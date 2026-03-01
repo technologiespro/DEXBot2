@@ -27,6 +27,7 @@
 const fs   = require('fs');
 const path = require('path');
 const kibanaSource = require('./kibana_source');
+const { parseJsonWithComments } = require('../modules/account_bots');
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -84,7 +85,15 @@ function loadBotsJson() {
     if (!fs.existsSync(BOTS_JSON)) {
         throw new Error(`bots.json not found: ${BOTS_JSON}`);
     }
-    const { bots } = JSON.parse(fs.readFileSync(BOTS_JSON, 'utf8'));
+    return parseBotsConfig(fs.readFileSync(BOTS_JSON, 'utf8'), BOTS_JSON);
+}
+
+function parseBotsConfig(raw, sourceLabel = BOTS_JSON) {
+    const parsed = parseJsonWithComments(raw);
+    const bots = Array.isArray(parsed?.bots) ? parsed.bots : (Array.isArray(parsed) ? parsed : null);
+    if (!bots) {
+        throw new Error(`Invalid bots.json format: ${sourceLabel}`);
+    }
     return bots;
 }
 
@@ -371,7 +380,16 @@ async function run() {
     console.log(`  node market_adapter/chart_lp_prices.js --file ${path.relative(process.cwd(), outPath)}`);
 }
 
-run().catch((err) => {
-    console.error('Fatal:', err);
-    process.exit(1);
-});
+if (require.main === module) {
+    run().catch((err) => {
+        console.error('Fatal:', err);
+        process.exit(1);
+    });
+}
+
+module.exports = {
+    parseBotsConfig,
+    loadBotsJson,
+    selectBot,
+    outputPath,
+};

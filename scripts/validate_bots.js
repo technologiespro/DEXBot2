@@ -12,6 +12,7 @@
  * 2. profiles/bots.json (live config, plain JSON)
  *
  * Required fields for each bot: assetA, assetB, activeOrders, botFunds
+ * Optional nested object: ama
  *
  * Usage: node scripts/validate_bots.js
  * Exit code: 0 (always, even if warnings found)
@@ -30,13 +31,8 @@ const livePath = path.join(__dirname, '..', 'profiles', 'bots.json');
  * stripComments: Remove JavaScript-style comments from JSON string
  *
  * JSONC (JSON with Comments) format is not standard JSON, but is commonly used
- * for configuration files. This function removes:
- * - Block comments: /* ... */
- * - Line comments: // ...
- *
- * Regex patterns:
- * - /\/\*(?:.|[\r\n])*?\*\//g: Matches /* */ comments across lines
- * - (^|\s*)\/\/.*: Matches // comments at any position in line
+ * for configuration files. This helper strips block-style and line-style comments
+ * so the text can be parsed by JSON.parse.
  *
  * @param {string} s - JSONC string potentially containing comments
  * @returns {string} - Cleaned JSON string ready for JSON.parse()
@@ -76,6 +72,8 @@ function checkConfig(obj, src) {
   // List of required fields that every bot must have
   const required = ['assetA', 'assetB', 'activeOrders', 'botFunds'];
   let anyMissing = false;
+  let anyAmaWarnings = false;
+  let anyAmaDeprecated = false;
 
   // Validate each bot entry
   bots.forEach((b, i) => {
@@ -92,11 +90,60 @@ function checkConfig(obj, src) {
       // Bot has all required fields
       console.log(`- Bot[${i}] '${name}' OK`);
     }
+
+    if (b.ama !== undefined) {
+      const ama = b.ama;
+      if (typeof ama !== 'object' || ama === null || Array.isArray(ama)) {
+        anyAmaWarnings = true;
+        console.warn(`  └─ ama must be an object when present`);
+        return;
+      }
+
+      const warn = (msg) => {
+        anyAmaWarnings = true;
+        console.warn(`  └─ ama warning: ${msg}`);
+      };
+
+      if ('enabled' in ama && typeof ama.enabled !== 'boolean') {
+        warn('enabled must be boolean');
+      }
+      const intFields = [
+        ['erPeriod', 1],
+        ['fastPeriod', 1],
+        ['slowPeriod', 1],
+      ];
+      intFields.forEach(([field, min]) => {
+        if (!(field in ama)) return;
+        const val = Number(ama[field]);
+        if (!Number.isInteger(val) || val < min) {
+          warn(`${field} must be integer >= ${min}`);
+        }
+      });
+
+      if (Number.isInteger(Number(ama.fastPeriod)) && Number.isInteger(Number(ama.slowPeriod))) {
+        if (Number(ama.fastPeriod) > Number(ama.slowPeriod)) {
+          warn('fastPeriod should be <= slowPeriod');
+        }
+      }
+
+      ['source', 'intervalSeconds', 'lookbackHours'].forEach((field) => {
+        if (field in ama) {
+          anyAmaDeprecated = true;
+          console.warn(`  └─ ama note: '${field}' is ignored by current adapter runtime`);
+        }
+      });
+    }
   });
 
   // Print summary if all bots are valid
   if (!anyMissing) {
     console.log(`-> ${src}: all required fields present for every bot entry`);
+  }
+  if (!anyAmaWarnings) {
+    console.log(`-> ${src}: ama settings valid (or omitted) for every bot entry`);
+  }
+  if (!anyAmaDeprecated) {
+    console.log(`-> ${src}: no deprecated ama fields detected`);
   }
 }
 
@@ -108,10 +155,14 @@ function checkConfig(obj, src) {
  * Any parse errors are caught and reported without stopping execution.
  */
 try {
-  const rawCfg = fs.readFileSync(cfgPath, 'utf8');
-  // Strip JSONC comments before parsing as standard JSON
-  const cfg = JSON.parse(stripComments(rawCfg));
-  checkConfig(cfg, 'examples/bots.json (template, JSONC)');
+  if (fs.existsSync(cfgPath)) {
+    const rawCfg = fs.readFileSync(cfgPath, 'utf8');
+    // Strip JSONC comments before parsing as standard JSON
+    const cfg = JSON.parse(stripComments(rawCfg));
+    checkConfig(cfg, 'examples/bots.json (template, JSONC)');
+  } else {
+    console.warn(`template config not found, skipping: ${cfgPath}`);
+  }
 } catch (err) {
   console.error('tracked config: parse error ->', err.message);
 }
@@ -124,9 +175,13 @@ try {
  * Parse errors are caught and reported without stopping execution.
  */
 try {
-  const rawLive = fs.readFileSync(livePath, 'utf8');
-  const live = JSON.parse(rawLive);
-  checkConfig(live, 'profiles/bots.json (live JSON)');
+  if (fs.existsSync(livePath)) {
+    const rawLive = fs.readFileSync(livePath, 'utf8');
+    const live = JSON.parse(rawLive);
+    checkConfig(live, 'profiles/bots.json (live JSON)');
+  } else {
+    console.warn(`live config not found, skipping: ${livePath}`);
+  }
 } catch (err) {
   console.error('live config: parse error ->', err.message);
 }

@@ -159,14 +159,16 @@ class BlockchainSource {
             if (!Array.isArray(op) || op[0] !== 63) continue;  // op_type 63 = liquidity_pool_exchange
 
             const d = op[1];
+            const resultData = Array.isArray(entry.result) ? entry.result[1] : null;
+            const received = Array.isArray(resultData?.received) ? resultData.received[0] : null;
             swaps.push({
                 block_time:       entry.block_time,
                 block_num:        entry.block_num,
                 poolId,
                 soldAssetId:      d.amount_to_sell?.asset_id,
                 soldAmount:       d.amount_to_sell?.amount,
-                receivedAssetId:  d.min_to_receive?.asset_id,
-                receivedAmount:   d.min_to_receive?.amount,
+                receivedAssetId:  received?.asset_id ?? d.min_to_receive?.asset_id,
+                receivedAmount:   received?.amount ?? d.min_to_receive?.amount,
             });
         }
 

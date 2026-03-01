@@ -353,8 +353,8 @@ async function getRawBuckets(poolId, soldAssetId, config = {}) {
 }
 
 /**
- * Legacy: bidirectional candles scoped to an asset pair (any pool).
- * Kept for backward compat with monitor_kibana.js.
+ * Bidirectional candles scoped to an asset pair (any pool).
+ * Retained for analysis tooling that is not pool-id scoped.
  */
 async function getLpCandlesBidirectional(assetA, assetB, config = {}) {
     return getLpCandlesForPool(null, assetA, assetB, config);
@@ -371,7 +371,7 @@ module.exports = {
     getLpClosePricesForPool,
     getRawBuckets,
 
-    // Asset-pair API (any pool, legacy)
+    // Asset-pair API (any pool)
     getLpCandlesBidirectional,
     getLpClosePrices,
 

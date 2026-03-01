@@ -26,7 +26,7 @@ const { exec } = require('child_process');
 const { calculateAMA } = require('../analysis/ama_fitting/ama');
 
 // ─── AMA Config ───────────────────────────────────────────────────────────────
-// Same params used in generate_unified_comparison_chart.js and market_monitor.js
+// Same params used in generate_unified_comparison_chart.js
 const AMA_PARAMS = { erPeriod: 10, fastPeriod: 2, slowPeriod: 30 };
 
 // ─── CLI Args ─────────────────────────────────────────────────────────────────
