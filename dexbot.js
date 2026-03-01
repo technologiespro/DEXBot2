@@ -783,7 +783,10 @@ async function bootstrap() {
             NODES: nodesConfig,
             GRID_LIMITS: gridLimits,
             TIMING: { ...TIMING },
-            UPDATER: { ...UPDATER }
+            UPDATER: { ...UPDATER },
+            MARKET_ADAPTER: {
+                DELTA_THRESHOLD_PERCENT: 1,
+            },
         };
         fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2) + '\n', 'utf8');
         console.log('✓ Created default general.settings.json');

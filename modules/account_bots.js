@@ -42,7 +42,13 @@
  *       "targetSpreadPercent": 2,
  *       "weightDistribution": { "sell": 0.5, "buy": 0.5 },
  *       "botFunds": { "sell": "100%", "buy": "100%" },
- *       "activeOrders": { "sell": 20, "buy": 20 }
+ *       "activeOrders": { "sell": 20, "buy": 20 },
+ *       "ama": {
+ *         "enabled": true,
+ *         "erPeriod": 10,
+ *         "fastPeriod": 2,
+ *         "slowPeriod": 30
+ *       }
  *     }
  *   ]
  * }
@@ -70,6 +76,17 @@ function parseJsonWithComments(raw) {
 
 const BOTS_FILE = path.join(__dirname, '..', 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
+
+const DEFAULT_AMA_CONFIG = {
+    enabled: true,
+    erPeriod: 10,
+    fastPeriod: 2,
+    slowPeriod: 30,
+};
+
+const DEFAULT_MARKET_ADAPTER_SETTINGS = {
+    DELTA_THRESHOLD_PERCENT: 1,
+};
 
 /**
  * Loads the bots configuration from profiles/bots.json.
@@ -116,7 +133,8 @@ function loadGeneralSettings() {
         LOG_LEVEL: LOG_LEVEL,
         GRID_LIMITS: { ...GRID_LIMITS },
         TIMING: { ...TIMING },
-        UPDATER: { ...UPDATER }
+        UPDATER: { ...UPDATER },
+        MARKET_ADAPTER: { ...DEFAULT_MARKET_ADAPTER_SETTINGS },
     };
 
     const settings = readGeneralSettings({
@@ -130,10 +148,43 @@ function loadGeneralSettings() {
         return defaults;
     }
 
-    // Ensure UPDATER section exists
-    if (!settings.UPDATER) {
-        settings.UPDATER = { ...UPDATER };
+    const incomingGridLimits = (settings.GRID_LIMITS && typeof settings.GRID_LIMITS === 'object') ? settings.GRID_LIMITS : {};
+    settings.GRID_LIMITS = {
+        ...GRID_LIMITS,
+        ...incomingGridLimits,
+        GRID_COMPARISON: {
+            ...GRID_LIMITS.GRID_COMPARISON,
+            ...(incomingGridLimits.GRID_COMPARISON && typeof incomingGridLimits.GRID_COMPARISON === 'object'
+                ? incomingGridLimits.GRID_COMPARISON
+                : {}),
+        },
+    };
+
+    settings.TIMING = {
+        ...TIMING,
+        ...((settings.TIMING && typeof settings.TIMING === 'object') ? settings.TIMING : {}),
+    };
+
+    settings.UPDATER = {
+        ...UPDATER,
+        ...((settings.UPDATER && typeof settings.UPDATER === 'object') ? settings.UPDATER : {}),
+    };
+    if (!settings.MARKET_ADAPTER || typeof settings.MARKET_ADAPTER !== 'object') {
+        settings.MARKET_ADAPTER = { ...DEFAULT_MARKET_ADAPTER_SETTINGS };
     }
+
+    const configuredDeltaPercent = Number(settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT);
+    const legacyResetFactor = Number(settings.MARKET_ADAPTER.GRID_RESET_FACTOR);
+    const effectiveDeltaPercent = Number.isFinite(configuredDeltaPercent) && configuredDeltaPercent > 0
+        ? configuredDeltaPercent
+        : (Number.isFinite(legacyResetFactor) && legacyResetFactor > 0
+            ? legacyResetFactor
+            : DEFAULT_MARKET_ADAPTER_SETTINGS.DELTA_THRESHOLD_PERCENT);
+    settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT = effectiveDeltaPercent;
+    if (Object.prototype.hasOwnProperty.call(settings.MARKET_ADAPTER, 'GRID_RESET_FACTOR')) {
+        delete settings.MARKET_ADAPTER.GRID_RESET_FACTOR;
+    }
+
     return settings;
 }
 
@@ -742,6 +793,8 @@ async function promptBotData(base = {}) {
     if (!data.weightDistribution) data.weightDistribution = { ...DEFAULT_CONFIG.weightDistribution };
     if (!data.botFunds) data.botFunds = { ...DEFAULT_CONFIG.botFunds };
     if (!data.activeOrders) data.activeOrders = { ...DEFAULT_CONFIG.activeOrders };
+    if (!data.ama || typeof data.ama !== 'object') data.ama = { ...DEFAULT_AMA_CONFIG };
+    data.ama = { ...DEFAULT_AMA_CONFIG, ...data.ama };
 
     // Set other defaults if missing
     if (data.active === undefined) data.active = DEFAULT_CONFIG.active;
@@ -764,6 +817,7 @@ async function promptBotData(base = {}) {
              console.log(`\x1b[1;33m3) Price:\x1b[0m      \x1b[38;5;208mRange:\x1b[0m [${data.minPrice} - ${data.maxPrice}], \x1b[38;5;208mStart:\x1b[0m ${data.startPrice}`);
              console.log(`\x1b[1;33m4) Grid:\x1b[0m       \x1b[38;5;208mWeights:\x1b[0m (S:${data.weightDistribution.sell}, B:${data.weightDistribution.buy}), \x1b[38;5;208mIncr:\x1b[0m ${data.incrementPercent}%, \x1b[38;5;208mSpread:\x1b[0m ${data.targetSpreadPercent}%`);
              console.log(`\x1b[1;33m5) Funding:\x1b[0m    \x1b[38;5;208mSell:\x1b[0m ${data.botFunds.sell}, \x1b[38;5;208mBuy:\x1b[0m ${data.botFunds.buy} | \x1b[38;5;208mOrders:\x1b[0m (S:${data.activeOrders.sell}, B:${data.activeOrders.buy})`);
+             console.log(`\x1b[1;33m6) AMA:\x1b[0m        \x1b[38;5;208mEnabled:\x1b[0m ${data.ama.enabled}, \x1b[38;5;208mParams:\x1b[0m (${data.ama.erPeriod},${data.ama.fastPeriod},${data.ama.slowPeriod})`);
              console.log('--------------------------------------------------');
              console.log('\x1b[1;32mS) Save & Exit\x1b[0m');
              console.log('\x1b[37mC) Cancel (Discard changes)\x1b[0m');
@@ -771,7 +825,7 @@ async function promptBotData(base = {}) {
         }
 
         const choice = (await readInput('Select section to edit or action: ', {
-            validate: (input) => ['1', '2', '3', '4', '5', 's', 'c'].includes(input)
+            validate: (input) => ['1', '2', '3', '4', '5', '6', 's', 'c'].includes(input)
         })).trim().toLowerCase();
 
         if (choice === '\x1b') {
@@ -852,6 +906,23 @@ async function promptBotData(base = {}) {
                 data.activeOrders.buy = oBuy;
                 showMenu = true;
                 break;
+            case '6':
+                const amaEnabled = await askBoolean('AMA enabled', data.ama.enabled !== false);
+                if (amaEnabled === '\x1b') break;
+                const amaEr = await askIntegerInRange('AMA erPeriod', data.ama.erPeriod, 1, 500);
+                if (amaEr === '\x1b') break;
+                const amaFast = await askIntegerInRange('AMA fastPeriod', data.ama.fastPeriod, 1, 500);
+                if (amaFast === '\x1b') break;
+                const amaSlowDefault = Math.max(data.ama.slowPeriod || DEFAULT_AMA_CONFIG.slowPeriod, amaFast);
+                const amaSlow = await askIntegerInRange('AMA slowPeriod', amaSlowDefault, amaFast, 2000);
+                if (amaSlow === '\x1b') break;
+
+                data.ama.enabled = amaEnabled;
+                data.ama.erPeriod = amaEr;
+                data.ama.fastPeriod = amaFast;
+                data.ama.slowPeriod = amaSlow;
+                showMenu = true;
+                break;
             case 's':
                 // Final basic validation before saving
                 if (!data.name || !data.assetA || !data.assetB || !data.preferredAccount) {
@@ -868,6 +939,10 @@ async function promptBotData(base = {}) {
                         console.log(`\x1b[31mError: targetSpreadPercent (${data.targetSpreadPercent}) must be >= ${spreadFactor}x incrementPercent (${Number(minRequiredSpread.toFixed(6))}).\x1b[0m`);
                         break;
                     }
+                }
+                if (!data.ama || data.ama.fastPeriod > data.ama.slowPeriod) {
+                    console.log('\x1b[31mError: AMA fastPeriod must be <= slowPeriod.\x1b[0m');
+                    break;
                 }
                 finished = true;
                 break;
@@ -897,7 +972,13 @@ async function promptBotData(base = {}) {
         targetSpreadPercent: data.targetSpreadPercent,
         weightDistribution: data.weightDistribution,
         botFunds: data.botFunds,
-        activeOrders: data.activeOrders
+        activeOrders: data.activeOrders,
+        ama: {
+            enabled: data.ama.enabled,
+            erPeriod: data.ama.erPeriod,
+            fastPeriod: data.ama.fastPeriod,
+            slowPeriod: data.ama.slowPeriod,
+        },
     };
 }
 
@@ -912,7 +993,7 @@ async function promptGeneralSettings() {
      while (!finished) {
           console.log('\x1b[1m--- General Settings (Global) ---\x1b[0m');
           console.log(`\x1b[1;33m1) Grid Limits:\x1b[0m   \x1b[38;5;208mCache:\x1b[0m ${settings.GRID_LIMITS.GRID_REGENERATION_PERCENTAGE}%, \x1b[38;5;208mRMS:\x1b[0m ${settings.GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE}%, \x1b[38;5;208mDust:\x1b[0m ${settings.GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE}%`);
-          console.log(`\x1b[1;33m2) Grid Safety:\x1b[0m   \x1b[38;5;208mMinSpreadFactor:\x1b[0m ${settings.GRID_LIMITS.MIN_SPREAD_FACTOR}, \x1b[38;5;208mMinSpreadOrders:\x1b[0m ${settings.GRID_LIMITS.MIN_SPREAD_ORDERS}`);
+          console.log(`\x1b[1;33m2) Grid Safety:\x1b[0m   \x1b[38;5;208mMinSpreadFactor:\x1b[0m ${settings.GRID_LIMITS.MIN_SPREAD_FACTOR}, \x1b[38;5;208mMinSpreadOrders:\x1b[0m ${settings.GRID_LIMITS.MIN_SPREAD_ORDERS}, \x1b[38;5;208mAdapterDelta:\x1b[0m ${settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT}%`);
           console.log(`\x1b[1;33m3) Timing (Core):\x1b[0m \x1b[38;5;208mFetchInterval:\x1b[0m ${settings.TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN}min, \x1b[38;5;208mSyncDelay:\x1b[0m ${settings.TIMING.SYNC_DELAY_MS / 1000}s, \x1b[38;5;208mLockTimeout:\x1b[0m ${settings.TIMING.LOCK_TIMEOUT_MS / 1000}s`);
           console.log(`\x1b[1;33m4) Timing (Fill):\x1b[0m \x1b[38;5;208mDedupeWindow:\x1b[0m ${settings.TIMING.FILL_DEDUPE_WINDOW_MS / 1000}s, \x1b[38;5;208mCleanupInterval:\x1b[0m ${settings.TIMING.FILL_CLEANUP_INTERVAL_MS / 1000}s, \x1b[38;5;208mRetention:\x1b[0m ${settings.TIMING.FILL_RECORD_RETENTION_MS / 1000}s`);
           console.log(`\x1b[1;33m5) Log lvl:\x1b[0m      \x1b[38;5;208m${settings.LOG_LEVEL}\x1b[0m (debug, info, warn, error)`);
@@ -949,8 +1030,11 @@ async function promptGeneralSettings() {
                 if (mFactor === '\x1b') break;
                 const mOrders = await askIntegerInRange('Minimum Spread Orders (Empty Slots)', settings.GRID_LIMITS.MIN_SPREAD_ORDERS, 1, 10);
                 if (mOrders === '\x1b') break;
+                const adapterDelta = await askNumberWithBounds('Market Adapter Delta Threshold %', settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT, 0.1, 50.0);
+                if (adapterDelta === '\x1b') break;
                 settings.GRID_LIMITS.MIN_SPREAD_FACTOR = mFactor;
                 settings.GRID_LIMITS.MIN_SPREAD_ORDERS = mOrders;
+                settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT = adapterDelta;
                 break;
             case '3':
                 const fetch = await askNumberWithBounds('Blockchain Fetch Interval (min)', settings.TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN, 1, 1440);

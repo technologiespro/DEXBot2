@@ -2,9 +2,9 @@
 
 ## Overview
 
-The **Market Adapter** is the real-time decision engine that continuously monitors current market activity and automatically adjusts bot configurations in `bots.json` to optimize performance under changing market conditions.
+The **Market Adapter** is a runtime candle-sync and AMA signal layer for live bots.
 
-**Core Purpose**: Bridge the gap between historical analysis (in `/analysis`) and live trading—translating market insights into actionable bot parameter updates.
+**Core Purpose**: Bridge historical analysis (`/analysis`) and live operations by keeping fresh LP candles, computing AMA-based market center values, and emitting deterministic signals/triggers.
 
 ---
 
@@ -22,11 +22,11 @@ spread_analysis/  ──┘
 ```
 
 **Data Flow**:
-1. **analysis/** generates optimal parameter ranges based on historical backtest data
-2. **market_adapter/** monitors live market conditions (volatility, trending, range-bound)
-3. **market_adapter/** applies decision rules to select appropriate parameters from analysis results
-4. **market_adapter/** updates `profiles/bots.json` when parameters should change
-5. **dexbot.js** reads the updated configuration and applies changes to running bots
+1. **analysis/** produces optimization context and candidate AMA settings
+2. **market_adapter/** fetches/updates LP candles (Kibana bootstrap + native incremental)
+3. **market_adapter/** computes per-bot AMA center and threshold deltas
+4. **market_adapter/** writes state snapshots and trigger files
+5. **dexbot.js** can react to `profiles/recalculate.<botKey>.trigger`
 
 ---
 
@@ -36,11 +36,11 @@ spread_analysis/  ──┘
 
 #### ✅ In Scope
 - **Real-time Market Monitoring**: Track current volatility, price action, and market regime
-- **Condition Detection**: Identify trending, ranging, volatile, or stable market conditions
-- **Parameter Selection**: Choose appropriate AMA/grid settings based on current conditions
-- **Configuration Updates**: Safely modify `bots.json` when market conditions warrant it
-- **Change Logging**: Track which parameters changed, when, and why
-- **State Management**: Maintain history of adaptations for analysis and rollback
+- **Candle Synchronization**: Keep per-bot LP candles current and pruned to AMA-required windows
+- **Signal Calculation**: Compute AMA center values and deviation thresholds
+- **Trigger Emission**: Create per-bot recalc trigger files when thresholds are crossed
+- **Runtime Safety**: Single-instance lock, retries/backoff, stale-data suppression
+- **State Management**: Persist machine-readable adapter state and center snapshots
 
 #### ❌ Out of Scope
 - Historical backtest optimization (that's `/analysis`)
@@ -101,90 +101,58 @@ The adapter uses rules defined in configuration files to determine when/how to a
 
 ```
 market_adapter/
-├── README.md                    (this file)
-├── market_monitor.js           # Real-time market data collection
-├── condition_detector.js        # Identify current market regime
-├── parameter_selector.js        # Choose parameters based on conditions
-├── config_updater.js            # Safely update bots.json
-├── change_logger.js             # Log all adaptations for audit trail
-├── config/
-│   ├── adaptation_rules.json   # Market condition → parameter mapping
-│   └── safety_limits.json      # Update frequency, max changes, etc.
-├── history/                     # Archive of past adaptations
-│   └── adaptations.log         # Timestamped log of all changes
-└── tests/
-    ├── market_monitor.test.js
-    ├── condition_detector.test.js
-    └── integration.test.js
+├── README.md
+├── price_adapter.js             # Main candle-sync + center tracking loop
+├── core/price_adapter_service.js # Extracted adapter service logic (no CLI)
+├── ama_signal_runner.js         # One-cycle JSON AMA outputs
+├── kibana_source.js             # Elasticsearch LP data source
+├── blockchain_source.js         # Native BitShares data source
+├── candle_utils.js              # Trade/candle helpers
+├── fetch_lp_data.js             # Pool-centric historical export
+├── kibana_api.js                # Kibana trade inspector/exporter
+├── native_api.js                # Native trade inspector/exporter
+├── chart_lp_prices.js           # Plotly chart generator
+├── data/                        # Candle caches and exports
+└── state/                       # Adapter runtime state files
 ```
 
 ---
 
 ## How It Works
 
-### 1. Market Monitoring (Every X seconds/minutes)
+### 1. Candle Sync
 
-```javascript
-const marketData = await marketMonitor.fetchCurrent();
-// Returns: { price, volatility, volumeProfile, trendStrength, ... }
-```
+`price_adapter.js` runs per cycle and updates per-bot candles:
+- Bootstrap from Kibana if local cache is missing
+- Then incrementally merge native LP history
+- Prune to the minimum window required by current AMA settings
 
-**Collects**:
-- Current price and price history (last N candles)
-- Trading volume
-- Bid/ask spreads
-- Price momentum (EMA slope)
+### 2. AMA Center Calculation
 
-### 2. Condition Detection
+For each processed bot, adapter computes:
+- Latest AMA value (per-bot `ama` config, or defaults)
+- Optional AMA comparison presets
+- Delta between current AMA and stored center
 
-```javascript
-const condition = conditionDetector.analyze(marketData);
-// Returns: { regime: "trending|ranging|volatile", confidence: 0.75, reason: "..." }
-```
+### 3. Trigger Decision
 
-**Determines**:
-- Market regime (trending, ranging, volatile, or calm)
-- Confidence level based on multiple indicators
-- Relevant factors driving the detection
+Adapter emits `profiles/recalculate.<botKey>.trigger` when:
+- AMA delta exceeds configured percentage threshold
+- Data is not stale (`--maxStaleHours` guard)
 
-### 3. Parameter Selection
+Threshold resolution order:
+1. CLI `--deltaPercent` override
+2. `profiles/general.settings.json` → `MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT`
+3. Built-in default `1` (%).
 
-```javascript
-const params = parameterSelector.getParameters(condition);
-// Returns: { gridSpacing: 0.8, erPeriod: 10, fastSmoothing: 2, slowSmoothing: 15 }
-```
+### 4. State Persistence + JSON Signals
 
-**Queries**:
-- Adaptation rules to find appropriate parameters
-- Cross-references with `analysis/` findings
-- Returns parameters with highest expected profitability
+Adapter writes:
+- `market_adapter/state/price_adapter_state.json`
+- `market_adapter/state/price_adapter_centers.json`
 
-### 4. Configuration Update (If Needed)
-
-```javascript
-const updated = await configUpdater.updateBots(currentParams, newParams);
-// Returns: { updated: true, changes: [...], timestamp: "2026-01-17T..." }
-```
-
-**Safety Checks**:
-- Verifies file integrity
-- Checks rate limits (don't update too frequently)
-- Validates new parameters against limits
-- Creates backup before writing
-- Acquires file lock to prevent concurrent writes
-
-### 5. Logging & Audit Trail
-
-```javascript
-changeLogger.record({
-  timestamp: Date.now(),
-  reason: "Detected trending market (EMA slope +2.1%)",
-  previousParams: {...},
-  newParams: {...},
-  confidence: 0.78,
-  expectedImpact: "+0.15% profit per trade"
-});
-```
+JSON consumer output is available via:
+- `node market_adapter/ama_signal_runner.js`
 
 ---
 
@@ -201,86 +169,52 @@ changeLogger.record({
 - **Sensitivity data**: From `analysis/ama_fitting/SENSITIVITY_REPORT.md`
 - **Regime-specific tuning**: From `analysis/ama_fitting/QUICK_REFERENCE.md`
 
-### Output: Bot Configuration
-- **Updates to `profiles/bots.json`**: Parameter changes written here
-- **Change log**: `market_adapter/history/adaptations.log`
-- **Metrics**: Exported for monitoring dashboards
+### Output: Runtime State + Triggers
+- **State snapshots**: `market_adapter/state/price_adapter_state.json`
+- **Center snapshots**: `market_adapter/state/price_adapter_centers.json`
+- **Trigger files**: `profiles/recalculate.<botKey>.trigger`
+- **JSON signal output**: `ama_signal_runner.js` stdout
 
 ### Integration with dexbot.js
-- dexbot reads updated `bots.json` on next initialization
-- Optional: Hot-reload capability for immediate application (if implemented)
+- dexbot can react to `recalculate.<botKey>.trigger`
+- `price_adapter` does not modify `profiles/bots.json`
 
 ---
 
 ## Decision Rules
 
-### When to Adapt
+### When to Trigger Recalc
 
-An adaptation is triggered when:
-1. **Confidence threshold met** (usually 75%+)
-2. **Minimum time elapsed** since last update (default: 1 hour)
-3. **Safety limits respected** (e.g., max 4 changes per day)
-4. **Expected benefit > overhead** (cost of updating must justify gains)
+A recalc trigger is emitted when:
+1. AMA center delta exceeds threshold
+2. Latest candle is not stale
+3. Bot is active and has valid pair/pool context
 
-### What NOT to Change
+### What This Adapter Does Not Change
 
-- **Always avoid**: Completely turning bots on/off (that's manual territory)
-- **Preserve**: Bot names, account assignments, active/inactive status
-- **Review manually**: Major regime shifts (trending → calm)
-
-### Rollback Mechanism
-
-If a parameter change underperforms:
-```javascript
-adapter.rollback({
-  adaptation: adaptationId,
-  reason: "Profit decreased by 15% in last 4 hours"
-});
-// Restores previous bot.json and logs the issue
-```
+- It does **not** edit `profiles/bots.json`
+- It does **not** start/stop bots
+- It does **not** place/cancel on-chain orders directly
 
 ---
 
 ## Configuration Files
 
-### `config/adaptation_rules.json`
+### `profiles/bots.json`
 
-Defines the mapping between market conditions and recommended parameters:
-- **Input**: Market condition (detected in real-time)
-- **Output**: Parameter set (gridSpacing, EMA settings, etc.)
-- **Source**: Results from `/analysis/ama_fitting/OPTIMIZATION_RESULTS.md`
+Input source for active bots, symbols, optional pool IDs, and optional per-bot AMA settings.
 
-**Example Rule**:
-```json
-{
-  "condition": "trending",
-  "trigger": {
-    "volatility": { "min": 0.5, "max": 100 },
-    "emaSlope": { "min": 0.01 }
-  },
-  "parameters": {
-    "gridSpacing": 0.9,
-    "erPeriod": 12,
-    "targetSpreadPercent": 1.2
-  },
-  "expectedBenefit": "0.15% higher profit per trade",
-  "notes": "Wider grid during strong trends"
-}
-```
+### `market_adapter/state/price_adapter_whitelist.json`
 
-### `config/safety_limits.json`
+Optional filter restricting which active bots are processed.
 
-Protection rules to prevent aggressive over-adaptation:
-```json
-{
-  "minTimeBetweenUpdates": 3600000,
-  "maxChangesPerDay": 4,
-  "maxParameterChangePercent": 25,
-  "confidenceThreshold": 0.75,
-  "rollbackIfUnderperforming": true,
-  "underperformanceThreshold": -0.10
-}
-```
+### `market_adapter/state/price_adapter_state.json`
+
+Primary runtime state file with per-bot candle metadata, AMA values, thresholds, and cycle metrics.
+
+### `market_adapter/state/price_adapter_centers.json`
+
+Lightweight center snapshot for quick inspection.
 
 ---
 
@@ -291,17 +225,129 @@ Protection rules to prevent aggressive over-adaptation:
 Run the adapter manually to test or force an update:
 
 ```bash
-# Check current market conditions without updating
-node market_adapter/market_monitor.js
+# One full sync cycle + trigger evaluation
+node market_adapter/price_adapter.js --once
 
-# Analyze and propose changes (dry-run)
-node market_adapter/condition_detector.js --dry-run
+# One full sync cycle + JSON AMA output
+node market_adapter/ama_signal_runner.js
 
-# Actually update bot config
-node market_adapter/index.js --update
+# View latest adapter state snapshot
+cat market_adapter/state/price_adapter_state.json
+```
 
-# View adaptation history
-cat market_adapter/history/adaptations.log | tail -20
+### LP Data Export (Analysis Inputs)
+
+Canonical LP export scripts:
+
+```bash
+# Kibana LP trades (long history) + optional candle export
+node market_adapter/kibana_api.js --pool 133 --hours 8760 --saveCandles --interval 1h --csv
+
+# Native BitShares LP trades (node-retained history) + optional candle export
+node market_adapter/native_api.js --pool 133 --hours 72 --saveCandles --interval 1h --csv
+
+# Existing pool-centric Kibana exporter used by analysis workflow
+node market_adapter/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --lookback 8760h
+```
+
+### Price Adapter (Standalone)
+
+Runs independently from dexbot, keeps 1h candles fresh, tracks a separate
+AMA-based market center, and creates per-bot grid reset trigger files when the
+delta threshold is exceeded.
+
+```bash
+# One cycle (safe test)
+node market_adapter/price_adapter.js --once
+
+# Continuous daemon loop
+node market_adapter/price_adapter.js
+
+# Custom trigger threshold (percent)
+node market_adapter/price_adapter.js --deltaPercent 1.5
+```
+
+State and outputs:
+- `market_adapter/data/price_adapter_<botKey>_1h.json`
+- `market_adapter/state/price_adapter_state.json`
+- `market_adapter/state/price_adapter_centers.json`
+- Trigger on threshold: `profiles/recalculate.<botKey>.trigger`
+
+Optional whitelist:
+- file: `market_adapter/state/price_adapter_whitelist.json`
+- format:
+
+```json
+{
+  "bots": ["XRP-BTS", "xrp-bts-0"]
+}
+```
+
+If whitelist exists and has entries, only matching bot `name` or `botKey` is processed.
+
+### AMA Signal Runner (JSON Output)
+
+Runs one candle sync cycle (same candle update flow as `price_adapter.js`) and
+prints structured AMA outputs per bot.
+
+```bash
+# Run one cycle and print JSON for all processed bots
+node market_adapter/ama_signal_runner.js
+
+# Filter by bot name or botKey
+node market_adapter/ama_signal_runner.js --bot XRP-BTS
+node market_adapter/ama_signal_runner.js --bot xrp-bts-0 --compact
+```
+
+Export format used by analysis scripts:
+
+```json
+{
+  "meta": {
+    "fetchedAt": "...",
+    "source": "...",
+    "pool": "1.19.133",
+    "assetA": { "id": "1.3.X", "precision": 4, "symbol": "..." },
+    "assetB": { "id": "1.3.Y", "precision": 5, "symbol": "..." },
+    "intervalSeconds": 3600,
+    "lookbackHours": 8760,
+    "candleCount": 0,
+    "priceUnit": "assetB per assetA",
+    "format": "[timestamp_ms, open, high, low, close, volume_A]"
+  },
+  "candles": [
+    [1700000000000, 1.23, 1.25, 1.22, 1.24, 123.45]
+  ]
+}
+```
+
+### Per-Bot AMA Settings
+
+Each bot can define its own AMA calculation in
+`profiles/bots.json` under `ama`.
+
+```json
+{
+  "name": "XRP-BTS",
+  "assetA": "IOB.XRP",
+  "assetB": "BTS",
+  "ama": {
+    "enabled": true,
+    "erPeriod": 10,
+    "fastPeriod": 2,
+    "slowPeriod": 30
+  }
+}
+```
+
+Notes:
+- `lookbackHours` is handled by runtime sync settings (`--bootstrapHours`, `--nativeBackfillHours`), not per-bot AMA
+- AMA params are passed directly to `calculateAMA(closes, params)`
+- if `ama` is missing, defaults are applied (backward compatible)
+- to test per-bot AMA output for one bot, run:
+
+```bash
+node market_adapter/ama_signal_runner.js --bot XRP-BTS
 ```
 
 ### Automated Execution
@@ -312,7 +358,7 @@ Schedule via PM2 or cron to run continuously:
 # In pm2.js, add:
 {
   name: "market-adapter",
-  script: "market_adapter/index.js",
+  script: "market_adapter/price_adapter.js",
   instances: 1,
   exec_mode: "fork",
   cron_restart: "0 * * * *"  // Every hour
@@ -322,8 +368,8 @@ Schedule via PM2 or cron to run continuously:
 ### Integration with dexbot
 
 The adapter runs independently; dexbot picks up changes by:
-1. Reloading `profiles/bots.json` on next initialization cycle
-2. Optional: Emit events for hot-reload
+1. Watching for `profiles/recalculate.<botKey>.trigger`
+2. Re-centering/recalculating the affected bot grid
 
 ---
 
@@ -350,47 +396,35 @@ rollbacks                - How often we had to revert
 
 ## Example Workflow
 
-### Scenario: Volatile Market Detected
+### Scenario: AMA Delta Trigger
 
 ```
-[09:00] Market Monitor detects high volatility (price swinging ±2% per hour)
-[09:05] Condition Detector identifies: "volatile" regime (confidence: 0.82)
-[09:10] Parameter Selector recommends: gridSpacing 0.95 (vs current 0.8)
-[09:15] Safety checks pass:
-        - Last update: 4 hours ago ✓
-        - Only 1 change today ✓
-        - Confidence > 75% ✓
-[09:16] Config Updater applies change to bots.json
-[09:17] Change Logger records adaptation
-[09:20] dexbot reloads config on next cycle
-[09:21] Bots now operating with 0.95% grid spacing
-[10:00] Monitor continues... market calms down
-[11:00] Condition Detector identifies: "ranging" regime
-        (Repeat process, revert to 0.7% spacing if appropriate)
+[09:00] Adapter runs cycle and updates candles
+[09:01] Latest AMA computed from synced candle cache
+[09:01] Delta vs stored center exceeds threshold
+[09:01] Adapter writes profiles/recalculate.<botKey>.trigger
+[09:02] dexbot consumes trigger and recalculates grid center
+[10:00] Next cycle repeats with incremental native updates
 ```
 
 ---
 
-## File Format: bots.json Changes
+## File Format: Trigger Payload
 
-The adapter only modifies these fields per bot:
+When threshold is exceeded, adapter writes a trigger file like:
 
 ```json
 {
-  "name": "XRP-BTS",
-  "active": true,  // ← NEVER changed by adapter
-  "dryRun": false, // ← NEVER changed by adapter
-
-  "incrementPercent": 0.4,          // ← CAN change
-  "targetSpreadPercent": 0.8,       // ← CAN change
-  "gridSpacing": 0.8,               // ← CAN change (if added)
-  "erPeriod": 10,                   // ← CAN change (if added)
-  "fastSmoothing": 2,               // ← CAN change (if added)
-  "slowSmoothing": 15,              // ← CAN change (if added)
-
-  "botFunds": {...},                // ← NEVER changed by adapter
-  "activeOrders": {...},            // ← NEVER changed by adapter
-  "preferredAccount": "..."         // ← NEVER changed by adapter
+  "createdAt": "2026-03-01T00:00:00.000Z",
+  "source": "market_adapter/price_adapter.js",
+  "botName": "XRP-BTS",
+  "botKey": "xrp-bts-0",
+  "reason": "price_adapter_delta_threshold",
+  "thresholdPercent": 0.8,
+  "deltaPercent": 1.1,
+  "previousCenterPrice": 1280.5,
+  "newCenterPrice": 1294.6,
+  "poolId": "1.19.133"
 }
 ```
 
@@ -398,11 +432,11 @@ The adapter only modifies these fields per bot:
 
 ## Future Enhancements
 
-### Phase 1 (MVP)
-- [x] Detect market conditions (trending/ranging/volatile)
-- [x] Select parameters based on conditions
-- [x] Safely update bots.json
-- [x] Log all changes with reasoning
+### Phase 1 (Current)
+- [x] Candle sync (Kibana bootstrap + native incremental)
+- [x] Per-bot AMA center calculation
+- [x] Trigger-file emission on threshold
+- [x] Runtime lock/retry/stale-data safety controls
 
 ### Phase 2 (Extended)
 - [ ] Machine learning-based regime detection (vs rules-based)
@@ -421,10 +455,11 @@ The adapter only modifies these fields per bot:
 
 ## Troubleshooting
 
-### Parameters not updating
-1. Check `minTimeBetweenUpdates` – might be in cooldown
-2. Verify `confidenceThreshold` – market signal might be weak
-3. Check file lock issues: `cat market_adapter/history/adaptations.log`
+### Triggers not being created
+1. Verify latest AMA is computed (`lastAmaPrice` in state file)
+2. Check threshold (`thresholdPercent`) vs `lastDeltaPercent`
+3. Check stale data guard (`staleData`, `staleAgeHours`)
+4. Check lock/state files under `market_adapter/state/`
 
 ### Oscillating between regimes
 1. Increase `minTimeBetweenUpdates` to be more conservative
