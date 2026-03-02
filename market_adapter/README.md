@@ -52,45 +52,38 @@ spread_analysis/  ──┘
 
 ## Configuration Structure
 
-### Market Adaptation Rules
+### Trigger Threshold
 
-The adapter uses rules defined in configuration files to determine when/how to adapt:
+The delta threshold that governs when the adapter emits a recalc trigger is resolved in this order:
 
-```javascript
+1. CLI `--deltaPercent <n>` override
+2. `profiles/general.settings.json` → `MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT`
+3. Built-in default: `1` (%)
+
+```json
+// profiles/general.settings.json
 {
-  "marketConditions": [
-    {
-      "name": "trending",
-      "volatilityRange": [0.5, 100],      // % price change vs MA
-      "emaSlope": "positive",             // trend direction
-      "gridSpacing": 0.9,                 // recommended spacing
-      "erPeriod": 12,
-      "fastSmoothing": 2,
-      "slowSmoothing": 18
-    },
-    {
-      "name": "ranging",
-      "volatilityRange": [0.1, 0.5],
-      "emaSlope": "flat",
-      "gridSpacing": 0.7,
-      "erPeriod": 8,
-      "fastSmoothing": 2,
-      "slowSmoothing": 12
-    },
-    {
-      "name": "volatile",
-      "volatilityRange": [0.7, 100],
-      "emaSlope": "any",
-      "gridSpacing": 0.95,
-      "erPeriod": 15,
-      "fastSmoothing": 2,
-      "slowSmoothing": 20
-    }
-  ],
-  "changeThresholds": {
-    "minTimeBetweenUpdates": 3600000,     // 1 hour in ms
-    "confidenceRequired": 0.75,           // 75% confidence before changing
-    "maxChangesPerDay": 4                 // safety limit
+  "MARKET_ADAPTER": {
+    "DELTA_THRESHOLD_PERCENT": 1
+  }
+}
+```
+
+### Per-Bot AMA Settings
+
+Each bot can define its own AMA calculation in `profiles/bots.json` under `ama`.
+If missing, the built-in defaults (`erPeriod: 90, fastPeriod: 10, slowPeriod: 100`) are used.
+
+```json
+{
+  "name": "XRP-BTS",
+  "assetA": "IOB.XRP",
+  "assetB": "BTS",
+  "ama": {
+    "enabled": true,
+    "erPeriod": 10,
+    "fastPeriod": 2,
+    "slowPeriod": 30
   }
 }
 ```
@@ -159,10 +152,8 @@ JSON consumer output is available via:
 ## Integration Points
 
 ### Input: Market Data Sources
-- **Current price data**: From BitShares blockchain API
-- **Candle history**: From `/data` or real-time calculation
-- **Order book**: For spread analysis
-- **Recent trades**: For volume profile
+- **Candle history**: Bootstrapped from Kibana, then incrementally from native BitShares API
+- **LP trade history**: Fetched via `kibana_source.js` / `blockchain_source.js`
 
 ### Input: Analysis Results
 - **Optimal parameter sets**: From `analysis/ama_fitting/OPTIMIZATION_RESULTS.md`
@@ -299,52 +290,41 @@ node market_adapter/ama_signal_runner.js --bot XRP-BTS
 node market_adapter/ama_signal_runner.js --bot xrp-bts-0 --compact
 ```
 
-Export format used by analysis scripts:
+Output format (one entry per processed bot):
 
 ```json
 {
-  "meta": {
-    "fetchedAt": "...",
-    "source": "...",
-    "pool": "1.19.133",
-    "assetA": { "id": "1.3.X", "precision": 4, "symbol": "..." },
-    "assetB": { "id": "1.3.Y", "precision": 5, "symbol": "..." },
-    "intervalSeconds": 3600,
-    "lookbackHours": 8760,
-    "candleCount": 0,
-    "priceUnit": "assetB per assetA",
-    "format": "[timestamp_ms, open, high, low, close, volume_A]"
-  },
-  "candles": [
-    [1700000000000, 1.23, 1.25, 1.22, 1.24, 123.45]
+  "ok": true,
+  "updatedAt": "2026-03-01T09:01:00.000Z",
+  "metrics": { "cycleMs": 4200, "botsProcessed": 1 },
+  "botCount": 1,
+  "bots": [
+    {
+      "botName": "XRP-BTS",
+      "botKey": "xrp-bts-0",
+      "ok": true,
+      "source": "native",
+      "candleCount": 720,
+      "amaPrice": 1294.6,
+      "deltaPercent": 1.1,
+      "thresholdPercent": 1.0,
+      "triggered": true,
+      "triggerPath": "profiles/recalculate.xrp-bts-0.trigger",
+      "reason": "price_adapter_delta_threshold"
+    }
   ]
 }
 ```
 
 ### Per-Bot AMA Settings
 
-Each bot can define its own AMA calculation in
-`profiles/bots.json` under `ama`.
-
-```json
-{
-  "name": "XRP-BTS",
-  "assetA": "IOB.XRP",
-  "assetB": "BTS",
-  "ama": {
-    "enabled": true,
-    "erPeriod": 10,
-    "fastPeriod": 2,
-    "slowPeriod": 30
-  }
-}
-```
+See [Configuration Structure](#configuration-structure) for the AMA config format.
 
 Notes:
-- `lookbackHours` is handled by runtime sync settings (`--bootstrapHours`, `--nativeBackfillHours`), not per-bot AMA
+- `lookbackHours` is controlled by runtime sync flags (`--bootstrapHours`, `--nativeBackfillHours`), not per-bot AMA
 - AMA params are passed directly to `calculateAMA(closes, params)`
-- if `ama` is missing, defaults are applied (backward compatible)
-- to test per-bot AMA output for one bot, run:
+- If `ama` is missing, built-in defaults apply (`erPeriod: 90, fastPeriod: 10, slowPeriod: 100`)
+- To test per-bot AMA output for one bot:
 
 ```bash
 node market_adapter/ama_signal_runner.js --bot XRP-BTS
@@ -373,24 +353,31 @@ The adapter runs independently; dexbot picks up changes by:
 
 ---
 
-## Monitoring & Alerts
+## Monitoring
 
-### Key Metrics to Track
+### Runtime State
+
+The adapter writes state after each cycle. Key fields in `market_adapter/state/price_adapter_state.json`:
 
 ```
-adaptations_total        - Total number of parameter updates
-adaptations_per_condition - Updates broken down by detected regime
-avg_confidence           - Average confidence of adaptations
-failed_updates           - Updates that couldn't be applied
-rollbacks                - How often we had to revert
+lastRunAt         - Timestamp of last completed cycle
+botsProcessed     - Number of bots evaluated
+cycleMs           - Cycle wall-clock duration
+per-bot entries:
+  lastAmaPrice    - Latest computed AMA value
+  centerPrice     - Stored center (baseline for delta)
+  lastDeltaPercent- Delta computed last cycle
+  thresholdPercent- Active trigger threshold
+  staleData       - true if candle age exceeded maxStaleHours
+  staleAgeHours   - How old the latest candle is
+  triggered       - true if trigger file was written this cycle
 ```
 
 ### Alert Conditions
 
-- ⚠️ **Rapid oscillation**: Switching parameters too frequently → increase `minTimeBetweenUpdates`
-- ⚠️ **Low confidence**: Many updates below 60% → review condition detection logic
-- 🔴 **Repeated rollbacks**: If same adaptation keeps failing → disable that rule
-- 🔴 **Failed locks**: Can't update bots.json → check permissions and file access
+- ⚠️ **Trigger not firing**: Check `lastDeltaPercent` vs `thresholdPercent` in state file
+- ⚠️ **Stale data**: `staleData: true` means candle sync is failing — check network/API access
+- 🔴 **Lock file stuck**: If `price_adapter.lock` is present after a crash, delete it manually
 
 ---
 
@@ -461,15 +448,10 @@ When threshold is exceeded, adapter writes a trigger file like:
 3. Check stale data guard (`staleData`, `staleAgeHours`)
 4. Check lock/state files under `market_adapter/state/`
 
-### Oscillating between regimes
-1. Increase `minTimeBetweenUpdates` to be more conservative
-2. Review market detection logic for false positives
-3. Increase `confidenceThreshold` requirement
-
-### Changes don't take effect
-1. Confirm dexbot reloaded bots.json
-2. Check bot logs for initialization errors
-3. Verify no permissions issues on bots.json
+### Trigger fires too often / too rarely
+1. Adjust `MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT` in `profiles/general.settings.json`
+2. Or pass `--deltaPercent <n>` on the CLI for a one-off override
+3. Check `lastDeltaPercent` in state to see what delta is actually being computed
 
 ---
 

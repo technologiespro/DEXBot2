@@ -149,6 +149,163 @@ async function testBootstrapFallsBackWhenKibanaIsEmpty() {
     assert.strictEqual(nativeCalls, 1, 'native fallback should be called once');
 }
 
+async function testAmaGridPriceIsCaseInsensitive() {
+    let writeAmaCenterCalls = 0;
+    let triggerWrites = 0;
+
+    const service = createPriceAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [1700000000000, 100, 100, 100, 100, 1],
+                [1700003600000, 101, 101, 101, 101, 1],
+            ],
+        }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 1,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaPrice: () => 103,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-0.trigger';
+        },
+        writeBotAmaCenter: () => {
+            writeAmaCenterCalls += 1;
+            return true;
+        },
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-0',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'AMA',
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-0': {
+                centerPrice: 100,
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.strictEqual(result.triggered, true, 'trigger should fire on threshold breach');
+    assert.strictEqual(writeAmaCenterCalls, 1, 'AMA center should be written for uppercase AMA mode');
+    assert.strictEqual(triggerWrites, 1, 'trigger file should be written');
+}
+
+async function testAmaTriggerSuppressedWhenCenterPersistFails() {
+    let triggerWrites = 0;
+
+    const service = createPriceAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [1700000000000, 100, 100, 100, 100, 1],
+                [1700003600000, 101, 101, 101, 101, 1],
+            ],
+        }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 1,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaPrice: () => 103,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-0.trigger';
+        },
+        writeBotAmaCenter: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-0',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-0': {
+                centerPrice: 100,
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should still complete');
+    assert.strictEqual(result.triggered, false, 'trigger should be suppressed if AMA center cannot be persisted');
+    assert.strictEqual(result.triggerSuppressedReason, 'ama_center_persist_failed', 'suppression reason should be reported');
+    assert.strictEqual(triggerWrites, 0, 'trigger file must not be written when center persistence fails');
+    assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'center price should not advance when trigger is suppressed');
+}
+
 async function testContextCacheInvalidatesOnPoolChange() {
     let resolveCalls = 0;
 
@@ -225,6 +382,8 @@ async function testContextCacheInvalidatesOnPoolChange() {
 async function run() {
     await testTriggerHookCalledOnThreshold();
     await testBootstrapFallsBackWhenKibanaIsEmpty();
+    await testAmaGridPriceIsCaseInsensitive();
+    await testAmaTriggerSuppressedWhenCenterPersistFails();
     await testContextCacheInvalidatesOnPoolChange();
 }
 

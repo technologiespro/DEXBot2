@@ -14,6 +14,40 @@
  * - Tracks a separate market center price per bot in market_adapter/state
  * - Creates recalculate.<botKey>.trigger when AMA center delta threshold is reached
  *
+ * GRID RECALCULATION TRIGGERS (Three Independent Mechanisms):
+ * ──────────────────────────────────────────────────────────
+ *
+ * 1. AMA DELTA THRESHOLD (this file / market adapter)
+ *    Triggers when market price moves significantly from last recorded AMA center
+ *    ├─ Controlled by: MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT
+ *    ├─ Location: profiles/general.settings.json
+ *    ├─ Default: 1% (grid resets when AMA moves ±1%)
+ *    ├─ CLI override: --deltaPercent <percent>
+ *    └─ Use case: Catch big market moves that require grid repositioning
+ *
+ * 2. RMS DIVERGENCE CHECK (order/grid.js / grid engine)
+ *    Triggers when calculated grid diverges from blockchain state
+ *    ├─ Controlled by: GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE
+ *    ├─ Location: profiles/general.settings.json
+ *    ├─ Default: 14.3% (balanced tolerance)
+ *    ├─ Set to 0 to disable (Issue #5: RMS Divergence Check Disabling)
+ *    └─ Use case: Detect order fill/rotation accumulation drift
+ *
+ * 3. GRID REGENERATION (internal threshold)
+ *    Triggers when available funds exceed allocation threshold
+ *    ├─ Controlled by: GRID_LIMITS.GRID_REGENERATION_PERCENTAGE
+ *    ├─ Default: 3% (regen when free balance ≥ 3% of allocated capital)
+ *    └─ Use case: Rebalance and utilize accumulated fill proceeds
+ *
+ * AMA CONFIGURATION (per bot in bots.json):
+ * ────────────────────────────────────────
+ *   "ama": {
+ *     "enabled": true,              // Enable AMA-based price tracking
+ *     "erPeriod": 10,              // ER lookback (higher=stable, lower=responsive)
+ *     "fastPeriod": 2,             // Trend smoothing (lower=fast response)
+ *     "slowPeriod": 30             // Choppy market smoothing (higher=more lag)
+ *   }
+ *
  * No wallet keys/password/auth required (read-only chain + Kibana bootstrap).
  */
 
@@ -67,9 +101,10 @@ const DEFAULT_AMA = {
     slowPeriod: 100,
 };
 
-// Optional in-script fallback whitelist.
-// Keep empty to allow all active bots (or use state/price_adapter_whitelist.json).
-const FALLBACK_WHITELIST = [];
+// Whitelist is file-driven only.
+// If whitelist file is missing, we create a skeleton: { "bots": [] }.
+// Empty whitelist means process no bots.
+const EMPTY_WHITELIST_SKELETON = { bots: [] };
 
 const AMA_COMPARISON_PRESETS = [
     { name: 'bestAreaMaxDist', erPeriod: 185, fastPeriod: 10, slowPeriod: 100 },
@@ -265,9 +300,12 @@ function loadActiveBots() {
 }
 
 function loadWhitelist() {
-    const fromFile = loadJson(WHITELIST_FILE, null);
-    const fileList = Array.isArray(fromFile?.bots) ? fromFile.bots : null;
-    const list = Array.isArray(fileList) ? fileList : FALLBACK_WHITELIST;
+    if (!fs.existsSync(WHITELIST_FILE)) {
+        saveJson(WHITELIST_FILE, EMPTY_WHITELIST_SKELETON);
+    }
+
+    const fromFile = loadJson(WHITELIST_FILE, EMPTY_WHITELIST_SKELETON);
+    const list = Array.isArray(fromFile?.bots) ? fromFile.bots : [];
 
     const normalized = new Set();
     for (const item of list || []) {
@@ -279,7 +317,7 @@ function loadWhitelist() {
 
 function applyWhitelist(bots, whitelist) {
     if (!(whitelist instanceof Set) || whitelist.size === 0) {
-        return { bots, mode: 'all-active' };
+        return { bots: [], mode: 'whitelist(empty)' };
     }
 
     const filtered = bots.filter((b) => {
@@ -595,6 +633,35 @@ async function resolveBotContext(bot) {
     return { assetA, assetB, poolId };
 }
 
+const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
+
+/**
+ * Atomically write the AMA center price for a bot to profiles/orders/<botKey>.gridprice.json.
+ * Called by price_adapter when a grid reset trigger fires (or on first initialisation) for bots
+ * with gridPrice: "ama". Uses write-then-rename to prevent partial reads by the dexbot process.
+ * @param {string} botKey   - Bot key (e.g. "iob-xrp-bts-0")
+ * @param {number} amaPrice - Current AMA center price (B/A format)
+ */
+function writeBotAmaCenter(botKey, amaPrice) {
+    try {
+        ensureDir(ORDERS_DIR);
+        const filePath = path.join(ORDERS_DIR, `${botKey}.gridprice.json`);
+        const tmpPath = `${filePath}.tmp`;
+        const payload = {
+            centerPrice: amaPrice,
+            updatedAt: new Date().toISOString(),
+            source: 'market_adapter/price_adapter.js',
+        };
+        // Atomic write: write to .tmp then rename — prevents dexbot reading a partial file
+        fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+        fs.renameSync(tmpPath, filePath);
+        return true;
+    } catch (err) {
+        console.warn(`[writeBotAmaCenter] Failed to write AMA center for ${botKey}: ${err.message}`);
+        return false;
+    }
+}
+
 const adapterService = createPriceAdapterService({
     resolveBotContext,
     resolveAmaForBot,
@@ -613,6 +680,7 @@ const adapterService = createPriceAdapterService({
     calcAmaPrice,
     calcAmaComparison,
     writeGridResetTrigger,
+    writeBotAmaCenter,
     root: ROOT,
     path,
 });

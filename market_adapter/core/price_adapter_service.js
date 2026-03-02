@@ -19,6 +19,7 @@ function createPriceAdapterService(deps = {}) {
         calcAmaPrice,
         calcAmaComparison,
         writeGridResetTrigger,
+        writeBotAmaCenter,
         root,
         path,
     } = deps;
@@ -44,6 +45,11 @@ function createPriceAdapterService(deps = {}) {
         if (!botAma.enabled) {
             return { ok: false, reason: 'ama disabled' };
         }
+
+        const gridPriceMode = (typeof bot.gridPrice === 'string')
+            ? bot.gridPrice.trim().toLowerCase()
+            : null;
+        const usesAmaGridPrice = gridPriceMode === 'ama';
 
         const contextSignature = buildBotContextSignature(bot);
         const cached = contextCache.get(bot.botKey);
@@ -125,43 +131,63 @@ function createPriceAdapterService(deps = {}) {
         let triggerPath = null;
         let deltaPercent = null;
         let triggerCallbackError = null;
+        let triggerSuppressedReason = null;
 
         if (!staleData && Number.isFinite(amaPrice) && amaPrice > 0) {
             const centerPrice = Number(botState.centerPrice || 0);
             if (!Number.isFinite(centerPrice) || centerPrice <= 0) {
+                // First run: record AMA as the delta-comparison baseline.
+                // Also persist the AMA center for bots using gridPrice: "ama" so that
+                // initializeGrid() can read it via loadAmaCenterPrice() on first reset.
                 botState.centerPrice = amaPrice;
                 botState.lastGridResetAt = nowIso;
+                if (usesAmaGridPrice && typeof writeBotAmaCenter === 'function') {
+                    writeBotAmaCenter(bot.botKey, amaPrice);
+                }
             } else {
                 deltaPercent = Math.abs((amaPrice - centerPrice) / centerPrice) * 100;
                 if (deltaPercent >= botThreshold) {
-                    triggerPath = writeGridResetTrigger(bot, {
-                        reason: 'price_adapter_delta_threshold',
-                        thresholdPercent: botThreshold,
-                        deltaPercent,
-                        previousCenterPrice: centerPrice,
-                        newCenterPrice: amaPrice,
-                        poolId: ctx.poolId,
-                    });
-                    botState.centerPrice = amaPrice;
-                    botState.lastGridResetAt = nowIso;
-                    botState.triggerCount = Number(botState.triggerCount || 0) + 1;
-                    triggered = true;
+                    let amaCenterPersisted = true;
 
-                    if (typeof hooks.onTrigger === 'function') {
-                        try {
-                            await hooks.onTrigger({
-                                bot,
-                                botKey: bot.botKey,
-                                botName: bot.name,
-                                poolId: ctx.poolId,
-                                thresholdPercent: botThreshold,
-                                deltaPercent,
-                                previousCenterPrice: centerPrice,
-                                newCenterPrice: amaPrice,
-                                triggerPath,
-                            });
-                        } catch (err) {
-                            triggerCallbackError = err.message;
+                    // For gridPrice: "ama" bots — write the new AMA center to
+                    // profiles/orders/<botKey>.gridprice.json BEFORE writing the trigger file,
+                    // so initializeGrid() always finds a fresh value when it reacts.
+                    if (usesAmaGridPrice && typeof writeBotAmaCenter === 'function') {
+                        amaCenterPersisted = writeBotAmaCenter(bot.botKey, amaPrice) !== false;
+                    }
+
+                    if (!amaCenterPersisted) {
+                        triggerSuppressedReason = 'ama_center_persist_failed';
+                    } else {
+                        triggerPath = writeGridResetTrigger(bot, {
+                            reason: 'price_adapter_delta_threshold',
+                            thresholdPercent: botThreshold,
+                            deltaPercent,
+                            previousCenterPrice: centerPrice,
+                            newCenterPrice: amaPrice,
+                            poolId: ctx.poolId,
+                        });
+                        botState.centerPrice = amaPrice;
+                        botState.lastGridResetAt = nowIso;
+                        botState.triggerCount = Number(botState.triggerCount || 0) + 1;
+                        triggered = true;
+
+                        if (typeof hooks.onTrigger === 'function') {
+                            try {
+                                await hooks.onTrigger({
+                                    bot,
+                                    botKey: bot.botKey,
+                                    botName: bot.name,
+                                    poolId: ctx.poolId,
+                                    thresholdPercent: botThreshold,
+                                    deltaPercent,
+                                    previousCenterPrice: centerPrice,
+                                    newCenterPrice: amaPrice,
+                                    triggerPath,
+                                });
+                            } catch (err) {
+                                triggerCallbackError = err.message;
+                            }
                         }
                     }
                 }
@@ -205,6 +231,7 @@ function createPriceAdapterService(deps = {}) {
             staleData,
             staleAgeHours,
             lastTriggerFile: triggerPath || botState.lastTriggerFile || null,
+            lastTriggerSuppressedReason: triggerSuppressedReason,
         };
 
         return {
@@ -220,6 +247,7 @@ function createPriceAdapterService(deps = {}) {
             staleData,
             staleAgeHours,
             triggerCallbackError,
+            triggerSuppressedReason,
         };
     }
 
