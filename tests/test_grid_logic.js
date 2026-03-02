@@ -7,6 +7,8 @@
  */
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const Grid = require('../modules/order/grid');
 const { ORDER_TYPES, ORDER_STATES, DEFAULT_CONFIG, GRID_LIMITS } = require('../modules/constants');
 const { OrderManager } = require('../modules/order/manager');
@@ -223,6 +225,47 @@ async function runTests() {
         mockManager.accountTotals.buyFree = 2;
         const below = Grid.checkAndUpdateGridIfNeeded(mockManager);
         assert.strictEqual(below.buyUpdated, false, 'Available funds below threshold (<2%) should not trigger update');
+    }
+
+    console.log(' - Testing initializeGrid with case-insensitive AMA mode and out-of-bounds startPrice...');
+    {
+        const botKey = `test-grid-ama-${process.pid}-case`;
+        const ordersDir = path.join(__dirname, '..', 'profiles', 'orders');
+        const amaFile = path.join(ordersDir, `${botKey}.gridprice.json`);
+
+        fs.mkdirSync(ordersDir, { recursive: true });
+        fs.writeFileSync(amaFile, JSON.stringify({ centerPrice: 1000, updatedAt: new Date().toISOString() }, null, 2) + '\n', 'utf8');
+
+        try {
+            const manager = new OrderManager({
+                assetA: 'TESTA',
+                assetB: 'TESTB',
+                botKey,
+                startPrice: 100,
+                gridPrice: 'AMA',
+                minPrice: '2x',
+                maxPrice: '2x',
+                incrementPercent: 1,
+                targetSpreadPercent: 2,
+                weightDistribution: { buy: 0.5, sell: 0.5 },
+                botFunds: { buy: '100%', sell: '100%' },
+                activeOrders: { buy: 6, sell: 6 }
+            });
+
+            manager.assets = {
+                assetA: { id: '1.3.1', symbol: 'TESTA', precision: 5 },
+                assetB: { id: '1.3.2', symbol: 'TESTB', precision: 5 }
+            };
+            await manager.setAccountTotals({ buy: 5000, sell: 5000, buyFree: 5000, sellFree: 5000 });
+
+            await Grid.initializeGrid(manager);
+
+            assert(manager.orders.size > 0, 'initializeGrid should succeed even when configured startPrice is outside resolved bounds');
+            assert(manager.config.minPrice > 400 && manager.config.minPrice < 600, 'minPrice should be resolved from AMA center in case-insensitive mode');
+            assert(manager.config.maxPrice > 1800 && manager.config.maxPrice < 2200, 'maxPrice should be resolved from AMA center in case-insensitive mode');
+        } finally {
+            try { fs.unlinkSync(amaFile); } catch (_) {}
+        }
     }
 
     console.log(' - Testing shouldFlagOutOfSpread with toleranceSteps = 0.5...');

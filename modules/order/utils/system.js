@@ -312,6 +312,26 @@ const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
     return null;
 };
 
+/**
+ * Load the AMA center price written by price_adapter for a bot.
+ * The price_adapter writes this file atomically to profiles/orders/<botKey>.gridprice.json
+ * whenever a grid reset trigger fires (or on first initialisation) for bots with gridPrice: "ama".
+ * Called by initializeGrid() when manager.config.gridPrice === "ama".
+ * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
+ * @returns {number|null} AMA center price in B/A format, or null if file absent/invalid
+ */
+function loadAmaCenterPrice(botKey) {
+    try {
+        const gridPriceFile = path.join(__dirname, '../../../profiles/orders', `${botKey}.gridprice.json`);
+        const raw = fs.readFileSync(gridPriceFile, 'utf8');
+        const data = JSON.parse(raw);
+        const v = Number(data?.centerPrice);
+        return Number.isFinite(v) && v > 0 ? v : null;
+    } catch (_) {
+        return null;
+    }
+}
+
 // ================================================================================
 // SECTION 6: FEE MANAGEMENT (INIT)
 // ================================================================================
@@ -862,6 +882,7 @@ module.exports = {
     deriveMarketPrice,
     derivePoolPrice,
     derivePrice,
+    loadAmaCenterPrice,
     initializeFeeCache,
     persistGridSnapshot,
     retryPersistenceIfNeeded,

@@ -128,7 +128,7 @@ const {
     calculateIdealBoundary,
     assignGridRoles
 } = require('./utils/order');
-const { derivePrice } = require('./utils/system');
+const { derivePrice, loadAmaCenterPrice } = require('./utils/system');
 
 class Grid {
     /**
@@ -507,8 +507,46 @@ class Grid {
         }
 
         const mp = Number(manager.config.startPrice);
-        const minP = resolveConfiguredPriceBound(manager.config.minPrice, DEFAULT_CONFIG.minPrice, mp, 'min');
-        const maxP = resolveConfiguredPriceBound(manager.config.maxPrice, DEFAULT_CONFIG.maxPrice, mp, 'max');
+
+        // Derive gridPrice — separate reference for x-factor bounds (may differ from startPrice).
+        // Three modes: numeric (fixed), "ama" (read from profiles/orders/<botKey>.gridprice.json),
+        // null/anything else (fallback to startPrice — backward-compatible).
+        let gp = mp;
+        const gpRaw = manager.config.gridPrice;
+        const gpMode = (typeof gpRaw === 'string') ? gpRaw.trim().toLowerCase() : null;
+        if (typeof gpRaw === 'number' && Number.isFinite(gpRaw) && gpRaw > 0) {
+            gp = gpRaw;
+            manager.logger?.log?.(`[DIAGNOSTIC] initializeGrid: gridPrice=numeric ${gp.toFixed(8)}`, 'info');
+        } else if (gpMode === 'ama') {
+            const amaCenter = loadAmaCenterPrice(manager.config.botKey);
+            if (Number.isFinite(amaCenter) && amaCenter > 0) {
+                gp = amaCenter;
+                manager.logger?.log?.(`[DIAGNOSTIC] initializeGrid: gridPrice=AMA center ${gp.toFixed(8)}`, 'info');
+            } else {
+                manager.logger?.log?.(`initializeGrid: AMA center unavailable for gridPrice, falling back to startPrice`, 'warn');
+            }
+        }
+
+        const minP = resolveConfiguredPriceBound(manager.config.minPrice, DEFAULT_CONFIG.minPrice, gp, 'min');
+        const maxP = resolveConfiguredPriceBound(manager.config.maxPrice, DEFAULT_CONFIG.maxPrice, gp, 'max');
+
+        let gridStartPrice = mp;
+        if (!(gridStartPrice >= minP && gridStartPrice <= maxP)) {
+            if (Number.isFinite(gp) && gp > 0 && gp >= minP && gp <= maxP) {
+                gridStartPrice = gp;
+                manager.logger?.log?.(
+                    `initializeGrid: startPrice (${mp}) outside bounds [${minP}, ${maxP}]; using gridPrice center ${gp}`,
+                    'warn'
+                );
+            } else {
+                const clamped = Math.min(maxP, Math.max(minP, gridStartPrice));
+                manager.logger?.log?.(
+                    `initializeGrid: startPrice (${mp}) outside bounds [${minP}, ${maxP}]; clamping to ${clamped}`,
+                    'warn'
+                );
+                gridStartPrice = clamped;
+            }
+        }
 
         manager.config.minPrice = minP;
         manager.config.maxPrice = maxP;
@@ -525,7 +563,12 @@ class Grid {
             throw new Error(`Cannot initialize grid without account totals: ${e.message}`);
         }
 
-        const { orders, boundaryIdx, initialSpreadCount } = Grid.createOrderGrid(manager.config);
+        const { orders, boundaryIdx, initialSpreadCount } = Grid.createOrderGrid({
+            ...manager.config,
+            startPrice: gridStartPrice,
+            minPrice: minP,
+            maxPrice: maxP,
+        });
 
         // RC-8: Update boundary with notification to dependent systems
         // Persist master boundary for StrategyEngine
@@ -602,7 +645,7 @@ class Grid {
         // FIX: Use consistent optional chaining pattern for all logger calls
         manager.logger?.log?.(`Initialized grid with ${orders.length} orders.`, 'info');
         manager.logger?.logFundsStatus?.(manager);
-        manager.logger?.logOrderGrid?.(Array.from(manager.orders.values()), manager.config.startPrice);
+        manager.logger?.logOrderGrid?.(Array.from(manager.orders.values()), gridStartPrice);
     }
 
     /**
