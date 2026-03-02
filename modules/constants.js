@@ -64,29 +64,35 @@
  *      FILL_ACK_WAIT_MS, FILL_TIMEOUT_MS, FILL_RETRY_ATTEMPTS
  *      Includes BATCH_LIMITS sub-object
  *
+ * MARKET ADAPTER CONFIGURATION:
+ *   10. MARKET_ADAPTER - Price tracking and grid recalculation trigger settings
+ *       DELTA_THRESHOLD_PERCENT: % change in AMA center price that triggers grid reset
+ *       Related to bot AMA configuration (profiles/bots.json: ama.enabled, erPeriod, etc.)
+ *       Stored in: profiles/general.settings.json
+ *
  * MAINTENANCE & MONITORING:
- *   10. MAINTENANCE - Background maintenance task configuration
+ *   11. MAINTENANCE - Background maintenance task configuration
  *       HEALTH_CHECK_INTERVAL_MS, PERSISTENCE_CHECK_INTERVAL_MS
  *       LOCK_CLEANUP_INTERVAL_MS, FILL_CLEANUP_INTERVAL_MS
  *
- *   11. NODE_MANAGEMENT - Multi-node health checking and failover configuration
+ *   12. NODE_MANAGEMENT - Multi-node health checking and failover configuration
  *       DEFAULT_NODES: List of BitShares nodes for redundancy
  *       HEALTH_CHECK_INTERVAL_MS, HEALTH_CHECK_TIMEOUT_MS, MAX_PING_MS
  *       BLACKLIST_THRESHOLD: Failures before node is blacklisted
  *       EXPECTED_CHAIN_ID: BitShares mainnet chain ID validation
  *       SELECTION_STRATEGY: Node selection algorithm (latency-based)
  *
- *   12. UPDATER - Version checking and update notification
+ *   13. UPDATER - Version checking and update notification
  *       CHECK_INTERVAL_MS, REPO_URL, NOTIFICATION_MIN_LEVEL
  *
  * LOGGING CONFIGURATION:
- *   13. LOGGING_CONFIG - Structured logging configuration
+ *   14. LOGGING_CONFIG - Structured logging configuration
  *       changeTracking: Smart change detection
  *       display.colors: TTY color support
  *       display.fundStatus, display.statusSummary, display.gridDiagnostics
  *       Categories for enabling/disabling log types
  *
- *   14. LOG_LEVEL - Current logging verbosity level
+ *   15. LOG_LEVEL - Current logging verbosity level
  *       Affects which messages are displayed: 'debug', 'info', 'warn', 'error'
  *
  * ===============================================================================
@@ -141,6 +147,11 @@ let DEFAULT_CONFIG = {
     startPrice: "pool",          // Market price source: "pool" (liquidity pool), "orderbook", or numeric value
     minPrice: "3x",               // Lower price bound: "Nx" = N times below startPrice, or numeric value
     maxPrice: "3x",               // Upper price bound: "Nx" = N times above startPrice, or numeric value
+    gridPrice: null,              // Optional reference price for x-factor bounds calculation.
+                                  // "ama"    = price_adapter writes AMA center to profiles/orders/<botKey>.gridprice.json;
+                                  //            grid generator reads it from there on reset
+                                  // numeric  = fixed numeric value (never updated by price_adapter)
+                                  // null     = use startPrice (default, backward-compatible)
     incrementPercent: 0.5,        // Price step between grid levels (0.5 = 0.5% geometric spacing)
     targetSpreadPercent: 2,       // Target spread width between best buy and best sell (2 = 2%)
 
@@ -277,6 +288,10 @@ let GRID_LIMITS = {
     // Grid comparison metrics
     // Detects significant divergence between calculated (in-memory) and persisted grid state
     // after order fills and rotations
+    // NOTE: Independent from MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT
+    //   - RMS_PERCENTAGE: Triggers grid reset when calculated grid diverges from blockchain state
+    //   - DELTA_THRESHOLD_PERCENT: Triggers grid reset when AMA center price moves significantly
+    //   Both can be configured independently in profiles/general.settings.json
     GRID_COMPARISON: {
         // Metric calculation: RMS (Root Mean Square) of relative order size differences
         // Formula: RMS = √(mean of ((calculated - persisted) / persisted)²)
@@ -285,7 +300,7 @@ let GRID_LIMITS = {
 
         // Divergence threshold for automatic grid regeneration (RMS as percentage)
         // When compareGrids() metric exceeds this threshold, updateGridOrderSizes will be triggered
-        // Set to 0 to completely disable RMS divergence checks
+        // Set to 0 to completely disable RMS divergence checks (Issue #5: RMS Divergence Check Disabling)
         //
         // RMS Threshold Reference Table (for 5% distribution: 5% outliers, 95% perfect):
         // ┌────────────────────────────────────────────────────────┐

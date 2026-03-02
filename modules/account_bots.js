@@ -35,7 +35,12 @@
  *       "assetB": "USD",
  *       "active": true,
  *       "dryRun": false,
- *       "startPrice": "pool",
+ *       "startPrice": "pool",      // Price for order alignment: "pool", "market", or numeric
+ *       "gridPrice": null,         // Reference price for x-factor bounds (3 options):
+ *                                  //   "ama"    = price_adapter writes AMA center to
+ *                                  //              profiles/orders/<botKey>.gridprice.json; grid reads it on reset
+ *                                  //   <number> = fixed numeric reference (price_adapter does not touch this)
+ *                                  //   null     = use startPrice (default, backward-compatible)
  *       "minPrice": "3x",
  *       "maxPrice": "3x",
  *       "incrementPercent": 0.5,
@@ -45,12 +50,24 @@
  *       "activeOrders": { "sell": 20, "buy": 20 },
  *       "ama": {
  *         "enabled": true,
- *         "erPeriod": 10,
- *         "fastPeriod": 2,
- *         "slowPeriod": 30
+ *         "erPeriod": 10,      // Efficiency Ratio lookback period (candles)
+ *         "fastPeriod": 2,     // Fast smoothing period for trending markets
+ *         "slowPeriod": 30     // Slow smoothing period for choppy markets
  *       }
  *     }
  *   ]
+ * }
+ *
+ * GLOBAL SETTINGS CONFIGURATION (profiles/general.settings.json):
+ * {
+ *   "MARKET_ADAPTER": {
+ *     "DELTA_THRESHOLD_PERCENT": 1  // % change in AMA center price triggers grid reset
+ *   },
+ *   "GRID_LIMITS": {
+ *     "GRID_COMPARISON": {
+ *       "RMS_PERCENTAGE": 14.3  // RMS divergence threshold triggers grid reset (set to 0 to disable)
+ *     }
+ *   }
  * }
  *
  * ===============================================================================
@@ -77,6 +94,19 @@ function parseJsonWithComments(raw) {
 const BOTS_FILE = path.join(__dirname, '..', 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
 
+/**
+ * Default AMA (Adaptive Moving Average) configuration for price trend detection.
+ * Used by the market adapter (price_adapter.js) to calculate adaptive moving average
+ * and detect when grid recalculation should be triggered.
+ *
+ * Parameters:
+ *   enabled: Whether to use AMA for price tracking and grid recalculation triggers
+ *   erPeriod: Efficiency Ratio lookback period (higher = more stable, lower = more responsive)
+ *   fastPeriod: Smoothing period for trending markets (lower = faster response)
+ *   slowPeriod: Smoothing period for choppy/sideways markets (higher = more lag)
+ *
+ * Grid recalculation is triggered when AMA center price changes by DELTA_THRESHOLD_PERCENT.
+ */
 const DEFAULT_AMA_CONFIG = {
     enabled: true,
     erPeriod: 10,
@@ -84,6 +114,21 @@ const DEFAULT_AMA_CONFIG = {
     slowPeriod: 30,
 };
 
+/**
+ * Market adapter settings controlling grid recalculation triggers.
+ *
+ * DELTA_THRESHOLD_PERCENT: Percentage change in AMA center price that triggers grid reset.
+ *   - Controls market_adapter/price_adapter.js trigger logic
+ *   - When AMA price moves ±DELTA_THRESHOLD_PERCENT from last recorded center,
+ *     a recalculate.<botKey>.trigger file is created to signal grid regeneration
+ *   - Default: 1% (grid recalculates when market moves 1% from last recorded AMA center)
+ *   - Range: 0.1 to 50.0 (configurable via CLI and bot editor)
+ *   - Stored in: profiles/general.settings.json under MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT
+ *
+ * Related setting: RMS_PERCENTAGE in GRID_LIMITS.GRID_COMPARISON
+ *   - Controls grid divergence checks (independent of AMA)
+ *   - Set to 0 to disable RMS checks (Issue #5 fix)
+ */
 const DEFAULT_MARKET_ADAPTER_SETTINGS = {
     DELTA_THRESHOLD_PERCENT: 1,
 };
