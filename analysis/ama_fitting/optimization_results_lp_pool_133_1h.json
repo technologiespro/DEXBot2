@@ -1,82 +1,199 @@
 {
   "meta": {
     "dataLabel": "LP Pool 1.19.133 (1.3.5537/1.3.0)",
-    "candles": 6206,
-    "totalCombos": 26520,
+    "candles": 6194,
+    "totalCombos": 64000,
+    "ranges": {
+      "er": {
+        "mode": "geometric",
+        "min": 50,
+        "max": 500,
+        "step": null,
+        "quantum": 1,
+        "count": 40,
+        "ratio": 1.0608183551394486
+      },
+      "fast": {
+        "mode": "geometric",
+        "min": 1,
+        "max": 10,
+        "step": null,
+        "quantum": 0.01,
+        "count": 40,
+        "ratio": 1.0608183551394486
+      },
+      "slow": {
+        "mode": "geometric",
+        "min": 500,
+        "max": 5000,
+        "step": null,
+        "quantum": 1,
+        "count": 40,
+        "ratio": 1.0608183551394486
+      }
+    },
+    "boundaryFlags": {
+      "AMA1": {
+        "er": null,
+        "fast": null,
+        "slow": null,
+        "any": false
+      },
+      "AMA2": {
+        "er": null,
+        "fast": null,
+        "slow": null,
+        "any": false
+      },
+      "AMA3": {
+        "er": null,
+        "fast": null,
+        "slow": null,
+        "any": false
+      },
+      "AMA4": {
+        "er": null,
+        "fast": null,
+        "slow": null,
+        "any": false
+      }
+    },
+    "objective": {
+      "type": "distance_and_movement_weighted",
+      "distanceMetric": "sum(abs(close-ama)/ama)",
+      "movementMetric": "sum(abs(ama_t-ama_t-1)/ama_t-1)",
+      "weights": [
+        {
+          "key": "AMA1",
+          "name": "AMA1 (min move, cap 65%)",
+          "distanceCapQuantile": 0.65
+        },
+        {
+          "key": "AMA2",
+          "name": "AMA2 (min move, cap 55%)",
+          "distanceCapQuantile": 0.55
+        },
+        {
+          "key": "AMA3",
+          "name": "AMA3 (min move, cap 45%)",
+          "distanceCapQuantile": 0.45
+        },
+        {
+          "key": "AMA4",
+          "name": "AMA4 (min move, cap 40%)",
+          "distanceCapQuantile": 0.4
+        }
+      ],
+      "maxDistanceCap": {
+        "value": null,
+        "quantileByAma": {
+          "AMA1": 0.65,
+          "AMA2": 0.55,
+          "AMA3": 0.45,
+          "AMA4": 0.4
+        },
+        "appliedValueByAma": {
+          "AMA1": 537.7294030013943,
+          "AMA2": 460.9296877235111,
+          "AMA3": 389.4745664513693,
+          "AMA4": 356.1923827908902
+        }
+      }
+    },
     "bandCapRatio": 0.8,
-    "areaCapPct": 61.52609566978763,
-    "prodCapPct": 57.13969675238229,
-    "bestAreaMaxDist": {
-      "er": 185,
-      "fast": 10,
-      "slow": 100,
-      "area": {
-        "above": 109.3304250093181,
-        "below": 476.66338180026275,
-        "total": 585.9938068095809,
-        "maxUp": 0.2869137694933773,
-        "maxDown": 0.38453809793617266,
-        "maxDist": 0.38453809793617266
+    "amas": {
+      "AMA1": {
+        "er": 194,
+        "fast": 4.38,
+        "slow": 2062,
+        "area": {
+          "above": 118.80787549138734,
+          "below": 435.405227658527,
+          "total": 554.2131031499143,
+          "maxUp": 0.28895926635746616,
+          "maxDown": 0.39201094511318485,
+          "maxDist": 0.39201094511318485
+        },
+        "repos": 0,
+        "reposRate": 0,
+        "bandFactorPct": 78.40218902263697,
+        "distanceTotal": 537.6129635367358,
+        "amaMovementTotal": 0.5274595135235481,
+        "weightedScore": 0.5274595135235481,
+        "normDistance": null,
+        "normMovement": null,
+        "key": "AMA1",
+        "label": "AMA1 (min move, cap 65%)"
       },
-      "repos": 0,
-      "reposRate": 0,
-      "bandFactorPct": 76.90761958723454,
-      "areaMaxDist": 1523.890116362012,
-      "prodMaxDist": 135523.13905513642
-    },
-    "bestProdMaxDist": {
-      "er": 90,
-      "fast": 10,
-      "slow": 100,
-      "area": {
-        "above": 137.96596831401322,
-        "below": 371.53626427434796,
-        "total": 509.50223258836115,
-        "maxUp": 0.31344682385298317,
-        "maxDown": 0.35712310470238934,
-        "maxDist": 0.35712310470238934
+      "AMA2": {
+        "er": 194,
+        "fast": 3.46,
+        "slow": 1728,
+        "area": {
+          "above": 96.2459944085322,
+          "below": 381.3602154655852,
+          "total": 477.60620987411744,
+          "maxUp": 0.2710665881830027,
+          "maxDown": 0.35810873888303196,
+          "maxDist": 0.35810873888303196
+        },
+        "repos": 0,
+        "reposRate": 0,
+        "bandFactorPct": 71.6217477766064,
+        "distanceTotal": 460.59111690526,
+        "amaMovementTotal": 0.6958577829564399,
+        "weightedScore": 0.6958577829564399,
+        "normDistance": null,
+        "normMovement": null,
+        "key": "AMA2",
+        "label": "AMA2 (min move, cap 55%)"
       },
-      "repos": 0,
-      "reposRate": 0,
-      "bandFactorPct": 71.42462094047787,
-      "areaMaxDist": 1426.6851566855578,
-      "prodMaxDist": 143534.1477194505
-    },
-    "bestAreaMaxDistCapped": {
-      "er": 40,
-      "fast": 9.5,
-      "slow": 97.5,
-      "area": {
-        "above": 117.70358721665647,
-        "below": 290.30626424330273,
-        "total": 408.00985145995924,
-        "maxUp": 0.3073314935891902,
-        "maxDown": 0.30680688364011216,
-        "maxDist": 0.3073314935891902
+      "AMA3": {
+        "er": 206,
+        "fast": 2.73,
+        "slow": 1364,
+        "area": {
+          "above": 76.19437237534639,
+          "below": 330.34277141250664,
+          "total": 406.53714378785304,
+          "maxUp": 0.251728672485311,
+          "maxDown": 0.32840078365585745,
+          "maxDist": 0.32840078365585745
+        },
+        "repos": 0,
+        "reposRate": 0,
+        "bandFactorPct": 65.6801567311715,
+        "distanceTotal": 389.05982370755925,
+        "amaMovementTotal": 0.8557091668806015,
+        "weightedScore": 0.8557091668806015,
+        "normDistance": null,
+        "normMovement": null,
+        "key": "AMA3",
+        "label": "AMA3 (min move, cap 45%)"
       },
-      "repos": 0.053715308863025966,
-      "reposRate": 0.0005371530886302597,
-      "bandFactorPct": 61.46629871783804,
-      "areaMaxDist": 1327.588808732195,
-      "prodMaxDist": 111183.16672933765
-    },
-    "bestProdMaxDistCapped": {
-      "er": 25,
-      "fast": 10,
-      "slow": 92.5,
-      "area": {
-        "above": 106.01324723573163,
-        "below": 253.43989763745122,
-        "total": 359.45314487318285,
-        "maxUp": 0.28559886222589026,
-        "maxDown": 0.2750900843954073,
-        "maxDist": 0.28559886222589026
-      },
-      "repos": 0.26857654431512984,
-      "reposRate": 0.0026857654431512983,
-      "bandFactorPct": 57.11977244517805,
-      "areaMaxDist": 1258.594456825527,
-      "prodMaxDist": 94075.95786003793
+      "AMA4": {
+        "er": 351,
+        "fast": 1.7,
+        "slow": 957,
+        "area": {
+          "above": 72.62524636663723,
+          "below": 300.9859851256603,
+          "total": 373.6112314922975,
+          "maxUp": 0.25101299949415334,
+          "maxDown": 0.30610706459369885,
+          "maxDist": 0.30610706459369885
+        },
+        "repos": 0,
+        "reposRate": 0,
+        "bandFactorPct": 61.22141291873977,
+        "distanceTotal": 356.00332933006393,
+        "amaMovementTotal": 0.9369113134276194,
+        "weightedScore": 0.9369113134276194,
+        "normDistance": null,
+        "normMovement": null,
+        "key": "AMA4",
+        "label": "AMA4 (min move, cap 40%)"
+      }
     }
   }
 }

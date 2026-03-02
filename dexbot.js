@@ -785,7 +785,7 @@ async function bootstrap() {
             TIMING: { ...TIMING },
             UPDATER: { ...UPDATER },
             MARKET_ADAPTER: {
-                DELTA_THRESHOLD_PERCENT: 1,
+                DELTA_THRESHOLD_PERCENT: 5,
             },
         };
         fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2) + '\n', 'utf8');

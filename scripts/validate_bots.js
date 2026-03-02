@@ -12,7 +12,7 @@
  * 2. profiles/bots.json (live config, plain JSON)
  *
  * Required fields for each bot: assetA, assetB, activeOrders, botFunds
- * Optional nested object: ama
+ * Optional field: gridPrice (number | null | "ama"/"ama1".."ama4")
  *
  * Usage: node scripts/validate_bots.js
  * Exit code: 0 (always, even if warnings found)
@@ -72,8 +72,7 @@ function checkConfig(obj, src) {
   // List of required fields that every bot must have
   const required = ['assetA', 'assetB', 'activeOrders', 'botFunds'];
   let anyMissing = false;
-  let anyAmaWarnings = false;
-  let anyAmaDeprecated = false;
+  let anyGridPriceWarnings = false;
 
   // Validate each bot entry
   bots.forEach((b, i) => {
@@ -91,47 +90,16 @@ function checkConfig(obj, src) {
       console.log(`- Bot[${i}] '${name}' OK`);
     }
 
-    if (b.ama !== undefined) {
-      const ama = b.ama;
-      if (typeof ama !== 'object' || ama === null || Array.isArray(ama)) {
-        anyAmaWarnings = true;
-        console.warn(`  └─ ama must be an object when present`);
-        return;
+    if (b.gridPrice !== undefined && b.gridPrice !== null) {
+      const gp = b.gridPrice;
+      const gpText = String(gp).trim().toLowerCase();
+      const gpNum = Number(gp);
+      const isAmaKeyword = /^ama(?:[1-4])?$/.test(gpText);
+      const isNumeric = Number.isFinite(gpNum) && gpNum > 0;
+      if (!isAmaKeyword && !isNumeric) {
+        anyGridPriceWarnings = true;
+        console.warn(`  └─ gridPrice warning: expected ama/ama1..ama4/positive number/null, got '${gp}'`);
       }
-
-      const warn = (msg) => {
-        anyAmaWarnings = true;
-        console.warn(`  └─ ama warning: ${msg}`);
-      };
-
-      if ('enabled' in ama && typeof ama.enabled !== 'boolean') {
-        warn('enabled must be boolean');
-      }
-      const intFields = [
-        ['erPeriod', 1],
-        ['fastPeriod', 1],
-        ['slowPeriod', 1],
-      ];
-      intFields.forEach(([field, min]) => {
-        if (!(field in ama)) return;
-        const val = Number(ama[field]);
-        if (!Number.isInteger(val) || val < min) {
-          warn(`${field} must be integer >= ${min}`);
-        }
-      });
-
-      if (Number.isInteger(Number(ama.fastPeriod)) && Number.isInteger(Number(ama.slowPeriod))) {
-        if (Number(ama.fastPeriod) > Number(ama.slowPeriod)) {
-          warn('fastPeriod should be <= slowPeriod');
-        }
-      }
-
-      ['source', 'intervalSeconds', 'lookbackHours'].forEach((field) => {
-        if (field in ama) {
-          anyAmaDeprecated = true;
-          console.warn(`  └─ ama note: '${field}' is ignored by current adapter runtime`);
-        }
-      });
     }
   });
 
@@ -139,11 +107,8 @@ function checkConfig(obj, src) {
   if (!anyMissing) {
     console.log(`-> ${src}: all required fields present for every bot entry`);
   }
-  if (!anyAmaWarnings) {
-    console.log(`-> ${src}: ama settings valid (or omitted) for every bot entry`);
-  }
-  if (!anyAmaDeprecated) {
-    console.log(`-> ${src}: no deprecated ama fields detected`);
+  if (!anyGridPriceWarnings) {
+    console.log(`-> ${src}: gridPrice settings valid (or omitted) for every bot entry`);
   }
 }
 

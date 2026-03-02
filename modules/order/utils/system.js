@@ -315,8 +315,9 @@ const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
 /**
  * Load the AMA center price written by price_adapter for a bot.
  * The price_adapter writes this file atomically to profiles/orders/<botKey>.gridprice.json
- * whenever a grid reset trigger fires (or on first initialisation) for bots with gridPrice: "ama".
- * Called by initializeGrid() when manager.config.gridPrice === "ama".
+ * whenever a grid reset trigger fires (or on first initialisation) for bots with
+ * gridPrice: "ama", "ama1", "ama2", "ama3", or "ama4".
+ * Called by initializeGrid() when manager.config.gridPrice uses an AMA keyword.
  * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
  * @returns {number|null} AMA center price in B/A format, or null if file absent/invalid
  */

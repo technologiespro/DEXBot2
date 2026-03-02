@@ -2,38 +2,55 @@
 
 const fs   = require('fs');
 const path = require('path');
+const os = require('os');
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const { calculateAMA } = require('./ama');
+
+const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'ama_profiles.json');
 
 /**
  * AMA GEOMETRIC OPTIMIZER
  *
  * Finds AMA parameters (ER, Fast, Slow) using geometric metrics only.
  *
- * Primary winners:
- *   - MAX AREA/MAXDIST      = area.total / maxDist
- *   - MAX PROD/MAXDIST      = (above * below) / maxDist
+ * New 4-AMA objective set:
+ *   - Minimise total relative distance: Σ |close - AMA| / AMA
+ *   - Minimise total AMA movement:      Σ |AMA_t - AMA_{t-1}| / AMA_{t-1}
  *
- * Capped winners:
- *   - MAX AREA/MAXDIST (capped)
- *   - MAX PROD/MAXDIST (capped)
- *
- * Cap is derived from each base winner's band factor:
- *   areaCapPct = BAND_CAP_RATIO * bandFactorPct(bestAreaMaxDist)
- *   prodCapPct = BAND_CAP_RATIO * bandFactorPct(bestProdMaxDist)
+ * AMA1..AMA4 use weighted minimisation, shifting weight from distance to movement:
+ *   AMA1: distance-heavy
+ *   AMA2: balanced
+ *   AMA3: movement-heavy
+ *   AMA4: movement-most-heavy
  *
  * Usage:
  *   node optimizer_high_resolution.js --data ../../market_adapter/data/lp_pool_133_4h.json
+ *   node optimizer_high_resolution.js --data ../../market_adapter/data/lp_pool_133_1h.json --erMax 400 --fastMax 20 --slowMax 200
  *
- * Capped variants use 80% of each base winner's Band Factor:
- *   areaCapPct = 0.8 × bandFactorPct(bestAreaMaxDist)
- *   prodCapPct = 0.8 × bandFactorPct(bestProdMaxDist)
  */
 
 const DATA_DIR = path.join(__dirname, 'data');
 
+const DEFAULT_SEARCH = {
+    er: { min: 50, max: 500, count: 40, step: null, quantum: 1 },
+    fast: { min: 1, max: 10, count: 40, step: null, quantum: 0.01 },
+    slow: { min: 500, max: 5000, count: 40, step: null, quantum: 1 },
+};
+
 // ── Geometric analysis constants ──────────────────────────────────────────────
 const REPOS_THRESHOLD      = 0.004;                          // 0.4% candle-to-candle AMA move
-const BAND_CAP_RATIO       = 0.8;                            // 80% of base winner's band factor
+const BAND_CAP_RATIO       = 0.8;                            // kept for backward-compat metadata
+
+const AMA_OBJECTIVES = [
+    { key: 'AMA1', name: 'AMA1 (min move, cap 65%)', distanceCapQuantile: 0.65 },
+    { key: 'AMA2', name: 'AMA2 (min move, cap 55%)', distanceCapQuantile: 0.55 },
+    { key: 'AMA3', name: 'AMA3 (min move, cap 45%)', distanceCapQuantile: 0.45 },
+    { key: 'AMA4', name: 'AMA4 (min move, cap 40%)', distanceCapQuantile: 0.40 },
+];
+
+function cloneObjectives() {
+    return AMA_OBJECTIVES.map((o) => ({ ...o }));
+}
 
 // ── Parameter ranges ──────────────────────────────────────────────────────────
 function range(min, max, step) {
@@ -42,9 +59,149 @@ function range(min, max, step) {
     return [...new Set(out)];
 }
 
-const ER_VALUES        = range(5,  200, 5);   // 40 values
-const FAST_VALUES      = range(2,  10,  0.5); // 17 values
-const SLOW_VALUES_AREA = range(5,  100, 2.5); // 39 values  (for MAX AREA — no repos gate)
+function quantize(value, quantum) {
+    if (!Number.isFinite(quantum) || quantum <= 0) return value;
+    return Math.round(value / quantum) * quantum;
+}
+
+function geometricRange(min, max, count, quantum = null) {
+    const out = [];
+    const ratio = Math.pow(max / min, 1 / (count - 1));
+    for (let i = 0; i < count; i++) {
+        let v = min * Math.pow(ratio, i);
+        if (i === 0) v = min;
+        if (i === count - 1) v = max;
+        v = quantize(v, quantum);
+        v = Math.max(min, Math.min(max, v));
+        out.push(parseFloat(v.toFixed(6)));
+    }
+    return [...new Set(out)].sort((a, b) => a - b);
+}
+
+function buildDimension(label, cfg) {
+    const min = Number(cfg.min);
+    const max = Number(cfg.max);
+    const step = Number(cfg.step);
+    const count = Number(cfg.count);
+    const quantum = Number(cfg.quantum);
+
+    if (Number.isFinite(step) && step > 0) {
+        const values = range(min, max, step);
+        return {
+            values,
+            meta: {
+                mode: 'linear',
+                min: values[0],
+                max: values[values.length - 1],
+                step,
+                quantum: Number.isFinite(quantum) && quantum > 0 ? quantum : null,
+                count: values.length,
+                ratio: null,
+            },
+        };
+    }
+
+    const ratio = Math.pow(max / min, 1 / (count - 1));
+    const values = geometricRange(min, max, count, quantum);
+    return {
+        values,
+        meta: {
+            mode: 'geometric',
+            min: values[0],
+            max: values[values.length - 1],
+            step: null,
+            quantum: Number.isFinite(quantum) && quantum > 0 ? quantum : null,
+            count: values.length,
+            ratio,
+        },
+    };
+}
+
+function parseArgs() {
+    const args = process.argv.slice(2);
+    const out = {
+        dataFile: null,
+        er: { ...DEFAULT_SEARCH.er },
+        fast: { ...DEFAULT_SEARCH.fast },
+        slow: { ...DEFAULT_SEARCH.slow },
+        workers: null,
+    };
+
+    for (let i = 0; i < args.length; i++) {
+        const a = args[i];
+        const v = args[i + 1];
+        switch (a) {
+            case '--data': out.dataFile = v || null; i++; break;
+            case '--erMin': out.er.min = Number(v); i++; break;
+            case '--erMax': out.er.max = Number(v); i++; break;
+            case '--erStep': out.er.step = Number(v); i++; break;
+            case '--erCount': out.er.count = Number(v); i++; break;
+            case '--fastMin': out.fast.min = Number(v); i++; break;
+            case '--fastMax': out.fast.max = Number(v); i++; break;
+            case '--fastStep': out.fast.step = Number(v); i++; break;
+            case '--fastCount': out.fast.count = Number(v); i++; break;
+            case '--slowMin': out.slow.min = Number(v); i++; break;
+            case '--slowMax': out.slow.max = Number(v); i++; break;
+            case '--slowStep': out.slow.step = Number(v); i++; break;
+            case '--slowCount': out.slow.count = Number(v); i++; break;
+            case '--ama1Cap': out.ama1Cap = Number(v); i++; break;
+            case '--ama2Cap': out.ama2Cap = Number(v); i++; break;
+            case '--ama3Cap': out.ama3Cap = Number(v); i++; break;
+            case '--ama4Cap': out.ama4Cap = Number(v); i++; break;
+            case '--workers': out.workers = Number(v); i++; break;
+        }
+    }
+
+    return out;
+}
+
+function percentile(values, q) {
+    if (!Array.isArray(values) || values.length === 0) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    const qq = Math.max(0, Math.min(1, q));
+    const pos = (sorted.length - 1) * qq;
+    const lo = Math.floor(pos);
+    const hi = Math.ceil(pos);
+    if (lo === hi) return sorted[lo];
+    const t = pos - lo;
+    return sorted[lo] * (1 - t) + sorted[hi] * t;
+}
+
+function getAmaObjectivesFromArgs(args) {
+    const objectives = cloneObjectives();
+    for (const o of objectives) {
+        const id = o.key.toLowerCase();
+        const cap = args[`${id}Cap`];
+        if (Number.isFinite(cap)) o.distanceCapQuantile = cap;
+        if (!Number.isFinite(o.distanceCapQuantile) || o.distanceCapQuantile <= 0 || o.distanceCapQuantile > 1) {
+            throw new Error(`Invalid cap for ${o.key}: ${o.distanceCapQuantile}. Use 0 < cap <= 1`);
+        }
+    }
+    return objectives;
+}
+
+function ensureValidRange(label, cfg) {
+    const { min, max, step, count } = cfg;
+    if (!Number.isFinite(min) || !Number.isFinite(max) || max < min) {
+        throw new Error(`Invalid ${label} range: min=${min}, max=${max}`);
+    }
+    if (Number.isFinite(step) && step > 0) return;
+    if (!Number.isFinite(count) || count < 2) {
+        throw new Error(`Invalid ${label} geometric sampling count: ${count}`);
+    }
+}
+
+function boundaryFlags(winner, erValues, fastValues, slowValues) {
+    if (!winner) return { er: null, fast: null, slow: null, any: false };
+    const eps = 1e-9;
+    const minEr = erValues[0], maxEr = erValues[erValues.length - 1];
+    const minFast = fastValues[0], maxFast = fastValues[fastValues.length - 1];
+    const minSlow = slowValues[0], maxSlow = slowValues[slowValues.length - 1];
+    const er = Math.abs(winner.er - minEr) < eps ? 'min' : (Math.abs(winner.er - maxEr) < eps ? 'max' : null);
+    const fast = Math.abs(winner.fast - minFast) < eps ? 'min' : (Math.abs(winner.fast - maxFast) < eps ? 'max' : null);
+    const slow = Math.abs(winner.slow - minSlow) < eps ? 'min' : (Math.abs(winner.slow - maxSlow) < eps ? 'max' : null);
+    return { er, fast, slow, any: !!(er || fast || slow) };
+}
 
 // ── Data loaders ──────────────────────────────────────────────────────────────
 
@@ -66,6 +223,103 @@ function loadMexc() {
 function loadLp(filePath) {
     const json = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     return { candles: toCandles(json.candles ?? json), meta: json.meta ?? null };
+}
+
+function ensureDir(dirPath) {
+    if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function normalizeSymbol(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function inferIntervalLabel(dataFile, meta) {
+    const fromMeta = Number(meta?.intervalSeconds);
+    if (Number.isFinite(fromMeta) && fromMeta > 0) {
+        if (fromMeta % 3600 === 0) return `${Math.round(fromMeta / 3600)}h`;
+        if (fromMeta % 60 === 0) return `${Math.round(fromMeta / 60)}m`;
+        return `${fromMeta}s`;
+    }
+
+    const m = String(path.basename(dataFile || '')).match(/_(\d+)([mhd])\.json$/i);
+    return m ? `${m[1]}${m[2].toLowerCase()}` : '1h';
+}
+
+function updateAmaProfilesFile({ dataFile, meta, winners, sourceResultsFile }) {
+    const assetASymbol = normalizeSymbol(meta?.assetA?.symbol);
+    const assetBSymbol = normalizeSymbol(meta?.assetB?.symbol);
+    const assetAId = normalizeSymbol(meta?.assetA?.id);
+    const assetBId = normalizeSymbol(meta?.assetB?.id);
+    const assetA = assetASymbol || assetAId;
+    const assetB = assetBSymbol || assetBId;
+    if (!assetA || !assetB) return;
+
+    const intervalSeconds = Number(meta?.intervalSeconds);
+    const intervalLabel = inferIntervalLabel(dataFile, meta);
+    const key = `${assetA}|${assetB}|${Number.isFinite(intervalSeconds) && intervalSeconds > 0 ? intervalSeconds : intervalLabel}`;
+
+    const payload = {
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        profiles: [],
+    };
+
+    if (fs.existsSync(AMA_PROFILES_FILE)) {
+        try {
+            const current = JSON.parse(fs.readFileSync(AMA_PROFILES_FILE, 'utf8'));
+            if (current && typeof current === 'object') {
+                payload.version = Number(current.version) || 1;
+                payload.profiles = Array.isArray(current.profiles) ? current.profiles : [];
+            }
+        } catch (_) {}
+    }
+
+    const profile = {
+        key,
+        assetA,
+        assetB,
+        assetAId: assetAId || null,
+        assetBId: assetBId || null,
+        poolId: meta?.pool || null,
+        intervalSeconds: Number.isFinite(intervalSeconds) && intervalSeconds > 0 ? intervalSeconds : null,
+        intervalLabel,
+        defaultAma: 'AMA2',
+        sourceResultsFile,
+        updatedAt: payload.updatedAt,
+        amas: {
+            AMA1: {
+                name: winners.ama1.label,
+                erPeriod: winners.ama1.er,
+                fastPeriod: winners.ama1.fast,
+                slowPeriod: winners.ama1.slow,
+            },
+            AMA2: {
+                name: winners.ama2.label,
+                erPeriod: winners.ama2.er,
+                fastPeriod: winners.ama2.fast,
+                slowPeriod: winners.ama2.slow,
+            },
+            AMA3: {
+                name: winners.ama3.label,
+                erPeriod: winners.ama3.er,
+                fastPeriod: winners.ama3.fast,
+                slowPeriod: winners.ama3.slow,
+            },
+            AMA4: {
+                name: winners.ama4.label,
+                erPeriod: winners.ama4.er,
+                fastPeriod: winners.ama4.fast,
+                slowPeriod: winners.ama4.slow,
+            },
+        },
+    };
+
+    const idx = payload.profiles.findIndex((p) => String(p?.key || '') === key);
+    if (idx >= 0) payload.profiles[idx] = profile;
+    else payload.profiles.push(profile);
+
+    ensureDir(path.dirname(AMA_PROFILES_FILE));
+    fs.writeFileSync(AMA_PROFILES_FILE, JSON.stringify(payload, null, 2) + '\n', 'utf8');
 }
 
 // ── AMA Reposition Rate ───────────────────────────────────────────────────────
@@ -102,31 +356,153 @@ function calcArea(amaValues, candles) {
     return { above, below, total, maxUp, maxDown, maxDist };
 }
 
+function calcTotalRelativeDistance(amaValues, candles) {
+    const skip = Math.max(20, Math.floor(candles.length * 0.1));
+    let total = 0;
+    for (let i = skip; i < candles.length; i++) {
+        const ama = amaValues[i];
+        const close = candles[i].close;
+        total += Math.abs(close - ama) / ama;
+    }
+    return total;
+}
+
+function calcTotalAmaMovement(amaValues) {
+    const skip = Math.max(20, Math.floor(amaValues.length * 0.1));
+    let total = 0;
+    for (let i = skip + 1; i < amaValues.length; i++) {
+        total += Math.abs(amaValues[i] - amaValues[i - 1]) / amaValues[i - 1];
+    }
+    return total;
+}
+
+function runSearchShard(payload, onProgress = null) {
+    const {
+        workerId,
+        erShard,
+        fastValues,
+        slowValues,
+        candles,
+        closes,
+    } = payload;
+
+    const totalCombos = erShard.length * fastValues.length * slowValues.length;
+    const progressStep = Math.max(2000, Math.floor(totalCombos / 20));
+    let checked = 0;
+    let valid = 0;
+    const entries = [];
+    const startMs = Date.now();
+
+    for (const er of erShard) {
+        for (const fast of fastValues) {
+            for (const slow of slowValues) {
+                checked++;
+                if (fast >= slow) {
+                    if (onProgress && (checked % progressStep === 0 || checked === totalCombos)) {
+                        const elapsedSec = (Date.now() - startMs) / 1000;
+                        onProgress({ workerId, checked, total: totalCombos, elapsedSec });
+                    }
+                    continue;
+                }
+                valid++;
+
+                const ama = calculateAMA(closes, { erPeriod: er, fastPeriod: fast, slowPeriod: slow });
+                const area = calcArea(ama, candles);
+                const reposRate = calcReposRate(ama);
+                const repos = reposRate * 100;
+                const distanceTotal = calcTotalRelativeDistance(ama, candles);
+                const amaMovementTotal = calcTotalAmaMovement(ama);
+                const bandFactorPct = area.maxDist * 200;
+                const entry = {
+                    er, fast, slow,
+                    area,
+                    repos,
+                    reposRate,
+                    bandFactorPct,
+                    distanceTotal,
+                    amaMovementTotal,
+                };
+                entries.push(entry);
+
+                if (onProgress && (checked % progressStep === 0 || checked === totalCombos)) {
+                    const elapsedSec = (Date.now() - startMs) / 1000;
+                    onProgress({ workerId, checked, total: totalCombos, elapsedSec });
+                }
+            }
+        }
+    }
+
+    return { workerId, entries, totalCombos, validCombos: valid };
+}
+
+function spawnShardWorker(payload, onProgress) {
+    return new Promise((resolve, reject) => {
+        const worker = new Worker(__filename, { workerData: { type: 'search_shard', payload } });
+        worker.on('message', (msg) => {
+            if (!msg || typeof msg !== 'object') return;
+            if (msg.type === 'progress') {
+                if (onProgress) onProgress(msg);
+                return;
+            }
+            if (msg.type === 'done') resolve(msg.result);
+        });
+        worker.on('error', reject);
+        worker.on('exit', (code) => {
+            if (code !== 0) reject(new Error(`Worker exited with code ${code}`));
+        });
+    });
+}
+
+function splitIntoShards(values, shardCount) {
+    const out = [];
+    const size = Math.ceil(values.length / shardCount);
+    for (let i = 0; i < values.length; i += size) {
+        out.push(values.slice(i, i + size));
+    }
+    return out.filter((s) => s.length > 0);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-function run() {
-    const dataArgIdx = process.argv.indexOf('--data');
-    const dataFile   = dataArgIdx !== -1 ? process.argv[dataArgIdx + 1] : null;
+async function run() {
+    const args = parseArgs();
+    const dataFile = args.dataFile;
+    const objectives = getAmaObjectivesFromArgs(args);
+
+    ensureValidRange('ER', args.er);
+    ensureValidRange('Fast', args.fast);
+    ensureValidRange('Slow', args.slow);
+
+    const erDim = buildDimension('ER', args.er);
+    const fastDim = buildDimension('Fast', args.fast);
+    const slowDim = buildDimension('Slow', args.slow);
+
+    const ER_VALUES = erDim.values;
+    const FAST_VALUES = fastDim.values;
+    const SLOW_VALUES_AREA = slowDim.values;
 
     const totalCombos = ER_VALUES.length * FAST_VALUES.length * SLOW_VALUES_AREA.length;
+    const startMs = Date.now();
 
     console.log('================================================================================');
     console.log(' AMA GEOMETRIC OPTIMIZER');
     console.log('================================================================================');
     console.log(`  4 AMAs — pure geometric, no grid or bot settings`);
-    console.log(`  MAX AREA/MAXDIST:  area.total / maxDist              (linear band penalty)`);
-    console.log(`  MAX PROD/MAXDIST:  (above × below) / maxDist         (product per band)`);
-    console.log(`  MAX AREA/MAXDIST (BAND≤80% of base AREA): constrained area winner`);
-    console.log(`  MAX PROD/MAXDIST (BAND≤80% of base PROD): constrained product winner`);
+    console.log('  Objective: minimise AMA movement under per-AMA max distance caps');
+    for (const o of objectives) {
+        console.log(`  ${o.key}: distance cap quantile q=${o.distanceCapQuantile.toFixed(2)}`);
+    }
     console.log(`  Ranges:     ER ${ER_VALUES[0]}–${ER_VALUES[ER_VALUES.length-1]}  Fast ${FAST_VALUES[0]}–${FAST_VALUES[FAST_VALUES.length-1]}  Slow ${SLOW_VALUES_AREA[0]}–${SLOW_VALUES_AREA[SLOW_VALUES_AREA.length-1]}`);
+    console.log(`  Sampling:   ER ${erDim.meta.mode}(${erDim.meta.count}${erDim.meta.ratio ? `,x${erDim.meta.ratio.toFixed(3)}` : ''})  Fast ${fastDim.meta.mode}(${fastDim.meta.count}${fastDim.meta.ratio ? `,x${fastDim.meta.ratio.toFixed(3)}` : ''})  Slow ${slowDim.meta.mode}(${slowDim.meta.count}${slowDim.meta.ratio ? `,x${slowDim.meta.ratio.toFixed(3)}` : ''})`);
     console.log(`  Combos:     ${totalCombos}\n`);
 
     // Load data
-    let candles, dataLabel;
+    let candles, dataLabel, dataMeta = null;
     if (dataFile) {
         const loaded = loadLp(path.resolve(dataFile));
         candles   = loaded.candles;
         const m   = loaded.meta;
+        dataMeta = m;
         dataLabel = m ? `LP Pool ${m.pool} (${m.assetA?.symbol}/${m.assetB?.symbol})` : path.basename(dataFile);
     } else {
         candles   = loadMexc();
@@ -135,47 +511,76 @@ function run() {
     const closes = candles.map(c => c.close);
     console.log(`  Data:       ${dataLabel}  (${candles.length} candles)\n`);
 
-    // ── Run: pure geometric search — no grid settings ─────────────────────────
-    let bestAreaMaxDist = null, bestProdMaxDist = null, bestAreaMaxDistCapped = null, bestProdMaxDistCapped = null;
-    const allEntries = [];
+    // ── Run: core-parallel full-grid scan split by ER shards ──────────────────
+    const cpuCount = Math.max(1, os.cpus().length);
+    const requestedWorkers = Number.isFinite(args.workers) && args.workers > 0 ? Math.floor(args.workers) : cpuCount;
+    const workerCount = Math.max(1, Math.min(requestedWorkers, ER_VALUES.length));
+    const erShards = splitIntoShards(ER_VALUES, workerCount);
+    const shardTotals = erShards.map((shard) => shard.length * FAST_VALUES.length * SLOW_VALUES_AREA.length);
+    const shardProgress = new Map();
 
-    for (const er of ER_VALUES) {
-        for (const fast of FAST_VALUES) {
-            for (const slow of SLOW_VALUES_AREA) {
-                if (fast >= slow) continue;
+    console.log(`  Parallel workers: ${erShards.length} shard workers (CPU cores available: ${cpuCount})`);
+    const shardResults = await Promise.all(erShards.map((erShard, idx) => {
+        const workerPayload = {
+            workerId: idx + 1,
+            erShard,
+            fastValues: FAST_VALUES,
+            slowValues: SLOW_VALUES_AREA,
+            candles,
+            closes,
+        };
+        return spawnShardWorker(workerPayload, (msg) => {
+            shardProgress.set(msg.workerId, msg.checked);
+            const done = shardTotals.reduce((acc, total, i) => acc + Math.min(total, shardProgress.get(i + 1) || 0), 0);
+            const pct = ((done / totalCombos) * 100).toFixed(1);
+            console.log(`  [scan] ${pct}%  (${done}/${totalCombos})  w${msg.workerId} ${msg.elapsedSec.toFixed(1)}s`);
+        });
+    }));
 
-                const ama           = calculateAMA(closes, { erPeriod: er, fastPeriod: fast, slowPeriod: slow });
-                const area          = calcArea(ama, candles);
-                const reposRate     = calcReposRate(ama);
-                const repos         = reposRate * 100;
-                // Metric 1: area / maxDist — linear band penalty
-                const areaMaxDist   = area.total / area.maxDist;
-                // Metric 2: (above × below) / maxDist — product per band
-                const prodMaxDist   = (area.above * area.below) / area.maxDist;
-                const bandFactorPct = area.maxDist * 200;
-                const entry         = { er, fast, slow, area, repos, reposRate, bandFactorPct, areaMaxDist, prodMaxDist };
-                allEntries.push(entry);
+    const entries = shardResults.flatMap((r) => r.entries);
+    const validCombos = shardResults.reduce((acc, r) => acc + r.validCombos, 0);
+    const distVals = entries.map((e) => e.distanceTotal);
 
-                if (!bestAreaMaxDist || areaMaxDist > bestAreaMaxDist.areaMaxDist)   bestAreaMaxDist = entry;
-                if (!bestProdMaxDist || prodMaxDist > bestProdMaxDist.prodMaxDist)   bestProdMaxDist = entry;
+    const objectiveResults = objectives.map((objective) => {
+        const computedCap = percentile(distVals, objective.distanceCapQuantile);
+        const cappedEntries = entries.filter((e) => e.distanceTotal <= computedCap);
+
+        let best = null;
+        for (const e of cappedEntries) {
+            if (!best || e.amaMovementTotal < best.amaMovementTotal || (e.amaMovementTotal === best.amaMovementTotal && e.distanceTotal < best.distanceTotal)) {
+                best = {
+                    ...e,
+                    weightedScore: e.amaMovementTotal,
+                    normDistance: null,
+                    normMovement: null,
+                    key: objective.key,
+                    label: objective.name,
+                };
             }
         }
+
+        return {
+            objective,
+            best,
+            totalCombos,
+            validCombos,
+            candidatesUnderCap: cappedEntries.length,
+            maxDistanceCap: computedCap,
+        };
+    });
+    const elapsedSec = (Date.now() - startMs) / 1000;
+    console.log(`  Completed parallel search in ${elapsedSec.toFixed(1)}s  (valid combos: ${validCombos})\n`);
+
+    const selected = objectiveResults.map((r) => r.best).filter(Boolean);
+    const failed = objectiveResults.filter((r) => !r.best).map((r) => r.objective?.key || '?');
+    if (failed.length > 0) {
+        throw new Error(`No candidate under distance cap for: ${failed.join(', ')}. Increase corresponding cap (e.g. --ama4Cap 0.35).`);
     }
 
-    function bestUnderCap(capPct, key) {
-        let best = null;
-        for (const e of allEntries) {
-            if (e.bandFactorPct <= capPct && (!best || e[key] > best[key])) best = e;
-        }
-        return best;
-    }
-
-    const areaCapPct = bestAreaMaxDist ? bestAreaMaxDist.bandFactorPct * BAND_CAP_RATIO : null;
-    const prodCapPct = bestProdMaxDist ? bestProdMaxDist.bandFactorPct * BAND_CAP_RATIO : null;
-    const areaCapLabel = areaCapPct === null ? 'n/a' : areaCapPct.toFixed(1);
-    const prodCapLabel = prodCapPct === null ? 'n/a' : prodCapPct.toFixed(1);
-    bestAreaMaxDistCapped = areaCapPct ? bestUnderCap(areaCapPct, 'areaMaxDist') : null;
-    bestProdMaxDistCapped = prodCapPct ? bestUnderCap(prodCapPct, 'prodMaxDist') : null;
+    const ama1 = selected.find((s) => s.key === 'AMA1') || null;
+    const ama2 = selected.find((s) => s.key === 'AMA2') || null;
+    const ama3 = selected.find((s) => s.key === 'AMA3') || null;
+    const ama4 = selected.find((s) => s.key === 'AMA4') || null;
 
     function detail(label, r, optimisedFor) {
         if (!r) {
@@ -197,40 +602,53 @@ function run() {
     console.log(` 4 AMAs  —  pure geometric  (${ER_VALUES.length}×${FAST_VALUES.length}×${SLOW_VALUES_AREA.length} combinations)`);
     console.log('================================================================================\n');
 
-    detail('MAX AREA/MAXDIST   — linear band penalty',
-        bestAreaMaxDist, `area(${bestAreaMaxDist.area.total.toFixed(2)}) / maxDist(${(bestAreaMaxDist.area.maxDist * 100).toFixed(1)}%) = ${bestAreaMaxDist.areaMaxDist.toFixed(2)}`);
-    detail('MAX PROD/MAXDIST   — product per band',
-        bestProdMaxDist, `(above(${bestProdMaxDist.area.above.toFixed(2)}) × below(${bestProdMaxDist.area.below.toFixed(2)})) / maxDist(${(bestProdMaxDist.area.maxDist * 100).toFixed(1)}%) = ${bestProdMaxDist.prodMaxDist.toFixed(2)}`);
-    detail(`MAX AREA/MAXDIST   — constrained (Band Factor <= ${areaCapLabel}%)`,
-        bestAreaMaxDistCapped,
-        bestAreaMaxDistCapped
-            ? `area(${bestAreaMaxDistCapped.area.total.toFixed(2)}) / maxDist(${(bestAreaMaxDistCapped.area.maxDist * 100).toFixed(1)}%) = ${bestAreaMaxDistCapped.areaMaxDist.toFixed(2)}`
-            : 'n/a');
-    detail(`MAX PROD/MAXDIST   — constrained (Band Factor <= ${prodCapLabel}%)`,
-        bestProdMaxDistCapped,
-        bestProdMaxDistCapped
-            ? `(above(${bestProdMaxDistCapped.area.above.toFixed(2)}) × below(${bestProdMaxDistCapped.area.below.toFixed(2)})) / maxDist(${(bestProdMaxDistCapped.area.maxDist * 100).toFixed(1)}%) = ${bestProdMaxDistCapped.prodMaxDist.toFixed(2)}`
-            : 'n/a');
+    for (const w of selected) {
+        detail(w.label, w,
+            `minMove=${w.weightedScore.toFixed(6)}  rawDist=${w.distanceTotal.toFixed(2)}  rawMove=${w.amaMovementTotal.toFixed(2)}`);
+    }
+
+    for (const r of objectiveResults) {
+        if (Number.isFinite(r.maxDistanceCap)) {
+            console.log(`  ${r.objective.key} cap value: ${r.maxDistanceCap.toFixed(4)}  (candidates under cap: ${r.candidatesUnderCap})`);
+        }
+    }
+    console.log();
 
     // ── Side-by-side summary ───────────────────────────────────────────────────
     console.log('================================================================================');
     console.log(' SUMMARY');
     console.log('================================================================================\n');
-    console.log('                |  ER  | Fast | Slow | Area    | Above  | Below  | MaxDist | Repos%');
-    console.log('────────────────┼──────┼──────┼──────┼─────────┼────────┼────────┼─────────┼───────');
-    for (const [name, r] of [['MAX AREA/MAXDIST', bestAreaMaxDist], ['MAX PROD/MAXDIST', bestProdMaxDist], [`MAX AREA/MAXDIST (<=${areaCapLabel}%)`, bestAreaMaxDistCapped], [`MAX PROD/MAXDIST (<=${prodCapLabel}%)`, bestProdMaxDistCapped]]) {
+    console.log('                |  ER  | Fast | Slow | Dist    | Move    | Area    | MaxDist | Repos%');
+    console.log('────────────────┼──────┼──────┼──────┼─────────┼─────────┼─────────┼─────────┼───────');
+    for (const r of selected) {
+        const name = r.key;
         if (!r) continue;
         console.log(
             `${name.padEnd(15)} | ` +
             `${r.er.toString().padStart(4)} | ` +
             `${r.fast.toFixed(1).padStart(4)} | ` +
             `${r.slow.toFixed(1).padStart(4)} | ` +
+            `${r.distanceTotal.toFixed(2).padStart(7)} | ` +
+            `${r.amaMovementTotal.toFixed(2).padStart(7)} | ` +
             `${r.area.total.toFixed(2).padStart(7)} | ` +
-            `${r.area.above.toFixed(2).padStart(6)} | ` +
-            `${r.area.below.toFixed(2).padStart(6)} | ` +
             `${(r.area.maxDist * 100).toFixed(1).padStart(7)}% | ` +
             `${r.repos.toFixed(1).padStart(6)}`
         );
+    }
+    console.log();
+
+    const boundarySummary = {
+        AMA1: boundaryFlags(ama1, ER_VALUES, FAST_VALUES, SLOW_VALUES_AREA),
+        AMA2: boundaryFlags(ama2, ER_VALUES, FAST_VALUES, SLOW_VALUES_AREA),
+        AMA3: boundaryFlags(ama3, ER_VALUES, FAST_VALUES, SLOW_VALUES_AREA),
+        AMA4: boundaryFlags(ama4, ER_VALUES, FAST_VALUES, SLOW_VALUES_AREA),
+    };
+
+    console.log(' Boundary Check');
+    console.log('────────────────────────────────────────────────────────────────────────────────');
+    for (const [name, b] of Object.entries(boundarySummary)) {
+        const txt = b.any ? `ER:${b.er || '-'} Fast:${b.fast || '-'} Slow:${b.slow || '-'}` : 'none';
+        console.log(`${name.padEnd(24)} ${txt}`);
     }
     console.log();
 
@@ -240,10 +658,63 @@ function run() {
         : 'optimization_results_high_resolution.json';
     const outPath = path.join(__dirname, outName);
     fs.writeFileSync(outPath, JSON.stringify({
-        meta: { dataLabel, candles: candles.length, totalCombos, bandCapRatio: BAND_CAP_RATIO, areaCapPct, prodCapPct, bestAreaMaxDist, bestProdMaxDist, bestAreaMaxDistCapped, bestProdMaxDistCapped },
+        meta: {
+            dataLabel,
+            candles: candles.length,
+            totalCombos,
+            ranges: {
+                er: { ...erDim.meta },
+                fast: { ...fastDim.meta },
+                slow: { ...slowDim.meta },
+            },
+            boundaryFlags: boundarySummary,
+            objective: {
+                type: 'distance_and_movement_weighted',
+                distanceMetric: 'sum(abs(close-ama)/ama)',
+                movementMetric: 'sum(abs(ama_t-ama_t-1)/ama_t-1)',
+                weights: objectives,
+                maxDistanceCap: {
+                    value: null,
+                    quantileByAma: Object.fromEntries(objectives.map((o) => [o.key, o.distanceCapQuantile])),
+                    appliedValueByAma: Object.fromEntries(objectiveResults.map((r) => [r.objective.key, r.maxDistanceCap])),
+                },
+            },
+            bandCapRatio: BAND_CAP_RATIO,
+            amas: {
+                AMA1: ama1,
+                AMA2: ama2,
+                AMA3: ama3,
+                AMA4: ama4,
+            },
+        },
     }, null, 2));
+
+    if (dataFile && ama1 && ama2 && ama3 && ama4) {
+        updateAmaProfilesFile({
+            dataFile,
+            meta: dataMeta,
+            winners: { ama1, ama2, ama3, ama4 },
+            sourceResultsFile: outName,
+        });
+    }
+
     console.log(`================================================================================`);
     console.log(`  Saved: ${outName}\n`);
+    if (dataFile) console.log(`  Updated: ${path.relative(process.cwd(), AMA_PROFILES_FILE)}\n`);
 }
 
-run();
+if (!isMainThread) {
+    if (workerData?.type === 'search_shard') {
+        const result = runSearchShard(workerData.payload, (p) => {
+            parentPort.postMessage({ type: 'progress', ...p });
+        });
+        parentPort.postMessage({ type: 'done', result });
+    } else {
+        throw new Error('Unknown worker task type');
+    }
+} else {
+    run().catch((err) => {
+        console.error('Fatal:', err);
+        process.exit(1);
+    });
+}

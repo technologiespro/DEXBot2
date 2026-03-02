@@ -15,7 +15,7 @@
  *   node market_adapter/fetch_lp_data.js --pool 133 --precA 5 --precB 8
  *
  * Output:
- *   market_adapter/data/lp_pool_133_4h.json
+ *   market_adapter/data/lp/<assetA>_<assetB>/lp_pool_133_4h.json
  *
  * Precision:
  *   Resolved automatically from the BitShares blockchain via lookup_asset_symbols.
@@ -71,12 +71,29 @@ function parseArgs() {
 
 // ─── Output path ──────────────────────────────────────────────────────────────
 
-function outputPath(poolId, intervalSeconds) {
-    const label = intervalSeconds >= 86400 ? `${intervalSeconds / 86400}d` :
-                  intervalSeconds >= 3600  ? `${intervalSeconds / 3600}h`  :
-                  intervalSeconds >= 60    ? `${intervalSeconds / 60}m`    : `${intervalSeconds}s`;
+function intervalLabel(intervalSeconds) {
+    return intervalSeconds >= 86400 ? `${intervalSeconds / 86400}d` :
+        intervalSeconds >= 3600  ? `${intervalSeconds / 3600}h`  :
+            intervalSeconds >= 60    ? `${intervalSeconds / 60}m`    : `${intervalSeconds}s`;
+}
+
+function slugPart(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'unknown';
+}
+
+function pairFolderName(assetA, assetB) {
+    return `${slugPart(assetA?.symbol)}_${slugPart(assetB?.symbol)}`;
+}
+
+function outputPath(poolId, intervalSeconds, assetA, assetB) {
+    const label = intervalLabel(intervalSeconds);
     const id  = String(poolId).replace('1.19.', '');
-    return path.join(__dirname, 'data', `lp_pool_${id}_${label}.json`);
+    const pairFolder = pairFolderName(assetA, assetB);
+    return path.join(__dirname, 'data', 'lp', pairFolder, `lp_pool_${id}_${label}.json`);
 }
 
 // ─── bots.json helper ─────────────────────────────────────────────────────────
@@ -186,9 +203,7 @@ async function findPool(BitShares, idA, idB) {
 async function run() {
     const { poolId: cliPoolId, botName, precA: cliPrecA, precB: cliPrecB, config } = parseArgs();
 
-    const intervalLabel = config.intervalSeconds >= 86400 ? `${config.intervalSeconds / 86400}d` :
-                          config.intervalSeconds >= 3600  ? `${config.intervalSeconds / 3600}h`  :
-                          `${config.intervalSeconds / 60}m`;
+    const bucketLabel = intervalLabel(config.intervalSeconds);
 
     console.log('══════════════════════════════════════════════');
     console.log(' Kibana LP Fetcher — Pool-centric');
@@ -205,7 +220,7 @@ async function run() {
 
         // Still need to discover asset IDs from Kibana; precisions from CLI or default
         console.log(`  Pool:     ${fullPoolId}`);
-        console.log(`  Interval: ${intervalLabel} candles`);
+        console.log(`  Interval: ${bucketLabel} candles`);
         console.log(`  Lookback: ${config.lookbackHours}h (${(config.lookbackHours / 24 / 365).toFixed(2)} years)`);
         console.log('══════════════════════════════════════════════');
 
@@ -242,7 +257,7 @@ async function run() {
 
         console.log(`  Mode:     Auto (bots.json → blockchain → Kibana)`);
         console.log(`  Bot:      ${bot.name} (${bot.assetA} / ${bot.assetB})`);
-        console.log(`  Interval: ${intervalLabel} candles`);
+        console.log(`  Interval: ${bucketLabel} candles`);
         console.log(`  Lookback: ${config.lookbackHours}h (${(config.lookbackHours / 24 / 365).toFixed(2)} years)`);
         console.log(`  Auth:     ${config.apiKey ? 'API key set' : 'open (no auth)'}`);
         console.log('══════════════════════════════════════════════');
@@ -319,7 +334,7 @@ async function run() {
     }
 
     // ── Fetch full history ────────────────────────────────────────────────────
-    console.log(`\n[${stepFetch}/4] Fetching full history (${config.lookbackHours}h, ${intervalLabel} buckets)...`);
+    console.log(`\n[${stepFetch}/4] Fetching full history (${config.lookbackHours}h, ${bucketLabel} buckets)...`);
     let candles;
     try {
         candles = await kibanaSource.getLpCandlesForPool(fullPoolId, assetA, assetB, config);
@@ -348,7 +363,14 @@ async function run() {
 
     // ── Save ──────────────────────────────────────────────────────────────────
     console.log('\n[4/4] Saving...');
-    const outPath = outputPath(fullPoolId, config.intervalSeconds);
+    const outPath = outputPath(fullPoolId, config.intervalSeconds, assetA, assetB);
+
+    const pair = {
+        symbols: `${assetA.symbol}/${assetB.symbol}`,
+        ids: `${assetA.id}/${assetB.id}`,
+        keyBySymbols: `${assetA.symbol}|${assetB.symbol}`,
+        keyByIds: `${assetA.id}|${assetB.id}`,
+    };
 
     const output = {
         meta: {
@@ -357,6 +379,7 @@ async function run() {
             pool:            fullPoolId,
             assetA,
             assetB,
+            pair,
             intervalSeconds: config.intervalSeconds,
             lookbackHours:   config.lookbackHours,
             candleCount:     candles.length,

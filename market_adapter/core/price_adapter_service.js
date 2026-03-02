@@ -41,15 +41,10 @@ function createPriceAdapterService(deps = {}) {
             return { ok: false, reason: 'missing asset pair' };
         }
 
-        const botAma = resolveAmaForBot(bot);
-        if (!botAma.enabled) {
-            return { ok: false, reason: 'ama disabled' };
-        }
-
         const gridPriceMode = (typeof bot.gridPrice === 'string')
             ? bot.gridPrice.trim().toLowerCase()
             : null;
-        const usesAmaGridPrice = gridPriceMode === 'ama';
+        const usesAmaGridPrice = /^ama(?:[1-4])?$/.test(gridPriceMode || '');
 
         const contextSignature = buildBotContextSignature(bot);
         const cached = contextCache.get(bot.botKey);
@@ -62,6 +57,11 @@ function createPriceAdapterService(deps = {}) {
                 signature: contextSignature,
                 ctx,
             });
+        }
+
+        const botAma = resolveAmaForBot(bot, ctx);
+        if (!botAma.enabled) {
+            return { ok: false, reason: 'ama disabled' };
         }
 
         const filePath = candleFileForBot(bot.botKey);
@@ -137,7 +137,7 @@ function createPriceAdapterService(deps = {}) {
             const centerPrice = Number(botState.centerPrice || 0);
             if (!Number.isFinite(centerPrice) || centerPrice <= 0) {
                 // First run: record AMA as the delta-comparison baseline.
-                // Also persist the AMA center for bots using gridPrice: "ama" so that
+                // Also persist the AMA center for bots using AMA gridPrice keywords so that
                 // initializeGrid() can read it via loadAmaCenterPrice() on first reset.
                 botState.centerPrice = amaPrice;
                 botState.lastGridResetAt = nowIso;
@@ -149,7 +149,7 @@ function createPriceAdapterService(deps = {}) {
                 if (deltaPercent >= botThreshold) {
                     let amaCenterPersisted = true;
 
-                    // For gridPrice: "ama" bots — write the new AMA center to
+                    // For AMA gridPrice bots — write the new AMA center to
                     // profiles/orders/<botKey>.gridprice.json BEFORE writing the trigger file,
                     // so initializeGrid() always finds a fresh value when it reacts.
                     if (usesAmaGridPrice && typeof writeBotAmaCenter === 'function') {

@@ -7,7 +7,7 @@
  * Purpose:
  * - Runs independently from dexbot runtime
  * - Loads active bots from profiles/bots.json
- * - Uses per-bot AMA settings when present, otherwise DEFAULT AMA settings
+ * - Uses AMA profiles exported by analysis/ama_fitting (profiles/ama_profiles.json)
  * - Bootstraps 1h candles from Kibana once (if local file missing)
  * - Then updates candles from native BitShares API only
  * - Persists candles incrementally, prunes to AMA-required window
@@ -21,7 +21,7 @@
  *    Triggers when market price moves significantly from last recorded AMA center
  *    ├─ Controlled by: MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT
  *    ├─ Location: profiles/general.settings.json
- *    ├─ Default: 1% (grid resets when AMA moves ±1%)
+ *    ├─ Default: 5% (grid resets when AMA moves ±5%)
  *    ├─ CLI override: --deltaPercent <percent>
  *    └─ Use case: Catch big market moves that require grid repositioning
  *
@@ -39,14 +39,12 @@
  *    ├─ Default: 3% (regen when free balance ≥ 3% of allocated capital)
  *    └─ Use case: Rebalance and utilize accumulated fill proceeds
  *
- * AMA CONFIGURATION (per bot in bots.json):
- * ────────────────────────────────────────
- *   "ama": {
- *     "enabled": true,              // Enable AMA-based price tracking
- *     "erPeriod": 10,              // ER lookback (higher=stable, lower=responsive)
- *     "fastPeriod": 2,             // Trend smoothing (lower=fast response)
- *     "slowPeriod": 30             // Choppy market smoothing (higher=more lag)
- *   }
+ * AMA PROFILE SELECTION (per bot via gridPrice keyword):
+ * ───────────────────────────────────────────────────────
+ *   gridPrice: "ama"  or "ama2" => default/product profile
+ *   gridPrice: "ama1"             => max-area profile
+ *   gridPrice: "ama3"             => capped-area profile
+ *   gridPrice: "ama4"             => capped-product profile
  *
  * No wallet keys/password/auth required (read-only chain + Kibana bootstrap).
  */
@@ -54,7 +52,6 @@
 const fs = require('fs');
 const path = require('path');
 
-const { BitShares, waitForConnected } = require('../modules/bitshares_client');
 const { parseJsonWithComments } = require('../modules/account_bots');
 const { readGeneralSettings } = require('../modules/general_settings');
 const { createBotKey } = require('../modules/account_orders');
@@ -72,13 +69,24 @@ const STATE_FILE = path.join(STATE_DIR, 'price_adapter_state.json');
 const CENTER_FILE = path.join(STATE_DIR, 'price_adapter_centers.json');
 const WHITELIST_FILE = path.join(STATE_DIR, 'price_adapter_whitelist.json');
 const LOCK_FILE = path.join(STATE_DIR, 'price_adapter.lock');
+const OPT_RESULTS_FILE = path.join(ROOT, 'analysis', 'ama_fitting', 'optimization_results_lp_pool_133_1h.json');
+const AMA_PROFILES_FILE = path.join(PROFILES_DIR, 'ama_profiles.json');
+
+let bitsharesClient = null;
+
+function getBitsharesClient() {
+    if (!bitsharesClient) {
+        bitsharesClient = require('../modules/bitshares_client');
+    }
+    return bitsharesClient;
+}
 
 const LP_OP_TYPE = 63;
 const API_MAX_PAGE = 101;
 
 const DEFAULTS = {
     pollSeconds: 3600,
-    deltaThresholdPercent: 1,
+    deltaThresholdPercent: 5,
     intervalSeconds: 3600,
     bootstrapLookbackHours: 720,
     nativeBackfillHours: 6,
@@ -93,25 +101,156 @@ const DEFAULTS = {
     once: false,
 };
 
-const DEFAULT_AMA = {
-    // From analysis/ama_fitting/optimization_results_lp_pool_133_1h.json
-    // winner: meta.bestProdMaxDist => er=90, fast=10, slow=100
-    erPeriod: 90,
-    fastPeriod: 10,
-    slowPeriod: 100,
-};
+function loadAmaPresetsFromResults() {
+    const fallbackDefault = { erPeriod: 200, fastPeriod: 10, slowPeriod: 100 };
+    const fallbackComparison = [
+        { name: 'bestAreaMaxDist', erPeriod: 110, fastPeriod: 10, slowPeriod: 100 },
+        { name: 'bestProdMaxDist', erPeriod: 200, fastPeriod: 10, slowPeriod: 100 },
+        { name: 'bestAreaMaxDistCapped', erPeriod: 30, fastPeriod: 9.5, slowPeriod: 97.5 },
+        { name: 'bestProdMaxDistCapped', erPeriod: 40, fastPeriod: 10, slowPeriod: 90 },
+    ];
+
+    if (!fs.existsSync(OPT_RESULTS_FILE)) {
+        return { defaultAma: fallbackDefault, comparisonPresets: fallbackComparison };
+    }
+
+    try {
+        const json = JSON.parse(fs.readFileSync(OPT_RESULTS_FILE, 'utf8'));
+        const meta = json?.meta;
+        if (!meta?.bestProdMaxDist) {
+            return { defaultAma: fallbackDefault, comparisonPresets: fallbackComparison };
+        }
+
+        const defaultAma = {
+            erPeriod: meta.bestProdMaxDist.er,
+            fastPeriod: meta.bestProdMaxDist.fast,
+            slowPeriod: meta.bestProdMaxDist.slow,
+        };
+
+        const comparisonPresets = [
+            meta.bestAreaMaxDist ? {
+                name: 'bestAreaMaxDist',
+                erPeriod: meta.bestAreaMaxDist.er,
+                fastPeriod: meta.bestAreaMaxDist.fast,
+                slowPeriod: meta.bestAreaMaxDist.slow,
+            } : null,
+            {
+                name: 'bestProdMaxDist',
+                erPeriod: meta.bestProdMaxDist.er,
+                fastPeriod: meta.bestProdMaxDist.fast,
+                slowPeriod: meta.bestProdMaxDist.slow,
+            },
+            meta.bestAreaMaxDistCapped ? {
+                name: 'bestAreaMaxDistCapped',
+                erPeriod: meta.bestAreaMaxDistCapped.er,
+                fastPeriod: meta.bestAreaMaxDistCapped.fast,
+                slowPeriod: meta.bestAreaMaxDistCapped.slow,
+            } : null,
+            meta.bestProdMaxDistCapped ? {
+                name: 'bestProdMaxDistCapped',
+                erPeriod: meta.bestProdMaxDistCapped.er,
+                fastPeriod: meta.bestProdMaxDistCapped.fast,
+                slowPeriod: meta.bestProdMaxDistCapped.slow,
+            } : null,
+        ].filter(Boolean);
+
+        return {
+            defaultAma,
+            comparisonPresets: comparisonPresets.length ? comparisonPresets : fallbackComparison,
+        };
+    } catch {
+        return { defaultAma: fallbackDefault, comparisonPresets: fallbackComparison };
+    }
+}
+
+const AMA_PRESETS = loadAmaPresetsFromResults();
+const DEFAULT_AMA = AMA_PRESETS.defaultAma;
+const DEFAULT_AMA_KEY = 'AMA2';
+const AMA_KEYWORDS = new Set(['ama', 'ama1', 'ama2', 'ama3', 'ama4']);
 
 // Whitelist is file-driven only.
 // If whitelist file is missing, we create a skeleton: { "bots": [] }.
 // Empty whitelist means process no bots.
 const EMPTY_WHITELIST_SKELETON = { bots: [] };
 
-const AMA_COMPARISON_PRESETS = [
-    { name: 'bestAreaMaxDist', erPeriod: 185, fastPeriod: 10, slowPeriod: 100 },
-    { name: 'bestProdMaxDist', erPeriod: 90, fastPeriod: 10, slowPeriod: 100 },
-    { name: 'bestAreaMaxDistCapped', erPeriod: 40, fastPeriod: 10, slowPeriod: 98 },
-    { name: 'bestProdMaxDistCapped', erPeriod: 25, fastPeriod: 10, slowPeriod: 93 },
-];
+const AMA_COMPARISON_PRESETS = AMA_PRESETS.comparisonPresets;
+
+function normalizeAssetSymbol(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function normalizeAmaKey(raw) {
+    const s = String(raw || '').trim().toLowerCase();
+    if (!AMA_KEYWORDS.has(s)) return DEFAULT_AMA_KEY;
+    if (s === 'ama') return DEFAULT_AMA_KEY;
+    return s.toUpperCase();
+}
+
+function isAmaKeyword(raw) {
+    const s = String(raw || '').trim().toLowerCase();
+    return AMA_KEYWORDS.has(s);
+}
+
+function loadAmaProfiles() {
+    if (!fs.existsSync(AMA_PROFILES_FILE)) return [];
+    try {
+        const json = JSON.parse(fs.readFileSync(AMA_PROFILES_FILE, 'utf8'));
+        return Array.isArray(json?.profiles) ? json.profiles : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function getAmaFromProfilesForBot(bot, ctx = null) {
+    const profiles = loadAmaProfiles();
+    if (profiles.length === 0) return null;
+
+    const botAssetA = normalizeAssetSymbol(bot?.assetA);
+    const botAssetB = normalizeAssetSymbol(bot?.assetB);
+    const ctxAssetAId = normalizeAssetSymbol(ctx?.assetA?.id);
+    const ctxAssetBId = normalizeAssetSymbol(ctx?.assetB?.id);
+    if (!botAssetA && !ctxAssetAId) return null;
+    if (!botAssetB && !ctxAssetBId) return null;
+
+    const matches = profiles.filter((p) => {
+        const pA = normalizeAssetSymbol(p?.assetA);
+        const pB = normalizeAssetSymbol(p?.assetB);
+        const pAId = normalizeAssetSymbol(p?.assetAId);
+        const pBId = normalizeAssetSymbol(p?.assetBId);
+
+        const bySymbol = botAssetA && botAssetB && pA === botAssetA && pB === botAssetB;
+        const byId = ctxAssetAId && ctxAssetBId && pAId === ctxAssetAId && pBId === ctxAssetBId;
+        return bySymbol || byId;
+    });
+    if (matches.length === 0) return null;
+
+    const oneHour = matches.filter((p) => Number(p?.intervalSeconds) === 3600);
+    const candidates = oneHour.length > 0 ? oneHour : matches;
+    const sorted = [...candidates].sort((a, b) => {
+        const aTs = Date.parse(String(a?.updatedAt || 0)) || 0;
+        const bTs = Date.parse(String(b?.updatedAt || 0)) || 0;
+        return bTs - aTs;
+    });
+    const profile = sorted[0];
+
+    const requestedKey = isAmaKeyword(bot?.gridPrice)
+        ? normalizeAmaKey(bot?.gridPrice)
+        : normalizeAmaKey(profile?.defaultAma);
+    const selected = profile?.amas?.[requestedKey] || profile?.amas?.[DEFAULT_AMA_KEY];
+    if (!selected) return null;
+
+    const erPeriod = Number(selected.erPeriod);
+    const fastPeriod = Number(selected.fastPeriod);
+    const slowPeriod = Number(selected.slowPeriod);
+    if (!Number.isFinite(erPeriod) || !Number.isFinite(fastPeriod) || !Number.isFinite(slowPeriod)) return null;
+
+    return {
+        enabled: true,
+        erPeriod,
+        fastPeriod,
+        slowPeriod,
+    };
+}
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -218,7 +357,7 @@ function printHelp() {
     console.log('Options:');
     console.log('  --once                 Run one cycle and exit');
     console.log('  --pollSeconds <n>      Loop interval seconds (default 3600)');
-    console.log('  --deltaPercent <n>     Trigger threshold percent (default: general.settings MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT or 1)');
+    console.log('  --deltaPercent <n>     Trigger threshold percent (default: general.settings MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT or 5)');
     console.log('  --bootstrapHours <n>   Kibana bootstrap lookback hours (default 720)');
     console.log('  --nativeBackfillHours  Native incremental lookback hours (default 6)');
     console.log('  --maxStaleHours <n>    Max accepted candle staleness before trigger suppression (default 6)');
@@ -417,6 +556,7 @@ function normalizePoolId(id) {
 }
 
 async function resolveAsset(symbol) {
+    const { BitShares } = getBitsharesClient();
     const results = await BitShares.db.lookup_asset_symbols([symbol]);
     const asset = results?.[0];
     if (!asset?.id || typeof asset.precision !== 'number') {
@@ -426,6 +566,7 @@ async function resolveAsset(symbol) {
 }
 
 async function findPoolByAssets(assetAId, assetBId) {
+    const { BitShares } = getBitsharesClient();
     if (typeof BitShares.db?.get_liquidity_pool_by_asset_ids === 'function') {
         try {
             const pool = await BitShares.db.get_liquidity_pool_by_asset_ids(assetAId, assetBId);
@@ -491,7 +632,10 @@ function computeCandleStaleness(lastCandleTs, maxStaleHours) {
     return { staleData, staleAgeHours };
 }
 
-function resolveAmaForBot(bot) {
+function resolveAmaForBot(bot, ctx = null) {
+    const fromProfiles = getAmaFromProfilesForBot(bot, ctx);
+    if (fromProfiles) return fromProfiles;
+
     const raw = (bot && typeof bot.ama === 'object' && bot.ama !== null) ? bot.ama : {};
     const cfg = {
         erPeriod: Number(raw.erPeriod),
@@ -555,6 +699,7 @@ function calcAmaComparison(candles) {
 }
 
 async function fetchNativeTradesSince(poolId, sinceMs, pageLimit, maxPages) {
+    const { BitShares } = getBitsharesClient();
     const trades = [];
     let pages = 0;
     let startSeq = null;
@@ -638,7 +783,7 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
 /**
  * Atomically write the AMA center price for a bot to profiles/orders/<botKey>.gridprice.json.
  * Called by price_adapter when a grid reset trigger fires (or on first initialisation) for bots
- * with gridPrice: "ama". Uses write-then-rename to prevent partial reads by the dexbot process.
+ * with gridPrice using AMA keywords ("ama", "ama1".."ama4"). Uses write-then-rename to prevent partial reads by the dexbot process.
  * @param {string} botKey   - Bot key (e.g. "iob-xrp-bts-0")
  * @param {number} amaPrice - Current AMA center price (B/A format)
  */
@@ -813,6 +958,7 @@ async function runOnceForAma(overrides = {}) {
         staleMs: Math.max(2, cfg.pollSeconds) * 1000 * 2,
     });
     try {
+        const { waitForConnected } = getBitsharesClient();
         await waitForConnected(30000);
         const state = loadJson(STATE_FILE, { meta: {}, bots: {} });
         const contextCache = new Map();
@@ -851,6 +997,7 @@ async function main() {
             return 0;
         }
 
+        const { waitForConnected } = getBitsharesClient();
         await waitForConnected(30000);
         log(cfg, 'Connected to BitShares');
 

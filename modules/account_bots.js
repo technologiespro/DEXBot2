@@ -37,7 +37,7 @@
  *       "dryRun": false,
  *       "startPrice": "pool",      // Price for order alignment: "pool", "market", or numeric
  *       "gridPrice": null,         // Reference price for x-factor bounds (3 options):
- *                                  //   "ama"    = price_adapter writes AMA center to
+ *                                  //   "ama"/"ama1".."ama4" = price_adapter writes AMA center to
  *                                  //              profiles/orders/<botKey>.gridprice.json; grid reads it on reset
  *                                  //   <number> = fixed numeric reference (price_adapter does not touch this)
  *                                  //   null     = use startPrice (default, backward-compatible)
@@ -48,12 +48,7 @@
  *       "weightDistribution": { "sell": 0.5, "buy": 0.5 },
  *       "botFunds": { "sell": "100%", "buy": "100%" },
  *       "activeOrders": { "sell": 20, "buy": 20 },
- *       "ama": {
- *         "enabled": true,
- *         "erPeriod": 10,      // Efficiency Ratio lookback period (candles)
- *         "fastPeriod": 2,     // Fast smoothing period for trending markets
- *         "slowPeriod": 30     // Slow smoothing period for choppy markets
- *       }
+ *       "gridPrice": "ama2"   // Optional: "ama"/"ama1".."ama4"/number/null
  *     }
  *   ]
  * }
@@ -61,7 +56,7 @@
  * GLOBAL SETTINGS CONFIGURATION (profiles/general.settings.json):
  * {
  *   "MARKET_ADAPTER": {
- *     "DELTA_THRESHOLD_PERCENT": 1  // % change in AMA center price triggers grid reset
+ *     "DELTA_THRESHOLD_PERCENT": 5  // % change in AMA center price triggers grid reset
  *   },
  *   "GRID_LIMITS": {
  *     "GRID_COMPARISON": {
@@ -95,33 +90,13 @@ const BOTS_FILE = path.join(__dirname, '..', 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
 
 /**
- * Default AMA (Adaptive Moving Average) configuration for price trend detection.
- * Used by the market adapter (price_adapter.js) to calculate adaptive moving average
- * and detect when grid recalculation should be triggered.
- *
- * Parameters:
- *   enabled: Whether to use AMA for price tracking and grid recalculation triggers
- *   erPeriod: Efficiency Ratio lookback period (higher = more stable, lower = more responsive)
- *   fastPeriod: Smoothing period for trending markets (lower = faster response)
- *   slowPeriod: Smoothing period for choppy/sideways markets (higher = more lag)
- *
- * Grid recalculation is triggered when AMA center price changes by DELTA_THRESHOLD_PERCENT.
- */
-const DEFAULT_AMA_CONFIG = {
-    enabled: true,
-    erPeriod: 10,
-    fastPeriod: 2,
-    slowPeriod: 30,
-};
-
-/**
  * Market adapter settings controlling grid recalculation triggers.
  *
  * DELTA_THRESHOLD_PERCENT: Percentage change in AMA center price that triggers grid reset.
  *   - Controls market_adapter/price_adapter.js trigger logic
  *   - When AMA price moves ±DELTA_THRESHOLD_PERCENT from last recorded center,
  *     a recalculate.<botKey>.trigger file is created to signal grid regeneration
- *   - Default: 1% (grid recalculates when market moves 1% from last recorded AMA center)
+ *   - Default: 5% (grid recalculates when market moves 5% from last recorded AMA center)
  *   - Range: 0.1 to 50.0 (configurable via CLI and bot editor)
  *   - Stored in: profiles/general.settings.json under MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT
  *
@@ -130,7 +105,7 @@ const DEFAULT_AMA_CONFIG = {
  *   - Set to 0 to disable RMS checks (Issue #5 fix)
  */
 const DEFAULT_MARKET_ADAPTER_SETTINGS = {
-    DELTA_THRESHOLD_PERCENT: 1,
+    DELTA_THRESHOLD_PERCENT: 5,
 };
 
 /**
@@ -825,6 +800,24 @@ async function askStartPrice(promptText, defaultValue) {
     }
 }
 
+async function askGridPriceMode(promptText, defaultValue) {
+    while (true) {
+        const shownDefault = defaultValue === null || defaultValue === undefined ? 'startPrice' : defaultValue;
+        const raw = (await readInput(`${promptText} [${shownDefault}]: `)).trim();
+        if (raw === '\x1b') return '\x1b';
+        if (!raw) return defaultValue === undefined ? null : defaultValue;
+
+        const lower = raw.toLowerCase();
+        if (lower === 'none' || lower === 'null' || lower === 'start' || lower === 'startprice') return null;
+        if (/^ama(?:[1-4])?$/.test(lower)) return lower;
+
+        const num = Number(raw);
+        if (Number.isFinite(num) && num > 0) return num;
+
+        console.log('Please enter: ama, ama1..ama4, a positive number, or none/startprice.');
+    }
+}
+
 /**
  * Interactive menu to edit bot data.
  * @param {Object} [base={}] - The initial bot data to edit.
@@ -838,8 +831,6 @@ async function promptBotData(base = {}) {
     if (!data.weightDistribution) data.weightDistribution = { ...DEFAULT_CONFIG.weightDistribution };
     if (!data.botFunds) data.botFunds = { ...DEFAULT_CONFIG.botFunds };
     if (!data.activeOrders) data.activeOrders = { ...DEFAULT_CONFIG.activeOrders };
-    if (!data.ama || typeof data.ama !== 'object') data.ama = { ...DEFAULT_AMA_CONFIG };
-    data.ama = { ...DEFAULT_AMA_CONFIG, ...data.ama };
 
     // Set other defaults if missing
     if (data.active === undefined) data.active = DEFAULT_CONFIG.active;
@@ -849,6 +840,7 @@ async function promptBotData(base = {}) {
     if (data.incrementPercent === undefined) data.incrementPercent = DEFAULT_CONFIG.incrementPercent;
     if (data.targetSpreadPercent === undefined) data.targetSpreadPercent = DEFAULT_CONFIG.targetSpreadPercent;
     if (data.startPrice === undefined) data.startPrice = data.startPrice || DEFAULT_CONFIG.startPrice || 'pool';
+    if (data.gridPrice === undefined) data.gridPrice = null;
 
     let finished = false;
     let cancelled = false;
@@ -862,7 +854,7 @@ async function promptBotData(base = {}) {
              console.log(`\x1b[1;33m3) Price:\x1b[0m      \x1b[38;5;208mRange:\x1b[0m [${data.minPrice} - ${data.maxPrice}], \x1b[38;5;208mStart:\x1b[0m ${data.startPrice}`);
              console.log(`\x1b[1;33m4) Grid:\x1b[0m       \x1b[38;5;208mWeights:\x1b[0m (S:${data.weightDistribution.sell}, B:${data.weightDistribution.buy}), \x1b[38;5;208mIncr:\x1b[0m ${data.incrementPercent}%, \x1b[38;5;208mSpread:\x1b[0m ${data.targetSpreadPercent}%`);
              console.log(`\x1b[1;33m5) Funding:\x1b[0m    \x1b[38;5;208mSell:\x1b[0m ${data.botFunds.sell}, \x1b[38;5;208mBuy:\x1b[0m ${data.botFunds.buy} | \x1b[38;5;208mOrders:\x1b[0m (S:${data.activeOrders.sell}, B:${data.activeOrders.buy})`);
-             console.log(`\x1b[1;33m6) AMA:\x1b[0m        \x1b[38;5;208mEnabled:\x1b[0m ${data.ama.enabled}, \x1b[38;5;208mParams:\x1b[0m (${data.ama.erPeriod},${data.ama.fastPeriod},${data.ama.slowPeriod})`);
+             console.log(`\x1b[1;33m6) Grid Ref:\x1b[0m   \x1b[38;5;208mgridPrice:\x1b[0m ${data.gridPrice === null ? 'startPrice' : data.gridPrice}`);
              console.log('--------------------------------------------------');
              console.log('\x1b[1;32mS) Save & Exit\x1b[0m');
              console.log('\x1b[37mC) Cancel (Discard changes)\x1b[0m');
@@ -952,20 +944,11 @@ async function promptBotData(base = {}) {
                 showMenu = true;
                 break;
             case '6':
-                const amaEnabled = await askBoolean('AMA enabled', data.ama.enabled !== false);
-                if (amaEnabled === '\x1b') break;
-                const amaEr = await askIntegerInRange('AMA erPeriod', data.ama.erPeriod, 1, 500);
-                if (amaEr === '\x1b') break;
-                const amaFast = await askIntegerInRange('AMA fastPeriod', data.ama.fastPeriod, 1, 500);
-                if (amaFast === '\x1b') break;
-                const amaSlowDefault = Math.max(data.ama.slowPeriod || DEFAULT_AMA_CONFIG.slowPeriod, amaFast);
-                const amaSlow = await askIntegerInRange('AMA slowPeriod', amaSlowDefault, amaFast, 2000);
-                if (amaSlow === '\x1b') break;
-
-                data.ama.enabled = amaEnabled;
-                data.ama.erPeriod = amaEr;
-                data.ama.fastPeriod = amaFast;
-                data.ama.slowPeriod = amaSlow;
+                {
+                    const gp = await askGridPriceMode('gridPrice (ama/ama1/ama2/ama3/ama4/number/none)', data.gridPrice);
+                    if (gp === '\x1b') break;
+                    data.gridPrice = gp;
+                }
                 showMenu = true;
                 break;
             case 's':
@@ -984,10 +967,6 @@ async function promptBotData(base = {}) {
                         console.log(`\x1b[31mError: targetSpreadPercent (${data.targetSpreadPercent}) must be >= ${spreadFactor}x incrementPercent (${Number(minRequiredSpread.toFixed(6))}).\x1b[0m`);
                         break;
                     }
-                }
-                if (!data.ama || data.ama.fastPeriod > data.ama.slowPeriod) {
-                    console.log('\x1b[31mError: AMA fastPeriod must be <= slowPeriod.\x1b[0m');
-                    break;
                 }
                 finished = true;
                 break;
@@ -1018,12 +997,7 @@ async function promptBotData(base = {}) {
         weightDistribution: data.weightDistribution,
         botFunds: data.botFunds,
         activeOrders: data.activeOrders,
-        ama: {
-            enabled: data.ama.enabled,
-            erPeriod: data.ama.erPeriod,
-            fastPeriod: data.ama.fastPeriod,
-            slowPeriod: data.ama.slowPeriod,
-        },
+        gridPrice: data.gridPrice,
     };
 }
 

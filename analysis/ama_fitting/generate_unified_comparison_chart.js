@@ -25,6 +25,24 @@ const { generateHTML } = require('../../market_adapter/lp_chart_core');
  */
 
 const DATA_DIR = path.join(__dirname, 'data');
+const MARKET_ADAPTER_DIR = path.join(__dirname, '..', '..', 'market_adapter');
+
+function marketAdapterChartPath(meta, dataFile) {
+    if (meta?.pool) {
+        const suffix = String(meta.pool).replace('1.19.', '');
+        return path.join(MARKET_ADAPTER_DIR, `lp_chart_pool_${suffix}.html`);
+    }
+
+    const fromMetaA = String(meta?.assetA?.symbol || '').trim();
+    const fromMetaB = String(meta?.assetB?.symbol || '').trim();
+    if (fromMetaA && fromMetaB) {
+        return path.join(MARKET_ADAPTER_DIR, `lp_chart_${fromMetaA}_${fromMetaB}.html`).replace(/\./g, '_').replace('_html', '.html');
+    }
+
+    return path.join(MARKET_ADAPTER_DIR, `lp_chart_${path.basename(dataFile || 'comparison', '.json')}.html`)
+        .replace(/\./g, '_')
+        .replace('_html', '.html');
+}
 
 // Fallback strategies used when no optimizer results file exists
 const FALLBACK_STRATEGIES = [
@@ -36,13 +54,38 @@ const FALLBACK_STRATEGIES = [
 /**
  * Load representative strategies from an optimizer results JSON.
  * Returns null if the file doesn't exist or has no results.
- * Order: AREA first, PROD second (PROD becomes primary/index-0 after reorder in run()).
+ * Order: AMA1, AMA2, AMA3, AMA4.
  */
 function strategiesFromResults(resultsPath) {
     if (!fs.existsSync(resultsPath)) return null;
     const json = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
     const meta = json.meta;
     if (!meta) return null;
+
+    if (meta.amas && meta.amas.AMA1 && meta.amas.AMA2 && meta.amas.AMA3 && meta.amas.AMA4) {
+        const order = [
+            ['AMA1', '#fb8c00', 'solid'],
+            ['AMA2', '#42a5f5', 'dash'],
+            ['AMA3', '#66bb6a', 'longdash'],
+            ['AMA4', '#ef5350', 'longdashdot'],
+        ];
+        const out = [];
+        for (const [k, color, dash] of order) {
+            const r = meta.amas[k];
+            if (!r) continue;
+            const cleaned = String(r.label || '').replace(/^AMA\d\s*/i, '').replace(/^[-:\s]+/, '').trim();
+            const name = cleaned ? `${k} - ${cleaned}` : k;
+            out.push({
+                name,
+                erPeriod: r.er,
+                fastPeriod: r.fast,
+                slowPeriod: r.slow,
+                color,
+                dash,
+            });
+        }
+        return out.length ? out : null;
+    }
 
     const strategies = [];
 
@@ -149,7 +192,7 @@ function run() {
                 assetA: { symbol: '?' }, assetB: { symbol: '?' },
                 intervalSeconds: 3600, fetchedAt: new Date().toISOString(),
             };
-            outFile = path.join(__dirname, `chart_lp_${path.basename(dataFile, '.json')}.html`);
+            outFile = marketAdapterChartPath(meta, dataFile);
 
             const resultsFile = path.join(__dirname, `optimization_results_${path.basename(dataFile, '.json')}.json`);
             const fromResults = strategiesFromResults(resultsFile);
@@ -176,7 +219,7 @@ function run() {
         }
         meta    = { pool: null, assetA: { symbol: 'XRP' }, assetB: { symbol: 'BTS' },
                     intervalSeconds: 14400, fetchedAt: new Date().toISOString() };
-        outFile = path.join(__dirname, 'chart_4h_UNIFIED_COMPARISON.html');
+        outFile = path.join(MARKET_ADAPTER_DIR, 'lp_chart_4h_UNIFIED_COMPARISON.html');
         STRATEGIES = [...FALLBACK_STRATEGIES];
         console.log(`Data:        MEXC synthetic XRP/BTS (${candles.length} candles)`);
     }
@@ -204,6 +247,7 @@ function run() {
     // ── Generate and write HTML ───────────────────────────────────────────────
     console.log(`Generating chart (${amaResults.length} AMAs)...`);
     const html = generateHTML(meta, candleArrays, amaResults);
+    fs.mkdirSync(path.dirname(outFile), { recursive: true });
     fs.writeFileSync(outFile, html);
 
     console.log(`\nChart saved: ${path.relative(process.cwd(), outFile)}`);
