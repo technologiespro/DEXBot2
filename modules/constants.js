@@ -148,7 +148,7 @@ let DEFAULT_CONFIG = {
     minPrice: "3x",               // Lower price bound: "Nx" = N times below startPrice, or numeric value
     maxPrice: "3x",               // Upper price bound: "Nx" = N times above startPrice, or numeric value
     gridPrice: null,              // Optional reference price for x-factor bounds calculation.
-                                  // "ama"    = price_adapter writes AMA center to profiles/orders/<botKey>.gridprice.json;
+                                  // "ama"/"ama1".."ama4" = price_adapter writes AMA center to profiles/orders/<botKey>.gridprice.json;
                                   //            grid generator reads it from there on reset
                                   // numeric  = fixed numeric value (never updated by price_adapter)
                                   // null     = use startPrice (default, backward-compatible)
@@ -405,26 +405,12 @@ let FILL_PROCESSING = {
     // Indicator for taker (non-maker) fills
     TAKER_INDICATOR: 0,
 
-    // Adaptive batch sizing for fill processing under stress.
-    // Instead of processing fills one-at-a-time (each requiring a separate broadcast),
-    // multiple fills are grouped into a single processFilledOrders + broadcast cycle.
-    // The batch size scales with queue depth:
-    //   queueDepth 1-2  -> batch of 1 (normal operation)
-    //   queueDepth 3-5  -> batch of 2
-    //   queueDepth 6-14 -> batch of 3
-    //   queueDepth 15+  -> batch of MAX_FILL_BATCH_SIZE
-    // Set to 1 to disable batching (legacy sequential behavior).
-    MAX_FILL_BATCH_SIZE: 4,
-
-    // Queue depth thresholds for adaptive batch sizing.
-    // Array of [minQueueDepth, batchSize] pairs, evaluated in order.
-    // The first matching threshold determines the batch size.
-    BATCH_STRESS_TIERS: [
-        [15, 4],  // 15+ fills queued -> batch of 4
-        [6,  3],  // 6-14 fills queued -> batch of 3
-        [3,  2],  // 3-5 fills queued  -> batch of 2
-        [0,  1]   // 0-2 fills queued  -> sequential (1-at-a-time)
-    ]
+    // Maximum fills processed per rebalance/broadcast cycle.
+    // Behavior:
+    // - 1..MAX_FILL_BATCH_SIZE fills -> single unified batch
+    // - >MAX_FILL_BATCH_SIZE fills   -> fixed-size chunking at MAX_FILL_BATCH_SIZE
+    // Set to 1 for legacy sequential behavior.
+    MAX_FILL_BATCH_SIZE: 4
 };
 
 // Cleanup and maintenance parameters
@@ -754,7 +740,6 @@ Object.freeze(INCREMENT_BOUNDS);
 Object.freeze(FEE_PARAMETERS);
 Object.freeze(API_LIMITS);
 Object.freeze(FILL_PROCESSING);
-Object.freeze(FILL_PROCESSING.BATCH_STRESS_TIERS);
 Object.freeze(MAINTENANCE);
 Object.freeze(NODE_MANAGEMENT);
 Object.freeze(PIPELINE_TIMING);

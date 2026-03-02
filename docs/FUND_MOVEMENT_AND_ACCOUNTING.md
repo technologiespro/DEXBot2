@@ -101,29 +101,22 @@ Previously, fills were processed one-at-a-time (~3s per broadcast). A burst of 2
 
 **Impact**: The extended 90s window meant the bot couldn't react to market moves, creating a cascading failure.
 
-### Solution: Adaptive Batch Fill Processing
+### Solution: Fixed-Cap Batch Fill Processing
 
-**Mechanism** (`modules/dexbot_class.js::processFilledOrders`): Groups fills into stress-scaled batches before executing the full rebalance pipeline.
+**Mechanism** (`modules/dexbot_class.js::processFilledOrders`): Groups fills into capped batches before executing the full rebalance pipeline.
 
 **Batch Sizing Algorithm**:
 ```javascript
-// Determine batch size based on queue depth using BATCH_STRESS_TIERS
-const batchSize = findBatchSize(queueDepth, BATCH_STRESS_TIERS);
-// Example tiers: [[0,1], [3,2], [8,3], [15,4]]
-// queueDepth=5 → batchSize=2
-// queueDepth=20 → batchSize=4
+// Single cap-based batch size
+const batchSize = MAX_FILL_BATCH_SIZE;
+// queueDepth<=4 -> single unified batch of queueDepth
+// queueDepth>4  -> chunk into repeated batches of 4 (last chunk may be smaller)
 ```
 
 **Configuration** (`modules/constants.js`):
 ```javascript
 FILL_PROCESSING: {
-  MAX_FILL_BATCH_SIZE: 4,           // Hard cap on batch size
-  BATCH_STRESS_TIERS: [             // Adaptive sizing
-    [0, 1],   // 0-2 fills awaiting: batch size 1 (legacy sequential)
-    [3, 2],   // 3-7 fills awaiting: batch size 2
-    [8, 3],   // 8-14 fills awaiting: batch size 3
-    [15, 4]   // 15+ fills awaiting: batch size 4
-  ]
+  MAX_FILL_BATCH_SIZE: 4            // Hard cap on batch size
 }
 ```
 

@@ -209,7 +209,7 @@ The tests above target individual bugfixes discovered during normal operation. T
 
 ### Overview
 
-Test file `tests/test_fill_batch_invariants.js` validates fixes for the Feb 7 market crash post-mortem analysis. These tests ensure fill batching, recovery retry system, and orphan-fill deduplication remain robust.
+Coverage for the Feb 7 market crash post-mortem fixes is now split across active test files. These tests ensure fill batching, recovery retry system, and orphan-fill deduplication remain robust.
 
 ### Test Coverage
 
@@ -217,37 +217,39 @@ Test file `tests/test_fill_batch_invariants.js` validates fixes for the Feb 7 ma
 
 | Test | File | Purpose |
 |------|------|---------|
-| `test_adaptive_batch_pipeline` | `test_fill_batch_invariants.js` | Verifies fills processed in adaptive batches (1-4 per broadcast) instead of one-at-a-time |
-| `test_recovery_retry_mechanism` | `test_fill_batch_invariants.js` | Validates count+time-based retry system with periodic reset (max 5 attempts, 60s interval) |
-| `test_orphan_fill_deduplication` | `test_fill_batch_invariants.js` | Ensures stale-cleaned order IDs prevent double-crediting of fills |
+| `simulateBatching` | `tests/sim_batching.js` | Verifies fixed-cap behavior: `<=MAX_FILL_BATCH_SIZE` unified; larger queues chunked at max 4 |
+| `recovery retry cooldown and reset` | `tests/test_accounting_logic.js` | Validates count+time-based retry system with cooldown and retry counter behavior |
+| `testSingleStaleCancelBatchUsesStaleOnlyFastPath` | `tests/test_patch17_invariants.js` | Ensures stale-cleaned order IDs prevent double-crediting of delayed orphan fills |
 
 **Cache & Stale-Order Handling**:
 
 | Test | File | Purpose |
 |------|------|---------|
-| `test_cache_remainder_parity` | `test_fill_batch_invariants.js` | Verifies unallocated remainder calculated from actual allocated sizes (not ideal sizes) during capped grid resizes |
-| `test_abort_cooldown_arming` | `test_fill_batch_invariants.js` | Ensures both primary and retry hard-abort paths arm `_maintenanceCooldownCycles` |
-| `test_single_stale_cancel_fast_path` | `test_fill_batch_invariants.js` | Validates single-op batch stale recovery doesn't trigger expensive full sync |
+| `testGridResizeRespectsBudgetAfterCap` | `tests/test_patch17_invariants.js` | Verifies capped grid resize never allocates above budget and preserves correct remainder behavior |
+| `testIllegalBatchAbortArmsMaintenanceCooldown` | `tests/test_patch17_invariants.js` | Ensures illegal-state batch hard-abort arms `_maintenanceCooldownCycles` |
+| `testSingleStaleCancelBatchUsesStaleOnlyFastPath` | `tests/test_patch17_invariants.js` | Validates single-op stale cancel recovery avoids unnecessary full sync |
 
 ### Running Tests
 
 ```bash
-# Run fill batching invariant tests
-npm test -- tests/test_fill_batch_invariants.js
+# Run fixed-cap batching simulator
+node tests/sim_batching.js
 
-# Or directly
-node tests/test_fill_batch_invariants.js
+# Run recovery retry coverage
+node tests/test_accounting_logic.js
+
+# Run batch hard-abort/stale-cancel/capped-resize invariants
+node tests/test_patch17_invariants.js
 ```
 
 ### Test Details
 
-#### Test 1: Adaptive Batch Pipeline
+#### Test 1: Fixed-Cap Batch Pipeline
 
 **Scenario**: Simulate 29 fills arriving over 90 seconds of market crash
 
 **Validation**:
-- ✅ Queue depth measured correctly (uses BATCH_STRESS_TIERS)
-- ✅ Batches are sized adaptively (1-4 fills per broadcast)
+- ✅ Fixed-cap batching enforced (max 4 fills per broadcast)
 - ✅ All fills processed in ~8 broadcasts instead of 29
 - ✅ Processing time reduced from ~90s to ~24s
 - ✅ Single rebalance call per batch (not per-fill)
@@ -255,7 +257,6 @@ node tests/test_fill_batch_invariants.js
 
 **Configuration Tested**:
 ```javascript
-BATCH_STRESS_TIERS: [[0,1], [3,2], [8,3], [15,4]]
 MAX_FILL_BATCH_SIZE: 4
 ```
 
@@ -337,13 +338,12 @@ Modules Tested:
 
 Configuration Validated:
   - FILL_PROCESSING.MAX_FILL_BATCH_SIZE
-  - FILL_PROCESSING.BATCH_STRESS_TIERS
   - PIPELINE_TIMING.RECOVERY_RETRY_INTERVAL_MS
   - PIPELINE_TIMING.MAX_RECOVERY_ATTEMPTS
 
 Coverage Targets:
   ✅ Fill batch processing (1-4 fills per broadcast)
-  ✅ Adaptive batch sizing (queue depth → batch size)
+  ✅ Fixed-cap batch sizing (max 4 per batch)
   ✅ Recovery retry system (count+time-based)
   ✅ Orphan-fill double-credit prevention
   ✅ Remainder accuracy (per-slot tracking)
@@ -353,7 +353,7 @@ Coverage Targets:
 
 ### Key Assertions in Tests
 
-1. **Batch Size Assertions**: Verify correct adaptive sizing based on queue depth
+1. **Batch Size Assertions**: Verify fixed-cap sizing and chunking behavior
 2. **Recovery State Assertions**: Confirm count/time-based retry state machine
 3. **Stale ID Assertions**: Validate orphan deduplication map behavior
 4. **Cache Remainder Assertions**: Verify per-slot allocation tracking
@@ -368,17 +368,14 @@ Fill batching tests are part of the main test suite:
 # Full test suite
 npm test
 
-# Only fill batching tests
-npm test -- test_fill_batch_invariants.js
-
-# With coverage reporting
-npm test -- --coverage test_fill_batch_invariants.js
+# Targeted fixed-cap batching and recovery tests
+node tests/sim_batching.js && node tests/test_accounting_logic.js && node tests/test_patch17_invariants.js
 ```
 
 ### Regression Prevention
 
 These tests catch regressions in:
-- Fill batch processing logic (adaptive sizing)
+- Fill batch processing logic (fixed-cap sizing)
 - Recovery retry state management (count+time system)
 - Orphan-fill deduplication guards (stale ID tracking)
 - Remainder calculation (per-slot accuracy)

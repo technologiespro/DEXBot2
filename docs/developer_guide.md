@@ -36,7 +36,7 @@ Follow this path through the codebase:
 ```
 
 **Additional Resources**:
-- `modules/constants.js::FILL_PROCESSING` - Batch configuration (MAX_FILL_BATCH_SIZE, BATCH_STRESS_TIERS)
+- `modules/constants.js::FILL_PROCESSING` - Batch configuration (`MAX_FILL_BATCH_SIZE`)
 - `modules/constants.js::PIPELINE_TIMING` - Recovery configuration (RECOVERY_RETRY_INTERVAL_MS, MAX_RECOVERY_ATTEMPTS)
 - `modules/dexbot_class.js::_handleBatchHardAbort()` - Hard-abort recovery handler
 - `modules/dexbot_class.js::_staleCleanedOrderIds` - Orphan-fill deduplication tracking
@@ -72,8 +72,7 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 
 | Term | Meaning |
 |------|---------|
-| **Adaptive Batch Fill Processing** | Groups fills into stress-scaled batches (1-4 per broadcast based on queue depth) to reduce market divergence window from ~90s to ~24s for 29 fills |
-| **Batch Stress Tiers** | Configurable `BATCH_STRESS_TIERS` array mapping queue depth thresholds to batch sizes. Example: `[[0,1], [3,2], [8,3], [15,4]]` means 0-2 fills→batch 1, 3-7→batch 2, etc. |
+| **Fixed-Cap Batch Fill Processing** | Groups fills with a hard cap using `MAX_FILL_BATCH_SIZE` (default 4): `<= cap` uses one unified batch; `> cap` chunks at cap size. Reduces market divergence window from ~90s to ~24s for 29 fills. |
 | **Recovery Retry System** | Count+time-based retry mechanism with periodic reset. Replaces one-shot `_recoveryAttempted` flag. Max 5 attempts per episode with 60s minimum interval between retries. |
 | **Orphan-Fill Deduplication** | Map+TTL-based tracking of stale-cleaned order IDs to prevent double-crediting. Delayed orphan fill events are still blocked by checking `_staleCleanedOrderIds`. |
 
@@ -137,8 +136,8 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 | **Atomic Check-and-Deduct** | Verify funds + deduct in single operation |
 | **Divergence Detection** | Comparing ideal grid vs. persisted grid |
 | **Invariant Verification** | Checking fund accounting consistency |
-| **Batch Processing** | Grouping multiple fills into single rebalance cycle instead of one-at-a-time. Adaptive sizing (1-4 fills per broadcast) based on queue depth. |
-| **Adaptive Batch Sizing** | Dynamic batch size calculation using stress tiers: low queue depth→batch 1, high queue depth→batch 4. Reduces fill processing from ~90s to ~24s for 29 fills. |
+| **Batch Processing** | Grouping multiple fills into a single rebalance cycle instead of one-at-a-time. Fixed-cap sizing: `<= MAX_FILL_BATCH_SIZE` unified, otherwise chunked at cap size (default max 4). |
+| **Fixed-Cap Batch Sizing** | Deterministic chunking model with hard upper bound per broadcast. Keeps throughput high while avoiding tier-lookup complexity. |
 | **Stale-Order Recovery** | Fast-path recovery for single-operation batches that encounter stale orders on-chain. Executes cleanup without full state sync. |
 | **Orphan-Fill Prevention** | Deduplication mechanism that prevents double-crediting fills from stale-cleaned orders using timestamp-based ID tracking (TTL pruning). |
 

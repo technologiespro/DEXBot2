@@ -45,7 +45,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 *The most critical part of the bot: safe capital management.*
 - **Single Source of Truth**: How the bot avoids double-spending and out-of-sync balances.
 - **Optimistic ChainFree**: The mechanism that allows the bot to trade with fill proceeds before they are finalized on-chain.
-- **Fill Batch Processing**: Adaptive batch sizing for efficient fill processing (1-4 fills per cycle)
+- **Fill Batch Processing**: Fixed-cap batching for efficient fill processing (`<=4` unified, `>4` chunked)
 - **Partial Order Consolidation**: Simplified, direct consolidation through grid rebuilding (no merge/split mechanics)
 - **Dust Detection & Management**: Unhealthy partials are absorbed into next grid rebuild cycle
 - **BTS Fee Object Structure**: `netProceeds` field for accounting precision
@@ -64,7 +64,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 *Reliability and regression testing.*
 - **Recent Fixes**: Summary of test coverage added for the most recent critical bugfixes.
 - **Integration Scenarios**: Documentation of complex multi-fill and partial-fill test cases.
-- **Fill Batching Tests**: Regression tests for adaptive batching and recovery retry system.
+- **Fill Batching Tests**: Regression tests for fixed-cap batching and recovery retry system.
 - **Verification**: How to use the test suite to validate grid stability.
 
 ---

@@ -139,11 +139,11 @@ DEXBot brings a full Python scientific ecosystem and desktop GUI. DEXBot2 runs h
 
 - **Four specialized engines** (Accountant, StrategyEngine, Grid, SyncEngine) coordinate through OrderManager
 - **Copy-on-Write** grid: planning happens on isolated copy; committed atomically or discarded on failure
-- **No event callbacks**: polling-based loop with adaptive fill detection
+- **No event callbacks**: polling-based loop with fixed-cap fill batching
 - State in **JSON flat files** (no database dependency)
 - Each PM2 process manages **one bot**
 
-**Pattern:** Layered engines, polling with adaptive batching, immutable/COW state management.
+**Pattern:** Layered engines, polling with fixed-cap batching, immutable/COW state management.
 
 ---
 
@@ -151,7 +151,7 @@ DEXBot brings a full Python scientific ecosystem and desktop GUI. DEXBot2 runs h
 
 | Dimension | DEXBot | DEXBot2 |
 |---|---|---|
-| **Core Pattern** | Event-driven callbacks | Polling + adaptive batching |
+| **Core Pattern** | Event-driven callbacks | Polling + fixed-cap batching |
 | **Concurrency Model** | Python threading (GIL-bound) | Node.js async + AsyncLock semaphores |
 | **State Storage** | SQLite (relational, queryable) | JSON flat files (simple, no dependency) |
 | **State Safety** | Mutable shared state per worker | Copy-on-Write immutable master grid |

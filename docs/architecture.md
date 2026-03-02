@@ -59,7 +59,7 @@ flowchart TD
         TARGET["Strategy Engine<br/>calculateTargetGrid<br/>boundary-crawl pivot<br/>partial-fill consolidation, rotation"]
         WORKGRID["WorkingGrid — COW copy<br/>all mutations here only<br/>commit to Master on confirmation"]
         FILLQUEUE["Fill Queue<br/>AsyncLock + dedup 5-60 min"]
-        BATCHER["Adaptive Batcher<br/>depth 0-2 batch 1<br/>depth 3-7 batch 2<br/>depth 8-14 batch 3<br/>depth 15+ batch 4"]
+        BATCHER["Fixed-Cap Batcher<br/>queue <= cap: unified batch<br/>queue > cap: chunk at cap size<br/>default cap: 4"]
     end
 
     subgraph OUT["OUTPUTS"]
@@ -296,7 +296,7 @@ Only blockchain-confirmed events trigger master updates:
 
 ## Fill Processing Pipeline
 
-The fill pipeline handles incoming filled orders efficiently through adaptive batching instead of one-at-a-time processing.
+The fill pipeline handles incoming filled orders efficiently through fixed-cap batching instead of one-at-a-time processing.
 
 ### Architecture Diagram
 
@@ -314,8 +314,8 @@ The fill pipeline handles incoming filled orders efficiently through adaptive ba
                       ↓
 ┌─────────────────────────────────────────────────────────────┐
 │         processFilledOrders() - Entry Point                  │
-│  Measure queue depth → Determine adaptive batch size         │
-│  Rules: [[0,1], [3,2], [8,3], [15,4]] stress tiers         │
+│  Use MAX_FILL_BATCH_SIZE cap for deterministic batching      │
+│  Rules: <=cap unified, >cap chunked at cap size             │
 └─────────────────────┬───────────────────────────────────────┘
                       ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -355,11 +355,9 @@ The fill pipeline handles incoming filled orders efficiently through adaptive ba
 
 ### Key Properties
 
-- **Adaptive Batch Sizing**: Batch size scales with queue depth (1-4 fills)
-  - 0-2 awaiting: batch 1 (legacy sequential, low throughput)
-  - 3-7 awaiting: batch 2 (moderate stress)
-  - 8-14 awaiting: batch 3 (high stress)
-  - 15+ awaiting: batch 4 (extreme stress, maximum batching)
+- **Fixed-Cap Batch Sizing**: Batch size is deterministic with `MAX_FILL_BATCH_SIZE` (default 4)
+  - 1..4 awaiting: single unified batch (one rebalance/broadcast cycle)
+  - 5+ awaiting: repeated chunks of 4 (last chunk may be smaller)
 
 - **Single Rebalance Cycle**: All fills in batch processed in ONE rebalance
   - No "split across cycles" delays
@@ -380,7 +378,7 @@ The fill pipeline handles incoming filled orders efficiently through adaptive ba
 
 ### Impact vs. Legacy Sequential Processing
 
-| Metric | Legacy (1-at-a-time) | Adaptive Batching | Improvement |
+| Metric | Legacy (1-at-a-time) | Fixed-Cap Batching | Improvement |
 |--------|---------------------|-------------------|-------------|
 | **29 Fills** | ~90 seconds | ~24 seconds | **73% faster** |
 | **Market Divergence** | High (90s window) | Low (24s window) | **Safer** |

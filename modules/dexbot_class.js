@@ -923,28 +923,17 @@ class DEXBot {
                         await this.manager.resumeFundRecalc();
                     }
 
-                    // 5. Hybrid Fill Rebalance
-                    // Middle ground between strict sequential and always-full-batch:
-                    // - 1 fill: legacy single-fill pass
-                    // - 2..MAX_FILL_BATCH_SIZE fills: unified full-set planning (no mini-batch churn)
-                    // - larger bursts: adaptive chunking with anti-singleton tail balancing
+                    // 5. Fixed-Cap Fill Rebalance
+                    // - 1..MAX_FILL_BATCH_SIZE fills: unified full-set planning
+                    // - larger bursts: fixed-size chunking at MAX_FILL_BATCH_SIZE
                     if (allFilledOrders.length > 0) {
-                        const stressTiers = FILL_PROCESSING.BATCH_STRESS_TIERS || [[0, 1]];
                         const maxBatch = Math.max(1, FILL_PROCESSING.MAX_FILL_BATCH_SIZE || 1);
                         const totalFills = allFilledOrders.length;
 
-                        let adaptiveBatchSize = 1;
-                        for (const [minDepth, size] of stressTiers) {
-                            if (totalFills >= minDepth) {
-                                adaptiveBatchSize = Math.max(1, Math.min(size, maxBatch));
-                                break;
-                            }
-                        }
-
-                        const useUnifiedPlan = totalFills > 1 && totalFills <= maxBatch;
+                        const useUnifiedPlan = totalFills <= maxBatch;
                         const modeLabel = useUnifiedPlan ? 'unified' : 'chunked';
                         this.manager.logger.log(
-                            `Processing ${totalFills} filled orders (${modeLabel}, baseBatch=${useUnifiedPlan ? totalFills : adaptiveBatchSize})...`,
+                            `Processing ${totalFills} filled orders (${modeLabel}, baseBatch=${useUnifiedPlan ? totalFills : maxBatch})...`,
                             'info'
                         );
 
@@ -961,12 +950,7 @@ class DEXBot {
                                 if (useUnifiedPlan) {
                                     currentBatchSize = remaining;
                                 } else {
-                                    currentBatchSize = Math.min(adaptiveBatchSize, remaining);
-                                    // Avoid ending with a singleton tail when possible.
-                                    const tail = remaining - currentBatchSize;
-                                    if (tail === 1 && currentBatchSize < maxBatch) {
-                                        currentBatchSize = Math.min(maxBatch, currentBatchSize + 1);
-                                    }
+                                    currentBatchSize = Math.min(maxBatch, remaining);
                                 }
 
                                 const batchEnd = Math.min(i + currentBatchSize, totalFills);
