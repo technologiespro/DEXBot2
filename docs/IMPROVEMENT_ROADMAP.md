@@ -1,6 +1,6 @@
 # DEXBot2 Improvement Roadmap
 
-> Analysis of code evolution patterns and recommended improvements based on historical bug data and architectural evolution (Dec 2025 - Feb 2026).
+> Analysis of code evolution patterns and recommended improvements based on historical bug data and architectural evolution (Dec 2025 - Feb 2026). *(Status annotations updated March 2026.)*
 
 ---
 
@@ -8,11 +8,11 @@
 
 DEXBot2 has undergone significant architectural evolution over 3 months, with 983 commits addressing concurrency, precision, and state management challenges. This document consolidates lessons learned and provides a prioritized roadmap for future improvements.
 
-**Key Metrics:**
+**Key Metrics (as of original analysis):**
 - Bug-fix commits: 403 (41%)
 - Refactor commits: 233 (24%)
 - Concurrency-related fixes: 19+ commits
-- Test files: 103
+- Test files: 103 *(now 102 after obsolete test cleanup)*
 
 ---
 
@@ -42,11 +42,18 @@ Phase 2 (Jan 2026): Architectural Guards
 ├── Atomic Service Pattern
 └── Centralized quantization utilities
 
-Phase 3 (Feb 2026): Copy-on-Write Architecture
+Phase 3 (Feb 2026): Copy-on-Write Architecture  ✅ COMPLETE
 ├── Immutable master grid
 ├── Working grid for planning
 ├── Atomic commit on blockchain confirmation
 └── Eliminated 55 lines of rollback code
+
+Phase 4 (Late Feb - Mar 2026): Production Hardening  ✅ COMPLETE
+├── COW invariant contract sealed
+├── Fixed-cap fill batching finalized (adaptive-tier removed)
+├── Market adapter consolidation (split data sources)
+├── Doubled-side replacement flow removed
+└── CacheFunds removed (real-time commitment accounting)
 ```
 
 ### 1.3 Root Cause Analysis
@@ -148,7 +155,9 @@ scripts/run-invariant-checks.sh
 
 ### 2.2 Medium-Term (3-6 months)
 
-#### 2.2.1 StateManager Consolidation
+#### 2.2.1 StateManager Consolidation — ✅ DONE (Feb 2026)
+
+> Consolidated in commit `f9bc182` — StateManager class now owns rebalance state, working grid reference, and abort controller. See `COW_EVOLUTION_REPORT.md` Phase 9.
 
 **Problem:** Current state management split between:
 - `_state` (StateManager class)
@@ -420,7 +429,7 @@ Standardize post-mortems for production issues:
 |-------------|----------|--------|--------|----------|
 | Property-Based Testing | High | Medium | High | Short-term |
 | Integration Stress Tests | High | Medium | High | Short-term |
-| StateManager Consolidation | High | Medium | High | Medium-term |
+| ~~StateManager Consolidation~~ | ~~High~~ | ~~Medium~~ | ~~High~~ | ✅ Done (Feb 2026) |
 | Pre-Commit Invariant Checks | Medium | Low | Medium | Short-term |
 | Event Sourcing | Medium | High | High | Medium-term |
 | Schema Validation | Medium | Medium | High | Medium-term |
@@ -457,14 +466,14 @@ Track improvement effectiveness:
 ## Appendix A: Key Files Reference
 
 ### Files Most Frequently Modified (Bug Hotspots)
-1. `modules/order/manager.js` - Central coordinator, most state mutations
-2. `modules/dexbot_class.js` - Main loop, fill processing
-3. `modules/order/strategy.js` - Rebalancing logic
-4. `modules/order/grid.js` - Grid generation and sizing
-5. `modules/order/sync_engine.js` - Blockchain synchronization
+1. `modules/dexbot_class.js` (3,132 lines) - Main loop, fill processing
+2. `modules/order/grid.js` (1,750 lines) - Grid generation, sizing, spread correction
+3. `modules/order/manager.js` (1,513 lines) - Central coordinator, COW lifecycle
+4. `modules/order/startup_reconcile.js` (1,325 lines) - Startup reconciliation
+5. `modules/order/sync_engine.js` (1,055 lines) - Blockchain synchronization
 
 ### Files with Most Concurrency Concerns
-1. `modules/order/manager.js` - Multiple locks, state transitions
+1. `modules/order/manager.js` - Multiple locks, state transitions, COW commit/abort
 2. `modules/order/sync_engine.js` - Async blockchain calls
 3. `modules/order/accounting.js` - Fund tracking under concurrency
 4. `modules/order/async_lock.js` - Locking primitive
@@ -483,4 +492,5 @@ Track improvement effectiveness:
 ---
 
 *Document generated: 2026-02-19*
-*Based on: 983 commits, 103 test files, Dec 2025 - Feb 2026*
+*Status annotations updated: 2026-03-03*
+*Based on: 995+ commits, 102 test files, Dec 2025 - Mar 2026*

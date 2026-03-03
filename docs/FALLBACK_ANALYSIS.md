@@ -3,12 +3,15 @@
 ## Complete Fallback Categorization by Theme
 
 ### Summary
-Found **37+ distinct instances** of "fallback" across the codebase, organized into 7 categories with file paths, line numbers, and context.
+Found **35+ distinct instances** of "fallback" across the codebase, organized into 7 categories with file paths and context.
 
-⚠️ **Recent Updates**:
+> **Note:** Line numbers are approximate — code shifts with each commit. Use the described patterns/function names to locate current positions.
+
+⚠️ **Updates (March 2026)**:
 - Numeric format precision fallback has been completely removed. Precision is now strictly validated at startup.
 - Price fallback system has been removed. All price modes (`pool`, `market`, `auto`) now use strict semantics with no cross-fallback.
 - Orphan order lax tolerance fallback has been removed. Orphaned chain orders that don't strictly match grid orders are no longer recovered.
+- Rotation-to-creation fallback has been removed. Unmet rotations are no longer converted to placements.
 
 ---
 
@@ -30,7 +33,7 @@ Found **37+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `modules/order/grid.js` | 776-781 | `// Denominator: bot's total funds for this side (respects botFunds % allocation). Primary: allocated (botFunds-adjusted). Fallback: chainTotal (free + locked). Previous fallback (grid + pending) caused false-positive triggers when the grid allocation was small relative to total funds. const denominator = (allocated > 0) ? allocated : chainTotal;` |
+| `modules/order/grid.js` | ~733 | `// Denominator: side's allocated capital (or chain total fallback).` |
 
 **Behavior**: When calculating fund utilization ratios, prefer `allocated` (configured %), but fallback to `chainTotal` (on-chain balance) if allocated is 0.
 
@@ -38,16 +41,9 @@ Found **37+ distinct instances** of "fallback" across the codebase, organized in
 
 ## 2. ORDER ROTATION & PLACEMENT FALLBACK
 
-### 2.1 Rotation to Creation Conversion
-**Category**: When order rotation fails (order not found on-chain), convert unmet rotations to new placements.
+### ~~2.1 Rotation to Creation Conversion~~ — REMOVED (March 2026)
 
-| File | Line | Context |
-|------|------|---------|
-| `modules/dexbot_class.js` | 1568-1580 | `// Convert unmet rotations to placements so we still fill the grid gaps. if (unmetRotations.length > 0) { ... const fallbackPlacements = unmetRotations.map(r => ({ id: r.newGridId, price: r.newPrice, size: r.newSize, type: r.type, state: ORDER_STATES.VIRTUAL })); await this._buildCreateOps(fallbackPlacements, assetA, assetB, operations, opContexts);` |
-| `modules/dexbot_class.js` | 1860-1867 | `Tracks unmet rotations (orders missing on-chain) for fallback to creation. @returns {Array} Unmet rotations (fallback to placements)` |
-| `modules/dexbot_class.js` | 1902 | `this.manager.logger.log(\`Rotation fallback to creation: Order ${oldOrder.orderId} not found (assuming filled or cancelled)\`, 'warn');` |
-
-**Behavior**: If an order rotation fails because the order doesn't exist on-chain (likely filled/cancelled), convert the rotation spec into a new placement order with VIRTUAL state.
+> This fallback was removed. Unmet rotations are no longer converted to placements. The COW architecture handles rotation failures through its abort/discard mechanism instead.
 
 ---
 
@@ -58,7 +54,7 @@ Found **37+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `modules/order/sync_engine.js` | 1020-1035 | `const fetchAssetWithFallback = async (symbol, side) => { try { return await lookupAsset(BitShares, symbol); } catch (err) { if (mgr.accountOrders) { const persistedAssets = mgr.accountOrders.loadPersistedAssets(mgr.config.botKey); const assetData = (side === 'A') ? persistedAssets?.assetA : persistedAssets?.assetB; if (assetData && assetData.symbol === symbol && typeof assetData.precision === 'number') { mgr.logger.log(\`Blockchain lookup failed for ${symbol}: ${err.message}. Using persisted fallback: id=${assetData.id}, precision=${assetData.precision}\`, 'warn'); return assetData;` |
+| `modules/order/sync_engine.js` | ~1025 | `const fetchAssetWithFallback = async (symbol, side) => { try { return await lookupAsset(BitShares, symbol); } catch (err) { if (mgr.accountOrders) { const persistedAssets = mgr.accountOrders.loadPersistedAssets(mgr.config.botKey); const assetData = (side === 'A') ? persistedAssets?.assetA : persistedAssets?.assetB; if (assetData && assetData.symbol === symbol && typeof assetData.precision === 'number') { mgr.logger.log(\`Blockchain lookup failed for ${symbol}: ${err.message}. Using persisted fallback: id=${assetData.id}, precision=${assetData.precision}\`, 'warn'); return assetData;` |
 
 **Behavior**: If blockchain API fails to lookup asset metadata (id, precision), fallback to persisted data from previous successful loads stored in grid state.
 
@@ -71,8 +67,8 @@ Found **37+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `modules/dexbot_class.js` | 1266 | `// dexbot.js has fallback to selectAccount, bot.js throws` |
-| `modules/dexbot_class.js` | 1264-1274 | `catch (err) { this._warn(\`Auto-selection of preferredAccount failed: ${err.message}\`); if (typeof chainOrders.selectAccount === 'function') { const accountData = await chainOrders.selectAccount(); this.privateKey = accountData.privateKey; await this._setupAccountContext(accountData.accountName); } else { throw err;` |
+| `modules/dexbot_class.js` | ~1351 | `// dexbot.js has fallback to selectAccount, bot.js throws` |
+| `modules/dexbot_class.js` | ~1349-1359 | `catch (err) { ... if (typeof chainOrders.selectAccount === 'function') { ... } else { throw err; }` |
 
 **Behavior**: If auto-selecting a configured preferred account fails, fallback to `selectAccount()` (interactive) if available.
 
@@ -83,7 +79,7 @@ Found **37+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `modules/dexbot_class.js` | 2066 | `// Find this bot by name or fallback to index if name changed?` |
+| `modules/dexbot_class.js` | ~2499 | `// Find this bot by name or fallback to index if name changed?` |
 
 **Behavior**: Comment indicating potential fallback strategy if bot name is changed during runtime config refresh.
 
@@ -197,15 +193,15 @@ Found **37+ distinct instances** of "fallback" across the codebase, organized in
 
 ## SUMMARY STATISTICS
 
-**Total Instances**: 37+ (reduced from 38+ after orphan lax tolerance removal)
-**Categories**: 7 primary categories (price/precision/orphan-lax fallbacks removed)
-**Files Affected**: 15 source files
+**Total Instances**: 35+ (reduced after orphan lax tolerance and rotation-to-creation removal)
+**Categories**: 7 primary categories (price/precision/orphan-lax/rotation fallbacks removed)
+**Files Affected**: ~14 source files
 
 ### Fallback Distribution by Type:
 1. **Fund Management** - 8 instances (Budget, denominator, dust resize, cache, proceeds)
 2. **Asset Metadata** - 3 instances (Blockchain lookup, persisted state)
 3. **Account/Config** - 4 instances (Account selection, bot name, settings)
-4. **Order Operations** - 4 instances (Rotation conversion, slot selection)
+4. **Order Operations** - ~~4~~ 3 instances (~~Rotation conversion~~, slot selection)
 5. **File I/O** - 3 instances (Settings loading, parsing)
 6. **Testing/Utilities** - 6 instances (Account ref, fee cache, node failover)
 7. **Documentation** - 6 instances (Architecture, developer guide references)

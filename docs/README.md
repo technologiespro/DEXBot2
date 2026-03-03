@@ -12,7 +12,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **System Design**: High-level overview of how the bot components interact.
 - **Module Responsibilities**: Detailed breakdown of the **Manager**, **Accountant**, **Strategy**, and **Grid** modules.
 - **Copy-on-Write Pattern**: Safe concurrent rebalancing with isolated working grids (see [COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md))
-- **Fill Processing Pipeline**: Adaptive batch fill processing (1-4 fills per broadcast, ~24s for 29 fills)
+- **Fill Processing Pipeline**: Fixed-cap batch fill processing (1-4 fills per broadcast, ~24s for 29 fills)
 - **Fund-Driven Boundary Sync**: Automatic grid alignment with inventory distribution
 - **Spread Correction**: Conservative, fund-aware maintenance of constant spread width
 - **Periodic Market Price Refresh**: Background 4-hour price updates
@@ -26,7 +26,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Copy-on-Write Pattern**: How to work safely within the COW rebalance pipeline; `WorkingGrid` usage and master-grid commit rules (see [COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md))
 - **Startup Sequence & Lock Ordering**: Consolidated startup with deadlock prevention
 - **Zero-Amount Order Prevention**: Validation gates for healthy order sizes
-- **Configurable Pricing Priority**: Fixed vs dynamic startPrice behavior
+- **Configurable startPrice**: Fixed numeric, pool, or market-derived pricing modes
 - **Pool ID Caching**: Optimization for price derivation
 - **Order State Helper Functions**: Centralized predicate functions for state checking
 - **Common Tasks**: Practical "how-to" guides for adding features or fixing bugs.
@@ -71,7 +71,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 
 ## 📂 Source Code Map
 
-While these docs explain the *why*, the *how* lives in the code. See [root README 📦 Modules section](../README.md#-modules) for comprehensive module documentation:
+While these docs explain the *why*, the *how* lives in the code. Key source modules:
 
 **Core Modules:**
 - **`modules/dexbot_class.js`**: Bot initialization, account setup, order placement, fill processing, and rebalancing
@@ -84,9 +84,7 @@ While these docs explain the *why*, the *how* lives in the code. See [root READM
 
 **Utilities & Support:**
 - **`modules/order/utils/math.js`**: Precision conversions, RMS divergence calculation, fund allocation math
-- **`modules/order/utils/order.js`**: Order state predicates, grid indexing, reconciliation helpers, strategy calculations
+- **`modules/order/utils/order.js`**: Order state predicates, grid indexing, reconciliation helpers, delta building, index utilities
 - **`modules/order/utils/validate.js`**: Order validation, grid reconciliation, COW action building
-- **`modules/order/utils/order_comparison.js`**: Epsilon-based order comparison and COW delta building
-- **`modules/order/utils/grid_indexes.js`**: Index building utilities used by WorkingGrid
 - **`modules/order/utils/system.js`**: System utilities, price derivation, fill deduplication
 - **`modules/order/startup_reconcile.js`**: Startup grid reconciliation and offline fill detection

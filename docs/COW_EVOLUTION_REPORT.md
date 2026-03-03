@@ -326,12 +326,14 @@ NORMAL → REBALANCING → BROADCASTING → _commitWorkingGrid() → NORMAL
 
 ## Files Created (Chronological)
 
+> **Note (March 2026):** Several files created during COW development were later consolidated into existing modules. Current file status is annotated below.
+
 1. `modules/order/working_grid.js` - COW wrapper class
-2. `modules/order/utils/grid_indexes.js` - Index utilities
-3. `modules/order/utils/order_comparison.js` - Epsilon comparison
+2. ~~`modules/order/utils/grid_indexes.js`~~ - Index utilities *(consolidated into other utils)*
+3. ~~`modules/order/utils/order_comparison.js`~~ - Epsilon comparison *(consolidated into other utils)*
 4. `modules/order/utils/math.js` - Math utilities
-5. `modules/order/utils/strategy_logic.js` - Strategy extraction
-6. `modules/order/helpers.js` - Manager helpers (later renamed to `validate.js`)
+5. ~~`modules/order/utils/strategy_logic.js`~~ - Strategy extraction *(merged into `strategy.js`)*
+6. ~~`modules/order/helpers.js`~~ → `modules/order/utils/validate.js` - COW action building and validation
 7. `tests/test_cow_master_plan.js`
 8. `tests/test_working_grid.js`
 9. `tests/test_cow_commit_guards.js`

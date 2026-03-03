@@ -1,5 +1,7 @@
 # DEXBot2 TUI Dashboard Spec (Ratatui + Crossterm)
 
+> **Status (March 2026):** PLANNED — Dashboard scaffolding was started in Feb 2026 but implementation is not yet complete. This spec remains the target design.
+
 ## Purpose
 
 Define a terminal dashboard that shows live DEXBot2 status and provides controlled access to existing `scripts/` utilities, without changing trading behavior.

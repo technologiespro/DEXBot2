@@ -160,32 +160,9 @@ if (!match) {
 
 ---
 
-### 4. PRICE BOUND FALLBACK (Relative Price → Numeric Only)
+### 4. PRICE BOUND FALLBACK — REVERTED
 
-**Scope**: `modules/order/utils/order.js` - `resolveConfiguredPriceBound()`
-**Philosophy**: No fallback to relative price derivation
-
-#### Change:
-```javascript
-// BEFORE
-function resolveConfiguredPriceBound(value, fallback, startPrice, mode) {
-    const relative = MathUtils.resolveRelativePrice(value, startPrice, mode);
-    if (Number.isFinite(relative)) return relative;  // <-- FALLBACK REMOVED
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : fallback;
-}
-
-// AFTER
-function resolveConfiguredPriceBound(value, fallback, startPrice, mode) {
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : fallback;
-}
-```
-
-**Impact**:
-- Price bounds must be explicitly numeric (not relative expressions)
-- No silent calculation from startPrice
-- Clear error if bounds are misconfigured
+> **Note (March 2026):** This removal was reverted. Relative price resolution (e.g., `"3x"` multiplier syntax) is still active in `resolveConfiguredPriceBound()` at `modules/order/utils/order.js:381`. The function resolves relative expressions first, then falls back to numeric, and throws if neither works. This behavior is intentional — multiplier syntax (`"2x"`, `"15x"`) is a core configuration feature for `minPrice`/`maxPrice` bounds.
 
 ---
 

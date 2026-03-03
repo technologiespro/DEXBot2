@@ -1,7 +1,7 @@
 # DEXBot2: TypeScript Migration Analysis Report
 
-**Date**: February 2026  
-**Codebase Version**: 0.6.0  
+**Date**: February 2026 *(metrics updated March 2026)*
+**Codebase Version**: 0.6.0+
 **Analysis Scope**: JavaScript to TypeScript migration feasibility and effort estimation
 
 ---
@@ -11,8 +11,8 @@
 The DEXBot2 codebase is **well-positioned for a TypeScript migration**. With 18,212 lines of production code across 28 focused modules and only 3 external dependencies, the project presents a **low-complexity migration with medium-high effort** (1,488-1,588 total hours).
 
 ### Quick Stats
-- **Total Production Code**: 18,212 lines across 28 modules
-- **Test Coverage**: 130+ test files
+- **Total Production Code**: ~21,300 lines across 30+ modules
+- **Test Coverage**: 102 test files
 - **External Dependencies**: 3 (btsdex, bs58check, readline-sync)
 - **Estimated Timeline**: 4-5 months (3-4 developers) | 6-7 months (2 developers) | 9-10 months (1 developer)
 - **Budget Estimate**: $240,000-$300,000 (assuming $120/hour contractors)
@@ -31,38 +31,44 @@ DEXBot2/
 ├── pm2.js                       # PM2 configuration loader
 ├── unlock-start.js              # Credential daemon launcher
 ├── modules/
-│   ├── dexbot_class.js          # CORE: Main bot engine (2,968 lines)
+│   ├── dexbot_class.js          # CORE: Main bot engine (3,132 lines)
 │   ├── order/                   # CRITICAL: Order management subsystem
-│   │   ├── manager.js           # OrderManager class (1,354 lines)
-│   │   ├── strategy.js          # Grid rebalancing strategy (1,214 lines)
-│   │   ├── grid.js              # Grid calculations (1,456 lines)
-│   │   ├── accounting.js        # Fund accounting system (924 lines)
-│   │   ├── sync_engine.js       # Blockchain sync (876 lines)
-│   │   ├── startup_reconcile.js # Boot order reconciliation (312 lines)
-│   │   ├── runner.js            # Order execution framework (198 lines)
+│   │   ├── manager.js           # OrderManager class (1,513 lines)
+│   │   ├── strategy.js          # Grid rebalancing strategy (435 lines)
+│   │   ├── grid.js              # Grid calculations (1,750 lines)
+│   │   ├── accounting.js        # Fund accounting system (937 lines)
+│   │   ├── sync_engine.js       # Blockchain sync (1,055 lines)
+│   │   ├── startup_reconcile.js # Boot order reconciliation (1,325 lines)
+│   │   ├── working_grid.js      # COW grid wrapper (238 lines)
+│   │   ├── runner.js            # Order execution framework (141 lines)
 │   │   ├── utils/               # Utility modules
-│   │   │   ├── math.js
-│   │   │   ├── order.js
-│   │   │   └── system.js
-│   │   ├── logger.js            # Structured logging
-│   │   ├── async_lock.js        # Concurrency control
-│   │   └── export.js            # Data export utilities
-│   ├── chain_orders.js          # Blockchain order ops (1,435 lines)
-│   ├── account_orders.js        # Account order queries (454 lines)
-│   ├── account_bots.js          # Bot account data (314 lines)
-│   ├── bitshares_client.js      # Blockchain client wrapper
-│   ├── node_manager.js          # RPC node failover
-│   ├── chain_keys.js            # Key management
-│   ├── constants.js             # Configuration constants
-│   ├── general_settings.js      # Settings management
-│   ├── bots_file_lock.js        # File locking
-│   └── [other support modules]
+│   │   │   ├── math.js          # Precision, RMS, fund math (1,029 lines)
+│   │   │   ├── order.js         # Order predicates, helpers (1,108 lines)
+│   │   │   ├── system.js        # Price derivation, fill dedup (900 lines)
+│   │   │   └── validate.js      # COW action building, validation (1,022 lines)
+│   │   ├── logger.js            # Structured logging (504 lines)
+│   │   ├── logger_state.js      # State change logging (180 lines)
+│   │   ├── format.js            # Formatting utilities (319 lines)
+│   │   ├── async_lock.js        # Concurrency control (200 lines)
+│   │   └── export.js            # Data export utilities (326 lines)
+│   ├── chain_orders.js          # Blockchain order ops (1,021 lines)
+│   ├── account_orders.js        # Account order queries (728 lines)
+│   ├── account_bots.js          # Bot account data (1,222 lines)
+│   ├── bitshares_client.js      # Blockchain client wrapper (156 lines)
+│   ├── node_manager.js          # RPC node failover (455 lines)
+│   ├── chain_keys.js            # Key management (632 lines)
+│   ├── constants.js             # Configuration constants (750 lines)
+│   ├── general_settings.js      # Settings management (56 lines)
+│   └── bots_file_lock.js        # File locking (154 lines)
 ├── market_adapter/
+│   ├── price_adapter.js         # AMA calculation & trigger logic
 │   ├── blockchain_source.js     # Chain market data
-│   └── market_monitor.js        # Market monitoring
-├── analysis/                    # Standalone analysis tools
+│   ├── kibana_source.js         # Kibana price data
+│   ├── native_api.js            # Native API source
+│   └── core/price_adapter_service.js  # Adapter service
+├── analysis/                    # Standalone analysis tools (AMA fitting, trend detection)
 ├── scripts/                     # Utilities (git analysis, validation, etc.)
-└── tests/                       # 130+ test files (13,400+ lines)
+└── tests/                       # 102 test files
 ```
 
 ### 1.2 Dependency Analysis
@@ -118,7 +124,7 @@ DEXBot2/
 
 #### **Tier 1: HIGHEST COMPLEXITY** (Requires 120-150 hours each)
 
-**1. dexbot_class.js** (2,968 lines)
+**1. dexbot_class.js** (3,132 lines)
 - **Complexity**: 150 hours
 - **Why**: Async state machine, 90+ methods, intricate bot lifecycle
 - **Type Challenges**:
@@ -129,7 +135,7 @@ DEXBot2/
 - **Dependencies**: 15+ internal modules
 - **Migration Strategy**: Foundation layer - must come first
 
-**2. order/manager.js** (1,354 lines)
+**2. order/manager.js** (1,513 lines)
 - **Complexity**: 120 hours
 - **Why**: OrderManager coordinates all order operations
 - **Type Challenges**:
@@ -143,17 +149,17 @@ DEXBot2/
   - `processSync()` - Blockchain reconciliation
 - **Test Coverage**: 10+ dedicated test files help validate types
 
-**3. order/strategy.js** (1,214 lines)
-- **Complexity**: 100 hours
-- **Why**: Complex mathematical algorithms for grid rebalancing
+**3. order/strategy.js** (435 lines)
+- **Complexity**: 50 hours *(reduced — logic extracted to grid.js and utils)*
+- **Why**: Grid rebalancing strategy coordination
 - **Type Challenges**:
   - Discriminated union types for trading strategies (anchor/consolidation)
   - Complex numerical precision handling
   - Algorithm with 30+ internal computation functions
 - **Related**: Heavily tested (test_strategy_logic.js, test_strategy_*.js)
 
-**4. order/grid.js** (1,456 lines)
-- **Complexity**: 75 hours
+**4. order/grid.js** (1,750 lines)
+- **Complexity**: 90 hours
 - **Why**: Grid placement, bid/ask calculations, rebalancing
 - **Type Challenges**:
   - Array manipulation with numeric precision
@@ -161,8 +167,8 @@ DEXBot2/
   - Union types for price derivation (pool/market/auto)
 - **Math-Heavy**: Requires careful numeric typing
 
-**5. chain_orders.js** (1,435 lines)
-- **Complexity**: 80 hours
+**5. chain_orders.js** (1,021 lines)
+- **Complexity**: 65 hours
 - **Why**: Blockchain interaction, order serialization
 - **Type Challenges**:
   - btsdex library has NO type definitions
@@ -174,26 +180,30 @@ DEXBot2/
 
 | Module | Lines | Hours | Key Challenge |
 |--------|-------|-------|---|
-| order/accounting.js | 924 | 90 | Fund balance tracking, discriminated types |
-| order/sync_engine.js | 876 | 85 | Blockchain sync logic, complex state |
-| account_orders.js | 454 | 65 | Blockchain query responses |
-| account_bots.js | 314 | 55 | Bot state from chain |
-| market_adapter/*.js | 600 | 70 | Market data structures |
+| order/accounting.js | 937 | 90 | Fund balance tracking, discriminated types |
+| order/sync_engine.js | 1,055 | 90 | Blockchain sync logic, complex state |
+| order/startup_reconcile.js | 1,325 | 95 | Startup reconciliation, offline fill detection |
+| account_orders.js | 728 | 70 | Blockchain query responses |
+| account_bots.js | 1,222 | 80 | Bot state, AMA config, market adapter settings |
+| market_adapter/*.js | ~1,200 | 85 | Market data structures, multiple sources |
 
-**Subtotal Tier 2**: ~365 hours
+**Subtotal Tier 2**: ~510 hours
 
 #### **Tier 3: MEDIUM COMPLEXITY** (40-80 hours each)
 
 | Module | Hours | Notes |
 |--------|-------|-------|
-| order/utils/* | 60 | Math utilities, order helpers |
-| order/logger.js | 35 | Structured logging types |
+| order/utils/* (4 files, 4,059 lines) | 120 | Math, order predicates, system, COW validation |
+| order/logger.js + logger_state.js | 40 | Structured logging types |
+| order/format.js + export.js | 35 | Formatting and export utilities |
+| order/working_grid.js | 25 | COW wrapper types |
 | node_manager.js | 50 | RPC failover logic |
-| bitshares_client.js | 45 | Client wrapper |
-| constants.js | 30 | Config constants |
-| Other support modules | 100 | General module typing |
+| bitshares_client.js | 20 | Client wrapper |
+| constants.js (750 lines) | 40 | Config constants |
+| chain_keys.js (632 lines) | 30 | Key management |
+| Other support modules | 60 | General module typing |
 
-**Subtotal Tier 3**: ~320 hours
+**Subtotal Tier 3**: ~420 hours
 
 #### **Tier 4-5: LOWER COMPLEXITY** (10-30 hours each)
 
@@ -505,79 +515,83 @@ npm test  # All 130+ tests passing
 ### Tier 1: HIGHEST (>100 hours each)
 
 ```
-TIER 1 ANALYSIS - Total: 525 hours
+TIER 1 ANALYSIS - Total: 475 hours
 ===================================
 
-dexbot_class.js (150 hours) ⭐⭐⭐⭐⭐
+dexbot_class.js (150 hours, 3,132 lines) ⭐⭐⭐⭐⭐
 ├─ ~90 public methods
-├─ ~12 async coordination patterns  
+├─ ~12 async coordination patterns
 ├─ ~50 internal state fields
 ├─ Event emission system
 └─ Dependencies: All modules (most complex)
 
-order/manager.js (120 hours) ⭐⭐⭐⭐
+order/manager.js (120 hours, 1,513 lines) ⭐⭐⭐⭐
 ├─ ~55 public/private methods
-├─ Order state machine (5 states)
-├─ ~100 internal mutations
+├─ Order state machine (3 states: VIRTUAL, ACTIVE, PARTIAL)
+├─ COW commit/abort lifecycle
 ├─ Map<string, Order> tracking
 └─ Dependencies: grid, strategy, accounting, sync_engine
 
-order/strategy.js (100 hours) ⭐⭐⭐⭐
-├─ Complex grid rebalancing algorithm
-├─ ~30 internal computation functions
-├─ 2 strategy types (discriminated union)
-├─ Numerical precision handling
-└─ Dependencies: grid, accounting
-
-order/grid.js (75 hours) ⭐⭐⭐⭐
-├─ Grid placement calculations
+order/grid.js (90 hours, 1,750 lines) ⭐⭐⭐⭐
+├─ Grid placement calculations + spread correction
 ├─ Bid/ask spread management
-├─ ~25 methods
+├─ Divergence detection (RMS)
 ├─ Array manipulation (precision)
-└─ Dependencies: math utilities
+└─ Dependencies: math utilities, validate.js
 
-chain_orders.js (80 hours) ⭐⭐⭐⭐
+chain_orders.js (65 hours, 1,021 lines) ⭐⭐⭐⭐
 ├─ Blockchain API integration
 ├─ NO TYPE DEFS for btsdex
 ├─ Object transformation patterns
 ├─ ~20 blockchain methods
 └─ Dependencies: btsdex (external)
+
+order/strategy.js (50 hours, 435 lines) ⭐⭐⭐
+├─ Grid rebalancing coordination
+├─ Boundary crawl logic
+├─ Numerical precision handling
+└─ Dependencies: grid, accounting
 ```
 
 ### Tier 2: HIGH (60-90 hours each)
 
 ```
-TIER 2 ANALYSIS - Total: 365 hours
+TIER 2 ANALYSIS - Total: 510 hours
 ===================================
 
-order/accounting.js (90 hours)
+order/startup_reconcile.js (95 hours, 1,325 lines)
+├─ Startup grid reconciliation
+├─ Offline fill detection
+├─ Batch retry with sequential fallback
+└─ Types: ReconcileResult, OfflineFill
+
+order/accounting.js (90 hours, 937 lines)
 ├─ Fund balance tracking
 ├─ Complex fee deduction logic
 ├─ ~25 methods
 └─ Types: FundBalance, FundTracker
 
-order/sync_engine.js (85 hours)
+order/sync_engine.js (90 hours, 1,055 lines)
 ├─ Blockchain synchronization
 ├─ Complex state reconciliation
 ├─ ~30 methods
 └─ Types: SyncState, ChainDelta
 
-account_orders.js (65 hours)
+market_adapter/ (85 hours, ~1,200 lines across 5+ files)
+├─ AMA calculation and triggers
+├─ Multiple data sources (blockchain, Kibana, native API)
+├─ Shard-parallel fitting
+└─ Types: MarketData, AMAConfig, TriggerState
+
+account_bots.js (80 hours, 1,222 lines)
+├─ Bot data, AMA config, market adapter settings
+├─ Configuration schema management
+└─ Types: BotConfig, AMASettings, MarketAdapterSettings
+
+account_orders.js (70 hours, 728 lines)
 ├─ Order query responses
 ├─ ~20 methods
 └─ Types: OrderQuery, QueryResponse
-
-account_bots.js (55 hours)
-├─ Bot data from blockchain
-├─ ~15 methods
-└─ Types: BotState, BotData
-
-market_adapter/ (70 hours)
-├─ Market data aggregation
-├─ ~15 methods across 2 files
-└─ Types: MarketData, OrderBook
-
-[Continue with node_manager, bitshares_client...]
 ```
 
 ---
@@ -667,10 +681,10 @@ npm run test:ts → ts-node runs TS tests directly (faster during development)
 **Verdict**: DEXBot2 is **ideal** for TypeScript migration
 
 **Rationale**:
-1. ✅ Small, focused codebase (18K LOC)
+1. ✅ Small, focused codebase (~21K LOC)
 2. ✅ Minimal dependencies (3 packages)
 3. ✅ Already modern (async/await)
-4. ✅ Good test coverage (130+ tests)
+4. ✅ Good test coverage (102 test files)
 5. ✅ Clear architecture (no circular deps)
 6. ✅ Strong business case (trading bot → type safety critical)
 
@@ -693,21 +707,23 @@ npm run test:ts → ts-node runs TS tests directly (faster during development)
 ### Key Modules by Complexity
 
 **Critical Path** (must migrate in order):
-1. chain_orders.js (80h) - Foundation
-2. order/grid.js (75h) - Grid types
-3. order/strategy.js (100h) - Strategy types
+1. chain_orders.js (65h) - Foundation
+2. order/grid.js (90h) - Grid types
+3. order/strategy.js (50h) - Strategy types
 4. order/manager.js (120h) - Manager types
 5. dexbot_class.js (150h) - Bot coordination
 
 **High Priority** (impacts fund safety):
 - order/accounting.js (90h)
-- order/sync_engine.js (85h)
-- account_orders.js (65h)
+- order/sync_engine.js (90h)
+- order/startup_reconcile.js (95h)
+- order/utils/validate.js (COW action building)
+- account_orders.js (70h)
 
 **Medium Priority** (supporting):
-- market_adapter/ (70h)
+- market_adapter/ (85h)
+- account_bots.js (80h)
 - node_manager.js (50h)
-- bitshares_client.js (45h)
 
 **Low Priority** (can parallelize):
 - Scripts, utilities, entry points

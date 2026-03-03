@@ -1,6 +1,6 @@
 # DEXBot vs DEXBot2 — Detailed Comparison Report
 
-> **Date:** 2026-02-19
+> **Date:** 2026-02-19 *(metrics updated 2026-03-03)*
 > **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite, v0.6.x).
 > **Audience:** Developers, contributors, and operators evaluating or migrating between the two projects.
 
@@ -35,22 +35,22 @@
 
 | Attribute | DEXBot (original) | DEXBot2 |
 |---|---|---|
-| **Version** | 1.0.0 | 0.6.0-patch.21 |
+| **Version** | 1.0.0 | 0.6.0+ |
 | **Language** | Python 3.6+ | Node.js (JavaScript ES2022) |
 | **Status** | Alpha / Maintenance | Active Development |
-| **Last Update** | ~May 2020 | February 2026 |
+| **Last Update** | ~May 2020 | March 2026 |
 | **License** | MIT | MIT |
 | **Origin** | BitShares worker-proposal funded, Codaone Oy | Private rewrite by froooze |
 | **Primary Goal** | Multi-strategy, extensible trading framework | Hardened, single-strategy grid bot |
 | **Target Exchange** | BitShares DEX | BitShares DEX |
-| **Lines of Code** | ~10,846 (Python) | ~15,000+ (JavaScript) |
+| **Lines of Code** | ~10,846 (Python) | ~21,000+ (JavaScript) |
 | **Source Files** | 72 Python files | 30+ JS modules |
 
 ### Summary
 
 DEXBot (original) is a community-governed, multi-strategy trading framework built in Python with a full GUI and plugin system. It was designed to be user-friendly and extensible, supporting multiple strategies and external price feeds out of the box.
 
-DEXBot2 is a ground-up rewrite in Node.js focused entirely on a single, deeply engineered grid trading strategy. It trades breadth of features for depth of correctness, adding production-grade state management, concurrency safety, and a comprehensive test suite.
+DEXBot2 is a ground-up rewrite in Node.js focused entirely on a single, deeply engineered grid trading strategy. It trades breadth of features for depth of correctness, adding production-grade state management (Copy-on-Write architecture), concurrency safety, AMA-based market adaptation, and a comprehensive test suite (102 files).
 
 ---
 
@@ -69,7 +69,7 @@ DEXBot2 is a ground-up rewrite in Node.js focused entirely on a single, deeply e
 | **External APIs** | CoinGecko, CCXT, Waves | None (on-chain only) |
 | **Container** | Docker (Ubuntu 18.04) | Docker (multi-stage) |
 | **Dashboard** | PyQt5 GUI | Rust/Ratatui TUI (in progress) |
-| **Testing** | pytest + Docker testnet | Native Node.js assert (40+ tests) |
+| **Testing** | pytest + Docker testnet | Native Node.js assert (102 test files) |
 | **CI/CD** | Travis CI, AppVeyor | GitHub Actions |
 | **Packaging** | PyInstaller (Win/Mac/Linux binaries) | npm / PM2 ecosystem |
 
@@ -138,8 +138,9 @@ DEXBot brings a full Python scientific ecosystem and desktop GUI. DEXBot2 runs h
 ```
 
 - **Four specialized engines** (Accountant, StrategyEngine, Grid, SyncEngine) coordinate through OrderManager
-- **Copy-on-Write** grid: planning happens on isolated copy; committed atomically or discarded on failure
-- **No event callbacks**: polling-based loop with fixed-cap fill batching
+- **Copy-on-Write** grid: planning happens on isolated `WorkingGrid`; committed atomically or discarded on failure
+- **No event callbacks**: polling-based loop with fixed-cap fill batching (max 4 fills per cycle)
+- **Market Adapter**: AMA-based price tracking with shard-parallel fitting and configurable delta triggers
 - State in **JSON flat files** (no database dependency)
 - Each PM2 process manages **one bot**
 
@@ -205,7 +206,7 @@ DEXBot brings a full Python scientific ecosystem and desktop GUI. DEXBot2 runs h
 - **Dynamic spread gap** around market price (configurable `targetSpreadPercent`)
 - On fill: grid **crawls** — boundary shifts, slots reassign roles, new orders placed
 - **Partial fill consolidation**: dust detection and cleanup
-- **Adaptive fill batching**: 1–4 fills processed per cycle based on queue depth
+- **Fixed-cap fill batching**: 1–4 fills per unified batch, >4 chunked at 4-fill boundaries
 
 ```
 Price Scale (geometric, e.g. 0.4% increments):
@@ -581,7 +582,7 @@ Where:
 ### DEXBot2
 
 - **Framework:** Native Node.js `assert` module (no external test framework)
-- **40+ test files** covering:
+- **102 test files** covering:
   - Unit tests: accounting, strategy, grid, manager logic
   - Copy-on-Write semantics: COW commits, guards, concurrent fills
   - Edge cases: ghost orders, partial fills, BTS fee accounting, precision
@@ -596,7 +597,7 @@ Where:
 | Feature | DEXBot | DEXBot2 |
 |---|---|---|
 | **Framework** | pytest | Native Node.js assert |
-| **Test Count** | ~20-30 | 40+ |
+| **Test Count** | ~20-30 | 102 |
 | **Test Types** | Unit + integration | Unit + integration + edge-case |
 | **Testnet Integration** | Yes (Docker) | No (mocks) |
 | **External Dependency** | pytest, Docker | None |
@@ -631,9 +632,10 @@ Where:
 | `docs/LOGGING.md` | 21 KB | Logging categories and configuration |
 | `docs/WORKFLOW.md` | 7 KB | Branch strategy, commit standards |
 | `docs/TEST_UPDATES_SUMMARY.md` | 14 KB | Test suite coverage and improvements |
+| `docs/GRID_RECALCULATION.md` | 11 KB | Three independent grid recalculation triggers |
 | `docs/TYPESCRIPT_MIGRATION_ANALYSIS.md` | 23 KB | Future TypeScript migration roadmap |
 | `AGENTS.md` | 6.5 KB | AI development context |
-| `CHANGELOG.md` | Very large | Full version history (983 commits) |
+| `CHANGELOG.md` | Very large | Full version history (995+ commits) |
 
 ### Documentation Comparison
 
@@ -727,14 +729,14 @@ Where:
 
 | Metric | DEXBot | DEXBot2 |
 |---|---|---|
-| **Version** | 1.0.0 | 0.6.0-patch.21 |
+| **Version** | 1.0.0 | 0.6.0+ |
 | **Active Since** | ~2018 | December 2025 |
-| **Last Commit** | ~May 2020 | February 2026 |
-| **Total Commits** | Unknown (mature project) | 983 (3 months) |
-| **Lines of Code** | ~10,846 | ~15,000+ |
+| **Last Commit** | ~May 2020 | March 2026 |
+| **Total Commits** | Unknown (mature project) | 995+ (4 months) |
+| **Lines of Code** | ~10,846 | ~21,000+ |
 | **Source Files** | 72 Python files | 30+ JS modules |
-| **Test Files** | ~20-30 | 40+ |
-| **Documentation** | Sphinx docs + README | 14 comprehensive Markdown files |
+| **Test Files** | ~20-30 | 102 |
+| **Documentation** | Sphinx docs + README | 15+ comprehensive Markdown files |
 | **Strategies** | 3 + plugins | 1 |
 | **Max Concurrent Bots** | Many (one process) | Many (one process per bot, PM2) |
 | **Primary Developer** | Codaone Oy (team) | froooze (individual, 99.1% commits) |
@@ -767,7 +769,7 @@ Where:
 - Rust TUI dashboard not yet complete
 - No community/plugin ecosystem
 - Heavy documentation suggests significant learning curve for contributors
-- 983 commits in 3 months suggests rapid, potentially unstable iteration
+- 995+ commits in 4 months suggests rapid iteration (stabilizing as COW architecture and fill batching are finalized)
 
 ---
 
@@ -782,7 +784,7 @@ Where:
 | **Security** | ★★★☆☆ | ★★★★★ (AES-256-GCM, RAM-only) | DEXBot2 |
 | **Ease of Setup** | ★★★★★ (GUI wizard) | ★★☆☆☆ (manual JSON) | DEXBot |
 | **Accessibility** | ★★★★★ (GUI) | ★★☆☆☆ (CLI only) | DEXBot |
-| **Testing Depth** | ★★★☆☆ | ★★★★★ (40+ edge-case tests) | DEXBot2 |
+| **Testing Depth** | ★★★☆☆ | ★★★★★ (102 test files) | DEXBot2 |
 | **Documentation** | ★★★☆☆ | ★★★★★ (14 detailed docs) | DEXBot2 |
 | **Dependency Footprint** | ★★☆☆☆ (heavy) | ★★★★★ (3 packages) | DEXBot2 |
 | **Extensibility** | ★★★★★ (plugins) | ★☆☆☆☆ | DEXBot |
@@ -794,4 +796,4 @@ Where:
 
 ---
 
-*Report generated 2026-02-19. DEXBot2 analyzed at commit `986a28a`. DEXBot analyzed at HEAD of DEXBot-master.*
+*Report generated 2026-02-19. Metrics updated 2026-03-03. DEXBot analyzed at HEAD of DEXBot-master.*
