@@ -71,7 +71,7 @@
 const fs = require('fs');
 const path = require('path');
 const { ensureProfilesDirectory, readInput } = require('./order/utils/system');
-const { DEFAULT_CONFIG, GRID_LIMITS, TIMING, LOG_LEVEL, UPDATER } = require('./constants');
+const { DEFAULT_CONFIG, GRID_LIMITS, TIMING, LOG_LEVEL, UPDATER, MARKET_ADAPTER } = require('./constants');
 const { SETTINGS_FILE, readGeneralSettings, writeGeneralSettings } = require('./general_settings');
 
 /**
@@ -86,25 +86,6 @@ function parseJsonWithComments(raw) {
 
 const BOTS_FILE = path.join(__dirname, '..', 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
-
-/**
- * Market adapter settings controlling grid recalculation triggers.
- *
- * DELTA_THRESHOLD_PERCENT: Percentage change in AMA center price that triggers grid reset.
- *   - Controls market_adapter/price_adapter.js trigger logic
- *   - When AMA price moves ±DELTA_THRESHOLD_PERCENT from last recorded center,
- *     a recalculate.<botKey>.trigger file is created to signal grid regeneration
- *   - Default: 5% (grid recalculates when market moves 5% from last recorded AMA center)
- *   - Range: 0.1 to 50.0 (configurable via CLI and bot editor)
- *   - Stored in: profiles/general.settings.json under MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT
- *
- * Related setting: RMS_PERCENTAGE in GRID_LIMITS.GRID_COMPARISON
- *   - Controls grid divergence checks (independent of AMA)
- *   - Set to 0 to disable RMS checks (Issue #5 fix)
- */
-const DEFAULT_MARKET_ADAPTER_SETTINGS = {
-    DELTA_THRESHOLD_PERCENT: 5,
-};
 
 /**
  * Loads the bots configuration from profiles/bots.json.
@@ -152,7 +133,7 @@ function loadGeneralSettings() {
         GRID_LIMITS: { ...GRID_LIMITS },
         TIMING: { ...TIMING },
         UPDATER: { ...UPDATER },
-        MARKET_ADAPTER: { ...DEFAULT_MARKET_ADAPTER_SETTINGS },
+        MARKET_ADAPTER: { ...MARKET_ADAPTER },
     };
 
     const settings = readGeneralSettings({
@@ -188,7 +169,7 @@ function loadGeneralSettings() {
         ...((settings.UPDATER && typeof settings.UPDATER === 'object') ? settings.UPDATER : {}),
     };
     if (!settings.MARKET_ADAPTER || typeof settings.MARKET_ADAPTER !== 'object') {
-        settings.MARKET_ADAPTER = { ...DEFAULT_MARKET_ADAPTER_SETTINGS };
+        settings.MARKET_ADAPTER = { ...MARKET_ADAPTER };
     }
 
     const configuredDeltaPercent = Number(settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT);
@@ -197,7 +178,7 @@ function loadGeneralSettings() {
         ? configuredDeltaPercent
         : (Number.isFinite(legacyResetFactor) && legacyResetFactor > 0
             ? legacyResetFactor
-            : DEFAULT_MARKET_ADAPTER_SETTINGS.DELTA_THRESHOLD_PERCENT);
+            : MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT);
     settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT = effectiveDeltaPercent;
     if (Object.prototype.hasOwnProperty.call(settings.MARKET_ADAPTER, 'GRID_RESET_FACTOR')) {
         delete settings.MARKET_ADAPTER.GRID_RESET_FACTOR;

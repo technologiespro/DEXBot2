@@ -519,6 +519,19 @@ let PIPELINE_TIMING = {
     RECOVERY_DECAY_FALLBACK_MS: 3 * 60 * 1000
 };
 
+// Market Adapter Configuration
+// Controls price tracking and grid recalculation triggers.
+// See: market_adapter/price_adapter.js, modules/account_bots.js
+let MARKET_ADAPTER = {
+    // DELTA_THRESHOLD_PERCENT: Percentage change in AMA center price that triggers a grid reset.
+    //   - When AMA price moves ±DELTA_THRESHOLD_PERCENT from the last recorded center,
+    //     a recalculate.<botKey>.trigger file is written to signal grid regeneration.
+    //   - Configurable per deployment via profiles/general.settings.json under MARKET_ADAPTER.
+    //   - Range: 0.1 to 50.0 (enforced in account_bots.js)
+    //   - Default: 5 (grid recalculates when market moves 5% from last recorded AMA center)
+    DELTA_THRESHOLD_PERCENT: 5,
+};
+
 // Logging Level Configuration
 // Options:
 // - 'debug': Verbose output including calculation details, API calls, and flow tracing.
@@ -746,5 +759,6 @@ Object.freeze(PIPELINE_TIMING);
 Object.freeze(UPDATER);
 Object.freeze(COW_PERFORMANCE);
 Object.freeze(LOGGING_CONFIG);
+Object.freeze(MARKET_ADAPTER);
 
-module.exports = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE };
+module.exports = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE, MARKET_ADAPTER };

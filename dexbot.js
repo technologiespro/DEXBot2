@@ -755,7 +755,7 @@ async function bootstrap() {
 
         // Generate default general.settings.json for new installations
         const SETTINGS_FILE = path.join(PROFILES_DIR, 'general.settings.json');
-        const { LOG_LEVEL, GRID_LIMITS, TIMING, UPDATER, NODE_MANAGEMENT } = require('./modules/constants');
+        const { LOG_LEVEL, GRID_LIMITS, TIMING, UPDATER, NODE_MANAGEMENT, MARKET_ADAPTER } = require('./modules/constants');
 
         // Create a copy of GRID_LIMITS and remove any legacy fields if necessary
         // (Though constants.js was already updated, this ensures a clean object)
@@ -784,9 +784,7 @@ async function bootstrap() {
             GRID_LIMITS: gridLimits,
             TIMING: { ...TIMING },
             UPDATER: { ...UPDATER },
-            MARKET_ADAPTER: {
-                DELTA_THRESHOLD_PERCENT: 5,
-            },
+            MARKET_ADAPTER: { ...MARKET_ADAPTER },
         };
         fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2) + '\n', 'utf8');
         console.log('✓ Created default general.settings.json');
