@@ -132,12 +132,13 @@ Below is a reference guide for each configuration option from `node dexbot bots`
 | **`dryRun`** | boolean | If `true`, simulates orders without broadcasting to the blockchain. |
 | **`preferredAccount`** | string | The BitShares account name to use for trading. |
 
-#### 3. Price Range
+#### 3. Price
 | Parameter | Type | Description |
 | :--- | :--- | :--- |
-| **`startPrice`** | num \| str | Default start price from liquidiy pool (`"pool"`), `"market"` (order book) or a number `A/B` is also possible. |
+| **`startPrice`** | num \| str | Initial price for order alignment. `"pool"` (liquidity pool), `"market"` (order book), or a numeric `A/B` ratio. |
 | **`minPrice`** | number \| string | Lower bound. Use a number (e.g., `0.5`) or multiplier (e.g., `"2x"` = `startPrice / 2`). |
 | **`maxPrice`** | number \| string | Upper bound. Use a number (e.g., `1.5`) or multiplier (e.g., `"2x"` = `startPrice * 2`). |
+| **`gridPrice`** | num \| str \| null | Reference price for x-factor bound calculations, independent of `startPrice`. Options: `null` (default — uses `startPrice`), a numeric price, or an AMA keyword (`"ama"`, `"ama1"`–`"ama4"`). When set to an AMA keyword, the market adapter writes the current AMA center price to `profiles/orders/<botKey>.gridprice.json` and the grid reads it on each reset. |
 
 #### 4. Grid Strategy
 | Parameter | Type | Description |

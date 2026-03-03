@@ -830,10 +830,9 @@ async function promptBotData(base = {}) {
              console.log('\n\x1b[1m--- Bot Editor: ' + (data.name || 'New Bot') + ' ---\x1b[0m');
              console.log(`\x1b[1;33m1) Pair:\x1b[0m       \x1b[1;31m${data.assetA || '?'} / ${data.assetB || '?'} \x1b[0m`);
              console.log(`\x1b[1;33m2) Identity:\x1b[0m   \x1b[38;5;208mName:\x1b[0m ${data.name || '?'} , \x1b[38;5;208mAccount:\x1b[0m ${data.preferredAccount || '?'} , \x1b[38;5;208mActive:\x1b[0m ${data.active}, \x1b[38;5;208mDryRun:\x1b[0m ${data.dryRun}`);
-             console.log(`\x1b[1;33m3) Price:\x1b[0m      \x1b[38;5;208mRange:\x1b[0m [${data.minPrice} - ${data.maxPrice}], \x1b[38;5;208mStart:\x1b[0m ${data.startPrice}`);
+             console.log(`\x1b[1;33m3) Price:\x1b[0m      \x1b[38;5;208mRange:\x1b[0m [${data.minPrice} - ${data.maxPrice}], \x1b[38;5;208mStart:\x1b[0m ${data.startPrice}, \x1b[38;5;208mGrid:\x1b[0m ${data.gridPrice === null ? 'startPrice' : data.gridPrice}`);
              console.log(`\x1b[1;33m4) Grid:\x1b[0m       \x1b[38;5;208mWeights:\x1b[0m (S:${data.weightDistribution.sell}, B:${data.weightDistribution.buy}), \x1b[38;5;208mIncr:\x1b[0m ${data.incrementPercent}%, \x1b[38;5;208mSpread:\x1b[0m ${data.targetSpreadPercent}%`);
              console.log(`\x1b[1;33m5) Funding:\x1b[0m    \x1b[38;5;208mSell:\x1b[0m ${data.botFunds.sell}, \x1b[38;5;208mBuy:\x1b[0m ${data.botFunds.buy} | \x1b[38;5;208mOrders:\x1b[0m (S:${data.activeOrders.sell}, B:${data.activeOrders.buy})`);
-             console.log(`\x1b[1;33m6) Grid Ref:\x1b[0m   \x1b[38;5;208mgridPrice:\x1b[0m ${data.gridPrice === null ? 'startPrice' : data.gridPrice}`);
              console.log('--------------------------------------------------');
              console.log('\x1b[1;32mS) Save & Exit\x1b[0m');
              console.log('\x1b[37mC) Cancel (Discard changes)\x1b[0m');
@@ -841,7 +840,7 @@ async function promptBotData(base = {}) {
         }
 
         const choice = (await readInput('Select section to edit or action: ', {
-            validate: (input) => ['1', '2', '3', '4', '5', '6', 's', 'c'].includes(input)
+            validate: (input) => ['1', '2', '3', '4', '5', 's', 'c'].includes(input.toLowerCase())
         })).trim().toLowerCase();
 
         if (choice === '\x1b') {
@@ -882,9 +881,12 @@ async function promptBotData(base = {}) {
                 if (maxP === '\x1b') break;
                 const startP = await askStartPrice('startPrice (pool, market or A/B)', data.startPrice);
                 if (startP === '\x1b') break;
+                const gp = await askGridPriceMode('gridPrice ref (ama/ama1/ama2/ama3/ama4/number/none)', data.gridPrice);
+                if (gp === '\x1b') break;
                 data.minPrice = minP;
                 data.maxPrice = maxP;
                 data.startPrice = startP;
+                data.gridPrice = gp;
                 showMenu = true;
                 break;
             case '4':
@@ -920,14 +922,6 @@ async function promptBotData(base = {}) {
                 data.botFunds.buy = fBuy;
                 data.activeOrders.sell = oSell;
                 data.activeOrders.buy = oBuy;
-                showMenu = true;
-                break;
-            case '6':
-                {
-                    const gp = await askGridPriceMode('gridPrice (ama/ama1/ama2/ama3/ama4/number/none)', data.gridPrice);
-                    if (gp === '\x1b') break;
-                    data.gridPrice = gp;
-                }
                 showMenu = true;
                 break;
             case 's':
