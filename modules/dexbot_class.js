@@ -2493,7 +2493,6 @@ class DEXBot {
         try {
             // 1. Reload configuration from disk to pick up any changes
             try {
-                const { parseJsonWithComments } = require('./account_bots');
                 const content = fs.readFileSync(PROFILES_BOTS_FILE, 'utf8');
                 const allBotsConfig = parseJsonWithComments(content).bots || [];
 

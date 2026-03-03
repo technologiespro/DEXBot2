@@ -176,27 +176,6 @@ module.exports = { apps: ${JSON.stringify(apps, null, 2)} };
 }
 
 /**
- * Authenticate master password without waiting for connection.
- * @returns {Promise<string>} The authenticated master password.
- * @throws {Error} If authentication fails or no password is set.
- */
-async function authenticateWithoutWait() {
-    const chainKeys = require('./modules/chain_keys');
-
-    try {
-        const password = await chainKeys.authenticate();
-        console.log('Master password authenticated');
-        return password;
-    } catch (err) {
-        if (err.message && err.message.includes('No master password set')) {
-            console.error('No master password set. Run: node dexbot.js keys');
-            process.exit(1);
-        }
-        throw err;
-    }
-}
-
-/**
  * Main application entry point for PM2 orchestration.
  * @param {string|null} [botNameFilter=null] - Optional bot name to start.
  * @returns {Promise<void>}
@@ -638,4 +617,4 @@ if (require.main === module) {
     })();
 }
 
-module.exports = { main, generateEcosystemConfig, authenticateWithoutWait };
+module.exports = { main, generateEcosystemConfig };
