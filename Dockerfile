@@ -7,5 +7,7 @@ RUN npm ci --omit=dev
 
 COPY . .
 
-# Default command is help-oriented; override in docker-compose or docker run.
-CMD ["node", "dexbot.js", "help"]
+# Default command starts credential daemon and all active bots interactively.
+# Run with: docker run -it -v ./profiles:/app/profiles <image>
+# For a specific bot: docker run -it ... <image> node unlock-start.js <bot-name>
+CMD ["node", "unlock-start.js"]
