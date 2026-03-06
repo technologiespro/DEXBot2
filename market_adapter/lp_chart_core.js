@@ -193,7 +193,7 @@ Plotly.newPlot('price-chart',
         margin: { l: 70, r: 260, t: 10, b: 10 },
         showlegend: false,
         xaxis: { ...AXIS, type: 'date', showticklabels: false, rangeslider: { visible: false } },
-        yaxis: { ...AXIS, title: { text: '${assetB.symbol} per ${assetA.symbol}', standoff: 8 }, tickformat: '.6f' },
+        yaxis: { ...AXIS, title: { text: '${assetA.symbol}/${assetB.symbol} (log scale)', standoff: 8 }, type: 'log' },
     },
     { responsive: true, displayModeBar: true }   // toolbar shown here only
 );
