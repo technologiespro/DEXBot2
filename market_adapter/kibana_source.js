@@ -148,11 +148,15 @@ function toFixedInterval(seconds) {
  * @param {number}      intervalSeconds
  * @param {string|null} poolId          - full pool ID e.g. '1.19.133', or null for any pool
  */
-function buildQuery(soldAssetId, lookbackHours, intervalSeconds, poolId = null) {
+function buildQuery(soldAssetId, lookbackHours, intervalSeconds, poolId = null, timeRange = null) {
+    const rangeValue = timeRange
+        ? { gte: timeRange.gte, lte: timeRange.lte }
+        : { gte: `now-${lookbackHours}h`, lte: 'now' };
+
     const filters = [
         { term:  { operation_type: OP_TYPE_LP } },
         { term:  { 'operation_history.op_object.amount_to_sell.asset_id.keyword': soldAssetId } },
-        { range: { 'block_data.block_time': { gte: `now-${lookbackHours}h`, lte: 'now' } } },
+        { range: { 'block_data.block_time': rangeValue } },
     ];
 
     if (poolId) {
@@ -278,7 +282,7 @@ async function discoverPoolAssets(poolId, config = {}) {
  */
 async function getLpCandles(poolId, soldAssetId, soldPrecision, receivedPrecision, config = {}) {
     const cfg     = { ...DEFAULT_CONFIG, ...config };
-    const query   = buildQuery(soldAssetId, cfg.lookbackHours, cfg.intervalSeconds, poolId);
+    const query   = buildQuery(soldAssetId, cfg.lookbackHours, cfg.intervalSeconds, poolId, cfg.timeRange ?? null);
     const result  = await kibanaSearch(cfg, query);
     const buckets = result.aggregations?.by_time?.buckets ?? [];
     return bucketsToCandles(buckets, soldPrecision, receivedPrecision);

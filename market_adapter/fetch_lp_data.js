@@ -12,7 +12,11 @@
  *   node market_adapter/fetch_lp_data.js --bot XRP-BTS --interval 4h --lookback 8760h
  *
  * Manual override (no blockchain connection needed):
- *   node market_adapter/fetch_lp_data.js --pool 133 --precA 5 --precB 8
+ *   node market_adapter/fetch_lp_data.js --pool 133 --precA 4 --precB 5
+ *
+ * Date range fetch (for historical windows or multi-step fetching):
+ *   node market_adapter/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --start 2024-03-06 --end 2025-03-06
+ *   node market_adapter/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --start 2025-03-06 --end 2026-03-06
  *
  * Output:
  *   market_adapter/data/lp/<assetA>_<assetB>/lp_pool_133_4h.json
@@ -56,13 +60,16 @@ function parseArgs() {
         const val = args[i + 1];
 
         switch (arg) {
-            case '--bot':      botName              = val; i++; break;
-            case '--pool':     poolId               = val; i++; break;
+            case '--bot':      botName                = val; i++; break;
+            case '--pool':     poolId                 = val; i++; break;
             case '--interval': config.intervalSeconds = intervalMap[val] ?? parseInt(val, 10); i++; break;
             case '--lookback': config.lookbackHours   = parseInt(val.replace('h', ''), 10); i++; break;
             case '--precA':    precA                  = parseInt(val, 10); i++; break;
             case '--precB':    precB                  = parseInt(val, 10); i++; break;
             case '--apiKey':   config.apiKey          = val; i++; break;
+            case '--start':    config.timeRange       = { ...(config.timeRange || {}), gte: val }; i++; break;
+            case '--end':      config.timeRange       = { ...(config.timeRange || {}), lte: val }; i++; break;
+            case '--out':      config.outPath         = val; i++; break;
         }
     }
 
@@ -221,7 +228,7 @@ async function run() {
         // Still need to discover asset IDs from Kibana; precisions from CLI or default
         console.log(`  Pool:     ${fullPoolId}`);
         console.log(`  Interval: ${bucketLabel} candles`);
-        console.log(`  Lookback: ${config.lookbackHours}h (${(config.lookbackHours / 24 / 365).toFixed(2)} years)`);
+        console.log(`  Range:    ${config.timeRange ? `${config.timeRange.gte} → ${config.timeRange.lte}` : `last ${config.lookbackHours}h (${(config.lookbackHours / 24 / 365).toFixed(2)} years)`}`);
         console.log('══════════════════════════════════════════════');
 
         console.log(`\n[1/4] Discovering assets in pool ${fullPoolId}...`);
@@ -258,7 +265,7 @@ async function run() {
         console.log(`  Mode:     Auto (bots.json → blockchain → Kibana)`);
         console.log(`  Bot:      ${bot.name} (${bot.assetA} / ${bot.assetB})`);
         console.log(`  Interval: ${bucketLabel} candles`);
-        console.log(`  Lookback: ${config.lookbackHours}h (${(config.lookbackHours / 24 / 365).toFixed(2)} years)`);
+        console.log(`  Range:    ${config.timeRange ? `${config.timeRange.gte} → ${config.timeRange.lte}` : `last ${config.lookbackHours}h (${(config.lookbackHours / 24 / 365).toFixed(2)} years)`}`);
         console.log(`  Auth:     ${config.apiKey ? 'API key set' : 'open (no auth)'}`);
         console.log('══════════════════════════════════════════════');
 
@@ -363,7 +370,9 @@ async function run() {
 
     // ── Save ──────────────────────────────────────────────────────────────────
     console.log('\n[4/4] Saving...');
-    const outPath = outputPath(fullPoolId, config.intervalSeconds, assetA, assetB);
+    const outPath = config.outPath
+        ? path.resolve(config.outPath)
+        : outputPath(fullPoolId, config.intervalSeconds, assetA, assetB);
 
     const pair = {
         symbols: `${assetA.symbol}/${assetB.symbol}`,
