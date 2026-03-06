@@ -788,16 +788,14 @@ graph LR
     
     CHAIN_FREE --> AVAILABLE
     VIRTUAL --> AVAILABLE
-    CACHE --> AVAILABLE
-    
+
     CHAIN_FREE --> TOTAL_CHAIN
     CHAIN_COMMITTED --> TOTAL_CHAIN
-    
+
     GRID_COMMITTED --> TOTAL_GRID
     VIRTUAL --> TOTAL_GRID
-    
+
     style AVAILABLE fill:#90EE90
-    style CACHE fill:#FFD700
     style VIRTUAL fill:#87CEEB
 ```
 
