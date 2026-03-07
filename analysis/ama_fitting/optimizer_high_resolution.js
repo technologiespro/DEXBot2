@@ -283,7 +283,7 @@ function updateAmaProfilesFile({ dataFile, meta, winners, sourceResultsFile }) {
         poolId: meta?.pool || null,
         intervalSeconds: Number.isFinite(intervalSeconds) && intervalSeconds > 0 ? intervalSeconds : null,
         intervalLabel,
-        defaultAma: 'AMA2',
+        defaultAma: 'AMA3',
         sourceResultsFile,
         updatedAt: payload.updatedAt,
         amas: {

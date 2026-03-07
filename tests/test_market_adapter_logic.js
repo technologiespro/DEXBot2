@@ -1,13 +1,21 @@
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 
 console.log('Running market_adapter logic tests');
 
 const {
+    DEFAULT_AMA,
     calculateBotThreshold,
+    calcAmaComparison,
     computeCandleStaleness,
+    resolveAmaForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
     applyRuntimeDefaultsFromGeneralSettings,
+    usesAmaGridPrice,
 } = require('../market_adapter/price_adapter');
+
+const AMA_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'ama_profiles.json');
 
 // Threshold behavior
 assert.strictEqual(
@@ -82,6 +90,114 @@ assert.strictEqual(
         { MARKET_ADAPTER: { DELTA_THRESHOLD_PERCENT: 4 } }
     );
     assert.strictEqual(cfg.deltaThresholdPercent, 2.5, 'CLI-provided deltaPercent should win over settings');
+}
+
+// Bot AMA config behavior
+assert.strictEqual(DEFAULT_AMA.erPeriod, 372, 'built-in default AMA should point to AMA3 erPeriod');
+assert.strictEqual(DEFAULT_AMA.fastPeriod, 1.8, 'built-in default AMA should point to AMA3 fastPeriod');
+assert.strictEqual(DEFAULT_AMA.slowPeriod, 1286, 'built-in default AMA should point to AMA3 slowPeriod');
+
+{
+    const ama = resolveAmaForBot({
+        ama: {
+            enabled: true,
+            erPeriod: 136,
+            fastPeriod: 2.73,
+            slowPeriod: 672,
+        },
+    });
+    assert.strictEqual(ama.fastPeriod, 2.73, 'fractional fastPeriod from bot config should be preserved');
+}
+
+// AMA grid-price selection behavior
+assert.strictEqual(usesAmaGridPrice({ gridPrice: 'ama' }), true, 'ama should enable price adapter processing');
+assert.strictEqual(usesAmaGridPrice({ gridPrice: 'ama3' }), true, 'ama3 should enable price adapter processing');
+assert.strictEqual(usesAmaGridPrice({ gridPrice: '  AMA4  ' }), true, 'ama4 matching should be case-insensitive');
+assert.strictEqual(usesAmaGridPrice({ gridPrice: 1.2345 }), false, 'numeric gridPrice should not enable price adapter processing');
+assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPrice should not enable price adapter processing');
+
+// AMA profile override behavior
+{
+    const hadOriginal = fs.existsSync(AMA_PROFILES_FILE);
+    const original = hadOriginal ? fs.readFileSync(AMA_PROFILES_FILE, 'utf8') : null;
+
+    try {
+        fs.mkdirSync(path.dirname(AMA_PROFILES_FILE), { recursive: true });
+        fs.writeFileSync(AMA_PROFILES_FILE, JSON.stringify({
+            profiles: [
+                {
+                    assetA: 'TESTA',
+                    assetB: 'TESTB',
+                    intervalSeconds: 3600,
+                    defaultAma: 'AMA4',
+                    updatedAt: '2026-03-07T00:00:00.000Z',
+                    amas: {
+                        AMA1: { erPeriod: 351, fastPeriod: 3.26, slowPeriod: 802 },
+                        AMA4: { erPeriod: 136, fastPeriod: 2.73, slowPeriod: 672 },
+                    },
+                },
+            ],
+        }, null, 2));
+
+        const ama1 = resolveAmaForBot({ assetA: 'TESTA', assetB: 'TESTB', gridPrice: 'ama1' });
+        assert.strictEqual(ama1.fastPeriod, 3.26, 'ama_profiles AMA1 override should preserve fractional fastPeriod');
+
+        const amaDefault = resolveAmaForBot({ assetA: 'TESTA', assetB: 'TESTB', gridPrice: 'ama' });
+        assert.strictEqual(amaDefault.fastPeriod, 2.73, 'ama_profiles default AMA should preserve fractional fastPeriod');
+    } finally {
+        if (hadOriginal) {
+            fs.writeFileSync(AMA_PROFILES_FILE, original, 'utf8');
+        } else if (fs.existsSync(AMA_PROFILES_FILE)) {
+            fs.unlinkSync(AMA_PROFILES_FILE);
+        }
+    }
+}
+
+// AMA comparison behavior should follow pair-specific profiles
+{
+    const hadOriginal = fs.existsSync(AMA_PROFILES_FILE);
+    const original = hadOriginal ? fs.readFileSync(AMA_PROFILES_FILE, 'utf8') : null;
+
+    try {
+        fs.mkdirSync(path.dirname(AMA_PROFILES_FILE), { recursive: true });
+        fs.writeFileSync(AMA_PROFILES_FILE, JSON.stringify({
+            profiles: [
+                {
+                    assetA: 'TESTA',
+                    assetB: 'TESTB',
+                    intervalSeconds: 3600,
+                    defaultAma: 'AMA4',
+                    updatedAt: '2026-03-07T00:00:00.000Z',
+                    amas: {
+                        AMA1: { erPeriod: 2, fastPeriod: 2.1, slowPeriod: 6 },
+                        AMA2: { erPeriod: 3, fastPeriod: 3.3, slowPeriod: 7 },
+                        AMA3: { erPeriod: 4, fastPeriod: 4.4, slowPeriod: 8 },
+                        AMA4: { erPeriod: 5, fastPeriod: 5.5, slowPeriod: 9 },
+                    },
+                },
+            ],
+        }, null, 2));
+
+        const candles = Array.from({ length: 20 }, (_, i) => [1700000000000 + (i * 3600000), 100 + i, 101 + i, 99 + i, 100 + i, 1]);
+        const comparison = calcAmaComparison(candles, { assetA: 'TESTA', assetB: 'TESTB' });
+        assert.deepStrictEqual(
+            comparison.map((entry) => ({ name: entry.name, erPeriod: entry.erPeriod, fastPeriod: entry.fastPeriod, slowPeriod: entry.slowPeriod })),
+            [
+                { name: 'AMA1', erPeriod: 2, fastPeriod: 2.1, slowPeriod: 6 },
+                { name: 'AMA2', erPeriod: 3, fastPeriod: 3.3, slowPeriod: 7 },
+                { name: 'AMA3', erPeriod: 4, fastPeriod: 4.4, slowPeriod: 8 },
+                { name: 'AMA4', erPeriod: 5, fastPeriod: 5.5, slowPeriod: 9 },
+            ],
+            'ama comparison should use pair-specific profile presets when present'
+        );
+        assert.ok(comparison.every((entry) => entry.ok), 'profile-based comparison presets should produce valid AMA values with enough candles');
+    } finally {
+        if (hadOriginal) {
+            fs.writeFileSync(AMA_PROFILES_FILE, original, 'utf8');
+        } else if (fs.existsSync(AMA_PROFILES_FILE)) {
+            fs.unlinkSync(AMA_PROFILES_FILE);
+        }
+    }
 }
 
 console.log('market_adapter logic tests passed');

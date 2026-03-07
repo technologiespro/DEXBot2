@@ -67,6 +67,8 @@
  * MARKET ADAPTER CONFIGURATION:
  *   10. MARKET_ADAPTER - Price tracking and grid recalculation trigger settings
  *       DELTA_THRESHOLD_PERCENT: % change in AMA center price that triggers grid reset
+ *       DEFAULT_AMA_KEY: Default AMA profile used for `gridPrice: "ama"`
+ *       AMAS: Built-in AMA1..AMA4 presets for price adapter fallback/defaults
  *       Related to bot AMA configuration (profiles/bots.json: ama.enabled, erPeriod, etc.)
  *       Stored in: profiles/general.settings.json
  *
@@ -528,8 +530,42 @@ let MARKET_ADAPTER = {
     //     a recalculate.<botKey>.trigger file is written to signal grid regeneration.
     //   - Configurable per deployment via profiles/general.settings.json under MARKET_ADAPTER.
     //   - Range: 0.1 to 50.0 (enforced in account_bots.js)
-    //   - Default: 5 (grid recalculates when market moves 5% from last recorded AMA center)
-    DELTA_THRESHOLD_PERCENT: 5,
+    //   - Default: 2.5 (grid recalculates when market moves 2.5% from last recorded AMA center)
+    DELTA_THRESHOLD_PERCENT: 2.5,
+
+    // DEFAULT_AMA_KEY: Built-in default profile for `gridPrice: "ama"` when no
+    // pair-specific ama_profiles entry exists.
+    DEFAULT_AMA_KEY: 'AMA3',
+
+    // AMAS: Built-in AMA presets derived from the local LP 1.19.133 fitting results.
+    // These serve as stable defaults for the price adapter and can be overridden by
+    // pair-specific profiles in profiles/ama_profiles.json.
+    AMAS: {
+        AMA1: {
+            name: 'AMA1 (min move, cap 65%)',
+            erPeriod: 351,
+            fastPeriod: 3.26,
+            slowPeriod: 802,
+        },
+        AMA2: {
+            name: 'AMA2 (min move, cap 55%)',
+            erPeriod: 351,
+            fastPeriod: 2.57,
+            slowPeriod: 672,
+        },
+        AMA3: {
+            name: 'AMA3 (min move, cap 45%)',
+            erPeriod: 372,
+            fastPeriod: 1.8,
+            slowPeriod: 1286,
+        },
+        AMA4: {
+            name: 'AMA4 (min move, cap 40%)',
+            erPeriod: 136,
+            fastPeriod: 2.73,
+            slowPeriod: 672,
+        },
+    },
 };
 
 // Logging Level Configuration
@@ -759,6 +795,11 @@ Object.freeze(PIPELINE_TIMING);
 Object.freeze(UPDATER);
 Object.freeze(COW_PERFORMANCE);
 Object.freeze(LOGGING_CONFIG);
+Object.freeze(MARKET_ADAPTER.AMAS.AMA1);
+Object.freeze(MARKET_ADAPTER.AMAS.AMA2);
+Object.freeze(MARKET_ADAPTER.AMAS.AMA3);
+Object.freeze(MARKET_ADAPTER.AMAS.AMA4);
+Object.freeze(MARKET_ADAPTER.AMAS);
 Object.freeze(MARKET_ADAPTER);
 
 module.exports = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE, MARKET_ADAPTER };

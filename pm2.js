@@ -81,6 +81,20 @@ const BOTS_JSON = path.join(PROFILES_DIR, 'bots.json');
 const ECOSYSTEM_FILE = path.join(PROFILES_DIR, 'ecosystem.config.js');
 const LOGS_DIR = path.join(PROFILES_DIR, 'logs');
 
+function usesAmaGridPrice(bot) {
+    const gridPrice = typeof bot?.gridPrice === 'string' ? bot.gridPrice.trim().toLowerCase() : '';
+    return /^ama(?:[1-4])?$/.test(gridPrice);
+}
+
+function isServiceApp(app) {
+    const name = String(app?.name || '');
+    return name === 'dexbot-update' || name === 'dexbot-cred' || name === 'dexbot-price-adapter';
+}
+
+function countManagedBots(apps) {
+    return (apps || []).filter((app) => !isServiceApp(app)).length;
+}
+
 /**
  * Generate ecosystem.config.js from bots.json.
  * @param {string|null} [botNameFilter=null] - Optional bot name to filter by.
@@ -134,6 +148,27 @@ function generateEcosystemConfig(botNameFilter = null) {
                 restart_delay: 3000
             };
         });
+
+        const needsPriceAdapter = bots.some((bot) => usesAmaGridPrice(bot));
+
+        if (needsPriceAdapter) {
+            apps.unshift({
+                name: 'dexbot-price-adapter',
+                script: path.join(ROOT, 'market_adapter', 'price_adapter.js'),
+                cwd: ROOT,
+                watch: false,
+                autorestart: true,
+                max_memory_restart: '150M',
+                error_file: path.join(LOGS_DIR, 'dexbot-price-adapter-error.log'),
+                out_file: path.join(LOGS_DIR, 'dexbot-price-adapter.log'),
+                log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
+                merge_logs: false,
+                combine_logs: true,
+                max_restarts: 13,
+                min_uptime: 60000,
+                restart_delay: 3000
+            });
+        }
 
         // Add credential daemon as a managed service
         apps.unshift({
@@ -222,7 +257,7 @@ async function main(botNameFilter = null) {
 
     // Step 2: Generate ecosystem config
     const apps = generateEcosystemConfig(botNameFilter);
-    const botCount = apps.filter(a => a.name !== 'dexbot-update' && a.name !== 'dexbot-cred').length;
+    const botCount = countManagedBots(apps);
     console.log(`Number active bots: ${botCount}`);
     console.log();
 
@@ -617,4 +652,4 @@ if (require.main === module) {
     })();
 }
 
-module.exports = { main, generateEcosystemConfig };
+module.exports = { main, generateEcosystemConfig, countManagedBots, isServiceApp };

@@ -6,8 +6,9 @@
  *
  * Purpose:
  * - Runs independently from dexbot runtime
- * - Loads active bots from profiles/bots.json
- * - Uses AMA profiles exported by analysis/ama_fitting (profiles/ama_profiles.json)
+ * - Loads active bots with AMA grid pricing from profiles/bots.json
+ * - Uses built-in AMA defaults from constants, optionally overridden by pair-specific
+ *   profiles in profiles/ama_profiles.json
  * - Bootstraps 1h candles from Kibana once (if local file missing)
  * - Then updates candles from native BitShares API only
  * - Persists candles incrementally, prunes to AMA-required window
@@ -21,7 +22,7 @@
  *    Triggers when market price moves significantly from last recorded AMA center
  *    ├─ Controlled by: MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT
  *    ├─ Location: profiles/general.settings.json
- *    ├─ Default: 5% (grid resets when AMA moves ±5%)
+ *    ├─ Default: 2.5% (grid resets when AMA moves ±2.5%)
  *    ├─ CLI override: --deltaPercent <percent>
  *    └─ Use case: Catch big market moves that require grid repositioning
  *
@@ -41,10 +42,10 @@
  *
  * AMA PROFILE SELECTION (per bot via gridPrice keyword):
  * ───────────────────────────────────────────────────────
- *   gridPrice: "ama"  or "ama2" => default/product profile
- *   gridPrice: "ama1"             => max-area profile
- *   gridPrice: "ama3"             => capped-area profile
- *   gridPrice: "ama4"             => capped-product profile
+ *   gridPrice: "ama"  or "ama3" => default (best backtest score, ER=372)
+ *   gridPrice: "ama1"             => min move, cap 65%
+ *   gridPrice: "ama2"             => min move, cap 55%
+ *   gridPrice: "ama3"             => min move, cap 45%
  *
  * No wallet keys/password/auth required (read-only chain + Kibana bootstrap).
  */
@@ -54,6 +55,7 @@ const path = require('path');
 
 const { parseJsonWithComments } = require('../modules/account_bots');
 const { readGeneralSettings } = require('../modules/general_settings');
+const { MARKET_ADAPTER } = require('../modules/constants');
 const { createBotKey } = require('../modules/account_orders');
 const { calculateAMA } = require('../analysis/ama_fitting/ama');
 const kibanaSource = require('./kibana_source');
@@ -67,9 +69,7 @@ const DATA_DIR = path.join(__dirname, 'data');
 const STATE_DIR = path.join(__dirname, 'state');
 const STATE_FILE = path.join(STATE_DIR, 'price_adapter_state.json');
 const CENTER_FILE = path.join(STATE_DIR, 'price_adapter_centers.json');
-const WHITELIST_FILE = path.join(STATE_DIR, 'price_adapter_whitelist.json');
 const LOCK_FILE = path.join(STATE_DIR, 'price_adapter.lock');
-const OPT_RESULTS_FILE = path.join(ROOT, 'analysis', 'ama_fitting', 'optimization_results_lp_pool_133_1h.json');
 const AMA_PROFILES_FILE = path.join(PROFILES_DIR, 'ama_profiles.json');
 
 let bitsharesClient = null;
@@ -86,7 +86,7 @@ const API_MAX_PAGE = 101;
 
 const DEFAULTS = {
     pollSeconds: 3600,
-    deltaThresholdPercent: 5,
+    deltaThresholdPercent: MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT,
     intervalSeconds: 3600,
     bootstrapLookbackHours: 720,
     nativeBackfillHours: 6,
@@ -101,79 +101,19 @@ const DEFAULTS = {
     once: false,
 };
 
-function loadAmaPresetsFromResults() {
-    const fallbackDefault = { erPeriod: 200, fastPeriod: 10, slowPeriod: 100 };
-    const fallbackComparison = [
-        { name: 'bestAreaMaxDist', erPeriod: 110, fastPeriod: 10, slowPeriod: 100 },
-        { name: 'bestProdMaxDist', erPeriod: 200, fastPeriod: 10, slowPeriod: 100 },
-        { name: 'bestAreaMaxDistCapped', erPeriod: 30, fastPeriod: 9.5, slowPeriod: 97.5 },
-        { name: 'bestProdMaxDistCapped', erPeriod: 40, fastPeriod: 10, slowPeriod: 90 },
-    ];
-
-    if (!fs.existsSync(OPT_RESULTS_FILE)) {
-        return { defaultAma: fallbackDefault, comparisonPresets: fallbackComparison };
-    }
-
-    try {
-        const json = JSON.parse(fs.readFileSync(OPT_RESULTS_FILE, 'utf8'));
-        const meta = json?.meta;
-        if (!meta?.bestProdMaxDist) {
-            return { defaultAma: fallbackDefault, comparisonPresets: fallbackComparison };
-        }
-
-        const defaultAma = {
-            erPeriod: meta.bestProdMaxDist.er,
-            fastPeriod: meta.bestProdMaxDist.fast,
-            slowPeriod: meta.bestProdMaxDist.slow,
-        };
-
-        const comparisonPresets = [
-            meta.bestAreaMaxDist ? {
-                name: 'bestAreaMaxDist',
-                erPeriod: meta.bestAreaMaxDist.er,
-                fastPeriod: meta.bestAreaMaxDist.fast,
-                slowPeriod: meta.bestAreaMaxDist.slow,
-            } : null,
-            {
-                name: 'bestProdMaxDist',
-                erPeriod: meta.bestProdMaxDist.er,
-                fastPeriod: meta.bestProdMaxDist.fast,
-                slowPeriod: meta.bestProdMaxDist.slow,
-            },
-            meta.bestAreaMaxDistCapped ? {
-                name: 'bestAreaMaxDistCapped',
-                erPeriod: meta.bestAreaMaxDistCapped.er,
-                fastPeriod: meta.bestAreaMaxDistCapped.fast,
-                slowPeriod: meta.bestAreaMaxDistCapped.slow,
-            } : null,
-            meta.bestProdMaxDistCapped ? {
-                name: 'bestProdMaxDistCapped',
-                erPeriod: meta.bestProdMaxDistCapped.er,
-                fastPeriod: meta.bestProdMaxDistCapped.fast,
-                slowPeriod: meta.bestProdMaxDistCapped.slow,
-            } : null,
-        ].filter(Boolean);
-
-        return {
-            defaultAma,
-            comparisonPresets: comparisonPresets.length ? comparisonPresets : fallbackComparison,
-        };
-    } catch {
-        return { defaultAma: fallbackDefault, comparisonPresets: fallbackComparison };
-    }
-}
-
-const AMA_PRESETS = loadAmaPresetsFromResults();
-const DEFAULT_AMA = AMA_PRESETS.defaultAma;
-const DEFAULT_AMA_KEY = 'AMA2';
+const DEFAULT_AMA_KEY = String(MARKET_ADAPTER.DEFAULT_AMA_KEY || 'AMA3').toUpperCase();
+const BUILTIN_AMAS = MARKET_ADAPTER.AMAS || {};
+const DEFAULT_AMA = BUILTIN_AMAS[DEFAULT_AMA_KEY] || BUILTIN_AMAS.AMA3 || { erPeriod: 372, fastPeriod: 1.8, slowPeriod: 1286 };
 const AMA_KEYWORDS = new Set(['ama', 'ama1', 'ama2', 'ama3', 'ama4']);
+const AMA_PRESET_KEYS = ['AMA1', 'AMA2', 'AMA3', 'AMA4'];
 
-// Whitelist is file-driven only.
-// If whitelist file is missing, we create a skeleton: { "bots": [] }.
-// Empty whitelist means process no bots.
-const EMPTY_WHITELIST_SKELETON = { bots: [] };
-
-const AMA_COMPARISON_PRESETS = AMA_PRESETS.comparisonPresets;
+function normalizeAmaPreset(raw) {
+    const erPeriod = Number(raw?.erPeriod);
+    const fastPeriod = Number(raw?.fastPeriod);
+    const slowPeriod = Number(raw?.slowPeriod);
+    if (!Number.isFinite(erPeriod) || !Number.isFinite(fastPeriod) || !Number.isFinite(slowPeriod)) return null;
+    return { erPeriod, fastPeriod, slowPeriod };
+}
 
 function normalizeAssetSymbol(value) {
     return String(value || '').trim().toUpperCase();
@@ -191,17 +131,11 @@ function isAmaKeyword(raw) {
     return AMA_KEYWORDS.has(s);
 }
 
-function loadAmaProfiles() {
-    if (!fs.existsSync(AMA_PROFILES_FILE)) return [];
-    try {
-        const json = JSON.parse(fs.readFileSync(AMA_PROFILES_FILE, 'utf8'));
-        return Array.isArray(json?.profiles) ? json.profiles : [];
-    } catch (_) {
-        return [];
-    }
+function usesAmaGridPrice(bot) {
+    return isAmaKeyword(bot?.gridPrice);
 }
 
-function getAmaFromProfilesForBot(bot, ctx = null) {
+function findAmaProfileForBot(bot, ctx = null) {
     const profiles = loadAmaProfiles();
     if (profiles.length === 0) return null;
 
@@ -226,29 +160,64 @@ function getAmaFromProfilesForBot(bot, ctx = null) {
 
     const oneHour = matches.filter((p) => Number(p?.intervalSeconds) === 3600);
     const candidates = oneHour.length > 0 ? oneHour : matches;
-    const sorted = [...candidates].sort((a, b) => {
+    return [...candidates].sort((a, b) => {
         const aTs = Date.parse(String(a?.updatedAt || 0)) || 0;
         const bTs = Date.parse(String(b?.updatedAt || 0)) || 0;
         return bTs - aTs;
-    });
-    const profile = sorted[0];
+    })[0] || null;
+}
 
-    const requestedKey = isAmaKeyword(bot?.gridPrice)
-        ? normalizeAmaKey(bot?.gridPrice)
-        : normalizeAmaKey(profile?.defaultAma);
-    const selected = profile?.amas?.[requestedKey] || profile?.amas?.[DEFAULT_AMA_KEY];
+function getAmaPresetForKey(key, profile = null) {
+    return normalizeAmaPreset(profile?.amas?.[key]) || normalizeAmaPreset(BUILTIN_AMAS[key]) || null;
+}
+
+function buildAmaComparisonPresets(bot, ctx = null) {
+    const profile = findAmaProfileForBot(bot, ctx);
+    return AMA_PRESET_KEYS
+        .map((key) => {
+            const preset = getAmaPresetForKey(key, profile);
+            if (!preset) return null;
+            return {
+                name: key,
+                erPeriod: preset.erPeriod,
+                fastPeriod: preset.fastPeriod,
+                slowPeriod: preset.slowPeriod,
+            };
+        })
+        .filter(Boolean);
+}
+
+function loadAmaProfiles() {
+    if (!fs.existsSync(AMA_PROFILES_FILE)) return [];
+    try {
+        const json = JSON.parse(fs.readFileSync(AMA_PROFILES_FILE, 'utf8'));
+        return Array.isArray(json?.profiles) ? json.profiles : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function getAmaFromProfilesForBot(bot, ctx = null) {
+    const profile = findAmaProfileForBot(bot, ctx);
+    if (!profile) return null;
+
+    const rawGridPrice = String(bot?.gridPrice || '').trim().toLowerCase();
+    const requestedKey = rawGridPrice === 'ama'
+        ? normalizeAmaKey(profile?.defaultAma)
+        : (isAmaKeyword(rawGridPrice)
+            ? normalizeAmaKey(rawGridPrice)
+            : normalizeAmaKey(profile?.defaultAma));
+    const selected = normalizeAmaPreset(profile?.amas?.[requestedKey])
+        || normalizeAmaPreset(profile?.amas?.[DEFAULT_AMA_KEY])
+        || getAmaPresetForKey(requestedKey)
+        || getAmaPresetForKey(DEFAULT_AMA_KEY);
     if (!selected) return null;
-
-    const erPeriod = Number(selected.erPeriod);
-    const fastPeriod = Number(selected.fastPeriod);
-    const slowPeriod = Number(selected.slowPeriod);
-    if (!Number.isFinite(erPeriod) || !Number.isFinite(fastPeriod) || !Number.isFinite(slowPeriod)) return null;
 
     return {
         enabled: true,
-        erPeriod,
-        fastPeriod,
-        slowPeriod,
+        erPeriod: selected.erPeriod,
+        fastPeriod: selected.fastPeriod,
+        slowPeriod: selected.slowPeriod,
     };
 }
 
@@ -357,7 +326,7 @@ function printHelp() {
     console.log('Options:');
     console.log('  --once                 Run one cycle and exit');
     console.log('  --pollSeconds <n>      Loop interval seconds (default 3600)');
-    console.log('  --deltaPercent <n>     Trigger threshold percent (default: general.settings MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT or 5)');
+    console.log('  --deltaPercent <n>     Trigger threshold percent (default: general.settings MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT or 2.5)');
     console.log('  --bootstrapHours <n>   Kibana bootstrap lookback hours (default 720)');
     console.log('  --nativeBackfillHours  Native incremental lookback hours (default 6)');
     console.log('  --maxStaleHours <n>    Max accepted candle staleness before trigger suppression (default 6)');
@@ -438,36 +407,6 @@ function loadActiveBots() {
         .filter((b) => b.active);
 }
 
-function loadWhitelist() {
-    if (!fs.existsSync(WHITELIST_FILE)) {
-        saveJson(WHITELIST_FILE, EMPTY_WHITELIST_SKELETON);
-    }
-
-    const fromFile = loadJson(WHITELIST_FILE, EMPTY_WHITELIST_SKELETON);
-    const list = Array.isArray(fromFile?.bots) ? fromFile.bots : [];
-
-    const normalized = new Set();
-    for (const item of list || []) {
-        const s = String(item || '').trim().toLowerCase();
-        if (s) normalized.add(s);
-    }
-    return normalized;
-}
-
-function applyWhitelist(bots, whitelist) {
-    if (!(whitelist instanceof Set) || whitelist.size === 0) {
-        return { bots: [], mode: 'whitelist(empty)' };
-    }
-
-    const filtered = bots.filter((b) => {
-        const name = String(b.name || '').trim().toLowerCase();
-        const key = String(b.botKey || '').trim().toLowerCase();
-        return whitelist.has(name) || whitelist.has(key);
-    });
-
-    return { bots: filtered, mode: `whitelist(${whitelist.size})` };
-}
-
 function ensureDir(dir) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
@@ -518,7 +457,15 @@ function acquireFileLock(lockPath, opts = {}) {
                 createdAt: new Date(now).toISOString(),
             };
             fs.writeFileSync(fd, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-            return { fd, lockPath };
+            const heartbeatMs = Math.max(30000, Math.floor(staleMs / 2));
+            const heartbeat = setInterval(() => {
+                try {
+                    const ts = new Date();
+                    fs.utimesSync(lockPath, ts, ts);
+                } catch (_) {}
+            }, heartbeatMs);
+            if (typeof heartbeat.unref === 'function') heartbeat.unref();
+            return { fd, lockPath, heartbeat };
         } catch (err) {
             if (err.code !== 'EEXIST') throw err;
 
@@ -546,6 +493,7 @@ function acquireFileLock(lockPath, opts = {}) {
 
 function releaseFileLock(lock) {
     if (!lock) return;
+    try { if (lock.heartbeat) clearInterval(lock.heartbeat); } catch (_) {}
     try { if (typeof lock.fd === 'number') fs.closeSync(lock.fd); } catch (_) {}
     try { if (lock.lockPath) fs.unlinkSync(lock.lockPath); } catch (_) {}
 }
@@ -645,7 +593,7 @@ function resolveAmaForBot(bot, ctx = null) {
     };
 
     if (!Number.isInteger(cfg.erPeriod) || cfg.erPeriod < 1) cfg.erPeriod = DEFAULT_AMA.erPeriod;
-    if (!Number.isInteger(cfg.fastPeriod) || cfg.fastPeriod < 1) cfg.fastPeriod = DEFAULT_AMA.fastPeriod;
+    if (!Number.isFinite(cfg.fastPeriod) || cfg.fastPeriod < 1) cfg.fastPeriod = DEFAULT_AMA.fastPeriod;
     if (!Number.isInteger(cfg.slowPeriod) || cfg.slowPeriod < 1) cfg.slowPeriod = DEFAULT_AMA.slowPeriod;
     if (cfg.fastPeriod > cfg.slowPeriod) {
         const t = cfg.fastPeriod;
@@ -676,11 +624,12 @@ function calcAmaPrice(candles, ama = DEFAULT_AMA) {
     return Number.isFinite(last) ? last : null;
 }
 
-function calcAmaComparison(candles) {
+function calcAmaComparison(candles, bot = null, ctx = null) {
     const closes = (candles || []).map((c) => Number(c?.[4])).filter((v) => Number.isFinite(v) && v > 0);
     const out = [];
+    const presets = buildAmaComparisonPresets(bot, ctx);
 
-    for (const p of AMA_COMPARISON_PRESETS) {
+    for (const p of presets) {
         const minNeeded = p.erPeriod + 1;
         if (closes.length < minNeeded) {
             out.push({ ...p, value: null, ok: false });
@@ -854,9 +803,8 @@ function writeCenterSnapshot(state) {
 async function runOnce(cfg, state, contextCache) {
     const startedAtMs = Date.now();
     const allBots = loadActiveBots();
-    const whitelist = loadWhitelist();
-    const { bots, mode } = applyWhitelist(allBots, whitelist);
-    log(cfg, `Active bots: ${allBots.length} | Processing: ${bots.length} (${mode})`);
+    const bots = allBots.filter((bot) => usesAmaGridPrice(bot));
+    log(cfg, `Active bots: ${allBots.length} | AMA-grid bots: ${bots.length}`);
 
     const results = [];
 
@@ -1037,7 +985,10 @@ module.exports = {
     DEFAULT_AMA,
     DEFAULTS,
     calculateBotThreshold,
+    calcAmaComparison,
     computeCandleStaleness,
+    resolveAmaForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
     applyRuntimeDefaultsFromGeneralSettings,
+    usesAmaGridPrice,
 };

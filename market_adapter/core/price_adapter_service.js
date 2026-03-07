@@ -122,7 +122,7 @@ function createPriceAdapterService(deps = {}) {
 
         nextCandles = pruneCandles(nextCandles, keepCount);
         const amaPrice = calcAmaPrice(nextCandles, botAma);
-        const amaComparison = calcAmaComparison(nextCandles);
+        const amaComparison = calcAmaComparison(nextCandles, bot, ctx);
         const lastCandleTs = nextCandles[nextCandles.length - 1]?.[0] || null;
         const { staleData, staleAgeHours } = computeCandleStaleness(lastCandleTs, cfg.maxStaleHours);
 

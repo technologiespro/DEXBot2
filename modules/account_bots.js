@@ -48,7 +48,7 @@
  *       "weightDistribution": { "sell": 0.5, "buy": 0.5 },
  *       "botFunds": { "sell": "100%", "buy": "100%" },
  *       "activeOrders": { "sell": 20, "buy": 20 },
- *       "gridPrice": "ama2"   // Optional: "ama"/"ama1".."ama4"/number/null
+ *       "gridPrice": "ama"    // Optional: "ama"/"ama1".."ama4"/number/null (default=AMA3)
  *     }
  *   ]
  * }
@@ -56,7 +56,7 @@
  * GLOBAL SETTINGS CONFIGURATION (profiles/general.settings.json):
  * {
  *   "MARKET_ADAPTER": {
- *     "DELTA_THRESHOLD_PERCENT": 5  // % change in AMA center price triggers grid reset
+ *     "DELTA_THRESHOLD_PERCENT": 2.5  // % change in AMA center price triggers grid reset
  *   },
  *   "GRID_LIMITS": {
  *     "GRID_COMPARISON": {
