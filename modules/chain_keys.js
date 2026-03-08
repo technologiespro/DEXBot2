@@ -22,33 +22,39 @@
  * All private keys encrypted before storage.
  *
  * ===============================================================================
- * EXPORTS (6 functions + 1 error class)
+ * EXPORTS (12 functions + 1 error class)
  * ===============================================================================
  *
- * AUTHENTICATION (1 function - async)
- *   1. authenticate() - Authenticate with master password
+ * AUTHENTICATION (1 function)
+ *   1. authenticate() - Authenticate with master password (async)
  *      Prompts user for password, verifies hash
  *      Throws MasterPasswordError on failure
  *
- * KEY MANAGEMENT (3 functions - async)
- *   2. getPrivateKey(accountName) - Get private key for account
+ * KEY MANAGEMENT (3 functions)
+ *   2. getPrivateKey(accountName, masterPassword) - Get private key for account
  *      Returns decrypted private key string
- *      Returns null if not found
+ *      Throws Error if account not found
  *
- *   3. manageKeys() - Interactive CLI for key management
+ *   3. main() - Interactive CLI for key management (async)
  *      Add/modify/remove keys from storage
  *      Re-encrypts entire key store
  *
- *   4. addKey(accountName, privateKey, masterPassword) - Add key to storage
- *      Validates key format, encrypts, saves
+ *   4. validatePrivateKey(key) - Validate private key format
  *
- * DAEMON READINESS (2 functions - async)
- *   5. isDaemonReady() - Check if BitShares daemon is ready
+ * CRYPTO HELPERS (4 functions)
+ *   5. encrypt(text, password) - AES-256-GCM encryption
+ *   6. decrypt(encryptedHex, password) - AES-256-GCM decryption
+ *   7. hashPassword(password) - SHA-256 hash for verification
+ *   8. loadAccounts() - Load accounts from keys.json
+ *   9. saveAccounts(data) - Save accounts to keys.json
  *
- *   6. waitForDaemon(timeoutMs) - Wait for daemon to become ready (async)
+ * DAEMON (3 functions)
+ *  10. isDaemonReady() - Check if credential daemon is ready
+ *  11. waitForDaemon(timeoutMs) - Wait for daemon to become ready (async)
+ *  12. getPrivateKeyFromDaemon(accountName) - Request key via daemon socket (async)
  *
  * ERROR HANDLING (1 error class)
- *   7. MasterPasswordError - Thrown when authentication fails
+ *  13. MasterPasswordError - Thrown when authentication fails
  *
  * ===============================================================================
  *
@@ -61,8 +67,8 @@
  * }
  *
  * ENCRYPTION PROCESS:
- * 1. Generate random salt (32 bytes) and IV (12 bytes)
- * 2. Derive key from master password using pbkdf2
+ * 1. Generate random salt (16 bytes) and IV (16 bytes)
+ * 2. Derive key from master password using scrypt
  * 3. Encrypt private key with AES-256-GCM
  * 4. Store: encrypted:salt:iv:authTag:ciphertext
  *

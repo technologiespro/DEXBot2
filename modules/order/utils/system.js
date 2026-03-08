@@ -31,7 +31,7 @@
  *   - readPassword(prompt) - Read password with masked echo
  *   - withRetry(fn, options) - Execute async function with exponential backoff
  *
- * SECTION 6: GENERAL UTILITIES (2 functions)
+ * SECTION 6: GENERAL UTILITIES (3 functions)
  *   - resolveAccountRef(manager, account) - Resolve best account reference
  *   - deepFreeze(obj) - Recursively freeze object for immutability
  *   - cloneMap(map) - Create shallow clone of Map
@@ -48,7 +48,7 @@ const MathUtils = require('./math');
 const OrderUtils = require('./order');
 
 // ================================================================================
-// SECTION 4: PRICE DERIVATION
+// SECTION 1: PRICE DERIVATION
 // ================================================================================
 
 const poolIdCache = new Map();
@@ -334,7 +334,7 @@ function loadAmaCenterPrice(botKey) {
 }
 
 // ================================================================================
-// SECTION 6: FEE MANAGEMENT (INIT)
+// SECTION 2: FEE MANAGEMENT (INIT)
 // ================================================================================
 
 /**
@@ -397,7 +397,7 @@ async function initializeFeeCache(botsConfig, BitShares) {
 }
 
 // ================================================================================
-// SECTION 7: GRID STATE MANAGEMENT
+// SECTION 3: GRID STATE MANAGEMENT
 // ================================================================================
 
 /**
@@ -678,6 +678,10 @@ async function applyGridDivergenceCorrections(manager, accountOrders, botKey, up
     }
 }
 
+// ================================================================================
+// SECTION 4: GRID UTILITIES
+// ================================================================================
+
 /**
  * Synchronize grid boundary position based on available funds.
  *
@@ -739,7 +743,7 @@ function syncBoundaryToFunds(manager) {
 }
 
 // ================================================================================
-// SECTION 11: UI & INTERACTIVE UTILITIES
+// SECTION 5: UI & INTERACTIVE UTILITIES
 // ================================================================================
 
 /**
@@ -828,6 +832,10 @@ async function withRetry(fn, options = {}) {
         }
     }
 }
+
+// ================================================================================
+// SECTION 6: GENERAL UTILITIES
+// ================================================================================
 
 /**
  * Resolve the best account reference for blockchain reads.

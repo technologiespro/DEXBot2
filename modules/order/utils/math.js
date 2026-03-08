@@ -38,9 +38,9 @@
  *   - validateOrderAmountsWithinLimits(amountToSell, minToReceive) - Validate order limits
  *   - getMinOrderSize(assets, type) - Get minimum order size for type
  *   - getDustThresholdFactor() - Get dust threshold multiplier
- *   - getSingleDustThreshold(assets, orderType) - Get single dust threshold
- *   - getDoubleDustThreshold(assets, orderType) - Get double dust threshold
- *   - getMinAbsoluteOrderSize(assets, orderType) - Get minimum absolute order size
+ *   - getSingleDustThreshold(idealSize, dustThresholdPercent) - Get single dust threshold
+ *   - getDoubleDustThreshold(idealSize, dustThresholdPercent) - Get double dust threshold
+ *   - getMinAbsoluteOrderSize(orderType, assets, minFactor) - Get minimum absolute order size
  *   - validateOrderSize(manager, size, type, context) - Validate order size against minimums
  *
  * SECTION 6: FEE CALCULATIONS (2 functions + 2 internal)

@@ -2995,9 +2995,9 @@ class DEXBot {
      * Consolidates maintenance checks used during startup, periodic updates, and post-fill.
      *
      * ENTRY POINTS:
-     * 1. Startup (line ~530): After grid initialization, ensures grid is healthy
-     * 2. Periodic (line ~1982): Every BLOCKCHAIN_SYNC_INTERVAL_MS (default 30s)
-     * 3. Post-Fill (line ~850): After order fills are rotated (NEW in commit a946c33)
+     * 1. Startup (line ~681): After grid initialization, ensures grid is healthy
+     * 2. Periodic (line ~2682): Every BLOCKCHAIN_FETCH_INTERVAL_MIN (default 240 min)
+     * 3. Post-Fill (line ~1059): After order fills are rotated
      *
      * PIPELINE PROTECTION:
      * All maintenance operations inside _executeMaintenanceLogic respect isPipelineEmpty().

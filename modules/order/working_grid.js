@@ -18,7 +18,7 @@
  * - If rebalance succeeds, delta is applied atomically to master
  *
  * ===============================================================================
- * TABLE OF CONTENTS - WorkingGrid Class (13 methods)
+ * TABLE OF CONTENTS - WorkingGrid Class (21 methods/properties)
  * ===============================================================================
  *
  * INITIALIZATION (2 methods)

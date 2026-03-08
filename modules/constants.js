@@ -3,10 +3,10 @@
  *
  * Global configuration, constants, and defaults for DEXBot2.
  * All constants are frozen to prevent accidental runtime modifications.
- * Local overrides can be loaded from ~/.claude/dexbot_settings.json
+ * Local overrides can be loaded from profiles/general.settings.json
  *
  * ===============================================================================
- * EXPORTED CONSTANTS (14 configuration objects)
+ * EXPORTED CONSTANTS (19 configuration objects)
  * ===============================================================================
  *
  * ENUM DEFINITIONS:
@@ -97,10 +97,15 @@
  *   15. LOG_LEVEL - Current logging verbosity level
  *       Affects which messages are displayed: 'debug', 'info', 'warn', 'error'
  *
+ *   16. PIPELINE_TIMING - Pipeline execution timing thresholds
+ *   17. COW_PERFORMANCE - Copy-on-write grid performance settings
+ *   18. REBALANCE_STATES - Rebalance lifecycle state enum
+ *   19. COW_ACTIONS - Copy-on-write action type enum
+ *
  * ===============================================================================
  *
  * LOCAL SETTINGS OVERRIDE:
- * Read from ~/.claude/dexbot_settings.json if it exists.
+ * Read from profiles/general.settings.json if it exists.
  * Supports overriding any exported constant with custom values.
  * Useful for development, testing, and performance tuning.
  *

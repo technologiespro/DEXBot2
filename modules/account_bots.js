@@ -5,7 +5,7 @@
  * Manages multi-bot configuration and metadata.
  *
  * ===============================================================================
- * EXPORTS (4 functions + 1 helper)
+ * EXPORTS (4 functions)
  * ===============================================================================
  *
  * MAIN ENTRY POINT:

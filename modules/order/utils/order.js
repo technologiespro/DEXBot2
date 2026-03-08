@@ -5,7 +5,7 @@
  * Includes grid indexing, order comparison, delta building, and strategy calculations.
  *
  * ===============================================================================
- * TABLE OF CONTENTS (45 exported functions)
+ * TABLE OF CONTENTS (36 exported functions)
  * ===============================================================================
  *
  * SECTION 1: CHAIN ORDER MATCHING & RECONCILIATION (5 functions)
@@ -24,7 +24,7 @@
  *   - virtualizeOrder(order) - Convert order to VIRTUAL state
  *   - convertToSpreadPlaceholder(order) - Convert order to SPREAD placeholder
  *
- * SECTION 4: FILTERING & COUNTING (4 functions)
+ * SECTION 4: FILTERING & COUNTING (5 functions)
  *   - filterOrdersByType(orders, orderType) - Filter orders by type
  *   - getPartialsByType(orders) - Get partials grouped by type
  *   - countOrdersByType(orderType, ordersMap) - Count orders by type
@@ -74,7 +74,7 @@ const MathUtils = require('./math');
 const { blockchainToFloat, floatToBlockchainInt, quantizeFloat } = MathUtils;
 
 // ================================================================================
-// SECTION 5: CHAIN ORDER MATCHING & RECONCILIATION
+// SECTION 1: CHAIN ORDER MATCHING & RECONCILIATION
 // ================================================================================
 
 /**
@@ -326,7 +326,7 @@ async function correctAllPriceMismatches(manager, accountName, privateKey, accou
 }
 
 // ================================================================================
-// SECTION 8: ORDER UTILITIES
+// SECTION 2-3: ORDER CONSTRUCTION & STATE TRANSITIONS
 // ================================================================================
 
 /**
@@ -419,7 +419,7 @@ function convertToSpreadPlaceholder(order) {
 }
 
 // ================================================================================
-// SECTION 10: FILTERING & ANALYSIS
+// SECTION 4-6: FILTERING, PREDICATES & SIZE VALIDATION
 // ================================================================================
 
 /**

@@ -6,7 +6,7 @@
  * Analyzes git history and generates a chart showing:
  * - Lines added vs deleted by file
  *
- * Usage: node scripts/analyze-repo-stats.js
+ * Usage: node scripts/analyze-git.js
  */
 
 const { execSync } = require('child_process');
@@ -32,7 +32,7 @@ class RepoAnalyzer {
      *
      * Tracked files are filtered by patterns:
      * - README* (any README file)
-     * - Root-level .js files (bot/*.js is excluded)
+     * - Root-level .js files (only matches files without directory separators)
      * - modules/* folder (core business logic)
      * - scripts/* folder (utility scripts)
      *

@@ -5,9 +5,8 @@
  * Prevents race conditions when multiple processes access file simultaneously.
  *
  * Locking Strategy:
- * - Semaphore-based mechanism
- * - Multiple reads can proceed in parallel
- * - Writes are exclusive (block all reads/writes)
+ * - Mutex-based mechanism (exclusive access)
+ * - Only one operation (read or write) at a time
  * - Queues operations during conflicts
  *
  * ===============================================================================

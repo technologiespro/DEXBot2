@@ -183,7 +183,7 @@ try {
     console.log('----------------------------------------------------------------\n');
 
     /**
-     * STEP 3: Prepare Working Directory
+     * STEP 6: Prepare Working Directory
      * Cleans up any uncommitted changes to ensure clean pull
      * git reset --hard: Discards all local modifications
      * git clean -fd: Removes untracked files/directories
@@ -193,7 +193,7 @@ try {
     run('git clean -fd');
 
     /**
-     * STEP 4: Pull Latest Code Changes
+     * STEP 7: Pull Latest Code Changes
      * Switches branch if needed, then pulls remote changes
      */
     if (currentBranch !== branch) {
@@ -205,7 +205,7 @@ try {
     run(`git pull --rebase origin ${branch}`);
 
     /**
-     * STEP 5: Reinstall Dependencies
+     * STEP 8: Reinstall Dependencies
      * Updates npm packages to versions specified in package-lock.json
      * --prefer-offline: Uses cached packages when possible
      */
@@ -213,7 +213,7 @@ try {
     run('npm install --prefer-offline');
 
     /**
-     * STEP 6: Reload Active PM2 Processes
+     * STEP 9: Reload Active PM2 Processes
      * Intelligently reloads only the bots that were active before update
      * This approach:
      * - Preserves PM2 state if not running

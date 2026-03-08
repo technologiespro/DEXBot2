@@ -9,21 +9,14 @@
  * Eliminates race conditions when multiple bots write simultaneously.
  *
  * ===============================================================================
- * EXPORTS (4 functions)
+ * EXPORTS (1 class + 1 helper)
  * ===============================================================================
  *
- * PERSISTENCE OPERATIONS:
- *   1. readOrders(botKey) - Read persisted grid for bot (async)
- *      Returns { grid, btsFeesOwed }
+ * 1. AccountOrders(botKey) - Class for per-bot order persistence
+ *    Methods: readOrders(), writeOrders(meta, grid, state), deleteOrders(), etc.
+ *    Constructor requires botKey (throws if missing)
  *
- *   2. writeOrders(botKey, meta, grid, state) - Write grid snapshot (async)
- *      Writes atomic file update with metadata
- *      state: { btsFeesOwed }
- *
- *   3. deleteOrders(botKey) - Delete persisted grid for bot (async)
- *
- *   4. listBotOrders() - List all persisted bot orders (async)
- *      Returns array of botKeys with persisted grids
+ * 2. createBotKey(accountName, assetA, assetB) - Generate unique bot key string
  *
  * ===============================================================================
  *
@@ -194,8 +187,6 @@ class AccountOrders {
    * Creates new entries for unknown bots, updates metadata for existing ones.
    *
    * When in per-bot mode (botKey set): Only processes the matching bot entry and ignores others.
-   * When in shared mode (no botKey): Processes all bot entries and prunes stale ones.
-   *
    * @param {Array} botEntries - Array of bot configurations from bots.json
    */
   async ensureBotEntries(botEntries = []) {
@@ -260,7 +251,7 @@ class AccountOrders {
         bot.botKey = key;
       }
 
-      // 2. Prune zombie bots (remove entries not in botEntries) - only in shared mode
+      // 2. Prune zombie bots (remove entries not in botEntries) - legacy dead code path
       if (!this.botKey) {
         for (const key of Object.keys(this.data.bots)) {
           if (!validKeys.has(key)) {
@@ -322,8 +313,6 @@ class AccountOrders {
    * Called after grid changes (initialization, fills, syncs).
    *
    * In per-bot mode: Only stores the specified bot's data (ignores other bots in this.data).
-   * In shared mode: Stores all bot data.
-   *
    * @param {string} botKey - Bot identifier key
    * @param {Array} orders - Array of order objects from OrderManager
    * @param {number} btsFeesOwed - Optional BTS blockchain fees owed
@@ -337,8 +326,7 @@ class AccountOrders {
     // Prevents concurrent calls from overwriting each other's changes
     await this._persistenceLock.acquire(async () => {
       // CRITICAL: Reload from disk before writing to prevent race conditions between bot processes
-      // In per-bot mode: loads only this bot's data from its dedicated file
-      // In shared mode: loads all bots from the shared file
+      // Loads this bot's data from its dedicated file
       this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
 
       const snapshot = Array.isArray(orders) ? orders.map(order => this._serializeOrder(order)) : [];

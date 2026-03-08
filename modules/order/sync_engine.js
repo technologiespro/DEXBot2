@@ -36,9 +36,8 @@
  *
  *   4. _performSyncFromOpenOrders(mgr, precA, precB, parsedChain, rawChain, options) - Core sync logic (internal)
  *      Performs actual two-pass reconciliation without locking
- *      Pass 1: Match grid orders to chain (known grid → chain)
+ *      Pass 1: Match grid orders to chain (known grid → chain, includes orphan cleanup)
  *      Pass 2: Add missing chain orders (unknown chain → grid)
- *      Pass 3: Mark orphaned grid orders as VIRTUAL
  *
  * FILL PROCESSING (1 method)
  *   5. syncFromFillHistory(fill) - Process fill event synchronously

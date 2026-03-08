@@ -2,7 +2,7 @@
  * modules/order/manager.js - OrderManager Engine
  *
  * Core grid-based order management system for DEXBot2.
- * Uses helpers.js for validation and rebalance logic.
+ * Uses utils/validate.js, strategy.js, and utils/order.js for validation and rebalance logic.
  *
  * ===============================================================================
  * TABLE OF CONTENTS

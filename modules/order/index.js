@@ -39,7 +39,7 @@
  * 1. manager.js - OrderManager class (order lifecycle, fund tracking)
  * 2. grid.js - Grid class (grid creation, synchronization, health)
  * 3. utils/math.js, utils/order.js, utils/system.js - Helper functions by concern
- * 4. format.js - Numeric formatting (14 functions for consistent display)
+ * 4. format.js - Numeric formatting (18 functions for consistent display)
  * 5. accounting.js - Accountant class (fund calculations and reconciliation)
  * 6. logger.js - Logger class (structured, color-coded output)
  * 7. logger_state.js - LoggerState class (change detection, audit trail)

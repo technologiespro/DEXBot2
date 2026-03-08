@@ -129,7 +129,7 @@ try {
     console.warn(`template config not found, skipping: ${cfgPath}`);
   }
 } catch (err) {
-  console.error('tracked config: parse error ->', err.message);
+  console.error('template config: parse error ->', err.message);
 }
 
 /**

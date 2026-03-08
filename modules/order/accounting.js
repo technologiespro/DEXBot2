@@ -6,7 +6,7 @@
  * Exports a single Accountant class that manages all fund accounting operations.
  *
  * ===============================================================================
- * TABLE OF CONTENTS - Accountant Class (15 methods)
+ * TABLE OF CONTENTS - Accountant Class (18 methods)
  * ===============================================================================
  *
  * CORE INITIALIZATION & RECALCULATION (2 methods)
@@ -152,10 +152,7 @@ class Accountant {
          if (mgr._pauseFundRecalc) return;
          if (!mgr.funds) this.resetFunds();
 
-         // CRITICAL: Acquire lock to get consistent snapshot of orders (Race Condition #3)
-         // Otherwise _updateOrder() could change mgr.orders while we're iterating,
-         // causing us to miss newly added orders or include stale ones.
-         // No lock needed for read-only access to frozen orders
+         // No lock needed for read-only access to frozen orders (COW pattern)
          const orderSnapshot = Array.from(mgr.orders.values());
 
          let gridBuy = 0, gridSell = 0;
@@ -447,7 +444,7 @@ class Accountant {
                   // NOTE: Do NOT reset attemptCount here. The fund invariant check will
                   // run again after recovery returns. If the invariant is still violated,
                   // we want the counter to increment properly (2/5, 3/5, etc.) rather
-                  // than resetting to 1/5 each time. The decay logic (line 417) will
+                  // than resetting to 1/5 each time. The decay logic (line ~402) will
                   // reset the counter if enough time passes without violations.
                   return true;
               }
@@ -831,7 +828,7 @@ class Accountant {
      * Returns net proceeds after market fees, or raw amount if asset is not recognized.
      * @param {string} assetSymbol - Asset symbol (e.g., 'BTS', 'XRP')
      * @param {number} rawAmount - Amount before fees
-     * @param {boolean} isMaker - Whether this was a maker order (0.1% fee) vs taker (0.1% fee)
+     * @param {boolean} isMaker - Whether this was a maker order (lower fee) vs taker (full fee)
      * @returns {number} Net proceeds after fees, or rawAmount if symbol not found
      * @private
      */

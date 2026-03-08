@@ -37,7 +37,6 @@
  * TRADING OPERATIONS:
  *   node dexbot start <bot-name>     - Start single bot directly (live trading)
  *   node dexbot drystart <bot-name>  - Start bot in dry-run mode (no transactions)
- *   node dexbot stop <bot-name>      - Stop a running bot
  *
  * BOT MANAGEMENT:
  *   node dexbot reset <bot-name>     - Reset bot grid (full regeneration)
@@ -95,7 +94,7 @@ const { setupGracefulShutdown, registerCleanup } = require('./modules/graceful_s
 setupGracefulShutdown();
 
 // Note: accountOrders is now per-bot only. Each bot has its own AccountOrders instance
-// created in DEXBot.start() (line 663). This eliminates shared-file race conditions.
+// created in DEXBot.start() in modules/dexbot_class.js. This eliminates shared-file race conditions.
 
 // Primary CLI driver that manages tracked bots and helper utilities such as key/bot editors.
 const PROFILES_BOTS_FILE = path.join(__dirname, 'profiles', 'bots.json');
@@ -653,7 +652,7 @@ async function exportBotTrades(botName) {
 
 /**
  * Parse and execute CLI commands.
- * Supported commands: start, drystart, reset, stop, keys, bots, export
+ * Supported commands: start, drystart, reset, disable, keys, bots, pm2, update, export
  * @returns {Promise<boolean>} True if a command was handled, false otherwise
  */
 async function handleCLICommands() {

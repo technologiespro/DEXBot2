@@ -10,10 +10,10 @@
  * - Subscription and event handling
  *
  * ===============================================================================
- * EXPORTS (3 items)
+ * EXPORTS (8 items)
  * ===============================================================================
  *
- * 1. BitShares - Shared BitShares instance for database operations
+ * 1. BitShares - Shared BitShares class for database operations
  *    Used for: querying accounts, assets, orders, subscriptions
  *    Never use for signing transactions
  *
@@ -24,6 +24,12 @@
  * 3. createAccountClient(name, key) - Create per-account client for signing
  *    Returns client instance with sign() and broadcast() methods
  *    Used for: createOrder, updateOrder, cancelOrder operations
+ *
+ * 4. setSuppressConnectionLog(bool) - Suppress/restore connection log output
+ * 5. getNodeManager() - Get the NodeManager instance
+ * 6. getNodeStats() - Get node health statistics
+ * 7. getNodeSummary() - Get node summary
+ * 8. _internal - Internal state (connected flag) for testing
  *
  * ===============================================================================
  *

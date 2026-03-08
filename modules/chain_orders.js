@@ -17,7 +17,7 @@
  * converted to blockchain integers internally using asset precision.
  *
  * ===============================================================================
- * EXPORTS (15 functions)
+ * EXPORTS (16 functions + 1 constant)
  * ===============================================================================
  *
  * ACCOUNT MANAGEMENT (2 functions - async)
@@ -25,8 +25,11 @@
  *      Prompts for password if needed, caches selection
  *      Returns { accountId, accountName, authority }
  *
- *   2. setPreferredAccount(nameOrId) - Set preferred default account
+ *   2. setPreferredAccount(accountId, accountName) - Set preferred account
  *      Used by selectAccount() if no account specified
+ *
+ *   2b. resolveAccountId(nameOrId) - Resolve account name to ID (async, cached)
+ *   2c. resolveAccountName(id) - Resolve account ID to name (async, cached)
  *
  * ORDER OPERATIONS (5 functions - async)
  *   3. readOpenOrders(accountId) - Read all open orders for account

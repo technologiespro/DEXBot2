@@ -117,7 +117,7 @@ activeOrders.forEach((order, idx) => {
   if (absError > maxError) { maxError = absError; maxErrorOrder = { ...order, idx }; }
 });
 
-console.log(`\nMin error: ${Format.formatPrice4(minError * 100)}% at buy-${minErrorOrder.idx}`);
+console.log(`\nMin error: ${Format.formatPrice4(minError * 100)}% at order-${minErrorOrder.idx} (${minErrorOrder.type || 'unknown'})`);
 console.log(`  Calculated: ${Format.formatPrice(minErrorOrder.calculated)}, Persisted: ${Format.formatPrice(minErrorOrder.persisted)}`);
-console.log(`Max error: ${Format.formatPrice4(maxError * 100)}% at buy-${maxErrorOrder.idx}`);
+console.log(`Max error: ${Format.formatPrice4(maxError * 100)}% at order-${maxErrorOrder.idx} (${maxErrorOrder.type || 'unknown'})`);
 console.log(`  Calculated: ${Format.formatPrice(maxErrorOrder.calculated)}, Persisted: ${Format.formatPrice(maxErrorOrder.persisted)}`);

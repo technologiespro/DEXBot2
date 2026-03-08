@@ -20,7 +20,7 @@
  * COMMUNICATION:
  * - Socket: /tmp/dexbot-cred-daemon.sock
  * - Ready file: /tmp/dexbot-cred-daemon.ready
- * - Connection timeout: 30 seconds
+ * - Startup timeout: 60 seconds (DAEMON_STARTUP_TIMEOUT_MS)
  * - Windows 10+: Supported; earlier Windows not supported
  *
  * REQUEST FORMAT:

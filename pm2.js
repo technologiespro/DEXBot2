@@ -24,41 +24,38 @@
  * SETUP SEQUENCE
  * ===============================================================================
  *
- * 1. BITSHARES CONNECTION VERIFICATION
+ * Step 0: BITSHARES CONNECTION VERIFICATION
  *    - Waits for BitShares blockchain network connection
  *    - Suppresses debug output to keep terminal clean
  *    - Validates node availability before proceeding
  *
- * 2. PM2 INSTALLATION CHECK
+ * Step 1: PM2 INSTALLATION CHECK
  *    - Detects local and global PM2 installations
  *    - Prompts to install PM2 if missing
  *    - Validates PM2 is available before proceeding
  *
- * 3. ECOSYSTEM CONFIGURATION GENERATION
+ * Step 2: ECOSYSTEM CONFIGURATION GENERATION
  *    - Reads bot definitions from profiles/bots.json
  *    - Generates profiles/ecosystem.config.js with absolute paths
  *    - Filters only active bots (active !== false)
  *    - If bot-name provided, filters to only that bot
  *    - Each bot configured with:
  *      * Unique app name
- *      * Node runtime arguments
- *      * Environment variables
  *      * Log file paths
+ *      * Restart/memory policies
  *
- * 4. CREDENTIAL DAEMON STARTUP
- *    - Starts dexbot-cred daemon if not already running
+ * Step 3: AUTHENTICATION & CLEANUP
+ *    - Cleans up stale daemon socket files
  *    - Prompts interactively for master password (once at startup)
- *    - Daemon authenticates with profiles/keys.json
- *    - Keeps password in RAM for bot process requests
- *    - Creates Unix socket for inter-process communication
- *    - Bot processes request keys via socket (no password exposed)
+ *    - Authenticates against profiles/keys.json
+ *    - Sets password in process.env.DAEMON_PASSWORD for PM2 child processes
  *
- * 5. PM2 DAEMON STARTUP
+ * Step 4: PM2 DAEMON STARTUP
  *    - Starts PM2 daemon if not already running
  *    - Waits for PM2 to be ready
  *    - Starts each configured bot as PM2 app
- *    - Bots request private keys from credential daemon
- *    - No MASTER_PASSWORD environment variables passed to bots
+ *    - Credential daemon is started as a PM2 app (defined in ecosystem config)
+ *    - Bots request private keys from credential daemon via Unix socket
  */
 
 const fs = require('fs');
