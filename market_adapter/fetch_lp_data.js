@@ -31,6 +31,7 @@
 const fs   = require('fs');
 const path = require('path');
 const kibanaSource = require('./kibana_source');
+const { toIntervalLabel } = require('./candle_utils');
 const { parseJsonWithComments } = require('../modules/account_bots');
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -78,12 +79,6 @@ function parseArgs() {
 
 // ─── Output path ──────────────────────────────────────────────────────────────
 
-function intervalLabel(intervalSeconds) {
-    return intervalSeconds >= 86400 ? `${intervalSeconds / 86400}d` :
-        intervalSeconds >= 3600  ? `${intervalSeconds / 3600}h`  :
-            intervalSeconds >= 60    ? `${intervalSeconds / 60}m`    : `${intervalSeconds}s`;
-}
-
 function slugPart(value) {
     return String(value || '')
         .trim()
@@ -97,7 +92,7 @@ function pairFolderName(assetA, assetB) {
 }
 
 function outputPath(poolId, intervalSeconds, assetA, assetB) {
-    const label = intervalLabel(intervalSeconds);
+    const label = toIntervalLabel(intervalSeconds);
     const id  = String(poolId).replace('1.19.', '');
     const pairFolder = pairFolderName(assetA, assetB);
     return path.join(__dirname, 'data', 'lp', pairFolder, `lp_pool_${id}_${label}.json`);
@@ -210,7 +205,7 @@ async function findPool(BitShares, idA, idB) {
 async function run() {
     const { poolId: cliPoolId, botName, precA: cliPrecA, precB: cliPrecB, config } = parseArgs();
 
-    const bucketLabel = intervalLabel(config.intervalSeconds);
+    const bucketLabel = toIntervalLabel(config.intervalSeconds);
 
     console.log('══════════════════════════════════════════════');
     console.log(' Kibana LP Fetcher — Pool-centric');

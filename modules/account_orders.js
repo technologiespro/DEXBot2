@@ -251,17 +251,6 @@ class AccountOrders {
         bot.botKey = key;
       }
 
-      // 2. Prune zombie bots (remove entries not in botEntries) - legacy dead code path
-      if (!this.botKey) {
-        for (const key of Object.keys(this.data.bots)) {
-          if (!validKeys.has(key)) {
-            console.log(`[AccountOrders] Pruning stale bot entry: ${key}`);
-            delete this.data.bots[key];
-            changed = true;
-          }
-        }
-      }
-
       if (changed) {
         this.data.lastUpdated = nowIso();
         this._persist();

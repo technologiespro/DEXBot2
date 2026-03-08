@@ -59,6 +59,7 @@ const { MARKET_ADAPTER } = require('../modules/constants');
 const { createBotKey } = require('../modules/account_orders');
 const { calculateAMA } = require('../analysis/ama_fitting/ama');
 const kibanaSource = require('./kibana_source');
+const { normalizePoolId } = kibanaSource;
 const { tradesToCandles } = require('./candle_utils');
 const { createPriceAdapterService } = require('./core/price_adapter_service');
 
@@ -496,11 +497,6 @@ function releaseFileLock(lock) {
     try { if (lock.heartbeat) clearInterval(lock.heartbeat); } catch (_) {}
     try { if (typeof lock.fd === 'number') fs.closeSync(lock.fd); } catch (_) {}
     try { if (lock.lockPath) fs.unlinkSync(lock.lockPath); } catch (_) {}
-}
-
-function normalizePoolId(id) {
-    const s = String(id).trim();
-    return s.startsWith('1.19.') ? s : `1.19.${s}`;
 }
 
 async function resolveAsset(symbol) {

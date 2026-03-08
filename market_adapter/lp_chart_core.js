@@ -18,12 +18,12 @@
 
 'use strict';
 
+const { toIntervalLabel } = require('./candle_utils');
+
 function generateHTML(meta, candles, amaResults) {
     const { assetA, assetB, intervalSeconds, fetchedAt, pool } = meta;
     const poolLabel = pool ? `Pool ${String(pool).replace('1.19.', '')}` : `${assetA.symbol}/${assetB.symbol}`;
-    const intervalLabel = intervalSeconds >= 86400 ? `${intervalSeconds / 86400}d` :
-                          intervalSeconds >= 3600  ? `${intervalSeconds / 3600}h`  :
-                          intervalSeconds >= 60    ? `${intervalSeconds / 60}m`    : `${intervalSeconds}s`;
+    const intervalLabel = toIntervalLabel(intervalSeconds);
 
     const dates   = candles.map(c => c[0]);                                          // integer ms timestamps (shorter JSON than ISO strings)
     const closes  = candles.map(c => Math.round(c[4] * 1e6) / 1e6);               // 6 dp

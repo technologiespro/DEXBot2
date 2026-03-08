@@ -9,6 +9,7 @@ const {
     writeCandlesJson,
     writeCandlesCsv,
 } = require('./candle_utils');
+const { normalizePoolId } = require('./kibana_source');
 
 const OP_TYPE_LP_EXCHANGE = 63;
 const API_MAX_LIMIT = 101;
@@ -103,11 +104,6 @@ function printHelp() {
     console.log('  --saveCandles Save OHLCV file for analysis');
     console.log('  --out        Output JSON path (optional)');
     console.log('  --csv        Also save CSV next to JSON');
-}
-
-function normalizePoolId(id) {
-    const s = String(id).trim();
-    return s.startsWith('1.19.') ? s : `1.19.${s}`;
 }
 
 function parseChainTimeToMs(chainTime) {
