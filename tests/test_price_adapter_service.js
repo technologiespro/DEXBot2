@@ -4,6 +4,7 @@ const path = require('path');
 console.log('Running price adapter service tests');
 
 const { createPriceAdapterService } = require('../market_adapter/core/price_adapter_service');
+const { detectMissingCandleTimestamps } = require('../market_adapter/candle_utils');
 
 async function testTriggerHookCalledOnThreshold() {
     let triggerHookCalls = 0;
@@ -379,12 +380,184 @@ async function testContextCacheInvalidatesOnPoolChange() {
     assert.strictEqual(state.bots['xrp-bts-0'].poolId, '1.19.999', 'state should store refreshed pool context');
 }
 
+async function testKibanaGapRepairPatchesMissingCandles() {
+    let savedPayload = null;
+    let amaCandles = null;
+    let kibanaCalls = 0;
+    let kibanaTimeRange = null;
+
+    const service = createPriceAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [1700000000000, 100, 100, 100, 100, 1],
+                [1700007200000, 102, 102, 102, 102, 1],
+            ],
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 5,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async (_poolId, _assetA, _assetB, cfg) => {
+                kibanaCalls += 1;
+                kibanaTimeRange = cfg.timeRange;
+                return [
+                    [1700003600000, 100.5, 100.5, 100.5, 100.5, 1.5],
+                ];
+            },
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        detectMissingCandleTimestamps,
+        mergeCandles: (existing, incoming) => [...existing, ...incoming].sort((a, b) => a[0] - b[0]),
+        pruneCandles: (candles) => candles,
+        calcAmaPrice: (candles) => {
+            amaCandles = candles;
+            return 100;
+        },
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-0',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    const state = { bots: {} };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed with Kibana gap repair');
+    assert.strictEqual(kibanaCalls, 1, 'Kibana should be queried once to patch the gap');
+    assert.deepStrictEqual(
+        kibanaTimeRange,
+        {
+            gte: '2023-11-14T22:13:20.000Z',
+            lte: '2023-11-15T01:13:19.999Z',
+        },
+        'Kibana repair should fetch slightly more than the missing bucket window'
+    );
+    assert.strictEqual(result.kibanaGapRepairCount, 1, 'patched gap count should be reported in result');
+    assert.strictEqual(result.unresolvedGapCount, 0, 'no gaps should remain after Kibana repair');
+    assert.strictEqual(state.bots['xrp-bts-0'].kibanaGapRepairCount, 1, 'state should track retained Kibana repairs');
+    assert.strictEqual(state.bots['xrp-bts-0'].unresolvedGapCount, 0, 'state should track remaining gaps');
+    assert.strictEqual(savedPayload.meta.kibanaGapRepairCount, 1, 'saved candle payload should include Kibana repair count');
+    assert.strictEqual(savedPayload.meta.unresolvedGapCount, 0, 'saved candle payload should include remaining gap count');
+    assert.deepStrictEqual(
+        amaCandles,
+        [
+            [1700000000000, 100, 100, 100, 100, 1],
+            [1700003600000, 100.5, 100.5, 100.5, 100.5, 1.5],
+            [1700007200000, 102, 102, 102, 102, 1],
+        ],
+        'AMA should be computed from the Kibana-patched candle series'
+    );
+}
+
+async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
+    let savedPayload = null;
+
+    const service = createPriceAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [1700000000000, 100, 100, 100, 100, 1],
+                [1700007200000, 102, 102, 102, 102, 1],
+            ],
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 5,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        detectMissingCandleTimestamps,
+        mergeCandles: (existing, incoming) => [...existing, ...incoming].sort((a, b) => a[0] - b[0]),
+        pruneCandles: (candles) => candles,
+        calcAmaPrice: () => 100,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-0',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    const state = { bots: {} };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should still complete when Kibana cannot patch a gap');
+    assert.strictEqual(result.kibanaGapRepairCount, 0, 'no Kibana repairs should be reported when nothing is returned');
+    assert.strictEqual(result.unresolvedGapCount, 1, 'remaining gaps should be exposed in the result');
+    assert.strictEqual(state.bots['xrp-bts-0'].unresolvedGapCount, 1, 'state should retain unresolved gap count');
+    assert.strictEqual(savedPayload.meta.unresolvedGapCount, 1, 'saved payload should retain unresolved gap count');
+}
+
 async function run() {
     await testTriggerHookCalledOnThreshold();
     await testBootstrapFallsBackWhenKibanaIsEmpty();
     await testAmaGridPriceIsCaseInsensitive();
     await testAmaTriggerSuppressedWhenCenterPersistFails();
     await testContextCacheInvalidatesOnPoolChange();
+    await testKibanaGapRepairPatchesMissingCandles();
+    await testRemainingGapsAreReportedWhenKibanaHasNoPatchData();
 }
 
 run()

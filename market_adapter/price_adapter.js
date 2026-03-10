@@ -60,7 +60,7 @@ const { createBotKey } = require('../modules/account_orders');
 const { calculateAMA } = require('../analysis/ama_fitting/ama');
 const kibanaSource = require('./kibana_source');
 const { normalizePoolId } = kibanaSource;
-const { tradesToCandles } = require('./candle_utils');
+const { tradesToCandles, detectMissingCandleTimestamps } = require('./candle_utils');
 const { createPriceAdapterService } = require('./core/price_adapter_service');
 
 const ROOT = path.join(__dirname, '..');
@@ -765,6 +765,7 @@ const adapterService = createPriceAdapterService({
     kibanaSource,
     fetchNativeTradesSince,
     tradesToCandles,
+    detectMissingCandleTimestamps,
     mergeCandles,
     pruneCandles,
     calcAmaPrice,
@@ -825,8 +826,10 @@ async function runOnce(cfg, state, contextCache) {
             const deltaText = Number.isFinite(r.deltaPercent) ? `${r.deltaPercent.toFixed(3)}%` : 'n/a';
             const thresholdText = Number.isFinite(r.thresholdPercent) ? `${r.thresholdPercent.toFixed(3)}%` : 'n/a';
             const staleText = r.staleData ? ` STALE(${Number.isFinite(r.staleAgeHours) ? r.staleAgeHours.toFixed(2) : 'n/a'}h)` : '';
+            const patchText = Number.isFinite(r.kibanaGapRepairCount) && r.kibanaGapRepairCount > 0 ? ` KIBANA_PATCH(${r.kibanaGapRepairCount})` : '';
+            const gapText = Number.isFinite(r.unresolvedGapCount) && r.unresolvedGapCount > 0 ? ` GAPS(${r.unresolvedGapCount})` : '';
             const trigText = r.triggered ? ` TRIGGERED -> ${path.relative(ROOT, r.triggerPath)}` : '';
-            log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText}, delta=${deltaText}, threshold=${thresholdText}${staleText}${trigText}`);
+            log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText}, delta=${deltaText}, threshold=${thresholdText}${staleText}${patchText}${gapText}${trigText}`);
             if (Array.isArray(r.amaComparison) && r.amaComparison.length > 0) {
                 const parts = r.amaComparison.map((a) => {
                     const val = Number.isFinite(a.value) ? a.value.toFixed(8) : 'n/a';
@@ -871,6 +874,10 @@ async function runOnce(cfg, state, contextCache) {
         failedBots: results.filter((r) => !r.ok).length,
         triggeredBots: results.filter((r) => r.ok && r.triggered).length,
         staleBots: results.filter((r) => r.ok && r.staleData).length,
+        kibanaPatchedBots: results.filter((r) => r.ok && Number(r.kibanaGapRepairCount) > 0).length,
+        kibanaPatchedCandles: results.reduce((sum, r) => sum + (r.ok && Number.isFinite(r.kibanaGapRepairCount) ? r.kibanaGapRepairCount : 0), 0),
+        unresolvedGapBots: results.filter((r) => r.ok && Number(r.unresolvedGapCount) > 0).length,
+        unresolvedGapCandles: results.reduce((sum, r) => sum + (r.ok && Number.isFinite(r.unresolvedGapCount) ? r.unresolvedGapCount : 0), 0),
     };
     state.meta.metrics = metrics;
 

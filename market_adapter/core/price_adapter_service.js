@@ -14,6 +14,7 @@ function createPriceAdapterService(deps = {}) {
         kibanaSource,
         fetchNativeTradesSince,
         tradesToCandles,
+        detectMissingCandleTimestamps,
         mergeCandles,
         pruneCandles,
         calcAmaPrice,
@@ -34,6 +35,19 @@ function createPriceAdapterService(deps = {}) {
             bot?.assetBPrecision,
             bot?.poolId,
         ].map((v) => String(v ?? '')).join('|');
+    }
+
+    function buildGapRepairTimeRange(missingTimestamps, intervalSeconds) {
+        const bucketMs = Number(intervalSeconds) * 1000;
+        if (!Array.isArray(missingTimestamps) || missingTimestamps.length === 0) return null;
+        if (!Number.isFinite(bucketMs) || bucketMs <= 0) return null;
+
+        const startTs = Math.max(0, missingTimestamps[0] - bucketMs);
+        const endTs = missingTimestamps[missingTimestamps.length - 1] + (bucketMs * 2) - 1;
+        return {
+            gte: new Date(startTs).toISOString(),
+            lte: new Date(endTs).toISOString(),
+        };
     }
 
     async function processBot(bot, state, cfg, contextCache, hooks = {}) {
@@ -120,7 +134,42 @@ function createPriceAdapterService(deps = {}) {
             nextCandles = mergeCandles(existingCandles, incomingCandles);
         }
 
+        let kibanaGapRepairTimestamps = [];
+        let gapAnalysis = typeof detectMissingCandleTimestamps === 'function'
+            ? detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
+            : { gapCount: 0, missingTimestamps: [] };
+
+        if (gapAnalysis.gapCount > 0 && kibanaSource && typeof kibanaSource.getLpCandlesForPool === 'function') {
+            const timeRange = buildGapRepairTimeRange(gapAnalysis.missingTimestamps, cfg.intervalSeconds);
+            if (timeRange) {
+                try {
+                    const kibanaGapCandles = await withRetries(() => kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
+                        intervalSeconds: cfg.intervalSeconds,
+                        consolidateByTimestamp: true,
+                        apiKey: null,
+                        timeRange,
+                    }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana gap repair failed');
+
+                    if (Array.isArray(kibanaGapCandles) && kibanaGapCandles.length > 0) {
+                        const beforeTimestamps = new Set(nextCandles.map((c) => c[0]));
+                        nextCandles = mergeCandles(nextCandles, kibanaGapCandles);
+                        const afterTimestamps = new Set(nextCandles.map((c) => c[0]));
+                        kibanaGapRepairTimestamps = gapAnalysis.missingTimestamps.filter((ts) => !beforeTimestamps.has(ts) && afterTimestamps.has(ts));
+                    }
+                } catch (_) {}
+            }
+            gapAnalysis = typeof detectMissingCandleTimestamps === 'function'
+                ? detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
+                : { gapCount: 0, missingTimestamps: [] };
+        }
+
         nextCandles = pruneCandles(nextCandles, keepCount);
+        const retainedTimestamps = new Set(nextCandles.map((c) => c[0]));
+        const kibanaGapRepairCount = kibanaGapRepairTimestamps.filter((ts) => retainedTimestamps.has(ts)).length;
+        const retainedGapAnalysis = typeof detectMissingCandleTimestamps === 'function'
+            ? detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
+            : { gapCount: 0, missingTimestamps: [] };
+        const unresolvedGapCount = retainedGapAnalysis.gapCount;
         const amaPrice = calcAmaPrice(nextCandles, botAma);
         const amaComparison = calcAmaComparison(nextCandles, bot, ctx);
         const lastCandleTs = nextCandles[nextCandles.length - 1]?.[0] || null;
@@ -203,6 +252,8 @@ function createPriceAdapterService(deps = {}) {
                 assetB: ctx.assetB,
                 intervalSeconds: cfg.intervalSeconds,
                 candleCount: nextCandles.length,
+                kibanaGapRepairCount,
+                unresolvedGapCount,
                 format: '[timestamp_ms, open, high, low, close, volume_A]',
             },
             candles: nextCandles,
@@ -216,6 +267,8 @@ function createPriceAdapterService(deps = {}) {
             poolId: ctx.poolId,
             candleFile: path.relative(root, filePath),
             candleCount: nextCandles.length,
+            kibanaGapRepairCount,
+            unresolvedGapCount,
             lastCandleTs,
             lastAmaPrice: amaPrice,
             amaConfig: {
@@ -238,6 +291,8 @@ function createPriceAdapterService(deps = {}) {
             ok: true,
             source: sourceLabel,
             candleCount: nextCandles.length,
+            kibanaGapRepairCount,
+            unresolvedGapCount,
             amaPrice,
             deltaPercent,
             thresholdPercent: botThreshold,

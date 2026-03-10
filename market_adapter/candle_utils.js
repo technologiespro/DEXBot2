@@ -72,6 +72,40 @@ function tradesToCandles(trades, assetA, assetB, intervalSeconds = 3600) {
         .map(([ts, c]) => [ts, c.open, c.high, c.low, c.close, c.volumeA]);
 }
 
+function detectMissingCandleTimestamps(candles, intervalSeconds = 3600) {
+    const bucketMs = Number(intervalSeconds) * 1000;
+    if (!Number.isFinite(bucketMs) || bucketMs <= 0) {
+        return { gapCount: 0, missingTimestamps: [] };
+    }
+
+    const sorted = (Array.isArray(candles) ? candles : [])
+        .filter((c) => Array.isArray(c) && Number.isFinite(c[0]))
+        .slice()
+        .sort((a, b) => a[0] - b[0]);
+
+    if (sorted.length === 0) {
+        return { gapCount: 0, missingTimestamps: [] };
+    }
+
+    const missingTimestamps = [];
+
+    for (let i = 1; i < sorted.length; i++) {
+        const prevTs = sorted[i - 1][0];
+        const nextTs = sorted[i][0];
+        let expectedTs = prevTs + bucketMs;
+
+        while (nextTs > expectedTs) {
+            missingTimestamps.push(expectedTs);
+            expectedTs += bucketMs;
+        }
+    }
+
+    return {
+        gapCount: missingTimestamps.length,
+        missingTimestamps,
+    };
+}
+
 function writeCandlesJson(filePath, payload) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
@@ -88,6 +122,7 @@ module.exports = {
     toIntervalLabel,
     buildOutputPath,
     tradesToCandles,
+    detectMissingCandleTimestamps,
     writeCandlesJson,
     writeCandlesCsv,
 };

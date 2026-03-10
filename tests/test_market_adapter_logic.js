@@ -14,6 +14,7 @@ const {
     applyRuntimeDefaultsFromGeneralSettings,
     usesAmaGridPrice,
 } = require('../market_adapter/price_adapter');
+const { detectMissingCandleTimestamps } = require('../market_adapter/candle_utils');
 
 const AMA_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'ama_profiles.json');
 
@@ -53,6 +54,31 @@ assert.strictEqual(
     const missing = computeCandleStaleness(null, 6);
     assert.strictEqual(missing.staleData, true, 'missing candle timestamp should be treated as stale');
     assert.strictEqual(missing.staleAgeHours, null, 'missing candle timestamp should expose null staleAgeHours');
+}
+
+// Candle continuity behavior
+{
+    const candles = [
+        [1700000000000, 100, 100, 100, 100, 1],
+        [1700007200000, 102, 103, 101, 102, 2],
+    ];
+    const result = detectMissingCandleTimestamps(candles, 3600);
+    assert.strictEqual(result.gapCount, 1, 'missing hourly bucket should be detected');
+    assert.deepStrictEqual(
+        result.missingTimestamps,
+        [1700003600000],
+        'gap detector should return the missing hourly bucket timestamp'
+    );
+}
+
+{
+    const candles = [
+        [1700000000000, 100, 100, 100, 100, 1],
+        [1700003600000, 101, 101, 101, 101, 1],
+    ];
+    const result = detectMissingCandleTimestamps(candles, 3600);
+    assert.strictEqual(result.gapCount, 0, 'continuous candles should not report gaps');
+    assert.deepStrictEqual(result.missingTimestamps, [], 'continuous series should not return missing timestamps');
 }
 
 // General settings → runtime defaults behavior
