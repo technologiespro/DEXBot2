@@ -203,6 +203,11 @@ class DEXBot {
         this._batchRetryInFlight = false;
         this._recoverySyncInFlight = false;
         this._maintenanceCooldownCycles = 0;
+
+        // Tracks when each order first entered the dust state (orderId → timestamp ms).
+        // Used by _cancelDustOrders to enforce DUST_CANCEL_DELAY_MIN.
+        // Entries are pruned when an order recovers from dust or is cancelled.
+        this._dustSinceMap = new Map();
     }
 
     /**
@@ -1034,6 +1039,10 @@ class DEXBot {
                                 const healthResult = await this.manager.checkGridHealth(
                                     this.updateOrdersOnChainPlan.bind(this)
                                 );
+                                await this._cancelDustOrders({
+                                    buy: healthResult.buyDustOrders,
+                                    sell: healthResult.sellDustOrders,
+                                });
                                 if (healthResult.buyDust && healthResult.sellDust) {
                                     await this.manager.persistGrid();
                                 }
@@ -2930,6 +2939,10 @@ class DEXBot {
                 this.updateOrdersOnChainPlan.bind(this)
             );
             if (await this._abortFlowIfIllegalState(`${context} health check`)) return;
+            await this._cancelDustOrders({
+                buy: healthResult.buyDustOrders,
+                sell: healthResult.sellDustOrders,
+            });
             if (healthResult.buyDust && healthResult.sellDust) {
                 await this._persistAndRecoverIfNeeded();
             }
@@ -2988,6 +3001,82 @@ class DEXBot {
                 await this._persistAndRecoverIfNeeded();
             }
         }
+    }
+
+    /**
+     * Cancel dust partial orders that have exceeded DUST_CANCEL_DELAY_MIN, treating each
+     * as a fully-filled slot so the grid can place a fresh counter-order there.
+     *
+     * Behaviour by GRID_LIMITS.DUST_CANCEL_DELAY_MIN:
+     *   -1  Disabled — returns immediately without action.
+     *    0  Cancel on first detection (no delay).
+     *    N  Cancel after N continuous minutes in dust state.
+     *
+     * The timer is tracked per orderId in this._dustSinceMap.  Orders that recover
+     * from dust (size grows back above threshold) have their timer reset automatically.
+     *
+     * After a successful cancel the order slot is virtualised (size=0, state=VIRTUAL)
+     * and recalculateFunds() is called so normal grid maintenance picks up the freed slot.
+     *
+     * @param {{ buy: Array, sell: Array }} dustOrders - Dust order lists from checkGridHealth.
+     * @returns {Promise<number>} Number of orders successfully cancelled.
+     * @private
+     */
+    async _cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {}) {
+        const delayMin = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
+        if (!Number.isFinite(delayMin) || delayMin < 0) return 0;
+
+        const now = Date.now();
+        const delayMs = delayMin * 60_000;
+        const allDust = [...buyDust, ...sellDust];
+        const dustIds = new Set(allDust.map(o => o.orderId).filter(Boolean));
+
+        // Prune orders that are no longer dust (recovered or naturally filled).
+        for (const orderId of this._dustSinceMap.keys()) {
+            if (!dustIds.has(orderId)) this._dustSinceMap.delete(orderId);
+        }
+
+        // Record first-seen timestamp for newly-detected dust orders.
+        for (const order of allDust) {
+            if (order.orderId && !this._dustSinceMap.has(order.orderId)) {
+                this._dustSinceMap.set(order.orderId, now);
+            }
+        }
+
+        // Determine which orders have been dust long enough to cancel.
+        const toCancel = allDust.filter(o => {
+            if (!o.orderId) return false;
+            const firstSeen = this._dustSinceMap.get(o.orderId) ?? now;
+            return (now - firstSeen) >= delayMs;
+        });
+
+        if (toCancel.length === 0) return 0;
+
+        let cancelledCount = 0;
+        for (const order of toCancel) {
+            try {
+                // Use the established cancel pattern: single call handles build + broadcast,
+                // then synchronizeWithChain acquires _gridLock before applying the sync.
+                await chainOrders.cancelOrder(this.account, this.privateKey, order.orderId);
+                await this.manager.synchronizeWithChain(order.orderId, 'cancelOrder');
+
+                this._dustSinceMap.delete(order.orderId);
+                cancelledCount++;
+                this._log(
+                    `[DUST-CANCEL] Cancelled dust order ${order.id} (${order.orderId}) ` +
+                    `as fully filled (delay=${delayMin}min, size=${order.size})`,
+                    'info'
+                );
+            } catch (err) {
+                this._warn(`[DUST-CANCEL] Failed to cancel dust order ${order.id}: ${err.message}`);
+            }
+        }
+
+        if (cancelledCount > 0) {
+            await this.manager.recalculateFunds();
+        }
+
+        return cancelledCount;
     }
 
     /**

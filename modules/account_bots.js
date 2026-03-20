@@ -984,7 +984,12 @@ async function promptGeneralSettings() {
 
      while (!finished) {
           console.log('\x1b[1m--- General Settings (Global) ---\x1b[0m');
-          console.log(`\x1b[1;33m1) Grid Limits:\x1b[0m   \x1b[38;5;208mCache:\x1b[0m ${settings.GRID_LIMITS.GRID_REGENERATION_PERCENTAGE}%, \x1b[38;5;208mRMS:\x1b[0m ${settings.GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE}%, \x1b[38;5;208mDust:\x1b[0m ${settings.GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE}%`);
+          const dustCancelDisplay = settings.GRID_LIMITS.DUST_CANCEL_DELAY_MIN < 0
+              ? 'OFF'
+              : settings.GRID_LIMITS.DUST_CANCEL_DELAY_MIN === 0
+                  ? 'instant'
+                  : `${settings.GRID_LIMITS.DUST_CANCEL_DELAY_MIN}min`;
+          console.log(`\x1b[1;33m1) Grid Limits:\x1b[0m   \x1b[38;5;208mCache:\x1b[0m ${settings.GRID_LIMITS.GRID_REGENERATION_PERCENTAGE}%, \x1b[38;5;208mRMS:\x1b[0m ${settings.GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE}%, \x1b[38;5;208mDust:\x1b[0m ${settings.GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE}%, \x1b[38;5;208mDustCancel:\x1b[0m ${dustCancelDisplay}`);
           console.log(`\x1b[1;33m2) Grid Safety:\x1b[0m   \x1b[38;5;208mMinSpreadFactor:\x1b[0m ${settings.GRID_LIMITS.MIN_SPREAD_FACTOR}, \x1b[38;5;208mMinSpreadOrders:\x1b[0m ${settings.GRID_LIMITS.MIN_SPREAD_ORDERS}, \x1b[38;5;208mAdapterDelta:\x1b[0m ${settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT}%`);
           console.log(`\x1b[1;33m3) Timing (Core):\x1b[0m \x1b[38;5;208mFetchInterval:\x1b[0m ${settings.TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN}min, \x1b[38;5;208mSyncDelay:\x1b[0m ${settings.TIMING.SYNC_DELAY_MS / 1000}s, \x1b[38;5;208mLockTimeout:\x1b[0m ${settings.TIMING.LOCK_TIMEOUT_MS / 1000}s`);
           console.log(`\x1b[1;33m4) Timing (Fill):\x1b[0m \x1b[38;5;208mDedupeWindow:\x1b[0m ${settings.TIMING.FILL_DEDUPE_WINDOW_MS / 1000}s, \x1b[38;5;208mCleanupInterval:\x1b[0m ${settings.TIMING.FILL_CLEANUP_INTERVAL_MS / 1000}s, \x1b[38;5;208mRetention:\x1b[0m ${settings.TIMING.FILL_RECORD_RETENTION_MS / 1000}s`);
@@ -1013,9 +1018,13 @@ async function promptGeneralSettings() {
                 if (rms === '\x1b') break;
                 const dust = await askNumberWithBounds('Partial Dust Threshold %', settings.GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE, 0.1, 50);
                 if (dust === '\x1b') break;
+                console.log('  \x1b[38;5;250mDust Cancel Delay: -1=off, 0=instant, N=minutes before auto-cancel\x1b[0m');
+                const dustCancel = await askIntegerInRange('Dust Cancel Delay (min)', settings.GRID_LIMITS.DUST_CANCEL_DELAY_MIN, -1, 1440);
+                if (dustCancel === '\x1b') break;
                 settings.GRID_LIMITS.GRID_REGENERATION_PERCENTAGE = gRegen;
                 settings.GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE = rms;
                 settings.GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE = dust;
+                settings.GRID_LIMITS.DUST_CANCEL_DELAY_MIN = dustCancel;
                 break;
             case '2':
                 const mFactor = await askNumberWithBounds('Minimum Spread Factor (Inc x Factor)', settings.GRID_LIMITS.MIN_SPREAD_FACTOR, 1.0, 10.0);

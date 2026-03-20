@@ -1292,20 +1292,20 @@ class Grid {
      * @returns {Promise<Object>} Health status { buyDust, sellDust }.
      */
     static async checkGridHealth(manager, updateOrdersOnChainBatch = null) {
-        if (!manager) return { buyDust: false, sellDust: false };
+        if (!manager) return { buyDust: false, sellDust: false, buyDustOrders: [], sellDustOrders: [] };
 
         // Skip health checks during bootstrap to prevent spamming warnings
-        if (manager._state.isBootstrapping()) return { buyDust: false, sellDust: false };
+        if (manager._state.isBootstrapping()) return { buyDust: false, sellDust: false, buyDustOrders: [], sellDustOrders: [] };
 
         // Health checks are scoped to the active on-chain window only.
         // This keeps detection aligned with maintenance actions that operate on
         // active window partials.
-        const { buyDust, sellDust } = await Grid.checkWindowDust(manager);
+        const { buyDust, sellDust, buyDustOrders, sellDustOrders } = await Grid.checkWindowDust(manager);
 
         // Partial split/merge maintenance is intentionally disabled.
         // Health checks remain detection-only.
 
-        return { buyDust, sellDust };
+        return { buyDust, sellDust, buyDustOrders, sellDustOrders };
     }
 
     /**
@@ -1316,13 +1316,14 @@ class Grid {
      * `activeOrders.sell` sell slots by price — the slots that are actively on-chain
      * and can become "squeezed" when the boundary crawls past a dust partial.
      *
-     * Returns the same shape as checkGridHealth: { buyDust, sellDust }.
+     * Returns boolean flags plus the actual dust order objects so callers can act
+     * on individual orders (e.g. DUST_CANCEL_DELAY_MIN auto-cancel).
      *
      * @param {OrderManager} manager
-     * @returns {Promise<{buyDust: boolean, sellDust: boolean}>}
+     * @returns {Promise<{buyDust: boolean, sellDust: boolean, buyDustOrders: Array, sellDustOrders: Array}>}
      */
     static async checkWindowDust(manager) {
-        if (!manager) return { buyDust: false, sellDust: false };
+        if (!manager) return { buyDust: false, sellDust: false, buyDustOrders: [], sellDustOrders: [] };
 
         const allOrders = Array.from(manager.orders.values());
         const { buy: buyPartials, sell: sellPartials } = getPartialsByType(allOrders);
@@ -1330,7 +1331,7 @@ class Grid {
         const activeBuyCount = manager.config.activeOrders?.buy ?? 0;
         const activeSellCount = manager.config.activeOrders?.sell ?? 0;
 
-        let buyDust = false;
+        let buyDustOrders = [];
         if (buyPartials.length > 0 && activeBuyCount > 0) {
             const windowBuyIds = new Set(
                 allOrders
@@ -1340,11 +1341,12 @@ class Grid {
                     .map(o => o.id)
             );
             const windowBuyPartials = buyPartials.filter(p => windowBuyIds.has(p.id));
-            buyDust = windowBuyPartials.length > 0 &&
-                await Grid._hasAnyDust(manager, windowBuyPartials, ORDER_TYPES.BUY);
+            if (windowBuyPartials.length > 0) {
+                buyDustOrders = await Grid._getDustOrders(manager, windowBuyPartials, ORDER_TYPES.BUY);
+            }
         }
 
-        let sellDust = false;
+        let sellDustOrders = [];
         if (sellPartials.length > 0 && activeSellCount > 0) {
             const windowSellIds = new Set(
                 allOrders
@@ -1354,29 +1356,41 @@ class Grid {
                     .map(o => o.id)
             );
             const windowSellPartials = sellPartials.filter(p => windowSellIds.has(p.id));
-            sellDust = windowSellPartials.length > 0 &&
-                await Grid._hasAnyDust(manager, windowSellPartials, ORDER_TYPES.SELL);
+            if (windowSellPartials.length > 0) {
+                sellDustOrders = await Grid._getDustOrders(manager, windowSellPartials, ORDER_TYPES.SELL);
+            }
         }
 
-        return { buyDust, sellDust };
+        return {
+            buyDust: buyDustOrders.length > 0,
+            sellDust: sellDustOrders.length > 0,
+            buyDustOrders,
+            sellDustOrders,
+        };
     }
 
     /**
-     * Check if any partial orders on a side represent "dust" that should be cleaned.
+     * Return the subset of partial orders that qualify as dust on a given side.
+     * Shares the same sizing context as _hasAnyDust but returns the actual order
+     * objects so callers can act on them (e.g. auto-cancel).
      * @private
+     * @param {OrderManager} manager
+     * @param {Array<Object>} partials - Candidate partial orders to test.
+     * @param {string} type - ORDER_TYPES.BUY or ORDER_TYPES.SELL
+     * @returns {Promise<Array<Object>>} Orders whose size is below the dust threshold.
      */
-    static async _hasAnyDust(manager, partials, type) {
-        if (!partials || partials.length === 0) return false;
+    static async _getDustOrders(manager, partials, type) {
+        if (!partials || partials.length === 0) return [];
 
         const side = type === ORDER_TYPES.BUY ? 'buy' : 'sell';
         const ctx = await Grid._getSizingContext(manager, side);
-        if (!ctx || ctx.budget <= 0) return false;
+        if (!ctx || ctx.budget <= 0) return [];
 
         const sideSlots = Array.from(manager.orders.values())
             .filter(o => o.type === type)
             .sort((a, b) => a.price - b.price);
 
-        if (sideSlots.length === 0) return false;
+        if (sideSlots.length === 0) return [];
 
         const idealSizes = allocateFundsByWeights(
             ctx.budget,
@@ -1388,12 +1402,20 @@ class Grid {
             ctx.precision
         );
 
-        return partials.some(p => {
+        return partials.filter(p => {
             const idx = sideSlots.findIndex(s => s.id === p.id);
             if (idx === -1) return false;
             const threshold = getSingleDustThreshold(idealSizes[idx]);
             return p.size < threshold;
         });
+    }
+
+    /**
+     * Check if any partial orders on a side represent "dust" that should be cleaned.
+     * @private
+     */
+    static async _hasAnyDust(manager, partials, type) {
+        return (await Grid._getDustOrders(manager, partials, type)).length > 0;
     }
 
     /**
