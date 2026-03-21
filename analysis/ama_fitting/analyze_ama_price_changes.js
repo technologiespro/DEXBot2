@@ -4,7 +4,7 @@
 /**
  * AMA REPOSITION FREQUENCY ANALYSIS
  *
- * Simulates DELTA_THRESHOLD_PERCENT grid-reposition logic for all four AMA
+ * Simulates AMA_DELTA_THRESHOLD_PERCENT grid-reposition logic for all four AMA
  * series on LP Pool 133 (1h candles).
  *
  * For each threshold (1%, 2%, 3%, 4%):
@@ -56,7 +56,7 @@ function loadAmaParams(resultsPath) {
 // ── Analysis ──────────────────────────────────────────────────────────────────
 
 /**
- * Simulate DELTA_THRESHOLD_PERCENT reposition logic.
+ * Simulate AMA_DELTA_THRESHOLD_PERCENT reposition logic.
  *
  * Starting from the first post-warmup AMA value, track cumulative drift from
  * the last reposition baseline.  When drift reaches a threshold, a reposition
@@ -136,7 +136,7 @@ function run() {
 
     console.log('');
     console.log('════════════════════════════════════════════════════════════════════════════════');
-    console.log(' AMA Reposition Frequency Analysis  (DELTA_THRESHOLD_PERCENT simulation)');
+    console.log(' AMA Reposition Frequency Analysis  (AMA_DELTA_THRESHOLD_PERCENT simulation)');
     console.log('════════════════════════════════════════════════════════════════════════════════');
     console.log(` Dataset:    ${label}  (${interval} candles)`);
     console.log(` Candles:    ${candles.length}  →  ${totalSteps} steps total`);

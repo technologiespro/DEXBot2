@@ -66,7 +66,7 @@
  *
  * MARKET ADAPTER CONFIGURATION:
  *   10. MARKET_ADAPTER - Price tracking and grid recalculation trigger settings
- *       DELTA_THRESHOLD_PERCENT: % change in AMA center price that triggers grid reset
+ *       AMA_DELTA_THRESHOLD_PERCENT: % change in AMA center price that triggers grid reset
  *       DEFAULT_AMA_KEY: Default AMA profile used for `gridPrice: "ama"`
  *       AMAS: Built-in AMA1..AMA4 presets for price adapter fallback/defaults
  *       Related to bot AMA configuration (profiles/bots.json: ama.enabled, erPeriod, etc.)
@@ -308,9 +308,9 @@ let GRID_LIMITS = {
     // Grid comparison metrics
     // Detects significant divergence between calculated (in-memory) and persisted grid state
     // after order fills and rotations
-    // NOTE: Independent from MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT
+    // NOTE: Independent from MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT
     //   - RMS_PERCENTAGE: Triggers grid reset when calculated grid diverges from blockchain state
-    //   - DELTA_THRESHOLD_PERCENT: Triggers grid reset when AMA center price moves significantly
+    //   - AMA_DELTA_THRESHOLD_PERCENT: Triggers grid reset when AMA center price moves significantly
     //   Both can be configured independently in profiles/general.settings.json
     GRID_COMPARISON: {
         // Metric calculation: RMS (Root Mean Square) of relative order size differences
@@ -543,13 +543,13 @@ let PIPELINE_TIMING = {
 // Controls price tracking and grid recalculation triggers.
 // See: market_adapter/price_adapter.js, modules/account_bots.js
 let MARKET_ADAPTER = {
-    // DELTA_THRESHOLD_PERCENT: Percentage change in AMA center price that triggers a grid reset.
-    //   - When AMA price moves ±DELTA_THRESHOLD_PERCENT from the last recorded center,
+    // AMA_DELTA_THRESHOLD_PERCENT: Percentage change in AMA center price that triggers a grid reset.
+    //   - When AMA price moves ±AMA_DELTA_THRESHOLD_PERCENT from the last recorded center,
     //     a recalculate.<botKey>.trigger file is written to signal grid regeneration.
     //   - Configurable per deployment via profiles/general.settings.json under MARKET_ADAPTER.
     //   - Range: 0.1 to 50.0 (enforced in account_bots.js)
     //   - Default: 2.5 (grid recalculates when market moves 2.5% from last recorded AMA center)
-    DELTA_THRESHOLD_PERCENT: 2.5,
+    AMA_DELTA_THRESHOLD_PERCENT: 2.5,
 
     // DEFAULT_AMA_KEY: Built-in default profile for `gridPrice: "ama"` when no
     // pair-specific ama_profiles entry exists.

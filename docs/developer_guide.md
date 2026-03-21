@@ -40,6 +40,7 @@ Follow this path through the codebase:
 - `modules/constants.js::PIPELINE_TIMING` - Recovery configuration (RECOVERY_RETRY_INTERVAL_MS, MAX_RECOVERY_ATTEMPTS)
 - `modules/dexbot_class.js::_handleBatchHardAbort()` - Hard-abort recovery handler
 - `modules/dexbot_class.js::_staleCleanedOrderIds` - Orphan-fill deduplication tracking
+- `modules/dexbot_class.js::_cancelDustOrders()` - Auto-cancel dust partials; timer state in `_dustSinceMap`
 
 ---
 
@@ -123,14 +124,14 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 | **Surplus** | Order outside the active window that can be rotated |
 | **Hard Surplus** | Order beyond the configured `activeOrders` count |
 | **Dust** | Partial order < 5% of ideal size |
-| **Doubled Side** | Flag set when a dust partial is updated to ideal size; allows additional rebalancing actions on that side |
+| **Dust Cancel** | Auto-cancellation of dust partials on-chain after `DUST_CANCEL_DELAY_MIN` minutes, freeing the slot for a fresh counter-order. Timer tracked per `orderId` in `_dustSinceMap`. |
 
 ### Operations
 
 | Term | Meaning |
 |------|---------|
 | **Rotation** | Moving an order from one price level to another |
-| **Consolidation** | Updating dust partials to ideal size and flagging the side as "doubled" for additional rebalancing capacity |
+| **Consolidation** | Absorbing dust partials into the next grid rebuild cycle. All slots are treated uniformly—no side-specific flags or bonuses. |
 | **Rebalancing** | Adjusting order sizes based on current funds |
 | **Global Side Capping** | Scaling order sizes when insufficient funds |
 | **Atomic Check-and-Deduct** | Verify funds + deduct in single operation |

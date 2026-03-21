@@ -57,14 +57,14 @@ spread_analysis/  ──┘
 The delta threshold that governs when the adapter emits a recalc trigger is resolved in this order:
 
 1. CLI `--deltaPercent <n>` override
-2. `profiles/general.settings.json` → `MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT`
+2. `profiles/general.settings.json` → `MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT`
 3. Built-in default: `1` (%)
 
 ```json
 // profiles/general.settings.json
 {
   "MARKET_ADAPTER": {
-    "DELTA_THRESHOLD_PERCENT": 1
+    "AMA_DELTA_THRESHOLD_PERCENT": 1
   }
 }
 ```
@@ -135,7 +135,7 @@ Adapter emits `profiles/recalculate.<botKey>.trigger` when:
 
 Threshold resolution order:
 1. CLI `--deltaPercent` override
-2. `profiles/general.settings.json` → `MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT`
+2. `profiles/general.settings.json` → `MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT`
 3. Built-in default `1` (%).
 
 ### 4. State Persistence + JSON Signals
@@ -449,7 +449,7 @@ When threshold is exceeded, adapter writes a trigger file like:
 4. Check lock/state files under `market_adapter/state/`
 
 ### Trigger fires too often / too rarely
-1. Adjust `MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT` in `profiles/general.settings.json`
+1. Adjust `MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT` in `profiles/general.settings.json`
 2. Or pass `--deltaPercent <n>` on the CLI for a one-off override
 3. Check `lastDeltaPercent` in state to see what delta is actually being computed
 

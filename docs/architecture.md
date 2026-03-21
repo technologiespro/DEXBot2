@@ -435,9 +435,7 @@ Once the new boundary is determined, existing on-chain orders are matched to des
 | **ACTIVATE** | Desired slot is empty | Place new order at this price |
 | **DEACTIVATE** | Existing order exceeds target count | Cancel excess orders |
 
-**Adaptive Target Count**:
-- Normal: `activeOrders` from config
-- Doubled sides: `activeOrders - 1` (prevents structural drift)
+**Target Count**: `activeOrders` from config, applied uniformly to both sides.
 
 ### Impact
 
@@ -1248,11 +1246,11 @@ The strategy engine has been significantly strengthened with improvements to fun
 - Uses atomic check-and-deduct pattern for safety
 - Located in: `modules/order/strategy.js` - `rebalanceSideRobust()`
 
-**2. Dust Partial Prevention**
+**2. Dust Partial Handling**
 - Improved dust detection algorithm prevents false positives
-- Double-creation of dust partials eliminated
-- Dust consolidation now happens in single operation
 - Detects dust as `< 5% of ideal order size`
+- Dust partials are absorbed into the next grid rebuild cycle (no merge/split mechanics)
+- **Auto-Cancellation**: `_cancelDustOrders()` (called post-fill and in periodic maintenance) cancels dust partials on-chain once they exceed `DUST_CANCEL_DELAY_MIN` minutes in dust state; timer tracked per `orderId` in `_dustSinceMap`. `-1` disables, `0` = instant, default 5 min.
 
 **3. Strict Order Size Constraints**
 - Orders validated to not exceed available funds

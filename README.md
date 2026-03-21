@@ -10,6 +10,7 @@ A sophisticated market making bot for the BitShares Decentralized Exchange (DEX)
 - **Copy-on-Write Grid Architecture**: Master grid is immutable—all strategy planning occurs on an isolated working copy and is only committed to the master after blockchain confirmation. Eliminates speculative state corruption and supports true transactional semantics. See [COPY_ON_WRITE_MASTER_PLAN.md](docs/COPY_ON_WRITE_MASTER_PLAN.md).
 - **Adaptive Fill Batching**: Groups fills into stress-scaled batches (1-4 per broadcast) reducing processing time from ~90s to ~24s for 29 fills. Prevents stale orders and orphan fills during market surges.
 - **Self-Healing Recovery**: Periodic recovery retries (max 5 attempts, 60s interval) with automatic state reset prevent permanent lockup after single failures.
+- **Dust Partial Auto-Cancellation**: Dust partial orders (remaining size below threshold) are automatically cancelled on-chain after a configurable delay, freeing the slot for a fresh counter-order. Configurable via `DUST_CANCEL_DELAY_MIN` (`-1` = disabled, `0` = instant, `N` = minutes).
 - **Powerful Maintenance Tools**: Closed-loop boundary-crawl algorithm, periodic grid regeneration, fund invariant verification, and stale-order cleanup ensure long-term stability.
 - **Enterprise-Grade Security**: AES-encrypted key storage with RAM-only password handling—sensitive data is never written to disk.
 - **Production-Ready Orchestration**: Native PM2 integration for multi-bot management with built-in auto-updates and real-time monitoring.
@@ -158,9 +159,8 @@ Below is a reference guide for each configuration option from `node dexbot bots`
 DEXBot2 now supports global parameter management via the interactive editor (`dexbot bots`). These settings are stored in `profiles/general.settings.json` and persist across repository updates.
 
 **Available Global Parameters:**
-- **Grid Cache Regeneration %**: Threshold for resizing the grid when proceeds accumulate (Default: `3%`).
-- **RMS Divergence Threshold %**: Maximum allowed deviation between in-memory and persisted grid state (Default: `14.3%`).
-- **Partial Dust Threshold %**: Threshold for identifying small "dust" orders for geometric refilling (Default: `5%`).
+- **Grid Health**: **Grid Cache Regeneration %**: Threshold for resizing the grid when proceeds accumulate (Default: `3%`); **RMS Divergence Threshold %**: Maximum allowed deviation between in-memory and persisted grid state (Default: `14.3%`); **AMA Delta Threshold %**: AMA center price change that triggers a grid reset (Default: `2.5%`); **Partial Dust Threshold %**: Threshold for identifying small "dust" partial orders (Default: `5%`); **Dust Cancel Delay**: Minutes before a dust partial is automatically cancelled on-chain (`-1` = off, `0` = instant, Default: `5 min`).
+- **Order Recovery**: **Min Spread Factor**: Minimum spread width as a multiple of `incrementPercent` (Default: `2.1×`); **Min Spread Orders**: Minimum number of empty slots in the spread zone (Default: `2`).
 - **Timing (Core)**: **Blockchain Fetch Interval**: Frequency of full account balance refreshes (Default: `240 min`); **Sync Delay**: Polling delay for blockchain synchronization (Default: `500ms`); **Lock Timeout**: Order lock auto-expiry timeout (Default: `10s`).
 - **Timing (Fill)**: **Fill Dedupe Window**: Window for deduplicating same fill events (Default: `5s`); **Fill Cleanup Interval**: Frequency for cleaning old fill records (Default: `10s`); **Fill Record Retention**: Duration to keep persisted fill records (Default: `60 min`).
 - **Log Level**: Global verbosity control (`debug`, `info`, `warn`, `error`). Advanced logging configuration with fine-grained category control is available in `LOGGING_CONFIG` (see [Logging System](docs/LOGGING.md) below).

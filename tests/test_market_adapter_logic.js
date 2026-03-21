@@ -83,15 +83,21 @@ assert.strictEqual(
 
 // General settings → runtime defaults behavior
 assert.strictEqual(
-    resolveDeltaThresholdPercentFromGeneralSettings({ MARKET_ADAPTER: { DELTA_THRESHOLD_PERCENT: 3.25 } }),
+    resolveDeltaThresholdPercentFromGeneralSettings({ MARKET_ADAPTER: { AMA_DELTA_THRESHOLD_PERCENT: 3.25 } }),
     3.25,
-    'should read MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT when valid'
+    'should read MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT when valid'
 );
 
 assert.strictEqual(
-    resolveDeltaThresholdPercentFromGeneralSettings({ MARKET_ADAPTER: { DELTA_THRESHOLD_PERCENT: 0 } }),
+    resolveDeltaThresholdPercentFromGeneralSettings({ MARKET_ADAPTER: { AMA_DELTA_THRESHOLD_PERCENT: 0 } }),
     null,
     'non-positive settings value should be ignored'
+);
+
+assert.strictEqual(
+    resolveDeltaThresholdPercentFromGeneralSettings({ MARKET_ADAPTER: { DELTA_THRESHOLD_PERCENT: 3.0 } }),
+    3.0,
+    'renamed DELTA_THRESHOLD_PERCENT should be accepted as fallback'
 );
 
 assert.strictEqual(
@@ -104,7 +110,7 @@ assert.strictEqual(
     const cfg = applyRuntimeDefaultsFromGeneralSettings(
         { deltaThresholdPercent: 1 },
         { deltaThresholdPercent: false },
-        { MARKET_ADAPTER: { DELTA_THRESHOLD_PERCENT: 4 } }
+        { MARKET_ADAPTER: { AMA_DELTA_THRESHOLD_PERCENT: 4 } }
     );
     assert.strictEqual(cfg.deltaThresholdPercent, 4, 'settings should override default when CLI flag absent');
 }
@@ -113,7 +119,7 @@ assert.strictEqual(
     const cfg = applyRuntimeDefaultsFromGeneralSettings(
         { deltaThresholdPercent: 2.5 },
         { deltaThresholdPercent: true },
-        { MARKET_ADAPTER: { DELTA_THRESHOLD_PERCENT: 4 } }
+        { MARKET_ADAPTER: { AMA_DELTA_THRESHOLD_PERCENT: 4 } }
     );
     assert.strictEqual(cfg.deltaThresholdPercent, 2.5, 'CLI-provided deltaPercent should win over settings');
 }

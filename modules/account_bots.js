@@ -56,7 +56,7 @@
  * GLOBAL SETTINGS CONFIGURATION (profiles/general.settings.json):
  * {
  *   "MARKET_ADAPTER": {
- *     "DELTA_THRESHOLD_PERCENT": 2.5  // % change in AMA center price triggers grid reset
+ *     "AMA_DELTA_THRESHOLD_PERCENT": 2.5  // % change in AMA center price triggers grid reset
  *   },
  *   "GRID_LIMITS": {
  *     "GRID_COMPARISON": {
@@ -172,14 +172,20 @@ function loadGeneralSettings() {
         settings.MARKET_ADAPTER = { ...MARKET_ADAPTER };
     }
 
-    const configuredDeltaPercent = Number(settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT);
+    const configuredDeltaPercent = Number(settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT);
+    const renamedDeltaPercent = Number(settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT);
     const legacyResetFactor = Number(settings.MARKET_ADAPTER.GRID_RESET_FACTOR);
     const effectiveDeltaPercent = Number.isFinite(configuredDeltaPercent) && configuredDeltaPercent > 0
         ? configuredDeltaPercent
-        : (Number.isFinite(legacyResetFactor) && legacyResetFactor > 0
-            ? legacyResetFactor
-            : MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT);
-    settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT = effectiveDeltaPercent;
+        : (Number.isFinite(renamedDeltaPercent) && renamedDeltaPercent > 0
+            ? renamedDeltaPercent
+            : (Number.isFinite(legacyResetFactor) && legacyResetFactor > 0
+                ? legacyResetFactor
+                : MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT));
+    settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT = effectiveDeltaPercent;
+    if (Object.prototype.hasOwnProperty.call(settings.MARKET_ADAPTER, 'DELTA_THRESHOLD_PERCENT')) {
+        delete settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT;
+    }
     if (Object.prototype.hasOwnProperty.call(settings.MARKET_ADAPTER, 'GRID_RESET_FACTOR')) {
         delete settings.MARKET_ADAPTER.GRID_RESET_FACTOR;
     }
@@ -989,7 +995,7 @@ async function promptGeneralSettings() {
               : settings.GRID_LIMITS.DUST_CANCEL_DELAY_MIN === 0
                   ? 'instant'
                   : `${settings.GRID_LIMITS.DUST_CANCEL_DELAY_MIN}min`;
-          console.log(`\x1b[1;33m1) Grid Health:\x1b[0m   \x1b[38;5;208mCache:\x1b[0m ${settings.GRID_LIMITS.GRID_REGENERATION_PERCENTAGE}%, \x1b[38;5;208mRMS:\x1b[0m ${settings.GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE}%, \x1b[38;5;208mPriceDelta:\x1b[0m ${settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT}%`);
+          console.log(`\x1b[1;33m1) Grid Health:\x1b[0m   \x1b[38;5;208mCache:\x1b[0m ${settings.GRID_LIMITS.GRID_REGENERATION_PERCENTAGE}%, \x1b[38;5;208mRMS:\x1b[0m ${settings.GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE}%, \x1b[38;5;208mAMA Delta:\x1b[0m ${settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT}%`);
           console.log(`\x1b[1;33m2) Order Recovery:\x1b[0m \x1b[38;5;208mDust:\x1b[0m ${settings.GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE}%, \x1b[38;5;208mDustCancel:\x1b[0m ${dustCancelDisplay}`);
           console.log(`\x1b[1;33m3) Timing (Core):\x1b[0m \x1b[38;5;208mFetchInterval:\x1b[0m ${settings.TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN}min, \x1b[38;5;208mSyncDelay:\x1b[0m ${settings.TIMING.SYNC_DELAY_MS / 1000}s, \x1b[38;5;208mLockTimeout:\x1b[0m ${settings.TIMING.LOCK_TIMEOUT_MS / 1000}s`);
           console.log(`\x1b[1;33m4) Timing (Fill):\x1b[0m \x1b[38;5;208mDedupeWindow:\x1b[0m ${settings.TIMING.FILL_DEDUPE_WINDOW_MS / 1000}s, \x1b[38;5;208mCleanupInterval:\x1b[0m ${settings.TIMING.FILL_CLEANUP_INTERVAL_MS / 1000}s, \x1b[38;5;208mRetention:\x1b[0m ${settings.TIMING.FILL_RECORD_RETENTION_MS / 1000}s`);
@@ -1031,11 +1037,11 @@ async function promptGeneralSettings() {
                 if (mFactor === '\x1b') break;
                 const mOrders = await askIntegerInRange('Minimum Spread Orders (Empty Slots)', settings.GRID_LIMITS.MIN_SPREAD_ORDERS, 1, 10);
                 if (mOrders === '\x1b') break;
-                const priceDelta = await askNumberWithBounds('Price Delta Threshold %', settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT, 0.1, 50.0);
-                if (priceDelta === '\x1b') break;
+                const amaDelta = await askNumberWithBounds('AMA Delta Threshold %', settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT, 0.1, 50.0);
+                if (amaDelta === '\x1b') break;
                 settings.GRID_LIMITS.MIN_SPREAD_FACTOR = mFactor;
                 settings.GRID_LIMITS.MIN_SPREAD_ORDERS = mOrders;
-                settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT = priceDelta;
+                settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT = amaDelta;
                 break;
             case '3':
                 const fetch = await askNumberWithBounds('Blockchain Fetch Interval (min)', settings.TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN, 1, 1440);

@@ -8,7 +8,7 @@ DEXBot2 uses **three independent grid recalculation triggers** to keep the tradi
 
 | Mechanism | Trigger | Config | Location | Scope |
 |-----------|---------|--------|----------|-------|
-| **AMA Delta** | Market price moved significantly | `DELTA_THRESHOLD_PERCENT` | `general.settings.json` | Global (all bots) |
+| **AMA Delta** | Market price moved significantly | `AMA_DELTA_THRESHOLD_PERCENT` | `general.settings.json` | Global (all bots) |
 | **RMS Divergence** | Grid state diverged from blockchain | `RMS_PERCENTAGE` | `general.settings.json` | Global (all bots) |
 | **Regeneration** | Available funds exceed threshold | `GRID_REGENERATION_PERCENTAGE` | `constants.js` | Per-side (BUY/SELL) |
 
@@ -29,13 +29,13 @@ Monitors the Adaptive Moving Average (AMA) of market prices. When the AMA center
 ```json
 {
   "MARKET_ADAPTER": {
-    "DELTA_THRESHOLD_PERCENT": 1
+    "AMA_DELTA_THRESHOLD_PERCENT": 1
   }
 }
 ```
 
 **Parameters:**
-- `DELTA_THRESHOLD_PERCENT`: Percentage change in AMA center that triggers grid reset
+- `AMA_DELTA_THRESHOLD_PERCENT`: Percentage change in AMA center that triggers grid reset
   - Default: `1%`
   - Range: `0.1` to `50.0` (configurable via CLI and bot editor)
   - Example: If set to `1`, grid recalculates when AMA center moves ±1% from last center
@@ -78,7 +78,7 @@ node market_adapter/price_adapter.js --deltaPercent 2
 2. Loads per-bot AMA configuration (or uses defaults)
 3. Calculates AMA from 1h candlestick closing prices
 4. Tracks the **AMA center price** for each bot
-5. When `|currentAMA - lastRecordedAMA| >= DELTA_THRESHOLD_PERCENT`:
+5. When `|currentAMA - lastRecordedAMA| >= AMA_DELTA_THRESHOLD_PERCENT`:
    - Creates `market_adapter/state/recalculate.<botKey>.trigger` file
    - DEXBot's main loop detects the trigger and calls `Grid.recalculateGrid()`
 6. Last recorded center is updated after recalculation
@@ -235,7 +235,7 @@ All three mechanisms are **independent**:
 ```json
 {
   "MARKET_ADAPTER": {
-    "DELTA_THRESHOLD_PERCENT": 0.5  // Respond to small moves
+    "AMA_DELTA_THRESHOLD_PERCENT": 0.5  // Respond to small moves
   },
   "GRID_LIMITS": {
     "GRID_REGENERATION_PERCENTAGE": 1,  // Regen frequently
@@ -254,7 +254,7 @@ All three mechanisms are **independent**:
 ```json
 {
   "MARKET_ADAPTER": {
-    "DELTA_THRESHOLD_PERCENT": 2  // Ignore minor moves
+    "AMA_DELTA_THRESHOLD_PERCENT": 2  // Ignore minor moves
   },
   "GRID_LIMITS": {
     "GRID_REGENERATION_PERCENTAGE": 5,  // Regen sparingly
@@ -273,7 +273,7 @@ All three mechanisms are **independent**:
 ```json
 {
   "MARKET_ADAPTER": {
-    "DELTA_THRESHOLD_PERCENT": 1  // Standard threshold
+    "AMA_DELTA_THRESHOLD_PERCENT": 1  // Standard threshold
   },
   "GRID_LIMITS": {
     "GRID_REGENERATION_PERCENTAGE": 3,  // Moderate utilization
@@ -317,7 +317,7 @@ Check the logs for these messages:
 - Grid will never auto-correct blockchain state drift
 - Manual intervention required if major divergence occurs
 
-❌ **Don't:** Set `DELTA_THRESHOLD_PERCENT` too low (< 0.5%)
+❌ **Don't:** Set `AMA_DELTA_THRESHOLD_PERCENT` too low (< 0.5%)
 - Grid regens constantly (high fees)
 - May never stabilize in choppy markets
 
@@ -326,8 +326,8 @@ Check the logs for these messages:
 - Confusing configuration state
 
 ✅ **Do:** Understand your market's volatility
-- Trending markets: Lower DELTA_THRESHOLD_PERCENT
-- Choppy markets: Raise both DELTA_THRESHOLD_PERCENT and RMS_PERCENTAGE
+- Trending markets: Lower AMA_DELTA_THRESHOLD_PERCENT
+- Choppy markets: Raise both AMA_DELTA_THRESHOLD_PERCENT and RMS_PERCENTAGE
 - High-fill markets: Lower GRID_REGENERATION_PERCENTAGE
 
 ✅ **Do:** Monitor grid recalculation frequency

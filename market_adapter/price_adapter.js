@@ -20,7 +20,7 @@
  *
  * 1. AMA DELTA THRESHOLD (this file / market adapter)
  *    Triggers when market price moves significantly from last recorded AMA center
- *    ├─ Controlled by: MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT
+ *    ├─ Controlled by: MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT
  *    ├─ Location: profiles/general.settings.json
  *    ├─ Default: 2.5% (grid resets when AMA moves ±2.5%)
  *    ├─ CLI override: --deltaPercent <percent>
@@ -87,7 +87,7 @@ const API_MAX_PAGE = 101;
 
 const DEFAULTS = {
     pollSeconds: 3600,
-    deltaThresholdPercent: MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT,
+    deltaThresholdPercent: MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT,
     intervalSeconds: 3600,
     bootstrapLookbackHours: 720,
     nativeBackfillHours: 6,
@@ -327,7 +327,7 @@ function printHelp() {
     console.log('Options:');
     console.log('  --once                 Run one cycle and exit');
     console.log('  --pollSeconds <n>      Loop interval seconds (default 3600)');
-    console.log('  --deltaPercent <n>     Trigger threshold percent (default: general.settings MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT or 2.5)');
+    console.log('  --deltaPercent <n>     Trigger threshold percent (default: general.settings MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT or 2.5)');
     console.log('  --bootstrapHours <n>   Kibana bootstrap lookback hours (default 720)');
     console.log('  --nativeBackfillHours  Native incremental lookback hours (default 6)');
     console.log('  --maxStaleHours <n>    Max accepted candle staleness before trigger suppression (default 6)');
@@ -366,8 +366,11 @@ function validateConfig(input) {
 }
 
 function resolveDeltaThresholdPercentFromGeneralSettings(settings) {
-    const explicit = Number(settings?.MARKET_ADAPTER?.DELTA_THRESHOLD_PERCENT);
+    const explicit = Number(settings?.MARKET_ADAPTER?.AMA_DELTA_THRESHOLD_PERCENT);
     if (Number.isFinite(explicit) && explicit > 0) return explicit;
+
+    const renamed = Number(settings?.MARKET_ADAPTER?.DELTA_THRESHOLD_PERCENT);
+    if (Number.isFinite(renamed) && renamed > 0) return renamed;
 
     const legacy = Number(settings?.MARKET_ADAPTER?.GRID_RESET_FACTOR);
     if (Number.isFinite(legacy) && legacy > 0) return legacy;

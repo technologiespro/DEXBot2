@@ -47,11 +47,17 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Optimistic ChainFree**: The mechanism that allows the bot to trade with fill proceeds before they are finalized on-chain.
 - **Fill Batch Processing**: Fixed-cap batching for efficient fill processing (`<=4` unified, `>4` chunked)
 - **Partial Order Consolidation**: Simplified, direct consolidation through grid rebuilding (no merge/split mechanics)
-- **Dust Detection & Management**: Unhealthy partials are absorbed into next grid rebuild cycle
+- **Dust Detection & Management**: Unhealthy partials are absorbed into next grid rebuild cycle or auto-cancelled on-chain after a configurable delay (`DUST_CANCEL_DELAY_MIN`)
 - **BTS Fee Object Structure**: `netProceeds` field for accounting precision
 - **BUY Side Sizing & Fee Accounting**: Correct fee application by order side
 - **Mixed Order Fund Validation**: Separate validation for BUY vs SELL order fund checks
 - **Fee Management**: Detailed logic for BTS fee reservations and market fee deductions.
+
+### 📊 [Grid Recalculation](GRID_RECALCULATION.md)
+*When and why the grid resets.*
+- **Three Independent Triggers**: AMA Delta (market move), RMS Divergence (state drift), and Cache Regeneration (fund accumulation)
+- **Configuration**: Per-trigger thresholds and their defaults
+- **AMA Delta**: How the market adapter's price signal drives grid repositioning
 
 ### 📝 [Logging System](LOGGING.md)
 *Observability and debugging.*
