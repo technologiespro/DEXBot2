@@ -48,6 +48,7 @@ const { setNotifyStatusCallback } = require('btsdex-api');
 
 let patched = false;
 let resubscribePatchApplied = false;
+const verboseReconnectLogging = process.env.BTSDEX_EVENT_PATCH_VERBOSE === '1';
 
 try {
     const eventModule = require('btsdex/lib/event');
@@ -55,7 +56,55 @@ try {
     const EventClass = eventModule && (eventModule.default || eventModule);
     const accountHelpers = accountModule && (accountModule.default || accountModule);
 
-    // Patch 1: updateAccounts
+    // Patch 1: getUpdate
+    // Replaces btsdex's default implementation which assumes block.map.all
+    // already exists. During reconnects, notice messages can arrive before the
+    // event graph is fully rehydrated, which otherwise throws at
+    // `this.block.map.all.events = []`.
+    if (EventClass && typeof EventClass.getUpdate === 'function') {
+        EventClass.getUpdate = function (updates) {
+            if (!this.block) return;
+            if (!this.block.map) this.block.map = {};
+            if (!this.block.map.all) {
+                this.block.map.all = {
+                    subs: new Set(),
+                    events: []
+                };
+            } else if (!Array.isArray(this.block.map.all.events)) {
+                this.block.map.all.events = [];
+            } else {
+                this.block.map.all.events.length = 0;
+            }
+
+            const accountMap = this.account && this.account.map ? this.account.map : {};
+            const ids = Object.keys(accountMap)
+                .map(accName => accountMap[accName] && accountMap[accName].id)
+                .filter(Boolean);
+            const updateAcc = new Set();
+
+            if (Array.isArray(updates)) {
+                updates.forEach(array => {
+                    if (!Array.isArray(array)) return;
+                    array.forEach(obj => {
+                        if (!obj || !obj.id) return;
+                        if (obj.id === '2.1.0') {
+                            this.block.map.all.events.push(obj);
+                        } else if (/^2\.5\./.test(obj.id) && ids.includes(obj.owner)) {
+                            updateAcc.add(obj.owner);
+                        }
+                    });
+                });
+            }
+
+            if (typeof this.block.notify === 'function') this.block.notify();
+            if (updateAcc.size > 0 && typeof this.updateAccounts === 'function') {
+                this.updateAccounts(updateAcc);
+            }
+        };
+        patched = true;
+    }
+
+    // Patch 2: updateAccounts
     // Replaces btsdex's default implementation which crashes on empty history
     // and does not handle missing account map entries gracefully.
     if (EventClass && typeof EventClass.updateAccounts === 'function') {
@@ -88,7 +137,7 @@ try {
         patched = true;
     }
 
-    // Patch 2: resubscribe on silent auto-reconnect
+    // Patch 3: resubscribe on silent auto-reconnect
     // btsdex-api's onClose calls setTimeout(connectSocket, reconnectTimeout)
     // for auto-reconnect, which re-runs onOpen but never calls Event.resubscribe().
     // We use setNotifyStatusCallback (fires on every connection status change) to
@@ -104,7 +153,9 @@ try {
                 } else {
                     // Subsequent connect: auto-reconnect happened. Re-register
                     // setSubscribeCallback and getFullAccounts(accounts, true).
-                    console.log('[btsdex_event_patch] WebSocket reconnected, calling Event.resubscribe()');
+                    if (verboseReconnectLogging) {
+                        console.log('[btsdex_event_patch] WebSocket reconnected, calling Event.resubscribe()');
+                    }
                     EventClass.resubscribe().catch(err => {
                         console.error('[btsdex_event_patch] resubscribe failed after reconnect:', err.message || err);
                     });
