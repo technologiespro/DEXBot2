@@ -1039,12 +1039,12 @@ class DEXBot {
                                 const healthResult = await this.manager.checkGridHealth(
                                     this.updateOrdersOnChainPlan.bind(this)
                                 );
-                                await this._cancelDustOrders({
+                                const dustCancelResult = await this._cancelDustOrders({
                                     buy: healthResult.buyDustOrders,
                                     sell: healthResult.sellDustOrders,
                                 });
-                                if (healthResult.buyDust && healthResult.sellDust) {
-                                    await this.manager.persistGrid();
+                                if (dustCancelResult?.batchResult?.abortedForIllegalState || dustCancelResult?.batchResult?.abortedForAccountingFailure) {
+                                    abortedFillCycle = true;
                                 }
                             } else {
                                 // Pipeline not empty - defer grid health check to prevent premature modifications
@@ -1064,7 +1064,7 @@ class DEXBot {
                         // Before: Divergence checks ran immediately after fills, causing race-to-resize
                         // After: Grid maintenance waits for isPipelineEmpty() before structural changes
                         // Run only when the cycle contains at least one full fill.
-                        if (shouldRunPostFillChecks) {
+                        if (shouldRunPostFillChecks && !abortedFillCycle) {
                             await this._runGridMaintenance('post-fill', { fillLockAlreadyHeld: true });
                         }
                     }
@@ -2939,14 +2939,13 @@ class DEXBot {
                 this.updateOrdersOnChainPlan.bind(this)
             );
             if (await this._abortFlowIfIllegalState(`${context} health check`)) return;
-            await this._cancelDustOrders({
+            const dustCancelResult = await this._cancelDustOrders({
                 buy: healthResult.buyDustOrders,
                 sell: healthResult.sellDustOrders,
             });
-            if (healthResult.buyDust && healthResult.sellDust) {
-                await this._persistAndRecoverIfNeeded();
+            if (dustCancelResult?.batchResult?.abortedForIllegalState || dustCancelResult?.batchResult?.abortedForAccountingFailure) {
+                return;
             }
-
             // ================================================================================
             // STEP 2: THRESHOLD AND DIVERGENCE CHECKS
             // ================================================================================
@@ -3016,15 +3015,15 @@ class DEXBot {
      * from dust (size grows back above threshold) have their timer reset automatically.
      *
      * After a successful cancel the order slot is virtualised (size=0, state=VIRTUAL)
-     * and recalculateFunds() is called so normal grid maintenance picks up the freed slot.
+     * and a synthetic delayed-rotation event is sent through the normal fill pipeline.
      *
      * @param {{ buy: Array, sell: Array }} dustOrders - Dust order lists from checkGridHealth.
-     * @returns {Promise<number>} Number of orders successfully cancelled.
+     * @returns {Promise<{cancelledCount: number, batchResult: Object|null}>}
      * @private
      */
     async _cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {}) {
         const delayMin = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
-        if (!Number.isFinite(delayMin) || delayMin < 0) return 0;
+        if (!Number.isFinite(delayMin) || delayMin < 0) return { cancelledCount: 0, batchResult: null };
 
         const now = Date.now();
         const delayMs = delayMin * 60_000;
@@ -3050,16 +3049,23 @@ class DEXBot {
             return (now - firstSeen) >= delayMs;
         });
 
-        if (toCancel.length === 0) return 0;
+        if (toCancel.length === 0) return { cancelledCount: 0, batchResult: null };
 
         let cancelledCount = 0;
+        const syntheticFills = [];
         for (const order of toCancel) {
             try {
                 // Use the established cancel pattern: single call handles build + broadcast,
                 // then synchronizeWithChain acquires _gridLock before applying the sync.
                 await chainOrders.cancelOrder(this.account, this.privateKey, order.orderId);
-                await this.manager.synchronizeWithChain(order.orderId, 'cancelOrder');
+                await this.manager.synchronizeWithChain({ orderId: order.orderId, clearSize: true }, 'cancelOrder');
 
+                syntheticFills.push({
+                    ...order,
+                    isPartial: true,
+                    isDelayedRotationTrigger: true,
+                    dustCancelTriggeredAt: now
+                });
                 this._dustSinceMap.delete(order.orderId);
                 cancelledCount++;
                 this._log(
@@ -3072,11 +3078,23 @@ class DEXBot {
             }
         }
 
-        if (cancelledCount > 0) {
+        let batchResult = null;
+        if (syntheticFills.length > 0) {
+            const rebalanceResult = await this.manager.processFilledOrders(syntheticFills, new Set());
+            batchResult = await this._executeBatchIfNeeded(
+                rebalanceResult,
+                `dust cancel [${syntheticFills.map(o => o.id).join(', ')}]`
+            );
+
+            if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure) {
+                await this.manager.persistGrid();
+            }
+        } else if (cancelledCount > 0) {
             await this.manager.recalculateFunds();
+            await this.manager.persistGrid();
         }
 
-        return cancelledCount;
+        return { cancelledCount, batchResult };
     }
 
     /**

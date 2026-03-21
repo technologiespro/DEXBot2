@@ -876,28 +876,9 @@ class OrderManager {
         // Step 1: Handle Fills (Accounting & State Updates)
         await this.strategy.processFillsOnly(orders, excl);
 
-        // Step 2: Trigger Safe Rebalance
-        // Criteria for rebalance:
-        // 1. We have actual fills (non-partial)
-        // 2. We have dual-side dust (unhealthy partials on both sides)
+        // Step 2: Trigger Safe Rebalance only for actual fills.
         const triggerFills = orders.filter(f => !f.isPartial || f.isDelayedRotationTrigger);
-        let shouldRebalance = triggerFills.length > 0;
-
-        if (!shouldRebalance) {
-            const allOrders = Array.from(this.orders.values());
-            const { getPartialsByType } = require('./utils/order');
-            const { buy: buyPartials, sell: sellPartials } = getPartialsByType(allOrders);
-
-            if (buyPartials.length > 0 && sellPartials.length > 0) {
-                const buyHasDust = await this.strategy.hasAnyDust(buyPartials, 'buy');
-                const sellHasDust = await this.strategy.hasAnyDust(sellPartials, 'sell');
-
-                if (buyHasDust && sellHasDust) {
-                    this.logger.log('[BOUNDARY] Dual-side dust partials detected. Triggering rebalance.', 'info');
-                    shouldRebalance = true;
-                }
-            }
-        }
+        const shouldRebalance = triggerFills.length > 0;
 
         if (shouldRebalance) {
             const rebalanceResult = await this.performSafeRebalance(orders, excl);

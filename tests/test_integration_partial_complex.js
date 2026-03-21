@@ -218,10 +218,10 @@ async function testEdgeBoundGridWithPartial() {
 }
 
 // ============================================================================
-// TEST 6: Dual-Side Dust at Startup
+// TEST 6: Dust at Startup Does Not Force Rebalance
 // ============================================================================
-async function testStartupDualDustTrigger() {
-    console.log('TEST 6: Dual-Side Dust at Startup');
+async function testStartupDustNoForcedRebalance() {
+    console.log('TEST 6: Dust at Startup Does Not Force Rebalance');
 
     const mgr = new OrderManager({
         assetA: 'IOB.XRP', assetB: 'BTS', startPrice: 1800,
@@ -288,8 +288,8 @@ async function testStartupDualDustTrigger() {
         chainOpenOrders: chainDustOrders
     });
 
-    assert.strictEqual(rebalanceCalled, true, 'Should have triggered full rebalance for dual-side dust at startup');
-    console.log(`  ✓ Dual-side dust at startup correctly triggered rebalance\n`);
+    assert.strictEqual(rebalanceCalled, false, 'Startup dust should not trigger full rebalance');
+    console.log('  ✓ Startup dust no longer forces rebalance\n');
     
     mgr.performSafeRebalance = originalRebalance;
     mgr._applySafeRebalanceCOW = originalApplyRebalance;
@@ -302,7 +302,7 @@ async function testStartupDualDustTrigger() {
         await testRebalancingWithExistingPartial();
         await testGridNavigationWithPartials();
         await testEdgeBoundGridWithPartial();
-        await testStartupDualDustTrigger();
+        await testStartupDustNoForcedRebalance();
 
         console.log('===================================================');
         console.log('✓ All Integration Tests PASSED');

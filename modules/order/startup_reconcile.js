@@ -60,7 +60,7 @@
 
 const { ORDER_TYPES, ORDER_STATES, TIMING } = require('../constants');
 const { getMinAbsoluteOrderSize, getAssetFees } = require('./utils/math');
-const { isOrderPlaced, parseChainOrder, buildCreateOrderArgs, isOrderOnChain, getPartialsByType, buildOutsideInPairGroups, extractBatchOperationResults } = require('./utils/order');
+const { isOrderPlaced, parseChainOrder, buildCreateOrderArgs, isOrderOnChain, buildOutsideInPairGroups, extractBatchOperationResults } = require('./utils/order');
 const { resolveAccountRef } = require('./utils/system');
 const Format = require('./format');
 
@@ -1298,21 +1298,6 @@ async function reconcileStartupOrders({
             `gridActive(sell=${_countActiveOnGrid(manager, ORDER_TYPES.SELL)}, buy=${_countActiveOnGrid(manager, ORDER_TYPES.BUY)})`,
             'info'
         );
-
-        // DUST CHECK: If startup reconcile resulted in partials on either side,
-        // trigger a full rebalance to consolidate them.
-        const allOrders = Array.from(manager.orders.values());
-        const { buy: buyPartials, sell: sellPartials } = getPartialsByType(allOrders);
-
-        if (buyPartials.length > 0 && sellPartials.length > 0) {
-            const buyHasDust = await manager.strategy.hasAnyDust(buyPartials, 'buy');
-            const sellHasDust = await manager.strategy.hasAnyDust(sellPartials, 'sell');
-
-            if (buyHasDust && sellHasDust) {
-                logger && logger.log && logger.log('[STARTUP] Dual-side dust partials detected. Triggering full rebalance.', 'info');
-                return await manager._applySafeRebalanceCOW();
-            }
-        }
 
         return null;
     });

@@ -95,7 +95,8 @@ const {
     blockchainToFloat,
     floatToBlockchainInt,
     hasValidAccountTotals,
-    calculatePriceTolerance
+    calculatePriceTolerance,
+    getAssetFees
 } = require('./utils/math');
 const {
     parseChainOrder,
@@ -856,7 +857,10 @@ class SyncEngine {
                 break;
             }
             case 'cancelOrder': {
-                const orderId = chainData;
+                const orderId = typeof chainData === 'object' && chainData !== null
+                    ? chainData.orderId
+                    : chainData;
+                const clearSize = !!(typeof chainData === 'object' && chainData !== null && chainData.clearSize);
                 const btsFeeData = getAssetFees('BTS');
                 const gridOrder = findMatchingGridOrderByOpenOrder({ orderId }, { orders: mgr.orders, assets: mgr.assets, calcToleranceFn: (p, s, t) => calculatePriceTolerance(p, s, t, mgr.assets), logger: mgr.logger });
                 
@@ -868,7 +872,10 @@ class SyncEngine {
                         // Re-fetch to ensure we have latest state after acquiring lock
                         const currentGridOrder = mgr.orders.get(gridOrder.id);
                         if (currentGridOrder && currentGridOrder.orderId === orderId) {
-                            await mgr._applyOrderUpdate(virtualizeOrder(currentGridOrder), 'cancel-order', {
+                            const nextOrder = clearSize
+                                ? { ...virtualizeOrder(currentGridOrder), size: 0 }
+                                : virtualizeOrder(currentGridOrder);
+                            await mgr._applyOrderUpdate(nextOrder, 'cancel-order', {
                                 skipAccounting: false,
                                 fee: btsFeeData?.cancelFee || 0
                             });
