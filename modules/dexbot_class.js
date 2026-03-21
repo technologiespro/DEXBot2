@@ -195,6 +195,7 @@ class DEXBot {
         this._fillsUnsubscribe = null;
         this._triggerWatcher = null;
         this._triggerDebounceTimer = null;
+        this._dustMaintenanceTimer = null;
         this._mainLoopActive = false;
         this._mainLoopPromise = null;
 
@@ -899,12 +900,14 @@ class DEXBot {
                             this.manager.logger.log(`Syncing ${fillsToSync.length} fill(s) (history mode)`, 'info');
                             for (const fill of fillsToSync) {
                                 const resultHistory = await this.manager.syncFromFillHistory(fill);
+                                await this._seedDustTimersFromPartialUpdates(resultHistory.updatedOrders, Date.now());
                                 if (resultHistory.filledOrders) resolvedOrders.push(...resultHistory.filledOrders);
                             }
                         } else {
                             this.manager.logger.log(`Syncing ${fillsToSync.length} fill(s) (open orders mode)`, 'info');
                             const chainOpenOrders = await chainOrders.readOpenOrders(this.account);
                             const resultOpenOrders = await this.manager.syncFromOpenOrders(chainOpenOrders);
+                            await this._seedDustTimersFromPartialUpdates(resultOpenOrders.updatedOrders, Date.now());
                             if (resultOpenOrders.filledOrders) resolvedOrders.push(...resultOpenOrders.filledOrders);
                             if (resultOpenOrders.ordersNeedingCorrection) ordersNeedingCorrection.push(...resultOpenOrders.ordersNeedingCorrection);
                         }
@@ -3023,7 +3026,10 @@ class DEXBot {
      */
     async _cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {}) {
         const delayMin = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
-        if (!Number.isFinite(delayMin) || delayMin < 0) return { cancelledCount: 0, batchResult: null };
+        if (!Number.isFinite(delayMin) || delayMin < 0) {
+            this._clearDustMaintenanceTimer();
+            return { cancelledCount: 0, batchResult: null };
+        }
 
         const now = Date.now();
         const delayMs = delayMin * 60_000;
@@ -3049,7 +3055,10 @@ class DEXBot {
             return (now - firstSeen) >= delayMs;
         });
 
-        if (toCancel.length === 0) return { cancelledCount: 0, batchResult: null };
+        if (toCancel.length === 0) {
+            this._scheduleDustMaintenanceCheck();
+            return { cancelledCount: 0, batchResult: null };
+        }
 
         let cancelledCount = 0;
         const syntheticFills = [];
@@ -3094,7 +3103,94 @@ class DEXBot {
             await this.manager.persistGrid();
         }
 
+        this._scheduleDustMaintenanceCheck();
         return { cancelledCount, batchResult };
+    }
+
+    _clearDustMaintenanceTimer() {
+        if (this._dustMaintenanceTimer) {
+            clearTimeout(this._dustMaintenanceTimer);
+            this._dustMaintenanceTimer = null;
+        }
+    }
+
+    _scheduleDustMaintenanceCheck() {
+        this._clearDustMaintenanceTimer();
+
+        const delayMin = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
+        if (
+            this._shuttingDown ||
+            !this.manager ||
+            !Number.isFinite(delayMin) ||
+            delayMin < 0 ||
+            this._dustSinceMap.size === 0
+        ) {
+            return;
+        }
+
+        const delayMs = delayMin * 60_000;
+        const now = Date.now();
+        let nextRunAt = Number.POSITIVE_INFINITY;
+
+        for (const firstSeen of this._dustSinceMap.values()) {
+            if (!Number.isFinite(firstSeen)) continue;
+            nextRunAt = Math.min(nextRunAt, firstSeen + delayMs);
+        }
+
+        const nextDelayMs = Number.isFinite(nextRunAt)
+            ? Math.max(0, nextRunAt - now)
+            : delayMs;
+
+        this._dustMaintenanceTimer = setTimeout(() => {
+            this._dustMaintenanceTimer = null;
+            if (this._shuttingDown || !this.manager?._fillProcessingLock) return;
+
+            this.manager._fillProcessingLock.acquire(async () => {
+                if (this._shuttingDown) return;
+                await this._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true });
+            }).catch(err => {
+                this._warn(`Error during dust maintenance timer: ${err.message}`);
+            }).finally(() => {
+                if (!this._shuttingDown) {
+                    this._scheduleDustMaintenanceCheck();
+                }
+            });
+        }, nextDelayMs);
+    }
+
+    /**
+     * Seed dust timers immediately when a fill/update first leaves an order in dust state,
+     * instead of waiting for the next maintenance cycle to discover it.
+     * @param {Array<Object>} updatedOrders
+     * @param {number} [detectedAt=Date.now()]
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _seedDustTimersFromPartialUpdates(updatedOrders = [], detectedAt = Date.now()) {
+        if (!this.manager || !Array.isArray(updatedOrders) || updatedOrders.length === 0) return;
+
+        const partialOrders = updatedOrders.filter(order =>
+            order && order.state === ORDER_STATES.PARTIAL && order.orderId
+        );
+        if (partialOrders.length === 0) return;
+
+        const { buyDustOrders, sellDustOrders } = await Grid.checkWindowDust(this.manager);
+        const dustOrderIds = new Set(
+            [...buyDustOrders, ...sellDustOrders].map(order => order.orderId).filter(Boolean)
+        );
+
+        for (const order of partialOrders) {
+            if (!order?.orderId) continue;
+            if (dustOrderIds.has(order.orderId)) {
+                if (!this._dustSinceMap.has(order.orderId)) {
+                    this._dustSinceMap.set(order.orderId, detectedAt);
+                }
+            } else {
+                this._dustSinceMap.delete(order.orderId);
+            }
+        }
+
+        this._scheduleDustMaintenanceCheck();
     }
 
     /**
@@ -3171,6 +3267,8 @@ class DEXBot {
             clearTimeout(this._triggerDebounceTimer);
             this._triggerDebounceTimer = null;
         }
+
+        this._clearDustMaintenanceTimer();
 
         if (this._triggerWatcher && typeof this._triggerWatcher.close === 'function') {
             try {

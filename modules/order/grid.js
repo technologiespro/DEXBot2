@@ -124,7 +124,6 @@ const {
     isSlotAvailable,
     isOrderOnChain,
     hasOnChainId,
-    getPartialsByType,
     calculateIdealBoundary,
     assignGridRoles
 } = require('./utils/order');
@@ -1309,12 +1308,10 @@ class Grid {
     }
 
     /**
-     * Dust check scoped to the active buy/sell window.
+     * Dust check scoped to the top live order on each side.
      *
-     * Unlike checkGridHealth (which scans all partials), this method only considers
-     * partials that fall within the top `activeOrders.buy` buy slots and the bottom
-     * `activeOrders.sell` sell slots by price — the slots that are actively on-chain
-     * and can become "squeezed" when the boundary crawls past a dust partial.
+     * Dust auto-cancel must only act on the closest live on-chain order per side.
+     * Cancelling an interior partial could punch a hole inside the active grid.
      *
      * Returns boolean flags plus the actual dust order objects so callers can act
      * on individual orders (e.g. DUST_CANCEL_DELAY_MIN auto-cancel).
@@ -1326,39 +1323,27 @@ class Grid {
         if (!manager) return { buyDust: false, sellDust: false, buyDustOrders: [], sellDustOrders: [] };
 
         const allOrders = Array.from(manager.orders.values());
-        const { buy: buyPartials, sell: sellPartials } = getPartialsByType(allOrders);
 
-        const activeBuyCount = manager.config.activeOrders?.buy ?? 0;
-        const activeSellCount = manager.config.activeOrders?.sell ?? 0;
+        const isLiveOrder = order =>
+            order &&
+            order.orderId &&
+            order.price != null &&
+            (order.state === ORDER_STATES.ACTIVE || order.state === ORDER_STATES.PARTIAL);
 
         let buyDustOrders = [];
-        if (buyPartials.length > 0 && activeBuyCount > 0) {
-            const windowBuyIds = new Set(
-                allOrders
-                    .filter(o => o.type === ORDER_TYPES.BUY && o.price != null)
-                    .sort((a, b) => b.price - a.price)
-                    .slice(0, activeBuyCount)
-                    .map(o => o.id)
-            );
-            const windowBuyPartials = buyPartials.filter(p => windowBuyIds.has(p.id));
-            if (windowBuyPartials.length > 0) {
-                buyDustOrders = await Grid._getDustOrders(manager, windowBuyPartials, ORDER_TYPES.BUY);
-            }
+        const topBuyOrder = allOrders
+            .filter(o => o.type === ORDER_TYPES.BUY && isLiveOrder(o))
+            .sort((a, b) => b.price - a.price)[0];
+        if (topBuyOrder?.state === ORDER_STATES.PARTIAL) {
+            buyDustOrders = await Grid._getDustOrders(manager, [topBuyOrder], ORDER_TYPES.BUY);
         }
 
         let sellDustOrders = [];
-        if (sellPartials.length > 0 && activeSellCount > 0) {
-            const windowSellIds = new Set(
-                allOrders
-                    .filter(o => o.type === ORDER_TYPES.SELL && o.price != null)
-                    .sort((a, b) => a.price - b.price)
-                    .slice(0, activeSellCount)
-                    .map(o => o.id)
-            );
-            const windowSellPartials = sellPartials.filter(p => windowSellIds.has(p.id));
-            if (windowSellPartials.length > 0) {
-                sellDustOrders = await Grid._getDustOrders(manager, windowSellPartials, ORDER_TYPES.SELL);
-            }
+        const topSellOrder = allOrders
+            .filter(o => o.type === ORDER_TYPES.SELL && isLiveOrder(o))
+            .sort((a, b) => a.price - b.price)[0];
+        if (topSellOrder?.state === ORDER_STATES.PARTIAL) {
+            sellDustOrders = await Grid._getDustOrders(manager, [topSellOrder], ORDER_TYPES.SELL);
         }
 
         return {
@@ -1405,7 +1390,10 @@ class Grid {
         return partials.filter(p => {
             const idx = sideSlots.findIndex(s => s.id === p.id);
             if (idx === -1) return false;
-            const threshold = getSingleDustThreshold(idealSizes[idx]);
+            const threshold = getSingleDustThreshold(
+                idealSizes[idx],
+                GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE
+            );
             return p.size < threshold;
         });
     }
@@ -1429,6 +1417,20 @@ class Grid {
         const type = side === 'buy' ? ORDER_TYPES.BUY : side === 'sell' ? ORDER_TYPES.SELL : null;
         if (!type) return false;
         return await Grid._hasAnyDust(manager, partials, type);
+    }
+
+    /**
+     * Public dust helper that returns the subset of candidate partials currently below
+     * the configured dust threshold for the requested side.
+     * @param {OrderManager} manager
+     * @param {Array<Object>} partials
+     * @param {'buy'|'sell'} side
+     * @returns {Promise<Array<Object>>}
+     */
+    static async getDustOrders(manager, partials, side) {
+        const type = side === 'buy' ? ORDER_TYPES.BUY : side === 'sell' ? ORDER_TYPES.SELL : null;
+        if (!type) return [];
+        return await Grid._getDustOrders(manager, partials, type);
     }
 
     /**

@@ -10,7 +10,7 @@
 
 const assert = require('assert');
 const { OrderManager } = require('../modules/order/manager');
-const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
+const { ORDER_TYPES, ORDER_STATES, GRID_LIMITS } = require('../modules/constants');
 const Grid = require('../modules/order/grid');
 const { _setFeeCache } = require('../modules/order/utils/math');
 const DEXBot = require('../modules/dexbot_class');
@@ -221,13 +221,14 @@ async function testDustCancelSyntheticRotation() {
     console.log('Testing Dust Cancel Synthetic Rotation...');
 
     const originalCancelOrder = chainOrders.cancelOrder;
+    let bot;
     try {
         let cancelCalls = 0;
         let syncCalls = 0;
         let processCalls = 0;
         let persistCalls = 0;
 
-        const bot = new DEXBot({
+        bot = new DEXBot({
             botKey: 'test_dust_cancel_rotation',
             dryRun: false,
             startPrice: 1,
@@ -286,6 +287,9 @@ async function testDustCancelSyntheticRotation() {
         assert.strictEqual(persistCalls, 1, 'Dust cancel should persist the updated grid');
         console.log('  ✓ Dust cancel triggers synthetic delayed rotation only after timer expiry');
     } finally {
+        if (typeof bot?._clearDustMaintenanceTimer === 'function') {
+            bot._clearDustMaintenanceTimer();
+        }
         chainOrders.cancelOrder = originalCancelOrder;
     }
 }
@@ -294,11 +298,12 @@ async function testDustCancelDoesNotBeatRealFill() {
     console.log('Testing Dust Cancel Real Fill Precedence...');
 
     const originalCancelOrder = chainOrders.cancelOrder;
+    let bot;
     try {
         let processCalls = 0;
         let persistCalls = 0;
 
-        const bot = new DEXBot({
+        bot = new DEXBot({
             botKey: 'test_dust_cancel_precedence',
             dryRun: false,
             startPrice: 1,
@@ -344,7 +349,322 @@ async function testDustCancelDoesNotBeatRealFill() {
         assert.strictEqual(persistCalls, 0, 'Failed cancel should not persist synthetic changes');
         console.log('  ✓ Real fill / failed cancel path does not trigger synthetic rotation');
     } finally {
+        if (typeof bot?._clearDustMaintenanceTimer === 'function') {
+            bot._clearDustMaintenanceTimer();
+        }
         chainOrders.cancelOrder = originalCancelOrder;
+    }
+}
+
+async function testDustTimerStartsAtDustFill() {
+    console.log('Testing Dust Timer Starts At Fill Detection...');
+
+    _setFeeCache({
+        BTS: {
+            limitOrderCreate: { bts: 0.1 },
+            limitOrderCancel: { bts: 0 },
+            limitOrderUpdate: { bts: 0.001 }
+        }
+    });
+
+    const manager = new OrderManager({
+        assetA: 'TESTA',
+        assetB: 'TESTB',
+        startPrice: 1.0,
+        botFunds: { buy: 1000, sell: 1000 },
+        activeOrders: { buy: 5, sell: 5 },
+        incrementPercent: 1,
+        weightDistribution: { buy: 1, sell: 1 }
+    });
+
+    manager.assets = {
+        assetA: { id: '1.3.1', symbol: 'TESTA', precision: 5 },
+        assetB: { id: '1.3.2', symbol: 'TESTB', precision: 5 }
+    };
+
+    await manager.setAccountTotals({
+        buy: 1000,
+        sell: 1000,
+        buyFree: 1000,
+        sellFree: 1000
+    });
+
+    manager.logger = {
+        log: () => {},
+        logFundsStatus: () => {}
+    };
+
+    await manager._updateOrder({
+        id: 'dust-timer-sell',
+        type: ORDER_TYPES.SELL,
+        state: ORDER_STATES.PARTIAL,
+        size: 0.00001,
+        price: 1.1,
+        orderId: '1.7.902'
+    });
+
+    const bot = new DEXBot({
+        botKey: 'test_dust_timer_start',
+        dryRun: false,
+        startPrice: 1,
+        assetA: 'TESTA',
+        assetB: 'TESTB',
+        incrementPercent: 1,
+        weightDistribution: { buy: 1, sell: 1 },
+        activeOrders: { buy: 5, sell: 5 },
+        botFunds: { buy: 1000, sell: 1000 }
+    });
+    bot.manager = manager;
+
+    try {
+        const detectedAt = Date.now();
+        const dustOrder = manager.orders.get('dust-timer-sell');
+
+        await bot._seedDustTimersFromPartialUpdates([dustOrder], detectedAt);
+        assert.strictEqual(bot._dustSinceMap.get('1.7.902'), detectedAt, 'Dust timer should start at fill detection time');
+
+        await bot._seedDustTimersFromPartialUpdates([dustOrder], detectedAt + 1000);
+        assert.strictEqual(bot._dustSinceMap.get('1.7.902'), detectedAt, 'Existing dust timer should not be reset by later detections');
+        console.log('  ✓ Dust timer starts when the order first becomes dust');
+    } finally {
+        bot._clearDustMaintenanceTimer();
+    }
+}
+
+async function testDustThresholdUsesConfiguredPercentage() {
+    console.log('Testing Dust Threshold Uses Configured Percentage...');
+
+    const originalThreshold = GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE;
+    GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE = 10;
+
+    try {
+        const manager = new OrderManager({
+            assetA: 'TESTA',
+            assetB: 'TESTB',
+            startPrice: 1.0,
+            botFunds: { buy: 1000, sell: 1000 },
+            activeOrders: { buy: 5, sell: 5 },
+            incrementPercent: 1,
+            weightDistribution: { buy: 1, sell: 1 }
+        });
+
+        manager.assets = {
+            assetA: { id: '1.3.1', symbol: 'TESTA', precision: 5 },
+            assetB: { id: '1.3.2', symbol: 'TESTB', precision: 5 }
+        };
+
+        await manager.setAccountTotals({
+            buy: 1000,
+            sell: 1000,
+            buyFree: 1000,
+            sellFree: 1000
+        });
+
+        manager.logger = {
+            log: () => {},
+            logFundsStatus: () => {}
+        };
+
+        await manager._updateOrder({
+            id: 'threshold-sell-1',
+            type: ORDER_TYPES.SELL,
+            state: ORDER_STATES.ACTIVE,
+            size: 10,
+            price: 1.01,
+            orderId: '1.7.910'
+        });
+
+        await manager._updateOrder({
+            id: 'threshold-sell-2',
+            type: ORDER_TYPES.SELL,
+            state: ORDER_STATES.PARTIAL,
+            size: 0.95,
+            price: 1.02,
+            orderId: '1.7.911'
+        });
+
+        await manager._updateOrder({
+            id: 'threshold-sell-3',
+            type: ORDER_TYPES.SELL,
+            state: ORDER_STATES.ACTIVE,
+            size: 10,
+            price: 1.03,
+            orderId: '1.7.912'
+        });
+
+        const dustOrders = await Grid.getDustOrders(manager, [manager.orders.get('threshold-sell-2')], 'sell');
+        assert.strictEqual(dustOrders.length, 1, 'Configured dust threshold should classify the order as dust');
+        console.log('  ✓ Dust detection respects configured threshold percentage');
+    } finally {
+        GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE = originalThreshold;
+    }
+}
+
+async function testDustTrackingOnlyUsesTopLiveOrder() {
+    console.log('Testing Dust Tracking Only Uses Top Live Order...');
+
+    _setFeeCache({
+        BTS: {
+            limitOrderCreate: { bts: 0.1 },
+            limitOrderCancel: { bts: 0 },
+            limitOrderUpdate: { bts: 0.001 }
+        }
+    });
+
+    const manager = new OrderManager({
+        assetA: 'TESTA',
+        assetB: 'TESTB',
+        startPrice: 1.0,
+        botFunds: { buy: 1000, sell: 1000 },
+        activeOrders: { buy: 5, sell: 5 },
+        incrementPercent: 1,
+        weightDistribution: { buy: 1, sell: 1 }
+    });
+
+    manager.assets = {
+        assetA: { id: '1.3.1', symbol: 'TESTA', precision: 5 },
+        assetB: { id: '1.3.2', symbol: 'TESTB', precision: 5 }
+    };
+
+    await manager.setAccountTotals({
+        buy: 1000,
+        sell: 1000,
+        buyFree: 1000,
+        sellFree: 1000
+    });
+
+    manager.logger = {
+        log: () => {},
+        logFundsStatus: () => {}
+    };
+
+    await manager._updateOrder({
+        id: 'top-sell',
+        type: ORDER_TYPES.SELL,
+        state: ORDER_STATES.ACTIVE,
+        size: 10,
+        price: 1.01,
+        orderId: '1.7.930'
+    });
+    await manager._updateOrder({
+        id: 'inner-dust-sell',
+        type: ORDER_TYPES.SELL,
+        state: ORDER_STATES.PARTIAL,
+        size: 0.00001,
+        price: 1.02,
+        orderId: '1.7.931'
+    });
+    await manager._updateOrder({
+        id: 'outer-sell',
+        type: ORDER_TYPES.SELL,
+        state: ORDER_STATES.ACTIVE,
+        size: 10,
+        price: 1.03,
+        orderId: '1.7.932'
+    });
+
+    const bot = new DEXBot({
+        botKey: 'test_top_order_dust_only',
+        dryRun: false,
+        startPrice: 1,
+        assetA: 'TESTA',
+        assetB: 'TESTB',
+        incrementPercent: 1,
+        weightDistribution: { buy: 1, sell: 1 },
+        activeOrders: { buy: 5, sell: 5 },
+        botFunds: { buy: 1000, sell: 1000 }
+    });
+    bot.manager = manager;
+
+    try {
+        const detectedAt = Date.now();
+        const innerDust = manager.orders.get('inner-dust-sell');
+
+        const initialHealth = await Grid.checkWindowDust(manager);
+        assert.strictEqual(initialHealth.sellDustOrders.length, 0, 'Interior dust should not be selected when top order is healthy');
+
+        await bot._seedDustTimersFromPartialUpdates([innerDust], detectedAt);
+        assert.strictEqual(bot._dustSinceMap.has('1.7.931'), false, 'Interior dust should not start a cancel timer');
+
+        await manager._updateOrder({
+            id: 'top-sell',
+            type: ORDER_TYPES.SELL,
+            state: ORDER_STATES.PARTIAL,
+            size: 0.00001,
+            price: 1.01,
+            orderId: '1.7.930'
+        });
+
+        const topDust = manager.orders.get('top-sell');
+        const topHealth = await Grid.checkWindowDust(manager);
+        assert.strictEqual(topHealth.sellDustOrders.length, 1, 'Top dust should be selected for tracking');
+        assert.strictEqual(topHealth.sellDustOrders[0].orderId, '1.7.930', 'Top live sell should be the only tracked dust order');
+
+        await bot._seedDustTimersFromPartialUpdates([topDust], detectedAt + 1000);
+        assert.strictEqual(bot._dustSinceMap.get('1.7.930'), detectedAt + 1000, 'Top dust should start the cancel timer');
+        console.log('  ✓ Only the top live order is eligible for dust tracking');
+    } finally {
+        bot._clearDustMaintenanceTimer();
+    }
+}
+
+async function testStartupDustSchedulesTimer() {
+    console.log('Testing Startup Dust Schedules Maintenance Timer...');
+
+    const originalSetTimeout = global.setTimeout;
+    const originalClearTimeout = global.clearTimeout;
+    const originalDelay = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
+
+    try {
+        let scheduledDelay = null;
+        let scheduledFn = null;
+
+        global.setTimeout = (fn, delay) => {
+            scheduledFn = fn;
+            scheduledDelay = delay;
+            return { fakeTimer: true };
+        };
+        global.clearTimeout = () => {};
+
+        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = 5;
+
+        const bot = new DEXBot({
+            botKey: 'test_startup_dust_schedule',
+            dryRun: false,
+            startPrice: 1,
+            assetA: 'TESTA',
+            assetB: 'TESTB',
+            incrementPercent: 1
+        });
+
+        let maintenanceCalls = 0;
+        bot.manager = {
+            _fillProcessingLock: {
+                acquire: async (fn) => fn()
+            }
+        };
+        bot._runGridMaintenance = async (context, options) => {
+            maintenanceCalls++;
+            bot._dustSinceMap.clear();
+            assert.strictEqual(context, 'dust-timer', 'Dust timer should run dust maintenance context');
+            assert.deepStrictEqual(options, { fillLockAlreadyHeld: true }, 'Dust timer should reuse the fill lock');
+        };
+
+        bot._dustSinceMap.set('1.7.920', Date.now());
+        bot._scheduleDustMaintenanceCheck();
+
+        assert.ok(scheduledDelay >= 299000 && scheduledDelay <= 300000, 'Dust timer should schedule near configured delay');
+        assert.strictEqual(typeof scheduledFn, 'function', 'Dust timer should install a callback');
+
+        scheduledFn();
+        await new Promise(resolve => setImmediate(resolve));
+
+        assert.strictEqual(maintenanceCalls, 1, 'Dust timer should trigger maintenance once');
+        console.log('  ✓ Existing dust at startup schedules a maintenance check');
+    } finally {
+        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = originalDelay;
+        global.setTimeout = originalSetTimeout;
+        global.clearTimeout = originalClearTimeout;
     }
 }
 
@@ -352,6 +672,10 @@ Promise.resolve()
     .then(() => testDustTrigger())
     .then(() => testDustCancelSyntheticRotation())
     .then(() => testDustCancelDoesNotBeatRealFill())
+    .then(() => testDustTimerStartsAtDustFill())
+    .then(() => testDustThresholdUsesConfiguredPercentage())
+    .then(() => testDustTrackingOnlyUsesTopLiveOrder())
+    .then(() => testStartupDustSchedulesTimer())
     .then(() => {
     process.exit(0);
 }).catch(err => {
