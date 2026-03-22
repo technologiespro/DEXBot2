@@ -1,23 +1,22 @@
 # DEXBot2
 
-A sophisticated market making bot for the BitShares Decentralized Exchange (DEX), implementing optimized staggered order strategies for automated trading.
+A market making bot for the BitShares Decentralized Exchange (DEX), implementing optimized staggered order strategies for automated trading.
+
+![Grid Bot Order Distribution](docs/DEXBot2_0.6.0_grid_graphic.svg)
 
 ## 🚀 Features
 
-- **Geometric Grid Trading**: Dynamic order scaling with configurable weight distribution and automated recalculation based on current market position and available funds.
-- **Constant Spread Maintenance**: Fixed bid-ask gap that adapts smoothly to market movement without complex partial-handling mechanics. Simplified, predictable order placement.
-- **Minimal Blockchain Interaction**: Fund-driven rebalancing happens once per fill batch (1-4 fills per broadcast), not per partial. Reduces blockchain load by 60-80% vs. legacy sequential processing.
-- **Copy-on-Write Grid Architecture**: Master grid is immutable—all strategy planning occurs on an isolated working copy and is only committed to the master after blockchain confirmation. Eliminates speculative state corruption and supports true transactional semantics. See [COPY_ON_WRITE_MASTER_PLAN.md](docs/COPY_ON_WRITE_MASTER_PLAN.md).
-- **Adaptive Fill Batching**: Groups fills into stress-scaled batches (1-4 per broadcast) reducing processing time from ~90s to ~24s for 29 fills. Prevents stale orders and orphan fills during market surges.
-- **Self-Healing Recovery**: Periodic recovery retries (max 5 attempts, 60s interval) with automatic state reset prevent permanent lockup after single failures.
-- **Dust Partial Auto-Cancellation**: Dust partial orders (remaining size below threshold) are automatically cancelled on-chain after a configurable delay, freeing the slot for a fresh counter-order. Configurable via `DUST_CANCEL_DELAY_MIN` (`-1` = disabled, `0` = instant, `N` = minutes).
-- **Powerful Maintenance Tools**: Closed-loop boundary-crawl algorithm, periodic grid regeneration, fund invariant verification, and stale-order cleanup ensure long-term stability.
-- **Enterprise-Grade Security**: AES-encrypted key storage with RAM-only password handling—sensitive data is never written to disk.
-- **Production-Ready Orchestration**: Native PM2 integration for multi-bot management with built-in auto-updates and real-time monitoring.
+- **Geometric Grid Trading** with configurable weight distribution (mountain/valley) and fund-driven recalculation
+- **Constant Spread Maintenance** with fixed bid-ask gap that adapts to market movement
+- **Copy-on-Write Grid Architecture** — immutable master grid, isolated working copies, transactional commit after blockchain confirmation ([details](docs/COPY_ON_WRITE_MASTER_PLAN.md))
+- **Adaptive Fill Batching** — groups 1-4 fills per broadcast, reducing processing from ~90s to ~24s for 29 fills
+- **Self-Healing Recovery** — periodic retries (max 5, 60s interval) with automatic state reset
+- **Dust Partial Auto-Cancellation** — configurable delay before auto-cancelling small remainders on-chain
+- **Boundary-Crawl Rebalancing** — closed-loop algorithm with periodic grid regeneration and fund invariant verification
+- **AES-Encrypted Key Storage** with RAM-only password handling
+- **PM2 Integration** for multi-bot management with auto-updates and monitoring
 
 ## 🔥 Quick Start
-
-Get DEXBot2 running in 5 minutes:
 
 ```bash
 # 1. Clone and install
@@ -33,11 +32,11 @@ node unlock-start.js  # Single prompt, no PM2
 node dexbot start  # For testing
 ```
 
-For detailed setup, see [Installation](#-installation) or [Updating](#updating-dexbot2) sections below.
+For detailed setup, see [Installation](#installation) or [Updating](#updating-dexbot2) sections below.
 
-### ⚠️ Disclaimer — Use At Your Own Risk
+### Disclaimer — Use At Your Own Risk
 
-- This software is in beta stage and provided "as‑is" without warranty.
+- This software is in beta stage and provided "as-is" without warranty.
 - Secure your keys and secrets. Do not commit private keys or passwords to anyone.
 - The authors and maintainers are not responsible for losses.
 
@@ -115,86 +114,53 @@ The update script automatically:
 
 ## 🔧 Configuration
 
-### 🤖 Bot Options
+### Bot Options
 
-Below is a reference guide for each configuration option from `node dexbot bots` stored in `profiles/bots.json`.
+Configuration options from `node dexbot bots`, stored in `profiles/bots.json`:
 
-#### 1. Trading Pair
 | Parameter | Type | Description |
 | :--- | :--- | :--- |
 | **`assetA`** | string | Base asset |
 | **`assetB`** | string | Quote asset |
+| **`name`** | string | Friendly name for logging and CLI selection |
+| **`active`** | boolean | `false` to keep config without running |
+| **`dryRun`** | boolean | Simulate orders without broadcasting |
+| **`preferredAccount`** | string | BitShares account name for trading |
+| **`startPrice`** | num \| str | Initial price. `"pool"` (liquidity pool), `"market"` (order book), or numeric `A/B` ratio |
+| **`minPrice`** | num \| str | Lower bound. Number or multiplier (e.g., `"2x"` = `startPrice / 2`) |
+| **`maxPrice`** | num \| str | Upper bound. Number or multiplier (e.g., `"2x"` = `startPrice * 2`) |
+| **`gridPrice`** | num \| str \| null | Reference price for bound calculations. `null` (uses `startPrice`), numeric, or AMA keyword (`"ama"`, `"ama1"`-`"ama4"`) |
+| **`incrementPercent`** | number | Geometric step between layers (e.g., `0.5` = 0.5%) |
+| **`targetSpreadPercent`** | number | Width of the empty spread zone between buy and sell orders |
+| **`weightDistribution`** | object | Sizing: `{ "sell": 1.0, "buy": 1.0 }`. Range `-1` (super valley) to `2` (super mountain), `0.5` = neutral |
+| **`botFunds`** | object | Capital: `{ "sell": "100%", "buy": 1000 }`. Numbers or percentage strings |
+| **`activeOrders`** | object | Max concurrent orders per side: `{ "sell": 5, "buy": 5 }` |
 
-#### 2. Identity & Status
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| **`name`** | string | Friendly name for logging and CLI selection. |
-| **`active`** | boolean | Set to `false` to keep the config without running it. |
-| **`dryRun`** | boolean | If `true`, simulates orders without broadcasting to the blockchain. |
-| **`preferredAccount`** | string | The BitShares account name to use for trading. |
+### General Options (Global)
 
-#### 3. Price
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| **`startPrice`** | num \| str | Initial price for order alignment. `"pool"` (liquidity pool), `"market"` (order book), or a numeric `A/B` ratio. |
-| **`minPrice`** | number \| string | Lower bound. Use a number (e.g., `0.5`) or multiplier (e.g., `"2x"` = `startPrice / 2`). |
-| **`maxPrice`** | number \| string | Upper bound. Use a number (e.g., `1.5`) or multiplier (e.g., `"2x"` = `startPrice * 2`). |
-| **`gridPrice`** | num \| str \| null | Reference price for x-factor bound calculations, independent of `startPrice`. Options: `null` (default — uses `startPrice`), a numeric price, or an AMA keyword (`"ama"`, `"ama1"`–`"ama4"`). When set to an AMA keyword, the market adapter writes the current AMA center price to `profiles/orders/<botKey>.gridprice.json` and the grid reads it on each reset. |
+Global settings via `node dexbot bots`, stored in `profiles/general.settings.json`:
 
-#### 4. Grid Strategy
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| **`incrementPercent`** | number | Geometric step between layers (e.g., `0.5` for 0.5% increments). |
-| **`targetSpreadPercent`** | number | Target width of the empty spread zone between buy and sell orders. |
-| **`weightDistribution`**| object | Sizing logic: `{ "sell": 1.0, "buy": 1.0 }`. Range: `-1` to `2`. <br>• `-1`: **Super Valley** (heavy edge) <br>• `0.5`: **Neutral** <br>• `2`: **Super Mountain** (heavy center) |
+- **Grid Health**: Grid Cache Regeneration % (default `3%`), RMS Divergence Threshold % (default `14.3%`), AMA Delta Threshold % (default `2.5%`), Partial Dust Threshold % (default `5%`), Dust Cancel Delay (default `5 min`, `-1` = off, `0` = instant)
+- **Order Recovery**: Min Spread Factor (default `2.1x` of `incrementPercent`), Min Spread Orders (default `2`)
+- **Timing (Core)**: Blockchain Fetch Interval (default `240 min`), Sync Delay (default `500ms`), Lock Timeout (default `10s`)
+- **Timing (Fill)**: Dedupe Window (default `5s`), Cleanup Interval (default `10s`), Record Retention (default `60 min`)
+- **Log Level**: `debug`, `info`, `warn`, `error`. Fine-grained category control via `LOGGING_CONFIG` (see [Logging](docs/LOGGING.md))
+- **Updater**: Active (default `ON`), Branch (`auto`/`main`/`dev`/`test`), Interval (default `1 day`), Time (default `00:00`)
 
-#### 5. Funding & Scaling
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| **`botFunds`** | object | Capital allocation: `{ "sell": "100%", "buy": 1000 }`. Supports numbers or percentage strings (e.g., `"50%"`). |
-| **`activeOrders`** | object | Maximum concurrent orders per side: `{ "sell": 5, "buy": 5 }`. |
+## 🎯 PM2 Process Management
 
-### ⚙️ General Options (Global)
-
-DEXBot2 now supports global parameter management via the interactive editor (`dexbot bots`). These settings are stored in `profiles/general.settings.json` and persist across repository updates.
-
-**Available Global Parameters:**
-- **Grid Health**: **Grid Cache Regeneration %**: Threshold for resizing the grid when proceeds accumulate (Default: `3%`); **RMS Divergence Threshold %**: Maximum allowed deviation between in-memory and persisted grid state (Default: `14.3%`); **AMA Delta Threshold %**: AMA center price change that triggers a grid reset (Default: `2.5%`); **Partial Dust Threshold %**: Threshold for identifying small "dust" partial orders (Default: `5%`); **Dust Cancel Delay**: Minutes before a dust partial is automatically cancelled on-chain (`-1` = off, `0` = instant, Default: `5 min`).
-- **Order Recovery**: **Min Spread Factor**: Minimum spread width as a multiple of `incrementPercent` (Default: `2.1×`); **Min Spread Orders**: Minimum number of empty slots in the spread zone (Default: `2`).
-- **Timing (Core)**: **Blockchain Fetch Interval**: Frequency of full account balance refreshes (Default: `240 min`); **Sync Delay**: Polling delay for blockchain synchronization (Default: `500ms`); **Lock Timeout**: Order lock auto-expiry timeout (Default: `10s`).
-- **Timing (Fill)**: **Fill Dedupe Window**: Window for deduplicating same fill events (Default: `5s`); **Fill Cleanup Interval**: Frequency for cleaning old fill records (Default: `10s`); **Fill Record Retention**: Duration to keep persisted fill records (Default: `60 min`).
-- **Log Level**: Global verbosity control (`debug`, `info`, `warn`, `error`). Advanced logging configuration with fine-grained category control is available in `LOGGING_CONFIG` (see [Logging System](docs/LOGGING.md) below).
-- **Updater**: **Updater Active**: Toggle daily automated repository updates (Default: `ON`); **Updater Branch**: Branch to track for updates (`auto`, `main`, `dev`, `test`); **Updater Interval**: Frequency of automated updates in days (Default: `1 day`); **Updater Time**: Specific time of day to run the update (Default: `00:00`).
-
-## 🎯 PM2 Process Management (Recommended for Production)
-
-For production use with automatic restart and process monitoring, use PM2:
-
-### Starting Bots via PM2
-
-Use `node pm2.js` to start bots with PM2 process management. This unified launcher handles everything automatically:
-1. **BitShares Connection**: Waits for network connection
-2. **PM2 Check**: Detects local and global PM2; prompts to install if missing
-3. **Config Generation**: Creates `profiles/ecosystem.config.js` from `profiles/bots.json`
-4. **Authentication**: Prompts for master password (kept in RAM only, never saved to disk)
-5. **Startup**: Starts all active bots as PM2-managed processes with auto-restart
+For production use with automatic restart and monitoring. Use `node pm2` to start — it handles connection, config generation, authentication (RAM-only), and PM2 startup automatically.
 
 ```bash
 # Start all active bots with PM2
 node pm2
 
+# Start a specific bot
+node pm2 <bot-name>
+
 # Or via CLI
 node dexbot pm2
 
-# Start a specific bot via PM2
-node pm2 <bot-name>
-```
-
-### Managing PM2 Processes
-
-After startup via `node pm2.js`, use these commands to manage and monitor every pm2 process:
-
-```bash
 # View status and resource usage
 pm2 status
 
@@ -209,76 +175,33 @@ pm2 stop {all|<bot-name>}
 
 # Delete processes
 pm2 delete {all|<bot-name>}
-```
 
-### Managing Bot Processes via pm2.js
-
-Use `node pm2.js` wrapper commands to select only dexbot processes:
-
-```bash
-# Stop only dexbot processes
+# Stop/delete only dexbot processes (via wrapper)
 node pm2 stop {all|<bot-name>}
-
-# Delete only dexbot processes
 node pm2 delete {all|<bot-name>}
 
-# Show pm2.js usage information
+# Reset grid (regenerate orders)
+node dexbot reset {all|[<bot-name>]}
+
+# Disable a bot in config
+node dexbot disable {all|[<bot-name>]}
+
+# Show pm2.js usage
 node pm2.js help
 ```
 
-### Grid Management & Bot Config
-
-```bash
-# Reset Grid by using  (Regenerate orders)
-node dexbot reset {all|[<bot-name>]}
-
-# Disable a bot in config (marks as inactive)
-node dexbot disable {all|[<bot-name>]}
-```
-
-### Configuration & Logs
-
-Bot configurations are defined in `profiles/bots.json`. The PM2 launcher automatically:
-- Filters only bots with `active !== false`
-- Generates ecosystem config with proper paths and logging
-- Logs bot output to `profiles/logs/<bot-name>.log`
-- Logs bot errors to `profiles/logs/<bot-name>-error.log`
-- Applies restart policies (max 13 restarts, 1 day min uptime, 3 second restart delay)
-
-### Security
-
-- Master password is prompted interactively in your terminal
-- Password passed via environment variable to bot processes (RAM only)
-- Never written to disk or config files
-- Cleared when process exits
+Bot logs are written to `profiles/logs/<bot-name>.log` (errors to `<bot-name>-error.log`). Restart policy: max 13 restarts, 1 day min uptime, 3s restart delay.
 
 ## 📚 Documentation
 
-For comprehensive guides on architecture, fund accounting, rotation mechanics, and development, see the **[docs/](docs/)** folder.
+For architecture, fund accounting, rotation mechanics, and development guides, see the **[docs/](docs/)** folder:
 
-Key documents:
-- **[FUND_MOVEMENT_AND_ACCOUNTING.md](docs/FUND_MOVEMENT_AND_ACCOUNTING.md)** - Unified guide to fund accounting, grid topology, and rotation mechanics
-- **[architecture.md](docs/architecture.md)** - System design, fill processing pipeline, and testing strategy
-- **[COPY_ON_WRITE_MASTER_PLAN.md](docs/COPY_ON_WRITE_MASTER_PLAN.md)** - Copy-on-Write grid architecture: immutable master, working copies, and transactional rebalancing
-- **[developer_guide.md](docs/developer_guide.md)** - Development guide with examples and glossary
-- **[LOGGING.md](docs/LOGGING.md)** - Comprehensive logging system documentation
+- **[FUND_MOVEMENT_AND_ACCOUNTING.md](docs/FUND_MOVEMENT_AND_ACCOUNTING.md)** - Fund accounting, grid topology, rotation mechanics
+- **[architecture.md](docs/architecture.md)** - System design, fill processing pipeline, testing strategy
+- **[COPY_ON_WRITE_MASTER_PLAN.md](docs/COPY_ON_WRITE_MASTER_PLAN.md)** - Copy-on-Write grid architecture
+- **[developer_guide.md](docs/developer_guide.md)** - Development guide, environment variables, examples, glossary
+- **[LOGGING.md](docs/LOGGING.md)** - Logging system documentation
 - **[WORKFLOW.md](docs/WORKFLOW.md)** - Project workflow and contribution guide
-
-## 🔐 Environment Variables
-
-Control bot behavior via environment variables (useful for advanced setups):
-
-- `MASTER_PASSWORD` - Master password for key decryption (set by `pm2.js`, used by `bot.js` and `dexbot.js`)
-- `BOT_NAME` or `LIVE_BOT_NAME` - Select a specific bot from `profiles/bots.json` by name (for single-bot runs)
-- `PREFERRED_ACCOUNT` - Override the preferred account for the selected bot
-- `RUN_LOOP_MS` - Polling interval in milliseconds (default: 5000). Controls how often the bot checks for fills and market conditions
-- `CALC_CYCLES` - Number of calculation passes for standalone grid calculator (default: 1)
-- `CALC_DELAY_MS` - Delay between calculator cycles in milliseconds (default: 0)
-
-Example - Run a specific bot with custom polling interval:
-```bash
-BOT_NAME=my-bot RUN_LOOP_MS=3000 node dexbot.js
-```
 
 ## 🤝 Contributing
 
