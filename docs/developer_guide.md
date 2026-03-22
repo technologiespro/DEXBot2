@@ -1761,3 +1761,23 @@ See [WORKFLOW.md](WORKFLOW.md) for detailed branching strategy.
 5. **Run Tests**: `npm test` to see how components work
 
 Happy coding! 🚀
+
+---
+
+## Environment Variables
+
+Control bot behavior via environment variables (useful for advanced setups):
+
+| Variable | Description |
+|----------|-------------|
+| `MASTER_PASSWORD` | Master password for key decryption (set by `pm2.js`, used by `bot.js` and `dexbot.js`) |
+| `BOT_NAME` / `LIVE_BOT_NAME` | Select a specific bot from `profiles/bots.json` by name |
+| `PREFERRED_ACCOUNT` | Override the preferred account for the selected bot |
+| `RUN_LOOP_MS` | Polling interval in ms (default: `5000`) |
+| `CALC_CYCLES` | Calculation passes for standalone grid calculator (default: `1`) |
+| `CALC_DELAY_MS` | Delay between calculator cycles in ms (default: `0`) |
+
+Example — run a specific bot with custom polling interval:
+```bash
+BOT_NAME=my-bot RUN_LOOP_MS=3000 node dexbot.js
+```
