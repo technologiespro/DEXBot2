@@ -743,10 +743,10 @@ function formatAnalysis(analysis) {
    */
   if (analysis.hasConfig) {
     lines.push(
-      `   Spread:${formatPercent(analysis.spread.real).padStart(6)} (${formatPercent(analysis.spread.target)}) | Incr.: ${formatPercent(analysis.increment.avg).padStart(6)} (${formatPercent(analysis.increment.target)})`
+      `   Spread:${formatPercent(analysis.spread.real).padStart(6)} (${formatPercent(analysis.spread.target)}) | Incr.:${formatPercent(analysis.increment.avg).padStart(6)} (${formatPercent(analysis.increment.target)})`
     );
   } else {
-    lines.push(`   Spread:${formatPercent(analysis.spread.real).padStart(6)} | Incr.: ${formatPercent(analysis.increment.avg).padStart(6)}`);
+    lines.push(`   Spread:${formatPercent(analysis.spread.real).padStart(6)} | Incr.:${formatPercent(analysis.increment.avg).padStart(6)}`);
   }
 
   // Active orders comparison
