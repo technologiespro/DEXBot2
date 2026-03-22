@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="920" viewBox="0 0 1400 920" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="800" viewBox="0 0 1400 800" role="img" aria-labelledby="title desc">
   <title id="title">Grid bot order graphic</title>
-  <desc id="desc">Symmetrical horizontal chart showing buy orders on the left and sell orders on the right around a central spread zone, with mountain and valley order size distributions.</desc>
+  <desc id="desc">Symmetrical bar chart showing buy orders on the left and sell orders on the right around a central spread zone, with three infographics showing order patterns, grid reaction cycle, and geometric spacing.</desc>
 
   <defs>
     <linearGradient id="buyBar" x1="0" y1="1" x2="0" y2="0">
@@ -15,52 +15,34 @@
       <stop offset="0%" stop-color="#1e3a5f"/>
       <stop offset="100%" stop-color="#162d4a"/>
     </linearGradient>
+    <linearGradient id="glowGreen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5aaf32" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#5aaf32" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="glowGold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c4a822" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#c4a822" stop-opacity="0"/>
+    </linearGradient>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a7a3a"/>
     </marker>
-    <style>
-      .title { font: 700 32px Arial, sans-serif; fill: #b5c43a; }
-      .subtitle { font: 400 17px Arial, sans-serif; fill: #8a9a5a; }
-      .section { font: 700 18px Arial, sans-serif; fill: #b5c43a; }
-      .label { font: 600 16px Arial, sans-serif; fill: #b5c43a; }
-      .small { font: 400 14px Arial, sans-serif; fill: #7a8a50; }
-      .barLabel { font: 700 13px Arial, sans-serif; fill: #0d1b2a; }
-      .axisLabel { font: 600 14px Arial, sans-serif; fill: #8a9a5a; }
-      .axisText { font: 400 13px Arial, sans-serif; fill: #6a7a4a; }
-      .note { font: 400 15px Arial, sans-serif; fill: #b5c43a; }
-      .mono { font: 600 14px Arial, sans-serif; fill: #6a7a4a; }
-      .spreadLabel { font: 700 16px Arial, sans-serif; fill: #4a8abf; }
-      .priceLabel { font: 600 14px Arial, sans-serif; fill: #4a8abf; }
-      .miniTitle { font: 700 14px Arial, sans-serif; fill: #b5c43a; }
-      .miniLabel { font: 400 12px Arial, sans-serif; fill: #7a8a50; }
-    </style>
+    <marker id="cycleArrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a8abf"/>
+    </marker>
   </defs>
 
   <!-- Background -->
-  <rect x="0" y="0" width="1400" height="920" fill="#0d1b2a"/>
+  <rect x="0" y="0" width="1400" height="800" fill="#0d1b2a"/>
 
   <!-- Title -->
-  <text x="700" y="42" class="title" text-anchor="middle">Grid Bot - Order Distribution</text>
-  <text x="700" y="68" class="subtitle" text-anchor="middle">Buy orders (left) and sell orders (right) placed symmetrically around the market price spread zone</text>
+  <text x="700" y="52" font-family="Arial, sans-serif" font-weight="700" font-size="42" fill="#b5c43a" text-anchor="middle">Grid Bot — Order Distribution</text>
 
-  <!-- ═══════════════ MAIN CHART ═══════════════ -->
   <!-- Chart background -->
-  <rect x="60" y="90" width="1280" height="500" rx="20" fill="#101e30" stroke="#1e3a5f" stroke-width="1.5"/>
+  <rect x="60" y="80" width="1280" height="490" rx="20" fill="#101e30" stroke="#1e3a5f" stroke-width="1.5"/>
 
-  <!-- Axis labels -->
-  <text x="700" y="575" class="axisLabel" text-anchor="middle">Price</text>
-  <line x1="120" y1="540" x2="1280" y2="540" stroke="#1e3a5f" stroke-width="1.5"/>
-
-  <!-- Price arrow left -->
-  <line x1="120" y1="548" x2="140" y2="548" stroke="#5a7a3a" stroke-width="1.5" marker-start="url(#arrow)"/>
-  <text x="152" y="553" class="axisText">Lower</text>
-
-  <!-- Price arrow right -->
-  <line x1="1260" y1="548" x2="1280" y2="548" stroke="#5a7a3a" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="1200" y="553" class="axisText">Higher</text>
-
-  <!-- Amount axis -->
-  <text x="85" y="320" class="axisLabel" text-anchor="middle" transform="rotate(-90 85 320)">Order Size</text>
+  <!-- Side labels -->
+  <text x="350" y="118" font-family="Arial, sans-serif" font-weight="700" font-size="24" fill="#6bc942" text-anchor="middle">BUY SIDE</text>
+  <text x="1050" y="118" font-family="Arial, sans-serif" font-weight="700" font-size="24" fill="#d4be32" text-anchor="middle">SELL SIDE</text>
 
   <!-- Grid lines (horizontal) -->
   <line x1="120" y1="170" x2="1280" y2="170" stroke="#152538" stroke-width="1"/>
@@ -69,170 +51,183 @@
   <line x1="120" y1="410" x2="1280" y2="410" stroke="#152538" stroke-width="1"/>
   <line x1="120" y1="490" x2="1280" y2="490" stroke="#152538" stroke-width="1"/>
 
-  <!-- ── SPREAD ZONE (center) ── -->
+  <!-- Spread zone -->
   <rect x="650" y="110" width="100" height="430" rx="6" fill="url(#spreadGrad)" stroke="#2a5a8f" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.8"/>
-  <text x="700" y="135" class="spreadLabel" text-anchor="middle">Spread</text>
-  <text x="700" y="153" class="small" text-anchor="middle" fill="#4a8abf">Zone</text>
+  <text x="700" y="145" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#4a8abf" text-anchor="middle">Spread</text>
 
   <!-- Market price line -->
-  <line x1="700" y1="160" x2="700" y2="540" stroke="#2a6aaf" stroke-width="2.5" stroke-dasharray="8 6" opacity="0.5"/>
-  <circle cx="700" cy="540" r="5" fill="#4a8abf"/>
-  <text x="700" y="565" class="priceLabel" text-anchor="middle">Market Price</text>
+  <line x1="700" y1="160" x2="700" y2="530" stroke="#2a6aaf" stroke-width="2.5" stroke-dasharray="8 6" opacity="0.5"/>
 
-  <!-- ── BUY ORDERS (left side - mountain shape: tallest near center) ── -->
-  <!-- BUY 5 (outermost, lowest price) -->
-  <rect x="145" y="430" width="88" height="100" rx="6" fill="url(#buyBar)" opacity="0.65"/>
-  <text x="189" y="488" class="barLabel" text-anchor="middle">BUY 5</text>
-  <text x="189" y="553" class="axisText" text-anchor="middle">P-5</text>
+  <!-- ── BUY ORDERS ── -->
+  <rect x="145" y="420" width="88" height="110" rx="6" fill="url(#buyBar)" opacity="0.65"/>
+  <text x="189" y="482" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#0d1b2a" text-anchor="middle">BUY 5</text>
 
-  <!-- BUY 4 -->
-  <rect x="248" y="360" width="88" height="170" rx="6" fill="url(#buyBar)" opacity="0.75"/>
-  <text x="292" y="455" class="barLabel" text-anchor="middle">BUY 4</text>
-  <text x="292" y="553" class="axisText" text-anchor="middle">P-4</text>
+  <rect x="248" y="350" width="88" height="180" rx="6" fill="url(#buyBar)" opacity="0.75"/>
+  <text x="292" y="450" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#0d1b2a" text-anchor="middle">BUY 4</text>
 
-  <!-- BUY 3 -->
-  <rect x="351" y="280" width="88" height="250" rx="6" fill="url(#buyBar)" opacity="0.85"/>
-  <text x="395" y="415" class="barLabel" text-anchor="middle">BUY 3</text>
-  <text x="395" y="553" class="axisText" text-anchor="middle">P-3</text>
+  <rect x="351" y="270" width="88" height="260" rx="6" fill="url(#buyBar)" opacity="0.85"/>
+  <text x="395" y="410" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#0d1b2a" text-anchor="middle">BUY 3</text>
 
-  <!-- BUY 2 -->
-  <rect x="454" y="210" width="88" height="320" rx="6" fill="url(#buyBar)" opacity="0.92"/>
-  <text x="498" y="380" class="barLabel" text-anchor="middle">BUY 2</text>
-  <text x="498" y="553" class="axisText" text-anchor="middle">P-2</text>
+  <rect x="454" y="200" width="88" height="330" rx="6" fill="url(#buyBar)" opacity="0.92"/>
+  <text x="498" y="375" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#0d1b2a" text-anchor="middle">BUY 2</text>
 
-  <!-- BUY 1 (nearest center, tallest) -->
-  <rect x="557" y="150" width="88" height="380" rx="6" fill="url(#buyBar)"/>
-  <text x="601" y="350" class="barLabel" text-anchor="middle">BUY 1</text>
-  <text x="601" y="553" class="axisText" text-anchor="middle">P-1</text>
+  <rect x="557" y="140" width="88" height="390" rx="6" fill="url(#buyBar)"/>
+  <text x="601" y="345" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#0d1b2a" text-anchor="middle">BUY 1</text>
 
-  <!-- ── SELL ORDERS (right side - mountain shape: tallest near center) ── -->
-  <!-- SELL 1 (nearest center, tallest) -->
-  <rect x="755" y="150" width="88" height="380" rx="6" fill="url(#sellBar)"/>
-  <text x="799" y="350" class="barLabel" text-anchor="middle">SELL 1</text>
-  <text x="799" y="553" class="axisText" text-anchor="middle">P+1</text>
+  <!-- ── SELL ORDERS ── -->
+  <rect x="755" y="140" width="88" height="390" rx="6" fill="url(#sellBar)"/>
+  <text x="799" y="345" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#0d1b2a" text-anchor="middle">SELL 1</text>
 
-  <!-- SELL 2 -->
-  <rect x="858" y="210" width="88" height="320" rx="6" fill="url(#sellBar)" opacity="0.92"/>
-  <text x="902" y="380" class="barLabel" text-anchor="middle">SELL 2</text>
-  <text x="902" y="553" class="axisText" text-anchor="middle">P+2</text>
+  <rect x="858" y="200" width="88" height="330" rx="6" fill="url(#sellBar)" opacity="0.92"/>
+  <text x="902" y="375" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#0d1b2a" text-anchor="middle">SELL 2</text>
 
-  <!-- SELL 3 -->
-  <rect x="961" y="280" width="88" height="250" rx="6" fill="url(#sellBar)" opacity="0.85"/>
-  <text x="1005" y="415" class="barLabel" text-anchor="middle">SELL 3</text>
-  <text x="1005" y="553" class="axisText" text-anchor="middle">P+3</text>
+  <rect x="961" y="270" width="88" height="260" rx="6" fill="url(#sellBar)" opacity="0.85"/>
+  <text x="1005" y="410" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#0d1b2a" text-anchor="middle">SELL 3</text>
 
-  <!-- SELL 4 -->
-  <rect x="1064" y="360" width="88" height="170" rx="6" fill="url(#sellBar)" opacity="0.75"/>
-  <text x="1108" y="455" class="barLabel" text-anchor="middle">SELL 4</text>
-  <text x="1108" y="553" class="axisText" text-anchor="middle">P+4</text>
+  <rect x="1064" y="350" width="88" height="180" rx="6" fill="url(#sellBar)" opacity="0.75"/>
+  <text x="1108" y="450" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#0d1b2a" text-anchor="middle">SELL 4</text>
 
-  <!-- SELL 5 (outermost, highest price) -->
-  <rect x="1167" y="430" width="88" height="100" rx="6" fill="url(#sellBar)" opacity="0.65"/>
-  <text x="1211" y="488" class="barLabel" text-anchor="middle">SELL 5</text>
-  <text x="1211" y="553" class="axisText" text-anchor="middle">P+5</text>
+  <rect x="1167" y="420" width="88" height="110" rx="6" fill="url(#sellBar)" opacity="0.65"/>
+  <text x="1211" y="482" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#0d1b2a" text-anchor="middle">SELL 5</text>
 
-  <!-- Mountain envelope curve (dashed) -->
-  <path d="M 189 430 Q 395 120 601 150 L 601 150" stroke="#5aaf32" stroke-width="2" stroke-dasharray="5 4" fill="none" opacity="0.4"/>
-  <path d="M 799 150 Q 1005 120 1211 430" stroke="#c4a822" stroke-width="2" stroke-dasharray="5 4" fill="none" opacity="0.4"/>
+  <!-- Mountain envelope curves -->
+  <path d="M 189 420 Q 395 100 601 140" stroke="#5aaf32" stroke-width="2.5" stroke-dasharray="5 4" fill="none" opacity="0.4"/>
+  <path d="M 799 140 Q 1005 100 1211 420" stroke="#c4a822" stroke-width="2.5" stroke-dasharray="5 4" fill="none" opacity="0.4"/>
 
-  <!-- Side labels -->
-  <text x="350" y="118" class="section" text-anchor="middle" fill="#6bc942">BUY SIDE (Bids)</text>
-  <text x="1050" y="118" class="section" text-anchor="middle" fill="#d4be32">SELL SIDE (Asks)</text>
+  <!-- Baseline -->
+  <line x1="120" y1="530" x2="1280" y2="530" stroke="#1e3a5f" stroke-width="1.5"/>
 
-  <!-- Blue accent line (matching website) -->
-  <line x1="60" y1="595" x2="1340" y2="595" stroke="#2a5a8f" stroke-width="2"/>
+  <!-- Price arrows and labels -->
+  <line x1="120" y1="545" x2="145" y2="545" stroke="#5a7a3a" stroke-width="1.5" marker-start="url(#arrow)"/>
+  <text x="160" y="550" font-family="Arial, sans-serif" font-weight="600" font-size="18" fill="#6a7a4a">Lower</text>
 
-  <!-- ═══════════════ BOTTOM PANELS ═══════════════ -->
+  <line x1="1255" y1="545" x2="1280" y2="545" stroke="#5a7a3a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="1240" y="550" font-family="Arial, sans-serif" font-weight="600" font-size="18" fill="#6a7a4a" text-anchor="end">Higher</text>
 
-  <!-- Mountain vs Valley comparison -->
-  <rect x="60" y="605" width="420" height="285" rx="16" fill="#101e30" stroke="#1e3a5f" stroke-width="1.5"/>
-  <text x="270" y="637" class="section" text-anchor="middle">Order Size Patterns</text>
+  <text x="700" y="550" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#4a8abf" text-anchor="middle">Market Price</text>
 
-  <!-- Mountain mini chart -->
-  <text x="165" y="665" class="miniTitle" text-anchor="middle">Mountain</text>
-  <text x="165" y="681" class="miniLabel" text-anchor="middle">Largest orders near spread</text>
-  <!-- mini bars mountain -->
-  <rect x="100" y="750" width="18" height="30" rx="3" fill="#5a7a3a" opacity="0.55"/>
-  <rect x="122" y="735" width="18" height="45" rx="3" fill="#5a7a3a" opacity="0.65"/>
-  <rect x="144" y="710" width="18" height="70" rx="3" fill="#5a7a3a" opacity="0.8"/>
-  <rect x="166" y="695" width="18" height="85" rx="3" fill="#5a7a3a"/>
-  <rect x="188" y="710" width="18" height="70" rx="3" fill="#5a7a3a" opacity="0.8"/>
-  <rect x="210" y="735" width="18" height="45" rx="3" fill="#5a7a3a" opacity="0.65"/>
-  <rect x="232" y="750" width="18" height="30" rx="3" fill="#5a7a3a" opacity="0.55"/>
-  <line x1="100" y1="780" x2="250" y2="780" stroke="#1e3a5f" stroke-width="1"/>
-  <!-- mountain peak line -->
-  <path d="M 109 750 Q 175 685 241 750" stroke="#b5c43a" stroke-width="1.5" stroke-dasharray="3 3" fill="none" opacity="0.6"/>
+  <!-- Order Size axis label -->
+  <text x="85" y="320" font-family="Arial, sans-serif" font-weight="600" font-size="18" fill="#8a9a5a" text-anchor="middle" transform="rotate(-90 85 320)">Order Size</text>
 
-  <!-- Valley mini chart -->
-  <text x="375" y="665" class="miniTitle" text-anchor="middle">Valley</text>
-  <text x="375" y="681" class="miniLabel" text-anchor="middle">Smallest orders near spread</text>
-  <!-- mini bars valley -->
-  <rect x="310" y="695" width="18" height="85" rx="3" fill="#5a7a3a"/>
-  <rect x="332" y="710" width="18" height="70" rx="3" fill="#5a7a3a" opacity="0.8"/>
-  <rect x="354" y="735" width="18" height="45" rx="3" fill="#5a7a3a" opacity="0.65"/>
-  <rect x="376" y="750" width="18" height="30" rx="3" fill="#5a7a3a" opacity="0.55"/>
-  <rect x="398" y="735" width="18" height="45" rx="3" fill="#5a7a3a" opacity="0.65"/>
-  <rect x="420" y="710" width="18" height="70" rx="3" fill="#5a7a3a" opacity="0.8"/>
-  <rect x="442" y="695" width="18" height="85" rx="3" fill="#5a7a3a"/>
-  <line x1="310" y1="780" x2="460" y2="780" stroke="#1e3a5f" stroke-width="1"/>
-  <!-- valley dip line -->
-  <path d="M 319 695 Q 385 760 451 695" stroke="#b5c43a" stroke-width="1.5" stroke-dasharray="3 3" fill="none" opacity="0.6"/>
+  <!-- Accent divider -->
+  <line x1="60" y1="585" x2="1340" y2="585" stroke="#2a5a8f" stroke-width="2"/>
 
-  <!-- Divider between mini charts -->
-  <line x1="270" y1="655" x2="270" y2="870" stroke="#1e3a5f" stroke-width="1"/>
+  <!-- ═══════════════ INFOGRAPHIC 1: Size Patterns ═══════════════ -->
+  <g transform="translate(60, 600)">
+    <rect x="0" y="0" width="400" height="180" rx="16" fill="#101e30" stroke="#1e3a5f" stroke-width="1.5"/>
+    <text x="200" y="32" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#b5c43a" text-anchor="middle">Size Patterns</text>
 
-  <text x="270" y="825" class="small" text-anchor="middle">The main chart above shows the Mountain pattern.</text>
-  <text x="270" y="845" class="small" text-anchor="middle">Pattern affects how liquidity concentrates</text>
-  <text x="270" y="865" class="small" text-anchor="middle">around the market price.</text>
+    <!-- Mountain mini chart -->
+    <text x="105" y="58" font-family="Arial, sans-serif" font-weight="700" font-size="16" fill="#6bc942" text-anchor="middle">Mountain</text>
+    <!-- Glow under mountain -->
+    <ellipse cx="105" cy="155" rx="65" ry="8" fill="url(#glowGreen)" opacity="0.5"/>
+    <!-- Mountain bars -->
+    <rect x="55"  y="130" width="16" height="25" rx="3" fill="#5a7a3a" opacity="0.5"/>
+    <rect x="74"  y="115" width="16" height="40" rx="3" fill="#5a7a3a" opacity="0.65"/>
+    <rect x="93"  y="90"  width="16" height="65" rx="3" fill="#5a7a3a" opacity="0.85"/>
+    <rect x="112" y="75"  width="16" height="80" rx="3" fill="#5a7a3a"/>
+    <rect x="131" y="90"  width="16" height="65" rx="3" fill="#5a7a3a" opacity="0.85"/>
+    <rect x="150" y="115" width="16" height="40" rx="3" fill="#5a7a3a" opacity="0.65"/>
+    <rect x="169" y="130" width="16" height="25" rx="3" fill="#5a7a3a" opacity="0.5"/>
+    <line x1="55" y1="155" x2="185" y2="155" stroke="#1e3a5f" stroke-width="1"/>
+    <!-- Mountain peak curve -->
+    <path d="M 63 130 Q 120 65 177 130" stroke="#6bc942" stroke-width="2" stroke-dasharray="4 3" fill="none" opacity="0.6"/>
 
-  <!-- How it works panel -->
-  <rect x="510" y="605" width="420" height="285" rx="16" fill="#101e30" stroke="#1e3a5f" stroke-width="1.5"/>
-  <text x="720" y="637" class="section" text-anchor="middle">How the Grid Reacts</text>
+    <!-- Divider -->
+    <line x1="200" y1="50" x2="200" y2="170" stroke="#1e3a5f" stroke-width="1"/>
 
-  <circle cx="548" cy="675" r="14" fill="#4a9e2a"/>
-  <text x="548" y="680" class="barLabel" text-anchor="middle">1</text>
-  <text x="572" y="671" class="note">A fill occurs (buy or sell side)</text>
-  <text x="572" y="689" class="small">Funds return to the opposite side</text>
+    <!-- Valley mini chart -->
+    <text x="295" y="58" font-family="Arial, sans-serif" font-weight="700" font-size="16" fill="#d4be32" text-anchor="middle">Valley</text>
+    <!-- Glow under valley -->
+    <ellipse cx="295" cy="155" rx="65" ry="8" fill="url(#glowGold)" opacity="0.5"/>
+    <!-- Valley bars -->
+    <rect x="245" y="75"  width="16" height="80" rx="3" fill="#8a7a22"/>
+    <rect x="264" y="90"  width="16" height="65" rx="3" fill="#8a7a22" opacity="0.85"/>
+    <rect x="283" y="115" width="16" height="40" rx="3" fill="#8a7a22" opacity="0.65"/>
+    <rect x="302" y="130" width="16" height="25" rx="3" fill="#8a7a22" opacity="0.5"/>
+    <rect x="321" y="115" width="16" height="40" rx="3" fill="#8a7a22" opacity="0.65"/>
+    <rect x="340" y="90"  width="16" height="65" rx="3" fill="#8a7a22" opacity="0.85"/>
+    <rect x="359" y="75"  width="16" height="80" rx="3" fill="#8a7a22"/>
+    <line x1="245" y1="155" x2="375" y2="155" stroke="#1e3a5f" stroke-width="1"/>
+    <!-- Valley dip curve -->
+    <path d="M 253 75 Q 310 145 367 75" stroke="#d4be32" stroke-width="2" stroke-dasharray="4 3" fill="none" opacity="0.6"/>
+  </g>
 
-  <circle cx="548" cy="730" r="14" fill="#2a6aaf"/>
-  <text x="548" y="735" class="barLabel" text-anchor="middle">2</text>
-  <text x="572" y="726" class="note">Boundary crawls toward the fill</text>
-  <text x="572" y="744" class="small">Order roles shift: buy becomes sell or vice versa</text>
+  <!-- ═══════════════ INFOGRAPHIC 2: Grid Reaction Cycle ═══════════════ -->
+  <g transform="translate(500, 600)">
+    <rect x="0" y="0" width="400" height="180" rx="16" fill="#101e30" stroke="#1e3a5f" stroke-width="1.5"/>
+    <text x="200" y="32" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#b5c43a" text-anchor="middle">Grid Reaction Cycle</text>
 
-  <circle cx="548" cy="785" r="14" fill="#c4a822"/>
-  <text x="548" y="790" class="barLabel" text-anchor="middle">3</text>
-  <text x="572" y="781" class="note">Replacement orders are placed</text>
-  <text x="572" y="799" class="small">Grid stays geometric and spread-aware</text>
+    <!-- Circular flow: three nodes connected by curved arrows -->
+    <!-- Node 1: FILL (top) -->
+    <circle cx="200" cy="75" r="28" fill="#1a3a1a" stroke="#4a9e2a" stroke-width="2.5"/>
+    <text x="200" y="82" font-family="Arial, sans-serif" font-weight="700" font-size="17" fill="#6bc942" text-anchor="middle">FILL</text>
 
-  <line x1="540" y1="820" x2="900" y2="820" stroke="#1e3a5f" stroke-width="1"/>
-  <text x="720" y="845" class="small" text-anchor="middle">The spread zone always stays between the</text>
-  <text x="720" y="863" class="small" text-anchor="middle">innermost buy and sell, tracking the market.</text>
+    <!-- Node 2: CRAWL (bottom-left) -->
+    <circle cx="115" cy="145" r="28" fill="#0d2244" stroke="#2a6aaf" stroke-width="2.5"/>
+    <text x="115" y="152" font-family="Arial, sans-serif" font-weight="700" font-size="15" fill="#4a8abf" text-anchor="middle">CRAWL</text>
 
-  <!-- Key properties panel -->
-  <rect x="960" y="605" width="380" height="285" rx="16" fill="#101e30" stroke="#1e3a5f" stroke-width="1.5"/>
-  <text x="1150" y="637" class="section" text-anchor="middle">Key Properties</text>
+    <!-- Node 3: REPLACE (bottom-right) -->
+    <circle cx="285" cy="145" r="28" fill="#2a2a0a" stroke="#c4a822" stroke-width="2.5"/>
+    <text x="285" y="152" font-family="Arial, sans-serif" font-weight="700" font-size="14" fill="#e2d24a" text-anchor="middle">REPLACE</text>
 
-  <circle cx="992" cy="668" r="5" fill="#b5c43a"/>
-  <text x="1008" y="673" class="note">Dual-sided buy and sell placement</text>
+    <!-- Arrow: FILL → CRAWL (top to bottom-left) -->
+    <path d="M 175 90 Q 140 105 128 117" stroke="#4a8abf" stroke-width="2.5" fill="none" marker-end="url(#cycleArrow)"/>
 
-  <circle cx="992" cy="700" r="5" fill="#b5c43a"/>
-  <text x="1008" y="705" class="note">Geometric spacing between slots</text>
+    <!-- Arrow: CRAWL → REPLACE (bottom-left to bottom-right) -->
+    <path d="M 140 158 Q 200 175 258 158" stroke="#4a8abf" stroke-width="2.5" fill="none" marker-end="url(#cycleArrow)"/>
 
-  <circle cx="992" cy="732" r="5" fill="#b5c43a"/>
-  <text x="1008" y="737" class="note">Configurable spread percentage</text>
+    <!-- Arrow: REPLACE → FILL (bottom-right to top) -->
+    <path d="M 304 122 Q 272 94 225 80" stroke="#4a8abf" stroke-width="2.5" fill="none" marker-end="url(#cycleArrow)"/>
 
-  <circle cx="992" cy="764" r="5" fill="#b5c43a"/>
-  <text x="1008" y="769" class="note">Mountain or valley size distribution</text>
+    <!-- Center glow -->
+    <circle cx="200" cy="115" r="35" fill="#4a8abf" opacity="0.04"/>
+    <circle cx="200" cy="115" r="20" fill="#4a8abf" opacity="0.06"/>
+  </g>
 
-  <circle cx="992" cy="796" r="5" fill="#b5c43a"/>
-  <text x="1008" y="801" class="note">Boundary-crawl follows the market</text>
+  <!-- ═══════════════ INFOGRAPHIC 3: Auto-Regeneration ═══════════════ -->
+  <g transform="translate(940, 600)">
+    <rect x="0" y="0" width="400" height="180" rx="16" fill="#101e30" stroke="#1e3a5f" stroke-width="1.5"/>
+    <text x="200" y="32" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#b5c43a" text-anchor="middle">Auto-Regeneration</text>
 
-  <circle cx="992" cy="828" r="5" fill="#b5c43a"/>
-  <text x="1008" y="833" class="note">Rebalances only when orders fill</text>
+    <!-- OLD grid (faded, left side) -->
+    <text x="105" y="58" font-family="Arial, sans-serif" font-weight="700" font-size="13" fill="#8a4a4a" text-anchor="middle">DRIFTED</text>
+    <!-- Old bars - skewed/misaligned, red-tinted -->
+    <rect x="40"  y="120" width="14" height="35" rx="2" fill="#5a3a3a" opacity="0.4"/>
+    <rect x="58"  y="105" width="14" height="50" rx="2" fill="#5a3a3a" opacity="0.4"/>
+    <rect x="76"  y="115" width="14" height="40" rx="2" fill="#5a3a3a" opacity="0.4"/>
+    <rect x="94"  y="95"  width="14" height="60" rx="2" fill="#5a3a3a" opacity="0.4"/>
+    <rect x="112" y="110" width="14" height="45" rx="2" fill="#5a3a3a" opacity="0.4"/>
+    <rect x="130" y="100" width="14" height="55" rx="2" fill="#5a3a3a" opacity="0.4"/>
+    <rect x="148" y="125" width="14" height="30" rx="2" fill="#5a3a3a" opacity="0.4"/>
+    <line x1="40" y1="155" x2="162" y2="155" stroke="#5a3a3a" stroke-width="1" opacity="0.4"/>
+    <!-- X mark over old grid -->
+    <line x1="55" y1="80" x2="150" y2="150" stroke="#8a3a3a" stroke-width="2.5" opacity="0.5"/>
+    <line x1="150" y1="80" x2="55" y2="150" stroke="#8a3a3a" stroke-width="2.5" opacity="0.5"/>
 
-  <circle cx="992" cy="860" r="5" fill="#b5c43a"/>
-  <text x="1008" y="865" class="note">Automatic grid regeneration on drift</text>
+    <!-- Arrow: old → new -->
+    <path d="M 175 110 L 215 110" stroke="#4a8abf" stroke-width="2.5" marker-end="url(#cycleArrow)"/>
+    <!-- Lightning bolt / refresh icon -->
+    <path d="M 193 95 L 188 107 L 196 107 L 191 120" stroke="#e2d24a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
 
-  <!-- Footer -->
-  <text x="700" y="912" class="mono" text-anchor="middle">Grid order distribution overview</text>
+    <!-- NEW grid (bright, right side) -->
+    <text x="295" y="58" font-family="Arial, sans-serif" font-weight="700" font-size="13" fill="#6bc942" text-anchor="middle">REBUILT</text>
+    <!-- New bars - clean mountain pattern, bright -->
+    <rect x="240" y="130" width="14" height="25" rx="2" fill="#5a7a3a" opacity="0.6"/>
+    <rect x="258" y="115" width="14" height="40" rx="2" fill="#5a7a3a" opacity="0.75"/>
+    <rect x="276" y="95"  width="14" height="60" rx="2" fill="#5a7a3a" opacity="0.85"/>
+    <rect x="294" y="80"  width="14" height="75" rx="2" fill="#5a7a3a"/>
+    <rect x="312" y="95"  width="14" height="60" rx="2" fill="#5a7a3a" opacity="0.85"/>
+    <rect x="330" y="115" width="14" height="40" rx="2" fill="#5a7a3a" opacity="0.75"/>
+    <rect x="348" y="130" width="14" height="25" rx="2" fill="#5a7a3a" opacity="0.6"/>
+    <line x1="240" y1="155" x2="362" y2="155" stroke="#1e3a5f" stroke-width="1"/>
+    <!-- Mountain curve over new grid -->
+    <path d="M 247 130 Q 301 70 355 130" stroke="#6bc942" stroke-width="1.5" stroke-dasharray="4 3" fill="none" opacity="0.5"/>
+
+    <!-- Glow behind new grid -->
+    <ellipse cx="295" cy="155" rx="65" ry="8" fill="url(#glowGreen)" opacity="0.5"/>
+
+    <!-- Bottom label -->
+    <text x="200" y="175" font-family="Arial, sans-serif" font-weight="600" font-size="13" fill="#5a7a6a" text-anchor="middle">Detects drift and snaps back to optimal</text>
+  </g>
 </svg>
