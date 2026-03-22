@@ -1022,26 +1022,20 @@ async function promptGeneralSettings() {
                 if (gRegen === '\x1b') break;
                 const rms = await askNumberWithBounds('RMS Divergence Threshold %', settings.GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE, 1, 100);
                 if (rms === '\x1b') break;
+                const amaDelta = await askNumberWithBounds('AMA Delta Threshold %', settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT, 0.1, 50.0);
+                if (amaDelta === '\x1b') break;
+                settings.GRID_LIMITS.GRID_REGENERATION_PERCENTAGE = gRegen;
+                settings.GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE = rms;
+                settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT = amaDelta;
+                break;
+            case '2':
                 const dust = await askNumberWithBounds('Partial Dust Threshold %', settings.GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE, 0.1, 50);
                 if (dust === '\x1b') break;
                 console.log('  \x1b[38;5;250mDust Cancel Delay: -1=off, 0=instant, N=minutes before auto-cancel\x1b[0m');
                 const dustCancel = await askIntegerInRange('Dust Cancel Delay (min)', settings.GRID_LIMITS.DUST_CANCEL_DELAY_MIN, -1, 1440);
                 if (dustCancel === '\x1b') break;
-                settings.GRID_LIMITS.GRID_REGENERATION_PERCENTAGE = gRegen;
-                settings.GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE = rms;
                 settings.GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE = dust;
                 settings.GRID_LIMITS.DUST_CANCEL_DELAY_MIN = dustCancel;
-                break;
-            case '2':
-                const mFactor = await askNumberWithBounds('Minimum Spread Factor (Inc x Factor)', settings.GRID_LIMITS.MIN_SPREAD_FACTOR, 1.0, 10.0);
-                if (mFactor === '\x1b') break;
-                const mOrders = await askIntegerInRange('Minimum Spread Orders (Empty Slots)', settings.GRID_LIMITS.MIN_SPREAD_ORDERS, 1, 10);
-                if (mOrders === '\x1b') break;
-                const amaDelta = await askNumberWithBounds('AMA Delta Threshold %', settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT, 0.1, 50.0);
-                if (amaDelta === '\x1b') break;
-                settings.GRID_LIMITS.MIN_SPREAD_FACTOR = mFactor;
-                settings.GRID_LIMITS.MIN_SPREAD_ORDERS = mOrders;
-                settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT = amaDelta;
                 break;
             case '3':
                 const fetch = await askNumberWithBounds('Blockchain Fetch Interval (min)', settings.TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN, 1, 1440);
