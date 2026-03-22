@@ -829,12 +829,14 @@ async function buildCancelOrderOp(accountName, orderId) {
  * @param {string} accountName - The name of the account.
  * @param {string} privateKey - The private key for signing.
  * @param {string} orderId - The ID of the order to cancel.
- * @returns {Promise<Object>} Success object with order ID.
+ * @returns {Promise<Object>} Success object with order ID and verification metadata.
  * @throws {Error} If cancellation fails.
  */
 async function cancelOrder(accountName, privateKey, orderId) {
+    let accountId = null;
     try {
         const op = await buildCancelOrderOp(accountName, orderId);
+        accountId = op.op_data.fee_paying_account;
 
         const acc = createAccountClient(accountName, privateKey);
         await acc.initPromise;
@@ -844,8 +846,20 @@ async function cancelOrder(accountName, privateKey, orderId) {
         await tx.broadcast();
 
         console.log(`Order ${orderId} cancelled successfully`);
-        return { success: true, orderId };
+        return { success: true, orderId, verified: true };
     } catch (error) {
+        if (accountId) {
+            try {
+                const openOrders = await readOpenOrders(accountId, TIMING.CONNECTION_TIMEOUT_MS, true);
+                const stillPresent = Array.isArray(openOrders) && openOrders.some(order => String(order?.id ?? '') === String(orderId));
+                if (!stillPresent) {
+                    console.log(`Order ${orderId} cancellation confirmed after broadcast failure`);
+                    return { success: true, orderId, verified: true, verifiedAfterFailure: true };
+                }
+            } catch (_) {
+                // Fall through to the original error.
+            }
+        }
         console.error('Error cancelling order:', error.message);
         throw error;
     }

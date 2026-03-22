@@ -383,6 +383,80 @@ async function testDustCancelDoesNotBeatRealFill() {
     }
 }
 
+async function testDustCancelFallbackRefetchesOpenOrders() {
+    console.log('Testing Dust Cancel Fallback Refetch...');
+
+    const originalCancelOrder = chainOrders.cancelOrder;
+    const originalReadOpenOrders = chainOrders.readOpenOrders;
+    let bot;
+    try {
+        let syncSource = null;
+        let syncPayload = null;
+        let processCalls = 0;
+
+        bot = new DEXBot({
+            botKey: 'test_dust_cancel_refetch',
+            dryRun: false,
+            startPrice: 1,
+            assetA: 'TESTA',
+            assetB: 'BTS',
+            incrementPercent: 0.5
+        });
+        bot.account = 'test-account';
+        bot.accountId = '1.2.345';
+        bot.privateKey = 'test-key';
+        bot.manager = {
+            synchronizeWithChain: async (data, source) => {
+                syncSource = source;
+                syncPayload = data;
+                return { newOrders: [], ordersNeedingCorrection: [] };
+            },
+            processFilledOrders: async () => {
+                processCalls++;
+                return { actions: [] };
+            },
+            persistGrid: async () => ({ isValid: true }),
+            recalculateFunds: async () => {},
+            checkGridHealth: async () => ({ buyDustOrders: [], sellDustOrders: [] })
+        };
+
+        chainOrders.cancelOrder = async () => ({
+            success: true,
+            orderId: '1.7.910',
+            verified: true,
+            verifiedAfterFailure: true
+        });
+        chainOrders.readOpenOrders = async (accountRef) => {
+            assert.strictEqual(accountRef, '1.2.345', 'Fallback refetch should use accountId');
+            return [];
+        };
+
+        const dustOrder = {
+            id: 'dust-buy-refetch',
+            orderId: '1.7.910',
+            type: ORDER_TYPES.BUY,
+            state: ORDER_STATES.PARTIAL,
+            size: 0.1,
+            price: 0.9
+        };
+
+        bot._dustSinceMap.set('1.7.910', Date.now() - (5 * 60_000) - 1);
+        const result = await bot._cancelDustOrders({ buy: [dustOrder], sell: [] });
+
+        assert.strictEqual(result.cancelledCount, 1, 'Fallback refetch cancel should still count as cancelled');
+        assert.strictEqual(syncSource, 'readOpenOrders', 'Fallback path should resync from a fresh blockchain snapshot');
+        assert(Array.isArray(syncPayload), 'Fallback sync should receive the open-order snapshot');
+        assert.strictEqual(processCalls, 1, 'Fallback refetch should still trigger the synthetic fill pipeline');
+        console.log('  ✓ Dust cancel refetches open orders when cancel was already gone');
+    } finally {
+        if (typeof bot?._clearDustMaintenanceTimer === 'function') {
+            bot._clearDustMaintenanceTimer();
+        }
+        chainOrders.cancelOrder = originalCancelOrder;
+        chainOrders.readOpenOrders = originalReadOpenOrders;
+    }
+}
+
 async function testDustTimerStartsAtDustFill() {
     console.log('Testing Dust Timer Starts At Fill Detection...');
 
@@ -851,6 +925,7 @@ Promise.resolve()
     .then(() => testDustTrigger())
     .then(() => testDustCancelSyntheticRotation())
     .then(() => testDustCancelDoesNotBeatRealFill())
+    .then(() => testDustCancelFallbackRefetchesOpenOrders())
     .then(() => testDustTimerStartsAtDustFill())
     .then(() => testDustThresholdUsesConfiguredPercentage())
     .then(() => testDustTrackingOnlyUsesTopLiveOrder())

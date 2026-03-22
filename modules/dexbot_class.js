@@ -3064,10 +3064,17 @@ class DEXBot {
         const syntheticFills = [];
         for (const order of toCancel) {
             try {
-                // Use the established cancel pattern: single call handles build + broadcast,
-                // then synchronizeWithChain acquires _gridLock before applying the sync.
-                await chainOrders.cancelOrder(this.account, this.privateKey, order.orderId);
-                await this.manager.synchronizeWithChain({ orderId: order.orderId, clearSize: true }, 'cancelOrder');
+                // Normal cancel path stays single-order. If the cancel was already gone on-chain
+                // and the helper reports verifiedAfterFailure, refetch open orders first.
+                const cancelResult = await chainOrders.cancelOrder(this.account, this.privateKey, order.orderId);
+
+                if (cancelResult?.verifiedAfterFailure) {
+                    const accountRef = this.accountId || this.account;
+                    const chainOpenOrders = await chainOrders.readOpenOrders(accountRef);
+                    await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders');
+                } else {
+                    await this.manager.synchronizeWithChain({ orderId: order.orderId, clearSize: true }, 'cancelOrder');
+                }
 
                 syntheticFills.push({
                     ...order,

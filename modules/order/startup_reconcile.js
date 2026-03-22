@@ -351,9 +351,21 @@ async function _createOrderFromGrid({ chainOrders, account, privateKey, manager,
 async function _cancelChainOrder({ chainOrders, account, privateKey, manager, chainOrderId, dryRun, chainOrderObj, releaseUntrackedFunds = false }) {
     if (dryRun) return;
 
-    await chainOrders.cancelOrder(account, privateKey, chainOrderId);
-    // CRITICAL: Use _applySync (lock-free) since caller holds _gridLock
-    await manager._applySync(chainOrderId, 'cancelOrder');
+    const cancelResult = await chainOrders.cancelOrder(account, privateKey, chainOrderId);
+    if (cancelResult?.verifiedAfterFailure) {
+        const freshChainOrders = await chainOrders.readOpenOrders(
+            resolveAccountRef(manager, account),
+            TIMING.CONNECTION_TIMEOUT_MS
+        );
+        await manager.syncFromOpenOrders(freshChainOrders, {
+            skipAccounting: false,
+            source: 'cancelOrder',
+            gridLockAlreadyHeld: true
+        });
+    } else {
+        // CRITICAL: Use _applySync (lock-free) since caller holds _gridLock
+        await manager._applySync(chainOrderId, 'cancelOrder');
+    }
 
     // Unmatched chain orders are not represented as ACTIVE/PARTIAL grid slots, so
     // synchronizeWithChain('cancelOrder') cannot release their commitment.
