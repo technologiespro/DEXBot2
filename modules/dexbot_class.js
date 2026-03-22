@@ -3103,7 +3103,42 @@ class DEXBot {
             await this.manager.persistGrid();
         }
 
+        // After cancelling the top dust order the next order below is now the new top.
+        // Immediately seed it into _dustSinceMap so its delay starts now rather than
+        // waiting for the next periodic maintenance cycle to discover it.
+        if (cancelledCount > 0) {
+            try {
+                const freshHealth = await this.manager.checkGridHealth(null);
+                const seenAt = Date.now();
+                for (const order of [...freshHealth.buyDustOrders, ...freshHealth.sellDustOrders]) {
+                    if (order.orderId && !this._dustSinceMap.has(order.orderId)) {
+                        this._dustSinceMap.set(order.orderId, seenAt);
+                    }
+                }
+            } catch (err) {
+                this._warn(`[DUST-CANCEL] Failed to reseed dust timers after cancel: ${err.message}`);
+            }
+        }
+
+        // _scheduleDustMaintenanceCheck clears any existing timer first, so call it
+        // before the fallback so we don't clobber the fallback timer.
         this._scheduleDustMaintenanceCheck();
+
+        // If the reseed failed (or found nothing) the map may still be empty and
+        // _scheduleDustMaintenanceCheck would have bailed early. Install a bare
+        // follow-up scan so a newly exposed top order is never permanently skipped.
+        if (cancelledCount > 0 && this._dustSinceMap.size === 0 && !this._shuttingDown && !this._dustMaintenanceTimer) {
+            const delayMs = GRID_LIMITS.DUST_CANCEL_DELAY_MIN * 60_000;
+            this._dustMaintenanceTimer = setTimeout(() => {
+                this._dustMaintenanceTimer = null;
+                if (this._shuttingDown || !this.manager?._fillProcessingLock) return;
+                this.manager._fillProcessingLock.acquire(async () => {
+                    if (!this._shuttingDown) {
+                        await this._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true });
+                    }
+                }).catch(err2 => this._warn(`Error during dust fallback timer: ${err2.message}`));
+            }, delayMs);
+        }
         return { cancelledCount, batchResult };
     }
 

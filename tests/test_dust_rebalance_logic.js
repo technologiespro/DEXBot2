@@ -9,6 +9,32 @@
  */
 
 const assert = require('assert');
+const Module = require('module');
+
+const originalModuleLoad = Module._load;
+Module._load = function(request, parent, isMain) {
+    if (typeof request === 'string' && request.includes('bitshares_client')) {
+        return {
+            BitShares: {
+                subscribe: () => {},
+                disconnect: () => {},
+                ws: { isConnected: false }
+            },
+            waitForConnected: async () => {},
+            createAccountClient: () => ({
+                sign: () => {},
+                broadcast: async () => ({})
+            }),
+            setSuppressConnectionLog: () => {},
+            getNodeManager: () => null,
+            getNodeStats: () => null,
+            getNodeSummary: () => null,
+            _internal: { get connected() { return false; } }
+        };
+    }
+    return originalModuleLoad.call(this, request, parent, isMain);
+};
+
 const { OrderManager } = require('../modules/order/manager');
 const { ORDER_TYPES, ORDER_STATES, GRID_LIMITS } = require('../modules/constants');
 const Grid = require('../modules/order/grid');
@@ -257,7 +283,8 @@ async function testDustCancelSyntheticRotation() {
                 persistCalls++;
                 return { isValid: true };
             },
-            recalculateFunds: async () => {}
+            recalculateFunds: async () => {},
+            checkGridHealth: async () => ({ buyDustOrders: [], sellDustOrders: [] })
         };
 
         chainOrders.cancelOrder = async () => {
@@ -668,6 +695,158 @@ async function testStartupDustSchedulesTimer() {
     }
 }
 
+async function testConsecutiveDustCancelSeeding() {
+    console.log('Testing Consecutive Dust Cancel Seeds Next Top Order...');
+
+    const originalCancelOrder = chainOrders.cancelOrder;
+    const originalSetTimeout = global.setTimeout;
+    const originalClearTimeout = global.clearTimeout;
+    const originalDelay = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
+    let bot;
+
+    try {
+        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = 5;
+
+        // Intercept the timer so we can verify it is scheduled after the cancel.
+        let timerScheduled = false;
+        global.setTimeout = (fn, delay) => {
+            timerScheduled = true;
+            return { fakeTimer: true };
+        };
+        global.clearTimeout = () => {};
+
+        bot = new DEXBot({
+            botKey: 'test_consecutive_dust_cancel',
+            dryRun: false,
+            startPrice: 1,
+            assetA: 'TESTA',
+            assetB: 'BTS',
+            incrementPercent: 0.5
+        });
+        bot.account = 'test-account';
+        bot.privateKey = 'test-key';
+
+        const order2 = {
+            id: 'dust-buy-2',
+            orderId: '1.7.902',
+            type: ORDER_TYPES.BUY,
+            state: ORDER_STATES.PARTIAL,
+            size: 0.1,
+            price: 0.89
+        };
+
+        bot.manager = {
+            synchronizeWithChain: async () => ({ newOrders: [], ordersNeedingCorrection: [] }),
+            processFilledOrders: async () => ({ actions: [] }),
+            persistGrid: async () => ({ isValid: true }),
+            recalculateFunds: async () => {},
+            // After order 1 is cancelled, the next top is order 2.
+            checkGridHealth: async () => ({ buyDustOrders: [order2], sellDustOrders: [] })
+        };
+
+        chainOrders.cancelOrder = async () => {};
+
+        const order1 = {
+            id: 'dust-buy-1',
+            orderId: '1.7.901',
+            type: ORDER_TYPES.BUY,
+            state: ORDER_STATES.PARTIAL,
+            size: 0.1,
+            price: 0.9
+        };
+
+        // Age order 1 past the delay so it qualifies for cancellation.
+        bot._dustSinceMap.set('1.7.901', Date.now() - (5 * 60_000) - 1);
+
+        const result = await bot._cancelDustOrders({ buy: [order1], sell: [] });
+
+        assert.strictEqual(result.cancelledCount, 1, 'Order 1 should be cancelled');
+        assert.strictEqual(bot._dustSinceMap.has('1.7.901'), false, 'Cancelled order should be removed from map');
+        assert.strictEqual(bot._dustSinceMap.has('1.7.902'), true, 'Newly exposed order 2 should be seeded into _dustSinceMap immediately');
+        assert.strictEqual(timerScheduled, true, 'Dust timer should be scheduled for the newly seeded order');
+        console.log('  ✓ Consecutive dust cancel seeds next top order and schedules its timer');
+    } finally {
+        if (typeof bot?._clearDustMaintenanceTimer === 'function') {
+            bot._clearDustMaintenanceTimer();
+        }
+        chainOrders.cancelOrder = originalCancelOrder;
+        global.setTimeout = originalSetTimeout;
+        global.clearTimeout = originalClearTimeout;
+        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = originalDelay;
+    }
+}
+
+async function testDustReseedHealthFailureDoesNotAbort() {
+    console.log('Testing Dust Reseed Health Failure Does Not Abort...');
+
+    const originalCancelOrder = chainOrders.cancelOrder;
+    const originalSetTimeout = global.setTimeout;
+    const originalClearTimeout = global.clearTimeout;
+    const originalDelay = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
+    let bot;
+
+    try {
+        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = 5;
+
+        let fallbackTimerScheduled = false;
+        global.setTimeout = (fn, delay) => {
+            fallbackTimerScheduled = true;
+            return { fakeTimer: true };
+        };
+        global.clearTimeout = () => {};
+
+        bot = new DEXBot({
+            botKey: 'test_dust_reseed_health_failure',
+            dryRun: false,
+            startPrice: 1,
+            assetA: 'TESTA',
+            assetB: 'BTS',
+            incrementPercent: 0.5
+        });
+        bot.account = 'test-account';
+        bot.privateKey = 'test-key';
+
+        bot.manager = {
+            synchronizeWithChain: async () => ({ newOrders: [], ordersNeedingCorrection: [] }),
+            processFilledOrders: async () => ({ actions: [] }),
+            persistGrid: async () => ({ isValid: true }),
+            recalculateFunds: async () => {},
+            checkGridHealth: async () => {
+                throw new Error('temporary health failure');
+            }
+        };
+
+        chainOrders.cancelOrder = async () => {};
+
+        const order = {
+            id: 'dust-buy-1',
+            orderId: '1.7.903',
+            type: ORDER_TYPES.BUY,
+            state: ORDER_STATES.PARTIAL,
+            size: 0.1,
+            price: 0.9
+        };
+
+        bot._dustSinceMap.set('1.7.903', Date.now() - (5 * 60_000) - 1);
+
+        const result = await bot._cancelDustOrders({ buy: [order], sell: [] });
+
+        assert.strictEqual(result.cancelledCount, 1, 'Successful cancel should still be counted');
+        assert.strictEqual(bot._dustSinceMap.has('1.7.903'), false, 'Cancelled order should still be removed from the map');
+        assert.strictEqual(fallbackTimerScheduled, true, 'Fallback timer should be scheduled when reseed fails and map is empty');
+        console.log('  ✓ Health check failure no longer aborts successful dust cancellation');
+        console.log('  ✓ Fallback timer scheduled when reseed fails to prevent permanently skipping next top order');
+    } finally {
+        if (typeof bot?._clearDustMaintenanceTimer === 'function') {
+            bot._clearDustMaintenanceTimer();
+        }
+        chainOrders.cancelOrder = originalCancelOrder;
+        global.setTimeout = originalSetTimeout;
+        global.clearTimeout = originalClearTimeout;
+        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = originalDelay;
+    }
+}
+
 Promise.resolve()
     .then(() => testDustTrigger())
     .then(() => testDustCancelSyntheticRotation())
@@ -676,6 +855,11 @@ Promise.resolve()
     .then(() => testDustThresholdUsesConfiguredPercentage())
     .then(() => testDustTrackingOnlyUsesTopLiveOrder())
     .then(() => testStartupDustSchedulesTimer())
+    .then(() => testConsecutiveDustCancelSeeding())
+    .then(() => testDustReseedHealthFailureDoesNotAbort())
+    .finally(() => {
+        Module._load = originalModuleLoad;
+    })
     .then(() => {
     process.exit(0);
 }).catch(err => {
