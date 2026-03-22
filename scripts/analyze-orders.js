@@ -294,7 +294,9 @@ function analyzeOrder(botData, config) {
       sell: sellSlots
     },
     // Target active orders from config
-    activeOrdersTarget: config ? config.activeOrders : null
+    activeOrdersTarget: config ? config.activeOrders : null,
+    // Weight distribution from config
+    weightDistribution: config ? config.weightDistribution : null
   };
 }
 
@@ -488,7 +490,7 @@ function createDistributionBar(counts) {
   const spreadBar = '\x1b[97m' + '█'.repeat(spreadWidth) + colors.reset; // white
   const sellBar = colors.sellDark + '█'.repeat(activeSellWidth) + colors.sell + '█'.repeat(virtualSellWidth) + colors.reset;
 
-  return `${buyBar}${spreadBar}${sellBar}`;
+  return { bar: `${buyBar}${spreadBar}${sellBar}`, buyWidth: activeBuyWidth + virtualBuyWidth };
 }
 
 /**
@@ -721,6 +723,12 @@ function formatAnalysis(analysis) {
   // Header: Trading pair name
   lines.push(`\n${colors.cyan}📊 ${analysis.pair}${colors.reset}`);
   lines.push(`   Update: ${analysis.lastUpdated.toLocaleString()}`);
+  lines.push(``);
+
+  if (analysis.weightDistribution) {
+    const w = analysis.weightDistribution;
+    lines.push(`   Weight: ${w.buy} buy | ${w.sell} sell`);
+  }
 
   // Warning: No config available for comparison
   if (!analysis.hasConfig) {
@@ -735,26 +743,10 @@ function formatAnalysis(analysis) {
    */
   if (analysis.hasConfig) {
     lines.push(
-      `   Spread:${formatPercent(analysis.spread.real).padStart(6)} (target: ${formatPercent(analysis.spread.target)})`
+      `   Spread:${formatPercent(analysis.spread.real).padStart(6)} (${formatPercent(analysis.spread.target)}) | Incr.: ${formatPercent(analysis.increment.avg).padStart(6)} (${formatPercent(analysis.increment.target)})`
     );
   } else {
-    lines.push(`   Spread:${formatPercent(analysis.spread.real).padStart(6)}`);
-  }
-
-  /**
-   * Increment Analysis
-   * Shows: actual increment vs target
-   * Status: ✓ if within tolerance and consistent, ✗ otherwise
-   * σ (sigma): Standard deviation - measure of consistency
-   *   Low σ (<0.1%) = consistent geometric progression
-   *   High σ (>0.5%) = irregular slot spacing
-   */
-  if (analysis.hasConfig) {
-    lines.push(
-      `   Incr.: ${formatPercent(analysis.increment.avg).padStart(6)} (target: ${formatPercent(analysis.increment.target)})`
-    );
-  } else {
-    lines.push(`   Incr.: ${formatPercent(analysis.increment.avg).padStart(6)}`);
+    lines.push(`   Spread:${formatPercent(analysis.spread.real).padStart(6)} | Incr.: ${formatPercent(analysis.increment.avg).padStart(6)}`);
   }
 
   // Active orders comparison
@@ -764,7 +756,8 @@ function formatAnalysis(analysis) {
     const buyActual = analysis.slots.activeBuy;
     const sellActual = analysis.slots.activeSell;
     
-    lines.push(`   Active: ${buyActual}/${buyTarget} buy  |  ${sellActual}/${sellTarget} sell`);
+    lines.push(`   Active: ${buyActual}/${buyTarget} buy | ${sellActual}/${sellTarget} sell`);
+    lines.push(``);
   }
 
   // Calculate bar positioning based on slot distribution
@@ -860,7 +853,7 @@ function formatAnalysis(analysis) {
   const buySlotPctWithSpread = totalSlots > 0 ? ((analysis.slots.buy / totalSlots) * 100).toFixed(1) : '0.0';
   const sellSlotPctWithSpread = totalSlots > 0 ? ((analysis.slots.sell / totalSlots) * 100).toFixed(1) : '0.0';
 
-  const slotDistBar = createDistributionBar({
+  const { bar: slotDistBar, buyWidth: slotDistBuyWidth } = createDistributionBar({
     activeBuy: analysis.slots.activeBuy,
     virtualBuy: analysis.slots.virtualBuy,
     spread: analysis.slots.spread,
@@ -869,11 +862,10 @@ function formatAnalysis(analysis) {
   });
 
   // Weight factor visualization (funds distribution across all orders)
-  const barWidth = BAR_WIDTH; // Match the width of other bars
   const weightBar = createWeightFactorBar(
     analysis.slotData?.buy,
     analysis.slotData?.sell,
-    barWidth,
+    BAR_WIDTH,
     analysis.marketPrice || 1
   );
 
@@ -882,13 +874,10 @@ function formatAnalysis(analysis) {
   );
 
   // Position delta indicator directly under the spread slot character
-  // Use Math.round to match createDistributionBar calculation (which is what's actually displayed)
   const deltaStr = `Δ ${buyMatch}%`;
-  const slotDistBuyWidth = Math.round((analysis.slots.buy / totalSlots) * BAR_WIDTH);
   const spreadStart = 11 + slotDistBuyWidth; // Position where spread character starts (11 = prefix length)
-  const deltaPadding = spreadStart;
   lines.push(
-    `${' '.repeat(deltaPadding)}${deltaStr}`
+    `${' '.repeat(spreadStart)}${deltaStr}`
   );
 
   lines.push(
@@ -917,7 +906,7 @@ function formatAnalysis(analysis) {
   // Calculate spacing to match the Slots line width (prefix + bar width)
   // This ensures funds breakdown lines align with the visual bar width
   const barLinePrefix = `   Funds:  `;
-  const targetWidth = barLinePrefix.length + barWidth;
+  const targetWidth = barLinePrefix.length + BAR_WIDTH;
 
   // Spacing for each line: targetWidth - line prefix - buyValue - sellColumn
   const spacing1 = Math.max(2, targetWidth - prefix1Len - buyValueStr.length - rightColWidth);
