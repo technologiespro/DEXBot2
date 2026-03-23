@@ -206,7 +206,7 @@ class DEXBot {
         this._maintenanceCooldownCycles = 0;
 
         // Tracks when each order first entered the dust state (orderId → timestamp ms).
-        // Used by _cancelDustOrders to enforce DUST_CANCEL_DELAY_MIN.
+        // Used by _cancelDustOrders to enforce DUST_CANCEL_DELAY_SEC.
         // Entries are pruned when an order recovers from dust or is cancelled.
         this._dustSinceMap = new Map();
     }
@@ -3006,13 +3006,13 @@ class DEXBot {
     }
 
     /**
-     * Cancel dust partial orders that have exceeded DUST_CANCEL_DELAY_MIN, treating each
+     * Cancel dust partial orders that have exceeded DUST_CANCEL_DELAY_SEC, treating each
      * as a fully-filled slot so the grid can place a fresh counter-order there.
      *
-     * Behaviour by GRID_LIMITS.DUST_CANCEL_DELAY_MIN:
+     * Behaviour by GRID_LIMITS.DUST_CANCEL_DELAY_SEC:
      *   -1  Disabled — returns immediately without action.
      *    0  Cancel on first detection (no delay).
-     *    N  Cancel after N continuous minutes in dust state.
+     *    N  Cancel after N continuous seconds in dust state.
      *
      * The timer is tracked per orderId in this._dustSinceMap.  Orders that recover
      * from dust (size grows back above threshold) have their timer reset automatically.
@@ -3025,14 +3025,14 @@ class DEXBot {
      * @private
      */
     async _cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {}) {
-        const delayMin = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
-        if (!Number.isFinite(delayMin) || delayMin < 0) {
+        const delaySec = GRID_LIMITS.DUST_CANCEL_DELAY_SEC;
+        if (!Number.isFinite(delaySec) || delaySec < 0) {
             this._clearDustMaintenanceTimer();
             return { cancelledCount: 0, batchResult: null };
         }
 
         const now = Date.now();
-        const delayMs = delayMin * 60_000;
+        const delayMs = delaySec * 1_000;
         const allDust = [...buyDust, ...sellDust];
         const dustIds = new Set(allDust.map(o => o.orderId).filter(Boolean));
 
@@ -3086,7 +3086,7 @@ class DEXBot {
                 cancelledCount++;
                 this._log(
                     `[DUST-CANCEL] Cancelled dust order ${order.id} (${order.orderId}) ` +
-                    `as fully filled (delay=${delayMin}min, size=${order.size})`,
+                    `as fully filled (delay=${delaySec}s, size=${order.size})`,
                     'info'
                 );
             } catch (err) {
@@ -3135,7 +3135,7 @@ class DEXBot {
         // _scheduleDustMaintenanceCheck would have bailed early. Install a bare
         // follow-up scan so a newly exposed top order is never permanently skipped.
         if (cancelledCount > 0 && this._dustSinceMap.size === 0 && !this._shuttingDown && !this._dustMaintenanceTimer) {
-            const delayMs = GRID_LIMITS.DUST_CANCEL_DELAY_MIN * 60_000;
+            const delayMs = GRID_LIMITS.DUST_CANCEL_DELAY_SEC * 1_000;
             this._dustMaintenanceTimer = setTimeout(() => {
                 this._dustMaintenanceTimer = null;
                 if (this._shuttingDown || !this.manager?._fillProcessingLock) return;
@@ -3159,18 +3159,18 @@ class DEXBot {
     _scheduleDustMaintenanceCheck() {
         this._clearDustMaintenanceTimer();
 
-        const delayMin = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
+        const delaySec = GRID_LIMITS.DUST_CANCEL_DELAY_SEC;
         if (
             this._shuttingDown ||
             !this.manager ||
-            !Number.isFinite(delayMin) ||
-            delayMin < 0 ||
+            !Number.isFinite(delaySec) ||
+            delaySec < 0 ||
             this._dustSinceMap.size === 0
         ) {
             return;
         }
 
-        const delayMs = delayMin * 60_000;
+        const delayMs = delaySec * 1_000;
         const now = Date.now();
         let nextRunAt = Number.POSITIVE_INFINITY;
 

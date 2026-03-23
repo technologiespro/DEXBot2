@@ -1314,7 +1314,7 @@ class Grid {
      * Cancelling an interior partial could punch a hole inside the active grid.
      *
      * Returns boolean flags plus the actual dust order objects so callers can act
-     * on individual orders (e.g. DUST_CANCEL_DELAY_MIN auto-cancel).
+     * on individual orders (e.g. DUST_CANCEL_DELAY_SEC auto-cancel).
      *
      * @param {OrderManager} manager
      * @returns {Promise<{buyDust: boolean, sellDust: boolean, buyDustOrders: Array, sellDustOrders: Array}>}

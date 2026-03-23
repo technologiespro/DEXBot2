@@ -305,7 +305,7 @@ async function testDustCancelSyntheticRotation() {
         assert.strictEqual(cancelCalls, 0, 'Dust cancel should not run before timer expiry');
         assert.strictEqual(processCalls, 0, 'Synthetic rotation should not run before timer expiry');
 
-        bot._dustSinceMap.set('1.7.900', Date.now() - (5 * 60_000) - 1);
+        bot._dustSinceMap.set('1.7.900', Date.now() - (60 * 1_000) - 1);
         const secondPass = await bot._cancelDustOrders({ buy: [dustOrder], sell: [] });
         assert.strictEqual(secondPass.cancelledCount, 1, 'Dust cancel should fire once timer expires');
         assert.strictEqual(cancelCalls, 1, 'Dust cancel should submit one cancel');
@@ -368,7 +368,7 @@ async function testDustCancelDoesNotBeatRealFill() {
             price: 1.1
         };
 
-        bot._dustSinceMap.set('1.7.901', Date.now() - (5 * 60_000) - 1);
+        bot._dustSinceMap.set('1.7.901', Date.now() - (60 * 1_000) - 1);
         const result = await bot._cancelDustOrders({ buy: [], sell: [dustOrder] });
 
         assert.strictEqual(result.cancelledCount, 0, 'Failed cancel should not count as dust rotation');
@@ -440,7 +440,7 @@ async function testDustCancelFallbackRefetchesOpenOrders() {
             price: 0.9
         };
 
-        bot._dustSinceMap.set('1.7.910', Date.now() - (5 * 60_000) - 1);
+        bot._dustSinceMap.set('1.7.910', Date.now() - (60 * 1_000) - 1);
         const result = await bot._cancelDustOrders({ buy: [dustOrder], sell: [] });
 
         assert.strictEqual(result.cancelledCount, 1, 'Fallback refetch cancel should still count as cancelled');
@@ -714,7 +714,7 @@ async function testStartupDustSchedulesTimer() {
 
     const originalSetTimeout = global.setTimeout;
     const originalClearTimeout = global.clearTimeout;
-    const originalDelay = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
+    const originalDelay = GRID_LIMITS.DUST_CANCEL_DELAY_SEC;
 
     try {
         let scheduledDelay = null;
@@ -727,7 +727,7 @@ async function testStartupDustSchedulesTimer() {
         };
         global.clearTimeout = () => {};
 
-        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = 5;
+        GRID_LIMITS.DUST_CANCEL_DELAY_SEC = 60;
 
         const bot = new DEXBot({
             botKey: 'test_startup_dust_schedule',
@@ -754,7 +754,7 @@ async function testStartupDustSchedulesTimer() {
         bot._dustSinceMap.set('1.7.920', Date.now());
         bot._scheduleDustMaintenanceCheck();
 
-        assert.ok(scheduledDelay >= 299000 && scheduledDelay <= 300000, 'Dust timer should schedule near configured delay');
+        assert.ok(scheduledDelay >= 59000 && scheduledDelay <= 60000, 'Dust timer should schedule near configured delay');
         assert.strictEqual(typeof scheduledFn, 'function', 'Dust timer should install a callback');
 
         scheduledFn();
@@ -763,7 +763,7 @@ async function testStartupDustSchedulesTimer() {
         assert.strictEqual(maintenanceCalls, 1, 'Dust timer should trigger maintenance once');
         console.log('  ✓ Existing dust at startup schedules a maintenance check');
     } finally {
-        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = originalDelay;
+        GRID_LIMITS.DUST_CANCEL_DELAY_SEC = originalDelay;
         global.setTimeout = originalSetTimeout;
         global.clearTimeout = originalClearTimeout;
     }
@@ -775,11 +775,11 @@ async function testConsecutiveDustCancelSeeding() {
     const originalCancelOrder = chainOrders.cancelOrder;
     const originalSetTimeout = global.setTimeout;
     const originalClearTimeout = global.clearTimeout;
-    const originalDelay = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
+    const originalDelay = GRID_LIMITS.DUST_CANCEL_DELAY_SEC;
     let bot;
 
     try {
-        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = 5;
+        GRID_LIMITS.DUST_CANCEL_DELAY_SEC = 60;
 
         // Intercept the timer so we can verify it is scheduled after the cancel.
         let timerScheduled = false;
@@ -830,7 +830,7 @@ async function testConsecutiveDustCancelSeeding() {
         };
 
         // Age order 1 past the delay so it qualifies for cancellation.
-        bot._dustSinceMap.set('1.7.901', Date.now() - (5 * 60_000) - 1);
+        bot._dustSinceMap.set('1.7.901', Date.now() - (60 * 1_000) - 1);
 
         const result = await bot._cancelDustOrders({ buy: [order1], sell: [] });
 
@@ -846,7 +846,7 @@ async function testConsecutiveDustCancelSeeding() {
         chainOrders.cancelOrder = originalCancelOrder;
         global.setTimeout = originalSetTimeout;
         global.clearTimeout = originalClearTimeout;
-        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = originalDelay;
+        GRID_LIMITS.DUST_CANCEL_DELAY_SEC = originalDelay;
     }
 }
 
@@ -856,11 +856,11 @@ async function testDustReseedHealthFailureDoesNotAbort() {
     const originalCancelOrder = chainOrders.cancelOrder;
     const originalSetTimeout = global.setTimeout;
     const originalClearTimeout = global.clearTimeout;
-    const originalDelay = GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
+    const originalDelay = GRID_LIMITS.DUST_CANCEL_DELAY_SEC;
     let bot;
 
     try {
-        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = 5;
+        GRID_LIMITS.DUST_CANCEL_DELAY_SEC = 60;
 
         let fallbackTimerScheduled = false;
         global.setTimeout = (fn, delay) => {
@@ -901,7 +901,7 @@ async function testDustReseedHealthFailureDoesNotAbort() {
             price: 0.9
         };
 
-        bot._dustSinceMap.set('1.7.903', Date.now() - (5 * 60_000) - 1);
+        bot._dustSinceMap.set('1.7.903', Date.now() - (60 * 1_000) - 1);
 
         const result = await bot._cancelDustOrders({ buy: [order], sell: [] });
 
@@ -917,7 +917,7 @@ async function testDustReseedHealthFailureDoesNotAbort() {
         chainOrders.cancelOrder = originalCancelOrder;
         global.setTimeout = originalSetTimeout;
         global.clearTimeout = originalClearTimeout;
-        GRID_LIMITS.DUST_CANCEL_DELAY_MIN = originalDelay;
+        GRID_LIMITS.DUST_CANCEL_DELAY_SEC = originalDelay;
     }
 }
 

@@ -118,6 +118,21 @@
 
 const { readGeneralSettings } = require('./general_settings');
 
+function migrateDustCancelDelaySettings(gridSettings = {}) {
+    const cleanGridSettings = { ...gridSettings };
+
+    // Migrate legacy DUST_CANCEL_DELAY_MIN (minutes) → DUST_CANCEL_DELAY_SEC (seconds).
+    if ('DUST_CANCEL_DELAY_MIN' in cleanGridSettings && !('DUST_CANCEL_DELAY_SEC' in cleanGridSettings)) {
+        const legacyMin = Number(cleanGridSettings.DUST_CANCEL_DELAY_MIN);
+        if (Number.isFinite(legacyMin)) {
+            cleanGridSettings.DUST_CANCEL_DELAY_SEC = legacyMin < 0 ? legacyMin : legacyMin * 60;
+        }
+    }
+
+    delete cleanGridSettings.DUST_CANCEL_DELAY_MIN;
+    return cleanGridSettings;
+}
+
 // Order categories used by the OrderManager when classifying grid entries.
 const ORDER_TYPES = Object.freeze({
     SELL: 'sell',
@@ -268,18 +283,18 @@ let GRID_LIMITS = {
     //   - This order would be rotated to free the slot
     PARTIAL_DUST_THRESHOLD_PERCENTAGE: 5,
 
-    // DUST_CANCEL_DELAY_MIN: Minutes to wait before auto-cancelling a dust partial as fully filled.
+    // DUST_CANCEL_DELAY_SEC: Seconds to wait before auto-cancelling a dust partial as fully filled.
     // When a partial order's remaining size falls below PARTIAL_DUST_THRESHOLD_PERCENTAGE,
     // it can be cancelled on-chain and its slot freed for a fresh counter-order.
-    // Formula: IF (now - firstDustDetected) >= DUST_CANCEL_DELAY_MIN × 60000ms → cancel
+    // Formula: IF (now - firstDustDetected) >= DUST_CANCEL_DELAY_SEC × 1000ms → cancel
     // Values:
     //   -1 = disabled — dust orders are never auto-cancelled
     //    0 = cancel immediately on first dust detection in the active window
-    //    N = cancel after N minutes of continuous dust state (default: 5, timer resets if order recovers)
-    // Example: 5 → order stays dust for 5 minutes → cancel + treat slot as fully filled
+    //    N = cancel after N seconds of continuous dust state (default: 60, timer resets if order recovers)
+    // Example: 60 → order stays dust for 60 seconds → cancel + treat slot as fully filled
     //   - Bot then places a fresh order at proper size on the freed slot
     //   - The cancelled dust remainder is returned to the bot's free balance
-    DUST_CANCEL_DELAY_MIN: 5,
+    DUST_CANCEL_DELAY_SEC: 60,
 
     // FUND_INVARIANT_PERCENT_TOLERANCE: Allowed percentage drift in fund tracking before triggering recovery.
     // Formula: tolerance = max(precisionSlack, balance × percentTolerance)
@@ -730,9 +745,11 @@ if (settings) {
     if (settings.GRID_LIMITS) {
         const gridSettings = settings.GRID_LIMITS;
         // Filter out comment fields before merging
-        const cleanGridSettings = Object.fromEntries(
+        const filteredGridSettings = Object.fromEntries(
             Object.entries(gridSettings).filter(([key]) => !key.startsWith('_'))
         );
+        const cleanGridSettings = migrateDustCancelDelaySettings(filteredGridSettings);
+
         GRID_LIMITS = {
             ...GRID_LIMITS,
             ...cleanGridSettings,
@@ -757,9 +774,10 @@ if (settings) {
 
     if (settings.EXPERT) {
         if (settings.EXPERT.GRID_LIMITS) {
-            const expertGridSettings = Object.fromEntries(
+            const filteredExpertGridSettings = Object.fromEntries(
                 Object.entries(settings.EXPERT.GRID_LIMITS).filter(([key]) => !key.startsWith('_'))
             );
+            const expertGridSettings = migrateDustCancelDelaySettings(filteredExpertGridSettings);
             GRID_LIMITS = { ...GRID_LIMITS, ...expertGridSettings };
         }
         if (settings.EXPERT.TIMING) {

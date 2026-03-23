@@ -124,7 +124,7 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 | **Surplus** | Order outside the active window that can be rotated |
 | **Hard Surplus** | Order beyond the configured `activeOrders` count |
 | **Dust** | Partial order < 5% of ideal size |
-| **Dust Cancel** | Auto-cancellation of dust partials on-chain after `DUST_CANCEL_DELAY_MIN` minutes, freeing the slot for a fresh counter-order. Timer tracked per `orderId` in `_dustSinceMap`. |
+| **Dust Cancel** | Auto-cancellation of dust partials on-chain after `DUST_CANCEL_DELAY_SEC` seconds, freeing the slot for a fresh counter-order. Timer tracked per `orderId` in `_dustSinceMap`. |
 
 ### Operations
 
