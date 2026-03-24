@@ -1,6 +1,6 @@
 # DEXBot2
 
-A market making bot for the BitShares Decentralized Exchange (DEX), implementing optimized staggered order strategies for automated trading.
+DEXBot2 is an automated market maker for the BitShares decentralized exchange.
 
 ![Grid Bot Order Distribution](docs/DEXBot2_0.6.0_grid_graphic.svg)
 
@@ -36,15 +36,15 @@ For detailed setup, see [Installation](#installation) or [Updating](#updating-de
 
 ### Disclaimer — Use At Your Own Risk
 
-- This software is in beta stage and provided "as-is" without warranty.
-- Secure your keys and secrets. Do not commit private keys or passwords to anyone.
+- This software is provided "as-is" without warranty.
+- Secure your keys. Never share private keys or passwords.
 - The authors and maintainers are not responsible for losses.
 
 ## 📥 Installation
 
 ### Prerequisites
 
-You'll need **Git** and **Node.js** installed on your system.
+You'll need **Git** and **Node.js** installed.
 
 #### Windows Users
 
@@ -98,7 +98,7 @@ node dexbot bots
 
 ### Updating DEXBot2
 
-To update DEXBot2 to the latest version from the main branch:
+Update to the latest version:
 
 ```bash
 # Run the update script from project root
@@ -149,7 +149,7 @@ Global settings via `node dexbot bots`, stored in `profiles/general.settings.jso
 
 ## 🎯 PM2 Process Management
 
-For production use with automatic restart and monitoring. Use `node pm2` to start — it handles connection, config generation, authentication (RAM-only), and PM2 startup automatically.
+For production use with automatic restart and monitoring. Run `node pm2` to start — it handles connection, authentication, and PM2 startup automatically.
 
 ```bash
 # Start all active bots with PM2
@@ -190,7 +190,7 @@ node dexbot disable {all|[<bot-name>]}
 node pm2.js help
 ```
 
-Bot logs are written to `profiles/logs/<bot-name>.log` (errors to `<bot-name>-error.log`). Restart policy: max 13 restarts, 1 day min uptime, 3s restart delay.
+Bot logs are written to `profiles/logs/<bot-name>.log` (errors to `<bot-name>-error.log`).
 
 ## 📚 Documentation
 

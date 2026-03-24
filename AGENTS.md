@@ -1,4 +1,4 @@
-# Opencode Development Context - DEXBot2
+# Development Context - DEXBot2
 
 ## Branch Strategy
 **Pipeline: `test` → `dev` → `main`** (ONE DIRECTION ONLY!)
@@ -111,19 +111,70 @@ File: <path>
 - <test/verification>
 ```
 
-## Current Status
-| Branch | Commits Ahead | Status |
-|--------|---|--------|
-| test | 100 | ✓ Synced with origin/test |
-| dev | 100 | ✓ Synced with origin/dev |
-| Both | Equal | ✓ Fully synchronized |
+## Key Files
 
-## Key Modules
-- `dexbot.js` - Entry point
-- `modules/dexbot_class.js` - Core bot class
-- `modules/order/` - Order management (manager, strategy, grid, accounting, sync_engine)
-- `modules/chain_orders.js`, `account_orders.js`, `account_bots.js` - Chain interaction
-- `modules/constants.js` - Configuration
+### Entry Points
+- `dexbot.js` - Main CLI entry point
+- `bot.js` - Alternative bot starter
+- `pm2.js` - PM2 process management
+- `unlock-start.js` - Single-prompt starter (no PM2)
+- `credential-daemon.js` - Credential daemon
+
+### Core Bot
+- `modules/dexbot_class.js` - Core bot class and logic
+- `modules/constants.js` - Centralized configuration and tuning parameters
+- `modules/bitshares_client.js` - BitShares connection and node management integration
+- `modules/node_manager.js` - Multi-node health checking and failover
+- `modules/general_settings.js` - General settings management
+- `modules/graceful_shutdown.js` - Graceful shutdown handling
+- `modules/chain_keys.js` - Key management
+- `modules/bots_file_lock.js` - Bot config file locking
+- `modules/btsdex_event_patch.js` - BitShares DEX event patching
+
+### Order Management (`modules/order/`)
+- `manager.js` - Order lifecycle and state management
+- `grid.js` - Grid calculation, placement, and management
+- `working_grid.js` - Copy-on-write working grid
+- `strategy.js` - Trading strategy (anchor & refill, consolidation)
+- `accounting.js` - Fee accounting and fund tracking
+- `sync_engine.js` - Blockchain synchronization
+- `startup_reconcile.js` - Startup order reconciliation
+- `runner.js` - Order execution runner
+- `async_lock.js` - Concurrency control
+- `logger.js` - Order logging
+- `logger_state.js` - Logger state tracking
+- `format.js` - Order formatting
+- `export.js` - Order data export
+- `index.js` - Module exports
+- `utils/` - Utilities (math, order, system, validate)
+
+### Market Adapter (`market_adapter/`)
+- `price_adapter.js` - AMA delta threshold and grid recalculation trigger
+- `core/price_adapter_service.js` - Price adapter service core
+- `ama_signal_runner.js` - AMA signal processing
+- `blockchain_source.js` - Blockchain data source
+- `kibana_source.js` - Kibana data source
+- `kibana_api.js` - Kibana API client
+- `native_api.js` - Native API client
+- `fetch_lp_data.js` - Liquidity pool data fetching
+- `merge_lp_data.js` - LP data merging
+- `candle_utils.js` - Candlestick utilities
+- `lp_chart_core.js` - LP chart core logic
+- `chart_lp_prices.js` - LP price charting
+
+### Blockchain Interaction
+- `modules/chain_orders.js` - Blockchain order operations
+- `modules/account_orders.js` - Account order queries
+- `modules/account_bots.js` - Account bot data management
+
+### Configuration
+- `profiles/ecosystem.config.js` - PM2 ecosystem configuration
+- `profiles/bots.json` - Bot configuration
+- `profiles/general.settings.json` - Global settings (auto-generated on first run)
+- `profiles/ama_profiles.json` - AMA configuration profiles
+
+### Testing
+- `tests/` - Comprehensive test suite (unit, integration, scenario tests)
 
 ## Quick Commands
 ```bash
@@ -140,56 +191,3 @@ git checkout dev && git pull && git merge --no-ff test && git push
 # Release to main
 git checkout main && git pull && git merge --no-ff dev && git push
 ```
-
-## Key Files
-
-### Entry Points
-- `dexbot.js` - Main CLI entry point (executable)
-- `bot.js` - Alternative bot starter
-- `pm2.js` - PM2 process management
-
-### Core Bot
-- `modules/dexbot_class.js` - Core bot class and logic (1424 lines)
-- `modules/constants.js` - Centralized configuration and tuning parameters
-
-### Order Management (`modules/order/`)
-- `manager.js` - Order lifecycle and state management (2852+ lines)
-- `grid.js` - Grid calculation, placement, and management
-- `strategy.js` - Trading strategy (anchor & refill, consolidation)
-- `accounting.js` - Fee accounting and fund tracking
-- `sync_engine.js` - Blockchain synchronization
-- `startup_reconcile.js` - Startup order reconciliation
-- `utils.js` - Utility functions (1254+ lines)
-- `index.js` - Module exports
-- `logger.js` - Order logging
-- `runner.js` - Order execution runner
-- `async_lock.js` - Concurrency control
-
-### Blockchain Interaction
-- `modules/chain_orders.js` - Blockchain order operations (269+ lines)
-- `modules/account_orders.js` - Account order queries (454+ lines)
-- `modules/account_bots.js` - Account bot data management (314+ lines)
-
-### Configuration & Examples
-- `examples/bots.json` - Bot configuration examples
-- `profiles/ecosystem.config.js` - PM2 ecosystem configuration
-- `package.json` - Dependencies and npm scripts
-
-### Testing
-- `tests/` - Comprehensive test suite including integration tests and ported unit logic:
-  - `test_accounting_logic.js` - Ported from accounting.test.js
-  - `test_strategy_logic.js` - Ported from strategy.test.js
-  - `test_sync_logic.js` - Ported from sync_engine.test.js
-  - `test_grid_logic.js` - Ported from grid.test.js
-  - `test_manager_logic.js` - Ported from manager.test.js
-  - `test_bts_fee_logic.js` - Ported from bts_fee_settlement.test.js
-  - Scenario and integration tests (fills, grid, manager, etc.)
-
-## Documentation
-- `README.md` - Full documentation
-- `docs/WORKFLOW.md` - Branch workflow
-- `docs/architecture.md` - System architecture and module relationships
-- `docs/developer_guide.md` - Developer quick start and glossary
-- `docs/TEST_UPDATES_SUMMARY.md` - Recent test coverage improvements
-- `FUND_MOVEMENT_AND_ACCOUNTING.md` - (In docs/) Unified fund accounting and grid mechanics
-- `CHANGELOG.md` - Version history
