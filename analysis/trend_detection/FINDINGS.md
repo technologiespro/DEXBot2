@@ -1,10 +1,28 @@
 # Trend Detection Research Findings
 
-Consolidated findings from dual AMA system evaluation, alternative method comparison, and price action filter testing.
+Consolidated findings from system evaluation and method comparison.
 
 ---
 
-## Backtest Results (Baseline)
+## Current Method: AMA + Feed Price
+
+The active approach uses a single Kaufman AMA compared against the on-chain settlement feed price. For feed-anchored MPAs (HONEST.Assets), the feed is the fundamental reference — deviation from it is the signal.
+
+**Modules:** `feed_trend.js`, `feed_premium.js`, `trend_analyzer.js`
+
+**Properties observed in testing:**
+- Reacts faster than dual AMA for MPA-specific scenarios because the feed provides a hard reference
+- When market and feed move together, no false signal fires (AMA tracks feed, deviation stays under threshold)
+- Choppy oscillation around feed correctly produces NEUTRAL
+- Premium/discount snapshot is immediate — no lag
+
+---
+
+## Previous Method: Dual AMA Crossover
+
+**Status:** Superseded by AMA + feed. File `dual_ama.js` kept for reference.
+
+### Backtest Results (Historical — Dual AMA)
 
 **Data:** 500 1-day candles, XRP/BTS synthetic pair (~1.4 years)
 **Config:** Fast AMA (ER=50, Fast=2, Slow=15), Slow AMA (ER=20, Fast=3, Slow=30)
@@ -17,83 +35,45 @@ Consolidated findings from dual AMA system evaluation, alternative method compar
 | Profit Factor | 23.70 |
 | Avg Win | 188.29% |
 | Avg Loss | -7.95% |
-| Max Win | 506.44% (Oct 2024 - Mar 2025, 135d) |
-| Max Loss | -15.48% (Dec 2025 - Jan 2026, 40d) |
-| Avg Trade Duration | 55.5 days |
 
-**Caveat:** 6 trades is not statistically significant. The 506% trade dominates the results. These numbers should be treated as promising but unproven until validated with more data or live trading.
+**Caveat:** 6 trades is not statistically significant. These numbers are from the dual AMA method and should not be compared directly against AMA+feed results without rerunning the backtest.
 
 ---
 
-## Price Action Filter Test
+## Price Action Filter Test (Dual AMA era)
 
-**Hypothesis:** Adding higher-high/higher-low confirmation would filter false signals.
+**Result: REJECTED** — Filter degraded performance.
 
-**Result: REJECTED** - Filter degraded performance.
+| Metric | Baseline | With Filter |
+|--------|----------|-------------|
+| Total Return | 541.02% | 216.87% |
+| Profit Factor | 23.70 | 2.68 |
+| Trade Count | 6 | 90 |
 
-| Metric | Baseline | With Filter | Change |
-|--------|----------|-------------|--------|
-| Total Return | 541.02% | 216.87% | -60% |
-| Profit Factor | 23.70 | 2.68 | -89% |
-| Trade Count | 6 | 90 | +1400% |
-| Win Rate | 50% | 51.11% | +1% |
-
-**Why it failed:** Price action (higher high/lower low) is noisy on daily candles. It triggered on every small swing, creating 90 micro-trades with ~2.4% average win instead of 6 strategic trades with 188% average win. The dual AMA system's strength is its selectivity - adding price action destroyed that.
-
-**Conclusion:** Keep dual AMA without price action filter. The system's value is in making few, high-quality trades.
+Adding higher-high/higher-low confirmation created excessive micro-trades and destroyed selectivity.
 
 ---
 
 ## Alternative Methods Considered
 
-### Comparison Matrix
-
-| Method | Lag | Accuracy | Complexity | Best Use |
-|--------|-----|----------|------------|----------|
-| **Dual AMA (ours)** | Medium | High | Medium | Trending markets |
-| MACD | High | Medium | Medium | Secondary confirmation |
-| RSI | Medium | Low | Low | Divergence/exit signals |
-| Price Action | None | Low | Low | Too noisy standalone |
-| Linear Regression | High | Medium | Low | Outlier-sensitive |
-| Momentum/ROC | None | Low | Low | Very noisy |
-| Stochastic | Medium | Low | Medium | Range-bound only |
-| Volume Profile | Very High | High | High | Confirmation (needs data) |
-| Order Flow | None | Very High | Very High | Requires tick data |
-| ML/Neural Net | None | Unknown | Very High | Insufficient data |
-
-### Key Takeaways
-
-1. **MACD** - Tested in ama_fitting analysis, produced lower profit factors than dual AMA
-2. **Volume confirmation** - Worth testing if volume data becomes available, but not currently accessible for this pair
-3. **Machine learning** - Not viable yet (need 1000+ labeled trades, only have ~6)
-4. **RSI/Stochastic** - Wrong tools for trend detection (designed for mean-reversion)
-
----
-
-## 3-Indicator Reversal Architecture (Theoretical)
-
-A reversal detection system was designed but **not implemented or backtested**:
-- Component 1: Divergence detection (RSI/MACD/Stochastic)
-- Component 2: Trend break confirmation (EMA cross/S&R break)
-- Component 3: Volume validation (spike + OBV)
-
-This remains theoretical. Would require volume data and significant implementation work.
+| Method | Verdict | Reason |
+|--------|---------|--------|
+| MACD | Inferior | Lower profit factors than AMA approaches |
+| RSI/Stochastic | Wrong tool | Designed for mean-reversion, not trend detection |
+| Price Action | Rejected | Too noisy on daily candles (tested) |
+| Volume Profile | Not viable | Volume data not available for these pairs |
+| ML/Neural Net | Insufficient data | Need 1000+ labeled trades |
 
 ---
 
 ## Recommendations
 
-### Do Now
-- Monitor the dual AMA system on live data without trading on it
-- Collect more trade signals to build statistical confidence (target: 20+ trades)
+### Active
+- Run AMA+feed optimizer on fresh data to find parameters for target pairs
+- Backtest with `node backtest_trend_detection.js` to validate
+- Reoptimize when pair characteristics change
 
-### Do Later (if live monitoring validates)
-- Integrate `TrendAnalyzer` into bot for trend-aware grid adjustments
-- Test volume filter if volume data becomes available
-- Reoptimize parameters monthly with fresh data
-
-### Don't Do
-- Add price action filter (tested, hurts performance)
-- Switch to MACD/RSI (inferior for this use case)
-- Pursue ML approach (insufficient training data)
-- Rebuild the system (current design is sound, needs more validation)
+### Not Recommended
+- Price action filter (tested, hurts performance)
+- Switching to MACD/RSI (inferior for this use case)
+- ML approach (insufficient training data)

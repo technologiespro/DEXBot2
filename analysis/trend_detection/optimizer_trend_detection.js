@@ -1,13 +1,13 @@
 /**
- * TREND DETECTION OPTIMIZER
+ * TREND DETECTION OPTIMIZER (AMA + Feed)
  *
- * Tests different AMA parameter combinations to find the best settings
- * for detecting uptrends and downtrends with high precision.
+ * Tests different AMA parameter combinations for the feed-based trend
+ * detection method.  The "true" trend is derived from the feed price:
+ * when market price is consistently above feed, true trend is UP; below
+ * feed is DOWN.
  *
- * Scoring based on:
- * - Accuracy: % of candles where detected trend matches actual trend
- * - Signal Quality: Fewer false signals, sustained trend detection
- * - Trend Changes: Clean, clear trend change detection
+ * For backtesting without a live feed, we synthesize a stable feed from
+ * a slow moving average of the price data.
  *
  * Output: optimization_results_trend_1day.json (all results ranked)
  */
@@ -19,22 +19,18 @@ const { TrendAnalyzer } = require('./trend_analyzer');
 const DATA_DIR = path.join(__dirname, 'data');
 const RESULTS_FILE = path.join(__dirname, 'optimization_results_trend_1day.json');
 
-/**
- * Load candle data
- */
 function loadData() {
     const dataFile = path.join(DATA_DIR, 'XRP_BTS_SYNTHETIC_1day.json');
 
     if (!fs.existsSync(dataFile)) {
-        console.error(`❌ Data file not found: ${dataFile}`);
+        console.error('Data file not found:', dataFile);
         console.error('Run: node fetch_1day_candles.js');
         process.exit(1);
     }
 
     const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-    console.log(`✓ Loaded ${data.length} 1-day candles`);
+    console.log(`Loaded ${data.length} 1-day candles`);
 
-    // Return full candle structure: [timestamp, open, high, low, close, volume]
     return data.map(candle => ({
         timestamp: candle[0],
         open: candle[1],
@@ -46,53 +42,52 @@ function loadData() {
 }
 
 /**
- * Calculate "true" trend using MEDIAN PRICE LEVELS
- * True trend = compare current price to 20-day median
- * This is based on REAL market data, not arbitrary thresholds
+ * Synthesize a feed price series from a very slow SMA.
+ * For HONEST.Assets the feed is externally published and relatively stable.
+ * A 50-period SMA approximates that anchoring behavior for backtesting.
  */
-function calculateTrueTrend(candles, lookbackPeriod = 20) {
-    const trueTrends = [];
+function synthesizeFeedPrices(candles, smaPeriod = 50) {
+    const closes = candles.map(c => c.close);
+    const feed = [];
 
-    for (let i = 0; i < candles.length; i++) {
-        if (i < lookbackPeriod) {
-            trueTrends.push('NEUTRAL');
-            continue;
-        }
-
-        // Get median of last N closes (excluding current)
-        const priceWindow = candles.slice(i - lookbackPeriod, i).map(c => c.close);
-        const sorted = [...priceWindow].sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        const medianPrice = sorted.length % 2
-            ? sorted[mid]
-            : (sorted[mid - 1] + sorted[mid]) / 2;
-
-        const currentPrice = candles[i].close;
-
-        // Tolerance: 0.2% to avoid noise at median
-        const tolerance = medianPrice * 0.002;
-
-        if (currentPrice > medianPrice + tolerance) {
-            trueTrends.push('UP');
-        } else if (currentPrice < medianPrice - tolerance) {
-            trueTrends.push('DOWN');
+    for (let i = 0; i < closes.length; i++) {
+        if (i < smaPeriod - 1) {
+            // Not enough data yet — use close as feed proxy
+            feed.push(closes[i]);
         } else {
-            trueTrends.push('NEUTRAL');
+            let sum = 0;
+            for (let j = i - smaPeriod + 1; j <= i; j++) {
+                sum += closes[j];
+            }
+            feed.push(sum / smaPeriod);
         }
     }
 
-    return trueTrends;
+    return feed;
 }
 
 /**
- * Test a single parameter combination
+ * Calculate "true" trend using market price vs synthesized feed.
+ * UP = price > feed + tolerance, DOWN = price < feed - tolerance.
  */
-function testConfiguration(candles, config, usePriceActionFilter = false) {
+function calculateTrueTrend(candles, feedPrices, tolerancePercent = 0.5) {
+    return candles.map((c, i) => {
+        const feed = feedPrices[i];
+        const tolerance = feed * (tolerancePercent / 100);
+        if (c.close > feed + tolerance) return 'UP';
+        if (c.close < feed - tolerance) return 'DOWN';
+        return 'NEUTRAL';
+    });
+}
+
+/**
+ * Test a single AMA parameter combination with feed-based trend detection.
+ */
+function testConfiguration(candles, feedPrices, feedTrendConfig) {
     try {
         const analyzer = new TrendAnalyzer({
             lookbackBars: 20,
-            dualAMAConfig: config.dualAMAConfig,
-            usePriceActionFilter: usePriceActionFilter,
+            feedTrendConfig,
         });
 
         const detectedTrends = [];
@@ -100,9 +95,8 @@ function testConfiguration(candles, config, usePriceActionFilter = false) {
         let trendChangeCount = 0;
         let lastTrend = 'NEUTRAL';
 
-        // Feed all candles with high/low data
-        for (const candle of candles) {
-            analyzer.update(candle.close, candle.high, candle.low);
+        for (let i = 0; i < candles.length; i++) {
+            analyzer.update(candles[i].close, feedPrices[i]);
             const analysis = analyzer.getAnalysis();
 
             if (analysis.isReady) {
@@ -118,55 +112,36 @@ function testConfiguration(candles, config, usePriceActionFilter = false) {
             }
         }
 
-        return {
-            detectedTrends,
-            confirmedTrendsCount,
-            trendChangeCount,
-            readyAfter: 50, // warmup period
-        };
-    } catch (e) {
+        return { detectedTrends, confirmedTrendsCount, trendChangeCount };
+    } catch (_) {
         return null;
     }
 }
 
 /**
- * Calculate accuracy score
+ * Score a configuration against the true trend series.
  */
-function calculateScore(detectedTrends, trueTrends, config) {
-    // Only compare from where detector is ready
-    const readyAfter = 50;
-    const slice = detectedTrends.slice(readyAfter - 1);
-    const truthSlice = trueTrends.slice(readyAfter - 1);
+function calculateScore(detectedTrends, trueTrends, warmup = 50) {
+    const slice = detectedTrends.slice(warmup - 1);
+    const truthSlice = trueTrends.slice(warmup - 1);
+    if (slice.length === 0) return null;
 
-    if (slice.length === 0) return 0;
-
-    // Accuracy: % of correct trend detections
     let correctCount = 0;
     for (let i = 0; i < slice.length; i++) {
-        if (slice[i] === truthSlice[i]) {
-            correctCount++;
-        }
+        if (slice[i] === truthSlice[i]) correctCount++;
     }
     const accuracy = (correctCount / slice.length) * 100;
 
-    // Count confirmed signals only (higher quality)
     let confirmedMatches = 0;
     let confirmedCount = 0;
-    for (let i = readyAfter - 1; i < detectedTrends.length; i++) {
-        // Simplified: count as confirmed if we detect sustained trend
-        if (detectedTrends[i] !== 'NEUTRAL') {
+    for (let i = 0; i < slice.length; i++) {
+        if (slice[i] !== 'NEUTRAL') {
             confirmedCount++;
-            if (detectedTrends[i] === trueTrends[i]) {
-                confirmedMatches++;
-            }
+            if (slice[i] === truthSlice[i]) confirmedMatches++;
         }
     }
+    const confirmedAccuracy = confirmedCount > 0 ? (confirmedMatches / confirmedCount) * 100 : 0;
 
-    const confirmedAccuracy = confirmedCount > 0
-        ? (confirmedMatches / confirmedCount) * 100
-        : 0;
-
-    // Combined score: 60% accuracy + 40% confirmed accuracy (prefer confirmed signals)
     const combinedScore = accuracy * 0.6 + confirmedAccuracy * 0.4;
 
     return {
@@ -178,48 +153,22 @@ function calculateScore(detectedTrends, trueTrends, config) {
 }
 
 /**
- * Generate parameter combinations to test
- * WITH DIVERSITY CONSTRAINT: Fast and Slow AMAs must be significantly different
- * EXPANDED RANGES and HIGHER RESOLUTION for more thorough optimization
+ * Generate parameter combinations for feed-based AMA.
  */
 function generateConfigurations() {
     const configs = [];
 
-    // Fast AMA parameters - should be HIGH ER (responsive)
-    // EXPANDED: Now testing 8 values instead of 6
-    const fastErPeriods = [50, 60, 70, 80, 90, 100, 110, 120];
-    const fastFastPeriods = [2, 3, 4, 5];  // EXPANDED: Added 4, 5
-    const fastSlowPeriods = [10, 15, 20, 25, 30];  // EXPANDED: Added 25, 30
+    const erPeriods = [10, 20, 30, 40, 50, 60, 80, 100];
+    const fastPeriods = [2, 3, 4, 5];
+    const slowPeriods = [10, 15, 20, 25, 30];
+    const thresholds = [0.5, 1.0, 1.5, 2.0];
 
-    // Slow AMA parameters - should be LOW ER (conservative)
-    // EXPANDED: Now testing more values
-    const slowErPeriods = [5, 10, 15, 20, 25];  // EXPANDED: Added 25
-    const slowFastPeriods = [2, 3];
-    const slowSlowPeriods = [20, 25, 30, 35];  // EXPANDED: Added 20
-
-    // Generate combinations WITH DIVERSITY CONSTRAINT
-    for (const fastEr of fastErPeriods) {
-        for (const fastFast of fastFastPeriods) {
-            for (const fastSlow of fastSlowPeriods) {
-                for (const slowEr of slowErPeriods) {
-                    // CONSTRAINT: ER difference must be >= 30 for good divergence
-                    const erDiff = Math.abs(fastEr - slowEr);
-                    if (erDiff < 30) continue;  // Skip if AMAs too similar
-
-                    for (const slowFast of slowFastPeriods) {
-                        for (const slowSlow of slowSlowPeriods) {
-                            configs.push({
-                                dualAMAConfig: {
-                                    fastErPeriod: fastEr,
-                                    fastFastPeriod: fastFast,
-                                    fastSlowPeriod: fastSlow,
-                                    slowErPeriod: slowEr,
-                                    slowFastPeriod: slowFast,
-                                    slowSlowPeriod: slowSlow,
-                                }
-                            });
-                        }
-                    }
+    for (const erPeriod of erPeriods) {
+        for (const fastPeriod of fastPeriods) {
+            for (const slowPeriod of slowPeriods) {
+                if (fastPeriod >= slowPeriod) continue;
+                for (const thresholdPercent of thresholds) {
+                    configs.push({ erPeriod, fastPeriod, slowPeriod, thresholdPercent });
                 }
             }
         }
@@ -228,95 +177,71 @@ function generateConfigurations() {
     return configs;
 }
 
-/**
- * Run optimization
- */
 async function optimize() {
-    console.log('=== TREND DETECTION OPTIMIZER ===\n');
+    console.log('=== TREND DETECTION OPTIMIZER (AMA + Feed) ===\n');
 
-    // Load data
     console.log('Loading data...');
     const candles = loadData();
 
-    // Calculate true trends for scoring
-    console.log('Calculating reference trends...');
-    const trueTrends = calculateTrueTrend(candles, 10);
+    console.log('Synthesizing feed prices (50-period SMA)...');
+    const feedPrices = synthesizeFeedPrices(candles, 50);
 
-    // Generate configurations
+    console.log('Calculating reference trends...');
+    const trueTrends = calculateTrueTrend(candles, feedPrices, 0.5);
+
     console.log('\nGenerating parameter combinations...');
     const configs = generateConfigurations();
     console.log(`Testing ${configs.length} configurations...\n`);
 
-    // Test each configuration
     const results = [];
     let tested = 0;
 
     for (let i = 0; i < configs.length; i++) {
-        const config = configs[i];
-
-        // Test configuration WITHOUT price action filter (baseline)
-        const testResult = testConfiguration(candles, config, false);
+        const cfg = configs[i];
+        const testResult = testConfiguration(candles, feedPrices, cfg);
 
         if (testResult) {
-            // Calculate score
-            const score = calculateScore(testResult.detectedTrends, trueTrends, config);
-
-            results.push({
-                rank: 0, // Will be assigned after sorting
-                config: config.dualAMAConfig,
-                metrics: {
-                    accuracy: score.accuracy,
-                    confirmedAccuracy: score.confirmedAccuracy,
-                    confirmedSignals: score.confirmedSignals,
-                    score: score.score,
-                },
-                detection: {
-                    trendChanges: testResult.trendChangeCount,
-                    confirmedTrends: testResult.confirmedTrendsCount,
-                }
-            });
-
+            const score = calculateScore(testResult.detectedTrends, trueTrends);
+            if (score) {
+                results.push({
+                    rank: 0,
+                    config: cfg,
+                    metrics: score,
+                    detection: {
+                        trendChanges: testResult.trendChangeCount,
+                        confirmedTrends: testResult.confirmedTrendsCount,
+                    }
+                });
+            }
             tested++;
 
-            // Progress indicator
-            if ((i + 1) % 50 === 0) {
+            if ((i + 1) % 100 === 0) {
                 console.log(`  Tested ${i + 1}/${configs.length}...`);
             }
         }
     }
 
-    // Sort by score (descending)
     results.sort((a, b) => b.metrics.score - a.metrics.score);
+    results.forEach((r, i) => { r.rank = i + 1; });
 
-    // Assign ranks
-    results.forEach((r, i) => {
-        r.rank = i + 1;
-    });
-
-    // Save results
     fs.writeFileSync(RESULTS_FILE, JSON.stringify(results, null, 2));
 
-    console.log(`\n✅ Tested ${tested} configurations`);
-    console.log(`📊 Results saved to: ${path.basename(RESULTS_FILE)}`);
+    console.log(`\nTested ${tested} configurations`);
+    console.log(`Results saved to: ${path.basename(RESULTS_FILE)}`);
 
-    // Show top 10
     console.log('\n=== TOP 10 CONFIGURATIONS ===\n');
-    console.log('⚠️  These scores are used for RANKING only.');
     console.log('For REAL performance metrics, run: node backtest_trend_detection.js\n');
     for (let i = 0; i < Math.min(10, results.length); i++) {
         const r = results[i];
-        const cfg = r.config;
-        const erDiff = Math.abs(cfg.fastErPeriod - cfg.slowErPeriod);
+        const c = r.config;
         console.log(`#${r.rank} - Score: ${r.metrics.score}/100`);
-        console.log(`    Fast AMA: ER=${cfg.fastErPeriod}, Fast=${cfg.fastFastPeriod}, Slow=${cfg.fastSlowPeriod}`);
-        console.log(`    Slow AMA: ER=${cfg.slowErPeriod}, Fast=${cfg.slowFastPeriod}, Slow=${cfg.slowSlowPeriod}`);
-        console.log(`    ER Difference: ${erDiff} (>30 = good divergence)`);
+        console.log(`    AMA: ER=${c.erPeriod}, Fast=${c.fastPeriod}, Slow=${c.slowPeriod}, Threshold=${c.thresholdPercent}%`);
+        console.log(`    Accuracy: ${r.metrics.accuracy}% (Confirmed: ${r.metrics.confirmedAccuracy}%)`);
         console.log('');
     }
 
-    // Show statistics
-    console.log('=== OPTIMIZATION STATISTICS ===');
     const scores = results.map(r => r.metrics.score);
+    console.log('=== STATISTICS ===');
     console.log(`  Tested: ${tested} configurations`);
     console.log(`  Best Score: ${Math.max(...scores).toFixed(2)}/100`);
     console.log(`  Avg Score: ${(scores.reduce((a, b) => a + b) / scores.length).toFixed(2)}/100`);
@@ -325,7 +250,6 @@ async function optimize() {
     return results;
 }
 
-// Run
 optimize().catch(console.error);
 
 module.exports = { optimize };

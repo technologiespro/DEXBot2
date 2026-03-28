@@ -2,9 +2,15 @@
 
 ## Core Modules (Production Ready)
 ```
-dual_ama.js              # Fast + Slow AMA comparison engine
+feed_trend.js            # Single AMA vs feed price trend detection (for MPAs)
+feed_premium.js          # Market price vs feed price premium/discount (instantaneous)
 price_ratio.js           # Price position/oscillation analysis
-trend_analyzer.js        # Main interface - USE THIS!
+trend_analyzer.js        # Main interface - USE THIS! (AMA + feed focused)
+```
+
+## Legacy (kept for reference, not used by trend_analyzer)
+```
+dual_ama.js              # Fast + Slow AMA comparison engine (superseded by feed_trend)
 ```
 
 ## Tools (Run these in order)
@@ -88,7 +94,7 @@ npm run backtest                   # Regenerate backtest report
 
 ## File Sizes
 
-- Core modules: ~15 KB (dual_ama.js, price_ratio.js, trend_analyzer.js)
+- Core modules: ~25 KB (dual_ama.js, price_ratio.js, feed_premium.js, feed_trend.js, trend_analyzer.js)
 - Tools: ~30 KB (fetch, optimizer, chart, backtest scripts)
 - Documentation: ~20 KB (README, QUICKSTART, this file)
 - Data: ~200 KB (generated, git ignored)

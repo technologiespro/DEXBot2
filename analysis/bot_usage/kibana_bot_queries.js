@@ -35,81 +35,18 @@
 
 'use strict';
 
-const https = require('https');
+const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('../../market_adapter/core/kibana_client');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const KIBANA_URL = 'https://kibana.bitshares.dev';
-const INDEX      = 'bitshares-*';
 
 const OP_LIMIT_ORDER_CREATE = 1;
 const OP_LIMIT_ORDER_CANCEL = 2;
 const OP_FILL_ORDER         = 4;
 
-const PROXY_PATH = (index) =>
-    `/api/console/proxy?path=${encodeURIComponent(index + '/_search')}&method=POST`;
-
 const DEFAULT_CONFIG = {
-    kibanaUrl: KIBANA_URL,
-    apiKey:    null,   // base64('id:key') if Kibana requires auth
-    timeout:   25000,
+    ...BASE_CONFIG,
+    timeout: 25000,
 };
-
-// ─── HTTP client ──────────────────────────────────────────────────────────────
-
-function kibanaSearch(config, esQuery) {
-    return new Promise((resolve, reject) => {
-        const body    = JSON.stringify(esQuery);
-        const url     = new URL(config.kibanaUrl ?? KIBANA_URL);
-        const headers = {
-            'Content-Type':   'application/json',
-            'kbn-xsrf':       'true',
-            'Content-Length': Buffer.byteLength(body),
-        };
-        if (config.apiKey) headers['Authorization'] = `ApiKey ${config.apiKey}`;
-
-        const req = https.request({
-            hostname: url.hostname,
-            port:     url.port || 443,
-            path:     PROXY_PATH(INDEX),
-            method:   'POST',
-            headers,
-            timeout:  config.timeout ?? 25000,
-        }, (res) => {
-            let raw = '';
-            res.on('data', (c) => { raw += c; });
-            res.on('end', () => {
-                if (res.statusCode === 401 || res.statusCode === 403) {
-                    reject(new Error(
-                        `Kibana auth required (HTTP ${res.statusCode}). ` +
-                        `Set config.apiKey — Kibana → Stack Management → API Keys → Create.`
-                    ));
-                    return;
-                }
-                if (res.statusCode >= 400) {
-                    reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 400)}`));
-                    return;
-                }
-                try { resolve(JSON.parse(raw)); }
-                catch (e) { reject(new Error(`JSON parse failed: ${e.message}\n${raw.slice(0, 200)}`)); }
-            });
-        });
-
-        req.on('error', reject);
-        req.on('timeout', () => { req.destroy(); reject(new Error('Kibana request timed out')); });
-        req.write(body);
-        req.end();
-    });
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function toFixedInterval(seconds) {
-    if (seconds % 86400 === 0) return `${seconds / 86400}d`;
-    if (seconds % 3600  === 0) return `${seconds / 3600}h`;
-    if (seconds % 60    === 0) return `${seconds / 60}m`;
-    return `${seconds}s`;
-}
 
 // ─── Aggregation query builders (size:0, for counts & timelines) ───────────────
 

@@ -1,225 +1,178 @@
 /**
  * Trend Analyzer
- * Main module combining DualAMA and PriceRatio for high-precision trend detection
- * Optimized to be right, not fast
+ *
+ * Feed-anchored trend detection for MPAs (HONEST.Assets).
+ *
+ * Two components:
+ *   1. FeedTrend   – Single AMA vs on-chain feed price → trend direction
+ *   2. FeedPremium – Instantaneous market price vs feed → premium/discount
+ *
+ * PriceRatio provides oscillation context for grid-width decisions.
+ *
+ * Optimized to be right, not fast.
  */
 
-const { DualAMA } = require('./dual_ama');
+const { AMA } = require('../ama_fitting/ama');
 const { PriceRatio } = require('./price_ratio');
+const { FeedTrend } = require('./feed_trend');
+const { FeedPremium } = require('./feed_premium');
 
 class TrendAnalyzer {
     /**
-     * Initialize trend analyzer
-     * @param {Object} config - Configuration
-     * @param {number} config.lookbackBars - Price ratio lookback bars (default: 20)
-     * @param {Object} config.dualAMAConfig - DualAMA configuration
-     * @param {boolean} config.usePriceActionFilter - Use price action confirmation (default: false)
+     * @param {Object}  config
+     * @param {number}  config.lookbackBars         – PriceRatio lookback (default 20)
+     * @param {Object}  config.feedTrendConfig       – FeedTrend params (erPeriod, fastPeriod, slowPeriod, thresholdPercent, minBarsForConfirmation)
+     * @param {Object}  config.feedPremiumConfig     – FeedPremium params (deadZonePercent)
      */
     constructor(config = {}) {
-        this.dualAMA = new DualAMA(config.dualAMAConfig || {});
+        this.feedTrend = new FeedTrend(config.feedTrendConfig || {});
+        this.feedPremium = new FeedPremium(config.feedPremiumConfig || {});
         this.priceRatio = new PriceRatio(config.lookbackBars || 20);
-        this.usePriceActionFilter = config.usePriceActionFilter || false;
 
-        // State tracking
         this.updateCount = 0;
     }
 
     /**
-     * Update analyzer with new candle
-     * @param {number} price - Closing price
-     * @param {number} high - Candle high (for price action filter)
-     * @param {number} low - Candle low (for price action filter)
+     * Update with market price and feed price.
+     *
+     * @param {number} marketPrice – Current market price (close, mid, or last trade)
+     * @param {number} feedPrice   – On-chain settlement feed price (same units)
      * @returns {Object} Analysis result
      */
-    update(price, high = price, low = price) {
-        // Update both components with price action data
-        this.dualAMA.update(price, high, low);
+    update(marketPrice, feedPrice) {
+        this.feedTrend.update(marketPrice, feedPrice);
+        this.feedPremium.update(marketPrice, feedPrice);
 
-        // Get AMAs for price ratio update
-        const fastAMA = this.dualAMA.fastHistory[this.dualAMA.fastHistory.length - 1];
-        const slowAMA = this.dualAMA.slowHistory[this.dualAMA.slowHistory.length - 1];
-
-        // Update price ratio with slow AMA as center reference
-        this.priceRatio.update(price, slowAMA);
+        // Use the AMA value from FeedTrend as center reference for oscillation
+        const amaValue = this.feedTrend.amaHistory.length > 0
+            ? this.feedTrend.amaHistory[this.feedTrend.amaHistory.length - 1]
+            : marketPrice;
+        this.priceRatio.update(marketPrice, amaValue);
 
         this.updateCount++;
-
         return this.getAnalysis();
     }
 
-    /**
-     * Get current trend analysis (HIGH PRECISION)
-     * @returns {Object} Complete trend analysis
-     */
+    // ── Analysis ───────────────────────────────────────────────
+
     getAnalysis() {
-        if (this.updateCount < 50) {
+        const ft = this.feedTrend.getAnalysis();
+        const fp = this.feedPremium.getSnapshot();
+        const osc = this.priceRatio.getSnapshot();
+
+        if (!ft.isReady) {
             return {
                 isReady: false,
-                reason: `Warming up: ${this.updateCount}/50 candles`,
+                reason: ft.reason,
                 trend: 'NEUTRAL',
                 confidence: 0,
             };
         }
 
-        const confirmed = this.dualAMA.getConfirmedTrend();
-        const priceRatioData = this.priceRatio.getSnapshot();
-
-        // Get price action confirmation if enabled
-        let finalTrend = confirmed.trend;
-        let priceActionConfirms = true;
-
-        if (this.usePriceActionFilter && confirmed.isConfirmed) {
-            const priceAction = this.dualAMA.getPriceActionConfirmation();
-
-            // Only confirm if price action agrees with AMA signal
-            if (confirmed.trend === 'UP' && !priceAction.confirmsUp) {
-                finalTrend = 'NEUTRAL';  // AMA says UP but price action doesn't
-                priceActionConfirms = false;
-            } else if (confirmed.trend === 'DOWN' && !priceAction.confirmsDown) {
-                finalTrend = 'NEUTRAL';  // AMA says DOWN but price action doesn't
-                priceActionConfirms = false;
-            }
-        }
-
         return {
             isReady: true,
-            trend: finalTrend,
-            confidence: confirmed.confidence,
-            isConfirmed: confirmed.isConfirmed && priceActionConfirms,
-            rawTrend: confirmed.rawTrend,
-            barsInTrend: confirmed.barsInTrend,
-            priceActionFilterUsed: this.usePriceActionFilter,
-            priceActionConfirms: priceActionConfirms,
-            amaSeparation: {
-                percent: confirmed.separation,
+            trend: ft.trend,
+            confidence: ft.confidence,
+            isConfirmed: ft.isConfirmed,
+            rawTrend: ft.rawTrend,
+            barsInTrend: ft.barsInTrend,
+            deviationPercent: ft.deviationPercent,
+            amaValue: ft.amaValue,
+            feedPrice: ft.feedPrice,
+            marketPrice: ft.marketPrice,
+            premium: {
+                signal: fp.signal,
+                percent: fp.premiumPercent,
             },
-            priceAnalysis: priceRatioData.priceVsAMA,
             oscillation: {
-                ratio: priceRatioData.oscillationRatio,
-                description: this._getOscillationDescription(priceRatioData.oscillationRatio),
+                ratio: osc ? osc.oscillationRatio : 0,
+                description: this._getOscillationDescription(osc ? osc.oscillationRatio : 0),
             },
+            priceAnalysis: osc ? osc.priceVsAMA : null,
             updateCount: this.updateCount,
         };
     }
 
-    /**
-     * Get simple trend output (just the essentials)
-     * @returns {Object} {trend: 'UP'|'DOWN'|'NEUTRAL', confidence: 0-100}
-     */
     getSimpleTrend() {
-        const analysis = this.getAnalysis();
-        return {
-            trend: analysis.trend,
-            confidence: analysis.confidence,
-            isReady: analysis.isReady,
-        };
+        const a = this.getAnalysis();
+        return { trend: a.trend, confidence: a.confidence, isReady: a.isReady };
     }
 
-    /**
-     * Check if we're in a confirmed uptrend
-     * @returns {boolean}
-     */
     isUptrend() {
-        const analysis = this.getAnalysis();
-        return analysis.trend === 'UP' && analysis.isConfirmed;
+        const a = this.getAnalysis();
+        return a.trend === 'UP' && a.isConfirmed;
     }
 
-    /**
-     * Check if we're in a confirmed downtrend
-     * @returns {boolean}
-     */
     isDowntrend() {
-        const analysis = this.getAnalysis();
-        return analysis.trend === 'DOWN' && analysis.isConfirmed;
+        const a = this.getAnalysis();
+        return a.trend === 'DOWN' && a.isConfirmed;
     }
 
-    /**
-     * Check if trend is neutral/uncertain
-     * @returns {boolean}
-     */
     isNeutral() {
-        const analysis = this.getAnalysis();
-        return analysis.trend === 'NEUTRAL';
+        return this.getAnalysis().trend === 'NEUTRAL';
     }
 
-    /**
-     * Get all available data for analysis/debugging
-     * @returns {Object} Complete snapshot
-     */
+    // ── Direct accessors ───────────────────────────────────────
+
+    getFeedPremium() {
+        return this.feedPremium.getSnapshot();
+    }
+
+    getFeedTrend() {
+        return this.feedTrend.getAnalysis();
+    }
+
+    // ── Full snapshot ──────────────────────────────────────────
+
     getFullSnapshot() {
-        if (this.updateCount < 50) {
-            return {
-                isReady: false,
-                message: `Warming up: ${this.updateCount}/50 candles`,
-            };
+        const ft = this.feedTrend.getFullSnapshot();
+
+        if (!ft.isReady) {
+            return { isReady: false, message: ft.reason || 'Warming up' };
         }
 
-        const dualAMASnapshot = this.dualAMA.getSnapshot();
-        const priceRatioSnapshot = this.priceRatio.getSnapshot();
-        const confirmed = this.dualAMA.getConfirmedTrend();
+        const fp = this.feedPremium.getSnapshot();
+        const fpStats = this.feedPremium.getStats();
+        const osc = this.priceRatio.getSnapshot();
 
         return {
             timestamp: new Date().toISOString(),
             updateCount: this.updateCount,
-
             trend: {
-                confirmed: confirmed.trend,
-                raw: confirmed.rawTrend,
-                confidence: confirmed.confidence,
-                isConfirmed: confirmed.isConfirmed,
-                barsInTrend: confirmed.barsInTrend,
-                minBarsForConfirmation: this.dualAMA.minBarsForConfirmation,
+                direction: ft.trend,
+                confidence: ft.confidence,
+                isConfirmed: ft.isConfirmed,
+                rawTrend: ft.rawTrend,
+                barsInTrend: ft.barsInTrend,
+                deviationPercent: ft.deviationPercent,
             },
-
             ama: {
-                fast: dualAMASnapshot.fastAMA,
-                slow: dualAMASnapshot.slowAMA,
-                separation: dualAMASnapshot.amaSeparation,
+                value: ft.amaValue,
+                config: ft.config,
             },
-
-            price: {
-                current: dualAMASnapshot.price,
-                distanceFromSlowAMA: dualAMASnapshot.priceDistance,
-                range: dualAMASnapshot.priceRange,
-                positionInRange: {
-                    value: Math.round(this.priceRatio.getPricePositionInRange() * 10000) / 100,
-                    unit: '%',
-                },
+            feed: {
+                price: ft.feedPrice,
             },
-
-            oscillation: {
-                ratio: priceRatioSnapshot.oscillationRatio,
-                priceRange: priceRatioSnapshot.priceRange,
-                amaRange: priceRatioSnapshot.amaRange,
-                description: this._getOscillationDescription(priceRatioSnapshot.oscillationRatio),
+            market: {
+                price: ft.marketPrice,
             },
-
-            priceDirection: priceRatioSnapshot.priceDirection,
-
-            config: {
-                dualAMA: {
-                    fast: {
-                        erPeriod: this.dualAMA.fastAMA.erPeriod,
-                        fastPeriod: Math.round(2 / this.dualAMA.fastAMA.fastSC - 1),
-                        slowPeriod: Math.round(2 / this.dualAMA.fastAMA.slowSC - 1),
-                    },
-                    slow: {
-                        erPeriod: this.dualAMA.slowAMA.erPeriod,
-                        fastPeriod: Math.round(2 / this.dualAMA.slowAMA.fastSC - 1),
-                        slowPeriod: Math.round(2 / this.dualAMA.slowAMA.slowSC - 1),
-                    },
-                },
-                priceRatio: {
-                    lookbackBars: this.priceRatio.lookbackBars,
-                },
+            premium: {
+                signal: fp.signal,
+                percent: fp.premiumPercent,
+                deadZone: fp.deadZonePercent,
+                stats: fpStats,
             },
+            oscillation: osc ? {
+                ratio: osc.oscillationRatio,
+                priceRange: osc.priceRange,
+                description: this._getOscillationDescription(osc.oscillationRatio),
+            } : null,
+            priceDirection: osc ? osc.priceDirection : null,
         };
     }
 
-    /**
-     * Describe oscillation ratio in human terms
-     * @private
-     */
+    // ── Utilities ──────────────────────────────────────────────
+
     _getOscillationDescription(ratio) {
         if (ratio < 1) return 'Very tight - Ideal for grid trading';
         if (ratio < 3) return 'Tight - Good for grid trading';
@@ -228,19 +181,13 @@ class TrendAnalyzer {
         return 'Very wide - Highly volatile';
     }
 
-    /**
-     * Reset the analyzer
-     */
     reset() {
-        this.dualAMA.reset();
+        this.feedTrend.reset();
+        this.feedPremium.reset();
         this.priceRatio.reset();
         this.updateCount = 0;
     }
 
-    /**
-     * Get current update count (for testing/monitoring)
-     * @returns {number}
-     */
     getUpdateCount() {
         return this.updateCount;
     }

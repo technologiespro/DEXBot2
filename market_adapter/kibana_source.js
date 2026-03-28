@@ -29,26 +29,19 @@
 
 'use strict';
 
-const https = require('https');
+const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('./core/kibana_client');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const KIBANA_URL = 'https://kibana.bitshares.dev';
-const INDEX      = 'bitshares-*';
 const OP_TYPE_LP = 63;  // liquidity_pool_exchange
-
-const PROXY_PATH = (index) =>
-    `/api/console/proxy?path=${encodeURIComponent(index + '/_search')}&method=POST`;
 
 // ─── Default Config ───────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = {
-    kibanaUrl:       KIBANA_URL,
-    apiKey:          null,    // 'base64(id:key)' if auth required
+    ...BASE_CONFIG,
     intervalSeconds: 3600,   // bucket size (3600=1h, 14400=4h, 86400=1d)
     lookbackHours:   500,    // how far back (~20 days at 1h)
     consolidateByTimestamp: true,
-    timeout:         15000,
 };
 
 // ─── Pool ID normalizer ───────────────────────────────────────────────────────
@@ -63,65 +56,7 @@ function normalizePoolId(id) {
     return s.startsWith('1.19.') ? s : `1.19.${s}`;
 }
 
-// ─── Low-level HTTP ───────────────────────────────────────────────────────────
-
-function kibanaSearch(config, esQuery) {
-    return new Promise((resolve, reject) => {
-        const body = JSON.stringify(esQuery);
-        const url  = new URL(config.kibanaUrl ?? KIBANA_URL);
-
-        const headers = {
-            'Content-Type':   'application/json',
-            'kbn-xsrf':       'true',
-            'Content-Length': Buffer.byteLength(body),
-        };
-        if (config.apiKey) headers['Authorization'] = `ApiKey ${config.apiKey}`;
-
-        const req = https.request({
-            hostname: url.hostname,
-            port:     url.port || 443,
-            path:     PROXY_PATH(INDEX),
-            method:   'POST',
-            headers,
-            timeout:  config.timeout ?? 15000,
-        }, (res) => {
-            let raw = '';
-            res.on('data', (c) => { raw += c; });
-            res.on('end', () => {
-                if (res.statusCode === 401 || res.statusCode === 403) {
-                    reject(new Error(
-                        `Kibana auth required (HTTP ${res.statusCode}). ` +
-                        `Set config.apiKey — generate in Kibana → Stack Management → API Keys.`
-                    ));
-                    return;
-                }
-                if (res.statusCode >= 400) {
-                    reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 300)}`));
-                    return;
-                }
-                try { resolve(JSON.parse(raw)); }
-                catch (e) { reject(new Error(`JSON parse failed: ${e.message}\n${raw.slice(0, 200)}`)); }
-            });
-        });
-
-        req.on('error', reject);
-        req.on('timeout', () => { req.destroy(); reject(new Error('Kibana request timed out')); });
-        req.write(body);
-        req.end();
-    });
-}
-
 // ─── Query Builder ────────────────────────────────────────────────────────────
-
-// ES fixed_interval supports any duration string (Xd, Xh, Xm, Xs).
-// calendar_interval only supports 1m, 1h, 1d, 1w, 1M, 1q, 1y — anything
-// else (4h, 15m, 5m …) silently fails and returns no buckets.
-function toFixedInterval(seconds) {
-    if (seconds % 86400 === 0) return `${seconds / 86400}d`;
-    if (seconds % 3600  === 0) return `${seconds / 3600}h`;
-    if (seconds % 60    === 0) return `${seconds / 60}m`;
-    return `${seconds}s`;
-}
 
 /**
  * Build the ES aggregation query for LP swaps in one direction.
