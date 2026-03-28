@@ -5,6 +5,19 @@
   "description": "Minimal Node.js starter for interacting with the BitShares blockchain using btsdex.",
   "type": "commonjs",
   "main": "index.js",
+  "peerDependencies": {
+    "openclaw": ">=2026.3.27"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./runtimes/openclaw-plugin/index.js"
+    ]
+  },
   "scripts": {
     "example:connection": "node examples/connection_test.js",
     "example:claw-infra": "node examples/claw_infra_example.js",
@@ -14,6 +27,12 @@
     "example:zeroclaw-bridge": "node examples/zeroclaw_bridge_example.js",
     "example:position-manager": "node examples/position_manager_cli.js",
     "example:short-mpa-bts": "node examples/short_mpa_bts_strategy.js",
+    "claw:bridge": "node scripts/claw_bridge.js",
+    "claw:mcp": "node scripts/claw_mcp_server.js",
+    "claw:skill": "node scripts/claw_skill_md.js",
+    "nanobot:skill": "node scripts/claw_skill_md.js --runtime nanobot",
+    "picoclaw:skill": "node scripts/claw_skill_md.js --runtime picoclaw",
+    "openclaw:skill": "node scripts/claw_skill_md.js --runtime openclaw",
     "zeroclaw:skill": "node scripts/zeroclaw_skill.js",
     "service:position-watch": "node modules/position_manager_watch.js",
     "zeroclaw:bridge": "node scripts/zeroclaw_bridge.js",
@@ -21,7 +40,7 @@
     "pm2:stop": "pm2 stop ecosystem.config.js",
     "pm2:reload": "pm2 reload ecosystem.config.js",
     "report:honest-assets": "node scripts/honest_assets_report.js",
-    "check": "node -c index.js && node -c modules/bitshares_client.js && node -c modules/claw_infra.js && node -c modules/dexbot_bridge.js && node -c modules/dexbot_credential_client.js && node -c modules/dexbot_profiles.js && node -c modules/honest_ecosystem.js && node -c modules/liquidity_pools.js && node -c modules/chain_queries.js && node -c modules/chain_broadcast.js && node -c modules/chain_actions.js && node -c modules/short_mpa_strategy.js && node -c modules/position_manager.js && node -c modules/position_manager_watch.js && node -c modules/zeroclaw_skill.js && node -c modules/zeroclaw_manifest.js && node -c modules/zeroclaw_bridge.js && node -c examples/connection_test.js && node -c examples/claw_infra_example.js && node -c examples/claw_consumer_example.js && node -c examples/claw_profiles_example.js && node -c examples/honest_ecosystem_example.js && node -c examples/zeroclaw_bridge_example.js && node -c examples/short_mpa_bts_strategy.js && node -c examples/position_manager_cli.js && node -c scripts/honest_assets_report.js && node -c scripts/zeroclaw_bridge.js && node -c scripts/zeroclaw_skill.js && node -c ecosystem.config.js"
+    "check": "node -c index.js && node -c modules/bitshares_client.js && node -c modules/chain_actions.js && node -c modules/chain_broadcast.js && node -c modules/chain_queries.js && node -c modules/claw_bridge.js && node -c modules/claw_catalog.js && node -c modules/claw_infra.js && node -c modules/claw_manifest.js && node -c modules/claw_runtime_matrix.js && node -c modules/claw_skill_md.js && node -c modules/dexbot_bridge.js && node -c modules/dexbot_credential_client.js && node -c modules/dexbot_profiles.js && node -c modules/feed_price_source.js && node -c modules/honest_ecosystem.js && node -c modules/kibana_price_source.js && node -c modules/liquidity_pools.js && node -c modules/position_discovery.js && node -c modules/position_health.js && node -c modules/position_manager.js && node -c modules/position_manager_watch.js && node -c modules/short_mpa_strategy.js && node -c modules/zeroclaw_bridge.js && node -c modules/zeroclaw_catalog.js && node -c modules/zeroclaw_manifest.js && node -c modules/zeroclaw_skill.js && node -c examples/claw_consumer_example.js && node -c examples/claw_infra_example.js && node -c examples/claw_profiles_example.js && node -c examples/connection_test.js && node -c examples/honest_ecosystem_example.js && node -c examples/position_manager_cli.js && node -c examples/short_mpa_bts_strategy.js && node -c examples/zeroclaw_bridge_example.js && node -c scripts/claw_bridge.js && node -c scripts/claw_mcp_server.js && node -c scripts/claw_skill_md.js && node -c scripts/honest_assets_report.js && node -c scripts/zeroclaw_bridge.js && node -c scripts/zeroclaw_skill.js && node -c runtimes/openclaw-plugin/index.js && node -c ecosystem.config.js"
   },
   "dependencies": {
     "btsdex": "^0.7.11"

@@ -3,6 +3,7 @@
 | Skill | Boundary | Allowed work | Not allowed |
 | --- | --- | --- | --- |
 | `bitshares-guide` | presentation-only | Pack presentation, onboarding copy, and guide structure | Operational instructions or source dumps |
+| `margin-trading` | concept-reference | Trading concepts, HONEST.Asset properties, position lifecycle, available operations | Prescribing specific parameter values as optimal, strategy recommendations, profit/loss predictions |
 
 ## Non-Goals
 

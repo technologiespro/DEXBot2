@@ -24,7 +24,7 @@ npm install btsdex
 
 - Core BitShares runtime: `modules/bitshares_client.js`, `modules/chain_queries.js`, `modules/chain_broadcast.js`, `modules/chain_actions.js`
 - Strategy and state helpers: `modules/short_mpa_strategy.js`, `modules/position_manager.js`, `modules/position_manager_watch.js`
-- DEXBot2 and ZeroClaw integration: `modules/dexbot_bridge.js`, `modules/dexbot_profiles.js`, `modules/dexbot_credential_client.js`, `modules/zeroclaw_bridge.js`, `modules/zeroclaw_skill.js`, `scripts/zeroclaw_bridge.js`
+- DEXBot2 and Claw integration: `modules/dexbot_bridge.js`, `modules/dexbot_profiles.js`, `modules/dexbot_credential_client.js`, `modules/claw_bridge.js`, `modules/claw_catalog.js`, `modules/claw_manifest.js`, `modules/claw_skill_md.js`, `scripts/claw_bridge.js`, `scripts/claw_mcp_server.js`
 - HONEST support: `modules/honest_ecosystem.js`, `modules/liquidity_pools.js`
 - Reference docs: `docs/AI_BOT_LIBRARY_API.md`, `docs/DEXBOT2_TUNING_CHEAT_SHEET.md`
 - Example entrypoints: `examples/connection_test.js`, `examples/short_mpa_bts_strategy.js`, `examples/position_manager_cli.js`, `examples/zeroclaw_bridge_example.js`
@@ -35,11 +35,11 @@ npm install btsdex
 
 What it does:
 
-- expose a local JSON/CLI bridge for ZeroClaw and similar external callers
+- expose a local JSON/CLI bridge and native runtime packaging for ZeroClaw, OpenClaw, NanoBot, and PicoClaw
 - provide BitShares read helpers, broadcast helpers, and account/action wrappers
 - expose DEXBot2 profile context, order utilities, and liquidity/pool helpers through a smaller surface
 - provide HONEST context helpers, short-MPA helper flows, and position-manager utilities
-- generate ZeroClaw skill definitions and bridge metadata from a shared command catalog
+- generate runtime-native skill definitions and bridge metadata from a shared command catalog
 
 What it does not do:
 
@@ -129,9 +129,26 @@ npm run service:position-watch -- --account your-account
 npm run pm2:start
 ```
 
-## ZeroClaw Compatibility
+## Multi-Runtime Support
 
-ZeroClaw can call AI-Bot as a local BitShares bridge.
+`claw/` now targets four native runtime families:
+
+- ZeroClaw via `SKILL.toml`
+- OpenClaw via a native plugin plus optional `SKILL.md`
+- NanoBot via MCP plus `SKILL.md`
+- PicoClaw via MCP plus `SKILL.md`
+
+### Shared Bridge
+
+Use the runtime-neutral bridge command for JSON-friendly local integration:
+
+```bash
+node scripts/claw_bridge.js manifest
+node scripts/claw_bridge.js profile-context --payload '{"botRef":"default"}'
+node scripts/claw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+```
+
+### ZeroClaw
 
 Generate the ZeroClaw skill file:
 
@@ -139,7 +156,7 @@ Generate the ZeroClaw skill file:
 npm run zeroclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.zeroclaw/workspace/skills/ai-bots/SKILL.toml
 ```
 
-Use the bridge command for a JSON-friendly integration surface:
+ZeroClaw compatibility command surface:
 
 ```bash
 node scripts/zeroclaw_bridge.js manifest
@@ -151,7 +168,39 @@ node scripts/zeroclaw_bridge.js execute-batch --payload '{"accountName":"your-ac
 node scripts/zeroclaw_bridge.js borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
 ```
 
-Available bridge surfaces now include:
+### NanoBot and PicoClaw
+
+Run the MCP server over stdio:
+
+```bash
+node scripts/claw_mcp_server.js --profile-root /home/alex/BTS/Git/DEXBot2
+```
+
+Generate a runtime-native `SKILL.md`:
+
+```bash
+npm run nanobot:skill -- --profile-root /home/alex/BTS/Git/DEXBot2
+npm run picoclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2
+```
+
+On a fresh PicoClaw install, make sure `agents.defaults.workspace` is configured in `config.json` or run `picoclaw onboard` before expecting workspace skills to appear.
+
+### OpenClaw
+
+Install the native plugin bundle from this repository:
+
+```bash
+openclaw plugins install -l /home/alex/BTS/Git/DEXBot2/claw
+openclaw plugins enable bitshares-claw
+```
+
+Generate an optional OpenClaw `SKILL.md`:
+
+```bash
+npm run openclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2
+```
+
+Available bridge and native tool surfaces include:
 
 - runtime and manifest inspection
 - profile, market, and account snapshots
