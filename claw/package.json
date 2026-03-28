@@ -1,0 +1,29 @@
+{
+  "name": "bitshares-js-starter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal Node.js starter for interacting with the BitShares blockchain using btsdex.",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "example:connection": "node examples/connection_test.js",
+    "example:claw-infra": "node examples/claw_infra_example.js",
+    "example:claw-consumer": "node examples/claw_consumer_example.js",
+    "example:claw-profiles": "node examples/claw_profiles_example.js",
+    "example:honest-ecosystem": "node examples/honest_ecosystem_example.js",
+    "example:zeroclaw-bridge": "node examples/zeroclaw_bridge_example.js",
+    "example:position-manager": "node examples/position_manager_cli.js",
+    "example:short-mpa-bts": "node examples/short_mpa_bts_strategy.js",
+    "zeroclaw:skill": "node scripts/zeroclaw_skill.js",
+    "service:position-watch": "node modules/position_manager_watch.js",
+    "zeroclaw:bridge": "node scripts/zeroclaw_bridge.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop ecosystem.config.js",
+    "pm2:reload": "pm2 reload ecosystem.config.js",
+    "report:honest-assets": "node scripts/honest_assets_report.js",
+    "check": "node -c index.js && node -c modules/bitshares_client.js && node -c modules/claw_infra.js && node -c modules/dexbot_bridge.js && node -c modules/dexbot_credential_client.js && node -c modules/dexbot_profiles.js && node -c modules/honest_ecosystem.js && node -c modules/liquidity_pools.js && node -c modules/chain_queries.js && node -c modules/chain_broadcast.js && node -c modules/chain_actions.js && node -c modules/short_mpa_strategy.js && node -c modules/position_manager.js && node -c modules/position_manager_watch.js && node -c modules/zeroclaw_skill.js && node -c modules/zeroclaw_manifest.js && node -c modules/zeroclaw_bridge.js && node -c examples/connection_test.js && node -c examples/claw_infra_example.js && node -c examples/claw_consumer_example.js && node -c examples/claw_profiles_example.js && node -c examples/honest_ecosystem_example.js && node -c examples/zeroclaw_bridge_example.js && node -c examples/short_mpa_bts_strategy.js && node -c examples/position_manager_cli.js && node -c scripts/honest_assets_report.js && node -c scripts/zeroclaw_bridge.js && node -c scripts/zeroclaw_skill.js && node -c ecosystem.config.js"
+  },
+  "dependencies": {
+    "btsdex": "^0.7.11"
+  }
+}

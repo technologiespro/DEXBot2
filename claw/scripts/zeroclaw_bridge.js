@@ -1,0 +1,123 @@
+#!/usr/bin/env node
+
+const { listZeroClawCommandNames } = require('../modules/zeroclaw_catalog');
+
+function parseJson(value, fieldName) {
+  if (value === undefined || value === null || value === '') {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error();
+    }
+    return parsed;
+  } catch {
+    throw new Error(`${fieldName} must be a JSON object`);
+  }
+}
+
+function parseArgs(argv) {
+  const options = {
+    command: null,
+    payload: {}
+  };
+
+  const args = [...argv];
+  if (args.length > 0 && !args[0].startsWith('--')) {
+    options.command = args.shift();
+  }
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === '--payload' && args[i + 1]) {
+      options.payload = {
+        ...options.payload,
+        ...parseJson(args[i + 1], '--payload')
+      };
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--profile-root' && args[i + 1]) {
+      options.payload.profileRoot = args[i + 1];
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--account' && args[i + 1]) {
+      options.payload.accountName = args[i + 1];
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--bot-ref' && args[i + 1]) {
+      options.payload.botRef = args[i + 1];
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--pair' && args[i + 1]) {
+      options.payload.pair = args[i + 1];
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--base' && args[i + 1]) {
+      options.payload.baseSymbol = args[i + 1];
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--quote' && args[i + 1]) {
+      options.payload.quoteSymbol = args[i + 1];
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+    }
+  }
+
+  return options;
+}
+
+function printHelp() {
+  const commandLines = listZeroClawCommandNames().map((command) => `  ${command}`);
+
+  console.log([
+    'Usage:',
+    '  node scripts/zeroclaw_bridge.js <command> [--payload JSON] [options]',
+    '',
+    'Commands:',
+    ...commandLines
+  ].join('\n'));
+}
+
+async function main() {
+  const { command, help, payload } = parseArgs(process.argv.slice(2));
+
+  if (help || !command) {
+    printHelp();
+    process.exit(help ? 0 : 1);
+  }
+
+  if (command === 'manifest') {
+    const { describeZeroClawBridge } = require('../modules/zeroclaw_manifest');
+    process.stdout.write(`${JSON.stringify(describeZeroClawBridge(payload), null, 2)}\n`);
+    return;
+  }
+
+  const {
+    runZeroClawCommand
+  } = require('../modules/zeroclaw_bridge');
+  const result = await runZeroClawCommand(command, payload);
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
+main().catch((err) => {
+  console.error(err && err.stack ? err.stack : err.message);
+  process.exit(1);
+});
