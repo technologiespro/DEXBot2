@@ -313,24 +313,48 @@ const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
 };
 
 /**
- * Load the AMA center price written by price_adapter for a bot.
- * The price_adapter writes this file atomically to profiles/orders/<botKey>.gridprice.json
+ * Load the full grid-center snapshot written by price_adapter for a bot.
+ * The snapshot is stored atomically at profiles/orders/<botKey>.gridprice.json
  * whenever a grid reset trigger fires (or on first initialisation) for bots with
  * gridPrice: "ama", "ama1", "ama2", "ama3", or "ama4".
  * Called by initializeGrid() when manager.config.gridPrice uses an AMA keyword.
  * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
- * @returns {number|null} AMA center price in B/A format, or null if file absent/invalid
+ * @returns {Object|null} Snapshot with raw AMA and effective center fields, or null if invalid
  */
-function loadAmaCenterPrice(botKey) {
+function loadAmaCenterSnapshot(botKey) {
     try {
         const gridPriceFile = path.join(__dirname, '../../../profiles/orders', `${botKey}.gridprice.json`);
         const raw = fs.readFileSync(gridPriceFile, 'utf8');
         const data = JSON.parse(raw);
-        const v = Number(data?.centerPrice);
-        return Number.isFinite(v) && v > 0 ? v : null;
+        const effectiveCenterPrice = Number(data?.effectiveCenterPrice ?? data?.centerPrice);
+        const amaCenterPrice = Number(data?.amaCenterPrice);
+        if (!Number.isFinite(effectiveCenterPrice) || effectiveCenterPrice <= 0) {
+            return null;
+        }
+        return {
+            amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : null,
+            centerPrice: effectiveCenterPrice,
+            effectiveCenterPrice,
+            gridPriceOffsetClampToBounds: data?.gridPriceOffsetClampToBounds,
+            gridPriceOffsetEnabled: data?.gridPriceOffsetEnabled,
+            gridPriceOffsetPct: Number.isFinite(Number(data?.gridPriceOffsetPct)) ? Number(data.gridPriceOffsetPct) : 0,
+            source: data?.source || null,
+            updatedAt: data?.updatedAt || null
+        };
     } catch (_) {
         return null;
     }
+}
+
+/**
+ * Load the effective AMA grid center price written by price_adapter for a bot.
+ * This is the legacy numeric accessor used by the order engine.
+ * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
+ * @returns {number|null} Effective center price in B/A format, or null if file absent/invalid
+ */
+function loadAmaCenterPrice(botKey) {
+    const snapshot = loadAmaCenterSnapshot(botKey);
+    return snapshot ? snapshot.centerPrice : null;
 }
 
 // ================================================================================
@@ -892,6 +916,7 @@ module.exports = {
     derivePoolPrice,
     derivePrice,
     loadAmaCenterPrice,
+    loadAmaCenterSnapshot,
     initializeFeeCache,
     persistGridSnapshot,
     retryPersistenceIfNeeded,

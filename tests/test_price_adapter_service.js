@@ -307,6 +307,219 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
     assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'center price should not advance when trigger is suppressed');
 }
 
+async function testAmaGridPriceOffsetTriggersRecenter() {
+    let triggerWrites = 0;
+    let writeArgs = null;
+
+    const service = createPriceAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [1700000000000, 100, 100, 100, 100, 1],
+                [1700003600000, 100, 100, 100, 100, 1],
+            ],
+        }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 5,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaPrice: () => 100,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-0.trigger';
+        },
+        writeBotAmaCenter: (...args) => {
+            writeArgs = args;
+            return true;
+        },
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-0',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        gridPriceOffsetPct: 0.5,
+        incrementPercent: 0.4,
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-0': {
+                centerPrice: 100,
+                gridPriceOffsetPct: 0,
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.strictEqual(result.triggered, true, 'offset changes should recenter the grid');
+    assert.strictEqual(triggerWrites, 1, 'trigger file should be written for the offset change');
+    assert.ok(Array.isArray(writeArgs), 'writeBotAmaCenter should be called');
+    assert.strictEqual(writeArgs[0], 'xrp-bts-0');
+    assert.strictEqual(writeArgs[1], 100);
+    assert.strictEqual(writeArgs[2].gridPriceOffsetPct, 0.5);
+    assert.strictEqual(writeArgs[2].effectiveCenterPrice, 100.5);
+    assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100.5, 'effective center should be stored in state');
+    assert.strictEqual(state.bots['xrp-bts-0'].amaCenterPrice, 100, 'raw AMA center should be stored separately');
+    assert.strictEqual(state.bots['xrp-bts-0'].gridPriceOffsetPct, 0.5, 'offset should be tracked in state');
+}
+
+async function testAmaGridPriceOffsetClampAndDisable() {
+    let triggerWrites = 0;
+    let lastWrite = null;
+
+    const service = createPriceAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [1700000000000, 100, 100, 100, 100, 1],
+                [1700003600000, 100, 100, 100, 100, 1],
+            ],
+        }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 5,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaPrice: () => 100,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-0.trigger';
+        },
+        writeBotAmaCenter: (...args) => {
+            lastWrite = args;
+            return true;
+        },
+        root: process.cwd(),
+        path,
+    });
+
+    const clampedBot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-1',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        gridPriceOffsetPct: 5,
+        gridPriceOffsetEnabled: true,
+        gridPriceOffsetClampToBounds: true,
+        minPrice: 99,
+        maxPrice: 101,
+        incrementPercent: 0.4,
+    };
+
+    const clampedState = {
+        bots: {
+            'xrp-bts-1': {
+                centerPrice: 100,
+                gridPriceOffsetPct: 0,
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const clampedResult = await service.processBot(clampedBot, clampedState, cfg, new Map(), {});
+    assert.strictEqual(clampedResult.ok, true);
+    assert.strictEqual(clampedResult.triggered, true);
+    assert.strictEqual(clampedState.bots['xrp-bts-1'].centerPrice, 101, 'effective center should be clamped to maxPrice');
+    assert.strictEqual(lastWrite[2].effectiveCenterPrice, 101, 'written center should match the clamped value');
+
+    const disabledBot = {
+        ...clampedBot,
+        botKey: 'xrp-bts-2',
+        gridPriceOffsetEnabled: false,
+    };
+    const disabledState = {
+        bots: {
+            'xrp-bts-2': {
+                centerPrice: 105,
+                gridPriceOffsetPct: 5,
+            },
+        },
+    };
+
+    const disabledResult = await service.processBot(disabledBot, disabledState, cfg, new Map(), {});
+    assert.strictEqual(disabledResult.ok, true);
+    assert.strictEqual(disabledResult.triggered, true, 'disabling the offset should recenter back to raw AMA once');
+    assert.strictEqual(disabledState.bots['xrp-bts-2'].centerPrice, 100, 'disabled offset should fall back to raw AMA');
+    assert.strictEqual(disabledState.bots['xrp-bts-2'].gridPriceOffsetPct, 0, 'disabled offset should be persisted as zero in state');
+
+    const noOpState = {
+        bots: {
+            'xrp-bts-3': {
+                centerPrice: 101,
+                gridPriceOffsetPct: 4,
+            },
+        },
+    };
+    const noOpBot = {
+        ...clampedBot,
+        botKey: 'xrp-bts-3',
+        gridPriceOffsetPct: 5,
+    };
+    const noOpResult = await service.processBot(noOpBot, noOpState, cfg, new Map(), {});
+    assert.strictEqual(noOpResult.ok, true);
+    assert.strictEqual(noOpResult.triggered, false, 'no trigger should fire when clamping keeps the effective center unchanged');
+    assert.strictEqual(noOpState.bots['xrp-bts-3'].centerPrice, 101, 'effective center should remain unchanged at the clamp boundary');
+    assert.strictEqual(triggerWrites, 2, 'only the clamp move and disable reset should have triggered');
+}
+
 async function testContextCacheInvalidatesOnPoolChange() {
     let resolveCalls = 0;
 
@@ -555,6 +768,8 @@ async function run() {
     await testBootstrapFallsBackWhenKibanaIsEmpty();
     await testAmaGridPriceIsCaseInsensitive();
     await testAmaTriggerSuppressedWhenCenterPersistFails();
+    await testAmaGridPriceOffsetTriggersRecenter();
+    await testAmaGridPriceOffsetClampAndDisable();
     await testContextCacheInvalidatesOnPoolChange();
     await testKibanaGapRepairPatchesMissingCandles();
     await testRemainingGapsAreReportedWhenKibanaHasNoPatchData();

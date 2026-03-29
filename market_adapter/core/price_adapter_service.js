@@ -1,5 +1,8 @@
 'use strict';
 
+const { DEFAULT_CONFIG } = require('../../modules/constants');
+const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order');
+
 function createPriceAdapterService(deps = {}) {
     const {
         resolveBotContext,
@@ -48,6 +51,31 @@ function createPriceAdapterService(deps = {}) {
             gte: new Date(startTs).toISOString(),
             lte: new Date(endTs).toISOString(),
         };
+    }
+
+    function applyGridPriceOffset(centerPrice, offsetPct) {
+        const base = Number(centerPrice);
+        const offset = Number(offsetPct);
+        if (!Number.isFinite(base) || base <= 0) return null;
+        const signedOffset = Number.isFinite(offset) ? offset : 0;
+        const adjusted = base * (1 + (signedOffset / 100));
+        const rounded = Math.round(adjusted * 1e8) / 1e8;
+        return Number.isFinite(rounded) && rounded > 0 ? rounded : base;
+    }
+
+    function clampGridPriceToBounds(centerPrice, referencePrice, bot) {
+        const base = Number(centerPrice);
+        const ref = Number(referencePrice);
+        if (!Number.isFinite(base) || base <= 0) return centerPrice;
+        try {
+            const startPrice = Number.isFinite(ref) && ref > 0 ? ref : base;
+            const minP = resolveConfiguredPriceBound(bot?.minPrice, DEFAULT_CONFIG.minPrice, startPrice, 'min');
+            const maxP = resolveConfiguredPriceBound(bot?.maxPrice, DEFAULT_CONFIG.maxPrice, startPrice, 'max');
+            if (!Number.isFinite(minP) || !Number.isFinite(maxP)) return base;
+            return Math.min(maxP, Math.max(minP, base));
+        } catch (_) {
+            return base;
+        }
     }
 
     async function processBot(bot, state, cfg, contextCache, hooks = {}) {
@@ -174,6 +202,16 @@ function createPriceAdapterService(deps = {}) {
         const amaComparison = calcAmaComparison(nextCandles, bot, ctx);
         const lastCandleTs = nextCandles[nextCandles.length - 1]?.[0] || null;
         const { staleData, staleAgeHours } = computeCandleStaleness(lastCandleTs, cfg.maxStaleHours);
+        const gridPriceOffsetEnabled = bot.gridPriceOffsetEnabled !== false;
+        const gridPriceOffsetPct = usesAmaGridPrice && gridPriceOffsetEnabled ? Number(bot.gridPriceOffsetPct || 0) : 0;
+        let effectiveCenterPrice = usesAmaGridPrice
+            ? applyGridPriceOffset(amaPrice, gridPriceOffsetPct)
+            : amaPrice;
+        const gridPriceOffsetClampToBounds = bot.gridPriceOffsetClampToBounds !== false;
+        const clampedCenterPrice = usesAmaGridPrice && gridPriceOffsetClampToBounds
+            ? clampGridPriceToBounds(effectiveCenterPrice, amaPrice, bot)
+            : effectiveCenterPrice;
+        effectiveCenterPrice = Number.isFinite(clampedCenterPrice) && clampedCenterPrice > 0 ? clampedCenterPrice : effectiveCenterPrice;
 
         const botState = state.bots[bot.botKey] || {};
         let triggered = false;
@@ -184,39 +222,74 @@ function createPriceAdapterService(deps = {}) {
 
         if (!staleData && Number.isFinite(amaPrice) && amaPrice > 0) {
             const centerPrice = Number(botState.centerPrice || 0);
+            const previousGridPriceOffsetPct = Number(botState.gridPriceOffsetPct || 0);
+            const offsetPctChanged = usesAmaGridPrice && Number.isFinite(previousGridPriceOffsetPct)
+                ? Math.abs(previousGridPriceOffsetPct - gridPriceOffsetPct) > 1e-9
+                : false;
+            const effectiveCenterMoved = centerPrice > 0
+                && Math.abs(Number(effectiveCenterPrice || 0) - centerPrice) > 1e-8;
+            const offsetChanged = offsetPctChanged && effectiveCenterMoved;
+
             if (!Number.isFinite(centerPrice) || centerPrice <= 0) {
-                // First run: record AMA as the delta-comparison baseline.
-                // Also persist the AMA center for bots using AMA gridPrice keywords so that
+                // First run: record the effective center as the delta-comparison baseline.
+                // Also persist the effective center for bots using AMA gridPrice keywords so that
                 // initializeGrid() can read it via loadAmaCenterPrice() on first reset.
-                botState.centerPrice = amaPrice;
+                botState.centerPrice = Number.isFinite(effectiveCenterPrice) && effectiveCenterPrice > 0 ? effectiveCenterPrice : amaPrice;
+                botState.amaCenterPrice = amaPrice;
+                botState.gridPriceOffsetPct = gridPriceOffsetPct;
+                botState.gridPriceOffsetEnabled = gridPriceOffsetEnabled;
+                botState.gridPriceOffsetClampToBounds = gridPriceOffsetClampToBounds;
                 botState.lastGridResetAt = nowIso;
                 if (usesAmaGridPrice && typeof writeBotAmaCenter === 'function') {
-                    writeBotAmaCenter(bot.botKey, amaPrice);
+                    writeBotAmaCenter(bot.botKey, amaPrice, {
+                        amaCenterPrice: amaPrice,
+                        gridPriceOffsetPct,
+                        gridPriceOffsetEnabled,
+                        gridPriceOffsetClampToBounds,
+                        effectiveCenterPrice: botState.centerPrice,
+                    });
                 }
             } else {
-                deltaPercent = Math.abs((amaPrice - centerPrice) / centerPrice) * 100;
-                if (deltaPercent >= botThreshold) {
+                deltaPercent = Math.abs((effectiveCenterPrice - centerPrice) / centerPrice) * 100;
+                if (offsetChanged || deltaPercent >= botThreshold) {
                     let amaCenterPersisted = true;
 
-                    // For AMA gridPrice bots — write the new AMA center to
+                    // For AMA gridPrice bots — write the effective center to
                     // profiles/orders/<botKey>.gridprice.json BEFORE writing the trigger file,
                     // so initializeGrid() always finds a fresh value when it reacts.
                     if (usesAmaGridPrice && typeof writeBotAmaCenter === 'function') {
-                        amaCenterPersisted = writeBotAmaCenter(bot.botKey, amaPrice) !== false;
+                        amaCenterPersisted = writeBotAmaCenter(bot.botKey, amaPrice, {
+                            amaCenterPrice: amaPrice,
+                            gridPriceOffsetPct,
+                            gridPriceOffsetEnabled,
+                            gridPriceOffsetClampToBounds,
+                            effectiveCenterPrice,
+                            previousCenterPrice: centerPrice,
+                        }) !== false;
                     }
 
                     if (!amaCenterPersisted) {
                         triggerSuppressedReason = 'ama_center_persist_failed';
                     } else {
                         triggerPath = writeGridResetTrigger(bot, {
-                            reason: 'price_adapter_delta_threshold',
+                            reason: offsetChanged
+                                ? 'price_adapter_gridprice_offset_change'
+                                : 'price_adapter_delta_threshold',
                             thresholdPercent: botThreshold,
                             deltaPercent,
                             previousCenterPrice: centerPrice,
-                            newCenterPrice: amaPrice,
+                            newCenterPrice: effectiveCenterPrice,
+                            rawAmaPrice: amaPrice,
+                            gridPriceOffsetPct,
+                            gridPriceOffsetEnabled,
+                            gridPriceOffsetClampToBounds,
                             poolId: ctx.poolId,
                         });
-                        botState.centerPrice = amaPrice;
+                        botState.centerPrice = effectiveCenterPrice;
+                        botState.amaCenterPrice = amaPrice;
+                        botState.gridPriceOffsetPct = gridPriceOffsetPct;
+                        botState.gridPriceOffsetEnabled = gridPriceOffsetEnabled;
+                        botState.gridPriceOffsetClampToBounds = gridPriceOffsetClampToBounds;
                         botState.lastGridResetAt = nowIso;
                         botState.triggerCount = Number(botState.triggerCount || 0) + 1;
                         triggered = true;
@@ -231,7 +304,11 @@ function createPriceAdapterService(deps = {}) {
                                     thresholdPercent: botThreshold,
                                     deltaPercent,
                                     previousCenterPrice: centerPrice,
-                                    newCenterPrice: amaPrice,
+                                    newCenterPrice: effectiveCenterPrice,
+                                    rawAmaPrice: amaPrice,
+                                    gridPriceOffsetPct,
+                                    gridPriceOffsetEnabled,
+                                    gridPriceOffsetClampToBounds,
                                     triggerPath,
                                 });
                             } catch (err) {
@@ -271,6 +348,11 @@ function createPriceAdapterService(deps = {}) {
             unresolvedGapCount,
             lastCandleTs,
             lastAmaPrice: amaPrice,
+            amaCenterPrice: amaPrice,
+            gridPriceOffsetPct,
+            gridPriceOffsetEnabled,
+            gridPriceOffsetClampToBounds,
+            effectiveCenterPrice,
             amaConfig: {
                 erPeriod: botAma.erPeriod,
                 fastPeriod: botAma.fastPeriod,

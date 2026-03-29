@@ -170,7 +170,7 @@ let DEFAULT_CONFIG = {
     minPrice: "3x",               // Lower price bound: "Nx" = N times below startPrice, or numeric value
     maxPrice: "3x",               // Upper price bound: "Nx" = N times above startPrice, or numeric value
     gridPrice: null,              // Optional reference price for x-factor bounds calculation.
-                                  // "ama"/"ama1".."ama4" = price_adapter writes AMA center to profiles/orders/<botKey>.gridprice.json;
+                                  // "ama"/"ama1".."ama4" = price_adapter writes an effective center to profiles/orders/<botKey>.gridprice.json;
                                   //            grid generator reads it from there on reset
                                   // numeric  = fixed numeric value (never updated by price_adapter)
                                   // null     = use startPrice (default, backward-compatible)

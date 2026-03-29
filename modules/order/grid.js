@@ -508,7 +508,7 @@ class Grid {
         const mp = Number(manager.config.startPrice);
 
         // Derive gridPrice — separate reference for x-factor bounds (may differ from startPrice).
-        // Three modes: numeric (fixed), "ama"/"ama1".."ama4" (read from profiles/orders/<botKey>.gridprice.json),
+        // Three modes: numeric (fixed), "ama"/"ama1".."ama4" (read the effective center from profiles/orders/<botKey>.gridprice.json),
         // null/anything else (fallback to startPrice — backward-compatible).
         let gp = mp;
         const gpRaw = manager.config.gridPrice;
@@ -520,7 +520,7 @@ class Grid {
             const amaCenter = loadAmaCenterPrice(manager.config.botKey);
             if (Number.isFinite(amaCenter) && amaCenter > 0) {
                 gp = amaCenter;
-                manager.logger?.log?.(`[DIAGNOSTIC] initializeGrid: gridPrice=AMA center ${gp.toFixed(8)}`, 'info');
+                manager.logger?.log?.(`[DIAGNOSTIC] initializeGrid: gridPrice=effective AMA center ${gp.toFixed(8)}`, 'info');
             } else {
                 manager.logger?.log?.(`initializeGrid: AMA center unavailable for gridPrice, falling back to startPrice`, 'warn');
             }

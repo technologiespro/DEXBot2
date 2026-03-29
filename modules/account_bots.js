@@ -38,9 +38,12 @@
  *       "startPrice": "pool",      // Price for order alignment: "pool", "market", or numeric
  *       "gridPrice": null,         // Reference price for x-factor bounds (3 options):
  *                                  //   "ama"/"ama1".."ama4" = price_adapter writes AMA center to
- *                                  //              profiles/orders/<botKey>.gridprice.json; grid reads it on reset
+ *                                  //              profiles/orders/<botKey>.gridprice.json; grid reads the effective center on reset
  *                                  //   <number> = fixed numeric reference (price_adapter does not touch this)
  *                                  //   null     = use startPrice (default, backward-compatible)
+ *       "gridPriceOffsetPct": 0,   // Signed offset applied to the AMA center before grid resets
+ *       "gridPriceOffsetEnabled": true,
+ *       "gridPriceOffsetClampToBounds": true,
  *       "minPrice": "3x",
  *       "maxPrice": "3x",
  *       "incrementPercent": 0.5,
@@ -48,7 +51,6 @@
  *       "weightDistribution": { "sell": 0.5, "buy": 0.5 },
  *       "botFunds": { "sell": "100%", "buy": "100%" },
  *       "activeOrders": { "sell": 20, "buy": 20 },
- *       "gridPrice": "ama"    // Optional: "ama"/"ama1".."ama4"/number/null (default=AMA3)
  *     }
  *   ]
  * }
@@ -814,20 +816,18 @@ async function askGridPriceMode(promptText, defaultValue) {
 }
 
 /**
- * Interactive menu to edit bot data.
+ * Normalizes a bot draft for editing or saving.
+ * Preserves existing fields and seeds defaults for optional AMA offset controls.
  * @param {Object} [base={}] - The initial bot data to edit.
- * @returns {Promise<Object|null>} The edited bot data or null if cancelled.
+ * @returns {Object} A normalized bot draft.
  */
-async function promptBotData(base = {}) {
-    // Create a working copy of the data
+function normalizeBotDraft(base = {}) {
     const data = JSON.parse(JSON.stringify(base));
 
-    // Ensure nested objects exist
     if (!data.weightDistribution) data.weightDistribution = { ...DEFAULT_CONFIG.weightDistribution };
     if (!data.botFunds) data.botFunds = { ...DEFAULT_CONFIG.botFunds };
     if (!data.activeOrders) data.activeOrders = { ...DEFAULT_CONFIG.activeOrders };
 
-    // Set other defaults if missing
     if (data.active === undefined) data.active = DEFAULT_CONFIG.active;
     if (data.dryRun === undefined) data.dryRun = DEFAULT_CONFIG.dryRun;
     if (data.minPrice === undefined) data.minPrice = DEFAULT_CONFIG.minPrice;
@@ -836,6 +836,20 @@ async function promptBotData(base = {}) {
     if (data.targetSpreadPercent === undefined) data.targetSpreadPercent = DEFAULT_CONFIG.targetSpreadPercent;
     if (data.startPrice === undefined) data.startPrice = data.startPrice || DEFAULT_CONFIG.startPrice || 'pool';
     if (data.gridPrice === undefined) data.gridPrice = null;
+    if (data.gridPriceOffsetPct === undefined) data.gridPriceOffsetPct = 0;
+    if (data.gridPriceOffsetEnabled === undefined) data.gridPriceOffsetEnabled = true;
+    if (data.gridPriceOffsetClampToBounds === undefined) data.gridPriceOffsetClampToBounds = true;
+
+    return data;
+}
+
+/**
+ * Interactive menu to edit bot data.
+ * @param {Object} [base={}] - The initial bot data to edit.
+ * @returns {Promise<Object|null>} The edited bot data or null if cancelled.
+ */
+async function promptBotData(base = {}) {
+    const data = normalizeBotDraft(base);
 
     let finished = false;
     let cancelled = false;
@@ -846,7 +860,7 @@ async function promptBotData(base = {}) {
              console.log('\n\x1b[1m--- Bot Editor: ' + (data.name || 'New Bot') + ' ---\x1b[0m');
              console.log(`\x1b[1;33m1) Pair:\x1b[0m       \x1b[1;31m${data.assetA || '?'} / ${data.assetB || '?'} \x1b[0m`);
              console.log(`\x1b[1;33m2) Identity:\x1b[0m   \x1b[38;5;208mName:\x1b[0m ${data.name || '?'} , \x1b[38;5;208mAccount:\x1b[0m ${data.preferredAccount || '?'} , \x1b[38;5;208mActive:\x1b[0m ${data.active}, \x1b[38;5;208mDryRun:\x1b[0m ${data.dryRun}`);
-             console.log(`\x1b[1;33m3) Price:\x1b[0m      \x1b[38;5;208mRange:\x1b[0m [${data.minPrice} - ${data.maxPrice}], \x1b[38;5;208mStart:\x1b[0m ${data.startPrice}, \x1b[38;5;208mGrid:\x1b[0m ${data.gridPrice === null ? 'startPrice' : data.gridPrice}`);
+             console.log(`\x1b[1;33m3) Price:\x1b[0m      \x1b[38;5;208mRange:\x1b[0m [${data.minPrice} - ${data.maxPrice}], \x1b[38;5;208mStart:\x1b[0m ${data.startPrice}, \x1b[38;5;208mGrid:\x1b[0m ${data.gridPrice === null ? 'startPrice' : data.gridPrice}, \x1b[38;5;208mOffset:\x1b[0m ${data.gridPriceOffsetEnabled === false ? 'off' : `${data.gridPriceOffsetPct}%`}`);
              console.log(`\x1b[1;33m4) Grid:\x1b[0m       \x1b[38;5;208mWeights:\x1b[0m (S:${data.weightDistribution.sell}, B:${data.weightDistribution.buy}), \x1b[38;5;208mIncr:\x1b[0m ${data.incrementPercent}%, \x1b[38;5;208mSpread:\x1b[0m ${data.targetSpreadPercent}%`);
              console.log(`\x1b[1;33m5) Funding:\x1b[0m    \x1b[38;5;208mSell:\x1b[0m ${data.botFunds.sell}, \x1b[38;5;208mBuy:\x1b[0m ${data.botFunds.buy} | \x1b[38;5;208mOrders:\x1b[0m (S:${data.activeOrders.sell}, B:${data.activeOrders.buy})`);
              console.log('--------------------------------------------------');
@@ -899,10 +913,19 @@ async function promptBotData(base = {}) {
                 if (startP === '\x1b') break;
                 const gp = await askGridPriceMode('gridPrice ref (ama/ama1/ama2/ama3/ama4/number/none)', data.gridPrice);
                 if (gp === '\x1b') break;
+                const gpOffsetEnabled = await askBoolean('gridPriceOffsetEnabled', data.gridPriceOffsetEnabled !== false);
+                if (gpOffsetEnabled === '\x1b') break;
+                const gpOffsetPct = await askNumberWithBounds('gridPriceOffsetPct', data.gridPriceOffsetPct, -10, 10);
+                if (gpOffsetPct === '\x1b') break;
+                const gpClamp = await askBoolean('gridPriceOffsetClampToBounds', data.gridPriceOffsetClampToBounds !== false);
+                if (gpClamp === '\x1b') break;
                 data.minPrice = minP;
                 data.maxPrice = maxP;
                 data.startPrice = startP;
                 data.gridPrice = gp;
+                data.gridPriceOffsetEnabled = gpOffsetEnabled;
+                data.gridPriceOffsetPct = gpOffsetPct;
+                data.gridPriceOffsetClampToBounds = gpClamp;
                 showMenu = true;
                 break;
             case '4':
@@ -987,6 +1010,9 @@ async function promptBotData(base = {}) {
         botFunds: data.botFunds,
         activeOrders: data.activeOrders,
         gridPrice: data.gridPrice,
+        gridPriceOffsetPct: data.gridPriceOffsetPct,
+        gridPriceOffsetEnabled: data.gridPriceOffsetEnabled,
+        gridPriceOffsetClampToBounds: data.gridPriceOffsetClampToBounds,
     };
 }
 
@@ -1211,4 +1237,4 @@ async function main() {
     console.log('Botmanager closed!');
 }
 
-module.exports = { main, parseJsonWithComments, parseCronToDelta, deltaToCron };
+module.exports = { main, normalizeBotDraft, parseJsonWithComments, parseCronToDelta, deltaToCron };

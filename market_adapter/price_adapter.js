@@ -729,19 +729,37 @@ async function resolveBotContext(bot) {
 const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
 
 /**
- * Atomically write the AMA center price for a bot to profiles/orders/<botKey>.gridprice.json.
+ * Atomically write the effective grid center for a bot to profiles/orders/<botKey>.gridprice.json.
  * Called by price_adapter when a grid reset trigger fires (or on first initialisation) for bots
  * with gridPrice using AMA keywords ("ama", "ama1".."ama4"). Uses write-then-rename to prevent partial reads by the dexbot process.
  * @param {string} botKey   - Bot key (e.g. "iob-xrp-bts-0")
- * @param {number} amaPrice - Current AMA center price (B/A format)
+ * @param {number} amaPrice - Current raw AMA center price (B/A format)
+ * @param {Object} options
+ * @param {number} options.gridPriceOffsetPct - Signed offset percentage applied to the AMA center
+ * @param {boolean} options.gridPriceOffsetEnabled - Whether the offset is enabled at write time
+ * @param {boolean} options.gridPriceOffsetClampToBounds - Whether the effective center was clamped to bounds
+ * @param {number} options.effectiveCenterPrice - Precomputed effective center price
  */
-function writeBotAmaCenter(botKey, amaPrice) {
+function writeBotAmaCenter(botKey, amaPrice, options = {}) {
     try {
         ensureDir(ORDERS_DIR);
         const filePath = path.join(ORDERS_DIR, `${botKey}.gridprice.json`);
         const tmpPath = `${filePath}.tmp`;
+        const gridPriceOffsetPct = Number(options.gridPriceOffsetPct || 0);
+        const gridPriceOffsetEnabled = options.gridPriceOffsetEnabled !== false;
+        const gridPriceOffsetClampToBounds = options.gridPriceOffsetClampToBounds !== false;
+        const effectiveCenterPrice = Number(options.effectiveCenterPrice);
+        const centerPriceRaw = Number.isFinite(effectiveCenterPrice) && effectiveCenterPrice > 0
+            ? effectiveCenterPrice
+            : amaPrice * (1 + (Number.isFinite(gridPriceOffsetPct) ? gridPriceOffsetPct : 0) / 100);
+        const centerPrice = Math.round(centerPriceRaw * 1e8) / 1e8;
         const payload = {
-            centerPrice: amaPrice,
+            amaCenterPrice: amaPrice,
+            centerPrice,
+            effectiveCenterPrice: centerPrice,
+            gridPriceOffsetPct: Number.isFinite(gridPriceOffsetPct) ? gridPriceOffsetPct : 0,
+            gridPriceOffsetEnabled,
+            gridPriceOffsetClampToBounds,
             updatedAt: new Date().toISOString(),
             source: 'market_adapter/price_adapter.js',
         };
@@ -792,6 +810,11 @@ function writeCenterSnapshot(state) {
         centers.bots[botKey] = {
             botName: v.botName,
             centerPrice: v.centerPrice,
+            amaCenterPrice: v.amaCenterPrice,
+            effectiveCenterPrice: v.effectiveCenterPrice,
+            gridPriceOffsetPct: v.gridPriceOffsetPct,
+            gridPriceOffsetEnabled: v.gridPriceOffsetEnabled,
+            gridPriceOffsetClampToBounds: v.gridPriceOffsetClampToBounds,
             lastGridResetAt: v.lastGridResetAt,
             lastAmaPrice: v.lastAmaPrice,
             lastDeltaPercent: v.lastDeltaPercent,

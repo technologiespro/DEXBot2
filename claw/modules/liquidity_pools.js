@@ -12,6 +12,7 @@ function createDexbotPoolHelper() {
     derivePoolPrice: (assetA, assetB) => system.derivePoolPrice(BitShares, assetA, assetB),
     derivePrice: (assetA, assetB, mode) => system.derivePrice(BitShares, assetA, assetB, mode),
     deepFreeze: system.deepFreeze,
+    loadAmaCenterSnapshot: system.loadAmaCenterSnapshot,
     loadAmaCenterPrice: system.loadAmaCenterPrice,
     lookupAsset: system.lookupAsset
   };
@@ -23,6 +24,7 @@ module.exports = {
   derivePrice: (assetA, assetB, mode) => getDexbotSystem().derivePrice(BitShares, assetA, assetB, mode),
   deepFreeze: (...args) => getDexbotSystem().deepFreeze(...args),
   getDexbot2Root,
+  loadAmaCenterSnapshot: (...args) => getDexbotSystem().loadAmaCenterSnapshot(...args),
   loadAmaCenterPrice: (...args) => getDexbotSystem().loadAmaCenterPrice(...args),
   lookupAsset: (...args) => getDexbotSystem().lookupAsset(...args),
   requireDexbot2Module
