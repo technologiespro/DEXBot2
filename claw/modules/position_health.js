@@ -8,6 +8,10 @@
 
 'use strict';
 
+const { computeDynamicWeights } = require('../../market_adapter/dynamic_weights');
+
+const DEFAULT_PRICE_RANGE_RATIO = 3.0;
+
 // CR Zone boundaries for HONEST.Assets (MCR = 1.4)
 // Low zones: under-collateralized (liquidation risk)
 // High zones: over-collateralized (capital inefficiency)
@@ -196,12 +200,468 @@ function collateralDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, ta
   return needed - (currentCollateral || 0);
 }
 
+/**
+ * Calculate the maximum debt supportable by the current collateral at a target CR.
+ *
+ * @param {number} currentCollateral – Current BTS collateral
+ * @param {number} feedPrice         – BTS per MPA
+ * @param {number} targetCr          – Target collateral ratio (default 2.0)
+ * @returns {number} Debt level that matches the target CR
+ */
+function debtForTargetCr(currentCollateral, feedPrice, targetCr = 2.0) {
+  if (!Number.isFinite(currentCollateral) || !Number.isFinite(feedPrice) || !Number.isFinite(targetCr)) {
+    return 0;
+  }
+  if (currentCollateral <= 0 || feedPrice <= 0 || targetCr <= 0) {
+    return 0;
+  }
+  return currentCollateral / (feedPrice * targetCr);
+}
+
+/**
+ * Calculate how much debt to add/remove to reach a target CR using debt first.
+ *
+ * @param {number} currentCollateral – Current BTS collateral
+ * @param {number} debtAmount        – Current MPA debt
+ * @param {number} feedPrice         – BTS per MPA
+ * @param {number} targetCr          – Target collateral ratio (default 2.0)
+ * @returns {number} Delta (positive = can increase debt, negative = should reduce debt)
+ */
+function debtDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, targetCr = 2.0) {
+  const targetDebt = debtForTargetCr(currentCollateral, feedPrice, targetCr);
+  return targetDebt - (debtAmount || 0);
+}
+
+/**
+ * Build a CR adjustment plan using the actual strategy levers:
+ * change debt first, then collateral if needed or desired.
+ *
+ * @param {number} currentCollateral – Current BTS collateral
+ * @param {number} debtAmount        – Current MPA debt
+ * @param {number} feedPrice         – BTS per MPA
+ * @param {number} targetCr          – Target collateral ratio (default 2.0)
+ * @returns {Object} Adjustment plan
+ */
+function planCrAdjustment(currentCollateral, debtAmount, feedPrice, targetCr = 2.0) {
+  const targetDebt = debtForTargetCr(currentCollateral, feedPrice, targetCr);
+  const debtDelta = debtDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, targetCr);
+  const targetCollateral = collateralForTargetCr(debtAmount, feedPrice, targetCr);
+  const collateralDelta = collateralDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, targetCr);
+
+  let primaryAction = 'hold';
+  let fallbackAction = 'hold';
+  if (debtDelta < 0) {
+    primaryAction = 'reduce_debt';
+    fallbackAction = collateralDelta > 0 ? 'add_collateral' : 'hold';
+  } else if (debtDelta > 0) {
+    primaryAction = 'increase_debt';
+    fallbackAction = collateralDelta < 0 ? 'withdraw_collateral' : 'hold';
+  }
+
+  return {
+    targetCr,
+    targetDebt,
+    targetCollateral,
+    debtDelta,
+    collateralDelta,
+    primaryAction,
+    fallbackAction
+  };
+}
+
+function roundNumber(value, digits = 3) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  const factor = 10 ** digits;
+  return Math.round(numeric * factor) / factor;
+}
+
+function normalizeWeightDistribution(weightDistribution) {
+  return {
+    sell: Number.isFinite(Number(weightDistribution?.sell)) ? Number(weightDistribution.sell) : 0.5,
+    buy: Number.isFinite(Number(weightDistribution?.buy)) ? Number(weightDistribution.buy) : 0.5
+  };
+}
+
+function parseRatioValue(value, referencePrice, mode) {
+  if (typeof value === 'string') {
+    const match = value.trim().match(/^([0-9]+(?:\.[0-9]+)?)x$/i);
+    if (match) {
+      const ratio = Number(match[1]);
+      return Number.isFinite(ratio) && ratio > 0 ? ratio : null;
+    }
+  }
+
+  const numeric = Number(value);
+  const reference = Number(referencePrice);
+  if (!Number.isFinite(numeric) || numeric <= 0 || !Number.isFinite(reference) || reference <= 0) {
+    return null;
+  }
+  return mode === 'min' ? reference / numeric : numeric / reference;
+}
+
+function formatRatioAsMultiplier(ratio) {
+  const rounded = roundNumber(ratio, 2);
+  return `${rounded}x`;
+}
+
+function classifyPriceRangeRatio(ratio) {
+  const numeric = Number(ratio);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 'unknown';
+  }
+  if (numeric < 2) {
+    return 'very_competitive';
+  }
+  if (numeric < 3) {
+    return 'competitive';
+  }
+  if (numeric <= 3.25) {
+    return 'conservative';
+  }
+  return 'very_conservative';
+}
+
+function resolveCurrentPriceRangeRatio(botConfig = {}, referencePrice, options = {}) {
+  const forced = Number(options.currentPriceRangeRatio);
+  if (Number.isFinite(forced) && forced > 0) {
+    return {
+      isSymmetric: true,
+      maxRatio: forced,
+      minRatio: forced,
+      ratio: forced
+    };
+  }
+
+  const minRatio = parseRatioValue(botConfig.minPrice, referencePrice, 'min');
+  const maxRatio = parseRatioValue(botConfig.maxPrice, referencePrice, 'max');
+  const ratioCandidates = [minRatio, maxRatio].filter((value) => Number.isFinite(value) && value > 0);
+  const ratio = ratioCandidates.length > 0 ? Math.max(...ratioCandidates) : DEFAULT_PRICE_RANGE_RATIO;
+
+  return {
+    isSymmetric: Number.isFinite(minRatio) && Number.isFinite(maxRatio) && Math.abs(minRatio - maxRatio) < 0.05,
+    maxRatio,
+    minRatio,
+    ratio
+  };
+}
+
+function computePriceRangeRatioPlan(botConfig = {}, options = {}) {
+  const referencePrice = Number(options.referencePrice);
+  const current = resolveCurrentPriceRangeRatio(botConfig, referencePrice, options);
+  const rangeContext = options.rangeContext && typeof options.rangeContext === 'object' ? options.rangeContext : {};
+  const observedMinPrice = Number(rangeContext.observedMinPrice);
+  const observedMaxPrice = Number(rangeContext.observedMaxPrice);
+  const touchCount = Math.max(0, Number(rangeContext.boundTouchCount || 0));
+  const headroomFactor = Number.isFinite(Number(options.priceRangeHeadroomFactor))
+    ? Math.max(1, Number(options.priceRangeHeadroomFactor))
+    : 1.1;
+  const touchExpansionFactor = 1 + Math.min(touchCount, 5) * 0.025;
+  const minRatio = Number.isFinite(Number(options.minPriceRangeRatio))
+    ? Math.max(1.05, Number(options.minPriceRangeRatio))
+    : 1.25;
+  const maxRatio = Number.isFinite(Number(options.maxPriceRangeRatio))
+    ? Math.max(minRatio, Number(options.maxPriceRangeRatio))
+    : 6.0;
+  const minRangeRatioDelta = Number.isFinite(Number(options.minRangeRatioDelta))
+    ? Math.max(0, Number(options.minRangeRatioDelta))
+    : 0.25;
+
+  let observedRatio = null;
+  if (
+    Number.isFinite(referencePrice) &&
+    referencePrice > 0 &&
+    Number.isFinite(observedMinPrice) &&
+    observedMinPrice > 0 &&
+    Number.isFinite(observedMaxPrice) &&
+    observedMaxPrice > 0
+  ) {
+    observedRatio = Math.max(referencePrice / observedMinPrice, observedMaxPrice / referencePrice);
+  }
+
+  const recommendedRatio = Number.isFinite(observedRatio)
+    ? Math.min(maxRatio, Math.max(minRatio, observedRatio * headroomFactor * touchExpansionFactor))
+    : current.ratio;
+  const roundedRecommendedRatio = roundNumber(recommendedRatio, 2);
+  const ratioDelta = roundNumber(roundedRecommendedRatio - current.ratio, 2);
+  const shouldUpdate = Math.abs(ratioDelta) >= minRangeRatioDelta;
+  let reason = 'keep_existing_range_ratio';
+  if (!Number.isFinite(observedRatio)) {
+    reason = 'insufficient_range_history';
+  } else if (ratioDelta > 0) {
+    reason = 'historical_range_requires_wider_bounds';
+  } else if (ratioDelta < 0) {
+    reason = 'historical_range_supports_tighter_bounds';
+  }
+
+  return {
+    classification: classifyPriceRangeRatio(roundedRecommendedRatio),
+    currentClassification: classifyPriceRangeRatio(current.ratio),
+    currentRatio: roundNumber(current.ratio, 2),
+    isSymmetric: current.isSymmetric,
+    observedRatio: Number.isFinite(observedRatio) ? roundNumber(observedRatio, 2) : null,
+    ratioDelta,
+    reason,
+    recommendedRatio: roundedRecommendedRatio,
+    referencePrice: Number.isFinite(referencePrice) && referencePrice > 0 ? referencePrice : null,
+    shouldUpdate,
+    touchCount
+  };
+}
+
+function resolveTargetCr(position, trendSignal, botConfig, assessment, options) {
+  if (typeof options.resolveTargetCr === 'function') {
+    const resolved = options.resolveTargetCr(position, trendSignal, botConfig, assessment);
+    return Number.isFinite(Number(resolved)) && Number(resolved) > 0 ? Number(resolved) : null;
+  }
+  if (Number.isFinite(Number(options.targetCr)) && Number(options.targetCr) > 0) {
+    return Number(options.targetCr);
+  }
+
+  const currentCr = position?.onChain?.collateralRatio;
+  return Number.isFinite(Number(currentCr)) && Number(currentCr) > 0 ? Number(currentCr) : null;
+}
+
+/**
+ * Compute trend weight from confidence and trend direction.
+ *
+ * @param {string} trend       – 'UP', 'DOWN', or 'NEUTRAL'
+ * @param {number} confidence  – 0–100
+ * @returns {number} Weight multiplier (0.2 – 1.0)
+ */
+function trendWeight(trend, confidence) {
+  if (trend === 'NEUTRAL') return 0.4;
+  const c = Number(confidence) || 0;
+  if (c >= 80) return 1.0;
+  if (c >= 60) return 0.7;
+  if (c >= 40) return 0.4;
+  return 0.2;
+}
+
+/**
+ * Compute CR weight from the current collateral ratio zone.
+ *
+ * @param {string} zone – CR zone label from classifyCrZone
+ * @returns {number} Weight multiplier (0.0 – 1.5)
+ */
+function crWeight(zone) {
+  switch (zone) {
+    case 'red_high':    return 1.5;
+    case 'orange_high': return 1.2;
+    case 'green':       return 1.0;
+    case 'orange_low':  return 0.5;
+    case 'red_low':     return 0.0;
+    default:            return 1.0;
+  }
+}
+
+/**
+ * Compute a signed price-offset bias from trend direction and confidence.
+ *
+ * @param {string} trend       – 'UP', 'DOWN', or 'NEUTRAL'
+ * @param {number} confidence  – 0–100
+ * @returns {number} Signed bias in the range [-1, 1]
+ */
+function computePriceOffsetBias(trend = 'NEUTRAL', confidence = 0) {
+  if (trend === 'NEUTRAL') {
+    return 0;
+  }
+  const strength = trendWeight(trend, confidence);
+  if (trend === 'UP') {
+    return strength;
+  }
+  if (trend === 'DOWN') {
+    return -strength;
+  }
+  return 0;
+}
+
+/**
+ * Compute directional order-weight bias from trend direction and confidence.
+ * Positive bias means front-load that side; negative means flatten that side.
+ *
+ * @param {string} trend       – 'UP', 'DOWN', or 'NEUTRAL'
+ * @param {number} confidence  – 0–100
+ * @returns {{ profile: string, buyBias: number, sellBias: number, strength: number }}
+ */
+function computeOrderWeightBias(trend = 'NEUTRAL', confidence = 0) {
+  if (trend === 'NEUTRAL') {
+    return {
+      profile: 'balanced',
+      buyBias: 0,
+      sellBias: 0,
+      strength: 0
+    };
+  }
+
+  const strength = trendWeight(trend, confidence);
+  if (trend === 'DOWN') {
+    return {
+      profile: 'mountain_valley',
+      buyBias: strength,
+      sellBias: -strength,
+      strength
+    };
+  }
+
+  if (trend === 'UP') {
+    return {
+      profile: 'mountain_valley',
+      buyBias: -strength,
+      sellBias: strength,
+      strength
+    };
+  }
+
+  return {
+    profile: 'balanced',
+    buyBias: 0,
+    sellBias: 0,
+    strength: 0
+  };
+}
+
+/**
+ * Build a unified margin-trading plan that combines:
+ * - CR adjustment intent (debt first, collateral second)
+ * - final grid price offset percentage
+ * - final weightDistribution values
+ *
+ * @param {Object} position      – Position object with onChain collateral/debt/feed data
+ * @param {Object} [trendSignal] – Optional trend signal
+ * @param {Object} [botConfig]   – Current bot config
+ * @param {Object} [options]     – Planning options
+ * @returns {Object} Unified plan with concrete bot patch outputs
+ */
+function buildMarginTradingPlan(position, trendSignal = null, botConfig = {}, options = {}) {
+  const assessment = assessPosition(position, trendSignal);
+  const targetCr = resolveTargetCr(position, trendSignal, botConfig, assessment, options);
+  const feedPrice = Number(options.feedPrice ?? trendSignal?.feedPrice ?? position?.onChain?.btsPerMpa);
+  const referencePrice = Number(
+    options.referencePrice ??
+    options.gridReferencePrice ??
+    trendSignal?.marketPrice ??
+    feedPrice
+  );
+  const currentCollateral = Number(position?.onChain?.collateralAmount || 0);
+  const currentDebt = Number(position?.onChain?.debtAmount || 0);
+  const currentGridPriceOffsetPct = Number.isFinite(Number(botConfig?.gridPriceOffsetPct))
+    ? Number(botConfig.gridPriceOffsetPct)
+    : 0;
+  const offsetEnabled = botConfig?.gridPriceOffsetEnabled !== false && options.gridPriceOffsetEnabled !== false;
+  const allowNeutralReset = options.allowNeutralGridReset !== undefined
+    ? !!options.allowNeutralGridReset
+    : botConfig?.gridPriceOffsetAllowNeutralReset !== false;
+  const maxGridPriceOffsetPct = Number.isFinite(Number(options.maxGridPriceOffsetPct))
+    ? Math.max(0, Number(options.maxGridPriceOffsetPct))
+    : Number.isFinite(Number(botConfig?.gridPriceOffsetMaxPct))
+      ? Math.max(0, Number(botConfig.gridPriceOffsetMaxPct))
+      : 0.5;
+  const priceOffsetScale = Number.isFinite(Number(options.priceOffsetScale))
+    ? Math.max(0, Number(options.priceOffsetScale))
+    : 1;
+
+  const trend = trendSignal?.trend || 'NEUTRAL';
+  const confidence = Number(trendSignal?.confidence || 0);
+  const priceOffsetBias = computePriceOffsetBias(trend, confidence);
+  const orderWeightBias = computeOrderWeightBias(trend, confidence);
+  const priceRangePlan = computePriceRangeRatioPlan(botConfig, {
+    ...options,
+    referencePrice
+  });
+
+  let finalGridPriceOffsetPct = currentGridPriceOffsetPct;
+  if (!offsetEnabled) {
+    finalGridPriceOffsetPct = 0;
+  } else if (trend === 'NEUTRAL') {
+    finalGridPriceOffsetPct = allowNeutralReset ? 0 : currentGridPriceOffsetPct;
+  } else {
+    const scaledBias = Math.max(-1, Math.min(1, priceOffsetBias * priceOffsetScale));
+    finalGridPriceOffsetPct = roundNumber(scaledBias * maxGridPriceOffsetPct, 3);
+  }
+
+  const currentWeights = normalizeWeightDistribution(botConfig?.weightDistribution);
+  const weightPlan = computeDynamicWeights(
+    trendSignal
+      ? {
+        confidence,
+        isReady: trendSignal.isReady !== false,
+        oscillation: trendSignal.oscillation,
+        priceAnalysis: trendSignal.priceAnalysis,
+        trend
+      }
+      : null,
+    options.priceContext || {},
+    currentWeights
+  );
+
+  const crPlan = targetCr && Number.isFinite(feedPrice) && feedPrice > 0
+    ? planCrAdjustment(currentCollateral, currentDebt, feedPrice, targetCr)
+    : {
+      targetCr,
+      targetDebt: null,
+      targetCollateral: null,
+      debtDelta: 0,
+      collateralDelta: 0,
+      primaryAction: 'hold',
+      fallbackAction: 'hold'
+    };
+  const finalPriceRangeRatio = priceRangePlan.shouldUpdate
+    ? priceRangePlan.recommendedRatio
+    : priceRangePlan.currentRatio;
+
+  return {
+    assessment,
+    targetCr,
+    crPlan,
+    marketPlan: {
+      confidence,
+      trend,
+      priceOffsetBias,
+      orderWeightBias
+    },
+    gridPlan: {
+      currentGridPriceOffsetPct,
+      finalGridPriceOffsetPct,
+      finalPriceRangeRatio,
+      maxGridPriceOffsetPct,
+      priceRangePlan,
+      weightProfile: weightPlan.profile,
+      weightDistribution: {
+        sell: weightPlan.sell,
+        buy: weightPlan.buy
+      }
+    },
+    botPatch: {
+      gridPriceOffsetPct: finalGridPriceOffsetPct,
+      maxPrice: formatRatioAsMultiplier(finalPriceRangeRatio),
+      minPrice: formatRatioAsMultiplier(finalPriceRangeRatio),
+      weightDistribution: {
+        sell: weightPlan.sell,
+        buy: weightPlan.buy
+      }
+    }
+  };
+}
+
 module.exports = {
   CR_ZONES,
   assessAllPositions,
   assessPosition,
+  buildMarginTradingPlan,
   checkTrendAlignment,
   classifyCrZone,
+  classifyPriceRangeRatio,
   collateralDeltaForTargetCr,
   collateralForTargetCr,
+  computePriceRangeRatioPlan,
+  computeOrderWeightBias,
+  computePriceOffsetBias,
+  crWeight,
+  debtDeltaForTargetCr,
+  debtForTargetCr,
+  planCrAdjustment,
+  trendWeight,
 };

@@ -13,6 +13,7 @@ const {
   getFullAccount
 } = require('./chain_queries');
 const { listenForFills } = require('./chain_actions');
+const { writeJsonFileAtomic } = require('./dexbot_profiles');
 const { loadDexbotOrderUtils } = require('./dexbot_bridge');
 
 function getBlockchainToFloat() {
@@ -382,7 +383,7 @@ class PositionManager {
     const state = await this.loadState();
     state.updatedAt = nowIso();
     await fs.mkdir(path.dirname(this.statePath), { recursive: true });
-    await fs.writeFile(this.statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+    await writeJsonFileAtomic(this.statePath, state);
     return state;
   }
 

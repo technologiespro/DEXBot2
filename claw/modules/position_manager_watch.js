@@ -1,5 +1,10 @@
+const fsPromises = require('fs/promises');
+const path = require('path');
 const { PositionManager, DEFAULT_STATE_PATH } = require('./position_manager');
 const { waitForConnected } = require('./bitshares_client');
+
+const DEFAULT_HEALTH_PATH = path.join(process.cwd(), 'data', 'watcher-health.json');
+const DEFAULT_MAX_CONSECUTIVE_FAILURES = 5;
 
 function clone(value) {
   if (value === undefined) {
@@ -11,6 +16,8 @@ function clone(value) {
 function parsePositionManagerWatchArgs(argv = [], env = process.env) {
   const options = {
     accountName: env.BITSHARES_ACCOUNT || null,
+    healthPath: DEFAULT_HEALTH_PATH,
+    maxConsecutiveFailures: DEFAULT_MAX_CONSECUTIVE_FAILURES,
     statePath: DEFAULT_STATE_PATH,
     syncIntervalMs: 300000
   };
@@ -27,6 +34,12 @@ function parsePositionManagerWatchArgs(argv = [], env = process.env) {
       i += 1;
     } else if (arg === '--sync-interval' && next) {
       options.syncIntervalMs = Number(next);
+      i += 1;
+    } else if (arg === '--health-path' && next) {
+      options.healthPath = next;
+      i += 1;
+    } else if (arg === '--max-failures' && next) {
+      options.maxConsecutiveFailures = Number(next);
       i += 1;
     }
   }
@@ -62,6 +75,10 @@ function createPositionManagerWatcher(options = {}) {
   const logger = resolveLogger(options.logger);
   const resolvedOptions = {
     accountName: options.accountName || process.env.BITSHARES_ACCOUNT || null,
+    healthPath: options.healthPath || DEFAULT_HEALTH_PATH,
+    maxConsecutiveFailures: Number.isFinite(Number(options.maxConsecutiveFailures))
+      ? Number(options.maxConsecutiveFailures)
+      : DEFAULT_MAX_CONSECUTIVE_FAILURES,
     statePath: options.statePath || DEFAULT_STATE_PATH,
     syncIntervalMs: Number.isFinite(Number(options.syncIntervalMs)) && Number(options.syncIntervalMs) > 0
       ? Number(options.syncIntervalMs)
@@ -72,6 +89,62 @@ function createPositionManagerWatcher(options = {}) {
   let running = false;
   let syncTimer = null;
   let unsubscribe = null;
+
+  // Health tracking state
+  let consecutiveFailures = 0;
+  let lastSuccessAt = null;
+  let lastFailureAt = null;
+  let lastFailureMessage = null;
+  let healthWriteChain = Promise.resolve();
+
+  function getHealth() {
+    return {
+      checkedAt: new Date().toISOString(),
+      consecutiveFailures,
+      lastFailureAt,
+      lastFailureMessage,
+      lastSuccessAt,
+      running,
+      // Informational only — the watcher continues syncing regardless of status
+      status: consecutiveFailures >= resolvedOptions.maxConsecutiveFailures ? 'unhealthy' : 'healthy'
+    };
+  }
+
+  async function writeHealth() {
+    try {
+      const healthDir = path.dirname(resolvedOptions.healthPath);
+      await fsPromises.mkdir(healthDir, { recursive: true });
+      const tmpPath = `${resolvedOptions.healthPath}.tmp.${process.pid}.${Date.now()}`;
+      await fsPromises.writeFile(tmpPath, JSON.stringify(getHealth(), null, 2) + '\n', 'utf8');
+      await fsPromises.rename(tmpPath, resolvedOptions.healthPath);
+    } catch {
+      // Best-effort — do not let health writes break the watcher
+    }
+  }
+
+  function queueHealthWrite() {
+    healthWriteChain = healthWriteChain.then(() => writeHealth()).catch(() => null);
+    return healthWriteChain;
+  }
+
+  async function recordSyncSuccess() {
+    consecutiveFailures = 0;
+    lastSuccessAt = new Date().toISOString();
+    await queueHealthWrite();
+  }
+
+  async function recordSyncFailure(err) {
+    consecutiveFailures += 1;
+    lastFailureAt = new Date().toISOString();
+    lastFailureMessage = err.message || String(err);
+
+    if (consecutiveFailures >= resolvedOptions.maxConsecutiveFailures) {
+      logger.error(`[position-manager-watch] sync failed ${consecutiveFailures} consecutive times: ${lastFailureMessage}`);
+    } else {
+      logger.warn(`[position-manager-watch] sync failed (${consecutiveFailures}/${resolvedOptions.maxConsecutiveFailures}): ${lastFailureMessage}`);
+    }
+    await queueHealthWrite();
+  }
 
   const stop = async () => {
     if (!running) {
@@ -87,11 +160,13 @@ function createPositionManagerWatcher(options = {}) {
       await unsubscribe().catch(() => null);
       unsubscribe = null;
     }
+    await queueHealthWrite();
   };
 
   const start = async () => {
     if (running) {
       return {
+        getHealth,
         manager,
         options: resolvedOptions,
         stop
@@ -109,9 +184,9 @@ function createPositionManagerWatcher(options = {}) {
       throw new Error(`BitShares connection not ready: ${err.message}`);
     });
 
-    await manager.syncAllPositions().catch((err) => {
-      logger.warn('[position-manager-watch] initial sync failed:', err.message);
-    });
+    await manager.syncAllPositions()
+      .then(() => recordSyncSuccess())
+      .catch((err) => recordSyncFailure(err));
 
     unsubscribe = await manager.watchAccount(resolvedOptions.accountName, async (position) => {
       logger.info(`[position-manager-watch] fill observed for ${position.id}`);
@@ -125,13 +200,14 @@ function createPositionManagerWatcher(options = {}) {
         return;
       }
 
-      manager.syncAllPositions().catch((err) => {
-        logger.warn('[position-manager-watch] periodic sync failed:', err.message);
-      });
+      manager.syncAllPositions()
+        .then(() => recordSyncSuccess())
+        .catch((err) => recordSyncFailure(err));
     }, resolvedOptions.syncIntervalMs);
 
     logger.info('[position-manager-watch] running');
     return {
+      getHealth,
       manager,
       options: resolvedOptions,
       stop
@@ -139,6 +215,7 @@ function createPositionManagerWatcher(options = {}) {
   };
 
   return {
+    getHealth,
     manager,
     options: resolvedOptions,
     start,
@@ -152,6 +229,8 @@ async function runPositionManagerWatch(options = {}) {
 }
 
 module.exports = {
+  DEFAULT_HEALTH_PATH,
+  DEFAULT_MAX_CONSECUTIVE_FAILURES,
   createPositionManagerWatcher,
   parsePositionManagerWatchArgs,
   runPositionManagerWatch,

@@ -12,8 +12,18 @@ const {
   classifyCrZone,
   checkTrendAlignment,
   assessPosition,
+  buildMarginTradingPlan,
+  classifyPriceRangeRatio,
   collateralForTargetCr,
   collateralDeltaForTargetCr,
+  computePriceRangeRatioPlan,
+  computeOrderWeightBias,
+  computePriceOffsetBias,
+  crWeight,
+  debtDeltaForTargetCr,
+  debtForTargetCr,
+  planCrAdjustment,
+  trendWeight,
 } = require('../position_health');
 
 // --- classifyCrZone ---
@@ -90,7 +100,12 @@ function makePosition(cr, debtAmount = 100) {
   return {
     id: 'test_pos',
     status: 'debt_open',
-    onChain: { collateralRatio: cr, debtAmount },
+    onChain: {
+      btsPerMpa: 50,
+      collateralAmount: cr && debtAmount ? cr * debtAmount * 50 : 0,
+      collateralRatio: cr,
+      debtAmount
+    },
   };
 }
 
@@ -234,6 +249,51 @@ function testCollateralDelta() {
   console.log('    PASS');
 }
 
+function testDebtForTargetCr() {
+  console.log('  debtForTargetCr...');
+
+  assert.strictEqual(debtForTargetCr(10000, 50, 2.0), 100);
+  assert.strictEqual(debtForTargetCr(12000, 50, 2.0), 120);
+  assert.strictEqual(debtForTargetCr(0, 50, 2.0), 0);
+  assert.strictEqual(debtForTargetCr(10000, 0, 2.0), 0);
+
+  console.log('    PASS');
+}
+
+function testDebtDeltaForTargetCr() {
+  console.log('  debtDeltaForTargetCr...');
+
+  assert.strictEqual(debtDeltaForTargetCr(8000, 100, 50, 2.0), -20);
+  assert.strictEqual(debtDeltaForTargetCr(12000, 100, 50, 2.0), 20);
+  assert.strictEqual(debtDeltaForTargetCr(10000, 100, 50, 2.0), 0);
+
+  console.log('    PASS');
+}
+
+function testPlanCrAdjustment() {
+  console.log('  planCrAdjustment...');
+
+  const lowCr = planCrAdjustment(8000, 100, 50, 2.0);
+  assert.strictEqual(lowCr.primaryAction, 'reduce_debt');
+  assert.strictEqual(lowCr.fallbackAction, 'add_collateral');
+  assert.strictEqual(lowCr.debtDelta, -20);
+  assert.strictEqual(lowCr.collateralDelta, 2000);
+
+  const highCr = planCrAdjustment(12000, 100, 50, 2.0);
+  assert.strictEqual(highCr.primaryAction, 'increase_debt');
+  assert.strictEqual(highCr.fallbackAction, 'withdraw_collateral');
+  assert.strictEqual(highCr.debtDelta, 20);
+  assert.strictEqual(highCr.collateralDelta, -2000);
+
+  const onTarget = planCrAdjustment(10000, 100, 50, 2.0);
+  assert.strictEqual(onTarget.primaryAction, 'hold');
+  assert.strictEqual(onTarget.fallbackAction, 'hold');
+  assert.strictEqual(onTarget.debtDelta, 0);
+  assert.strictEqual(onTarget.collateralDelta, 0);
+
+  console.log('    PASS');
+}
+
 // --- CR_ZONES constant ---
 
 function testCrZonesConstant() {
@@ -247,6 +307,217 @@ function testCrZonesConstant() {
 
   // Deep frozen
   assert.throws(() => { CR_ZONES.GREEN.min = 999; }, TypeError);
+
+  console.log('    PASS');
+}
+
+// --- Weight factor ---
+
+function testTrendWeight() {
+  console.log('  trendWeight...');
+
+  assert.strictEqual(trendWeight('UP', 90), 1.0);
+  assert.strictEqual(trendWeight('DOWN', 80), 1.0);
+  assert.strictEqual(trendWeight('UP', 70), 0.7);
+  assert.strictEqual(trendWeight('DOWN', 60), 0.7);
+  assert.strictEqual(trendWeight('UP', 50), 0.4);
+  assert.strictEqual(trendWeight('DOWN', 40), 0.4);
+  assert.strictEqual(trendWeight('UP', 30), 0.2);
+  assert.strictEqual(trendWeight('DOWN', 0), 0.2);
+  // NEUTRAL always 0.4 regardless of confidence
+  assert.strictEqual(trendWeight('NEUTRAL', 100), 0.4);
+  assert.strictEqual(trendWeight('NEUTRAL', 0), 0.4);
+
+  console.log('    PASS');
+}
+
+function testCrWeight() {
+  console.log('  crWeight...');
+
+  assert.strictEqual(crWeight('red_high'), 1.5);
+  assert.strictEqual(crWeight('orange_high'), 1.2);
+  assert.strictEqual(crWeight('green'), 1.0);
+  assert.strictEqual(crWeight('orange_low'), 0.5);
+  assert.strictEqual(crWeight('red_low'), 0.0);
+  assert.strictEqual(crWeight('unknown'), 1.0);
+
+  console.log('    PASS');
+}
+
+function testComputePriceOffsetBias() {
+  console.log('  computePriceOffsetBias...');
+
+  assert.strictEqual(computePriceOffsetBias('UP', 90), 1.0);
+  assert.strictEqual(computePriceOffsetBias('DOWN', 70), -0.7);
+  assert.strictEqual(computePriceOffsetBias('NEUTRAL', 100), 0);
+  assert.strictEqual(computePriceOffsetBias('UNKNOWN', 100), 0);
+
+  console.log('    PASS');
+}
+
+function testComputeOrderWeightBias() {
+  console.log('  computeOrderWeightBias...');
+
+  const down = computeOrderWeightBias('DOWN', 80);
+  assert.strictEqual(down.profile, 'mountain_valley');
+  assert.strictEqual(down.buyBias, 1.0);
+  assert.strictEqual(down.sellBias, -1.0);
+
+  const up = computeOrderWeightBias('UP', 60);
+  assert.strictEqual(up.profile, 'mountain_valley');
+  assert.strictEqual(up.buyBias, -0.7);
+  assert.strictEqual(up.sellBias, 0.7);
+
+  const neutral = computeOrderWeightBias('NEUTRAL', 90);
+  assert.strictEqual(neutral.profile, 'balanced');
+  assert.strictEqual(neutral.buyBias, 0);
+  assert.strictEqual(neutral.sellBias, 0);
+  assert.strictEqual(neutral.strength, 0);
+
+  console.log('    PASS');
+}
+
+function testClassifyPriceRangeRatio() {
+  console.log('  classifyPriceRangeRatio...');
+
+  assert.strictEqual(classifyPriceRangeRatio(1.8), 'very_competitive');
+  assert.strictEqual(classifyPriceRangeRatio(2.0), 'competitive');
+  assert.strictEqual(classifyPriceRangeRatio(2.7), 'competitive');
+  assert.strictEqual(classifyPriceRangeRatio(3.0), 'conservative');
+  assert.strictEqual(classifyPriceRangeRatio(4.0), 'very_conservative');
+
+  console.log('    PASS');
+}
+
+function testComputePriceRangeRatioPlan() {
+  console.log('  computePriceRangeRatioPlan...');
+
+  const widen = computePriceRangeRatioPlan(
+    {
+      minPrice: '3x',
+      maxPrice: '3x'
+    },
+    {
+      rangeContext: {
+        observedMaxPrice: 145,
+        observedMinPrice: 70
+      },
+      referencePrice: 100
+    }
+  );
+
+  assert.strictEqual(widen.currentRatio, 3);
+  assert.strictEqual(widen.observedRatio, 1.45);
+  assert.strictEqual(widen.recommendedRatio, 1.6);
+  assert.strictEqual(widen.classification, 'very_competitive');
+  assert.strictEqual(widen.reason, 'historical_range_supports_tighter_bounds');
+  assert.strictEqual(widen.shouldUpdate, true);
+
+  const keep = computePriceRangeRatioPlan(
+    {
+      minPrice: '2x',
+      maxPrice: '2x'
+    },
+    {
+      rangeContext: {
+        observedMaxPrice: 195,
+        observedMinPrice: 55
+      },
+      referencePrice: 100
+    }
+  );
+
+  assert.strictEqual(keep.currentRatio, 2);
+  assert.strictEqual(keep.recommendedRatio, 2.15);
+  assert.strictEqual(keep.classification, 'competitive');
+  assert.strictEqual(keep.shouldUpdate, false);
+
+  console.log('    PASS');
+}
+
+function testBuildMarginTradingPlanDowntrend() {
+  console.log('  buildMarginTradingPlan (downtrend unified plan)...');
+
+  const plan = buildMarginTradingPlan(
+    makePosition(1.6, 100),
+    {
+      confidence: 80,
+      isReady: true,
+      oscillation: { ratio: 2 },
+      priceAnalysis: { inRange: 50 },
+      trend: 'DOWN'
+    },
+    {
+      gridPriceOffsetMaxPct: 0.5,
+      gridPriceOffsetPct: 0.1,
+      weightDistribution: { sell: 0.5, buy: 0.5 }
+    },
+    {
+      priceContext: {
+        oscillationRatio: 2,
+        pricePositionInRange: 0.5
+      },
+      rangeContext: {
+        observedMaxPrice: 165,
+        observedMinPrice: 60
+      },
+      referencePrice: 100,
+      resolveTargetCr: () => 2.2
+    }
+  );
+
+  assert.strictEqual(plan.targetCr, 2.2);
+  assert.strictEqual(plan.crPlan.primaryAction, 'reduce_debt');
+  assert.strictEqual(plan.crPlan.fallbackAction, 'add_collateral');
+  assert.strictEqual(plan.botPatch.gridPriceOffsetPct, -0.5);
+  assert.strictEqual(plan.gridPlan.finalPriceRangeRatio, 1.83);
+  assert.strictEqual(plan.gridPlan.weightProfile, 'mountain_valley');
+  assert.strictEqual(plan.botPatch.minPrice, '1.83x');
+  assert.strictEqual(plan.botPatch.maxPrice, '1.83x');
+  assert.strictEqual(plan.botPatch.weightDistribution.buy, 1.2);
+  assert.strictEqual(plan.botPatch.weightDistribution.sell, -0.15);
+
+  console.log('    PASS');
+}
+
+function testBuildMarginTradingPlanNeutralKeepsOffsetWhenConfigured() {
+  console.log('  buildMarginTradingPlan (neutral keeps offset when reset disabled)...');
+
+  const plan = buildMarginTradingPlan(
+    makePosition(2.2, 100),
+    {
+      confidence: 90,
+      isReady: true,
+      oscillation: { ratio: 2 },
+      priceAnalysis: { inRange: 50 },
+      trend: 'NEUTRAL'
+    },
+    {
+      gridPriceOffsetPct: 0.2,
+      gridPriceOffsetAllowNeutralReset: false,
+      weightDistribution: { sell: 0.5, buy: 0.5 }
+    },
+    {
+      priceContext: {
+        oscillationRatio: 2,
+        pricePositionInRange: 0.5
+      },
+      rangeContext: {
+        observedMaxPrice: 130,
+        observedMinPrice: 80
+      },
+      referencePrice: 100
+    }
+  );
+
+  assert.strictEqual(plan.crPlan.primaryAction, 'hold');
+  assert.strictEqual(plan.botPatch.gridPriceOffsetPct, 0.2);
+  assert.strictEqual(plan.gridPlan.finalPriceRangeRatio, 1.43);
+  assert.strictEqual(plan.botPatch.minPrice, '1.43x');
+  assert.strictEqual(plan.botPatch.maxPrice, '1.43x');
+  assert.strictEqual(plan.gridPlan.weightProfile, 'double_mountain');
+  assert.ok(plan.botPatch.weightDistribution.buy > 0.5);
+  assert.ok(plan.botPatch.weightDistribution.sell > 0.5);
 
   console.log('    PASS');
 }
@@ -271,8 +542,19 @@ function main() {
   testAssessTrendLowConfidence();
   testCollateralForTargetCr();
   testCollateralDelta();
+  testDebtForTargetCr();
+  testDebtDeltaForTargetCr();
+  testPlanCrAdjustment();
+  testTrendWeight();
+  testCrWeight();
+  testComputePriceOffsetBias();
+  testComputeOrderWeightBias();
+  testClassifyPriceRangeRatio();
+  testComputePriceRangeRatioPlan();
+  testBuildMarginTradingPlanDowntrend();
+  testBuildMarginTradingPlanNeutralKeepsOffsetWhenConfigured();
 
-  console.log('\n=== All 15 tests passed ===');
+  console.log('\n=== All 26 tests passed ===');
 }
 
 main();

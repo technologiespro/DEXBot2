@@ -65,6 +65,247 @@ Combining position direction with the trend signal:
 
 Being on the right side means the position direction matches the detected trend. When no trend is confirmed, there is no directional edge — both sides are equivalent.
 
+## Weight Factors
+
+Two independent weight systems operate at different levels. They solve different problems and must not be confused.
+
+### Order Sizing Weight (`weightDistribution`)
+
+The `weightDistribution` config (`{ sell: W, buy: W }`) controls how the bot's total fund budget is spread across individual grid slots. This is a geometric decay applied per-slot:
+
+```
+slotWeight[i] = (1 - incrementFactor) ^ (i * W)
+slotSize[i]   = (slotWeight[i] / totalWeight) * totalFunds
+```
+
+| W value | Effect | When to use |
+|---|---|---|
+| 0 | Flat — all slots equal size | Thin markets, want uniform depth |
+| 0.5 | Neutral baseline — gentle taper | Default for most pairs |
+| 1.0 | Front-loaded — large near market, small at edges | Liquid markets, capture spread |
+| > 1.0 | Extreme front-load | Aggressive scalping, tight spread |
+| < 0 | Inverted — larger at edges | Fade moves, expect mean reversion |
+
+This weight operates **within** the grid engine (`allocateFundsByWeights` in `order/utils/math.js`). It determines *how funds are distributed across slots* — not how much capital to deploy overall.
+
+#### Dynamic Weight Computation
+
+Static W values ignore market conditions. The dynamic weight system lives in `market_adapter/dynamic_weights.js` and should be used to compute candidate `weightDistribution` values outside the order engine:
+
+1. **Current trend** (direction + confidence from TrendAnalyzer)
+2. **Price position within observed range** (from PriceRatio)
+3. **Oscillation ratio** (volatility context)
+
+The computation is scenario-based rather than a single additive formula:
+
+- **NEUTRAL** trend uses a double-mountain profile: both sides start near baseline and are pushed toward the front-loaded target, then a small position bias is applied.
+- **UP/DOWN** trend uses a mountain/valley profile: the with-trend side is front-loaded, the against-trend side is flattened or inverted, then price-position bias and oscillation damping are applied.
+- Oscillation does not add a separate delta; it dampens the distance from baseline after the trend and position adjustments are applied.
+- Final `W` values are clamped to `[-0.5, 1.5]`.
+
+**Trend direction** sets the primary shift:
+
+| Trend | Confidence | With-trend side delta | Against-trend side delta |
+|---|---|---|---|
+| UP/DOWN | 80–100 (strong) | +0.5 (heavy front-load) | -0.4 (flatten/invert) |
+| UP/DOWN | 60–79 (moderate) | +0.3 | -0.2 |
+| UP/DOWN | 40–59 (weak) | +0.15 | -0.1 |
+| UP/DOWN | < 40 (minimal) | +0.05 | -0.05 |
+| NEUTRAL | any | 0 | 0 |
+
+- **DOWN trend**: buy side is "with trend" (price falling toward buys), sell side is "against trend"
+- **UP trend**: sell side is "with trend" (price rising toward sells), buy side is "against trend"
+
+**Price position** adds directional bias. If price is at the top of the observed range (`position = 1.0`), sells are more likely to fill, so `sellW` increases and `buyW` decreases. At the bottom, the reverse happens. The bias is centered around `0.5` and scales to roughly ±0.3.
+
+**Oscillation** dampens deviations from baseline. In volatile markets (oscillation ratio > 10), extreme front-loading is counterproductive — distant orders fill anyway. In tight markets (ratio < 1), concentration near market is rewarded.
+
+Practical interpretation:
+
+- lower volatility / tighter oscillation -> increase weights and keep more funds near the spread
+- higher volatility / wider oscillation -> lower weights and keep more funds on the outside of the ladder
+- very high volatility is where flatter or mildly inverted ladders make sense
+
+| Oscillation Ratio | Dampening Factor |
+|---|---|
+| < 1 (very tight) | 1.2 (amplify) |
+| 1–3 (tight) | 1.0 (no change) |
+| 3–5 (normal) | 0.85 |
+| 5–10 (choppy) | 0.7 |
+| > 10 (very volatile) | 0.5 (halve deviations) |
+
+**Bounds**: W is clamped to [-0.5, 1.5] to prevent degenerate allocations while keeping the range symmetric around the `0.5` baseline.
+
+#### Per-Slot Fill Probability
+
+For more granular control, `computeSlotFillProbabilities()` estimates the probability of each grid level being filled. This uses:
+
+- **Distance decay**: `exp(-distance * 1.5)` where distance is measured as a fraction of the observed price range
+- **Trend boost/dampening**: with-trend direction slots get up to +50% probability boost; against-trend slots get up to -30%
+- **Range containment**: slots within the observed min/max price range get a 1.2x multiplier
+
+This can be used to directly weight individual slot sizes rather than relying on geometric decay, when the grid engine supports per-slot sizing.
+
+#### Claw Usage
+
+The claw layer should treat the trend-analysis result as configuration input, not as core logic:
+
+1. Read trend and price context from the trend-analysis layer.
+2. Call `computeDynamicWeights()` to derive the desired `{ sell, buy }` weights.
+3. Compute `gridPriceOffsetPct` separately from the same trend signal when AMA offsetting is enabled.
+4. Persist those values back into `profiles/bots.json` with `claw/modules/dexbot_profiles.js` `updateBotSettings()`.
+5. Let the normal bot lifecycle pick up the updated config, or trigger a recalc when the policy says to do so.
+
+The bridge exposes this as `dynamic-weight-policy`, `dynamic-weight-preview`, and `dynamic-weight-apply`.
+
+#### Policy Layer Variables
+
+These are the knobs that control whether claw should apply a weight update:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Master on/off switch for the workflow |
+| `requireBtsQuote` | `true` | Only manage bots whose quote asset resolves to BTS |
+| `requireTrendReady` | `true` | Wait until TrendAnalyzer has enough history |
+| `requireConfirmedTrend` | `true` | Only update after trend confirmation |
+| `allowNeutralUpdate` | `true` | Allow double-mountain updates when the trend is NEUTRAL |
+| `minConfidence` | `60` | Skip weak signals below this confidence |
+| `minWeightDelta` | `0.1` | Ignore tiny changes that would churn config |
+| `cooldownMs` | `1800000` | Minimum time between weight updates per bot |
+| `triggerOnApply` | `true` | Write `recalculate.<botKey>.trigger` after config update |
+| `writeTriggerPayload` | `true` | Store a JSON trigger payload instead of an empty file |
+| `triggerReason` | `dynamic_weight_update` | Label written into the trigger payload |
+| `gridPriceOffsetEnabled` | `true` | Enable trend-biased grid-price offsets for AMA bots |
+| `gridPriceOffsetRequireAmaGridPrice` | `true` | Only apply offsets to bots using AMA grid pricing |
+| `gridPriceOffsetRequireConfirmedTrend` | `true` | Require confirmed trend before moving the grid center |
+| `gridPriceOffsetMinConfidence` | `70` | Skip weak signals below this confidence for offset updates |
+| `gridPriceOffsetMaxPct` | `0.5` | Cap the signed grid-price offset percentage |
+| `gridPriceOffsetScale` | `1` | Scale the confidence-based offset magnitude |
+| `gridPriceOffsetMinDeltaPct` | `0.1` | Ignore tiny offset changes that would churn config |
+| `gridPriceOffsetCooldownMs` | `1800000` | Minimum time between grid-price offset updates per bot |
+| `gridPriceOffsetAllowNeutralReset` | `true` | Allow NEUTRAL trend to reset the offset back to zero |
+| `gridPriceOffsetClampToBounds` | `true` | Clamp the effective center price to configured bounds |
+
+Policy should stay in claw or a claw-owned scheduler. It should not be pushed into `modules/order/`.
+
+## Control Split
+
+The bot should be treated as two layers:
+
+- a fixed structural grid layer
+- an adaptive trading layer on top of AMA
+
+### Fixed Structural Settings
+
+These should stay static unless you intentionally retune the bot for a different market regime:
+
+- `incrementPercent`
+- `targetSpreadPercent`
+- `activeOrders`
+
+These settings define the ladder geometry:
+
+- `incrementPercent` sets slot spacing
+- `targetSpreadPercent` sets the empty center buffer
+- spread is coupled to increment in the engine, so changing it changes slot count, order sizes, and gap structure
+
+Because of that, increment/spread are not good tactical knobs. They are setup choices.
+
+### Adaptive Trading Settings
+
+These are the practical knobs for building an advanced margin trader on top of the AMA price adapter:
+
+- debt adjustment
+- collateral adjustment
+- `gridPriceOffsetPct`
+- `weightDistribution`
+- `minPrice` / `maxPrice` ratio
+
+These settings change behavior without redefining the whole ladder:
+
+- CR is repaired through debt first, collateral second
+- AMA remains the base anchor
+- `gridPriceOffsetPct` biases the center ahead of raw AMA when trend is confirmed
+- `weightDistribution` changes where size is concentrated within the existing ladder
+- the min/max ratio changes the outer operating envelope slowly based on former price action
+
+Practical range-ratio bands:
+
+- below `2x` = very competitive
+- around `2x` = competitive
+- around `3x` = conservative
+- above `3x` = very conservative
+
+### Unified Plan
+
+The planner in `claw/modules/position_health.js` (`buildMarginTradingPlan(...)`) should therefore produce one unified plan with:
+
+- position assessment
+- target CR resolution
+- debt/collateral action plan
+- final `gridPriceOffsetPct`
+- final `weightDistribution`
+- final min/max price ratio recommendation
+
+This keeps the bot architecture clean:
+
+- AMA = anchor
+- offset = short-term lead
+- weights = deployment bias within the grid
+- range ratio = slow structural width
+- debt/collateral actions = margin-risk control
+
+Example: weak short, strong DOWN trend
+
+- repair the weak short by reducing debt first
+- bias the grid center downward while the downtrend persists
+- front-load buys and flatten sells
+
+Example: sideways market
+
+- `gridPriceOffsetPct` stays neutral or resets toward zero
+- `weightDistribution` stays balanced or double-mountain
+- the bot keeps full deployment, centered by AMA, with no strong directional skew beyond the configured price bounds
+
+Example unified plan output:
+
+```js
+{
+  targetCr: 2.0,
+  crPlan: {
+    primaryAction: 'reduce_debt',
+    fallbackAction: 'add_collateral',
+    debtDelta: -18.4,
+    collateralDelta: 920
+  },
+  gridPlan: {
+    finalGridPriceOffsetPct: -0.35,
+    finalPriceRangeRatio: 2.4,
+    weightDistribution: {
+      sell: 0.1,
+      buy: 1.05
+    }
+  },
+  botPatch: {
+    gridPriceOffsetPct: -0.35,
+    minPrice: '2.4x',
+    maxPrice: '2.4x',
+    weightDistribution: {
+      sell: 0.1,
+      buy: 1.05
+    }
+  }
+}
+```
+
+Interpretation:
+
+- CR is below target, so debt reduction is the first action
+- the confirmed DOWN trend shifts the center lower with a negative offset
+- buys are front-loaded because they are the with-trend side
+- sells are flattened because price is moving away from them
+- the range ratio stays competitive rather than widening all the way to a conservative `3x`
+
 ## Loss Minimization
 
 Losses come from:
