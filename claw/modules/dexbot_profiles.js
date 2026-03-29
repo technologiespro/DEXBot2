@@ -8,6 +8,24 @@ const DEFAULT_GENERAL_SETTINGS_FILE = 'general.settings.json';
 const DEFAULT_AMA_PROFILES_FILE = 'ama_profiles.json';
 const DEFAULT_ORDERS_DIR = 'orders';
 
+const KNOWN_BOT_KEYS = new Set([
+  'active', 'activeOrders', 'assetA', 'assetAId', 'assetB', 'assetBId',
+  'botFunds', 'dryRun', 'gridPrice', 'gridPriceOffsetClampToBounds', 'gridPriceOffsetCooldownMs',
+  'gridPriceOffsetAllowNeutralReset', 'gridPriceOffsetEnabled', 'gridPriceOffsetMaxPct',
+  'gridPriceOffsetMinConfidence', 'gridPriceOffsetMinDeltaPct', 'gridPriceOffsetPct',
+  'gridPriceOffsetRequireAmaGridPrice', 'gridPriceOffsetRequireConfirmedTrend',
+  'gridPriceOffsetScale',
+  'incrementPercent', 'maxPrice',
+  'minPrice', 'name', 'preferredAccount', 'startPrice', 'strategy',
+  'targetSpreadPercent', 'weightDistribution',
+  // Added by normalization
+  'botIndex', 'botKey'
+]);
+const REQUIRED_BOT_KEY_ALIASES = {
+  assetA: ['assetA', 'assetAId'],
+  assetB: ['assetB', 'assetBId']
+};
+
 function sanitizeKey(source) {
   if (!source) return 'bot';
   return String(source)
@@ -33,8 +51,45 @@ function resolveRawBotEntries(settings) {
   return [];
 }
 
-function normalizeBotEntries(rawEntries) {
+function validateBotEntry(entry, index, logger) {
+  const warnings = [];
+
+  for (const [label, aliases] of Object.entries(REQUIRED_BOT_KEY_ALIASES)) {
+    const hasAnyAlias = aliases.some((key) => {
+      const value = entry[key];
+      return value !== undefined && value !== null && value !== '';
+    });
+    if (!hasAnyAlias) {
+      warnings.push(`bot[${index}]: missing required key '${label}'`);
+    }
+  }
+
+  const unrecognizedKeys = [];
+  for (const key of Object.keys(entry)) {
+    if (!KNOWN_BOT_KEYS.has(key)) {
+      unrecognizedKeys.push(key);
+    }
+  }
+
+  if (logger && warnings.length > 0) {
+    for (const warning of warnings) {
+      (logger.warn || logger.log || console.warn).call(logger, `[dexbot-profiles] ${warning}`);
+    }
+  }
+  if (logger && unrecognizedKeys.length > 0) {
+    const logDebug = logger.debug || logger.log || console.debug;
+    logDebug.call(logger, `[dexbot-profiles] bot[${index}]: unrecognized keys: ${unrecognizedKeys.join(', ')}`);
+  }
+
+  return warnings;
+}
+
+function normalizeBotEntries(rawEntries, options = {}) {
+  const logger = options.logger || null;
   return rawEntries.map((entry, index) => {
+    if (logger) {
+      validateBotEntry(entry, index, logger);
+    }
     const normalized = { active: entry.active === undefined ? true : !!entry.active, ...entry };
     return { ...normalized, botIndex: index, botKey: createBotKey(normalized, index) };
   });
@@ -126,6 +181,82 @@ async function readJsonFile(filePath) {
       return null;
     }
     throw new Error(`Failed to read ${filePath}: ${error.message}`);
+  }
+}
+
+async function acquireFileLock(filePath) {
+  const lockPath = `${filePath}.lock`;
+
+  // Acquire advisory lock
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    try {
+      await fsPromises.writeFile(lockPath, JSON.stringify({ pid: process.pid, at: Date.now() }), { flag: 'wx' });
+      return async () => {
+        await fsPromises.unlink(lockPath).catch(() => {});
+      };
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      try {
+        const stat = await fsPromises.stat(lockPath);
+        if (Date.now() - stat.mtimeMs > 30000) {
+          // Stale lock — attempt to break it atomically by re-creating with wx.
+          // If another process grabbed it between our stat and this write, the
+          // wx flag will throw EEXIST and we retry on the next iteration.
+          try {
+            await fsPromises.unlink(lockPath);
+            await fsPromises.writeFile(lockPath, JSON.stringify({ pid: process.pid, at: Date.now() }), { flag: 'wx' });
+            return async () => {
+              await fsPromises.unlink(lockPath).catch(() => {});
+            };
+          } catch {
+            // Another writer beat us — fall through and retry
+          }
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  throw new Error(`Could not acquire lock on ${filePath} within 5000ms`);
+}
+
+async function writeJsonPayload(filePath, data) {
+  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+  try {
+    await fsPromises.writeFile(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+    await fsPromises.rename(tmpPath, filePath);
+  } catch (err) {
+    await fsPromises.unlink(tmpPath).catch(() => {});
+    throw err;
+  }
+}
+
+async function writeJsonFileAtomic(filePath, data) {
+  const release = await acquireFileLock(filePath);
+  try {
+    await writeJsonPayload(filePath, data);
+  } finally {
+    await release();
+  }
+}
+
+async function readTriggerFile(triggerPath) {
+  try {
+    const raw = await fsPromises.readFile(triggerPath, 'utf8');
+    const trimmed = raw.trim();
+    if (!trimmed) return { exists: true, payload: null };
+    try {
+      return { exists: true, payload: JSON.parse(trimmed) };
+    } catch {
+      return { exists: true, payload: trimmed };
+    }
+  } catch (err) {
+    if (err.code === 'ENOENT') return { exists: false, payload: null };
+    throw err;
   }
 }
 
@@ -245,7 +376,8 @@ function buildClawProfileContext(bundle, options = {}) {
       gridPriceSnapshot: selectedGridPriceSnapshot,
       orderSnapshot: selectedOrderSnapshot,
       selectedAmaProfile,
-      triggerExists: selectedTriggerPath ? fs.existsSync(selectedTriggerPath) : false
+      triggerExists: selectedTriggerPath ? fs.existsSync(selectedTriggerPath) : false,
+      triggerPayload: options.triggerPayload !== undefined ? options.triggerPayload : null
     } : null,
     summary: {
       activeBotCount: bundle.activeBots.length,
@@ -275,7 +407,7 @@ async function loadDexbotProfileBundle(profileRoot, options = {}) {
     listFiles(ordersDir)
   ]);
 
-  const bots = normalizeBotEntries(resolveRawBotEntries(botsConfig));
+  const bots = normalizeBotEntries(resolveRawBotEntries(botsConfig), { logger: options.logger });
   const activeBots = bots.filter((bot) => bot.active !== false);
   const botsByKey = Object.fromEntries(bots.map((bot) => [bot.botKey, bot]));
   const botsByName = Object.fromEntries(bots.filter((bot) => bot.name).map((bot) => [bot.name, bot]));
@@ -337,9 +469,10 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
     const gridPriceSnapshotPath = path.join(bundle.ordersDir, `${bot.botKey}.gridprice.json`);
     const triggerPath = path.join(bundle.profilesDir, `recalculate.${bot.botKey}.trigger`);
 
-    const [orderSnapshot, gridPriceSnapshot] = await Promise.all([
+    const [orderSnapshot, gridPriceSnapshot, trigger] = await Promise.all([
       readJsonFile(orderSnapshotPath),
-      readJsonFile(gridPriceSnapshotPath)
+      readJsonFile(gridPriceSnapshotPath),
+      readTriggerFile(triggerPath)
     ]);
 
     return {
@@ -351,7 +484,8 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
       },
       gridPriceSnapshot,
       orderSnapshot,
-      triggerExists: fs.existsSync(triggerPath)
+      triggerExists: trigger.exists,
+      triggerPayload: trigger.payload
     };
   }
 
@@ -365,7 +499,8 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
       botIdentifier: identifier,
       gridPriceSnapshot: selectedBotBundle ? selectedBotBundle.gridPriceSnapshot : null,
       orderSnapshot: selectedBotBundle ? selectedBotBundle.orderSnapshot : null,
-      selectedBot
+      selectedBot,
+      triggerPayload: selectedBotBundle ? selectedBotBundle.triggerPayload : null
     });
   }
 
@@ -380,8 +515,70 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
     }));
   }
 
+  async function consumeTrigger(botKey) {
+    const triggerPath = path.join(getProfilesDir(), `recalculate.${botKey}.trigger`);
+    const trigger = await readTriggerFile(triggerPath);
+    if (!trigger.exists) {
+      return { consumed: false, payload: null };
+    }
+    await fsPromises.unlink(triggerPath).catch(() => {});
+    return { consumed: true, payload: trigger.payload };
+  }
+
+  async function writeTrigger(botKey, payload = null) {
+    const triggerPath = path.join(getProfilesDir(), `recalculate.${botKey}.trigger`);
+    const content = payload ? JSON.stringify(payload, null, 2) : '';
+    await fsPromises.writeFile(triggerPath, content, 'utf8');
+  }
+
+  async function updateBotSettings(identifier, patch) {
+    if (!patch || typeof patch !== 'object') {
+      throw new Error('patch must be a non-null object');
+    }
+
+    const bundle = await loadBundle(true);
+    const release = await acquireFileLock(bundle.files.bots);
+
+    try {
+      const currentBotsConfig = await readJsonFile(bundle.files.bots);
+      const currentRawEntries = resolveRawBotEntries(currentBotsConfig);
+      const currentBots = normalizeBotEntries(currentRawEntries, { logger: options.logger });
+      const bot = currentBots.find((entry) => matchBotIdentifier(entry, identifier));
+      if (!bot) {
+        throw new Error(`Bot not found: ${identifier}`);
+      }
+
+      if (!currentRawEntries[bot.botIndex]) {
+        throw new Error(`Bot index ${bot.botIndex} out of range`);
+      }
+
+      const nextEntry = {
+        ...currentRawEntries[bot.botIndex],
+        ...patch
+      };
+      const nextRawEntries = currentRawEntries.slice();
+      nextRawEntries[bot.botIndex] = nextEntry;
+
+      // Preserve the original wrapper structure
+      const dataToWrite = Array.isArray(currentBotsConfig)
+        ? nextRawEntries
+        : Array.isArray(currentBotsConfig?.bots)
+          ? { ...currentBotsConfig, bots: nextRawEntries }
+          : nextEntry;
+
+      await writeJsonPayload(bundle.files.bots, dataToWrite);
+    } finally {
+      await release();
+    }
+
+    cachedBundle = null;
+    const freshBundle = await loadBundle(true);
+    return freshBundle.bots.find((entry) => matchBotIdentifier(entry, identifier)) || null;
+  }
+
   return {
     buildClawProfileContext: (bundle, contextOptions = {}) => buildClawProfileContext(bundle, contextOptions),
+    consumeTrigger,
     findBot,
     getBotBundle,
     getClawProfileContext,
@@ -389,7 +586,9 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
     listBots,
     listOrderArtifacts,
     loadBundle,
-    resolveProfilesDir: () => resolveProfilesDir(profileRoot || options.profileRoot)
+    resolveProfilesDir: () => resolveProfilesDir(profileRoot || options.profileRoot),
+    updateBotSettings,
+    writeTrigger
   };
 }
 
@@ -399,7 +598,11 @@ module.exports = {
   buildClawProfileContext,
   loadDexbotProfileBundle,
   normalizeBotEntries,
+  readTriggerFile,
   resolveProfilesDir,
   resolveRawBotEntries,
-  sanitizeKey
+  sanitizeKey,
+  acquireFileLock,
+  validateBotEntry,
+  writeJsonFileAtomic
 };

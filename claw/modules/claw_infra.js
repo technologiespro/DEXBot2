@@ -7,7 +7,8 @@ const chainQueries = require('./chain_queries');
 const credentialClient = require('./dexbot_credential_client');
 const { createHonestEcosystemAdapter } = require('./honest_ecosystem');
 const { loadDexbotOrderSubsystem } = require('./dexbot_bridge');
-const { createDexbotProfileAdapter } = require('./dexbot_profiles');
+const { createDynamicWeightService } = require('./dynamic_weight_service');
+const { acquireFileLock, createDexbotProfileAdapter } = require('./dexbot_profiles');
 const {
   createPositionManagerWatcher,
   parsePositionManagerWatchArgs,
@@ -45,8 +46,9 @@ function createStateStore(options = {}) {
   const stateDir = options.stateDir || path.join(dataDir, 'state');
   const filePath = options.filePath || path.join(stateDir, 'claw-state.json');
   const defaultValue = clone(options.defaultValue);
+  let writeQueue = Promise.resolve();
 
-  async function read() {
+  async function readFromDisk() {
     try {
       const raw = await fs.readFile(filePath, 'utf8');
       if (!raw.trim()) {
@@ -61,21 +63,59 @@ function createStateStore(options = {}) {
     }
   }
 
-  async function write(value) {
+  async function writeUnlocked(value) {
+    const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+    const serialized = JSON.stringify(value === undefined ? null : value, null, 2);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    const serialized = JSON.stringify(value, null, 2);
-    await fs.writeFile(filePath, `${serialized === undefined ? 'null' : serialized}\n`, 'utf8');
+    try {
+      await fs.writeFile(tmpPath, `${serialized === undefined ? 'null' : serialized}\n`, 'utf8');
+      await fs.rename(tmpPath, filePath);
+    } catch (error) {
+      await fs.unlink(tmpPath).catch(() => {});
+      throw error;
+    }
+  }
+
+  async function withFileLock(operation) {
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    const release = await acquireFileLock(filePath);
+    try {
+      return await operation();
+    } finally {
+      await release();
+    }
+  }
+
+  async function writeUnsafe(value) {
+    await withFileLock(async () => {
+      await writeUnlocked(value);
+    });
     return value;
   }
 
+  function serializeWrite(operation) {
+    const queued = writeQueue.then(operation, operation);
+    writeQueue = queued.catch(() => {});
+    return queued;
+  }
+
+  async function write(value) {
+    return serializeWrite(() => writeUnsafe(value));
+  }
+
   async function patch(partial) {
-    const current = await read();
-    const base = current && typeof current === 'object' && !Array.isArray(current) ? current : {};
-    const next = {
-      ...base,
-      ...(partial && typeof partial === 'object' ? partial : {})
-    };
-    return write(next);
+    return serializeWrite(async () => {
+      return withFileLock(async () => {
+        const current = await readFromDisk();
+        const base = current && typeof current === 'object' && !Array.isArray(current) ? current : {};
+        const next = {
+          ...base,
+          ...(partial && typeof partial === 'object' ? partial : {})
+        };
+        await writeUnlocked(next);
+        return next;
+      });
+    });
   }
 
   async function update(updater) {
@@ -83,20 +123,25 @@ function createStateStore(options = {}) {
       throw new Error('update(updater) requires a function');
     }
 
-    const current = await read();
-    const next = await updater(clone(current));
-    return write(next);
+    return serializeWrite(async () => {
+      return withFileLock(async () => {
+        const current = await readFromDisk();
+        const next = await updater(clone(current));
+        await writeUnlocked(next);
+        return next;
+      });
+    });
   }
 
   async function clear() {
-    return write(clone(defaultValue));
+    return serializeWrite(() => writeUnsafe(clone(defaultValue)));
   }
 
   return {
     clear,
     filePath,
     patch,
-    read,
+    read: readFromDisk,
     update,
     write
   };
@@ -232,10 +277,17 @@ function createClawInfrastructure(options = {}) {
   const profiles = createDexbotProfileAdapter(runtime.profileRoot, {
     logger: runtime.logger
   });
+  const dynamicWeights = createDynamicWeightService({
+    logger: runtime.logger,
+    market,
+    profiles,
+    stateStore
+  });
 
   return {
     bitshares,
     credential,
+    dynamicWeights,
     honest,
     profiles,
     market,

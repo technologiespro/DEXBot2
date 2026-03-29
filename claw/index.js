@@ -5,6 +5,7 @@ module.exports = {
   ...require('./modules/claw_manifest'),
   ...require('./modules/claw_skill_md'),
   ...require('./modules/dexbot_profiles'),
+  ...require('./modules/dynamic_weight_service'),
   ...require('./modules/honest_ecosystem'),
   ...require('./modules/liquidity_pools'),
   ...require('./modules/decision_loop'),

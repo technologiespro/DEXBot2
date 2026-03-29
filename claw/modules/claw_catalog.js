@@ -63,6 +63,32 @@ function objectSchema(properties = {}, required = [], description = null) {
   };
 }
 
+function dynamicWeightPolicySchema(description = null) {
+  return objectSchema({
+    allowNeutralUpdate: booleanSchema('Allow NEUTRAL trend updates to reshape weightDistribution'),
+    cooldownMs: integerSchema('Minimum time between updates for the same bot'),
+    enabled: booleanSchema('Enable dynamic weight evaluation and config updates'),
+    gridPriceOffsetAllowNeutralReset: booleanSchema('Allow neutral trend updates to reset gridPriceOffsetPct back toward zero'),
+    gridPriceOffsetClampToBounds: booleanSchema('Clamp offset-adjusted gridPrice within the configured bounds'),
+    gridPriceOffsetEnabled: booleanSchema('Enable trend-biased gridPrice offset updates'),
+    gridPriceOffsetCooldownMs: integerSchema('Minimum time between gridPrice offset updates'),
+    gridPriceOffsetMaxPct: numberSchema('Maximum signed gridPrice offset percentage'),
+    gridPriceOffsetMinConfidence: numberSchema('Minimum confidence needed to adjust gridPrice offset'),
+    gridPriceOffsetMinDeltaPct: numberSchema('Minimum offset delta needed to persist an update'),
+    gridPriceOffsetRequireAmaGridPrice: booleanSchema('Only apply gridPrice offsets to AMA-based bots'),
+    gridPriceOffsetRequireConfirmedTrend: booleanSchema('Require confirmed trend before adjusting gridPrice offset'),
+    gridPriceOffsetScale: numberSchema('Scale factor applied to the confidence-based offset'),
+    minConfidence: numberSchema('Minimum trend confidence needed for an update'),
+    minWeightDelta: numberSchema('Minimum absolute weight change needed to write a new config'),
+    requireBtsQuote: booleanSchema('Require the bot quote asset to resolve to BTS'),
+    requireConfirmedTrend: booleanSchema('Require TrendAnalyzer confirmation before updating'),
+    requireTrendReady: booleanSchema('Require TrendAnalyzer warmup completion before updating'),
+    triggerOnApply: booleanSchema('Write recalculate.<botKey>.trigger after persisting updated weights'),
+    triggerReason: stringSchema('Reason string written into the trigger payload'),
+    writeTriggerPayload: booleanSchema('Persist a JSON trigger payload instead of an empty trigger file')
+  }, [], description);
+}
+
 function createToolDefinition(definition) {
   return Object.freeze({
     risk: 'read',
@@ -469,6 +495,57 @@ const CLAW_TOOL_CATALOG = Object.freeze([
       mpaAsset: stringSchema('MPA asset symbol')
     }, ['mpaAsset']),
     toolName: 'claw_mpa_position'
+  }),
+  createToolDefinition({
+    command: 'dynamic-weight-policy',
+    description: 'Inspect the default dynamic-weight policy',
+    inputSchema: objectSchema({}),
+    toolName: 'claw_dynamic_weight_policy'
+  }),
+  createToolDefinition({
+    command: 'dynamic-weight-preview',
+    description: 'Preview a dynamic-weight update for a resolved bot profile',
+    exampleArgs: ['--payload', '{"botRef":"default","policy":{"enabled":true}}'],
+    args: {
+      payload_json: 'JSON object with botRef, identifier, botId, or pair, plus optional policy and priceContext'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botRef: stringSchema('Bot reference in DEXBot2 profiles'),
+      identifier: stringSchema('Generic profile identifier'),
+      botId: stringSchema('Explicit bot id'),
+      pair: stringSchema('Trading pair such as BTS/USD'),
+      profileRoot: stringSchema('Optional DEXBot2 profile root'),
+      policy: dynamicWeightPolicySchema('Dynamic-weight policy overrides'),
+      priceContext: objectSchema({
+        pricePositionInRange: numberSchema('Price position inside the observed range'),
+        oscillationRatio: numberSchema('Oscillation ratio override')
+      }, [], 'Optional price context override')
+    }),
+    toolName: 'claw_dynamic_weight_preview'
+  }),
+  createToolDefinition({
+    command: 'dynamic-weight-apply',
+    description: 'Apply a dynamic-weight update and write the recalc trigger',
+    exampleArgs: ['--payload', '{"botRef":"default","policy":{"enabled":true}}'],
+    args: {
+      payload_json: 'JSON object with botRef, identifier, botId, or pair, plus optional policy and priceContext'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botRef: stringSchema('Bot reference in DEXBot2 profiles'),
+      identifier: stringSchema('Generic profile identifier'),
+      botId: stringSchema('Explicit bot id'),
+      pair: stringSchema('Trading pair such as BTS/USD'),
+      profileRoot: stringSchema('Optional DEXBot2 profile root'),
+      policy: dynamicWeightPolicySchema('Dynamic-weight policy overrides'),
+      priceContext: objectSchema({
+        pricePositionInRange: numberSchema('Price position inside the observed range'),
+        oscillationRatio: numberSchema('Oscillation ratio override')
+      }, [], 'Optional price context override')
+    }),
+    risk: 'execute',
+    toolName: 'claw_dynamic_weight_apply'
   })
 ]);
 

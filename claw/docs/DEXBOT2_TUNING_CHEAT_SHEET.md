@@ -9,6 +9,31 @@ It is based on the engine's actual grid math and reset flow, not a universal "be
 - DEXBot2 enforces a minimum spread floor of about `2.1 x incrementPercent` and at least two spread slots, so the spread cannot be arbitrarily tight.
 - The tighter the grid, the more liquid and stable the market must be.
 
+## Structural vs Adaptive
+
+Keep these structural settings static in normal operation:
+
+- `incrementPercent`
+- `targetSpreadPercent`
+- `activeOrders`
+
+These settings define ladder geometry and order-size distribution, so changing them is a retune, not a tactical response.
+
+Use these adaptive settings for live trading behavior:
+
+- `gridPriceOffsetPct`
+- `weightDistribution`
+- `minPrice` / `maxPrice` ratio
+- debt / collateral actions
+
+That is the practical split:
+
+- increment/spread define the grid
+- AMA provides the anchor
+- offset and weights adapt to trend
+- range ratio adapts slowly to former price action
+- debt/collateral actions manage CR
+
 ## Quick ladder
 
 | Regime | Increment | Spread | Open orders | Typical use |
@@ -55,8 +80,17 @@ Use weights to express inventory preference:
 - mature, stable markets usually work best with flatter or near-neutral weights
 - trending markets can justify stronger weighting if you want more size near the spread
 - volatile markets usually prefer flatter weights so the bot does not over-commit near the edge
+- lower volatility lets you increase weights and concentrate more funds near market-adjacent orders
+- higher volatility argues for lower weights so more funds stay on the outer levels
 
 In DEXBot2, buy-side allocation is reversed internally so the near-market buy orders also receive the larger share when weights are higher.
+
+Negative weights are a special case:
+
+- use slightly negative weights only when you intentionally want more size toward the outer ladder
+- this makes sense in very volatile or mean-reverting markets where distant fills are realistic
+- for most markets, lowering toward `0` is safer than going negative
+- negative weights are not a default optimization; they are a deliberate fade/outer-liquidity choice
 
 ### `botFunds`
 
@@ -83,6 +117,12 @@ These define the outer range of the grid.
 - `3x` is a conservative default, not a target
 - mature and frequently reset markets often do not need that much width
 - wider ranges make sense only if the bot must survive larger drift between resets
+- practical range bands:
+  - below `2x` = very competitive
+  - around `2x` = competitive
+  - around `3x` = conservative
+  - above `3x` = very conservative
+- treat range ratio as a slow-moving structural setting driven by former price action, not a fast tactical knob
 
 ### `gridPrice`
 
