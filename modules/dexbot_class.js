@@ -372,6 +372,78 @@ class DEXBot {
         return null;
     }
 
+    async _applyRecoverableGridUpdates(updates, context = 'recoverable-grid-update') {
+        if (!this.manager || !Array.isArray(updates) || updates.length === 0) {
+            return 0;
+        }
+
+        if (typeof this.manager.applyGridUpdateBatch === 'function') {
+            await this.manager.applyGridUpdateBatch(updates, context);
+            return updates.length;
+        }
+
+        let applied = 0;
+        for (const update of updates) {
+            if (typeof this.manager._updateOrder !== 'function') break;
+            await this.manager._updateOrder(update, context);
+            applied++;
+        }
+        return applied;
+    }
+
+    async _recoverExplicitStaleOrders(staleOrderIds, reason = 'stale order cleanup') {
+        const staleIds = Array.from(staleOrderIds || []).filter(Boolean);
+        if (staleIds.length === 0) {
+            return { executed: false, hadRotation: false, stale: false };
+        }
+
+        this.manager.logger.log(
+            `[COW] Stale order(s) detected: ${staleIds.join(', ')}. Applying targeted cleanup.`,
+            'warn'
+        );
+
+        const updates = [];
+        for (const orderId of staleIds) {
+            this._staleCleanedOrderIds.set(orderId, Date.now());
+        }
+
+        for (const gridOrder of this.manager.orders.values()) {
+            if (!gridOrder?.orderId || !staleOrderIds.has(gridOrder.orderId)) continue;
+            updates.push({ ...virtualizeOrder(gridOrder), size: 0 });
+        }
+
+        if (updates.length > 0) {
+            await this._applyRecoverableGridUpdates(updates, reason);
+        } else {
+            this.manager.logger.log(
+                `[COW] No local grid slot matched stale order cleanup request (${staleIds.join(', ')}).`,
+                'debug'
+            );
+        }
+
+        return {
+            executed: false,
+            hadRotation: false,
+            stale: true,
+            recoveredByVirtualization: updates.length > 0
+        };
+    }
+
+    async _recoverBatchSizeDrift(err) {
+        const reason = `recoverable size drift during COW batch: ${err.message}`;
+        this.manager.logger.log(
+            `[COW] Recovering from on-chain size drift via recovery sync: ${err.message}`,
+            'warn'
+        );
+        await this._triggerStateRecoverySync(reason);
+        return {
+            executed: false,
+            hadRotation: false,
+            recoveredBySync: true,
+            reason: 'ORDER_SIZE_DRIFT'
+        };
+    }
+
     /**
      * Initialize bot state from storage and blockchain.
      * Consolidates common initialization logic for start() and startWithPrivateKey().
@@ -2225,7 +2297,7 @@ class DEXBot {
             const hardAbortResult = await this._handleBatchHardAbort(err, 'COW batch processing', operations.length);
             if (hardAbortResult) return hardAbortResult;
 
-            // Check for stale orders
+            // Check for stale orders — filled in the ~1.5s broadcast window after our plan was built.
             const staleOrderIds = new Set();
             const patterns = [
                 /Limit order (1\.7\.\d+) does not exist/g,
@@ -2239,13 +2311,18 @@ class DEXBot {
                 }
             }
 
+            // "Cannot deduct all or more from order than order contains" means the order still
+            // exists, but its on-chain size shrank during the broadcast window. That is not an
+            // explicit stale/missing-order signal, so reconcile from chain instead of virtualizing.
+            if (/Cannot deduct all or more from order than order contains/.test(err.message)) {
+                return await this._recoverBatchSizeDrift(err, opContexts);
+            }
+
             if (staleOrderIds.size > 0) {
-                this.manager.logger.log(`[COW] Stale order(s) detected: ${[...staleOrderIds].join(', ')}. Cleaning up.`, 'warn');
-                for (const gridOrder of this.manager.orders.values()) {
-                    if (staleOrderIds.has(gridOrder.orderId)) {
-                        this._staleCleanedOrderIds.set(gridOrder.orderId, Date.now());
-                    }
-                }
+                // Recover explicit missing-order failures without aborting the entire fill cycle.
+                // Use the manager update path so indexes, working-grid sync, accounting, and
+                // persistence stay coherent.
+                return await this._recoverExplicitStaleOrders(staleOrderIds, 'cow-stale-order-cleanup');
             }
 
             throw err;

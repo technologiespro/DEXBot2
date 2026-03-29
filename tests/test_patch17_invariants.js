@@ -11,11 +11,27 @@ if (typeof bsModule.setSuppressConnectionLog === 'function') {
 }
 
 const TEST_TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS || 30000);
+let testsComplete = false;
 const testTimeoutHandle = setTimeout(() => {
     console.error(`✗ Patch17 invariant tests timed out after ${TEST_TIMEOUT_MS}ms`);
     process.exit(1);
 }, TEST_TIMEOUT_MS);
 if (typeof testTimeoutHandle.unref === 'function') testTimeoutHandle.unref();
+
+process.on('unhandledRejection', (reason) => {
+    const isPostTestWsErrorEvent = testsComplete &&
+        reason &&
+        reason.type === 'error' &&
+        reason.error &&
+        typeof reason.error === 'object';
+
+    if (isPostTestWsErrorEvent) {
+        return;
+    }
+    console.error('✗ Patch17 invariant tests failed');
+    console.error(reason);
+    process.exit(1);
+});
 
 async function createManager() {
     const mgr = new OrderManager({
@@ -371,18 +387,20 @@ async function testSingleStaleCancelBatchUsesStaleOnlyFastPath() {
         recoverySyncCalls++;
     };
 
-    bot.manager = createBatchManagerStub({
-        orders: new Map([
-            ['slot-stale', {
-                id: 'slot-stale',
-                type: ORDER_TYPES.BUY,
-                state: ORDER_STATES.ACTIVE,
-                size: 1,
-                price: 99,
-                orderId: '1.7.999'
-            }]
-        ])
-    });
+    bot.manager = await createManager();
+    bot.manager.pauseFundRecalc();
+    await bot.manager._updateOrder({
+        id: 'slot-stale',
+        type: ORDER_TYPES.BUY,
+        state: ORDER_STATES.ACTIVE,
+        size: 1,
+        price: 99,
+        orderId: '1.7.999',
+        rawOnChain: { id: '1.7.999', for_sale: '100000' }
+    }, 'seed-stale', { skipAccounting: true, fee: 0 });
+    await bot.manager.resumeFundRecalc();
+
+    bot._validateOperationFunds = () => ({ isValid: true, summary: 'ok' });
 
     const originalExecuteBatch = chainOrders.executeBatch;
     const originalBuildCancelOrderOp = chainOrders.buildCancelOrderOp;
@@ -396,25 +414,109 @@ async function testSingleStaleCancelBatchUsesStaleOnlyFastPath() {
             throw new Error('Limit order 1.7.999 does not exist');
         };
 
-        let thrownError = null;
-        try {
-            await bot.updateOrdersOnChainPlan({
-                ordersToPlace: [],
-                ordersToRotate: [],
-                ordersToUpdate: [],
-                ordersToCancel: [{ id: 'slot-stale', orderId: '1.7.999' }]
-            });
-        } catch (err) {
-            thrownError = err;
-        }
+        const result = await bot.updateOrdersOnChainPlan({
+            ordersToPlace: [],
+            ordersToRotate: [],
+            ordersToUpdate: [],
+            ordersToCancel: [{ id: 'slot-stale', orderId: '1.7.999' }]
+        });
 
-        assert(thrownError, 'Stale cancel error should surface to caller');
-        assert(/does not exist/i.test(thrownError.message), 'Thrown error should include stale-order context');
+        const cleanedSlot = bot.manager.orders.get('slot-stale');
+        assert.strictEqual(result?.stale, true, 'Explicit stale order should return recoverable stale result');
+        assert(cleanedSlot, 'Stale slot should still exist in grid');
+        assert.strictEqual(cleanedSlot.state, ORDER_STATES.VIRTUAL, 'Stale slot should be virtualized through manager update path');
+        assert.strictEqual(cleanedSlot.orderId, null, 'Stale slot should clear orderId');
+        assert.strictEqual(cleanedSlot.size, 0, 'Stale slot should be zero-sized after cleanup');
+        assert.strictEqual(cleanedSlot.rawOnChain, null, 'Stale slot should clear rawOnChain metadata');
         assert.strictEqual(recoverySyncCalls, 0, 'Stale-only cancel race should not trigger recovery sync');
         assert.strictEqual(bot._staleCleanedOrderIds.has('1.7.999'), true, 'Stale order id should be tracked to avoid double-credit');
+        assert.strictEqual(bot.manager.validateIndices(), true, 'Stale cleanup should preserve manager indices');
     } finally {
         chainOrders.executeBatch = originalExecuteBatch;
         chainOrders.buildCancelOrderOp = originalBuildCancelOrderOp;
+    }
+}
+
+async function testCannotDeductTriggersRecoverySyncInsteadOfVirtualizing() {
+    const bot = new DEXBot({
+        botKey: 'test_patch17_cannot_deduct_recovery',
+        dryRun: false,
+        startPrice: 1,
+        assetA: 'TEST',
+        assetB: 'BTS',
+        incrementPercent: 0.5
+    });
+
+    let recoverySyncCalls = 0;
+    bot._triggerStateRecoverySync = async () => {
+        recoverySyncCalls++;
+    };
+
+    bot.manager = await createManager();
+    bot.manager.pauseFundRecalc();
+    await bot.manager._updateOrder({
+        id: 'slot-partial',
+        type: ORDER_TYPES.SELL,
+        state: ORDER_STATES.ACTIVE,
+        size: 5,
+        price: 101,
+        orderId: '1.7.555',
+        rawOnChain: { id: '1.7.555', for_sale: '500000000' }
+    }, 'seed-partial', { skipAccounting: true, fee: 0 });
+    await bot.manager.resumeFundRecalc();
+
+    bot._validateOperationFunds = () => ({ isValid: true, summary: 'ok' });
+
+    const originalExecuteBatch = chainOrders.executeBatch;
+    const originalBuildUpdateOrderOp = chainOrders.buildUpdateOrderOp;
+    try {
+        chainOrders.buildUpdateOrderOp = async () => ({
+            op: {
+                op_name: 'limit_order_update',
+                op_data: {
+                    order: '1.7.555',
+                    new_price: {
+                        base: { asset_id: '1.3.0', amount: 500000000 },
+                        quote: { asset_id: '1.3.1', amount: 49505 }
+                    },
+                    delta_amount_to_sell: { asset_id: '1.3.0', amount: -1000 }
+                }
+            },
+            finalInts: {
+                sell: 500000000,
+                receive: 49505,
+                sellAssetId: '1.3.0',
+                receiveAssetId: '1.3.1'
+            }
+        });
+
+        chainOrders.executeBatch = async () => {
+            throw new Error('Cannot deduct all or more from order than order contains');
+        };
+
+        const result = await bot.updateOrdersOnChainPlan({
+            ordersToPlace: [],
+            ordersToRotate: [],
+            ordersToUpdate: [{
+                id: 'slot-partial',
+                orderId: '1.7.555',
+                type: ORDER_TYPES.SELL,
+                newSize: 4.99999
+            }],
+            ordersToCancel: []
+        });
+
+        const liveSlot = bot.manager.orders.get('slot-partial');
+        assert.strictEqual(result?.recoveredBySync, true, '"Cannot deduct" should recover via sync path');
+        assert.strictEqual(result?.reason, 'ORDER_SIZE_DRIFT', '"Cannot deduct" should be classified as size drift');
+        assert.strictEqual(recoverySyncCalls, 1, '"Cannot deduct" should trigger one recovery sync');
+        assert(liveSlot, 'Updated slot should remain present after recoverable size drift');
+        assert.notStrictEqual(liveSlot.state, ORDER_STATES.VIRTUAL, '"Cannot deduct" must not virtualize the slot');
+        assert.strictEqual(liveSlot.orderId, '1.7.555', '"Cannot deduct" must preserve orderId until sync reconciles it');
+        assert.strictEqual(bot._staleCleanedOrderIds.has('1.7.555'), false, '"Cannot deduct" must not mark order as stale-cleaned');
+    } finally {
+        chainOrders.executeBatch = originalExecuteBatch;
+        chainOrders.buildUpdateOrderOp = originalBuildUpdateOrderOp;
     }
 }
 
@@ -427,6 +529,8 @@ async function runTests() {
     await testGridResizeRespectsBudgetAfterCap();
     await testIllegalBatchAbortArmsMaintenanceCooldown();
     await testSingleStaleCancelBatchUsesStaleOnlyFastPath();
+    await testCannotDeductTriggersRecoverySyncInsteadOfVirtualizing();
+    testsComplete = true;
     console.log('✓ Patch17 invariant tests passed!');
 }
 

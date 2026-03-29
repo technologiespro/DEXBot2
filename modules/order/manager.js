@@ -949,7 +949,7 @@ class OrderManager {
             const order = this.orders.get(id);
             // If type is null/undefined, return all orders with matching state
             // Otherwise, filter by both type and state
-            if (order && (type == null || order.type === type)) {
+            if (order && order.state === state && (type == null || order.type === type)) {
                 result.push(order);
             }
         }
