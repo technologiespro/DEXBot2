@@ -125,7 +125,7 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 | **Hard Surplus** | Order beyond the configured `activeOrders` count |
 | **Dust** | Partial order < 5% of ideal size |
 | **Dust Cancel** | Auto-cancellation of dust partials on-chain after `DUST_CANCEL_DELAY_SEC` seconds, freeing the slot for a fresh counter-order. Timer tracked per `orderId` in `_dustSinceMap`. |
-| **Grid Price Offset** | Signed percentage shift applied to the AMA center price (`gridPriceOffsetPct`), producing an effective center for grid bounds without altering the raw AMA anchor. Triggers grid reset on change. |
+| **Grid Price Offset** | Signed percentage shift applied to the AMA center price (`gridPriceOffsetPct`), producing an effective center for grid bounds without altering the raw AMA anchor. Set the offset to `0` to disable it. Triggers grid reset on change. |
 
 ### Operations
 

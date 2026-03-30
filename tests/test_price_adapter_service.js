@@ -447,7 +447,6 @@ async function testAmaGridPriceOffsetClampAndDisable() {
         assetB: 'BTS',
         gridPrice: 'ama',
         gridPriceOffsetPct: 5,
-        gridPriceOffsetEnabled: true,
         minPrice: 99,
         maxPrice: 101,
         incrementPercent: 0.4,
@@ -482,7 +481,7 @@ async function testAmaGridPriceOffsetClampAndDisable() {
     const disabledBot = {
         ...clampedBot,
         botKey: 'xrp-bts-2',
-        gridPriceOffsetEnabled: false,
+        gridPriceOffsetPct: 0,
     };
     const disabledState = {
         bots: {
@@ -495,9 +494,9 @@ async function testAmaGridPriceOffsetClampAndDisable() {
 
     const disabledResult = await service.processBot(disabledBot, disabledState, cfg, new Map(), {});
     assert.strictEqual(disabledResult.ok, true);
-    assert.strictEqual(disabledResult.triggered, true, 'disabling the offset should recenter back to raw AMA once');
+    assert.strictEqual(disabledResult.triggered, true, 'zero offset should recenter back to raw AMA once');
     assert.strictEqual(disabledState.bots['xrp-bts-2'].centerPrice, 100, 'disabled offset should fall back to raw AMA');
-    assert.strictEqual(disabledState.bots['xrp-bts-2'].gridPriceOffsetPct, 0, 'disabled offset should be persisted as zero in state');
+    assert.strictEqual(disabledState.bots['xrp-bts-2'].gridPriceOffsetPct, 0, 'zero offset should be persisted as zero in state');
 
     const noOpState = {
         bots: {

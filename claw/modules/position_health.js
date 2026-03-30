@@ -550,7 +550,7 @@ function buildMarginTradingPlan(position, trendSignal = null, botConfig = {}, op
   const currentGridPriceOffsetPct = Number.isFinite(Number(botConfig?.gridPriceOffsetPct))
     ? Number(botConfig.gridPriceOffsetPct)
     : 0;
-  const offsetEnabled = botConfig?.gridPriceOffsetEnabled !== false && options.gridPriceOffsetEnabled !== false;
+  const offsetEnabled = options.gridPriceOffsetEnabled !== false;
   const allowNeutralReset = options.allowNeutralGridReset !== undefined
     ? !!options.allowNeutralGridReset
     : botConfig?.gridPriceOffsetAllowNeutralReset !== false;

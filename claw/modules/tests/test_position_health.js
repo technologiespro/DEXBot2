@@ -480,6 +480,45 @@ function testBuildMarginTradingPlanDowntrend() {
   console.log('    PASS');
 }
 
+function testBuildMarginTradingPlanZeroOffsetStillPlansBias() {
+  console.log('  buildMarginTradingPlan (zero offset still plans trend bias)...');
+
+  const plan = buildMarginTradingPlan(
+    makePosition(1.6, 100),
+    {
+      confidence: 80,
+      isReady: true,
+      oscillation: { ratio: 2 },
+      priceAnalysis: { inRange: 50 },
+      trend: 'DOWN'
+    },
+    {
+      gridPriceOffsetMaxPct: 0.5,
+      gridPriceOffsetPct: 0,
+      weightDistribution: { sell: 0.5, buy: 0.5 }
+    },
+    {
+      priceContext: {
+        oscillationRatio: 2,
+        pricePositionInRange: 0.5
+      },
+      rangeContext: {
+        observedMaxPrice: 165,
+        observedMinPrice: 60
+      },
+      referencePrice: 100,
+      resolveTargetCr: () => 2.2
+    }
+  );
+
+  assert.strictEqual(plan.targetCr, 2.2);
+  assert.strictEqual(plan.crPlan.primaryAction, 'reduce_debt');
+  assert.strictEqual(plan.botPatch.gridPriceOffsetPct, -0.5);
+  assert.strictEqual(plan.gridPlan.finalGridPriceOffsetPct, -0.5);
+
+  console.log('    PASS');
+}
+
 function testBuildMarginTradingPlanNeutralKeepsOffsetWhenConfigured() {
   console.log('  buildMarginTradingPlan (neutral keeps offset when reset disabled)...');
 
@@ -552,6 +591,7 @@ function main() {
   testClassifyPriceRangeRatio();
   testComputePriceRangeRatioPlan();
   testBuildMarginTradingPlanDowntrend();
+  testBuildMarginTradingPlanZeroOffsetStillPlansBias();
   testBuildMarginTradingPlanNeutralKeepsOffsetWhenConfigured();
 
   console.log('\n=== All 26 tests passed ===');

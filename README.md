@@ -131,8 +131,7 @@ Configuration options from `node dexbot bots`, stored in `profiles/bots.json`:
 | **`minPrice`** | num \| str | Lower bound. Number or multiplier (e.g., `"2x"` = `startPrice / 2`) |
 | **`maxPrice`** | num \| str | Upper bound. Number or multiplier (e.g., `"2x"` = `startPrice * 2`) |
 | **`gridPrice`** | num \| str \| null | Reference price for bound calculations. `null` (uses `startPrice`), numeric, or AMA keyword (`"ama"`, `"ama1"`-`"ama4"`) |
-| **`gridPriceOffsetPct`** | number | Signed offset applied to the AMA center price (`-10` to `+10`%). `price = ama × (1 + offset/100)` |
-| **`gridPriceOffsetEnabled`** | boolean | Enable/disable the grid price offset (default `true`) |
+| **`gridPriceOffsetPct`** | number | Signed offset applied to the AMA center price (`-10` to `+10`%). `price = ama × (1 + offset/100)`. Set to `0` to disable the offset |
 | **`incrementPercent`** | number | Geometric step between layers (e.g., `0.5` = 0.5%) |
 | **`targetSpreadPercent`** | number | Width of the empty spread zone between buy and sell orders |
 | **`weightDistribution`** | object | Sizing: `{ "sell": 1.0, "buy": 1.0 }`. Range `-1` (super valley) to `2` (super mountain), `0.5` = neutral |

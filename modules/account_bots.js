@@ -41,8 +41,7 @@
  *                                  //              profiles/orders/<botKey>.gridprice.json; grid reads the effective center on reset
  *                                  //   <number> = fixed numeric reference (price_adapter does not touch this)
  *                                  //   null     = use startPrice (default, backward-compatible)
- *       "gridPriceOffsetPct": 0,   // Signed offset applied to the AMA center before grid resets
- *       "gridPriceOffsetEnabled": true,
+ *       "gridPriceOffsetPct": 0,   // Signed offset applied to the AMA center before grid resets; 0 disables the offset
  *       "minPrice": "3x",
  *       "maxPrice": "3x",
  *       "incrementPercent": 0.5,
@@ -836,7 +835,6 @@ function normalizeBotDraft(base = {}) {
     if (data.startPrice === undefined) data.startPrice = data.startPrice || DEFAULT_CONFIG.startPrice || 'pool';
     if (data.gridPrice === undefined) data.gridPrice = null;
     if (data.gridPriceOffsetPct === undefined) data.gridPriceOffsetPct = 0;
-    if (data.gridPriceOffsetEnabled === undefined) data.gridPriceOffsetEnabled = true;
     delete data.gridPriceOffsetClampToBounds;
 
     return data;
@@ -859,7 +857,7 @@ async function promptBotData(base = {}) {
              console.log('\n\x1b[1m--- Bot Editor: ' + (data.name || 'New Bot') + ' ---\x1b[0m');
              console.log(`\x1b[1;33m1) Pair:\x1b[0m       \x1b[1;31m${data.assetA || '?'} / ${data.assetB || '?'} \x1b[0m`);
              console.log(`\x1b[1;33m2) Identity:\x1b[0m   \x1b[38;5;208mName:\x1b[0m ${data.name || '?'} , \x1b[38;5;208mAccount:\x1b[0m ${data.preferredAccount || '?'} , \x1b[38;5;208mActive:\x1b[0m ${data.active}, \x1b[38;5;208mDryRun:\x1b[0m ${data.dryRun}`);
-             console.log(`\x1b[1;33m3) Price:\x1b[0m      \x1b[38;5;208mRange:\x1b[0m [${data.minPrice} - ${data.maxPrice}], \x1b[38;5;208mStart:\x1b[0m ${data.startPrice}, \x1b[38;5;208mGrid:\x1b[0m ${data.gridPrice === null ? 'startPrice' : data.gridPrice}, \x1b[38;5;208mOffset:\x1b[0m ${data.gridPriceOffsetEnabled === false ? 'off' : `${data.gridPriceOffsetPct}%`}`);
+             console.log(`\x1b[1;33m3) Price:\x1b[0m      \x1b[38;5;208mRange:\x1b[0m [${data.minPrice} - ${data.maxPrice}], \x1b[38;5;208mStart:\x1b[0m ${data.startPrice}, \x1b[38;5;208mGrid:\x1b[0m ${data.gridPrice === null ? 'startPrice' : data.gridPrice}, \x1b[38;5;208mOffset:\x1b[0m ${Number(data.gridPriceOffsetPct) === 0 ? 'off' : `${data.gridPriceOffsetPct}%`}`);
              console.log(`\x1b[1;33m4) Grid:\x1b[0m       \x1b[38;5;208mWeights:\x1b[0m (S:${data.weightDistribution.sell}, B:${data.weightDistribution.buy}), \x1b[38;5;208mIncr:\x1b[0m ${data.incrementPercent}%, \x1b[38;5;208mSpread:\x1b[0m ${data.targetSpreadPercent}%`);
              console.log(`\x1b[1;33m5) Funding:\x1b[0m    \x1b[38;5;208mSell:\x1b[0m ${data.botFunds.sell}, \x1b[38;5;208mBuy:\x1b[0m ${data.botFunds.buy} | \x1b[38;5;208mOrders:\x1b[0m (S:${data.activeOrders.sell}, B:${data.activeOrders.buy})`);
              console.log('--------------------------------------------------');
@@ -910,17 +908,14 @@ async function promptBotData(base = {}) {
                 if (maxP === '\x1b') break;
                 const startP = await askStartPrice('startPrice (pool, market or A/B)', data.startPrice);
                 if (startP === '\x1b') break;
-                const gp = await askGridPriceMode('gridPrice ref (ama/ama1/ama2/ama3/ama4/number/none)', data.gridPrice);
+                const gp = await askGridPriceMode('gridPrice (ama/number/none)', data.gridPrice);
                 if (gp === '\x1b') break;
-                const gpOffsetEnabled = await askBoolean('gridPriceOffsetEnabled', data.gridPriceOffsetEnabled !== false);
-                if (gpOffsetEnabled === '\x1b') break;
                 const gpOffsetPct = await askNumberWithBounds('gridPriceOffsetPct', data.gridPriceOffsetPct, -10, 10);
                 if (gpOffsetPct === '\x1b') break;
                 data.minPrice = minP;
                 data.maxPrice = maxP;
                 data.startPrice = startP;
                 data.gridPrice = gp;
-                data.gridPriceOffsetEnabled = gpOffsetEnabled;
                 data.gridPriceOffsetPct = gpOffsetPct;
                 showMenu = true;
                 break;
@@ -1007,7 +1002,6 @@ async function promptBotData(base = {}) {
         activeOrders: data.activeOrders,
         gridPrice: data.gridPrice,
         gridPriceOffsetPct: data.gridPriceOffsetPct,
-        gridPriceOffsetEnabled: data.gridPriceOffsetEnabled,
     };
 }
 

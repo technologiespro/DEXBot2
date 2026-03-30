@@ -18,7 +18,6 @@ async function testSnapshotReaderExposesRawAndEffectiveCenter() {
     amaCenterPrice: 100,
     centerPrice: 101.5,
     effectiveCenterPrice: 101.5,
-    gridPriceOffsetEnabled: true,
     gridPriceOffsetPct: 1.5,
     source: 'market_adapter/price_adapter.js',
     updatedAt: '2026-01-01T00:00:00Z'

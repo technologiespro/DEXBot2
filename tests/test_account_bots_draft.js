@@ -7,12 +7,10 @@ const { normalizeBotDraft } = require('../modules/account_bots');
 function testNormalizeBotDraftPreservesOffsetControls() {
   const draft = normalizeBotDraft({
     name: 'test-bot',
-    gridPriceOffsetEnabled: false,
     gridPriceOffsetPct: 0.35
   });
 
   assert.strictEqual(draft.gridPriceOffsetPct, 0.35);
-  assert.strictEqual(draft.gridPriceOffsetEnabled, false);
   assert.strictEqual(draft.gridPriceOffsetClampToBounds, undefined);
   assert.ok(draft.weightDistribution, 'defaults should still seed nested objects');
 }
@@ -21,7 +19,6 @@ function testNormalizeBotDraftSeedsDefaultOffsetControls() {
   const draft = normalizeBotDraft({ name: 'test-bot' });
 
   assert.strictEqual(draft.gridPriceOffsetPct, 0);
-  assert.strictEqual(draft.gridPriceOffsetEnabled, true);
   assert.strictEqual(draft.gridPriceOffsetClampToBounds, undefined);
 }
 

@@ -11,7 +11,7 @@ const DEFAULT_ORDERS_DIR = 'orders';
 const KNOWN_BOT_KEYS = new Set([
   'active', 'activeOrders', 'assetA', 'assetAId', 'assetB', 'assetBId',
   'botFunds', 'dryRun', 'gridPrice', 'gridPriceOffsetCooldownMs',
-  'gridPriceOffsetAllowNeutralReset', 'gridPriceOffsetEnabled', 'gridPriceOffsetMaxPct',
+  'gridPriceOffsetAllowNeutralReset', 'gridPriceOffsetMaxPct',
   'gridPriceOffsetMinConfidence', 'gridPriceOffsetMinDeltaPct', 'gridPriceOffsetPct',
   'gridPriceOffsetRequireAmaGridPrice', 'gridPriceOffsetRequireConfirmedTrend',
   'gridPriceOffsetScale',

@@ -202,8 +202,9 @@ function createPriceAdapterService(deps = {}) {
         const amaComparison = calcAmaComparison(nextCandles, bot, ctx);
         const lastCandleTs = nextCandles[nextCandles.length - 1]?.[0] || null;
         const { staleData, staleAgeHours } = computeCandleStaleness(lastCandleTs, cfg.maxStaleHours);
-        const gridPriceOffsetEnabled = bot.gridPriceOffsetEnabled !== false;
-        const gridPriceOffsetPct = usesAmaGridPrice && gridPriceOffsetEnabled ? Number(bot.gridPriceOffsetPct || 0) : 0;
+        const gridPriceOffsetPct = usesAmaGridPrice && Number.isFinite(Number(bot.gridPriceOffsetPct))
+            ? Number(bot.gridPriceOffsetPct)
+            : 0;
         let effectiveCenterPrice = usesAmaGridPrice
             ? applyGridPriceOffset(amaPrice, gridPriceOffsetPct)
             : amaPrice;
@@ -237,13 +238,11 @@ function createPriceAdapterService(deps = {}) {
                 botState.centerPrice = Number.isFinite(effectiveCenterPrice) && effectiveCenterPrice > 0 ? effectiveCenterPrice : amaPrice;
                 botState.amaCenterPrice = amaPrice;
                 botState.gridPriceOffsetPct = gridPriceOffsetPct;
-                botState.gridPriceOffsetEnabled = gridPriceOffsetEnabled;
                 botState.lastGridResetAt = nowIso;
                 if (usesAmaGridPrice && typeof writeBotAmaCenter === 'function') {
                     writeBotAmaCenter(bot.botKey, amaPrice, {
                         amaCenterPrice: amaPrice,
                         gridPriceOffsetPct,
-                        gridPriceOffsetEnabled,
                         effectiveCenterPrice: botState.centerPrice,
                     });
                 }
@@ -259,7 +258,6 @@ function createPriceAdapterService(deps = {}) {
                         amaCenterPersisted = writeBotAmaCenter(bot.botKey, amaPrice, {
                             amaCenterPrice: amaPrice,
                             gridPriceOffsetPct,
-                            gridPriceOffsetEnabled,
                             effectiveCenterPrice,
                             previousCenterPrice: centerPrice,
                         }) !== false;
@@ -278,13 +276,11 @@ function createPriceAdapterService(deps = {}) {
                             newCenterPrice: effectiveCenterPrice,
                             rawAmaPrice: amaPrice,
                             gridPriceOffsetPct,
-                            gridPriceOffsetEnabled,
                             poolId: ctx.poolId,
                         });
                         botState.centerPrice = effectiveCenterPrice;
                         botState.amaCenterPrice = amaPrice;
                         botState.gridPriceOffsetPct = gridPriceOffsetPct;
-                        botState.gridPriceOffsetEnabled = gridPriceOffsetEnabled;
                         botState.lastGridResetAt = nowIso;
                         botState.triggerCount = Number(botState.triggerCount || 0) + 1;
                         triggered = true;
@@ -302,7 +298,6 @@ function createPriceAdapterService(deps = {}) {
                                     newCenterPrice: effectiveCenterPrice,
                                     rawAmaPrice: amaPrice,
                                     gridPriceOffsetPct,
-                                    gridPriceOffsetEnabled,
                                     triggerPath,
                                 });
                             } catch (err) {
@@ -344,7 +339,6 @@ function createPriceAdapterService(deps = {}) {
             lastAmaPrice: amaPrice,
             amaCenterPrice: amaPrice,
             gridPriceOffsetPct,
-            gridPriceOffsetEnabled,
             effectiveCenterPrice,
             amaConfig: {
                 erPeriod: botAma.erPeriod,

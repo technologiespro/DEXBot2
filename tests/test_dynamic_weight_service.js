@@ -76,6 +76,7 @@ async function testPreviewAndApplyFlow() {
     assetB: 'BTS',
     botKey: 'honest-usd-0',
     gridPrice: 'ama',
+    gridPriceOffsetPct: 0.2,
     name: 'HONEST-USD',
     weightDistribution: { buy: 0.5, sell: 0.5 }
   };
@@ -165,7 +166,7 @@ async function testOffsetOnlyApplyDoesNotRewriteWeights() {
     assetB: 'BTS',
     botKey: 'honest-usd-1',
     gridPrice: 'ama',
-    gridPriceOffsetPct: 0,
+    gridPriceOffsetPct: 0.2,
     name: 'HONEST-USD',
     weightDistribution: { buy: 0.5, sell: 0.5 }
   };
@@ -191,7 +192,80 @@ async function testOffsetOnlyApplyDoesNotRewriteWeights() {
   assert.strictEqual(triggerWrites[0].payload.gridPriceOffsetPct, 0.41);
 }
 
-async function testOffsetDisableResetsPersistedBiasWithoutWeightChange() {
+async function testZeroOffsetCanUpdate() {
+  const appliedPatches = [];
+  const triggerWrites = [];
+
+  const service = createDynamicWeightService({
+    computeDynamicWeights: () => ({
+      buy: 0.5,
+      profile: 'static',
+      sell: 0.5
+    }),
+    fetchTrendInput: async () => ({
+      feedPrice: 1,
+      marketPrice: 1.15,
+      premium: 15,
+      publicationTime: '2026-01-01T00:00:00Z'
+    }),
+    market: {
+      getAsset: async (ref) => (ref === 'BTS' ? { symbol: 'BTS' } : null)
+    },
+    profiles: {
+      updateBotSettings: async (identifier, patch) => {
+        appliedPatches.push({ identifier, patch });
+        return {
+          botKey: identifier,
+          ...patch
+        };
+      },
+      writeTrigger: async (botKey, payload) => {
+        triggerWrites.push({ botKey, payload });
+      }
+    },
+    stateStore: {
+      async patch() {
+        return {};
+      },
+      async read() {
+        return {};
+      }
+    },
+    TrendAnalyzerClass: FakeTrendAnalyzer
+  });
+
+  const bot = {
+    active: true,
+    assetA: 'HONEST.USD',
+    assetB: 'BTS',
+    botKey: 'honest-usd-1b',
+    gridPrice: 'ama',
+    gridPriceOffsetPct: 0,
+    name: 'HONEST-USD',
+    weightDistribution: { buy: 0.5, sell: 0.5 }
+  };
+
+  const applied = await service.applySelectedBot(bot, {
+    policy: {
+      cooldownMs: 0,
+      enabled: true,
+      gridPriceOffsetCooldownMs: 0,
+      minWeightDelta: 0.25
+    }
+  });
+
+  assert.strictEqual(applied.applied, true);
+  assert.strictEqual(applied.canUpdateWeights, false);
+  assert.strictEqual(applied.canUpdateGridPriceOffset, true);
+  assert.strictEqual(appliedPatches.length, 1);
+  assert.strictEqual(appliedPatches[0].identifier, 'honest-usd-1b');
+  assert.strictEqual(appliedPatches[0].patch.weightDistribution, undefined);
+  assert.strictEqual(appliedPatches[0].patch.gridPriceOffsetPct, 0.41);
+  assert.strictEqual(triggerWrites.length, 1);
+  assert.strictEqual(triggerWrites[0].payload.gridPriceOffsetPct, 0.41);
+}
+
+async function testNonAmaGridPriceSkipsOffsetUpdates() {
   const appliedPatches = [];
   const triggerWrites = [];
 
@@ -238,7 +312,7 @@ async function testOffsetDisableResetsPersistedBiasWithoutWeightChange() {
     assetA: 'HONEST.USD',
     assetB: 'BTS',
     botKey: 'honest-usd-2',
-    gridPrice: 'ama',
+    gridPrice: 'market',
     gridPriceOffsetPct: 0.41,
     name: 'HONEST-USD',
     weightDistribution: { buy: 0.5, sell: 0.5 }
@@ -249,19 +323,15 @@ async function testOffsetDisableResetsPersistedBiasWithoutWeightChange() {
       cooldownMs: 0,
       enabled: true,
       gridPriceOffsetCooldownMs: 0,
-      gridPriceOffsetEnabled: false,
       minWeightDelta: 0.25
     }
   });
 
-  assert.strictEqual(applied.applied, true);
-  assert.strictEqual(applied.canUpdateWeights, false);
-  assert.strictEqual(applied.canUpdateGridPriceOffset, true);
-  assert.strictEqual(appliedPatches.length, 1);
-  assert.strictEqual(appliedPatches[0].patch.weightDistribution, undefined);
-  assert.strictEqual(appliedPatches[0].patch.gridPriceOffsetPct, 0);
-  assert.strictEqual(triggerWrites.length, 1);
-  assert.strictEqual(triggerWrites[0].payload.gridPriceOffsetPct, 0);
+  assert.strictEqual(applied.applied, false);
+  assert.strictEqual(applied.reason, 'changes_below_threshold');
+  assert.strictEqual(applied.gridPriceOffsetReason, 'gridprice_mode_not_ama');
+  assert.strictEqual(appliedPatches.length, 0);
+  assert.strictEqual(triggerWrites.length, 0);
 }
 
 async function testOffsetConfidenceGateHoldsPersistedBias() {
@@ -376,7 +446,7 @@ async function testPolicyDefaultsAndGates() {
   assert.strictEqual(policy.enabled, DEFAULT_DYNAMIC_WEIGHT_POLICY.enabled);
   assert.strictEqual(policy.minConfidence, DEFAULT_DYNAMIC_WEIGHT_POLICY.minConfidence);
   assert.strictEqual(policy.requireBtsQuote, true);
-  assert.strictEqual(policy.gridPriceOffsetEnabled, DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetEnabled);
+  assert.strictEqual(policy.gridPriceOffsetRequireAmaGridPrice, DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetRequireAmaGridPrice);
 
   const skipped = await service.evaluateSelectedBot({
     active: false,
@@ -749,7 +819,8 @@ async function testConcurrentAppliesPreserveAllBotState() {
 async function main() {
   await testPreviewAndApplyFlow();
   await testOffsetOnlyApplyDoesNotRewriteWeights();
-  await testOffsetDisableResetsPersistedBiasWithoutWeightChange();
+  await testZeroOffsetCanUpdate();
+  await testNonAmaGridPriceSkipsOffsetUpdates();
   await testOffsetConfidenceGateHoldsPersistedBias();
   await testPolicyDefaultsAndGates();
   await testNeutralTrendRespectsAllowNeutralUpdateFlag();

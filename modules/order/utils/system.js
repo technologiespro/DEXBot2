@@ -335,7 +335,6 @@ function loadAmaCenterSnapshot(botKey) {
             amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : null,
             centerPrice: effectiveCenterPrice,
             effectiveCenterPrice,
-            gridPriceOffsetEnabled: data?.gridPriceOffsetEnabled,
             gridPriceOffsetPct: Number.isFinite(Number(data?.gridPriceOffsetPct)) ? Number(data.gridPriceOffsetPct) : 0,
             source: data?.source || null,
             updatedAt: data?.updatedAt || null

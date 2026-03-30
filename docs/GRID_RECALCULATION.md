@@ -30,18 +30,16 @@ Applies a signed percentage offset to the AMA center price, producing an **effec
 ```json
 {
   "gridPrice": "ama",
-  "gridPriceOffsetPct": 1.5,
-  "gridPriceOffsetEnabled": true
+  "gridPriceOffsetPct": 1.5
 }
 ```
 
 **Parameters:**
-- `gridPriceOffsetPct`: Signed percentage offset (`-10` to `+10`). Formula: `effectiveCenter = ama × (1 + offset/100)`
-- `gridPriceOffsetEnabled`: Toggle the offset on/off (default `true`)
+- `gridPriceOffsetPct`: Signed percentage offset (`-10` to `+10`). Formula: `effectiveCenter = ama × (1 + offset/100)`. Set to `0` to disable the offset
 
 ### How It Works
 
-1. **Price Adapter Service** reads the bot's `gridPriceOffsetPct` and `gridPriceOffsetEnabled`
+1. **Price Adapter Service** reads the bot's `gridPriceOffsetPct`
 2. Calculates `effectiveCenter = amaPrice × (1 + offsetPct / 100)`, rounded to 8 decimals
 3. Compares current offset with the previous value from adapter state
 4. If offset changed AND effective center moved → creates trigger file (reason: `price_adapter_gridprice_offset_change`)
