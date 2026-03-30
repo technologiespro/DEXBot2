@@ -265,7 +265,7 @@ async function testZeroOffsetCanUpdate() {
   assert.strictEqual(triggerWrites[0].payload.gridPriceOffsetPct, 0.41);
 }
 
-async function testNonAmaGridPriceSkipsOffsetUpdates() {
+async function testNonAmaGridPriceCanUpdateOffset() {
   const appliedPatches = [];
   const triggerWrites = [];
 
@@ -313,7 +313,7 @@ async function testNonAmaGridPriceSkipsOffsetUpdates() {
     assetB: 'BTS',
     botKey: 'honest-usd-2',
     gridPrice: 'market',
-    gridPriceOffsetPct: 0.41,
+    gridPriceOffsetPct: 0.1,
     name: 'HONEST-USD',
     weightDistribution: { buy: 0.5, sell: 0.5 }
   };
@@ -327,11 +327,15 @@ async function testNonAmaGridPriceSkipsOffsetUpdates() {
     }
   });
 
-  assert.strictEqual(applied.applied, false);
-  assert.strictEqual(applied.reason, 'changes_below_threshold');
-  assert.strictEqual(applied.gridPriceOffsetReason, 'gridprice_mode_not_ama');
-  assert.strictEqual(appliedPatches.length, 0);
-  assert.strictEqual(triggerWrites.length, 0);
+  assert.strictEqual(applied.applied, true);
+  assert.strictEqual(applied.canUpdateWeights, false);
+  assert.strictEqual(applied.canUpdateGridPriceOffset, true);
+  assert.strictEqual(appliedPatches.length, 1);
+  assert.strictEqual(appliedPatches[0].identifier, 'honest-usd-2');
+  assert.strictEqual(appliedPatches[0].patch.weightDistribution, undefined);
+  assert.strictEqual(appliedPatches[0].patch.gridPriceOffsetPct, 0.41);
+  assert.strictEqual(triggerWrites.length, 1);
+  assert.strictEqual(triggerWrites[0].payload.gridPriceOffsetPct, 0.41);
 }
 
 async function testOffsetConfidenceGateHoldsPersistedBias() {
@@ -446,7 +450,7 @@ async function testPolicyDefaultsAndGates() {
   assert.strictEqual(policy.enabled, DEFAULT_DYNAMIC_WEIGHT_POLICY.enabled);
   assert.strictEqual(policy.minConfidence, DEFAULT_DYNAMIC_WEIGHT_POLICY.minConfidence);
   assert.strictEqual(policy.requireBtsQuote, true);
-  assert.strictEqual(policy.gridPriceOffsetRequireAmaGridPrice, DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetRequireAmaGridPrice);
+  assert.strictEqual(policy.gridPriceOffsetAllowNeutralReset, DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetAllowNeutralReset);
 
   const skipped = await service.evaluateSelectedBot({
     active: false,
@@ -820,7 +824,7 @@ async function main() {
   await testPreviewAndApplyFlow();
   await testOffsetOnlyApplyDoesNotRewriteWeights();
   await testZeroOffsetCanUpdate();
-  await testNonAmaGridPriceSkipsOffsetUpdates();
+  await testNonAmaGridPriceCanUpdateOffset();
   await testOffsetConfidenceGateHoldsPersistedBias();
   await testPolicyDefaultsAndGates();
   await testNeutralTrendRespectsAllowNeutralUpdateFlag();

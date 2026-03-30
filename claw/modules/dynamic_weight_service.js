@@ -15,7 +15,6 @@ const DEFAULT_DYNAMIC_WEIGHT_POLICY = Object.freeze({
   gridPriceOffsetMaxPct: 0.5,
   gridPriceOffsetMinConfidence: 70,
   gridPriceOffsetMinDeltaPct: 0.1,
-  gridPriceOffsetRequireAmaGridPrice: true,
   gridPriceOffsetRequireConfirmedTrend: true,
   gridPriceOffsetScale: 1,
   minConfidence: 60,
@@ -87,10 +86,6 @@ function normalizePolicy(policy = {}) {
     policy.gridPriceOffsetMinDeltaPct,
     DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetMinDeltaPct
   );
-  merged.gridPriceOffsetRequireAmaGridPrice = normalizeBoolean(
-    policy.gridPriceOffsetRequireAmaGridPrice,
-    DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetRequireAmaGridPrice
-  );
   merged.gridPriceOffsetRequireConfirmedTrend = normalizeBoolean(
     policy.gridPriceOffsetRequireConfirmedTrend,
     DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetRequireConfirmedTrend
@@ -119,16 +114,8 @@ function normalizeWeightDistribution(weightDistribution) {
   };
 }
 
-function isAmaGridPrice(bot = {}) {
-  return /^ama(?:[1-4])?$/.test(String(bot.gridPrice || '').trim().toLowerCase());
-}
-
 function computeGridPriceOffset(bot, analysis, policy) {
   const currentOffsetPct = normalizeNumber(bot?.gridPriceOffsetPct, 0);
-
-  if (policy.gridPriceOffsetRequireAmaGridPrice && !isAmaGridPrice(bot)) {
-    return { offsetPct: currentOffsetPct, reason: 'gridprice_mode_not_ama' };
-  }
 
   if (!analysis?.isReady) {
     return { offsetPct: currentOffsetPct, reason: 'trend_not_ready' };
@@ -350,7 +337,6 @@ function createDynamicWeightService(deps = {}) {
         gridPriceOffsetMaxPct: policy.gridPriceOffsetMaxPct,
         gridPriceOffsetMinConfidence: policy.gridPriceOffsetMinConfidence,
         gridPriceOffsetMinDeltaPct: policy.gridPriceOffsetMinDeltaPct,
-        gridPriceOffsetRequireAmaGridPrice: policy.gridPriceOffsetRequireAmaGridPrice,
         gridPriceOffsetRequireConfirmedTrend: policy.gridPriceOffsetRequireConfirmedTrend,
         gridPriceOffsetScale: policy.gridPriceOffsetScale,
         gridPriceOffsetCooldownMs: policy.gridPriceOffsetCooldownMs,

@@ -184,6 +184,8 @@ AMA is the recentering mechanism.
 - it watches how far the adaptive center moves
 - once the move crosses the configured threshold, DEXBot2 triggers a grid recalculation
 - `gridPrice: "ama"` tells the rebuilt grid to center itself on that AMA reference
+- `gridPrice: "pool"` or `gridPrice: "market"` centers the rebuilt grid on the live pair price instead
+- `gridPrice: null` falls back to the current `startPrice` reference before the offset is applied
 
 Practical interpretation:
 

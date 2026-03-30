@@ -73,7 +73,6 @@ function dynamicWeightPolicySchema(description = null) {
     gridPriceOffsetMaxPct: numberSchema('Maximum signed gridPrice offset percentage'),
     gridPriceOffsetMinConfidence: numberSchema('Minimum confidence needed to adjust gridPrice offset'),
     gridPriceOffsetMinDeltaPct: numberSchema('Minimum offset delta needed to persist an update'),
-    gridPriceOffsetRequireAmaGridPrice: booleanSchema('Only apply gridPrice offsets to AMA-based bots'),
     gridPriceOffsetRequireConfirmedTrend: booleanSchema('Require confirmed trend before adjusting gridPrice offset'),
     gridPriceOffsetScale: numberSchema('Scale factor applied to the confidence-based offset'),
     minConfidence: numberSchema('Minimum trend confidence needed for an update'),

@@ -550,7 +550,6 @@ function buildMarginTradingPlan(position, trendSignal = null, botConfig = {}, op
   const currentGridPriceOffsetPct = Number.isFinite(Number(botConfig?.gridPriceOffsetPct))
     ? Number(botConfig.gridPriceOffsetPct)
     : 0;
-  const offsetEnabled = options.gridPriceOffsetEnabled !== false;
   const allowNeutralReset = options.allowNeutralGridReset !== undefined
     ? !!options.allowNeutralGridReset
     : botConfig?.gridPriceOffsetAllowNeutralReset !== false;
@@ -573,9 +572,7 @@ function buildMarginTradingPlan(position, trendSignal = null, botConfig = {}, op
   });
 
   let finalGridPriceOffsetPct = currentGridPriceOffsetPct;
-  if (!offsetEnabled) {
-    finalGridPriceOffsetPct = 0;
-  } else if (trend === 'NEUTRAL') {
+  if (trend === 'NEUTRAL') {
     finalGridPriceOffsetPct = allowNeutralReset ? 0 : currentGridPriceOffsetPct;
   } else {
     const scaledBias = Math.max(-1, Math.min(1, priceOffsetBias * priceOffsetScale));

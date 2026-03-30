@@ -13,7 +13,7 @@ const KNOWN_BOT_KEYS = new Set([
   'botFunds', 'dryRun', 'gridPrice', 'gridPriceOffsetCooldownMs',
   'gridPriceOffsetAllowNeutralReset', 'gridPriceOffsetMaxPct',
   'gridPriceOffsetMinConfidence', 'gridPriceOffsetMinDeltaPct', 'gridPriceOffsetPct',
-  'gridPriceOffsetRequireAmaGridPrice', 'gridPriceOffsetRequireConfirmedTrend',
+  'gridPriceOffsetRequireConfirmedTrend',
   'gridPriceOffsetScale',
   'incrementPercent', 'maxPrice',
   'minPrice', 'name', 'preferredAccount', 'startPrice', 'strategy',

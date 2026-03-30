@@ -175,7 +175,6 @@ These are the knobs that control whether claw should apply a weight update:
 | `triggerOnApply` | `true` | Write `recalculate.<botKey>.trigger` after config update |
 | `writeTriggerPayload` | `true` | Store a JSON trigger payload instead of an empty file |
 | `triggerReason` | `dynamic_weight_update` | Label written into the trigger payload |
-| `gridPriceOffsetRequireAmaGridPrice` | `true` | Only apply offsets to bots using AMA grid pricing |
 | `gridPriceOffsetRequireConfirmedTrend` | `true` | Require confirmed trend before moving the grid center |
 | `gridPriceOffsetMinConfidence` | `70` | Skip weak signals below this confidence for offset updates |
 | `gridPriceOffsetMaxPct` | `0.5` | Cap the signed grid-price offset percentage |
