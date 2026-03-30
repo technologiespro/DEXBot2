@@ -11,7 +11,6 @@ const DEFAULT_DYNAMIC_WEIGHT_POLICY = Object.freeze({
   cooldownMs: 30 * 60 * 1000,
   enabled: true,
   gridPriceOffsetAllowNeutralReset: true,
-  gridPriceOffsetClampToBounds: true,
   gridPriceOffsetCooldownMs: 30 * 60 * 1000,
   gridPriceOffsetEnabled: true,
   gridPriceOffsetMaxPct: 0.5,
@@ -75,10 +74,6 @@ function normalizePolicy(policy = {}) {
   merged.gridPriceOffsetAllowNeutralReset = normalizeBoolean(
     policy.gridPriceOffsetAllowNeutralReset,
     DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetAllowNeutralReset
-  );
-  merged.gridPriceOffsetClampToBounds = normalizeBoolean(
-    policy.gridPriceOffsetClampToBounds,
-    DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetClampToBounds
   );
   merged.gridPriceOffsetCooldownMs = normalizeNumber(
     policy.gridPriceOffsetCooldownMs,
@@ -352,7 +347,6 @@ function createDynamicWeightService(deps = {}) {
       gridPriceOffsetPct: preview.gridPriceOffsetPct,
       gridPriceOffsetReason: preview.gridPriceOffsetReason,
       gridPriceOffsetCooldownMs: policy.gridPriceOffsetCooldownMs,
-      gridPriceOffsetClampToBounds: policy.gridPriceOffsetClampToBounds,
       nextWeights: preview.nextWeights,
       decisionReason: preview.reason,
       policy: {
@@ -367,7 +361,6 @@ function createDynamicWeightService(deps = {}) {
         gridPriceOffsetRequireConfirmedTrend: policy.gridPriceOffsetRequireConfirmedTrend,
         gridPriceOffsetScale: policy.gridPriceOffsetScale,
         gridPriceOffsetCooldownMs: policy.gridPriceOffsetCooldownMs,
-        gridPriceOffsetClampToBounds: policy.gridPriceOffsetClampToBounds,
         enabled: policy.enabled,
         minConfidence: policy.minConfidence,
         minWeightDelta: policy.minWeightDelta,

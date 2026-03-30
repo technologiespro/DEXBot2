@@ -69,7 +69,6 @@ function dynamicWeightPolicySchema(description = null) {
     cooldownMs: integerSchema('Minimum time between updates for the same bot'),
     enabled: booleanSchema('Enable dynamic weight evaluation and config updates'),
     gridPriceOffsetAllowNeutralReset: booleanSchema('Allow neutral trend updates to reset gridPriceOffsetPct back toward zero'),
-    gridPriceOffsetClampToBounds: booleanSchema('Clamp offset-adjusted gridPrice within the configured bounds'),
     gridPriceOffsetEnabled: booleanSchema('Enable trend-biased gridPrice offset updates'),
     gridPriceOffsetCooldownMs: integerSchema('Minimum time between gridPrice offset updates'),
     gridPriceOffsetMaxPct: numberSchema('Maximum signed gridPrice offset percentage'),

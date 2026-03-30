@@ -6,15 +6,16 @@ DEXBot2 is an automated market maker for the BitShares decentralized exchange.
 
 ## 🚀 Features
 
-- **Geometric Grid Trading** with configurable weight distribution (mountain/valley) and fund-driven recalculation
-- **Constant Spread Maintenance** with fixed bid-ask gap that adapts to market movement
-- **Copy-on-Write Grid Architecture** — immutable master grid, isolated working copies, transactional commit after blockchain confirmation ([details](docs/COPY_ON_WRITE_MASTER_PLAN.md))
-- **Adaptive Fill Batching** — groups 1-4 fills per broadcast, reducing processing from ~90s to ~24s for 29 fills
-- **Self-Healing Recovery** — periodic retries (max 5, 60s interval) with automatic state reset
-- **Dust Partial Auto-Cancellation** — configurable delay before auto-cancelling small remainders on-chain
-- **Boundary-Crawl Rebalancing** — closed-loop algorithm with periodic grid regeneration and fund invariant verification
-- **AES-Encrypted Key Storage** with RAM-only password handling
-- **PM2 Integration** for multi-bot management with auto-updates and monitoring
+- **Geometric Grid Trading** — fund-driven recalculation with configurable weight distribution
+- **Constant Spread** — fixed bid-ask gap that adapts to market movement
+- **Copy-on-Write Grid** — transactional rebalancing on isolated working copies ([details](docs/COPY_ON_WRITE_MASTER_PLAN.md))
+- **Adaptive Fill Batching** — 1-4 fills per broadcast, ~24s for 29 fills
+- **Self-Healing Recovery** — periodic retries with automatic state reset
+- **Dust Auto-Cancellation** — configurable delay before cancelling small remainders on-chain
+- **Boundary-Crawl Rebalancing** — periodic grid regeneration and fund invariant verification
+- **AES-Encrypted Key Storage** — RAM-only password handling
+- **PM2 Integration** — multi-bot management with auto-updates and monitoring
+- **Claw Integration Layer** — bridge exposing BitShares capabilities and DEXBot2 infrastructure to external runtimes ([details](claw/README.md))
 
 ## 🔥 Quick Start
 
@@ -130,6 +131,8 @@ Configuration options from `node dexbot bots`, stored in `profiles/bots.json`:
 | **`minPrice`** | num \| str | Lower bound. Number or multiplier (e.g., `"2x"` = `startPrice / 2`) |
 | **`maxPrice`** | num \| str | Upper bound. Number or multiplier (e.g., `"2x"` = `startPrice * 2`) |
 | **`gridPrice`** | num \| str \| null | Reference price for bound calculations. `null` (uses `startPrice`), numeric, or AMA keyword (`"ama"`, `"ama1"`-`"ama4"`) |
+| **`gridPriceOffsetPct`** | number | Signed offset applied to the AMA center price (`-10` to `+10`%). `price = ama × (1 + offset/100)` |
+| **`gridPriceOffsetEnabled`** | boolean | Enable/disable the grid price offset (default `true`) |
 | **`incrementPercent`** | number | Geometric step between layers (e.g., `0.5` = 0.5%) |
 | **`targetSpreadPercent`** | number | Width of the empty spread zone between buy and sell orders |
 | **`weightDistribution`** | object | Sizing: `{ "sell": 1.0, "buy": 1.0 }`. Range `-1` (super valley) to `2` (super mountain), `0.5` = neutral |
@@ -202,6 +205,7 @@ For architecture, fund accounting, rotation mechanics, and development guides, s
 - **[developer_guide.md](docs/developer_guide.md)** - Development guide, environment variables, examples, glossary
 - **[LOGGING.md](docs/LOGGING.md)** - Logging system documentation
 - **[WORKFLOW.md](docs/WORKFLOW.md)** - Project workflow and contribution guide
+- **[claw/](claw/)** - Claw integration layer: BitShares bridge, position management, and multi-runtime skill definitions ([README](claw/README.md), [API boundary](claw/docs/AI_BOT_LIBRARY_API.md))
 
 ## 🤝 Contributing
 

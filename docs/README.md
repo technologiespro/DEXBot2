@@ -17,6 +17,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Spread Correction**: Conservative, fund-aware maintenance of constant spread width
 - **Periodic Market Price Refresh**: Background 4-hour price updates
 - **Pipeline Safety & Diagnostics**: 5-minute timeout safeguard and health monitoring
+- **AMA Grid Price Offset**: Signed percentage offset on the AMA center for grid positioning without altering the raw anchor
 - **Data Flow**: Visualization of how market data becomes trading operations and then blockchain transactions.
 
 ### 📖 [Developer Guide](developer_guide.md)
@@ -55,7 +56,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 
 ### 📊 [Grid Recalculation](GRID_RECALCULATION.md)
 *When and why the grid resets.*
-- **Three Independent Triggers**: AMA Delta (market move), RMS Divergence (state drift), and Cache Regeneration (fund accumulation)
+- **Four Independent Triggers**: Grid Price Offset (offset change), AMA Delta (market move), RMS Divergence (state drift), and Cache Regeneration (fund accumulation)
 - **Configuration**: Per-trigger thresholds and their defaults
 - **AMA Delta**: How the market adapter's price signal drives grid repositioning
 
@@ -94,3 +95,15 @@ While these docs explain the *why*, the *how* lives in the code. Key source modu
 - **`modules/order/utils/validate.js`**: Order validation, grid reconciliation, COW action building
 - **`modules/order/utils/system.js`**: System utilities, price derivation, fill deduplication
 - **`modules/order/startup_reconcile.js`**: Startup grid reconciliation and offline fill detection
+
+---
+
+## 🦀 Claw Integration Layer
+
+### [claw/README.md](../claw/README.md)
+*Bridge between DEXBot2 and external runtimes.*
+- **Purpose**: Exposes BitShares capabilities and DEXBot2 infrastructure through JSON/CLI bridges for ZeroClaw, OpenClaw, NanoBot, and PicoClaw runtimes.
+- **API Boundary**: Responsibility split between the AI decision layer and the DEXBot2 execution substrate ([AI_BOT_LIBRARY_API.md](../claw/docs/AI_BOT_LIBRARY_API.md))
+- **Tuning Reference**: Practical grid-tuning baselines ([DEXBOT2_TUNING_CHEAT_SHEET.md](../claw/docs/DEXBOT2_TUNING_CHEAT_SHEET.md))
+- **Position Management**: Health monitoring, margin planner, and dynamic weight policy
+- **Skills**: Presentation-only skill packs for bitshares-guide, margin-trading, and shared references

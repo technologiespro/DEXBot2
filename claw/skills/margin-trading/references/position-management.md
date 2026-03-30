@@ -184,7 +184,6 @@ These are the knobs that control whether claw should apply a weight update:
 | `gridPriceOffsetMinDeltaPct` | `0.1` | Ignore tiny offset changes that would churn config |
 | `gridPriceOffsetCooldownMs` | `1800000` | Minimum time between grid-price offset updates per bot |
 | `gridPriceOffsetAllowNeutralReset` | `true` | Allow NEUTRAL trend to reset the offset back to zero |
-| `gridPriceOffsetClampToBounds` | `true` | Clamp the effective center price to configured bounds |
 
 Policy should stay in claw or a claw-owned scheduler. It should not be pushed into `modules/order/`.
 

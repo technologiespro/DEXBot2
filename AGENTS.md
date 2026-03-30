@@ -149,8 +149,8 @@ File: <path>
 - `utils/` - Utilities (math, order, system, validate)
 
 ### Market Adapter (`market_adapter/`)
-- `price_adapter.js` - AMA delta threshold and grid recalculation trigger
-- `core/price_adapter_service.js` - Price adapter service core
+- `price_adapter.js` - AMA delta threshold, grid price offset persistence, and grid recalculation trigger
+- `core/price_adapter_service.js` - Price adapter service core (offset calculation, bound clamping)
 - `ama_signal_runner.js` - AMA signal processing
 - `blockchain_source.js` - Blockchain data source
 - `kibana_source.js` - Kibana data source
@@ -172,6 +172,25 @@ File: <path>
 - `profiles/bots.json` - Bot configuration
 - `profiles/general.settings.json` - Global settings (auto-generated on first run)
 - `profiles/ama_profiles.json` - AMA configuration profiles
+
+### Claw Integration (`claw/`)
+- `index.js` - Main export combining all modules
+- `modules/claw_bridge.js` - JSON bridge for runtime integration
+- `modules/zeroclaw_bridge.js` - ZeroClaw runtime bridge
+- `modules/bitshares_client.js` - BitShares connection wrapper
+- `modules/chain_queries.js` - Chain read helpers
+- `modules/chain_broadcast.js` - Chain write helpers
+- `modules/chain_actions.js` - High-level chain operations
+- `modules/position_manager.js` - Position tracking and management
+- `modules/position_health.js` - Position health monitoring
+- `modules/dexbot_profiles.js` - DEXBot2 profile reader
+- `modules/dexbot_credential_client.js` - Credential daemon client
+- `modules/honest_ecosystem.js` - HONEST asset helpers
+- `modules/short_mpa_strategy.js` - Short MPA workflow
+- `modules/dynamic_weight_service.js` - Dynamic weight policy
+- `modules/claw_infra.js` - Shared runtime infrastructure
+- `docs/AI_BOT_LIBRARY_API.md` - API boundary and responsibility split
+- `docs/DEXBOT2_TUNING_CHEAT_SHEET.md` - Grid tuning reference
 
 ### Testing
 - `tests/` - Comprehensive test suite (unit, integration, scenario tests)
