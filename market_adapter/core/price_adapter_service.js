@@ -2,6 +2,7 @@
 
 const { DEFAULT_CONFIG } = require('../../modules/constants');
 const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order');
+const { applyGridPriceOffset } = require('../../modules/order/utils/system');
 
 function createPriceAdapterService(deps = {}) {
     const {
@@ -23,7 +24,7 @@ function createPriceAdapterService(deps = {}) {
         calcAmaPrice,
         calcAmaComparison,
         writeGridResetTrigger,
-        writeBotAmaCenter,
+        writeBotGridPriceCenter,
         root,
         path,
     } = deps;
@@ -53,16 +54,6 @@ function createPriceAdapterService(deps = {}) {
         };
     }
 
-    function applyGridPriceOffset(centerPrice, offsetPct) {
-        const base = Number(centerPrice);
-        const offset = Number(offsetPct);
-        if (!Number.isFinite(base) || base <= 0) return null;
-        const signedOffset = Number.isFinite(offset) ? offset : 0;
-        const adjusted = base * (1 + (signedOffset / 100));
-        const rounded = Math.round(adjusted * 1e8) / 1e8;
-        return Number.isFinite(rounded) && rounded > 0 ? rounded : base;
-    }
-
     function clampGridPriceToBounds(centerPrice, referencePrice, bot) {
         const base = Number(centerPrice);
         const ref = Number(referencePrice);
@@ -82,11 +73,6 @@ function createPriceAdapterService(deps = {}) {
         if (!bot.assetA || !bot.assetB) {
             return { ok: false, reason: 'missing asset pair' };
         }
-
-        const gridPriceMode = (typeof bot.gridPrice === 'string')
-            ? bot.gridPrice.trim().toLowerCase()
-            : null;
-        const usesAmaGridPrice = /^ama(?:[1-4])?$/.test(gridPriceMode || '');
 
         const contextSignature = buildBotContextSignature(bot);
         const cached = contextCache.get(bot.botKey);
@@ -202,15 +188,12 @@ function createPriceAdapterService(deps = {}) {
         const amaComparison = calcAmaComparison(nextCandles, bot, ctx);
         const lastCandleTs = nextCandles[nextCandles.length - 1]?.[0] || null;
         const { staleData, staleAgeHours } = computeCandleStaleness(lastCandleTs, cfg.maxStaleHours);
-        const gridPriceOffsetPct = usesAmaGridPrice && Number.isFinite(Number(bot.gridPriceOffsetPct))
+        const gridPriceOffsetPct = Number.isFinite(Number(bot.gridPriceOffsetPct))
             ? Number(bot.gridPriceOffsetPct)
             : 0;
-        let effectiveCenterPrice = usesAmaGridPrice
-            ? applyGridPriceOffset(amaPrice, gridPriceOffsetPct)
-            : amaPrice;
-        const clampedCenterPrice = usesAmaGridPrice
-            ? clampGridPriceToBounds(effectiveCenterPrice, amaPrice, bot)
-            : effectiveCenterPrice;
+        const referencePrice = amaPrice;
+        let effectiveCenterPrice = applyGridPriceOffset(amaPrice, gridPriceOffsetPct);
+        const clampedCenterPrice = clampGridPriceToBounds(effectiveCenterPrice, amaPrice, bot);
         effectiveCenterPrice = Number.isFinite(clampedCenterPrice) && clampedCenterPrice > 0 ? clampedCenterPrice : effectiveCenterPrice;
 
         const botState = { ...(state.bots[bot.botKey] || {}) };
@@ -221,10 +204,10 @@ function createPriceAdapterService(deps = {}) {
         let triggerCallbackError = null;
         let triggerSuppressedReason = null;
 
-        if (!staleData && Number.isFinite(amaPrice) && amaPrice > 0) {
+        if (!staleData && Number.isFinite(referencePrice) && referencePrice > 0) {
             const centerPrice = Number(botState.centerPrice || 0);
             const previousGridPriceOffsetPct = Number(botState.gridPriceOffsetPct || 0);
-            const offsetPctChanged = usesAmaGridPrice && Number.isFinite(previousGridPriceOffsetPct)
+            const offsetPctChanged = Number.isFinite(previousGridPriceOffsetPct)
                 ? Math.abs(previousGridPriceOffsetPct - gridPriceOffsetPct) > 1e-9
                 : false;
             const effectiveCenterMoved = centerPrice > 0
@@ -233,14 +216,14 @@ function createPriceAdapterService(deps = {}) {
 
             if (!Number.isFinite(centerPrice) || centerPrice <= 0) {
                 // First run: record the effective center as the delta-comparison baseline.
-                // Also persist the effective center for bots using AMA gridPrice keywords so that
-                // initializeGrid() can read it via loadAmaCenterPrice() on first reset.
-                botState.centerPrice = Number.isFinite(effectiveCenterPrice) && effectiveCenterPrice > 0 ? effectiveCenterPrice : amaPrice;
+                // Also persist the effective center so initializeGrid() can read it via
+                // loadAmaCenterPrice() on first reset.
+                botState.centerPrice = Number.isFinite(effectiveCenterPrice) && effectiveCenterPrice > 0 ? effectiveCenterPrice : referencePrice;
                 botState.amaCenterPrice = amaPrice;
                 botState.gridPriceOffsetPct = gridPriceOffsetPct;
                 botState.lastGridResetAt = nowIso;
-                if (usesAmaGridPrice && typeof writeBotAmaCenter === 'function') {
-                    writeBotAmaCenter(bot.botKey, amaPrice, {
+                if (typeof writeBotGridPriceCenter === 'function') {
+                    writeBotGridPriceCenter(bot.botKey, referencePrice, {
                         amaCenterPrice: amaPrice,
                         gridPriceOffsetPct,
                         effectiveCenterPrice: botState.centerPrice,
@@ -248,14 +231,13 @@ function createPriceAdapterService(deps = {}) {
                 }
             } else {
                 deltaPercent = Math.abs((effectiveCenterPrice - centerPrice) / centerPrice) * 100;
-                if (offsetChanged || deltaPercent >= botThreshold) {
+                if (deltaPercent >= botThreshold) {
                     let amaCenterPersisted = true;
 
-                    // For AMA gridPrice bots — write the effective center to
-                    // profiles/orders/<botKey>.gridprice.json BEFORE writing the trigger file,
-                    // so initializeGrid() always finds a fresh value when it reacts.
-                    if (usesAmaGridPrice && typeof writeBotAmaCenter === 'function') {
-                        amaCenterPersisted = writeBotAmaCenter(bot.botKey, amaPrice, {
+                    // Write the effective center before the trigger file so initializeGrid()
+                    // always finds a fresh value when it reacts.
+                    if (typeof writeBotGridPriceCenter === 'function') {
+                        amaCenterPersisted = writeBotGridPriceCenter(bot.botKey, referencePrice, {
                             amaCenterPrice: amaPrice,
                             gridPriceOffsetPct,
                             effectiveCenterPrice,
@@ -274,6 +256,7 @@ function createPriceAdapterService(deps = {}) {
                             deltaPercent,
                             previousCenterPrice: centerPrice,
                             newCenterPrice: effectiveCenterPrice,
+                            referencePrice,
                             rawAmaPrice: amaPrice,
                             gridPriceOffsetPct,
                             poolId: ctx.poolId,
@@ -296,6 +279,7 @@ function createPriceAdapterService(deps = {}) {
                                     deltaPercent,
                                     previousCenterPrice: centerPrice,
                                     newCenterPrice: effectiveCenterPrice,
+                                    referencePrice,
                                     rawAmaPrice: amaPrice,
                                     gridPriceOffsetPct,
                                     triggerPath,
@@ -348,6 +332,7 @@ function createPriceAdapterService(deps = {}) {
             amaComparison,
             lastDeltaPercent: deltaPercent,
             thresholdPercent: botThreshold,
+            referencePrice,
             lastCycleSource: sourceLabel,
             lastCycleAt: nowIso,
             staleData,
@@ -365,6 +350,7 @@ function createPriceAdapterService(deps = {}) {
             amaPrice,
             deltaPercent,
             thresholdPercent: botThreshold,
+            referencePrice,
             amaComparison,
             triggered,
             triggerPath,

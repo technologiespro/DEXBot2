@@ -730,15 +730,15 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
 
 /**
  * Atomically write the effective grid center for a bot to profiles/orders/<botKey>.gridprice.json.
- * Called by price_adapter when a grid reset trigger fires (or on first initialisation) for bots
- * with gridPrice using AMA keywords ("ama", "ama1".."ama4"). Uses write-then-rename to prevent partial reads by the dexbot process.
+ * Called by price_adapter when a grid reset trigger fires (or on first initialisation).
+ * Uses write-then-rename to prevent partial reads by the dexbot process.
  * @param {string} botKey   - Bot key (e.g. "iob-xrp-bts-0")
  * @param {number} amaPrice - Current raw AMA center price (B/A format)
  * @param {Object} options
- * @param {number} options.gridPriceOffsetPct - Signed offset percentage applied to the AMA center
+ * @param {number} options.gridPriceOffsetPct - Signed offset percentage applied to the center
  * @param {number} options.effectiveCenterPrice - Precomputed effective center price
  */
-function writeBotAmaCenter(botKey, amaPrice, options = {}) {
+function writeBotGridPriceCenter(botKey, amaPrice, options = {}) {
     try {
         ensureDir(ORDERS_DIR);
         const filePath = path.join(ORDERS_DIR, `${botKey}.gridprice.json`);
@@ -762,7 +762,7 @@ function writeBotAmaCenter(botKey, amaPrice, options = {}) {
         fs.renameSync(tmpPath, filePath);
         return true;
     } catch (err) {
-        console.warn(`[writeBotAmaCenter] Failed to write AMA center for ${botKey}: ${err.message}`);
+        console.warn(`[writeBotGridPriceCenter] Failed to write grid price center for ${botKey}: ${err.message}`);
         return false;
     }
 }
@@ -786,7 +786,7 @@ const adapterService = createPriceAdapterService({
     calcAmaPrice,
     calcAmaComparison,
     writeGridResetTrigger,
-    writeBotAmaCenter,
+    writeBotGridPriceCenter,
     root: ROOT,
     path,
 });

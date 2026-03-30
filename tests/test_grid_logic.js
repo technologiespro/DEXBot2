@@ -268,6 +268,85 @@ async function runTests() {
         }
     }
 
+    console.log(' - Testing AMA gridPrice does not double-apply gridPriceOffsetPct...');
+    {
+        const botKey = `test-grid-ama-offset-${process.pid}`;
+        const ordersDir = path.join(__dirname, '..', 'profiles', 'orders');
+        const amaFile = path.join(ordersDir, `${botKey}.gridprice.json`);
+
+        fs.mkdirSync(ordersDir, { recursive: true });
+        fs.writeFileSync(amaFile, JSON.stringify({
+            amaCenterPrice: 1000,
+            centerPrice: 1100,
+            effectiveCenterPrice: 1100,
+            gridPriceOffsetPct: 10,
+            updatedAt: new Date().toISOString(),
+        }, null, 2) + '\n', 'utf8');
+
+        try {
+            const manager = new OrderManager({
+                assetA: 'TESTA',
+                assetB: 'TESTB',
+                botKey,
+                startPrice: 100,
+                gridPrice: 'ama',
+                gridPriceOffsetPct: 10,
+                minPrice: '2x',
+                maxPrice: '2x',
+                incrementPercent: 1,
+                targetSpreadPercent: 2,
+                weightDistribution: { buy: 0.5, sell: 0.5 },
+                botFunds: { buy: '100%', sell: '100%' },
+                activeOrders: { buy: 6, sell: 6 }
+            });
+
+            manager.assets = {
+                assetA: { id: '1.3.1', symbol: 'TESTA', precision: 5 },
+                assetB: { id: '1.3.2', symbol: 'TESTB', precision: 5 }
+            };
+            await manager.setAccountTotals({ buy: 5000, sell: 5000, buyFree: 5000, sellFree: 5000 });
+
+            await Grid.initializeGrid(manager);
+
+            assert(manager.orders.size > 0, 'initializeGrid should succeed with AMA gridPrice and offset');
+            assert.strictEqual(manager.config.minPrice, 550, 'AMA gridPrice should use the persisted effective center without double-applying the offset');
+            assert.strictEqual(manager.config.maxPrice, 2200, 'AMA gridPrice should use the persisted effective center without double-applying the offset');
+        } finally {
+            try { fs.unlinkSync(amaFile); } catch (_) {}
+        }
+    }
+
+    console.log(' - Testing initializeGrid applies gridPriceOffsetPct to the resolved grid price...');
+    {
+        const manager = new OrderManager({
+            assetA: 'TESTA',
+            assetB: 'TESTB',
+            botKey: `test-grid-offset-${process.pid}`,
+            startPrice: 100,
+            gridPrice: null,
+            gridPriceOffsetPct: 10,
+            minPrice: '2x',
+            maxPrice: '2x',
+            incrementPercent: 1,
+            targetSpreadPercent: 2,
+            weightDistribution: { buy: 0.5, sell: 0.5 },
+            botFunds: { buy: '100%', sell: '100%' },
+            activeOrders: { buy: 6, sell: 6 }
+        });
+
+        manager.assets = {
+            assetA: { id: '1.3.1', symbol: 'TESTA', precision: 5 },
+            assetB: { id: '1.3.2', symbol: 'TESTB', precision: 5 }
+        };
+        await manager.setAccountTotals({ buy: 5000, sell: 5000, buyFree: 5000, sellFree: 5000 });
+
+        await Grid.initializeGrid(manager);
+
+        assert(manager.orders.size > 0, 'initializeGrid should succeed with an offset applied to the resolved grid price');
+        assert.strictEqual(manager.config.minPrice, 55, 'gridPriceOffsetPct should shift the resolved grid reference before minPrice is derived');
+        assert.strictEqual(manager.config.maxPrice, 220, 'gridPriceOffsetPct should shift the resolved grid reference before maxPrice is derived');
+    }
+
     console.log(' - Testing shouldFlagOutOfSpread with toleranceSteps = 0.5...');
     {
         // Test case: 1.6% target spread, 0.4% increment, toleranceSteps = 0.5

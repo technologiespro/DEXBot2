@@ -11,8 +11,8 @@ const {
     computeCandleStaleness,
     resolveAmaForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
-    applyRuntimeDefaultsFromGeneralSettings,
     usesAmaGridPrice,
+    applyRuntimeDefaultsFromGeneralSettings,
 } = require('../market_adapter/price_adapter');
 const { detectMissingCandleTimestamps } = require('../market_adapter/candle_utils');
 
@@ -141,7 +141,6 @@ assert.strictEqual(DEFAULT_AMA.slowPeriod, 1286, 'built-in default AMA should po
     assert.strictEqual(ama.fastPeriod, 2.73, 'fractional fastPeriod from bot config should be preserved');
 }
 
-// AMA grid-price selection behavior
 assert.strictEqual(usesAmaGridPrice({ gridPrice: 'ama' }), true, 'ama should enable price adapter processing');
 assert.strictEqual(usesAmaGridPrice({ gridPrice: 'ama3' }), true, 'ama3 should enable price adapter processing');
 assert.strictEqual(usesAmaGridPrice({ gridPrice: '  AMA4  ' }), true, 'ama4 matching should be case-insensitive');

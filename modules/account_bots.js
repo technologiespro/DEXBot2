@@ -37,11 +37,12 @@
  *       "dryRun": false,
  *       "startPrice": "pool",      // Price for order alignment: "pool", "market", or numeric
  *       "gridPrice": null,         // Reference price for x-factor bounds (3 options):
- *                                  //   "ama"/"ama1".."ama4" = price_adapter writes AMA center to
+ *                                  //   "pool" / "market" = live pair price reference
+ *                                  //   "ama"/"ama1".."ama4" = price_adapter writes a center snapshot to
  *                                  //              profiles/orders/<botKey>.gridprice.json; grid reads the effective center on reset
- *                                  //   <number> = fixed numeric reference (price_adapter does not touch this)
+ *                                  //   <number> = fixed numeric reference
  *                                  //   null     = use startPrice (default, backward-compatible)
- *       "gridPriceOffsetPct": 0,   // Signed offset applied to the AMA center before grid resets; 0 disables the offset
+ *       "gridPriceOffsetPct": 0,   // Signed offset applied to the resolved gridPrice reference; 0 disables the offset
  *       "minPrice": "3x",
  *       "maxPrice": "3x",
  *       "incrementPercent": 0.5,
@@ -804,18 +805,19 @@ async function askGridPriceMode(promptText, defaultValue) {
 
         const lower = raw.toLowerCase();
         if (lower === 'none' || lower === 'null' || lower === 'start' || lower === 'startprice') return null;
+        if (lower === 'pool' || lower === 'market') return lower;
         if (/^ama(?:[1-4])?$/.test(lower)) return lower;
 
         const num = Number(raw);
         if (Number.isFinite(num) && num > 0) return num;
 
-        console.log('Please enter: ama, ama1..ama4, a positive number, or none/startprice.');
+        console.log('Please enter: pool, market, ama, ama1..ama4, a positive number, or none/startprice.');
     }
 }
 
 /**
  * Normalizes a bot draft for editing or saving.
- * Preserves existing fields and seeds defaults for optional AMA offset controls.
+ * Preserves existing fields and seeds defaults for optional grid-price offset controls.
  * @param {Object} [base={}] - The initial bot data to edit.
  * @returns {Object} A normalized bot draft.
  */
@@ -908,7 +910,7 @@ async function promptBotData(base = {}) {
                 if (maxP === '\x1b') break;
                 const startP = await askStartPrice('startPrice (pool, market or A/B)', data.startPrice);
                 if (startP === '\x1b') break;
-                const gp = await askGridPriceMode('gridPrice (ama/number/none)', data.gridPrice);
+                const gp = await askGridPriceMode('gridPrice (pool/market/ama/number/none)', data.gridPrice);
                 if (gp === '\x1b') break;
                 const gpOffsetPct = await askNumberWithBounds('gridPriceOffsetPct', data.gridPriceOffsetPct, -10, 10);
                 if (gpOffsetPct === '\x1b') break;

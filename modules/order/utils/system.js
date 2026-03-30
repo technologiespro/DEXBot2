@@ -355,6 +355,22 @@ function loadAmaCenterPrice(botKey) {
     return snapshot ? snapshot.centerPrice : null;
 }
 
+/**
+ * Apply a signed percentage offset to a base price, rounding to 8 decimals.
+ * @param {number} basePrice - The reference price to offset
+ * @param {number} offsetPct - Signed percentage offset (e.g. 1.5 = +1.5%)
+ * @returns {number|null} Adjusted price, or null if basePrice is invalid
+ */
+function applyGridPriceOffset(basePrice, offsetPct) {
+    const base = Number(basePrice);
+    const offset = Number(offsetPct);
+    if (!Number.isFinite(base) || base <= 0) return null;
+    if (!Number.isFinite(offset) || offset === 0) return base;
+    const adjusted = base * (1 + (offset / 100));
+    const rounded = Math.round(adjusted * 1e8) / 1e8;
+    return Number.isFinite(rounded) && rounded > 0 ? rounded : base;
+}
+
 // ================================================================================
 // SECTION 2: FEE MANAGEMENT (INIT)
 // ================================================================================
@@ -913,6 +929,7 @@ module.exports = {
     deriveMarketPrice,
     derivePoolPrice,
     derivePrice,
+    applyGridPriceOffset,
     loadAmaCenterPrice,
     loadAmaCenterSnapshot,
     initializeFeeCache,

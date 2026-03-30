@@ -83,6 +83,10 @@ function usesAmaGridPrice(bot) {
     return /^ama(?:[1-4])?$/.test(gridPrice);
 }
 
+function needsPriceAdapter(bots) {
+    return (bots || []).some((bot) => usesAmaGridPrice(bot));
+}
+
 function isServiceApp(app) {
     const name = String(app?.name || '');
     return name === 'dexbot-update' || name === 'dexbot-cred' || name === 'dexbot-price-adapter';
@@ -146,9 +150,7 @@ function generateEcosystemConfig(botNameFilter = null) {
             };
         });
 
-        const needsPriceAdapter = bots.some((bot) => usesAmaGridPrice(bot));
-
-        if (needsPriceAdapter) {
+        if (needsPriceAdapter(bots)) {
             apps.unshift({
                 name: 'dexbot-price-adapter',
                 script: path.join(ROOT, 'market_adapter', 'price_adapter.js'),
@@ -649,4 +651,4 @@ if (require.main === module) {
     })();
 }
 
-module.exports = { main, generateEcosystemConfig, countManagedBots, isServiceApp };
+module.exports = { main, generateEcosystemConfig, countManagedBots, isServiceApp, usesAmaGridPrice, needsPriceAdapter };

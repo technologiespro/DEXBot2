@@ -9,7 +9,7 @@ DEXBot2 uses **four independent grid recalculation triggers** to keep the tradin
 | Mechanism | Trigger | Config | Location | Scope |
 |-----------|---------|--------|----------|-------|
 | **AMA Delta** | Market price moved significantly | `AMA_DELTA_THRESHOLD_PERCENT` | `general.settings.json` | Global (all bots) |
-| **Grid Price Offset** | Offset changed and effective center moved | `gridPriceOffsetPct` | `bots.json` | Per-bot |
+| **Grid Price Offset** | Offset changes the resolved grid reference | `gridPriceOffsetPct` | `bots.json` | Per-bot |
 | **RMS Divergence** | Grid state diverged from blockchain | `RMS_PERCENTAGE` | `general.settings.json` | Global (all bots) |
 | **Regeneration** | Available funds exceed threshold | `GRID_REGENERATION_PERCENTAGE` | `constants.js` | Per-side (BUY/SELL) |
 
@@ -17,34 +17,33 @@ Each mechanism is **independent and can be configured separately**. They don't i
 
 ---
 
-## 1. Grid Price Offset (Market Adapter)
+## 1. Grid Price Offset (Resolved Grid Price)
 
 ### What It Does
-Applies a signed percentage offset to the AMA center price, producing an **effective center** for grid bound calculations without altering the raw AMA anchor. When the offset value changes and the effective center moves, a grid reset is triggered.
+Applies a signed percentage offset to the resolved `gridPrice` reference, producing an **effective center** for grid bound calculations without altering the raw reference price.
 
-**Why it matters:** Lets you shift the grid center relative to the market without waiting for the AMA itself to move.
+**Why it matters:** Lets you shift the grid center relative to the active reference price without changing the underlying reference source.
 
 ### Configuration
 
 **File:** `profiles/bots.json` (per bot)
 ```json
 {
-  "gridPrice": "ama",
+  "gridPrice": "market",
   "gridPriceOffsetPct": 1.5
 }
 ```
 
 **Parameters:**
-- `gridPriceOffsetPct`: Signed percentage offset (`-10` to `+10`). Formula: `effectiveCenter = ama × (1 + offset/100)`. Set to `0` to disable the offset
+- `gridPrice`: Can be `pool`, `market`, `ama`/`ama1`..`ama4`, a positive number, or `null`
+- `gridPriceOffsetPct`: Signed percentage offset (`-10` to `+10`). Formula: `effectiveCenter = resolvedGridPrice × (1 + offset/100)`. Set to `0` to disable the offset
 
 ### How It Works
 
-1. **Price Adapter Service** reads the bot's `gridPriceOffsetPct`
-2. Calculates `effectiveCenter = amaPrice × (1 + offsetPct / 100)`, rounded to 8 decimals
-3. Compares current offset with the previous value from adapter state
-4. If offset changed AND effective center moved → creates trigger file (reason: `price_adapter_gridprice_offset_change`)
-5. Writes both raw AMA and effective center to `profiles/orders/<botKey>.gridprice.json`
-6. Grid engine reads the effective center via `loadAmaCenterPrice()` during `initializeGrid()`
+1. `initializeGrid()` resolves the current `gridPrice` reference using the configured mode
+2. For non-AMA references (`pool`, `market`, numeric, or `null -> startPrice`) it applies `gridPriceOffsetPct` directly before deriving min/max bounds
+3. For AMA references, `price_adapter` persists the effective AMA center so `initializeGrid()` can consume it without double-applying the offset
+4. Recalculation for non-AMA offsets is handled independently by whichever workflow updates the bot and writes `recalculate.<botKey>.trigger` (for example dynamic-weight updates)
 
 ### Debugging
 
