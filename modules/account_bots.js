@@ -43,7 +43,6 @@
  *                                  //   null     = use startPrice (default, backward-compatible)
  *       "gridPriceOffsetPct": 0,   // Signed offset applied to the AMA center before grid resets
  *       "gridPriceOffsetEnabled": true,
- *       "gridPriceOffsetClampToBounds": true,
  *       "minPrice": "3x",
  *       "maxPrice": "3x",
  *       "incrementPercent": 0.5,
@@ -838,7 +837,7 @@ function normalizeBotDraft(base = {}) {
     if (data.gridPrice === undefined) data.gridPrice = null;
     if (data.gridPriceOffsetPct === undefined) data.gridPriceOffsetPct = 0;
     if (data.gridPriceOffsetEnabled === undefined) data.gridPriceOffsetEnabled = true;
-    if (data.gridPriceOffsetClampToBounds === undefined) data.gridPriceOffsetClampToBounds = true;
+    delete data.gridPriceOffsetClampToBounds;
 
     return data;
 }
@@ -917,15 +916,12 @@ async function promptBotData(base = {}) {
                 if (gpOffsetEnabled === '\x1b') break;
                 const gpOffsetPct = await askNumberWithBounds('gridPriceOffsetPct', data.gridPriceOffsetPct, -10, 10);
                 if (gpOffsetPct === '\x1b') break;
-                const gpClamp = await askBoolean('gridPriceOffsetClampToBounds', data.gridPriceOffsetClampToBounds !== false);
-                if (gpClamp === '\x1b') break;
                 data.minPrice = minP;
                 data.maxPrice = maxP;
                 data.startPrice = startP;
                 data.gridPrice = gp;
                 data.gridPriceOffsetEnabled = gpOffsetEnabled;
                 data.gridPriceOffsetPct = gpOffsetPct;
-                data.gridPriceOffsetClampToBounds = gpClamp;
                 showMenu = true;
                 break;
             case '4':
@@ -1012,7 +1008,6 @@ async function promptBotData(base = {}) {
         gridPrice: data.gridPrice,
         gridPriceOffsetPct: data.gridPriceOffsetPct,
         gridPriceOffsetEnabled: data.gridPriceOffsetEnabled,
-        gridPriceOffsetClampToBounds: data.gridPriceOffsetClampToBounds,
     };
 }
 

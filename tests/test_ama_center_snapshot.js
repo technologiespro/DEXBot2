@@ -18,7 +18,6 @@ async function testSnapshotReaderExposesRawAndEffectiveCenter() {
     amaCenterPrice: 100,
     centerPrice: 101.5,
     effectiveCenterPrice: 101.5,
-    gridPriceOffsetClampToBounds: true,
     gridPriceOffsetEnabled: true,
     gridPriceOffsetPct: 1.5,
     source: 'market_adapter/price_adapter.js',
@@ -32,6 +31,7 @@ async function testSnapshotReaderExposesRawAndEffectiveCenter() {
     assert.strictEqual(snapshot.centerPrice, 101.5);
     assert.strictEqual(snapshot.effectiveCenterPrice, 101.5);
     assert.strictEqual(snapshot.gridPriceOffsetPct, 1.5);
+    assert.strictEqual(snapshot.gridPriceOffsetClampToBounds, undefined);
     assert.strictEqual(loadAmaCenterPrice(botKey), 101.5);
   } finally {
     await fs.unlink(filePath).catch(() => {});

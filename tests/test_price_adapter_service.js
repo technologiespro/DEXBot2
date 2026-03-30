@@ -448,7 +448,6 @@ async function testAmaGridPriceOffsetClampAndDisable() {
         gridPrice: 'ama',
         gridPriceOffsetPct: 5,
         gridPriceOffsetEnabled: true,
-        gridPriceOffsetClampToBounds: true,
         minPrice: 99,
         maxPrice: 101,
         incrementPercent: 0.4,

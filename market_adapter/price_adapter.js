@@ -737,7 +737,6 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
  * @param {Object} options
  * @param {number} options.gridPriceOffsetPct - Signed offset percentage applied to the AMA center
  * @param {boolean} options.gridPriceOffsetEnabled - Whether the offset is enabled at write time
- * @param {boolean} options.gridPriceOffsetClampToBounds - Whether the effective center was clamped to bounds
  * @param {number} options.effectiveCenterPrice - Precomputed effective center price
  */
 function writeBotAmaCenter(botKey, amaPrice, options = {}) {
@@ -747,7 +746,6 @@ function writeBotAmaCenter(botKey, amaPrice, options = {}) {
         const tmpPath = `${filePath}.tmp`;
         const gridPriceOffsetPct = Number(options.gridPriceOffsetPct || 0);
         const gridPriceOffsetEnabled = options.gridPriceOffsetEnabled !== false;
-        const gridPriceOffsetClampToBounds = options.gridPriceOffsetClampToBounds !== false;
         const effectiveCenterPrice = Number(options.effectiveCenterPrice);
         const centerPriceRaw = Number.isFinite(effectiveCenterPrice) && effectiveCenterPrice > 0
             ? effectiveCenterPrice
@@ -759,7 +757,6 @@ function writeBotAmaCenter(botKey, amaPrice, options = {}) {
             effectiveCenterPrice: centerPrice,
             gridPriceOffsetPct: Number.isFinite(gridPriceOffsetPct) ? gridPriceOffsetPct : 0,
             gridPriceOffsetEnabled,
-            gridPriceOffsetClampToBounds,
             updatedAt: new Date().toISOString(),
             source: 'market_adapter/price_adapter.js',
         };
@@ -814,7 +811,6 @@ function writeCenterSnapshot(state) {
             effectiveCenterPrice: v.effectiveCenterPrice,
             gridPriceOffsetPct: v.gridPriceOffsetPct,
             gridPriceOffsetEnabled: v.gridPriceOffsetEnabled,
-            gridPriceOffsetClampToBounds: v.gridPriceOffsetClampToBounds,
             lastGridResetAt: v.lastGridResetAt,
             lastAmaPrice: v.lastAmaPrice,
             lastDeltaPercent: v.lastDeltaPercent,
