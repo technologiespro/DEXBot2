@@ -182,7 +182,20 @@ function resolveBotQuoteRef(bot = {}) {
   return bot.assetBId || bot.assetB || null;
 }
 
-async function isEligibleBot(bot, policy, market) {
+async function resolveQuoteAsset(quoteRef, market) {
+  if (!quoteRef) {
+    return null;
+  }
+  if (quoteRef === 'BTS') {
+    return { symbol: 'BTS' };
+  }
+  if (market && typeof market.getAsset === 'function') {
+    return market.getAsset(quoteRef).catch(() => null);
+  }
+  return null;
+}
+
+async function isEligibleBot(bot, policy, market, options = {}) {
   if (!bot || typeof bot !== 'object') {
     return { eligible: false, reason: 'missing_bot' };
   }
@@ -197,22 +210,28 @@ async function isEligibleBot(bot, policy, market) {
       return { eligible: false, reason: 'missing_quote_asset' };
     }
 
-    if (quoteRef === 'BTS') {
-      return { eligible: true, reason: null };
-    }
-
-    if (market && typeof market.getAsset === 'function') {
-      const quoteAsset = await market.getAsset(quoteRef).catch(() => null);
-      if (!quoteAsset || quoteAsset.symbol !== 'BTS') {
-        return { eligible: false, reason: 'quote_asset_not_bts' };
-      }
-    } else {
+    const quoteAsset = await resolveQuoteAsset(quoteRef, market);
+    if (!quoteAsset) {
       return { eligible: false, reason: 'unable_to_verify_quote_asset' };
+    }
+    if (quoteAsset.symbol !== 'BTS') {
+      return { eligible: false, reason: 'quote_asset_not_bts' };
     }
   }
 
   if (!resolveBotMarketRef(bot)) {
     return { eligible: false, reason: 'missing_market_asset' };
+  }
+
+  if (policy.requireBtsQuote === false) {
+    const quoteRef = resolveBotQuoteRef(bot);
+    const quoteAsset = await resolveQuoteAsset(quoteRef, market);
+    const quoteSymbol = quoteAsset?.symbol || quoteRef || null;
+    const supportsNonBtsQuotes = options.supportsNonBtsQuotes === true;
+
+    if (quoteSymbol && quoteSymbol !== 'BTS' && !supportsNonBtsQuotes) {
+      return { eligible: false, reason: 'trend_source_requires_bts_quote' };
+    }
   }
 
   return { eligible: true, reason: null };
@@ -249,6 +268,8 @@ function createDynamicWeightService(deps = {}) {
   const fetchTrendInputFn = deps.fetchTrendInput || fetchTrendInput;
   const computeDynamicWeightsFn = deps.computeDynamicWeights || computeDynamicWeights;
   const TrendAnalyzerClass = deps.TrendAnalyzerClass || TrendAnalyzer;
+  const supportsNonBtsQuotes = deps.supportsNonBtsQuotes === true
+    || (deps.supportsNonBtsQuotes !== false && fetchTrendInputFn !== fetchTrendInput);
   const policyDefaults = normalizePolicy(deps.policy || {});
   const analyzerCache = createAnalyzerCache();
   const applyLocks = new Map();
@@ -364,7 +385,9 @@ function createDynamicWeightService(deps = {}) {
     });
 
     const currentWeights = normalizeWeightDistribution(selectedBot?.weightDistribution);
-    const eligibility = await isEligibleBot(selectedBot, policy, market);
+    const eligibility = await isEligibleBot(selectedBot, policy, market, {
+      supportsNonBtsQuotes
+    });
     if (!eligibility.eligible) {
       return {
         applied: false,
@@ -386,7 +409,12 @@ function createDynamicWeightService(deps = {}) {
     }
 
     const marketRef = resolveBotMarketRef(selectedBot);
-    const trendInput = await fetchTrendInputFn(marketRef);
+    const trendInput = await fetchTrendInputFn(marketRef, {
+      bot: clone(selectedBot),
+      marketRef,
+      quoteRef: resolveBotQuoteRef(selectedBot),
+      requireBtsQuote: policy.requireBtsQuote
+    });
     const analyzer = analyzerCache.get(selectedBot.botKey || marketRef, policy.analyzerConfig, TrendAnalyzerClass);
     const analysis = analyzer.update(trendInput.marketPrice, trendInput.feedPrice);
 

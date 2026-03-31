@@ -3,7 +3,7 @@ const path = require('path');
 const { PositionManager, DEFAULT_STATE_PATH } = require('./position_manager');
 const { waitForConnected } = require('./bitshares_client');
 
-const DEFAULT_HEALTH_PATH = path.join(process.cwd(), 'data', 'watcher-health.json');
+const DEFAULT_HEALTH_PATH = path.resolve(__dirname, '..', 'data', 'watcher-health.json');
 const DEFAULT_MAX_CONSECUTIVE_FAILURES = 5;
 
 function clone(value) {

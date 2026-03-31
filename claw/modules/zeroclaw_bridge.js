@@ -31,7 +31,10 @@ function describeZeroClawBridge(options = {}) {
 }
 
 function runZeroClawCommand(command, options = {}) {
-  return runClawCommand(command, options);
+  return runClawCommand(command, {
+    ...options,
+    runtimeName: options.runtimeName || 'zeroclaw'
+  });
 }
 
 module.exports = {

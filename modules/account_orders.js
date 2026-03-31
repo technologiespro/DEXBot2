@@ -94,7 +94,9 @@ function createBotKey(bot, index) {
     ? bot.name
     : bot && bot.assetA && bot.assetB
       ? `${bot.assetA}/${bot.assetB}`
-      : `bot-${index}`;
+      : bot && bot.assetAId && bot.assetBId
+        ? `${bot.assetAId}/${bot.assetBId}`
+        : `bot-${index}`;
   return `${sanitizeKey(identifier)}-${index}`;
 }
 

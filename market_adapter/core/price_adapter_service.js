@@ -70,7 +70,7 @@ function createPriceAdapterService(deps = {}) {
     }
 
     async function processBot(bot, state, cfg, contextCache, hooks = {}) {
-        if (!bot.assetA || !bot.assetB) {
+        if ((!bot.assetA && !bot.assetAId) || (!bot.assetB && !bot.assetBId)) {
             return { ok: false, reason: 'missing asset pair' };
         }
 
@@ -215,19 +215,28 @@ function createPriceAdapterService(deps = {}) {
             const offsetChanged = offsetPctChanged && effectiveCenterMoved;
 
             if (!Number.isFinite(centerPrice) || centerPrice <= 0) {
-                // First run: record the effective center as the delta-comparison baseline.
-                // Also persist the effective center so initializeGrid() can read it via
-                // loadAmaCenterPrice() on first reset.
-                botState.centerPrice = Number.isFinite(effectiveCenterPrice) && effectiveCenterPrice > 0 ? effectiveCenterPrice : referencePrice;
-                botState.amaCenterPrice = amaPrice;
-                botState.gridPriceOffsetPct = gridPriceOffsetPct;
-                botState.lastGridResetAt = nowIso;
+                // First run: persist the effective center before advancing the in-memory baseline.
+                // The order engine reads the snapshot file directly, so a failed write must leave
+                // the baseline unset to force a retry on the next cycle.
+                const bootstrapCenterPrice = Number.isFinite(effectiveCenterPrice) && effectiveCenterPrice > 0
+                    ? effectiveCenterPrice
+                    : referencePrice;
+                let amaCenterPersisted = true;
                 if (typeof writeBotGridPriceCenter === 'function') {
-                    writeBotGridPriceCenter(bot.botKey, referencePrice, {
+                    amaCenterPersisted = writeBotGridPriceCenter(bot.botKey, referencePrice, {
                         amaCenterPrice: amaPrice,
                         gridPriceOffsetPct,
-                        effectiveCenterPrice: botState.centerPrice,
-                    });
+                        effectiveCenterPrice: bootstrapCenterPrice,
+                    }) !== false;
+                }
+
+                if (amaCenterPersisted) {
+                    botState.centerPrice = bootstrapCenterPrice;
+                    botState.amaCenterPrice = amaPrice;
+                    botState.gridPriceOffsetPct = gridPriceOffsetPct;
+                    botState.lastGridResetAt = nowIso;
+                } else {
+                    triggerSuppressedReason = 'ama_center_persist_failed';
                 }
             } else {
                 deltaPercent = Math.abs((effectiveCenterPrice - centerPrice) / centerPrice) * 100;

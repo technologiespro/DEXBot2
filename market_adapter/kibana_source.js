@@ -83,7 +83,7 @@ function normalizePoolId(id) {
  * @param {number}      intervalSeconds
  * @param {string|null} poolId          - full pool ID e.g. '1.19.133', or null for any pool
  */
-function buildQuery(soldAssetId, lookbackHours, intervalSeconds, poolId = null, timeRange = null) {
+function buildQuery(soldAssetId, lookbackHours, intervalSeconds, poolId = null, timeRange = null, receivedAssetId = null) {
     const rangeValue = timeRange
         ? { gte: timeRange.gte, lte: timeRange.lte }
         : { gte: `now-${lookbackHours}h`, lte: 'now' };
@@ -96,6 +96,10 @@ function buildQuery(soldAssetId, lookbackHours, intervalSeconds, poolId = null, 
 
     if (poolId) {
         filters.push({ term: { 'operation_history.op_object.pool.keyword': poolId } });
+    }
+
+    if (receivedAssetId) {
+        filters.push({ term: { 'operation_history.op_object.min_to_receive.asset_id.keyword': receivedAssetId } });
     }
 
     return {
@@ -215,9 +219,9 @@ async function discoverPoolAssets(poolId, config = {}) {
  * @param {number}  receivedPrecision
  * @param {Object}  config
  */
-async function getLpCandles(poolId, soldAssetId, soldPrecision, receivedPrecision, config = {}) {
+async function getLpCandles(poolId, soldAssetId, soldPrecision, receivedPrecision, config = {}, receivedAssetId = null) {
     const cfg     = { ...DEFAULT_CONFIG, ...config };
-    const query   = buildQuery(soldAssetId, cfg.lookbackHours, cfg.intervalSeconds, poolId, cfg.timeRange ?? null);
+    const query   = buildQuery(soldAssetId, cfg.lookbackHours, cfg.intervalSeconds, poolId, cfg.timeRange ?? null, receivedAssetId);
     const result  = await kibanaSearch(cfg, query);
     const buckets = result.aggregations?.by_time?.buckets ?? [];
     return bucketsToCandles(buckets, soldPrecision, receivedPrecision);
@@ -240,9 +244,14 @@ async function getLpCandlesForPool(poolId, assetA, assetB, config = {}) {
     const cfg = { ...DEFAULT_CONFIG, ...config };
     const fullId = normalizePoolId(poolId);
 
+    // When poolId is null (any-pool path), filter on the counterpart asset
+    // to avoid mixing swaps from unrelated pools.
+    const pairScopeA = fullId ? null : assetB.id;
+    const pairScopeB = fullId ? null : assetA.id;
+
     const [candlesAtoB, candlesBtoARaw] = await Promise.all([
-        getLpCandles(fullId, assetA.id, assetA.precision, assetB.precision, cfg),
-        getLpCandles(fullId, assetB.id, assetB.precision, assetA.precision, cfg),
+        getLpCandles(fullId, assetA.id, assetA.precision, assetB.precision, cfg, pairScopeA),
+        getLpCandles(fullId, assetB.id, assetB.precision, assetA.precision, cfg, pairScopeB),
     ]);
 
     // Invert B→A candles: price was A-per-B → convert to B-per-A

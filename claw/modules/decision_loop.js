@@ -35,11 +35,19 @@ function getTrendAnalyzer() {
  * Persists across loop iterations so KAMA state accumulates.
  */
 const analyzers = new Map();
+const analyzerConfigs = new Map();
+
+function configChanged(mpaSymbol, config) {
+  const prev = analyzerConfigs.get(mpaSymbol);
+  if (!prev) return true;
+  return JSON.stringify(prev) !== JSON.stringify(config);
+}
 
 function getOrCreateAnalyzer(mpaSymbol, config = {}) {
-  if (!analyzers.has(mpaSymbol)) {
+  if (!analyzers.has(mpaSymbol) || configChanged(mpaSymbol, config)) {
     const TA = getTrendAnalyzer();
     analyzers.set(mpaSymbol, new TA(config));
+    analyzerConfigs.set(mpaSymbol, JSON.parse(JSON.stringify(config)));
   }
   return analyzers.get(mpaSymbol);
 }
@@ -162,6 +170,7 @@ function buildSummary(assessments) {
  */
 function resetAnalyzers() {
   analyzers.clear();
+  analyzerConfigs.clear();
 }
 
 module.exports = {

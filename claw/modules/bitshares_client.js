@@ -1,4 +1,5 @@
 const BitSharesLib = require('btsdex');
+require('../../modules/btsdex_event_patch');
 const { TIMING } = require('../../modules/constants');
 
 const DEFAULT_TIMEOUT_MS = TIMING.CONNECTION_TIMEOUT_MS;

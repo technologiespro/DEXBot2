@@ -1,30 +1,65 @@
+const bitsharesClient = require('./modules/bitshares_client');
+const chainActions = require('./modules/chain_actions');
+const chainBroadcast = require('./modules/chain_broadcast');
+const chainQueries = require('./modules/chain_queries');
+const clawBridge = require('./modules/claw_bridge');
+const clawCatalog = require('./modules/claw_catalog');
+const clawInfra = require('./modules/claw_infra');
+const clawManifest = require('./modules/claw_manifest');
+const clawRuntimeMatrix = require('./modules/claw_runtime_matrix');
+const clawSkillMd = require('./modules/claw_skill_md');
+const decisionLoop = require('./modules/decision_loop');
+const dexbotBridge = require('./modules/dexbot_bridge');
+const dexbotCredentialClient = require('./modules/dexbot_credential_client');
+const dexbotProfiles = require('./modules/dexbot_profiles');
+const dynamicWeightService = require('./modules/dynamic_weight_service');
+const feedPriceSource = require('./modules/feed_price_source');
+const honestEcosystem = require('./modules/honest_ecosystem');
+const kibanaPriceSource = require('./modules/kibana_price_source');
+const liquidityPools = require('./modules/liquidity_pools');
+const positionDiscovery = require('./modules/position_discovery');
+const positionHealth = require('./modules/position_health');
+const positionManager = require('./modules/position_manager');
+const positionManagerWatch = require('./modules/position_manager_watch');
+const shortMpaStrategy = require('./modules/short_mpa_strategy');
+const zeroclawBridge = require('./modules/zeroclaw_bridge');
+const zeroclawCatalog = require('./modules/zeroclaw_catalog');
+const zeroclawManifest = require('./modules/zeroclaw_manifest');
+const zeroclawSkill = require('./modules/zeroclaw_skill');
+
 module.exports = {
-  ...require('./modules/bitshares_client'),
-  ...require('./modules/chain_actions'),
-  ...require('./modules/chain_broadcast'),
-  ...require('./modules/chain_queries'),
-  ...require('./modules/claw_bridge'),
-  ...require('./modules/claw_catalog'),
-  ...require('./modules/claw_infra'),
-  ...require('./modules/claw_manifest'),
-  ...require('./modules/claw_runtime_matrix'),
-  ...require('./modules/claw_skill_md'),
-  ...require('./modules/decision_loop'),
-  ...require('./modules/dexbot_bridge'),
-  ...require('./modules/dexbot_credential_client'),
-  ...require('./modules/dexbot_profiles'),
-  ...require('./modules/dynamic_weight_service'),
-  ...require('./modules/feed_price_source'),
-  ...require('./modules/honest_ecosystem'),
-  ...require('./modules/kibana_price_source'),
-  ...require('./modules/liquidity_pools'),
-  ...require('./modules/position_discovery'),
-  ...require('./modules/position_health'),
-  ...require('./modules/position_manager'),
-  ...require('./modules/position_manager_watch'),
-  ...require('./modules/short_mpa_strategy'),
-  ...require('./modules/zeroclaw_bridge'),
-  ...require('./modules/zeroclaw_catalog'),
-  ...require('./modules/zeroclaw_manifest'),
-  ...require('./modules/zeroclaw_skill'),
+  ...bitsharesClient,
+  ...chainActions,
+  ...chainBroadcast,
+  ...chainQueries,
+  ...clawBridge,
+  ...clawCatalog,
+  ...clawInfra,
+  ...clawManifest,
+  ...clawRuntimeMatrix,
+  ...clawSkillMd,
+  ...decisionLoop,
+  ...dexbotBridge,
+  ...dexbotCredentialClient,
+  ...dexbotProfiles,
+  ...dynamicWeightService,
+  ...feedPriceSource,
+  ...honestEcosystem,
+  ...kibanaPriceSource,
+  ...liquidityPools,
+  ...positionDiscovery,
+  ...positionHealth,
+  ...positionManager,
+  ...positionManagerWatch,
+  ...shortMpaStrategy,
+  ...zeroclawBridge,
+  ...zeroclawCatalog,
+  ...zeroclawManifest,
+  ...zeroclawSkill,
+
+  // Disambiguate root exports that would otherwise be overwritten by spread order.
+  describeZeroClawBridge: zeroclawManifest.describeZeroClawBridge,
+  describeZeroClawRuntimeBridge: zeroclawBridge.describeZeroClawBridge,
+  resolveAccountName: chainQueries.resolveAccountName,
+  resolveSigningAccountName: chainBroadcast.resolveAccountName
 };

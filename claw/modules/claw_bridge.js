@@ -58,7 +58,9 @@ function getProfileContextRef(options = {}) {
 
 function createClawBridge(options = {}) {
   const sanitizedOptions = stripPrivateKey(options);
-  const runtimeName = sanitizedOptions.runtime?.name || 'claw-bridge';
+  const runtimeName = sanitizedOptions.runtimeName
+    || sanitizedOptions.runtime?.name
+    || 'claw-bridge';
 
   return createClawInfrastructure({
     ...sanitizedOptions,

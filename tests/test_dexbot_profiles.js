@@ -6,7 +6,9 @@ const os = require('os');
 const path = require('path');
 
 const {
+  createBotKey,
   createDexbotProfileAdapter,
+  matchBotIdentifier,
   normalizeBotEntries,
   writeJsonFileAtomic,
 } = require('../claw/modules/dexbot_profiles');
@@ -140,8 +142,37 @@ async function testConcurrentUpdateBotSettingsPreservesBothPatches() {
   assert.strictEqual(written.bots[1].gridPriceOffsetPct, 0.2, 'second concurrent patch should persist');
 }
 
+function testCreateBotKeyFallsBackToAssetIds() {
+  const key = createBotKey({ assetAId: '1.3.1', assetBId: '1.3.0' }, 0);
+  assert.ok(key.includes('1-3-1'), `botKey should contain sanitized assetAId, got: ${key}`);
+  assert.ok(key.includes('1-3-0'), `botKey should contain sanitized assetBId, got: ${key}`);
+
+  // Symbol fields still take precedence
+  const symKey = createBotKey({ assetA: 'IOB.XRP', assetB: 'BTS', assetAId: '1.3.1', assetBId: '1.3.0' }, 0);
+  assert.ok(symKey.includes('iob'), `symbol-based key should take precedence, got: ${symKey}`);
+}
+
+function testMatchBotIdentifierHandlesIdOnlyBots() {
+  const bot = normalizeBotEntries([{ assetAId: '1.3.1', assetBId: '1.3.0' }])[0];
+
+  // String pair match with IDs
+  assert.strictEqual(matchBotIdentifier(bot, '1.3.1/1.3.0'), true, 'should match ID pair string');
+  assert.strictEqual(matchBotIdentifier(bot, '1.3.1/1.3.999'), false, 'should not match wrong ID');
+
+  // Object match with IDs
+  assert.strictEqual(matchBotIdentifier(bot, { assetAId: '1.3.1', assetBId: '1.3.0' }), true, 'should match ID object');
+  assert.strictEqual(matchBotIdentifier(bot, { assetAId: '1.3.1', assetBId: '1.3.999' }), false, 'should not match wrong ID object');
+
+  // Mixed bot with both symbols and IDs
+  const mixedBot = normalizeBotEntries([{ assetA: 'IOB.XRP', assetB: 'BTS', assetAId: '1.3.1', assetBId: '1.3.0' }])[0];
+  assert.strictEqual(matchBotIdentifier(mixedBot, 'IOB.XRP/BTS'), true, 'symbol pair should still work');
+  assert.strictEqual(matchBotIdentifier(mixedBot, '1.3.1/1.3.0'), true, 'ID pair should also work for mixed bot');
+}
+
 async function main() {
   testNormalizeAcceptsAssetIdAliases();
+  testCreateBotKeyFallsBackToAssetIds();
+  testMatchBotIdentifierHandlesIdOnlyBots();
   await testAtomicWriteFailsFastWhenLockCannotBeAcquired();
   await testUpdateBotSettingsPreservesSingleObjectFormat();
   await testConcurrentUpdateBotSettingsPreservesBothPatches();

@@ -253,6 +253,30 @@ GRID_LIMITS: {
 
 ---
 
+## Bootstrap Center Persistence
+
+On the **first cycle** for a bot (when no `centerPrice` baseline exists yet), the price adapter must persist the initial AMA center to disk before advancing the in-memory baseline. This ordering prevents a dangerous split where the order engine reads stale or missing snapshot data while the adapter believes it succeeded.
+
+### How It Works
+
+1. `processBot()` detects the bootstrap case (`centerPrice` is not yet set).
+2. It calls `writeBotGridPriceCenter(botKey, referencePrice, { amaCenterPrice, gridPriceOffsetPct, effectiveCenterPrice })`.
+3. **If the write succeeds** (returns anything other than `false`): the in-memory baseline (`centerPrice`, `amaCenterPrice`, `gridPriceOffsetPct`, `lastGridResetAt`) is set. No recalculation trigger is created during bootstrap — the bot enters normal delta-comparison behavior on subsequent cycles.
+4. **If the write fails** (returns `false`): the in-memory baseline is left unset, `triggerSuppressedReason` is set to `ama_center_persist_failed`, and no recalculation trigger is written. The next cycle will retry the bootstrap from scratch.
+
+### Debugging
+
+**Bootstrap persistence failure:**
+```
+triggerSuppressedReason: 'ama_center_persist_failed'
+```
+
+If this appears repeatedly, check:
+- disk space and write permissions on the state directory
+- whether `writeBotGridPriceCenter` is correctly wired in the service deps
+
+---
+
 ## Interaction Between Mechanisms
 
 ### Independence

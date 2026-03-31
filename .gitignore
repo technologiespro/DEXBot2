@@ -44,3 +44,6 @@ dashboard/target/
 # Market adapter runtime/user-specific artifacts
 market_adapter/data/
 market_adapter/state/
+
+# Claw runtime/user-specific artifacts
+claw/data/

@@ -15,6 +15,10 @@ const {
   runPositionManagerWatch
 } = require('./position_manager_watch');
 
+const CLAW_ROOT = path.resolve(__dirname, '..');
+const DEFAULT_DATA_DIR = path.join(CLAW_ROOT, 'data');
+const DEFAULT_STATE_DIR = path.join(DEFAULT_DATA_DIR, 'state');
+
 function clone(value) {
   if (value === undefined) {
     return undefined;
@@ -23,7 +27,7 @@ function clone(value) {
 }
 
 function createRuntimeContext(options = {}) {
-  const dataDir = options.dataDir || path.join(process.cwd(), 'data');
+  const dataDir = options.dataDir || DEFAULT_DATA_DIR;
   const stateDir = options.stateDir || path.join(dataDir, 'state');
 
   return {
@@ -42,7 +46,7 @@ function createRuntimeContext(options = {}) {
 }
 
 function createStateStore(options = {}) {
-  const dataDir = options.dataDir || path.join(process.cwd(), 'data');
+  const dataDir = options.dataDir || DEFAULT_DATA_DIR;
   const stateDir = options.stateDir || path.join(dataDir, 'state');
   const filePath = options.filePath || path.join(stateDir, 'claw-state.json');
   const defaultValue = clone(options.defaultValue);
@@ -298,6 +302,8 @@ function createClawInfrastructure(options = {}) {
 }
 
 module.exports = {
+  DEFAULT_DATA_DIR,
+  DEFAULT_STATE_DIR,
   createBitsharesClient,
   createClawInfrastructure,
   createCredentialClient,

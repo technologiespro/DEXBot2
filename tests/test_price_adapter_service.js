@@ -309,6 +309,77 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
     assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'center price should not advance when trigger is suppressed');
 }
 
+async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
+    let triggerWrites = 0;
+
+    const service = createPriceAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [1700000000000, 100, 100, 100, 100, 1],
+                [1700003600000, 101, 101, 101, 101, 1],
+            ],
+        }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 1,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaPrice: () => 103,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-bootstrap.trigger';
+        },
+        writeBotGridPriceCenter: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-bootstrap',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    const state = { bots: {} };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should still complete on bootstrap persistence failure');
+    assert.strictEqual(result.triggered, false, 'bootstrap persistence failure should not produce a trigger');
+    assert.strictEqual(result.triggerSuppressedReason, 'ama_center_persist_failed', 'bootstrap failure should be reported');
+    assert.strictEqual(triggerWrites, 0, 'trigger file must not be written during bootstrap persistence failure');
+    assert.strictEqual(state.bots['xrp-bts-bootstrap'].centerPrice, undefined, 'bootstrap baseline should remain unset so the next cycle retries');
+    assert.strictEqual(state.bots['xrp-bts-bootstrap'].lastGridResetAt, undefined, 'bootstrap state should not pretend a reset happened');
+}
+
 async function testGridPriceOffsetTriggersRecenter() {
     let triggerWrites = 0;
     let writeArgs = null;
@@ -849,11 +920,73 @@ async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
     assert.strictEqual(savedPayload.meta.unresolvedGapCount, 1, 'saved payload should retain unresolved gap count');
 }
 
+async function testIdOnlyBotIsNotRejected() {
+    const service = createPriceAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [1700000000000, 100, 100, 100, 100, 1],
+                [1700003600000, 101, 101, 101, 101, 1],
+            ],
+        }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 1,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaPrice: () => 103,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.id-bot.trigger',
+        writeBotGridPriceCenter: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    // Bot with only assetAId/assetBId (no assetA/assetB symbols)
+    const bot = {
+        name: 'ID-Only-Bot',
+        botKey: 'id-only-bot-0',
+        assetAId: '1.3.1',
+        assetBId: '1.3.0',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    const state = { bots: {} };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+    assert.strictEqual(result.ok, true, 'ID-only bot should not be rejected by processBot');
+    assert.notStrictEqual(result.reason, 'missing asset pair', 'should not fail with missing asset pair');
+}
+
 async function run() {
     await testTriggerHookCalledOnThreshold();
+    await testIdOnlyBotIsNotRejected();
     await testBootstrapFallsBackWhenKibanaIsEmpty();
     await testAmaGridPriceIsCaseInsensitive();
     await testAmaTriggerSuppressedWhenCenterPersistFails();
+    await testBootstrapCenterDoesNotAdvanceWhenPersistFails();
     await testGridPriceOffsetTriggersRecenter();
     await testGridPriceOffsetRespectsDeltaThreshold();
     await testGridPriceOffsetClampAndDisable();

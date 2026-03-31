@@ -747,6 +747,105 @@ async function testRequireConfirmedTrendBlocksWeightUpdates() {
   assert.strictEqual(updateCalled, false);
 }
 
+async function testNonBtsQuoteRequiresCompatibleTrendSource() {
+  let fetchCalls = 0;
+
+  const service = createDynamicWeightService({
+    fetchTrendInput: async () => {
+      fetchCalls += 1;
+      return {
+        feedPrice: 1,
+        marketPrice: 1.1,
+        premium: 10,
+        publicationTime: '2026-01-01T00:00:00Z'
+      };
+    },
+    market: {
+      getAsset: async (ref) => (ref === 'USD' ? { symbol: 'USD' } : null)
+    },
+    supportsNonBtsQuotes: false,
+    profiles: {
+      updateBotSettings: async () => {
+        throw new Error('should not be called');
+      },
+      writeTrigger: async () => {
+        throw new Error('should not be called');
+      }
+    },
+    TrendAnalyzerClass: FakeTrendAnalyzer
+  });
+
+  const preview = await service.evaluateSelectedBot({
+    active: true,
+    assetA: 'HONEST.USD',
+    assetB: 'USD',
+    botKey: 'non-bts-unsupported',
+    weightDistribution: { buy: 0.5, sell: 0.5 }
+  }, {
+    policy: {
+      enabled: true,
+      requireBtsQuote: false
+    }
+  });
+
+  assert.strictEqual(preview.eligible, false);
+  assert.strictEqual(preview.reason, 'trend_source_requires_bts_quote');
+  assert.strictEqual(fetchCalls, 0, 'incompatible bots should be rejected before trend fetch');
+}
+
+async function testCustomTrendSourceCanHandleNonBtsQuotes() {
+  let fetchArgs = null;
+
+  const service = createDynamicWeightService({
+    computeDynamicWeights: () => ({
+      buy: 0.4,
+      profile: 'mountain_valley',
+      sell: 0.9
+    }),
+    fetchTrendInput: async (marketRef, context) => {
+      fetchArgs = { marketRef, context };
+      return {
+        feedPrice: 1,
+        marketPrice: 1.1,
+        premium: 10,
+        publicationTime: '2026-01-01T00:00:00Z'
+      };
+    },
+    market: {
+      getAsset: async (ref) => (ref === 'USD' ? { symbol: 'USD' } : null)
+    },
+    profiles: {
+      updateBotSettings: async () => {
+        throw new Error('should not be called');
+      },
+      writeTrigger: async () => {
+        throw new Error('should not be called');
+      }
+    },
+    TrendAnalyzerClass: FakeTrendAnalyzer
+  });
+
+  const preview = await service.evaluateSelectedBot({
+    active: true,
+    assetA: 'HONEST.USD',
+    assetB: 'USD',
+    botKey: 'non-bts-supported',
+    weightDistribution: { buy: 0.5, sell: 0.5 }
+  }, {
+    policy: {
+      cooldownMs: 0,
+      enabled: true,
+      requireBtsQuote: false
+    }
+  });
+
+  assert.strictEqual(preview.eligible, true);
+  assert.strictEqual(preview.reason, 'preview_only');
+  assert.strictEqual(fetchArgs.marketRef, 'HONEST.USD');
+  assert.strictEqual(fetchArgs.context.quoteRef, 'USD');
+  assert.strictEqual(fetchArgs.context.requireBtsQuote, false);
+}
+
 async function testConcurrentAppliesPreserveAllBotState() {
   const state = {};
   let updateQueue = Promise.resolve();
@@ -830,6 +929,8 @@ async function main() {
   await testNeutralTrendRespectsAllowNeutralUpdateFlag();
   await testNeutralOffsetResetRemainsAvailableWhenNeutralWeightsAreDisabled();
   await testRequireConfirmedTrendBlocksWeightUpdates();
+  await testNonBtsQuoteRequiresCompatibleTrendSource();
+  await testCustomTrendSourceCanHandleNonBtsQuotes();
   await testConcurrentAppliesPreserveAllBotState();
   console.log('dynamic weight service tests passed');
 }

@@ -40,7 +40,9 @@ function createBotKey(bot, index) {
     ? bot.name
     : bot && bot.assetA && bot.assetB
       ? `${bot.assetA}/${bot.assetB}`
-      : `bot-${index}`;
+      : bot && bot.assetAId && bot.assetBId
+        ? `${bot.assetAId}/${bot.assetBId}`
+        : `bot-${index}`;
   return `${sanitizeKey(identifier)}-${index}`;
 }
 
@@ -287,6 +289,13 @@ function matchBotIdentifier(bot, identifier) {
     if (identifier.assetA && identifier.assetB && bot.assetA === identifier.assetA && bot.assetB === identifier.assetB) {
       return true;
     }
+    if (identifier.assetAId && identifier.assetBId) {
+      const botAId = bot.assetAId || null;
+      const botBId = bot.assetBId || null;
+      if (botAId === identifier.assetAId && botBId === identifier.assetBId) {
+        return true;
+      }
+    }
     return false;
   }
 
@@ -299,8 +308,22 @@ function matchBotIdentifier(bot, identifier) {
     return true;
   }
 
-  if (`${bot.assetA}/${bot.assetB}` === value) {
+  if (bot.assetA && bot.assetB && `${bot.assetA}/${bot.assetB}` === value) {
     return true;
+  }
+
+  if (bot.assetAId && bot.assetBId && `${bot.assetAId}/${bot.assetBId}` === value) {
+    return true;
+  }
+
+  // Cross-match: identifier may use IDs while bot has symbols, or vice versa
+  const [pairA, pairB] = value.includes('/') ? value.split('/', 2) : [null, null];
+  if (pairA && pairB) {
+    const botA = bot.assetA || bot.assetAId || null;
+    const botB = bot.assetB || bot.assetBId || null;
+    if (botA && botB && pairA === botA && pairB === botB) {
+      return true;
+    }
   }
 
   return sanitizeKey(bot.name) === sanitizeKey(value);
@@ -597,6 +620,7 @@ module.exports = {
   createDexbotProfileAdapter,
   buildClawProfileContext,
   loadDexbotProfileBundle,
+  matchBotIdentifier,
   normalizeBotEntries,
   readTriggerFile,
   resolveProfilesDir,

@@ -1,7 +1,65 @@
 const assert = require('assert');
+const Module = require('module');
+const path = require('path');
 
 function clearModule(modulePath) {
   delete require.cache[modulePath];
+}
+
+async function testClawBitsharesClientLoadsEventPatchAndDetectsExistingConnection() {
+  const clawBitsharesPath = require.resolve('../claw/modules/bitshares_client');
+  const originalLoad = Module._load;
+  let patchLoaded = false;
+
+  Module._load = function(request, parent, isMain) {
+    if (request === 'btsdex' && parent?.filename === clawBitsharesPath) {
+      return {
+        subscribe(event, callback) {
+          if (event === 'connected') {
+            callback();
+          }
+        }
+      };
+    }
+
+    if (request === '../../modules/btsdex_event_patch' && parent?.filename === clawBitsharesPath) {
+      patchLoaded = true;
+      return { patched: true };
+    }
+
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  try {
+    clearModule(clawBitsharesPath);
+    const clawBitshares = require('../claw/modules/bitshares_client');
+
+    await clawBitshares.waitForConnected(5);
+
+    assert.strictEqual(patchLoaded, true, 'claw BitShares client should load the shared reconnect patch');
+    assert.strictEqual(clawBitshares.isConnected(), true, 'connected callback should immediately mark the shared client ready');
+    assert.throws(() => clawBitshares.createAccountClient('', 'wif'), /accountName is required/);
+    assert.throws(() => clawBitshares.createAccountClient('alice', ''), /privateKey is required/);
+  } finally {
+    Module._load = originalLoad;
+    clearModule(clawBitsharesPath);
+  }
+}
+
+function testClawRootExportsAvoidSilentCollisions() {
+  const clawIndexPath = require.resolve('../claw');
+  clearModule(clawIndexPath);
+
+  const claw = require('../claw');
+  const manifest = claw.describeZeroClawBridge();
+
+  assert.strictEqual(typeof claw.resolveSigningAccountName, 'function');
+  assert.strictEqual(claw.resolveSigningAccountName({ accountName: 'alice' }), 'alice');
+  assert.strictEqual(typeof claw.resolveAccountName, 'function');
+  assert.strictEqual(claw.resolveAccountName('alice') instanceof Promise, true);
+  assert.strictEqual(manifest.options.runtimeName, 'zeroclaw');
+  assert.strictEqual(manifest.commandExamples.some((example) => example.includes('zeroclaw_bridge.js')), true);
+  assert.strictEqual(typeof claw.describeZeroClawRuntimeBridge, 'function');
 }
 
 function testZeroClawSkillQuotesPayloadPlaceholders() {
@@ -199,10 +257,259 @@ async function testDecisionLoopReusesAnalyzerStateForDuplicateMarkets() {
   clearModule(trendAnalyzerPath);
 }
 
+async function testDecisionLoopReplacesAnalyzerOnConfigChange() {
+  const decisionLoopPath = require.resolve('../claw/modules/decision_loop');
+  const discoveryPath = require.resolve('../claw/modules/position_discovery');
+  const healthPath = require.resolve('../claw/modules/position_health');
+  const feedPriceSourcePath = require.resolve('../claw/modules/feed_price_source');
+  const trendAnalyzerPath = require.resolve('../analysis/trend_detection/trend_analyzer');
+  let constructionCount = 0;
+
+  class ConfigTrackingAnalyzer {
+    constructor(config) {
+      constructionCount += 1;
+      this.config = config;
+    }
+
+    update(marketPrice, feedPrice) {
+      return { confidence: 50, isReady: true, trend: 'NEUTRAL' };
+    }
+
+    getAnalysis() {
+      return { confidence: 50, isReady: true, premium: { percent: 0 }, trend: 'NEUTRAL' };
+    }
+  }
+
+  require.cache[discoveryPath] = {
+    id: discoveryPath, filename: discoveryPath, loaded: true,
+    exports: {
+      discoverPositions: async () => ([
+        { id: 'pos-1', market: 'HONEST.USD/BTS', mpaSymbol: 'HONEST.USD', onChain: { debtAmount: 5 } }
+      ])
+    }
+  };
+  require.cache[healthPath] = {
+    id: healthPath, filename: healthPath, loaded: true,
+    exports: { assessPosition: (position, trendSignal) => ({ actions: [], positionId: position.id, trend: trendSignal }) }
+  };
+  require.cache[feedPriceSourcePath] = {
+    id: feedPriceSourcePath, filename: feedPriceSourcePath, loaded: true,
+    exports: { fetchTrendInput: async () => ({ feedPrice: 100, marketPrice: 95, premium: -5 }) }
+  };
+  require.cache[trendAnalyzerPath] = {
+    id: trendAnalyzerPath, filename: trendAnalyzerPath, loaded: true,
+    exports: { TrendAnalyzer: ConfigTrackingAnalyzer }
+  };
+  clearModule(decisionLoopPath);
+
+  const { evaluate, resetAnalyzers } = require('../claw/modules/decision_loop');
+
+  await evaluate('alice', { analyzerConfig: { kamaPeriod: 10 } });
+  assert.strictEqual(constructionCount, 1, 'first evaluate should create one analyzer');
+
+  await evaluate('alice', { analyzerConfig: { kamaPeriod: 10 } });
+  assert.strictEqual(constructionCount, 1, 'same config should reuse the cached analyzer');
+
+  await evaluate('alice', { analyzerConfig: { kamaPeriod: 20 } });
+  assert.strictEqual(constructionCount, 2, 'changed config should replace the analyzer');
+
+  resetAnalyzers();
+  clearModule(decisionLoopPath);
+  clearModule(discoveryPath);
+  clearModule(healthPath);
+  clearModule(feedPriceSourcePath);
+  clearModule(trendAnalyzerPath);
+}
+
+async function testPositionManagerEntryExposesSellPriceInBts() {
+  const positionManagerPath = require.resolve('../claw/modules/position_manager');
+  const chainQueriesPath = require.resolve('../claw/modules/chain_queries');
+
+  require.cache[chainQueriesPath] = {
+    id: chainQueriesPath, filename: chainQueriesPath, loaded: true,
+    exports: {
+      getAsset: async (sym) => ({ id: `1.3.${sym.length}`, symbol: sym, precision: 5, bitasset_data_id: '2.4.1' }),
+      getBackingAsset: async () => ({ id: '1.3.0', symbol: 'BTS', precision: 5 }),
+      getBitassetData: async () => ({
+        asset_id: '1.3.999',
+        options: { short_backing_asset: '1.3.0' }
+      }),
+      dbCall: async () => null,
+      waitForConnected: async () => {}
+    }
+  };
+
+  clearModule(positionManagerPath);
+  const { PositionManager } = require('../claw/modules/position_manager');
+
+  const savedState = {};
+  const pm = new PositionManager({
+    loadState: async () => savedState.data || { positions: [] },
+    saveState: async (state) => { savedState.data = state; }
+  });
+
+  const position = await pm.createShortPosition({
+    accountName: 'alice',
+    mpaAsset: 'HONEST.USD',
+    debtAmount: 10,
+    collateralAmount: 25000,
+    sellPriceInBts: 1000
+  });
+
+  assert.strictEqual(position.entry.sellPriceInBts, 1000, 'entry must expose sellPriceInBts for openShort');
+  assert.strictEqual(position.entry.priceInBts, 1000, 'entry must also have generic priceInBts from createOrderTracking');
+
+  clearModule(positionManagerPath);
+  clearModule(chainQueriesPath);
+}
+
+function testClawBridgeRespectsRuntimeNameOption() {
+  const clawBridgePath = require.resolve('../claw/modules/claw_bridge');
+  const clawInfraPath = require.resolve('../claw/modules/claw_infra');
+
+  let capturedOptions = null;
+  require.cache[clawInfraPath] = {
+    id: clawInfraPath, filename: clawInfraPath, loaded: true,
+    exports: {
+      createClawInfrastructure: (opts) => {
+        capturedOptions = opts;
+        return {
+          runtime: { name: opts.runtime?.name || 'claw-bridge' },
+          profiles: {},
+          market: {}
+        };
+      }
+    }
+  };
+
+  clearModule(clawBridgePath);
+  const { createClawBridge } = require('../claw/modules/claw_bridge');
+
+  createClawBridge({ runtimeName: 'openclaw' });
+  assert.strictEqual(capturedOptions.runtime.name, 'openclaw', 'runtimeName option should propagate to runtime.name');
+
+  createClawBridge({ runtime: { name: 'picoclaw' } });
+  assert.strictEqual(capturedOptions.runtime.name, 'picoclaw', 'runtime.name should still work directly');
+
+  createClawBridge({});
+  assert.strictEqual(capturedOptions.runtime.name, 'claw-bridge', 'should fall back to claw-bridge');
+
+  clearModule(clawBridgePath);
+  clearModule(clawInfraPath);
+}
+
+function testAccountOrdersBotKeyFallsBackToAssetIds() {
+  const { createBotKey } = require('../modules/account_orders');
+
+  const idOnlyBot = { assetAId: '1.3.1', assetBId: '1.3.0' };
+  const key = createBotKey(idOnlyBot, 0);
+  assert.ok(key.includes('1-3-1'), `account_orders botKey should derive from assetAId, got: ${key}`);
+  assert.ok(key.includes('1-3-0'), `account_orders botKey should include assetBId, got: ${key}`);
+
+  // Symbol fields still take precedence
+  const symBot = { assetA: 'IOB.XRP', assetB: 'BTS', assetAId: '1.3.1', assetBId: '1.3.0' };
+  const symKey = createBotKey(symBot, 0);
+  assert.ok(symKey.includes('iob'), `symbol-based key should take precedence, got: ${symKey}`);
+  assert.ok(!symKey.includes('1-3-1'), `symbol key should not include asset ID, got: ${symKey}`);
+
+  // Aligns with claw's createBotKey
+  const clawProfiles = require('../claw/modules/dexbot_profiles');
+  const clawKey = clawProfiles.createBotKey(idOnlyBot, 0);
+  assert.strictEqual(key, clawKey, `account_orders and claw botKey must match for same input, got: ${key} vs ${clawKey}`);
+}
+
+function testZeroClawCommandInjectsRuntimeName() {
+  const zeroclawBridgePath = require.resolve('../claw/modules/zeroclaw_bridge');
+  const clawBridgePath = require.resolve('../claw/modules/claw_bridge');
+  const clawInfraPath = require.resolve('../claw/modules/claw_infra');
+
+  let capturedOptions = null;
+  require.cache[clawInfraPath] = {
+    id: clawInfraPath, filename: clawInfraPath, loaded: true,
+    exports: {
+      createClawInfrastructure: (opts) => {
+        capturedOptions = opts;
+        return {
+          runtime: { name: opts.runtime?.name || 'claw-bridge', accountName: null },
+          profiles: {},
+          market: {}
+        };
+      }
+    }
+  };
+
+  clearModule(clawBridgePath);
+  clearModule(zeroclawBridgePath);
+
+  const { runZeroClawCommand } = require('../claw/modules/zeroclaw_bridge');
+  const result = runZeroClawCommand('runtime', {});
+
+  assert.strictEqual(capturedOptions.runtime.name, 'zeroclaw', 'runZeroClawCommand should inject zeroclaw as runtimeName');
+
+  clearModule(zeroclawBridgePath);
+  clearModule(clawBridgePath);
+  clearModule(clawInfraPath);
+}
+
+function testBuildQueryScopesAnyPoolByReceivedAsset() {
+  const { buildQuery } = require('../market_adapter/kibana_source');
+
+  // With poolId: no received asset filter needed
+  const poolScoped = buildQuery('1.3.0', 100, 3600, '1.19.133');
+  const poolFilters = poolScoped.query.bool.filter;
+  assert.ok(
+    poolFilters.some((f) => f.term?.['operation_history.op_object.pool.keyword'] === '1.19.133'),
+    'pool-scoped query should filter by pool'
+  );
+  assert.ok(
+    !poolFilters.some((f) => f.term?.['operation_history.op_object.min_to_receive.asset_id.keyword']),
+    'pool-scoped query should not add receivedAssetId filter'
+  );
+
+  // Without poolId but with receivedAssetId: must scope by counterpart
+  const pairScoped = buildQuery('1.3.0', 100, 3600, null, null, '1.3.1');
+  const pairFilters = pairScoped.query.bool.filter;
+  assert.ok(
+    !pairFilters.some((f) => f.term?.['operation_history.op_object.pool.keyword']),
+    'any-pool query should not have pool filter'
+  );
+  assert.ok(
+    pairFilters.some((f) => f.term?.['operation_history.op_object.min_to_receive.asset_id.keyword'] === '1.3.1'),
+    'any-pool query should filter by received asset ID'
+  );
+}
+
+function testClawDefaultDataPathsStayInsideClawFolder() {
+  const clawDataDir = path.join(__dirname, '..', 'claw', 'data');
+  const clawStateDir = path.join(clawDataDir, 'state');
+  const clawInfra = require('../claw/modules/claw_infra');
+  const { DEFAULT_STATE_PATH } = require('../claw/modules/position_manager');
+  const { DEFAULT_HEALTH_PATH } = require('../claw/modules/position_manager_watch');
+
+  assert.strictEqual(DEFAULT_STATE_PATH, path.join(clawDataDir, 'positions.json'));
+  assert.strictEqual(DEFAULT_HEALTH_PATH, path.join(clawDataDir, 'watcher-health.json'));
+
+  const runtime = clawInfra.createRuntimeContext();
+  assert.strictEqual(runtime.dataDir, clawDataDir);
+  assert.strictEqual(runtime.stateDir, clawStateDir);
+
+  const stateStore = clawInfra.createStateStore();
+  assert.strictEqual(stateStore.filePath, path.join(clawStateDir, 'claw-state.json'));
+}
+
 async function main() {
+  await testClawBitsharesClientLoadsEventPatchAndDetectsExistingConnection();
+  testClawRootExportsAvoidSilentCollisions();
   testZeroClawSkillQuotesPayloadPlaceholders();
   testLiquidityPoolWrapperInjectsSharedBitSharesClient();
   await testDecisionLoopReusesAnalyzerStateForDuplicateMarkets();
+  await testDecisionLoopReplacesAnalyzerOnConfigChange();
+  await testPositionManagerEntryExposesSellPriceInBts();
+  testClawBridgeRespectsRuntimeNameOption();
+  testZeroClawCommandInjectsRuntimeName();
+  testAccountOrdersBotKeyFallsBackToAssetIds();
+  testBuildQueryScopesAnyPoolByReceivedAsset();
+  testClawDefaultDataPathsStayInsideClawFolder();
   console.log('claw regression tests passed');
 }
 

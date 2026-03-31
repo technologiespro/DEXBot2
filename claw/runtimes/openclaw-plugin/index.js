@@ -20,7 +20,7 @@ export default definePluginEntry({
         description: `[${tool.risk}] ${tool.description}`,
         parameters: tool.inputSchema,
         async execute(_id, params) {
-          const result = await runClawCommand(tool.command, params || {});
+          const result = await runClawCommand(tool.command, { ...params, runtimeName: 'openclaw' });
           return {
             content: [
               {

@@ -20,7 +20,7 @@ function getBlockchainToFloat() {
   return loadDexbotOrderUtils().blockchainToFloat;
 }
 
-const DEFAULT_STATE_PATH = path.join(process.cwd(), 'data', 'positions.json');
+const DEFAULT_STATE_PATH = path.resolve(__dirname, '..', 'data', 'positions.json');
 const STRATEGY_NAME = 'short-mpa-bts';
 
 function clone(value) {
@@ -431,6 +431,7 @@ class PositionManager {
       },
       entry: {
         expectedBtsProceeds: debtAmount * sellPriceInBts,
+        sellPriceInBts,
         ...createOrderTracking({
           priceInBts: sellPriceInBts,
           receiveAsset: toTrackedAsset(backingAsset),
