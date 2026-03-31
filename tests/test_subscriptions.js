@@ -1,8 +1,17 @@
-const orders = require('../modules/chain_orders');
-
 console.log('Testing listenForFills subscribe/unsubscribe behavior');
 
+const RUN_LIVE_TEST = process.env.RUN_LIVE_BITSHARES_TESTS === '1';
+
 (async () => {
+    if (!RUN_LIVE_TEST) {
+        console.log('Skipping live listenForFills subscription test.');
+        console.log('Set RUN_LIVE_BITSHARES_TESTS=1 to run it explicitly.');
+        process.exit(0);
+        return;
+    }
+
+    const orders = require('../modules/chain_orders');
+
     try {
         // subscribe twice for same account id
         // prefer account selected from profiles/bots.json (preferredAccount) for test consistency

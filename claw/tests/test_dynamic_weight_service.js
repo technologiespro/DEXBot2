@@ -4,7 +4,7 @@ const assert = require('assert');
 const {
   DEFAULT_DYNAMIC_WEIGHT_POLICY,
   createDynamicWeightService
-} = require('../claw/modules/dynamic_weight_service');
+} = require('../modules/dynamic_weight_service');
 
 class FakeTrendAnalyzer {
   constructor() {

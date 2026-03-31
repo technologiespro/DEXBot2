@@ -6,6 +6,23 @@ const { OrderManager } = require('../modules/order/manager');
 const { WorkingGrid } = require('../modules/order/working_grid');
 const { ORDER_TYPES, ORDER_STATES, COW_ACTIONS } = require('../modules/constants');
 
+let testsComplete = false;
+
+process.on('unhandledRejection', (reason) => {
+    const isPostTestWsErrorEvent = testsComplete &&
+        reason &&
+        reason.type === 'error' &&
+        reason.error &&
+        typeof reason.error === 'object';
+
+    if (isPostTestWsErrorEvent) {
+        return;
+    }
+
+    console.error('Test failed:', reason);
+    process.exit(1);
+});
+
 function createOrder(id, overrides = {}) {
     return {
         id,
@@ -536,14 +553,6 @@ run().catch(err => {
     console.error('Test failed:', err);
     process.exitCode = 1;
 }).finally(() => {
-    try {
-        const bsModule = require('../modules/bitshares_client');
-        const BitShares = bsModule?.BitShares;
-        if (BitShares?.ws?.isConnected && typeof BitShares.disconnect === 'function') {
-            BitShares.disconnect();
-        }
-    } catch (_) {
-        // noop
-    }
+    testsComplete = true;
     setTimeout(() => process.exit(process.exitCode || 0), 20);
 });

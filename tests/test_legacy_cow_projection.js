@@ -3,6 +3,24 @@ const assert = require('assert');
 const DEXBot = require('../modules/dexbot_class');
 const { ORDER_TYPES, ORDER_STATES, COW_ACTIONS } = require('../modules/constants');
 
+let testsComplete = false;
+
+process.on('unhandledRejection', (reason) => {
+    const isPostTestWsErrorEvent = testsComplete &&
+        reason &&
+        reason.type === 'error' &&
+        reason.error &&
+        typeof reason.error === 'object';
+
+    if (isPostTestWsErrorEvent) {
+        return;
+    }
+
+    console.error('✗ Legacy COW projection tests failed');
+    console.error(reason);
+    process.exit(1);
+});
+
 async function testLegacyProjectionIntoWorkingGrid() {
     const bot = new DEXBot({
         botKey: 'test_legacy_cow_projection',
@@ -148,14 +166,6 @@ run().catch((err) => {
     console.error(err);
     process.exitCode = 1;
 }).finally(() => {
-    try {
-        const bsModule = require('../modules/bitshares_client');
-        const BitShares = bsModule?.BitShares;
-        if (BitShares?.ws?.isConnected && typeof BitShares.disconnect === 'function') {
-            BitShares.disconnect();
-        }
-    } catch (_) {
-        // noop
-    }
+    testsComplete = true;
     setTimeout(() => process.exit(process.exitCode || 0), 20);
 });

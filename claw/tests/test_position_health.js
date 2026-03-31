@@ -24,7 +24,7 @@ const {
   debtForTargetCr,
   planCrAdjustment,
   trendWeight,
-} = require('../position_health');
+} = require('../modules/position_health');
 
 // --- classifyCrZone ---
 

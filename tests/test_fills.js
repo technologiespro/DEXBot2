@@ -1,6 +1,15 @@
+console.log('Starting test for listening to filled orders...');
+
+const RUN_LIVE_TEST = process.env.RUN_LIVE_BITSHARES_TESTS === '1';
+
+if (!RUN_LIVE_TEST) {
+    console.log('Skipping live fill-listener test.');
+    console.log('Set RUN_LIVE_BITSHARES_TESTS=1 to run it explicitly.');
+    process.exit(0);
+}
+
 const { listenForFills } = require('../modules/chain_orders');
 
-console.log('Starting test for listening to filled orders...');
 let TEST_ACCOUNT = '1.2.1624309';
 try {
     const live = require('../profiles/bots.json');

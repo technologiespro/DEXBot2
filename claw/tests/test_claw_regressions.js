@@ -7,7 +7,7 @@ function clearModule(modulePath) {
 }
 
 async function testClawBitsharesClientLoadsEventPatchAndDetectsExistingConnection() {
-  const clawBitsharesPath = require.resolve('../claw/modules/bitshares_client');
+  const clawBitsharesPath = require.resolve('../modules/bitshares_client');
   const originalLoad = Module._load;
   let patchLoaded = false;
 
@@ -32,7 +32,7 @@ async function testClawBitsharesClientLoadsEventPatchAndDetectsExistingConnectio
 
   try {
     clearModule(clawBitsharesPath);
-    const clawBitshares = require('../claw/modules/bitshares_client');
+    const clawBitshares = require('../modules/bitshares_client');
 
     await clawBitshares.waitForConnected(5);
 
@@ -47,10 +47,10 @@ async function testClawBitsharesClientLoadsEventPatchAndDetectsExistingConnectio
 }
 
 function testClawRootExportsAvoidSilentCollisions() {
-  const clawIndexPath = require.resolve('../claw');
+  const clawIndexPath = require.resolve('..');
   clearModule(clawIndexPath);
 
-  const claw = require('../claw');
+  const claw = require('..');
   const manifest = claw.describeZeroClawBridge();
 
   assert.strictEqual(typeof claw.resolveSigningAccountName, 'function');
@@ -63,15 +63,15 @@ function testClawRootExportsAvoidSilentCollisions() {
 }
 
 function testZeroClawSkillQuotesPayloadPlaceholders() {
-  const skillPath = require.resolve('../claw/modules/zeroclaw_skill');
-  const catalogPath = require.resolve('../claw/modules/zeroclaw_catalog');
-  const manifestPath = require.resolve('../claw/modules/zeroclaw_manifest');
+  const skillPath = require.resolve('../modules/zeroclaw_skill');
+  const catalogPath = require.resolve('../modules/zeroclaw_catalog');
+  const manifestPath = require.resolve('../modules/zeroclaw_manifest');
   clearModule(catalogPath);
   clearModule(manifestPath);
   clearModule(skillPath);
-  const { buildZeroClawCommandExamples, listZeroClawCommandNames } = require('../claw/modules/zeroclaw_catalog');
-  const { describeZeroClawBridge } = require('../claw/modules/zeroclaw_manifest');
-  const { buildZeroClawSkillToml } = require('../claw/modules/zeroclaw_skill');
+  const { buildZeroClawCommandExamples, listZeroClawCommandNames } = require('../modules/zeroclaw_catalog');
+  const { describeZeroClawBridge } = require('../modules/zeroclaw_manifest');
+  const { buildZeroClawSkillToml } = require('../modules/zeroclaw_skill');
 
   const toml = buildZeroClawSkillToml({
     profileRoot: '/tmp/profile root',
@@ -101,9 +101,9 @@ function testZeroClawSkillQuotesPayloadPlaceholders() {
 }
 
 function testLiquidityPoolWrapperInjectsSharedBitSharesClient() {
-  const bitsharesPath = require.resolve('../claw/modules/bitshares_client');
-  const dexbotBridgePath = require.resolve('../claw/modules/dexbot_bridge');
-  const liquidityPoolsPath = require.resolve('../claw/modules/liquidity_pools');
+  const bitsharesPath = require.resolve('../modules/bitshares_client');
+  const dexbotBridgePath = require.resolve('../modules/dexbot_bridge');
+  const liquidityPoolsPath = require.resolve('../modules/liquidity_pools');
   const sharedBitShares = { name: 'shared-bitshares-client' };
   let capturedPoolArgs = null;
   let capturedPriceArgs = null;
@@ -139,7 +139,7 @@ function testLiquidityPoolWrapperInjectsSharedBitSharesClient() {
   };
   clearModule(liquidityPoolsPath);
 
-  const liquidityPools = require('../claw/modules/liquidity_pools');
+  const liquidityPools = require('../modules/liquidity_pools');
 
   assert.strictEqual(liquidityPools.derivePoolPrice('HONEST.USD', 'BTS'), 'pool-price');
   assert.deepStrictEqual(
@@ -161,11 +161,11 @@ function testLiquidityPoolWrapperInjectsSharedBitSharesClient() {
 }
 
 async function testDecisionLoopReusesAnalyzerStateForDuplicateMarkets() {
-  const decisionLoopPath = require.resolve('../claw/modules/decision_loop');
-  const discoveryPath = require.resolve('../claw/modules/position_discovery');
-  const healthPath = require.resolve('../claw/modules/position_health');
-  const feedPriceSourcePath = require.resolve('../claw/modules/feed_price_source');
-  const trendAnalyzerPath = require.resolve('../analysis/trend_detection/trend_analyzer');
+  const decisionLoopPath = require.resolve('../modules/decision_loop');
+  const discoveryPath = require.resolve('../modules/position_discovery');
+  const healthPath = require.resolve('../modules/position_health');
+  const feedPriceSourcePath = require.resolve('../modules/feed_price_source');
+  const trendAnalyzerPath = require.resolve('../../analysis/trend_detection/trend_analyzer');
   let trendFetchCount = 0;
 
   class FakeTrendAnalyzer {
@@ -240,7 +240,7 @@ async function testDecisionLoopReusesAnalyzerStateForDuplicateMarkets() {
   };
   clearModule(decisionLoopPath);
 
-  const { evaluate, resetAnalyzers } = require('../claw/modules/decision_loop');
+  const { evaluate, resetAnalyzers } = require('../modules/decision_loop');
   const result = await evaluate('alice');
 
   assert.strictEqual(trendFetchCount, 1, 'trend input should be fetched once per market');
@@ -258,11 +258,11 @@ async function testDecisionLoopReusesAnalyzerStateForDuplicateMarkets() {
 }
 
 async function testDecisionLoopReplacesAnalyzerOnConfigChange() {
-  const decisionLoopPath = require.resolve('../claw/modules/decision_loop');
-  const discoveryPath = require.resolve('../claw/modules/position_discovery');
-  const healthPath = require.resolve('../claw/modules/position_health');
-  const feedPriceSourcePath = require.resolve('../claw/modules/feed_price_source');
-  const trendAnalyzerPath = require.resolve('../analysis/trend_detection/trend_analyzer');
+  const decisionLoopPath = require.resolve('../modules/decision_loop');
+  const discoveryPath = require.resolve('../modules/position_discovery');
+  const healthPath = require.resolve('../modules/position_health');
+  const feedPriceSourcePath = require.resolve('../modules/feed_price_source');
+  const trendAnalyzerPath = require.resolve('../../analysis/trend_detection/trend_analyzer');
   let constructionCount = 0;
 
   class ConfigTrackingAnalyzer {
@@ -302,7 +302,7 @@ async function testDecisionLoopReplacesAnalyzerOnConfigChange() {
   };
   clearModule(decisionLoopPath);
 
-  const { evaluate, resetAnalyzers } = require('../claw/modules/decision_loop');
+  const { evaluate, resetAnalyzers } = require('../modules/decision_loop');
 
   await evaluate('alice', { analyzerConfig: { kamaPeriod: 10 } });
   assert.strictEqual(constructionCount, 1, 'first evaluate should create one analyzer');
@@ -322,8 +322,8 @@ async function testDecisionLoopReplacesAnalyzerOnConfigChange() {
 }
 
 async function testPositionManagerEntryExposesSellPriceInBts() {
-  const positionManagerPath = require.resolve('../claw/modules/position_manager');
-  const chainQueriesPath = require.resolve('../claw/modules/chain_queries');
+  const positionManagerPath = require.resolve('../modules/position_manager');
+  const chainQueriesPath = require.resolve('../modules/chain_queries');
 
   require.cache[chainQueriesPath] = {
     id: chainQueriesPath, filename: chainQueriesPath, loaded: true,
@@ -340,7 +340,7 @@ async function testPositionManagerEntryExposesSellPriceInBts() {
   };
 
   clearModule(positionManagerPath);
-  const { PositionManager } = require('../claw/modules/position_manager');
+  const { PositionManager } = require('../modules/position_manager');
 
   const savedState = {};
   const pm = new PositionManager({
@@ -364,8 +364,8 @@ async function testPositionManagerEntryExposesSellPriceInBts() {
 }
 
 function testClawBridgeRespectsRuntimeNameOption() {
-  const clawBridgePath = require.resolve('../claw/modules/claw_bridge');
-  const clawInfraPath = require.resolve('../claw/modules/claw_infra');
+  const clawBridgePath = require.resolve('../modules/claw_bridge');
+  const clawInfraPath = require.resolve('../modules/claw_infra');
 
   let capturedOptions = null;
   require.cache[clawInfraPath] = {
@@ -383,7 +383,7 @@ function testClawBridgeRespectsRuntimeNameOption() {
   };
 
   clearModule(clawBridgePath);
-  const { createClawBridge } = require('../claw/modules/claw_bridge');
+  const { createClawBridge } = require('../modules/claw_bridge');
 
   createClawBridge({ runtimeName: 'openclaw' });
   assert.strictEqual(capturedOptions.runtime.name, 'openclaw', 'runtimeName option should propagate to runtime.name');
@@ -399,7 +399,7 @@ function testClawBridgeRespectsRuntimeNameOption() {
 }
 
 function testAccountOrdersBotKeyFallsBackToAssetIds() {
-  const { createBotKey } = require('../modules/account_orders');
+  const { createBotKey } = require('../../modules/account_orders');
 
   const idOnlyBot = { assetAId: '1.3.1', assetBId: '1.3.0' };
   const key = createBotKey(idOnlyBot, 0);
@@ -413,15 +413,15 @@ function testAccountOrdersBotKeyFallsBackToAssetIds() {
   assert.ok(!symKey.includes('1-3-1'), `symbol key should not include asset ID, got: ${symKey}`);
 
   // Aligns with claw's createBotKey
-  const clawProfiles = require('../claw/modules/dexbot_profiles');
+  const clawProfiles = require('../modules/dexbot_profiles');
   const clawKey = clawProfiles.createBotKey(idOnlyBot, 0);
   assert.strictEqual(key, clawKey, `account_orders and claw botKey must match for same input, got: ${key} vs ${clawKey}`);
 }
 
 function testZeroClawCommandInjectsRuntimeName() {
-  const zeroclawBridgePath = require.resolve('../claw/modules/zeroclaw_bridge');
-  const clawBridgePath = require.resolve('../claw/modules/claw_bridge');
-  const clawInfraPath = require.resolve('../claw/modules/claw_infra');
+  const zeroclawBridgePath = require.resolve('../modules/zeroclaw_bridge');
+  const clawBridgePath = require.resolve('../modules/claw_bridge');
+  const clawInfraPath = require.resolve('../modules/claw_infra');
 
   let capturedOptions = null;
   require.cache[clawInfraPath] = {
@@ -441,7 +441,7 @@ function testZeroClawCommandInjectsRuntimeName() {
   clearModule(clawBridgePath);
   clearModule(zeroclawBridgePath);
 
-  const { runZeroClawCommand } = require('../claw/modules/zeroclaw_bridge');
+  const { runZeroClawCommand } = require('../modules/zeroclaw_bridge');
   const result = runZeroClawCommand('runtime', {});
 
   assert.strictEqual(capturedOptions.runtime.name, 'zeroclaw', 'runZeroClawCommand should inject zeroclaw as runtimeName');
@@ -452,7 +452,7 @@ function testZeroClawCommandInjectsRuntimeName() {
 }
 
 function testBuildQueryScopesAnyPoolByReceivedAsset() {
-  const { buildQuery } = require('../market_adapter/kibana_source');
+  const { buildQuery } = require('../../market_adapter/kibana_source');
 
   // With poolId: no received asset filter needed
   const poolScoped = buildQuery('1.3.0', 100, 3600, '1.19.133');
@@ -480,11 +480,11 @@ function testBuildQueryScopesAnyPoolByReceivedAsset() {
 }
 
 function testClawDefaultDataPathsStayInsideClawFolder() {
-  const clawDataDir = path.join(__dirname, '..', 'claw', 'data');
+  const clawDataDir = path.join(__dirname, '..', 'data');
   const clawStateDir = path.join(clawDataDir, 'state');
-  const clawInfra = require('../claw/modules/claw_infra');
-  const { DEFAULT_STATE_PATH } = require('../claw/modules/position_manager');
-  const { DEFAULT_HEALTH_PATH } = require('../claw/modules/position_manager_watch');
+  const clawInfra = require('../modules/claw_infra');
+  const { DEFAULT_STATE_PATH } = require('../modules/position_manager');
+  const { DEFAULT_HEALTH_PATH } = require('../modules/position_manager_watch');
 
   assert.strictEqual(DEFAULT_STATE_PATH, path.join(clawDataDir, 'positions.json'));
   assert.strictEqual(DEFAULT_HEALTH_PATH, path.join(clawDataDir, 'watcher-health.json'));

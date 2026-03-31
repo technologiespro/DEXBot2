@@ -1,7 +1,15 @@
-const orders = require('../modules/chain_orders');
+const RUN_LIVE_TEST = process.env.RUN_LIVE_BITSHARES_TESTS === '1';
 
 // Test account selection
 async function testAccountSelection() {
+    if (!RUN_LIVE_TEST) {
+        console.log('Skipping live account selection test.');
+        console.log('Set RUN_LIVE_BITSHARES_TESTS=1 to run it explicitly.');
+        return;
+    }
+
+    const orders = require('../modules/chain_orders');
+
     try {
         console.log('Testing account order read for configured account...');
         let TEST_ACCOUNT = '1.2.1074325';

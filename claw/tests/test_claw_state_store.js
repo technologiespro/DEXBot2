@@ -5,7 +5,7 @@ const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
 
-const { createStateStore } = require('../claw/modules/claw_infra');
+const { createStateStore } = require('../modules/claw_infra');
 
 async function testConcurrentUpdatesPreserveBothWrites() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'claw-state-store-'));

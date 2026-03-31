@@ -7,9 +7,9 @@ const path = require('path');
 const Module = require('module');
 
 const originalLoad = Module._load;
-const watcherModulePath = require.resolve('../claw/modules/position_manager_watch');
-const positionManagerPath = require.resolve('../claw/modules/position_manager');
-const bitsharesClientPath = require.resolve('../claw/modules/bitshares_client');
+const watcherModulePath = require.resolve('../modules/position_manager_watch');
+const positionManagerPath = require.resolve('../modules/position_manager');
+const bitsharesClientPath = require.resolve('../modules/bitshares_client');
 
 function loadWatcherModule(mockPositionManager, waitForConnected) {
   delete require.cache[watcherModulePath];
@@ -32,7 +32,7 @@ function loadWatcherModule(mockPositionManager, waitForConnected) {
   };
 
   try {
-    return require('../claw/modules/position_manager_watch');
+    return require('../modules/position_manager_watch');
   } finally {
     Module._load = originalLoad;
   }

@@ -11,7 +11,7 @@ const {
   matchBotIdentifier,
   normalizeBotEntries,
   writeJsonFileAtomic,
-} = require('../claw/modules/dexbot_profiles');
+} = require('../modules/dexbot_profiles');
 
 function createCaptureLogger() {
   const messages = [];
