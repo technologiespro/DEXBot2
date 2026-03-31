@@ -24,9 +24,13 @@ npm install btsdex
 
 - Core BitShares runtime: `modules/bitshares_client.js`, `modules/chain_queries.js`, `modules/chain_broadcast.js`, `modules/chain_actions.js`
 - Strategy and state helpers: `modules/short_mpa_strategy.js`, `modules/position_manager.js`, `modules/position_manager_watch.js`
-- DEXBot2 and Claw integration: `modules/dexbot_bridge.js`, `modules/dexbot_profiles.js`, `modules/dexbot_credential_client.js`, `modules/claw_bridge.js`, `modules/claw_catalog.js`, `modules/claw_manifest.js`, `modules/claw_skill_md.js`, `scripts/claw_bridge.js`, `scripts/claw_mcp_server.js`
+- Position health: `modules/position_health.js`, `modules/position_discovery.js`, `modules/decision_loop.js`
+- Dynamic weights: `modules/dynamic_weight_service.js`
+- Price sources: `modules/feed_price_source.js`, `modules/kibana_price_source.js`
+- DEXBot2 and Claw integration: `modules/dexbot_bridge.js`, `modules/dexbot_profiles.js`, `modules/dexbot_credential_client.js`, `modules/claw_bridge.js`, `modules/claw_catalog.js`, `modules/claw_manifest.js`, `modules/claw_skill_md.js`, `modules/claw_runtime_matrix.js`, `scripts/claw_bridge.js`, `scripts/claw_mcp_server.js`
+- ZeroClaw support: `modules/zeroclaw_bridge.js`, `modules/zeroclaw_catalog.js`, `modules/zeroclaw_manifest.js`, `modules/zeroclaw_skill.js`
 - HONEST support: `modules/honest_ecosystem.js`, `modules/liquidity_pools.js`
-- Reference docs: `docs/AI_BOT_LIBRARY_API.md`, `docs/DEXBOT2_TUNING_CHEAT_SHEET.md`
+- Reference docs: `docs/AI_BOT_LIBRARY_API.md`, `docs/DEXBOT2_TUNING_CHEAT_SHEET.md`, `docs/POSITION_HEALTH.md`, `docs/RUNTIME_COMPARISON.md`
 - Example entrypoints: `examples/connection_test.js`, `examples/short_mpa_bts_strategy.js`, `examples/position_manager_cli.js`, `examples/zeroclaw_bridge_example.js`
 
 ## Responsibility Boundary
@@ -251,12 +255,47 @@ Inspect the HONEST asset context and a requested LP pair:
 npm run example:honest-ecosystem -- HONEST.MONEY/BTS
 ```
 
+## Position Health
+
+The position health subsystem discovers on-chain debt positions, classifies collateral ratios into a 5-zone model, checks trend alignment, and recommends actions. See [docs/POSITION_HEALTH.md](docs/POSITION_HEALTH.md) for the full reference.
+
+Inspect one on-chain MPA position:
+
+```bash
+node scripts/claw_bridge.js mpa-position --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD"}'
+```
+
+The decision loop (`modules/decision_loop.js`) is exposed as a module API. Its `evaluate()` call ties discovery, trend analysis, and health assessment into a single result with prioritized actions.
+
+## Dynamic Weights
+
+Dynamic weight updates adjust `weightDistribution` and `gridPriceOffsetPct` based on trend signals. The service evaluates bot eligibility, fetches trend data, computes weight and offset changes, enforces cooldowns, and optionally writes a recalculation trigger.
+
+Inspect the default policy:
+
+```bash
+node scripts/claw_bridge.js dynamic-weight-policy
+```
+
+Preview an update without applying:
+
+```bash
+node scripts/claw_bridge.js dynamic-weight-preview --payload '{"botRef":"default"}'
+```
+
+Apply the update and write the recalc trigger:
+
+```bash
+node scripts/claw_bridge.js dynamic-weight-apply --payload '{"botRef":"default"}'
+```
+
 ## High-Level Actions
 
 The starter now includes these bot-facing actions in `modules/chain_actions.js`:
 
 - create limit orders
 - cancel limit orders
+- update limit orders
 - execute batches of operations
 - subscribe to account fill events
 - borrow MPAs

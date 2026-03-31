@@ -1,40 +1,39 @@
-# AI-Bot Infrastructure API Boundary
+# Claw Infrastructure API Boundary
 
 This document defines the boundary between:
 
 - `DEXBot2`: runtime infrastructure, BitShares connectivity, credentials, and execution substrate
-- `AI-Bot`: decision layer / library
-- `Claw`: bot executor and workflow owner
+- `Claw`: bridge layer, shared infrastructure, and workflow owner
 
 The goal is simple:
 
-- `Claw` can use `AI-Bot` for shared infrastructure
+- `Claw` provides shared infrastructure helpers and a bridge surface
 - `Claw` can talk to DEXBot2 and the blockchain directly
-- `AI-Bot` stays infrastructure-only and reusable
+- The infrastructure layer stays reusable and decision-free
 
-The current scaffold lives in [modules/claw_infra.js](modules/claw_infra.js), [modules/dexbot_profiles.js](modules/dexbot_profiles.js), and [modules/zeroclaw_bridge.js](modules/zeroclaw_bridge.js), and is exported from [index.js](index.js).
+The current scaffold lives in [../modules/claw_infra.js](../modules/claw_infra.js), [../modules/dexbot_profiles.js](../modules/dexbot_profiles.js), and [../modules/zeroclaw_bridge.js](../modules/zeroclaw_bridge.js), and is exported from [../index.js](../index.js).
 
 ## Design Rules
 
-`AI-Bot` should:
+The Claw infrastructure layer should:
 
 - provide shared runtime helpers
 - provide connection and credential adapters
 - provide configuration, logging, and state helpers
 - provide market-data and BitShares utility wrappers
 - provide order/grid math primitives only
+- expose write-capable clients only behind explicit caller intent
 - avoid process management
-- avoid credential handling
-- avoid direct blockchain writes
+- avoid exposing raw private keys or bypassing the credential daemon boundary
 - avoid owning persistent execution state
 - avoid making strategy decisions
 
-`Claw` should:
+The Claw workflow layer should:
 
 - manage lifecycle and persistence
 - place, cancel, and rebalance orders
 - talk to DEXBot2 when it needs shared runtime support
-- decide whether to apply or ignore AI-Bot recommendations
+- decide whether to apply or ignore recommendations
 
 ## Recommended Shape
 
@@ -44,15 +43,15 @@ The cleanest shape is a small library with a narrow, typed surface:
 - output: plain objects / JSON
 - no side effects unless explicitly requested
 
-Think of AI-Bot as the shared infrastructure layer that Claw builds on.
+Think of Claw's infrastructure layer as the shared foundation that the workflow layer builds on.
 
 ## ZeroClaw Compatibility
 
-ZeroClaw should use AI-Bot as a compatibility layer, not as a second signing or credential system.
+ZeroClaw should use Claw as a compatibility layer, not as a second signing or credential system.
 
-- ZeroClaw can invoke the JSON/CLI bridge in [scripts/zeroclaw_bridge.js](scripts/zeroclaw_bridge.js).
-- The manifest lives in [modules/zeroclaw_manifest.js](modules/zeroclaw_manifest.js) and is safe to query without starting the BitShares runtime.
-- AI-Bot keeps private-key access inside its existing DEXBot2 credential path.
+- ZeroClaw can invoke the JSON/CLI bridge in [../scripts/zeroclaw_bridge.js](../scripts/zeroclaw_bridge.js).
+- The manifest lives in [../modules/zeroclaw_manifest.js](../modules/zeroclaw_manifest.js) and is safe to query without starting the BitShares runtime.
+- Claw keeps private-key access inside its existing DEXBot2 credential path.
 - ZeroClaw gets read access to market, profile, HONEST, and order context, plus explicit action entrypoints when it needs to request a trade operation.
 
 The bridge surface currently includes:
@@ -69,12 +68,12 @@ The bridge surface currently includes:
 Recommended trust boundary:
 
 1. ZeroClaw sends an intent or request.
-2. AI-Bot resolves the request and, when needed, asks DEXBot2 for the signing key.
-3. DEXBot2 returns the key only to AI-Bot over the local daemon socket.
-4. AI-Bot broadcasts the operation.
+2. Claw resolves the request and, when needed, asks DEXBot2 for the signing key.
+3. DEXBot2 returns the key only to Claw over the local daemon socket.
+4. Claw broadcasts the operation.
 5. ZeroClaw never receives or stores the key.
 
-To generate the same file from AI-Bot, run:
+To generate the skill file from Claw, run:
 
 ```bash
 npm run zeroclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.zeroclaw/workspace/skills/ai-bots/SKILL.toml
@@ -84,26 +83,26 @@ npm run zeroclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.
 
 ### `RuntimeContext`
 
-The shared runtime wiring AI-Bot can assemble for Claw.
+The shared runtime wiring Claw assembles for its consumers.
 
 ```ts
 type RuntimeContext = {
+  accountName: string | null;
+  createdAt: string;
+  cwd: string;
+  dataDir: string;
   logger: {
     info: (...args: unknown[]) => void;
     warn: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
     debug?: (...args: unknown[]) => void;
   };
+  name: string;
+  profileRoot: string | null;
+  readyFilePath: string;
+  socketPath: string;
+  stateDir: string;
   config: Record<string, unknown>;
-  paths: {
-    dataDir: string;
-    stateDir: string;
-    cacheDir?: string;
-  };
-  connections?: {
-    bitshares?: unknown;
-    credentialDaemon?: unknown;
-  };
 };
 ```
 
@@ -158,15 +157,16 @@ type RuntimeOptions = {
   name: string;
   accountName?: string;
   socketPath?: string;
-  readyFile?: string;
+  readyFilePath?: string;
   dataDir?: string;
   stateDir?: string;
+  profileRoot?: string;
   logger?: unknown;
   config?: Record<string, unknown>;
 };
 ```
 
-This should be the central bootstrap helper if Claw wants a consistent runtime shape.
+This should be the central bootstrap helper for a consistent runtime shape.
 
 ### 2. `createBitsharesClient(options)`
 
@@ -175,9 +175,9 @@ Returns a read/write BitShares client wrapper.
 This helper should:
 
 - connect to BitShares
-- reuse the shared client pattern already in AI-Bot
+- reuse the shared client pattern already in Claw
 - ask the DEXBot2 credential daemon for keys when needed
-- keep key handling out of Claw
+- keep key handling out of callers
 
 ### 3. `createCredentialClient(options)`
 
@@ -256,9 +256,9 @@ Useful companion method:
 
 - `resolveHonestPairPrice(assetA, assetB, options)` for the special-case bridge plus DEXBot2 fallback pool pricing
 
-### 10. ZeroClaw command bridge
+### 10. Command bridge
 
-The bridge exposed by [modules/zeroclaw_bridge.js](modules/zeroclaw_bridge.js) supports:
+The bridge exposed by [../modules/claw_bridge.js](../modules/claw_bridge.js) supports:
 
 - `manifest`
 - `runtime`
@@ -285,25 +285,28 @@ The bridge exposed by [modules/zeroclaw_bridge.js](modules/zeroclaw_bridge.js) s
 - `build-take-profit-plan`
 - `build-close-short-plan`
 - `mpa-position`
+- `dynamic-weight-policy`
+- `dynamic-weight-preview`
+- `dynamic-weight-apply`
 
 ## Suggested Runtime Flow
 
 1. Claw collects market data and its own state.
-2. Claw asks AI-Bot to create shared runtime helpers.
+2. Claw creates shared runtime helpers via `createRuntimeContext`.
 3. Claw loads the DEXBot2 profile bundle through the adapter.
-4. Claw asks AI-Bot for HONEST and profile context helpers when needed.
+4. Claw uses HONEST and profile context helpers when needed.
 5. Claw makes all decisions.
 6. Claw executes against DEXBot2 and the blockchain.
 
 That keeps the separation clean:
 
-- AI-Bot provides the foundation
-- Claw decides
+- Claw infrastructure provides the foundation
+- Claw workflow decides
 - DEXBot2 supports runtime execution
 
 ## Practical Policy
 
-AI-Bot should be allowed to provide:
+The Claw infrastructure layer should be allowed to provide:
 
 - connection wrappers
 - credential daemon access
@@ -311,8 +314,9 @@ AI-Bot should be allowed to provide:
 - market-data adapters
 - order and grid math helpers
 - validation and normalization utilities
+- explicit execution adapters that still keep key material behind DEXBot2
 
-AI-Bot should not be responsible for:
+The Claw infrastructure layer should not be responsible for:
 
 - strategy decisions
 - signing policy
@@ -320,7 +324,7 @@ AI-Bot should not be responsible for:
 - PM2 lifecycle
 - bot orchestration
 - persisting execution decisions
-- broadcasting blockchain transactions
+- autonomous trade execution without explicit caller intent
 
 ## Minimal JSON Contract
 
@@ -368,8 +372,8 @@ If you want the simplest possible integration, use one request and one response 
 
 If you want a simple division of responsibility:
 
-- `AI-Bot` provides the common foundation
-- `Claw` makes trading decisions
+- `Claw` infrastructure provides the common foundation
+- `Claw` workflow makes trading decisions
 - `DEXBot2` handles the runtime substrate and credentials
 
 That gives you a reusable infrastructure layer without coupling it to any single executor.

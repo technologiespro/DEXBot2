@@ -9,6 +9,7 @@
 'use strict';
 
 const { computeDynamicWeights } = require('../../market_adapter/dynamic_weights');
+const { DEFAULT_CONFIG } = require('../../modules/constants');
 
 const DEFAULT_PRICE_RANGE_RATIO = 3.0;
 
@@ -280,8 +281,12 @@ function roundNumber(value, digits = 3) {
 
 function normalizeWeightDistribution(weightDistribution) {
   return {
-    sell: Number.isFinite(Number(weightDistribution?.sell)) ? Number(weightDistribution.sell) : 0.5,
-    buy: Number.isFinite(Number(weightDistribution?.buy)) ? Number(weightDistribution.buy) : 0.5
+    sell: Number.isFinite(Number(weightDistribution?.sell))
+      ? Number(weightDistribution.sell)
+      : DEFAULT_CONFIG.weightDistribution.sell,
+    buy: Number.isFinite(Number(weightDistribution?.buy))
+      ? Number(weightDistribution.buy)
+      : DEFAULT_CONFIG.weightDistribution.buy
   };
 }
 

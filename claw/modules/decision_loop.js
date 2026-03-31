@@ -97,7 +97,7 @@ async function evaluate(accountName, options = {}) {
       // Reuse last trend signal for same market
       const analyzer = analyzers.get(mpa);
       if (analyzer) {
-        const snapshot = analyzer.getSnapshot();
+        const snapshot = analyzer.getAnalysis();
         trendSignal = {
           trend: snapshot.trend,
           confidence: snapshot.confidence,

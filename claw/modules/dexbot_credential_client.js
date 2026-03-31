@@ -1,11 +1,12 @@
 const fs = require('fs');
 const net = require('net');
+const { TIMING } = require('../../modules/constants');
 
 const DEFAULT_SOCKET_PATH = process.env.DEXBOT_CRED_DAEMON_SOCKET || '/tmp/dexbot-cred-daemon.sock';
 const DEFAULT_READY_FILE = process.env.DEXBOT_CRED_DAEMON_READY_FILE || '/tmp/dexbot-cred-daemon.ready';
 const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
-const DEFAULT_WAIT_TIMEOUT_MS = 60000;
-const DEFAULT_POLL_INTERVAL_MS = 250;
+const DEFAULT_WAIT_TIMEOUT_MS = TIMING.DAEMON_STARTUP_TIMEOUT_MS;
+const DEFAULT_POLL_INTERVAL_MS = TIMING.CHECK_INTERVAL_MS;
 
 function getSocketPath(options = {}) {
   return options.socketPath || DEFAULT_SOCKET_PATH;

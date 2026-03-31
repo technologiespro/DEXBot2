@@ -3,6 +3,7 @@
 const {
   computeDynamicWeights
 } = require('../../market_adapter/dynamic_weights');
+const { DEFAULT_CONFIG } = require('../../modules/constants');
 const { fetchTrendInput } = require('./feed_price_source');
 const { TrendAnalyzer } = require('../../analysis/trend_detection/trend_analyzer');
 
@@ -109,8 +110,8 @@ function normalizePolicy(policy = {}) {
 
 function normalizeWeightDistribution(weightDistribution) {
   return {
-    sell: normalizeNumber(weightDistribution?.sell, 0.5),
-    buy: normalizeNumber(weightDistribution?.buy, 0.5)
+    sell: normalizeNumber(weightDistribution?.sell, DEFAULT_CONFIG.weightDistribution.sell),
+    buy: normalizeNumber(weightDistribution?.buy, DEFAULT_CONFIG.weightDistribution.buy)
   };
 }
 

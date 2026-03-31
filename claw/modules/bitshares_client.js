@@ -1,7 +1,8 @@
 const BitSharesLib = require('btsdex');
+const { TIMING } = require('../../modules/constants');
 
-const DEFAULT_TIMEOUT_MS = 30000;
-const DEFAULT_CHECK_INTERVAL_MS = 250;
+const DEFAULT_TIMEOUT_MS = TIMING.CONNECTION_TIMEOUT_MS;
+const DEFAULT_CHECK_INTERVAL_MS = TIMING.CHECK_INTERVAL_MS;
 
 let connected = false;
 let suppressConnectionLog = false;

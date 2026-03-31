@@ -124,6 +124,19 @@ These define the outer range of the grid.
   - above `3x` = very conservative
 - treat range ratio as a slow-moving structural setting driven by former price action, not a fast tactical knob
 
+### `gridPriceOffsetPct`
+
+This shifts the grid center price by a percentage after the reference price is resolved.
+
+- `0` means no offset (default)
+- positive values shift the center upward (bullish lean)
+- negative values shift the center downward (bearish lean)
+- the maximum magnitude is controlled by `gridPriceOffsetMaxPct` (default `0.5`)
+
+Use the offset to express a directional bias without changing the structural grid settings. The dynamic weight service can automate this based on trend signals — see the `dynamic-weight-preview` and `dynamic-weight-apply` bridge commands.
+
+The offset is an adaptive setting. It should change with market conditions, not be set once and forgotten.
+
 ### `gridPrice`
 
 This controls the reference price used when the grid is rebuilt.
