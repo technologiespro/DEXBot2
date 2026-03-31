@@ -1,6 +1,6 @@
-# BitShares JS Starter
+# Claw BitShares Bridge
 
-Minimal Node.js starter for interacting with the BitShares blockchain using `btsdex`.
+Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes.
 
 This scaffold follows the same high-level split used in DEXBot2:
 
@@ -133,10 +133,32 @@ npm run pm2:start
 
 `claw/` now targets four native runtime families:
 
-- ZeroClaw via `SKILL.toml`
-- OpenClaw via a native plugin plus optional `SKILL.md`
-- NanoBot via MCP plus `SKILL.md`
-- PicoClaw via MCP plus `SKILL.md`
+| Runtime | Native integration | Best fit | Main tradeoff |
+| --- | --- | --- | --- |
+| ZeroClaw | `SKILL.toml` skill manifest | Smallest and most constrained option | Best cold starts, but the most specialized Rust-oriented workflow |
+| OpenClaw | Native plugin plus optional `SKILL.md` | Broadest and heaviest option | Richest runtime surface, but also the highest operational complexity |
+| NanoBot | MCP plus `SKILL.md` | Smaller Python codebase with MCP integration | Easier to inspect, but slower and heavier than Go or Rust |
+| PicoClaw | MCP plus `SKILL.md` | Small Go-based option with launcher support | Great for low-cost hardware, but still evolving quickly |
+
+Practical selection guide:
+
+| If you optimize for | Best choice | Why |
+| --- | --- | --- |
+| Lowest footprint and fastest startup | ZeroClaw | Smallest surface, manifest-driven, best for static local automation |
+| Broadest assistant surface and plugin depth | OpenClaw | Richest runtime, strongest plugin model, widest ecosystem coverage |
+| Simple MCP integration with Python ergonomics | NanoBot | Easier to inspect and adapt, good for lightweight tool-driven workflows |
+| Small Go binary and low-cost hardware | PicoClaw | Good launcher support, strong fit for tiny boards and constrained Linux targets |
+
+Rule of thumb:
+
+- Choose **ZeroClaw** for the smallest and most deterministic runtime.
+- Choose **OpenClaw** for the broadest assistant platform.
+- Choose **NanoBot** for a compact Python codebase with MCP tooling.
+- Choose **PicoClaw** for a small Go runtime with launcher support.
+
+For a deeper comparison of the four alternatives, see [docs/RUNTIME_COMPARISON.md](docs/RUNTIME_COMPARISON.md).
+
+Run the commands below from the `claw/` directory.
 
 ### Shared Bridge
 
@@ -153,7 +175,9 @@ node scripts/claw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quot
 Generate the ZeroClaw skill file:
 
 ```bash
-npm run zeroclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.zeroclaw/workspace/skills/ai-bots/SKILL.toml
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+npm run zeroclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT" --output ~/.zeroclaw/workspace/skills/ai-bots/SKILL.toml
 ```
 
 ZeroClaw compatibility command surface:
@@ -173,14 +197,18 @@ node scripts/zeroclaw_bridge.js borrow-mpa --payload '{"accountName":"your-accou
 Run the MCP server over stdio:
 
 ```bash
-node scripts/claw_mcp_server.js --profile-root /home/alex/BTS/Git/DEXBot2
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+node scripts/claw_mcp_server.js --profile-root "$DEXBOT_ROOT"
 ```
 
 Generate a runtime-native `SKILL.md`:
 
 ```bash
-npm run nanobot:skill -- --profile-root /home/alex/BTS/Git/DEXBot2
-npm run picoclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+npm run nanobot:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
+npm run picoclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
 ```
 
 On a fresh PicoClaw install, make sure `agents.defaults.workspace` is configured in `config.json` or run `picoclaw onboard` before expecting workspace skills to appear.
@@ -190,14 +218,18 @@ On a fresh PicoClaw install, make sure `agents.defaults.workspace` is configured
 Install the native plugin bundle from this repository:
 
 ```bash
-openclaw plugins install -l /home/alex/BTS/Git/DEXBot2/claw
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+openclaw plugins install -l "$CLAW_ROOT"
 openclaw plugins enable bitshares-claw
 ```
 
 Generate an optional OpenClaw `SKILL.md`:
 
 ```bash
-npm run openclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+npm run openclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
 ```
 
 Available bridge and native tool surfaces include:
