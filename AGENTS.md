@@ -121,7 +121,9 @@ File: <path>
 - `credential-daemon.js` - Credential daemon
 
 ### Core Bot
-- `modules/dexbot_class.js` - Core bot class and logic
+- `modules/dexbot_class.js` - Core bot class, lifecycle orchestration, and shared runtime wiring
+- `modules/dexbot_fill_runtime.js` - Fill processing runtime and replay-safe accounting helpers
+- `modules/dexbot_maintenance_runtime.js` - Maintenance runtime for sync loops and grid checks
 - `modules/constants.js` - Centralized configuration and tuning parameters
 - `modules/bitshares_client.js` - BitShares connection and node management integration
 - `modules/node_manager.js` - Multi-node health checking and failover
@@ -138,6 +140,7 @@ File: <path>
 - `strategy.js` - Trading strategy (anchor & refill, consolidation)
 - `accounting.js` - Fee accounting and fund tracking
 - `sync_engine.js` - Blockchain synchronization
+- `processed_fill_store.js` - Processed fill dedupe persistence and batching
 - `startup_reconcile.js` - Startup order reconciliation
 - `runner.js` - Order execution runner
 - `async_lock.js` - Concurrency control

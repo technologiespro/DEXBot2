@@ -81,11 +81,14 @@ This directory contains the comprehensive technical documentation for the DEXBot
 While these docs explain the *why*, the *how* lives in the code. Key source modules:
 
 **Core Modules:**
-- **`modules/dexbot_class.js`**: Bot initialization, account setup, order placement, fill processing, and rebalancing
+- **`modules/dexbot_class.js`**: Bot initialization, account setup, lifecycle orchestration, and shared runtime wiring
+- **`modules/dexbot_fill_runtime.js`**: Fill processing, replay-safe accounting, and fill queue handling
+- **`modules/dexbot_maintenance_runtime.js`**: Open-orders sync loop, blockchain fetch loop, grid maintenance, and trigger handling
 - **`modules/order/manager.js`**: Central controller with Copy-on-Write rebalancing pattern (see [COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md))
 - **`modules/order/working_grid.js`**: COW grid wrapper enabling safe concurrent rebalancing with isolated modifications
 - **`modules/order/grid.js`**: Grid generation, sizing, divergence detection, and spread management
 - **`modules/order/accounting.js`**: Fund tracking, available balance calculation, fee deduction, and committed fund management
+- **`modules/order/processed_fill_store.js`**: Processed fill dedupe tracker and persistence batching
 - **`modules/order/strategy.js`**: Grid rebalancing, order activation, consolidation, rotation, and spread management
 - **`modules/order/sync_engine.js`**: Blockchain synchronization, fill detection, order reconciliation
 

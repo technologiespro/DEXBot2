@@ -1390,8 +1390,7 @@ Post-mortem analysis of the Feb 7 market crash (8% spike + reversal) revealed th
   - Reduces unnecessary dependencies and improves code clarity.
 
 - **Project Documentation** (commits 4a08821, d6be00b)
-  - Added `CLAUDE.md` reference file for Claude AI context tracking.
-  - Added `GEMINI.md` for project context tracking.
+  - Added `AGENTS.md` as the shared project instruction file.
   - Renamed `opencode.md` to `OPENCODE.md` for consistency with convention.
 
 ### Performance
