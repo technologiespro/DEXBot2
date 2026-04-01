@@ -8,7 +8,7 @@
 
 const assert = require('assert');
 const { OrderManager } = require('../modules/order/index.js');
-const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants.js');
+const { ORDER_TYPES, ORDER_STATES, TIMING } = require('../modules/constants.js');
 
 // Mock getAssetFees to prevent crashes during recalculateFunds
 const OrderUtils = require('../modules/order/utils/math');
@@ -214,6 +214,136 @@ async function runTests() {
         }
 
         assert.strictEqual(manager.accountTotals.sell, sellTotalBefore + rawReceives, 'Sell total should credit raw proceeds when fee lookup fails');
+    }
+
+    console.log(' - Testing manager owns processed fill tracker before bot wiring...');
+    {
+        const manager = await createManager();
+        const tracker = manager.accountant._getProcessedFillTracker();
+
+        assert.strictEqual(manager.processedFillTracker instanceof Map, true, 'OrderManager should own a shared processed fill tracker by default');
+        assert.strictEqual(tracker, manager.processedFillTracker, 'Accountant should use the manager-owned processed fill tracker');
+    }
+
+    console.log(' - Testing keyed fill accounting deduplicates duplicate credits...');
+    {
+        const manager = await createManager();
+        manager.assets = {
+            assetA: { id: '1.3.0', precision: 5 },
+            assetB: { id: '1.3.1', precision: 5 }
+        };
+
+        const sellTotalBefore = manager.accountTotals.sell;
+        const fillOp = {
+            pays: { asset_id: '1.3.1', amount: 100000 },
+            receives: { asset_id: '1.3.0', amount: 250000 }
+        };
+        const fillKey = '1.7.123:999:1.11.555';
+
+        await manager.accountant.processFillAccounting(fillOp, fillKey);
+        await manager.accountant.processFillAccounting(fillOp, fillKey);
+
+        assert.strictEqual(
+            manager.accountTotals.sell,
+            sellTotalBefore + 2.5,
+            'Duplicate keyed fill should only credit proceeds once'
+        );
+    }
+
+    console.log(' - Testing keyed fill replay stays blocked beyond burst dedupe window...');
+    {
+        const manager = await createManager();
+        manager.assets = {
+            assetA: { id: '1.3.0', precision: 5 },
+            assetB: { id: '1.3.1', precision: 5 }
+        };
+
+        const sellTotalBefore = manager.accountTotals.sell;
+        const fillOp = {
+            pays: { asset_id: '1.3.1', amount: 100000 },
+            receives: { asset_id: '1.3.0', amount: 250000 }
+        };
+        const fillKey = '1.7.123:999:1.11.556';
+        const tracker = manager.accountant._getProcessedFillTracker();
+
+        await manager.accountant.processFillAccounting(fillOp, fillKey);
+        tracker.set(fillKey, Date.now() - (TIMING.FILL_DEDUPE_WINDOW_MS + 1000));
+        await manager.accountant.processFillAccounting(fillOp, fillKey);
+
+        assert.strictEqual(
+            manager.accountTotals.sell,
+            sellTotalBefore + 2.5,
+            'Replay should stay blocked after the short burst dedupe window expires'
+        );
+    }
+
+    console.log(' - Testing invalid keyed fill does not block later valid retry...');
+    {
+        const manager = await createManager();
+        manager.assets = {
+            assetA: { id: '1.3.0', precision: 5 },
+            assetB: { id: '1.3.1', precision: 5 }
+        };
+
+        const sellTotalBefore = manager.accountTotals.sell;
+        const retryFillKey = '1.7.124:1000:1.11.556';
+
+        await manager.accountant.processFillAccounting({
+            pays: { asset_id: '1.3.1', amount: 100000 }
+        }, retryFillKey);
+
+        await manager.accountant.processFillAccounting({
+            pays: { asset_id: '1.3.1', amount: 100000 },
+            receives: { asset_id: '1.3.0', amount: 250000 }
+        }, retryFillKey);
+
+        assert.strictEqual(
+            manager.accountTotals.sell,
+            sellTotalBefore + 2.5,
+            'A no-op keyed fill attempt must not poison a later valid retry'
+        );
+    }
+
+    console.log(' - Testing keyed fill retry survives post-validation failure before tracker write...');
+    {
+        const manager = await createManager();
+        manager.assets = {
+            assetA: { id: '1.3.0', precision: 5 },
+            assetB: { id: '1.3.1', precision: 5 }
+        };
+
+        const originalAdjustTotalBalance = manager.accountant.adjustTotalBalance.bind(manager.accountant);
+        const sellTotalBefore = manager.accountTotals.sell;
+        const retryFillKey = '1.7.125:1001:1.11.557';
+        const fillOp = {
+            pays: { asset_id: '1.3.1', amount: 100000 },
+            receives: { asset_id: '1.3.0', amount: 250000 }
+        };
+
+        manager.accountant.adjustTotalBalance = () => {
+            throw new Error('forced post-validation failure');
+        };
+
+        await assert.rejects(
+            manager.accountant.processFillAccounting(fillOp, retryFillKey),
+            /forced post-validation failure/,
+            'Expected injected failure after fill validation'
+        );
+        const tracker = manager.accountant._getProcessedFillTracker();
+        assert.strictEqual(
+            tracker.has(retryFillKey),
+            false,
+            'Failed accounting attempt must not poison the fill key'
+        );
+
+        manager.accountant.adjustTotalBalance = originalAdjustTotalBalance;
+        await manager.accountant.processFillAccounting(fillOp, retryFillKey);
+
+        assert.strictEqual(
+            manager.accountTotals.sell,
+            sellTotalBefore + 2.5,
+            'Retry after post-validation failure should still credit the fill once'
+        );
     }
 
     // Test: Recovery retry cooldown and reset behavior

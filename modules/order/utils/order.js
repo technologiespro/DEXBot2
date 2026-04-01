@@ -19,6 +19,7 @@
  *   - buildCreateOrderArgs(order, assetA, assetB) - Build create order arguments
  *   - getOrderTypeFromUpdatedFlags(buyUpdated, sellUpdated) - Get type from update flags
  *   - resolveConfiguredPriceBound(value, fallback, startPrice, mode) - Resolve price bounds
+ *   - buildFillKey(fillOrParts) - Build a stable fill dedupe key
  *
  * SECTION 3: STATE TRANSITIONS (2 functions)
  *   - virtualizeOrder(order) - Convert order to VIRTUAL state
@@ -231,6 +232,24 @@ async function applyChainSizeToGridOrder(manager, gridOrder, chainSize) {
         if (typeof manager.logger.logFundsStatus === 'function') manager.logger.logFundsStatus(manager);
     }
     return updatedOrder;
+}
+
+/**
+ * Build a stable fill dedupe key.
+ * Accepts either a fill-history entry or explicit parts.
+ * Returns null if required fields are missing — callers should
+ * skip dedup rather than operate on a degraded key.
+ *
+ * @param {Object} fillOrParts - Fill entry ({ op, block_num, id }) or { orderId, blockNum, historyId }
+ * @returns {string|null} Stable key in order:block:history form, or null if fields are missing
+ */
+function buildFillKey(fillOrParts) {
+    const fillOp = fillOrParts?.op?.[1];
+    const orderId = fillOp?.order_id ?? fillOrParts?.orderId;
+    const blockNum = fillOrParts?.block_num ?? fillOrParts?.blockNum;
+    const historyId = fillOrParts?.id ?? fillOrParts?.historyId;
+    if (!orderId || blockNum == null || !historyId) return null;
+    return `${orderId}:${blockNum}:${historyId}`;
 }
 
 /**
@@ -1072,6 +1091,7 @@ module.exports = {
     parseChainOrder,
     findMatchingGridOrderByOpenOrder,
     applyChainSizeToGridOrder,
+    buildFillKey,
     correctOrderPriceOnChain,
     correctAllPriceMismatches,
     buildCreateOrderArgs,

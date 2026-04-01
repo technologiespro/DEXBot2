@@ -487,10 +487,15 @@ class AccountOrders {
    * Load processed fill IDs for a bot to prevent reprocessing fills across restarts.
    * Returns a Map of fillKey => timestamp for fills already processed.
    * @param {string} botKey - Bot identifier key
-   * @param {boolean} forceReload - If true, reload from disk to ensure fresh data
+   * @param {boolean|Object} options - Reload/filter options
    * @returns {Map} Map of fillKey => timestamp
    */
-  loadProcessedFills(botKey, forceReload = false) {
+  loadProcessedFills(botKey, options = {}) {
+    const forceReload = typeof options === 'boolean' ? options : options?.forceReload === true;
+    const minTimestamp = typeof options === 'object' && options !== null && Number.isFinite(options.minTimestamp)
+      ? options.minTimestamp
+      : null;
+
     // Optionally reload from disk to prevent using stale in-memory data
     if (forceReload) {
       this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
@@ -499,50 +504,21 @@ class AccountOrders {
     if (this.data && this.data.bots && this.data.bots[botKey]) {
       const botData = this.data.bots[botKey];
       const fills = botData.processedFills || {};
-      // Convert stored object to Map
-      const fillMap = new Map(Object.entries(fills));
-      return fillMap;
+      const entries = Object.entries(fills).filter(([, timestamp]) =>
+        minTimestamp === null || (Number.isFinite(timestamp) && timestamp >= minTimestamp)
+      );
+      return new Map(entries);
     }
     return new Map();
   }
 
   /**
-   * Add or update a processed fill record (prevents reprocessing same fills).
+   * Persist a batch of processed fill records in one locked disk write.
    * @param {string} botKey - Bot identifier key
-   * @param {string} fillKey - Unique fill identifier (e.g., "order_id:block_num:history_id")
-   * @param {number} timestamp - Timestamp when fill was processed
-   */
-  async updateProcessedFills(botKey, fillKey, timestamp) {
-    if (!botKey || !fillKey) return;
-
-    // Use AsyncLock to serialize writes
-    await this._persistenceLock.acquire(async () => {
-      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
-
-      if (!this.data || !this.data.bots || !this.data.bots[botKey]) {
-        return;
-      }
-
-      if (!this.data.bots[botKey].processedFills) {
-        this.data.bots[botKey].processedFills = {};
-      }
-
-      // Store fill with timestamp
-      this.data.bots[botKey].processedFills[fillKey] = timestamp;
-      this.data.lastUpdated = nowIso();
-      this._persist();
-    });
-  }
-
-  /**
-   * Update multiple processed fills at once (more efficient than updating one-by-one).
-   * @param {string} botKey - Bot identifier key
-   * @param {Map|Object} fills - Map or object of fillKey => timestamp
+   * @param {Map<string, number>} fills - Processed fill entries
    */
   async updateProcessedFillsBatch(botKey, fills) {
-    if (!botKey || !fills || (fills instanceof Map && fills.size === 0) || (typeof fills === 'object' && Object.keys(fills).length === 0)) {
-      return;
-    }
+    if (!botKey || !(fills instanceof Map) || fills.size === 0) return;
 
     // Use AsyncLock to serialize writes
     await this._persistenceLock.acquire(async () => {
@@ -556,16 +532,15 @@ class AccountOrders {
         this.data.bots[botKey].processedFills = {};
       }
 
-      // Merge fills
-      if (fills instanceof Map) {
-        const updatedFills = { ...(this.data.bots[botKey].processedFills || {}) };
-        for (const [key, timestamp] of fills) {
-          updatedFills[key] = timestamp;
-        }
-        this.data.bots[botKey].processedFills = updatedFills;
-      } else {
-        this.data.bots[botKey].processedFills = { ...(this.data.bots[botKey].processedFills || {}), ...fills };
+      let changed = false;
+      for (const [fillKey, timestamp] of fills) {
+        if (!fillKey) continue;
+        if (this.data.bots[botKey].processedFills[fillKey] === timestamp) continue;
+        this.data.bots[botKey].processedFills[fillKey] = timestamp;
+        changed = true;
       }
+
+      if (!changed) return;
 
       this.data.lastUpdated = nowIso();
       this._persist();

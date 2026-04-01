@@ -34,7 +34,7 @@
  *   4. TIMING - Operational timing constants
  *      SYNC_DELAY_MS, ACCOUNT_TOTALS_TIMEOUT_MS, MILLISECONDS_PER_SECOND
  *      BLOCKCHAIN_FETCH_INTERVAL_MIN, FILL_DEDUPE_WINDOW_MS
- *      FILL_CLEANUP_INTERVAL_MS, FILL_RECORD_RETENTION_MS
+ *      FILL_RECORD_RETENTION_MS
  *      LOCK_TIMEOUT_MS, SYNC_LOCK_TIMEOUT_MS
  *      CONNECTION_TIMEOUT_MS, DAEMON_STARTUP_TIMEOUT_MS
  *      RUN_LOOP_DEFAULT_MS, OPEN_ORDERS_SYNC_LOOP_ENABLED, CHECK_INTERVAL_MS
@@ -75,7 +75,7 @@
  * MAINTENANCE & MONITORING:
  *   11. MAINTENANCE - Background maintenance task configuration
  *       HEALTH_CHECK_INTERVAL_MS, PERSISTENCE_CHECK_INTERVAL_MS
- *       LOCK_CLEANUP_INTERVAL_MS, FILL_CLEANUP_INTERVAL_MS
+ *       LOCK_CLEANUP_INTERVAL_MS
  *
  *   12. NODE_MANAGEMENT - Multi-node health checking and failover configuration
  *       DEFAULT_NODES: List of BitShares nodes for redundancy
@@ -204,8 +204,9 @@ let TIMING = {
 
     // Fill processing timing
     FILL_DEDUPE_WINDOW_MS: 5000,    // 5 seconds - window for deduplicating same fill events
-    FILL_CLEANUP_INTERVAL_MS: 10000, // 10 seconds - clean old fill records (2x dedup window)
     FILL_RECORD_RETENTION_MS: 3600000, // 1 hour - how long to keep persisted fill records
+    PROCESSED_FILL_PERSIST_BATCH_MS: 250, // 250ms - coalesce processed-fill persistence writes under burst load
+    PROCESSED_FILL_PERSIST_BATCH_SIZE: 25, // Flush immediately once this many processed fills are queued
 
     // Order locking timing
     // Reduced from 30s to 10s to prevent lock-based starvation under high fill rates.

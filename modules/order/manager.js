@@ -447,6 +447,8 @@ class OrderManager {
         this._isFetchingTotals = false;
         this.ordersNeedingPriceCorrection = [];
         this.shadowOrderIds = new Map();
+        this.processedFillTracker = new Map();
+        this.processedFillStore = null;
 
         this._syncLock = new AsyncLock();
         this._fillProcessingLock = new AsyncLock();

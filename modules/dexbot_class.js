@@ -105,9 +105,14 @@ const {
     correctAllPriceMismatches,
     convertToSpreadPlaceholder,
     buildOutsideInPairGroups,
-    extractBatchOperationResults
+    extractBatchOperationResults,
+    buildFillKey
 } = require('./order/utils/order');
 const { validateOrderSize } = require('./order/utils/math');
+const {
+    ProcessedFillStore,
+    PROCESSED_FILL_PERSISTENCE_MODES
+} = require('./order/processed_fill_store');
 const {
     ORDER_STATES,
     ORDER_TYPES,
@@ -158,12 +163,21 @@ class DEXBot {
         this.manager = null;
         this.accountOrders = null;  // Will be initialized in start()
         this.triggerFile = path.join(PROFILES_DIR, `recalculate.${config.botKey}.trigger`);
-        this._recentlyProcessedFills = new Map();
+        this._recentlyQueuedFills = new Map();
         this._fillCleanupCounter = 0;  // Deterministic cleanup tracking
 
         // Time-based configuration for fill processing (from constants.TIMING)
         this._fillDedupeWindowMs = TIMING.FILL_DEDUPE_WINDOW_MS;      // Window for deduplicating same fill events
-        this._fillCleanupIntervalMs = TIMING.FILL_CLEANUP_INTERVAL_MS;  // Clean old fill records periodically
+        this._fillRecordRetentionMs = TIMING.FILL_RECORD_RETENTION_MS;  // Retain processed fill keys long enough to block replay
+        this._processedFillPersistBatchMs = TIMING.PROCESSED_FILL_PERSIST_BATCH_MS;
+        this._processedFillPersistBatchSize = TIMING.PROCESSED_FILL_PERSIST_BATCH_SIZE;
+        this._processedFillStore = new ProcessedFillStore({
+            batchMs: this._processedFillPersistBatchMs,
+            batchSize: this._processedFillPersistBatchSize,
+            warn: (message) => this._warn(message)
+        });
+        this._recentlyProcessedFills = this._processedFillStore.tracker;
+        this._pendingProcessedFillWrites = this._processedFillStore.pendingWrites;
 
         this._incomingFillQueue = [];
         this.logPrefix = options.logPrefix || '';
@@ -452,14 +466,17 @@ class DEXBot {
     async _initializeStartupState() {
         // Create AccountOrders with bot-specific file (one file per bot)
         this.accountOrders = new AccountOrders({ botKey: this.config.botKey });
+        this._processedFillStore.configure({
+            accountOrders: this.accountOrders,
+            botKey: this.config.botKey
+        });
 
         // Load persisted processed fills to prevent reprocessing after restart
-        const persistedFills = this.accountOrders.loadProcessedFills(this.config.botKey);
-        for (const [fillKey, timestamp] of persistedFills) {
-            this._recentlyProcessedFills.set(fillKey, timestamp);
-        }
-        if (persistedFills.size > 0) {
-            this._log(`Loaded ${persistedFills.size} persisted fill records to prevent reprocessing`);
+        const loadedPersistedFills = this._processedFillStore.loadPersisted({
+            minTimestamp: Date.now() - this._fillRecordRetentionMs
+        });
+        if (loadedPersistedFills > 0) {
+            this._log(`Loaded ${loadedPersistedFills} persisted fill records to prevent reprocessing`);
         }
 
         // Ensure bot metadata is properly initialized in storage BEFORE any Grid operations
@@ -476,6 +493,7 @@ class DEXBot {
             this.manager.accountId = this.accountId;
             this.manager.accountOrders = this.accountOrders;
         }
+        this._wireProcessedFillTracking();
         this.manager.startBootstrap();
 
         // Fetch account totals from blockchain at startup to initialize funds
@@ -528,6 +546,118 @@ class DEXBot {
         };
     }
 
+    _wireProcessedFillTracking() {
+        if (!this.manager) return;
+        this._processedFillStore.configure({
+            accountOrders: this.accountOrders,
+            botKey: this.config?.botKey
+        });
+
+        this._processedFillStore.mergeTracker(this.manager.processedFillTracker);
+
+        this.manager.processedFillTracker = this._recentlyProcessedFills;
+        this.manager.processedFillStore = this._processedFillStore;
+    }
+
+    async _flushProcessedFillPersistence(reason = 'manual', options = {}) {
+        this._processedFillStore.setShuttingDown(this._shuttingDown);
+        await this._processedFillStore.flush(reason, options);
+    }
+
+    _buildOrphanFillFallbackKey(fill) {
+        const fillOp = fill?.op?.[1];
+        const orderId = fillOp?.order_id;
+        const blockNum = fill?.block_num;
+        const paysAssetId = fillOp?.pays?.asset_id;
+        const paysAmount = fillOp?.pays?.amount;
+        const receivesAssetId = fillOp?.receives?.asset_id;
+        const receivesAmount = fillOp?.receives?.amount;
+        const makerRole = fillOp?.is_maker === false ? 'taker' : 'maker';
+        if (!orderId || blockNum == null || !paysAssetId || paysAmount == null || !receivesAssetId || receivesAmount == null) {
+            return null;
+        }
+        return `orphan:${orderId}:${blockNum}:${paysAssetId}:${paysAmount}:${receivesAssetId}:${receivesAmount}:${makerRole}`;
+    }
+
+    async _applyReplaySafeFillAccounting(fill, fillOp, {
+        missingKeyMessage,
+        fallbackKeyMessage,
+        replayMessage,
+        errorMessage,
+        logger = this.manager?.logger,
+        missingKeyLevel = 'warn',
+        fallbackKeyLevel = 'warn',
+        replayLevel = 'debug',
+        persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE,
+        allowOrphanFallbackKey = false
+    } = {}) {
+        let fillKey = buildFillKey(fill);
+        let usedFallbackKey = false;
+        if (!fillKey && allowOrphanFallbackKey) {
+            fillKey = this._buildOrphanFillFallbackKey(fill);
+            usedFallbackKey = Boolean(fillKey);
+            if (usedFallbackKey && fallbackKeyMessage) {
+                logger?.log?.(fallbackKeyMessage(fillOp, fill, fillKey), fallbackKeyLevel);
+            }
+        }
+        if (!fillKey) {
+            if (missingKeyMessage) {
+                logger?.log?.(missingKeyMessage(fillOp, fill), missingKeyLevel);
+            }
+            return { status: 'missing_key', fillKey: null };
+        }
+
+        try {
+            const applied = await this.manager.accountant.processFillAccounting(fillOp, fillKey, { persistenceMode });
+            if (!applied) {
+                if (replayMessage) {
+                    logger?.log?.(replayMessage(fillOp, fill, fillKey), replayLevel);
+                }
+                return { status: 'duplicate', fillKey };
+            }
+
+            return { status: 'applied', fillKey, usedFallbackKey };
+        } catch (err) {
+            if (errorMessage) {
+                logger?.log?.(errorMessage(fillOp, fill, err), 'error');
+                return { status: 'error', fillKey, error: err };
+            }
+            throw err;
+        }
+    }
+
+    async _applyReplaySafeTrackedFillAccounting(fill, fillOp, {
+        context,
+        logger = this.manager?.logger,
+        replayMessage,
+        persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
+    } = {}) {
+        return this._applyReplaySafeFillAccounting(fill, fillOp, {
+            logger,
+            missingKeyMessage: (op) => `[${context}] Missing fill history id for ${op.order_id}; deferring to open-orders sync`,
+            replayMessage,
+            errorMessage: (op, _fill, err) => `[${context}] Failed to process accounting for ${op.order_id}: ${err.message}`,
+            persistenceMode
+        });
+    }
+
+    async _applyReplaySafeOrphanFillAccounting(fill, fillOp, {
+        context,
+        logger = this.manager?.logger,
+        replayMessage,
+        persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
+    } = {}) {
+        return this._applyReplaySafeFillAccounting(fill, fillOp, {
+            logger,
+            missingKeyMessage: (op) => `[${context}] Missing fill history id and orphan fallback key for ${op.order_id}; deferring to open-orders sync`,
+            fallbackKeyMessage: (op) => `[${context}] Missing fill history id for orphan fill ${op.order_id}; using degraded orphan replay key for proceeds-only accounting`,
+            replayMessage,
+            errorMessage: (op, _fill, err) => `[${context}] Failed to process accounting for ${op.order_id}: ${err.message}`,
+            persistenceMode,
+            allowOrphanFallbackKey: true
+        });
+    }
+
     /**
      * Finalize the bot startup after account and initial grid sync are complete.
      * Consolidates common logic for start() and startWithPrivateKey().
@@ -572,6 +702,7 @@ class DEXBot {
                         // Process fills - this will place new orders on the filled slots
                         // Use normal fill processing since bootstrap is complete
                         const fills = this._incomingFillQueue.splice(0);
+                        let requiresOpenOrdersSync = false;
                         for (const fill of fills) {
                             if (!fill || fill.op?.[0] !== 4) continue;
 
@@ -583,21 +714,31 @@ class DEXBot {
                                 // CRITICAL FIX: Even if order not in grid, we must still credit the fill proceeds
                                 // This can happen when fills arrive after an order was marked VIRTUAL during sequential processing
                                  this._log(`[POST-RESET] Processing funds for unknown order ${fillOp.order_id} (not in grid but crediting proceeds)`, 'warn');
-                                 try {
-                                     await this.manager.accountant.processFillAccounting(fillOp);
-                                 } catch (accErr) {
-                                     this._log(`[POST-RESET] Failed to process accounting for ${fillOp.order_id}: ${accErr.message}`, 'error');
-                                }
+                                 const accountingResult = await this._applyReplaySafeOrphanFillAccounting(fill, fillOp, {
+                                     context: 'POST-RESET',
+                                     logger: { log: this._log.bind(this) },
+                                     replayMessage: (op) => `[POST-RESET] Replay detected for orphan fill ${op.order_id}; skipping duplicate credit`
+                                 });
+                                 if (accountingResult.status === 'missing_key') {
+                                     requiresOpenOrdersSync = true;
+                                 }
                                 continue;
                             }
 
                             this._log(`[POST-RESET] Processing fill for ${gridOrder.type} order ${gridOrder.id} at price ${gridOrder.price}`);
 
-                             try {
-                                 await this.manager.accountant.processFillAccounting(fillOp);
-                             } catch (accErr) {
-                                 this._log(`[POST-RESET] Failed to process accounting for ${fillOp.order_id}: ${accErr.message}`, 'error');
-                            }
+                             const accountingResult = await this._applyReplaySafeTrackedFillAccounting(fill, fillOp, {
+                                 context: 'POST-RESET',
+                                 logger: { log: this._log.bind(this) },
+                                 replayMessage: (op) => `[POST-RESET] Replay detected for ${op.order_id}; skipping duplicate rebalance`
+                             });
+                             if (accountingResult.status === 'missing_key') {
+                                 requiresOpenOrdersSync = true;
+                                 continue;
+                             }
+                             if (accountingResult.status !== 'applied') {
+                                 continue;
+                             }
 
                             // Process this fill through the full rebalance pipeline
                             // This will shift the boundary and place a new order on the filled slot
@@ -609,6 +750,19 @@ class DEXBot {
                                 continue;
                             }
                         }
+
+                        if (requiresOpenOrdersSync) {
+                            this._log('[POST-RESET] Falling back to open-orders sync for fill(s) missing replay-safe history identifiers', 'warn');
+                            const postResetChainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
+                            const syncResult = await this.manager.syncFromOpenOrders(postResetChainOpenOrders);
+                            if (syncResult.filledOrders?.length > 0) {
+                                const rebalanceResult = await this.manager.processFilledOrders(syncResult.filledOrders, new Set());
+                                await this._executeBatchIfNeeded(rebalanceResult, '[POST-RESET] open-orders fallback');
+                            }
+                        }
+
+                        await this._flushProcessedFillPersistence('post-reset-batch');
+
                         await this.manager.persistGrid();
                     }
 
@@ -868,6 +1022,7 @@ class DEXBot {
 
                     const validFills = [];
                     const processedFillKeys = new Set();
+                    let requiresOpenOrdersSync = false;
 
                     // 2. Filter and Deduplicate (Standard Logic)
                     for (const fill of allFills) {
@@ -902,11 +1057,13 @@ class DEXBot {
                                 // Legitimate orphan fill: order was virtualized during sequential processing
                                 // but a fill arrived afterward. Credit proceeds to maintain fund tracking.
                                  this.manager.logger.log(`[ORPHAN-FILL] Processing funds for unknown order ${fillOp.order_id} (not in grid but crediting proceeds)`, 'warn');
-                                 try {
-                                     await this.manager.accountant.processFillAccounting(fillOp);
-                                 } catch (accErr) {
-                                     this.manager.logger.log(`[ORPHAN-FILL] Failed to process accounting for ${fillOp.order_id}: ${accErr.message}`, 'error');
-                                }
+                                 const accountingResult = await this._applyReplaySafeOrphanFillAccounting(fill, fillOp, {
+                                     context: 'ORPHAN-FILL',
+                                     replayMessage: (op) => `[ORPHAN-FILL] Replay detected for ${op.order_id}; skipping duplicate credit`
+                                 });
+                                 if (accountingResult.status === 'missing_key') {
+                                     requiresOpenOrdersSync = true;
+                                 }
                                 // Don't add to validFills - we can't do rebalancing without a grid slot
                                 // But the funds are now credited, preventing fund invariant violation
                                 continue;
@@ -918,10 +1075,18 @@ class DEXBot {
                             const roleStr = fillOp.is_maker ? 'maker' : 'taker';
                             this.manager.logger.log(`Processing ${roleStr} fill for order ${fillOp.order_id}`, 'debug');
 
-                            const fillKey = `${fillOp.order_id}:${fill.block_num}:${fill.id || ''}`;
+                            const fillKey = buildFillKey(fill);
+                            if (!fillKey) {
+                                this.manager.logger.log(
+                                    `[FILL] Missing history id for order ${fillOp.order_id} block ${fill.block_num}; deferring to open-orders sync`,
+                                    'warn'
+                                );
+                                requiresOpenOrdersSync = true;
+                                continue;
+                            }
                             const now = Date.now();
-                            if (this._recentlyProcessedFills.has(fillKey)) {
-                                const lastProcessed = this._recentlyProcessedFills.get(fillKey);
+                            if (this._recentlyQueuedFills.has(fillKey)) {
+                                const lastProcessed = this._recentlyQueuedFills.get(fillKey);
                                 if (now - lastProcessed < this._fillDedupeWindowMs) {
                                     this.manager.logger.log(`Skipping duplicate fill for ${fillOp.order_id} (processed ${now - lastProcessed}ms ago)`, 'debug');
                                     continue;
@@ -931,7 +1096,7 @@ class DEXBot {
                             if (processedFillKeys.has(fillKey)) continue;
 
                             processedFillKeys.add(fillKey);
-                            this._recentlyProcessedFills.set(fillKey, now);
+                            this._recentlyQueuedFills.set(fillKey, now);
                             validFills.push(fill);
 
                             // Log info
@@ -945,21 +1110,20 @@ class DEXBot {
                         }
                     }
 
-                    // Clean up dedupe cache (periodically remove old entries)
-                    // Entries older than FILL_CLEANUP_INTERVAL_MS are removed to prevent memory leak
+                    // Clean up short-lived queue dedupe cache to prevent memory leak.
                     const cleanupTimestamp = Date.now();
                     let cleanedCount = 0;
-                    for (const [key, timestamp] of this._recentlyProcessedFills) {
-                        if (cleanupTimestamp - timestamp > this._fillCleanupIntervalMs) {
-                            this._recentlyProcessedFills.delete(key);
+                    for (const [key, timestamp] of this._recentlyQueuedFills) {
+                        if (cleanupTimestamp - timestamp > this._fillDedupeWindowMs) {
+                            this._recentlyQueuedFills.delete(key);
                             cleanedCount++;
                         }
                     }
                     if (cleanedCount > 0) {
-                        this.manager.logger.log(`Cleaned ${cleanedCount} old fill records. Remaining: ${this._recentlyProcessedFills.size}`, 'debug');
+                        this.manager.logger.log(`Cleaned ${cleanedCount} old queued fill records. Remaining: ${this._recentlyQueuedFills.size}`, 'debug');
                     }
 
-                    if (validFills.length === 0) continue; // Loop back for more
+                    if (validFills.length === 0 && !requiresOpenOrdersSync) continue; // Loop back for more
 
                     // 3. Sync and Collect Filled Orders
                     let allFilledOrders = [];
@@ -971,11 +1135,22 @@ class DEXBot {
                         if (fillMode === 'history') {
                             this.manager.logger.log(`Syncing ${fillsToSync.length} fill(s) (history mode)`, 'info');
                             for (const fill of fillsToSync) {
-                                const resultHistory = await this.manager.syncFromFillHistory(fill);
+                                const resultHistory = await this.manager.syncFromFillHistory(fill, {
+                                    persistenceMode: PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
+                                });
                                 await this._seedDustTimersFromPartialUpdates(resultHistory.updatedOrders, Date.now());
                                 if (resultHistory.filledOrders) resolvedOrders.push(...resultHistory.filledOrders);
+                                if (resultHistory.requiresOpenOrdersSync) requiresOpenOrdersSync = true;
                             }
-                        } else {
+                        }
+
+                        if (fillMode !== 'history' || requiresOpenOrdersSync) {
+                            if (fillMode === 'history' && requiresOpenOrdersSync) {
+                                this.manager.logger.log(
+                                    'Falling back to open-orders sync for fill(s) missing replay-safe history identifiers',
+                                    'warn'
+                                );
+                            }
                             this.manager.logger.log(`Syncing ${fillsToSync.length} fill(s) (open orders mode)`, 'info');
                             const chainOpenOrders = await chainOrders.readOpenOrders(this.account);
                             const resultOpenOrders = await this.manager.syncFromOpenOrders(chainOpenOrders);
@@ -989,6 +1164,7 @@ class DEXBot {
                     this.manager.pauseFundRecalc();
                     try {
                         allFilledOrders = await processValidFills(validFills);
+                        await this._flushProcessedFillPersistence('fill-batch');
 
                         // 4. Handle Price Corrections
                         if (ordersNeedingCorrection.length > 0) {
@@ -1144,20 +1320,7 @@ class DEXBot {
                         }
                     }
 
-                    // Save processed fills
                     await retryPersistenceIfNeeded(this.manager);
-                    if (validFills.length > 0 && this.accountOrders) {
-                        try {
-                            const fillsToSave = {};
-                            for (const fillKey of processedFillKeys) {
-                                fillsToSave[fillKey] = this._recentlyProcessedFills.get(fillKey) || Date.now();
-                            }
-                            await this.accountOrders.updateProcessedFillsBatch(this.config.botKey, fillsToSave);
-                            this.manager.logger.log(`Persisted ${processedFillKeys.size} fill records to prevent reprocessing`, 'debug');
-                        } catch (err) {
-                            this.manager?.logger?.log(`Warning: Failed to persist processed fills - may be reprocessed on next run: ${err.message}`, 'warn');
-                        }
-                    }
 
                     // Periodically clean up old fill records after processing N fills.
                     // Counter is protected by _fillProcessingLock during fill consumption.
@@ -1252,6 +1415,7 @@ class DEXBot {
         const fills = this._incomingFillQueue.splice(0);
         const validFills = [];
         const processedFillKeys = new Set();
+        let requiresOpenOrdersSync = false;
         const ORDER_TYPES = require('./constants').ORDER_TYPES;
 
         // 1. Validate and deduplicate fills
@@ -1266,26 +1430,50 @@ class DEXBot {
                 // CRITICAL FIX: Even if order not in grid, we must still credit the fill proceeds
                 // This can happen when fills arrive after an order was marked VIRTUAL during sequential processing
                  this.manager.logger.log(`[BOOTSTRAP] Processing funds for unknown order ${fillOp.order_id} (not in grid but crediting proceeds)`, 'warn');
-                 try {
-                     await this.manager.accountant.processFillAccounting(fillOp);
-                 } catch (accErr) {
-                     this.manager.logger.log(`[BOOTSTRAP] Failed to process accounting for ${fillOp.order_id}: ${accErr.message}`, 'error');
-                }
+                 const accountingResult = await this._applyReplaySafeOrphanFillAccounting(fill, fillOp, {
+                     context: 'BOOTSTRAP'
+                 });
+                 if (accountingResult.status === 'missing_key') {
+                     requiresOpenOrdersSync = true;
+                 }
                 continue;
             }
 
-            const fillKey = `${fillOp.order_id}:${fill.block_num}:${fill.id || ''}`;
-            if (processedFillKeys.has(fillKey)) continue;
+            const accountingResult = await this._applyReplaySafeTrackedFillAccounting(fill, fillOp, {
+                context: 'BOOTSTRAP',
+                replayMessage: (op) => `[BOOTSTRAP] Replay detected for ${op.order_id}; skipping duplicate bootstrap rotation`
+            });
+            if (accountingResult.status === 'missing_key') {
+                requiresOpenOrdersSync = true;
+                continue;
+            }
+            if (accountingResult.status !== 'applied') {
+                continue;
+            }
 
-            processedFillKeys.add(fillKey);
+            if (processedFillKeys.has(accountingResult.fillKey)) continue;
+            processedFillKeys.add(accountingResult.fillKey);
             validFills.push({ ...fill, gridOrder });
 
             const fillType = gridOrder.type === ORDER_TYPES.BUY ? 'BUY' : 'SELL';
             this._log(`[BOOTSTRAP] Fill detected: ${fillType} order (${fillOp.is_maker ? 'maker' : 'taker'})`);
-
-             // Optimistically update account totals for bootstrap fills
-             await this.manager.accountant.processFillAccounting(fillOp);
          }
+
+        if (requiresOpenOrdersSync) {
+            this._log('[BOOTSTRAP] Falling back to open-orders sync for fill(s) missing replay-safe history identifiers', 'warn');
+            const bootstrapChainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
+            const syncResult = await this.manager.syncFromOpenOrders(bootstrapChainOpenOrders);
+            if (syncResult.filledOrders?.length > 0) {
+                const queuedOrderIds = new Set(validFills.map(fill => fill?.gridOrder?.orderId).filter(Boolean));
+                for (const filledOrder of syncResult.filledOrders) {
+                    if (!filledOrder?.orderId || queuedOrderIds.has(filledOrder.orderId)) continue;
+                    validFills.push({ gridOrder: filledOrder });
+                    queuedOrderIds.add(filledOrder.orderId);
+                }
+            }
+        }
+
+        await this._flushProcessedFillPersistence('bootstrap-batch');
 
         if (validFills.length === 0) return;
 
@@ -3378,6 +3566,7 @@ class DEXBot {
     async shutdown() {
         this._log('Initiating graceful shutdown...');
         this._shuttingDown = true;
+        this._processedFillStore.setShuttingDown(true);
 
         // Stop accepting new work
         this._stopBlockchainFetchInterval();
@@ -3427,6 +3616,8 @@ class DEXBot {
                     if (this._incomingFillQueue.length > 0) {
                         this._warn(`${this._incomingFillQueue.length} fills queued but not processed at shutdown`);
                     }
+
+                    await this._flushProcessedFillPersistence('shutdown');
 
                     // Persist final state
                     if (this.manager && this.accountOrders && this.config?.botKey) {

@@ -1025,7 +1025,7 @@ async function promptGeneralSettings() {
           console.log(`\x1b[1;33m1) Grid Health:\x1b[0m   \x1b[38;5;208mCache:\x1b[0m ${settings.GRID_LIMITS.GRID_REGENERATION_PERCENTAGE}%, \x1b[38;5;208mRMS:\x1b[0m ${settings.GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE}%, \x1b[38;5;208mAMA Delta:\x1b[0m ${settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT}%`);
           console.log(`\x1b[1;33m2) Order Recovery:\x1b[0m \x1b[38;5;208mDust:\x1b[0m ${settings.GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE}%, \x1b[38;5;208mDustCancel:\x1b[0m ${dustCancelDisplay}`);
           console.log(`\x1b[1;33m3) Timing (Core):\x1b[0m \x1b[38;5;208mFetchInterval:\x1b[0m ${settings.TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN}min, \x1b[38;5;208mSyncDelay:\x1b[0m ${settings.TIMING.SYNC_DELAY_MS / 1000}s, \x1b[38;5;208mLockTimeout:\x1b[0m ${settings.TIMING.LOCK_TIMEOUT_MS / 1000}s`);
-          console.log(`\x1b[1;33m4) Timing (Fill):\x1b[0m \x1b[38;5;208mDedupeWindow:\x1b[0m ${settings.TIMING.FILL_DEDUPE_WINDOW_MS / 1000}s, \x1b[38;5;208mCleanupInterval:\x1b[0m ${settings.TIMING.FILL_CLEANUP_INTERVAL_MS / 1000}s, \x1b[38;5;208mRetention:\x1b[0m ${settings.TIMING.FILL_RECORD_RETENTION_MS / 1000}s`);
+          console.log(`\x1b[1;33m4) Timing (Fill):\x1b[0m \x1b[38;5;208mDedupeWindow:\x1b[0m ${settings.TIMING.FILL_DEDUPE_WINDOW_MS / 1000}s, \x1b[38;5;208mRetention:\x1b[0m ${settings.TIMING.FILL_RECORD_RETENTION_MS / 1000}s`);
           console.log(`\x1b[1;33m5) Log lvl:\x1b[0m      \x1b[38;5;208m${settings.LOG_LEVEL}\x1b[0m (debug, info, warn, error)`);
           const updaterStatus = settings.UPDATER.ACTIVE ? `\x1b[32mON\x1b[0m` : `\x1b[31mOFF\x1b[0m`;
           const currentSched = parseCronToDelta(settings.UPDATER.SCHEDULE || "0 0 * * *");
@@ -1078,12 +1078,9 @@ async function promptGeneralSettings() {
             case '4':
                 const dedupe = await askNumberWithBounds('Fill Dedup Window (s)', settings.TIMING.FILL_DEDUPE_WINDOW_MS / 1000, 0.1, 30);
                 if (dedupe === '\x1b') break;
-                const clean = await askNumberWithBounds('Fill Cleanup Interval (s)', settings.TIMING.FILL_CLEANUP_INTERVAL_MS / 1000, 1, 60);
-                if (clean === '\x1b') break;
                 const retain = await askNumberWithBounds('Fill Record Retention (s)', settings.TIMING.FILL_RECORD_RETENTION_MS / 1000, 600, 86400);
                 if (retain === '\x1b') break;
                 settings.TIMING.FILL_DEDUPE_WINDOW_MS = dedupe * 1000;
-                settings.TIMING.FILL_CLEANUP_INTERVAL_MS = clean * 1000;
                 settings.TIMING.FILL_RECORD_RETENTION_MS = retain * 1000;
                 break;
             case '5':

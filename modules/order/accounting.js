@@ -67,13 +67,17 @@
  * ===============================================================================
  */
 
-const { ORDER_TYPES, ORDER_STATES, GRID_LIMITS, PIPELINE_TIMING } = require('../constants');
+const { ORDER_TYPES, ORDER_STATES, GRID_LIMITS, PIPELINE_TIMING, TIMING } = require('../constants');
 const {
     calculateAvailableFundsValue,
     getAssetFees,
     blockchainToFloat,
     getPrecisionSlack
 } = require('./utils/math');
+const {
+    PROCESSED_FILL_PERSISTENCE_MODES,
+    resolveProcessedFillPersistenceMode
+} = require('./processed_fill_store');
 const { resolveAccountRef } = require('./utils/system');
 const Format = require('./format');
 const { toFiniteNumber } = Format;
@@ -96,6 +100,31 @@ class Accountant {
         this.manager = manager;
         this._isVerifyingInvariants = false;  // Prevents overlapping invariant checks
         this._pendingInvariantSnapshot = null;  // Coalesces latest request while one is running
+    }
+
+    _getProcessedFillTracker() {
+        return this.manager.processedFillTracker;
+    }
+
+    _getProcessedFillStore() {
+        return this.manager.processedFillStore;
+    }
+
+    _applyBalanceAdjustments(balanceAdjustments) {
+        for (const adjustment of balanceAdjustments) {
+            this.adjustTotalBalance(adjustment.orderType, adjustment.delta, adjustment.operation);
+        }
+    }
+
+    _rollbackBalanceAdjustments(balanceAdjustments) {
+        for (let i = balanceAdjustments.length - 1; i >= 0; i--) {
+            const adjustment = balanceAdjustments[i];
+            this.adjustTotalBalance(
+                adjustment.orderType,
+                -adjustment.delta,
+                `${adjustment.operation}-rollback`
+            );
+        }
     }
 
     /**
@@ -879,11 +908,15 @@ class Accountant {
       * Atomically updates accountTotals to keep internal state in sync with blockchain.
       * CRITICAL: Called within fill processing lock context to prevent race conditions.
       */
-    async processFillAccounting(fillOp) {
+    async processFillAccounting(fillOp, fillKey = null, options = {}) {
          const mgr = this.manager;
+         // Persistence is durable by default. Callers that process many fills under
+         // the fill lock can opt into deferred persistence and close the window with
+         // one explicit batch flush before leaving the processing cycle.
+         const persistenceMode = resolveProcessedFillPersistenceMode(options);
          const pays = fillOp?.pays;
          const receives = fillOp?.receives;
-         if (!pays || !receives) return;
+         if (!pays || !receives) return false;
 
          // Default to maker (not taker) because:
         // 1. This bot primarily places orders (maker orders, not taker)
@@ -898,36 +931,87 @@ class Accountant {
         const assetAPrecision = mgr.assets?.assetA?.precision;
         const assetBPrecision = mgr.assets?.assetB?.precision;
 
-        if (assetAPrecision === undefined || assetBPrecision === undefined) return;
+         if (assetAPrecision === undefined || assetBPrecision === undefined) return false;
 
-        const assetASymbol = mgr.config?.assetA;
-        const assetBSymbol = mgr.config?.assetB;
+         // Derive all numeric effects before recording the fill key.
+         // This keeps retries safe if a later computation unexpectedly fails.
+         const balanceAdjustments = [];
+         const assetASymbol = mgr.config?.assetA;
+         const assetBSymbol = mgr.config?.assetB;
 
-        // 1. Deduct PAYS amount from both TOTAL and FREE balances.
-        // We must deduct from FREE to offset the optimistic "release to Free"
-        // that happens when _updateOrder transitions the filled order to VIRTUAL.
-        if (pays.asset_id === assetAId) {
-            const amount = blockchainToFloat(pays.amount, assetAPrecision, true);
-            this.adjustTotalBalance(ORDER_TYPES.SELL, -amount, 'fill-pays');
-        } else if (pays.asset_id === assetBId) {
-            const amount = blockchainToFloat(pays.amount, assetBPrecision, true);
-            this.adjustTotalBalance(ORDER_TYPES.BUY, -amount, 'fill-pays');
-        }
+         if (pays.asset_id === assetAId) {
+             const amount = blockchainToFloat(pays.amount, assetAPrecision, true);
+             balanceAdjustments.push({ orderType: ORDER_TYPES.SELL, delta: -amount, operation: 'fill-pays' });
+         } else if (pays.asset_id === assetBId) {
+             const amount = blockchainToFloat(pays.amount, assetBPrecision, true);
+             balanceAdjustments.push({ orderType: ORDER_TYPES.BUY, delta: -amount, operation: 'fill-pays' });
+         }
 
-        // 2. Add RECEIVES amount to both TOTAL and FREE
-        // These proceeds are liquid and increase spending power.
-        // IMPORTANT: Deduct market fees from proceeds to match blockchain reality.
-        if (receives.asset_id === assetAId) {
-            const rawAmount = blockchainToFloat(receives.amount, assetAPrecision, true);
-            const netAmount = this._deductFeesFromProceeds(assetASymbol, rawAmount, isMaker);
-
-             this.adjustTotalBalance(ORDER_TYPES.SELL, netAmount, 'fill-receives');
+         if (receives.asset_id === assetAId) {
+             const rawAmount = blockchainToFloat(receives.amount, assetAPrecision, true);
+             const netAmount = this._deductFeesFromProceeds(assetASymbol, rawAmount, isMaker);
+             balanceAdjustments.push({ orderType: ORDER_TYPES.SELL, delta: netAmount, operation: 'fill-receives' });
          } else if (receives.asset_id === assetBId) {
              const rawAmount = blockchainToFloat(receives.amount, assetBPrecision, true);
              const netAmount = this._deductFeesFromProceeds(assetBSymbol, rawAmount, isMaker);
+             balanceAdjustments.push({ orderType: ORDER_TYPES.BUY, delta: netAmount, operation: 'fill-receives' });
+         }
 
-             this.adjustTotalBalance(ORDER_TYPES.BUY, netAmount, 'fill-receives');
-        }
+         let processedAt = null;
+         const tracker = fillKey ? this._getProcessedFillTracker() : null;
+         const previousProcessedAt = fillKey ? tracker.get(fillKey) : undefined;
+         if (fillKey) {
+             processedAt = Date.now();
+             const lastProcessed = tracker.get(fillKey);
+             if (lastProcessed !== undefined && (processedAt - lastProcessed) < TIMING.FILL_RECORD_RETENTION_MS) {
+                 this.manager?.logger?.log(
+                     `[FILL-DEDUP] Skipping duplicate credit for fill ${fillKey} (processed ${processedAt - lastProcessed}ms ago)`,
+                     'warn'
+                 );
+                 return false;
+             }
+         }
+
+         this._applyBalanceAdjustments(balanceAdjustments);
+
+         if (fillKey) {
+             tracker.set(fillKey, processedAt || Date.now());
+             // Prune entries beyond the retention horizon to prevent unbounded growth.
+             if (tracker.size > 500) {
+                 const cutoff = (processedAt || Date.now()) - TIMING.FILL_RECORD_RETENTION_MS;
+                 for (const [k, ts] of tracker) {
+                     if (ts < cutoff) tracker.delete(k);
+                 }
+             }
+         }
+
+         const processedFillStore = this._getProcessedFillStore();
+         if (fillKey && processedFillStore) {
+             try {
+                 await processedFillStore.persist(fillKey, processedAt || Date.now(), { mode: persistenceMode });
+             } catch (err) {
+                 if (persistenceMode === PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE) {
+                     processedFillStore.discard(fillKey, processedAt || Date.now());
+                     if (previousProcessedAt === undefined) {
+                         tracker.delete(fillKey);
+                     } else {
+                         tracker.set(fillKey, previousProcessedAt);
+                     }
+                     this._rollbackBalanceAdjustments(balanceAdjustments);
+                     mgr.logger?.log?.(
+                         `[FILL-DEDUP] Rolled back fill ${fillKey} after persistence failure: ${err.message}`,
+                         'warn'
+                     );
+                     throw err;
+                 }
+                 mgr.logger?.log?.(
+                     `[FILL-DEDUP] Failed to persist processed fill ${fillKey}: ${err.message}`,
+                     'warn'
+                 );
+             }
+         }
+
+         return true;
     }
 }
 

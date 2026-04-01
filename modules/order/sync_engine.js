@@ -104,12 +104,16 @@ const {
     applyChainSizeToGridOrder,
     convertToSpreadPlaceholder,
     virtualizeOrder,
+    buildFillKey,
     isOrderPlaced,
     isOrderOnChain,
     hasOnChainId,
     isOrderVirtual,
     isPhantomOrder
 } = require('./utils/order');
+const {
+    resolveProcessedFillPersistenceMode
+} = require('./processed_fill_store');
 const { lookupAsset } = require('./utils/system');
 
 function hasEquivalentRawOnChainOrder(a, b) {
@@ -594,8 +598,9 @@ class SyncEngine {
      * Process one incremental fill-history event.
      * Returns `{ filledOrders, updatedOrders, partialFill }`.
      */
-    async syncFromFillHistory(fill) {
+    async syncFromFillHistory(fill, options = {}) {
         const mgr = this.manager;
+        const persistenceMode = resolveProcessedFillPersistenceMode(options);
         if (!fill || !fill.op || !fill.op[1]) return { filledOrders: [], updatedOrders: [], partialFill: false };
 
         const fillOp = fill.op[1];
@@ -603,6 +608,7 @@ class SyncEngine {
         const historyId = fill.id;
         const isMaker = fillOp.is_maker !== false;  // Default missing flag to maker for consistency with accounting
         const orderId = fillOp.order_id;
+        const fillKey = buildFillKey({ orderId, blockNum, historyId });
 
         const paysAmountRaw = toFiniteNumber(fillOp.pays?.amount);
         const paysAssetId = fillOp.pays ? fillOp.pays.asset_id : null;
@@ -611,9 +617,21 @@ class SyncEngine {
 
         mgr.logger.log(`[SYNC] Processing fill ${historyId} at block ${blockNum} for order ${orderId} (maker=${isMaker}). Pays=${paysAmountRaw}@${paysAssetId}, Receives=${receivesAmountRaw}@${receivesAssetId}`, 'debug');
 
+         if (!fillKey) {
+             mgr.logger.log(
+                 `[SYNC] Missing replay-safe fill key for order ${orderId} block ${blockNum}; deferring to open-orders sync`,
+                 'warn'
+             );
+             return { filledOrders: [], updatedOrders: [], partialFill: false, requiresOpenOrdersSync: true };
+         }
+
          // Optimistically update account totals to reflect the fill
          // This prevents fund invariant violations during the window between fill detection and next blockchain fetch
-         await mgr.accountant.processFillAccounting(fillOp);
+         const appliedAccounting = await mgr.accountant.processFillAccounting(fillOp, fillKey, { persistenceMode });
+         if (!appliedAccounting) {
+             mgr.logger.log(`[SYNC] Replay detected for fill ${fillKey}; skipping duplicate order mutation`, 'debug');
+             return { filledOrders: [], updatedOrders: [], partialFill: false };
+         }
 
          // Lock the order to prevent concurrent modifications from createOrder/cancelOrder/sync
          // This is critical to prevent TOCTOU races where fill processing updates a stale order
