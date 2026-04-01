@@ -2,7 +2,7 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
 }
 
-const SUPPORTED_RUNTIMES = ['zeroclaw', 'openclaw', 'nanobot', 'picoclaw'];
+const SUPPORTED_RUNTIMES = ['openclaw', 'nanobot', 'picoclaw', 'zeroclaw'];
 
 function stringSchema(description) {
   return {

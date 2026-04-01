@@ -29,6 +29,15 @@ async function testClawSkillMarkdown() {
   assert.ok(markdown.includes('claw_honest_context'));
 }
 
+function testZeroClawSkillMarkdownRejects() {
+  const { buildRuntimeSkillMarkdown } = require('../modules/claw_skill_md');
+
+  assert.throws(
+    () => buildRuntimeSkillMarkdown('zeroclaw'),
+    /ZeroClaw uses SKILL\.toml via scripts\/zeroclaw_skill\.js, not claw_skill_md\.js/
+  );
+}
+
 async function testZeroClawSkillToml() {
   const { buildZeroClawSkillToml, describeZeroClawSkill, writeZeroClawSkillFile } = require('../modules/zeroclaw_skill');
   const { getZeroClawSkillTools } = require('../modules/zeroclaw_catalog');
@@ -56,6 +65,7 @@ async function testZeroClawSkillToml() {
 
 async function main() {
   await testClawSkillMarkdown();
+  testZeroClawSkillMarkdownRejects();
   await testZeroClawSkillToml();
   console.log('claw skill generation tests passed');
 }

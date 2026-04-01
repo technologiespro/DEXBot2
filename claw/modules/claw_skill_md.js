@@ -133,6 +133,10 @@ function buildRuntimeSkillMarkdown(runtimeName, options = {}) {
     throw new Error(`Unsupported runtime: ${runtimeName}`);
   }
 
+  if (runtime.runtime === 'zeroclaw') {
+    throw new Error('ZeroClaw uses SKILL.toml via scripts/zeroclaw_skill.js, not claw_skill_md.js');
+  }
+
   const repoRoot = normalizeRepoRoot(options.repoRoot);
   const profileRoot = normalizeProfileRoot(options, repoRoot);
 

@@ -14,10 +14,7 @@ function testRuntimeMatrix() {
   assert.ok(all.length >= 4);
 
   const names = all.map((r) => r.runtime);
-  assert.ok(names.includes('zeroclaw'));
-  assert.ok(names.includes('openclaw'));
-  assert.ok(names.includes('nanobot'));
-  assert.ok(names.includes('picoclaw'));
+  assert.deepStrictEqual(names, ['openclaw', 'nanobot', 'picoclaw', 'zeroclaw']);
 
   // Each entry is a defensive clone — mutations must not affect the registry
   all[0].runtime = 'mutated';

@@ -1,12 +1,5 @@
 const SUPPORTED_CLAW_RUNTIMES = Object.freeze([
   {
-    runtime: 'zeroclaw',
-    nativeIntegration: 'skill-manifest',
-    preferredTransport: 'local-cli-json',
-    skillFile: 'SKILL.toml',
-    notes: 'Native shell-tool manifests with prompts and tool declarations.'
-  },
-  {
     runtime: 'openclaw',
     nativeIntegration: 'plugin',
     preferredTransport: 'plugin-or-mcp',
@@ -26,6 +19,13 @@ const SUPPORTED_CLAW_RUNTIMES = Object.freeze([
     preferredTransport: 'mcp',
     skillFile: 'SKILL.md',
     notes: 'PicoClaw mirrors NanoBot on native SKILL.md loading and MCP tool integration.'
+  },
+  {
+    runtime: 'zeroclaw',
+    nativeIntegration: 'skill-manifest',
+    preferredTransport: 'local-cli-json',
+    skillFile: 'SKILL.toml',
+    notes: 'Native shell-tool manifests with prompts and tool declarations.'
   }
 ]);
 

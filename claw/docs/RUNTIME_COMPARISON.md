@@ -2,10 +2,10 @@
 
 This note compares the four runtime families supported by the Claw bridge layer:
 
-- ZeroClaw
 - OpenClaw
 - NanoBot
 - PicoClaw
+- ZeroClaw
 
 The comparison is based on the current `claw/` bridge design and runtime metadata. It is a practical analysis, not a formal benchmark report.
 
@@ -32,29 +32,6 @@ The useful axes are:
 - operational complexity
 
 ## Deep Dive
-
-### ZeroClaw
-
-ZeroClaw is the smallest and most constrained option.
-
-Strengths:
-
-- Best cold-start behavior.
-- Best fit for small, static, local deployments.
-- Clear skill-manifest model with `SKILL.toml`.
-- Best when the bridge should feel tiny and deterministic rather than broad.
-
-Tradeoffs:
-
-- Rust-oriented integration is more specialized than the other options.
-- The workflow is more manifest-driven, so the runtime surface is less flexible than plugin-first systems.
-- Better for fast, narrow automation than for a broad assistant shell.
-
-Best fit:
-
-- Edge devices.
-- Minimal local automation.
-- Users who want the most predictable, lowest-overhead runtime.
 
 ### OpenClaw
 
@@ -124,6 +101,29 @@ Best fit:
 - Users who want a low-footprint Go runtime with a practical launcher.
 - Deployments where the assistant needs to be easy to bootstrap, not just tiny.
 
+### ZeroClaw
+
+ZeroClaw is the smallest and most constrained option.
+
+Strengths:
+
+- Best cold-start behavior.
+- Best fit for small, static, local deployments.
+- Clear skill-manifest model with `SKILL.toml`.
+- Best when the bridge should feel tiny and deterministic rather than broad.
+
+Tradeoffs:
+
+- Rust-oriented integration is more specialized than the other options.
+- The workflow is more manifest-driven, so the runtime surface is less flexible than plugin-first systems.
+- Better for fast, narrow automation than for a broad assistant shell.
+
+Best fit:
+
+- Edge devices.
+- Minimal local automation.
+- Users who want the most predictable, lowest-overhead runtime.
+
 ## Recommendation Matrix
 
 If you optimize primarily for:
@@ -137,10 +137,10 @@ If you optimize primarily for:
 
 ## Practical Rule Of Thumb
 
-- Choose **ZeroClaw** if the bridge must be tiny and deterministic.
 - Choose **OpenClaw** if the bridge should live inside a larger assistant product with rich extension points.
 - Choose **NanoBot** if you want a compact Python assistant that is easy to modify.
 - Choose **PicoClaw** if you want a small Go runtime with MCP and launcher support.
+- Choose **ZeroClaw** if the bridge must be tiny and deterministic.
 
 ## Source Of Truth
 

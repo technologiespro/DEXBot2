@@ -102,7 +102,7 @@ While these docs explain the *why*, the *how* lives in the code. Key source modu
 
 ### [claw/README.md](../claw/README.md)
 *Bridge between DEXBot2 and external runtimes.*
-- **Purpose**: Exposes BitShares capabilities and DEXBot2 infrastructure through JSON/CLI bridges for ZeroClaw, OpenClaw, NanoBot, and PicoClaw runtimes.
+- **Purpose**: Exposes BitShares capabilities and DEXBot2 infrastructure through JSON/CLI bridges for OpenClaw, NanoBot, PicoClaw, and ZeroClaw runtimes.
 - **API Boundary**: Responsibility split between the AI decision layer and the DEXBot2 execution substrate ([AI_BOT_LIBRARY_API.md](../claw/docs/AI_BOT_LIBRARY_API.md))
 - **Tuning Reference**: Practical grid-tuning baselines ([DEXBOT2_TUNING_CHEAT_SHEET.md](../claw/docs/DEXBOT2_TUNING_CHEAT_SHEET.md))
 - **Position Management**: Health monitoring, margin planner, and dynamic weight policy

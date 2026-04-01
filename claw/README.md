@@ -1,6 +1,6 @@
 # Claw BitShares Bridge
 
-Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes.
+Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes: OpenClaw, NanoBot, PicoClaw, and ZeroClaw.
 
 This scaffold follows the same high-level split used in DEXBot2:
 
@@ -39,7 +39,7 @@ npm install btsdex
 
 What it does:
 
-- expose a local JSON/CLI bridge and native runtime packaging for ZeroClaw, OpenClaw, NanoBot, and PicoClaw
+- expose a local JSON/CLI bridge and native runtime packaging for OpenClaw, NanoBot, PicoClaw, and ZeroClaw
 - provide BitShares read helpers, broadcast helpers, and account/action wrappers
 - expose DEXBot2 profile context, order utilities, and liquidity/pool helpers through a smaller surface
 - provide HONEST context helpers, short-MPA helper flows, and position-manager utilities
@@ -135,30 +135,30 @@ npm run pm2:start
 
 ## Multi-Runtime Support
 
-`claw/` now targets four native runtime families:
+`claw/` supports four native runtime families, listed once here for quick reference:
 
 | Runtime | Native integration | Best fit | Main tradeoff |
 | --- | --- | --- | --- |
-| ZeroClaw | `SKILL.toml` skill manifest | Smallest and most constrained option | Best cold starts, but the most specialized Rust-oriented workflow |
 | OpenClaw | Native plugin plus optional `SKILL.md` | Broadest and heaviest option | Richest runtime surface, but also the highest operational complexity |
 | NanoBot | MCP plus `SKILL.md` | Smaller Python codebase with MCP integration | Easier to inspect, but slower and heavier than Go or Rust |
 | PicoClaw | MCP plus `SKILL.md` | Small Go-based option with launcher support | Great for low-cost hardware, but still evolving quickly |
+| ZeroClaw | `SKILL.toml` skill manifest | Smallest and most constrained option | Best cold starts, but the most specialized Rust-oriented workflow |
 
 Practical selection guide:
 
 | If you optimize for | Best choice | Why |
 | --- | --- | --- |
-| Lowest footprint and fastest startup | ZeroClaw | Smallest surface, manifest-driven, best for static local automation |
 | Broadest assistant surface and plugin depth | OpenClaw | Richest runtime, strongest plugin model, widest ecosystem coverage |
 | Simple MCP integration with Python ergonomics | NanoBot | Easier to inspect and adapt, good for lightweight tool-driven workflows |
 | Small Go binary and low-cost hardware | PicoClaw | Good launcher support, strong fit for tiny boards and constrained Linux targets |
+| Lowest footprint and fastest startup | ZeroClaw | Smallest surface, manifest-driven, best for static local automation |
 
 Rule of thumb:
 
-- Choose **ZeroClaw** for the smallest and most deterministic runtime.
 - Choose **OpenClaw** for the broadest assistant platform.
 - Choose **NanoBot** for a compact Python codebase with MCP tooling.
 - Choose **PicoClaw** for a small Go runtime with launcher support.
+- Choose **ZeroClaw** for the smallest and most deterministic runtime.
 
 For a deeper comparison of the four alternatives, see [docs/RUNTIME_COMPARISON.md](docs/RUNTIME_COMPARISON.md).
 
@@ -173,49 +173,6 @@ node scripts/claw_bridge.js manifest
 node scripts/claw_bridge.js profile-context --payload '{"botRef":"default"}'
 node scripts/claw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
 ```
-
-### ZeroClaw
-
-Generate the ZeroClaw skill file:
-
-```bash
-CLAW_ROOT="$(pwd)"
-DEXBOT_ROOT="$(cd .. && pwd)"
-npm run zeroclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT" --output ~/.zeroclaw/workspace/skills/ai-bots/SKILL.toml
-```
-
-ZeroClaw compatibility command surface:
-
-```bash
-node scripts/zeroclaw_bridge.js manifest
-node scripts/zeroclaw_bridge.js profile-context --payload '{"botRef":"default"}'
-node scripts/zeroclaw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
-node scripts/zeroclaw_bridge.js create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
-node scripts/zeroclaw_bridge.js update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
-node scripts/zeroclaw_bridge.js execute-batch --payload '{"accountName":"your-account","operations":[]}'
-node scripts/zeroclaw_bridge.js borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
-```
-
-### NanoBot and PicoClaw
-
-Run the MCP server over stdio:
-
-```bash
-CLAW_ROOT="$(pwd)"
-DEXBOT_ROOT="$(cd .. && pwd)"
-node scripts/claw_mcp_server.js --profile-root "$DEXBOT_ROOT"
-```
-
-Generate a runtime-native `SKILL.md`:
-
-```bash
-CLAW_ROOT="$(pwd)"
-DEXBOT_ROOT="$(cd .. && pwd)"
-npm run nanobot:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
-npm run picoclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
-```
-
-On a fresh PicoClaw install, make sure `agents.defaults.workspace` is configured in `config.json` or run `picoclaw onboard` before expecting workspace skills to appear.
 
 ### OpenClaw
 
@@ -246,6 +203,49 @@ Available bridge and native tool surfaces include:
 - MPA borrow, repay, collateral adjustment, and settlement
 - BTS-backed short open, take-profit, close, and plan builders
 - MPA position lookup
+
+### NanoBot and PicoClaw
+
+Run the MCP server over stdio:
+
+```bash
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+node scripts/claw_mcp_server.js --profile-root "$DEXBOT_ROOT"
+```
+
+Generate a runtime-native `SKILL.md`:
+
+```bash
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+npm run nanobot:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
+npm run picoclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
+```
+
+On a fresh PicoClaw install, make sure `agents.defaults.workspace` is configured in `config.json` or run `picoclaw onboard` before expecting workspace skills to appear.
+
+### ZeroClaw
+
+Generate the ZeroClaw skill file:
+
+```bash
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+npm run zeroclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT" --output ~/.zeroclaw/workspace/skills/ai-bots/SKILL.toml
+```
+
+ZeroClaw compatibility command surface:
+
+```bash
+node scripts/zeroclaw_bridge.js manifest
+node scripts/zeroclaw_bridge.js profile-context --payload '{"botRef":"default"}'
+node scripts/zeroclaw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+node scripts/zeroclaw_bridge.js create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+node scripts/zeroclaw_bridge.js update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
+node scripts/zeroclaw_bridge.js execute-batch --payload '{"accountName":"your-account","operations":[]}'
+node scripts/zeroclaw_bridge.js borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
+```
 
 ## HONEST Ecosystem Helper
 
