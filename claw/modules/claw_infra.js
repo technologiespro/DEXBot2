@@ -72,7 +72,7 @@ function createStateStore(options = {}) {
     const serialized = JSON.stringify(value === undefined ? null : value, null, 2);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     try {
-      await fs.writeFile(tmpPath, `${serialized === undefined ? 'null' : serialized}\n`, 'utf8');
+      await fs.writeFile(tmpPath, `${serialized}\n`, 'utf8');
       await fs.rename(tmpPath, filePath);
     } catch (error) {
       await fs.unlink(tmpPath).catch(() => {});

@@ -205,6 +205,7 @@ function createBroadcastHarness() {
       request: [],
       wait: []
     },
+    daemonReady: false,
     newTx: 0,
     txOps: []
   };
@@ -255,7 +256,7 @@ function createBroadcastHarness() {
   });
 
   registerMock(credentialClientPath, {
-    isCredentialDaemonReady: () => false,
+    isCredentialDaemonReady: () => calls.daemonReady,
     requestPrivateKeyFromCredentialDaemon: async (accountName, options) => {
       calls.daemon.request.push({ accountName, options });
       return 'daemon-secret';
@@ -315,6 +316,14 @@ async function testChainBroadcast() {
     assert.deepStrictEqual(txResult.operation_results, [[0, '1.7.77']]);
     assert.strictEqual(txResult.raw.source, 'tx-broadcast');
 
+    await assert.rejects(
+      broadcast.getSigningClient({ accountName: 'alice' }),
+      /Credential daemon is not ready/
+    );
+    assert.strictEqual(calls.daemon.wait.length, 0);
+    assert.strictEqual(calls.daemon.request.length, 0);
+
+    calls.daemonReady = true;
     const rawResult = await broadcast.broadcastOperation(
       { object_id: '1.7.88' },
       { accountName: 'alice' }

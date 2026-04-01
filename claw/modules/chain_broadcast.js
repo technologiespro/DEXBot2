@@ -44,11 +44,8 @@ async function getSigningClient(options = {}) {
     return createSigningClient(accountName, options.privateKey);
   }
 
-  if (isCredentialDaemonReady(options)) {
-    return createSigningClientFromCredentialDaemon({
-      ...options,
-      accountName
-    });
+  if (!isCredentialDaemonReady(options)) {
+    throw new Error('Credential daemon is not ready');
   }
 
   return createSigningClientFromCredentialDaemon({

@@ -2,11 +2,17 @@ const path = require('path');
 const fs = require('fs');
 
 function getDexbot2Root() {
-  return process.env.DEXBOT2_ROOT
-    ? path.resolve(process.env.DEXBOT2_ROOT)
-    : fs.existsSync(path.resolve(__dirname, '../..', 'modules', 'order', 'index.js'))
-      ? path.resolve(__dirname, '../..')
-      : path.resolve(__dirname, '../../Git/DEXBot2');
+  if (process.env.DEXBOT2_ROOT) {
+    return path.resolve(process.env.DEXBOT2_ROOT);
+  }
+
+  const repoRoot = path.resolve(__dirname, '../..');
+  const orderIndexPath = path.join(repoRoot, 'modules', 'order', 'index.js');
+  if (fs.existsSync(orderIndexPath)) {
+    return repoRoot;
+  }
+
+  throw new Error('Unable to resolve DEXBot2 root. Set DEXBOT2_ROOT or run from a DEXBot2 checkout.');
 }
 
 function requireDexbot2Module(relativePath) {
