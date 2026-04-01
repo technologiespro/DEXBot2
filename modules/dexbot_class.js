@@ -113,6 +113,8 @@ const {
     ProcessedFillStore,
     PROCESSED_FILL_PERSISTENCE_MODES
 } = require('./order/processed_fill_store');
+const DexbotFillRuntime = require('./dexbot_fill_runtime');
+const DexbotMaintenanceRuntime = require('./dexbot_maintenance_runtime');
 const {
     ORDER_STATES,
     ORDER_TYPES,
@@ -547,36 +549,15 @@ class DEXBot {
     }
 
     _wireProcessedFillTracking() {
-        if (!this.manager) return;
-        this._processedFillStore.configure({
-            accountOrders: this.accountOrders,
-            botKey: this.config?.botKey
-        });
-
-        this._processedFillStore.mergeTracker(this.manager.processedFillTracker);
-
-        this.manager.processedFillTracker = this._recentlyProcessedFills;
-        this.manager.processedFillStore = this._processedFillStore;
+        return DexbotFillRuntime.wireProcessedFillTracking.call(this);
     }
 
     async _flushProcessedFillPersistence(reason = 'manual', options = {}) {
-        this._processedFillStore.setShuttingDown(this._shuttingDown);
-        await this._processedFillStore.flush(reason, options);
+        return DexbotFillRuntime.flushProcessedFillPersistence.call(this, reason, options);
     }
 
     _buildOrphanFillFallbackKey(fill) {
-        const fillOp = fill?.op?.[1];
-        const orderId = fillOp?.order_id;
-        const blockNum = fill?.block_num;
-        const paysAssetId = fillOp?.pays?.asset_id;
-        const paysAmount = fillOp?.pays?.amount;
-        const receivesAssetId = fillOp?.receives?.asset_id;
-        const receivesAmount = fillOp?.receives?.amount;
-        const makerRole = fillOp?.is_maker === false ? 'taker' : 'maker';
-        if (!orderId || blockNum == null || !paysAssetId || paysAmount == null || !receivesAssetId || receivesAmount == null) {
-            return null;
-        }
-        return `orphan:${orderId}:${blockNum}:${paysAssetId}:${paysAmount}:${receivesAssetId}:${receivesAmount}:${makerRole}`;
+        return DexbotFillRuntime.buildOrphanFillFallbackKey.call(this, fill);
     }
 
     async _applyReplaySafeFillAccounting(fill, fillOp, {
@@ -591,39 +572,18 @@ class DEXBot {
         persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE,
         allowOrphanFallbackKey = false
     } = {}) {
-        let fillKey = buildFillKey(fill);
-        let usedFallbackKey = false;
-        if (!fillKey && allowOrphanFallbackKey) {
-            fillKey = this._buildOrphanFillFallbackKey(fill);
-            usedFallbackKey = Boolean(fillKey);
-            if (usedFallbackKey && fallbackKeyMessage) {
-                logger?.log?.(fallbackKeyMessage(fillOp, fill, fillKey), fallbackKeyLevel);
-            }
-        }
-        if (!fillKey) {
-            if (missingKeyMessage) {
-                logger?.log?.(missingKeyMessage(fillOp, fill), missingKeyLevel);
-            }
-            return { status: 'missing_key', fillKey: null };
-        }
-
-        try {
-            const applied = await this.manager.accountant.processFillAccounting(fillOp, fillKey, { persistenceMode });
-            if (!applied) {
-                if (replayMessage) {
-                    logger?.log?.(replayMessage(fillOp, fill, fillKey), replayLevel);
-                }
-                return { status: 'duplicate', fillKey };
-            }
-
-            return { status: 'applied', fillKey, usedFallbackKey };
-        } catch (err) {
-            if (errorMessage) {
-                logger?.log?.(errorMessage(fillOp, fill, err), 'error');
-                return { status: 'error', fillKey, error: err };
-            }
-            throw err;
-        }
+        return DexbotFillRuntime.applyReplaySafeFillAccounting.call(this, fill, fillOp, {
+            missingKeyMessage,
+            fallbackKeyMessage,
+            replayMessage,
+            errorMessage,
+            logger,
+            missingKeyLevel,
+            fallbackKeyLevel,
+            replayLevel,
+            persistenceMode,
+            allowOrphanFallbackKey
+        });
     }
 
     async _applyReplaySafeTrackedFillAccounting(fill, fillOp, {
@@ -632,11 +592,10 @@ class DEXBot {
         replayMessage,
         persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
     } = {}) {
-        return this._applyReplaySafeFillAccounting(fill, fillOp, {
+        return DexbotFillRuntime.applyReplaySafeTrackedFillAccounting.call(this, fill, fillOp, {
+            context,
             logger,
-            missingKeyMessage: (op) => `[${context}] Missing fill history id for ${op.order_id}; deferring to open-orders sync`,
             replayMessage,
-            errorMessage: (op, _fill, err) => `[${context}] Failed to process accounting for ${op.order_id}: ${err.message}`,
             persistenceMode
         });
     }
@@ -647,14 +606,11 @@ class DEXBot {
         replayMessage,
         persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
     } = {}) {
-        return this._applyReplaySafeFillAccounting(fill, fillOp, {
+        return DexbotFillRuntime.applyReplaySafeOrphanFillAccounting.call(this, fill, fillOp, {
+            context,
             logger,
-            missingKeyMessage: (op) => `[${context}] Missing fill history id and orphan fallback key for ${op.order_id}; deferring to open-orders sync`,
-            fallbackKeyMessage: (op) => `[${context}] Missing fill history id for orphan fill ${op.order_id}; using degraded orphan replay key for proceeds-only accounting`,
             replayMessage,
-            errorMessage: (op, _fill, err) => `[${context}] Failed to process accounting for ${op.order_id}: ${err.message}`,
-            persistenceMode,
-            allowOrphanFallbackKey: true
+            persistenceMode
         });
     }
 
@@ -944,22 +900,7 @@ class DEXBot {
      * @private
      */
     _createFillCallback(chainOrders) {
-        return async (fills) => {
-            if (this._shuttingDown) {
-                return;
-            }
-
-            if (this.manager && !this.config.dryRun && Array.isArray(fills) && fills.length > 0) {
-                // PUSH to queue immediately (non-blocking)
-                this._incomingFillQueue.push(...fills);
-
-                // Trigger consumer (fire-and-forget: it will acquire lock if needed)
-                this._consumeFillQueue(chainOrders).catch(err => {
-                    this._warn(`Fill queue consume failed: ${err.message}`);
-                });
-                return;
-            }
-        };
+        return DexbotFillRuntime.createFillCallback.call(this, chainOrders);
     }
 
     /**
@@ -2764,57 +2705,7 @@ class DEXBot {
      * @private
      */
     async _performGridResync() {
-        let success = false;
-        this.manager.startBootstrap();
-        this._log('Grid regeneration triggered. Performing full grid resync...');
-        try {
-            // 1. Reload configuration from disk to pick up any changes
-            try {
-                const content = fs.readFileSync(PROFILES_BOTS_FILE, 'utf8');
-                const allBotsConfig = parseJsonWithComments(content).bots || [];
-
-                // Find this bot by name or fallback to index if name changed?
-                // Better: find by current name.
-                const myName = this.config.name;
-                const updatedBot = allBotsConfig.find(b => b.name === myName);
-
-                if (updatedBot) {
-                    this._log(`Reloaded configuration for bot '${myName}'`);
-                    // Keep botKey and index if they were set
-                    const oldKey = this.config.botKey;
-                    const oldIndex = this.config.botIndex;
-                    this.config = { ...updatedBot, botKey: oldKey, botIndex: oldIndex };
-                    this.manager.config = { ...this.manager.config, ...this.config };
-                }
-            } catch (e) {
-                this._warn(`Failed to reload config during resync (using current settings): ${e.message}`);
-            }
-
-            // 2. Perform the actual grid recalculation
-            const readFn = () => chainOrders.readOpenOrders(this.accountId);
-            await Grid.recalculateGrid(this.manager, {
-                readOpenOrdersFn: readFn,
-                chainOrders,
-                account: this.account,
-                privateKey: this.privateKey,
-                config: this.config,
-            });
-
-            this.manager.funds.btsFeesOwed = 0;
-            await this.manager.persistGrid();
-            success = true;
-
-            if (fs.existsSync(this.triggerFile)) {
-                fs.unlinkSync(this.triggerFile);
-                this._log('Removed trigger file.');
-            }
-        } catch (err) {
-            this._log(`Error during triggered resync: ${err.message}`, 'error');
-        } finally {
-            this.manager.finishBootstrap();
-        }
-
-        return success;
+        return DexbotMaintenanceRuntime.performGridResync.call(this);
     }
 
     /**
@@ -2824,23 +2715,7 @@ class DEXBot {
      * @private
      */
     async _handlePendingTriggerReset() {
-        if (!fs.existsSync(this.triggerFile)) {
-            return false; // No pending reset
-        }
-
-        this._log('Pending trigger file detected. Processing reset before startup...');
-
-        // Use fill lock to prevent concurrent modifications during resync
-        let resetSucceeded = false;
-        await this.manager._fillProcessingLock.acquire(async () => {
-            resetSucceeded = await this._performGridResync();
-        });
-
-        if (!resetSucceeded) {
-            this._warn('Pending trigger reset failed. Continuing with normal startup path.');
-        }
-
-        return resetSucceeded;
+        return DexbotMaintenanceRuntime.handlePendingTriggerReset.call(this);
     }
 
     /**
@@ -2849,49 +2724,7 @@ class DEXBot {
      * @private
      */
     async _setupTriggerFileDetection() {
-        // NOTE: Startup trigger file check is now handled in _handlePendingTriggerReset()
-        // This method now only sets up the runtime file watcher for trigger detection.
-
-        // Debounced watcher to avoid duplicate rapid triggers on some platforms
-        if (this._triggerWatcher && typeof this._triggerWatcher.close === 'function') {
-            this._triggerWatcher.close();
-            this._triggerWatcher = null;
-        }
-
-        if (this._triggerDebounceTimer) {
-            clearTimeout(this._triggerDebounceTimer);
-            this._triggerDebounceTimer = null;
-        }
-
-        try {
-            this._triggerWatcher = fs.watch(PROFILES_DIR, (eventType, filename) => {
-                try {
-                    if (this._shuttingDown) return;
-
-                    if (filename === path.basename(this.triggerFile)) {
-                        if ((eventType === 'rename' || eventType === 'change') && fs.existsSync(this.triggerFile)) {
-                            if (this._triggerDebounceTimer) clearTimeout(this._triggerDebounceTimer);
-                            this._triggerDebounceTimer = setTimeout(() => {
-                                this._triggerDebounceTimer = null;
-                                // Use fill lock to prevent concurrent modifications during resync
-                                this.manager._fillProcessingLock.acquire(async () => {
-                                    const ok = await this._performGridResync();
-                                    if (!ok) {
-                                        this._warn('Runtime trigger reset failed; retaining existing grid state.');
-                                    }
-                                }).catch(err => {
-                                    this._warn(`Trigger reset lock error: ${err.message}`);
-                                });
-                            }, 200);
-                        }
-                    }
-                } catch (err) {
-                    this._warn(`fs.watch handler error: ${err && err.message ? err.message : err}`);
-                }
-            });
-        } catch (err) {
-            this._warn(`Failed to setup file watcher: ${err.message}`);
-        }
+        return DexbotMaintenanceRuntime.setupTriggerFileDetection.call(this);
     }
 
     /**
@@ -2955,12 +2788,11 @@ class DEXBot {
      * @private
      */
     async _performPeriodicGridChecks() {
-        // CRITICAL: Caller (_setupBlockchainFetchInterval) already holds _fillProcessingLock
-        await this._runGridMaintenance('periodic', { fillLockAlreadyHeld: true });
+        return DexbotMaintenanceRuntime.performPeriodicGridChecks.call(this);
     }
 
     _isOpenOrdersSyncLoopEnabled() {
-        return !!TIMING.OPEN_ORDERS_SYNC_LOOP_ENABLED;
+        return DexbotMaintenanceRuntime.isOpenOrdersSyncLoopEnabled.call(this);
     }
 
     /**
@@ -2969,61 +2801,7 @@ class DEXBot {
      * @private
      */
     _startOpenOrdersSyncLoop() {
-        if (this._mainLoopPromise) {
-            return;
-        }
-
-        const hasPreferredEnvLoopDelay = Object.prototype.hasOwnProperty.call(process.env, 'OPEN_ORDERS_SYNC_LOOP_MS');
-        const loopDelayRaw = hasPreferredEnvLoopDelay
-            ? process.env.OPEN_ORDERS_SYNC_LOOP_MS
-            : undefined;
-        const hasEnvLoopDelay = loopDelayRaw !== undefined;
-        const configuredLoopDelayMs = hasEnvLoopDelay
-            ? Number(loopDelayRaw)
-            : Number(TIMING.RUN_LOOP_DEFAULT_MS);
-        const loopDelayMs = Number.isFinite(configuredLoopDelayMs) && configuredLoopDelayMs > 0
-            ? configuredLoopDelayMs
-            : Number(TIMING.RUN_LOOP_DEFAULT_MS);
-
-        if (hasEnvLoopDelay && loopDelayMs !== configuredLoopDelayMs) {
-            this._warn(
-                `Invalid OPEN_ORDERS_SYNC_LOOP_MS='${loopDelayRaw}'. Falling back to default ${TIMING.RUN_LOOP_DEFAULT_MS}ms.`
-            );
-        }
-
-        this._mainLoopActive = true;
-        this._log(`Open-orders sync loop started (every ${loopDelayMs}ms, dryRun=${!!this.config.dryRun})`);
-
-        this._mainLoopPromise = (async () => {
-            while (this._mainLoopActive && !this._shuttingDown) {
-                try {
-                    if (this.manager && this.accountId && !this.config.dryRun) {
-                        if (!this.manager._fillProcessingLock.isLocked() &&
-                            this.manager._fillProcessingLock.getQueueLength() === 0) {
-                            await this.manager._fillProcessingLock.acquire(async () => {
-                                const chainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
-                                const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders');
-
-                                if (syncResult?.filledOrders && syncResult.filledOrders.length > 0) {
-                                    this._log(`Open-orders sync loop: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
-                                    const rebalanceResult = await this.manager.processFilledOrders(syncResult.filledOrders, new Set());
-                                    const batchResult = await this._executeBatchIfNeeded(rebalanceResult, 'open-orders sync fill rebalance');
-                                    if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure && !batchResult?.skippedNoActions) {
-                                        await this.manager.persistGrid();
-                                    }
-                                }
-                            });
-                        }
-                    }
-                } catch (err) {
-                    this._warn(`Order manager loop error: ${err.message}`);
-                }
-
-                await new Promise(resolve => setTimeout(resolve, loopDelayMs));
-            }
-        })().finally(() => {
-            this._mainLoopPromise = null;
-        });
+        return DexbotMaintenanceRuntime.startOpenOrdersSyncLoop.call(this);
     }
 
     /**
@@ -3031,10 +2809,7 @@ class DEXBot {
      * @private
      */
     async _stopOpenOrdersSyncLoop() {
-        this._mainLoopActive = false;
-        if (this._mainLoopPromise) {
-            await this._mainLoopPromise;
-        }
+        return DexbotMaintenanceRuntime.stopOpenOrdersSyncLoop.call(this);
     }
 
     /**
@@ -3043,86 +2818,7 @@ class DEXBot {
      * @private
      */
     _setupBlockchainFetchInterval() {
-        const { TIMING } = require('./constants');
-        const intervalMin = TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN;
-
-        if (this._blockchainFetchInterval !== null && this._blockchainFetchInterval !== undefined) {
-            this._stopBlockchainFetchInterval();
-        }
-
-        // Validate the interval setting
-        if (!Number.isFinite(intervalMin) || intervalMin <= 0) {
-            this._log(`Blockchain fetch interval disabled (value: ${intervalMin}). Periodic blockchain updates will not run.`);
-            return;
-        }
-
-        // Validate manager and account ID
-        if (!this.manager || typeof this.manager.fetchAccountTotals !== 'function') {
-            this._warn('Cannot start blockchain fetch interval: manager or fetchAccountTotals method missing');
-            return;
-        }
-
-        if (!this.accountId) {
-            this._warn('Cannot start blockchain fetch interval: account ID not available');
-            return;
-        }
-
-        // Convert minutes to milliseconds
-        const intervalMs = intervalMin * 60 * 1000;
-
-        // Set up the periodic fetch
-        // Entire callback wrapped in fill lock to prevent race with fill processing
-        this._blockchainFetchInterval = setInterval(async () => {
-            try {
-                await this.manager._fillProcessingLock.acquire(async () => {
-                    // Reset recovery state each periodic cycle so accounting recovery can be re-attempted
-                    // even when no fills occur (processFilledOrders also resets this, but only runs on fills).
-                    // Fallback keeps compatibility with lightweight test stubs that may not attach accountant.
-                    if (this.manager.accountant && typeof this.manager.accountant.resetRecoveryState === 'function') {
-                        this.manager.accountant.resetRecoveryState();
-                    } else {
-                        this.manager._recoveryAttempted = false;
-                    }
-                    this._log(`Fetching blockchain account values (interval: every ${intervalMin}min)`);
-                    await this.manager.fetchAccountTotals(this.accountId);
-
-                    // Sync with current on-chain orders to detect divergence
-                    let chainOpenOrders = [];
-                    if (!this.config.dryRun) {
-                        try {
-                            chainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
-                            const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'periodicBlockchainFetch');
-
-                            // Log and process fills discovered during periodic sync
-                            if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
-                                this._log(`Periodic sync: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
-
-                                // Process these fills through the full strategy + batch pipeline
-                                // so periodic detection behaves consistently with fill listener processing.
-                                const rebalanceResult = await this.manager.processFilledOrders(syncResult.filledOrders, new Set());
-                                const batchResult = await this._executeBatchIfNeeded(rebalanceResult, 'periodic sync fill rebalance');
-                                if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure && !batchResult?.skippedNoActions) {
-                                    await this.manager.persistGrid();
-                                }
-                            }
-
-                            if (syncResult.unmatchedChainOrders && syncResult.unmatchedChainOrders.length > 0) {
-                                this._log(`Periodic sync: ${syncResult.unmatchedChainOrders.length} chain order(s) not in grid (surplus/divergence)`, 'warn');
-                            }
-                        } catch (err) {
-                            this._warn(`Error reading open orders during periodic fetch: ${err.message}`);
-                        }
-                    }
-
-                    // Perform periodic grid checks (fund thresholds, spread, health)
-                    await this._performPeriodicGridChecks();
-                });
-            } catch (err) {
-                this._warn(`Error during periodic blockchain fetch: ${err && err.message ? err.message : err}`);
-            }
-        }, intervalMs);
-
-        this._log(`Started periodic blockchain fetch interval: every ${intervalMin} minute(s)`);
+        return DexbotMaintenanceRuntime.setupBlockchainFetchInterval.call(this);
     }
 
     /**
@@ -3130,11 +2826,7 @@ class DEXBot {
      * @private
      */
     _stopBlockchainFetchInterval() {
-        if (this._blockchainFetchInterval !== null && this._blockchainFetchInterval !== undefined) {
-            clearInterval(this._blockchainFetchInterval);
-            this._blockchainFetchInterval = null;
-            this._log('Stopped periodic blockchain fetch interval');
-        }
+        return DexbotMaintenanceRuntime.stopBlockchainFetchInterval.call(this);
     }
 
     /**
@@ -3184,90 +2876,7 @@ class DEXBot {
      * @private
      */
     async _executeMaintenanceLogic(context) {
-        await this.manager.recalculateFunds();
-
-        // Clear any operations that have been stuck beyond timeout threshold
-        this.manager.clearStalePipelineOperations();
-
-        if (this._maintenanceCooldownCycles > 0) {
-            this._maintenanceCooldownCycles--;
-            this._log(
-                `[MAINT-COOLDOWN] Skipping ${context} maintenance after hard-abort recovery sync (remaining=${this._maintenanceCooldownCycles})`,
-                'warn'
-            );
-            return;
-        }
-
-        const pipelineStatus = this.manager.isPipelineEmpty(this._getPipelineSignals());
-        if (pipelineStatus.isEmpty) {
-            // ================================================================================
-            // STEP 1: HEALTH CHECK
-            // ================================================================================
-            const healthResult = await this.manager.checkGridHealth(
-                this.updateOrdersOnChainPlan.bind(this)
-            );
-            if (await this._abortFlowIfIllegalState(`${context} health check`)) return;
-            const dustCancelResult = await this._cancelDustOrders({
-                buy: healthResult.buyDustOrders,
-                sell: healthResult.sellDustOrders,
-            });
-            if (dustCancelResult?.batchResult?.abortedForIllegalState || dustCancelResult?.batchResult?.abortedForAccountingFailure) {
-                return;
-            }
-            // ================================================================================
-            // STEP 2: THRESHOLD AND DIVERGENCE CHECKS
-            // ================================================================================
-            // Structural checks run before spread correction so spread decisions use
-            // the final post-resize grid state.
-            // Only performed when pipeline is empty to prevent premature resizing.
-
-            // Perform unified divergence monitoring (Ratio + RMS)
-            try {
-                const persistedGridData = this.accountOrders.loadBotGrid(this.config.botKey, true) || [];
-                const calculatedGrid = Array.from(this.manager.orders.values());
-                const divergence = await Grid.monitorDivergence(this.manager, calculatedGrid, persistedGridData);
-
-                if (divergence.needsUpdate) {
-                    if (divergence.buy.ratio || divergence.sell.ratio) {
-                        this._log(`Grid update triggered by funds during ${context} (buy: ${divergence.buy.ratio}, sell: ${divergence.sell.ratio})`);
-                    }
-                    if (divergence.buy.rms || divergence.sell.rms) {
-                        this._log(`Grid update triggered by structural divergence during ${context}: buy=${Format.formatPrice6(divergence.buy.metric)}, sell=${Format.formatPrice6(divergence.sell.metric)}`);
-                    }
-
-                    try {
-                        await applyGridDivergenceCorrections(
-                            this.manager,
-                            this.accountOrders,
-                            this.config.botKey,
-                            this.updateOrdersOnChainBatch.bind(this)
-                        );
-                        if (await this._abortFlowIfIllegalState(`${context} divergence correction`)) return;
-                        this._log(`Grid divergence corrections applied during ${context}`);
-                    } catch (err) {
-                        this._warn(`Error applying divergence corrections during ${context}: ${err.message}`);
-                    }
-                }
-            } catch (err) {
-                this._warn(`Error running divergence check during ${context}: ${err.message}`);
-            }
-
-            // ================================================================================
-            // STEP 3: SPREAD CORRECTION (FINAL)
-            // ================================================================================
-            // Run spread correction after health + divergence work so it uses the
-            // final stabilized grid state for this maintenance cycle.
-
-            const spreadResult = await this.manager.checkSpreadCondition(
-                BitShares,
-                this.updateOrdersOnChainPlan.bind(this)
-            );
-            if (await this._abortFlowIfIllegalState(`${context} spread check`)) return;
-            if (spreadResult && spreadResult.ordersPlaced > 0) {
-                this._log(`✓ Spread correction during ${context}: ${spreadResult.ordersPlaced} order(s) placed`);
-                await this._persistAndRecoverIfNeeded();
-            }
-        }
+        return DexbotMaintenanceRuntime.executeMaintenanceLogic.call(this, context);
     }
 
     /**
@@ -3290,179 +2899,15 @@ class DEXBot {
      * @private
      */
     async _cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {}) {
-        const delaySec = GRID_LIMITS.DUST_CANCEL_DELAY_SEC;
-        if (!Number.isFinite(delaySec) || delaySec < 0) {
-            this._clearDustMaintenanceTimer();
-            return { cancelledCount: 0, batchResult: null };
-        }
-
-        const now = Date.now();
-        const delayMs = delaySec * 1_000;
-        const allDust = [...buyDust, ...sellDust];
-        const dustIds = new Set(allDust.map(o => o.orderId).filter(Boolean));
-
-        // Prune orders that are no longer dust (recovered or naturally filled).
-        for (const orderId of this._dustSinceMap.keys()) {
-            if (!dustIds.has(orderId)) this._dustSinceMap.delete(orderId);
-        }
-
-        // Record first-seen timestamp for newly-detected dust orders.
-        for (const order of allDust) {
-            if (order.orderId && !this._dustSinceMap.has(order.orderId)) {
-                this._dustSinceMap.set(order.orderId, now);
-            }
-        }
-
-        // Determine which orders have been dust long enough to cancel.
-        const toCancel = allDust.filter(o => {
-            if (!o.orderId) return false;
-            const firstSeen = this._dustSinceMap.get(o.orderId) ?? now;
-            return (now - firstSeen) >= delayMs;
-        });
-
-        if (toCancel.length === 0) {
-            this._scheduleDustMaintenanceCheck();
-            return { cancelledCount: 0, batchResult: null };
-        }
-
-        let cancelledCount = 0;
-        const syntheticFills = [];
-        for (const order of toCancel) {
-            try {
-                // Normal cancel path stays single-order. If the cancel was already gone on-chain
-                // and the helper reports verifiedAfterFailure, refetch open orders first.
-                const cancelResult = await chainOrders.cancelOrder(this.account, this.privateKey, order.orderId);
-
-                if (cancelResult?.verifiedAfterFailure) {
-                    const accountRef = this.accountId || this.account;
-                    const chainOpenOrders = await chainOrders.readOpenOrders(accountRef);
-                    await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders');
-                } else {
-                    await this.manager.synchronizeWithChain({ orderId: order.orderId, clearSize: true }, 'cancelOrder');
-                }
-
-                syntheticFills.push({
-                    ...order,
-                    isPartial: true,
-                    isDelayedRotationTrigger: true,
-                    dustCancelTriggeredAt: now
-                });
-                this._dustSinceMap.delete(order.orderId);
-                cancelledCount++;
-                this._log(
-                    `[DUST-CANCEL] Cancelled dust order ${order.id} (${order.orderId}) ` +
-                    `as fully filled (delay=${delaySec}s, size=${order.size})`,
-                    'info'
-                );
-            } catch (err) {
-                this._warn(`[DUST-CANCEL] Failed to cancel dust order ${order.id}: ${err.message}`);
-            }
-        }
-
-        let batchResult = null;
-        if (syntheticFills.length > 0) {
-            const rebalanceResult = await this.manager.processFilledOrders(syntheticFills, new Set());
-            batchResult = await this._executeBatchIfNeeded(
-                rebalanceResult,
-                `dust cancel [${syntheticFills.map(o => o.id).join(', ')}]`
-            );
-
-            if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure) {
-                await this.manager.persistGrid();
-            }
-        } else if (cancelledCount > 0) {
-            await this.manager.recalculateFunds();
-            await this.manager.persistGrid();
-        }
-
-        // After cancelling the top dust order the next order below is now the new top.
-        // Immediately seed it into _dustSinceMap so its delay starts now rather than
-        // waiting for the next periodic maintenance cycle to discover it.
-        if (cancelledCount > 0) {
-            try {
-                const freshHealth = await this.manager.checkGridHealth(null);
-                const seenAt = Date.now();
-                for (const order of [...freshHealth.buyDustOrders, ...freshHealth.sellDustOrders]) {
-                    if (order.orderId && !this._dustSinceMap.has(order.orderId)) {
-                        this._dustSinceMap.set(order.orderId, seenAt);
-                    }
-                }
-            } catch (err) {
-                this._warn(`[DUST-CANCEL] Failed to reseed dust timers after cancel: ${err.message}`);
-            }
-        }
-
-        // _scheduleDustMaintenanceCheck clears any existing timer first, so call it
-        // before the fallback so we don't clobber the fallback timer.
-        this._scheduleDustMaintenanceCheck();
-
-        // If the reseed failed (or found nothing) the map may still be empty and
-        // _scheduleDustMaintenanceCheck would have bailed early. Install a bare
-        // follow-up scan so a newly exposed top order is never permanently skipped.
-        if (cancelledCount > 0 && this._dustSinceMap.size === 0 && !this._shuttingDown && !this._dustMaintenanceTimer) {
-            const delayMs = GRID_LIMITS.DUST_CANCEL_DELAY_SEC * 1_000;
-            this._dustMaintenanceTimer = setTimeout(() => {
-                this._dustMaintenanceTimer = null;
-                if (this._shuttingDown || !this.manager?._fillProcessingLock) return;
-                this.manager._fillProcessingLock.acquire(async () => {
-                    if (!this._shuttingDown) {
-                        await this._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true });
-                    }
-                }).catch(err2 => this._warn(`Error during dust fallback timer: ${err2.message}`));
-            }, delayMs);
-        }
-        return { cancelledCount, batchResult };
+        return DexbotMaintenanceRuntime.cancelDustOrders.call(this, { buy: buyDust, sell: sellDust });
     }
 
     _clearDustMaintenanceTimer() {
-        if (this._dustMaintenanceTimer) {
-            clearTimeout(this._dustMaintenanceTimer);
-            this._dustMaintenanceTimer = null;
-        }
+        return DexbotMaintenanceRuntime.clearDustMaintenanceTimer.call(this);
     }
 
     _scheduleDustMaintenanceCheck() {
-        this._clearDustMaintenanceTimer();
-
-        const delaySec = GRID_LIMITS.DUST_CANCEL_DELAY_SEC;
-        if (
-            this._shuttingDown ||
-            !this.manager ||
-            !Number.isFinite(delaySec) ||
-            delaySec < 0 ||
-            this._dustSinceMap.size === 0
-        ) {
-            return;
-        }
-
-        const delayMs = delaySec * 1_000;
-        const now = Date.now();
-        let nextRunAt = Number.POSITIVE_INFINITY;
-
-        for (const firstSeen of this._dustSinceMap.values()) {
-            if (!Number.isFinite(firstSeen)) continue;
-            nextRunAt = Math.min(nextRunAt, firstSeen + delayMs);
-        }
-
-        const nextDelayMs = Number.isFinite(nextRunAt)
-            ? Math.max(0, nextRunAt - now)
-            : delayMs;
-
-        this._dustMaintenanceTimer = setTimeout(() => {
-            this._dustMaintenanceTimer = null;
-            if (this._shuttingDown || !this.manager?._fillProcessingLock) return;
-
-            this.manager._fillProcessingLock.acquire(async () => {
-                if (this._shuttingDown) return;
-                await this._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true });
-            }).catch(err => {
-                this._warn(`Error during dust maintenance timer: ${err.message}`);
-            }).finally(() => {
-                if (!this._shuttingDown) {
-                    this._scheduleDustMaintenanceCheck();
-                }
-            });
-        }, nextDelayMs);
+        return DexbotMaintenanceRuntime.scheduleDustMaintenanceCheck.call(this);
     }
 
     /**
@@ -3474,30 +2919,7 @@ class DEXBot {
      * @private
      */
     async _seedDustTimersFromPartialUpdates(updatedOrders = [], detectedAt = Date.now()) {
-        if (!this.manager || !Array.isArray(updatedOrders) || updatedOrders.length === 0) return;
-
-        const partialOrders = updatedOrders.filter(order =>
-            order && order.state === ORDER_STATES.PARTIAL && order.orderId
-        );
-        if (partialOrders.length === 0) return;
-
-        const { buyDustOrders, sellDustOrders } = await Grid.checkWindowDust(this.manager);
-        const dustOrderIds = new Set(
-            [...buyDustOrders, ...sellDustOrders].map(order => order.orderId).filter(Boolean)
-        );
-
-        for (const order of partialOrders) {
-            if (!order?.orderId) continue;
-            if (dustOrderIds.has(order.orderId)) {
-                if (!this._dustSinceMap.has(order.orderId)) {
-                    this._dustSinceMap.set(order.orderId, detectedAt);
-                }
-            } else {
-                this._dustSinceMap.delete(order.orderId);
-            }
-        }
-
-        this._scheduleDustMaintenanceCheck();
+        return DexbotMaintenanceRuntime.seedDustTimersFromPartialUpdates.call(this, updatedOrders, detectedAt);
     }
 
     /**
@@ -3526,36 +2948,7 @@ class DEXBot {
      * @private
      */
     async _runGridMaintenance(context = 'periodic', options = {}) {
-        if (options === null || typeof options !== 'object' || Array.isArray(options)) {
-            throw new TypeError('Grid maintenance options must be an object');
-        }
-        const fillLockAlreadyHeld = options.fillLockAlreadyHeld === true;
-
-        try {
-            if (!this.manager || !this.manager.orders || this.manager.orders.size === 0) return;
-
-            // Core maintenance logic wrapped in divergence lock
-            const runWithDivergenceLock = async () => {
-                await this.manager._divergenceLock.acquire(async () => {
-                    await this._executeMaintenanceLogic(context);
-                });
-            };
-
-            // CANONICAL LOCK ORDER: _fillProcessingLock → _divergenceLock
-            // This prevents deadlocks with _consumeFillQueue which uses the same order.
-            if (fillLockAlreadyHeld) {
-                // Caller guarantees they hold _fillProcessingLock - just acquire inner lock
-                await runWithDivergenceLock();
-            } else {
-                // Acquire outer lock first, then inner lock
-                await this.manager._fillProcessingLock.acquire(async () => {
-                    await runWithDivergenceLock();
-                });
-            }
-
-        } catch (err) {
-            this._warn(`Error during ${context} grid maintenance: ${err.message}`);
-        }
+        return DexbotMaintenanceRuntime.runGridMaintenance.call(this, context, options);
     }
 
     /**

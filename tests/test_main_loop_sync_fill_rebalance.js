@@ -30,14 +30,31 @@ async function runTests() {
 
     const originalLoopMs = process.env.OPEN_ORDERS_SYNC_LOOP_MS;
     const originalReadOpenOrders = chainOrders.readOpenOrders;
+    const unhandledRejectionHandler = (reason) => {
+        const isWsErrorEvent = reason &&
+            (
+                reason.constructor?.name === 'ErrorEvent' ||
+                (reason.type === 'error' && reason.error && typeof reason.error === 'object')
+            );
+
+        if (isWsErrorEvent) {
+            return;
+        }
+
+        console.error('✗ Main loop sync fill rebalance test failed');
+        console.error(reason);
+        process.exit(1);
+    };
 
     process.env.OPEN_ORDERS_SYNC_LOOP_MS = '20';
+    process.on('unhandledRejection', unhandledRejectionHandler);
 
     try {
         let syncCalls = 0;
         let processCalls = 0;
         let batchCalls = 0;
         let persistCalls = 0;
+        const unhandledRejectionListenersBefore = process.listeners('unhandledRejection').length;
 
         const bot = new DEXBot({
             botKey: 'test_main_loop_sync_fill_rebalance',
@@ -96,8 +113,18 @@ async function runTests() {
         chainOrders.readOpenOrders = async () => [];
 
         bot._startOpenOrdersSyncLoop();
+        assert.strictEqual(
+            process.listeners('unhandledRejection').length,
+            unhandledRejectionListenersBefore,
+            'Open-orders sync loop must not install global unhandledRejection handlers'
+        );
         await new Promise((resolve) => setTimeout(resolve, 90));
         await bot._stopOpenOrdersSyncLoop();
+        assert.strictEqual(
+            process.listeners('unhandledRejection').length,
+            unhandledRejectionListenersBefore,
+            'Open-orders sync loop shutdown must leave global unhandledRejection handlers unchanged'
+        );
 
         assert(syncCalls >= 1, 'Main loop should run synchronizeWithChain at least once');
         assert.strictEqual(processCalls, 1, 'Main loop should process sync-detected fills');
@@ -106,6 +133,7 @@ async function runTests() {
 
         console.log('✓ Main loop processes sync-detected fills through rebalance pipeline');
     } finally {
+        process.off('unhandledRejection', unhandledRejectionHandler);
         if (originalLoopMs === undefined) {
             delete process.env.OPEN_ORDERS_SYNC_LOOP_MS;
         } else {
