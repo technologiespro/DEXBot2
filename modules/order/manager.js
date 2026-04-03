@@ -703,8 +703,8 @@ class OrderManager {
         return this.sync.syncFromOpenOrders(orders, info);
     }
 
-    syncFromFillHistory(fill) {
-        return this.sync.syncFromFillHistory(fill);
+    syncFromFillHistory(fill, options) {
+        return this.sync.syncFromFillHistory(fill, options);
     }
 
     async synchronizeWithChain(data, src) {

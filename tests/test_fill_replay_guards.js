@@ -191,6 +191,29 @@ async function runTests() {
         assert.strictEqual(bot._pendingProcessedFillWrites.size, 0, 'Deferred batch flush should drain pending writes');
     }
 
+    console.log(' - Testing OrderManager wrapper forwards fill sync options...');
+    {
+        const { bot } = await createBotFixture('test_fill_replay_wrapper_forwarding');
+        const fill = buildFill('1.11.7910');
+        let receivedOptions = null;
+        const originalSyncFromFillHistory = bot.manager.sync.syncFromFillHistory.bind(bot.manager.sync);
+
+        bot.manager.sync.syncFromFillHistory = async (incomingFill, options) => {
+            receivedOptions = options;
+            return originalSyncFromFillHistory(incomingFill, options);
+        };
+
+        await bot.manager.syncFromFillHistory(fill, {
+            persistenceMode: PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
+        });
+
+        assert.strictEqual(
+            receivedOptions?.persistenceMode,
+            PROCESSED_FILL_PERSISTENCE_MODES.BATCHED,
+            'Manager wrapper should forward the fill sync persistence mode'
+        );
+    }
+
     console.log(' - Testing immediate persistence failure rolls back accounting and tracker state...');
     {
         const { bot, persistedFills } = await createBotFixture('test_fill_replay_immediate_failure', {
