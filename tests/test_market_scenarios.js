@@ -10,6 +10,7 @@ const assert = require('assert');
 const { OrderManager } = require('../modules/order/manager');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 const { initializeFeeCache } = require('../modules/order/utils/system');
+const { createTestLogger } = require('./helpers/silent_logger');
 
 // --- Mock Environment ---
 const mockBitShares = {
@@ -34,12 +35,11 @@ async function setupScenarioManager(activeCount = 3) {
         incrementPercent: 1, targetSpreadPercent: 2, weightDistribution: { buy: 0.5, sell: 0.5 }
     };
     const mgr = new OrderManager(cfg);
-    mgr.logger = { 
-        log: (msg, lvl) => { 
-            if (lvl === 'error' || lvl === 'warn') console.log(`    [${lvl.toUpperCase()}] ${msg}`); 
-        }, 
-        logFundsStatus: () => {} 
-    };
+    mgr.logger = createTestLogger({
+        onLog: (msg, lvl) => {
+            if (lvl === 'error' || lvl === 'warn') console.log(`    [${lvl.toUpperCase()}] ${msg}`);
+        }
+    });
     mgr.assets = { 
         assetA: { id: '1.3.0', precision: 5, symbol: 'BTS' }, 
         assetB: { id: '1.3.1', precision: 8, symbol: 'USD' } 

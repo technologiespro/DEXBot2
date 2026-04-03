@@ -1,4 +1,8 @@
 const assert = require('assert');
+const { installBitsharesClientStub } = require('./helpers/bitshares_client_stub');
+
+const bitsharesClientPath = require.resolve('../modules/bitshares_client');
+installBitsharesClientStub(bitsharesClientPath);
 
 const DEXBot = require('../modules/dexbot_class');
 const chainOrders = require('../modules/chain_orders');

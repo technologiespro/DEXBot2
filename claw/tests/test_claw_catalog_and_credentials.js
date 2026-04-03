@@ -61,13 +61,19 @@ function testClawCatalog() {
 
 async function testCredentialDaemonClient() {
   const clientPath = require.resolve('../modules/dexbot_credential_client');
+  const runtimePath = require.resolve('../../modules/credential_runtime');
   clearModule(clientPath);
+  clearModule(runtimePath);
   const client = require('../modules/dexbot_credential_client');
+  const runtime = require('../../modules/credential_runtime');
 
   const originalExistsSync = fs.existsSync;
   const originalCreateConnection = net.createConnection;
 
   try {
+    assert.strictEqual(client.DEFAULT_SOCKET_PATH, runtime.getCredentialSocketPath());
+    assert.strictEqual(client.DEFAULT_READY_FILE, runtime.getCredentialReadyFilePath());
+
     let readyChecks = 0;
     fs.existsSync = (filePath) => {
       if (String(filePath).includes('cred')) {
@@ -201,6 +207,7 @@ async function testCredentialDaemonClient() {
     fs.existsSync = originalExistsSync;
     net.createConnection = originalCreateConnection;
     clearModule(clientPath);
+    clearModule(runtimePath);
   }
 }
 

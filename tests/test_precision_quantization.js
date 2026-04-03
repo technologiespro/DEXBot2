@@ -27,6 +27,7 @@ const { OrderManager } = require('../modules/order/manager');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 const { floatToBlockchainInt, blockchainToFloat } = require('../modules/order/utils/math');
 const { buildCreateOrderArgs } = require('../modules/order/utils/order');
+const { createTestLogger } = require('./helpers/silent_logger');
 
 console.log('='.repeat(70));
 console.log('Testing Precision Quantization Fix');
@@ -100,12 +101,13 @@ async function testFillWithQuantizedOrder() {
     };
 
     const mgr = new OrderManager(cfg);
-    mgr.logger = {
-        log: (msg, level) => {
+    mgr.logger = createTestLogger({
+        includeFundsStatus: false,
+        onLog: (msg, level) => {
             if (level === 'debug') return;
             console.log(`    [${level.toUpperCase()}] ${msg}`);
         }
-    };
+    });
 
     mgr.assets = {
         assetA: { id: '1.3.0', precision: 4 },

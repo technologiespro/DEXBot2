@@ -2,6 +2,7 @@ const assert = require('assert');
 const { OrderManager } = require('../modules/order/manager');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 const { initializeFeeCache } = require('../modules/order/utils/system');
+const { createTestLogger } = require('./helpers/silent_logger');
 
 // Mock BitShares for fee initialization
 const mockBitShares = {
@@ -50,13 +51,12 @@ async function setupManager() {
     };
 
     const mgr = new OrderManager(cfg);
-    mgr.logger = {
-        log: (msg, level) => {
+    mgr.logger = createTestLogger({
+        onLog: (msg, level) => {
             if (level === 'debug') return;
             console.log(`    [${level}] ${msg}`);
-        },
-        logFundsStatus: () => {}
-    };
+        }
+    });
 
     mgr.assets = {
         assetA: { id: '1.3.0', precision: 8 },

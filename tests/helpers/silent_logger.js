@@ -1,0 +1,18 @@
+function createTestLogger({ onLog = null, includeFundsStatus = true } = {}) {
+    const logger = {
+        log: typeof onLog === 'function' ? onLog : () => {},
+    };
+    if (includeFundsStatus) {
+        logger.logFundsStatus = () => {};
+    }
+    return logger;
+}
+
+function createSilentLogger() {
+    return createTestLogger();
+}
+
+module.exports = {
+    createTestLogger,
+    createSilentLogger,
+};

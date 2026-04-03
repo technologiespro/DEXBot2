@@ -9,6 +9,7 @@
 const assert = require('assert');
 const { OrderManager } = require('../modules/order/index.js');
 const { ORDER_TYPES, ORDER_STATES, TIMING } = require('../modules/constants.js');
+const { createSilentLogger } = require('./helpers/silent_logger');
 
 // Mock getAssetFees to prevent crashes during recalculateFunds
 const OrderUtils = require('../modules/order/utils/math');
@@ -40,6 +41,7 @@ async function runTests() {
              weightDistribution: { sell: 0.5, buy: 0.5 },
              activeOrders: { buy: 5, sell: 5 }
          });
+         mgr.logger = createSilentLogger();
          await mgr.setAccountTotals({
              buy: 10000,
              sell: 100,

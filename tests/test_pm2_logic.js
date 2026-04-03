@@ -3,11 +3,15 @@ const assert = require('assert');
 console.log('Running PM2 logic tests');
 
 const {
+    buildCredentialDaemonApp,
+    buildEcosystemApps,
+    buildScopedChildEnv,
     countManagedBots,
     isServiceApp,
     needsPriceAdapter,
     usesAmaGridPrice,
 } = require('../pm2');
+const { selectActiveBotEntries } = require('../modules/bot_settings');
 
 assert.strictEqual(isServiceApp({ name: 'dexbot-cred' }), true, 'credential daemon should be treated as a service app');
 assert.strictEqual(isServiceApp({ name: 'dexbot-update' }), true, 'updater should be treated as a service app');
@@ -29,6 +33,46 @@ assert.strictEqual(
     ]),
     2,
     'managed bot count should exclude service processes'
+);
+
+assert.deepStrictEqual(selectActiveBotEntries({ bots: [] }), [], 'empty bot config should remain empty');
+assert.deepStrictEqual(
+    selectActiveBotEntries({ bots: [{ name: 'XRP-BTS', active: false }, { name: 'H-BTS', active: true }] }),
+    [{ name: 'H-BTS', active: true }],
+    'inactive bots should be filtered out'
+);
+const clawOnlyApps = buildEcosystemApps([], { includeUpdater: false });
+assert.deepStrictEqual(
+    clawOnlyApps.map((app) => app.name),
+    [],
+    'claw-only ecosystem should not contain any bot-managed apps'
+);
+
+const credentialApp = buildCredentialDaemonApp({
+    credentialEnv: {
+        DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/test-bootstrap.sock',
+    },
+});
+assert.deepStrictEqual(
+    credentialApp.env,
+    {
+        DEXBOT_CRED_DAEMON_SOCKET: credentialApp.env.DEXBOT_CRED_DAEMON_SOCKET,
+        DEXBOT_CRED_DAEMON_READY_FILE: credentialApp.env.DEXBOT_CRED_DAEMON_READY_FILE,
+        DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/test-bootstrap.sock',
+    },
+    'credential bootstrap env should only be attached to dexbot-cred'
+);
+assert.strictEqual(credentialApp.autorestart, false, 'credential daemon should require a fresh unlock after stop/crash');
+process.env.TEST_PM2_SECRET = 'should-not-leak';
+const scopedEnv = buildScopedChildEnv({ extra: { DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/test-bootstrap.sock' } });
+delete process.env.TEST_PM2_SECRET;
+assert.strictEqual(scopedEnv.TEST_PM2_SECRET, undefined, 'scoped child env should not forward arbitrary parent secrets');
+assert.strictEqual(scopedEnv.DEXBOT_CRED_BOOTSTRAP_SOCKET, '/tmp/test-bootstrap.sock', 'scoped child env should keep explicit launcher extras');
+assert.strictEqual(
+    buildEcosystemApps([{ name: 'XRP-BTS' }], { includeUpdater: false, credentialEnv: { SECRET: 'scoped' } })
+        .find((app) => app.name === 'XRP-BTS').env,
+    undefined,
+    'bot apps should not receive credential bootstrap env'
 );
 
 console.log('PM2 logic tests passed');

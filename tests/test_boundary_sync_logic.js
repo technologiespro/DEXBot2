@@ -7,6 +7,7 @@ const assert = require('assert');
 const { OrderManager } = require('../modules/order/manager');
 const Grid = require('../modules/order/grid');
 const { ORDER_STATES, ORDER_TYPES } = require('../modules/constants');
+const { createTestLogger } = require('./helpers/silent_logger');
 
 function createMockManager(buyFunds = 10000, sellFunds = 100, startPrice = 100) {
     const manager = new OrderManager({
@@ -33,9 +34,7 @@ function createMockManager(buyFunds = 10000, sellFunds = 100, startPrice = 100) 
     manager.targetSpreadCount = 2;
     manager.outOfSpread = 0;
 
-    manager.logger = {
-        log: (msg, level) => { /* silent */ }
-    };
+    manager.logger = createTestLogger({ includeFundsStatus: false });
 
     return manager;
 }

@@ -9,6 +9,7 @@
 const assert = require('assert');
 const { OrderManager } = require('../modules/order/index.js');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants.js');
+const { createSilentLogger } = require('./helpers/silent_logger');
 
 // Mock getAssetFees
 const OrderUtils = require('../modules/order/utils/math');
@@ -27,6 +28,7 @@ async function runTests() {
         const mgr = new OrderManager({
             market: 'TEST/BTS', assetA: 'TEST', assetB: 'BTS'
         });
+        mgr.logger = createSilentLogger();
         mgr.assets = { assetA: { id: '1.3.0', precision: 8 }, assetB: { id: '1.3.1', precision: 5 } };
         await mgr.setAccountTotals({ buy: 10000, sell: 100, buyFree: 10000, sellFree: 100 });
         return mgr;
