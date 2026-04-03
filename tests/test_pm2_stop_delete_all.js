@@ -1,57 +1,118 @@
 const assert = require('assert');
 const childProcess = require('child_process');
 const fs = require('fs');
+const path = require('path');
+const { EventEmitter } = require('events');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
 
 console.log('Running PM2 stop/delete all tests');
 
 const pm2Path = require.resolve('../pm2');
 const botSettingsPath = require.resolve('../modules/bot_settings');
+const ecosystemConfigPath = path.join(__dirname, '..', 'profiles', 'ecosystem.config.js');
 
 const originalPm2Module = require.cache[pm2Path];
 const originalBotSettings = require.cache[botSettingsPath];
 const originalSpawn = childProcess.spawn;
 const originalExistsSync = fs.existsSync;
+const originalLog = console.log;
 const originalWarn = console.warn;
 
 const calls = [];
+const logs = [];
 const warnings = [];
+
+let scenario = 'output';
+
+function makePm2Child() {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.kill = () => {};
+    return child;
+}
+
+function emitLines(child, lines) {
+    process.nextTick(() => {
+        for (const line of lines) {
+            child.stdout.emit('data', `${line}\n`);
+        }
+        child.emit('close', 0);
+    });
+}
+
+function resetCaptured() {
+    calls.length = 0;
+    logs.length = 0;
+    warnings.length = 0;
+}
 
 function installStubs() {
     delete require.cache[pm2Path];
+
     setCachedModule(botSettingsPath, {
         loadSettingsFile: () => {
-            throw new Error('malformed bots.json');
+            if (scenario === 'warn') {
+                throw new Error('malformed bots.json');
+            }
+            return {
+                config: {
+                    bots: [
+                        { name: 'XRP-BTS', active: true },
+                        { name: 'H-BTS', active: true },
+                        { name: 'T-BTS', active: true },
+                    ],
+                },
+            };
         },
-        selectActiveBotEntries: () => [],
+        selectActiveBotEntries: (config) => (config && Array.isArray(config.bots) ? config.bots.filter((bot) => bot.active !== false) : []),
     });
 
     childProcess.spawn = (_command, args) => {
         calls.push(args);
-        const child = {
-            stdout: { on() {} },
-            stderr: { on() {} },
-            on(event, cb) {
-                if (event === 'close') process.nextTick(() => cb(0));
-                return child;
-            },
-        };
+        const child = makePm2Child();
+        const action = args[0];
+        const target = String(args[1] || '');
+
+        if (scenario === 'output' && target === ecosystemConfigPath && (action === 'stop' || action === 'delete')) {
+            const actionVerb = action === 'stop' ? 'stopProcessId' : 'deleteProcessId';
+            emitLines(child, [
+                `[PM2] Applying action ${actionVerb} on app [XRP-BTS, H-BTS, T-BTS, dexbot-update](ids: [ 63, 64, 65, 66 ])`,
+                '[PM2] [H-BTS](64) ✓',
+                '[PM2] [XRP-BTS](63) ✓',
+                '[PM2] [dexbot-update](66) ✓',
+                '[PM2] [T-BTS](65) ✓',
+                '┌────┬────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐',
+                '│ id │ name           │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │',
+                '└────┴────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘',
+            ]);
+            return child;
+        }
+
+        process.nextTick(() => child.emit('close', 0));
         return child;
     };
 
     fs.existsSync = (targetPath) => {
-        if (String(targetPath).endsWith('profiles/ecosystem.config.js')) return false;
+        if (String(targetPath).endsWith('profiles/ecosystem.config.js')) return scenario === 'output';
         if (String(targetPath).endsWith('profiles/bots.json')) return true;
         if (String(targetPath).endsWith('profiles/logs')) return true;
         return originalExistsSync(targetPath);
     };
 
-    console.warn = (message) => warnings.push(String(message));
+    console.log = (...args) => {
+        logs.push(args.map((part) => String(part)).join(' '));
+    };
+
+    console.warn = (...args) => {
+        warnings.push(args.map((part) => String(part)).join(' '));
+    };
 }
 
 function restoreStubs() {
     childProcess.spawn = originalSpawn;
     fs.existsSync = originalExistsSync;
+    console.log = originalLog;
     console.warn = originalWarn;
 
     restoreCachedModule(botSettingsPath, originalBotSettings);
@@ -66,6 +127,63 @@ const { deletePM2Processes, stopPM2Processes } = require('../pm2');
 
 (async () => {
     try {
+        scenario = 'output';
+
+        resetCaptured();
+        await stopPM2Processes('all');
+        assert.deepStrictEqual(
+            logs,
+            [
+                'Stopping PM2 processes: all',
+                '',
+                '[PM2] [H-BTS](64) ✓',
+                '[PM2] [XRP-BTS](63) ✓',
+                '[PM2] [dexbot-update](66) ✓',
+                '[PM2] [T-BTS](65) ✓',
+                '',
+                'All dexbot PM2 processes stopped.',
+            ],
+            'stop all should emit the compact ordered PM2 output'
+        );
+        assert.deepStrictEqual(
+            calls.map((args) => [args[0], args[1]]),
+            [
+                ['stop', ecosystemConfigPath],
+                ['stop', 'dexbot-cred'],
+            ],
+            'stop all should act on the managed ecosystem first and then dexbot-cred silently'
+        );
+        assert.deepStrictEqual(warnings, [], 'stop all should not warn in the normal path');
+
+        resetCaptured();
+        await deletePM2Processes('all');
+        assert.deepStrictEqual(
+            logs,
+            [
+                'Deleting PM2 processes: all',
+                '',
+                '[PM2] [H-BTS](64) ✓',
+                '[PM2] [XRP-BTS](63) ✓',
+                '[PM2] [dexbot-update](66) ✓',
+                '[PM2] [T-BTS](65) ✓',
+                '',
+                'All dexbot PM2 processes deleted.',
+            ],
+            'delete all should emit the compact ordered PM2 output'
+        );
+        assert.deepStrictEqual(
+            calls.map((args) => [args[0], args[1]]),
+            [
+                ['delete', ecosystemConfigPath],
+                ['delete', 'dexbot-cred'],
+            ],
+            'delete all should act on the managed ecosystem first and then dexbot-cred silently'
+        );
+        assert.deepStrictEqual(warnings, [], 'delete all should not warn in the normal path');
+
+        scenario = 'warn';
+
+        resetCaptured();
         await stopPM2Processes('all');
         await deletePM2Processes('all');
 
@@ -86,12 +204,12 @@ const { deletePM2Processes, stopPM2Processes } = require('../pm2');
             'delete all should warn when managed bot config regeneration fails'
         );
 
+        restoreStubs();
         console.log('PM2 stop/delete all tests passed');
         process.exit(0);
     } catch (err) {
+        restoreStubs();
         console.error(err);
         process.exit(1);
-    } finally {
-        restoreStubs();
     }
 })();

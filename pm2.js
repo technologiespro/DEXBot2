@@ -118,6 +118,40 @@ function countManagedBots(apps) {
     return (apps || []).filter((app) => !isServiceApp(app)).length;
 }
 
+function isPm2TableLine(line) {
+    const trimmed = String(line || '').trim();
+    if (!trimmed) return true;
+    return /^[┌┬│├┤└┴─\s]+$/.test(trimmed) || /^[┌┬│├┤└┴]/.test(trimmed);
+}
+
+function transformPm2Line(line) {
+    const trimmed = String(line || '').trim();
+    if (!trimmed) return null;
+    if (isPm2TableLine(trimmed)) return null;
+    if (/^\[PM2\] Starting\b/.test(trimmed)) return null;
+    if (trimmed === '[PM2] Done.') return null;
+    if (/^\[PM2\] cron restart at /.test(trimmed)) return null;
+    if (/^\[PM2\]\[WARN\] Applications .* not running, starting\.\.\.$/.test(trimmed)) return null;
+    if (/^\[PM2\] Applying action /.test(trimmed)) return null;
+    return trimmed.replace(/\s+\(\d+ instances?\)$/, '');
+}
+
+function flushPm2Buffer(buffer, writer, { final = false } = {}) {
+    if (!buffer) return '';
+    const lines = buffer.split(/\r?\n/);
+    const trailing = lines.pop();
+    for (const line of lines) {
+        const transformed = transformPm2Line(line);
+        if (transformed) writer(transformed);
+    }
+    if (final && trailing && trailing.trim()) {
+        const transformed = transformPm2Line(trailing);
+        if (transformed) writer(transformed);
+        return '';
+    }
+    return trailing || '';
+}
+
 /**
  * Build PM2 app definitions for the current runtime.
  * @param {Array<Object>} bots - Active bot entries.
@@ -429,52 +463,19 @@ function startPM2Process(args, env = buildScopedChildEnv()) {
         let stdoutBuffer = '';
         let stderrBuffer = '';
 
-        function isPm2TableLine(line) {
-            const trimmed = String(line || '').trim();
-            if (!trimmed) return true;
-            return /^[┌┬│├┤└┴─\s]+$/.test(trimmed) || /^[┌┬│├┤└┴]/.test(trimmed);
-        }
-
-        function transformPm2Line(line) {
-            const trimmed = String(line || '').trim();
-            if (!trimmed) return null;
-            if (isPm2TableLine(trimmed)) return null;
-            if (/^\[PM2\] Starting\b/.test(trimmed)) return null;
-            if (trimmed === '[PM2] Done.') return null;
-            if (/^\[PM2\] cron restart at /.test(trimmed)) return null;
-            if (/^\[PM2\]\[WARN\] Applications .* not running, starting\.\.\.$/.test(trimmed)) return null;
-            return trimmed.replace(/\s+\(\d+ instances?\)$/, '');
-        }
-
-        function flushBuffer(buffer, writer, { final = false } = {}) {
-            if (!buffer) return '';
-            const lines = buffer.split(/\r?\n/);
-            const trailing = lines.pop();
-            for (const line of lines) {
-                const transformed = transformPm2Line(line);
-                if (transformed) writer(transformed);
-            }
-            if (final && trailing && trailing.trim()) {
-                const transformed = transformPm2Line(trailing);
-                if (transformed) writer(transformed);
-                return '';
-            }
-            return trailing || '';
-        }
-
         pm2.stdout.on('data', (data) => {
             stdoutBuffer += data.toString();
-            stdoutBuffer = flushBuffer(stdoutBuffer, (line) => console.log(line));
+            stdoutBuffer = flushPm2Buffer(stdoutBuffer, (line) => console.log(line));
         });
 
         pm2.stderr.on('data', (data) => {
             stderrBuffer += data.toString();
-            stderrBuffer = flushBuffer(stderrBuffer, (line) => console.error(line));
+            stderrBuffer = flushPm2Buffer(stderrBuffer, (line) => console.error(line));
         });
 
         pm2.on('close', code => {
-            stdoutBuffer = flushBuffer(stdoutBuffer, (line) => console.log(line), { final: true });
-            stderrBuffer = flushBuffer(stderrBuffer, (line) => console.error(line), { final: true });
+            stdoutBuffer = flushPm2Buffer(stdoutBuffer, (line) => console.log(line), { final: true });
+            stderrBuffer = flushPm2Buffer(stderrBuffer, (line) => console.error(line), { final: true });
             if (code === 0) {
                 // Ensure we disconnect from PM2's file descriptors
                 setImmediate(resolve);
@@ -643,7 +644,7 @@ async function installPM2() {
  * @returns {Promise<Object>} Command result.
  * @throws {Error} If action is invalid or command fails.
  */
-async function execPM2Command(action, target, { suppressStderrOnError = false } = {}) {
+async function execPM2Command(action, target, { suppressStderrOnError = false, silent = false } = {}) {
     // Validate action to prevent injection
     const validActions = ['start', 'stop', 'delete', 'restart', 'reload'];
     if (!validActions.includes(action)) {
@@ -666,9 +667,14 @@ async function execPM2Command(action, target, { suppressStderrOnError = false } 
 
         let stdout = '';
         let stderr = '';
+        let stdoutBuffer = '';
 
         pm2.stdout.on('data', (data) => {
             stdout += data.toString();
+            if (!silent) {
+                stdoutBuffer += data.toString();
+                stdoutBuffer = flushPm2Buffer(stdoutBuffer, (line) => console.log(line));
+            }
         });
 
         pm2.stderr.on('data', (data) => {
@@ -676,8 +682,10 @@ async function execPM2Command(action, target, { suppressStderrOnError = false } 
         });
 
         pm2.on('close', (code) => {
+            if (!silent) {
+                stdoutBuffer = flushPm2Buffer(stdoutBuffer, (line) => console.log(line), { final: true });
+            }
             if (code === 0) {
-                if (stdout) console.log(stdout);
                 resolve({ success: true, stdout, stderr });
             } else {
                 if (stderr && !suppressStderrOnError) console.error(stderr);
@@ -689,9 +697,9 @@ async function execPM2Command(action, target, { suppressStderrOnError = false } 
     });
 }
 
-async function execPM2CommandIgnoreMissing(action, target) {
+async function execPM2CommandIgnoreMissing(action, target, options = {}) {
     try {
-        await execPM2Command(action, target, { suppressStderrOnError: true });
+        await execPM2Command(action, target, { suppressStderrOnError: true, ...options });
         return true;
     } catch (error) {
         const message = String(error && error.message ? error.message : error);
@@ -712,6 +720,7 @@ async function stopPM2Processes(target) {
     console.log(`Stopping PM2 processes: ${target}`);
 
     if (target === 'all') {
+        console.log('');
         if (fs.existsSync(ECOSYSTEM_FILE)) {
             await runManagedAppsPm2Action('stop');
         } else if (fs.existsSync(BOTS_JSON)) {
@@ -721,7 +730,8 @@ async function stopPM2Processes(target) {
                 console.warn(`Skipping managed bot stop: ${err.message}`);
             }
         }
-        await execPM2CommandIgnoreMissing('stop', CREDENTIAL_DAEMON_APP_NAME);
+        await execPM2CommandIgnoreMissing('stop', CREDENTIAL_DAEMON_APP_NAME, { silent: true });
+        console.log('');
         console.log('All dexbot PM2 processes stopped.');
     } else {
         if (target === CREDENTIAL_DAEMON_APP_NAME) {
@@ -758,6 +768,7 @@ async function deletePM2Processes(target) {
     console.log(`Deleting PM2 processes: ${target}`);
 
     if (target === 'all') {
+        console.log('');
         if (fs.existsSync(ECOSYSTEM_FILE)) {
             await runManagedAppsPm2Action('delete');
         } else if (fs.existsSync(BOTS_JSON)) {
@@ -767,8 +778,10 @@ async function deletePM2Processes(target) {
                 console.warn(`Skipping managed bot delete: ${err.message}`);
             }
         }
-        await execPM2CommandIgnoreMissing('delete', CREDENTIAL_DAEMON_APP_NAME);
+        await execPM2CommandIgnoreMissing('delete', CREDENTIAL_DAEMON_APP_NAME, { silent: true });
+        console.log('');
         console.log('All dexbot PM2 processes deleted.');
+        return;
     } else {
         if (target === CREDENTIAL_DAEMON_APP_NAME) {
             await execPM2CommandIgnoreMissing('delete', CREDENTIAL_DAEMON_APP_NAME);
@@ -792,9 +805,6 @@ async function deletePM2Processes(target) {
         await execPM2Command('delete', target);
         console.log(`PM2 process '${target}' deleted.`);
     }
-
-    console.log('Bot configs remain in profiles/bots.json.');
-    console.log('Run "node dexbot.js bots" to manage bot configurations.');
 }
 
 async function restartPM2Processes(target) {
