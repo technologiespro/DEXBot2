@@ -1,6 +1,6 @@
 # Claw BitShares Bridge
 
-Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes: OpenClaw, NanoBot, PicoClaw, and ZeroClaw.
+Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes: OpenClaw, NanoBot, PicoClaw, ZeroClaw, and NullClaw.
 
 This scaffold follows the same high-level split used in DEXBot2:
 
@@ -29,9 +29,10 @@ npm install btsdex
 - Price sources: `modules/feed_price_source.js`, `modules/kibana_price_source.js`
 - DEXBot2 and Claw integration: `modules/dexbot_bridge.js`, `modules/dexbot_profiles.js`, `modules/dexbot_credential_client.js`, `modules/claw_bridge.js`, `modules/claw_catalog.js`, `modules/claw_manifest.js`, `modules/claw_skill_md.js`, `modules/claw_runtime_matrix.js`, `scripts/claw_bridge.js`, `scripts/claw_mcp_server.js`
 - ZeroClaw support: `modules/zeroclaw_bridge.js`, `modules/zeroclaw_catalog.js`, `modules/zeroclaw_manifest.js`, `modules/zeroclaw_skill.js`
+- NullClaw support: `modules/nullclaw_bridge.js`, `modules/nullclaw_catalog.js`, `modules/nullclaw_manifest.js`, `modules/nullclaw_skill.js`
 - HONEST support: `modules/honest_ecosystem.js`, `modules/liquidity_pools.js`
 - Reference docs: `docs/AI_BOT_LIBRARY_API.md`, `docs/DEXBOT2_TUNING_CHEAT_SHEET.md`, `docs/POSITION_HEALTH.md`, `docs/RUNTIME_COMPARISON.md`
-- Example entrypoints: `examples/connection_test.js`, `examples/short_mpa_bts_strategy.js`, `examples/position_manager_cli.js`, `examples/zeroclaw_bridge_example.js`
+- Example entrypoints: `examples/connection_test.js`, `examples/short_mpa_bts_strategy.js`, `examples/position_manager_cli.js`, `examples/nullclaw_bridge_example.js`, `examples/zeroclaw_bridge_example.js`
 
 ## Responsibility Boundary
 
@@ -39,7 +40,7 @@ npm install btsdex
 
 What it does:
 
-- expose a local JSON/CLI bridge and native runtime packaging for OpenClaw, NanoBot, PicoClaw, and ZeroClaw
+- expose a local JSON/CLI bridge and native runtime packaging for OpenClaw, NanoBot, PicoClaw, ZeroClaw, and NullClaw
 - provide BitShares read helpers, broadcast helpers, and account/action wrappers
 - expose DEXBot2 profile context, order utilities, and liquidity/pool helpers through a smaller surface
 - provide HONEST context helpers, short-MPA helper flows, and position-manager utilities
@@ -48,7 +49,7 @@ What it does:
 What it does not do:
 
 - replace the main DEXBot2 bot engine or orchestration loop
-- own credentials or hand private keys to ZeroClaw callers
+- own credentials or hand private keys to ZeroClaw or NullClaw callers
 - become the canonical source of truth for core DEXBot2 math or runtime behavior
 - make strategy decisions for the main bot runtime beyond the explicit helper flows included here
 - guarantee that exposed write actions are safe just because they are wrapped by the bridge
@@ -135,7 +136,7 @@ npm run pm2:start
 
 ## Multi-Runtime Support
 
-`claw/` supports four native runtime families, listed once here for quick reference:
+`claw/` supports five native runtime families, listed once here for quick reference:
 
 | Runtime | Native integration | Best fit | Main tradeoff |
 | --- | --- | --- | --- |
@@ -143,6 +144,7 @@ npm run pm2:start
 | NanoBot | MCP plus `SKILL.md` | Smaller Python codebase with MCP integration | Easier to inspect, but slower and heavier than Go or Rust |
 | PicoClaw | MCP plus `SKILL.md` | Small Go-based option with launcher support | Great for low-cost hardware, but still evolving quickly |
 | ZeroClaw | `SKILL.toml` skill manifest | Smallest and most constrained option | Best cold starts, but the most specialized Rust-oriented workflow |
+| NullClaw | `SKILL.toml` skill manifest plus MCP server config | Zig-native runtime with workspace loading | Strong fit for local workspace loading, but more dependent on NullClaw-specific config conventions |
 
 Practical selection guide:
 
@@ -152,6 +154,7 @@ Practical selection guide:
 | Simple MCP integration with Python ergonomics | NanoBot | Easier to inspect and adapt, good for lightweight tool-driven workflows |
 | Small Go binary and low-cost hardware | PicoClaw | Good launcher support, strong fit for tiny boards and constrained Linux targets |
 | Lowest footprint and fastest startup | ZeroClaw | Smallest surface, manifest-driven, best for static local automation |
+| Zig-native workspace assistant with manifest loading | NullClaw | Native workspace loading, direct skill-file workflows, and optional MCP server support |
 
 Rule of thumb:
 
@@ -159,8 +162,9 @@ Rule of thumb:
 - Choose **NanoBot** for a compact Python codebase with MCP tooling.
 - Choose **PicoClaw** for a small Go runtime with launcher support.
 - Choose **ZeroClaw** for the smallest and most deterministic runtime.
+- Choose **NullClaw** for a Zig-native runtime with workspace-centric skill loading.
 
-For a deeper comparison of the four alternatives, see [docs/RUNTIME_COMPARISON.md](docs/RUNTIME_COMPARISON.md).
+For a deeper comparison of the five supported runtimes, see [docs/RUNTIME_COMPARISON.md](docs/RUNTIME_COMPARISON.md).
 
 Run the commands below from the `claw/` directory.
 
@@ -245,6 +249,28 @@ node scripts/zeroclaw_bridge.js create-limit-order --payload '{"accountName":"yo
 node scripts/zeroclaw_bridge.js update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
 node scripts/zeroclaw_bridge.js execute-batch --payload '{"accountName":"your-account","operations":[]}'
 node scripts/zeroclaw_bridge.js borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
+```
+
+### NullClaw
+
+Generate the NullClaw skill file:
+
+```bash
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+npm run nullclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT" --output ~/.nullclaw/workspace/skills/bitshares-claw/SKILL.toml
+```
+
+NullClaw compatibility command surface:
+
+```bash
+node scripts/nullclaw_bridge.js manifest
+node scripts/nullclaw_bridge.js profile-context --payload '{"botRef":"default"}'
+node scripts/nullclaw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+node scripts/nullclaw_bridge.js create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+node scripts/nullclaw_bridge.js update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
+node scripts/nullclaw_bridge.js execute-batch --payload '{"accountName":"your-account","operations":[]}'
+node scripts/nullclaw_bridge.js borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
 ```
 
 ## HONEST Ecosystem Helper

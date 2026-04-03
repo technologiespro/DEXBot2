@@ -51,15 +51,52 @@ function testClawRootExportsAvoidSilentCollisions() {
   clearModule(clawIndexPath);
 
   const claw = require('..');
+  const nullManifest = claw.describeNullClawBridge();
   const manifest = claw.describeZeroClawBridge();
 
   assert.strictEqual(typeof claw.resolveSigningAccountName, 'function');
   assert.strictEqual(claw.resolveSigningAccountName({ accountName: 'alice' }), 'alice');
   assert.strictEqual(typeof claw.resolveAccountName, 'function');
   assert.strictEqual(claw.resolveAccountName('alice') instanceof Promise, true);
+  assert.strictEqual(nullManifest.options.runtimeName, 'nullclaw');
+  assert.strictEqual(nullManifest.commandExamples.some((example) => example.includes('nullclaw_bridge.js')), true);
+  assert.strictEqual(typeof claw.describeNullClawRuntimeBridge, 'function');
   assert.strictEqual(manifest.options.runtimeName, 'zeroclaw');
   assert.strictEqual(manifest.commandExamples.some((example) => example.includes('zeroclaw_bridge.js')), true);
   assert.strictEqual(typeof claw.describeZeroClawRuntimeBridge, 'function');
+}
+
+function testNullClawCommandInjectsRuntimeName() {
+  const nullclawBridgePath = require.resolve('../modules/nullclaw_bridge');
+  const clawBridgePath = require.resolve('../modules/claw_bridge');
+  const clawInfraPath = require.resolve('../modules/claw_infra');
+
+  let capturedOptions = null;
+  require.cache[clawInfraPath] = {
+    id: clawInfraPath, filename: clawInfraPath, loaded: true,
+    exports: {
+      createClawInfrastructure: (opts) => {
+        capturedOptions = opts;
+        return {
+          runtime: { name: opts.runtime?.name || 'claw-bridge', accountName: null },
+          profiles: {},
+          market: {}
+        };
+      }
+    }
+  };
+
+  clearModule(clawBridgePath);
+  clearModule(nullclawBridgePath);
+
+  const { runNullClawCommand } = require('../modules/nullclaw_bridge');
+  const result = runNullClawCommand('runtime', {});
+
+  assert.strictEqual(capturedOptions.runtime.name, 'nullclaw', 'runNullClawCommand should inject nullclaw as runtimeName');
+
+  clearModule(nullclawBridgePath);
+  clearModule(clawBridgePath);
+  clearModule(clawInfraPath);
 }
 
 function testZeroClawSkillQuotesPayloadPlaceholders() {
@@ -507,6 +544,7 @@ async function main() {
   await testPositionManagerEntryExposesSellPriceInBts();
   testClawBridgeRespectsRuntimeNameOption();
   testZeroClawCommandInjectsRuntimeName();
+  testNullClawCommandInjectsRuntimeName();
   testAccountOrdersBotKeyFallsBackToAssetIds();
   testBuildQueryScopesAnyPoolByReceivedAsset();
   testClawDefaultDataPathsStayInsideClawFolder();

@@ -11,7 +11,7 @@ The goal is simple:
 - `Claw` can talk to DEXBot2 and the blockchain directly
 - The infrastructure layer stays reusable and decision-free
 
-The current scaffold lives in [../modules/claw_infra.js](../modules/claw_infra.js), [../modules/dexbot_profiles.js](../modules/dexbot_profiles.js), and [../modules/zeroclaw_bridge.js](../modules/zeroclaw_bridge.js), and is exported from [../index.js](../index.js).
+The current scaffold lives in [../modules/claw_infra.js](../modules/claw_infra.js), [../modules/dexbot_profiles.js](../modules/dexbot_profiles.js), [../modules/zeroclaw_bridge.js](../modules/zeroclaw_bridge.js), and [../modules/nullclaw_bridge.js](../modules/nullclaw_bridge.js), and is exported from [../index.js](../index.js).
 
 ## Design Rules
 
@@ -77,6 +77,21 @@ To generate the skill file from Claw, run:
 
 ```bash
 npm run zeroclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.zeroclaw/workspace/skills/ai-bots/SKILL.toml
+```
+
+## NullClaw Compatibility
+
+NullClaw uses the same bridge surface, with a native skill path centered on `SKILL.toml` in the workspace.
+
+- NullClaw can invoke the JSON/CLI bridge in [../scripts/nullclaw_bridge.js](../scripts/nullclaw_bridge.js).
+- The manifest lives in [../modules/nullclaw_manifest.js](../modules/nullclaw_manifest.js) and is safe to query without starting the BitShares runtime.
+- Claw keeps private-key access inside its existing DEXBot2 credential path.
+- NullClaw gets the same read access to market, profile, HONEST, and order context, plus explicit action entrypoints when it needs to request a trade operation.
+
+To generate the skill file from Claw, run:
+
+```bash
+npm run nullclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.nullclaw/workspace/skills/bitshares-claw/SKILL.toml
 ```
 
 ## Core Types

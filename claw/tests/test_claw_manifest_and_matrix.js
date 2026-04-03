@@ -11,10 +11,10 @@ function testRuntimeMatrix() {
   const matrix = require('../modules/claw_runtime_matrix');
 
   const all = matrix.listSupportedClawRuntimes();
-  assert.ok(all.length >= 4);
+  assert.ok(all.length >= 5);
 
   const names = all.map((r) => r.runtime);
-  assert.deepStrictEqual(names, ['openclaw', 'nanobot', 'picoclaw', 'zeroclaw']);
+  assert.deepStrictEqual(names, ['openclaw', 'nanobot', 'picoclaw', 'zeroclaw', 'nullclaw']);
 
   // Each entry is a defensive clone — mutations must not affect the registry
   all[0].runtime = 'mutated';
@@ -26,9 +26,15 @@ function testRuntimeMatrix() {
   assert.strictEqual(zc.preferredTransport, 'local-cli-json');
   assert.strictEqual(zc.skillFile, 'SKILL.toml');
 
+  const nc = matrix.getSupportedClawRuntime('nullclaw');
+  assert.strictEqual(nc.runtime, 'nullclaw');
+  assert.strictEqual(nc.preferredTransport, 'skill-toml-or-mcp');
+  assert.strictEqual(nc.skillFile, 'SKILL.toml');
+
   // Lookup is case-insensitive and trims whitespace
   assert.strictEqual(matrix.getSupportedClawRuntime('  ZeroClaw  ').runtime, 'zeroclaw');
   assert.strictEqual(matrix.getSupportedClawRuntime('OPENCLAW').runtime, 'openclaw');
+  assert.strictEqual(matrix.getSupportedClawRuntime('NullClaw').runtime, 'nullclaw');
 
   // Unknown / missing runtime returns null
   assert.strictEqual(matrix.getSupportedClawRuntime('unknown'), null);
@@ -118,6 +124,26 @@ function testZeroClawManifest() {
 }
 
 // ---------------------------------------------------------------------------
+// nullclaw_manifest
+// ---------------------------------------------------------------------------
+
+function testNullClawManifest() {
+  const manifest = require('../modules/nullclaw_manifest');
+
+  const desc = manifest.describeNullClawBridge();
+
+  assert.strictEqual(desc.compatibility.name, 'NullClaw');
+  assert.ok(desc.compatibility.trustModel.includes('NullClaw'));
+  assert.strictEqual(desc.options.runtimeName, 'nullclaw');
+  assert.strictEqual(desc.compatibility.recommendedTransport, 'skill-toml-or-mcp');
+  assert.ok(Array.isArray(desc.commandExamples));
+  assert.ok(desc.commandExamples.some((example) => example.includes('nullclaw_bridge.js')));
+
+  const withOpts = manifest.describeNullClawBridge({ accountName: 'carol' });
+  assert.strictEqual(withOpts.options.accountName, 'carol');
+}
+
+// ---------------------------------------------------------------------------
 // dexbot_bridge — getDexbot2Root branching only
 // ---------------------------------------------------------------------------
 
@@ -166,6 +192,7 @@ function main() {
   testRuntimeMatrix();
   testClawManifest();
   testZeroClawManifest();
+  testNullClawManifest();
   testDexbotBridgeRootResolution();
   console.log('claw manifest and matrix tests passed');
 }

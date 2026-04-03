@@ -63,10 +63,37 @@ async function testZeroClawSkillToml() {
   assert.strictEqual(description.output, toml);
 }
 
+async function testNullClawSkillToml() {
+  const { buildNullClawSkillToml, describeNullClawSkill, writeNullClawSkillFile } = require('../modules/nullclaw_skill');
+  const { getNullClawSkillTools } = require('../modules/nullclaw_catalog');
+
+  const repoRoot = path.join(os.tmpdir(), 'null repo');
+  const profileRoot = path.join(os.tmpdir(), 'null profile');
+  const toml = buildNullClawSkillToml({ repoRoot, profileRoot });
+  const description = describeNullClawSkill({ repoRoot, profileRoot });
+  const outputPath = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'nullclaw-skill-')), 'SKILL.toml');
+  const written = await writeNullClawSkillFile(outputPath, { repoRoot, profileRoot });
+  const fileText = await fs.readFile(outputPath, 'utf8');
+  const toolCount = getNullClawSkillTools().length;
+
+  assert.strictEqual(written, fileText);
+  assert.strictEqual(countOccurrences(toml, '[[tools]]'), toolCount);
+  assert.ok(toml.includes('[skill]'));
+  assert.ok(toml.includes('name = "bitshares-claw"'));
+  assert.ok(toml.includes('NullClaw bridge to the AI-Bot / DEXBot2 BitShares layer'));
+  assert.ok(toml.includes(description.bridgeScript));
+  assert.ok(toml.includes('--profile-root'));
+  assert.strictEqual(description.repositoryRoot, path.resolve(repoRoot));
+  assert.strictEqual(description.profileRoot, path.resolve(profileRoot));
+  assert.strictEqual(description.bridgeScript, path.join(repoRoot, 'scripts', 'nullclaw_bridge.js').replace(/\\/g, '/'));
+  assert.strictEqual(description.output, toml);
+}
+
 async function main() {
   await testClawSkillMarkdown();
   testZeroClawSkillMarkdownRejects();
   await testZeroClawSkillToml();
+  await testNullClawSkillToml();
   console.log('claw skill generation tests passed');
 }
 

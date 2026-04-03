@@ -1,22 +1,24 @@
 # Claw Runtime Comparison
 
-This note compares the four runtime families supported by the Claw bridge layer:
+This note compares the five runtime families supported by the Claw bridge layer:
 
 - OpenClaw
 - NanoBot
 - PicoClaw
 - ZeroClaw
+- NullClaw
 
 The comparison is based on the current `claw/` bridge design and runtime metadata. It is a practical analysis, not a formal benchmark report.
 
 ## What The Bridge Optimizes For
 
-The bridge is trying to satisfy four different operating modes with one shared BitShares surface:
+The bridge is trying to satisfy five different operating modes with one shared BitShares surface:
 
 - very small footprint and fast startup
 - broad assistant and plugin coverage
 - simple MCP-based integration
 - low-cost hardware and launcher-based workflows
+- workspace-native skill loading and local manifest workflows
 
 That means each runtime is a different compromise, not a strict upgrade path.
 
@@ -41,7 +43,7 @@ Strengths:
 
 - Richest runtime surface.
 - Native plugin model is a strong fit for extension-heavy workflows.
-- Broadest assistant-style experience among the four.
+- Broadest assistant-style experience among the five.
 - Best when the bridge needs to live inside a feature-rich product rather than a small runtime shim.
 
 Tradeoffs:
@@ -124,6 +126,29 @@ Best fit:
 - Minimal local automation.
 - Users who want the most predictable, lowest-overhead runtime.
 
+### NullClaw
+
+NullClaw is the Zig-native runtime focused on workspace skill loading.
+
+Strengths:
+
+- Native `SKILL.toml` loading in the workspace skill tree.
+- MCP server support alongside the built-in skill loader.
+- Strong fit for local, file-based assistant workflows.
+- Keeps the bridge surface aligned with the NullClaw workspace conventions.
+
+Tradeoffs:
+
+- Newer integration path than the longer-established OpenClaw, NanoBot, and PicoClaw flows.
+- More workspace-centric than the CLI-first ZeroClaw wrapper.
+- Best experience depends on `~/.nullclaw/workspace/skills` and NullClaw's config conventions.
+
+Best fit:
+
+- Users who want a Zig-native assistant runtime with native skill manifests.
+- Local workflows where the bridge should slot into a NullClaw workspace directly.
+- Operators who want workspace-native NullClaw support without changing the shared Claw bridge surface.
+
 ## Recommendation Matrix
 
 If you optimize primarily for:
@@ -134,6 +159,7 @@ If you optimize primarily for:
 - **Lowest-cost hardware**: PicoClaw, then ZeroClaw
 - **Most mature assistant ecosystem**: OpenClaw
 - **Fastest local command-style integration**: ZeroClaw
+- **Workspace-native skill manifests**: NullClaw
 
 ## Practical Rule Of Thumb
 
@@ -141,6 +167,7 @@ If you optimize primarily for:
 - Choose **NanoBot** if you want a compact Python assistant that is easy to modify.
 - Choose **PicoClaw** if you want a small Go runtime with MCP and launcher support.
 - Choose **ZeroClaw** if the bridge must be tiny and deterministic.
+- Choose **NullClaw** if you want a Zig-native runtime with workspace skill loading and MCP support.
 
 ## Source Of Truth
 

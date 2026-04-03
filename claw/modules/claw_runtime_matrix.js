@@ -26,6 +26,13 @@ const SUPPORTED_CLAW_RUNTIMES = Object.freeze([
     preferredTransport: 'local-cli-json',
     skillFile: 'SKILL.toml',
     notes: 'Native shell-tool manifests with prompts and tool declarations.'
+  },
+  {
+    runtime: 'nullclaw',
+    nativeIntegration: 'skill-manifest',
+    preferredTransport: 'skill-toml-or-mcp',
+    skillFile: 'SKILL.toml',
+    notes: 'NullClaw prefers SKILL.toml in ~/.nullclaw/workspace/skills and can also load Claw through mcp_servers.'
   }
 ]);
 
