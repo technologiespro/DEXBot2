@@ -21,8 +21,10 @@ The Claw infrastructure layer should:
 - provide connection and credential adapters
 - provide configuration, logging, and state helpers
 - provide market-data and BitShares utility wrappers
-- provide order/grid math primitives only
+- provide low-level order/grid math helpers only
 - expose write-capable clients only behind explicit caller intent
+- manage bot-level settings only; keep DEXBot general settings default-first and explicit-only
+- treat `profiles/general.settings.json` as read-only context, not a Claw write surface
 - avoid process management
 - avoid exposing raw private keys or bypassing the credential daemon boundary
 - avoid owning persistent execution state
@@ -245,6 +247,8 @@ Reads the DEXBot2 `profiles/` directory and normalizes:
 - per-bot files in `profiles/orders/`
 
 This is the profile-folder bridge for Claw.
+
+`profiles/general.settings.json` is read-only context here, not a Claw write surface.
 
 ### 8. `getBotSettings(identifier, forceReload)`
 

@@ -162,7 +162,7 @@ function botSettingsPatchSchema(description = null) {
       weightDistribution: strictObjectSchema({
         buy: numberSchema('Buy-side weight'),
         sell: numberSchema('Sell-side weight')
-      }, [], 'Per-side weight distribution')
+      }, [], 'Per-side weight distribution'),
     }, [], 'Partial bot settings patch'),
     trigger: booleanSchema('Write a recalc trigger after applying the patch'),
     triggerPayload: objectSchema({}, [], 'Optional trigger payload'),
@@ -173,7 +173,7 @@ function botSettingsPatchSchema(description = null) {
     identifier: stringSchema('Generic profile identifier'),
     pair: stringSchema('Trading pair such as BTS/USD'),
     profileRoot: stringSchema('Optional DEXBot2 profile root')
-  }, [], description);
+  }, ['patch'], description);
 }
 
 function createToolDefinition(definition) {
