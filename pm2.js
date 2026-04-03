@@ -10,15 +10,21 @@
  * COMMANDS
  * ===============================================================================
  *
- * node pm2.js                    - Default: unlock keystore and start all bots
- * node pm2.js unlock-start       - Explicit: unlock keystore and start all bots
- * node pm2.js unlock-start <bot> - Unlock keystore and start specific bot
- * node pm2.js update             - Run the update script immediately
- * node pm2.js stop all           - Stop all dexbot PM2 processes
- * node pm2.js stop <bot-name>    - Stop specific bot process
- * node pm2.js delete all         - Delete all dexbot processes from PM2
- * node pm2.js delete <bot-name>  - Delete specific bot from PM2
- * node pm2.js help               - Show help message
+ * node pm2                       - Default: unlock keystore and start all bots
+ * node pm2 unlock-start          - Explicit: unlock keystore and start all bots
+ * node pm2 unlock-start <bot>    - Unlock keystore and start specific bot
+ * node pm2 claw-only             - Credential daemon only, managed by PM2
+ * node pm2 unlock-start --claw-only - Credential daemon only, managed by PM2
+ * node pm2 update                - Run the update script immediately
+ * node pm2 stop all              - Stop all dexbot PM2 processes
+ * node pm2 stop <bot-name>       - Stop specific bot process
+ * node pm2 delete all            - Delete all dexbot processes from PM2
+ * node pm2 delete <bot-name>     - Delete specific bot from PM2
+ * node pm2 restart all           - Restart managed apps; re-unlock dexbot-cred only if needed
+ * node pm2 restart <target>      - Restart a bot or safely re-unlock dexbot-cred
+ * node pm2 reload all            - Reload managed apps without touching dexbot-cred
+ * node pm2 reload <target>       - Reload a bot, or safely re-unlock dexbot-cred
+ * node pm2 help                  - Show help message
  *
  * ===============================================================================
  * SETUP SEQUENCE
@@ -35,10 +41,11 @@
  *    - Validates PM2 is available before proceeding
  *
  * Step 2: ECOSYSTEM CONFIGURATION GENERATION
- *    - Reads bot definitions from profiles/bots.json
+ *    - Reads bot definitions from profiles/bots.json for bot mode
  *    - Generates profiles/ecosystem.config.js with absolute paths
  *    - Filters only active bots (active !== false)
  *    - If bot-name provided, filters to only that bot
+ *    - In claw-only mode, generates only the credential daemon app
  *    - Each bot configured with:
  *      * Unique app name
  *      * Log file paths
@@ -48,22 +55,34 @@
  *    - Cleans up stale daemon socket files
  *    - Prompts interactively for master password (once at startup)
  *    - Authenticates against profiles/keys.json
- *    - Sets password in process.env.DAEMON_PASSWORD for PM2 child processes
+ *    - Uses a one-shot local bootstrap channel for credential-daemon only
  *
  * Step 4: PM2 DAEMON STARTUP
  *    - Starts PM2 daemon if not already running
  *    - Waits for PM2 to be ready
  *    - Starts each configured bot as PM2 app
- *    - Credential daemon is started as a PM2 app (defined in ecosystem config)
+ *    - Credential daemon is started as a PM2 app after one-shot bootstrap
  *    - Bots request private keys from credential daemon via Unix socket
  */
+
+process.umask(0o077);
 
 const fs = require('fs');
 const path = require('path');
 const { spawn, exec, execSync } = require('child_process');
 const { promisify } = require('util');
 const { parseJsonWithComments } = require('./modules/account_bots');
-const { readBotsFileSync, readBotsFileWithLock } = require('./modules/bots_file_lock');
+const { readBotsFileWithLock } = require('./modules/bots_file_lock');
+const { loadSettingsFile, selectActiveBotEntries } = require('./modules/bot_settings');
+const chainKeys = require('./modules/chain_keys');
+const {
+    ensureCredentialRuntimeDirSync,
+    getCredentialReadyFilePath,
+    getCredentialSocketPath,
+} = require('./modules/credential_runtime');
+const { buildScopedChildEnv } = require('./modules/launcher/child_env');
+const { createPasswordBootstrapServer } = require('./modules/launcher/credential_bootstrap');
+const { parsePm2Args } = require('./modules/launcher/launch_modes');
 const { setupGracefulShutdown } = require('./modules/graceful_shutdown');
 const { UPDATER, TIMING } = require('./modules/constants');
 
@@ -77,6 +96,9 @@ const PROFILES_DIR = path.join(ROOT, 'profiles');
 const BOTS_JSON = path.join(PROFILES_DIR, 'bots.json');
 const ECOSYSTEM_FILE = path.join(PROFILES_DIR, 'ecosystem.config.js');
 const LOGS_DIR = path.join(PROFILES_DIR, 'logs');
+const CREDENTIAL_DAEMON_APP_NAME = 'dexbot-cred';
+const CREDENTIAL_SOCKET_PATH = getCredentialSocketPath({ root: ROOT });
+const CREDENTIAL_READY_FILE = getCredentialReadyFilePath({ root: ROOT });
 
 function usesAmaGridPrice(bot) {
     const gridPrice = typeof bot?.gridPrice === 'string' ? bot.gridPrice.trim().toLowerCase() : '';
@@ -89,7 +111,7 @@ function needsPriceAdapter(bots) {
 
 function isServiceApp(app) {
     const name = String(app?.name || '');
-    return name === 'dexbot-update' || name === 'dexbot-cred' || name === 'dexbot-price-adapter';
+    return name === 'dexbot-update' || name === CREDENTIAL_DAEMON_APP_NAME || name === 'dexbot-price-adapter';
 }
 
 function countManagedBots(apps) {
@@ -97,15 +119,102 @@ function countManagedBots(apps) {
 }
 
 /**
- * Generate ecosystem.config.js from bots.json.
- * @param {string|null} [botNameFilter=null] - Optional bot name to filter by.
+ * Build PM2 app definitions for the current runtime.
+ * @param {Array<Object>} bots - Active bot entries.
+ * @param {Object} options - Build options.
+ * @param {boolean} options.includeUpdater - Whether to add the updater service.
+ * @returns {Array<Object>} PM2 app definitions.
+ */
+function buildEcosystemApps(bots, { includeUpdater = true } = {}) {
+    const apps = (bots || []).map((bot, index) => {
+        const botName = bot.name || `bot-${index}`;
+        return {
+            name: botName,
+            script: path.join(ROOT, 'bot.js'),
+            args: botName,
+            cwd: ROOT,
+            max_memory_restart: '250M',
+            watch: false,
+            autorestart: true,
+            error_file: path.join(LOGS_DIR, `${botName}-error.log`),
+            out_file: path.join(LOGS_DIR, `${botName}.log`),
+            log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
+            merge_logs: false,
+            combine_logs: true,
+            max_restarts: 13,
+            min_uptime: 86400000,
+            restart_delay: 3000
+        };
+    });
+
+    if (needsPriceAdapter(bots)) {
+        apps.unshift({
+            name: 'dexbot-price-adapter',
+            script: path.join(ROOT, 'market_adapter', 'price_adapter.js'),
+            cwd: ROOT,
+            watch: false,
+            autorestart: true,
+            max_memory_restart: '150M',
+            error_file: path.join(LOGS_DIR, 'dexbot-price-adapter-error.log'),
+            out_file: path.join(LOGS_DIR, 'dexbot-price-adapter.log'),
+            log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
+            merge_logs: false,
+            combine_logs: true,
+            max_restarts: 13,
+            min_uptime: 60000,
+            restart_delay: 3000
+        });
+    }
+
+    if (includeUpdater && UPDATER.ACTIVE) {
+        apps.push({
+            name: "dexbot-update",
+            script: path.join(ROOT, 'scripts', 'update.js'),
+            cwd: ROOT,
+            autorestart: false,
+            cron_restart: UPDATER.SCHEDULE,
+            error_file: path.join(LOGS_DIR, `dexbot-update-error.log`),
+            out_file: path.join(LOGS_DIR, `dexbot-update.log`),
+            log_date_format: "YY-MM-DD HH:mm:ss.SSS"
+        });
+    }
+
+    return apps;
+}
+
+function buildCredentialDaemonApp({ credentialEnv = {} } = {}) {
+    return {
+        name: CREDENTIAL_DAEMON_APP_NAME,
+        script: path.join(ROOT, 'credential-daemon.js'),
+        cwd: ROOT,
+        autorestart: false,
+        max_memory_restart: '100M',
+        error_file: path.join(LOGS_DIR, 'dexbot-cred-error.log'),
+        out_file: path.join(LOGS_DIR, 'dexbot-cred.log'),
+        log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
+        env: {
+            DEXBOT_CRED_DAEMON_SOCKET: CREDENTIAL_SOCKET_PATH,
+            DEXBOT_CRED_DAEMON_READY_FILE: CREDENTIAL_READY_FILE,
+            ...credentialEnv,
+        }
+    };
+}
+
+/**
+ * Generate ecosystem.config.js from bots.json or claw-only mode.
+ * @param {Object} [options={}] - Generation options.
+ * @param {string|null} [options.botNameFilter=null] - Optional bot name to filter by.
+ * @param {boolean} [options.clawOnly=false] - Generate no managed bot apps.
  * @returns {Array<Object>} The generated app configurations.
  * @throws {Error} If configuration loading fails.
  */
-function generateEcosystemConfig(botNameFilter = null) {
-    if (!fs.existsSync(BOTS_JSON)) {
-        console.error('profiles/bots.json not found. Run: dexbot bots');
-        process.exit(1);
+function generateEcosystemConfig({ botNameFilter = null, clawOnly = false, exitOnError = true } = {}) {
+    function fail(message) {
+        if (exitOnError) {
+            console.error(message);
+            process.exit(1);
+        }
+        throw new Error(message);
     }
 
     // Ensure logs directory exists
@@ -114,139 +223,174 @@ function generateEcosystemConfig(botNameFilter = null) {
     }
 
     try {
-        const { config } = readBotsFileSync(BOTS_JSON, parseJsonWithComments);
-        let bots = (config.bots || []).filter(b => b.active !== false);
+        if (clawOnly) {
+            const apps = [];
+            const ecosystemContent = `// Auto-generated by pm2.js - DO NOT EDIT
+// Regenerate with: node pm2 or node dexbot.js pm2
+module.exports = { apps: ${JSON.stringify(apps, null, 2)} };
+`;
 
-        // Filter to specific bot if name provided
+            fs.writeFileSync(ECOSYSTEM_FILE, ecosystemContent);
+            console.log('Ecosystem configuration generated for claw-only mode');
+            return apps;
+        }
+
+        if (!fs.existsSync(BOTS_JSON)) {
+            fail('profiles/bots.json not found. Run: dexbot bots');
+        }
+
+        const { config } = loadSettingsFile(BOTS_JSON, { exitOnError });
+        const bots = selectActiveBotEntries(config);
+
         if (botNameFilter) {
-            bots = bots.filter(b => b.name === botNameFilter);
-            if (bots.length === 0) {
-                console.error(`Bot '${botNameFilter}' not found or not active in profiles/bots.json`);
-                process.exit(1);
+            const filtered = bots.filter((b) => b.name === botNameFilter);
+            if (filtered.length === 0) {
+                fail(`Bot '${botNameFilter}' not found or not active in profiles/bots.json`);
             }
-        } else if (bots.length === 0) {
-            console.error('No active bots found in profiles/bots.json');
-            process.exit(1);
+            const apps = buildEcosystemApps(filtered, { includeUpdater: false });
+            const ecosystemContent = `// Auto-generated by pm2.js - DO NOT EDIT
+// Regenerate with: node pm2 or node dexbot.js pm2
+module.exports = { apps: ${JSON.stringify(apps, null, 2)} };
+`;
+
+            fs.writeFileSync(ECOSYSTEM_FILE, ecosystemContent);
+            console.log('Ecosystem configuration generated');
+            return apps;
         }
 
-        const apps = bots.map((bot, index) => {
-            const botName = bot.name || `bot-${index}`;
-            return {
-                name: botName,
-                script: path.join(ROOT, 'bot.js'),
-                args: botName,
-                cwd: ROOT,
-                max_memory_restart: '250M',
-                watch: false,
-                autorestart: true,
-                error_file: path.join(LOGS_DIR, `${botName}-error.log`),
-                out_file: path.join(LOGS_DIR, `${botName}.log`),
-                log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
-                merge_logs: false,
-                combine_logs: true,
-                max_restarts: 13,
-                min_uptime: 86400000,
-                restart_delay: 3000
-            };
-        });
-
-        if (needsPriceAdapter(bots)) {
-            apps.unshift({
-                name: 'dexbot-price-adapter',
-                script: path.join(ROOT, 'market_adapter', 'price_adapter.js'),
-                cwd: ROOT,
-                watch: false,
-                autorestart: true,
-                max_memory_restart: '150M',
-                error_file: path.join(LOGS_DIR, 'dexbot-price-adapter-error.log'),
-                out_file: path.join(LOGS_DIR, 'dexbot-price-adapter.log'),
-                log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
-                merge_logs: false,
-                combine_logs: true,
-                max_restarts: 13,
-                min_uptime: 60000,
-                restart_delay: 3000
-            });
+        if (bots.length === 0) {
+            fail('No active bots found in profiles/bots.json');
         }
 
-        // Add credential daemon as a managed service
-        apps.unshift({
-            name: 'dexbot-cred',
-            script: path.join(ROOT, 'credential-daemon.js'),
-            cwd: ROOT,
-            autorestart: true,
-            max_memory_restart: '100M',
-            error_file: path.join(LOGS_DIR, 'dexbot-cred-error.log'),
-            out_file: path.join(LOGS_DIR, 'dexbot-cred.log'),
-            log_date_format: 'YY-MM-DD HH:mm:ss.SSS'
-        });
-
-        // Add weekly updater (if active and not filtering for a specific bot)
-        if (!botNameFilter && UPDATER.ACTIVE) {
-            apps.push({
-                name: "dexbot-update",
-                script: path.join(ROOT, 'scripts', 'update.js'),
-                cwd: ROOT,
-                autorestart: false,
-                cron_restart: UPDATER.SCHEDULE,
-                error_file: path.join(LOGS_DIR, `dexbot-update-error.log`),
-                out_file: path.join(LOGS_DIR, `dexbot-update.log`),
-                log_date_format: "YY-MM-DD HH:mm:ss.SSS"
-            });
-        }
+        const apps = buildEcosystemApps(bots, { includeUpdater: true });
 
         const ecosystemContent = `// Auto-generated by pm2.js - DO NOT EDIT
-// Regenerate with: node pm2.js or node dexbot.js pm2
+// Regenerate with: node pm2 or node dexbot.js pm2
 module.exports = { apps: ${JSON.stringify(apps, null, 2)} };
 `;
 
         fs.writeFileSync(ECOSYSTEM_FILE, ecosystemContent);
-        console.log(`Ecosystem configuration generated`);
+        console.log('Ecosystem configuration generated');
         return apps;
     } catch (err) {
-        console.error('Error reading bots.json:', err.message);
-        process.exit(1);
+        fail(`Error reading bots.json: ${err.message}`);
+    }
+}
+
+async function runManagedAppsPm2Action(action, { regenerate = false } = {}) {
+    if (regenerate) {
+        generateEcosystemConfig({ clawOnly: false, exitOnError: false });
+    }
+    if (!fs.existsSync(ECOSYSTEM_FILE)) {
+        return false;
+    }
+    return execPM2CommandIgnoreMissing(action, ECOSYSTEM_FILE);
+}
+
+function cleanupStaleCredentialDaemonFiles() {
+    try {
+        try { fs.unlinkSync(CREDENTIAL_SOCKET_PATH); } catch (e) { }
+        try { fs.unlinkSync(CREDENTIAL_READY_FILE); } catch (e) { }
+    } catch (e) {
+        // Socket files already cleaned, that's fine
+    }
+}
+
+async function ensureCredentialDaemonPM2({ forceRefresh = false, logReuse = true } = {}) {
+    ensureCredentialRuntimeDirSync({ root: ROOT, socketPath: CREDENTIAL_SOCKET_PATH, readyFilePath: CREDENTIAL_READY_FILE });
+    const daemonReady = chainKeys.isDaemonReady({
+        socketPath: CREDENTIAL_SOCKET_PATH,
+        readyFilePath: CREDENTIAL_READY_FILE,
+    });
+
+    if (daemonReady && !forceRefresh) {
+        if (logReuse) {
+            console.log('Credential daemon already running. Reusing existing daemon session.\n');
+        }
+        return false;
+    }
+
+    if (!daemonReady) {
+        cleanupStaleCredentialDaemonFiles();
+    }
+
+    console.log(forceRefresh ? 'Re-authenticating master password...' : 'Authenticating master password...');
+
+    let bootstrap = null;
+    try {
+        const masterPassword = await chainKeys.authenticate();
+        bootstrap = await createPasswordBootstrapServer({ password: masterPassword });
+        console.log('✓ Authentication successful\n');
+        await startManagedRuntimePM2({ apps: [], bootstrap });
+        return true;
+    } catch (error) {
+        if (bootstrap) bootstrap.close();
+        throw error;
+    }
+}
+
+async function assertActiveBotTarget(target) {
+    try {
+        const { config } = await readBotsFileWithLock(BOTS_JSON, parseJsonWithComments);
+        const botExists = selectActiveBotEntries(config).some((b) => b.name === target);
+        if (!botExists) {
+            throw new Error(`Bot '${target}' not found or not active in profiles/bots.json`);
+        }
+    } catch (err) {
+        if (String(err && err.message || '').includes('not found or not active')) {
+            throw err;
+        }
+        throw new Error(`Failed to read bots configuration: ${err.message}`);
     }
 }
 
 /**
  * Main application entry point for PM2 orchestration.
- * @param {string|null} [botNameFilter=null] - Optional bot name to start.
+ * @param {Object} [options={}] - Launcher options.
+ * @param {string|null} [options.botNameFilter=null] - Optional bot name to start.
+ * @param {boolean} [options.clawOnly=false] - Start the credential daemon only.
  * @returns {Promise<void>}
  */
-async function main(botNameFilter = null) {
+async function main({ botNameFilter = null, clawOnly = false } = {}) {
     console.log('='.repeat(50));
     console.log('DEXBot2 PM2 Launcher');
+    if (clawOnly) {
+        console.log('Starting credential daemon only');
+    }
     if (botNameFilter) {
         console.log(`Starting bot: ${botNameFilter}`);
     }
     console.log('='.repeat(50));
     console.log();
 
-     // Step 0: Wait for BitShares connection (suppress BitShares client logs)
-     const { waitForConnected } = require('./modules/bitshares_client');
-     const chainKeys = require('./modules/chain_keys');
-     console.log('Connecting to BitShares...');
+    if (!clawOnly) {
+        // Step 0: Wait for BitShares connection (suppress BitShares client logs)
+        const { waitForConnected } = require('./modules/bitshares_client');
+        console.log('Connecting to BitShares...');
 
-     // Suppress BitShares console output during connection
-     const originalLog = console.log;
-     try {
-         console.log = (...args) => {
-             // Only suppress BitShares-specific messages
-             const msg = args.join(' ');
-             if (!msg.includes('bitshares_client') && !msg.includes('modules/')) {
-                 originalLog(...args);
-             }
-         };
+        // Suppress BitShares console output during connection
+        const originalLog = console.log;
+        try {
+            console.log = (...args) => {
+                // Only suppress BitShares-specific messages
+                const msg = args.join(' ');
+                if (!msg.includes('bitshares_client') && !msg.includes('modules/')) {
+                    originalLog(...args);
+                }
+            };
 
-         await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
-     } finally {
-         // Always restore console output, even if waitForConnected throws
-         console.log = originalLog;
-     }
+            await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
+        } finally {
+            // Always restore console output, even if waitForConnected throws
+            console.log = originalLog;
+        }
 
-     console.log('Connected to BitShares');
-     console.log();
+        console.log('Connected to BitShares');
+        console.log();
+    } else {
+        console.log('Skipping BitShares connection check for claw-only mode');
+        console.log();
+    }
 
     // Step 1: Check PM2
     if (!checkPM2Installed()) {
@@ -254,56 +398,40 @@ async function main(botNameFilter = null) {
         await installPM2();
     }
 
-    // Step 2: Generate ecosystem config
-    const apps = generateEcosystemConfig(botNameFilter);
-    const botCount = countManagedBots(apps);
-    console.log(`Number active bots: ${botCount}`);
-    console.log();
-
-    // Step 3: Clean up and authenticate
-    // Clean up any stale daemon socket files
+    // Step 2: Ensure credential daemon availability
     try {
-        try { fs.unlinkSync('/tmp/dexbot-cred-daemon.sock'); } catch (e) { }
-        try { fs.unlinkSync('/tmp/dexbot-cred-daemon.ready'); } catch (e) { }
-    } catch (e) {
-        // Socket files already cleaned, that's fine
-    }
-
-    // Authenticate password and set in environment for PM2 apps
-    console.log('Authenticating master password...');
-    try {
-        const masterPassword = await chainKeys.authenticate();
-        process.env.DAEMON_PASSWORD = masterPassword;
+        await ensureCredentialDaemonPM2();
     } catch (error) {
         console.error('\n❌', error.message);
         process.exit(1);
     }
-    console.log('✓ Authentication successful\n');
+
+    // Step 3: Generate ecosystem config
+    const apps = generateEcosystemConfig({
+        botNameFilter,
+        clawOnly,
+    });
+    const botCount = countManagedBots(apps);
+    console.log(`Number active bots: ${botCount}`);
+    console.log();
 
     // Step 4: Start PM2
-    console.log('Starting PM2 with all services...');
-    await startPM2();
+    console.log(clawOnly ? 'Starting PM2 with credential daemon only...' : 'Starting PM2 with all services...');
+    await startManagedAppsPM2(apps);
 
     console.log();
     console.log('='.repeat(50));
     console.log('DEXBot2 started successfully!');
+    console.log('If dexbot-cred stops, rerun `node pm2` to unlock it again.');
     console.log('='.repeat(50));
     console.log();
 }
 
-/**
- * Start PM2 with provided configuration.
- * @returns {Promise<void>}
- */
-function startPM2() {
+function startPM2Process(args, env = buildScopedChildEnv()) {
     return new Promise((resolve, reject) => {
-        // Use 'pm2 start' to handle both cases:
-        // 1. First run (processes don't exist yet) - creates new processes
-        // 2. Subsequent runs (processes exist) - restarts existing processes gracefully
-        // This prevents duplicate processes while supporting both fresh start and restart scenarios
-        const pm2 = spawn('pm2', ['start', ECOSYSTEM_FILE], {
+        const pm2 = spawn('pm2', args, {
             cwd: ROOT,
-            env: process.env,
+            env,
             stdio: 'inherit',
             detached: false,
             shell: process.platform === 'win32'
@@ -320,6 +448,45 @@ function startPM2() {
 
         pm2.on('error', reject);
     });
+}
+
+function startManagedAppsPM2(apps) {
+    if (!apps || apps.length === 0) {
+        return Promise.resolve();
+    }
+    return startPM2Process(['start', ECOSYSTEM_FILE]);
+}
+
+function startCredentialDaemonPM2({ credentialEnv = {} } = {}) {
+    const app = buildCredentialDaemonApp({ credentialEnv });
+    const args = [
+        'start',
+        app.script,
+        '--name', app.name,
+        '--cwd', app.cwd,
+        '--output', app.out_file,
+        '--error', app.error_file,
+        '--max-memory-restart', app.max_memory_restart,
+        '--log-date-format', app.log_date_format,
+        '--no-autorestart',
+    ];
+    return startPM2Process(args, buildScopedChildEnv({ extra: app.env }));
+}
+
+async function startManagedRuntimePM2({ apps, bootstrap = null } = {}) {
+    if (bootstrap) {
+        await execPM2CommandIgnoreMissing('delete', CREDENTIAL_DAEMON_APP_NAME);
+        await startCredentialDaemonPM2({ credentialEnv: bootstrap.credentialEnv });
+        await Promise.all([
+            bootstrap.waitForTransfer(),
+            chainKeys.waitForDaemon(TIMING.DAEMON_STARTUP_TIMEOUT_MS, {
+                socketPath: CREDENTIAL_SOCKET_PATH,
+                readyFilePath: CREDENTIAL_READY_FILE,
+            }),
+        ]);
+    }
+
+    await startManagedAppsPM2(apps);
 }
 
 /**
@@ -485,6 +652,19 @@ async function execPM2Command(action, target) {
     });
 }
 
+async function execPM2CommandIgnoreMissing(action, target) {
+    try {
+        await execPM2Command(action, target);
+        return true;
+    } catch (error) {
+        const message = String(error && error.message ? error.message : error);
+        if (message.includes('Process or Namespace') || message.includes('not found') || message.includes('does not exist')) {
+            return false;
+        }
+        throw error;
+    }
+}
+
 /**
  * Stop PM2 processes based on target.
  * @param {string} target - 'all' or specific bot name.
@@ -492,24 +672,31 @@ async function execPM2Command(action, target) {
  * @throws {Error} If target not found or stopping fails.
  */
 async function stopPM2Processes(target) {
-    // Ensure ecosystem config exists (validates bot configuration)
-    if (!fs.existsSync(BOTS_JSON)) {
-        throw new Error('profiles/bots.json not found. Run: npm run bootstrap:profiles');
-    }
-
     console.log(`Stopping PM2 processes: ${target}`);
 
     if (target === 'all') {
-        // Regenerate ecosystem config to ensure it's current
-        generateEcosystemConfig();
-        // Stop all dexbot processes via ecosystem config
-        await execPM2Command('stop', ECOSYSTEM_FILE);
+        if (fs.existsSync(ECOSYSTEM_FILE)) {
+            await runManagedAppsPm2Action('stop');
+        } else if (fs.existsSync(BOTS_JSON)) {
+            try {
+                await runManagedAppsPm2Action('stop', { regenerate: true });
+            } catch (err) {
+                console.warn(`Skipping managed bot stop: ${err.message}`);
+            }
+        }
+        await execPM2CommandIgnoreMissing('stop', CREDENTIAL_DAEMON_APP_NAME);
         console.log('All dexbot PM2 processes stopped.');
     } else {
+        if (target === CREDENTIAL_DAEMON_APP_NAME) {
+            await execPM2CommandIgnoreMissing('stop', CREDENTIAL_DAEMON_APP_NAME);
+            console.log(`PM2 process '${target}' stopped.`);
+            return;
+        }
+
         // Validate bot exists in configuration before stopping (with lock protection)
         try {
             const { config } = await readBotsFileWithLock(BOTS_JSON, parseJsonWithComments);
-            const botExists = config.bots && config.bots.some(b => b.name === target && b.active !== false);
+            const botExists = selectActiveBotEntries(config).some((b) => b.name === target);
 
             if (!botExists) {
                 throw new Error(`Bot '${target}' not found or not active in profiles/bots.json`);
@@ -531,24 +718,31 @@ async function stopPM2Processes(target) {
  * @throws {Error} If target not found or deleting fails.
  */
 async function deletePM2Processes(target) {
-    // Ensure ecosystem config exists (validates bot configuration)
-    if (!fs.existsSync(BOTS_JSON)) {
-        throw new Error('profiles/bots.json not found. Run: npm run bootstrap:profiles');
-    }
-
     console.log(`Deleting PM2 processes: ${target}`);
 
     if (target === 'all') {
-        // Regenerate ecosystem config to ensure it's current
-        generateEcosystemConfig();
-        // Delete all dexbot processes via ecosystem config
-        await execPM2Command('delete', ECOSYSTEM_FILE);
+        if (fs.existsSync(ECOSYSTEM_FILE)) {
+            await runManagedAppsPm2Action('delete');
+        } else if (fs.existsSync(BOTS_JSON)) {
+            try {
+                await runManagedAppsPm2Action('delete', { regenerate: true });
+            } catch (err) {
+                console.warn(`Skipping managed bot delete: ${err.message}`);
+            }
+        }
+        await execPM2CommandIgnoreMissing('delete', CREDENTIAL_DAEMON_APP_NAME);
         console.log('All dexbot PM2 processes deleted.');
     } else {
+        if (target === CREDENTIAL_DAEMON_APP_NAME) {
+            await execPM2CommandIgnoreMissing('delete', CREDENTIAL_DAEMON_APP_NAME);
+            console.log(`PM2 process '${target}' deleted.`);
+            return;
+        }
+
         // Validate bot exists in configuration before deleting (with lock protection)
         try {
             const { config } = await readBotsFileWithLock(BOTS_JSON, parseJsonWithComments);
-            const botExists = config.bots && config.bots.some(b => b.name === target && b.active !== false);
+            const botExists = selectActiveBotEntries(config).some((b) => b.name === target);
 
             if (!botExists) {
                 throw new Error(`Bot '${target}' not found or not active in profiles/bots.json`);
@@ -566,43 +760,99 @@ async function deletePM2Processes(target) {
     console.log('Run "node dexbot.js bots" to manage bot configurations.');
 }
 
+async function restartPM2Processes(target) {
+    console.log(`Restarting PM2 processes: ${target}`);
+
+    if (target === 'all') {
+        generateEcosystemConfig({ clawOnly: false, exitOnError: false });
+        await ensureCredentialDaemonPM2({ logReuse: false });
+        await runManagedAppsPm2Action('restart');
+        console.log('Managed dexbot PM2 apps restarted. dexbot-cred was left on the safe wrapper path.');
+        return;
+    }
+
+    if (target === CREDENTIAL_DAEMON_APP_NAME) {
+        await ensureCredentialDaemonPM2({ forceRefresh: true, logReuse: false });
+        console.log(`Credential daemon '${target}' restarted with a fresh unlock.`);
+        return;
+    }
+
+    await assertActiveBotTarget(target);
+    await ensureCredentialDaemonPM2({ logReuse: false });
+    await execPM2Command('restart', target);
+    console.log(`PM2 process '${target}' restarted.`);
+}
+
+async function reloadPM2Processes(target) {
+    console.log(`Reloading PM2 processes: ${target}`);
+
+    if (target === 'all') {
+        generateEcosystemConfig({ clawOnly: false, exitOnError: false });
+        await ensureCredentialDaemonPM2({ logReuse: false });
+        await runManagedAppsPm2Action('reload');
+        console.log('Managed dexbot PM2 apps reloaded. dexbot-cred was not reloaded.');
+        return;
+    }
+
+    if (target === CREDENTIAL_DAEMON_APP_NAME) {
+        await ensureCredentialDaemonPM2({ forceRefresh: true, logReuse: false });
+        console.log(`Credential daemon '${target}' re-unlocked via safe restart flow.`);
+        return;
+    }
+
+    await assertActiveBotTarget(target);
+    await ensureCredentialDaemonPM2({ logReuse: false });
+    await execPM2Command('reload', target);
+    console.log(`PM2 process '${target}' reloaded.`);
+}
+
 /**
  * Show help text for PM2 CLI usage.
  */
 function showPM2Help() {
     console.log(`
-Usage: node pm2.js <command> [target]
+Usage: node pm2 <command> [target]
 
 Commands:
   unlock-start              Unlock keystore and start all bots with PM2 (default)
+  claw-only                 Start only the credential daemon with PM2
   update                    Run the update script immediately
   stop <bot-name|all>       Stop PM2 process(es) - only dexbot processes
   delete <bot-name|all>     Delete PM2 process(es) - only dexbot processes
+  restart <bot-name|all>    Restart managed apps safely; dexbot-cred uses fresh unlock flow
+  reload <bot-name|all>     Reload managed apps safely; dexbot-cred uses fresh unlock flow
   help                      Show this help message
 
 Examples:
-  node pm2.js                    # Start all bots (unlock + start)
-  node pm2.js stop all           # Stop all dexbot processes
-  node pm2.js stop XRP-BTS       # Stop specific bot
-  node pm2.js delete all         # Delete all dexbot processes from PM2
-  node pm2.js delete XRP-BTS     # Delete specific bot from PM2
-  node pm2.js help               # Show help
+  node pm2                       # Start all bots (unlock + start)
+  node pm2 claw-only             # Start only the credential daemon
+  node pm2 unlock-start --claw-only # Start only the credential daemon
+  node pm2 stop all             # Stop all dexbot processes
+  node pm2 stop XRP-BTS         # Stop specific bot
+  node pm2 delete all           # Delete all dexbot processes from PM2
+  node pm2 delete XRP-BTS       # Delete specific bot from PM2
+  node pm2 restart all          # Safe restart path for managed apps
+  node pm2 reload XRP-BTS       # Safe reload path for a specific bot
+  node pm2 help                 # Show help
     `);
 }
 
 // Run if called directly
 if (require.main === module) {
     // Parse command line arguments
-    const args = process.argv.slice(2);
-    const command = args[0] || 'unlock-start';
-    const target = args[1];
+    const { command, target, clawOnly } = parsePm2Args(process.argv);
 
     (async () => {
         try {
             if (command === 'unlock-start') {
                 // Full setup: unlock, generate config, authenticate, start PM2
                 // Optional: filter to specific bot if provided
-                await main(target || null);
+                await main({ botNameFilter: target || null, clawOnly });
+                // Close stdin to prevent hanging
+                if (process.stdin) process.stdin.destroy();
+                process.exit(0);
+            } else if (command === 'claw-only') {
+                await main({ clawOnly: true });
                 // Close stdin to prevent hanging
                 if (process.stdin) process.stdin.destroy();
                 process.exit(0);
@@ -636,6 +886,32 @@ if (require.main === module) {
                     console.error(`Failed to delete processes: ${err.message}`);
                     process.exit(1);
                 }
+            } else if (command === 'restart') {
+                if (!target) {
+                    console.error('Error: Target required. Specify bot name, "dexbot-cred", or "all".');
+                    showPM2Help();
+                    process.exit(1);
+                }
+                try {
+                    await restartPM2Processes(target);
+                    process.exit(0);
+                } catch (err) {
+                    console.error(`Failed to restart processes: ${err.message}`);
+                    process.exit(1);
+                }
+            } else if (command === 'reload') {
+                if (!target) {
+                    console.error('Error: Target required. Specify bot name, "dexbot-cred", or "all".');
+                    showPM2Help();
+                    process.exit(1);
+                }
+                try {
+                    await reloadPM2Processes(target);
+                    process.exit(0);
+                } catch (err) {
+                    console.error(`Failed to reload processes: ${err.message}`);
+                    process.exit(1);
+                }
             } else if (command === 'help') {
                 showPM2Help();
                 process.exit(0);
@@ -651,4 +927,20 @@ if (require.main === module) {
     })();
 }
 
-module.exports = { main, generateEcosystemConfig, countManagedBots, isServiceApp, usesAmaGridPrice, needsPriceAdapter };
+module.exports = {
+    buildCredentialDaemonApp,
+    buildEcosystemApps,
+    buildScopedChildEnv,
+    countManagedBots,
+    deletePM2Processes,
+    ensureCredentialDaemonPM2,
+    generateEcosystemConfig,
+    isServiceApp,
+    main,
+    needsPriceAdapter,
+    reloadPM2Processes,
+    restartPM2Processes,
+    stopPM2Processes,
+    startManagedRuntimePM2,
+    usesAmaGridPrice
+};

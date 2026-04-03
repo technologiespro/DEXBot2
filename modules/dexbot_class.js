@@ -1560,6 +1560,9 @@ class DEXBot {
                 this.privateKey = privateKey;
                 await this._setupAccountContext(this.config.preferredAccount);
             } catch (err) {
+                if (chainKeys.isMasterPasswordFailure(err)) {
+                    throw err;
+                }
                 this._warn(`Auto-selection of preferredAccount failed: ${err.message}`);
                 // dexbot.js has fallback to selectAccount, bot.js throws
                 if (typeof chainOrders.selectAccount === 'function') {

@@ -80,6 +80,10 @@ const fs = require('fs');
 const path = require('path');
 const { readInput, readPassword } = require('./order/utils/system');
 const { TIMING } = require('./constants');
+const {
+    getCredentialReadyFilePath,
+    getCredentialSocketPath,
+} = require('./credential_runtime');
 
 // Profiles key file (ignored) only
 const PROFILES_KEYS_FILE = path.join(__dirname, '..', 'profiles', 'keys.json');
@@ -217,6 +221,10 @@ class MasterPasswordError extends Error {
         this.name = 'MasterPasswordError';
         this.code = 'MASTER_PASSWORD_FAILED';
     }
+}
+
+function isMasterPasswordFailure(err) {
+    return !!(err && (err instanceof MasterPasswordError || err.code === 'MASTER_PASSWORD_FAILED'));
 }
 
 const MASTER_PASSWORD_MAX_ATTEMPTS = 3;
@@ -532,9 +540,9 @@ async function main() {
  * Check if dexbot-cred daemon is ready and responsive
  * @returns {boolean} True if daemon socket is responsive
  */
-function isDaemonReady() {
+function isDaemonReady(options = {}) {
     try {
-        return fs.existsSync('/tmp/dexbot-cred-daemon.ready') && fs.existsSync('/tmp/dexbot-cred-daemon.sock');
+        return fs.existsSync(getCredentialReadyFilePath(options)) && fs.existsSync(getCredentialSocketPath(options));
     } catch {
         return false;
     }
@@ -546,12 +554,12 @@ function isDaemonReady() {
  * @returns {Promise<void>} Resolves when daemon is ready
  * @throws {Error} If daemon doesn't start within timeout
  */
-async function waitForDaemon(maxWaitMs = TIMING.DAEMON_STARTUP_TIMEOUT_MS) {
+async function waitForDaemon(maxWaitMs = TIMING.DAEMON_STARTUP_TIMEOUT_MS, options = {}) {
     const startTime = Date.now();
     const checkInterval = TIMING.CHECK_INTERVAL_MS; // Check every 100ms
 
     while (Date.now() - startTime < maxWaitMs) {
-        if (isDaemonReady()) {
+        if (isDaemonReady(options)) {
             return;
         }
         await new Promise(resolve => setTimeout(resolve, checkInterval));
@@ -567,12 +575,12 @@ async function waitForDaemon(maxWaitMs = TIMING.DAEMON_STARTUP_TIMEOUT_MS) {
  * @returns {Promise<string>} Decrypted private key
  * @throws {Error} If daemon unavailable or request fails
  */
-function getPrivateKeyFromDaemon(accountName, timeout = 5000) {
+function getPrivateKeyFromDaemon(accountName, timeout = 5000, options = {}) {
     const net = require('net');
-    const SOCKET_PATH = '/tmp/dexbot-cred-daemon.sock';
+    const socketPath = getCredentialSocketPath(options);
 
     return new Promise((resolve, reject) => {
-        const socket = net.createConnection(SOCKET_PATH, () => {
+        const socket = net.createConnection(socketPath, () => {
             // Send request
             socket.write(JSON.stringify({ type: 'private-key', accountName }) + '\n');
         });
@@ -631,6 +639,7 @@ module.exports = {
     main,
     authenticate,
     getPrivateKey,
+    isMasterPasswordFailure,
     MasterPasswordError,
     isDaemonReady,
     waitForDaemon,

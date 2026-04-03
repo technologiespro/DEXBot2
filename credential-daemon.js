@@ -18,8 +18,8 @@
  * 5. Services private key requests from bot processes
  *
  * COMMUNICATION:
- * - Socket: /tmp/dexbot-cred-daemon.sock
- * - Ready file: /tmp/dexbot-cred-daemon.ready
+ * - Socket: profiles/run/dexbot-cred-daemon.sock (or $DEXBOT_CRED_RUNTIME_DIR, or $XDG_RUNTIME_DIR/dexbot2/)
+ * - Ready file: profiles/run/dexbot-cred-daemon.ready (or $DEXBOT_CRED_RUNTIME_DIR, or $XDG_RUNTIME_DIR/dexbot2/)
  * - Startup timeout: 60 seconds (DAEMON_STARTUP_TIMEOUT_MS)
  * - Windows 10+: Supported; earlier Windows not supported
  *
@@ -36,7 +36,7 @@
  *
  * - Master password prompt only once (at daemon startup)
  * - Individual bot processes have no access to master password
- * - No password in environment variables
+ * - No persisted password in environment variables or config files
  * - Private keys never written to disk unencrypted
  * - Centralized key management
  * - Unix socket provides process-level isolation
@@ -57,11 +57,20 @@
  * ===============================================================================
  */
 
+process.umask(0o077);
+
 const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const chainKeys = require('./modules/chain_keys');
+const {
+    ensureCredentialRuntimeDirSync,
+    getCredentialReadyFilePath,
+    getCredentialRuntimeDir,
+    getCredentialSocketPath,
+} = require('./modules/credential_runtime');
+const { fetchBootstrapPassword } = require('./modules/launcher/credential_bootstrap');
 
 // Platform check - Unix sockets require Unix-like systems or Windows 10+
 const platform = os.platform();
@@ -75,11 +84,36 @@ if (platform === 'win32') {
     }
 }
 
-const SOCKET_PATH = '/tmp/dexbot-cred-daemon.sock';
-const READY_FILE = '/tmp/dexbot-cred-daemon.ready';
+const RUNTIME_DIR = getCredentialRuntimeDir({ root: __dirname });
+const SOCKET_PATH = getCredentialSocketPath({ root: __dirname, runtimeDir: RUNTIME_DIR });
+const READY_FILE = getCredentialReadyFilePath({ root: __dirname, runtimeDir: RUNTIME_DIR });
 
 let masterPassword = null;
 let server = null;
+
+function debugLog(message, err = null) {
+    const suffix = err && err.message ? `: ${err.message}` : '';
+    console.error(`[credential-daemon][debug] ${message}${suffix}`);
+}
+
+async function resolveMasterPassword() {
+    const envPassword = process.env.DAEMON_PASSWORD;
+    if (envPassword) {
+        delete process.env.DAEMON_PASSWORD;
+        return envPassword;
+    }
+
+    const bootstrapSocket = process.env.DEXBOT_CRED_BOOTSTRAP_SOCKET;
+    delete process.env.DEXBOT_CRED_BOOTSTRAP_SOCKET;
+
+    if (bootstrapSocket) {
+        return fetchBootstrapPassword({
+            socketPath: bootstrapSocket,
+        });
+    }
+
+    return chainKeys.authenticate();
+}
 
 /**
  * Initialize daemon: authenticate and start listening
@@ -92,11 +126,10 @@ async function initialize() {
             throw new Error('profiles/keys.json not found. Please run: node dexbot.js keys');
         }
 
-        // Accept password from PM2 environment when available, otherwise prompt once.
-        masterPassword = process.env.DAEMON_PASSWORD;
-        if (!masterPassword) {
-            masterPassword = await chainKeys.authenticate();
-        }
+        // Accept password via one-shot bootstrap channel when launched by a wrapper,
+        // otherwise prompt once interactively.
+        masterPassword = await resolveMasterPassword();
+        ensureCredentialRuntimeDirSync({ root: __dirname, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });
 
         // Clean up old socket if it exists
         try {
@@ -110,11 +143,17 @@ async function initialize() {
         // Create server
         server = net.createServer(handleConnection);
         server.listen(SOCKET_PATH, () => {
+            try {
+                fs.chmodSync(SOCKET_PATH, 0o600);
+            } catch (err) {
+                debugLog(`Unable to chmod socket ${SOCKET_PATH}`, err);
+            }
             // Create ready file to signal startup completion
             try {
                 fs.writeFileSync(READY_FILE, Date.now().toString());
+                fs.chmodSync(READY_FILE, 0o600);
             } catch (err) {
-                // Silently ignore
+                debugLog(`Unable to update ready file permissions ${READY_FILE}`, err);
             }
         });
 

@@ -83,12 +83,16 @@ const path = require('path');
 const chainKeys = require('./modules/chain_keys');
 const { initializeFeeCache, ensureProfilesDirectory } = require('./modules/order/utils/system');
 const accountBots = require('./modules/account_bots');
-const { parseJsonWithComments } = accountBots;
-const { createBotKey } = require('./modules/account_orders');
 const SharedDEXBot = require('./modules/dexbot_class');
 const { authenticateWithChainKeys } = require('./modules/dexbot_class');
-const { readBotsFileSync } = require('./modules/bots_file_lock');
 const { setupGracefulShutdown, registerCleanup } = require('./modules/graceful_shutdown');
+const {
+    collectValidationIssues,
+    loadSettingsFile,
+    normalizeBotEntries,
+    resolveRawBotEntries,
+    saveSettingsFile,
+} = require('./modules/bot_settings');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
@@ -159,71 +163,6 @@ if (cliArgs.some(arg => CLI_HELP_FLAGS.includes(arg))) {
 if (cliArgs.includes(CLI_EXAMPLES_FLAG)) {
     printCLIExamples();
     process.exit(0);
-}
-
-// `parseJsonWithComments` is provided by `modules/account_bots.js` (shared single-source)
-
-/**
- * Load the tracked bot settings file.
- * @param {Object} [options={}] - Load options.
- * @param {boolean} [options.silent=false] - Whether to suppress missing file errors.
- * @returns {Object} Object containing config and filePath.
- */
-function loadSettingsFile({ silent = false } = {}) {
-     if (!fs.existsSync(PROFILES_BOTS_FILE)) {
-         if (!silent) {
-             console.error('profiles/bots.json not found. Run: dexbot bots');
-         }
-         return { config: {}, filePath: PROFILES_BOTS_FILE };
-     }
-     try {
-         const { config } = readBotsFileSync(PROFILES_BOTS_FILE, parseJsonWithComments);
-         return { config, filePath: PROFILES_BOTS_FILE };
-     } catch (err) {
-         console.error('Failed to parse bot settings from', PROFILES_BOTS_FILE);
-         console.error('Error:', err.message);
-         console.error('Please check the JSON syntax in profiles/bots.json and try again.');
-         process.exit(1);
-     }
- }
-
-/**
- * Persist the tracked bot settings to disk.
- * @param {Object} config - The configuration object to save.
- * @param {string} filePath - The path to the file.
- * @throws {Error} If saving fails.
- */
-function saveSettingsFile(config, filePath) {
-    try {
-        fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf8');
-    } catch (err) {
-        console.error('Failed to save bot settings to', filePath, '-', err.message);
-        throw err;
-    }
-}
-
-/**
- * Normalize the root data structure to always return an array of bot entries.
- * @param {Object} settings - The settings object.
- * @returns {Array<Object>} Array of bot entries.
- */
-function resolveRawBotEntries(settings) {
-    if (!settings || typeof settings !== 'object') return [];
-    if (Array.isArray(settings.bots)) return settings.bots;
-    if (Object.keys(settings).length > 0) return [settings];
-    return [];
-}
-
-/**
- * Decorate each bot entry with runtime metadata.
- * @param {Array<Object>} rawEntries - Array of raw bot entries.
- * @returns {Array<Object>} Normalized bot entries.
- */
-function normalizeBotEntries(rawEntries) {
-    return rawEntries.map((entry, index) => {
-        const normalized = { active: entry.active === undefined ? true : !!entry.active, ...entry };
-        return { ...normalized, botIndex: index, botKey: createBotKey(normalized, index) };
-    });
 }
 
 // Connection handled centrally by modules/bitshares_client; use waitForConnected() when needed
@@ -323,63 +262,6 @@ async function runAccountManager({ waitForConnection = false, exitAfter = false,
  }
 
 /**
- * Validate a bot configuration entry for required fields.
- * Checks for: assetA, assetB, activeOrders (buy/sell), botFunds (buy/sell)
- * @param {Object} b - Bot entry from bots.json
- * @param {number} i - Index in the bots array
- * @param {string} src - Source name for error messages
- * @returns {string|null} Error message if invalid, null if valid
- */
-function validateBotEntry(b, i, src) {
-    const problems = [];
-    const required = ['assetA', 'assetB', 'activeOrders', 'botFunds'];
-    for (const k of required) {
-        if (!(k in b)) problems.push(`missing '${k}'`);
-    }
-
-    if ('activeOrders' in b) {
-        if (typeof b.activeOrders !== 'object' || b.activeOrders === null) problems.push("'activeOrders' must be an object");
-        else {
-            if (!('buy' in b.activeOrders)) problems.push("activeOrders missing 'buy'");
-            if (!('sell' in b.activeOrders)) problems.push("activeOrders missing 'sell'");
-        }
-    }
-
-    if ('botFunds' in b) {
-        if (typeof b.botFunds !== 'object' || b.botFunds === null) problems.push("'botFunds' must be an object");
-        else {
-            if (!('buy' in b.botFunds)) problems.push("botFunds missing 'buy'");
-            if (!('sell' in b.botFunds)) problems.push("botFunds missing 'sell'");
-        }
-    }
-
-    if (problems.length) {
-        const name = b.name || `<unnamed-${i}>`;
-        return `Bot[${i}] '${name}' (${src}) -> ${problems.join('; ')}`;
-    }
-    return null;
-}
-
-/**
- * Collect all validation issues across a set of bot entries.
- * @param {Array<Object>} entries - Bot entries.
- * @param {string} sourceName - Label for the source of entries.
- * @returns {Object} { errors: string[], warnings: string[] }
- */
-function collectValidationIssues(entries, sourceName) {
-    const errors = [];
-    const warnings = [];
-    entries.forEach((entry, index) => {
-        const issue = validateBotEntry(entry, index, sourceName);
-        if (issue) {
-            if (entry.active) errors.push(issue);
-            else warnings.push(issue);
-        }
-    });
-    return { errors, warnings };
-}
-
-/**
  * Execute the provided bot entries after validation and authentication.
  * This is the main orchestration function that:
  * 1. Validates all bot configurations
@@ -437,6 +319,9 @@ async function runBotInstances(botEntries, { forceDryRun = false, sourceName = '
             try {
                 masterPassword = await authenticateMasterPassword();
             } catch (err) {
+                if (chainKeys.isMasterPasswordFailure(err)) {
+                    throw err;
+                }
                 console.warn('Master password entry failed or was cancelled. Bots requiring preferredAccount may need interactive selection.');
                 masterPassword = null;
             }
@@ -467,8 +352,7 @@ async function runBotInstances(botEntries, { forceDryRun = false, sourceName = '
              instances.push(bot);
          } catch (err) {
              console.error('Failed to start bot:', err.message);
-             // Check for master password failure using code property (more reliable than instanceof)
-             if (err && (err instanceof chainKeys.MasterPasswordError || err?.code === 'MASTER_PASSWORD_FAILED')) {
+             if (chainKeys.isMasterPasswordFailure(err)) {
                  console.error('Aborting because the master password failed 3 times.');
                  process.exit(1);
              }
@@ -499,7 +383,7 @@ async function startBotByName(botName, { dryRun = false } = {}) {
     if (!botName) {
         return runDefaultBots({ forceDryRun: dryRun, sourceName: dryRun ? 'CLI drystart (all)' : 'CLI start (all)' });
     }
-    const { config } = loadSettingsFile();
+    const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
     const entries = resolveRawBotEntries(config);
     if (!entries.length) {
         console.error('No bot definitions exist in the tracked settings.');
@@ -524,7 +408,7 @@ async function startBotByName(botName, { dryRun = false } = {}) {
  * @param {string|null} botName - Name of the bot to disable, or null for all
  */
 async function disableBotByName(botName) {
-    const { config, filePath } = loadSettingsFile();
+    const { config, filePath } = loadSettingsFile(PROFILES_BOTS_FILE);
     const entries = resolveRawBotEntries(config);
     if (!botName) {
         let updated = false;
@@ -553,7 +437,7 @@ async function disableBotByName(botName) {
     }
     match.active = false;
     saveSettingsFile(config, filePath);
-    console.log(`Marked '${botName}' inactive in ${path.basename(filePath)}. Stop the PM2 process using 'node pm2.js stop ${botName}'.`);
+    console.log(`Marked '${botName}' inactive in ${path.basename(filePath)}. Stop the PM2 process using 'node pm2 stop ${botName}'.`);
 }
 
 /**
@@ -568,7 +452,7 @@ async function disableBotByName(botName) {
  * @param {string|null} botName - Name of the bot to reset, or null for all active
  */
 async function resetBotByName(botName) {
-    const { config } = loadSettingsFile();
+    const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
     const entries = normalizeBotEntries(resolveRawBotEntries(config));
 
     // Filter targets
@@ -607,12 +491,11 @@ async function exportBotTrades(botName) {
     }
 
     try {
-        const { readBotsFileSync } = require('./modules/bots_file_lock');
         const exporter = require('./modules/order/export');
 
         // Load bots configuration
-        const botsData = readBotsFileSync();
-        const bot = botsData.bots.find(b => b.name === botName);
+        const { config: botsData } = loadSettingsFile(PROFILES_BOTS_FILE);
+        const bot = resolveRawBotEntries(botsData).find((b) => b.name === botName);
 
         if (!bot) {
             console.error(`Bot '${botName}' not found in profiles/bots.json`);
@@ -727,7 +610,7 @@ async function handleCLICommands() {
  * @returns {Promise<void>}
  */
 async function runDefaultBots({ forceDryRun = false, sourceName = 'settings' } = {}) {
-    const { config } = loadSettingsFile();
+    const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
     const entries = resolveRawBotEntries(config);
     const normalized = normalizeBotEntries(entries);
     await runBotInstances(normalized, { forceDryRun, sourceName });
@@ -832,4 +715,22 @@ async function bootstrap() {
     await runDefaultBots();
 }
 
-bootstrap().catch(console.error);
+function handleFatalBootstrapError(err) {
+    if (chainKeys.isMasterPasswordFailure(err)) {
+        console.error('Failed to start bot:', err.message);
+        console.error('Aborting because the master password failed 3 times.');
+    } else if (err && err.message) {
+        console.error(err.message);
+    } else {
+        console.error(err);
+    }
+
+    try {
+        BitShares.disconnect();
+    } catch (disconnectErr) {
+    }
+
+    process.exit(1);
+}
+
+bootstrap().catch(handleFatalBootstrapError);

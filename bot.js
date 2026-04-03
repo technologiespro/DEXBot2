@@ -48,12 +48,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const accountBots = require('./modules/account_bots');
-const { parseJsonWithComments } = accountBots;
-const { createBotKey } = require('./modules/account_orders');
 const DEXBot = require('./modules/dexbot_class');
 const { normalizeBotEntry } = require('./modules/dexbot_class');
-const { readBotsFileSync } = require('./modules/bots_file_lock');
+const { loadSettingsFile, resolveRawBotEntries, selectBotEntry } = require('./modules/bot_settings');
 const { setupGracefulShutdown, registerCleanup } = require('./modules/graceful_shutdown');
 
 // Setup graceful shutdown handlers
@@ -93,11 +90,11 @@ function loadBotConfig(name) {
     }
 
     try {
-        const { config } = readBotsFileSync(PROFILES_BOTS_FILE, parseJsonWithComments);
-        const bots = config.bots || [];
-        const botEntry = bots.find(b => b.name === name);
+        const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
+        const botEntry = selectBotEntry(config, name);
 
         if (!botEntry) {
+            const bots = resolveRawBotEntries(config);
             console.error(`[bot.js] Bot '${name}' not found in profiles/bots.json`);
             console.error(`[bot.js] Available bots: ${bots.map(b => b.name).join(', ') || 'none'}`);
             process.exit(1);
@@ -176,7 +173,8 @@ async function getPrivateKeyForAccount(accountName) {
         console.log(`[bot.js] Market: ${botConfig.assetA}-${botConfig.assetB}, Account: ${botConfig.preferredAccount}`);
 
          // Load all bots from configuration to prevent pruning other active bots
-          const allBotsConfig = readBotsFileSync(PROFILES_BOTS_FILE, parseJsonWithComments).config.bots || [];
+          const { config: allBotsConfigData } = loadSettingsFile(PROFILES_BOTS_FILE);
+          const allBotsConfig = resolveRawBotEntries(allBotsConfigData);
          
          // Normalize all active bots with their correct indices in the unfiltered array
          // CRITICAL: Index must be based on position in allBotsConfig, not in filtered array.

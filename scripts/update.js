@@ -219,7 +219,7 @@ try {
      * - Preserves PM2 state if not running
      * - Reloads active bots to pick up code changes
      * - Handles missing bots.json gracefully
-     * - Falls back to "reload all" if selective reload fails
+     * - Never reloads dexbot-cred through bulk PM2 actions
      */
     log('Reloading active bots in PM2...');
     try {
@@ -291,18 +291,12 @@ try {
                 log('No active bots found in config.');
             }
         } else {
-            // bots.json not found - reload all PM2 apps as fallback
+            // bots.json not found - skip bulk reload to avoid touching dexbot-cred
             log('Warning: profiles/bots.json not found, skipping selective reload.');
-            run('pm2 reload all');
         }
     } catch (err) {
-        // PM2 reload logic itself failed - try reload all as last resort
-        log(`Warning: PM2 reload logic failed (${err.message}). Falling back to reload all.`);
-        try {
-            run('pm2 reload all');
-        } catch (e) {
-            // Even fallback failed, but this is not critical - update still succeeded
-        }
+        // Avoid pm2 reload all because dexbot-cred must only be restarted through node pm2
+        log(`Warning: PM2 reload logic failed (${err.message}). Skipping bulk reload to avoid touching dexbot-cred.`);
     }
 
 
