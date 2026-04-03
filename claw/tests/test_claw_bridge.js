@@ -43,6 +43,11 @@ function createBridgeHarness() {
       closeShortOnBts: [],
       openShortOnBts: [],
       placeTakeProfitBuyOrderOnBts: []
+    },
+    profiles: {
+      getBotSettings: [],
+      previewBotSettingsUpdate: [],
+      applyBotSettingsPatch: []
     }
   };
 
@@ -104,7 +109,34 @@ function createBridgeHarness() {
             options,
             ref,
             selectedBot: { botId: ref, source: 'profile-context' }
-          })
+          }),
+          getBotSettings: async (ref, forceReload) => {
+            calls.profiles.getBotSettings.push({ forceReload, ref });
+            return {
+              forceReload,
+              ref,
+              source: 'bot-settings'
+            };
+          },
+          previewBotSettingsUpdate: async (ref, patch, options) => {
+            calls.profiles.previewBotSettingsUpdate.push({ options, patch, ref });
+            return {
+              options,
+              patch,
+              ref,
+              source: 'bot-settings-preview'
+            };
+          },
+          applyBotSettingsPatch: async (ref, patch, options) => {
+            calls.profiles.applyBotSettingsPatch.push({ options, patch, ref });
+            return {
+              options,
+              patch,
+              ref,
+              source: 'bot-settings-apply',
+              updatedBot: { botKey: ref, ...patch }
+            };
+          }
         },
         runtime: {
           ...bridgeRuntime,
@@ -282,6 +314,30 @@ async function testRunClawCommandDispatchMatrix() {
 
     const openOrders = await bridge.runClawCommand('open-orders', {});
     assert.strictEqual(openOrders.accountNameOrId, 'runtime-account');
+
+    const botSettings = await bridge.runClawCommand('bot-settings', {
+      botRef: 'alpha'
+    });
+    assert.strictEqual(botSettings.source, 'bot-settings');
+    assert.strictEqual(botSettings.ref, 'alpha');
+    assert.strictEqual(botSettings.forceReload, false);
+
+    const botSettingsPreview = await bridge.runClawCommand('bot-settings-preview', {
+      botRef: 'alpha',
+      patch: { gridPriceOffsetPct: 0.2, weightDistribution: { buy: 0.4 } }
+    });
+    assert.strictEqual(botSettingsPreview.source, 'bot-settings-preview');
+    assert.strictEqual(botSettingsPreview.ref, 'alpha');
+    assert.strictEqual(botSettingsPreview.patch.gridPriceOffsetPct, 0.2);
+    assert.strictEqual(botSettingsPreview.patch.weightDistribution.buy, 0.4);
+
+    const botSettingsApply = await bridge.runClawCommand('bot-settings-apply', {
+      botRef: 'alpha',
+      patch: { gridPriceOffsetPct: 0.3 }
+    });
+    assert.strictEqual(botSettingsApply.source, 'bot-settings-apply');
+    assert.strictEqual(botSettingsApply.updatedBot.gridPriceOffsetPct, 0.3);
+    assert.strictEqual(calls.profiles.applyBotSettingsPatch.length, 1);
 
     const honestContext = await bridge.runClawCommand('honest-context', {
       batchSize: '8',

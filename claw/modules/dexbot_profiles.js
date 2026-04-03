@@ -1,6 +1,8 @@
 const fs = require('fs');
 const fsPromises = require('fs/promises');
 const path = require('path');
+const { DEFAULT_CONFIG, GRID_LIMITS, INCREMENT_BOUNDS } = require('../../modules/constants');
+const { resolveRelativePrice } = require('../../modules/order/utils/math');
 
 const DEFAULT_MANIFEST_FILE = 'config.json';
 const DEFAULT_BOTS_FILE = 'bots.json';
@@ -21,10 +23,581 @@ const KNOWN_BOT_KEYS = new Set([
   // Added by normalization
   'botIndex', 'botKey'
 ]);
+const BOT_SETTINGS_READ_ONLY_KEYS = new Set(['botIndex', 'botKey']);
+const BOT_SETTINGS_TRIGGER_KEYS = new Set([
+  'active',
+  'activeOrders',
+  'assetA',
+  'assetAId',
+  'assetB',
+  'assetBId',
+  'botFunds',
+  'dryRun',
+  'gridPrice',
+  'gridPriceOffsetAllowNeutralReset',
+  'gridPriceOffsetCooldownMs',
+  'gridPriceOffsetMaxPct',
+  'gridPriceOffsetMinConfidence',
+  'gridPriceOffsetMinDeltaPct',
+  'gridPriceOffsetPct',
+  'gridPriceOffsetRequireConfirmedTrend',
+  'gridPriceOffsetScale',
+  'incrementPercent',
+  'maxPrice',
+  'minPrice',
+  'preferredAccount',
+  'startPrice',
+  'strategy',
+  'targetSpreadPercent',
+  'weightDistribution'
+]);
 const REQUIRED_BOT_KEY_ALIASES = {
   assetA: ['assetA', 'assetAId'],
   assetB: ['assetB', 'assetBId']
 };
+
+const GRID_PRICE_OFFSET_BOUNDS = Object.freeze({ min: -10, max: 10 });
+const BOT_SETTINGS_NESTED_KEYS = Object.freeze({
+  activeOrders: new Set(['buy', 'sell']),
+  botFunds: new Set(['buy', 'sell']),
+  weightDistribution: new Set(['buy', 'sell'])
+});
+const BOT_SETTINGS_STATE_FIELDS = Object.freeze({
+  numeric: [
+    'incrementPercent',
+    'targetSpreadPercent',
+    'gridPriceOffsetPct',
+    'gridPriceOffsetCooldownMs',
+    'gridPriceOffsetMinConfidence',
+    'gridPriceOffsetMinDeltaPct',
+    'gridPriceOffsetMaxPct',
+    'gridPriceOffsetScale'
+  ],
+  boolean: [
+    'active',
+    'dryRun',
+    'gridPriceOffsetAllowNeutralReset',
+    'gridPriceOffsetRequireConfirmedTrend'
+  ],
+  priceLike: [
+    'startPrice',
+    'gridPrice',
+    'minPrice',
+    'maxPrice'
+  ],
+  string: [
+    'name',
+    'preferredAccount',
+    'assetA',
+    'assetB',
+    'assetAId',
+    'assetBId',
+    'strategy'
+  ]
+});
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isNumericString(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  return trimmed !== '' && Number.isFinite(Number(trimmed));
+}
+
+function isPositiveNumericString(value) {
+  if (!isNumericString(value)) {
+    return false;
+  }
+
+  return Number(value.trim()) > 0;
+}
+
+function isPositiveMultiplierString(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!/^[0-9]+(?:\.[0-9]+)?x$/i.test(trimmed)) {
+    return false;
+  }
+
+  return parseFloat(trimmed) > 0;
+}
+
+function isPositivePriceLike(value) {
+  return (
+    (typeof value === 'number' && Number.isFinite(value) && value > 0) ||
+    isPositiveNumericString(value) ||
+    isPositiveMultiplierString(value)
+  );
+}
+
+function resolveComparablePriceValue(value, startPrice = null, mode = 'min') {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (isNumericString(value)) {
+    return Number(value.trim());
+  }
+
+  if (typeof value === 'string' && Number.isFinite(startPrice)) {
+    const resolved = resolveRelativePrice(value, startPrice, mode);
+    return Number.isFinite(resolved) ? resolved : null;
+  }
+
+  return null;
+}
+
+function validateNestedBotSettingKeys(field, value, errors) {
+  const allowedKeys = BOT_SETTINGS_NESTED_KEYS[field];
+  if (!allowedKeys || !isPlainObject(value)) {
+    return;
+  }
+
+  const unknownKeys = Object.keys(value).filter((key) => !allowedKeys.has(key));
+  if (unknownKeys.length > 0) {
+    errors.push(`${field} contains unrecognized keys: ${unknownKeys.join(', ')}`);
+  }
+}
+
+function normalizeBooleanField(value, fallback) {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const lowered = value.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(lowered)) return true;
+    if (['0', 'false', 'no', 'off'].includes(lowered)) return false;
+  }
+  return fallback;
+}
+
+function normalizeNumberField(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function isPercentageString(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.endsWith('%')) {
+    return false;
+  }
+
+  const numeric = Number(trimmed.slice(0, -1).trim());
+  return Number.isFinite(numeric);
+}
+
+function cloneBotSettings(value) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeBotSettings(bot = {}) {
+  const normalized = cloneBotSettings(bot) || {};
+
+  normalized.active = normalizeBooleanField(normalized.active, DEFAULT_CONFIG.active);
+  normalized.dryRun = normalizeBooleanField(normalized.dryRun, DEFAULT_CONFIG.dryRun);
+  normalized.startPrice = normalized.startPrice === undefined ? DEFAULT_CONFIG.startPrice : normalized.startPrice;
+  normalized.minPrice = normalized.minPrice === undefined ? DEFAULT_CONFIG.minPrice : normalized.minPrice;
+  normalized.maxPrice = normalized.maxPrice === undefined ? DEFAULT_CONFIG.maxPrice : normalized.maxPrice;
+  normalized.gridPrice = normalized.gridPrice === undefined ? DEFAULT_CONFIG.gridPrice : normalized.gridPrice;
+  normalized.incrementPercent = normalized.incrementPercent === undefined
+    ? DEFAULT_CONFIG.incrementPercent
+    : normalizeNumberField(normalized.incrementPercent, DEFAULT_CONFIG.incrementPercent);
+  normalized.targetSpreadPercent = normalized.targetSpreadPercent === undefined
+    ? DEFAULT_CONFIG.targetSpreadPercent
+    : normalizeNumberField(normalized.targetSpreadPercent, DEFAULT_CONFIG.targetSpreadPercent);
+  normalized.weightDistribution = {
+    ...cloneBotSettings(DEFAULT_CONFIG.weightDistribution),
+    ...(isPlainObject(normalized.weightDistribution) ? normalized.weightDistribution : {})
+  };
+  normalized.botFunds = {
+    ...cloneBotSettings(DEFAULT_CONFIG.botFunds),
+    ...(isPlainObject(normalized.botFunds) ? normalized.botFunds : {})
+  };
+  normalized.activeOrders = {
+    ...cloneBotSettings(DEFAULT_CONFIG.activeOrders),
+    ...(isPlainObject(normalized.activeOrders) ? normalized.activeOrders : {})
+  };
+  normalized.gridPriceOffsetPct = normalized.gridPriceOffsetPct === undefined
+    ? 0
+    : normalizeNumberField(normalized.gridPriceOffsetPct, 0);
+
+  return normalized;
+}
+
+function mergeBotSettingsPatch(currentBot = {}, patch = {}) {
+  const next = cloneBotSettings(currentBot) || {};
+  const patchKeys = Object.keys(patch || {});
+
+  for (const key of patchKeys) {
+    const value = patch[key];
+    if (value === undefined) {
+      continue;
+    }
+
+    if (['weightDistribution', 'botFunds', 'activeOrders'].includes(key) && isPlainObject(value)) {
+      next[key] = {
+        ...(isPlainObject(next[key]) ? next[key] : {}),
+        ...value
+      };
+      continue;
+    }
+
+    next[key] = value;
+  }
+
+  return next;
+}
+
+function describeBotSettingMutability() {
+  const readOnly = [...BOT_SETTINGS_READ_ONLY_KEYS].sort();
+  const writable = [...KNOWN_BOT_KEYS].filter((key) => !BOT_SETTINGS_READ_ONLY_KEYS.has(key)).sort();
+
+  return {
+    readOnly,
+    triggerOnChange: [...BOT_SETTINGS_TRIGGER_KEYS].sort(),
+    writable
+  };
+}
+
+function validateBotSettingsValue(field, value, errors) {
+  const push = (message) => errors.push(message);
+
+  switch (field) {
+    case 'active':
+    case 'dryRun':
+      if (typeof value !== 'boolean') {
+        push(`${field} must be a boolean`);
+      }
+      break;
+
+    case 'name':
+    case 'preferredAccount':
+    case 'assetA':
+    case 'assetB':
+    case 'strategy':
+      if (typeof value !== 'string' || value.trim() === '') {
+        push(`${field} must be a non-empty string`);
+      }
+      break;
+
+    case 'assetAId':
+    case 'assetBId':
+      if (typeof value !== 'string' || value.trim() === '') {
+        push(`${field} must be a non-empty string`);
+      }
+      break;
+
+    case 'incrementPercent': {
+      const increment = Number(value);
+      if (!Number.isFinite(increment) || increment <= 0) {
+        push('incrementPercent must be a positive number');
+        break;
+      }
+      if (Number.isFinite(INCREMENT_BOUNDS.MIN_PERCENT) && increment < INCREMENT_BOUNDS.MIN_PERCENT) {
+        push(`incrementPercent must be >= ${INCREMENT_BOUNDS.MIN_PERCENT}`);
+      }
+      if (Number.isFinite(INCREMENT_BOUNDS.MAX_PERCENT) && increment > INCREMENT_BOUNDS.MAX_PERCENT) {
+        push(`incrementPercent must be <= ${INCREMENT_BOUNDS.MAX_PERCENT}`);
+      }
+      break;
+    }
+
+    case 'targetSpreadPercent': {
+      const spread = Number(value);
+      if (!Number.isFinite(spread) || spread <= 0) {
+        push('targetSpreadPercent must be a positive number');
+      }
+      break;
+    }
+
+    case 'startPrice':
+      if (!isPositivePriceLike(value)
+        && !(typeof value === 'string' && ['pool', 'market', 'orderbook'].includes(value.toLowerCase()))) {
+        push('startPrice must be a positive number or one of pool/market/orderbook');
+      }
+      break;
+
+    case 'gridPrice':
+      if (value !== null
+        && !isPositivePriceLike(value)
+        && !(typeof value === 'string' && /^(pool|market|ama(?:[1-4])?)$/i.test(value))) {
+        push('gridPrice must be null, a positive number, or one of pool/market/ama/ama1..ama4');
+      }
+      break;
+
+    case 'minPrice':
+    case 'maxPrice':
+      if (!isPositivePriceLike(value)) {
+        push(`${field} must be a positive number or a multiplier string like 3x`);
+      }
+      break;
+
+    case 'gridPriceOffsetPct': {
+      const offset = Number(value);
+      if (!Number.isFinite(offset)) {
+        push('gridPriceOffsetPct must be a finite number');
+      } else if (offset < GRID_PRICE_OFFSET_BOUNDS.min || offset > GRID_PRICE_OFFSET_BOUNDS.max) {
+        push(`gridPriceOffsetPct must be between ${GRID_PRICE_OFFSET_BOUNDS.min} and ${GRID_PRICE_OFFSET_BOUNDS.max}`);
+      }
+      break;
+    }
+
+    case 'gridPriceOffsetCooldownMs':
+    case 'gridPriceOffsetMinConfidence':
+    case 'gridPriceOffsetMinDeltaPct':
+    case 'gridPriceOffsetMaxPct':
+    case 'gridPriceOffsetScale': {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || numeric < 0) {
+        push(`${field} must be a finite number greater than or equal to 0`);
+      }
+      break;
+    }
+
+    case 'gridPriceOffsetAllowNeutralReset':
+    case 'gridPriceOffsetRequireConfirmedTrend':
+      if (typeof value !== 'boolean') {
+        push(`${field} must be a boolean`);
+      }
+      break;
+
+    case 'weightDistribution':
+      if (!isPlainObject(value)) {
+        push('weightDistribution must be an object with sell and buy');
+        break;
+      }
+      validateNestedBotSettingKeys('weightDistribution', value, errors);
+      if (!isFiniteNumber(value.sell)) {
+        push('weightDistribution.sell must be a finite number');
+      }
+      if (!isFiniteNumber(value.buy)) {
+        push('weightDistribution.buy must be a finite number');
+      }
+      break;
+
+    case 'botFunds':
+      if (!isPlainObject(value)) {
+        push('botFunds must be an object with sell and buy');
+        break;
+      }
+      validateNestedBotSettingKeys('botFunds', value, errors);
+      for (const side of ['sell', 'buy']) {
+        const sideValue = value[side];
+        if (sideValue === undefined) {
+          continue;
+        }
+        if (typeof sideValue === 'number') {
+          if (!Number.isFinite(sideValue) || sideValue < 0) {
+            push(`botFunds.${side} must be a finite number greater than or equal to 0`);
+          }
+          continue;
+        }
+        if (typeof sideValue === 'string' && isPercentageString(sideValue)) {
+          const numeric = Number(sideValue.trim().slice(0, -1).trim());
+          if (numeric < 0) {
+            push(`botFunds.${side} percentage must be greater than or equal to 0`);
+          }
+          continue;
+        }
+        push(`botFunds.${side} must be a finite number or a percentage string`);
+      }
+      break;
+
+    case 'activeOrders':
+      if (!isPlainObject(value)) {
+        push('activeOrders must be an object with sell and buy');
+        break;
+      }
+      validateNestedBotSettingKeys('activeOrders', value, errors);
+      for (const side of ['sell', 'buy']) {
+        const sideValue = value[side];
+        if (sideValue === undefined) {
+          continue;
+        }
+        if (!Number.isInteger(Number(sideValue)) || Number(sideValue) < 0) {
+          push(`activeOrders.${side} must be an integer greater than or equal to 0`);
+        }
+      }
+      break;
+
+    case 'botIndex':
+    case 'botKey':
+      push(`${field} is read-only`);
+      break;
+
+    default:
+      break;
+  }
+}
+
+function validateBotSettingsState(bot = {}) {
+  const errors = [];
+  const warnings = [];
+
+  for (const field of Object.keys(BOT_SETTINGS_NESTED_KEYS)) {
+    if (bot[field] !== undefined) {
+      validateBotSettingsValue(field, bot[field], errors);
+    }
+  }
+
+  for (const field of [
+    ...BOT_SETTINGS_STATE_FIELDS.boolean,
+    ...BOT_SETTINGS_STATE_FIELDS.numeric,
+    ...BOT_SETTINGS_STATE_FIELDS.priceLike
+  ].filter((field) => !BOT_SETTINGS_NESTED_KEYS[field])) {
+    if (bot[field] !== undefined) {
+      validateBotSettingsValue(field, bot[field], errors);
+    }
+  }
+
+  for (const field of BOT_SETTINGS_STATE_FIELDS.string.filter((field) => !BOT_SETTINGS_NESTED_KEYS[field])) {
+    if (bot[field] !== undefined) {
+      validateBotSettingsValue(field, bot[field], errors);
+    }
+  }
+
+  const increment = Number(bot.incrementPercent);
+  const spread = Number(bot.targetSpreadPercent);
+  if (Number.isFinite(increment) && Number.isFinite(spread)) {
+    const minSpread = increment * GRID_LIMITS.MIN_SPREAD_FACTOR;
+    if (spread + Number.EPSILON < minSpread) {
+      errors.push(`targetSpreadPercent must be >= ${GRID_LIMITS.MIN_SPREAD_FACTOR}x incrementPercent (${Number(minSpread.toFixed(6))})`);
+    }
+  }
+
+  const resolvedStartPrice = resolveComparablePriceValue(bot.startPrice);
+  const resolvedMinPrice = resolveComparablePriceValue(bot.minPrice, resolvedStartPrice, 'min');
+  const resolvedMaxPrice = resolveComparablePriceValue(bot.maxPrice, resolvedStartPrice, 'max');
+  if (resolvedMinPrice !== null && resolvedMaxPrice !== null) {
+    if (resolvedMinPrice >= resolvedMaxPrice) {
+      errors.push('minPrice must be less than maxPrice');
+    }
+  }
+
+  if (resolvedStartPrice !== null) {
+    if (resolvedMinPrice !== null && resolvedStartPrice < resolvedMinPrice) {
+      errors.push('startPrice must be greater than or equal to minPrice');
+    }
+    if (resolvedMaxPrice !== null && resolvedStartPrice > resolvedMaxPrice) {
+      errors.push('startPrice must be less than or equal to maxPrice');
+    }
+  }
+
+  const unknownKeys = Object.keys(bot).filter((key) => !KNOWN_BOT_KEYS.has(key));
+  if (unknownKeys.length > 0) {
+    warnings.push(`unrecognized keys: ${unknownKeys.join(', ')}`);
+  }
+
+  return {
+    errors,
+    warnings,
+    valid: errors.length === 0
+  };
+}
+
+function validateBotSettingsPatch(patch = {}, currentBot = {}, options = {}) {
+  const errors = [];
+  const warnings = [];
+  const patchKeys = Object.keys(patch || {});
+  const allowUnknownKeys = Boolean(options.allowUnknownKeys);
+
+  if (!isPlainObject(patch)) {
+    return {
+      errors: ['patch must be a non-null object'],
+      merged: cloneBotSettings(currentBot) || {},
+      patchKeys: [],
+      triggerRequired: false,
+      valid: false,
+      warnings: []
+    };
+  }
+
+  for (const key of patchKeys) {
+    if (!KNOWN_BOT_KEYS.has(key)) {
+      if (allowUnknownKeys) {
+        warnings.push(`unrecognized patch key: ${key}`);
+      } else {
+        errors.push(`unrecognized patch key: ${key}`);
+      }
+      continue;
+    }
+
+    if (['weightDistribution', 'botFunds', 'activeOrders'].includes(key) && isPlainObject(patch[key])) {
+      validateNestedBotSettingKeys(key, patch[key], errors);
+      const mergedField = {
+        ...(isPlainObject(currentBot[key]) ? currentBot[key] : {}),
+        ...patch[key]
+      };
+      validateBotSettingsValue(key, mergedField, errors);
+      continue;
+    }
+
+    validateBotSettingsValue(key, patch[key], errors);
+  }
+
+  const merged = mergeBotSettingsPatch(currentBot, patch);
+  const mergedValidation = validateBotSettingsState(normalizeBotSettings(merged));
+  errors.push(...mergedValidation.errors.filter((entry) => !errors.includes(entry)));
+  warnings.push(...mergedValidation.warnings);
+
+  const triggerRequired = patchKeys.some((key) => BOT_SETTINGS_TRIGGER_KEYS.has(key));
+
+  return {
+    errors,
+    merged,
+    patchKeys,
+    triggerRequired,
+    valid: errors.length === 0,
+    warnings
+  };
+}
+
+function buildBotSettingsView(bot, bundle = null, options = {}) {
+  const current = cloneBotSettings(bot) || null;
+  const effective = current ? normalizeBotSettings(current) : null;
+  const currentValidation = current ? validateBotSettingsState(current) : { errors: [], warnings: [], valid: true };
+  const effectiveValidation = effective ? validateBotSettingsState(effective) : { errors: [], warnings: [], valid: true };
+  const mutability = describeBotSettingMutability();
+  const selectedBotFiles = current && bundle ? {
+    gridPriceSnapshot: path.join(bundle.ordersDir || path.join(bundle.profilesDir, DEFAULT_ORDERS_DIR), `${current.botKey}.gridprice.json`),
+    orderSnapshot: path.join(bundle.ordersDir || path.join(bundle.profilesDir, DEFAULT_ORDERS_DIR), `${current.botKey}.json`),
+    trigger: path.join(bundle.profilesDir, `recalculate.${current.botKey}.trigger`)
+  } : null;
+
+  return {
+    current,
+    defaults: cloneBotSettings(DEFAULT_CONFIG),
+    effective,
+    files: selectedBotFiles,
+    identifier: options.identifier || null,
+    mutability,
+    rawValidation: currentValidation,
+    validation: effectiveValidation
+  };
+}
 
 function sanitizeKey(source) {
   if (!source) return 'bot';
@@ -230,6 +803,17 @@ async function writeJsonPayload(filePath, data) {
   const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
   try {
     await fsPromises.writeFile(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+    await fsPromises.rename(tmpPath, filePath);
+  } catch (err) {
+    await fsPromises.unlink(tmpPath).catch(() => {});
+    throw err;
+  }
+}
+
+async function writeTextPayload(filePath, content) {
+  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+  try {
+    await fsPromises.writeFile(tmpPath, `${content}\n`, 'utf8');
     await fsPromises.rename(tmpPath, filePath);
   } catch (err) {
     await fsPromises.unlink(tmpPath).catch(() => {});
@@ -512,6 +1096,129 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
     };
   }
 
+  async function getBotSettings(identifier, forceReload = false) {
+    const bundle = await loadBundle(forceReload);
+    const bot = identifier
+      ? bundle.bots.find((entry) => matchBotIdentifier(entry, identifier)) || null
+      : bundle.activeBots[0] || bundle.bots[0] || null;
+
+    return buildBotSettingsView(bot, bundle, {
+      identifier
+    });
+  }
+
+  async function previewBotSettingsUpdate(identifier, patch, options = {}) {
+    const bundle = await loadBundle(Boolean(options.forceReload));
+    const bot = identifier
+      ? bundle.bots.find((entry) => matchBotIdentifier(entry, identifier)) || null
+      : bundle.activeBots[0] || bundle.bots[0] || null;
+    if (!bot) {
+      throw new Error(`Bot not found: ${identifier}`);
+    }
+
+    const validation = validateBotSettingsPatch(patch, bot, options);
+    const nextBot = validation.merged;
+    const currentValidation = validateBotSettingsState(bot);
+
+    return {
+      bot: cloneBotSettings(bot),
+      changedKeys: validation.patchKeys,
+      current: buildBotSettingsView(bot, bundle, { identifier }),
+      errors: validation.errors,
+      next: buildBotSettingsView(nextBot, bundle, { identifier }),
+      patch: cloneBotSettings(patch) || {},
+      triggerRequired: validation.triggerRequired,
+      valid: validation.valid,
+      warnings: [...currentValidation.warnings, ...validation.warnings]
+    };
+  }
+
+  async function applyBotSettingsPatch(identifier, patch, options = {}) {
+    if (!isPlainObject(patch)) {
+      throw new Error('patch must be a non-null object');
+    }
+
+    const bundle = await loadBundle(true);
+    const release = await acquireFileLock(bundle.files.bots);
+
+    try {
+      const currentBotsConfig = await readJsonFile(bundle.files.bots);
+      const currentRawEntries = resolveRawBotEntries(currentBotsConfig);
+      const currentBots = normalizeBotEntries(currentRawEntries, { logger: options.logger });
+      const bot = identifier
+        ? currentBots.find((entry) => matchBotIdentifier(entry, identifier))
+        : currentBots.find((entry) => entry.active !== false) || currentBots[0] || null;
+      if (!bot) {
+        throw new Error(`Bot not found: ${identifier}`);
+      }
+
+      if (!currentRawEntries[bot.botIndex]) {
+        throw new Error(`Bot index ${bot.botIndex} out of range`);
+      }
+
+      const validation = validateBotSettingsPatch(patch, currentRawEntries[bot.botIndex], options);
+      if (!validation.valid) {
+        const error = new Error(`Bot settings validation failed:\n${validation.errors.map((entry) => `  - ${entry}`).join('\n')}`);
+        error.validation = validation;
+        throw error;
+      }
+
+      const nextEntry = validation.merged;
+      const nextRawEntries = currentRawEntries.slice();
+      nextRawEntries[bot.botIndex] = nextEntry;
+
+      const dataToWrite = Array.isArray(currentBotsConfig)
+        ? nextRawEntries
+        : Array.isArray(currentBotsConfig?.bots)
+          ? { ...currentBotsConfig, bots: nextRawEntries }
+          : nextEntry;
+
+      await writeJsonPayload(bundle.files.bots, dataToWrite);
+
+      let triggerPayload = null;
+      let triggerPath = null;
+      const shouldWriteTrigger = options.writeTrigger === true
+        || options.trigger === true
+        || (options.trigger === undefined && (
+          options.triggerPayload !== undefined
+          || validation.patchKeys.some((key) => BOT_SETTINGS_TRIGGER_KEYS.has(key))
+        ));
+      if (shouldWriteTrigger) {
+        triggerPath = path.join(bundle.profilesDir, `recalculate.${bot.botKey}.trigger`);
+        triggerPayload = options.triggerPayload !== undefined
+          ? options.triggerPayload
+          : {
+              botKey: bot.botKey,
+              changedKeys: validation.patchKeys,
+              reason: options.triggerReason || 'settings_update',
+              updatedAt: new Date().toISOString()
+            };
+        const content = triggerPayload ? JSON.stringify(triggerPayload, null, 2) : '';
+        await fsPromises.mkdir(path.dirname(triggerPath), { recursive: true });
+        await writeTextPayload(triggerPath, content);
+      }
+
+      cachedBundle = null;
+      const freshBundle = await loadBundle(true);
+      const updatedBot = freshBundle.bots.find((entry) => entry.botIndex === bot.botIndex) || null;
+
+      return {
+        changedKeys: validation.patchKeys,
+        current: buildBotSettingsView(bot, bundle, { identifier }),
+        errors: [],
+        next: buildBotSettingsView(updatedBot || nextEntry, freshBundle, { identifier }),
+        patch: cloneBotSettings(patch) || {},
+        triggerPath,
+        triggerPayload,
+        updatedBot: updatedBot ? cloneBotSettings(updatedBot) : cloneBotSettings(nextEntry),
+        valid: true,
+        warnings: validation.warnings
+      };
+    } finally {
+      await release();
+    }
+  }
+
   async function getClawProfileContext(identifier, options = {}) {
     const bundle = await loadBundle(Boolean(options.forceReload));
     const bot = identifier ? bundle.bots.find((entry) => matchBotIdentifier(entry, identifier)) || null : null;
@@ -551,22 +1258,26 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
   async function writeTrigger(botKey, payload = null) {
     const triggerPath = path.join(getProfilesDir(), `recalculate.${botKey}.trigger`);
     const content = payload ? JSON.stringify(payload, null, 2) : '';
-    await fsPromises.writeFile(triggerPath, content, 'utf8');
+    await fsPromises.mkdir(path.dirname(triggerPath), { recursive: true });
+    await writeTextPayload(triggerPath, content);
   }
 
   async function updateBotSettings(identifier, patch) {
-    if (!patch || typeof patch !== 'object') {
+    if (!isPlainObject(patch)) {
       throw new Error('patch must be a non-null object');
     }
 
     const bundle = await loadBundle(true);
     const release = await acquireFileLock(bundle.files.bots);
+    let selectedBotIndex = null;
 
     try {
       const currentBotsConfig = await readJsonFile(bundle.files.bots);
       const currentRawEntries = resolveRawBotEntries(currentBotsConfig);
       const currentBots = normalizeBotEntries(currentRawEntries, { logger: options.logger });
-      const bot = currentBots.find((entry) => matchBotIdentifier(entry, identifier));
+      const bot = identifier
+        ? currentBots.find((entry) => matchBotIdentifier(entry, identifier))
+        : currentBots.find((entry) => entry.active !== false) || currentBots[0] || null;
       if (!bot) {
         throw new Error(`Bot not found: ${identifier}`);
       }
@@ -574,6 +1285,7 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
       if (!currentRawEntries[bot.botIndex]) {
         throw new Error(`Bot index ${bot.botIndex} out of range`);
       }
+      selectedBotIndex = bot.botIndex;
 
       const nextEntry = {
         ...currentRawEntries[bot.botIndex],
@@ -582,7 +1294,6 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
       const nextRawEntries = currentRawEntries.slice();
       nextRawEntries[bot.botIndex] = nextEntry;
 
-      // Preserve the original wrapper structure
       const dataToWrite = Array.isArray(currentBotsConfig)
         ? nextRawEntries
         : Array.isArray(currentBotsConfig?.bots)
@@ -596,19 +1307,22 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
 
     cachedBundle = null;
     const freshBundle = await loadBundle(true);
-    return freshBundle.bots.find((entry) => matchBotIdentifier(entry, identifier)) || null;
+    return freshBundle.bots.find((entry) => entry.botIndex === selectedBotIndex) || null;
   }
 
   return {
     buildClawProfileContext: (bundle, contextOptions = {}) => buildClawProfileContext(bundle, contextOptions),
+    applyBotSettingsPatch,
     consumeTrigger,
     findBot,
     getBotBundle,
+    getBotSettings,
     getClawProfileContext,
     getProfilesDir,
     listBots,
     listOrderArtifacts,
     loadBundle,
+    previewBotSettingsUpdate,
     resolveProfilesDir: () => resolveProfilesDir(profileRoot || options.profileRoot),
     updateBotSettings,
     writeTrigger
@@ -616,11 +1330,14 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
 }
 
 module.exports = {
+  buildBotSettingsView,
   createBotKey,
   createDexbotProfileAdapter,
   buildClawProfileContext,
+  describeBotSettingMutability,
   loadDexbotProfileBundle,
   matchBotIdentifier,
+  normalizeBotSettings,
   normalizeBotEntries,
   readTriggerFile,
   resolveProfilesDir,
@@ -628,5 +1345,7 @@ module.exports = {
   sanitizeKey,
   acquireFileLock,
   validateBotEntry,
+  validateBotSettingsPatch,
+  validateBotSettingsState,
   writeJsonFileAtomic
 };

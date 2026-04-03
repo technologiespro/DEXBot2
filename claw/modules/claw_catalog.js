@@ -18,6 +18,27 @@ function numberSchema(description) {
   };
 }
 
+function numberOrStringSchema(description = null) {
+  return {
+    oneOf: [
+      numberSchema(),
+      stringSchema()
+    ],
+    ...(description ? { description } : {})
+  };
+}
+
+function numberOrStringOrNullSchema(description = null) {
+  return {
+    oneOf: [
+      { type: 'null' },
+      numberSchema(),
+      stringSchema()
+    ],
+    ...(description ? { description } : {})
+  };
+}
+
 function integerSchema(description) {
   return {
     type: 'integer',
@@ -63,6 +84,13 @@ function objectSchema(properties = {}, required = [], description = null) {
   };
 }
 
+function strictObjectSchema(properties = {}, required = [], description = null) {
+  return {
+    ...objectSchema(properties, required, description),
+    additionalProperties: false
+  };
+}
+
 function dynamicWeightPolicySchema(description = null) {
   return objectSchema({
     allowNeutralUpdate: booleanSchema('Allow NEUTRAL trend updates to reshape weightDistribution'),
@@ -83,6 +111,68 @@ function dynamicWeightPolicySchema(description = null) {
     triggerOnApply: booleanSchema('Write recalculate.<botKey>.trigger after persisting updated weights'),
     triggerReason: stringSchema('Reason string written into the trigger payload'),
     writeTriggerPayload: booleanSchema('Persist a JSON trigger payload instead of an empty trigger file')
+  }, [], description);
+}
+
+function botSettingsSelectorSchema(description = null) {
+  return objectSchema({
+    botId: stringSchema('Explicit bot id'),
+    botRef: stringSchema('Bot reference in DEXBot2 profiles'),
+    forceReload: booleanSchema('Force a fresh profile reload'),
+    identifier: stringSchema('Generic profile identifier'),
+    pair: stringSchema('Trading pair such as BTS/USD'),
+    profileRoot: stringSchema('Optional DEXBot2 profile root')
+  }, [], description);
+}
+
+function botSettingsPatchSchema(description = null) {
+  return objectSchema({
+    patch: strictObjectSchema({
+      active: booleanSchema('Whether the bot is active'),
+      activeOrders: strictObjectSchema({
+        buy: integerSchema('Buy-side active order count'),
+        sell: integerSchema('Sell-side active order count')
+      }, [], 'Per-side active order counts'),
+      assetA: stringSchema('Base asset symbol'),
+      assetAId: stringSchema('Base asset id'),
+      assetB: stringSchema('Quote asset symbol'),
+      assetBId: stringSchema('Quote asset id'),
+      botFunds: strictObjectSchema({
+        buy: numberOrStringSchema('Buy-side fund allocation as a number or percentage string'),
+        sell: numberOrStringSchema('Sell-side fund allocation as a number or percentage string')
+      }, [], 'Per-side fund allocation'),
+      dryRun: booleanSchema('Simulate instead of broadcasting'),
+      gridPrice: numberOrStringOrNullSchema('Grid reference price mode or numeric value'),
+      gridPriceOffsetAllowNeutralReset: booleanSchema('Allow neutral trend to reset gridPriceOffsetPct'),
+      gridPriceOffsetCooldownMs: integerSchema('Cooldown between gridPrice offset updates'),
+      gridPriceOffsetMaxPct: numberSchema('Maximum gridPrice offset percentage'),
+      gridPriceOffsetMinConfidence: numberSchema('Minimum confidence for gridPrice offset changes'),
+      gridPriceOffsetMinDeltaPct: numberSchema('Minimum delta for gridPrice offset changes'),
+      gridPriceOffsetPct: numberSchema('Signed grid price offset percentage'),
+      gridPriceOffsetRequireConfirmedTrend: booleanSchema('Require confirmed trend for gridPrice offset updates'),
+      gridPriceOffsetScale: numberSchema('Scale factor for confidence-based gridPrice offset updates'),
+      incrementPercent: numberSchema('Geometric step between grid levels'),
+      maxPrice: numberOrStringSchema('Maximum grid bound'),
+      minPrice: numberOrStringSchema('Minimum grid bound'),
+      name: stringSchema('Friendly bot name'),
+      preferredAccount: stringSchema('Preferred BitShares account'),
+      startPrice: numberOrStringSchema('Initial grid reference price'),
+      strategy: stringSchema('Strategy label'),
+      targetSpreadPercent: numberSchema('Width of the empty spread zone'),
+      weightDistribution: strictObjectSchema({
+        buy: numberSchema('Buy-side weight'),
+        sell: numberSchema('Sell-side weight')
+      }, [], 'Per-side weight distribution')
+    }, [], 'Partial bot settings patch'),
+    trigger: booleanSchema('Write a recalc trigger after applying the patch'),
+    triggerPayload: objectSchema({}, [], 'Optional trigger payload'),
+    triggerReason: stringSchema('Optional trigger reason'),
+    botId: stringSchema('Explicit bot id'),
+    botRef: stringSchema('Bot reference in DEXBot2 profiles'),
+    forceReload: booleanSchema('Force a fresh profile reload'),
+    identifier: stringSchema('Generic profile identifier'),
+    pair: stringSchema('Trading pair such as BTS/USD'),
+    profileRoot: stringSchema('Optional DEXBot2 profile root')
   }, [], description);
 }
 
@@ -177,6 +267,41 @@ const CLAW_TOOL_CATALOG = Object.freeze([
       accountRef: stringSchema('Alternate account reference')
     }),
     toolName: 'claw_open_orders'
+  }),
+  createToolDefinition({
+    command: 'bot-settings',
+    description: 'Read a normalized DEXBot2 bot settings view',
+    exampleArgs: ['--payload', '{"botRef":"default"}'],
+    args: {
+      payload_json: 'JSON object with botRef, identifier, botId, or pair'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: botSettingsSelectorSchema('Selector for a DEXBot2 bot'),
+    toolName: 'claw_bot_settings'
+  }),
+  createToolDefinition({
+    command: 'bot-settings-preview',
+    description: 'Preview a DEXBot2 bot settings patch without writing it',
+    exampleArgs: ['--payload', '{"botRef":"default","patch":{"gridPriceOffsetPct":0.2}}'],
+    args: {
+      payload_json: 'JSON object with botRef, identifier, botId, or pair, plus a patch object'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: botSettingsPatchSchema('Selector plus a partial bot settings patch'),
+    risk: 'plan',
+    toolName: 'claw_bot_settings_preview'
+  }),
+  createToolDefinition({
+    command: 'bot-settings-apply',
+    description: 'Apply a DEXBot2 bot settings patch and optionally write a trigger',
+    exampleArgs: ['--payload', '{"botRef":"default","patch":{"gridPriceOffsetPct":0.2,"weightDistribution":{"sell":0.7,"buy":0.4}}}'],
+    args: {
+      payload_json: 'JSON object with botRef, identifier, botId, or pair, plus a patch object'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: botSettingsPatchSchema('Selector plus a partial bot settings patch'),
+    risk: 'execute',
+    toolName: 'claw_bot_settings_apply'
   }),
   createToolDefinition({
     command: 'honest-context',

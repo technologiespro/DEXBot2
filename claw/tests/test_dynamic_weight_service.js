@@ -47,11 +47,15 @@ async function testPreviewAndApplyFlow() {
       getAsset: async (ref) => (ref === 'BTS' ? { symbol: 'BTS' } : null)
     },
     profiles: {
-      updateBotSettings: async (identifier, patch) => {
-        appliedPatches.push({ identifier, patch });
+      applyBotSettingsPatch: async (identifier, patch, options) => {
+        appliedPatches.push({ identifier, options, patch });
         return {
           botKey: identifier,
-          ...patch
+          triggerPath: `profiles/recalculate.${identifier}.trigger`,
+          updatedBot: {
+            botKey: identifier,
+            ...patch
+          }
         };
       },
       writeTrigger: async (botKey, payload) => {
@@ -111,10 +115,10 @@ async function testPreviewAndApplyFlow() {
   assert.strictEqual(appliedPatches[0].patch.weightDistribution.sell, 1.1);
   assert.deepStrictEqual(Object.keys(appliedPatches[0].patch.weightDistribution).sort(), ['buy', 'sell']);
   assert.strictEqual(appliedPatches[0].patch.gridPriceOffsetPct, 0.41);
-  assert.strictEqual(triggerWrites.length, 1);
-  assert.strictEqual(triggerWrites[0].botKey, 'honest-usd-0');
-  assert.strictEqual(triggerWrites[0].payload.reason, 'dynamic_weight_update');
-  assert.strictEqual(triggerWrites[0].payload.gridPriceOffsetPct, 0.41);
+  assert.strictEqual(appliedPatches[0].options.trigger, true);
+  assert.strictEqual(appliedPatches[0].options.triggerPayload.reason, 'dynamic_weight_update');
+  assert.strictEqual(appliedPatches[0].options.triggerPayload.gridPriceOffsetPct, 0.41);
+  assert.strictEqual(triggerWrites.length, 0, 'writeTrigger fallback should not run when applyBotSettingsPatch is available');
   assert.strictEqual(state.dynamicWeights['honest-usd-0'].lastReason, 'dynamic_weight_update');
 }
 
@@ -919,6 +923,69 @@ async function testConcurrentAppliesPreserveAllBotState() {
   assert.ok(state.dynamicWeights['honest-usd-b'], 'second bot state should be preserved');
 }
 
+async function testApplyPathPreservesEmptyTriggerSemanticsWhenPayloadsAreDisabled() {
+  const appliedPatches = [];
+
+  const service = createDynamicWeightService({
+    computeDynamicWeights: () => ({
+      buy: 0.3,
+      profile: 'dynamic',
+      sell: 1.1
+    }),
+    fetchTrendInput: async () => ({
+      feedPrice: 1,
+      marketPrice: 1.15,
+      premium: 15,
+      publicationTime: '2026-01-01T00:00:00Z'
+    }),
+    market: {
+      getAsset: async () => ({ symbol: 'BTS' })
+    },
+    profiles: {
+      applyBotSettingsPatch: async (identifier, patch, options) => {
+        appliedPatches.push({ identifier, options, patch });
+        return {
+          triggerPath: `profiles/recalculate.${identifier}.trigger`,
+          updatedBot: { botKey: identifier, ...patch }
+        };
+      }
+    },
+    stateStore: {
+      async patch() {
+        return {};
+      },
+      async read() {
+        return {};
+      }
+    },
+    TrendAnalyzerClass: FakeTrendAnalyzer
+  });
+
+  const bot = {
+    active: true,
+    assetA: 'HONEST.USD',
+    assetB: 'BTS',
+    botKey: 'empty-trigger-0',
+    gridPrice: 'ama',
+    gridPriceOffsetPct: 0.2,
+    name: 'HONEST-USD',
+    weightDistribution: { buy: 0.5, sell: 0.5 }
+  };
+
+  const applied = await service.applySelectedBot(bot, {
+    policy: {
+      cooldownMs: 0,
+      enabled: true,
+      writeTriggerPayload: false
+    }
+  });
+
+  assert.strictEqual(applied.applied, true);
+  assert.strictEqual(appliedPatches.length, 1);
+  assert.strictEqual(appliedPatches[0].options.trigger, true);
+  assert.strictEqual(appliedPatches[0].options.triggerPayload, null, 'apply path should request an empty trigger file when payload writing is disabled');
+}
+
 async function main() {
   await testPreviewAndApplyFlow();
   await testOffsetOnlyApplyDoesNotRewriteWeights();
@@ -932,6 +999,7 @@ async function main() {
   await testNonBtsQuoteRequiresCompatibleTrendSource();
   await testCustomTrendSourceCanHandleNonBtsQuotes();
   await testConcurrentAppliesPreserveAllBotState();
+  await testApplyPathPreservesEmptyTriggerSemanticsWhenPayloadsAreDisabled();
   console.log('dynamic weight service tests passed');
 }
 

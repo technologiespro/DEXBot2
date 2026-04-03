@@ -545,8 +545,11 @@ function createDynamicWeightService(deps = {}) {
 
     const policy = preview.policy || policyDefaults;
     const botIdentifier = selectedBot.botKey || selectedBot.name || resolveBotMarketRef(selectedBot);
-    if (!profiles || typeof profiles.updateBotSettings !== 'function') {
-      throw new Error('profiles.updateBotSettings is not available');
+    if (!profiles || (
+      typeof profiles.applyBotSettingsPatch !== 'function'
+      && typeof profiles.updateBotSettings !== 'function'
+    )) {
+      throw new Error('profiles.applyBotSettingsPatch/updateBotSettings is not available');
     }
 
     const patch = {};
@@ -560,18 +563,42 @@ function createDynamicWeightService(deps = {}) {
       patch.gridPriceOffsetPct = preview.gridPriceOffsetPct;
     }
 
-    const updatedBot = Object.keys(patch).length > 0
-      ? await profiles.updateBotSettings(botIdentifier, patch)
-      : selectedBot;
-
-    let triggerPath = null;
-    if (policy.triggerOnApply && typeof profiles.writeTrigger === 'function') {
-      const payload = policy.writeTriggerPayload
-        ? buildTriggerPayload(selectedBot, policy, preview.trendInput, preview.trendAnalysis, preview)
-        : null;
-      await profiles.writeTrigger(selectedBot.botKey || botIdentifier, payload);
-      triggerPath = `profiles/recalculate.${selectedBot.botKey || botIdentifier}.trigger`;
+    const triggerPayload = policy.triggerOnApply
+      ? (policy.writeTriggerPayload
+          ? buildTriggerPayload(selectedBot, policy, preview.trendInput, preview.trendAnalysis, preview)
+          : null)
+      : undefined;
+    let updateResult;
+    if (Object.keys(patch).length > 0) {
+      if (typeof profiles.applyBotSettingsPatch === 'function') {
+        updateResult = await profiles.applyBotSettingsPatch(botIdentifier, patch, {
+          logger: options.logger,
+          trigger: policy.triggerOnApply,
+          triggerPayload,
+          triggerReason: policy.triggerReason
+        });
+      } else {
+        const updatedBot = typeof profiles.updateBotSettings === 'function'
+          ? await profiles.updateBotSettings(botIdentifier, patch)
+          : selectedBot;
+        if (policy.triggerOnApply && typeof profiles.writeTrigger === 'function') {
+          await profiles.writeTrigger(selectedBot.botKey || botIdentifier, triggerPayload || null);
+        }
+        updateResult = {
+          updatedBot,
+          triggerPath: policy.triggerOnApply ? `profiles/recalculate.${selectedBot.botKey || botIdentifier}.trigger` : null,
+          triggerPayload: triggerPayload || null
+        };
+      }
+    } else {
+      updateResult = {
+        updatedBot: selectedBot,
+        triggerPath: null,
+        triggerPayload: null
+      };
     }
+    const updatedBot = updateResult.updatedBot || selectedBot;
+    const triggerPath = updateResult.triggerPath || null;
 
     const state = await readServiceState();
     const botState = state[selectedBot.botKey] || {};

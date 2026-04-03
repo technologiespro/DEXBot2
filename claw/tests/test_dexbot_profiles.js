@@ -142,6 +142,387 @@ async function testConcurrentUpdateBotSettingsPreservesBothPatches() {
   assert.strictEqual(written.bots[1].gridPriceOffsetPct, 0.2, 'second concurrent patch should persist');
 }
 
+async function testApplyBotSettingsPatchAcceptsNumericStringBounds() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-legacy-'));
+  const profilesDir = path.join(dir, 'profiles');
+  const botsFile = path.join(profilesDir, 'bots.json');
+
+  await fs.mkdir(profilesDir, { recursive: true });
+  await fs.writeFile(botsFile, JSON.stringify({
+    bots: [
+      {
+        name: 'legacy',
+        assetA: 'HONEST.MONEY',
+        assetB: 'BTS',
+        active: true,
+        dryRun: false,
+        startPrice: 'pool',
+        minPrice: '0.55',
+        maxPrice: '15x',
+        incrementPercent: 0.4,
+        targetSpreadPercent: 1.6,
+        weightDistribution: { sell: 0.5, buy: 0.5 },
+        botFunds: { sell: '100%', buy: '100%' },
+        activeOrders: { sell: 20, buy: 20 }
+      }
+    ]
+  }, null, 2));
+
+  const adapter = createDexbotProfileAdapter(profilesDir);
+  const view = await adapter.getBotSettings('legacy', true);
+  const result = await adapter.applyBotSettingsPatch('legacy', {
+    gridPriceOffsetPct: 0.4
+  }, {
+    trigger: false
+  });
+  const written = JSON.parse(await fs.readFile(botsFile, 'utf8'));
+
+  assert.deepStrictEqual(view.validation.errors, []);
+  assert.strictEqual(view.validation.valid, true);
+  assert.strictEqual(result.updatedBot.gridPriceOffsetPct, 0.4);
+  assert.strictEqual(written.bots[0].gridPriceOffsetPct, 0.4);
+  assert.strictEqual(written.bots[0].minPrice, '0.55', 'numeric-string bounds must remain valid during unrelated updates');
+}
+
+async function testApplyBotSettingsPatchRejectsUnknownNestedPatchKeys() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-nested-'));
+  const profilesDir = path.join(dir, 'profiles');
+  const botsFile = path.join(profilesDir, 'bots.json');
+
+  await fs.mkdir(profilesDir, { recursive: true });
+  await fs.writeFile(botsFile, JSON.stringify({
+    bots: [
+      {
+        name: 'strict',
+        assetA: 'USD',
+        assetB: 'BTS',
+        startPrice: 'pool',
+        minPrice: 0.55,
+        maxPrice: '15x',
+        incrementPercent: 0.4,
+        targetSpreadPercent: 1.6,
+        weightDistribution: { sell: 0.5, buy: 0.5 },
+        botFunds: { sell: '100%', buy: '100%' },
+        activeOrders: { sell: 20, buy: 20 }
+      }
+    ]
+  }, null, 2));
+
+  const adapter = createDexbotProfileAdapter(profilesDir);
+  const preview = await adapter.previewBotSettingsUpdate('strict', {
+    weightDistribution: { buy: 0.7, typo: 123 }
+  }, {
+    forceReload: true
+  });
+
+  assert.strictEqual(preview.valid, false);
+  assert.match(preview.errors.join('\n'), /weightDistribution contains unrecognized keys: typo/);
+  await assert.rejects(
+    () => adapter.applyBotSettingsPatch('strict', {
+      weightDistribution: { buy: 0.7, typo: 123 }
+    }, {
+      trigger: false
+    }),
+    /weightDistribution contains unrecognized keys: typo/
+  );
+}
+
+async function testApplyBotSettingsPatchWritesTriggerAtomically() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-apply-'));
+  const profilesDir = path.join(dir, 'profiles');
+  const botsFile = path.join(profilesDir, 'bots.json');
+  const triggerFile = path.join(profilesDir, 'recalculate.solo-0.trigger');
+
+  await fs.mkdir(profilesDir, { recursive: true });
+  await fs.writeFile(botsFile, JSON.stringify({
+    bots: [
+      {
+        name: 'solo',
+        assetA: 'USD',
+        assetB: 'BTS',
+        activeOrders: { sell: 20, buy: 20 },
+        botFunds: { sell: '100%', buy: '100%' },
+        weightDistribution: { sell: 0.5, buy: 0.5 }
+      }
+    ]
+  }, null, 2));
+
+  const adapter = createDexbotProfileAdapter(profilesDir);
+  const result = await adapter.applyBotSettingsPatch('solo', {
+    gridPriceOffsetPct: 0.4,
+    weightDistribution: { buy: 0.7 }
+  }, {
+    trigger: true,
+    triggerPayload: { reason: 'manual_test', changedKeys: ['gridPriceOffsetPct'] }
+  });
+
+  const written = JSON.parse(await fs.readFile(botsFile, 'utf8'));
+  const trigger = JSON.parse(await fs.readFile(triggerFile, 'utf8'));
+
+  assert.strictEqual(result.updatedBot.gridPriceOffsetPct, 0.4);
+  assert.strictEqual(result.updatedBot.weightDistribution.buy, 0.7);
+  assert.strictEqual(result.updatedBot.weightDistribution.sell, 0.5, 'partial nested patch must preserve existing fields');
+  assert.strictEqual(written.bots[0].gridPriceOffsetPct, 0.4);
+  assert.strictEqual(written.bots[0].weightDistribution.buy, 0.7);
+  assert.strictEqual(written.bots[0].weightDistribution.sell, 0.5);
+  assert.strictEqual(result.triggerPath, triggerFile);
+  assert.strictEqual(trigger.reason, 'manual_test');
+}
+
+async function testSparseBotPatchRespectsDefaultBackedValidation() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-defaults-'));
+  const profilesDir = path.join(dir, 'profiles');
+  const botsFile = path.join(profilesDir, 'bots.json');
+
+  await fs.mkdir(profilesDir, { recursive: true });
+  await fs.writeFile(botsFile, JSON.stringify({
+    bots: [
+      {
+        name: 'solo',
+        assetA: 'USD',
+        assetB: 'BTS'
+      }
+    ]
+  }, null, 2));
+
+  const adapter = createDexbotProfileAdapter(profilesDir);
+  const preview = await adapter.previewBotSettingsUpdate('solo', {
+    targetSpreadPercent: 0.1
+  }, {
+    forceReload: true
+  });
+
+  assert.strictEqual(preview.valid, false, 'preview must reject patches that are invalid after defaults are applied');
+  assert.match(preview.errors.join('\n'), /targetSpreadPercent must be >= 2x incrementPercent/);
+  await assert.rejects(
+    () => adapter.applyBotSettingsPatch('solo', {
+      targetSpreadPercent: 0.1
+    }, {
+      trigger: false
+    }),
+    /targetSpreadPercent must be >= 2x incrementPercent/
+  );
+}
+
+async function testInvalidPersistedOffsetPolicyBlocksUnrelatedPatch() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-policy-'));
+  const profilesDir = path.join(dir, 'profiles');
+  const botsFile = path.join(profilesDir, 'bots.json');
+
+  await fs.mkdir(profilesDir, { recursive: true });
+  await fs.writeFile(botsFile, JSON.stringify({
+    bots: [
+      {
+        name: 'solo',
+        assetA: 'USD',
+        assetB: 'BTS',
+        gridPriceOffsetCooldownMs: -1,
+        weightDistribution: { sell: 0.5, buy: 0.5 },
+        botFunds: { sell: '100%', buy: '100%' },
+        activeOrders: { sell: 20, buy: 20 }
+      }
+    ]
+  }, null, 2));
+
+  const adapter = createDexbotProfileAdapter(profilesDir);
+  const view = await adapter.getBotSettings('solo', true);
+
+  assert.strictEqual(view.validation.valid, false, 'effective view must expose invalid persisted offset policy');
+  assert.match(view.validation.errors.join('\n'), /gridPriceOffsetCooldownMs must be a finite number greater than or equal to 0/);
+  await assert.rejects(
+    () => adapter.applyBotSettingsPatch('solo', {
+      gridPriceOffsetPct: 0.4
+    }, {
+      trigger: false
+    }),
+    /gridPriceOffsetCooldownMs must be a finite number greater than or equal to 0/
+  );
+}
+
+async function testApplyBotSettingsPatchWithoutIdentifierReturnsResolvedBotMetadata() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-default-target-'));
+  const profilesDir = path.join(dir, 'profiles');
+  const botsFile = path.join(profilesDir, 'bots.json');
+
+  await fs.mkdir(profilesDir, { recursive: true });
+  await fs.writeFile(botsFile, JSON.stringify({
+    bots: [
+      {
+        name: 'solo',
+        assetA: 'USD',
+        assetB: 'BTS'
+      }
+    ]
+  }, null, 2));
+
+  const adapter = createDexbotProfileAdapter(profilesDir);
+  const result = await adapter.applyBotSettingsPatch(null, {
+    gridPriceOffsetPct: 0.4
+  }, {
+    trigger: false
+  });
+
+  assert.strictEqual(result.updatedBot.botKey, 'solo-0');
+  assert.strictEqual(result.updatedBot.botIndex, 0);
+  assert.strictEqual(result.next.files.orderSnapshot, path.join(profilesDir, 'orders', 'solo-0.json'));
+  assert.strictEqual(result.next.files.gridPriceSnapshot, path.join(profilesDir, 'orders', 'solo-0.gridprice.json'));
+  assert.strictEqual(result.next.files.trigger, path.join(profilesDir, 'recalculate.solo-0.trigger'));
+}
+
+async function testUpdateBotSettingsRetainsLegacyWriteBehaviorWithInvalidPersistedFields() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-legacy-update-'));
+  const profilesDir = path.join(dir, 'profiles');
+  const botsFile = path.join(profilesDir, 'bots.json');
+
+  await fs.mkdir(profilesDir, { recursive: true });
+  await fs.writeFile(botsFile, JSON.stringify({
+    bots: [
+      {
+        name: 'legacy-update',
+        assetA: 'USD',
+        assetB: 'BTS',
+        gridPriceOffsetCooldownMs: -1
+      }
+    ]
+  }, null, 2));
+
+  const adapter = createDexbotProfileAdapter(profilesDir);
+  const updated = await adapter.updateBotSettings('legacy-update', {
+    gridPriceOffsetPct: 0.4
+  });
+  const written = JSON.parse(await fs.readFile(botsFile, 'utf8'));
+
+  assert.strictEqual(updated.gridPriceOffsetPct, 0.4);
+  assert.strictEqual(written.bots[0].gridPriceOffsetPct, 0.4);
+  assert.strictEqual(written.bots[0].gridPriceOffsetCooldownMs, -1, 'legacy updateBotSettings should still permit unrelated writes against invalid persisted fields');
+}
+
+async function testWeightDistributionRejectsNullAndFalseValues() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-weight-types-'));
+  const profilesDir = path.join(dir, 'profiles');
+  const botsFile = path.join(profilesDir, 'bots.json');
+
+  await fs.mkdir(profilesDir, { recursive: true });
+  await fs.writeFile(botsFile, JSON.stringify({
+    bots: [
+      {
+        name: 'strict-weight',
+        assetA: 'USD',
+        assetB: 'BTS',
+        startPrice: 'pool',
+        minPrice: 0.55,
+        maxPrice: '15x',
+        incrementPercent: 0.4,
+        targetSpreadPercent: 1.6,
+        weightDistribution: { sell: 0.5, buy: 0.5 },
+        botFunds: { sell: '100%', buy: '100%' },
+        activeOrders: { sell: 20, buy: 20 }
+      }
+    ]
+  }, null, 2));
+
+  const adapter = createDexbotProfileAdapter(profilesDir);
+  const preview = await adapter.previewBotSettingsUpdate('strict-weight', {
+    weightDistribution: { sell: null, buy: false }
+  }, {
+    forceReload: true
+  });
+
+  assert.strictEqual(preview.valid, false);
+  assert.match(preview.errors.join('\n'), /weightDistribution\.sell must be a finite number/);
+  assert.match(preview.errors.join('\n'), /weightDistribution\.buy must be a finite number/);
+}
+
+async function testNestedPatchValidationDoesNotDuplicateErrors() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-no-dupes-'));
+  const profilesDir = path.join(dir, 'profiles');
+  const botsFile = path.join(profilesDir, 'bots.json');
+
+  await fs.mkdir(profilesDir, { recursive: true });
+  await fs.writeFile(botsFile, JSON.stringify({
+    bots: [
+      {
+        name: 'no-dupes',
+        assetA: 'USD',
+        assetB: 'BTS',
+        startPrice: 'pool',
+        minPrice: 0.55,
+        maxPrice: '15x',
+        incrementPercent: 0.4,
+        targetSpreadPercent: 1.6,
+        weightDistribution: { sell: 0.5, buy: 0.5 },
+        botFunds: { sell: '100%', buy: '100%' },
+        activeOrders: { sell: 20, buy: 20 }
+      }
+    ]
+  }, null, 2));
+
+  const adapter = createDexbotProfileAdapter(profilesDir);
+  const preview = await adapter.previewBotSettingsUpdate('no-dupes', {
+    weightDistribution: { sell: null }
+  }, {
+    forceReload: true
+  });
+
+  const sellErrors = preview.errors.filter((entry) => entry === 'weightDistribution.sell must be a finite number');
+  assert.strictEqual(sellErrors.length, 1, 'nested patch validation should not duplicate the same field error');
+}
+
+async function testNestedStateValidationRejectsWrongContainerTypes() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-bad-nested-state-'));
+  const profilesDir = path.join(dir, 'profiles');
+  const botsFile = path.join(profilesDir, 'bots.json');
+
+  await fs.mkdir(profilesDir, { recursive: true });
+  await fs.writeFile(botsFile, JSON.stringify({
+    bots: [
+      {
+        name: 'bad-nested-state',
+        assetA: 'USD',
+        assetB: 'BTS',
+        weightDistribution: 'oops',
+        activeOrders: 0,
+        botFunds: true
+      }
+    ]
+  }, null, 2));
+
+  const adapter = createDexbotProfileAdapter(profilesDir);
+  const view = await adapter.getBotSettings('bad-nested-state', true);
+
+  assert.strictEqual(view.rawValidation.valid, false);
+  assert.match(view.rawValidation.errors.join('\n'), /weightDistribution must be an object with sell and buy/);
+  assert.match(view.rawValidation.errors.join('\n'), /activeOrders must be an object with sell and buy/);
+  assert.match(view.rawValidation.errors.join('\n'), /botFunds must be an object with sell and buy/);
+}
+
+async function testUpdateBotSettingsWithoutIdentifierReturnsResolvedBot() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-default-update-return-'));
+  const profilesDir = path.join(dir, 'profiles');
+  const botsFile = path.join(profilesDir, 'bots.json');
+
+  await fs.mkdir(profilesDir, { recursive: true });
+  await fs.writeFile(botsFile, JSON.stringify({
+    bots: [
+      {
+        name: 'solo',
+        assetA: 'USD',
+        assetB: 'BTS'
+      }
+    ]
+  }, null, 2));
+
+  const adapter = createDexbotProfileAdapter(profilesDir);
+  const updated = await adapter.updateBotSettings(null, {
+    gridPriceOffsetPct: 0.4
+  });
+
+  assert.ok(updated, 'updateBotSettings(null, patch) should return the resolved bot');
+  assert.strictEqual(updated.botKey, 'solo-0');
+  assert.strictEqual(updated.botIndex, 0);
+  assert.strictEqual(updated.gridPriceOffsetPct, 0.4);
+}
+
 function testCreateBotKeyFallsBackToAssetIds() {
   const key = createBotKey({ assetAId: '1.3.1', assetBId: '1.3.0' }, 0);
   assert.ok(key.includes('1-3-1'), `botKey should contain sanitized assetAId, got: ${key}`);
@@ -176,6 +557,17 @@ async function main() {
   await testAtomicWriteFailsFastWhenLockCannotBeAcquired();
   await testUpdateBotSettingsPreservesSingleObjectFormat();
   await testConcurrentUpdateBotSettingsPreservesBothPatches();
+  await testApplyBotSettingsPatchAcceptsNumericStringBounds();
+  await testApplyBotSettingsPatchRejectsUnknownNestedPatchKeys();
+  await testApplyBotSettingsPatchWritesTriggerAtomically();
+  await testSparseBotPatchRespectsDefaultBackedValidation();
+  await testInvalidPersistedOffsetPolicyBlocksUnrelatedPatch();
+  await testApplyBotSettingsPatchWithoutIdentifierReturnsResolvedBotMetadata();
+  await testUpdateBotSettingsRetainsLegacyWriteBehaviorWithInvalidPersistedFields();
+  await testWeightDistributionRejectsNullAndFalseValues();
+  await testNestedPatchValidationDoesNotDuplicateErrors();
+  await testNestedStateValidationRejectsWrongContainerTypes();
+  await testUpdateBotSettingsWithoutIdentifierReturnsResolvedBot();
   console.log('dexbot profile tests passed');
 }
 

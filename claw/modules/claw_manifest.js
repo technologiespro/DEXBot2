@@ -42,7 +42,7 @@ function describeClawBridge(options = {}) {
       honest: 'read-only context + pair pricing',
       market: 'read-only snapshots',
       order: 'DEXBot2 order utilities',
-      profiles: 'DEXBot2 profile-folder adapter',
+      profiles: 'DEXBot2 profile-folder adapter, including bot settings read/preview/apply',
       stateStore: 'filesystem-backed AI-Bot state'
     },
     tools: {

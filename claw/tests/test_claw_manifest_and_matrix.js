@@ -57,10 +57,12 @@ function testClawManifest() {
   assert.ok(desc.commands);
   assert.ok(desc.tools);
   assert.ok(desc.surfaces);
+  assert.strictEqual(desc.surfaces.settings, undefined);
 
   // Identity
   assert.strictEqual(desc.compatibility.name, 'Claw');
   assert.strictEqual(desc.compatibility.version, 2);
+  assert.ok(desc.surfaces.profiles.includes('bot settings'));
 
   // Commands list is non-empty and consistent with catalog
   assert.ok(Array.isArray(desc.commands));

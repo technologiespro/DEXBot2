@@ -56,6 +56,14 @@ function getProfileContextRef(options = {}) {
   return options.botRef || options.identifier || options.botId || options.pair || null;
 }
 
+function getBotSettingsPatch(options = {}) {
+  if (!options.patch || typeof options.patch !== 'object' || Array.isArray(options.patch)) {
+    throw new Error('bot-settings-preview and bot-settings-apply require a patch object');
+  }
+
+  return options.patch;
+}
+
 function createClawBridge(options = {}) {
   const sanitizedOptions = stripPrivateKey(options);
   const runtimeName = sanitizedOptions.runtimeName
@@ -107,6 +115,26 @@ async function runClawCommand(command, options = {}) {
 
     case 'open-orders':
       return getOpenOrders(safeOptions.accountName || safeOptions.accountRef || accountName);
+
+    case 'bot-settings':
+      return bridge.profiles.getBotSettings(
+        getProfileContextRef(safeOptions),
+        Boolean(safeOptions.forceReload)
+      );
+
+    case 'bot-settings-preview':
+      return bridge.profiles.previewBotSettingsUpdate(
+        getProfileContextRef(safeOptions),
+        getBotSettingsPatch(safeOptions),
+        safeOptions
+      );
+
+    case 'bot-settings-apply':
+      return bridge.profiles.applyBotSettingsPatch(
+        getProfileContextRef(safeOptions),
+        getBotSettingsPatch(safeOptions),
+        safeOptions
+      );
 
     case 'honest-context':
       return bridge.honest.buildContext({

@@ -246,7 +246,43 @@ Reads the DEXBot2 `profiles/` directory and normalizes:
 
 This is the profile-folder bridge for Claw.
 
-### 8. `getClawProfileContext(identifier, options)`
+### 8. `getBotSettings(identifier, forceReload)`
+
+Returns the current DEXBot2 bot config in a normalized, read-only view.
+
+The result includes:
+
+- raw bot data
+- effective values with DEXBot2 defaults merged in
+- current validation status
+- file locations for the selected bot
+- mutability metadata for the bridge
+
+### 9. `previewBotSettingsUpdate(identifier, patch, options)`
+
+Validates a bot-settings patch without writing it.
+
+Use this before any settings write to check:
+
+- merged next-state values
+- validation errors
+- whether the patch would require a recalc trigger
+
+### 10. `applyBotSettingsPatch(identifier, patch, options)`
+
+Applies a bot-settings patch through the DEXBot2 profile lock.
+
+This helper should:
+
+- acquire the `bots.json` lock before reading and writing
+- merge the patch against the current bot record
+- validate the merged result before persisting
+- optionally write the recalc trigger atomically while still inside the lock
+- reload the bundle before returning the updated bot view
+
+This is the preferred write path for bot tuning and for any bridge command that needs to change DEXBot2 bot settings safely.
+
+### 11. `getClawProfileContext(identifier, options)`
 
 Returns one normalized JSON object that combines:
 

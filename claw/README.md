@@ -178,6 +178,18 @@ node scripts/claw_bridge.js profile-context --payload '{"botRef":"default"}'
 node scripts/claw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
 ```
 
+### Bot Settings
+
+Use the bridge to read, preview, and apply DEXBot2 bot settings through the locked profile adapter:
+
+```bash
+node scripts/claw_bridge.js bot-settings --payload '{"botRef":"default"}'
+node scripts/claw_bridge.js bot-settings-preview --payload '{"botRef":"default","patch":{"gridPriceOffsetPct":0.2}}'
+node scripts/claw_bridge.js bot-settings-apply --payload '{"botRef":"default","patch":{"weightDistribution":{"sell":0.7,"buy":0.4}}}'
+```
+
+Settings writes are serialized through the profile lock and the recalc trigger is written atomically, so concurrent bot-setting updates do not clobber each other.
+
 ### OpenClaw
 
 Install the native plugin bundle from this repository:
