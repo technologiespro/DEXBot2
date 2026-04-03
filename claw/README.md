@@ -30,6 +30,7 @@ npm install btsdex
 - DEXBot2 and Claw integration: `modules/dexbot_bridge.js`, `modules/dexbot_profiles.js`, `modules/dexbot_credential_client.js`, `modules/claw_bridge.js`, `modules/claw_catalog.js`, `modules/claw_manifest.js`, `modules/claw_skill_md.js`, `modules/claw_runtime_matrix.js`, `scripts/claw_bridge.js`, `scripts/claw_mcp_server.js`
 - ZeroClaw support: `modules/zeroclaw_bridge.js`, `modules/zeroclaw_catalog.js`, `modules/zeroclaw_manifest.js`, `modules/zeroclaw_skill.js`
 - NullClaw support: `modules/nullclaw_bridge.js`, `modules/nullclaw_catalog.js`, `modules/nullclaw_manifest.js`, `modules/nullclaw_skill.js`
+- Skill packs: `skills/bitshares-guide/SKILL.md`, `skills/margin-trading/SKILL.md`, `skills/launcher-ops/SKILL.md`, shared boundary references under `skills/shared/references/`
 - HONEST support: `modules/honest_ecosystem.js`, `modules/liquidity_pools.js`
 - Reference docs: `docs/AI_BOT_LIBRARY_API.md`, `docs/DEXBOT2_TUNING_CHEAT_SHEET.md`, `docs/POSITION_HEALTH.md`, `docs/RUNTIME_COMPARISON.md`
 - Example entrypoints: `examples/connection_test.js`, `examples/short_mpa_bts_strategy.js`, `examples/position_manager_cli.js`, `examples/nullclaw_bridge_example.js`, `examples/zeroclaw_bridge_example.js`
@@ -45,6 +46,7 @@ What it does:
 - expose DEXBot2 profile context, order utilities, and liquidity/pool helpers through a smaller surface
 - provide HONEST context helpers, short-MPA helper flows, and position-manager utilities
 - generate runtime-native skill definitions and bridge metadata from a shared command catalog
+- keep launcher orchestration as its own skill boundary rather than folding PM2 or Docker startup into trading/reference skills
 
 What it does not do:
 
@@ -133,6 +135,16 @@ PM2 can run the watcher process built from `modules/position_manager_watch.js` a
 npm run service:position-watch -- --account your-account
 npm run pm2:start
 ```
+
+## Skill Packs
+
+The `skills/` tree is intentionally split by responsibility:
+
+- `bitshares-guide` is presentation-only and should stay free of operational instructions.
+- `margin-trading` is concept-reference only and should stay free of launcher or deployment content.
+- `launcher-ops` owns PM2 startup, `unlock-start`, `--claw-only`, Docker-friendly startup, and launcher validation.
+
+Shared boundary notes live in `skills/shared/references/skill-boundaries.md`.
 
 ## Multi-Runtime Support
 

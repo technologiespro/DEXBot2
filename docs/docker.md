@@ -19,27 +19,40 @@ docker build -t dexbot2:local .
 docker run --rm -it dexbot2:local node dexbot.js help
 ```
 
-## Secure startup (single prompt, no PM2)
+## Secure startup
 
 For production and best secret hygiene without PM2, use the bundled unlock launcher:
 
 ```bash
-node unlock-start.js
+node unlock-start
 ```
 
 - Enter the master password once interactively.
 - Password stays in daemon memory (RAM) and is not stored in `.env`.
 - Bot processes request private keys through the daemon socket.
+- If the credential daemon stops, rerun the launcher to unlock it again.
 
 To start only one bot:
 
 ```bash
-node unlock-start.js <bot-name>
+node unlock-start <bot-name>
+```
+
+For claw-only workflows that only need credentials, use:
+
+```bash
+node unlock-start --claw-only
+```
+
+For PM2-managed credential-daemon-only startup:
+
+```bash
+node pm2 claw-only
 ```
 
 ## Run with Docker Compose
 
-1. Create a `.env` file in the project root:
+1. Create a `.env` file in the project root for non-secret Docker Compose runtime values:
 
 ```dotenv
 BOT_NAME=my-bot
@@ -70,5 +83,5 @@ docker compose down
 
 - Persist bot state/config by mounting `./profiles:/app/profiles`.
 - Keep `.env` for non-sensitive runtime values (for example `BOT_NAME`, `RUN_LOOP_MS`).
-- Do not store `MASTER_PASSWORD` in `.env` when using the credential-daemon security model.
+- Do not store the master password in `.env`. The secure launchers prompt once and keep it only in process memory.
 - If you prefer immutable pinning, replace `latest` in `docker-compose.yml` with a `sha-<commit>` tag.

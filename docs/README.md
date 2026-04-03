@@ -109,4 +109,4 @@ While these docs explain the *why*, the *how* lives in the code. Key source modu
 - **API Boundary**: Responsibility split between the AI decision layer and the DEXBot2 execution substrate ([AI_BOT_LIBRARY_API.md](../claw/docs/AI_BOT_LIBRARY_API.md))
 - **Tuning Reference**: Practical grid-tuning baselines ([DEXBOT2_TUNING_CHEAT_SHEET.md](../claw/docs/DEXBOT2_TUNING_CHEAT_SHEET.md))
 - **Position Management**: Health monitoring, margin planner, and dynamic weight policy
-- **Skills**: Presentation-only skill packs for bitshares-guide, margin-trading, and shared references
+- **Skills**: Presentation-only, concept-reference, and launcher-orchestration skill packs for bitshares-guide, margin-trading, launcher-ops, and shared references

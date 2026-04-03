@@ -29,7 +29,9 @@ node dexbot bots
 
 # 3. Start with PM2 or directly
 node pm2           # For production
-node unlock-start.js  # Single prompt, no PM2
+node pm2 claw-only  # PM2-managed credential daemon only
+node unlock-start  # Single prompt, no PM2
+node unlock-start --claw-only  # Credential daemon only for claw workflows
 node dexbot start  # For testing
 ```
 
@@ -109,7 +111,7 @@ node dexbot update
 The update script automatically:
 - Fetches and pulls the latest code
 - Installs any new dependencies
-- Reloads PM2 processes if running
+- Reloads active PM2 bot processes if running
 - Ensures your `profiles/` directory is protected and unchanged
 - Logs all operations to `update.log`
 
@@ -160,6 +162,9 @@ node pm2
 # Start a specific bot
 node pm2 <bot-name>
 
+# Start only the credential daemon
+node pm2 claw-only
+
 # Or via CLI
 node dexbot pm2
 
@@ -169,8 +174,9 @@ pm2 status
 # View real-time logs
 pm2 logs [<bot-name>]
 
-# Restart processes
-pm2 restart {all|<bot-name>}
+# Safe restart/reload path for DEXBot-managed PM2 apps
+node pm2 restart {all|<bot-name>|dexbot-cred}
+node pm2 reload {all|<bot-name>|dexbot-cred}
 
 # Stop processes
 pm2 stop {all|<bot-name>}
@@ -188,11 +194,13 @@ node dexbot reset {all|[<bot-name>]}
 # Disable a bot in config
 node dexbot disable {all|[<bot-name>]}
 
-# Show pm2.js usage
-node pm2.js help
+# Show PM2 wrapper usage
+node pm2 help
 ```
 
 Bot logs are written to `profiles/logs/<bot-name>.log` (errors to `<bot-name>-error.log`).
+
+Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local bootstrap channel instead of exporting the master password to every PM2 app. Use `node pm2 restart ...` or `node pm2 reload ...` for DEXBot-managed PM2 actions. Avoid raw `pm2 restart all` / `pm2 reload all`, because `dexbot-cred` must only be re-unlocked through the wrapper. If `dexbot-cred` stops, rerun `node pm2` or `node pm2 restart dexbot-cred`.
 
 ## 📚 Documentation
 
@@ -204,7 +212,7 @@ For architecture, fund accounting, rotation mechanics, and development guides, s
 - **[developer_guide.md](docs/developer_guide.md)** - Development guide, environment variables, examples, glossary
 - **[LOGGING.md](docs/LOGGING.md)** - Logging system documentation
 - **[WORKFLOW.md](docs/WORKFLOW.md)** - Project workflow and contribution guide
-- **[claw/](claw/)** - Claw integration layer: BitShares bridge, position management, and multi-runtime skill definitions ([README](claw/README.md), [API boundary](claw/docs/AI_BOT_LIBRARY_API.md))
+- **[claw/](claw/)** - Claw integration layer: BitShares bridge, position management, launcher ops, and multi-runtime skill definitions ([README](claw/README.md), [API boundary](claw/docs/AI_BOT_LIBRARY_API.md))
 
 ## 🤝 Contributing
 

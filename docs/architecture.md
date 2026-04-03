@@ -38,7 +38,7 @@ flowchart TD
     subgraph IN["INPUTS"]
         CFG["bots.json<br/>(grid params, funds, pair)"]
         GS["general.settings.json<br/>(timing, thresholds)"]
-        KEYS["keys.json AES encrypted<br/>+ MASTER_PASSWORD env"]
+        KEYS["keys.json AES encrypted<br/>+ interactive unlock / one-shot local bootstrap"]
         PERSIST["orders/botKey.json<br/>grid snapshot,<br/>feesOwed, boundaryIdx"]
         FILLEV["Fill Events real-time<br/>BitShares block op-4"]
         OPENORD["Open Orders polling<br/>chain open-order list"]

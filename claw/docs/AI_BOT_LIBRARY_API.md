@@ -36,6 +36,7 @@ The Claw workflow layer should:
 - place, cancel, and rebalance orders
 - talk to DEXBot2 when it needs shared runtime support
 - decide whether to apply or ignore recommendations
+- keep launcher orchestration, PM2 startup, and Docker entrypoint behavior in the `launcher-ops` skill boundary instead of the infrastructure API boundary
 
 ## Recommended Shape
 
@@ -66,6 +67,8 @@ The bridge surface currently includes:
 - MPA borrow, repay, collateral adjustment, and settlement
 - BTS-backed short open, take-profit, close, and plan builders
 - MPA position lookup
+
+Launcher behavior such as `node unlock-start --claw-only` and `node pm2 claw-only` is documented and maintained separately under `skills/launcher-ops/`.
 
 Recommended trust boundary:
 
@@ -434,7 +437,7 @@ If you want the simplest possible integration, use one request and one response 
   "runtime": {
     "name": "claw-runtime",
     "accountName": "your-account",
-    "socketPath": "/tmp/dexbot-cred-daemon.sock"
+    "socketPath": "./profiles/run/dexbot-cred-daemon.sock"
   },
   "state": {
     "botId": "claw-01",
@@ -446,11 +449,13 @@ If you want the simplest possible integration, use one request and one response 
 
 ### Response
 
+Example response with the resolved absolute socket path:
+
 ```json
 {
   "runtime": {
     "ready": true,
-    "resolvedSocketPath": "/tmp/dexbot-cred-daemon.sock",
+    "resolvedSocketPath": "/app/profiles/run/dexbot-cred-daemon.sock",
     "notes": ["Credential daemon is reachable."]
   },
   "stores": {
