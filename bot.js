@@ -75,8 +75,6 @@ if (!botName) {
     process.exit(1);
 }
 
-console.log(`[bot.js] Starting bot: ${botName}`);
-
 /**
  * Loads the configuration for a specific bot from profiles/bots.json.
  * @param {string} name - The name of the bot to load.
@@ -119,25 +117,15 @@ async function getPrivateKeyForAccount(accountName) {
 
     // Try daemon first
     if (chainKeys.isDaemonReady()) {
-        console.log('[bot.js] Requesting private key from credential daemon...');
         try {
-            const privateKey = await chainKeys.getPrivateKeyFromDaemon(accountName);
-            console.log('[bot.js] Private key loaded from daemon');
-            return privateKey;
+            return await chainKeys.getPrivateKeyFromDaemon(accountName);
         } catch (err) {
-            console.warn('[bot.js] Daemon request failed:', err.message);
-            console.log('[bot.js] Falling back to interactive authentication...\n');
         }
-    } else {
-        console.log('[bot.js] Credential daemon not available');
-        console.log('[bot.js] Falling back to interactive authentication...\n');
     }
 
     // Fallback to interactive master password prompt
     const originalLog = console.log;
     try {
-        console.log('[bot.js] Prompting for master password...');
-
         // Suppress BitShares client logs during password prompt
         console.log = (...args) => {
             const msg = args.join(' ');
@@ -150,7 +138,6 @@ async function getPrivateKeyForAccount(accountName) {
 
         // Restore console before getting key
         console.log = originalLog;
-        console.log('[bot.js] Master password authenticated');
 
         // Get the private key using master password
         const privateKey = chainKeys.getPrivateKey(accountName, masterPassword);
@@ -169,8 +156,6 @@ async function getPrivateKeyForAccount(accountName) {
     try {
         // Load bot configuration
         const botConfig = loadBotConfig(botName);
-        console.log(`[bot.js] Loaded configuration for bot: ${botName}`);
-        console.log(`[bot.js] Market: ${botConfig.assetA}-${botConfig.assetB}, Account: ${botConfig.preferredAccount}`);
 
          // Load all bots from configuration to prevent pruning other active bots
           const { config: allBotsConfigData } = loadSettingsFile(PROFILES_BOTS_FILE);

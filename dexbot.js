@@ -240,26 +240,54 @@ async function runAccountManager({ waitForConnection = false, exitAfter = false,
   * to guide the user through initial setup.
   * @returns {Promise<string>} The authenticated master password
   */
- async function authenticateMasterPassword() {
-     try {
-         return await chainKeys.authenticate();
-     } catch (err) {
-         if (!keySetupInProgress && err && err.message && err.message.includes('No master password set')) {
-             keySetupInProgress = true;
-             try {
-                 console.log('no master password set');
-                 console.log('autostart account keys');
-                 await runAccountManager();
-                 keySetupInProgress = false;
-                 return await chainKeys.authenticate();
-             } catch (setupErr) {
-                 keySetupInProgress = false;
+async function authenticateMasterPassword() {
+    try {
+        return await chainKeys.authenticate();
+    } catch (err) {
+        if (!keySetupInProgress && err && err.message && err.message.includes('No master password set')) {
+            keySetupInProgress = true;
+            try {
+                await runAccountManager();
+                keySetupInProgress = false;
+                return await chainKeys.authenticate();
+            } catch (setupErr) {
+                keySetupInProgress = false;
                  throw setupErr;
              }
          }
-         throw err;
-     }
- }
+        throw err;
+    }
+}
+
+function printStartLauncherHeader({ botName = null, dryRun = false } = {}) {
+    console.log('='.repeat(50));
+    console.log('DEXBot2 Start Launcher');
+    if (botName) {
+        console.log(`Starting bot: ${botName}`);
+    } else {
+        console.log('Starting all bots');
+    }
+    if (dryRun) {
+        console.log('Dry-run mode enabled');
+    }
+    console.log('='.repeat(50));
+    console.log();
+}
+
+function printStartLauncherSuccess({ botName = null, dryRun = false } = {}) {
+    const command = dryRun ? 'drystart' : 'start';
+    const target = botName ? ` ${botName}` : '';
+    console.log();
+    console.log('='.repeat(50));
+    console.log('DEXBot2 started successfully!');
+    if (botName) {
+        console.log(`If the bot stops, rerun \`node dexbot ${command}${target}\` to start it again.`);
+    } else {
+        console.log(`If the bots stop, rerun \`node dexbot ${command}\` to start them again.`);
+    }
+    console.log('='.repeat(50));
+    console.log();
+}
 
 /**
  * Execute the provided bot entries after validation and authentication.
@@ -274,102 +302,138 @@ async function runAccountManager({ waitForConnection = false, exitAfter = false,
  * @param {string} options.sourceName - Source label for logging
  * @returns {Promise<Array>} Array of started DEXBot instances
  */
-async function runBotInstances(botEntries, { forceDryRun = false, sourceName = 'settings' } = {}) {
-    if (!botEntries.length) {
-        console.log(`No bot entries were found in ${sourceName}.`);
-        return [];
-    }
+async function runBotInstances(botEntries, { forceDryRun = false, sourceName = 'settings', launcherStyle = null } = {}) {
+    setSuppressConnectionLog(true);
 
-    const prepared = botEntries.map(entry => ({
-        ...entry,
-        dryRun: forceDryRun ? true : entry.dryRun,
-    }));
+    const shouldAnnounceLauncher = !!launcherStyle;
+    const launcherBotName = launcherStyle?.botName || null;
+    const launcherDryRun = !!launcherStyle?.dryRun;
+    let connectionAnnounced = false;
+    let authenticationAnnounced = false;
+    const activeCount = (botEntries || []).filter((entry) => entry && entry.active !== false).length;
 
-    // Note: ensureBotEntries is no longer needed here. Each bot creates its own AccountOrders
-    // instance with per-bot file when it starts, eliminating the need for shared initialization.
+    const announceConnection = () => {
+        if (shouldAnnounceLauncher && !connectionAnnounced) {
+            console.log('Connected to BitShares');
+            connectionAnnounced = true;
+        }
+    };
 
-    const { errors, warnings } = collectValidationIssues(prepared, sourceName);
-    if (warnings.length) {
-        console.warn(`Found problems in inactive bot entries (${sourceName}):`);
-        warnings.forEach(w => console.warn('  -', w));
-    }
+    const announceAuthentication = () => {
+        if (shouldAnnounceLauncher && !authenticationAnnounced) {
+            console.log('✓ Authentication successful');
+            authenticationAnnounced = true;
+        }
+    };
 
-    if (errors.length) {
-        console.error('ERROR: Invalid configuration for one or more **active** bots:');
-        errors.forEach(e => console.error('  -', e));
-        console.error('Fix the configuration problems in profiles/bots.json and restart. Aborting.');
-        process.exit(1);
-    }
-
-    const needMaster = prepared.some(b => b.active && b.preferredAccount);
-    let masterPassword = null;
-    if (needMaster) {
-        const daemonReady = chainKeys.isDaemonReady();
-        if (daemonReady) {
-            console.log('Credential daemon detected. Starting bots with daemon-backed key access (no extra password prompt).');
+    try {
+        if (shouldAnnounceLauncher) {
+            printStartLauncherHeader({ botName: launcherBotName, dryRun: launcherDryRun });
         }
 
+        if (!botEntries.length) {
+            console.log(`No bot entries were found in ${sourceName}.`);
+            return [];
+        }
+
+        const prepared = botEntries.map(entry => ({
+            ...entry,
+            dryRun: forceDryRun ? true : entry.dryRun,
+        }));
+
+        // Note: ensureBotEntries is no longer needed here. Each bot creates its own AccountOrders
+        // instance with per-bot file when it starts, eliminating the need for shared initialization.
+
+        const { errors } = collectValidationIssues(prepared, sourceName);
+
+        if (errors.length) {
+            console.error('ERROR: Invalid configuration for one or more **active** bots:');
+            errors.forEach(e => console.error('  -', e));
+            console.error('Fix the configuration problems in profiles/bots.json and restart. Aborting.');
+            process.exit(1);
+        }
+
+        const needMaster = prepared.some(b => b.active && b.preferredAccount);
+        let masterPassword = null;
+        if (needMaster) {
+            const daemonReady = chainKeys.isDaemonReady();
+
+            try {
+                await waitForConnected();
+                announceConnection();
+            } catch (err) {
+                // Continue; the bot startup path will retry through the normal runtime flow.
+            }
+
+            if (!daemonReady) {
+                try {
+                    masterPassword = await authenticateMasterPassword();
+                    announceAuthentication();
+                } catch (err) {
+                    if (chainKeys.isMasterPasswordFailure(err)) {
+                        throw err;
+                    }
+                    masterPassword = null;
+                }
+            }
+        }
+
+        // Fee cache is required for fill processing (getAssetFees), including offline fill reconciliation at startup.
+        // Initialize it once per process for the assets used by active bots.
         try {
             await waitForConnected();
+            announceConnection();
+            await initializeFeeCache(prepared.filter(b => b.active), BitShares);
         } catch (err) {
-            console.warn('Timed out waiting for BitShares connection before prompting for master password.');
+            console.error(`Fee cache initialization failed: ${err.message}`);
+            console.error('Cannot proceed without fee cache for fill processing. Aborting.');
+            process.exit(1);
         }
 
-        if (!daemonReady) {
+        if (shouldAnnounceLauncher) {
+            console.log(`Number active bots: ${activeCount}`);
+            console.log();
+            console.log('Starting bot runtime...');
+        }
+
+        const instances = [];
+        for (const entry of prepared) {
+            if (!entry.active) {
+                continue;
+            }
+
             try {
-                masterPassword = await authenticateMasterPassword();
+                const bot = new DEXBot(entry);
+                await bot.start(masterPassword);
+                instances.push(bot);
             } catch (err) {
+                console.error('Failed to start bot:', err.message);
                 if (chainKeys.isMasterPasswordFailure(err)) {
-                    throw err;
+                    console.error('Aborting because the master password failed 3 times.');
+                    process.exit(1);
                 }
-                console.warn('Master password entry failed or was cancelled. Bots requiring preferredAccount may need interactive selection.');
-                masterPassword = null;
+                if (err && err.message && String(err.message).toLowerCase().includes('marketprice')) {
+                    console.info('Hint: startPrice could not be derived.');
+                    console.info(' - If using profiles/bots.json with "pool" or "market" signals, ensure the chain contains a matching liquidity pool or orderbook for the configured pair.');
+                    console.info(' - Alternatively, set a numeric `startPrice` directly in profiles/bots.json for this bot to avoid auto-derive.');
+                    console.info(' - You can also set LIVE_BOT_NAME or BOT_NAME to select a different bot from the profiles settings.');
+                }
             }
         }
-    }
 
-     // Fee cache is required for fill processing (getAssetFees), including offline fill reconciliation at startup.
-     // Initialize it once per process for the assets used by active bots.
-     try {
-         await waitForConnected();
-         await initializeFeeCache(prepared.filter(b => b.active), BitShares);
-     } catch (err) {
-         console.error(`Fee cache initialization failed: ${err.message}`);
-         console.error('Cannot proceed without fee cache for fill processing. Aborting.');
-         process.exit(1);
-     }
-
-    const instances = [];
-    for (const entry of prepared) {
-        if (!entry.active) {
-            console.log('Skipping inactive bot entry (active=false) — settings preserved.');
-            continue;
+        if (instances.length === 0) {
+            console.log('No active bots were started. Check bots.json and ensure at least one bot is active.');
+            return instances;
         }
 
-         try {
-             const bot = new DEXBot(entry);
-             await bot.start(masterPassword);
-             instances.push(bot);
-         } catch (err) {
-             console.error('Failed to start bot:', err.message);
-             if (chainKeys.isMasterPasswordFailure(err)) {
-                 console.error('Aborting because the master password failed 3 times.');
-                 process.exit(1);
-             }
-            if (err && err.message && String(err.message).toLowerCase().includes('marketprice')) {
-                console.info('Hint: startPrice could not be derived.');
-                console.info(' - If using profiles/bots.json with "pool" or "market" signals, ensure the chain contains a matching liquidity pool or orderbook for the configured pair.');
-                console.info(' - Alternatively, set a numeric `startPrice` directly in profiles/bots.json for this bot to avoid auto-derive.');
-                console.info(' - You can also set LIVE_BOT_NAME or BOT_NAME to select a different bot from the profiles settings.');
-            }
+        if (shouldAnnounceLauncher) {
+            printStartLauncherSuccess({ botName: launcherBotName, dryRun: launcherDryRun });
         }
-    }
 
-    if (instances.length === 0) {
-        console.log('No active bots were started. Check bots.json and ensure at least one bot is active.');
+        return instances;
+    } finally {
+        setSuppressConnectionLog(false);
     }
-
-    return instances;
 }
 
 /**
@@ -381,7 +445,11 @@ async function runBotInstances(botEntries, { forceDryRun = false, sourceName = '
  */
 async function startBotByName(botName, { dryRun = false } = {}) {
     if (!botName) {
-        return runDefaultBots({ forceDryRun: dryRun, sourceName: dryRun ? 'CLI drystart (all)' : 'CLI start (all)' });
+        return runDefaultBots({
+            forceDryRun: dryRun,
+            sourceName: dryRun ? 'CLI drystart (all)' : 'CLI start (all)',
+            launcherStyle: { botName: null, dryRun },
+        });
     }
     const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
     const entries = resolveRawBotEntries(config);
@@ -398,7 +466,11 @@ async function startBotByName(botName, { dryRun = false } = {}) {
     entryCopy.active = true;
     if (dryRun) entryCopy.dryRun = true;
     const normalized = normalizeBotEntries([entryCopy]);
-    await runBotInstances(normalized, { forceDryRun: dryRun, sourceName: dryRun ? 'CLI drystart' : 'CLI start' });
+    await runBotInstances(normalized, {
+        forceDryRun: dryRun,
+        sourceName: dryRun ? 'CLI drystart' : 'CLI start',
+        launcherStyle: { botName, dryRun },
+    });
 }
 
 /**
@@ -609,11 +681,11 @@ async function handleCLICommands() {
  * @param {string} [options.sourceName='settings'] - Source label.
  * @returns {Promise<void>}
  */
-async function runDefaultBots({ forceDryRun = false, sourceName = 'settings' } = {}) {
+async function runDefaultBots({ forceDryRun = false, sourceName = 'settings', launcherStyle = null } = {}) {
     const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
     const entries = resolveRawBotEntries(config);
     const normalized = normalizeBotEntries(entries);
-    await runBotInstances(normalized, { forceDryRun, sourceName });
+    await runBotInstances(normalized, { forceDryRun, sourceName, launcherStyle });
 }
 
 /**

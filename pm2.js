@@ -231,7 +231,6 @@ module.exports = { apps: ${JSON.stringify(apps, null, 2)} };
 `;
 
             fs.writeFileSync(ECOSYSTEM_FILE, ecosystemContent);
-            console.log('Ecosystem configuration generated for claw-only mode');
             return apps;
         }
 
@@ -254,7 +253,6 @@ module.exports = { apps: ${JSON.stringify(apps, null, 2)} };
 `;
 
             fs.writeFileSync(ECOSYSTEM_FILE, ecosystemContent);
-            console.log('Ecosystem configuration generated');
             return apps;
         }
 
@@ -270,7 +268,6 @@ module.exports = { apps: ${JSON.stringify(apps, null, 2)} };
 `;
 
         fs.writeFileSync(ECOSYSTEM_FILE, ecosystemContent);
-        console.log('Ecosystem configuration generated');
         return apps;
     } catch (err) {
         fail(`Error reading bots.json: ${err.message}`);
@@ -296,7 +293,7 @@ function cleanupStaleCredentialDaemonFiles() {
     }
 }
 
-async function ensureCredentialDaemonPM2({ forceRefresh = false, logReuse = true } = {}) {
+async function ensureCredentialDaemonPM2({ forceRefresh = false } = {}) {
     ensureCredentialRuntimeDirSync({ root: ROOT, socketPath: CREDENTIAL_SOCKET_PATH, readyFilePath: CREDENTIAL_READY_FILE });
     const daemonReady = chainKeys.isDaemonReady({
         socketPath: CREDENTIAL_SOCKET_PATH,
@@ -304,17 +301,12 @@ async function ensureCredentialDaemonPM2({ forceRefresh = false, logReuse = true
     });
 
     if (daemonReady && !forceRefresh) {
-        if (logReuse) {
-            console.log('Credential daemon already running. Reusing existing daemon session.\n');
-        }
         return false;
     }
 
     if (!daemonReady) {
         cleanupStaleCredentialDaemonFiles();
     }
-
-    console.log(forceRefresh ? 'Re-authenticating master password...' : 'Authenticating master password...');
 
     let bootstrap = null;
     try {
@@ -366,7 +358,6 @@ async function main({ botNameFilter = null, clawOnly = false } = {}) {
     if (!clawOnly) {
         // Step 0: Wait for BitShares connection (suppress BitShares client logs)
         const { waitForConnected } = require('./modules/bitshares_client');
-        console.log('Connecting to BitShares...');
 
         // Suppress BitShares console output during connection
         const originalLog = console.log;
@@ -386,9 +377,7 @@ async function main({ botNameFilter = null, clawOnly = false } = {}) {
         }
 
         console.log('Connected to BitShares');
-        console.log();
     } else {
-        console.log('Skipping BitShares connection check for claw-only mode');
         console.log();
     }
 
@@ -432,12 +421,60 @@ function startPM2Process(args, env = buildScopedChildEnv()) {
         const pm2 = spawn('pm2', args, {
             cwd: ROOT,
             env,
-            stdio: 'inherit',
+            stdio: ['ignore', 'pipe', 'pipe'],
             detached: false,
             shell: process.platform === 'win32'
         });
 
+        let stdoutBuffer = '';
+        let stderrBuffer = '';
+
+        function isPm2TableLine(line) {
+            const trimmed = String(line || '').trim();
+            if (!trimmed) return true;
+            return /^[┌┬│├┤└┴─\s]+$/.test(trimmed) || /^[┌┬│├┤└┴]/.test(trimmed);
+        }
+
+        function transformPm2Line(line) {
+            const trimmed = String(line || '').trim();
+            if (!trimmed) return null;
+            if (isPm2TableLine(trimmed)) return null;
+            if (/^\[PM2\] Starting\b/.test(trimmed)) return null;
+            if (trimmed === '[PM2] Done.') return null;
+            if (/^\[PM2\] cron restart at /.test(trimmed)) return null;
+            if (/^\[PM2\]\[WARN\] Applications .* not running, starting\.\.\.$/.test(trimmed)) return null;
+            return trimmed.replace(/\s+\(\d+ instances?\)$/, '');
+        }
+
+        function flushBuffer(buffer, writer, { final = false } = {}) {
+            if (!buffer) return '';
+            const lines = buffer.split(/\r?\n/);
+            const trailing = lines.pop();
+            for (const line of lines) {
+                const transformed = transformPm2Line(line);
+                if (transformed) writer(transformed);
+            }
+            if (final && trailing && trailing.trim()) {
+                const transformed = transformPm2Line(trailing);
+                if (transformed) writer(transformed);
+                return '';
+            }
+            return trailing || '';
+        }
+
+        pm2.stdout.on('data', (data) => {
+            stdoutBuffer += data.toString();
+            stdoutBuffer = flushBuffer(stdoutBuffer, (line) => console.log(line));
+        });
+
+        pm2.stderr.on('data', (data) => {
+            stderrBuffer += data.toString();
+            stderrBuffer = flushBuffer(stderrBuffer, (line) => console.error(line));
+        });
+
         pm2.on('close', code => {
+            stdoutBuffer = flushBuffer(stdoutBuffer, (line) => console.log(line), { final: true });
+            stderrBuffer = flushBuffer(stderrBuffer, (line) => console.error(line), { final: true });
             if (code === 0) {
                 // Ensure we disconnect from PM2's file descriptors
                 setImmediate(resolve);
@@ -606,7 +643,7 @@ async function installPM2() {
  * @returns {Promise<Object>} Command result.
  * @throws {Error} If action is invalid or command fails.
  */
-async function execPM2Command(action, target) {
+async function execPM2Command(action, target, { suppressStderrOnError = false } = {}) {
     // Validate action to prevent injection
     const validActions = ['start', 'stop', 'delete', 'restart', 'reload'];
     if (!validActions.includes(action)) {
@@ -643,7 +680,7 @@ async function execPM2Command(action, target) {
                 if (stdout) console.log(stdout);
                 resolve({ success: true, stdout, stderr });
             } else {
-                if (stderr) console.error(stderr);
+                if (stderr && !suppressStderrOnError) console.error(stderr);
                 reject(new Error(`PM2 command failed with code ${code}: ${stderr || stdout}`));
             }
         });
@@ -654,7 +691,7 @@ async function execPM2Command(action, target) {
 
 async function execPM2CommandIgnoreMissing(action, target) {
     try {
-        await execPM2Command(action, target);
+        await execPM2Command(action, target, { suppressStderrOnError: true });
         return true;
     } catch (error) {
         const message = String(error && error.message ? error.message : error);

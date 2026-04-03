@@ -29,6 +29,65 @@ function forwardSignal(child, signal) {
     }
 }
 
+function printLauncherHeader({ botName = null, clawOnly = false } = {}) {
+    console.log('='.repeat(50));
+    console.log('DEXBot2 Unlock-Start Launcher');
+    if (clawOnly) {
+        console.log('Starting credential daemon only');
+    } else if (botName) {
+        console.log(`Starting bot: ${botName}`);
+    } else {
+        console.log('Starting all bots');
+    }
+    console.log('='.repeat(50));
+    console.log();
+}
+
+function printLauncherSuccess({ botName = null, clawOnly = false } = {}) {
+    console.log();
+    console.log('='.repeat(50));
+    if (clawOnly) {
+        console.log('DEXBot2 credential daemon started successfully!');
+        console.log('If the daemon stops, rerun `node unlock-start --claw-only` to unlock it again.');
+    } else if (botName) {
+        console.log('DEXBot2 started successfully!');
+        console.log(`If the bot stops, rerun \`node unlock-start ${botName}\` to unlock it again.`);
+    } else {
+        console.log('DEXBot2 started successfully!');
+        console.log('If the bot stops, rerun `node unlock-start` to unlock it again.');
+    }
+    console.log('='.repeat(50));
+    console.log();
+}
+
+function waitForChildSpawn(child) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+
+        const handleSpawn = () => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve();
+        };
+
+        const handleError = (error) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(error);
+        };
+
+        const cleanup = () => {
+            child.off('spawn', handleSpawn);
+            child.off('error', handleError);
+        };
+
+        child.once('spawn', handleSpawn);
+        child.once('error', handleError);
+    });
+}
+
 /**
  * Main entry point.
  * Starts daemon, then launches bot process with stdio inheritance.
@@ -41,9 +100,14 @@ async function main({ argv = process.argv } = {}) {
     const { botName, clawOnly } = parseUnlockStartArgs(argv);
 
     try {
-        await controller.ensureCredentialDaemon();
+        printLauncherHeader({ botName, clawOnly });
+        const unlockedNow = await controller.ensureCredentialDaemon();
+        if (unlockedNow) {
+            console.log('✓ Authentication successful');
+        }
 
         if (clawOnly) {
+            printLauncherSuccess({ clawOnly });
             const exitCode = await controller.waitForManagedDaemon();
             process.exitCode = exitCode || 0;
             return;
@@ -56,6 +120,9 @@ async function main({ argv = process.argv } = {}) {
             env: process.env,
             stdio: 'inherit',
         });
+
+        await waitForChildSpawn(botProcess);
+        printLauncherSuccess({ botName });
 
         process.on('SIGINT', () => forwardSignal(botProcess, 'SIGINT'));
         process.on('SIGTERM', () => forwardSignal(botProcess, 'SIGTERM'));
@@ -94,4 +161,5 @@ if (require.main === module) {
 module.exports = {
     buildDexbotStartArgs,
     main,
+    waitForChildSpawn,
 };

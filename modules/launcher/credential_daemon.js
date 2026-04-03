@@ -49,14 +49,12 @@ function createCredentialDaemonController({
 
     async function ensureCredentialDaemon() {
         if (isDaemonReady()) {
-            console.log('Credential daemon already running. Reusing existing daemon session.');
             return false;
         }
 
         removeStaleDaemonFiles();
         ensureCredentialRuntimeDirSync({ socketPath, readyFilePath, root });
 
-        console.log('Unlocking credential daemon...');
         const masterPassword = await chainKeys.authenticate();
         const bootstrap = await createPasswordBootstrapServer({ password: masterPassword });
 
@@ -72,7 +70,6 @@ function createCredentialDaemonController({
                 chainKeys.waitForDaemon(undefined, { socketPath, readyFilePath }),
                 bootstrap.waitForTransfer(),
             ]);
-            console.log('Credential daemon is ready.');
             return true;
         } catch (error) {
             bootstrap.close();

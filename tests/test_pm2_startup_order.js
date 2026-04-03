@@ -16,6 +16,7 @@ const originalTestSecret = process.env.TEST_PM2_SECRET;
 
 const events = [];
 const spawnCalls = [];
+const consoleErrors = [];
 
 function installStubs() {
     delete require.cache[pm2Path];
@@ -69,7 +70,9 @@ function restoreStubs() {
 }
 
 installStubs();
-console.error = () => {};
+console.error = (...args) => {
+    consoleErrors.push(args.join(' '));
+};
 process.env.TEST_PM2_SECRET = 'should-not-leak';
 
 const { startManagedRuntimePM2 } = require('../pm2');
@@ -102,6 +105,10 @@ const { startManagedRuntimePM2 } = require('../pm2');
         assert.strictEqual(credSpawn.options.env.DEXBOT_CRED_BOOTSTRAP_SOCKET, '/tmp/bootstrap.sock', 'credential daemon PM2 launch should keep explicit bootstrap env');
         assert.strictEqual(appSpawn.options.env.TEST_PM2_SECRET, undefined, 'ecosystem PM2 launch should not inherit arbitrary parent secrets');
         assert.strictEqual(appSpawn.options.env.DEXBOT_CRED_BOOTSTRAP_SOCKET, undefined, 'ecosystem PM2 launch should not receive bootstrap env');
+        assert.ok(
+            !consoleErrors.some((line) => line.includes('Process or Namespace dexbot-cred not found')),
+            'missing dexbot-cred should be ignored without logging a PM2 error'
+        );
 
         console.log('PM2 startup order tests passed');
         process.exit(0);
