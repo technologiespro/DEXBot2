@@ -588,6 +588,49 @@ class SyncEngine {
                     `but grid order was already matched to another chain order. Skipping to prevent double-assignment.`,
                     'warn'
                 );
+            } else {
+                // No grid slot matched by type+price+size. Fallback: find the nearest
+                // VIRTUAL slot (including spread slots) by price so the orphaned order
+                // becomes visible to checkWindowDust and can be dust-cancelled.
+                const adoptedSlot = findMatchingGridOrderByOpenOrder(
+                    { orderId: chainOrderId, type: chainOrder.type, price: chainOrder.price, size: chainOrder.size },
+                    {
+                        orders: mgr.orders,
+                        assets: mgr.assets,
+                        calcToleranceFn: (p, s, t) => calculatePriceTolerance(p, s, t, mgr.assets),
+                        allowSpreadType: true,
+                        skipSizeMatch: true,
+                    }
+                );
+
+                if (adoptedSlot && !matchedGridOrderIds.has(adoptedSlot.id) && !adoptedSlot.orderId) {
+                    const precision = (chainOrder.type === ORDER_TYPES.SELL) ? assetAPrecision : assetBPrecision;
+                    const chainInt = floatToBlockchainInt(chainOrder.size, precision);
+                    const adoptedOrder = {
+                        ...adoptedSlot,
+                        orderId: chainOrderId,
+                        type: chainOrder.type,
+                        state: chainInt > 0 ? ORDER_STATES.PARTIAL : ORDER_STATES.VIRTUAL,
+                        size: chainOrder.size,
+                        price: chainOrder.price,
+                        rawOnChain: rawChainOrders.get(chainOrderId),
+                    };
+                    matchedGridOrderIds.add(adoptedSlot.id);
+                    chainOrderIdsOnGrid.add(chainOrderId);
+                    await mgr._applyOrderUpdate(adoptedOrder, 'sync-pass2-adopt-orphan', { skipAccounting, fee: 0 });
+                    updatedOrders.push(adoptedOrder);
+                    mgr.logger?.log?.(
+                        `[SYNC] Orphaned chain order ${chainOrderId} (${chainOrder.type}, price=${chainOrder.price}, ` +
+                        `size=${chainOrder.size}) adopted into slot ${adoptedSlot.id} (was ${adoptedSlot.type})`,
+                        'warn'
+                    );
+                } else {
+                    mgr.logger?.log?.(
+                        `[SYNC] Unmatched chain order ${chainOrderId} (${chainOrder.type}, price=${chainOrder.price}, ` +
+                        `size=${chainOrder.size}): no adoptable slot found within price tolerance`,
+                        'warn'
+                    );
+                }
             }
         }
 

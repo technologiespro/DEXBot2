@@ -143,6 +143,37 @@ async function runTests() {
         assert(manager.ordersNeedingPriceCorrection.some(c => c.chainOrderId === 'c-tm' && c.isSurplus), 'Mismatch should queue stale order cancellation');
     }
 
+    console.log(' - Testing Orphan Spread Slot Adoption...');
+    {
+        const manager = await createManager();
+        await manager._updateOrder({
+            id: 'spread-1',
+            state: ORDER_STATES.VIRTUAL,
+            type: ORDER_TYPES.SPREAD,
+            price: 100,
+            size: 0
+        });
+
+        const chainOrders = [{
+            id: 'c-spread-1',
+            sell_price: {
+                base: { amount: 1000, asset_id: '1.3.0' },
+                quote: { amount: 100, asset_id: '1.3.1' }
+            },
+            for_sale: 2500000000
+        }];
+
+        const result = await manager.sync.syncFromOpenOrders(chainOrders);
+        const slot = manager.orders.get('spread-1');
+
+        assert.strictEqual(slot.orderId, 'c-spread-1', 'Orphan chain order should be adopted into the spread slot');
+        assert.strictEqual(slot.type, ORDER_TYPES.SELL, 'Adopted spread slot should take the chain order side');
+        assert.strictEqual(slot.state, ORDER_STATES.PARTIAL, 'Adopted orphan should become a tracked partial');
+        assert.strictEqual(slot.price, 100, 'Adopted orphan should preserve the chain price');
+        assert.strictEqual(slot.size, 25, 'Adopted orphan should preserve the chain size');
+        assert(result.updatedOrders.some(o => o.id === 'spread-1'), 'Sync result should include the adopted slot update');
+    }
+
     console.log(' - Testing Non-Grid Pair Chain Orders Are Ignored...');
     {
         const manager = await createManager();

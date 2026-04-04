@@ -158,11 +158,16 @@ function findMatchingGridOrderByOpenOrder(parsedChainOrder, opts) {
     let bestPriceDiff = Infinity;
 
     for (const gridOrder of orders.values()) {
-        if (!gridOrder || gridOrder.type !== parsedChainOrder.type) continue;
+        const typeMatch = gridOrder?.type === parsedChainOrder.type ||
+            (opts?.allowSpreadType && gridOrder?.type === ORDER_TYPES.SPREAD);
+        if (!gridOrder || !typeMatch) continue;
         if (![ORDER_STATES.ACTIVE, ORDER_STATES.PARTIAL, ORDER_STATES.VIRTUAL].includes(gridOrder.state)) continue;
 
         const priceDiff = Math.abs(gridOrder.price - chainPrice);
-        const priceTolerance = calcToleranceFn?.(gridOrder.price, gridOrder.size, gridOrder.type) || 0;
+        // Virtual/spread slots have size=0 — fall back to chain order's size so the
+        // precision-based tolerance is meaningful instead of collapsing to 0.
+        const effectiveSize = gridOrder.size > 0 ? gridOrder.size : chainSize;
+        const priceTolerance = calcToleranceFn?.(gridOrder.price, effectiveSize, parsedChainOrder.type) || 0;
         if (priceDiff > priceTolerance) continue;
 
         const gridInt = floatToBlockchainInt(gridOrder.size, precision);
