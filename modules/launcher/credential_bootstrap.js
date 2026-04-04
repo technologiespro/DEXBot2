@@ -68,12 +68,21 @@ function fetchBootstrapPassword({
             const line = buffer.slice(0, newlineIndex).trim();
             try {
                 const response = JSON.parse(line);
-                if (!response || response.success !== true || typeof response.password !== 'string') {
+                if (!response || response.success !== true) {
                     finish(reject, new Error(response && response.error ? response.error : 'Invalid bootstrap response'));
                     return;
                 }
-                socket.end();
-                finish(resolve, response.password);
+                if (typeof response.password === 'string') {
+                    socket.end();
+                    finish(resolve, response.password);
+                    return;
+                }
+                if (typeof response.secret !== 'undefined') {
+                    socket.end();
+                    finish(resolve, response.secret);
+                    return;
+                }
+                finish(reject, new Error('Invalid bootstrap response'));
             } catch (error) {
                 finish(reject, new Error('Invalid bootstrap response'));
             }
@@ -90,10 +99,17 @@ function fetchBootstrapPassword({
 
 async function createPasswordBootstrapServer({
     password,
+    secret,
     timeoutMs = DEFAULT_TIMEOUT_MS,
 } = {}) {
-    if (typeof password !== 'string' || password.length === 0) {
-        throw new Error('Bootstrap password must be a non-empty string');
+    const credential = typeof secret !== 'undefined' ? secret : password;
+    const credentialType = typeof secret !== 'undefined' ? 'secret' : 'password';
+    if (credentialType === 'password') {
+        if (typeof credential !== 'string' || credential.length === 0) {
+            throw new Error('Bootstrap password must be a non-empty string');
+        }
+    } else if (typeof credential === 'undefined' || credential === null) {
+        throw new Error('Bootstrap secret must be defined');
     }
 
     const socketDir = createBootstrapSocketDir();
@@ -149,7 +165,7 @@ async function createPasswordBootstrapServer({
                         return;
                     }
 
-                    socket.write(JSON.stringify({ success: true, password }) + '\n');
+                    socket.write(JSON.stringify({ success: true, [credentialType]: credential }) + '\n');
                     socket.end();
                     settle(resolveTransfer);
                 } catch (error) {

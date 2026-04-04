@@ -53,7 +53,7 @@
  *
  * Step 3: AUTHENTICATION & CLEANUP
  *    - Cleans up stale daemon socket files
- *    - Prompts interactively for master password (once at startup)
+ *    - Prompts interactively for the unlock secret once at startup
  *    - Authenticates against profiles/keys.json
  *    - Uses a one-shot local bootstrap channel for credential-daemon only
  *
@@ -344,8 +344,8 @@ async function ensureCredentialDaemonPM2({ forceRefresh = false } = {}) {
 
     let bootstrap = null;
     try {
-        const masterPassword = await chainKeys.authenticate();
-        bootstrap = await createPasswordBootstrapServer({ password: masterPassword });
+        const vaultSecret = await chainKeys.authenticate();
+        bootstrap = await createPasswordBootstrapServer({ secret: vaultSecret });
         console.log('✓ Authentication successful\n');
         await startManagedRuntimePM2({ apps: [], bootstrap });
         return true;

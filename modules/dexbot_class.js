@@ -1532,18 +1532,18 @@ class DEXBot {
 
     /**
      * Initialize the bot by connecting to BitShares and setting up the account.
-     * @param {string} [masterPassword=null] - The master password for authentication.
+     * @param {string|Object|Buffer} [vaultSecret=null] - The unlock secret for authentication.
      * @returns {Promise<void>}
      * @throws {Error} If initialization fails or preferredAccount is missing.
      */
-    async initialize(masterPassword = null) {
+    async initialize(vaultSecret = null) {
         await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
         if (this.config && this.config.preferredAccount) {
             try {
                 let privateKey = null;
 
-                if (masterPassword) {
-                    privateKey = chainKeys.getPrivateKey(this.config.preferredAccount, masterPassword);
+                if (vaultSecret) {
+                    privateKey = chainKeys.getPrivateKey(this.config.preferredAccount, vaultSecret);
                 } else if (chainKeys.isDaemonReady()) {
                     try {
                         privateKey = await chainKeys.getPrivateKeyFromDaemon(this.config.preferredAccount);
@@ -1553,8 +1553,8 @@ class DEXBot {
                 }
 
                 if (!privateKey) {
-                    const pwd = await chainKeys.authenticate();
-                    privateKey = chainKeys.getPrivateKey(this.config.preferredAccount, pwd);
+                    const unlockSecret = await chainKeys.authenticate();
+                    privateKey = chainKeys.getPrivateKey(this.config.preferredAccount, unlockSecret);
                 }
 
                 this.privateKey = privateKey;
@@ -2732,17 +2732,17 @@ class DEXBot {
 
     /**
      * Starts the bot's operation.
-     * @param {string} [masterPassword=null] - The master password.
+     * @param {string|Object|Buffer} [vaultSecret=null] - The unlock secret.
      * @returns {Promise<void>}
      */
-    async start(masterPassword = null) {
-        await this.initialize(masterPassword);
+    async start(vaultSecret = null) {
+        await this.initialize(vaultSecret);
         await this._runStartupSequence();
     }
 
     /**
      * Start bot with a pre-decrypted private key.
-     * Alternative to start(masterPassword) when key is already decrypted.
+     * Alternative to start(vaultSecret) when key is already decrypted.
      * @param {string} privateKey - Pre-decrypted private key
      * @returns {Promise<void>}
      */

@@ -55,8 +55,8 @@ function createCredentialDaemonController({
         removeStaleDaemonFiles();
         ensureCredentialRuntimeDirSync({ socketPath, readyFilePath, root });
 
-        const masterPassword = await chainKeys.authenticate();
-        const bootstrap = await createPasswordBootstrapServer({ password: masterPassword });
+        const vaultSecret = await chainKeys.authenticate();
+        const bootstrap = await createPasswordBootstrapServer({ secret: vaultSecret });
 
         try {
             daemonProcess = spawn(process.execPath, [path.join(root, 'credential-daemon.js')], {

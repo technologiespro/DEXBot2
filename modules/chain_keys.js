@@ -5,7 +5,7 @@
  * Provides authentication, key storage, and transaction signing capabilities.
  *
  * Features:
- * - Master password authentication with SHA-256 hash verification
+ * - Master password authentication with derived vault-key verification
  * - AES-256-GCM encryption with random salt and IV
  * - Private key retrieval for transaction signing
  * - Interactive CLI for key management (add/modify/remove)
@@ -18,20 +18,21 @@
  * - PVT_K1_* style keys used by some Graphene chains
  * - Raw 64-character hexadecimal private keys
  *
- * Security: Master password never stored; only SHA-256 hash kept for verification.
- * All private keys encrypted before storage.
+ * Security: Master password never stored; only a derived vault key is kept in memory.
+ * Legacy SHA-256 password hashes are supported only to migrate existing vaults.
+ * All newly written private keys use the v2 vault format.
  *
  * ===============================================================================
  * EXPORTS (12 functions + 1 error class)
  * ===============================================================================
  *
  * AUTHENTICATION (1 function)
- *   1. authenticate() - Authenticate with master password (async)
- *      Prompts user for password, verifies hash
+ *   1. authenticate() - Authenticate and return a derived vault secret (async)
+ *      Prompts user for password, verifies vault metadata
  *      Throws MasterPasswordError on failure
  *
  * KEY MANAGEMENT (3 functions)
- *   2. getPrivateKey(accountName, masterPassword) - Get private key for account
+ *   2. getPrivateKey(accountName, vaultSecret) - Get private key for account
  *      Returns decrypted private key string
  *      Throws Error if account not found
  *
@@ -41,12 +42,14 @@
  *
  *   4. validatePrivateKey(key) - Validate private key format
  *
- * CRYPTO HELPERS (4 functions)
- *   5. encrypt(text, password) - AES-256-GCM encryption
- *   6. decrypt(encryptedHex, password) - AES-256-GCM decryption
- *   7. hashPassword(password) - SHA-256 hash for verification
- *   8. loadAccounts() - Load accounts from keys.json
- *   9. saveAccounts(data) - Save accounts to keys.json
+ * CRYPTO HELPERS (7 functions)
+ *   5. encrypt(text, secret) - AES-256-GCM encryption
+ *   6. decrypt(encryptedHex, secret) - AES-256-GCM decryption
+ *   7. hashPassword(password) - SHA-256 hash for legacy verification
+ *   8. deriveVaultKey(password, vaultSalt) - Derive the session vault key
+ *   9. loadAccounts() - Load accounts from keys.json
+ *  10. saveAccounts(data) - Save accounts to keys.json
+ *  11. createVaultSecret(...) - Build a serializable derived secret object
  *
  * DAEMON (3 functions)
  *  10. isDaemonReady() - Check if credential daemon is ready
@@ -60,17 +63,19 @@
  *
  * KEY STORAGE STRUCTURE (profiles/keys.json):
  * {
- *   "masterPasswordHash": "sha256hash",
- *   "keys": {
- *     "accountName": "encrypted:salt:iv:authTag:ciphertext"
+ *   "vaultVersion": 2,
+ *   "vaultSalt": "hex-salt",
+ *   "vaultVerifier": "hex-hmac",
+ *   "accounts": {
+ *     "accountName": "v2:recordSalt:iv:authTag:ciphertext"
  *   }
  * }
  *
  * ENCRYPTION PROCESS:
- * 1. Generate random salt (16 bytes) and IV (16 bytes)
- * 2. Derive key from master password using scrypt
- * 3. Encrypt private key with AES-256-GCM
- * 4. Store: encrypted:salt:iv:authTag:ciphertext
+ * 1. Generate random vault salt (16 bytes) and derive a vault key with scrypt
+ * 2. Derive a per-record key from the vault key with HKDF and a record salt
+ * 3. Encrypt private key with AES-256-GCM and a 12-byte IV
+ * 4. Store: v2:recordSalt:iv:authTag:ciphertext
  *
  * ===============================================================================
  */
@@ -85,8 +90,26 @@ const {
     getCredentialSocketPath,
 } = require('./credential_runtime');
 
+const VAULT_VERSION = 2;
+const VAULT_SALT_BYTES = 16;
+const VAULT_RECORD_SALT_BYTES = 16;
+const VAULT_IV_BYTES = 12;
+const VAULT_KEY_BYTES = 32;
+const VAULT_SCRYPT_PARAMS = Object.freeze({
+    N: 2 ** 17,
+    r: 8,
+    p: 1,
+    // 128 * N * r bytes plus headroom for Node/OpenSSL overhead.
+    maxmem: 256 * 1024 * 1024,
+});
+const VAULT_RECORD_INFO = Buffer.from('dexbot2:v2:record-key', 'utf8');
+const VAULT_VERIFIER_LABEL = 'dexbot2:v2:verifier';
+const VAULT_SECRET_KIND = 'dexbot-vault-secret';
+
 // Profiles key file (ignored) only
-const PROFILES_KEYS_FILE = path.join(__dirname, '..', 'profiles', 'keys.json');
+const PROFILES_KEYS_FILE = process.env.DEXBOT_KEYS_FILE
+    ? path.resolve(process.env.DEXBOT_KEYS_FILE)
+    : path.join(__dirname, '..', 'profiles', 'keys.json');
 
 /**
  * Ensures that the profiles/keys directory exists.
@@ -97,38 +120,192 @@ function ensureProfilesKeysDirectory() {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
+function toBuffer(value, encoding = 'hex') {
+    if (Buffer.isBuffer(value)) {
+        return Buffer.from(value);
+    }
+    if (typeof value === 'string' && value.length > 0) {
+        return Buffer.from(value, encoding);
+    }
+    return null;
+}
+
+function isVaultSecret(value) {
+    return !!(value && typeof value === 'object' && value.kind === VAULT_SECRET_KIND);
+}
+
+function resolveVaultKey(secret) {
+    if (!secret) return null;
+    if (Buffer.isBuffer(secret)) {
+        return Buffer.from(secret);
+    }
+    if (isVaultSecret(secret) && typeof secret.vaultKeyHex === 'string') {
+        return toBuffer(secret.vaultKeyHex);
+    }
+    if (typeof secret === 'object' && typeof secret.vaultKeyHex === 'string') {
+        return toBuffer(secret.vaultKeyHex);
+    }
+    if (typeof secret === 'object' && Buffer.isBuffer(secret.vaultKey)) {
+        return Buffer.from(secret.vaultKey);
+    }
+    return null;
+}
+
+function createVaultSecret(vaultKey, extra = {}) {
+    const keyBuffer = resolveVaultKey(vaultKey);
+    if (!keyBuffer) {
+        throw new Error('Vault secret requires a derived key');
+    }
+    return {
+        kind: VAULT_SECRET_KIND,
+        version: extra.version || VAULT_VERSION,
+        vaultKeyHex: keyBuffer.toString('hex'),
+    };
+}
+
+function deriveVaultKey(password, vaultSalt) {
+    const saltBuffer = toBuffer(vaultSalt) || crypto.randomBytes(VAULT_SALT_BYTES);
+    return crypto.scryptSync(password, saltBuffer, VAULT_KEY_BYTES, VAULT_SCRYPT_PARAMS);
+}
+
+function deriveRecordKey(vaultKey, recordSalt) {
+    const keyBuffer = resolveVaultKey(vaultKey);
+    const saltBuffer = toBuffer(recordSalt);
+    if (!keyBuffer || !saltBuffer) {
+        throw new Error('Vault key and record salt are required');
+    }
+    return Buffer.from(crypto.hkdfSync('sha256', keyBuffer, saltBuffer, VAULT_RECORD_INFO, VAULT_KEY_BYTES));
+}
+
+function createVaultVerifier(vaultKey) {
+    const keyBuffer = resolveVaultKey(vaultKey);
+    if (!keyBuffer) {
+        throw new Error('Vault key is required');
+    }
+    return crypto.createHmac('sha256', keyBuffer).update(VAULT_VERIFIER_LABEL).digest('hex');
+}
+
+function timingSafeEqualHex(leftHex, rightHex) {
+    if (typeof leftHex !== 'string' || typeof rightHex !== 'string' || leftHex.length !== rightHex.length) {
+        return false;
+    }
+    const left = Buffer.from(leftHex, 'hex');
+    const right = Buffer.from(rightHex, 'hex');
+    if (left.length !== right.length) {
+        return false;
+    }
+    return crypto.timingSafeEqual(left, right);
+}
+
+function normalizeAccountsData(data = {}) {
+    const accountsSource = data.accounts && typeof data.accounts === 'object'
+        ? data.accounts
+        : {};
+
+    return {
+        vaultVersion: Number(data.vaultVersion) || 0,
+        vaultSalt: typeof data.vaultSalt === 'string' ? data.vaultSalt : '',
+        vaultVerifier: typeof data.vaultVerifier === 'string' ? data.vaultVerifier : '',
+        masterPasswordHash: typeof data.masterPasswordHash === 'string' ? data.masterPasswordHash : '',
+        accounts: accountsSource,
+    };
+}
+
+function hasModernVault(accountsData) {
+    return !!(
+        accountsData
+        && accountsData.vaultVersion === VAULT_VERSION
+        && typeof accountsData.vaultSalt === 'string'
+        && accountsData.vaultSalt.length > 0
+        && typeof accountsData.vaultVerifier === 'string'
+        && accountsData.vaultVerifier.length > 0
+    );
+}
+
+function deriveModernSecretFromPassword(password, accountsData) {
+    if (!hasModernVault(accountsData)) {
+        throw new Error('Vault metadata missing');
+    }
+    const vaultSalt = toBuffer(accountsData.vaultSalt);
+    const vaultKey = deriveVaultKey(password, vaultSalt);
+    return createVaultSecret(vaultKey);
+}
+
+function verifyModernPassword(password, accountsData) {
+    if (!hasModernVault(accountsData)) {
+        return false;
+    }
+    const secret = deriveModernSecretFromPassword(password, accountsData);
+    return timingSafeEqualHex(createVaultVerifier(secret), accountsData.vaultVerifier);
+}
+
+function isVersionedEncryptedPayload(encrypted) {
+    return String(encrypted || '').startsWith('v2:');
+}
+
 /**
- * Encrypt text using AES-256-GCM with random salt and IV.
- * Returns a colon-separated string: salt:iv:authTag:ciphertext
+ * Encrypt text using the v2 AES-256-GCM vault format.
  * @param {string} text - Plain text to encrypt
- * @param {string} password - Encryption password
+ * @param {Object|Buffer} secret - Derived vault secret
  * @returns {string} Encrypted data as hex string
  */
-function encrypt(text, password) {
-    const salt = crypto.randomBytes(16);
-    const key = crypto.scryptSync(password, salt, 32);
-    const iv = crypto.randomBytes(16);
+function encrypt(text, secret) {
+    const vaultKey = resolveVaultKey(secret);
+    if (!vaultKey) {
+        throw new Error('A derived vault secret is required to encrypt v2 key data');
+    }
+
+    const salt = crypto.randomBytes(VAULT_RECORD_SALT_BYTES);
+    const key = deriveRecordKey(vaultKey, salt);
+    const iv = crypto.randomBytes(VAULT_IV_BYTES);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
     const authTag = cipher.getAuthTag();
-    return salt.toString('hex') + ':' + iv.toString('hex') + ':' + authTag.toString('hex') + ':' + encrypted;
+    return 'v2:' + salt.toString('hex') + ':' + iv.toString('hex') + ':' + authTag.toString('hex') + ':' + encrypted;
 }
 
 /**
  * Decrypt text encrypted with the encrypt() function.
  * @param {string} encrypted - Colon-separated encrypted data
- * @param {string} password - Decryption password
+ * @param {Object|Buffer} secret - Derived vault secret
  * @returns {string} Decrypted plain text
  * @throws {Error} If decryption fails (wrong password or corrupted data)
  */
-function decrypt(encrypted, password) {
-    const parts = encrypted.split(':');
-    const salt = Buffer.from(parts[0], 'hex');
-    const iv = Buffer.from(parts[1], 'hex');
-    const authTag = Buffer.from(parts[2], 'hex');
-    const encryptedText = parts[3];
-    const key = crypto.scryptSync(password, salt, 32);
+function decrypt(encrypted, secret) {
+    const parts = String(encrypted || '').split(':');
+    if (parts.length < 4) {
+        throw new Error('Invalid encrypted payload');
+    }
+
+    const isVersioned = parts.length === 5 && parts[0] === 'v2';
+    if (!isVersioned && parts.length !== 4) {
+        throw new Error('Unsupported encrypted payload version');
+    }
+
+    const saltIndex = isVersioned ? 1 : 0;
+    const ivIndex = isVersioned ? 2 : 1;
+    const authTagIndex = isVersioned ? 3 : 2;
+    const payloadIndex = isVersioned ? 4 : 3;
+
+    const salt = toBuffer(parts[saltIndex]);
+    const iv = toBuffer(parts[ivIndex]);
+    const authTag = toBuffer(parts[authTagIndex]);
+    const encryptedText = parts[payloadIndex];
+    if (!salt || !iv || !authTag || typeof encryptedText !== 'string') {
+        throw new Error('Invalid encrypted payload');
+    }
+
+    if (!isVersioned) {
+        throw new Error('Legacy encrypted data requires migration before decrypt');
+    }
+
+    const vaultKey = resolveVaultKey(secret);
+    if (!vaultKey) {
+        throw new Error('A derived vault secret is required to decrypt v2 key data');
+    }
+    const key = deriveRecordKey(vaultKey, salt);
+
     const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(authTag);
     let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
@@ -190,31 +367,104 @@ function validatePrivateKey(key) {
 /**
  * Load stored accounts from profiles/keys.json.
  * Returns empty structure if file doesn't exist or is corrupted.
- * @returns {Object} { masterPasswordHash: string, accounts: Object }
+ * @returns {Object} { vaultVersion: number, vaultSalt: string, vaultVerifier: string, masterPasswordHash: string, accounts: Object }
  */
 function loadAccounts() {
     try {
         if (!fs.existsSync(PROFILES_KEYS_FILE)) {
-            return { masterPasswordHash: '', accounts: {} };
+            return normalizeAccountsData();
         }
         const content = fs.readFileSync(PROFILES_KEYS_FILE, 'utf8').trim();
         if (!content) {
-            return { masterPasswordHash: '', accounts: {} };
+            return normalizeAccountsData();
         }
-        return JSON.parse(content);
+        return normalizeAccountsData(JSON.parse(content));
     } catch (error) {
         console.error('Error loading accounts file, resetting to default:', error.message);
-        return { masterPasswordHash: '', accounts: {} };
+        return normalizeAccountsData();
     }
 }
-/**
- * Hash a password using SHA-256 for storage/comparison.
- * @param {string} password - Password to hash
- * @returns {string} Hex-encoded hash
- */
+
 function hashPassword(password) {
     return crypto.createHash('sha256').update(password).digest('hex');
 }
+
+function setupModernVault(accountsData, password) {
+    const vaultSalt = crypto.randomBytes(VAULT_SALT_BYTES);
+    const vaultKey = deriveVaultKey(password, vaultSalt);
+    accountsData.vaultVersion = VAULT_VERSION;
+    accountsData.vaultSalt = vaultSalt.toString('hex');
+    accountsData.vaultVerifier = createVaultVerifier(vaultKey);
+    delete accountsData.masterPasswordHash;
+    return createVaultSecret(vaultKey);
+}
+
+function decryptLegacyRecord(encrypted, password) {
+    const parts = String(encrypted || '').split(':');
+    if (parts.length !== 4) {
+        throw new Error('Invalid legacy encrypted payload');
+    }
+
+    const salt = toBuffer(parts[0]);
+    const iv = toBuffer(parts[1]);
+    const authTag = toBuffer(parts[2]);
+    const encryptedText = parts[3];
+    if (!salt || !iv || !authTag || typeof encryptedText !== 'string') {
+        throw new Error('Invalid legacy encrypted payload');
+    }
+
+    const key = crypto.scryptSync(password, salt, VAULT_KEY_BYTES);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(authTag);
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+}
+
+function migrateLegacyVault(accountsData, password) {
+    const decryptedKeys = {};
+    for (const [name, account] of Object.entries(accountsData.accounts)) {
+        decryptedKeys[name] = decryptLegacyRecord(account.encryptedKey, password);
+    }
+
+    const secret = setupModernVault(accountsData, password);
+    for (const [name, account] of Object.entries(accountsData.accounts)) {
+        account.encryptedKey = encrypt(decryptedKeys[name], secret);
+    }
+
+    saveAccounts(accountsData);
+    return secret;
+}
+
+function unlockWithPassword(password, accountsData = loadAccounts()) {
+    if (hasModernVault(accountsData)) {
+        if (!verifyModernPassword(password, accountsData)) {
+            throw new MasterPasswordError('Incorrect master password.');
+        }
+        return deriveModernSecretFromPassword(password, accountsData);
+    }
+
+    if (accountsData.masterPasswordHash) {
+        if (hashPassword(password) !== accountsData.masterPasswordHash) {
+            throw new MasterPasswordError('Incorrect master password.');
+        }
+        return migrateLegacyVault(accountsData, password);
+    }
+
+    if (Object.keys(accountsData.accounts || {}).length > 0) {
+        throw new Error('Unsupported key vault format. Recreate profiles/keys.json with the current key manager.');
+    }
+
+    throw new Error('No master password set. Please run modules/chain_keys.js first.');
+}
+
+function verifyCurrentPassword(password, accountsData) {
+    if (hasModernVault(accountsData)) {
+        return verifyModernPassword(password, accountsData);
+    }
+    return !!accountsData.masterPasswordHash && hashPassword(password) === accountsData.masterPasswordHash;
+}
+
 class MasterPasswordError extends Error {
     constructor(message) {
         super(message);
@@ -246,25 +496,27 @@ async function _promptPassword() {
 }
 
 /**
- * Authenticate and return the master password.
+ * Authenticate and return a derived vault secret.
  * Prompts user interactively with limited retry attempts.
- * @returns {Promise<string>} The verified master password
+ * @returns {Promise<Object>} The verified vault secret
  * @throws {Error} If no master password is set
  * @throws {MasterPasswordError} If max attempts exceeded
  */
 async function authenticate() {
     const accountsData = loadAccounts();
-    if (!accountsData.masterPasswordHash) {
-        throw new Error('No master password set. Please run modules/chain_keys.js first.');
-    }
-
     try {
         while (true) {
             const enteredPassword = await _promptPassword();
-            if (hashPassword(enteredPassword) === accountsData.masterPasswordHash) {
+            try {
+                const secret = unlockWithPassword(enteredPassword, accountsData);
                 masterPasswordAttempts = 0;
-                return enteredPassword;
+                return secret;
+            } catch (error) {
+                if (!(error instanceof MasterPasswordError)) {
+                    throw error;
+                }
             }
+
             if (masterPasswordAttempts < MASTER_PASSWORD_MAX_ATTEMPTS) {
                 console.log('Master password not correct. Please try again.');
             }
@@ -280,17 +532,22 @@ async function authenticate() {
 /**
  * Retrieve and decrypt a stored private key.
  * @param {string} accountName - Name of the account
- * @param {string} masterPassword - Master password for decryption
+ * @param {Object|Buffer} vaultSecret - Derived vault secret
  * @returns {string} Decrypted private key
  * @throws {Error} If account not found
  */
-function getPrivateKey(accountName, masterPassword) {
+function getPrivateKey(accountName, vaultSecret) {
     const accountsData = loadAccounts();
     const account = accountsData.accounts[accountName];
     if (!account) {
         throw new Error(`Account '${accountName}' not found.`);
     }
-    return decrypt(account.encryptedKey, masterPassword);
+
+    if (!isVersionedEncryptedPayload(account.encryptedKey)) {
+        throw new Error('Legacy encrypted data should have been migrated during unlock');
+    }
+
+    return decrypt(account.encryptedKey, vaultSecret);
 }
 /**
  * Display stored account names to console.
@@ -336,53 +593,59 @@ async function selectKeyName(accounts, promptText) {
 /**
  * Interactively changes the master password and re-encrypts all stored keys.
  * @param {Object} accountsData - The loaded accounts data object.
- * @param {string} currentPassword - The current master password.
- * @returns {Promise<string>} The new master password, or the old one if failed/cancelled.
+ * @param {Object|Buffer|null} currentSecret - The current derived secret.
+ * @returns {Promise<Object|Buffer|null>} The new vault secret, or the old one if failed/cancelled.
  */
-async function changeMasterPassword(accountsData, currentPassword) {
-    if (!accountsData.masterPasswordHash) {
+async function changeMasterPassword(accountsData, currentSecret) {
+    if (!hasModernVault(accountsData) && !accountsData.masterPasswordHash) {
         console.log('No master password is set yet.');
-        return currentPassword;
+        return currentSecret;
     }
-    const oldPassword = await readPassword('Enter current master password: ');
-    if (oldPassword === '\x1b') return currentPassword;
 
-    if (hashPassword(oldPassword) !== accountsData.masterPasswordHash) {
+    const oldPassword = await readPassword('Enter current master password: ');
+    if (oldPassword === '\x1b') return currentSecret;
+
+    if (!verifyCurrentPassword(oldPassword, accountsData)) {
         console.log('Incorrect master password!');
-        return currentPassword;
+        return currentSecret;
     }
+
+    const oldSecret = hasModernVault(accountsData)
+        ? deriveModernSecretFromPassword(oldPassword, accountsData)
+        : migrateLegacyVault(accountsData, oldPassword);
+
     const newPassword = await readPassword('Enter new master password:     ');
-    if (newPassword === '\x1b') return currentPassword;
+    if (newPassword === '\x1b') return currentSecret;
 
     const confirmPassword = await readPassword('Confirm new master password:   ');
-    if (confirmPassword === '\x1b') return currentPassword;
+    if (confirmPassword === '\x1b') return currentSecret;
 
     if (newPassword !== confirmPassword) {
         console.log('Passwords do not match!');
-        return currentPassword;
+        return currentSecret;
     }
     if (!newPassword) {
         console.log('New master password cannot be empty.');
-        return currentPassword;
+        return currentSecret;
     }
 
     const decryptedKeys = {};
     try {
         for (const [name, account] of Object.entries(accountsData.accounts)) {
-            decryptedKeys[name] = decrypt(account.encryptedKey, oldPassword);
+            decryptedKeys[name] = decrypt(account.encryptedKey, oldSecret);
         }
     } catch (error) {
         console.log('Failed to decrypt stored keys with the current master password:', error.message);
-        return currentPassword;
+        return currentSecret;
     }
 
+    const newSecret = setupModernVault(accountsData, newPassword);
     for (const [name, account] of Object.entries(accountsData.accounts)) {
-        account.encryptedKey = encrypt(decryptedKeys[name], newPassword);
+        account.encryptedKey = encrypt(decryptedKeys[name], newSecret);
     }
-    accountsData.masterPasswordHash = hashPassword(newPassword);
     saveAccounts(accountsData);
     console.log('Master password updated successfully.');
-    return newPassword;
+    return newSecret;
 }
 
 /**
@@ -393,7 +656,29 @@ async function changeMasterPassword(accountsData, currentPassword) {
 function saveAccounts(data) {
     // Always save sensitive data to the live path (ignored by git)
     ensureProfilesKeysDirectory();
-    fs.writeFileSync(PROFILES_KEYS_FILE, JSON.stringify(data, null, 2));
+
+    const serialized = {
+        vaultVersion: data && Number(data.vaultVersion) ? Number(data.vaultVersion) : 0,
+        vaultSalt: data && typeof data.vaultSalt === 'string' ? data.vaultSalt : '',
+        vaultVerifier: data && typeof data.vaultVerifier === 'string' ? data.vaultVerifier : '',
+        masterPasswordHash: data && typeof data.masterPasswordHash === 'string' ? data.masterPasswordHash : '',
+        accounts: data && data.accounts && typeof data.accounts === 'object' ? data.accounts : {},
+    };
+
+    if (!serialized.masterPasswordHash) {
+        delete serialized.masterPasswordHash;
+    }
+    if (!serialized.vaultSalt) {
+        delete serialized.vaultSalt;
+    }
+    if (!serialized.vaultVerifier) {
+        delete serialized.vaultVerifier;
+    }
+    if (!hasModernVault(serialized)) {
+        delete serialized.vaultVersion;
+    }
+
+    fs.writeFileSync(PROFILES_KEYS_FILE, JSON.stringify(serialized, null, 2));
 }
 
 /**
@@ -406,10 +691,10 @@ async function main() {
     console.log('========================');
 
     let accountsData = loadAccounts();
-    let masterPassword = '';
+    let vaultSecret = null;
 
     // Check if master password is set
-    if (!accountsData.masterPasswordHash) {
+    if (!hasModernVault(accountsData) && !accountsData.masterPasswordHash) {
         console.log('No master password set. Please set one:');
         const password1 = await readPassword('Enter master password:   ');
         const password2 = await readPassword('Confirm master password: ');
@@ -417,13 +702,13 @@ async function main() {
             console.log('Passwords do not match!');
             return;
         }
-        accountsData.masterPasswordHash = hashPassword(password1);
+        vaultSecret = setupModernVault(accountsData, password1);
         saveAccounts(accountsData);
-        masterPassword = password1;
         console.log('Master password set successfully.');
     } else {
         try {
-            masterPassword = await authenticate();
+            vaultSecret = await authenticate();
+            accountsData = loadAccounts();
             console.log('Authenticated successfully.');
         } catch (err) {
             if (err instanceof MasterPasswordError) {
@@ -474,7 +759,7 @@ async function main() {
                 continue;
             }
 
-            const encryptedKey = encrypt(privateKey, masterPassword);
+            const encryptedKey = encrypt(privateKey, vaultSecret);
 
             accountsData.accounts[accountName] = { encryptedKey };
             saveAccounts(accountsData);
@@ -495,7 +780,7 @@ async function main() {
                 continue;
             }
 
-            const encryptedKey = encrypt(privateKey, masterPassword);
+            const encryptedKey = encrypt(privateKey, vaultSecret);
             accountsData.accounts[accountName] = { ...accountsData.accounts[accountName], encryptedKey };
             saveAccounts(accountsData);
             console.log(`Account '${accountName}' updated successfully.`);
@@ -520,13 +805,13 @@ async function main() {
             if (accountName === '\x1b' || !accountName) continue;
             
             try {
-                const decryptedKey = decrypt(accountsData.accounts[accountName].encryptedKey, masterPassword);
+                const decryptedKey = decrypt(accountsData.accounts[accountName].encryptedKey, vaultSecret);
                 console.log(`First 5 characters: ${decryptedKey.substring(0, 5)}`);
             } catch (error) {
                 console.log('Decryption failed - wrong master password or corrupted data');
             }
         } else if (choice === '6') {
-            masterPassword = await changeMasterPassword(accountsData, masterPassword);
+            vaultSecret = await changeMasterPassword(accountsData, vaultSecret);
         } else if (choice === '7') {
             console.log('Keymanager closed!');
             break;
@@ -636,6 +921,10 @@ module.exports = {
     encrypt,
     decrypt,
     hashPassword,
+    deriveVaultKey,
+    createVaultSecret,
+    isVaultSecret,
+    unlockWithPassword,
     main,
     authenticate,
     getPrivateKey,

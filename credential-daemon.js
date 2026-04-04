@@ -4,7 +4,7 @@
  *
  * DEXBot credential daemon for multi-bot private key management.
  * Enables bot processes to request pre-decrypted keys via Unix socket.
- * Master password kept in RAM only, never exposed to bot processes.
+ * Derived vault secret kept in RAM only, never exposed to bot processes.
  *
  * ===============================================================================
  * DAEMON OPERATION
@@ -13,7 +13,7 @@
  * STARTUP:
  * 1. Prompts for master password ONCE at startup
  * 2. Authenticates with profiles/keys.json
- * 3. Keeps password in RAM only during operation
+ * 3. Keeps only the derived vault secret in RAM during operation
  * 4. Listens on Unix socket for credential requests
  * 5. Services private key requests from bot processes
  *
@@ -35,8 +35,8 @@
  * ===============================================================================
  *
  * - Master password prompt only once (at daemon startup)
- * - Individual bot processes have no access to master password
- * - No persisted password in environment variables or config files
+ * - Individual bot processes have no access to the derived vault secret
+ * - No persisted raw password in environment variables or config files
  * - Private keys never written to disk unencrypted
  * - Centralized key management
  * - Unix socket provides process-level isolation
@@ -71,6 +71,7 @@ const {
     getCredentialSocketPath,
 } = require('./modules/credential_runtime');
 const { fetchBootstrapPassword } = require('./modules/launcher/credential_bootstrap');
+const { normalizeBootstrapCredential } = require('./modules/launcher/credential_secret');
 
 // Platform check - Unix sockets require Unix-like systems or Windows 10+
 const platform = os.platform();
@@ -88,7 +89,7 @@ const RUNTIME_DIR = getCredentialRuntimeDir({ root: __dirname });
 const SOCKET_PATH = getCredentialSocketPath({ root: __dirname, runtimeDir: RUNTIME_DIR });
 const READY_FILE = getCredentialReadyFilePath({ root: __dirname, runtimeDir: RUNTIME_DIR });
 
-let masterPassword = null;
+let vaultSecret = null;
 let server = null;
 
 function debugLog(message, err = null) {
@@ -96,20 +97,20 @@ function debugLog(message, err = null) {
     console.error(`[credential-daemon][debug] ${message}${suffix}`);
 }
 
-async function resolveMasterPassword() {
-    const envPassword = process.env.DAEMON_PASSWORD;
-    if (envPassword) {
+async function resolveVaultSecret() {
+    const envSecret = process.env.DAEMON_PASSWORD;
+    if (envSecret) {
         delete process.env.DAEMON_PASSWORD;
-        return envPassword;
+        return normalizeBootstrapCredential(envSecret);
     }
 
     const bootstrapSocket = process.env.DEXBOT_CRED_BOOTSTRAP_SOCKET;
     delete process.env.DEXBOT_CRED_BOOTSTRAP_SOCKET;
 
     if (bootstrapSocket) {
-        return fetchBootstrapPassword({
+        return normalizeBootstrapCredential(await fetchBootstrapPassword({
             socketPath: bootstrapSocket,
-        });
+        }));
     }
 
     return chainKeys.authenticate();
@@ -126,9 +127,9 @@ async function initialize() {
             throw new Error('profiles/keys.json not found. Please run: node dexbot.js keys');
         }
 
-        // Accept password via one-shot bootstrap channel when launched by a wrapper,
+        // Accept a one-shot bootstrap secret when launched by a wrapper,
         // otherwise prompt once interactively.
-        masterPassword = await resolveMasterPassword();
+        vaultSecret = await resolveVaultSecret();
         ensureCredentialRuntimeDirSync({ root: __dirname, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });
 
         // Clean up old socket if it exists
@@ -236,7 +237,7 @@ function processRequest(requestStr, socket) {
         // Retrieve private key
         let privateKey;
         try {
-            privateKey = chainKeys.getPrivateKey(accountName, masterPassword);
+            privateKey = chainKeys.getPrivateKey(accountName, vaultSecret);
         } catch (error) {
             return sendError(socket, error.message);
         }
@@ -277,12 +278,12 @@ function sendError(socket, message) {
 
 /**
  * Gracefully shutdown daemon.
- * Clears master password from memory and closes server.
+ * Clears the derived vault secret from memory and closes server.
  */
 function shutdown() {
-    // Clear master password from memory
-    if (masterPassword) {
-        masterPassword = null;
+    // Clear derived vault secret from memory
+    if (vaultSecret) {
+        vaultSecret = null;
     }
 
     // Close server
