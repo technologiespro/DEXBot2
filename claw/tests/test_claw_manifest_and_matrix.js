@@ -26,6 +26,16 @@ function testRuntimeMatrix() {
   assert.strictEqual(zc.preferredTransport, 'local-cli-json');
   assert.strictEqual(zc.skillFile, 'SKILL.toml');
 
+  const nb = matrix.getSupportedClawRuntime('nanobot');
+  assert.strictEqual(nb.runtime, 'nanobot');
+  assert.strictEqual(nb.preferredTransport, 'mcp-stdio-jsonl');
+  assert.ok(nb.notes.includes('newline-delimited JSON-RPC'));
+
+  const pc = matrix.getSupportedClawRuntime('picoclaw');
+  assert.strictEqual(pc.runtime, 'picoclaw');
+  assert.strictEqual(pc.preferredTransport, 'mcp-stdio-jsonl');
+  assert.ok(pc.notes.includes('newline-delimited JSON-RPC'));
+
   const nc = matrix.getSupportedClawRuntime('nullclaw');
   assert.strictEqual(nc.runtime, 'nullclaw');
   assert.strictEqual(nc.preferredTransport, 'skill-toml-or-mcp');
@@ -82,6 +92,10 @@ function testClawManifest() {
   const zcDesc = manifest.describeClawBridge({ runtimeName: 'zeroclaw' });
   assert.strictEqual(zcDesc.compatibility.recommendedTransport, 'local-cli-json');
   assert.strictEqual(zcDesc.options.runtimeName, 'zeroclaw');
+
+  const nbDesc = manifest.describeClawBridge({ runtimeName: 'nanobot' });
+  assert.strictEqual(nbDesc.compatibility.recommendedTransport, 'mcp-stdio-jsonl');
+  assert.strictEqual(nbDesc.options.runtimeName, 'nanobot');
 
   // Unknown runtime falls back gracefully
   const unknownDesc = manifest.describeClawBridge({ runtimeName: 'unknown' });

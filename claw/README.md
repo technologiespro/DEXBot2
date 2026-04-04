@@ -242,6 +242,8 @@ DEXBOT_ROOT="$(cd .. && pwd)"
 node scripts/claw_mcp_server.js --profile-root "$DEXBOT_ROOT"
 ```
 
+The stdio transport uses newline-delimited JSON-RPC messages on `stdin` and `stdout`.
+
 Generate a runtime-native `SKILL.md`:
 
 ```bash

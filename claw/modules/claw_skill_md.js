@@ -61,6 +61,8 @@ function buildRuntimeSetup(runtime, repoRoot, profileRoot) {
         '}',
         '```',
         '',
+        'The stdio transport uses newline-delimited JSON-RPC messages on `stdin` and `stdout`.',
+        '',
         `Set \`DEXBOT_PROFILE_ROOT=${profileRoot}\` if you want a default profile root outside tool args.`
       ].join('\n');
 
@@ -87,6 +89,8 @@ function buildRuntimeSetup(runtime, repoRoot, profileRoot) {
         '  }',
         '}',
         '```',
+        '',
+        'The stdio transport uses newline-delimited JSON-RPC messages on `stdin` and `stdout`.',
         '',
         `Set \`DEXBOT_PROFILE_ROOT=${profileRoot}\` if you want a default profile root outside tool args.`,
         '',

@@ -9,16 +9,16 @@ const SUPPORTED_CLAW_RUNTIMES = Object.freeze([
   {
     runtime: 'nanobot',
     nativeIntegration: 'mcp',
-    preferredTransport: 'mcp',
+    preferredTransport: 'mcp-stdio-jsonl',
     skillFile: 'SKILL.md',
-    notes: 'Native external tool surface is MCP, with SKILL.md used for workflow guidance.'
+    notes: 'Native external tool surface is MCP over stdio with newline-delimited JSON-RPC, with SKILL.md used for workflow guidance.'
   },
   {
     runtime: 'picoclaw',
     nativeIntegration: 'mcp',
-    preferredTransport: 'mcp',
+    preferredTransport: 'mcp-stdio-jsonl',
     skillFile: 'SKILL.md',
-    notes: 'PicoClaw mirrors NanoBot on native SKILL.md loading and MCP tool integration.'
+    notes: 'PicoClaw mirrors NanoBot on native SKILL.md loading and MCP stdio integration with newline-delimited JSON-RPC.'
   },
   {
     runtime: 'zeroclaw',

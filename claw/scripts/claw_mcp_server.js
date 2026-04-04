@@ -33,13 +33,23 @@ function parseArgs(argv) {
 }
 
 function writeMessage(message) {
-  const body = Buffer.from(JSON.stringify(message), 'utf8');
-  process.stdout.write(`Content-Length: ${body.length}\r\n\r\n`);
-  process.stdout.write(body);
+  return new Promise((resolve, reject) => {
+    try {
+      process.stdout.write(`${JSON.stringify(message)}\n`, (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 function success(id, result) {
-  writeMessage({
+  return writeMessage({
     jsonrpc: '2.0',
     id,
     result
@@ -47,7 +57,7 @@ function success(id, result) {
 }
 
 function failure(id, code, message, data = undefined) {
-  writeMessage({
+  return writeMessage({
     jsonrpc: '2.0',
     id,
     error: {
@@ -75,7 +85,7 @@ async function handleRequest(message, defaults) {
 
   switch (method) {
     case 'initialize':
-      success(id, {
+      return success(id, {
         protocolVersion: '2024-11-05',
         capabilities: {
           tools: {
@@ -87,26 +97,22 @@ async function handleRequest(message, defaults) {
           version: '0.1.0'
         }
       });
-      return;
 
     case 'notifications/initialized':
       return;
 
     case 'ping':
-      success(id, {});
-      return;
+      return success(id, {});
 
     case 'tools/list':
-      success(id, {
+      return success(id, {
         tools: listMcpTools()
       });
-      return;
 
     case 'tools/call': {
       const tool = getClawToolByName(params?.name);
       if (!tool) {
-        failure(id, -32602, `Unknown tool: ${params?.name || '(missing)'}`);
-        return;
+        return failure(id, -32602, `Unknown tool: ${params?.name || '(missing)'}`);
       }
 
       try {
@@ -115,7 +121,7 @@ async function handleRequest(message, defaults) {
           ...(params?.arguments || {})
         });
 
-        success(id, {
+        return success(id, {
           content: [
             {
               type: 'text',
@@ -125,7 +131,7 @@ async function handleRequest(message, defaults) {
           structuredContent: result
         });
       } catch (error) {
-        success(id, {
+        return success(id, {
           content: [
             {
               type: 'text',
@@ -135,12 +141,11 @@ async function handleRequest(message, defaults) {
           isError: true
         });
       }
-      return;
     }
 
     default:
       if (id !== undefined) {
-        failure(id, -32601, `Method not found: ${method}`);
+        return failure(id, -32601, `Method not found: ${method}`);
       }
   }
 }
@@ -151,33 +156,21 @@ function createMessageParser(onMessage) {
 
   function processBuffer() {
     while (true) {
-      const headerEnd = buffer.indexOf('\r\n\r\n');
-      if (headerEnd === -1) {
+      const newlineIndex = buffer.indexOf('\n');
+      if (newlineIndex === -1) {
         return;
       }
 
-      const headerBlock = buffer.slice(0, headerEnd).toString('utf8');
-      const headers = headerBlock.split('\r\n');
-      const contentLengthHeader = headers.find((line) => /^content-length:/i.test(line));
-      if (!contentLengthHeader) {
-        buffer = Buffer.alloc(0);
-        return;
+      const line = buffer.slice(0, newlineIndex).toString('utf8').trim();
+      buffer = buffer.slice(newlineIndex + 1);
+
+      if (!line) {
+        continue;
       }
-
-      const length = Number(contentLengthHeader.split(':')[1].trim());
-      const bodyStart = headerEnd + 4;
-      const bodyEnd = bodyStart + length;
-
-      if (buffer.length < bodyEnd) {
-        return;
-      }
-
-      const body = buffer.slice(bodyStart, bodyEnd).toString('utf8');
-      buffer = buffer.slice(bodyEnd);
 
       let message;
       try {
-        message = JSON.parse(body);
+        message = JSON.parse(line);
       } catch (error) {
         continue;
       }
@@ -192,6 +185,7 @@ function createMessageParser(onMessage) {
     push(chunk) {
       buffer = Buffer.concat([buffer, chunk]);
       processBuffer();
+      return queue;
     }
   };
 }
@@ -199,10 +193,17 @@ function createMessageParser(onMessage) {
 async function main() {
   const defaults = parseArgs(process.argv.slice(2));
   const parser = createMessageParser((message) => handleRequest(message, defaults));
+  let lastQueue = Promise.resolve();
 
-  process.stdin.on('data', (chunk) => parser.push(chunk));
-  process.stdin.on('end', () => process.exit(0));
+  process.stdin.on('data', (chunk) => {
+    lastQueue = parser.push(chunk);
+  });
   process.stdin.resume();
+
+  await new Promise((resolve) => {
+    process.stdin.on('end', resolve);
+  });
+  await lastQueue;
 }
 
 if (require.main === module) {
@@ -211,3 +212,13 @@ if (require.main === module) {
     process.exit(1);
   });
 }
+
+module.exports = {
+  createMessageParser,
+  failure,
+  handleRequest,
+  listMcpTools,
+  main,
+  success,
+  writeMessage
+};

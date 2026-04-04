@@ -15,6 +15,8 @@ async function testClawSkillMarkdown() {
   const repoRoot = path.join(os.tmpdir(), 'repo root');
   const profileRoot = path.join(os.tmpdir(), 'profile root');
   const markdown = buildRuntimeSkillMarkdown('openclaw', { repoRoot, profileRoot });
+  const nanoMarkdown = buildRuntimeSkillMarkdown('nanobot', { repoRoot, profileRoot });
+  const picoMarkdown = buildRuntimeSkillMarkdown('picoclaw', { repoRoot, profileRoot });
   const outputPath = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'claw-skill-md-')), 'SKILL.md');
   const written = await writeRuntimeSkillMarkdown(outputPath, 'openclaw', { repoRoot, profileRoot });
   const fileText = await fs.readFile(outputPath, 'utf8');
@@ -27,6 +29,10 @@ async function testClawSkillMarkdown() {
   assert.ok(markdown.includes(`Default profile root: \`${profileRoot}\``));
   assert.ok(markdown.includes('claw_manifest'));
   assert.ok(markdown.includes('claw_honest_context'));
+  assert.ok(nanoMarkdown.includes('## NanoBot Setup'));
+  assert.ok(nanoMarkdown.includes('The stdio transport uses newline-delimited JSON-RPC messages on `stdin` and `stdout`.'));
+  assert.ok(picoMarkdown.includes('## PicoClaw Setup'));
+  assert.ok(picoMarkdown.includes('The stdio transport uses newline-delimited JSON-RPC messages on `stdin` and `stdout`.'));
 }
 
 function testZeroClawSkillMarkdownRejects() {
