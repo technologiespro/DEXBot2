@@ -596,6 +596,134 @@ const CLAW_TOOL_CATALOG = Object.freeze([
     }, ['mpaAsset']),
     toolName: 'claw_mpa_position'
   }),
+  createToolDefinition({
+    command: 'launcher-run',
+    description: 'Start/run bots with auto-detected deployment mode. Modes: claw-only (daemon only), dexbot-direct (foreground testing), pm2 (production service), unlock-start (single-prompt, no PM2). Auto-detects mode from config or asks user on first call.',
+    args: {
+      payload_json: 'JSON object with botName (optional), deploymentMode (optional), setPreference (optional), profileRoot (optional)'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botName: stringSchema('Bot name as defined in profiles/bots.json. Omit for default/all.'),
+      deploymentMode: stringSchema('Optional override: claw-only, dexbot-direct, pm2, unlock-start. Omit to auto-detect or use stored preference.'),
+      setPreference: booleanSchema('If true, save deploymentMode as user preference for future calls.'),
+      profileRoot: stringSchema('Optional DEXBot2 profile root')
+    }, []),
+    risk: 'execute',
+    toolName: 'claw_launcher_run'
+  }),
+  createToolDefinition({
+    command: 'launcher-drystart',
+    description: 'Run a bot in dry-run mode (test/simulate without broadcasting to blockchain). Synonyms: dry run, simulate, test mode, paper trade, trial run, simulation',
+    args: {
+      payload_json: 'JSON object with botName (optional), profileRoot (optional)'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botName: stringSchema('Bot name as defined in profiles/bots.json. Omit for default.'),
+      profileRoot: stringSchema('Optional DEXBot2 profile root')
+    }, []),
+    risk: 'execute',
+    toolName: 'claw_launcher_drystart'
+  }),
+  createToolDefinition({
+    command: 'launcher-reset',
+    description: 'Reset a bot grid (triggers recalculation on next start or if running). Synonyms: reset grid, regenerate, recalculate, rebuild orders, refresh grid',
+    args: {
+      payload_json: 'JSON object with botName (optional, defaults to all active), profileRoot (optional)'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botName: stringSchema('Bot name as defined in profiles/bots.json. Omit or "all" for all active bots.'),
+      profileRoot: stringSchema('Optional DEXBot2 profile root')
+    }, []),
+    risk: 'execute',
+    toolName: 'claw_launcher_reset'
+  }),
+  createToolDefinition({
+    command: 'launcher-disable',
+    description: 'Disable a bot in config (set active: false). Synonyms: disable, deactivate, turn off, mark inactive, deregister',
+    args: {
+      payload_json: 'JSON object with botName (optional, defaults to all), profileRoot (optional)'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botName: stringSchema('Bot name as defined in profiles/bots.json. Omit or "all" to disable all.'),
+      profileRoot: stringSchema('Optional DEXBot2 profile root')
+    }, []),
+    risk: 'execute',
+    toolName: 'claw_launcher_disable'
+  }),
+  createToolDefinition({
+    command: 'launcher-pm2-start',
+    description: 'Start bots via PM2 (production-grade, managed). Requires credential daemon running. Synonyms: pm2 start, deploy, launch pm2, production start',
+    args: {
+      payload_json: 'JSON object with botName (optional, defaults to all active), profileRoot (optional)'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botName: stringSchema('Bot name as defined in profiles/bots.json. Omit for all active bots.'),
+      profileRoot: stringSchema('Optional DEXBot2 profile root')
+    }, []),
+    risk: 'execute',
+    toolName: 'claw_launcher_pm2_start'
+  }),
+  createToolDefinition({
+    command: 'launcher-pm2-stop',
+    description: 'Stop a bot process via PM2. Synonyms: pause, stop, halt, freeze, suspend, shut down, quiet',
+    args: {
+      payload_json: 'JSON object with botName (optional, defaults to all), profileRoot (optional)'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botName: stringSchema('Bot name or "all". Omit defaults to "all".'),
+      profileRoot: stringSchema('Optional DEXBot2 profile root')
+    }, []),
+    risk: 'execute',
+    toolName: 'claw_launcher_pm2_stop'
+  }),
+  createToolDefinition({
+    command: 'launcher-pm2-delete',
+    description: 'Delete a bot from PM2 process list. Synonyms: delete, remove, deregister, unregister, purge',
+    args: {
+      payload_json: 'JSON object with botName (optional, defaults to all), profileRoot (optional)'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botName: stringSchema('Bot name or "all". Omit defaults to "all".'),
+      profileRoot: stringSchema('Optional DEXBot2 profile root')
+    }, []),
+    risk: 'execute',
+    toolName: 'claw_launcher_pm2_delete'
+  }),
+  createToolDefinition({
+    command: 'launcher-pm2-restart',
+    description: 'Restart a bot process via PM2. Synonyms: restart, reboot, cycle, bounce, reset, recycle',
+    args: {
+      payload_json: 'JSON object with botName (optional, defaults to all), profileRoot (optional)'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botName: stringSchema('Bot name or "all". Omit defaults to "all".'),
+      profileRoot: stringSchema('Optional DEXBot2 profile root')
+    }, []),
+    risk: 'execute',
+    toolName: 'claw_launcher_pm2_restart'
+  }),
+  createToolDefinition({
+    command: 'launcher-pm2-reload',
+    description: 'Reload a bot process via PM2 (zero-downtime). Synonyms: reload, hot-reload, refresh, apply changes, refresh config',
+    args: {
+      payload_json: 'JSON object with botName (optional, defaults to all), profileRoot (optional)'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      botName: stringSchema('Bot name or "all". Omit defaults to "all".'),
+      profileRoot: stringSchema('Optional DEXBot2 profile root')
+    }, []),
+    risk: 'execute',
+    toolName: 'claw_launcher_pm2_reload'
+  }),
 ]);
 
 function cloneTool(tool) {

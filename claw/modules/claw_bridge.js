@@ -21,6 +21,17 @@ const {
   placeTakeProfitBuyOrderOnBts
 } = require('./short_mpa_strategy');
 const { describeClawBridge } = require('./claw_manifest');
+const {
+  launcherRun,
+  launcherDrystart,
+  launcherReset,
+  launcherDisable,
+  launcherPm2Start,
+  launcherPm2Stop,
+  launcherPm2Delete,
+  launcherPm2Restart,
+  launcherPm2Reload,
+} = require('./claw_launcher');
 
 function clone(value) {
   if (value === undefined) {
@@ -298,6 +309,33 @@ async function runClawCommand(command, options = {}) {
 
     case 'mpa-position':
       return getMpaPosition(safeOptions.accountName || safeOptions.accountRef || accountName, safeOptions.mpaAsset);
+
+    case 'launcher-run':
+      return launcherRun(safeOptions.botName || null, safeOptions);
+
+    case 'launcher-drystart':
+      return launcherDrystart(safeOptions.botName || null, safeOptions);
+
+    case 'launcher-reset':
+      return launcherReset(safeOptions.botName || null, safeOptions);
+
+    case 'launcher-disable':
+      return launcherDisable(safeOptions.botName || null, safeOptions);
+
+    case 'launcher-pm2-start':
+      return launcherPm2Start(safeOptions.botName || null, safeOptions);
+
+    case 'launcher-pm2-stop':
+      return launcherPm2Stop(safeOptions.botName || 'all', safeOptions);
+
+    case 'launcher-pm2-delete':
+      return launcherPm2Delete(safeOptions.botName || 'all', safeOptions);
+
+    case 'launcher-pm2-restart':
+      return launcherPm2Restart(safeOptions.botName || 'all', safeOptions);
+
+    case 'launcher-pm2-reload':
+      return launcherPm2Reload(safeOptions.botName || 'all', safeOptions);
 
     default:
       throw new Error(`Unsupported Claw command: ${command}`);
