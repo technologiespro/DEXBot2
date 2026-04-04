@@ -289,6 +289,11 @@ function printStartLauncherSuccess({ botName = null, dryRun = false } = {}) {
     console.log();
 }
 
+function printMasterPasswordFailure(err) {
+    console.error();
+    console.error(`❌ ${err.message}`);
+}
+
 /**
  * Execute the provided bot entries after validation and authentication.
  * This is the main orchestration function that:
@@ -407,11 +412,12 @@ async function runBotInstances(botEntries, { forceDryRun = false, sourceName = '
                 await bot.start(masterPassword);
                 instances.push(bot);
             } catch (err) {
-                console.error('Failed to start bot:', err.message);
                 if (chainKeys.isMasterPasswordFailure(err)) {
-                    console.error('Aborting because the master password failed 3 times.');
+                    printMasterPasswordFailure(err);
                     process.exit(1);
+                    return;
                 }
+                console.error('Failed to start bot:', err.message);
                 if (err && err.message && String(err.message).toLowerCase().includes('marketprice')) {
                     console.info('Hint: startPrice could not be derived.');
                     console.info(' - If using profiles/bots.json with "pool" or "market" signals, ensure the chain contains a matching liquidity pool or orderbook for the configured pair.');
@@ -789,8 +795,9 @@ async function bootstrap() {
 
 function handleFatalBootstrapError(err) {
     if (chainKeys.isMasterPasswordFailure(err)) {
-        console.error('Failed to start bot:', err.message);
-        console.error('Aborting because the master password failed 3 times.');
+        printMasterPasswordFailure(err);
+        process.exit(1);
+        return;
     } else if (err && err.message) {
         console.error(err.message);
     } else {

@@ -1546,9 +1546,10 @@ class DEXBot {
                     privateKey = chainKeys.getPrivateKey(this.config.preferredAccount, vaultSecret);
                 } else if (chainKeys.isDaemonReady()) {
                     try {
-                        privateKey = await chainKeys.getPrivateKeyFromDaemon(this.config.preferredAccount);
-                    } catch (daemonErr) {
-                        this._warn(`Credential daemon request failed: ${daemonErr.message}. Falling back to interactive authentication.`);
+                        await chainKeys.probeAccountInDaemon(this.config.preferredAccount);
+                        privateKey = chainKeys.createDaemonSigningToken(this.config.preferredAccount);
+                    } catch (err) {
+                        this._warn(`Credential daemon probe failed: ${err.message}. Falling back to interactive authentication.`);
                     }
                 }
 
@@ -2742,8 +2743,8 @@ class DEXBot {
 
     /**
      * Start bot with a pre-decrypted private key.
-     * Alternative to start(vaultSecret) when key is already decrypted.
-     * @param {string} privateKey - Pre-decrypted private key
+     * Alternative to start(vaultSecret) when the signing secret is already available.
+     * @param {string|Object} privateKey - Pre-decrypted private key or daemon signing token
      * @returns {Promise<void>}
      */
     async startWithPrivateKey(privateKey) {

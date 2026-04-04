@@ -17,10 +17,10 @@
  *    - Loads trading parameters (grid size, spread, order count, etc.)
  *
  * 2. AUTHENTICATION
- *    - First attempts credential daemon (Unix socket) for pre-decrypted key
+ *    - First attempts credential daemon (Unix socket) for a session-only signing token
  *    - Falls back to interactive master password prompt if daemon unavailable
  *    - Master password never stored in environment variables
- *    - Private key loaded directly to bot memory
+ *    - Legacy path still loads a raw private key into bot memory
  *
  * 3. BOT INITIALIZATION
  *    - Waits for BitShares blockchain connection (30 second timeout)
@@ -106,20 +106,22 @@ function loadBotConfig(name) {
 }
 
 /**
- * Get private key for account from daemon or interactive prompt.
+ * Get signing secret for account from daemon or interactive prompt.
  * Tries daemon first (if running), then falls back to interactive master password prompt.
  * @param {string} accountName - The account name to retrieve key for.
- * @returns {Promise<string>} The decrypted private key.
+ * @returns {Promise<string|Object>} A raw private key for legacy mode, or a daemon signing token.
  * @throws {Error} If both daemon and interactive authentication fail.
  */
-async function getPrivateKeyForAccount(accountName) {
+async function getSigningSecretForAccount(accountName) {
     const chainKeys = require('./modules/chain_keys');
 
     // Try daemon first
     if (chainKeys.isDaemonReady()) {
         try {
-            return await chainKeys.getPrivateKeyFromDaemon(accountName);
+            await chainKeys.probeAccountInDaemon(accountName);
+            return chainKeys.createDaemonSigningToken(accountName);
         } catch (err) {
+            // Fall back to interactive authentication if the daemon is stale or unresponsive.
         }
     }
 
@@ -140,8 +142,7 @@ async function getPrivateKeyForAccount(accountName) {
         console.log = originalLog;
 
         // Get the private key using master password
-        const privateKey = chainKeys.getPrivateKey(accountName, masterPassword);
-        return privateKey;
+        return chainKeys.getPrivateKey(accountName, masterPassword);
     } catch (err) {
         console.log = originalLog;
         if (err && err.message && err.message.includes('No master password set')) {
@@ -178,9 +179,9 @@ async function getPrivateKeyForAccount(accountName) {
          // Normalize config for current bot with correct index from unfiltered array
          const normalizedConfig = normalizeBotEntry(botConfig, botIndex);
 
-        // Get private key from daemon or interactively
+        // Get signing secret from daemon or interactively
         const preferredAccount = normalizedConfig.preferredAccount;
-        const privateKey = await getPrivateKeyForAccount(preferredAccount);
+        const signingSecret = await getSigningSecretForAccount(preferredAccount);
 
          // Create and start bot with log prefix for [bot.js] context
           const bot = new DEXBot(normalizedConfig, { logPrefix: '[bot.js]' });
@@ -188,7 +189,7 @@ async function getPrivateKeyForAccount(accountName) {
               // Register bot cleanup on shutdown
               registerCleanup(`Bot: ${botName}`, () => bot.shutdown());
 
-              await bot.startWithPrivateKey(privateKey);
+              await bot.startWithPrivateKey(signingSecret);
           } catch (err) {
               // Attempt graceful cleanup before exiting
               try {

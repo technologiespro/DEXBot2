@@ -145,7 +145,11 @@ const { _setFeeCache } = require('../modules/order/utils/math');
             cancelOrder: async () => ({ success: true }),
             createOrder: async () => {
                 const chainOrderId = `1.7.${nextOrderNum++}`;
-                return [{ trx: { operation_results: [[1, chainOrderId]] } }];
+                return {
+                    success: true,
+                    raw: { trx: { operation_results: [[1, chainOrderId]] } },
+                    operation_results: [[1, chainOrderId]],
+                };
             },
             readOpenOrders: async () => [],
         };
