@@ -1,6 +1,6 @@
 # Claw BitShares Bridge
 
-Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes: OpenClaw, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw.
+Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes: OpenClaw, Hermes, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw.
 
 This scaffold follows the same high-level split used in DEXBot2:
 
@@ -28,6 +28,7 @@ npm install btsdex
 - Dynamic weights: `modules/dynamic_weight_service.js`
 - Price sources: `modules/feed_price_source.js`, `modules/kibana_price_source.js`
 - DEXBot2 and Claw integration: `modules/dexbot_bridge.js`, `modules/dexbot_profiles.js`, `modules/dexbot_credential_client.js`, `modules/claw_bridge.js`, `modules/claw_catalog.js`, `modules/claw_manifest.js`, `modules/claw_skill_md.js`, `modules/claw_runtime_matrix.js`, `scripts/claw_bridge.js`, `scripts/claw_mcp_server.js`
+- Hermes support: `modules/hermes_manifest.js`, `scripts/claw_mcp_server.js`
 - OpenFang support: `modules/openfang_bridge.js`, `scripts/openfang_bridge.js`
 - NanoClaw support: `modules/nanoclaw_bridge.js`, `scripts/nanoclaw_bridge.js`
 - ZeroClaw support: `modules/zeroclaw_bridge.js`, `modules/zeroclaw_catalog.js`, `modules/zeroclaw_manifest.js`, `modules/zeroclaw_skill.js`
@@ -43,7 +44,7 @@ npm install btsdex
 
 What it does:
 
-- expose a local JSON/CLI bridge and native runtime packaging for OpenClaw, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw
+- expose a local JSON/CLI bridge and native runtime packaging for OpenClaw, Hermes, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw
 - provide BitShares read helpers, broadcast helpers, and account/action wrappers
 - expose DEXBot2 profile context, order utilities, and liquidity/pool helpers through a smaller surface
 - provide HONEST context helpers, short-MPA helper flows, and position-manager utilities
@@ -150,11 +151,12 @@ Shared boundary notes live in `skills/shared/references/skill-boundaries.md`.
 
 ## Multi-Runtime Support
 
-`claw/` supports seven native runtime families, listed once here for quick reference:
+`claw/` supports eight native runtime families, listed once here for quick reference:
 
 | Runtime | Native integration | Best fit | Main tradeoff |
 | --- | --- | --- | --- |
 | OpenClaw | Native plugin plus optional `SKILL.md` | Broadest and heaviest option | Richest runtime surface, but also the highest operational complexity |
+| Hermes | MCP server plus optional `SKILL.md` | General-purpose assistant that can also trade | Broader agent platform, but unnecessary overhead if you only need DEXBot actions |
 | OpenFang | CLI bridge plus workspace `SKILL.md` | CLI-first local integration | Best when the runtime should consume a thin generated bridge rather than a vendored adapter stack |
 | NanoBot | MCP plus `SKILL.md` | Smaller Python codebase with MCP integration | Easier to inspect, but slower and heavier than Go or Rust |
 | PicoClaw | MCP plus `SKILL.md` | Small Go-based option with launcher support | Great for low-cost hardware, but still evolving quickly |
@@ -167,6 +169,7 @@ Practical selection guide:
 | If you optimize for | Best choice | Why |
 | --- | --- | --- |
 | Broadest assistant surface and plugin depth | OpenClaw | Richest runtime, strongest plugin model, widest ecosystem coverage |
+| General-purpose assistant with memory, messaging, and cron | Hermes | MCP-first integration keeps Claw reusable while Hermes handles the broader assistant runtime |
 | CLI-first local workspace integration | OpenFang | Thin bridge, generated skill file, and minimal maintenance surface |
 | Simple MCP integration with Python ergonomics | NanoBot | Easier to inspect and adapt, good for lightweight tool-driven workflows |
 | Small Go binary and low-cost hardware | PicoClaw | Good launcher support, strong fit for tiny boards and constrained Linux targets |
@@ -177,6 +180,7 @@ Practical selection guide:
 Rule of thumb:
 
 - Choose **OpenClaw** for the broadest assistant platform.
+- Choose **Hermes** if you want a general-purpose assistant with memory, messaging, cron, and browser tooling that can also trade through Claw.
 - Choose **OpenFang** for a CLI-first local workspace integration with a thin generated skill file.
 - Choose **NanoBot** for a compact Python codebase with MCP tooling.
 - Choose **PicoClaw** for a small Go runtime with launcher support.
@@ -184,7 +188,7 @@ Rule of thumb:
 - Choose **ZeroClaw** for the smallest and most deterministic runtime.
 - Choose **NullClaw** for a Zig-native runtime with workspace-centric skill loading.
 
-For a deeper comparison of the seven supported runtimes, see [docs/RUNTIME_COMPARISON.md](docs/RUNTIME_COMPARISON.md).
+For a deeper comparison of the eight supported runtimes, see [docs/RUNTIME_COMPARISON.md](docs/RUNTIME_COMPARISON.md).
 
 Run the commands below from the `claw/` directory.
 
@@ -260,6 +264,27 @@ node scripts/openfang_bridge.js profile-context --payload '{"botRef":"default"}'
 node scripts/openfang_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
 node scripts/openfang_bridge.js create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
 ```
+
+### Hermes
+
+Generate the Hermes skill file:
+
+```bash
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+npm run hermes:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT" --output ~/.hermes/skills/bitshares-claw/SKILL.md
+```
+
+Add the shared Claw MCP server to `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  claw:
+    command: "node"
+    args: ["/absolute/path/to/claw/scripts/claw_mcp_server.js", "--profile-root", "/absolute/path/to/DEXBot2"]
+```
+
+Hermes should use the shared MCP server for live tools and keep the generated `SKILL.md` focused on workflow guidance. The Claw MCP server registers raw tool ids such as `claw_manifest`; if Hermes shows a namespaced label in its UI, use the label shown there.
 
 ### NanoBot and PicoClaw
 

@@ -7,6 +7,13 @@ const SUPPORTED_CLAW_RUNTIMES = Object.freeze([
     notes: 'Native plugin registration is preferred; SKILL.md remains the native workflow layer.'
   },
   {
+    runtime: 'hermes',
+    nativeIntegration: 'mcp-plus-skill-md',
+    preferredTransport: 'mcp-stdio-jsonl',
+    skillFile: 'SKILL.md',
+    notes: 'Hermes prefers the shared MCP server via ~/.hermes/config.yaml, with an optional SKILL.md in ~/.hermes/skills for workflow guidance.'
+  },
+  {
     runtime: 'openfang',
     nativeIntegration: 'skill-md',
     preferredTransport: 'local-cli-json',

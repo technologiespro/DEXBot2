@@ -133,6 +133,11 @@ async function testHandleRequestEmitsNewlineJson() {
     responses[1].result.tools.some((tool) => tool.name === 'claw_runtime'),
     'tools/list should include claw_runtime'
   );
+  assert.strictEqual(
+    responses[1].result.tools.some((tool) => String(tool.name).startsWith('mcp_claw_')),
+    false,
+    'tools/list should expose the raw claw_* tool ids from the MCP server'
+  );
 }
 
 function runServerProcess(input) {
@@ -206,6 +211,11 @@ async function testMainEntrypointHandlesRealProcessInitialize() {
   assert.ok(
     responses[1].result.tools.some((tool) => tool.name === 'claw_manifest'),
     'tools/list should include claw_manifest'
+  );
+  assert.strictEqual(
+    responses[1].result.tools.some((tool) => String(tool.name).startsWith('mcp_claw_')),
+    false,
+    'entrypoint should expose raw claw_* tool ids from the MCP server'
   );
 }
 

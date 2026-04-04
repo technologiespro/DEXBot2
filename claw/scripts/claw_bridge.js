@@ -1,12 +1,7 @@
 #!/usr/bin/env node
 
 const { listClawCommandNames } = require('../modules/claw_catalog');
-const { describeClawBridge, runClawCommand } = require('../modules/claw_bridge');
-const { describeOpenClawBridge } = require('../modules/openclaw_manifest');
-const { describeOpenFangBridge } = require('../modules/openfang_bridge');
-const { describeNanoClawBridge } = require('../modules/nanoclaw_bridge');
-const { describeNullClawBridge } = require('../modules/nullclaw_bridge');
-const { describeZeroClawBridge } = require('../modules/zeroclaw_manifest');
+const { describeRuntimeManifest, runClawCommand } = require('../modules/claw_bridge');
 
 function parseJson(value, fieldName) {
   if (value === undefined || value === null || value === '') {
@@ -108,26 +103,8 @@ function printHelp(scriptPath = 'node scripts/claw_bridge.js') {
   ].join('\n'));
 }
 
-function describeRuntimeManifest(runtimeName, payload = {}) {
-  const effectiveRuntimeName = runtimeName || payload.runtimeName || payload.runtime || null;
-  const normalizedRuntimeName = effectiveRuntimeName
-    ? String(effectiveRuntimeName).trim().toLowerCase()
-    : null;
-
-  switch (normalizedRuntimeName) {
-    case 'openclaw':
-      return describeOpenClawBridge(payload);
-    case 'openfang':
-      return describeOpenFangBridge(payload);
-    case 'nanoclaw':
-      return describeNanoClawBridge(payload);
-    case 'nullclaw':
-      return describeNullClawBridge(payload);
-    case 'zeroclaw':
-      return describeZeroClawBridge(payload);
-    default:
-      return describeClawBridge(payload);
-  }
+function describeScriptRuntimeManifest(runtimeName, payload = {}) {
+  return describeRuntimeManifest(runtimeName ? { ...payload, runtimeName } : payload);
 }
 
 async function main(runtimeName = null, scriptPath = 'node scripts/claw_bridge.js') {
@@ -140,7 +117,7 @@ async function main(runtimeName = null, scriptPath = 'node scripts/claw_bridge.j
 
   const mergedPayload = runtimeName ? { ...payload, runtimeName } : payload;
   if (command === 'manifest') {
-    process.stdout.write(`${JSON.stringify(describeRuntimeManifest(runtimeName, mergedPayload), null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(describeScriptRuntimeManifest(runtimeName, mergedPayload), null, 2)}\n`);
     return;
   }
 
@@ -156,6 +133,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-  describeRuntimeManifest,
+  describeRuntimeManifest: describeScriptRuntimeManifest,
   main
 };

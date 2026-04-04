@@ -1,8 +1,9 @@
 # Claw Runtime Comparison
 
-This note compares the seven runtime families supported by the Claw bridge layer:
+This note compares the eight runtime families supported by the Claw bridge layer:
 
 - OpenClaw
+- Hermes
 - OpenFang
 - NanoBot
 - PicoClaw
@@ -14,7 +15,7 @@ The comparison is based on the current `claw/` bridge design and runtime metadat
 
 ## What The Bridge Optimizes For
 
-The bridge is trying to satisfy seven different operating modes with one shared BitShares surface:
+The bridge is trying to satisfy eight different operating modes with one shared BitShares surface:
 
 - very small footprint and fast startup
 - broad assistant and plugin coverage
@@ -60,6 +61,28 @@ Best fit:
 - Desktop or server environments where footprint is less important.
 - Teams that value extensibility and a mature assistant ecosystem.
 - Workflows that benefit from plugin registration over a narrow CLI surface.
+
+### Hermes
+
+Hermes is the best fit when Claw should be one capability inside a broader assistant runtime rather than the whole product.
+
+Strengths:
+
+- Broad agent platform with memory, messaging, cron, browser automation, voice, and subagent delegation.
+- MCP-first integration lets Hermes consume the shared Claw surface without vendoring DEXBot2-specific runtime code.
+- Good fit when trading is only one part of a larger assistant workflow.
+
+Tradeoffs:
+
+- Heavier operational surface than the narrower runtimes.
+- Adds little value if the only requirement is safe DEXBot inspection and execution.
+- The integration should stay MCP-first; a Hermes-specific bridge wrapper would mostly duplicate existing Claw behavior.
+
+Best fit:
+
+- Users who want a general-purpose assistant that can also trade.
+- Always-on or messaging-driven workflows where memory and scheduling matter.
+- Teams that want Hermes features without moving BitShares execution outside DEXBot2.
 
 ### OpenFang
 
@@ -202,6 +225,7 @@ If you optimize primarily for:
 
 - **Lowest footprint**: ZeroClaw
 - **Broadest feature set**: OpenClaw
+- **General-purpose assistant that can also trade**: Hermes
 - **CLI-first workspace integration**: OpenFang
 - **Simplest external tool boundary**: NanoBot or PicoClaw, depending on whether you want Python or Go
 - **Skill-file driven local assistant**: NanoClaw
@@ -213,6 +237,7 @@ If you optimize primarily for:
 ## Practical Rule Of Thumb
 
 - Choose **OpenClaw** if the bridge should live inside a larger assistant product with rich extension points.
+- Choose **Hermes** if you want a broader assistant runtime and want Claw to remain an MCP-backed trading capability inside it.
 - Choose **OpenFang** if you want a CLI-first workspace bridge with minimal maintenance overhead.
 - Choose **NanoBot** if you want a compact Python assistant that is easy to modify.
 - Choose **PicoClaw** if you want a small Go runtime with MCP and launcher support.

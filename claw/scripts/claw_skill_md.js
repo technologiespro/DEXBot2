@@ -53,7 +53,7 @@ function parseArgs(argv) {
 function printHelp() {
   console.log([
     'Usage:',
-    '  node scripts/claw_skill_md.js --runtime <openclaw|openfang|nanobot|picoclaw|nanoclaw> [--repo-root PATH] [--profile-root PATH] [--output PATH]',
+    '  node scripts/claw_skill_md.js --runtime <openclaw|hermes|openfang|nanobot|picoclaw|nanoclaw> [--repo-root PATH] [--profile-root PATH] [--output PATH]',
     '',
     'Outputs a SKILL.md file for the requested runtime.',
     'If --output is omitted, the markdown is written to stdout.'

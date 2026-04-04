@@ -79,10 +79,47 @@ function createClawBridge(options = {}) {
   });
 }
 
+function describeRuntimeManifest(options = {}) {
+  const effectiveRuntimeName = options.runtimeName || options.runtime?.name || options.runtime || null;
+  const normalizedRuntimeName = effectiveRuntimeName
+    ? String(effectiveRuntimeName).trim().toLowerCase()
+    : null;
+
+  switch (normalizedRuntimeName) {
+    case 'hermes':
+      return require('./hermes_manifest').describeHermesBridge(options);
+    case 'openclaw':
+      return require('./openclaw_manifest').describeOpenClawBridge(options);
+    case 'openfang':
+      return require('./openfang_bridge').describeOpenFangBridge(options);
+    case 'nanoclaw':
+      return require('./nanoclaw_bridge').describeNanoClawBridge(options);
+    case 'nullclaw':
+      return require('./nullclaw_bridge').describeNullClawBridge(options);
+    case 'zeroclaw':
+      return require('./zeroclaw_manifest').describeZeroClawBridge(options);
+    default:
+      return describeClawBridge(options);
+  }
+}
+
+function describeCommandManifest(options = {}) {
+  const effectiveRuntimeName = options.runtimeName || options.runtime?.name || options.runtime || null;
+  const normalizedRuntimeName = effectiveRuntimeName
+    ? String(effectiveRuntimeName).trim().toLowerCase()
+    : null;
+
+  if (normalizedRuntimeName === 'hermes') {
+    return require('./hermes_manifest').describeHermesBridge(options);
+  }
+
+  return describeClawBridge(options);
+}
+
 async function runClawCommand(command, options = {}) {
   const safeOptions = stripPrivateKey(options);
   if (command === 'manifest') {
-    return describeClawBridge(safeOptions);
+    return describeCommandManifest(safeOptions);
   }
 
   const bridge = createClawBridge(safeOptions);
@@ -297,5 +334,6 @@ async function runClawCommand(command, options = {}) {
 module.exports = {
   createClawBridge,
   describeClawBridge,
+  describeRuntimeManifest,
   runClawCommand
 };

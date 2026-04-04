@@ -11,10 +11,10 @@ function testRuntimeMatrix() {
   const matrix = require('../modules/claw_runtime_matrix');
 
   const all = matrix.listSupportedClawRuntimes();
-  assert.ok(all.length >= 7);
+  assert.ok(all.length >= 8);
 
   const names = all.map((r) => r.runtime);
-  assert.deepStrictEqual(names, ['openclaw', 'openfang', 'nanobot', 'picoclaw', 'nanoclaw', 'zeroclaw', 'nullclaw']);
+  assert.deepStrictEqual(names, ['openclaw', 'hermes', 'openfang', 'nanobot', 'picoclaw', 'nanoclaw', 'zeroclaw', 'nullclaw']);
 
   // Each entry is a defensive clone — mutations must not affect the registry
   all[0].runtime = 'mutated';
@@ -30,6 +30,12 @@ function testRuntimeMatrix() {
   assert.strictEqual(of.runtime, 'openfang');
   assert.strictEqual(of.preferredTransport, 'local-cli-json');
   assert.strictEqual(of.skillFile, 'SKILL.md');
+
+  const hermes = matrix.getSupportedClawRuntime('hermes');
+  assert.strictEqual(hermes.runtime, 'hermes');
+  assert.strictEqual(hermes.preferredTransport, 'mcp-stdio-jsonl');
+  assert.strictEqual(hermes.skillFile, 'SKILL.md');
+  assert.ok(hermes.notes.includes('~/.hermes/config.yaml'));
 
   const nb = matrix.getSupportedClawRuntime('nanobot');
   assert.strictEqual(nb.runtime, 'nanobot');
@@ -107,6 +113,10 @@ function testClawManifest() {
   assert.strictEqual(nbDesc.compatibility.recommendedTransport, 'mcp-stdio-jsonl');
   assert.strictEqual(nbDesc.options.runtimeName, 'nanobot');
 
+  const hermesDesc = manifest.describeClawBridge({ runtimeName: 'hermes' });
+  assert.strictEqual(hermesDesc.compatibility.recommendedTransport, 'mcp-stdio-jsonl');
+  assert.strictEqual(hermesDesc.options.runtimeName, 'hermes');
+
   const openfangDesc = manifest.describeClawBridge({ runtimeName: 'openfang' });
   assert.strictEqual(openfangDesc.compatibility.recommendedTransport, 'local-cli-json');
   assert.strictEqual(openfangDesc.options.runtimeName, 'openfang');
@@ -129,6 +139,26 @@ function testClawManifest() {
   assert.strictEqual(withOpts.options.accountName, 'alice');
   assert.strictEqual(withOpts.options.profileRoot, '/tmp/profiles');
   assert.strictEqual(withOpts.options.socketPath, '/tmp/cred.sock');
+}
+
+// ---------------------------------------------------------------------------
+// hermes_manifest
+// ---------------------------------------------------------------------------
+
+function testHermesManifest() {
+  const manifest = require('../modules/hermes_manifest');
+
+  const desc = manifest.describeHermesBridge();
+
+  assert.strictEqual(desc.compatibility.name, 'Hermes');
+  assert.ok(desc.compatibility.trustModel.includes('Hermes'));
+  assert.strictEqual(desc.options.runtimeName, 'hermes');
+  assert.strictEqual(desc.compatibility.recommendedTransport, 'mcp-stdio-jsonl');
+  assert.ok(Array.isArray(desc.commandExamples));
+  assert.ok(desc.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')));
+
+  const withOpts = manifest.describeHermesBridge({ accountName: 'erin' });
+  assert.strictEqual(withOpts.options.accountName, 'erin');
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +275,7 @@ function testDexbotBridgeRootResolution() {
 function main() {
   testRuntimeMatrix();
   testClawManifest();
+  testHermesManifest();
   testOpenClawManifest();
   testZeroClawManifest();
   testNullClawManifest();

@@ -38,10 +38,38 @@ function buildToolSummary(runtimeName) {
 }
 
 function buildRuntimeSetup(runtime, repoRoot, profileRoot) {
-  const mcpCommand = `node ${path.join(repoRoot, 'scripts', 'claw_mcp_server.js')}`;
-  const mcpArgs = `["${path.join(repoRoot, 'scripts', 'claw_mcp_server.js')}", "--profile-root", "${profileRoot}"]`;
+  const mcpScriptPath = path.join(repoRoot, 'scripts', 'claw_mcp_server.js').replace(/\\/g, '/');
+  const mcpCommand = `node ${mcpScriptPath}`;
+  const mcpArgs = `["${mcpScriptPath}", "--profile-root", "${profileRoot}"]`;
 
   switch (runtime.runtime) {
+    case 'hermes':
+      return [
+        '## Hermes Setup',
+        '',
+        'Hermes works best with the shared Claw MCP server plus an optional local `SKILL.md` for workflow guidance.',
+        '',
+        'Add the Claw MCP server to `~/.hermes/config.yaml`:',
+        '',
+        '```yaml',
+        'mcp_servers:',
+        '  claw:',
+        '    command: "node"',
+        `    args: ${mcpArgs}`,
+        '```',
+        '',
+        'Optionally write the generated `SKILL.md` into Hermes\' local skill tree, for example:',
+        '',
+        '```text',
+        '~/.hermes/skills/bitshares-claw/SKILL.md',
+        '```',
+        '',
+        'If you prefer a shared read-only skill directory, add that parent directory under `skills.external_dirs` in `~/.hermes/config.yaml`.',
+        'Use the MCP server for live tools and keep this skill focused on workflow guidance rather than embedding execution logic.',
+        '',
+        `Set \`DEXBOT_PROFILE_ROOT=${profileRoot}\` if you want a default profile root outside MCP server args.`
+      ].join('\n');
+
     case 'nanobot':
       return [
         '## NanoBot Setup',
@@ -165,6 +193,23 @@ function buildRuntimeSetup(runtime, repoRoot, profileRoot) {
   }
 }
 
+function buildRuntimeWorkflow(runtime) {
+  if (runtime.runtime === 'hermes') {
+    return [
+      '- Start with `claw_manifest`, `claw_runtime`, `claw_profile_context`, `claw_market_snapshot`, `claw_account_snapshot`, or `claw_open_orders`.',
+      '- For MPA and short workflows, use `claw_build_open_short_plan`, `claw_build_take_profit_plan`, or `claw_build_close_short_plan` before executing trades.',
+      '- Use `claw_honest_context`, `claw_honest_pair`, and `claw_honest_price` when the task involves HONEST assets or discovery.',
+      '- The shared Claw MCP server registers raw tool ids such as `claw_manifest`; if Hermes shows a namespaced label in its UI, follow the label shown there.'
+    ].join('\n');
+  }
+
+  return [
+    '- Start with `claw_manifest`, `claw_runtime`, `claw_profile_context`, `claw_market_snapshot`, `claw_account_snapshot`, or `claw_open_orders`.',
+    '- For MPA and short workflows, use `claw_build_open_short_plan`, `claw_build_take_profit_plan`, or `claw_build_close_short_plan` before executing trades.',
+    '- Use `claw_honest_context`, `claw_honest_pair`, and `claw_honest_price` when the task involves HONEST assets or discovery.'
+  ].join('\n');
+}
+
 function buildRuntimeSkillMarkdown(runtimeName, options = {}) {
   const runtime = getSupportedClawRuntime(runtimeName);
   if (!runtime) {
@@ -202,9 +247,7 @@ function buildRuntimeSkillMarkdown(runtimeName, options = {}) {
     '',
     '## Workflow',
     '',
-    '- Start with `claw_manifest`, `claw_runtime`, `claw_profile_context`, `claw_market_snapshot`, `claw_account_snapshot`, or `claw_open_orders`.',
-    '- For MPA and short workflows, use `claw_build_open_short_plan`, `claw_build_take_profit_plan`, or `claw_build_close_short_plan` before executing trades.',
-    '- Use `claw_honest_context`, `claw_honest_pair`, and `claw_honest_price` when the task involves HONEST assets or discovery.',
+    buildRuntimeWorkflow(runtime),
     '',
     '## Repository Paths',
     '',

@@ -127,6 +127,30 @@ To generate the skill file from Claw, run:
 npm run openfang:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.openfang/skills/bitshares-claw/SKILL.md
 ```
 
+## Hermes Compatibility
+
+Hermes should consume Claw through the shared MCP server, with an optional local `SKILL.md` for workflow guidance.
+
+- Hermes can invoke the MCP server in [../scripts/claw_mcp_server.js](../scripts/claw_mcp_server.js).
+- The manifest wrapper lives in [../modules/hermes_manifest.js](../modules/hermes_manifest.js) and advertises Hermes as an MCP-first runtime over the shared Claw command surface.
+- Keep the generated skill named `bitshares-claw` and focused on workflow guidance rather than copying bridge logic into Hermes.
+- Claw keeps private-key access inside its existing DEXBot2 credential path.
+
+To generate the Hermes skill file from Claw, run:
+
+```bash
+npm run hermes:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.hermes/skills/bitshares-claw/SKILL.md
+```
+
+Add the MCP server to `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  claw:
+    command: "node"
+    args: ["/absolute/path/to/claw/scripts/claw_mcp_server.js", "--profile-root", "/home/alex/BTS/Git/DEXBot2"]
+```
+
 ## Core Types
 
 ### `RuntimeContext`

@@ -51,6 +51,7 @@ function testClawRootExportsAvoidSilentCollisions() {
   clearModule(clawIndexPath);
 
   const claw = require('..');
+  const hermesManifest = claw.describeHermesBridge();
   const openclawManifest = claw.describeOpenClawBridge();
   const openfangManifest = claw.describeOpenFangBridge();
   const nullManifest = claw.describeNullClawBridge();
@@ -60,6 +61,9 @@ function testClawRootExportsAvoidSilentCollisions() {
   assert.strictEqual(claw.resolveSigningAccountName({ accountName: 'alice' }), 'alice');
   assert.strictEqual(typeof claw.resolveAccountName, 'function');
   assert.strictEqual(claw.resolveAccountName('alice') instanceof Promise, true);
+  assert.strictEqual(hermesManifest.options.runtimeName, 'hermes');
+  assert.strictEqual(hermesManifest.compatibility.name, 'Hermes');
+  assert.strictEqual(typeof claw.describeHermesRuntimeBridge, 'function');
   assert.strictEqual(openclawManifest.options.runtimeName, 'openclaw');
   assert.strictEqual(openclawManifest.compatibility.name, 'OpenClaw');
   assert.strictEqual(openclawManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
@@ -520,6 +524,10 @@ function testClawBridgeScriptManifestUsesRuntimeSpecificDescriptors() {
 
   const { describeRuntimeManifest } = require('../scripts/claw_bridge');
 
+  const hermesManifest = describeRuntimeManifest('hermes', {});
+  assert.strictEqual(hermesManifest.compatibility.name, 'Hermes');
+  assert.strictEqual(hermesManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
+
   const openclawManifest = describeRuntimeManifest('openclaw', {});
   assert.strictEqual(openclawManifest.compatibility.name, 'OpenClaw');
   assert.strictEqual(openclawManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
@@ -552,14 +560,24 @@ function testClawBridgeScriptManifestUsesRuntimeSpecificDescriptors() {
   assert.strictEqual(normalizedPayloadManifest.compatibility.name, 'OpenFang');
   assert.strictEqual(normalizedPayloadManifest.commandExamples.some((example) => example.includes('openfang_bridge.js')), true);
 
+  const hermesPayloadManifest = describeRuntimeManifest(null, { runtimeName: ' Hermes ' });
+  assert.strictEqual(hermesPayloadManifest.compatibility.name, 'Hermes');
+  assert.strictEqual(hermesPayloadManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
+
   clearModule(scriptPath);
 }
 
 async function testRuntimeCommandManifestUsesRuntimeSpecificDescriptors() {
+  const { runClawCommand } = require('../modules/claw_bridge');
   const { runOpenFangCommand } = require('../modules/openfang_bridge');
   const { runNanoClawCommand } = require('../modules/nanoclaw_bridge');
   const { runNullClawCommand } = require('../modules/nullclaw_bridge');
   const { runZeroClawCommand } = require('../modules/zeroclaw_bridge');
+
+  const hermesManifest = await runClawCommand('manifest', { runtimeName: 'hermes' });
+  assert.strictEqual(hermesManifest.compatibility.name, 'Hermes');
+  assert.strictEqual(hermesManifest.options.runtimeName, 'hermes');
+  assert.ok(hermesManifest.compatibility.trustModel.includes('Hermes'));
 
   const openfangManifest = await runOpenFangCommand('manifest', {});
   assert.strictEqual(openfangManifest.compatibility.name, 'OpenFang');

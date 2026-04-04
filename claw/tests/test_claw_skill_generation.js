@@ -15,6 +15,7 @@ async function testClawSkillMarkdown() {
   const repoRoot = path.join(os.tmpdir(), 'repo root');
   const profileRoot = path.join(os.tmpdir(), 'profile root');
   const markdown = buildRuntimeSkillMarkdown('openclaw', { repoRoot, profileRoot });
+  const hermesMarkdown = buildRuntimeSkillMarkdown('hermes', { repoRoot, profileRoot });
   const openfangMarkdown = buildRuntimeSkillMarkdown('openfang', { repoRoot, profileRoot });
   const nanoMarkdown = buildRuntimeSkillMarkdown('nanobot', { repoRoot, profileRoot });
   const picoMarkdown = buildRuntimeSkillMarkdown('picoclaw', { repoRoot, profileRoot });
@@ -31,6 +32,12 @@ async function testClawSkillMarkdown() {
   assert.ok(markdown.includes(`Default profile root: \`${profileRoot}\``));
   assert.ok(markdown.includes('claw_manifest'));
   assert.ok(markdown.includes('claw_honest_context'));
+  assert.ok(hermesMarkdown.includes('## Hermes Setup'));
+  assert.ok(hermesMarkdown.includes('~/.hermes/config.yaml'));
+  assert.ok(hermesMarkdown.includes('~/.hermes/skills/bitshares-claw/SKILL.md'));
+  assert.ok(hermesMarkdown.includes('claw_manifest'));
+  assert.ok(hermesMarkdown.includes('The shared Claw MCP server registers raw tool ids such as `claw_manifest`'));
+  assert.strictEqual(hermesMarkdown.includes('mcp_claw_claw_manifest'), false);
   assert.ok(openfangMarkdown.includes('## OpenFang Setup'));
   assert.ok(openfangMarkdown.includes('openfang_bridge.js'));
   assert.ok(openfangMarkdown.includes('bitshares-claw'));
