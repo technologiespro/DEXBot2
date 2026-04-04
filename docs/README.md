@@ -67,6 +67,13 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Performance**: How the logging system minimizes overhead during high-frequency events.
 - **Batch Processing Logs**: Fill batching, recovery retry, and orphan-fill deduplication messages.
 
+### 🔐 [Credential Security](CREDENTIAL_SECURITY.md)
+*How private keys are protected at rest, in transit, and in RAM.*
+- **Vault v2**: scrypt (N=2¹⁷) key derivation, per-record HKDF isolation, AES-256-GCM encryption
+- **Daemon-backed signing**: primary bot flow uses signing tokens; compatibility clients can still request raw keys
+- **Session cache**: encrypted HKDF re-encryption with a random salt that is never persisted
+- **Runtime hardening**: lstat + owner/mode/type checks on all sockets and ready files; bootstrap socket destroyed after first use
+
 ### 🧪 [Test Suite Updates](TEST_UPDATES_SUMMARY.md)
 *Reliability and regression testing.*
 - **Recent Fixes**: Summary of test coverage added for the most recent critical bugfixes.

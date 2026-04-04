@@ -206,6 +206,7 @@ Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local boo
 
 For architecture, fund accounting, rotation mechanics, and development guides, see the **[docs/](docs/)** folder:
 
+- **[CREDENTIAL_SECURITY.md](docs/CREDENTIAL_SECURITY.md)** - Credential security model: key derivation, daemon-backed signing, session cache, runtime file hardening
 - **[FUND_MOVEMENT_AND_ACCOUNTING.md](docs/FUND_MOVEMENT_AND_ACCOUNTING.md)** - Fund accounting, grid topology, rotation mechanics
 - **[architecture.md](docs/architecture.md)** - System design, fill processing pipeline, testing strategy
 - **[COPY_ON_WRITE_MASTER_PLAN.md](docs/COPY_ON_WRITE_MASTER_PLAN.md)** - Copy-on-Write grid architecture
