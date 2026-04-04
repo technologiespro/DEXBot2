@@ -295,6 +295,8 @@ function analyzeOrder(botData, config) {
     },
     // Target active orders from config
     activeOrdersTarget: config ? config.activeOrders : null,
+    // Bot fund allocation settings from config
+    botFunds: config ? config.botFunds : null,
     // Weight distribution from config
     weightDistribution: config ? config.weightDistribution : null
   };
@@ -725,11 +727,6 @@ function formatAnalysis(analysis) {
   lines.push(`   Update: ${analysis.lastUpdated.toLocaleString()}`);
   lines.push(``);
 
-  if (analysis.weightDistribution) {
-    const w = analysis.weightDistribution;
-    lines.push(`   Weight: ${w.buy} buy | ${w.sell} sell`);
-  }
-
   // Warning: No config available for comparison
   if (!analysis.hasConfig) {
     lines.push(`   ${colors.gray}⚠️  No config found - showing grid data only${colors.reset}`);
@@ -757,6 +754,14 @@ function formatAnalysis(analysis) {
     const sellActual = analysis.slots.activeSell;
     
     lines.push(`   Active: ${buyActual}/${buyTarget} buy | ${sellActual}/${sellTarget} sell`);
+    lines.push(``);
+    if (analysis.weightDistribution) {
+      const w = analysis.weightDistribution;
+      lines.push(`   Weight: ${w.buy} buy | ${w.sell} sell`);
+    }
+    if (analysis.botFunds) {
+      lines.push(`   Funds:  ${analysis.botFunds.buy} buy | ${analysis.botFunds.sell} sell`);
+    }
     lines.push(``);
   }
 
