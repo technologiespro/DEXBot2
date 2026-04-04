@@ -11,7 +11,7 @@ The goal is simple:
 - `Claw` can talk to DEXBot2 and the blockchain directly
 - The infrastructure layer stays reusable and decision-free
 
-The current scaffold lives in [../modules/claw_infra.js](../modules/claw_infra.js), [../modules/dexbot_profiles.js](../modules/dexbot_profiles.js), [../modules/zeroclaw_bridge.js](../modules/zeroclaw_bridge.js), and [../modules/nullclaw_bridge.js](../modules/nullclaw_bridge.js), and is exported from [../index.js](../index.js).
+The current scaffold lives in [../modules/claw_infra.js](../modules/claw_infra.js), [../modules/dexbot_profiles.js](../modules/dexbot_profiles.js), [../modules/nanoclaw_bridge.js](../modules/nanoclaw_bridge.js), [../modules/openfang_bridge.js](../modules/openfang_bridge.js), [../modules/zeroclaw_bridge.js](../modules/zeroclaw_bridge.js), and [../modules/nullclaw_bridge.js](../modules/nullclaw_bridge.js), and is exported from [../index.js](../index.js).
 
 ## Design Rules
 
@@ -97,6 +97,34 @@ To generate the skill file from Claw, run:
 
 ```bash
 npm run nullclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.nullclaw/workspace/skills/bitshares-claw/SKILL.toml
+```
+
+## NanoClaw Compatibility
+
+NanoClaw uses the same bridge surface, with a native `SKILL.md` path in the workspace skill tree.
+
+- NanoClaw can invoke the JSON/CLI bridge in [../scripts/nanoclaw_bridge.js](../scripts/nanoclaw_bridge.js).
+- The bridge lives in [../modules/nanoclaw_bridge.js](../modules/nanoclaw_bridge.js) and uses the shared Claw command surface.
+- Keep the generated skill named `bitshares-claw` so it does not collide with NanoClaw's bundled `claw` skill.
+
+To generate the skill file from Claw, run:
+
+```bash
+npm run nanoclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output /path/to/nanoclaw/.claude/skills/bitshares-claw/SKILL.md
+```
+
+## OpenFang Compatibility
+
+OpenFang uses the same bridge surface through a CLI-first wrapper and a workspace skill file.
+
+- OpenFang can invoke the JSON/CLI bridge in [../scripts/openfang_bridge.js](../scripts/openfang_bridge.js).
+- The bridge lives in [../modules/openfang_bridge.js](../modules/openfang_bridge.js) and uses the shared Claw command surface.
+- Keep the generated skill named `bitshares-claw` so it stays separate from runtime-specific OpenFang skills and remains a thin wrapper around the shared CLI bridge.
+
+To generate the skill file from Claw, run:
+
+```bash
+npm run openfang:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.openfang/skills/bitshares-claw/SKILL.md
 ```
 
 ## Core Types

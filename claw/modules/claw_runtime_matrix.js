@@ -7,6 +7,13 @@ const SUPPORTED_CLAW_RUNTIMES = Object.freeze([
     notes: 'Native plugin registration is preferred; SKILL.md remains the native workflow layer.'
   },
   {
+    runtime: 'openfang',
+    nativeIntegration: 'skill-md',
+    preferredTransport: 'local-cli-json',
+    skillFile: 'SKILL.md',
+    notes: 'OpenFang can load prompt-only SKILL.md skills and shell out to the shared CLI bridge from a local workspace skill.'
+  },
+  {
     runtime: 'nanobot',
     nativeIntegration: 'mcp',
     preferredTransport: 'mcp-stdio-jsonl',
@@ -19,6 +26,13 @@ const SUPPORTED_CLAW_RUNTIMES = Object.freeze([
     preferredTransport: 'mcp-stdio-jsonl',
     skillFile: 'SKILL.md',
     notes: 'PicoClaw mirrors NanoBot on native SKILL.md loading and MCP stdio integration with newline-delimited JSON-RPC.'
+  },
+  {
+    runtime: 'nanoclaw',
+    nativeIntegration: 'skill-md',
+    preferredTransport: 'local-cli-json',
+    skillFile: 'SKILL.md',
+    notes: 'NanoClaw uses Claude Code skill files with a local JSON CLI bridge and workspace-level skill loading.'
   },
   {
     runtime: 'zeroclaw',

@@ -51,6 +51,8 @@ function testClawRootExportsAvoidSilentCollisions() {
   clearModule(clawIndexPath);
 
   const claw = require('..');
+  const openclawManifest = claw.describeOpenClawBridge();
+  const openfangManifest = claw.describeOpenFangBridge();
   const nullManifest = claw.describeNullClawBridge();
   const manifest = claw.describeZeroClawBridge();
 
@@ -58,12 +60,56 @@ function testClawRootExportsAvoidSilentCollisions() {
   assert.strictEqual(claw.resolveSigningAccountName({ accountName: 'alice' }), 'alice');
   assert.strictEqual(typeof claw.resolveAccountName, 'function');
   assert.strictEqual(claw.resolveAccountName('alice') instanceof Promise, true);
+  assert.strictEqual(openclawManifest.options.runtimeName, 'openclaw');
+  assert.strictEqual(openclawManifest.compatibility.name, 'OpenClaw');
+  assert.strictEqual(openclawManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
+  assert.strictEqual(typeof claw.describeOpenClawRuntimeBridge, 'function');
+  assert.strictEqual(openfangManifest.options.runtimeName, 'openfang');
+  assert.strictEqual(openfangManifest.commandExamples.some((example) => example.includes('openfang_bridge.js')), true);
+  assert.strictEqual(typeof claw.describeOpenFangRuntimeBridge, 'function');
+  assert.strictEqual(typeof claw.describeNanoClawRuntimeBridge, 'function');
   assert.strictEqual(nullManifest.options.runtimeName, 'nullclaw');
   assert.strictEqual(nullManifest.commandExamples.some((example) => example.includes('nullclaw_bridge.js')), true);
   assert.strictEqual(typeof claw.describeNullClawRuntimeBridge, 'function');
   assert.strictEqual(manifest.options.runtimeName, 'zeroclaw');
   assert.strictEqual(manifest.commandExamples.some((example) => example.includes('zeroclaw_bridge.js')), true);
   assert.strictEqual(typeof claw.describeZeroClawRuntimeBridge, 'function');
+  assert.strictEqual(typeof claw.describeOpenClawBridge, 'function');
+  assert.strictEqual(typeof claw.describeOpenFangBridge, 'function');
+  assert.strictEqual(typeof claw.describeNanoClawBridge, 'function');
+}
+
+function testOpenFangCommandInjectsRuntimeName() {
+  const openfangBridgePath = require.resolve('../modules/openfang_bridge');
+  const clawBridgePath = require.resolve('../modules/claw_bridge');
+  const clawInfraPath = require.resolve('../modules/claw_infra');
+
+  let capturedOptions = null;
+  require.cache[clawInfraPath] = {
+    id: clawInfraPath, filename: clawInfraPath, loaded: true,
+    exports: {
+      createClawInfrastructure: (opts) => {
+        capturedOptions = opts;
+        return {
+          runtime: { name: opts.runtime?.name || 'claw-bridge', accountName: null },
+          profiles: {},
+          market: {}
+        };
+      }
+    }
+  };
+
+  clearModule(clawBridgePath);
+  clearModule(openfangBridgePath);
+
+  const { runOpenFangCommand } = require('../modules/openfang_bridge');
+  runOpenFangCommand('runtime', {});
+
+  assert.strictEqual(capturedOptions.runtime.name, 'openfang', 'runOpenFangCommand should inject openfang as runtimeName');
+
+  clearModule(openfangBridgePath);
+  clearModule(clawBridgePath);
+  clearModule(clawInfraPath);
 }
 
 function testNullClawCommandInjectsRuntimeName() {
@@ -95,6 +141,39 @@ function testNullClawCommandInjectsRuntimeName() {
   assert.strictEqual(capturedOptions.runtime.name, 'nullclaw', 'runNullClawCommand should inject nullclaw as runtimeName');
 
   clearModule(nullclawBridgePath);
+  clearModule(clawBridgePath);
+  clearModule(clawInfraPath);
+}
+
+function testNanoClawCommandInjectsRuntimeName() {
+  const nanoclawBridgePath = require.resolve('../modules/nanoclaw_bridge');
+  const clawBridgePath = require.resolve('../modules/claw_bridge');
+  const clawInfraPath = require.resolve('../modules/claw_infra');
+
+  let capturedOptions = null;
+  require.cache[clawInfraPath] = {
+    id: clawInfraPath, filename: clawInfraPath, loaded: true,
+    exports: {
+      createClawInfrastructure: (opts) => {
+        capturedOptions = opts;
+        return {
+          runtime: { name: opts.runtime?.name || 'claw-bridge', accountName: null },
+          profiles: {},
+          market: {}
+        };
+      }
+    }
+  };
+
+  clearModule(clawBridgePath);
+  clearModule(nanoclawBridgePath);
+
+  const { runNanoClawCommand } = require('../modules/nanoclaw_bridge');
+  runNanoClawCommand('runtime', {});
+
+  assert.strictEqual(capturedOptions.runtime.name, 'nanoclaw', 'runNanoClawCommand should inject nanoclaw as runtimeName');
+
+  clearModule(nanoclawBridgePath);
   clearModule(clawBridgePath);
   clearModule(clawInfraPath);
 }
@@ -435,6 +514,70 @@ function testClawBridgeRespectsRuntimeNameOption() {
   clearModule(clawInfraPath);
 }
 
+function testClawBridgeScriptManifestUsesRuntimeSpecificDescriptors() {
+  const scriptPath = require.resolve('../scripts/claw_bridge');
+  clearModule(scriptPath);
+
+  const { describeRuntimeManifest } = require('../scripts/claw_bridge');
+
+  const openclawManifest = describeRuntimeManifest('openclaw', {});
+  assert.strictEqual(openclawManifest.compatibility.name, 'OpenClaw');
+  assert.strictEqual(openclawManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
+
+  const openfangManifest = describeRuntimeManifest('openfang', {});
+  assert.strictEqual(openfangManifest.compatibility.name, 'OpenFang');
+  assert.strictEqual(openfangManifest.commandExamples.some((example) => example.includes('openfang_bridge.js')), true);
+
+  const nanoclawManifest = describeRuntimeManifest('nanoclaw', {});
+  assert.strictEqual(nanoclawManifest.compatibility.name, 'NanoClaw');
+  assert.strictEqual(nanoclawManifest.commandExamples.some((example) => example.includes('nanoclaw_bridge.js')), true);
+
+  const nullclawManifest = describeRuntimeManifest('nullclaw', {});
+  assert.strictEqual(nullclawManifest.compatibility.name, 'NullClaw');
+  assert.strictEqual(nullclawManifest.commandExamples.some((example) => example.includes('nullclaw_bridge.js')), true);
+
+  const zeroclawManifest = describeRuntimeManifest('zeroclaw', {});
+  assert.strictEqual(zeroclawManifest.compatibility.name, 'ZeroClaw');
+  assert.strictEqual(zeroclawManifest.commandExamples.some((example) => example.includes('zeroclaw_bridge.js')), true);
+
+  const genericManifest = describeRuntimeManifest(null, {});
+  assert.strictEqual(genericManifest.compatibility.name, 'Claw');
+  assert.strictEqual(genericManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
+
+  const payloadSelectedManifest = describeRuntimeManifest(null, { runtimeName: 'openfang' });
+  assert.strictEqual(payloadSelectedManifest.compatibility.name, 'OpenFang');
+  assert.strictEqual(payloadSelectedManifest.commandExamples.some((example) => example.includes('openfang_bridge.js')), true);
+
+  const normalizedPayloadManifest = describeRuntimeManifest(null, { runtimeName: ' OpenFang ' });
+  assert.strictEqual(normalizedPayloadManifest.compatibility.name, 'OpenFang');
+  assert.strictEqual(normalizedPayloadManifest.commandExamples.some((example) => example.includes('openfang_bridge.js')), true);
+
+  clearModule(scriptPath);
+}
+
+async function testRuntimeCommandManifestUsesRuntimeSpecificDescriptors() {
+  const { runOpenFangCommand } = require('../modules/openfang_bridge');
+  const { runNanoClawCommand } = require('../modules/nanoclaw_bridge');
+  const { runNullClawCommand } = require('../modules/nullclaw_bridge');
+  const { runZeroClawCommand } = require('../modules/zeroclaw_bridge');
+
+  const openfangManifest = await runOpenFangCommand('manifest', {});
+  assert.strictEqual(openfangManifest.compatibility.name, 'OpenFang');
+  assert.strictEqual(openfangManifest.commandExamples.some((example) => example.includes('openfang_bridge.js')), true);
+
+  const nanoclawManifest = await runNanoClawCommand('manifest', {});
+  assert.strictEqual(nanoclawManifest.compatibility.name, 'NanoClaw');
+  assert.strictEqual(nanoclawManifest.commandExamples.some((example) => example.includes('nanoclaw_bridge.js')), true);
+
+  const nullclawManifest = await runNullClawCommand('manifest', {});
+  assert.strictEqual(nullclawManifest.compatibility.name, 'NullClaw');
+  assert.strictEqual(nullclawManifest.commandExamples.some((example) => example.includes('nullclaw_bridge.js')), true);
+
+  const zeroclawManifest = await runZeroClawCommand('manifest', {});
+  assert.strictEqual(zeroclawManifest.compatibility.name, 'ZeroClaw');
+  assert.strictEqual(zeroclawManifest.commandExamples.some((example) => example.includes('zeroclaw_bridge.js')), true);
+}
+
 function testAccountOrdersBotKeyFallsBackToAssetIds() {
   const { createBotKey } = require('../../modules/account_orders');
 
@@ -543,7 +686,11 @@ async function main() {
   await testDecisionLoopReplacesAnalyzerOnConfigChange();
   await testPositionManagerEntryExposesSellPriceInBts();
   testClawBridgeRespectsRuntimeNameOption();
+  testClawBridgeScriptManifestUsesRuntimeSpecificDescriptors();
+  await testRuntimeCommandManifestUsesRuntimeSpecificDescriptors();
+  testOpenFangCommandInjectsRuntimeName();
   testZeroClawCommandInjectsRuntimeName();
+  testNanoClawCommandInjectsRuntimeName();
   testNullClawCommandInjectsRuntimeName();
   testAccountOrdersBotKeyFallsBackToAssetIds();
   testBuildQueryScopesAnyPoolByReceivedAsset();

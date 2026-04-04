@@ -11,10 +11,10 @@ function testRuntimeMatrix() {
   const matrix = require('../modules/claw_runtime_matrix');
 
   const all = matrix.listSupportedClawRuntimes();
-  assert.ok(all.length >= 5);
+  assert.ok(all.length >= 7);
 
   const names = all.map((r) => r.runtime);
-  assert.deepStrictEqual(names, ['openclaw', 'nanobot', 'picoclaw', 'zeroclaw', 'nullclaw']);
+  assert.deepStrictEqual(names, ['openclaw', 'openfang', 'nanobot', 'picoclaw', 'nanoclaw', 'zeroclaw', 'nullclaw']);
 
   // Each entry is a defensive clone — mutations must not affect the registry
   all[0].runtime = 'mutated';
@@ -26,6 +26,11 @@ function testRuntimeMatrix() {
   assert.strictEqual(zc.preferredTransport, 'local-cli-json');
   assert.strictEqual(zc.skillFile, 'SKILL.toml');
 
+  const of = matrix.getSupportedClawRuntime('openfang');
+  assert.strictEqual(of.runtime, 'openfang');
+  assert.strictEqual(of.preferredTransport, 'local-cli-json');
+  assert.strictEqual(of.skillFile, 'SKILL.md');
+
   const nb = matrix.getSupportedClawRuntime('nanobot');
   assert.strictEqual(nb.runtime, 'nanobot');
   assert.strictEqual(nb.preferredTransport, 'mcp-stdio-jsonl');
@@ -36,10 +41,15 @@ function testRuntimeMatrix() {
   assert.strictEqual(pc.preferredTransport, 'mcp-stdio-jsonl');
   assert.ok(pc.notes.includes('newline-delimited JSON-RPC'));
 
-  const nc = matrix.getSupportedClawRuntime('nullclaw');
-  assert.strictEqual(nc.runtime, 'nullclaw');
-  assert.strictEqual(nc.preferredTransport, 'skill-toml-or-mcp');
-  assert.strictEqual(nc.skillFile, 'SKILL.toml');
+  const nanoclaw = matrix.getSupportedClawRuntime('nanoclaw');
+  assert.strictEqual(nanoclaw.runtime, 'nanoclaw');
+  assert.strictEqual(nanoclaw.preferredTransport, 'local-cli-json');
+  assert.strictEqual(nanoclaw.skillFile, 'SKILL.md');
+
+  const nullclaw = matrix.getSupportedClawRuntime('nullclaw');
+  assert.strictEqual(nullclaw.runtime, 'nullclaw');
+  assert.strictEqual(nullclaw.preferredTransport, 'skill-toml-or-mcp');
+  assert.strictEqual(nullclaw.skillFile, 'SKILL.toml');
 
   // Lookup is case-insensitive and trims whitespace
   assert.strictEqual(matrix.getSupportedClawRuntime('  ZeroClaw  ').runtime, 'zeroclaw');
@@ -97,6 +107,14 @@ function testClawManifest() {
   assert.strictEqual(nbDesc.compatibility.recommendedTransport, 'mcp-stdio-jsonl');
   assert.strictEqual(nbDesc.options.runtimeName, 'nanobot');
 
+  const openfangDesc = manifest.describeClawBridge({ runtimeName: 'openfang' });
+  assert.strictEqual(openfangDesc.compatibility.recommendedTransport, 'local-cli-json');
+  assert.strictEqual(openfangDesc.options.runtimeName, 'openfang');
+
+  const nanoclawDesc = manifest.describeClawBridge({ runtimeName: 'nanoclaw' });
+  assert.strictEqual(nanoclawDesc.compatibility.recommendedTransport, 'local-cli-json');
+  assert.strictEqual(nanoclawDesc.options.runtimeName, 'nanoclaw');
+
   // Unknown runtime falls back gracefully
   const unknownDesc = manifest.describeClawBridge({ runtimeName: 'unknown' });
   assert.strictEqual(unknownDesc.compatibility.recommendedTransport, 'runtime-specific');
@@ -111,6 +129,26 @@ function testClawManifest() {
   assert.strictEqual(withOpts.options.accountName, 'alice');
   assert.strictEqual(withOpts.options.profileRoot, '/tmp/profiles');
   assert.strictEqual(withOpts.options.socketPath, '/tmp/cred.sock');
+}
+
+// ---------------------------------------------------------------------------
+// openclaw_manifest
+// ---------------------------------------------------------------------------
+
+function testOpenClawManifest() {
+  const manifest = require('../modules/openclaw_manifest');
+
+  const desc = manifest.describeOpenClawBridge();
+
+  assert.strictEqual(desc.compatibility.name, 'OpenClaw');
+  assert.ok(desc.compatibility.trustModel.includes('OpenClaw'));
+  assert.strictEqual(desc.options.runtimeName, 'openclaw');
+  assert.strictEqual(desc.compatibility.recommendedTransport, 'plugin-or-mcp');
+  assert.ok(Array.isArray(desc.commandExamples));
+  assert.ok(desc.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')));
+
+  const withOpts = manifest.describeOpenClawBridge({ accountName: 'dave' });
+  assert.strictEqual(withOpts.options.accountName, 'dave');
 }
 
 // ---------------------------------------------------------------------------
@@ -207,6 +245,7 @@ function testDexbotBridgeRootResolution() {
 function main() {
   testRuntimeMatrix();
   testClawManifest();
+  testOpenClawManifest();
   testZeroClawManifest();
   testNullClawManifest();
   testDexbotBridgeRootResolution();

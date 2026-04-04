@@ -1,8 +1,8 @@
 const {
   createClawBridge,
-  describeClawBridge,
   runClawCommand
 } = require('./claw_bridge');
+const { describeZeroClawBridge } = require('./zeroclaw_manifest');
 
 function createZeroClawBridge(options = {}) {
   return createClawBridge({
@@ -14,23 +14,11 @@ function createZeroClawBridge(options = {}) {
   });
 }
 
-function describeZeroClawBridge(options = {}) {
-  const manifest = describeClawBridge({
-    ...options,
-    runtimeName: 'zeroclaw'
-  });
-
-  return {
-    ...manifest,
-    compatibility: {
-      ...manifest.compatibility,
-      name: 'ZeroClaw',
-      trustModel: 'ZeroClaw sends intents and reads context; AI-Bot handles signing through DEXBot2'
-    }
-  };
-}
-
 function runZeroClawCommand(command, options = {}) {
+  if (command === 'manifest') {
+    return describeZeroClawBridge(options);
+  }
+
   return runClawCommand(command, {
     ...options,
     runtimeName: options.runtimeName || 'zeroclaw'

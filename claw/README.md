@@ -1,6 +1,6 @@
 # Claw BitShares Bridge
 
-Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes: OpenClaw, NanoBot, PicoClaw, ZeroClaw, and NullClaw.
+Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes: OpenClaw, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw.
 
 This scaffold follows the same high-level split used in DEXBot2:
 
@@ -28,6 +28,8 @@ npm install btsdex
 - Dynamic weights: `modules/dynamic_weight_service.js`
 - Price sources: `modules/feed_price_source.js`, `modules/kibana_price_source.js`
 - DEXBot2 and Claw integration: `modules/dexbot_bridge.js`, `modules/dexbot_profiles.js`, `modules/dexbot_credential_client.js`, `modules/claw_bridge.js`, `modules/claw_catalog.js`, `modules/claw_manifest.js`, `modules/claw_skill_md.js`, `modules/claw_runtime_matrix.js`, `scripts/claw_bridge.js`, `scripts/claw_mcp_server.js`
+- OpenFang support: `modules/openfang_bridge.js`, `scripts/openfang_bridge.js`
+- NanoClaw support: `modules/nanoclaw_bridge.js`, `scripts/nanoclaw_bridge.js`
 - ZeroClaw support: `modules/zeroclaw_bridge.js`, `modules/zeroclaw_catalog.js`, `modules/zeroclaw_manifest.js`, `modules/zeroclaw_skill.js`
 - NullClaw support: `modules/nullclaw_bridge.js`, `modules/nullclaw_catalog.js`, `modules/nullclaw_manifest.js`, `modules/nullclaw_skill.js`
 - Skill packs: `skills/bitshares-guide/SKILL.md`, `skills/margin-trading/SKILL.md`, `skills/launcher-ops/SKILL.md`, shared boundary references under `skills/shared/references/`
@@ -41,7 +43,7 @@ npm install btsdex
 
 What it does:
 
-- expose a local JSON/CLI bridge and native runtime packaging for OpenClaw, NanoBot, PicoClaw, ZeroClaw, and NullClaw
+- expose a local JSON/CLI bridge and native runtime packaging for OpenClaw, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw
 - provide BitShares read helpers, broadcast helpers, and account/action wrappers
 - expose DEXBot2 profile context, order utilities, and liquidity/pool helpers through a smaller surface
 - provide HONEST context helpers, short-MPA helper flows, and position-manager utilities
@@ -51,7 +53,7 @@ What it does:
 What it does not do:
 
 - replace the main DEXBot2 bot engine or orchestration loop
-- own credentials or hand private keys to ZeroClaw or NullClaw callers
+- own credentials or hand private keys to ZeroClaw, NanoClaw, or NullClaw callers
 - become the canonical source of truth for core DEXBot2 math or runtime behavior
 - make strategy decisions for the main bot runtime beyond the explicit helper flows included here
 - guarantee that exposed write actions are safe just because they are wrapped by the bridge
@@ -148,13 +150,15 @@ Shared boundary notes live in `skills/shared/references/skill-boundaries.md`.
 
 ## Multi-Runtime Support
 
-`claw/` supports five native runtime families, listed once here for quick reference:
+`claw/` supports seven native runtime families, listed once here for quick reference:
 
 | Runtime | Native integration | Best fit | Main tradeoff |
 | --- | --- | --- | --- |
 | OpenClaw | Native plugin plus optional `SKILL.md` | Broadest and heaviest option | Richest runtime surface, but also the highest operational complexity |
+| OpenFang | CLI bridge plus workspace `SKILL.md` | CLI-first local integration | Best when the runtime should consume a thin generated bridge rather than a vendored adapter stack |
 | NanoBot | MCP plus `SKILL.md` | Smaller Python codebase with MCP integration | Easier to inspect, but slower and heavier than Go or Rust |
 | PicoClaw | MCP plus `SKILL.md` | Small Go-based option with launcher support | Great for low-cost hardware, but still evolving quickly |
+| NanoClaw | `SKILL.md` skill file plus local JSON bridge | Claude Code skill-driven local runtime | Keep the DEXBot2 bridge skill named `bitshares-claw` so it does not collide with NanoClaw's built-in `claw` skill |
 | ZeroClaw | `SKILL.toml` skill manifest | Smallest and most constrained option | Best cold starts, but the most specialized Rust-oriented workflow |
 | NullClaw | `SKILL.toml` skill manifest plus MCP server config | Zig-native runtime with workspace loading | Strong fit for local workspace loading, but more dependent on NullClaw-specific config conventions |
 
@@ -163,20 +167,24 @@ Practical selection guide:
 | If you optimize for | Best choice | Why |
 | --- | --- | --- |
 | Broadest assistant surface and plugin depth | OpenClaw | Richest runtime, strongest plugin model, widest ecosystem coverage |
+| CLI-first local workspace integration | OpenFang | Thin bridge, generated skill file, and minimal maintenance surface |
 | Simple MCP integration with Python ergonomics | NanoBot | Easier to inspect and adapt, good for lightweight tool-driven workflows |
 | Small Go binary and low-cost hardware | PicoClaw | Good launcher support, strong fit for tiny boards and constrained Linux targets |
+| Claude Code skill-driven local runtime | NanoClaw | Skill-file workflow with a dedicated local bridge and a name that avoids NanoClaw's built-in `claw` skill |
 | Lowest footprint and fastest startup | ZeroClaw | Smallest surface, manifest-driven, best for static local automation |
 | Zig-native workspace assistant with manifest loading | NullClaw | Native workspace loading, direct skill-file workflows, and optional MCP server support |
 
 Rule of thumb:
 
 - Choose **OpenClaw** for the broadest assistant platform.
+- Choose **OpenFang** for a CLI-first local workspace integration with a thin generated skill file.
 - Choose **NanoBot** for a compact Python codebase with MCP tooling.
 - Choose **PicoClaw** for a small Go runtime with launcher support.
+- Choose **NanoClaw** for a Claude Code skill-driven local assistant with a narrow local bridge.
 - Choose **ZeroClaw** for the smallest and most deterministic runtime.
 - Choose **NullClaw** for a Zig-native runtime with workspace-centric skill loading.
 
-For a deeper comparison of the five supported runtimes, see [docs/RUNTIME_COMPARISON.md](docs/RUNTIME_COMPARISON.md).
+For a deeper comparison of the seven supported runtimes, see [docs/RUNTIME_COMPARISON.md](docs/RUNTIME_COMPARISON.md).
 
 Run the commands below from the `claw/` directory.
 
@@ -232,6 +240,27 @@ Available bridge and native tool surfaces include:
 - BTS-backed short open, take-profit, close, and plan builders
 - MPA position lookup
 
+### OpenFang
+
+Generate the OpenFang skill file:
+
+```bash
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+npm run openfang:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT" --output ~/.openfang/skills/bitshares-claw/SKILL.md
+```
+
+OpenFang uses the same shared bridge surface through a local CLI wrapper. Keep the generated skill file focused on invoking `openfang_bridge.js` rather than vendoring OpenFang internals into DEXBot2.
+
+OpenFang compatibility command surface:
+
+```bash
+node scripts/openfang_bridge.js manifest
+node scripts/openfang_bridge.js profile-context --payload '{"botRef":"default"}'
+node scripts/openfang_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+node scripts/openfang_bridge.js create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+```
+
 ### NanoBot and PicoClaw
 
 Run the MCP server over stdio:
@@ -254,6 +283,27 @@ npm run picoclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
 ```
 
 On a fresh PicoClaw install, make sure `agents.defaults.workspace` is configured in `config.json` or run `picoclaw onboard` before expecting workspace skills to appear.
+
+### NanoClaw
+
+Generate the NanoClaw skill file:
+
+```bash
+CLAW_ROOT="$(pwd)"
+DEXBOT_ROOT="$(cd .. && pwd)"
+npm run nanoclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT" --output /path/to/nanoclaw/.claude/skills/bitshares-claw/SKILL.md
+```
+
+NanoClaw already ships its own `claw` skill, so keep this bridge skill named `bitshares-claw`.
+
+NanoClaw compatibility command surface:
+
+```bash
+node scripts/nanoclaw_bridge.js manifest
+node scripts/nanoclaw_bridge.js profile-context --payload '{"botRef":"default"}'
+node scripts/nanoclaw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+node scripts/nanoclaw_bridge.js create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+```
 
 ### ZeroClaw
 

@@ -8,6 +8,9 @@ const clawInfra = require('./modules/claw_infra');
 const clawManifest = require('./modules/claw_manifest');
 const clawRuntimeMatrix = require('./modules/claw_runtime_matrix');
 const clawSkillMd = require('./modules/claw_skill_md');
+const openclawManifest = require('./modules/openclaw_manifest');
+const openfangBridge = require('./modules/openfang_bridge');
+const nanoclawBridge = require('./modules/nanoclaw_bridge');
 const nullclawBridge = require('./modules/nullclaw_bridge');
 const nullclawCatalog = require('./modules/nullclaw_catalog');
 const nullclawManifest = require('./modules/nullclaw_manifest');
@@ -42,6 +45,9 @@ module.exports = {
   ...clawManifest,
   ...clawRuntimeMatrix,
   ...clawSkillMd,
+  ...openclawManifest,
+  ...openfangBridge,
+  ...nanoclawBridge,
   ...nullclawBridge,
   ...nullclawCatalog,
   ...nullclawManifest,
@@ -66,6 +72,12 @@ module.exports = {
   ...zeroclawSkill,
 
   // Disambiguate root exports that would otherwise be overwritten by spread order.
+  describeOpenClawBridge: openclawManifest.describeOpenClawBridge,
+  describeOpenClawRuntimeBridge: openclawManifest.describeOpenClawBridge,
+  describeOpenFangBridge: openfangBridge.describeOpenFangBridge,
+  describeOpenFangRuntimeBridge: openfangBridge.describeOpenFangBridge,
+  describeNanoClawBridge: nanoclawBridge.describeNanoClawBridge,
+  describeNanoClawRuntimeBridge: nanoclawBridge.describeNanoClawBridge,
   describeNullClawBridge: nullclawManifest.describeNullClawBridge,
   describeNullClawRuntimeBridge: nullclawBridge.describeNullClawBridge,
   describeZeroClawBridge: zeroclawManifest.describeZeroClawBridge,

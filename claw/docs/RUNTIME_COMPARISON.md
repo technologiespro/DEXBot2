@@ -1,10 +1,12 @@
 # Claw Runtime Comparison
 
-This note compares the five runtime families supported by the Claw bridge layer:
+This note compares the seven runtime families supported by the Claw bridge layer:
 
 - OpenClaw
+- OpenFang
 - NanoBot
 - PicoClaw
+- NanoClaw
 - ZeroClaw
 - NullClaw
 
@@ -12,10 +14,11 @@ The comparison is based on the current `claw/` bridge design and runtime metadat
 
 ## What The Bridge Optimizes For
 
-The bridge is trying to satisfy five different operating modes with one shared BitShares surface:
+The bridge is trying to satisfy seven different operating modes with one shared BitShares surface:
 
 - very small footprint and fast startup
 - broad assistant and plugin coverage
+- CLI-first workspace integration
 - simple MCP-based integration
 - low-cost hardware and launcher-based workflows
 - workspace-native skill loading and local manifest workflows
@@ -43,7 +46,7 @@ Strengths:
 
 - Richest runtime surface.
 - Native plugin model is a strong fit for extension-heavy workflows.
-- Broadest assistant-style experience among the five.
+- Broadest assistant-style experience among the seven.
 - Best when the bridge needs to live inside a feature-rich product rather than a small runtime shim.
 
 Tradeoffs:
@@ -57,6 +60,28 @@ Best fit:
 - Desktop or server environments where footprint is less important.
 - Teams that value extensibility and a mature assistant ecosystem.
 - Workflows that benefit from plugin registration over a narrow CLI surface.
+
+### OpenFang
+
+OpenFang is the CLI-first local workspace integration with the thinnest maintenance surface.
+
+Strengths:
+
+- Local CLI bridge keeps the integration narrow and explicit.
+- Generated `SKILL.md` can wrap the shared Claw surface without vendoring OpenFang internals.
+- Good fit when the runtime should consume commands from a workspace skill file instead of embedding Claw as a library.
+
+Tradeoffs:
+
+- Less feature-rich than a full plugin-driven assistant platform.
+- Depends on OpenFang's local CLI and workspace skill conventions.
+- Best when the bridge stays deliberately thin.
+
+Best fit:
+
+- Local workspace installs.
+- Operators who want the smallest possible adapter between OpenFang and DEXBot2.
+- CLI-first workflows that do not need a new transport layer.
 
 ### NanoBot
 
@@ -102,6 +127,28 @@ Best fit:
 - Small-board deployments.
 - Users who want a low-footprint Go runtime with a practical launcher.
 - Deployments where the assistant needs to be easy to bootstrap, not just tiny.
+
+### NanoClaw
+
+NanoClaw is the Claude Code skill-driven local runtime with a narrow bridge wrapper.
+
+Strengths:
+
+- Uses a plain `SKILL.md` skill file and a local bridge script.
+- Fits the same shared Claw command surface without introducing a separate transport stack.
+- Keeps the bridge skill name distinct from NanoClaw's bundled `claw` skill.
+
+Tradeoffs:
+
+- More workspace-convention dependent than the external-tool runtimes.
+- Newer than the longer-established OpenClaw, NanoBot, and PicoClaw flows.
+- Best experience depends on NanoClaw's `.claude/skills` layout and local CLI invocation.
+
+Best fit:
+
+- Users who want a Claude Code style local assistant with a narrow bridge.
+- Workspace-driven installs where a generated `bitshares-claw` skill file is acceptable.
+- Operators who want to keep runtime integration simple and file-based.
 
 ### ZeroClaw
 
@@ -155,7 +202,9 @@ If you optimize primarily for:
 
 - **Lowest footprint**: ZeroClaw
 - **Broadest feature set**: OpenClaw
+- **CLI-first workspace integration**: OpenFang
 - **Simplest external tool boundary**: NanoBot or PicoClaw, depending on whether you want Python or Go
+- **Skill-file driven local assistant**: NanoClaw
 - **Lowest-cost hardware**: PicoClaw, then ZeroClaw
 - **Most mature assistant ecosystem**: OpenClaw
 - **Fastest local command-style integration**: ZeroClaw
@@ -164,8 +213,10 @@ If you optimize primarily for:
 ## Practical Rule Of Thumb
 
 - Choose **OpenClaw** if the bridge should live inside a larger assistant product with rich extension points.
+- Choose **OpenFang** if you want a CLI-first workspace bridge with minimal maintenance overhead.
 - Choose **NanoBot** if you want a compact Python assistant that is easy to modify.
 - Choose **PicoClaw** if you want a small Go runtime with MCP and launcher support.
+- Choose **NanoClaw** if you want a Claude Code skill-driven local runtime with a narrow bridge.
 - Choose **ZeroClaw** if the bridge must be tiny and deterministic.
 - Choose **NullClaw** if you want a Zig-native runtime with workspace skill loading and MCP support.
 
@@ -177,5 +228,9 @@ The executable behavior lives in the `claw/` modules and scripts. This compariso
 - `modules/claw_catalog.js`
 - `modules/claw_manifest.js`
 - `modules/claw_skill_md.js`
+- `modules/openfang_bridge.js`
+- `modules/nanoclaw_bridge.js`
+- `scripts/openfang_bridge.js`
 - `scripts/claw_skill_md.js`
+- `scripts/nanoclaw_bridge.js`
 - `scripts/zeroclaw_skill.js`

@@ -32,6 +32,10 @@ function describeNullClawBridge(options = {}) {
 }
 
 function runNullClawCommand(command, options = {}) {
+  if (command === 'manifest') {
+    return describeNullClawBridge(options);
+  }
+
   return runClawCommand(command, {
     ...options,
     runtimeName: options.runtimeName || 'nullclaw'

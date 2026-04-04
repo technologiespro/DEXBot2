@@ -98,6 +98,40 @@ function buildRuntimeSetup(runtime, repoRoot, profileRoot) {
         'Running `picoclaw onboard` or writing an explicit workspace path in `config.json` is sufficient.'
       ].join('\n');
 
+    case 'nanoclaw':
+      return [
+        '## NanoClaw Setup',
+        '',
+        'NanoClaw already ships its own `claw` skill, so keep this bridge skill named `bitshares-claw` to avoid a collision.',
+        '',
+        'Write the generated `SKILL.md` into NanoClaw\'s workspace skill tree, for example:',
+        '',
+        '```text',
+        '.claude/skills/bitshares-claw/SKILL.md',
+        '```',
+        '',
+        'Use the local JSON bridge in `scripts/nanoclaw_bridge.js` when you want the NanoClaw runtime to talk to DEXBot2.',
+        '',
+        `Set \`DEXBOT_PROFILE_ROOT=${profileRoot}\` if you want a default profile root outside tool args.`
+      ].join('\n');
+
+    case 'openfang':
+      return [
+        '## OpenFang Setup',
+        '',
+        'OpenFang uses the same shared Claw bridge surface through a local CLI wrapper.',
+        '',
+        'Write the generated `SKILL.md` into OpenFang\'s workspace skill tree, for example:',
+        '',
+        '```text',
+        '~/.openfang/skills/bitshares-claw/SKILL.md',
+        '```',
+        '',
+        'Use the local JSON bridge in `scripts/openfang_bridge.js` when you want the OpenFang runtime to talk to DEXBot2.',
+        '',
+        `Set \`DEXBOT_PROFILE_ROOT=${profileRoot}\` if you want a default profile root outside tool args.`
+      ].join('\n');
+
     case 'openclaw':
       return [
         '## OpenClaw Setup',
