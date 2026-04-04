@@ -126,6 +126,23 @@ function testDerivedVaultRoundtrip() {
         '5K-example-private-key',
         'vault secret should decrypt its own ciphertext'
     );
+
+    const sessionSaltA = Buffer.from('ffeeddccbbaa99887766554433221100', 'hex');
+    const sessionSaltB = Buffer.from('00112233445566778899aabbccddeeff', 'hex');
+    const sessionSecretA = chainKeys.createSessionSecret(secret, sessionSaltA);
+    const sessionSecretB = chainKeys.createSessionSecret(secret, sessionSaltB);
+
+    assert.strictEqual(sessionSecretA.kind, 'dexbot-session-secret', 'session secret should be tagged as session-only');
+    assert.strictEqual(sessionSecretA.sessionSaltHex, sessionSaltA.toString('hex'), 'session secret should expose the salt used for derivation');
+    assert.notStrictEqual(sessionSecretA.vaultKeyHex, secret.vaultKeyHex, 'session secret should not reuse the master-derived vault key');
+    assert.notStrictEqual(sessionSecretA.vaultKeyHex, sessionSecretB.vaultKeyHex, 'different session salts should produce different session keys');
+
+    const sessionCiphertext = chainKeys.encrypt('5K-session-private-key', sessionSecretA);
+    assert.strictEqual(
+        chainKeys.decrypt(sessionCiphertext, sessionSecretA),
+        '5K-session-private-key',
+        'session secret should encrypt and decrypt its own ciphertext'
+    );
 }
 
 function testLegacyPayloadRejected() {

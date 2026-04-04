@@ -1,5 +1,6 @@
 const assert = require('assert');
 const fs = require('fs');
+const net = require('net');
 const os = require('os');
 const path = require('path');
 
@@ -89,6 +90,56 @@ function testEnsureRuntimeDirUsesPrivatePermissions() {
     }
 }
 
+async function testSecurePathChecksRecognizePrivateFilesAndSockets() {
+    const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-runtime-secure-'));
+    const runtimeDir = path.join(baseDir, 'run');
+    const socketPath = path.join(baseDir, 'daemon.sock');
+    const filePath = path.join(baseDir, 'ready.file');
+
+    try {
+        runtime.ensureCredentialRuntimeDirSync({ runtimeDir });
+        assert.ok(
+            runtime.isPrivatePathSecure(runtimeDir, { expectedType: 'dir', requiredMode: 0o700 }),
+            'runtime dir should pass the private-path check'
+        );
+
+        fs.writeFileSync(filePath, 'ready', { mode: 0o600 });
+        assert.ok(
+            runtime.isPrivatePathSecure(filePath, { expectedType: 'file', requiredMode: 0o600 }),
+            'ready file should pass the private-path check'
+        );
+
+        let server;
+        try {
+            server = net.createServer();
+            await new Promise((resolve, reject) => {
+                server.once('error', reject);
+                server.listen(socketPath, resolve);
+            });
+            try {
+                fs.chmodSync(socketPath, 0o600);
+            } catch (err) { }
+
+            assert.ok(
+                runtime.isPrivatePathSecure(socketPath, { expectedType: 'socket', requiredMode: 0o600 }),
+                'daemon socket should pass the private-path check'
+            );
+        } catch (error) {
+            if (error && error.code === 'EPERM') {
+                console.log('Skipping socket security test under sandbox restrictions');
+                return;
+            }
+            throw error;
+        } finally {
+            if (server) {
+                await new Promise((resolve) => server.close(resolve));
+            }
+        }
+    } finally {
+        try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+    }
+}
+
 function testInvalidXdgRuntimeFallsBackToProfilesRun() {
     const originalXdg = process.env.XDG_RUNTIME_DIR;
     const originalRuntimeDir = process.env.DEXBOT_CRED_RUNTIME_DIR;
@@ -129,10 +180,16 @@ function testInvalidXdgRuntimeFallsBackToProfilesRun() {
     }
 }
 
-testDefaultPathsUseProfilesRun();
-testXdgRuntimeOverride();
-testEnsureRuntimeDirUsesPrivatePermissions();
-testInvalidXdgRuntimeFallsBackToProfilesRun();
+(async () => {
+    testDefaultPathsUseProfilesRun();
+    testXdgRuntimeOverride();
+    testEnsureRuntimeDirUsesPrivatePermissions();
+    await testSecurePathChecksRecognizePrivateFilesAndSockets();
+    testInvalidXdgRuntimeFallsBackToProfilesRun();
 
-console.log('credential runtime path tests passed');
-process.exit(0);
+    console.log('credential runtime path tests passed');
+    process.exit(0);
+})().catch((err) => {
+    console.error(err);
+    process.exit(1);
+});

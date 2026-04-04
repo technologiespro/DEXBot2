@@ -3,6 +3,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const chainKeys = require('../chain_keys');
 const {
+    assertPrivatePathSecurity,
     ensureCredentialRuntimeDirSync,
     getCredentialReadyFilePath,
     getCredentialSocketPath,
@@ -35,8 +36,22 @@ function createCredentialDaemonController({
 
     function removeStaleDaemonFiles() {
         if (isDaemonReady()) return;
-        try { fs.unlinkSync(socketPath); } catch (err) { }
-        try { fs.unlinkSync(readyFilePath); } catch (err) { }
+        try {
+            if (fs.existsSync(socketPath)) {
+                assertPrivatePathSecurity(socketPath, { expectedType: 'socket', requiredMode: 0o600 });
+                fs.unlinkSync(socketPath);
+            }
+        } catch (err) {
+            throw new Error(`Insecure credential socket path: ${err.message}`);
+        }
+        try {
+            if (fs.existsSync(readyFilePath)) {
+                assertPrivatePathSecurity(readyFilePath, { expectedType: 'file', requiredMode: 0o600 });
+                fs.unlinkSync(readyFilePath);
+            }
+        } catch (err) {
+            throw new Error(`Insecure credential ready path: ${err.message}`);
+        }
     }
 
     function forwardSignal(signal) {

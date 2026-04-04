@@ -291,13 +291,8 @@ async function _createOrderFromGrid({ chainOrders, account, privateKey, manager,
         return;
     }
 
-    const chainOrderId =
-        result &&
-        result[0] &&
-        result[0].trx &&
-        result[0].trx.operation_results &&
-        result[0].trx.operation_results[0] &&
-        result[0].trx.operation_results[0][1];
+    const operationResults = extractBatchOperationResults(result) || [];
+    const chainOrderId = operationResults[0] && operationResults[0][1];
 
     if (chainOrderId) {
         const btsFeeData = getAssetFees('BTS');

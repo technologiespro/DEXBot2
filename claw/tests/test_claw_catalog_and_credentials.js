@@ -68,7 +68,22 @@ async function testCredentialDaemonClient() {
   const runtime = require('../../modules/credential_runtime');
 
   const originalExistsSync = fs.existsSync;
+  const originalLstatSync = fs.lstatSync;
   const originalCreateConnection = net.createConnection;
+
+  const credStatFor = (filePath) => ({
+    isSymbolicLink: () => false,
+    isFile: () => !String(filePath).endsWith('.sock'),
+    isSocket: () => String(filePath).endsWith('.sock'),
+    isDirectory: () => false,
+    uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+    mode: 0o100600,
+  });
+
+  fs.lstatSync = (filePath) => {
+    if (String(filePath).includes('cred')) return credStatFor(filePath);
+    return originalLstatSync.call(fs, filePath);
+  };
 
   try {
     assert.strictEqual(client.DEFAULT_SOCKET_PATH, runtime.getCredentialSocketPath());
@@ -205,6 +220,7 @@ async function testCredentialDaemonClient() {
     );
   } finally {
     fs.existsSync = originalExistsSync;
+    fs.lstatSync = originalLstatSync;
     net.createConnection = originalCreateConnection;
     clearModule(clientPath);
     clearModule(runtimePath);

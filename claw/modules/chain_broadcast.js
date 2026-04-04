@@ -1,6 +1,8 @@
 const { createAccountClient } = require('./bitshares_client');
 const {
   isCredentialDaemonReady,
+  broadcastOperationViaCredentialDaemon,
+  executeOperationsViaCredentialDaemon,
   requestPrivateKeyFromCredentialDaemon,
   waitForCredentialDaemon
 } = require('./dexbot_credential_client');
@@ -65,6 +67,33 @@ async function executeOperations(operations, options = {}) {
     return { success: true, operation_results: [], raw: null };
   }
 
+  if (!options.privateKey && isCredentialDaemonReady(options)) {
+    const accountName = resolveAccountName(options);
+    if (!accountName) {
+      throw new Error('accountName is required');
+    }
+
+    const daemonTimeoutMs = Number.isFinite(Number(options.daemonTimeoutMs))
+      ? Number(options.daemonTimeoutMs)
+      : undefined;
+    const requestTimeoutMs = Number.isFinite(Number(options.daemonRequestTimeoutMs))
+      ? Number(options.daemonRequestTimeoutMs)
+      : undefined;
+
+    await waitForCredentialDaemon(daemonTimeoutMs, options);
+    const result = await executeOperationsViaCredentialDaemon(accountName, ops, {
+      socketPath: options.socketPath,
+      timeoutMs: requestTimeoutMs
+    });
+
+    return {
+      ...result,
+      operation_results: result.operation_results || [],
+      raw: result.raw || null,
+      success: true
+    };
+  }
+
   const client = await getSigningClient(options);
   if (client.initPromise) {
     await client.initPromise;
@@ -102,6 +131,38 @@ async function executeOperations(operations, options = {}) {
 async function broadcastOperation(operation, options = {}) {
   if (operation && operation.op_name && operation.op_data) {
     return executeOperations([operation], options);
+  }
+
+  if (!options.privateKey && isCredentialDaemonReady(options)) {
+    const accountName = resolveAccountName(options);
+    if (!accountName) {
+      throw new Error('accountName is required');
+    }
+
+    const daemonTimeoutMs = Number.isFinite(Number(options.daemonTimeoutMs))
+      ? Number(options.daemonTimeoutMs)
+      : undefined;
+    const requestTimeoutMs = Number.isFinite(Number(options.daemonRequestTimeoutMs))
+      ? Number(options.daemonRequestTimeoutMs)
+      : undefined;
+
+    await waitForCredentialDaemon(daemonTimeoutMs, options);
+    const result = await broadcastOperationViaCredentialDaemon(accountName, operation, {
+      socketPath: options.socketPath,
+      timeoutMs: requestTimeoutMs
+    });
+
+    const operationResults =
+      (result && Array.isArray(result.operation_results) && result.operation_results) ||
+      (result && result.trx && Array.isArray(result.trx.operation_results) && result.trx.operation_results) ||
+      (Array.isArray(result) && result[0] && result[0].trx && Array.isArray(result[0].trx.operation_results) && result[0].trx.operation_results) ||
+      [];
+
+    return {
+      success: true,
+      raw: result,
+      operation_results: operationResults
+    };
   }
 
   const client = await getSigningClient(options);

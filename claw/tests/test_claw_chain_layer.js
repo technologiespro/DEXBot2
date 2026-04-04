@@ -202,6 +202,8 @@ function createBroadcastHarness() {
     accountClient: [],
     broadcasts: [],
     daemon: {
+      broadcast: [],
+      execute: [],
       request: [],
       wait: []
     },
@@ -257,6 +259,23 @@ function createBroadcastHarness() {
 
   registerMock(credentialClientPath, {
     isCredentialDaemonReady: () => calls.daemonReady,
+    broadcastOperationViaCredentialDaemon: async (accountName, operation, options) => {
+      calls.daemon.broadcast.push({ accountName, operation, options });
+      return {
+        operation,
+        operation_results: [[0, '1.7.88']],
+        raw: { source: 'daemon-broadcast' },
+        source: 'daemon-broadcast'
+      };
+    },
+    executeOperationsViaCredentialDaemon: async (accountName, operations, options) => {
+      calls.daemon.execute.push({ accountName, operations, options });
+      return {
+        operation_results: [[0, '1.7.77']],
+        raw: { source: 'daemon-execute' },
+        source: 'daemon-execute'
+      };
+    },
     requestPrivateKeyFromCredentialDaemon: async (accountName, options) => {
       calls.daemon.request.push({ accountName, options });
       return 'daemon-secret';
@@ -324,16 +343,28 @@ async function testChainBroadcast() {
     assert.strictEqual(calls.daemon.request.length, 0);
 
     calls.daemonReady = true;
+    const daemonTxResult = await broadcast.executeOperations([
+      {
+        op_data: { amount: 2 },
+        op_name: 'limit_order_create'
+      }
+    ], {
+      accountName: 'alice'
+    });
+
+    assert.strictEqual(calls.daemon.execute.length, 1, 'daemon-backed execute should use the daemon RPC');
+    assert.strictEqual(calls.daemon.request.length, 0, 'daemon-backed execute should not request a raw private key');
+    assert.strictEqual(daemonTxResult.raw.source, 'daemon-execute');
+
     const rawResult = await broadcast.broadcastOperation(
       { object_id: '1.7.88' },
       { accountName: 'alice' }
     );
 
-    assert.strictEqual(calls.daemon.wait.length, 1);
-    assert.strictEqual(calls.daemon.request.length, 1);
-    assert.strictEqual(calls.accountClient[1].privateKey, 'daemon-secret');
-    assert.deepStrictEqual(calls.broadcasts[0], { object_id: '1.7.88' });
-    assert.strictEqual(rawResult.source, 'raw-broadcast');
+    assert.strictEqual(calls.daemon.wait.length, 2);
+    assert.strictEqual(calls.daemon.broadcast.length, 1, 'daemon-backed raw broadcast should use the daemon RPC');
+    assert.strictEqual(calls.accountClient[1], undefined, 'daemon-backed raw broadcast should not create a local account client');
+    assert.strictEqual(rawResult.raw.source, 'daemon-broadcast');
 
     assert.strictEqual(broadcast.resolveAccountName({ accountName: 'alice' }), 'alice');
     assert.strictEqual(broadcast.resolveAccountName({}), null);

@@ -69,16 +69,84 @@ function ensureCredentialRuntimeDirSync(options = {}) {
     } catch (err) {
         debugLog(`Unable to chmod runtime dir ${runtimeDir}`, err);
     }
+    assertPrivatePathSecurity(runtimeDir, { expectedType: 'dir', requiredMode: 0o700 });
     return runtimeDir;
+}
+
+function getCurrentUid() {
+    return typeof process.getuid === 'function' ? process.getuid() : null;
+}
+
+function assertPrivatePathSecurity(filePath, options = {}) {
+    if (!filePath) {
+        throw new Error('filePath is required');
+    }
+
+    const expectedType = options.expectedType || 'file';
+    const requiredMode = options.requiredMode;
+    const requireOwner = options.requireOwner !== false;
+
+    if (process.platform === 'win32' && expectedType === 'socket') {
+        if (!fs.existsSync(filePath)) {
+            throw new Error(`Missing socket path: ${filePath}`);
+        }
+        return null;
+    }
+
+    const stat = fs.lstatSync(filePath);
+
+    if (stat.isSymbolicLink()) {
+        throw new Error(`Refusing to use symbolic link: ${filePath}`);
+    }
+
+    const typeCheck = {
+        dir: () => stat.isDirectory(),
+        file: () => stat.isFile(),
+        socket: () => stat.isSocket(),
+    }[expectedType];
+
+    if (!typeCheck) {
+        throw new Error(`Unsupported expectedType: ${expectedType}`);
+    }
+
+    if (!typeCheck()) {
+        throw new Error(`Unexpected path type for ${filePath}; expected ${expectedType}`);
+    }
+
+    const currentUid = getCurrentUid();
+    if (requireOwner && currentUid !== null && typeof stat.uid === 'number' && stat.uid !== currentUid) {
+        throw new Error(`Unexpected owner for ${filePath}; expected uid ${currentUid}, found ${stat.uid}`);
+    }
+
+    if (Number.isInteger(requiredMode) && process.platform !== 'win32') {
+        const mode = stat.mode & 0o777;
+        if (mode !== requiredMode) {
+            throw new Error(`Unexpected permissions for ${filePath}; expected ${requiredMode.toString(8)}, found ${mode.toString(8)}`);
+        }
+    }
+
+    return stat;
+}
+
+function isPrivatePathSecure(filePath, options = {}) {
+    try {
+        assertPrivatePathSecurity(filePath, options);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 module.exports = {
     DEFAULT_READY_BASENAME,
     DEFAULT_RUNTIME_DIR_NAME,
     DEFAULT_SOCKET_BASENAME,
+    assertPrivatePathSecurity,
     ensureCredentialRuntimeDirSync,
     getCredentialReadyFilePath,
     getCredentialRuntimeDir,
     getCredentialSocketPath,
+    getCurrentUid,
     isUsableRuntimeBaseDir,
+    isPrivatePathSecure,
 };

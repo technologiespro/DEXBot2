@@ -104,6 +104,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const chainKeys = require('./chain_keys');
+const {
+    executeOperationsViaCredentialDaemon,
+} = require('./dexbot_credential_client');
 
 // Key/auth helpers provided by modules/chain_keys.js
 // (authenticate(), getPrivateKey(), MasterPasswordError)
@@ -351,6 +354,21 @@ async function selectAccount() {
     const pref = await getPreferredAccount();
     console.log(`Selected account: ${selectedAccount} (ID: ${pref.id})`);
     return { accountName: selectedAccount, privateKey: privateKey, id: pref.id };
+}
+
+function isDaemonSigningToken(value) {
+    return chainKeys.isDaemonSigningToken(value);
+}
+
+async function executeViaDaemonToken(accountName, signingToken, operations) {
+    const result = await executeOperationsViaCredentialDaemon(accountName, operations, {
+        socketPath: signingToken.socketPath,
+    });
+    return {
+        success: true,
+        raw: result.raw || null,
+        operation_results: Array.isArray(result.operation_results) ? result.operation_results : [],
+    };
 }
 
 /**
@@ -687,6 +705,12 @@ async function updateOrder(accountName, privateKey, orderId, newParams) {
         }
 
         const { op } = buildResult;
+        if (isDaemonSigningToken(privateKey)) {
+            const result = await executeViaDaemonToken(accountName, privateKey, [op]);
+            console.log(`Order ${orderId} updated successfully`);
+            return { success: true, orderId, raw: result.raw, operation_results: result.operation_results };
+        }
+
         const acc = createAccountClient(accountName, privateKey);
         await acc.initPromise;
         const tx = acc.newTx();
@@ -789,6 +813,12 @@ async function createOrder(accountName, privateKey, amountToSell, sellAssetId, m
             return { dryRun: true, params: op.op_data };
         }
 
+        if (isDaemonSigningToken(privateKey)) {
+            const result = await executeViaDaemonToken(accountName, privateKey, [op]);
+            console.log(`Limit order created successfully for account ${accountName}`);
+            return result;
+        }
+
         const acc = createAccountClient(accountName, privateKey);
         await acc.initPromise;
         const tx = acc.newTx();
@@ -838,6 +868,12 @@ async function cancelOrder(accountName, privateKey, orderId) {
         const op = await buildCancelOrderOp(accountName, orderId);
         accountId = op.op_data.fee_paying_account;
 
+        if (isDaemonSigningToken(privateKey)) {
+            const result = await executeViaDaemonToken(accountName, privateKey, [op]);
+            console.log(`Order ${orderId} cancelled successfully`);
+            return { success: true, orderId, verified: true, raw: result.raw, operation_results: result.operation_results };
+        }
+
         const acc = createAccountClient(accountName, privateKey);
         await acc.initPromise;
         const tx = acc.newTx();
@@ -876,6 +912,10 @@ async function executeBatch(accountName, privateKey, operations) {
     if (!operations || operations.length === 0) return { success: true, operations: 0 };
 
     try {
+        if (isDaemonSigningToken(privateKey)) {
+            return executeViaDaemonToken(accountName, privateKey, operations);
+        }
+
         const acc = createAccountClient(accountName, privateKey);
         await acc.initPromise;
         const tx = acc.newTx();

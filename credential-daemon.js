@@ -4,7 +4,7 @@
  *
  * DEXBot credential daemon for multi-bot private key management.
  * Enables bot processes to request pre-decrypted keys via Unix socket.
- * Derived vault secret kept in RAM only, never exposed to bot processes.
+ * Keeps the derived vault secret in RAM so key updates remain visible while the daemon runs.
  *
  * ===============================================================================
  * DAEMON OPERATION
@@ -13,9 +13,10 @@
  * STARTUP:
  * 1. Prompts for master password ONCE at startup
  * 2. Authenticates with profiles/keys.json
- * 3. Keeps only the derived vault secret in RAM during operation
- * 4. Listens on Unix socket for credential requests
- * 5. Services private key requests from bot processes
+ * 3. Re-wraps the decrypted account cache with a random session secret
+ * 4. Keeps the derived vault secret and session cache in RAM during operation
+ * 5. Listens on Unix socket for credential requests
+ * 6. Services private key requests from bot processes
  *
  * COMMUNICATION:
  * - Socket: profiles/run/dexbot-cred-daemon.sock (or $DEXBOT_CRED_RUNTIME_DIR, or $XDG_RUNTIME_DIR/dexbot2/)
@@ -64,12 +65,18 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const chainKeys = require('./modules/chain_keys');
+const { createAccountClient } = require('./modules/bitshares_client');
 const {
+    assertPrivatePathSecurity,
     ensureCredentialRuntimeDirSync,
     getCredentialReadyFilePath,
     getCredentialRuntimeDir,
     getCredentialSocketPath,
 } = require('./modules/credential_runtime');
+const {
+    buildSessionAccountCache,
+    loadDaemonPrivateKey,
+} = require('./modules/credential_session_cache');
 const { fetchBootstrapPassword } = require('./modules/launcher/credential_bootstrap');
 const { normalizeBootstrapCredential } = require('./modules/launcher/credential_secret');
 
@@ -90,6 +97,8 @@ const SOCKET_PATH = getCredentialSocketPath({ root: __dirname, runtimeDir: RUNTI
 const READY_FILE = getCredentialReadyFilePath({ root: __dirname, runtimeDir: RUNTIME_DIR });
 
 let vaultSecret = null;
+let sessionSecret = null;
+let sessionAccountKeys = new Map();
 let server = null;
 
 function debugLog(message, err = null) {
@@ -116,6 +125,70 @@ async function resolveVaultSecret() {
     return chainKeys.authenticate();
 }
 
+function removeSecureStaleFile(filePath, expectedType) {
+    if (!fs.existsSync(filePath)) {
+        return;
+    }
+
+    // Intentionally throws rather than silently cleaning up: if the path fails
+    // the security check (wrong owner, wrong permissions, or a symlink) we must
+    // not remove it — doing so could mask an attack. The caller is expected to
+    // surface the error and abort daemon startup.
+    assertPrivatePathSecurity(filePath, {
+        expectedType,
+        requiredMode: 0o600,
+    });
+
+    fs.unlinkSync(filePath);
+}
+
+async function loadCurrentPrivateKey(accountName) {
+    return loadDaemonPrivateKey(accountName, {
+        vaultSecret,
+        sessionAccountKeys,
+        sessionSecret,
+    });
+}
+
+async function executeOperationsWithClient(client, operations) {
+    const ops = Array.isArray(operations) ? operations.filter(Boolean) : [];
+    if (ops.length === 0) {
+        return { success: true, operation_results: [], raw: null };
+    }
+
+    if (client.initPromise) {
+        await client.initPromise;
+    }
+
+    if (typeof client.newTx !== 'function') {
+        throw new Error('Signing client does not support newTx()');
+    }
+
+    const tx = client.newTx();
+    for (const op of ops) {
+        if (!op || !op.op_name || !op.op_data) {
+            throw new Error('Each operation requires op_name and op_data');
+        }
+        if (typeof tx[op.op_name] !== 'function') {
+            throw new Error(`Transaction builder does not support ${op.op_name}`);
+        }
+        tx[op.op_name](op.op_data);
+    }
+
+    const result = await tx.broadcast();
+    const operationResults =
+        (result && Array.isArray(result.operation_results) && result.operation_results) ||
+        (result && result.trx && Array.isArray(result.trx.operation_results) && result.trx.operation_results) ||
+        (Array.isArray(result) && result[0] && result[0].trx && Array.isArray(result[0].trx.operation_results) && result[0].trx.operation_results) ||
+        [];
+
+    return {
+        success: true,
+        raw: result,
+        operation_results: operationResults,
+    };
+}
+
 /**
  * Initialize daemon: authenticate and start listening
  */
@@ -130,15 +203,25 @@ async function initialize() {
         // Accept a one-shot bootstrap secret when launched by a wrapper,
         // otherwise prompt once interactively.
         vaultSecret = await resolveVaultSecret();
+        const accountsData = chainKeys.loadAccounts();
+        const sessionState = buildSessionAccountCache(accountsData, vaultSecret, {
+            onDecryptError: (accountName, err) => {
+                debugLog(`Skipping account '${accountName}' — decryption failed: ${err.message}`);
+            },
+        });
+        sessionAccountKeys = sessionState.cache;
+        sessionSecret = sessionState.sessionSecret;
+        if (accountsData && typeof accountsData === 'object') {
+            accountsData.accounts = null;
+        }
         ensureCredentialRuntimeDirSync({ root: __dirname, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });
 
         // Clean up old socket if it exists
         try {
-            if (fs.existsSync(SOCKET_PATH)) {
-                fs.unlinkSync(SOCKET_PATH);
-            }
+            removeSecureStaleFile(SOCKET_PATH, 'socket');
+            removeSecureStaleFile(READY_FILE, 'file');
         } catch (err) {
-            // Silently ignore
+            throw new Error(`Insecure credential runtime path detected: ${err.message}`);
         }
 
         // Create server
@@ -146,6 +229,7 @@ async function initialize() {
         server.listen(SOCKET_PATH, () => {
             try {
                 fs.chmodSync(SOCKET_PATH, 0o600);
+                assertPrivatePathSecurity(SOCKET_PATH, { expectedType: 'socket', requiredMode: 0o600 });
             } catch (err) {
                 debugLog(`Unable to chmod socket ${SOCKET_PATH}`, err);
             }
@@ -153,6 +237,7 @@ async function initialize() {
             try {
                 fs.writeFileSync(READY_FILE, Date.now().toString());
                 fs.chmodSync(READY_FILE, 0o600);
+                assertPrivatePathSecurity(READY_FILE, { expectedType: 'file', requiredMode: 0o600 });
             } catch (err) {
                 debugLog(`Unable to update ready file permissions ${READY_FILE}`, err);
             }
@@ -218,6 +303,9 @@ function handleConnection(socket) {
  * @param {net.Socket} socket - Client socket to send response
  */
 function processRequest(requestStr, socket) {
+    // The outer try/catch handles JSON parse errors and any synchronous throws.
+    // Each async branch manages its own errors via .catch() → sendError(), so
+    // the outer catch is not expected to fire for async operation failures.
     try {
         const request = JSON.parse(requestStr);
         const { type, accountName } = request;
@@ -226,23 +314,57 @@ function processRequest(requestStr, socket) {
             return sendError(socket, 'Missing "type" field');
         }
 
-        if (type !== 'private-key') {
-            return sendError(socket, `Unknown credential type: ${type}`);
-        }
-
         if (!accountName) {
             return sendError(socket, 'Missing "accountName" field');
         }
 
-        // Retrieve private key
-        let privateKey;
-        try {
-            privateKey = chainKeys.getPrivateKey(accountName, vaultSecret);
-        } catch (error) {
-            return sendError(socket, error.message);
+        if (type === 'probe-account') {
+            loadCurrentPrivateKey(accountName)
+                .then(() => sendSuccess(socket, {}))
+                .catch((error) => sendError(socket, error.message));
+            return;
         }
 
-        sendSuccess(socket, { privateKey });
+        if (type === 'broadcast-operation') {
+            const operation = request.operation;
+            if (!operation || typeof operation !== 'object') {
+                return sendError(socket, 'Missing "operation" field');
+            }
+
+            loadCurrentPrivateKey(accountName)
+                .then((privateKey) => {
+                    const client = createAccountClient(accountName, privateKey);
+                    return client.broadcast(operation);
+                })
+                .then((result) => sendSuccess(socket, { result }))
+                .catch((error) => sendError(socket, error.message));
+            return;
+        }
+
+        if (type === 'execute-operations') {
+            const operations = request.operations;
+            if (!Array.isArray(operations)) {
+                return sendError(socket, 'Missing "operations" field');
+            }
+
+            loadCurrentPrivateKey(accountName)
+                .then((privateKey) => {
+                    const client = createAccountClient(accountName, privateKey);
+                    return executeOperationsWithClient(client, operations);
+                })
+                .then((result) => sendSuccess(socket, result))
+                .catch((error) => sendError(socket, error.message));
+            return;
+        }
+
+        if (type === 'private-key') {
+            loadCurrentPrivateKey(accountName)
+                .then((privateKey) => sendSuccess(socket, { privateKey }))
+                .catch((error) => sendError(socket, error.message));
+            return;
+        }
+
+        return sendError(socket, `Unknown credential type: ${type}`);
     } catch (error) {
         sendError(socket, error.message);
     }
@@ -284,6 +406,12 @@ function shutdown() {
     // Clear derived vault secret from memory
     if (vaultSecret) {
         vaultSecret = null;
+    }
+    if (sessionSecret) {
+        sessionSecret = null;
+    }
+    if (sessionAccountKeys) {
+        sessionAccountKeys.clear();
     }
 
     // Close server

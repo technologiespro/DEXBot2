@@ -23,7 +23,7 @@
  * All newly written private keys use the v2 vault format.
  *
  * ===============================================================================
- * EXPORTS (12 functions + 1 error class)
+ * EXPORTS (13 functions + 1 error class)
  * ===============================================================================
  *
  * AUTHENTICATION (1 function)
@@ -42,14 +42,15 @@
  *
  *   4. validatePrivateKey(key) - Validate private key format
  *
- * CRYPTO HELPERS (7 functions)
+ * CRYPTO HELPERS (8 functions)
  *   5. encrypt(text, secret) - AES-256-GCM encryption
  *   6. decrypt(encryptedHex, secret) - AES-256-GCM decryption
  *   7. hashPassword(password) - SHA-256 hash for legacy verification
  *   8. deriveVaultKey(password, vaultSalt) - Derive the session vault key
- *   9. loadAccounts() - Load accounts from keys.json
- *  10. saveAccounts(data) - Save accounts to keys.json
- *  11. createVaultSecret(...) - Build a serializable derived secret object
+ *   9. deriveSessionSecret(vaultSecret, sessionSalt) - Derive a session-only signing key
+ *  10. loadAccounts() - Load accounts from keys.json
+ *  11. saveAccounts(data) - Save accounts to keys.json
+ *  12. createVaultSecret(...) - Build a serializable derived secret object
  *
  * DAEMON (3 functions)
  *  10. isDaemonReady() - Check if credential daemon is ready
@@ -103,8 +104,11 @@ const VAULT_SCRYPT_PARAMS = Object.freeze({
     maxmem: 256 * 1024 * 1024,
 });
 const VAULT_RECORD_INFO = Buffer.from('dexbot2:v2:record-key', 'utf8');
+const VAULT_SESSION_INFO = Buffer.from('dexbot2:v2:session-key', 'utf8');
 const VAULT_VERIFIER_LABEL = 'dexbot2:v2:verifier';
 const VAULT_SECRET_KIND = 'dexbot-vault-secret';
+const VAULT_SESSION_SECRET_KIND = 'dexbot-session-secret';
+const VAULT_DAEMON_SIGNING_TOKEN_KIND = 'dexbot-daemon-signing-token';
 
 // Profiles key file (ignored) only
 const PROFILES_KEYS_FILE = process.env.DEXBOT_KEYS_FILE
@@ -161,6 +165,41 @@ function createVaultSecret(vaultKey, extra = {}) {
         version: extra.version || VAULT_VERSION,
         vaultKeyHex: keyBuffer.toString('hex'),
     };
+}
+
+function createSessionSecret(vaultKey, sessionSalt = crypto.randomBytes(VAULT_SALT_BYTES)) {
+    const keyBuffer = resolveVaultKey(vaultKey);
+    const saltBuffer = toBuffer(sessionSalt);
+    if (!keyBuffer || !saltBuffer) {
+        throw new Error('Vault secret and session salt are required');
+    }
+
+    const sessionKey = Buffer.from(
+        crypto.hkdfSync('sha256', keyBuffer, saltBuffer, VAULT_SESSION_INFO, VAULT_KEY_BYTES)
+    );
+
+    return {
+        kind: VAULT_SESSION_SECRET_KIND,
+        version: VAULT_VERSION,
+        sessionSaltHex: saltBuffer.toString('hex'),
+        vaultKeyHex: sessionKey.toString('hex'),
+    };
+}
+
+function createDaemonSigningToken(accountName, options = {}) {
+    if (!accountName || typeof accountName !== 'string') {
+        throw new Error('accountName is required for daemon signing');
+    }
+
+    return {
+        kind: VAULT_DAEMON_SIGNING_TOKEN_KIND,
+        accountName,
+        socketPath: options.socketPath || getCredentialSocketPath(options),
+    };
+}
+
+function isDaemonSigningToken(value) {
+    return !!(value && typeof value === 'object' && value.kind === VAULT_DAEMON_SIGNING_TOKEN_KIND && typeof value.accountName === 'string');
 }
 
 function deriveVaultKey(password, vaultSalt) {
@@ -914,6 +953,72 @@ function getPrivateKeyFromDaemon(accountName, timeout = 5000, options = {}) {
     });
 }
 
+/**
+ * Probe the credential daemon for a specific account without fetching the key.
+ * Verifies the account exists in the daemon's session cache.
+ * @param {string} accountName - Name of the account to probe
+ * @param {number} timeout - Timeout in milliseconds (default 5000)
+ * @param {Object} options - Optional socket path overrides
+ * @returns {Promise<void>} Resolves if the account is available, rejects otherwise
+ */
+function probeAccountInDaemon(accountName, timeout = 5000, options = {}) {
+    const net = require('net');
+    const socketPath = getCredentialSocketPath(options);
+
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const socket = net.createConnection(socketPath, () => {
+            socket.write(JSON.stringify({ type: 'probe-account', accountName }) + '\n');
+        });
+
+        let responseBuffer = '';
+        const timer = setTimeout(() => {
+            socket.destroy();
+            if (!settled) { settled = true; reject(new Error('Daemon probe timeout')); }
+        }, timeout);
+
+        socket.on('data', (data) => {
+            responseBuffer += data.toString();
+            const lines = responseBuffer.split('\n');
+            responseBuffer = lines.pop();
+
+            for (const line of lines) {
+                if (line.trim()) {
+                    clearTimeout(timer);
+                    socket.end();
+                    if (!settled) {
+                        settled = true;
+                        try {
+                            const response = JSON.parse(line);
+                            if (response.success) {
+                                resolve();
+                            } else {
+                                reject(new Error(response.error || 'Daemon probe failed'));
+                            }
+                        } catch (err) {
+                            reject(new Error('Invalid daemon probe response'));
+                        }
+                    }
+                    return;
+                }
+            }
+        });
+
+        socket.on('error', (error) => {
+            clearTimeout(timer);
+            if (!settled) { settled = true; reject(new Error(`Daemon connection failed: ${error.message}`)); }
+        });
+
+        socket.on('end', () => {
+            clearTimeout(timer);
+            if (!settled && !responseBuffer.trim()) {
+                settled = true;
+                reject(new Error('Daemon closed connection unexpectedly'));
+            }
+        });
+    });
+}
+
 module.exports = {
     validatePrivateKey,
     loadAccounts,
@@ -922,8 +1027,11 @@ module.exports = {
     decrypt,
     hashPassword,
     deriveVaultKey,
+    createDaemonSigningToken,
+    createSessionSecret,
     createVaultSecret,
     isVaultSecret,
+    isDaemonSigningToken,
     unlockWithPassword,
     main,
     authenticate,
@@ -933,4 +1041,5 @@ module.exports = {
     isDaemonReady,
     waitForDaemon,
     getPrivateKeyFromDaemon,
+    probeAccountInDaemon,
 };
