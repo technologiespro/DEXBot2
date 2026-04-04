@@ -20,7 +20,6 @@ const decisionLoop = require('./modules/decision_loop');
 const dexbotBridge = require('./modules/dexbot_bridge');
 const dexbotCredentialClient = require('./modules/dexbot_credential_client');
 const dexbotProfiles = require('./modules/dexbot_profiles');
-const dynamicWeightService = require('./modules/dynamic_weight_service');
 const feedPriceSource = require('./modules/feed_price_source');
 const honestEcosystem = require('./modules/honest_ecosystem');
 const kibanaPriceSource = require('./modules/kibana_price_source');
@@ -58,7 +57,6 @@ module.exports = {
   ...dexbotBridge,
   ...dexbotCredentialClient,
   ...dexbotProfiles,
-  ...dynamicWeightService,
   ...feedPriceSource,
   ...honestEcosystem,
   ...kibanaPriceSource,

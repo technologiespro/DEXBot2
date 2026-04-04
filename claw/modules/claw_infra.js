@@ -7,7 +7,6 @@ const chainQueries = require('./chain_queries');
 const credentialClient = require('./dexbot_credential_client');
 const { createHonestEcosystemAdapter } = require('./honest_ecosystem');
 const { loadDexbotOrderSubsystem } = require('./dexbot_bridge');
-const { createDynamicWeightService } = require('./dynamic_weight_service');
 const { acquireFileLock, createDexbotProfileAdapter } = require('./dexbot_profiles');
 const { tuneBot } = require('./bot_auto_tuner');
 const {
@@ -282,18 +281,10 @@ function createClawInfrastructure(options = {}) {
   const profiles = createDexbotProfileAdapter(runtime.profileRoot, {
     logger: runtime.logger
   });
-  const dynamicWeights = createDynamicWeightService({
-    logger: runtime.logger,
-    market,
-    profiles,
-    stateStore
-  });
-
   return {
     autoTuner: { tuneBot },
     bitshares,
     credential,
-    dynamicWeights,
     honest,
     profiles,
     market,

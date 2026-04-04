@@ -61,19 +61,6 @@ function createBridgeHarness() {
     createClawInfrastructure: (options) => {
       calls.createClawInfrastructure.push(options);
       return {
-        dynamicWeights: {
-          applySelectedBot: async (selectedBot, options) => ({
-            selectedBot,
-            source: 'apply',
-            options
-          }),
-          evaluateSelectedBot: async (selectedBot, options) => ({
-            selectedBot,
-            source: 'preview',
-            options
-          }),
-          getPolicy: () => ({ policy: 'dynamic-weight-policy' })
-        },
         honest: {
           buildContext: async (options) => ({
             source: 'honest-context',
@@ -469,25 +456,27 @@ async function testRunClawCommandDispatchMatrix() {
     assert.strictEqual(mpaPosition.source, 'mpa-position');
     assert.strictEqual(calls.chainActions.getMpaPosition[0].accountNameOrId, 'alice');
 
-    const dynamicWeightPolicy = await bridge.runClawCommand('dynamic-weight-policy', {});
-    assert.strictEqual(dynamicWeightPolicy.policy, 'dynamic-weight-policy');
-
-    const dynamicWeightPreview = await bridge.runClawCommand('dynamic-weight-preview', {
-      botId: 'bot-123'
-    });
-    assert.strictEqual(dynamicWeightPreview.source, 'preview');
-    assert.strictEqual(dynamicWeightPreview.selectedBot.botId, 'bot-123');
-    assert.strictEqual(dynamicWeightPreview.options.policy, undefined);
-
-    const dynamicWeightApply = await bridge.runClawCommand('dynamic-weight-apply', {
-      botId: 'bot-123'
-    });
-    assert.strictEqual(dynamicWeightApply.source, 'apply');
-    assert.strictEqual(dynamicWeightApply.selectedBot.botId, 'bot-123');
-
     await assert.rejects(
       () => bridge.runClawCommand('unsupported-command', {}),
       /Unsupported Claw command: unsupported-command/
+    );
+    await assert.rejects(
+      () => bridge.runClawCommand('dynamic-weight-policy', {}),
+      /Unsupported Claw command: dynamic-weight-policy/
+    );
+    await assert.rejects(
+      () => bridge.runClawCommand('dynamic-weight-preview', {
+        botId: 'bot-123',
+        patch: { gridPriceOffsetPct: 0.2 }
+      }),
+      /Unsupported Claw command: dynamic-weight-preview/
+    );
+    await assert.rejects(
+      () => bridge.runClawCommand('dynamic-weight-apply', {
+        botId: 'bot-123',
+        patch: { gridPriceOffsetPct: 0.2 }
+      }),
+      /Unsupported Claw command: dynamic-weight-apply/
     );
   } finally {
     cleanup();

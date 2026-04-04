@@ -40,7 +40,7 @@ function testClawCatalog() {
   assert.strictEqual(commands.length, new Set(commands).size);
   assert.ok(commands.includes('manifest'));
   assert.ok(commands.includes('create-limit-order'));
-  assert.ok(commands.includes('dynamic-weight-apply'));
+  assert.ok(commands.includes('bot-settings-apply'));
 
   const createLimitOrder = catalog.getClawToolByCommand('create-limit-order');
   assert.strictEqual(createLimitOrder.risk, 'execute');
@@ -56,7 +56,7 @@ function testClawCatalog() {
 
   const examples = catalog.buildClawCommandExamples('node scripts/claw_bridge.js');
   assert.ok(examples.some((line) => line.startsWith('node scripts/claw_bridge.js manifest')));
-  assert.ok(examples.some((line) => line.includes('dynamic-weight-apply')));
+  assert.ok(examples.some((line) => line.includes('bot-settings-apply')));
 }
 
 async function testCredentialDaemonClient() {

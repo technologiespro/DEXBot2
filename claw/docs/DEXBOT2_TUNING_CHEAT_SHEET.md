@@ -133,7 +133,7 @@ This shifts the grid center price by a percentage after the reference price is r
 - negative values shift the center downward (bearish lean)
 - the maximum magnitude is controlled by `gridPriceOffsetMaxPct` (default `0.5`)
 
-Use the offset to express a directional bias without changing the structural grid settings. The dynamic weight service can automate this based on trend signals — see the `dynamic-weight-preview` and `dynamic-weight-apply` bridge commands.
+Use the offset to express a directional bias without changing the structural grid settings. The generic bot settings bridge can automate this based on trend signals — see the `bot-settings-preview` and `bot-settings-apply` commands.
 
 The offset is an adaptive setting. It should change with market conditions, not be set once and forgotten.
 

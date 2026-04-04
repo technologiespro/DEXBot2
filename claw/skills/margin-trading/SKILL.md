@@ -19,5 +19,5 @@ The practical control model is split into:
 - `references/honest-asset-list.md` — All 46 HONEST MPAs with on-chain IDs, precision, and categories
 - `references/honest-assets.md` — HONEST ecosystem properties: fees, MCR, feed price mechanics
 - `references/trading-concepts.md` — Short/long position lifecycles, collateral operations, claw bridge commands
-- `references/position-management.md` — CR zones, capital efficiency, dynamic weight and grid-price offset policy, min/max range-ratio guidance, unified planner model, loss/profit principles
-- `references/trend-detection.md` — AMA vs feed price trend detection, premium/discount analysis
+- `references/position-management.md` — CR zones, capital efficiency, unified planner model, loss/profit principles
+- Shared trend and signal tuning lives in `../trend-detection/SKILL.md`

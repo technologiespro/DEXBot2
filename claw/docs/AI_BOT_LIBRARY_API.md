@@ -395,9 +395,9 @@ The bridge exposed by [../modules/claw_bridge.js](../modules/claw_bridge.js) sup
 - `build-take-profit-plan`
 - `build-close-short-plan`
 - `mpa-position`
-- `dynamic-weight-policy`
-- `dynamic-weight-preview`
-- `dynamic-weight-apply`
+- `bot-settings`
+- `bot-settings-preview`
+- `bot-settings-apply`
 
 ## Root Export Disambiguation
 

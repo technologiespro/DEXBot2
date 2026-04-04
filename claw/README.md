@@ -401,19 +401,19 @@ Dynamic weight updates adjust `weightDistribution` and `gridPriceOffsetPct` base
 Inspect the default policy:
 
 ```bash
-node scripts/claw_bridge.js dynamic-weight-policy
+node scripts/claw_bridge.js bot-settings --payload '{"botRef":"default"}'
 ```
 
 Preview an update without applying:
 
 ```bash
-node scripts/claw_bridge.js dynamic-weight-preview --payload '{"botRef":"default"}'
+node scripts/claw_bridge.js bot-settings-preview --payload '{"botRef":"default","patch":{"gridPriceOffsetPct":0.2}}'
 ```
 
 Apply the update and write the recalc trigger:
 
 ```bash
-node scripts/claw_bridge.js dynamic-weight-apply --payload '{"botRef":"default"}'
+node scripts/claw_bridge.js bot-settings-apply --payload '{"botRef":"default","patch":{"gridPriceOffsetPct":0.2}}'
 ```
 
 ## High-Level Actions

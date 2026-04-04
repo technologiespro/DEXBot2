@@ -95,7 +95,7 @@ function testClawManifest() {
   assert.ok(desc.commands.length > 0);
   assert.ok(desc.commands.includes('manifest'));
   assert.ok(desc.commands.includes('create-limit-order'));
-  assert.ok(desc.commands.includes('dynamic-weight-apply'));
+  assert.ok(desc.commands.includes('bot-settings-apply'));
 
   // byRisk grouping covers at least read and execute buckets
   assert.ok(Array.isArray(desc.tools.byRisk.read));

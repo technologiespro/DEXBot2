@@ -299,33 +299,6 @@ async function runClawCommand(command, options = {}) {
     case 'mpa-position':
       return getMpaPosition(safeOptions.accountName || safeOptions.accountRef || accountName, safeOptions.mpaAsset);
 
-    case 'dynamic-weight-policy':
-      return bridge.dynamicWeights.getPolicy();
-
-    case 'dynamic-weight-preview': {
-      const context = await bridge.profiles.getClawProfileContext(getProfileContextRef(safeOptions), safeOptions);
-      if (!context?.selectedBot) {
-        throw new Error('dynamic-weight-preview requires a resolved bot profile');
-      }
-
-      return bridge.dynamicWeights.evaluateSelectedBot(context.selectedBot, {
-        policy: safeOptions.policy,
-        priceContext: safeOptions.priceContext
-      });
-    }
-
-    case 'dynamic-weight-apply': {
-      const context = await bridge.profiles.getClawProfileContext(getProfileContextRef(safeOptions), safeOptions);
-      if (!context?.selectedBot) {
-        throw new Error('dynamic-weight-apply requires a resolved bot profile');
-      }
-
-      return bridge.dynamicWeights.applySelectedBot(context.selectedBot, {
-        policy: safeOptions.policy,
-        priceContext: safeOptions.priceContext
-      });
-    }
-
     default:
       throw new Error(`Unsupported Claw command: ${command}`);
   }

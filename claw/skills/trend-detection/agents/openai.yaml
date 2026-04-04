@@ -1,0 +1,3 @@
+interface:
+  display_name: "Trend Detection"
+  short_description: "Tune and monitor the shared DEXBot/Claw trend service"
