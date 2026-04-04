@@ -20,6 +20,7 @@
 const { discoverPositions } = require('./position_discovery');
 const { assessPosition } = require('./position_health');
 const { fetchTrendInput } = require('./feed_price_source');
+const { tuneBot } = require('./bot_auto_tuner');
 
 // Lazy-load TrendAnalyzer to avoid circular dependency issues at startup
 let TrendAnalyzer = null;
@@ -173,8 +174,46 @@ function resetAnalyzers() {
   analyzerConfigs.clear();
 }
 
+/**
+ * Run evaluation and generate tuning recommendations for each position.
+ * Returns assessments with tuning suggestions (patch + reasoning) for direct bot application.
+ *
+ * @param {string} accountName – BitShares account name
+ * @param {Object} [bots] – Map of bot configs keyed by botKey
+ * @param {Object} [options]
+ * @param {Object} [options.analyzerConfig] – TrendAnalyzer config overrides
+ * @param {Function} [options.logger] – Log function
+ * @returns {Object} { account, evaluatedAt, positions: [...with tuning] }
+ */
+async function evaluateAndTune(accountName, bots = {}, options = {}) {
+  // Run standard evaluation
+  const result = await evaluate(accountName, options);
+
+  // Add tuning recommendations to each assessment
+  const positionsWithTuning = result.positions.map((assessment) => {
+    const botKey = assessment.botKey;
+    const bot = botKey && bots[botKey] ? bots[botKey] : null;
+
+    let tuningRecommendation = null;
+    if (bot) {
+      tuningRecommendation = tuneBot(bot, assessment);
+    }
+
+    return {
+      ...assessment,
+      tuning: tuningRecommendation
+    };
+  });
+
+  return {
+    ...result,
+    positions: positionsWithTuning
+  };
+}
+
 module.exports = {
   evaluate,
+  evaluateAndTune,
   getOrCreateAnalyzer,
   resetAnalyzers,
 };

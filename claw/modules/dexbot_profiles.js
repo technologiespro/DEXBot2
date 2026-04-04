@@ -1208,6 +1208,7 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
         errors: [],
         next: buildBotSettingsView(updatedBot || nextEntry, freshBundle, { identifier }),
         patch: cloneBotSettings(patch) || {},
+        reasoning: options.reasoning || [],
         triggerPath,
         triggerPayload,
         updatedBot: updatedBot ? cloneBotSettings(updatedBot) : cloneBotSettings(nextEntry),
@@ -1218,6 +1219,7 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
       await release();
     }
   }
+
 
   async function getClawProfileContext(identifier, options = {}) {
     const bundle = await loadBundle(Boolean(options.forceReload));

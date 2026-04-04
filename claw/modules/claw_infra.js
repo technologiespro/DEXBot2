@@ -9,6 +9,7 @@ const { createHonestEcosystemAdapter } = require('./honest_ecosystem');
 const { loadDexbotOrderSubsystem } = require('./dexbot_bridge');
 const { createDynamicWeightService } = require('./dynamic_weight_service');
 const { acquireFileLock, createDexbotProfileAdapter } = require('./dexbot_profiles');
+const { tuneBot } = require('./bot_auto_tuner');
 const {
   createPositionManagerWatcher,
   parsePositionManagerWatchArgs,
@@ -289,6 +290,7 @@ function createClawInfrastructure(options = {}) {
   });
 
   return {
+    autoTuner: { tuneBot },
     bitshares,
     credential,
     dynamicWeights,
