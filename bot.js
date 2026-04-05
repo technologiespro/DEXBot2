@@ -52,6 +52,8 @@ const DEXBot = require('./modules/dexbot_class');
 const { normalizeBotEntry } = require('./modules/dexbot_class');
 const { loadSettingsFile, resolveRawBotEntries, selectBotEntry } = require('./modules/bot_settings');
 const { setupGracefulShutdown, registerCleanup } = require('./modules/graceful_shutdown');
+const chainKeys = require('./modules/chain_keys');
+const credentialPolicy = require('./modules/credential_policy');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
@@ -113,13 +115,15 @@ function loadBotConfig(name) {
  * @throws {Error} If both daemon and interactive authentication fail.
  */
 async function getSigningSecretForAccount(accountName) {
-    const chainKeys = require('./modules/chain_keys');
-
     // Try daemon first
     if (chainKeys.isDaemonReady()) {
         try {
-            await chainKeys.probeAccountInDaemon(accountName);
-            return chainKeys.createDaemonSigningToken(accountName);
+            const sessionId = await chainKeys.probeAccountInDaemon(accountName);
+            const botHmacSecret = credentialPolicy.loadBotHmacSecret(
+                accountName,
+                path.join(__dirname, 'profiles', 'daemon-policies.json')
+            );
+            return chainKeys.createDaemonSigningToken(accountName, { sessionId, botHmacSecret });
         } catch (err) {
             // Fall back to interactive authentication if the daemon is stale or unresponsive.
         }

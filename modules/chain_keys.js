@@ -195,6 +195,8 @@ function createDaemonSigningToken(accountName, options = {}) {
         kind: VAULT_DAEMON_SIGNING_TOKEN_KIND,
         accountName,
         socketPath: options.socketPath || getCredentialSocketPath(options),
+        sessionId: options.sessionId || null,
+        botHmacSecret: options.botHmacSecret || null,
     };
 }
 
@@ -991,7 +993,7 @@ function probeAccountInDaemon(accountName, timeout = 5000, options = {}) {
                         try {
                             const response = JSON.parse(line);
                             if (response.success) {
-                                resolve();
+                                resolve(response.sessionId || null);
                             } else {
                                 reject(new Error(response.error || 'Daemon probe failed'));
                             }

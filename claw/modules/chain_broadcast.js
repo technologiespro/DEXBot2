@@ -1,4 +1,5 @@
 const { createAccountClient } = require('./bitshares_client');
+const path = require('path');
 const {
   isCredentialDaemonReady,
   broadcastOperationViaCredentialDaemon,
@@ -6,6 +7,54 @@ const {
   requestPrivateKeyFromCredentialDaemon,
   waitForCredentialDaemon
 } = require('./dexbot_credential_client');
+const { getDexbot2Root, requireDexbot2Module } = require('./dexbot_bridge');
+
+// Lazy-load DEXBot2 modules
+let chainKeys = null;
+let credentialPolicy = null;
+
+function getChainKeys() {
+  if (!chainKeys) chainKeys = requireDexbot2Module('modules/chain_keys.js');
+  return chainKeys;
+}
+
+function getCredentialPolicy() {
+  if (!credentialPolicy) credentialPolicy = requireDexbot2Module('modules/credential_policy.js');
+  return credentialPolicy;
+}
+
+/**
+ * Resolve sessionId and botHmacSecret for an account.
+ * Probes the daemon for a session and loads the HMAC secret from DEXBot2 profiles.
+ */
+async function resolveSessionCredentials(accountName, options = {}) {
+  let sessionId = options.sessionId || null;
+  let botHmacSecret = options.botHmacSecret || null;
+
+  if (sessionId && botHmacSecret) {
+    return { sessionId, botHmacSecret };
+  }
+
+  try {
+    const chainKeysMod = getChainKeys();
+    const policyMod = getCredentialPolicy();
+
+    // If no sessionId, probe the daemon
+    if (!sessionId) {
+      sessionId = await chainKeysMod.probeAccountInDaemon(accountName, 5000, options);
+    }
+
+    // If no secret, try to load it from DEXBot2 profile
+    if (!botHmacSecret) {
+      const policyPath = path.join(getDexbot2Root(), 'profiles', 'daemon-policies.json');
+      botHmacSecret = policyMod.loadBotHmacSecret(accountName, policyPath);
+    }
+  } catch (_) {
+    // Fall back to unauthenticated request if probe/load fails
+  }
+
+  return { sessionId, botHmacSecret };
+}
 
 function createSigningClient(accountName, privateKey) {
   return createAccountClient(accountName, privateKey);
@@ -81,9 +130,14 @@ async function executeOperations(operations, options = {}) {
       : undefined;
 
     await waitForCredentialDaemon(daemonTimeoutMs, options);
+
+    const { sessionId, botHmacSecret } = await resolveSessionCredentials(accountName, options);
+
     const result = await executeOperationsViaCredentialDaemon(accountName, ops, {
       socketPath: options.socketPath,
-      timeoutMs: requestTimeoutMs
+      timeoutMs: requestTimeoutMs,
+      sessionId,
+      botHmacSecret
     });
 
     return {
@@ -147,9 +201,14 @@ async function broadcastOperation(operation, options = {}) {
       : undefined;
 
     await waitForCredentialDaemon(daemonTimeoutMs, options);
+
+    const { sessionId, botHmacSecret } = await resolveSessionCredentials(accountName, options);
+
     const result = await broadcastOperationViaCredentialDaemon(accountName, operation, {
       socketPath: options.socketPath,
-      timeoutMs: requestTimeoutMs
+      timeoutMs: requestTimeoutMs,
+      sessionId,
+      botHmacSecret
     });
 
     const operationResults =

@@ -87,6 +87,7 @@ const fs = require('fs');
 const path = require('path');
 const { BitShares, waitForConnected } = require('./bitshares_client');
 const chainKeys = require('./chain_keys');
+const credentialPolicy = require('./credential_policy');
 const chainOrders = require('./chain_orders');
 const { OrderManager, grid: Grid } = require('./order');
 const {
@@ -1546,8 +1547,15 @@ class DEXBot {
                     privateKey = chainKeys.getPrivateKey(this.config.preferredAccount, vaultSecret);
                 } else if (chainKeys.isDaemonReady()) {
                     try {
-                        await chainKeys.probeAccountInDaemon(this.config.preferredAccount);
-                        privateKey = chainKeys.createDaemonSigningToken(this.config.preferredAccount);
+                        const sessionId = await chainKeys.probeAccountInDaemon(this.config.preferredAccount);
+                        const botHmacSecret = credentialPolicy.loadBotHmacSecret(
+                            this.config.preferredAccount,
+                            path.join(__dirname, '..', 'profiles', 'daemon-policies.json')
+                        );
+                        privateKey = chainKeys.createDaemonSigningToken(this.config.preferredAccount, {
+                            sessionId,
+                            botHmacSecret,
+                        });
                     } catch (err) {
                         this._warn(`Credential daemon probe failed: ${err.message}. Falling back to interactive authentication.`);
                     }

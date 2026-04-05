@@ -1,4 +1,5 @@
 const net = require('net');
+const crypto = require('crypto');
 const {
   DEFAULT_READY_FILE,
   DEFAULT_SOCKET_PATH,
@@ -87,15 +88,32 @@ function broadcastOperationViaCredentialDaemon(accountName, operation, options =
   const timeoutMs = Number.isFinite(Number(options.timeoutMs))
     ? Number(options.timeoutMs)
     : DEFAULT_REQUEST_TIMEOUT_MS;
+  const sessionId = options.sessionId || null;
+  const botHmacSecret = options.botHmacSecret || null;
+
+  // Compute HMAC if botHmacSecret is provided
+  let hmac = null;
+  if (botHmacSecret && sessionId) {
+    const signingPayload = JSON.stringify({ sessionId, operations: [operation] });
+    hmac = crypto
+      .createHmac('sha256', Buffer.from(botHmacSecret, 'hex'))
+      .update(signingPayload)
+      .digest('hex');
+  }
 
   return new Promise((resolve, reject) => {
     let settled = false;
     const socket = net.createConnection(socketPath, () => {
-      socket.write(`${JSON.stringify({
+      const payload = {
         type: 'broadcast-operation',
         accountName,
+        sessionId,
         operation
-      })}\n`);
+      };
+      if (hmac) {
+        payload.hmac = hmac;
+      }
+      socket.write(`${JSON.stringify(payload)}\n`);
     });
 
     let responseBuffer = '';

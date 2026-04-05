@@ -64,7 +64,9 @@ const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const chainKeys = require('./modules/chain_keys');
+const credentialPolicy = require('./modules/credential_policy');
 const { createAccountClient } = require('./modules/bitshares_client');
 const {
     assertPrivatePathSecurity,
@@ -101,9 +103,49 @@ let sessionSecret = null;
 let sessionAccountKeys = new Map();
 let server = null;
 
+// Policy layer and session management
+let policyConfig = null;
+let activeSessions = new Map(); // sessionId → { accountName, createdAt }
+let auditLogPath = null;
+
 function debugLog(message, err = null) {
     const suffix = err && err.message ? `: ${err.message}` : '';
     console.error(`[credential-daemon][debug] ${message}${suffix}`);
+}
+
+/**
+ * Policy and session management helpers
+ */
+
+function generateSessionId() {
+    return crypto.randomBytes(16).toString('hex');
+}
+
+function purgeExpiredSessions() {
+    const ttl = (policyConfig && policyConfig.sessionTtlMs) || 86400000;
+    const now = Date.now();
+    for (const [id, session] of activeSessions) {
+        if (now - session.createdAt > ttl) {
+            activeSessions.delete(id);
+        }
+    }
+}
+
+function checkSessionValid(accountName, sessionId) {
+    purgeExpiredSessions();
+    if (!sessionId) {
+        return false;
+    }
+    const session = activeSessions.get(sessionId);
+    return session && session.accountName === accountName;
+}
+
+function appendAuditLog(entry) {
+    if (!auditLogPath) return;
+    const line = JSON.stringify(entry) + '\n';
+    fs.appendFile(auditLogPath, line, (err) => {
+        if (err) debugLog('Audit log write failed', err);
+    });
 }
 
 async function resolveVaultSecret() {
@@ -214,6 +256,33 @@ async function initialize() {
         if (accountsData && typeof accountsData === 'object') {
             accountsData.accounts = null;
         }
+
+        // Load policy config
+        const policyConfigPath = path.join(__dirname, 'profiles', 'daemon-policies.json');
+        policyConfig = credentialPolicy.loadPolicyConfig(policyConfigPath);
+        if (policyConfig === null) {
+            debugLog('No policy config loaded — using built-in defaults');
+        }
+
+        // Set audit log path
+        const auditLogDir = path.join(__dirname, 'profiles', 'logs');
+        if (!fs.existsSync(auditLogDir)) {
+            try {
+                fs.mkdirSync(auditLogDir, { recursive: true });
+            } catch (err) {
+                debugLog(`Failed to create audit log directory ${auditLogDir}: ${err.message}`);
+            }
+        }
+        auditLogPath = path.join(auditLogDir, 'daemon-audit.jsonl');
+
+        // Register SIGHUP handler for policy reload
+        process.on('SIGHUP', () => {
+            debugLog('Reloading policy config...');
+            const newConfig = credentialPolicy.loadPolicyConfig(policyConfigPath, { forceReload: true });
+            policyConfig = newConfig;
+            debugLog(newConfig ? 'Policy config reloaded' : 'Policy config reload failed, using built-in defaults');
+        });
+
         ensureCredentialRuntimeDirSync({ root: __dirname, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });
 
         // Clean up old socket if it exists
@@ -320,7 +389,21 @@ function processRequest(requestStr, socket) {
 
         if (type === 'probe-account') {
             loadCurrentPrivateKey(accountName)
-                .then(() => sendSuccess(socket, {}))
+                .then(() => {
+                    // Session registration
+                    const sessionId = generateSessionId();
+                    activeSessions.set(sessionId, {
+                        accountName,
+                        createdAt: Date.now(),
+                    });
+                    appendAuditLog({
+                        event: 'session_created',
+                        accountName,
+                        sessionId,
+                        timestamp: new Date().toISOString(),
+                    });
+                    sendSuccess(socket, { sessionId });
+                })
                 .catch((error) => sendError(socket, error.message));
             return;
         }
@@ -331,12 +414,83 @@ function processRequest(requestStr, socket) {
                 return sendError(socket, 'Missing "operation" field');
             }
 
-            loadCurrentPrivateKey(accountName)
-                .then((privateKey) => {
-                    const client = createAccountClient(accountName, privateKey);
-                    return client.broadcast(operation);
+            const sessionId = request.sessionId || null;
+
+            // Session validation
+            if (!checkSessionValid(accountName, sessionId)) {
+                const reason = 'invalid or expired session';
+                appendAuditLog({
+                    event: 'sign_denied',
+                    accountName,
+                    sessionId,
+                    reason: 'session: ' + reason,
+                    timestamp: new Date().toISOString(),
+                });
+                return sendError(socket, credentialPolicy.POLICY_DENIED_PREFIX + reason);
+            }
+
+            // Source authentication (HMAC verification)
+            // For broadcast-operation, we verify HMAC over [operation] (single-element array)
+            const hmacResult = credentialPolicy.verifySourceHmac(
+                { ...request, operations: [operation] },
+                policyConfig
+            );
+            if (!hmacResult.valid) {
+                appendAuditLog({
+                    event: 'sign_denied',
+                    accountName,
+                    sessionId,
+                    reason: 'source: ' + hmacResult.reason,
+                    timestamp: new Date().toISOString(),
+                });
+                return sendError(socket, credentialPolicy.POLICY_DENIED_PREFIX + 'invalid source authentication');
+            }
+            if (hmacResult.skipped) {
+                debugLog(`[warn] no botHmacSecret configured for ${accountName} — source authentication skipped`);
+            }
+
+            // Policy evaluation — treat as single-operation batch
+            const policy = credentialPolicy.resolveAccountPolicy(policyConfig, accountName);
+            const context = credentialPolicy.buildPolicyContext({
+                ...request,
+                operations: [operation],
+            });
+
+            credentialPolicy.evaluatePolicy(policy, context)
+                .then((result) => {
+                    if (!result.allow) {
+                        appendAuditLog({
+                            event: 'sign_denied',
+                            accountName,
+                            sessionId,
+                            policyId: result.policyId,
+                            reason: result.reason,
+                            opCount: 1,
+                            opTypes: [operation && operation.op_name].filter(Boolean),
+                            timestamp: new Date().toISOString(),
+                        });
+                        sendError(socket, credentialPolicy.POLICY_DENIED_PREFIX + result.reason);
+                        return;
+                    }
+
+                    // Policy passed — now load key material
+                    return loadCurrentPrivateKey(accountName)
+                        .then((privateKey) => {
+                            const client = createAccountClient(accountName, privateKey);
+                            return client.broadcast(operation);
+                        })
+                        .then((signResult) => {
+                            appendAuditLog({
+                                event: 'sign_allowed',
+                                accountName,
+                                sessionId,
+                                opCount: 1,
+                                opTypes: [operation && operation.op_name].filter(Boolean),
+                                timestamp: new Date().toISOString(),
+                            });
+                            sendSuccess(socket, signResult);
+                        });
                 })
-                .then((result) => sendSuccess(socket, { result }))
                 .catch((error) => sendError(socket, error.message));
             return;
         }
@@ -347,12 +501,76 @@ function processRequest(requestStr, socket) {
                 return sendError(socket, 'Missing "operations" field');
             }
 
-            loadCurrentPrivateKey(accountName)
-                .then((privateKey) => {
-                    const client = createAccountClient(accountName, privateKey);
-                    return executeOperationsWithClient(client, operations);
+            const sessionId = request.sessionId || null;
+
+            // Session validation
+            if (!checkSessionValid(accountName, sessionId)) {
+                const reason = 'invalid or expired session';
+                appendAuditLog({
+                    event: 'sign_denied',
+                    accountName,
+                    sessionId,
+                    reason: 'session: ' + reason,
+                    timestamp: new Date().toISOString(),
+                });
+                return sendError(socket, credentialPolicy.POLICY_DENIED_PREFIX + reason);
+            }
+
+            // Source authentication (HMAC verification)
+            const hmacResult = credentialPolicy.verifySourceHmac(request, policyConfig);
+            if (!hmacResult.valid) {
+                appendAuditLog({
+                    event: 'sign_denied',
+                    accountName,
+                    sessionId,
+                    reason: 'source: ' + hmacResult.reason,
+                    timestamp: new Date().toISOString(),
+                });
+                return sendError(socket, credentialPolicy.POLICY_DENIED_PREFIX + 'invalid source authentication');
+            }
+            if (hmacResult.skipped) {
+                debugLog(`[warn] no botHmacSecret configured for ${accountName} — source authentication skipped`);
+            }
+
+            // Policy evaluation — before any key material is touched
+            const policy = credentialPolicy.resolveAccountPolicy(policyConfig, accountName);
+            const context = credentialPolicy.buildPolicyContext(request);
+
+            credentialPolicy.evaluatePolicy(policy, context)
+                .then((result) => {
+                    if (!result.allow) {
+                        appendAuditLog({
+                            event: 'sign_denied',
+                            accountName,
+                            sessionId,
+                            policyId: result.policyId,
+                            reason: result.reason,
+                            opCount: operations.length,
+                            opTypes: operations.map((o) => o && o.op_name).filter(Boolean),
+                            timestamp: new Date().toISOString(),
+                        });
+                        sendError(socket, credentialPolicy.POLICY_DENIED_PREFIX + result.reason);
+                        return;
+                    }
+
+                    // Policy passed — now load key material
+                    return loadCurrentPrivateKey(accountName)
+                        .then((privateKey) => {
+                            const client = createAccountClient(accountName, privateKey);
+                            return executeOperationsWithClient(client, operations);
+                        })
+                        .then((signResult) => {
+                            appendAuditLog({
+                                event: 'sign_allowed',
+                                accountName,
+                                sessionId,
+                                opCount: operations.length,
+                                opTypes: operations.map((o) => o && o.op_name).filter(Boolean),
+                                timestamp: new Date().toISOString(),
+                            });
+                            sendSuccess(socket, signResult);
+                        });
                 })
-                .then((result) => sendSuccess(socket, result))
                 .catch((error) => sendError(socket, error.message));
             return;
         }

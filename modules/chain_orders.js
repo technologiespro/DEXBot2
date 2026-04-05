@@ -361,14 +361,40 @@ function isDaemonSigningToken(value) {
 }
 
 async function executeViaDaemonToken(accountName, signingToken, operations) {
-    const result = await executeOperationsViaCredentialDaemon(accountName, operations, {
-        socketPath: signingToken.socketPath,
-    });
-    return {
-        success: true,
-        raw: result.raw || null,
-        operation_results: Array.isArray(result.operation_results) ? result.operation_results : [],
-    };
+    try {
+        const result = await executeOperationsViaCredentialDaemon(accountName, operations, {
+            socketPath: signingToken.socketPath,
+            sessionId: signingToken.sessionId || null,
+            botHmacSecret: signingToken.botHmacSecret || null,
+        });
+        return {
+            success: true,
+            raw: result.raw || null,
+            operation_results: Array.isArray(result.operation_results) ? result.operation_results : [],
+        };
+    } catch (err) {
+        if (err.message && err.message.includes('invalid or expired session')) {
+            console.warn(`[chain_orders] Session expired for ${accountName}, automatically renegotiating...`);
+            // Probe daemon for a new session
+            const newSessionId = await chainKeys.probeAccountInDaemon(accountName);
+            // Update token in-place so future calls use the fresh session
+            signingToken.sessionId = newSessionId;
+            
+            // Retry exact same operation with new session
+            const retryResult = await executeOperationsViaCredentialDaemon(accountName, operations, {
+                socketPath: signingToken.socketPath,
+                sessionId: signingToken.sessionId,
+                botHmacSecret: signingToken.botHmacSecret || null,
+            });
+            
+            return {
+                success: true,
+                raw: retryResult.raw || null,
+                operation_results: Array.isArray(retryResult.operation_results) ? retryResult.operation_results : [],
+            };
+        }
+        throw err;
+    }
 }
 
 /**

@@ -1,7 +1,29 @@
 # DEXBot2 Credential Security
 
-This document describes the layered security model that protects private keys and
-credentials at rest, in transit between processes, and in RAM during a live session.
+## System Architecture
+
+DEXBot2 implements a layered security model to protect private keys and 
+credentials at rest, in transit, and in RAM during a live session.
+
+### Policy Engine & Strict Enforcement
+The credential daemon employs a strictly enforced HMAC policy engine. All 
+operations require cryptographic validation. The daemon dynamically loads
+parameters, ensuring that bots cannot bypass verification or hit unauthorized
+resource limits.
+
+### Session Management & Auto-Heal
+The daemon supports persistent operations via session IDs. To mitigate 
+interruptions (e.g., daemon restarts or TTL expiration), the system implements 
+a transparent renegotiation loop. When an `executeViaDaemonToken` call fails, 
+the system automatically fetches a new `sessionId`, injects it into the 
+`signingToken`, and cleanly replays the pending operations.
+
+### Daemon Policy & Batch Limits
+The credential daemon enforces granular operation policies via `daemon-policies.json`.
+These policies are strictly enforced at the daemon boundary. To prevent 
+resource exhaustion, the daemon enforces a global `maxOpsPerBatch` limit 
+(defaulting to 200). This ensures that complex grid replacements or 
+batch orders do not overwhelm the daemon's internal state.
 
 ---
 
@@ -266,6 +288,7 @@ development and recovery.
 | AES-256-GCM | All encryption operations | Authenticated encryption; detects tampering |
 | HMAC-SHA256 | Vault verifier | Unlock check without storing the password |
 | `crypto.timingSafeEqual` | Verifier comparison | Prevents timing-based password oracle |
+| Batch limit (200) | `execute-operations` | Prevents resource exhaustion |
 | Signing token (no key export) | Bot ↔ daemon IPC | Private key never leaves daemon boundary |
 | `lstat` + owner/mode/type checks | Runtime socket & ready file | Prevents symlink attacks and rogue sockets |
 | 0700 runtime dir / 0600 sockets | Filesystem | OS-level access restriction |
