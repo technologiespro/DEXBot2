@@ -623,12 +623,19 @@ function sendError(socket, message) {
 function shutdown() {
     // Clear derived vault secret from memory
     if (vaultSecret) {
+        if (Buffer.isBuffer(vaultSecret)) vaultSecret.fill(0);
         vaultSecret = null;
     }
     if (sessionSecret) {
+        if (Buffer.isBuffer(sessionSecret)) sessionSecret.fill(0);
         sessionSecret = null;
     }
     if (sessionAccountKeys) {
+        for (const [key, val] of sessionAccountKeys) {
+            if (Buffer.isBuffer(val)) {
+                val.fill(0);
+            }
+        }
         sessionAccountKeys.clear();
     }
 

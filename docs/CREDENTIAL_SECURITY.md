@@ -25,6 +25,14 @@ resource exhaustion, the daemon enforces a global `maxOpsPerBatch` limit
 (defaulting to 200). This ensures that complex grid replacements or 
 batch orders do not overwhelm the daemon's internal state.
 
+### Memory Safety & Zeroing
+To minimize the window of exposure for sensitive key material, the credential
+daemon implements explicit memory scrubbing on a best-effort basis. All sensitive buffers—
+including vault secrets, session secrets, and cached account keys—are 
+explicitly overwritten with zeros (via `Buffer.fill(0)`) upon process 
+termination, ensuring no plaintext material persists in RAM after the 
+daemon exits.
+
 ---
 
 ## Overview
