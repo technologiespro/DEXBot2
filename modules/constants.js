@@ -558,7 +558,7 @@ let PIPELINE_TIMING = {
 
 // Market Adapter Configuration
 // Controls price tracking and grid recalculation triggers.
-// See: market_adapter/price_adapter.js, modules/account_bots.js
+// See: market_adapter/market_adapter.js, modules/account_bots.js
 let MARKET_ADAPTER = {
     // AMA_DELTA_THRESHOLD_PERCENT: Percentage change in AMA center price that triggers a grid reset.
     //   - When AMA price moves ±AMA_DELTA_THRESHOLD_PERCENT from the last recorded center,

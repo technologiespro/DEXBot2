@@ -184,7 +184,7 @@ function buildEcosystemApps(bots, { includeUpdater = true } = {}) {
     if (needsPriceAdapter(bots)) {
         apps.unshift({
             name: 'dexbot-price-adapter',
-            script: path.join(ROOT, 'market_adapter', 'price_adapter.js'),
+            script: path.join(ROOT, 'market_adapter', 'market_adapter.js'),
             cwd: ROOT,
             watch: false,
             autorestart: true,

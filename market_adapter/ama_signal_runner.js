@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+const fs = require('fs');
+
 /**
  * AMA SIGNAL RUNNER
  *
@@ -13,7 +15,7 @@
  *   node market_adapter/ama_signal_runner.js --bot xrp-bts-0 --compact
  */
 
-const { runOnceForAma } = require('./price_adapter');
+const { runOnceForAma } = require('./market_adapter');
 
 function printHelp() {
     console.log('AMA signal runner (one cycle): updates candles and returns latest AMA values.');
@@ -158,8 +160,8 @@ async function main() {
     }
     const out = buildOutput(payload, cli.bot);
     const json = cli.compact ? JSON.stringify(out) : JSON.stringify(out, null, 2);
-    process.stdout.write(`${json}\n`);
-    process.exit(0);
+    fs.writeFileSync(1, `${json}\n`, 'utf8');
+    return 0;
 }
 
 main().catch((err) => {
@@ -167,6 +169,6 @@ main().catch((err) => {
         ok: false,
         error: err.message,
     };
-    process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
-    process.exit(1);
+    fs.writeFileSync(1, `${JSON.stringify(out, null, 2)}\n`, 'utf8');
+    process.exitCode = 1;
 });

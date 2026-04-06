@@ -19,7 +19,7 @@ async function testSnapshotReaderExposesRawAndEffectiveCenter() {
     centerPrice: 101.5,
     effectiveCenterPrice: 101.5,
     gridPriceOffsetPct: 1.5,
-    source: 'market_adapter/price_adapter.js',
+    source: 'market_adapter/market_adapter.js',
     updatedAt: '2026-01-01T00:00:00Z'
   }, null, 2) + '\n', 'utf8');
 

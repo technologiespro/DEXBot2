@@ -61,11 +61,11 @@ DEXBot2/
 │   ├── general_settings.js      # Settings management (56 lines)
 │   └── bots_file_lock.js        # File locking (154 lines)
 ├── market_adapter/
-│   ├── price_adapter.js         # AMA calculation & trigger logic
+│   ├── market_adapter.js         # AMA calculation & trigger logic
 │   ├── blockchain_source.js     # Chain market data
 │   ├── kibana_source.js         # Kibana price data
 │   ├── native_api.js            # Native API source
-│   └── core/price_adapter_service.js  # Adapter service
+│   └── core/market_adapter_service.js  # Adapter service
 ├── analysis/                    # Standalone analysis tools (AMA fitting, trend detection)
 ├── scripts/                     # Utilities (git analysis, validation, etc.)
 └── tests/                       # 102 test files

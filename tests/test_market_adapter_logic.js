@@ -13,7 +13,7 @@ const {
     resolveDeltaThresholdPercentFromGeneralSettings,
     usesAmaGridPrice,
     applyRuntimeDefaultsFromGeneralSettings,
-} = require('../market_adapter/price_adapter');
+} = require('../market_adapter/market_adapter');
 const { detectMissingCandleTimestamps } = require('../market_adapter/candle_utils');
 
 const AMA_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'ama_profiles.json');

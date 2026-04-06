@@ -13,7 +13,7 @@ const lockPath = path.join(root, 'market_adapter', 'state', 'price_adapter.lock'
         fs.unlinkSync(lockPath);
     }
 
-    const res = spawnSync('node', ['market_adapter/price_adapter.js', '--once', '--dryRun', '--quiet'], {
+    const res = spawnSync('node', ['market_adapter/market_adapter.js', '--once', '--dryRun', '--quiet'], {
         cwd: root,
         encoding: 'utf8',
     });

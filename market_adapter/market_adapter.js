@@ -96,10 +96,23 @@ const DEFAULTS = {
     metricsJson: false,
     quiet: false,
     dryRun: false,
+    whitelistAll: false,
     maxPages: 80,
     pageLimit: 100,
     once: false,
 };
+
+const WHITELIST_FILE = path.join(PROFILES_DIR, 'price_adapter_whitelist.json');
+
+function isBotWhitelisted(botKey) {
+    if (!fs.existsSync(WHITELIST_FILE)) return false;
+    try {
+        const json = JSON.parse(fs.readFileSync(WHITELIST_FILE, 'utf8'));
+        return Array.isArray(json?.whitelist) && json.whitelist.includes(botKey);
+    } catch (_) {
+        return false;
+    }
+}
 
 const DEFAULT_AMA_KEY = String(MARKET_ADAPTER.DEFAULT_AMA_KEY || 'AMA3').toUpperCase();
 const BUILTIN_AMAS = MARKET_ADAPTER.AMAS || {};
@@ -297,6 +310,9 @@ function parseArgs() {
             case '--dryRun':
                 cfg.dryRun = true;
                 break;
+            case '--whitelist-all':
+                cfg.whitelistAll = true;
+                break;
             case '--maxPages':
                 cfg.maxPages = Number(v);
                 i++;
@@ -321,7 +337,7 @@ function printHelp() {
     console.log('Price adapter (standalone): Kibana bootstrap + native incremental updates');
     console.log('');
     console.log('Usage:');
-    console.log('  node market_adapter/price_adapter.js [--once] [--pollSeconds 3600]');
+    console.log('  node market_adapter/market_adapter.js [--once] [--pollSeconds 3600]');
     console.log('');
     console.log('Options:');
     console.log('  --once                 Run one cycle and exit');
@@ -334,7 +350,8 @@ function printHelp() {
     console.log('  --retryDelayMs <n>     Base retry delay in milliseconds (default 800)');
     console.log('  --metricsJson          Emit per-cycle metrics as one JSON line');
     console.log('  --quiet                Suppress per-bot logs (state still written)');
-    console.log('  --dryRun               Validate + lock-check only (for --once smoke tests)');
+    console.log('  --dryRun               Enable dry run mode for non-whitelisted bots');
+    console.log('  --whitelist-all        Disable dry run mode for all bots');
     console.log('  --maxPages <n>         Max native history pages per cycle (default 80)');
     console.log('  --pageLimit <n>        Native page size (max 101, default 100)');
 }
@@ -391,12 +408,18 @@ function applyRuntimeDefaultsFromGeneralSettings(cfg, provided = {}, settingsOve
     return out;
 }
 
+const Logger = require('../modules/logger');
+const priceAdapterLogFile = path.join(__dirname, '..', 'logs', 'price_adapter.log');
+const logger = new Logger('PriceAdapter', { quiet: DEFAULTS.quiet, logFile: priceAdapterLogFile });
+
 function log(cfg, ...args) {
-    if (!cfg?.quiet) console.log(...args);
+    logger.quiet = !!cfg?.quiet;
+    logger.info(...args);
 }
 
 function write(cfg, text) {
-    if (!cfg?.quiet) process.stdout.write(text);
+    logger.quiet = !!cfg?.quiet;
+    logger.raw(text);
 }
 
 function loadActiveBots() {
@@ -700,7 +723,7 @@ function writeGridResetTrigger(bot, payload) {
     const triggerPath = path.join(PROFILES_DIR, `recalculate.${bot.botKey}.trigger`);
     const content = {
         createdAt: new Date().toISOString(),
-        source: 'market_adapter/price_adapter.js',
+        source: 'market_adapter/market_adapter.js',
         botName: bot.name,
         botKey: bot.botKey,
         ...payload,
@@ -754,7 +777,7 @@ function writeBotGridPriceCenter(botKey, amaPrice, options = {}) {
             effectiveCenterPrice: centerPrice,
             gridPriceOffsetPct: Number.isFinite(gridPriceOffsetPct) ? gridPriceOffsetPct : 0,
             updatedAt: new Date().toISOString(),
-            source: 'market_adapter/price_adapter.js',
+            source: 'market_adapter/market_adapter.js',
         };
         // Atomic write: write to .tmp then rename — prevents dexbot reading a partial file
         fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
@@ -828,10 +851,12 @@ async function runOnce(cfg, state, contextCache) {
     const results = [];
 
     for (const bot of bots) {
-        write(cfg, `- ${bot.name} (${bot.botKey}): `);
+        const isDryRun = cfg.dryRun || (!cfg.whitelistAll && !isBotWhitelisted(bot.botKey));
+        write(cfg, `- ${bot.name} (${bot.botKey})${isDryRun ? ' [DRY RUN]' : ''}: `);
         try {
             const r = await processBot(bot, state, cfg, contextCache, {
                 onTrigger: cfg.onTrigger,
+                isDryRun
             });
             if (!r.ok) {
                 log(cfg, `skip (${r.reason})`);
@@ -850,10 +875,13 @@ async function runOnce(cfg, state, contextCache) {
             const staleText = r.staleData ? ` STALE(${Number.isFinite(r.staleAgeHours) ? r.staleAgeHours.toFixed(2) : 'n/a'}h)` : '';
             const patchText = Number.isFinite(r.kibanaGapRepairCount) && r.kibanaGapRepairCount > 0 ? ` KIBANA_PATCH(${r.kibanaGapRepairCount})` : '';
             const gapText = Number.isFinite(r.unresolvedGapCount) && r.unresolvedGapCount > 0 ? ` GAPS(${r.unresolvedGapCount})` : '';
-            const trigText = r.triggered ? ` TRIGGERED -> ${path.relative(ROOT, r.triggerPath)}` : '';
+            const trigText = r.triggered ? ` TRIGGERED -> ${r.triggerPath ? path.relative(ROOT, r.triggerPath) : '[DRY RUN]'}` : '';
             const weightText = r.weights ? ` weights[buy=${r.weights.buy}, sell=${r.weights.sell}]` : '';
             const trendText = r.trend ? ` trend=${r.trend}` : '';
             log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText}, delta=${deltaText}, threshold=${thresholdText}${staleText}${patchText}${gapText}${trigText}${trendText}${weightText}`);
+            if (Array.isArray(r.dryRunMessages)) {
+                r.dryRunMessages.forEach(msg => log(cfg, `  ${msg}`));
+            }
             if (Array.isArray(r.amaComparison) && r.amaComparison.length > 0) {
                 const parts = r.amaComparison.map((a) => {
                     const val = Number.isFinite(a.value) ? a.value.toFixed(8) : 'n/a';
@@ -879,7 +907,7 @@ async function runOnce(cfg, state, contextCache) {
 
     state.meta = {
         updatedAt: new Date().toISOString(),
-        source: 'market_adapter/price_adapter.js',
+        source: 'market_adapter/market_adapter.js',
         defaults: {
             ama: DEFAULT_AMA,
             intervalSeconds: cfg.intervalSeconds,
@@ -905,8 +933,10 @@ async function runOnce(cfg, state, contextCache) {
     };
     state.meta.metrics = metrics;
 
-    saveJson(STATE_FILE, state);
-    writeCenterSnapshot(state);
+    if (!cfg.dryRun) {
+        saveJson(STATE_FILE, state);
+        writeCenterSnapshot(state);
+    }
     if (cfg.metricsJson) {
         log(cfg, `METRICS ${JSON.stringify(metrics)}`);
     }
@@ -952,6 +982,8 @@ async function runOnceForAma(overrides = {}) {
 
 async function main() {
     const cfg = parseArgs();
+    logger.quiet = cfg.quiet;
+
     ensureDir(DATA_DIR);
     ensureDir(STATE_DIR);
 
@@ -961,11 +993,18 @@ async function main() {
 
     try {
         log(cfg, '═══════════════════════════════════════');
-        log(cfg, ' Price Adapter (Standalone)');
+        log(cfg, ' Market Adapter Hub Settings:');
+        log(cfg, `  - Poll Interval: ${cfg.pollSeconds}s`);
+        log(cfg, `  - Delta Threshold: ${cfg.deltaThresholdPercent}%`);
+        log(cfg, `  - Dry Run: ${cfg.dryRun}`);
+        log(cfg, `  - Whitelist All: ${cfg.whitelistAll}`);
+        log(cfg, `  - Max Pages: ${cfg.maxPages} (Limit: ${cfg.pageLimit})`);
+        log(cfg, `  - Native Backfill: ${cfg.nativeBackfillHours}h (Max Stale: ${cfg.maxStaleHours}h)`);
+        log(cfg, `  - Bootstrap Lookback: ${cfg.bootstrapLookbackHours}h`);
+        log(cfg, `  - Source Retries: ${cfg.sourceRetries} (Delay: ${cfg.retryDelayMs}ms)`);
+        log(cfg, `  - Metrics JSON: ${cfg.metricsJson}`);
+        log(cfg, `  - Quiet Mode: ${cfg.quiet}`);
         log(cfg, '═══════════════════════════════════════');
-        const thresholdLabel = `${cfg.deltaThresholdPercent}%`;
-        log(cfg, `Poll: ${cfg.pollSeconds}s | Delta threshold: ${thresholdLabel} | Interval: 1h`);
-        log(cfg, 'Auth: none (read-only RPC + Kibana bootstrap)');
 
         if (cfg.once && cfg.dryRun) {
             log(cfg, 'Dry run: config validation + lock acquisition OK (no network, no writes).');
@@ -1008,6 +1047,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+    main,
     runOnceForAma,
     DEFAULT_AMA,
     DEFAULTS,

@@ -158,11 +158,11 @@ dexbot.js (entry)
     ├── modules/node_manager.js (multi-node failover - 455 lines)
     ├── modules/bitshares_client.js (blockchain client - 156 lines)
     ├── market_adapter/
-    │   ├── price_adapter.js (AMA calculation & triggers)
+    │   ├── market_adapter.js (AMA calculation & triggers)
     │   ├── blockchain_source.js (chain market data)
     │   ├── kibana_source.js (Kibana price data)
     │   ├── native_api.js (native API source)
-    │   └── core/price_adapter_service.js (adapter service)
+    └── core/market_adapter_service.js (adapter service)
     └── modules/order/
         ├── manager.js (order lifecycle - 1,513 lines)
         ├── grid.js (grid calculation - 1,750 lines)

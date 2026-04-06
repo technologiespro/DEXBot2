@@ -73,6 +73,8 @@ class MarketAdapterService {
 
     async processBot(bot, state, cfg, contextCache, hooks = {}) {
         const deps = this.deps;
+        const isDryRun = !!hooks.isDryRun;
+        let dryRunMessages = [];
         
         if ((!bot.assetA && !bot.assetAId) || (!bot.assetB && !bot.assetBId)) {
             return { ok: false, reason: 'missing asset pair' };
@@ -263,12 +265,14 @@ class MarketAdapterService {
                     ? effectiveCenterPrice
                     : referencePrice;
                 let amaCenterPersisted = true;
-                if (typeof deps.writeBotGridPriceCenter === 'function') {
+                if (!isDryRun && typeof deps.writeBotGridPriceCenter === 'function') {
                     amaCenterPersisted = deps.writeBotGridPriceCenter(bot.botKey, referencePrice, {
                         amaCenterPrice: amaPrice,
                         gridPriceOffsetPct,
                         effectiveCenterPrice: bootstrapCenterPrice,
                     }) !== false;
+                } else if (isDryRun) {
+                    dryRunMessages.push(`[DRY RUN] Would write grid price center for ${bot.botKey}: ${bootstrapCenterPrice}`);
                 }
 
                 if (amaCenterPersisted) {
@@ -284,31 +288,37 @@ class MarketAdapterService {
                 if (deltaPercent >= botThreshold) {
                     let amaCenterPersisted = true;
 
-                    if (typeof deps.writeBotGridPriceCenter === 'function') {
+                    if (!isDryRun && typeof deps.writeBotGridPriceCenter === 'function') {
                         amaCenterPersisted = deps.writeBotGridPriceCenter(bot.botKey, referencePrice, {
                             amaCenterPrice: amaPrice,
                             gridPriceOffsetPct,
                             effectiveCenterPrice,
                             previousCenterPrice: centerPrice,
                         }) !== false;
+                    } else if (isDryRun) {
+                        dryRunMessages.push(`[DRY RUN] Would write grid price center for ${bot.botKey}: ${effectiveCenterPrice}`);
                     }
 
                     if (!amaCenterPersisted) {
                         triggerSuppressedReason = 'ama_center_persist_failed';
                     } else {
-                        triggerPath = deps.writeGridResetTrigger(bot, {
-                            reason: offsetChanged
-                                ? 'price_adapter_gridprice_offset_change'
-                                : 'price_adapter_delta_threshold',
-                            thresholdPercent: botThreshold,
-                            deltaPercent,
-                            previousCenterPrice: centerPrice,
-                            newCenterPrice: effectiveCenterPrice,
-                            referencePrice,
-                            rawAmaPrice: amaPrice,
-                            gridPriceOffsetPct,
-                            poolId: ctx.poolId,
-                        });
+                        if (!isDryRun) {
+                            triggerPath = deps.writeGridResetTrigger(bot, {
+                                reason: offsetChanged
+                                    ? 'price_adapter_gridprice_offset_change'
+                                    : 'price_adapter_delta_threshold',
+                                thresholdPercent: botThreshold,
+                                deltaPercent,
+                                previousCenterPrice: centerPrice,
+                                newCenterPrice: effectiveCenterPrice,
+                                referencePrice,
+                                rawAmaPrice: amaPrice,
+                                gridPriceOffsetPct,
+                                poolId: ctx.poolId,
+                            });
+                        } else {
+                            dryRunMessages.push(`[DRY RUN] Would write grid reset trigger for ${bot.botKey}`);
+                        }
                         botState.centerPrice = effectiveCenterPrice;
                         botState.amaCenterPrice = amaPrice;
                         botState.gridPriceOffsetPct = gridPriceOffsetPct;
@@ -356,46 +366,53 @@ class MarketAdapterService {
             },
             candles: nextCandles,
         };
-        deps.saveJson(filePath, candlePayload);
+        if (!isDryRun) {
+            deps.saveJson(filePath, candlePayload);
+        } else {
+            dryRunMessages.push(`[DRY RUN] Would save candle file for ${bot.botKey}`);
+        }
 
-        state.bots[bot.botKey] = {
-            ...botState,
-            botName: bot.name,
-            botKey: bot.botKey,
-            poolId: ctx.poolId,
-            candleFile: deps.path.relative(deps.root, filePath),
-            candleCount: nextCandles.length,
-            kibanaGapRepairCount,
-            unresolvedGapCount,
-            lastCandleTs,
-            lastAmaPrice: amaPrice,
-            amaCenterPrice: amaPrice,
-            gridPriceOffsetPct,
-            effectiveCenterPrice,
-            amaConfig: {
-                erPeriod: botAma.erPeriod,
-                fastPeriod: botAma.fastPeriod,
-                slowPeriod: botAma.slowPeriod,
-            },
-            amaComparison,
-            lastDeltaPercent: deltaPercent,
-            thresholdPercent: botThreshold,
-            referencePrice,
-            lastCycleSource: sourceLabel,
-            lastCycleAt: nowIso,
-            staleData,
-            staleAgeHours,
-            lastTriggerFile: triggerPath || botState.lastTriggerFile || null,
-            lastTriggerSuppressedReason: triggerSuppressedReason,
-            weights,
-            collateral,
-            trend: trendData.trend,
-            atr,
-            weightVariance
-        };
+        if (!isDryRun) {
+            state.bots[bot.botKey] = {
+                ...botState,
+                botName: bot.name,
+                botKey: bot.botKey,
+                poolId: ctx.poolId,
+                candleFile: deps.path.relative(deps.root, filePath),
+                candleCount: nextCandles.length,
+                kibanaGapRepairCount,
+                unresolvedGapCount,
+                lastCandleTs,
+                lastAmaPrice: amaPrice,
+                amaCenterPrice: amaPrice,
+                gridPriceOffsetPct,
+                effectiveCenterPrice,
+                amaConfig: {
+                    erPeriod: botAma.erPeriod,
+                    fastPeriod: botAma.fastPeriod,
+                    slowPeriod: botAma.slowPeriod,
+                },
+                amaComparison,
+                lastDeltaPercent: deltaPercent,
+                thresholdPercent: botThreshold,
+                referencePrice,
+                lastCycleSource: sourceLabel,
+                lastCycleAt: nowIso,
+                staleData,
+                staleAgeHours,
+                lastTriggerFile: triggerPath || botState.lastTriggerFile || null,
+                lastTriggerSuppressedReason: triggerSuppressedReason,
+                weights,
+                collateral,
+                trend: trendData.trend,
+                atr,
+                weightVariance
+            };
+        }
 
         return {
             ok: true,
+            dryRunMessages,
             source: sourceLabel,
             candleCount: nextCandles.length,
             kibanaGapRepairCount,
@@ -413,7 +430,19 @@ class MarketAdapterService {
             triggerSuppressedReason,
             weights,
             collateral,
-            trend: trendData.trend
+            trend: trendData.trend,
+            poolId: ctx.poolId,
+            candleFile: isDryRun ? 'DRY_RUN' : deps.path.relative(deps.root, filePath),
+            lastCandleTs,
+            gridPriceOffsetPct,
+            effectiveCenterPrice,
+            amaConfig: {
+                erPeriod: botAma.erPeriod,
+                fastPeriod: botAma.fastPeriod,
+                slowPeriod: botAma.slowPeriod,
+            },
+            atr,
+            weightVariance
         };
     }
 }

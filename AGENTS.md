@@ -152,8 +152,8 @@ File: <path>
 - `utils/` - Utilities (math, order, system, validate)
 
 ### Market Adapter (`market_adapter/`)
-- `price_adapter.js` - AMA delta threshold, grid price offset persistence, and grid recalculation trigger
-- `core/price_adapter_service.js` - Price adapter service core (offset calculation, bound clamping)
+- `market_adapter.js` - AMA delta threshold, grid price offset persistence, and grid recalculation trigger
+- `core/market_adapter_service.js` - Price adapter service core (offset calculation, bound clamping)
 - `ama_signal_runner.js` - AMA signal processing
 - `blockchain_source.js` - Blockchain data source
 - `kibana_source.js` - Kibana data source

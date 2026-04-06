@@ -80,7 +80,7 @@ Monitors the Adaptive Moving Average (AMA) of market prices. When the AMA center
 
 ### CLI Override
 ```bash
-node market_adapter/price_adapter.js --deltaPercent 2
+node market_adapter/market_adapter.js --deltaPercent 2
 ```
 
 ### Bot Configuration (Complementary)
@@ -112,7 +112,7 @@ node market_adapter/price_adapter.js --deltaPercent 2
 
 ### How It Works
 
-1. **Market Adapter** (`market_adapter/price_adapter.js`) runs continuously
+1. **Market Adapter** (`market_adapter/market_adapter.js`) runs continuously
 2. Loads per-bot AMA configuration (or uses defaults)
 3. Calculates AMA from 1h candlestick closing prices
 4. Tracks the **AMA center price** for each bot
@@ -411,7 +411,7 @@ Check the logs for these messages:
 
 - `modules/constants.js` — Default configuration values
 - `modules/account_bots.js` — Bot configuration schema and defaults
-- `market_adapter/price_adapter.js` — AMA calculation and trigger logic
+- `market_adapter/market_adapter.js` — AMA calculation and trigger logic
 - `modules/order/grid.js` — RMS divergence check and grid comparison
 - `modules/order/manager.js` — Regeneration threshold logic
 - `profiles/general.settings.json` — User-editable configuration

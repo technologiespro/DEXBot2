@@ -16,7 +16,7 @@ and collateral management into a single coherent service layer.
 - Estimating target collateral ratio
 - Emitting trigger files for grid re-centering
 
-The adapter runs as a standalone process (like the old `price_adapter.js` was), separate from
+The adapter runs as a standalone process (like the old `market_adapter.js` was), separate from
 `dexbot.js`. How often it fetches new candles from the BitShares API or Kibana server is governed
 by a timing setting (default: **1 hour**).
 
@@ -99,7 +99,7 @@ spread_analysis/  ──┘
 market_adapter/
 ├── README.md
 ├── README-update.md             # Architecture spec / update notes
-├── price_adapter.js             # Main candle-sync + signal loop (standalone daemon)
+├── market_adapter.js             # Main candle-sync + signal loop (standalone daemon)
 ├── ama_signal_runner.js         # One-cycle JSON AMA output (CLI consumer)
 ├── candle_utils.js              # Trade/candle helpers (merge, prune, gap detect)
 ├── merge_lp_data.js             # LP data merge utilities
@@ -130,7 +130,7 @@ market_adapter/
 ```
 
 > **Legacy scripts removed**: `blockchain_source.js`, `kibana_source.js`, `kibana_api.js`,
-> `native_api.js`, `fetch_lp_data.js`, `dynamic_weights.js`, and `core/price_adapter_service.js`
+> `native_api.js`, `fetch_lp_data.js`, `dynamic_weights.js`, and `core/market_adapter_service.js`
 > have all been moved or replaced. The root `market_adapter/` directory is now clean; data sources
 > live under `inputs/` and the full service logic lives under `core/`.
 
@@ -140,7 +140,7 @@ market_adapter/
 
 ### 1. Candle Sync
 
-`price_adapter.js` runs per cycle and updates per-bot candles:
+`market_adapter.js` runs per cycle and updates per-bot candles:
 - **Bootstrap**: If no local cache exists, fetch from Kibana; fall back to native BitShares API
 - **Incremental**: Merge incoming native trades into existing candle cache
 - **Gap repair**: Detect missing candle timestamps and patch them with a targeted Kibana fetch
@@ -259,13 +259,13 @@ on top of this.
 
 ```bash
 # One full sync + signal cycle (safe test)
-node market_adapter/price_adapter.js --once
+node market_adapter/market_adapter.js --once
 
 # Continuous daemon loop (runs every configured interval)
-node market_adapter/price_adapter.js
+node market_adapter/market_adapter.js
 
 # Custom trigger threshold
-node market_adapter/price_adapter.js --deltaPercent 1.5
+node market_adapter/market_adapter.js --deltaPercent 1.5
 
 # View latest state snapshot
 cat market_adapter/state/price_adapter_state.json
@@ -342,7 +342,7 @@ If the file exists with entries, only matching bot `name` or `botKey` values are
 // In profiles/ecosystem.config.js or pm2.js
 {
   name: "market-adapter",
-  script: "market_adapter/price_adapter.js",
+  script: "market_adapter/market_adapter.js",
   instances: 1,
   exec_mode: "fork",
   cron_restart: "0 * * * *"  // Every hour
@@ -413,7 +413,7 @@ When threshold is exceeded, the adapter writes a trigger file like:
 ```json
 {
   "createdAt": "2026-03-01T00:00:00.000Z",
-  "source": "market_adapter/price_adapter.js",
+  "source": "market_adapter/market_adapter.js",
   "botName": "XRP-BTS",
   "botKey": "xrp-bts-0",
   "reason": "price_adapter_delta_threshold",
