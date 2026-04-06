@@ -3,13 +3,13 @@ const path = require('path');
 
 console.log('Running price adapter service tests');
 
-const { createPriceAdapterService } = require('../market_adapter/core/price_adapter_service');
+const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
 const { detectMissingCandleTimestamps } = require('../market_adapter/candle_utils');
 
 async function testTriggerHookCalledOnThreshold() {
     let triggerHookCalls = 0;
 
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
@@ -85,7 +85,7 @@ async function testBootstrapFallsBackWhenKibanaIsEmpty() {
     let kibanaCalls = 0;
     let nativeCalls = 0;
 
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
@@ -156,7 +156,7 @@ async function testAmaGridPriceIsCaseInsensitive() {
     let writeAmaCenterCalls = 0;
     let triggerWrites = 0;
 
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
@@ -235,7 +235,7 @@ async function testAmaGridPriceIsCaseInsensitive() {
 async function testAmaTriggerSuppressedWhenCenterPersistFails() {
     let triggerWrites = 0;
 
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
@@ -312,7 +312,7 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
 async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
     let triggerWrites = 0;
 
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
@@ -384,7 +384,7 @@ async function testGridPriceOffsetTriggersRecenter() {
     let triggerWrites = 0;
     let writeArgs = null;
 
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
@@ -473,7 +473,7 @@ async function testGridPriceOffsetRespectsDeltaThreshold() {
     let triggerWrites = 0;
     let writeCalls = 0;
 
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
@@ -558,7 +558,7 @@ async function testGridPriceOffsetClampAndDisable() {
     let triggerWrites = 0;
     let lastWrite = null;
 
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
@@ -679,7 +679,7 @@ async function testGridPriceOffsetClampAndDisable() {
 async function testContextCacheInvalidatesOnPoolChange() {
     let resolveCalls = 0;
 
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async (bot) => {
             resolveCalls += 1;
             return {
@@ -756,7 +756,7 @@ async function testKibanaGapRepairPatchesMissingCandles() {
     let kibanaCalls = 0;
     let kibanaTimeRange = null;
 
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
@@ -854,7 +854,7 @@ async function testKibanaGapRepairPatchesMissingCandles() {
 async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
     let savedPayload = null;
 
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
@@ -921,7 +921,7 @@ async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
 }
 
 async function testIdOnlyBotIsNotRejected() {
-    const service = createPriceAdapterService({
+    const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },

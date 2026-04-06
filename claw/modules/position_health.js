@@ -8,7 +8,7 @@
 
 'use strict';
 
-const { computeDynamicWeights } = require('../../market_adapter/dynamic_weights');
+const { computeDynamicWeights } = require('../../market_adapter/core/strategies/dynamic_weights');
 const { DEFAULT_CONFIG } = require('../../modules/constants');
 
 const DEFAULT_PRICE_RANGE_RATIO = 3.0;

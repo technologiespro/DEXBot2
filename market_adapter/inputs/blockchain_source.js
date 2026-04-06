@@ -1,4 +1,4 @@
-const { BitShares, waitForConnected } = require('../modules/bitshares_client');
+const { BitShares, waitForConnected } = require('../../modules/bitshares_client');
 
 class BlockchainSource {
     constructor() {

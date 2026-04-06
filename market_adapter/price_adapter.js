@@ -58,10 +58,9 @@ const { readGeneralSettings } = require('../modules/general_settings');
 const { MARKET_ADAPTER } = require('../modules/constants');
 const { createBotKey } = require('../modules/account_orders');
 const { calculateAMA } = require('../analysis/ama_fitting/ama');
-const kibanaSource = require('./kibana_source');
+const kibanaSource = require('./inputs/kibana_source');
 const { normalizePoolId } = kibanaSource;
 const { tradesToCandles, detectMissingCandleTimestamps } = require('./candle_utils');
-const { createPriceAdapterService } = require('./core/price_adapter_service');
 
 const ROOT = path.join(__dirname, '..');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
@@ -767,7 +766,8 @@ function writeBotGridPriceCenter(botKey, amaPrice, options = {}) {
     }
 }
 
-const adapterService = createPriceAdapterService({
+const { MarketAdapterService } = require("./core/market_adapter_service");
+const adapterService = new MarketAdapterService({
     resolveBotContext,
     resolveAmaForBot,
     candleFileForBot,
@@ -810,6 +810,10 @@ function writeCenterSnapshot(state) {
             lastGridResetAt: v.lastGridResetAt,
             lastAmaPrice: v.lastAmaPrice,
             lastDeltaPercent: v.lastDeltaPercent,
+            weights: v.weights,
+            collateral: v.collateral,
+            trend: v.trend,
+            atr: v.atr
         };
     }
     saveJson(CENTER_FILE, centers);
@@ -847,7 +851,9 @@ async function runOnce(cfg, state, contextCache) {
             const patchText = Number.isFinite(r.kibanaGapRepairCount) && r.kibanaGapRepairCount > 0 ? ` KIBANA_PATCH(${r.kibanaGapRepairCount})` : '';
             const gapText = Number.isFinite(r.unresolvedGapCount) && r.unresolvedGapCount > 0 ? ` GAPS(${r.unresolvedGapCount})` : '';
             const trigText = r.triggered ? ` TRIGGERED -> ${path.relative(ROOT, r.triggerPath)}` : '';
-            log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText}, delta=${deltaText}, threshold=${thresholdText}${staleText}${patchText}${gapText}${trigText}`);
+            const weightText = r.weights ? ` weights[buy=${r.weights.buy}, sell=${r.weights.sell}]` : '';
+            const trendText = r.trend ? ` trend=${r.trend}` : '';
+            log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText}, delta=${deltaText}, threshold=${thresholdText}${staleText}${patchText}${gapText}${trigText}${trendText}${weightText}`);
             if (Array.isArray(r.amaComparison) && r.amaComparison.length > 0) {
                 const parts = r.amaComparison.map((a) => {
                     const val = Number.isFinite(a.value) ? a.value.toFixed(8) : 'n/a';

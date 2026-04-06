@@ -29,7 +29,7 @@
 
 'use strict';
 
-const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('./core/kibana_client');
+const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('../core/kibana_client');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

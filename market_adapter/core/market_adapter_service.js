@@ -1,35 +1,37 @@
 'use strict';
 
+const { TrendDetectionService } = require('./strategies/trend_detection/analyzer');
+const { calculateATR } = require('./strategies/atr/calculator');
+const { computeDynamicWeights } = require('./strategies/dynamic_weights');
+const { adjustCollateralRatio } = require('./strategies/collateral_manager');
 const { DEFAULT_CONFIG } = require('../../modules/constants');
 const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order');
 const { applyGridPriceOffset } = require('../../modules/order/utils/system');
 
-function createPriceAdapterService(deps = {}) {
-    const {
-        resolveBotContext,
-        resolveAmaForBot,
-        candleFileForBot,
-        loadJson,
-        saveJson,
-        requiredCandlesForAma,
-        calculateBotThreshold,
-        computeCandleStaleness,
-        withRetries,
-        kibanaSource,
-        fetchNativeTradesSince,
-        tradesToCandles,
-        detectMissingCandleTimestamps,
-        mergeCandles,
-        pruneCandles,
-        calcAmaPrice,
-        calcAmaComparison,
-        writeGridResetTrigger,
-        writeBotGridPriceCenter,
-        root,
-        path,
-    } = deps;
+// Max grid price offset (%) applied at 100% trend confidence.
+// At confidence C, dynamic offset = ±(C / 100) * TREND_OFFSET_MAX_PCT.
+const TREND_OFFSET_MAX_PCT = 1.5;
 
-    function buildBotContextSignature(bot) {
+class MarketAdapterService {
+    constructor(deps = {}) {
+        this.deps = deps;
+        // Per-bot trend analyzers to prevent cross-bot state contamination
+        this.trendServices = new Map();
+    }
+
+    /**
+     * Get or create a TrendDetectionService for a specific bot.
+     * Each bot gets its own analyzer so accumulated AMA/oscillation
+     * state is independent.
+     */
+    _getTrendService(botKey) {
+        if (!this.trendServices.has(botKey)) {
+            this.trendServices.set(botKey, new TrendDetectionService());
+        }
+        return this.trendServices.get(botKey);
+    }
+
+    buildBotContextSignature(bot) {
         return [
             bot?.assetA,
             bot?.assetB,
@@ -41,7 +43,7 @@ function createPriceAdapterService(deps = {}) {
         ].map((v) => String(v ?? '')).join('|');
     }
 
-    function buildGapRepairTimeRange(missingTimestamps, intervalSeconds) {
+    buildGapRepairTimeRange(missingTimestamps, intervalSeconds) {
         const bucketMs = Number(intervalSeconds) * 1000;
         if (!Array.isArray(missingTimestamps) || missingTimestamps.length === 0) return null;
         if (!Number.isFinite(bucketMs) || bucketMs <= 0) return null;
@@ -54,7 +56,7 @@ function createPriceAdapterService(deps = {}) {
         };
     }
 
-    function clampGridPriceToBounds(centerPrice, referencePrice, bot) {
+    clampGridPriceToBounds(centerPrice, referencePrice, bot) {
         const base = Number(centerPrice);
         const ref = Number(referencePrice);
         if (!Number.isFinite(base) || base <= 0) return centerPrice;
@@ -69,37 +71,39 @@ function createPriceAdapterService(deps = {}) {
         }
     }
 
-    async function processBot(bot, state, cfg, contextCache, hooks = {}) {
+    async processBot(bot, state, cfg, contextCache, hooks = {}) {
+        const deps = this.deps;
+        
         if ((!bot.assetA && !bot.assetAId) || (!bot.assetB && !bot.assetBId)) {
             return { ok: false, reason: 'missing asset pair' };
         }
 
-        const contextSignature = buildBotContextSignature(bot);
+        const contextSignature = this.buildBotContextSignature(bot);
         const cached = contextCache.get(bot.botKey);
         const cachedCtx = cached && typeof cached === 'object' && cached.ctx ? cached.ctx : cached;
         const cachedSignature = cached && typeof cached === 'object' && cached.signature ? cached.signature : null;
         let ctx = cachedCtx;
         if (!ctx || cachedSignature !== contextSignature) {
-            ctx = await resolveBotContext(bot);
+            ctx = await deps.resolveBotContext(bot);
             contextCache.set(bot.botKey, {
                 signature: contextSignature,
                 ctx,
             });
         }
 
-        const botAma = resolveAmaForBot(bot, ctx);
+        const botAma = deps.resolveAmaForBot(bot, ctx);
         if (!botAma.enabled) {
             return { ok: false, reason: 'ama disabled' };
         }
 
-        const filePath = candleFileForBot(bot.botKey);
-        const existing = loadJson(filePath, null);
+        const filePath = deps.candleFileForBot(bot.botKey);
+        const existing = deps.loadJson(filePath, null);
         const existingCandles = Array.isArray(existing?.candles) ? existing.candles : [];
 
         const needBootstrap = existingCandles.length === 0;
-        const keepCount = requiredCandlesForAma(botAma);
+        const keepCount = deps.requiredCandlesForAma(botAma);
         const nowIso = new Date().toISOString();
-        const botThreshold = calculateBotThreshold(cfg);
+        const botThreshold = deps.calculateBotThreshold(cfg);
         if (!Number.isFinite(botThreshold) || botThreshold <= 0) {
             throw new Error(`deltaThresholdPercent missing/invalid for bot ${bot.name}`);
         }
@@ -111,7 +115,7 @@ function createPriceAdapterService(deps = {}) {
             const lookbackHours = Math.max(cfg.bootstrapLookbackHours, keepCount * 2);
             let kibanaCandles = null;
             try {
-                kibanaCandles = await withRetries(() => kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
+                kibanaCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
                     intervalSeconds: cfg.intervalSeconds,
                     lookbackHours,
                     consolidateByTimestamp: true,
@@ -126,38 +130,38 @@ function createPriceAdapterService(deps = {}) {
                 sourceLabel = 'kibana-bootstrap';
             } else {
                 const sinceMs = Date.now() - (lookbackHours * 3600 * 1000);
-                const trades = await withRetries(
-                    () => fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
+                const trades = await deps.withRetries(
+                    () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
                     cfg.sourceRetries,
                     cfg.retryDelayMs,
                     'native bootstrap fallback failed'
                 );
-                nextCandles = tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
+                nextCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
                 sourceLabel = 'native-bootstrap-fallback';
             }
         } else {
             const lastTs = existingCandles[existingCandles.length - 1]?.[0] || 0;
             const sinceMs = lastTs - (cfg.nativeBackfillHours * 3600 * 1000);
-            const trades = await withRetries(
-                () => fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
+            const trades = await deps.withRetries(
+                () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
                 cfg.sourceRetries,
                 cfg.retryDelayMs,
                 'native incremental fetch failed'
             );
-            const incomingCandles = tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
-            nextCandles = mergeCandles(existingCandles, incomingCandles);
+            const incomingCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
+            nextCandles = deps.mergeCandles(existingCandles, incomingCandles);
         }
 
         let kibanaGapRepairTimestamps = [];
-        let gapAnalysis = typeof detectMissingCandleTimestamps === 'function'
-            ? detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
+        let gapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
+            ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
             : { gapCount: 0, missingTimestamps: [] };
 
-        if (gapAnalysis.gapCount > 0 && kibanaSource && typeof kibanaSource.getLpCandlesForPool === 'function') {
-            const timeRange = buildGapRepairTimeRange(gapAnalysis.missingTimestamps, cfg.intervalSeconds);
+        if (gapAnalysis.gapCount > 0 && deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function') {
+            const timeRange = this.buildGapRepairTimeRange(gapAnalysis.missingTimestamps, cfg.intervalSeconds);
             if (timeRange) {
                 try {
-                    const kibanaGapCandles = await withRetries(() => kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
+                    const kibanaGapCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
                         intervalSeconds: cfg.intervalSeconds,
                         consolidateByTimestamp: true,
                         apiKey: null,
@@ -166,34 +170,74 @@ function createPriceAdapterService(deps = {}) {
 
                     if (Array.isArray(kibanaGapCandles) && kibanaGapCandles.length > 0) {
                         const beforeTimestamps = new Set(nextCandles.map((c) => c[0]));
-                        nextCandles = mergeCandles(nextCandles, kibanaGapCandles);
+                        nextCandles = deps.mergeCandles(nextCandles, kibanaGapCandles);
                         const afterTimestamps = new Set(nextCandles.map((c) => c[0]));
                         kibanaGapRepairTimestamps = gapAnalysis.missingTimestamps.filter((ts) => !beforeTimestamps.has(ts) && afterTimestamps.has(ts));
                     }
                 } catch (_) {}
             }
-            gapAnalysis = typeof detectMissingCandleTimestamps === 'function'
-                ? detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
+            gapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
+                ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
                 : { gapCount: 0, missingTimestamps: [] };
         }
 
-        nextCandles = pruneCandles(nextCandles, keepCount);
+        nextCandles = deps.pruneCandles(nextCandles, keepCount);
         const retainedTimestamps = new Set(nextCandles.map((c) => c[0]));
         const kibanaGapRepairCount = kibanaGapRepairTimestamps.filter((ts) => retainedTimestamps.has(ts)).length;
-        const retainedGapAnalysis = typeof detectMissingCandleTimestamps === 'function'
-            ? detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
+        const retainedGapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
+            ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
             : { gapCount: 0, missingTimestamps: [] };
         const unresolvedGapCount = retainedGapAnalysis.gapCount;
-        const amaPrice = calcAmaPrice(nextCandles, botAma);
-        const amaComparison = calcAmaComparison(nextCandles, bot, ctx);
-        const lastCandleTs = nextCandles[nextCandles.length - 1]?.[0] || null;
-        const { staleData, staleAgeHours } = computeCandleStaleness(lastCandleTs, cfg.maxStaleHours);
-        const gridPriceOffsetPct = Number.isFinite(Number(bot.gridPriceOffsetPct))
+        
+        // ------------------ MARKET ADAPTER STRATEGIES ------------------
+        
+        const amaPrice = deps.calcAmaPrice(nextCandles, botAma);
+        const lastCandle = nextCandles[nextCandles.length - 1] || [0,0,0,0,0];
+        
+        // 1. Trend analysis (price_candles -> trend_detection)
+        //    Feed ALL candles through the per-bot analyzer so it accumulates
+        //    enough history for isReady/confidence to be meaningful.
+        //    Use AMA price as the feed reference (LP pairs have no on-chain feed).
+        const trendService = this._getTrendService(bot.botKey);
+        trendService.reset();
+        const feedRef = Number.isFinite(amaPrice) && amaPrice > 0 ? amaPrice : 0;
+        let trendData = { isReady: false, trend: 'NEUTRAL', confidence: 0 };
+        for (let i = 0; i < nextCandles.length; i++) {
+            const close = nextCandles[i][4] || 0;
+            trendData = trendService.update(close, feedRef);
+        }
+
+        // 2. ATR Calculation (price_candles -> ATR -> weight_variance)
+        const atr = calculateATR(nextCandles, 14);
+        const weightVariance = amaPrice > 0 ? (atr / amaPrice) : 0;
+        
+        // 3. Dynamic Weights (trend_detection -> weight_offset, combine weight_variance)
+        const weights = computeDynamicWeights(trendData, { oscillationRatio: weightVariance * 100 });
+        
+        // 4. Collateral Strategy
+        const collateral = adjustCollateralRatio(trendData, 1.5, 2.0);
+
+        // 5. Grid Price Offset Calculation
+        // trend_detection -> price_offset
+        let dynamicTrendOffset = 0;
+        if (trendData.trend === 'UP') dynamicTrendOffset = (trendData.confidence / 100) * TREND_OFFSET_MAX_PCT; 
+        else if (trendData.trend === 'DOWN') dynamicTrendOffset = -(trendData.confidence / 100) * TREND_OFFSET_MAX_PCT; 
+        
+        let gridPriceOffsetPct = Number.isFinite(Number(bot.gridPriceOffsetPct))
             ? Number(bot.gridPriceOffsetPct)
             : 0;
+        gridPriceOffsetPct += dynamicTrendOffset;
+
+        // AMA + price_offset -> Gridprice
+        // ---------------------------------------------------------------
+        
+        const amaComparison = deps.calcAmaComparison(nextCandles, bot, ctx);
+        const lastCandleTs = lastCandle[0] || null;
+        const { staleData, staleAgeHours } = deps.computeCandleStaleness(lastCandleTs, cfg.maxStaleHours);
+        
         const referencePrice = amaPrice;
         let effectiveCenterPrice = applyGridPriceOffset(amaPrice, gridPriceOffsetPct);
-        const clampedCenterPrice = clampGridPriceToBounds(effectiveCenterPrice, amaPrice, bot);
+        const clampedCenterPrice = this.clampGridPriceToBounds(effectiveCenterPrice, amaPrice, bot);
         effectiveCenterPrice = Number.isFinite(clampedCenterPrice) && clampedCenterPrice > 0 ? clampedCenterPrice : effectiveCenterPrice;
 
         const botState = { ...(state.bots[bot.botKey] || {}) };
@@ -215,15 +259,12 @@ function createPriceAdapterService(deps = {}) {
             const offsetChanged = offsetPctChanged && effectiveCenterMoved;
 
             if (!Number.isFinite(centerPrice) || centerPrice <= 0) {
-                // First run: persist the effective center before advancing the in-memory baseline.
-                // The order engine reads the snapshot file directly, so a failed write must leave
-                // the baseline unset to force a retry on the next cycle.
                 const bootstrapCenterPrice = Number.isFinite(effectiveCenterPrice) && effectiveCenterPrice > 0
                     ? effectiveCenterPrice
                     : referencePrice;
                 let amaCenterPersisted = true;
-                if (typeof writeBotGridPriceCenter === 'function') {
-                    amaCenterPersisted = writeBotGridPriceCenter(bot.botKey, referencePrice, {
+                if (typeof deps.writeBotGridPriceCenter === 'function') {
+                    amaCenterPersisted = deps.writeBotGridPriceCenter(bot.botKey, referencePrice, {
                         amaCenterPrice: amaPrice,
                         gridPriceOffsetPct,
                         effectiveCenterPrice: bootstrapCenterPrice,
@@ -243,10 +284,8 @@ function createPriceAdapterService(deps = {}) {
                 if (deltaPercent >= botThreshold) {
                     let amaCenterPersisted = true;
 
-                    // Write the effective center before the trigger file so initializeGrid()
-                    // always finds a fresh value when it reacts.
-                    if (typeof writeBotGridPriceCenter === 'function') {
-                        amaCenterPersisted = writeBotGridPriceCenter(bot.botKey, referencePrice, {
+                    if (typeof deps.writeBotGridPriceCenter === 'function') {
+                        amaCenterPersisted = deps.writeBotGridPriceCenter(bot.botKey, referencePrice, {
                             amaCenterPrice: amaPrice,
                             gridPriceOffsetPct,
                             effectiveCenterPrice,
@@ -257,7 +296,7 @@ function createPriceAdapterService(deps = {}) {
                     if (!amaCenterPersisted) {
                         triggerSuppressedReason = 'ama_center_persist_failed';
                     } else {
-                        triggerPath = writeGridResetTrigger(bot, {
+                        triggerPath = deps.writeGridResetTrigger(bot, {
                             reason: offsetChanged
                                 ? 'price_adapter_gridprice_offset_change'
                                 : 'price_adapter_delta_threshold',
@@ -317,14 +356,14 @@ function createPriceAdapterService(deps = {}) {
             },
             candles: nextCandles,
         };
-        saveJson(filePath, candlePayload);
+        deps.saveJson(filePath, candlePayload);
 
         state.bots[bot.botKey] = {
             ...botState,
             botName: bot.name,
             botKey: bot.botKey,
             poolId: ctx.poolId,
-            candleFile: path.relative(root, filePath),
+            candleFile: deps.path.relative(deps.root, filePath),
             candleCount: nextCandles.length,
             kibanaGapRepairCount,
             unresolvedGapCount,
@@ -348,6 +387,11 @@ function createPriceAdapterService(deps = {}) {
             staleAgeHours,
             lastTriggerFile: triggerPath || botState.lastTriggerFile || null,
             lastTriggerSuppressedReason: triggerSuppressedReason,
+            weights,
+            collateral,
+            trend: trendData.trend,
+            atr,
+            weightVariance
         };
 
         return {
@@ -367,28 +411,11 @@ function createPriceAdapterService(deps = {}) {
             staleAgeHours,
             triggerCallbackError,
             triggerSuppressedReason,
+            weights,
+            collateral,
+            trend: trendData.trend
         };
     }
-
-    async function runCycle(bots, state, cfg, contextCache, hooks = {}) {
-        const out = [];
-        for (const bot of bots) {
-            try {
-                const result = await processBot(bot, state, cfg, contextCache, hooks);
-                out.push({ botName: bot.name, botKey: bot.botKey, ...result });
-            } catch (err) {
-                out.push({ botName: bot.name, botKey: bot.botKey, ok: false, reason: err.message });
-            }
-        }
-        return out;
-    }
-
-    return {
-        processBot,
-        runCycle,
-    };
 }
 
-module.exports = {
-    createPriceAdapterService,
-};
+module.exports = { MarketAdapterService };

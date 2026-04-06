@@ -333,7 +333,7 @@ async function testDecisionLoop() {
 function createKibanaHarness() {
   const chainQueriesPath = require.resolve('../modules/chain_queries');
   const marketCandlesPath = require.resolve('../../market_adapter/core/kibana_market_candles');
-  const lpSourcePath = require.resolve('../../market_adapter/kibana_source');
+  const lpSourcePath = require.resolve('../../market_adapter/inputs/kibana_source');
   const kibanaPricePath = require.resolve('../modules/kibana_price_source');
 
   const calls = {

@@ -31,8 +31,8 @@
 const fs   = require('fs');
 const path = require('path');
 const kibanaSource = require('./kibana_source');
-const { toIntervalLabel } = require('./candle_utils');
-const { parseJsonWithComments } = require('../modules/account_bots');
+const { toIntervalLabel } = require('../candle_utils');
+const { parseJsonWithComments } = require('../../modules/account_bots');
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -42,7 +42,7 @@ const DEFAULT_CONFIG = {
     apiKey:          null,
 };
 
-const BOTS_JSON = path.join(__dirname, '..', 'profiles', 'bots.json');
+const BOTS_JSON = path.join(__dirname, '..', '..', 'profiles', 'bots.json');
 
 // ─── CLI ──────────────────────────────────────────────────────────────────────
 
@@ -215,7 +215,7 @@ async function run() {
 
     // ── Mode A: manual --pool override (no blockchain connection needed) ──────
     if (cliPoolId) {
-        const { waitForConnected, BitShares } = require('../modules/bitshares_client');
+        const { waitForConnected, BitShares } = require('../../modules/bitshares_client');
 
         console.log(`  Mode:     Manual (--pool ${cliPoolId})`);
         fullPoolId = kibanaSource.normalizePoolId(cliPoolId);
@@ -252,7 +252,7 @@ async function run() {
 
     // ── Mode B: auto-resolve from bots.json + blockchain (default) ───────────
     } else {
-        const { waitForConnected, BitShares } = require('../modules/bitshares_client');
+        const { waitForConnected, BitShares } = require('../../modules/bitshares_client');
 
         const bots = loadBotsJson();
         const bot  = selectBot(bots, botName);

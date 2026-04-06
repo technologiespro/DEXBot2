@@ -2,7 +2,7 @@
 
 const {
   computeDynamicWeights
-} = require('../../market_adapter/dynamic_weights');
+} = require('../../market_adapter/core/strategies/dynamic_weights');
 const { DEFAULT_CONFIG } = require('../../modules/constants');
 const { fetchTrendInput } = require('./feed_price_source');
 const { TrendAnalyzer } = require('../../analysis/trend_detection/trend_analyzer');

@@ -15,7 +15,7 @@
 'use strict';
 
 const { getMarketCandles, getMarketClosePrices } = require('../../market_adapter/core/kibana_market_candles');
-const { getLpCandlesForPool, getLpClosePricesForPool, discoverPoolAssets } = require('../../market_adapter/kibana_source');
+const { getLpCandlesForPool, getLpClosePricesForPool, discoverPoolAssets } = require('../../market_adapter/inputs/kibana_source');
 const { getAsset } = require('./chain_queries');
 
 /**

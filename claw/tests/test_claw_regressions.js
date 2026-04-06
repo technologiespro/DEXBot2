@@ -650,7 +650,7 @@ function testZeroClawCommandInjectsRuntimeName() {
 }
 
 function testBuildQueryScopesAnyPoolByReceivedAsset() {
-  const { buildQuery } = require('../../market_adapter/kibana_source');
+  const { buildQuery } = require('../../market_adapter/inputs/kibana_source');
 
   // With poolId: no received asset filter needed
   const poolScoped = buildQuery('1.3.0', 100, 3600, '1.19.133');

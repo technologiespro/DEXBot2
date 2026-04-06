@@ -14,7 +14,7 @@
 
 'use strict';
 
-const { computeDynamicWeights } = require('../../market_adapter/dynamic_weights');
+const { computeDynamicWeights } = require('../../market_adapter/core/strategies/dynamic_weights');
 
 /**
  * Generate a universal tuning recommendation for a bot position.

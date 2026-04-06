@@ -2,14 +2,14 @@
 'use strict';
 
 const kibanaSource = require('./kibana_source');
-const { BitShares, waitForConnected } = require('../modules/bitshares_client');
+const { BitShares, waitForConnected } = require('../../modules/bitshares_client');
 const {
     buildOutputPath,
     toIntervalLabel,
     tradesToCandles,
     writeCandlesJson,
     writeCandlesCsv,
-} = require('./candle_utils');
+} = require('../candle_utils');
 
 const DEFAULTS = {
     pool: '133',

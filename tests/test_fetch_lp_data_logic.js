@@ -5,7 +5,7 @@ console.log('Running fetch_lp_data parsing tests');
 const {
     parseBotsConfig,
     selectBot,
-} = require('../market_adapter/fetch_lp_data');
+} = require('../market_adapter/inputs/fetch_lp_data');
 
 {
     const raw = `{

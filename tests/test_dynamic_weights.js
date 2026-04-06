@@ -10,7 +10,7 @@ const {
   computePositionBias,
   computeSlotFillProbabilities,
   oscillationFactor,
-} = require('../market_adapter/dynamic_weights');
+} = require('../market_adapter/core/strategies/dynamic_weights');
 
 // ── classifyTrendScenario ──
 
