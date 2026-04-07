@@ -346,10 +346,14 @@ function calculateAvailableFundsValue(side, accountTotals, funds, assetA, assetB
  * @param {Array<Object>} activeSells - Active sell orders with price property
  * @returns {number} Spread percentage or 0 if insufficient data
  */
-function calculateSpreadFromOrders(activeBuys, activeSells) {
-    const bestBuy = activeBuys.length > 0 ? Math.max(...activeBuys.map(o => o.price)) : null;
+function getGridBestPrices(activeBuys, activeSells) {
+    const bestBuy  = activeBuys.length  > 0 ? Math.max(...activeBuys.map(o => o.price))  : null;
     const bestSell = activeSells.length > 0 ? Math.min(...activeSells.map(o => o.price)) : null;
+    return { bestBuy, bestSell };
+}
 
+function calculateSpreadFromOrders(activeBuys, activeSells) {
+    const { bestBuy, bestSell } = getGridBestPrices(activeBuys, activeSells);
     if (bestBuy === null || bestSell === null || bestBuy === 0) return 0;
     return ((bestSell / bestBuy) - 1) * 100;
 }
@@ -998,6 +1002,7 @@ module.exports = {
     getPrecision,
     computeChainFundTotals,
     calculateAvailableFundsValue,
+    getGridBestPrices,
     calculateSpreadFromOrders,
     resolveConfigValue,
     hasValidAccountTotals,

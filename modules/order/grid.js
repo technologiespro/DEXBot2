@@ -109,6 +109,7 @@ const {
     getPrecisionSlack,
     getMinAbsoluteOrderSize,
     getSingleDustThreshold,
+    getGridBestPrices,
     calculateSpreadFromOrders,
     allocateFundsByWeights,
     calculateGapSlots
@@ -1201,17 +1202,22 @@ class Grid {
      * @param {OrderManager} manager - The manager instance.
      * @returns {number} The calculated spread percentage.
      */
+    static _getOnChainOrders(manager) {
+        const onChainBuys = [
+            ...manager.getOrdersByTypeAndState(ORDER_TYPES.BUY, ORDER_STATES.ACTIVE),
+            ...manager.getOrdersByTypeAndState(ORDER_TYPES.BUY, ORDER_STATES.PARTIAL)
+        ].filter(o => o?.orderId && Number(o?.size || 0) > 0);
+
+        const onChainSells = [
+            ...manager.getOrdersByTypeAndState(ORDER_TYPES.SELL, ORDER_STATES.ACTIVE),
+            ...manager.getOrdersByTypeAndState(ORDER_TYPES.SELL, ORDER_STATES.PARTIAL)
+        ].filter(o => o?.orderId && Number(o?.size || 0) > 0);
+
+        return { onChainBuys, onChainSells };
+    }
+
     static calculateCurrentSpread(manager) {
-        const activeBuys = manager.getOrdersByTypeAndState(ORDER_TYPES.BUY, ORDER_STATES.ACTIVE);
-        const activeSells = manager.getOrdersByTypeAndState(ORDER_TYPES.SELL, ORDER_STATES.ACTIVE);
-        const partialBuys = manager.getOrdersByTypeAndState(ORDER_TYPES.BUY, ORDER_STATES.PARTIAL);
-        const partialSells = manager.getOrdersByTypeAndState(ORDER_TYPES.SELL, ORDER_STATES.PARTIAL);
-
-        const onChainBuys = [...activeBuys, ...partialBuys]
-            .filter(o => o?.orderId && Number(o?.size || 0) > 0);
-        const onChainSells = [...activeSells, ...partialSells]
-            .filter(o => o?.orderId && Number(o?.size || 0) > 0);
-
+        const { onChainBuys, onChainSells } = Grid._getOnChainOrders(manager);
         return calculateSpreadFromOrders(onChainBuys, onChainSells);
     }
 
@@ -1239,9 +1245,15 @@ class Grid {
         let correction = null;
         let shouldApplyCorrection = false;
 
-        // Market price is only used for valuation during side-selection decision.
-        // We rely on config.startPrice (which is updated periodically) to avoid redundant blockchain calls.
-        const startPrice = manager.config.startPrice;
+        // Derive current market price from the bot's own grid (no blockchain call needed).
+        // Grid prices are in B/A format (e.g. BTS/XRP) so no inversion is required.
+        // Mid between best bid and best ask is the most current price the bot has.
+        // Falls back to config.startPrice when either side is empty (e.g. at startup).
+        const { onChainBuys, onChainSells } = Grid._getOnChainOrders(manager);
+        const { bestBuy, bestSell } = getGridBestPrices(onChainBuys, onChainSells);
+        const lastPrice = (bestBuy !== null && bestSell !== null)
+            ? (bestBuy + bestSell) / 2
+            : Number(manager.config.startPrice) || 0;
 
         // FIX: Use optional chaining for lock - if no lock exists, execute synchronously
         const executeSpreadCheck = async () => {
@@ -1270,7 +1282,7 @@ class Grid {
             const limitSpread = nominalSpread + (manager.config.incrementPercent * toleranceSteps);
             manager.logger?.log?.(`Spread too wide (${Format.formatPercent(currentSpread)} > ${Format.formatPercent(limitSpread)}), correcting with ${manager.outOfSpread} extra slot(s)...`, 'warn');
 
-            const decision = Grid.determineOrderSideByFunds(manager, startPrice);
+            const decision = Grid.determineOrderSideByFunds(manager, lastPrice);
             if (!decision.side) return false;
 
             // Perform spread correction by placing orders on the chosen side.
@@ -1468,7 +1480,8 @@ class Grid {
     /**
      * Determine which side has more available funds for spread correction.
      * @param {OrderManager} manager - The manager instance.
-     * @param {number} currentMarketPrice - Current market price (for valuation context).
+     * @param {number} currentMarketPrice - Last traded price in B/A format (e.g. BTS/XRP), used to
+     *   normalize sell-side funds into buy-side units for a fair cross-asset comparison.
      * @returns {{ side: string|null, reason: string }} The side to correct on, or null if insufficient funds.
      */
     static determineOrderSideByFunds(manager, currentMarketPrice) {
@@ -1492,7 +1505,14 @@ class Grid {
 
         let side = null;
         if (buyViable && sellViable) {
-            side = buyAvailable > sellAvailable ? ORDER_TYPES.BUY : ORDER_TYPES.SELL;
+            // Normalize sell (assetA) to assetB units using market price so both sides
+            // are comparable. Without this, a raw number comparison (e.g. 2192 BTS vs
+            // 0.12 XRP) always picks BUY even when the sell side is larger in value.
+            const marketPrice = Number(currentMarketPrice);
+            const sellInBuyUnits = (Number.isFinite(marketPrice) && marketPrice > 0)
+                ? sellAvailable * marketPrice
+                : sellAvailable;
+            side = buyAvailable >= sellInBuyUnits ? ORDER_TYPES.BUY : ORDER_TYPES.SELL;
         } else if (buyViable) {
             side = ORDER_TYPES.BUY;
         } else if (sellViable) {
@@ -1615,22 +1635,40 @@ class Grid {
             manager.logger?.log?.(`[SPREAD-CORRECTION] Identified partial order at ${edgePartial.price} for update`, 'debug');
         }
 
-        const spreadCandidates = allOrders
+        // Primary candidates: SPREAD-type slots adjacent to the gap.
+        const typedSpreadCandidates = allOrders
             .filter(o => o.type === ORDER_TYPES.SPREAD && isSlotAvailable(o))
             .sort((a, b) => railType === ORDER_TYPES.BUY ? a.price - b.price : b.price - a.price)
             .slice(0, missingSlots);
 
+        // Secondary candidates: orphaned virtual slots of the correct side-type that have
+        // lost their order (e.g. stale-cleaned after a race condition during a crash).
+        // These sit inside the active window and are invisible to the SPREAD-type filter above.
+        const orphanedVirtualCandidates = allOrders
+            .filter(o => o.type === railType && o.state === ORDER_STATES.VIRTUAL && !o.orderId && Number(o.size || 0) === 0)
+            .sort((a, b) => railType === ORDER_TYPES.BUY ? b.price - a.price : a.price - b.price)
+            .slice(0, missingSlots);
+
+        // Merge: prefer orphaned virtuals (they already occupy correct grid positions) then
+        // fall back to SPREAD slots for any remaining quota.
+        const remainingQuota = Math.max(0, missingSlots - orphanedVirtualCandidates.length);
+        const spreadCandidates = [
+            ...orphanedVirtualCandidates,
+            ...typedSpreadCandidates.slice(0, remainingQuota)
+        ];
+
         if (spreadCandidates.length > 0) {
-            manager.logger?.log?.(`[SPREAD-CORRECTION] Identified ${spreadCandidates.length}/${missingSlots} spread slot(s) for activation on ${sideName}`, 'debug');
+            manager.logger?.log?.(`[SPREAD-CORRECTION] Identified ${spreadCandidates.length}/${missingSlots} slot(s) for activation on ${sideName} (orphaned=${orphanedVirtualCandidates.length}, spread=${spreadCandidates.length - orphanedVirtualCandidates.length})`, 'debug');
         }
 
         if (!edgePartial && spreadCandidates.length === 0) {
-            manager.logger?.log?.(`[SPREAD-CORRECTION] No suitable partials or spread slots found. Skipping.`, 'warn');
+            manager.logger?.log?.(`[SPREAD-CORRECTION] No suitable partials, orphaned virtual slots, or spread slots found. Skipping.`, 'warn');
             return { ordersToPlace: [], ordersToUpdate: [] };
         }
 
+        const orphanedIds = new Set(orphanedVirtualCandidates.map(o => o.id));
         const sideSlots = allOrders
-            .filter(o => o.type === railType)
+            .filter(o => o.type === railType && !orphanedIds.has(o.id))
             .sort((a, b) => a.price - b.price);
         const syntheticSideSlots = [
             ...sideSlots,
@@ -1778,7 +1816,7 @@ class Grid {
 
         if (spreadCandidates.length < missingSlots) {
             manager.logger?.log?.(
-                `[SPREAD-CORRECTION] Requested ${missingSlots} extra slot(s), found ${spreadCandidates.length} available spread slot(s) on ${sideName}`,
+                `[SPREAD-CORRECTION] Requested ${missingSlots} extra slot(s), found ${spreadCandidates.length} available slot(s) on ${sideName}`,
                 'warn'
             );
         }
