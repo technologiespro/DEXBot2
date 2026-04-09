@@ -113,11 +113,62 @@ function generateHTML(data, title) {
     const interpBearWeak = interpState.map(s => s === 'BEAR_WEAK'  ? -0.5  : 0);
     const interpOS       = interpState.map(s => s === 'OVERSOLD'   ? -0.75 : 0);
 
-    const smaTrendClass     = (last.smaRawTrend     || 'neutral').toLowerCase();
-    const fastSmaTrendClass = (last.fastSmaRawTrend || 'neutral').toLowerCase();
-    const interpClass = last.interpretation === 'BULL' ? 'up'
-        : last.interpretation === 'BEAR' ? 'down'
-        : 'neutral';
+    const priceSeries = prices.filter(v => Number.isFinite(v));
+    const priceStart = priceSeries.length ? priceSeries[0] : null;
+    const priceEnd = priceSeries.length ? priceSeries[priceSeries.length - 1] : null;
+    const priceHigh = priceSeries.length ? Math.max(...priceSeries) : null;
+    const priceLow = priceSeries.length ? Math.min(...priceSeries) : null;
+    const priceChange = priceStart !== null && priceEnd !== null ? priceEnd - priceStart : null;
+    const priceChangePct = priceStart !== null && priceEnd !== null && priceStart !== 0
+        ? ((priceEnd - priceStart) / priceStart) * 100
+        : null;
+
+    const countTrend = arr => arr.reduce((acc, v) => {
+        acc.total += 1;
+        if (v > 0) acc.up += 1;
+        else if (v < 0) acc.down += 1;
+        else acc.neutral += 1;
+        return acc;
+    }, { total: 0, up: 0, down: 0, neutral: 0 });
+
+    const countStates = (arr, positive, negative) => arr.reduce((acc, v) => {
+        acc.total += 1;
+        if (v === positive) acc.positive += 1;
+        else if (v === negative) acc.negative += 1;
+        else acc.neutral += 1;
+        return acc;
+    }, { total: 0, positive: 0, negative: 0, neutral: 0 });
+
+    const macdTrendNum = results.map(r => r.macdTrend === 'BULL' ? 1 : r.macdTrend === 'BEAR' ? -1 : 0);
+    const interpTrendNum = interpState.map(s =>
+        s === 'BULL' || s === 'BULL_WEAK' ? 1 :
+        s === 'BEAR' || s === 'BEAR_WEAK' ? -1 : 0
+    );
+
+    const smaTotals = countTrend(smaNum);
+    const fastSmaTotals = countTrend(fastSmaNum);
+    const macdTotals = countTrend(macdTrendNum);
+    const rsiTotals = countStates(results.map(r => r.rsiZone || 'NEUTRAL'), 'OVERBOUGHT', 'OVERSOLD');
+    const signalTotals = (() => {
+        let up = 0, down = 0, prev = null;
+        for (const state of interpState) {
+            const isBull = state === 'BULL' || state === 'BULL_WEAK';
+            const isBear = state === 'BEAR' || state === 'BEAR_WEAK';
+            if (isBull) {
+                if (state !== prev) up += 1;
+            } else if (isBear) {
+                if (state !== prev) down += 1;
+            }
+            prev = state;
+        }
+        return { up, down };
+    })();
+    const candleCount = results.length;
+
+    const fmtPrice = v => v === null ? 'n/a' : Number(v).toFixed(6);
+    const fmtSignedPrice = v => v === null ? 'n/a' : `${v >= 0 ? '+' : ''}${Math.round(Number(v))}`;
+    const fmtPct = v => v === null ? 'n/a' : `${v >= 0 ? '+' : ''}${Math.round(Number(v))}%`;
+    const fmtShare = count => candleCount > 0 ? `${Math.round((count / candleCount) * 100)}%` : 'n/a';
 
     const headerParts = [];
     if (smaPeriod !== 'N/A') headerParts.push(`SMA(${smaPeriod})`);
@@ -126,34 +177,25 @@ function generateHTML(data, title) {
     headerParts.push(`RSI(${rsiPeriod})`);
     const headerSub = headerParts.join(' &middot; ');
 
-    const fastSmaStatsBlock = hasFastSma ? `
-    <div style="margin-top:6px"><span class="label">&#x2500;&#x2500; fastSMA(${fastSmaPeriod}) d/dt &#x2500;&#x2500;</span></div>
-    <div><span class="label">Direction</span><span class="trend-badge ${fastSmaTrendClass}">${last.fastSmaRawTrend}</span></div>
-    <div><span class="label">Confirmed</span> <span class="val">${last.fastSmaTrend}</span></div>
-    <div><span class="label">Bars in direction</span> <span class="val">${last.fastSmaBarsInTrend}</span></div>
-    <div><span class="label">Confidence</span> <span class="val">${last.fastSmaConfidence}%</span></div>
-    <div><span class="label">fastSMA value</span> <span class="val">${last.fastSmaValue !== null ? Number(last.fastSmaValue).toFixed(6) : 'n/a'}</span></div>` : '';
-
     const statsPanel = `
     <div><span class="label">Candles</span> <span class="val">${results.length}</span></div>
-    <div style="margin-top:6px"><span class="label">&#x2500;&#x2500; SMA(${smaPeriod}) d/dt &#x2500;&#x2500;</span></div>
-    <div><span class="label">Direction</span><span class="trend-badge ${smaTrendClass}">${last.smaRawTrend}</span></div>
-    <div><span class="label">Confirmed</span> <span class="val">${last.smaTrend}</span></div>
-    <div><span class="label">Bars in direction</span> <span class="val">${last.smaBarsInTrend}</span></div>
-    <div><span class="label">Confidence</span> <span class="val">${last.smaConfidence}%</span></div>
-    <div><span class="label">SMA value</span> <span class="val">${last.slowSma !== null ? Number(last.slowSma).toFixed(6) : 'n/a'}</span></div>
-    ${fastSmaStatsBlock}
-    <div style="margin-top:6px"><span class="label">&#x2500;&#x2500; MACD(${macdFast},${macdSlow},${macdSig}) &#x2500;&#x2500;</span></div>
-    <div><span class="label">Signal</span><span class="trend-badge ${(last.macdTrend || 'neutral').toLowerCase()}">${last.macdTrend || 'n/a'}</span></div>
-    <div><span class="label">Histogram</span> <span class="val">${last.macdHistogram !== null ? Number(last.macdHistogram).toFixed(4) + '%' : 'n/a'}</span></div>
-    <div><span class="label">MACD line</span> <span class="val">${last.macdLine !== null ? Number(last.macdLine).toFixed(4) + '%' : 'n/a'}</span></div>
-    <div style="margin-top:6px"><span class="label">&#x2500;&#x2500; RSI(${rsiPeriod}) &#x2500;&#x2500;</span></div>
-    <div><span class="label">Value</span> <span class="val">${last.rsi !== null ? Number(last.rsi).toFixed(1) : 'n/a'}</span></div>
-    <div><span class="label">Zone</span> <span class="val">${last.rsiZone || 'n/a'}</span></div>
-    <div style="margin-top:6px"><span class="label">&#x2500;&#x2500; Interpretation &#x2500;&#x2500;</span></div>
-    <div><span class="trend-badge ${interpClass}">${last.interpretation || 'NEUTRAL'}</span></div>
-    <div style="margin-top:6px"><span class="label">&#x2500;&#x2500; Price &#x2500;&#x2500;</span></div>
-    <div><span class="label">Last</span> <span class="val">${last.price !== null ? Number(last.price).toFixed(6) : 'n/a'}</span></div>
+    <div style="margin-top:6px"><span class="label">&#x2500;&#x2500; Price summary &#x2500;&#x2500;</span></div>
+    <div><span class="label">Start</span> <span class="val">${fmtPrice(priceStart)}</span></div>
+    <div><span class="label">End</span> <span class="val">${fmtPrice(priceEnd)}</span></div>
+    <div style="margin-top:4px"></div>
+    <div><span class="label">High</span> <span class="val">${fmtPrice(priceHigh)}</span></div>
+    <div><span class="label">Low</span> <span class="val">${fmtPrice(priceLow)}</span></div>
+    <div style="margin-top:4px"></div>
+    <div><span class="label">Abs change</span> <span class="val">${fmtSignedPrice(priceChange)}</span></div>
+    <div><span class="label">Rel change</span> <span class="val">${fmtPct(priceChangePct)}</span></div>
+    <div style="margin-top:6px"><span class="label">&#x2500;&#x2500; Totals &#x2500;&#x2500;</span></div>
+    <div><span class="label">SMA(${smaPeriod})</span> <span class="val"><span class="pos">&#x25B2;</span>${fmtShare(smaTotals.up)} <span class="neg">&#x25BC;</span>${fmtShare(smaTotals.down)} <span class="muted">&#x25CF;</span>${fmtShare(smaTotals.neutral)}</span></div>
+    ${hasFastSma ? `<div><span class="label">fastSMA(${fastSmaPeriod})</span> <span class="val"><span class="pos">&#x25B2;</span>${fmtShare(fastSmaTotals.up)} <span class="neg">&#x25BC;</span>${fmtShare(fastSmaTotals.down)} <span class="muted">&#x25CF;</span>${fmtShare(fastSmaTotals.neutral)}</span></div>` : ''}
+    <div style="margin-top:4px"></div>
+    <div><span class="label">MACD(${macdFast},${macdSlow},${macdSig})</span> <span class="val"><span class="pos">&#x25B2;</span>${fmtShare(macdTotals.up)} <span class="neg">&#x25BC;</span>${fmtShare(macdTotals.down)} <span class="muted">&#x25CF;</span>${fmtShare(macdTotals.neutral)}</span></div>
+    <div><span class="label">RSI(${rsiPeriod})</span> <span class="val"><span class="pos">&#x25B2;</span>${fmtShare(rsiTotals.positive)} <span class="neg">&#x25BC;</span>${fmtShare(rsiTotals.negative)} <span class="muted">&#x25CF;</span>${fmtShare(rsiTotals.neutral)}</span></div>
+    <div style="margin-top:4px"></div>
+    <div><span class="label">Signals</span> <span class="val"><span class="pos">&#x25B2;</span>${signalTotals.up} <span class="neg">&#x25BC;</span>${signalTotals.down}</span></div>
 `;
 
     return `<!DOCTYPE html>
@@ -187,9 +229,24 @@ function generateHTML(data, title) {
             min-width: 230px;
         }
         #stats .label { color: #888; }
-        #stats .val   { color: #e0e0e0; font-weight: 600; }
+        #stats .val   { color: #e0e0e0; font-weight: 600; font-variant-numeric: tabular-nums; }
+        #stats .pos   { color: #26a69a; }
+        #stats .neg   { color: #ef5350; }
+        #stats .muted { color: #9ca3b8; }
 
-        #charts { padding-top: 36px; display: flex; flex-direction: column; height: 100vh; }
+        #charts {
+            padding-top: 36px;
+            padding-bottom: 8px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #reset-zoom-btn {
+            background: #1e2330; color: #ccc; border: 1px solid #2a2e3e;
+            border-radius: 4px; padding: 3px 10px; font-size: 11px; cursor: pointer;
+            white-space: nowrap;
+        }
+        #reset-zoom-btn:hover { background: #2a3050; color: #fff; }
         #price-chart  { flex: 3; min-height: 0; }
         #deriv-chart  { flex: 1; min-height: 0; }
         #interp-chart { flex: 2; min-height: 0; }
@@ -211,6 +268,7 @@ function generateHTML(data, title) {
     <h1>&#x1F4CA; ${escapeHtml(title)}</h1>
     <span class="sub">Source: ${escapeHtml(source)}</span>
     <span class="sub">${headerSub}</span>
+    <button id="reset-zoom-btn" onclick="resetZoom()" title="Reset x-axis zoom on all panels">&#x21BA; Reset Zoom</button>
     <span class="sub" style="margin-left:auto">Generated: ${new Date().toLocaleString()}</span>
 </div>
 
@@ -491,31 +549,16 @@ Plotly.newPlot('rsi-chart', [
     },
 ], {
     ...DARK,
-    margin: { l: 60, r: MARGIN_R, t: 4, b: 4 },
+    margin: { l: 60, r: MARGIN_R, t: 0, b: 20 },
     showlegend: true,
     legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(0,0,0,0.4)', font: { size: 11 } },
-    xaxis: { ...AXIS, type: 'date', showticklabels: false },
+    xaxis: { ...AXIS, type: 'date' },
     yaxis: { ...AXIS, title: { text: 'RSI', standoff: 6 }, range: [0, 100], fixedrange: true },
 }, { responsive: true, displayModeBar: false });
 
 // ── Synchronized x-axis zoom ───────────────────────────────────────────────
 let isSyncing = false;
-function syncAxes(srcDiv, targets) {
-    let rafId = null;
-    srcDiv.on('plotly_relayout', e => {
-        if (isSyncing) return;
-        const upd = e['xaxis.range[0]'] !== undefined
-            ? { 'xaxis.range[0]': e['xaxis.range[0]'], 'xaxis.range[1]': e['xaxis.range[1]'] }
-            : e['xaxis.autorange'] ? { 'xaxis.autorange': true } : null;
-        if (!upd) return;
-        if (rafId) cancelAnimationFrame(rafId);
-        rafId = requestAnimationFrame(() => {
-            isSyncing = true;
-            Promise.all(targets.map(d => Plotly.relayout(d, upd)))
-                .finally(() => { isSyncing = false; rafId = null; });
-        });
-    });
-}
+
 const allCharts = [
     document.getElementById('price-chart'),
     document.getElementById('deriv-chart'),
@@ -523,7 +566,80 @@ const allCharts = [
     document.getElementById('macd-chart'),
     document.getElementById('rsi-chart'),
 ].filter(Boolean);
+
+function wireAutoscaleToResetZoom(chartDiv) {
+    if (!chartDiv || chartDiv.__resetZoomAutoscaleWired) return;
+    chartDiv.__resetZoomAutoscaleWired = true;
+
+    const bind = () => {
+        const autoscaleBtn = chartDiv.querySelector(
+            '.modebar-btn[data-title*="Autoscale"], ' +
+            '.modebar-btn[data-title*="autoscale"], ' +
+            '.modebar-btn[aria-label*="Autoscale"]'
+        );
+
+        if (!autoscaleBtn || autoscaleBtn.__resetZoomBound) return;
+        autoscaleBtn.__resetZoomBound = true;
+        autoscaleBtn.addEventListener('click', e => {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            setTimeout(resetZoom, 0);
+        }, true);
+    };
+
+    bind();
+    const observer = new MutationObserver(bind);
+    observer.observe(chartDiv, { childList: true, subtree: true });
+    chartDiv.__resetZoomObserver = observer;
+}
+
+function syncAxes(srcDiv, targets) {
+    srcDiv.on('plotly_relayout', e => {
+        if (isSyncing) return;
+        if (Object.keys(e).length === 1 && 'shapes' in e) return;
+
+        let upd;
+        if (e['xaxis.range[0]'] !== undefined) {
+            upd = { 'xaxis.range[0]': e['xaxis.range[0]'], 'xaxis.range[1]': e['xaxis.range[1]'] };
+        } else if (e['xaxis.autorange']) {
+            const range = srcDiv.layout?.xaxis?.range;
+            if (!range || range.length < 2) return;
+            upd = { 'xaxis.range[0]': range[0], 'xaxis.range[1]': range[1] };
+        } else if (e['autosize']) {
+            setTimeout(resetZoom, 0);
+            return;
+        } else {
+            return;
+        }
+
+        isSyncing = true;
+        Promise.all(targets.map(d => Plotly.relayout(d, upd)))
+            .finally(() => { setTimeout(() => { isSyncing = false; }, 50); });
+    });
+}
+
 allCharts.forEach(src => syncAxes(src, allCharts.filter(c => c !== src)));
+wireAutoscaleToResetZoom(allCharts[0]);
+
+// ── Reset Zoom button ──────────────────────────────────────────────────────
+function resetZoom() {
+    const ref = allCharts.find(c => c.data && c.data.length > 0);
+    if (!ref) return;
+    let xMin = null, xMax = null;
+    for (const trace of ref.data) {
+        if (trace.x && trace.x.length > 0) {
+            const f = trace.x[0], l = trace.x[trace.x.length - 1];
+            if (!xMin || f < xMin) xMin = f;
+            if (!xMax || l > xMax) xMax = l;
+        }
+    }
+    if (!xMin || !xMax) return;
+    isSyncing = true;
+    Promise.all(allCharts.map(d => Plotly.relayout(d, {
+        'xaxis.range[0]': xMin, 'xaxis.range[1]': xMax, 'yaxis.autorange': true
+    })))
+    .finally(() => { setTimeout(() => { isSyncing = false; }, 50); });
+}
 
 // ── Vertical crosshair across all panels ──────────────────────────────────
 let lastCrosshairX = null;

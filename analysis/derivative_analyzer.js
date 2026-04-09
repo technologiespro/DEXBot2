@@ -440,23 +440,30 @@ class DerivativeAnalyzer {
         if (fastDir === 'NEUTRAL') return interp;
 
         // Primary gate: fast MA sustained in opposite direction → suppress to NEUTRAL
+        let suppressedByTrendFilter = false;
         if (fastBarsInDir >= this.trendFilterMinBars) {
-            if (fastDir === 'UP'   && (interp === 'BEAR' || interp === 'BEAR_WEAK')) return 'NEUTRAL';
-            if (fastDir === 'DOWN' && (interp === 'BULL' || interp === 'BULL_WEAK')) return 'NEUTRAL';
+            if (fastDir === 'UP'   && (interp === 'BEAR' || interp === 'BEAR_WEAK')) {
+                interp = 'NEUTRAL';
+                suppressedByTrendFilter = true;
+            }
+            if (fastDir === 'DOWN' && (interp === 'BULL' || interp === 'BULL_WEAK')) {
+                interp = 'NEUTRAL';
+                suppressedByTrendFilter = true;
+            }
         }
 
         // Momentum Gate (Opt 11): if MACD + RSI both diverge from SMA(500) for
         // >= momentumGateMinBars, allow signal through as WEAK instead of suppressing to NEUTRAL.
-        if (this.momentumGateEnabled && this.sma) {
+        if (suppressedByTrendFilter && this.momentumGateEnabled && this.sma) {
             const slowDir  = this._rawSmaTrend();
             const macdConf = this.barsInMacdDivergence >= this.momentumGateMinBars;
             const rsiConf  = this.barsInRsiDivergence  >= this.momentumGateMinBars;
 
             if (macdConf && rsiConf && slowDir !== 'NEUTRAL') {
-                if (slowDir === 'UP'   && interp === 'NEUTRAL' && this.currMacd?.histogram < -this.macdMinHist) {
+                if (slowDir === 'UP' && this.currMacd?.histogram < -this.macdMinHist) {
                     interp = 'BEAR_WEAK';
                 }
-                if (slowDir === 'DOWN' && interp === 'NEUTRAL' && this.currMacd?.histogram >  this.macdMinHist) {
+                if (slowDir === 'DOWN' && this.currMacd?.histogram > this.macdMinHist) {
                     interp = 'BULL_WEAK';
                 }
             }

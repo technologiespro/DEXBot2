@@ -45,6 +45,7 @@ function parseArgs() {
         momentumGateEnabled: false,
         momentumGateMinBars: 3,
         momentumGateRsiZone: 35,
+        opt10CommitmentBars: 2,
         priceRegimeGate: true,
         priceRegimeMinDistancePct: 0.35,
         rsiPeriod: 14,
@@ -81,6 +82,7 @@ function parseArgs() {
         else if (arg === '--momentum-gate')         config.momentumGateEnabled  = true;
         else if (arg === '--momentum-gate-bars')    config.momentumGateMinBars  = parseInt(args[++i]);
         else if (arg === '--momentum-gate-rsi-zone') config.momentumGateRsiZone = parseFloat(args[++i]);
+        else if (arg === '--opt10-commitment')      config.opt10CommitmentBars  = parseInt(args[++i]);
         else if (arg === '--no-price-regime-gate')  config.priceRegimeGate      = false;
         else if (arg === '--price-regime-buffer-pct') config.priceRegimeMinDistancePct = parseFloat(args[++i]);
         else if (arg === '--chart')       config.chartFile                  = args[++i];
@@ -123,6 +125,7 @@ Analyzer options:
   --interp-hold N  Bars to hold confirmed BULL/BEAR downgrades (default 3)
   --trend-filter  Enable derivative trend filter
   --trend-filter-min-bars N  Sustained bars for trend filter (default 3)
+  --opt10-commitment N  Consecutive bars price must stay beyond fastSMA (default 2)
   --no-price-regime-gate  Disable slow-SMA macro regime gate
   --price-regime-buffer-pct N  Required slow-SMA clearance in % (default 0.35)
 
@@ -155,6 +158,7 @@ async function analyze(source, config) {
         momentumGateEnabled:    config.momentumGateEnabled,
         momentumGateMinBars:    config.momentumGateMinBars,
         momentumGateRsiZone:    config.momentumGateRsiZone,
+        opt10CommitmentBars:    config.opt10CommitmentBars,
         priceRegimeGateEnabled: config.priceRegimeGate,
         priceRegimeMinDistancePct: config.priceRegimeMinDistancePct,
         rsiPeriod:              config.rsiPeriod,
@@ -198,6 +202,10 @@ async function analyze(source, config) {
             macdMinHist:         config.macdMinHist,
             trendFilter:         config.trendFilter,
             trendFilterMinBars:  config.trendFilterMinBars,
+            momentumGateEnabled: config.momentumGateEnabled,
+            momentumGateMinBars: config.momentumGateMinBars,
+            momentumGateRsiZone: config.momentumGateRsiZone,
+            opt10CommitmentBars: config.opt10CommitmentBars,
             priceRegimeGate:     config.priceRegimeGate,
             priceRegimeMinDistancePct: config.priceRegimeMinDistancePct,
             rsiPeriod:           config.rsiPeriod,

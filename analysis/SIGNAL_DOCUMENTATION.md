@@ -19,6 +19,11 @@ The output signal is one of:
 - `OVERSOLD`
 - `NEUTRAL`
 
+There are two independent outputs:
+
+- `trend` / `rawTrend` / `isConfirmed` come from SMA direction alone. `--confirm` controls only this MA-trend confirmation layer.
+- `interpretation` / `interpretationRaw` are the trading-style states (`BULL`, `BEAR`, `OVERBOUGHT`, etc.). `--interp-confirm` and `--interp-hold` control only this signal layer.
+
 ---
 
 ## Indicators
@@ -181,7 +186,7 @@ When fastSMA is present, two additional checks run inside the trend filter:
 
 ### Momentum gate
 
-When the trend filter suppresses a signal, the momentum gate can restore it as weak if MACD and RSI both support the reversal for enough bars.
+When the trend filter suppresses a directional candidate to `NEUTRAL`, the momentum gate can restore it as weak if MACD and RSI both support the reversal for enough bars.
 
 **Flags**
 
@@ -191,9 +196,11 @@ When the trend filter suppresses a signal, the momentum gate can restore it as w
 | `--momentum-gate-bars N` | 3 | Bars of sustained divergence required |
 | `--momentum-gate-rsi-zone F` | 35 | RSI threshold for the divergence check |
 
+The gate is only checked after a directional state was suppressed by the primary trend filter. It does not create weak signals from an already-neutral MACD/RSI reading.
+
 ### Price regime gate
 
-Confirmed signals are suppressed if price has not cleared the slow SMA by a small buffer.
+Any directional state (`BULL`, `BULL_WEAK`, `BEAR`, `BEAR_WEAK`) is suppressed if price has not cleared the slow SMA by a small buffer.
 
 **Flags**
 
@@ -204,16 +211,27 @@ Confirmed signals are suppressed if price has not cleared the slow SMA by a smal
 
 This is the trap filter that removes shallow bull/bear crosses from the chart.
 
+The same gate is also treated as a hard invalidation for hysteresis. A confirmed `BULL`/`BEAR` is dropped immediately when the buffered slow-SMA regime is lost.
+
 ### MACD line regime gate
 
-The MACD line itself must agree with the regime:
+Inside the trend filter, the MACD line itself must agree with the regime:
 
 - `BULL` needs MACD line > 0
 - `BEAR` needs MACD line < 0
 
+There is one extra bearish downgrade:
+
+- `BEAR` + MACD histogram > 0 -> `BEAR_WEAK`
+
 ### Post-filter trap suppression
 
-The final hard gate suppresses weak directional states while the MACD line is still near the wrong side of zero.
+The final hard gate suppresses any remaining directional state while the MACD line is still too close to the wrong side of zero.
+
+The threshold is not pure zero. It reuses `--macd-min-hist` as a small regime buffer:
+
+- `BULL` / `BULL_WEAK` require MACD line >= `macd-min-hist`
+- `BEAR` / `BEAR_WEAK` require MACD line <= `-macd-min-hist`
 
 That means stale bullish or bearish holds are cleared immediately when the regime is invalidated.
 
@@ -274,6 +292,7 @@ BEAR candidate:
 | `--momentum-gate` | off | Enable MACD+RSI recovery gate |
 | `--momentum-gate-bars N` | 3 | Momentum gate persistence |
 | `--momentum-gate-rsi-zone F` | 35 | RSI divergence threshold |
+| `--opt10-commitment N` | 2 | Consecutive bars price must stay beyond fastSMA before full BULL/BEAR confirmation can accumulate |
 | `--no-price-regime-gate` | off | Disable slow-SMA regime gate |
 | `--price-regime-buffer-pct N` | 0.35 | Minimum price clearance from slow SMA |
 | `--source` | market_adapter | Data source |
