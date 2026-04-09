@@ -4,7 +4,7 @@
  * DERIVATIVE TREND ANALYSIS
  *
  * Runs DerivativeAnalyzer over candle data and generates an interactive HTML chart.
- * Trend is detected purely from the sign of d(SMA)/dt and d(KAMA)/dt.
+ * Trend is detected from SMA, MACD, and RSI only.
  *
  * Usage:
  *   node analysis/analyze_derivatives.js \
@@ -34,16 +34,8 @@ function parseArgs() {
     const config = {
         source: { type: 'market_adapter', config: { pair: 'XRP-BTS' } },
         slowSmaPeriod:        500,
-        fastSmaPeriod:        100,
-        fastKamaErPeriod:     null,
-        fastKamaFastPeriod:   2,
-        fastKamaSlowPeriod:   300,
+        fastSmaPeriod:        null,
         minBarsForConfirmation: 3,
-        lrsPeriod: null,
-        almaPeriod: null,
-        almaOffset: 0.85,
-        almaSigma: 6,
-        macdEnabled: false,
         macdFastPeriod: 12,
         macdSlowPeriod: 26,
         macdSignalPeriod: 9,
@@ -53,17 +45,14 @@ function parseArgs() {
         momentumGateEnabled: false,
         momentumGateMinBars: 3,
         momentumGateRsiZone: 35,
-        opt10CommitmentBars: 2,
         priceRegimeGate: true,
         priceRegimeMinDistancePct: 0.35,
-        rsiEnabled: false,
         rsiPeriod: 14,
         interpConfirmBars: 3,
         interpHoldBars: 3,
         rsiZone: 10,
         rsiExtreme: 90,
         chartFile: 'analysis/charts/derivative_chart.html',
-        smaOnly: true,
         quiet: false,
     };
 
@@ -77,20 +66,12 @@ function parseArgs() {
         else if (arg === '--precB')     config.source.config.precB          = parseInt(args[++i]);
         else if (arg === '--sma')       config.slowSmaPeriod                = parseInt(args[++i]);
         else if (arg === '--fast-sma')  config.fastSmaPeriod                = parseInt(args[++i]);
-        else if (arg === '--kama-er')   { config.fastKamaErPeriod           = parseInt(args[++i]); }
-        else if (arg === '--kama-fast') config.fastKamaFastPeriod           = parseInt(args[++i]);
-        else if (arg === '--kama-slow') config.fastKamaSlowPeriod           = parseInt(args[++i]);
         else if (arg === '--confirm')   config.minBarsForConfirmation       = parseInt(args[++i]);
-        else if (arg === '--lrs')       { config.lrsPeriod                  = parseInt(args[++i]); }
-        else if (arg === '--alma')      { config.almaPeriod                 = parseInt(args[++i]); }
-        else if (arg === '--alma-offset')  config.almaOffset                = parseFloat(args[++i]);
-        else if (arg === '--alma-sigma')   config.almaSigma                 = parseFloat(args[++i]);
-        else if (arg === '--macd')         { config.macdEnabled             = true; }
-        else if (arg === '--macd-fast')  { config.macdFastPeriod            = parseInt(args[++i]); config.macdEnabled = true; }
-        else if (arg === '--macd-slow')  { config.macdSlowPeriod            = parseInt(args[++i]); config.macdEnabled = true; }
-        else if (arg === '--macd-signal'){ config.macdSignalPeriod          = parseInt(args[++i]); config.macdEnabled = true; }
+        else if (arg === '--macd-fast')  { config.macdFastPeriod            = parseInt(args[++i]); }
+        else if (arg === '--macd-slow')  { config.macdSlowPeriod            = parseInt(args[++i]); }
+        else if (arg === '--macd-signal'){ config.macdSignalPeriod          = parseInt(args[++i]); }
         else if (arg === '--macd-min-hist') { config.macdMinHist            = parseFloat(args[++i]); }
-        else if (arg === '--rsi')          { config.rsiEnabled = true; const v = parseInt(args[i + 1]); if (!isNaN(v)) { config.rsiPeriod = v; i++; } }
+        else if (arg === '--rsi')          { const v = parseInt(args[i + 1]); if (!isNaN(v)) { config.rsiPeriod = v; i++; } }
         else if (arg === '--interp-confirm') config.interpConfirmBars        = parseInt(args[++i]);
         else if (arg === '--interp-hold')    config.interpHoldBars           = parseInt(args[++i]);
         else if (arg === '--rsi-zone')       config.rsiZone                  = parseFloat(args[++i]);
@@ -100,12 +81,9 @@ function parseArgs() {
         else if (arg === '--momentum-gate')         config.momentumGateEnabled  = true;
         else if (arg === '--momentum-gate-bars')    config.momentumGateMinBars  = parseInt(args[++i]);
         else if (arg === '--momentum-gate-rsi-zone') config.momentumGateRsiZone = parseFloat(args[++i]);
-        else if (arg === '--opt10-commitment')      config.opt10CommitmentBars  = parseInt(args[++i]);
         else if (arg === '--no-price-regime-gate')  config.priceRegimeGate      = false;
         else if (arg === '--price-regime-buffer-pct') config.priceRegimeMinDistancePct = parseFloat(args[++i]);
         else if (arg === '--chart')       config.chartFile                  = args[++i];
-        else if (arg === '--sma-only')  config.smaOnly                      = true;
-        else if (arg === '--all')       config.smaOnly                      = false;
         else if (arg === '--quiet')     config.quiet                        = true;
         else if (arg === '--help' || arg === '-h') { showHelp(); process.exit(0); }
     }
@@ -117,7 +95,7 @@ function showHelp() {
     console.log(`
 Derivative Trend Analysis
 
-Analyzes candle data using d(SMA)/dt and d(KAMA)/dt as trend signals.
+Analyzes candle data using SMA, MACD, and RSI as trend signals.
 Generates an interactive HTML chart.
 
 Usage:
@@ -132,16 +110,13 @@ Sources:
 
 Analyzer options:
   --sma N        SMA period (default 500)
-  --fast-sma N   Fast SMA period (default 100)
-  --kama-er N    KAMA ER period (default disabled)
-  --kama-fast N  KAMA fast period (default 2)
-  --kama-slow N  KAMA slow period (default 300)
+  --fast-sma N   Fast SMA period (optional, enables trend filter source + Opt 10)
   --confirm N    Bars required for confirmation (default 3)
   --macd-fast N  MACD fast period (default 12)
   --macd-slow N  MACD slow period (default 26)
   --macd-signal N  MACD signal period (default 9)
   --macd-min-hist N  MACD histogram/line threshold (default 0.02)
-  --rsi [N]      Enable RSI, optionally set period (default 14)
+  --rsi [N]      RSI period (default 14)
   --rsi-zone N   RSI bull/bear zone offset from 50 (default 10)
   --rsi-extreme N  RSI extreme threshold (default 90)
   --interp-confirm N  Bars required to confirm BULL/BEAR (default 3)
@@ -150,8 +125,6 @@ Analyzer options:
   --trend-filter-min-bars N  Sustained bars for trend filter (default 3)
   --no-price-regime-gate  Disable slow-SMA macro regime gate
   --price-regime-buffer-pct N  Required slow-SMA clearance in % (default 0.35)
-  --sma-only     Show only SMA signals (default true)
-  --all          Show all calculated indicators
 
 Output:
   --chart FILE   Chart output path (default: analysis/charts/derivative_chart.html)
@@ -173,14 +146,6 @@ async function analyze(source, config) {
     const analyzer = new DerivativeAnalyzer({
         slowSmaPeriod:          config.slowSmaPeriod,
         fastSmaPeriod:          config.fastSmaPeriod,
-        fastKamaErPeriod:       config.fastKamaErPeriod,
-        fastKamaFastPeriod:     config.fastKamaFastPeriod,
-        fastKamaSlowPeriod:     config.fastKamaSlowPeriod,
-        lrsPeriod:              config.lrsPeriod,
-        almaPeriod:             config.almaPeriod,
-        almaOffset:             config.almaOffset,
-        almaSigma:              config.almaSigma,
-        macdEnabled:            config.macdEnabled,
         macdFastPeriod:         config.macdFastPeriod,
         macdSlowPeriod:         config.macdSlowPeriod,
         macdSignalPeriod:       config.macdSignalPeriod,
@@ -190,10 +155,8 @@ async function analyze(source, config) {
         momentumGateEnabled:    config.momentumGateEnabled,
         momentumGateMinBars:    config.momentumGateMinBars,
         momentumGateRsiZone:    config.momentumGateRsiZone,
-        opt10CommitmentBars:    config.opt10CommitmentBars,
         priceRegimeGateEnabled: config.priceRegimeGate,
         priceRegimeMinDistancePct: config.priceRegimeMinDistancePct,
-        rsiEnabled:             config.rsiEnabled,
         rsiPeriod:              config.rsiPeriod,
         interpConfirmBars:      config.interpConfirmBars,
         interpHoldBars:         config.interpHoldBars,
@@ -217,13 +180,10 @@ async function analyze(source, config) {
     const last = allResults[allResults.length - 1];
     if (!config.quiet) {
         const parts = [];
-        if (config.fastKamaErPeriod) parts.push(`KAMA: ${last.kamaRawTrend} (${last.kamaBarsInTrend} bars)`);
-        if (config.almaPeriod)       parts.push(`ALMA: ${last.almaRawTrend} (${last.almaBarsInTrend} bars)`);
         if (config.slowSmaPeriod)    parts.push(`SMA(${config.slowSmaPeriod}): ${last.smaRawTrend} (${last.smaBarsInTrend} bars)`);
         if (config.fastSmaPeriod)    parts.push(`fastSMA(${config.fastSmaPeriod}): ${last.fastSmaRawTrend} (${last.fastSmaBarsInTrend} bars)`);
-        if (config.lrsPeriod)        parts.push(`LRS: ${last.lrsRawTrend} (${last.lrsBarsInTrend} bars)`);
-        if (config.macdEnabled)      parts.push(`MACD: ${last.macdTrend} hist=${last.macdHistogram}`);
-        if (config.rsiEnabled)       parts.push(`RSI(${config.rsiPeriod}): ${last.rsi !== null ? last.rsi.toFixed(1) : 'n/a'} [${last.rsiZone}]`);
+        parts.push(`MACD: ${last.macdTrend} hist=${last.macdHistogram}`);
+        parts.push(`RSI(${config.rsiPeriod}): ${last.rsi !== null ? last.rsi.toFixed(1) : 'n/a'} [${last.rsiZone}]`);
         console.log(`[Analyzer] Done — ${last.isReady ? '' : '(warming up) '}${parts.join('  ')}`);
     }
 
@@ -232,14 +192,6 @@ async function analyze(source, config) {
             source:              source.name,
             slowSmaPeriod:       config.slowSmaPeriod,
             fastSmaPeriod:       config.fastSmaPeriod,
-            fastKamaErPeriod:    config.fastKamaErPeriod,
-            fastKamaFastPeriod:  config.fastKamaFastPeriod,
-            fastKamaSlowPeriod:  config.fastKamaSlowPeriod,
-            lrsPeriod:           config.lrsPeriod,
-            almaPeriod:          config.almaPeriod,
-            almaOffset:          config.almaOffset,
-            almaSigma:           config.almaSigma,
-            macdEnabled:         config.macdEnabled,
             macdFastPeriod:      config.macdFastPeriod,
             macdSlowPeriod:      config.macdSlowPeriod,
             macdSignalPeriod:    config.macdSignalPeriod,
@@ -248,7 +200,6 @@ async function analyze(source, config) {
             trendFilterMinBars:  config.trendFilterMinBars,
             priceRegimeGate:     config.priceRegimeGate,
             priceRegimeMinDistancePct: config.priceRegimeMinDistancePct,
-            rsiEnabled:          config.rsiEnabled,
             rsiPeriod:           config.rsiPeriod,
             interpConfirmBars:   config.interpConfirmBars,
             interpHoldBars:      config.interpHoldBars,
@@ -277,7 +228,7 @@ async function main() {
         const report = await analyze(source, config);
 
         // Generate chart
-        const html    = generateHTML(report, 'Derivative Trend Analysis', config.smaOnly);
+        const html    = generateHTML(report, 'Derivative Trend Analysis');
         const chartDir = path.dirname(config.chartFile);
         if (!fs.existsSync(chartDir)) fs.mkdirSync(chartDir, { recursive: true });
         fs.writeFileSync(config.chartFile, html, 'utf8');

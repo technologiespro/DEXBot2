@@ -7,13 +7,10 @@ const { createSource } = require('../analysis/price_sources');
 function createAnalyzer() {
     return new DerivativeAnalyzer({
         slowSmaPeriod: 500,
-        fastSmaPeriod: 100,
-        macdEnabled: true,
         macdFastPeriod: 48,
         macdSlowPeriod: 104,
         macdSignalPeriod: 36,
         macdMinHist: 0.02,
-        rsiEnabled: true,
         rsiPeriod: 96,
         rsiOverboughtLevel: 90,
         rsiOversoldLevel: 10,

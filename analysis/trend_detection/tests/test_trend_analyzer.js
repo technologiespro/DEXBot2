@@ -1,5 +1,5 @@
 /**
- * Test Trend Analyzer — derivative-based (SMA + KAMA)
+ * Test Trend Analyzer — derivative-based (SMA only)
  */
 
 'use strict';
@@ -11,12 +11,11 @@ function printEvery(label, analysis, i, interval = 10) {
     console.log(
         `[${label} ${i + 1}] trend=${analysis.trend} conf=${analysis.confidence}%` +
         ` confirmed=${analysis.isConfirmed}` +
-        ` | kama=${analysis.kamaRawTrend}(${analysis.kamaBarsInTrend})` +
         ` sma=${analysis.smaRawTrend}(${analysis.smaBarsInTrend})`
     );
 }
 
-// Market drifts steadily up → KAMA and SMA derivatives both positive → UP
+// Market drifts steadily up → SMA derivative positive → UP
 async function testUptrend() {
     console.log('=== Uptrend: steadily rising price ===\n');
     const a = new TrendAnalyzer({ minBarsForConfirmation: 3 });
@@ -24,9 +23,6 @@ async function testUptrend() {
     // Short SMA to keep test fast
     const fast = new TrendAnalyzer({
         slowSmaPeriod: 20,
-        fastKamaErPeriod: 5,
-        fastKamaFastPeriod: 2,
-        fastKamaSlowPeriod: 30,
         minBarsForConfirmation: 3,
     });
 
@@ -37,14 +33,11 @@ async function testUptrend() {
     console.log(`isUptrend: ${fast.isUptrend()}\n`);
 }
 
-// Market drifts steadily down → derivatives both negative → DOWN
+// Market drifts steadily down → SMA derivative negative → DOWN
 async function testDowntrend() {
     console.log('=== Downtrend: steadily falling price ===\n');
     const fast = new TrendAnalyzer({
         slowSmaPeriod: 20,
-        fastKamaErPeriod: 5,
-        fastKamaFastPeriod: 2,
-        fastKamaSlowPeriod: 30,
         minBarsForConfirmation: 3,
     });
 
@@ -60,9 +53,6 @@ async function testChoppy() {
     console.log('=== Choppy: oscillation ===\n');
     const fast = new TrendAnalyzer({
         slowSmaPeriod: 20,
-        fastKamaErPeriod: 5,
-        fastKamaFastPeriod: 2,
-        fastKamaSlowPeriod: 30,
         minBarsForConfirmation: 3,
     });
 
@@ -79,9 +69,6 @@ async function testFeedPriceIgnored() {
     console.log('=== Feed price backward compat ===\n');
     const fast = new TrendAnalyzer({
         slowSmaPeriod: 20,
-        fastKamaErPeriod: 5,
-        fastKamaFastPeriod: 2,
-        fastKamaSlowPeriod: 30,
         minBarsForConfirmation: 3,
     });
 
@@ -98,9 +85,6 @@ async function testSnapshot() {
     console.log('=== Full Snapshot ===\n');
     const fast = new TrendAnalyzer({
         slowSmaPeriod: 20,
-        fastKamaErPeriod: 5,
-        fastKamaFastPeriod: 2,
-        fastKamaSlowPeriod: 30,
         minBarsForConfirmation: 3,
     });
 

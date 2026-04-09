@@ -5,12 +5,9 @@
  *
  * Feed-compatible wrapper around DerivativeAnalyzer.
  *
- * Trend detection uses the derivative (rate of change) of SMA and KAMA:
- *   KAMA derivative → primary trend signal  (adaptive, faster)
- *   SMA  derivative → secondary trend signal (smoother, slower)
- *
- * Both signals are exposed in getAnalysis() as kamaTrend / smaTrend
- * so they can be compared to find which fits the asset best.
+ * Trend detection uses the derivative (rate of change) of the slow SMA.
+ * The wrapper exists for feed compatibility and exposes the SMA-based
+ * trend snapshot directly.
  *
  * Interface is backward-compatible: update(marketPrice, feedPrice)
  * feedPrice is accepted but not used for trend; it is recorded for
@@ -23,17 +20,11 @@ class TrendAnalyzer {
     /**
      * @param {Object} config
      * @param {number} config.slowSmaPeriod          – SMA period (default 800)
-     * @param {number} config.fastKamaErPeriod        – KAMA ER period (default 100)
-     * @param {number} config.fastKamaFastPeriod      – KAMA fast period (default 2)
-     * @param {number} config.fastKamaSlowPeriod      – KAMA slow period (default 300)
      * @param {number} config.minBarsForConfirmation  – Bars to confirm trend (default 3)
      */
     constructor(config = {}) {
         this.analyzer = new DerivativeAnalyzer({
             slowSmaPeriod: config.slowSmaPeriod || 800,
-            fastKamaErPeriod: config.fastKamaErPeriod || 100,
-            fastKamaFastPeriod: config.fastKamaFastPeriod || 2,
-            fastKamaSlowPeriod: config.fastKamaSlowPeriod || 300,
             minBarsForConfirmation: config.minBarsForConfirmation || 3,
         });
 
@@ -114,18 +105,10 @@ class TrendAnalyzer {
             timestamp: new Date().toISOString(),
             updateCount: this.updateCount,
             isReady: true,
-            // Primary (KAMA derivative)
+            // Primary SMA-derived trend
             trend: a.trend,
             confidence: a.confidence,
             isConfirmed: a.isConfirmed,
-            // Per-indicator signals
-            kama: {
-                trend: a.kamaTrend,
-                rawTrend: a.kamaRawTrend,
-                barsInTrend: a.kamaBarsInTrend,
-                confidence: a.kamaConfidence,
-                value: a.fastKama,
-            },
             sma: {
                 trend: a.smaTrend,
                 rawTrend: a.smaRawTrend,

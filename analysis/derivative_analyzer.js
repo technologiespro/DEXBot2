@@ -3,16 +3,13 @@
 /**
  * Derivative Analyzer
  *
- * Trend detection from the sign (and magnitude) of derivatives:
- *   SMA derivative  > 0 → UP,  < 0 → DOWN
- *   KAMA derivative > 0 → UP,  < 0 → DOWN
- *   LRS slope       > 0 → UP,  < 0 → DOWN
+ * Trend detection from the sign (and magnitude) of the slow SMA derivative.
  *
- * Each indicator is optional and independent.
- * Primary `trend` field follows KAMA when present, else LRS, else SMA.
+ * The analyzer intentionally stays narrow:
+ *   - SMA for direction / regime
+ *   - MACD for momentum
+ *   - RSI for exhaustion and counter-trend filtering
  */
-
-const { AMA } = require('./ama_fitting/ama');
 
 // ─── Simple Moving Average ───────────────────────────────────────────────────
 
@@ -32,59 +29,6 @@ class SMA {
     isReady() { return this.values.length >= this.period; }
 
     reset(period) { this.period = period; this.values = []; }
-}
-
-// ─── ALMA (Arnaud Legoux Moving Average) ─────────────────────────────────────
-
-class ALMA {
-    /**
-     * Gaussian-weighted moving average with tuneable lag.
-     *
-     * @param {number} period – window size
-     * @param {number} offset – 0–1, shifts bell toward recent bars (default 0.85)
-     *                          higher = less lag, lower = smoother
-     * @param {number} sigma  – bell width (default 6)
-     *                          lower = sharper/faster, higher = smoother
-     */
-    constructor(period, offset = 0.85, sigma = 6) {
-        this.period = period;
-        this.offset = offset;
-        this.sigma  = sigma;
-        this.values = [];
-        this._buildWeights();
-    }
-
-    _buildWeights() {
-        const n = this.period;
-        const m = this.offset * (n - 1);
-        const s = n / this.sigma;
-        this._weights = new Array(n);
-        let wSum = 0;
-        for (let i = 0; i < n; i++) {
-            this._weights[i] = Math.exp(-((i - m) ** 2) / (2 * s * s));
-            wSum += this._weights[i];
-        }
-        this._wSum = wSum;
-    }
-
-    update(price) {
-        this.values.push(price);
-        if (this.values.length > this.period) this.values.shift();
-        if (this.values.length < this.period) return null;
-        let sum = 0;
-        for (let i = 0; i < this.period; i++) sum += this._weights[i] * this.values[i];
-        return sum / this._wSum;
-    }
-
-    isReady() { return this.values.length >= this.period; }
-
-    reset(period, offset, sigma) {
-        this.period = period ?? this.period;
-        this.offset = offset ?? this.offset;
-        this.sigma  = sigma  ?? this.sigma;
-        this.values = [];
-        this._buildWeights();
-    }
 }
 
 // ─── Exponential Moving Average ──────────────────────────────────────────────
@@ -213,74 +157,12 @@ class RSI {
     }
 }
 
-// ─── Linear Regression Slope ─────────────────────────────────────────────────
-
-class LRS {
-    /**
-     * Fits y = a + b*x over a rolling window of `period` bars.
-     * Returns the slope b, normalised as % of mean price per bar.
-     * Also exposes the regression line endpoint as `value` (for price overlay).
-     *
-     * @param {number} period
-     */
-    constructor(period) {
-        this.period = period;
-        this.values = [];
-        this._precompute(period);
-    }
-
-    _precompute(n) {
-        // x = [0, 1, ..., n-1]
-        this._sumX  = n * (n - 1) / 2;
-        this._sumX2 = n * (n - 1) * (2 * n - 1) / 6;
-        this._denom = n * this._sumX2 - this._sumX * this._sumX;
-    }
-
-    update(price) {
-        this.values.push(price);
-        if (this.values.length > this.period) this.values.shift();
-        if (this.values.length < this.period) return null;
-
-        const n   = this.period;
-        let sumY  = 0;
-        let sumXY = 0;
-        for (let i = 0; i < n; i++) {
-            sumY  += this.values[i];
-            sumXY += i * this.values[i];
-        }
-
-        const slope     = (n * sumXY - this._sumX * sumY) / this._denom;
-        const intercept = (sumY - slope * this._sumX) / n;
-        const meanY     = sumY / n;
-
-        // Regression line endpoint (last bar)
-        const endValue  = intercept + slope * (n - 1);
-
-        // Normalised slope: % change per bar relative to mean price
-        const normSlope = meanY !== 0 ? (slope / meanY) * 100 : 0;
-
-        return { slope: normSlope, value: endValue };
-    }
-
-    isReady() { return this.values.length >= this.period; }
-
-    reset(period) {
-        this.period = period;
-        this.values = [];
-        this._precompute(period);
-    }
-}
-
 // ─── Derivative Analyzer ─────────────────────────────────────────────────────
 
 class DerivativeAnalyzer {
     /**
      * @param {Object} config
      * @param {number}  config.slowSmaPeriod          – SMA period (null to disable)
-     * @param {number}  config.fastKamaErPeriod        – KAMA ER period (null to disable)
-     * @param {number}  config.fastKamaFastPeriod      – KAMA fast period
-     * @param {number}  config.fastKamaSlowPeriod      – KAMA slow period
-     * @param {number}  config.lrsPeriod               – LRS window (null to disable)
      * @param {number}  config.minBarsForConfirmation  – Bars to confirm trend (default 3)
      */
     constructor(config = {}) {
@@ -294,45 +176,19 @@ class DerivativeAnalyzer {
         this.fastSmaPeriod = config.fastSmaPeriod ?? null;
         this.fastSma = this.fastSmaPeriod ? new SMA(this.fastSmaPeriod) : null;
 
-        // KAMA
-        this.kamaConfig = {
-            erPeriod:   config.fastKamaErPeriod   ?? 100,
-            fastPeriod: config.fastKamaFastPeriod  ?? 2,
-            slowPeriod: config.fastKamaSlowPeriod  ?? 300,
-        };
-        this.kama = (config.fastKamaErPeriod !== null && config.fastKamaErPeriod !== undefined)
-            ? new AMA(this.kamaConfig.erPeriod, this.kamaConfig.fastPeriod, this.kamaConfig.slowPeriod)
-            : null;
-
-        // ALMA
-        this.almaConfig = {
-            period: config.almaPeriod ?? null,
-            offset: config.almaOffset ?? 0.85,
-            sigma:  config.almaSigma  ?? 6,
-        };
-        this.alma = this.almaConfig.period
-            ? new ALMA(this.almaConfig.period, this.almaConfig.offset, this.almaConfig.sigma)
-            : null;
-
-        // LRS
-        this.lrsPeriod = config.lrsPeriod ?? null;
-        this.lrs = this.lrsPeriod ? new LRS(this.lrsPeriod) : null;
-
         // MACD
         this.macdConfig = {
             fastPeriod:   config.macdFastPeriod   ?? 12,
             slowPeriod:   config.macdSlowPeriod   ?? 26,
             signalPeriod: config.macdSignalPeriod ?? 9,
         };
-        this.macd = config.macdEnabled
-            ? new MACD(this.macdConfig.fastPeriod, this.macdConfig.slowPeriod, this.macdConfig.signalPeriod)
-            : null;
+        this.macd = new MACD(this.macdConfig.fastPeriod, this.macdConfig.slowPeriod, this.macdConfig.signalPeriod);
         this.currMacd = null;
         this.prevMacd = null;
 
         // RSI
         this.rsiPeriod = config.rsiPeriod ?? 14;
-        this.rsi = config.rsiEnabled ? new RSI(this.rsiPeriod) : null;
+        this.rsi = new RSI(this.rsiPeriod);
         this.currRsi = null;
         this.prevRsi = null;
 
@@ -344,6 +200,7 @@ class DerivativeAnalyzer {
         this.rsiBullThreshold    = config.rsiBullThreshold   ?? 55;
         this.rsiBearThreshold    = config.rsiBearThreshold   ?? 45;
         this.macdMinHist         = config.macdMinHist        ?? 0;
+        this.opt10CommitmentBars = config.opt10CommitmentBars ?? 2;
         this.trendFilterEnabled  = config.trendFilterEnabled ?? false;
         this.trendFilterMinBars  = config.trendFilterMinBars ?? 3;
         this.momentumGateEnabled = config.momentumGateEnabled ?? false;
@@ -351,7 +208,6 @@ class DerivativeAnalyzer {
         this.momentumGateRsiZone = config.momentumGateRsiZone ?? 35;
         this.barsInMacdDivergence = 0;
         this.barsInRsiDivergence  = 0;
-        this.opt10CommitmentBars = config.opt10CommitmentBars ?? 2;
         this.priceRegimeGateEnabled = config.priceRegimeGateEnabled ?? true;
         this.priceRegimeMinDistancePct = config.priceRegimeMinDistancePct ?? 0.35;
         this.prevRawInterp       = null;
@@ -361,25 +217,21 @@ class DerivativeAnalyzer {
         this.pendingInterp         = null;
         this.pendingInterpBars     = 0;
 
-        // Previous / current MA values (for derivative)
-        this.prevSma     = null; this.currSma     = null;
-        this.prevFastSma = null; this.currFastSma = null;
-        this.prevKama    = null; this.currKama    = null;
-        this.prevAlma    = null; this.currAlma    = null;
-        this.currLrsSlope = null; this.currLrsValue = null;
+        // Previous / current SMA values (for derivative)
+        this.prevSma     = null;
+        this.currSma     = null;
+        this.prevFastSma = null;
+        this.currFastSma = null;
         this.prevPrice = null;
         this.currPrice = null;
 
-        // Opt 10 price/MA commitment tracking
-        this.barsAboveFastSma = 0;  // consecutive bars price > fastSMA
-        this.barsBelowFastSma = 0;  // consecutive bars price < fastSMA
-
         // Independent trend states
-        this.prevRawSmaTrend     = null; this.barsInSmaTrend     = 0;
-        this.prevRawFastSmaTrend = null; this.barsInFastSmaTrend = 0;
-        this.prevRawKamaTrend    = null; this.barsInKamaTrend    = 0;
-        this.prevRawAlmaTrend    = null; this.barsInAlmaTrend    = 0;
-        this.prevRawLrsTrend     = null; this.barsInLrsTrend     = 0;
+        this.prevRawSmaTrend = null;
+        this.barsInSmaTrend = 0;
+        this.prevRawFastSmaTrend = null;
+        this.barsInFastSmaTrend = 0;
+        this.barsAboveFastSma = 0;
+        this.barsBelowFastSma = 0;
 
         this.updateCount = 0;
     }
@@ -403,25 +255,6 @@ class DerivativeAnalyzer {
         if (this.fastSma) {
             this.prevFastSma = this.currFastSma;
             this.currFastSma = this.fastSma.update(price);
-        }
-
-        // KAMA
-        if (this.kama) {
-            this.prevKama = this.currKama;
-            this.currKama = this.kama.update(price);
-        }
-
-        // ALMA
-        if (this.alma) {
-            this.prevAlma = this.currAlma;
-            this.currAlma = this.alma.update(price);
-        }
-
-        // LRS
-        if (this.lrs) {
-            const r = this.lrs.update(price);
-            this.currLrsSlope = r ? r.slope : null;
-            this.currLrsValue = r ? r.value : null;
         }
 
         // MACD — normalized as % of price so scale is comparable across all price levels
@@ -448,7 +281,7 @@ class DerivativeAnalyzer {
         // Advance momentum divergence counters (for Momentum Gate optimization)
         this._advanceMomentumDivergence();
 
-        // Track consecutive bars price is above/below fastSMA (for Opt 10 commitment)
+        // Opt 10: price vs fast MA position tracking
         this._advancePriceFastSmaPosition();
 
         // Interpretation (computed after MACD + RSI are updated)
@@ -493,8 +326,7 @@ class DerivativeAnalyzer {
                         this.barsInRawInterp = 1;
                     }
                 } else {
-                    // Opt 10 not met, reset confirmation counter
-                    // Set prevRawInterp to something different so next bar treats it as a NEW signal
+                    // Opt 10 not met — reset confirmation counter
                     this.prevRawInterp   = rawInterp === 'BULL' ? 'BEAR' : 'BULL';
                     this.barsInRawInterp = 0;
                 }
@@ -514,15 +346,8 @@ class DerivativeAnalyzer {
         // Update trend states
         const smaRaw     = this._rawSmaTrend();
         const fastSmaRaw = this._rawFastSmaTrend();
-        const kamaRaw    = this._rawKamaTrend();
-        const almaRaw    = this._rawAlmaTrend();
-        const lrsRaw     = this._rawLrsTrend();
-
         this._advanceTrend(smaRaw,     'Sma');
         this._advanceTrend(fastSmaRaw, 'FastSma');
-        this._advanceTrend(kamaRaw,    'Kama');
-        this._advanceTrend(almaRaw,    'Alma');
-        this._advanceTrend(lrsRaw,     'Lrs');
 
         const result = this.getAnalysis();
         if (timestamp !== null) result.timestamp = timestamp;
@@ -556,25 +381,19 @@ class DerivativeAnalyzer {
         return 'NEUTRAL';
     }
 
-    _rawKamaTrend() {
-        if (!this.kama || this.prevKama === null || this.currKama === null) return 'NEUTRAL';
-        if (this.currKama > this.prevKama) return 'UP';
-        if (this.currKama < this.prevKama) return 'DOWN';
-        return 'NEUTRAL';
-    }
-
-    _rawAlmaTrend() {
-        if (!this.alma || this.prevAlma === null || this.currAlma === null) return 'NEUTRAL';
-        if (this.currAlma > this.prevAlma) return 'UP';
-        if (this.currAlma < this.prevAlma) return 'DOWN';
-        return 'NEUTRAL';
-    }
-
-    _rawLrsTrend() {
-        if (!this.lrs || this.currLrsSlope === null) return 'NEUTRAL';
-        if (this.currLrsSlope > 0) return 'UP';
-        if (this.currLrsSlope < 0) return 'DOWN';
-        return 'NEUTRAL';
+    _advancePriceFastSmaPosition() {
+        if (!this.fastSma || this.currFastSma === null || this.currPrice === null) {
+            this.barsAboveFastSma = 0;
+            this.barsBelowFastSma = 0;
+            return;
+        }
+        if (this.currPrice > this.currFastSma) {
+            this.barsAboveFastSma++;
+            this.barsBelowFastSma = 0;
+        } else {
+            this.barsBelowFastSma++;
+            this.barsAboveFastSma = 0;
+        }
     }
 
     _advanceMomentumDivergence() {
@@ -598,26 +417,6 @@ class DerivativeAnalyzer {
 
         this.barsInMacdDivergence = macdOpposes ? this.barsInMacdDivergence + 1 : 0;
         this.barsInRsiDivergence  = rsiOpposes  ? this.barsInRsiDivergence  + 1 : 0;
-    }
-
-    _advancePriceFastSmaPosition() {
-        // Track consecutive bars where price is above/below fastSMA
-        // Used for Opt 10: price/MA commitment validation
-        if (!this.fastSma || this.currFastSma === null || this.currPrice === null) {
-            this.barsAboveFastSma = 0;
-            this.barsBelowFastSma = 0;
-            return;
-        }
-
-        const priceAbove = this.currPrice > this.currFastSma;
-
-        if (priceAbove) {
-            this.barsAboveFastSma++;
-            this.barsBelowFastSma = 0;
-        } else {
-            this.barsBelowFastSma++;
-            this.barsAboveFastSma = 0;
-        }
     }
 
     // ── Trend filter ─────────────────────────────────────────
@@ -666,8 +465,6 @@ class DerivativeAnalyzer {
         // Macro regime gate: when fastSMA and SMA(slow) are both present and disagree,
         // cap full BULL/BEAR to WEAK — a short-term dip/bounce against the macro trend
         // does not warrant a confirmed directional signal.
-        //   fastSMA DOWN + SMA UP  → BEAR capped to BEAR_WEAK
-        //   fastSMA UP   + SMA DOWN → BULL capped to BULL_WEAK
         if (this.fastSma && this.sma) {
             const slowDir       = this._rawSmaTrend();
             const slowBarsInDir = (slowDir === this.prevRawSmaTrend ? this.barsInSmaTrend + 1 : 1);
@@ -678,36 +475,19 @@ class DerivativeAnalyzer {
         }
 
         // Opt 10 — Price vs fast MA cross-check (N-bar commitment required)
-        // Requires price to have been beyond fastSMA for ≥ opt10CommitmentBars consecutive bars.
-        // Default: 2 bars. Adjust to tune responsiveness vs. wick filtering.
-        //   1 = loose (responds to current bar position)
-        //   2 = moderate (default, requires 2-bar confirmation)
-        //   3+ = strict (requires sustained multi-bar position)
         if (this.fastSma && this.currFastSma !== null && this.currPrice !== null) {
-            if (interp === 'BULL') {
-                // BULL requires price sustained ABOVE fastSMA for ≥N bars
-                if (this.barsAboveFastSma < this.opt10CommitmentBars) return 'BULL_WEAK';
-            }
-            if (interp === 'BEAR') {
-                // BEAR requires price sustained BELOW fastSMA for ≥N bars
-                if (this.barsBelowFastSma < this.opt10CommitmentBars) return 'BEAR_WEAK';
-            }
+            if (interp === 'BULL' && this.barsAboveFastSma < this.opt10CommitmentBars) return 'BULL_WEAK';
+            if (interp === 'BEAR' && this.barsBelowFastSma < this.opt10CommitmentBars) return 'BEAR_WEAK';
         }
 
         // Opt 12 — MACD Line & Histogram regime check
-        // BULL requires MACD line > 0 (positive momentum), BEAR requires MACD line < 0.
-        // Also: BEAR cannot hold when histogram just reversed to positive (early reversal signal).
-        // Prevents false signals when indicator is still in opposite regime fundamentally.
         if (this.macd && this.currMacd !== null) {
             if (interp === 'BULL' && this.currMacd.macd <= 0) return 'BULL_WEAK';
             if (interp === 'BEAR' && this.currMacd.macd >= 0) return 'BEAR_WEAK';
-            // Extra: BEAR cannot sustain if histogram has flipped positive (reversal in progress)
             if (interp === 'BEAR' && this.currMacd.histogram > 0) return 'BEAR_WEAK';
         }
 
         // Macro price regime gate: require a minimum clearance beyond slow SMA.
-        // Barely crossing the slow SMA is often a corrective bounce/dip rather than a
-        // durable regime change, so directional signals need a small distance buffer.
         if (this._violatesPriceRegimeGate(interp)) return 'NEUTRAL';
 
         return interp;
@@ -861,9 +641,6 @@ class DerivativeAnalyzer {
         const warmupNeeded = Math.max(
             this.sma     ? this.slowSmaPeriod : 0,
             this.fastSma ? this.fastSmaPeriod : 0,
-            this.kama    ? this.kamaConfig.erPeriod + 1 : 0,
-            this.alma    ? this.almaConfig.period : 0,
-            this.lrs     ? this.lrsPeriod : 0,
             this.macd    ? this.macdConfig.slowPeriod + this.macdConfig.signalPeriod : 0,
             this.rsi     ? this.rsiPeriod + 1 : 0
         );
@@ -880,26 +657,16 @@ class DerivativeAnalyzer {
 
         const smaRaw     = this._rawSmaTrend();
         const fastSmaRaw = this._rawFastSmaTrend();
-        const kamaRaw    = this._rawKamaTrend();
-        const almaRaw    = this._rawAlmaTrend();
-        const lrsRaw     = this._rawLrsTrend();
-
         const smaConf     = this._conf(smaRaw,     this.barsInSmaTrend);
         const fastSmaConf = this._conf(fastSmaRaw, this.barsInFastSmaTrend);
-        const kamaConf    = this._conf(kamaRaw,    this.barsInKamaTrend);
-        const almaConf    = this._conf(almaRaw,    this.barsInAlmaTrend);
-        const lrsConf     = this._conf(lrsRaw,     this.barsInLrsTrend);
 
         const smaConfirmed     = smaRaw     !== 'NEUTRAL' && this.barsInSmaTrend     >= this.minBarsForConfirmation;
         const fastSmaConfirmed = fastSmaRaw !== 'NEUTRAL' && this.barsInFastSmaTrend >= this.minBarsForConfirmation;
-        const kamaConfirmed    = kamaRaw    !== 'NEUTRAL' && this.barsInKamaTrend    >= this.minBarsForConfirmation;
-        const almaConfirmed    = almaRaw    !== 'NEUTRAL' && this.barsInAlmaTrend    >= this.minBarsForConfirmation;
-        const lrsConfirmed     = lrsRaw     !== 'NEUTRAL' && this.barsInLrsTrend     >= this.minBarsForConfirmation;
 
-        // Primary: ALMA > KAMA > LRS > fastSMA > SMA
-        const primary     = this.alma ? almaRaw  : this.kama ? kamaRaw  : this.lrs ? lrsRaw  : this.fastSma ? fastSmaRaw  : smaRaw;
-        const primConf    = this.alma ? almaConf : this.kama ? kamaConf : this.lrs ? lrsConf : this.fastSma ? fastSmaConf : smaConf;
-        const primConfirm = this.alma ? almaConfirmed : this.kama ? kamaConfirmed : this.lrs ? lrsConfirmed : this.fastSma ? fastSmaConfirmed : smaConfirmed;
+        // Primary: fastSMA > SMA
+        const primary     = this.fastSma ? fastSmaRaw  : smaRaw;
+        const primConf    = this.fastSma ? fastSmaConf : smaConf;
+        const primConfirm = this.fastSma ? fastSmaConfirmed : smaConfirmed;
 
         return {
             isReady: true,
@@ -907,7 +674,7 @@ class DerivativeAnalyzer {
             confidence:  primConf,
             isConfirmed: primConfirm,
             rawTrend:    primary,
-            barsInTrend: this.alma ? this.barsInAlmaTrend : this.kama ? this.barsInKamaTrend : this.lrs ? this.barsInLrsTrend : this.fastSma ? this.barsInFastSmaTrend : this.barsInSmaTrend,
+            barsInTrend: this.fastSma ? this.barsInFastSmaTrend : this.barsInSmaTrend,
             // SMA (slow)
             smaRawTrend:    smaRaw,
             smaTrend:       smaConfirmed ? smaRaw : 'NEUTRAL',
@@ -918,22 +685,7 @@ class DerivativeAnalyzer {
             fastSmaTrend:       fastSmaConfirmed ? fastSmaRaw : 'NEUTRAL',
             fastSmaBarsInTrend: this.barsInFastSmaTrend,
             fastSmaConfidence:  fastSmaConf,
-            // KAMA
-            kamaRawTrend:    kamaRaw,
-            kamaTrend:       kamaConfirmed ? kamaRaw : 'NEUTRAL',
-            kamaBarsInTrend: this.barsInKamaTrend,
-            kamaConfidence:  kamaConf,
-            // ALMA
-            almaRawTrend:    almaRaw,
-            almaTrend:       almaConfirmed ? almaRaw : 'NEUTRAL',
-            almaBarsInTrend: this.barsInAlmaTrend,
-            almaConfidence:  almaConf,
-            // LRS
-            lrsRawTrend:    lrsRaw,
-            lrsTrend:       lrsConfirmed ? lrsRaw : 'NEUTRAL',
-            lrsBarsInTrend: this.barsInLrsTrend,
-            lrsConfidence:  lrsConf,
-            lrsSlope:       this.currLrsSlope !== null ? Math.round(this.currLrsSlope * 1e6) / 1e6 : null,
+            fastSmaValue:       this.currFastSma !== null ? Math.round(this.currFastSma * 1e6) / 1e6 : null,
             // MACD
             macdLine:      this.currMacd ? Math.round(this.currMacd.macd      * 1e8) / 1e8 : null,
             macdSignal:    this.currMacd ? Math.round(this.currMacd.signal    * 1e8) / 1e8 : null,
@@ -953,10 +705,6 @@ class DerivativeAnalyzer {
             // Values
             price:       this.currPrice,
             slowSma:     this.currSma     !== null ? Math.round(this.currSma     * 1e6) / 1e6 : null,
-            fastSmaValue: this.currFastSma !== null ? Math.round(this.currFastSma * 1e6) / 1e6 : null,
-            fastKama:    this.currKama    !== null ? Math.round(this.currKama    * 1e6) / 1e6 : null,
-            almaValue:   this.currAlma    !== null ? Math.round(this.currAlma    * 1e6) / 1e6 : null,
-            lrsValue:    this.currLrsValue !== null ? Math.round(this.currLrsValue * 1e6) / 1e6 : null,
             updateCount: this.updateCount,
         };
     }
@@ -968,11 +716,8 @@ class DerivativeAnalyzer {
     _emptySignals() {
         return {
             smaRawTrend: 'NEUTRAL', smaTrend: 'NEUTRAL', smaBarsInTrend: 0, smaConfidence: 0,
-            fastSmaRawTrend: 'NEUTRAL', fastSmaTrend: 'NEUTRAL', fastSmaBarsInTrend: 0, fastSmaConfidence: 0,
-            kamaRawTrend: 'NEUTRAL', kamaTrend: 'NEUTRAL', kamaBarsInTrend: 0, kamaConfidence: 0,
-            almaRawTrend: 'NEUTRAL', almaTrend: 'NEUTRAL', almaBarsInTrend: 0, almaConfidence: 0,
-            lrsRawTrend: 'NEUTRAL', lrsTrend: 'NEUTRAL', lrsBarsInTrend: 0, lrsConfidence: 0,
-            lrsSlope: null, slowSma: null, fastSmaValue: null, fastKama: null, almaValue: null, lrsValue: null,
+            fastSmaRawTrend: 'NEUTRAL', fastSmaTrend: 'NEUTRAL', fastSmaBarsInTrend: 0, fastSmaConfidence: 0, fastSmaValue: null,
+            slowSma: null,
             macdLine: null, macdSignal: null, macdHistogram: null, macdTrend: null,
             rsi: null, rsiZone: null,
             interpretation: 'NEUTRAL', interpretationRaw: 'NEUTRAL', interpretationBars: 0,
@@ -982,9 +727,6 @@ class DerivativeAnalyzer {
     reset() {
         if (this.sma)     this.sma.reset(this.slowSmaPeriod);
         if (this.fastSma) this.fastSma.reset(this.fastSmaPeriod);
-        if (this.kama)    this.kama = new AMA(this.kamaConfig.erPeriod, this.kamaConfig.fastPeriod, this.kamaConfig.slowPeriod);
-        if (this.alma)    this.alma.reset(this.almaConfig.period, this.almaConfig.offset, this.almaConfig.sigma);
-        if (this.lrs)     this.lrs.reset(this.lrsPeriod);
         if (this.macd)    this.macd.reset(this.macdConfig.fastPeriod, this.macdConfig.slowPeriod, this.macdConfig.signalPeriod);
         if (this.rsi)     this.rsi.reset(this.rsiPeriod);
         this.currMacd = null; this.prevMacd = null;
@@ -993,21 +735,21 @@ class DerivativeAnalyzer {
         this.currInterpretation = 'NEUTRAL'; this.currInterpretationRaw = 'NEUTRAL';
         this.pendingInterp      = null;
         this.pendingInterpBars  = 0;
-        this.prevSma     = null; this.currSma     = null;
-        this.prevFastSma = null; this.currFastSma = null;
-        this.prevKama    = null; this.currKama    = null;
-        this.prevAlma    = null; this.currAlma    = null;
-        this.currLrsSlope = null; this.currLrsValue = null;
+        this.prevSma     = null;
+        this.currSma     = null;
+        this.prevFastSma = null;
+        this.currFastSma = null;
         this.currPrice = null;
-        this.prevRawSmaTrend     = null; this.barsInSmaTrend     = 0;
-        this.prevRawFastSmaTrend = null; this.barsInFastSmaTrend = 0;
-        this.prevRawKamaTrend    = null; this.barsInKamaTrend    = 0;
-        this.prevRawAlmaTrend    = null; this.barsInAlmaTrend    = 0;
-        this.prevRawLrsTrend     = null; this.barsInLrsTrend     = 0;
+        this.prevRawSmaTrend = null;
+        this.barsInSmaTrend = 0;
+        this.prevRawFastSmaTrend = null;
+        this.barsInFastSmaTrend = 0;
+        this.barsAboveFastSma = 0;
+        this.barsBelowFastSma = 0;
         this.updateCount = 0;
     }
 
     getUpdateCount() { return this.updateCount; }
 }
 
-module.exports = { DerivativeAnalyzer, SMA, LRS };
+module.exports = { DerivativeAnalyzer, SMA, EMA, MACD, RSI };

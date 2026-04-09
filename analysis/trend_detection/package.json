@@ -1,15 +1,14 @@
 {
   "name": "trend-detection",
   "version": "2.0.0",
-  "description": "Derivative-based trend detection using SMA and KAMA rate-of-change signals",
+  "description": "Derivative-based trend detection using SMA rate-of-change signals",
   "main": "trend_analyzer.js",
   "scripts": {
     "test": "node tests/test_trend_analyzer.js"
   },
   "keywords": [
-    "AMA",
     "trend-detection",
-    "Kaufman",
+    "SMA",
     "uptrend",
     "downtrend",
     "trading",
