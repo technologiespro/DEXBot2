@@ -106,6 +106,71 @@ function detectMissingCandleTimestamps(candles, intervalSeconds = 3600) {
     };
 }
 
+/**
+ * Fills gaps in a candle series by carrying forward the last known close price.
+ * Volume for filled candles is 0.
+ *
+ * @param {Array}  candles         - [[ts, o, h, l, c, v], ...]
+ * @param {number} intervalSeconds - bucket size in seconds
+ * @param {number} [startTs]       - optional start timestamp (ms) to stretch to the past
+ * @param {number} [endTs]         - optional end timestamp (ms) to stretch to the future
+ */
+function fillCandleGaps(candles, intervalSeconds, startTs = null, endTs = null) {
+    const bucketMs = Number(intervalSeconds) * 1000;
+    if (!candles || !Array.isArray(candles)) return [];
+    if (!Number.isFinite(bucketMs) || bucketMs <= 0) return candles;
+
+    const sorted = candles
+        .filter((c) => Array.isArray(c) && Number.isFinite(c[0]))
+        .slice()
+        .sort((a, b) => a[0] - b[0]);
+
+    if (sorted.length === 0) {
+        // If we have no data, we can't really fill unless we have a baseline price.
+        // For now, return empty.
+        return [];
+    }
+
+    const filled = [];
+
+    // Determine absolute timeline range
+    const firstKnownTs = sorted[0][0];
+    const lastKnownTs = sorted[sorted.length - 1][0];
+
+    let currentTs = startTs != null
+        ? Math.floor(Number(startTs) / bucketMs) * bucketMs
+        : firstKnownTs;
+
+    const finalTs = endTs != null
+        ? Math.floor(Number(endTs) / bucketMs) * bucketMs
+        : lastKnownTs;
+
+    let sourceIdx = 0;
+    let lastKnownCandle = sorted[0];
+
+    // Find first available candle at or after currentTs to initialize lastKnownCandle
+    while (sourceIdx < sorted.length && sorted[sourceIdx][0] < currentTs) {
+        lastKnownCandle = sorted[sourceIdx];
+        sourceIdx++;
+    }
+
+    while (currentTs <= finalTs) {
+        if (sourceIdx < sorted.length && sorted[sourceIdx][0] === currentTs) {
+            lastKnownCandle = sorted[sourceIdx];
+            filled.push(lastKnownCandle);
+            sourceIdx++;
+        } else {
+            // Gap: carry forward lastKnownCandle's close
+            const p = lastKnownCandle[4]; // close
+            // Format: [ts, open, high, low, close, volume]
+            filled.push([currentTs, p, p, p, p, 0]);
+        }
+        currentTs += bucketMs;
+    }
+
+    return filled;
+}
+
 function writeCandlesJson(filePath, payload) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
@@ -123,6 +188,7 @@ module.exports = {
     buildOutputPath,
     tradesToCandles,
     detectMissingCandleTimestamps,
+    fillCandleGaps,
     writeCandlesJson,
     writeCandlesCsv,
 };

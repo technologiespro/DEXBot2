@@ -29,6 +29,7 @@
 'use strict';
 
 const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('./kibana_client');
+const { fillCandleGaps } = require('../candle_utils');
 
 const OP_FILL_ORDER = 4;
 
@@ -185,7 +186,12 @@ async function getMarketCandles(assetA, assetB, config = {}) {
   });
 
   const merged = [...candlesAtoB, ...candlesBtoA].sort((a, b) => a[0] - b[0]);
-  return cfg.consolidateByTimestamp ? consolidateCandlesByTimestamp(merged) : merged;
+  const consolidated = cfg.consolidateByTimestamp ? consolidateCandlesByTimestamp(merged) : merged;
+
+  // Fill gaps and stretch to full requested range (lookbackHours)
+  const nowMs = Date.now();
+  const startTs = nowMs - (cfg.lookbackHours * 3600 * 1000);
+  return fillCandleGaps(consolidated, cfg.intervalSeconds, startTs, nowMs);
 }
 
 /**

@@ -31,14 +31,14 @@
 const fs   = require('fs');
 const path = require('path');
 const kibanaSource = require('./kibana_source');
-const { toIntervalLabel } = require('../candle_utils');
+const { toIntervalLabel, fillCandleGaps } = require('../candle_utils');
 const { parseJsonWithComments } = require('../../modules/account_bots');
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = {
-    intervalSeconds: 14400,   // 4h buckets — good balance of resolution vs noise
-    lookbackHours:   8760,    // 365 days
+    intervalSeconds: 3600,    // 1h buckets
+    lookbackHours:   26280,   // 3 years (3 * 365 * 24)
     apiKey:          null,
 };
 

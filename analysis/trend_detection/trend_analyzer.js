@@ -1,190 +1,150 @@
+'use strict';
+
 /**
  * Trend Analyzer
  *
- * Feed-anchored trend detection for MPAs (HONEST.Assets).
+ * Feed-compatible wrapper around DerivativeAnalyzer.
  *
- * Two components:
- *   1. FeedTrend   – Single AMA vs on-chain feed price → trend direction
- *   2. FeedPremium – Instantaneous market price vs feed → premium/discount
+ * Trend detection uses the derivative (rate of change) of SMA and KAMA:
+ *   KAMA derivative → primary trend signal  (adaptive, faster)
+ *   SMA  derivative → secondary trend signal (smoother, slower)
  *
- * PriceRatio provides oscillation context for grid-width decisions.
+ * Both signals are exposed in getAnalysis() as kamaTrend / smaTrend
+ * so they can be compared to find which fits the asset best.
  *
- * Optimized to be right, not fast.
+ * Interface is backward-compatible: update(marketPrice, feedPrice)
+ * feedPrice is accepted but not used for trend; it is recorded for
+ * optional premium calculation via getFeedPremium().
  */
 
-const { AMA } = require('../ama_fitting/ama');
-const { PriceRatio } = require('./price_ratio');
-const { FeedTrend } = require('./feed_trend');
-const { FeedPremium } = require('./feed_premium');
+const { DerivativeAnalyzer } = require('../derivative_analyzer');
 
 class TrendAnalyzer {
     /**
-     * @param {Object}  config
-     * @param {number}  config.lookbackBars         – PriceRatio lookback (default 20)
-     * @param {Object}  config.feedTrendConfig       – FeedTrend params (erPeriod, fastPeriod, slowPeriod, thresholdPercent, minBarsForConfirmation)
-     * @param {Object}  config.feedPremiumConfig     – FeedPremium params (deadZonePercent)
+     * @param {Object} config
+     * @param {number} config.slowSmaPeriod          – SMA period (default 800)
+     * @param {number} config.fastKamaErPeriod        – KAMA ER period (default 100)
+     * @param {number} config.fastKamaFastPeriod      – KAMA fast period (default 2)
+     * @param {number} config.fastKamaSlowPeriod      – KAMA slow period (default 300)
+     * @param {number} config.minBarsForConfirmation  – Bars to confirm trend (default 3)
      */
     constructor(config = {}) {
-        this.feedTrend = new FeedTrend(config.feedTrendConfig || {});
-        this.feedPremium = new FeedPremium(config.feedPremiumConfig || {});
-        this.priceRatio = new PriceRatio(config.lookbackBars || 20);
+        this.analyzer = new DerivativeAnalyzer({
+            slowSmaPeriod: config.slowSmaPeriod || 800,
+            fastKamaErPeriod: config.fastKamaErPeriod || 100,
+            fastKamaFastPeriod: config.fastKamaFastPeriod || 2,
+            fastKamaSlowPeriod: config.fastKamaSlowPeriod || 300,
+            minBarsForConfirmation: config.minBarsForConfirmation || 3,
+        });
 
+        // Feed price tracking for optional premium calculation
+        this._lastFeedPrice = null;
+        this._lastMarketPrice = null;
         this.updateCount = 0;
     }
 
     /**
-     * Update with market price and feed price.
+     * Update with market price and optional feed price.
+     * feedPrice is recorded but does not affect trend detection.
      *
-     * @param {number} marketPrice – Current market price (close, mid, or last trade)
-     * @param {number} feedPrice   – On-chain settlement feed price (same units)
+     * @param {number} marketPrice
+     * @param {number} [feedPrice]
      * @returns {Object} Analysis result
      */
-    update(marketPrice, feedPrice) {
-        this.feedTrend.update(marketPrice, feedPrice);
-        this.feedPremium.update(marketPrice, feedPrice);
-
-        // Use the AMA value from FeedTrend as center reference for oscillation
-        const amaValue = this.feedTrend.amaHistory.length > 0
-            ? this.feedTrend.amaHistory[this.feedTrend.amaHistory.length - 1]
-            : marketPrice;
-        this.priceRatio.update(marketPrice, amaValue);
-
+    update(marketPrice, feedPrice = null) {
+        this._lastMarketPrice = marketPrice;
+        if (feedPrice !== null) this._lastFeedPrice = feedPrice;
         this.updateCount++;
-        return this.getAnalysis();
+        return this.analyzer.update(marketPrice);
     }
 
     // ── Analysis ───────────────────────────────────────────────
 
     getAnalysis() {
-        const ft = this.feedTrend.getAnalysis();
-        const fp = this.feedPremium.getSnapshot();
-        const osc = this.priceRatio.getSnapshot();
-
-        if (!ft.isReady) {
-            return {
-                isReady: false,
-                reason: ft.reason,
-                trend: 'NEUTRAL',
-                confidence: 0,
-            };
-        }
-
-        return {
-            isReady: true,
-            trend: ft.trend,
-            confidence: ft.confidence,
-            isConfirmed: ft.isConfirmed,
-            rawTrend: ft.rawTrend,
-            barsInTrend: ft.barsInTrend,
-            deviationPercent: ft.deviationPercent,
-            amaValue: ft.amaValue,
-            feedPrice: ft.feedPrice,
-            marketPrice: ft.marketPrice,
-            premium: {
-                signal: fp.signal,
-                percent: fp.premiumPercent,
-            },
-            oscillation: {
-                ratio: osc ? osc.oscillationRatio : 0,
-                description: this._getOscillationDescription(osc ? osc.oscillationRatio : 0),
-            },
-            priceAnalysis: osc ? osc.priceVsAMA : null,
-            updateCount: this.updateCount,
-        };
+        return this.analyzer.getAnalysis();
     }
 
     getSimpleTrend() {
-        const a = this.getAnalysis();
+        const a = this.analyzer.getAnalysis();
         return { trend: a.trend, confidence: a.confidence, isReady: a.isReady };
     }
 
     isUptrend() {
-        const a = this.getAnalysis();
-        return a.trend === 'UP' && a.isConfirmed;
+        const a = this.analyzer.getAnalysis();
+        return a.isReady && a.trend === 'UP' && a.isConfirmed;
     }
 
     isDowntrend() {
-        const a = this.getAnalysis();
-        return a.trend === 'DOWN' && a.isConfirmed;
+        const a = this.analyzer.getAnalysis();
+        return a.isReady && a.trend === 'DOWN' && a.isConfirmed;
     }
 
     isNeutral() {
-        return this.getAnalysis().trend === 'NEUTRAL';
+        const a = this.analyzer.getAnalysis();
+        return !a.isReady || a.trend === 'NEUTRAL';
     }
 
-    // ── Direct accessors ───────────────────────────────────────
+    // ── Optional feed premium ──────────────────────────────────
 
+    /**
+     * Returns instantaneous premium/discount of market vs feed price.
+     * Returns null if no feed price has been provided.
+     */
     getFeedPremium() {
-        return this.feedPremium.getSnapshot();
-    }
-
-    getFeedTrend() {
-        return this.feedTrend.getAnalysis();
+        if (this._lastFeedPrice === null || this._lastMarketPrice === null) return null;
+        const pct = ((this._lastMarketPrice - this._lastFeedPrice) / this._lastFeedPrice) * 100;
+        return {
+            premiumPercent: Math.round(pct * 10000) / 10000,
+            signal: pct > 0.25 ? 'PREMIUM' : pct < -0.25 ? 'DISCOUNT' : 'FAIR',
+            marketPrice: this._lastMarketPrice,
+            feedPrice: this._lastFeedPrice,
+        };
     }
 
     // ── Full snapshot ──────────────────────────────────────────
 
     getFullSnapshot() {
-        const ft = this.feedTrend.getFullSnapshot();
+        const a = this.analyzer.getAnalysis();
 
-        if (!ft.isReady) {
-            return { isReady: false, message: ft.reason || 'Warming up' };
+        if (!a.isReady) {
+            return { isReady: false, message: a.reason || 'Warming up' };
         }
-
-        const fp = this.feedPremium.getSnapshot();
-        const fpStats = this.feedPremium.getStats();
-        const osc = this.priceRatio.getSnapshot();
 
         return {
             timestamp: new Date().toISOString(),
             updateCount: this.updateCount,
-            trend: {
-                direction: ft.trend,
-                confidence: ft.confidence,
-                isConfirmed: ft.isConfirmed,
-                rawTrend: ft.rawTrend,
-                barsInTrend: ft.barsInTrend,
-                deviationPercent: ft.deviationPercent,
+            isReady: true,
+            // Primary (KAMA derivative)
+            trend: a.trend,
+            confidence: a.confidence,
+            isConfirmed: a.isConfirmed,
+            // Per-indicator signals
+            kama: {
+                trend: a.kamaTrend,
+                rawTrend: a.kamaRawTrend,
+                barsInTrend: a.kamaBarsInTrend,
+                confidence: a.kamaConfidence,
+                value: a.fastKama,
             },
-            ama: {
-                value: ft.amaValue,
-                config: ft.config,
+            sma: {
+                trend: a.smaTrend,
+                rawTrend: a.smaRawTrend,
+                barsInTrend: a.smaBarsInTrend,
+                confidence: a.smaConfidence,
+                value: a.slowSma,
             },
-            feed: {
-                price: ft.feedPrice,
-            },
-            market: {
-                price: ft.marketPrice,
-            },
-            premium: {
-                signal: fp.signal,
-                percent: fp.premiumPercent,
-                deadZone: fp.deadZonePercent,
-                stats: fpStats,
-            },
-            oscillation: osc ? {
-                ratio: osc.oscillationRatio,
-                priceRange: osc.priceRange,
-                description: this._getOscillationDescription(osc.oscillationRatio),
-            } : null,
-            priceDirection: osc ? osc.priceDirection : null,
+            // Context
+            price: a.price,
+            feedPremium: this.getFeedPremium(),
         };
     }
 
     // ── Utilities ──────────────────────────────────────────────
 
-    _getOscillationDescription(ratio) {
-        if (ratio < 1) return 'Very tight - Ideal for grid trading';
-        if (ratio < 3) return 'Tight - Good for grid trading';
-        if (ratio < 5) return 'Normal - Moderate trading range';
-        if (ratio < 10) return 'Wide - Choppy market';
-        return 'Very wide - Highly volatile';
-    }
-
     reset() {
-        this.feedTrend.reset();
-        this.feedPremium.reset();
-        this.priceRatio.reset();
+        this.analyzer.reset();
+        this._lastFeedPrice = null;
+        this._lastMarketPrice = null;
         this.updateCount = 0;
     }
 
