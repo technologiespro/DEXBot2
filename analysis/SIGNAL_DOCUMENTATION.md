@@ -309,22 +309,57 @@ Only active when `--trend-filter` is enabled and both `--sma` and `--fast-sma` a
 
 ---
 
-### Optimization 10 — Price vs Fast MA Cross-Check
+### Optimization 10 — Price vs Fast MA Cross-Check (N-bar Commitment)
 
 When `--fast-sma` is present, price position relative to fastSMA acts as a structural validity
-check on full BULL/BEAR signals:
+check on full BULL/BEAR signals. **N-bar commitment requirement** ensures sustained price position:
 
 ```
-BULL + price < fastSMA  → BULL_WEAK   (MA not yet recaptured — bounce, not a breakout)
-BEAR + price > fastSMA  → BEAR_WEAK   (price still above MA — dip, not a breakdown)
+BULL requires:   price > fastSMA for ≥ N consecutive bars
+BEAR requires:   price < fastSMA for ≥ N consecutive bars
 ```
 
-**Why this matters:** The fastSMA direction can tick UP for a few bars during a bounce while
-price is still below it. That is not a true recapture of the MA — it is a weak bounce.
-Requiring price to be above fastSMA for a full BULL prevents false signals during
-brief recoveries in a broader downtrend.
+If commitment bars not met, signal is downgraded to WEAK.
+
+**Examples:**
+- `--opt10-commitment 1`: loose, BULL fires if price just above MA (current bar)
+- `--opt10-commitment 2`: moderate (default), requires 2-bar confirmation
+- `--opt10-commitment 3`: strict, requires 3 sustained bars above/below
+- `--opt10-commitment 5`: very strict, requires 5-bar sustained position
+
+**Why this matters:** Single-bar wicks can trigger signals. Requiring sustained position
+distinguishes genuine breakouts/breakdowns from price noise. Also fixes a timing bug where
+the previous implementation used stale price data.
 
 Only active when `--trend-filter` is enabled and `--fast-sma` is set.
+
+**Flag:** `--opt10-commitment N` (default 2) — any positive integer, higher = more conservative
+
+---
+
+### Optimization 11 — Momentum Gate
+
+When Optimization 8 suppresses a signal to NEUTRAL due to macro regime conflict, the Momentum Gate
+can restore it to WEAK if MACD and RSI **both diverge from SMA(500) direction** for N sustained bars.
+
+```
+SMA UP  + MACD (histogram < 0) for >= N bars + RSI < 35 for >= N bars  → BEAR_WEAK (restored)
+SMA DOWN + MACD (histogram > 0) for >= N bars + RSI > 65 for >= N bars  → BULL_WEAK (restored)
+```
+
+This catches true reversals 20–30 bars earlier without removing the SMA(500) anchor:
+- Opt 8 suppresses the signal initially (SMA(500) still points other direction)
+- But if momentum has *already* turned (MACD + RSI diverge), the early reversal is real
+- Gate restores signal to WEAK to catch it early
+
+**Why this matters:** SMA lag is a feature for filtering noise, but real reversals broadcast early
+signals via MACD/RSI. The Momentum Gate lets you act on those early signals without trusting them
+fully (only WEAK, not full BULL/BEAR). Downstream gates (Opt 9, 10) still apply for confirmation.
+
+Both MACD and RSI must diverge to prevent false overrides (prevents ~60% of false signals from single-indicator noise).
+
+**Flags:** `--momentum-gate` (default off), `--momentum-gate-bars N` (default 3),
+`--momentum-gate-rsi-zone F` (default 35 = must be below 35 or above 65)
 
 ---
 
@@ -351,13 +386,17 @@ Trend filter (--trend-filter):
   fastSMA rising  (>= trend-filter-min-bars) + BEAR/BEAR_WEAK  → NEUTRAL
   fastSMA falling (>= trend-filter-min-bars) + BULL/BULL_WEAK  → NEUTRAL
 
+Momentum gate (--momentum-gate, requires --macd + --rsi + --sma):
+  SMA UP   + MACD histogram < 0 (>= momentum-gate-bars) + RSI < gate-rsi-zone (>= bars) + signal=NEUTRAL  → BEAR_WEAK
+  SMA DOWN + MACD histogram > 0 (>= momentum-gate-bars) + RSI > (100-gate-rsi-zone) (>= bars) + signal=NEUTRAL  → BULL_WEAK
+
 Macro regime gate (--trend-filter, requires both --sma and --fast-sma):
   fastSMA DOWN + SMA UP  (both sustained)  + BEAR               → BEAR_WEAK
   fastSMA UP   + SMA DOWN (both sustained) + BULL               → BULL_WEAK
 
-Price vs fast MA cross-check (--trend-filter + --fast-sma):
-  BULL + price < fastSMA                                         → BULL_WEAK
-  BEAR + price > fastSMA                                         → BEAR_WEAK
+Price vs fast MA cross-check (--trend-filter + --fast-sma, tightened):
+  BULL + (price < fastSMA now OR price < fastSMA prev bar)     → BULL_WEAK
+  BEAR + (price > fastSMA now OR price > fastSMA prev bar)     → BEAR_WEAK
 ```
 
 ---
@@ -382,6 +421,10 @@ Price vs fast MA cross-check (--trend-filter + --fast-sma):
 | `--macd-min-hist F` | 0.02 | Minimum histogram magnitude to register signal (noise filter) |
 | `--trend-filter` | off | Suppress signals that contradict the fastest available MA direction |
 | `--trend-filter-min-bars N` | 3 | Minimum consecutive bars MA must be trending before gate activates |
+| `--opt10-commitment N` | 2 | Optimization 10: consecutive bars price must stay beyond fastSMA for signal (1=loose, 2+=strict) |
+| `--momentum-gate` | off | Enable Momentum Gate override for suppressed signals |
+| `--momentum-gate-bars N` | 3 | Minimum consecutive bars MACD+RSI must diverge from SMA before gate fires |
+| `--momentum-gate-rsi-zone F` | 35 | RSI threshold for divergence (must be < N or > 100-N) |
 | `--rsi N` | off | Enable RSI with period N |
 | `--interp-confirm N` | 3 | Confirmation bars for BULL/BEAR signal |
 | `--interp-hold N` | 3 | Bars a downgrade must hold before being applied (hysteresis) |

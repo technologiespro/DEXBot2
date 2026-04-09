@@ -50,6 +50,10 @@ function parseArgs() {
         macdMinHist: 0.02,
         trendFilter: false,
         trendFilterMinBars: 3,
+        momentumGateEnabled: false,
+        momentumGateMinBars: 3,
+        momentumGateRsiZone: 35,
+        opt10CommitmentBars: 2,
         rsiEnabled: false,
         rsiPeriod: 14,
         interpConfirmBars: 3,
@@ -91,6 +95,10 @@ function parseArgs() {
         else if (arg === '--rsi-extreme')    config.rsiExtreme               = parseFloat(args[++i]);
         else if (arg === '--trend-filter')          config.trendFilter          = true;
         else if (arg === '--trend-filter-min-bars') config.trendFilterMinBars  = parseInt(args[++i]);
+        else if (arg === '--momentum-gate')         config.momentumGateEnabled  = true;
+        else if (arg === '--momentum-gate-bars')    config.momentumGateMinBars  = parseInt(args[++i]);
+        else if (arg === '--momentum-gate-rsi-zone') config.momentumGateRsiZone = parseFloat(args[++i]);
+        else if (arg === '--opt10-commitment')      config.opt10CommitmentBars  = parseInt(args[++i]);
         else if (arg === '--chart')       config.chartFile                  = args[++i];
         else if (arg === '--sma-only')  config.smaOnly                      = true;
         else if (arg === '--all')       config.smaOnly                      = false;
@@ -162,6 +170,10 @@ async function analyze(source, config) {
         macdMinHist:            config.macdMinHist,
         trendFilterEnabled:     config.trendFilter,
         trendFilterMinBars:     config.trendFilterMinBars,
+        momentumGateEnabled:    config.momentumGateEnabled,
+        momentumGateMinBars:    config.momentumGateMinBars,
+        momentumGateRsiZone:    config.momentumGateRsiZone,
+        opt10CommitmentBars:    config.opt10CommitmentBars,
         rsiEnabled:             config.rsiEnabled,
         rsiPeriod:              config.rsiPeriod,
         interpConfirmBars:      config.interpConfirmBars,

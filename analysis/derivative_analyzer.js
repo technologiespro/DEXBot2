@@ -346,6 +346,12 @@ class DerivativeAnalyzer {
         this.macdMinHist         = config.macdMinHist        ?? 0;
         this.trendFilterEnabled  = config.trendFilterEnabled ?? false;
         this.trendFilterMinBars  = config.trendFilterMinBars ?? 3;
+        this.momentumGateEnabled = config.momentumGateEnabled ?? false;
+        this.momentumGateMinBars = config.momentumGateMinBars ?? 3;
+        this.momentumGateRsiZone = config.momentumGateRsiZone ?? 35;
+        this.barsInMacdDivergence = 0;
+        this.barsInRsiDivergence  = 0;
+        this.opt10CommitmentBars = config.opt10CommitmentBars ?? 2;
         this.prevRawInterp       = null;
         this.barsInRawInterp     = 0;
         this.currInterpretation    = 'NEUTRAL';
@@ -359,7 +365,12 @@ class DerivativeAnalyzer {
         this.prevKama    = null; this.currKama    = null;
         this.prevAlma    = null; this.currAlma    = null;
         this.currLrsSlope = null; this.currLrsValue = null;
+        this.prevPrice = null;
         this.currPrice = null;
+
+        // Opt 10 price/MA commitment tracking
+        this.barsAboveFastSma = 0;  // consecutive bars price > fastSMA
+        this.barsBelowFastSma = 0;  // consecutive bars price < fastSMA
 
         // Independent trend states
         this.prevRawSmaTrend     = null; this.barsInSmaTrend     = 0;
@@ -375,6 +386,10 @@ class DerivativeAnalyzer {
         if (!Number.isFinite(price) || price <= 0) {
             throw new Error('price must be a positive finite number');
         }
+
+        // Update current price at the start of the bar (before interpretation)
+        this.prevPrice = this.currPrice;
+        this.currPrice = price;
 
         // SMA (slow)
         if (this.sma) {
@@ -428,6 +443,12 @@ class DerivativeAnalyzer {
             this.currRsi = this.rsi.update(price);
         }
 
+        // Advance momentum divergence counters (for Momentum Gate optimization)
+        this._advanceMomentumDivergence();
+
+        // Track consecutive bars price is above/below fastSMA (for Opt 10 commitment)
+        this._advancePriceFastSmaPosition();
+
         // Interpretation (computed after MACD + RSI are updated)
         if (this.macd || this.rsi) {
             const rawInterp = this.trendFilterEnabled
@@ -452,7 +473,6 @@ class DerivativeAnalyzer {
             }
         }
 
-        this.currPrice = price;
         this.updateCount++;
 
         // Update trend states
@@ -521,6 +541,49 @@ class DerivativeAnalyzer {
         return 'NEUTRAL';
     }
 
+    _advanceMomentumDivergence() {
+        if (!this.momentumGateEnabled || !this.macd || !this.rsi || !this.sma) return;
+        if (this.currMacd === null || this.currRsi === null) return;
+
+        const slowDir = this._rawSmaTrend();
+        if (slowDir === 'NEUTRAL') {
+            this.barsInMacdDivergence = 0;
+            this.barsInRsiDivergence  = 0;
+            return;
+        }
+
+        const macdOpposes =
+            (slowDir === 'UP'   && this.currMacd.histogram < -this.macdMinHist) ||
+            (slowDir === 'DOWN' && this.currMacd.histogram >  this.macdMinHist);
+
+        const rsiOpposes =
+            (slowDir === 'UP'   && this.currRsi < this.momentumGateRsiZone) ||
+            (slowDir === 'DOWN' && this.currRsi > (100 - this.momentumGateRsiZone));
+
+        this.barsInMacdDivergence = macdOpposes ? this.barsInMacdDivergence + 1 : 0;
+        this.barsInRsiDivergence  = rsiOpposes  ? this.barsInRsiDivergence  + 1 : 0;
+    }
+
+    _advancePriceFastSmaPosition() {
+        // Track consecutive bars where price is above/below fastSMA
+        // Used for Opt 10: price/MA commitment validation
+        if (!this.fastSma || this.currFastSma === null || this.currPrice === null) {
+            this.barsAboveFastSma = 0;
+            this.barsBelowFastSma = 0;
+            return;
+        }
+
+        const priceAbove = this.currPrice > this.currFastSma;
+
+        if (priceAbove) {
+            this.barsAboveFastSma++;
+            this.barsBelowFastSma = 0;
+        } else {
+            this.barsBelowFastSma++;
+            this.barsAboveFastSma = 0;
+        }
+    }
+
     // ── Trend filter ─────────────────────────────────────────
 
     _applyTrendFilter(interp) {
@@ -547,6 +610,23 @@ class DerivativeAnalyzer {
             if (fastDir === 'DOWN' && (interp === 'BULL' || interp === 'BULL_WEAK')) return 'NEUTRAL';
         }
 
+        // Momentum Gate (Opt 11): if MACD + RSI both diverge from SMA(500) for
+        // >= momentumGateMinBars, allow signal through as WEAK instead of suppressing to NEUTRAL.
+        if (this.momentumGateEnabled && this.sma) {
+            const slowDir  = this._rawSmaTrend();
+            const macdConf = this.barsInMacdDivergence >= this.momentumGateMinBars;
+            const rsiConf  = this.barsInRsiDivergence  >= this.momentumGateMinBars;
+
+            if (macdConf && rsiConf && slowDir !== 'NEUTRAL') {
+                if (slowDir === 'UP'   && interp === 'NEUTRAL' && this.currMacd?.histogram < -this.macdMinHist) {
+                    interp = 'BEAR_WEAK';
+                }
+                if (slowDir === 'DOWN' && interp === 'NEUTRAL' && this.currMacd?.histogram >  this.macdMinHist) {
+                    interp = 'BULL_WEAK';
+                }
+            }
+        }
+
         // Macro regime gate: when fastSMA and SMA(slow) are both present and disagree,
         // cap full BULL/BEAR to WEAK — a short-term dip/bounce against the macro trend
         // does not warrant a confirmed directional signal.
@@ -561,13 +641,21 @@ class DerivativeAnalyzer {
             }
         }
 
-        // Price vs fast MA cross-check: price must have recaptured the fast MA before
-        // a BULL is valid; price must be below it before a BEAR is valid.
-        // A bounce while price is still under fastSMA is structurally weak — cap to WEAK.
-        // A dip while price is still above fastSMA is structurally weak — cap to WEAK.
+        // Opt 10 — Price vs fast MA cross-check (N-bar commitment required)
+        // Requires price to have been beyond fastSMA for ≥ opt10CommitmentBars consecutive bars.
+        // Default: 2 bars. Adjust to tune responsiveness vs. wick filtering.
+        //   1 = loose (responds to current bar position)
+        //   2 = moderate (default, requires 2-bar confirmation)
+        //   3+ = strict (requires sustained multi-bar position)
         if (this.fastSma && this.currFastSma !== null && this.currPrice !== null) {
-            if (interp === 'BULL' && this.currPrice < this.currFastSma) return 'BULL_WEAK';
-            if (interp === 'BEAR' && this.currPrice > this.currFastSma) return 'BEAR_WEAK';
+            if (interp === 'BULL') {
+                // BULL requires price sustained ABOVE fastSMA for ≥N bars
+                if (this.barsAboveFastSma < this.opt10CommitmentBars) return 'BULL_WEAK';
+            }
+            if (interp === 'BEAR') {
+                // BEAR requires price sustained BELOW fastSMA for ≥N bars
+                if (this.barsBelowFastSma < this.opt10CommitmentBars) return 'BEAR_WEAK';
+            }
         }
 
         return interp;
