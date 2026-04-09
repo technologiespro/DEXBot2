@@ -352,6 +352,8 @@ class DerivativeAnalyzer {
         this.barsInMacdDivergence = 0;
         this.barsInRsiDivergence  = 0;
         this.opt10CommitmentBars = config.opt10CommitmentBars ?? 2;
+        this.priceRegimeGateEnabled = config.priceRegimeGateEnabled ?? true;
+        this.priceRegimeMinDistancePct = config.priceRegimeMinDistancePct ?? 0.35;
         this.prevRawInterp       = null;
         this.barsInRawInterp     = 0;
         this.currInterpretation    = 'NEUTRAL';
@@ -451,18 +453,52 @@ class DerivativeAnalyzer {
 
         // Interpretation (computed after MACD + RSI are updated)
         if (this.macd || this.rsi) {
-            const rawInterp = this.trendFilterEnabled
+            let rawInterp = this.trendFilterEnabled
                 ? this._applyTrendFilter(this._computeInterpretation())
                 : this._computeInterpretation();
+
+            // Opt 13 — Post-filter MACD line gate (bull/bear trap suppression)
+            // The MACD line is the authoritative momentum regime indicator:
+            //   line > threshold → bullish regime; line < -threshold → bearish regime.
+            // Any signal that contradicts the confirmed regime is suppressed to NEUTRAL.
+            // This ignores marginal crossings at ~0 and ensures signals only start when
+            // momentum is clearly confirmed.
+            if (this.macd && this.currMacd !== null) {
+                const threshold = this.macdMinHist || 0.02;
+                if ((rawInterp === 'BEAR' || rawInterp === 'BEAR_WEAK') && this.currMacd.macd > -threshold)
+                    rawInterp = 'NEUTRAL';
+                if ((rawInterp === 'BULL' || rawInterp === 'BULL_WEAK') && this.currMacd.macd < threshold)
+                    rawInterp = 'NEUTRAL';
+            }
+
             this.currInterpretationRaw = rawInterp;
             // BULL/BEAR require confirmation bars; other states are immediate
             if (rawInterp === 'BULL' || rawInterp === 'BEAR') {
-                if (rawInterp === this.prevRawInterp) {
-                    this.barsInRawInterp++;
-                } else {
-                    this.prevRawInterp   = rawInterp;
-                    this.barsInRawInterp = 1;
+                // Check if Opt 10 commitment is met (required before counting confirmation)
+                let opt10PassesCommitment = true;
+                if (this.fastSma && this.currFastSma !== null && this.currPrice !== null) {
+                    if (rawInterp === 'BULL') {
+                        opt10PassesCommitment = this.barsAboveFastSma >= this.opt10CommitmentBars;
+                    } else if (rawInterp === 'BEAR') {
+                        opt10PassesCommitment = this.barsBelowFastSma >= this.opt10CommitmentBars;
+                    }
                 }
+
+                // Only count confirmation bars if Opt 10 passes
+                if (opt10PassesCommitment) {
+                    if (rawInterp === this.prevRawInterp) {
+                        this.barsInRawInterp++;
+                    } else {
+                        this.prevRawInterp   = rawInterp;
+                        this.barsInRawInterp = 1;
+                    }
+                } else {
+                    // Opt 10 not met, reset confirmation counter
+                    // Set prevRawInterp to something different so next bar treats it as a NEW signal
+                    this.prevRawInterp   = rawInterp === 'BULL' ? 'BEAR' : 'BULL';
+                    this.barsInRawInterp = 0;
+                }
+
                 const confirmed = this.barsInRawInterp >= this.interpConfirmBars
                     ? rawInterp : 'NEUTRAL';
                 this._applyWithHysteresis(confirmed);
@@ -658,6 +694,22 @@ class DerivativeAnalyzer {
             }
         }
 
+        // Opt 12 — MACD Line & Histogram regime check
+        // BULL requires MACD line > 0 (positive momentum), BEAR requires MACD line < 0.
+        // Also: BEAR cannot hold when histogram just reversed to positive (early reversal signal).
+        // Prevents false signals when indicator is still in opposite regime fundamentally.
+        if (this.macd && this.currMacd !== null) {
+            if (interp === 'BULL' && this.currMacd.macd <= 0) return 'BULL_WEAK';
+            if (interp === 'BEAR' && this.currMacd.macd >= 0) return 'BEAR_WEAK';
+            // Extra: BEAR cannot sustain if histogram has flipped positive (reversal in progress)
+            if (interp === 'BEAR' && this.currMacd.histogram > 0) return 'BEAR_WEAK';
+        }
+
+        // Macro price regime gate: require a minimum clearance beyond slow SMA.
+        // Barely crossing the slow SMA is often a corrective bounce/dip rather than a
+        // durable regime change, so directional signals need a small distance buffer.
+        if (this._violatesPriceRegimeGate(interp)) return 'NEUTRAL';
+
         return interp;
     }
 
@@ -676,7 +728,11 @@ class DerivativeAnalyzer {
         const isDowngrade = (curr === 'BULL' && newInterp !== 'BULL')
                          || (curr === 'BEAR' && newInterp !== 'BEAR');
 
-        if (!isDowngrade || this.interpHoldBars <= 0) {
+        // Hard regime gates define when a confirmed signal is no longer valid at all.
+        // In those cases hysteresis must not keep a stale BULL/BEAR alive after invalidation.
+        const hardInvalidation = this._isHardInvalidation(curr);
+
+        if (!isDowngrade || this.interpHoldBars <= 0 || hardInvalidation) {
             this.currInterpretation = newInterp;
             this.pendingInterp      = null;
             this.pendingInterpBars  = 0;
@@ -695,6 +751,35 @@ class DerivativeAnalyzer {
             this.pendingInterp     = newInterp;
             this.pendingInterpBars = 1;
         }
+    }
+
+    _isHardInvalidation(interp) {
+        if (interp !== 'BULL' && interp !== 'BEAR') return false;
+
+        if (this.macd && this.currMacd !== null) {
+            const threshold = this.macdMinHist || 0.02;
+            if (interp === 'BULL' && this.currMacd.macd < threshold) return true;
+            if (interp === 'BEAR' && this.currMacd.macd > -threshold) return true;
+        }
+
+        if (this._violatesPriceRegimeGate(interp)) return true;
+
+        return false;
+    }
+
+    _violatesPriceRegimeGate(interp) {
+        if (!this.priceRegimeGateEnabled || !this.sma || this.currSma === null || this.currPrice === null) {
+            return false;
+        }
+        if (!['BULL', 'BULL_WEAK', 'BEAR', 'BEAR_WEAK'].includes(interp)) return false;
+
+        const distanceMultiplier = this.priceRegimeMinDistancePct / 100;
+        const bullFloor = this.currSma * (1 + distanceMultiplier);
+        const bearCeiling = this.currSma * (1 - distanceMultiplier);
+
+        if ((interp === 'BULL' || interp === 'BULL_WEAK') && this.currPrice < bullFloor) return true;
+        if ((interp === 'BEAR' || interp === 'BEAR_WEAK') && this.currPrice > bearCeiling) return true;
+        return false;
     }
 
     // ── Interpretation ────────────────────────────────────────
@@ -906,6 +991,8 @@ class DerivativeAnalyzer {
         this.currRsi  = null;
         this.prevRawInterp = null; this.barsInRawInterp = 0;
         this.currInterpretation = 'NEUTRAL'; this.currInterpretationRaw = 'NEUTRAL';
+        this.pendingInterp      = null;
+        this.pendingInterpBars  = 0;
         this.prevSma     = null; this.currSma     = null;
         this.prevFastSma = null; this.currFastSma = null;
         this.prevKama    = null; this.currKama    = null;

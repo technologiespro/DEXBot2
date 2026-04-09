@@ -363,6 +363,61 @@ Both MACD and RSI must diverge to prevent false overrides (prevents ~60% of fals
 
 ---
 
+### Optimization 12 — MACD Line Regime Check
+
+BULL and BEAR signals require the MACD line to be in the corresponding regime:
+- **BULL** requires MACD line > 0 (positive momentum in absolute terms)
+- **BEAR** requires MACD line < 0 (negative momentum in absolute terms)
+
+Also, **BEAR cannot sustain when histogram becomes positive** (clear reversal signal underway).
+
+```
+BULL signal + MACD line ≤ 0           → BULL_WEAK
+BEAR signal + MACD line ≥ 0           → BEAR_WEAK  
+BEAR signal + MACD histogram > 0      → BEAR_WEAK  [reversal in progress]
+```
+
+**Why this matters:** The histogram measures convergence/divergence (line > signal), but the line itself
+measures actual momentum direction. A positive histogram means momentum is *improving* (line rising),
+but if the line is still negative, momentum hasn't yet turned positive. This gate filters false breakouts
+caught in a downtrend's final bounce (line approaching zero but not crossing).
+
+**Collateral:** Filters ~5.9% of all BULL signals. Always active (no flags).
+
+---
+
+### Optimization 13 — Post-Filter MACD Line Gate (Trap Suppression)
+
+Applied **after** `_applyTrendFilter` returns, catching all code paths (macro regime gate, Opt 10,
+Opt 12, etc.) that can emit directional states before the line check runs.
+
+**Rule:** No directional signal while the MACD line still contradicts that regime.
+
+```
+(BEAR or BEAR_WEAK) + MACD line > -threshold   → NEUTRAL
+(BULL or BULL_WEAK) + MACD line < threshold    → NEUTRAL
+```
+
+**Why this matters:** The MACD line is the net momentum regime. If the line is still positive, bearish
+signals are often bear traps; if the line is still negative or too close to zero, bullish signals are
+often bull traps. Histogram flips and MA crosses are shorter-term inputs; the MACD line is the
+authoritative regime gate.
+
+**Why a post-filter is needed (not just Opt 12):** Several paths inside `_applyTrendFilter` return
+early (macro regime gate, Opt 10), emitting directional weak states before Opt 12 ever runs. This gate
+catches them all in one place.
+
+**Collateral:** Suppresses directional states to `NEUTRAL` until the MACD line has cleared a small
+threshold beyond zero. Always active (no flags).
+
+---
+
+**Combined Opt 12 + 13 impact:** Opt 12 downgrades full `BULL/BEAR` to weak states when the MACD line
+still disagrees. Opt 13 catches anything Opt 12 missed by being a final gate that converts the remaining
+directional states to `NEUTRAL` while the line still contradicts the regime.
+
+---
+
 ### Signal Decision Tree
 
 ```
@@ -397,6 +452,25 @@ Macro regime gate (--trend-filter, requires both --sma and --fast-sma):
 Price vs fast MA cross-check (--trend-filter + --fast-sma, tightened):
   BULL + (price < fastSMA now OR price < fastSMA prev bar)     → BULL_WEAK
   BEAR + (price > fastSMA now OR price > fastSMA prev bar)     → BEAR_WEAK
+
+Price vs SMA Macro Regime Gate (default enabled; disable with `--no-price-regime-gate`):
+  BULL or BULL_WEAK + price < slow SMA * (1 + bufferPct)       → NEUTRAL
+  BEAR or BEAR_WEAK + price > slow SMA * (1 - bufferPct)       → NEUTRAL
+  Default `bufferPct = 0.35%` via `--price-regime-buffer-pct`
+  [Acts as a sanity check to prevent shallow crosses from becoming traps]
+
+MACD line regime check (Opt 12, always active):
+  BULL + MACD line ≤ 0                                         → BULL_WEAK
+  BEAR + MACD line ≥ 0                                         → BEAR_WEAK
+  BEAR + MACD histogram > 0                                    → BEAR_WEAK
+
+Post-filter MACD line gate (Opt 13, always active — applied after all trendFilter paths):
+  BEAR or BEAR_WEAK + MACD line > -threshold                   → NEUTRAL  [bear trap suppression]
+  BULL or BULL_WEAK + MACD line < threshold                    → NEUTRAL  [bull trap suppression]
+
+The threshold uses `macd-min-hist` (default 0.02) to ignore marginal crossings at ~0. Signals only
+start when momentum clearly confirms the regime, and confirmed BULL/BEAR signals bypass hysteresis
+and exit immediately when the line clearly crosses to the opposing regime.
 ```
 
 ---

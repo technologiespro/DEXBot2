@@ -54,6 +54,8 @@ function parseArgs() {
         momentumGateMinBars: 3,
         momentumGateRsiZone: 35,
         opt10CommitmentBars: 2,
+        priceRegimeGate: true,
+        priceRegimeMinDistancePct: 0.35,
         rsiEnabled: false,
         rsiPeriod: 14,
         interpConfirmBars: 3,
@@ -99,6 +101,8 @@ function parseArgs() {
         else if (arg === '--momentum-gate-bars')    config.momentumGateMinBars  = parseInt(args[++i]);
         else if (arg === '--momentum-gate-rsi-zone') config.momentumGateRsiZone = parseFloat(args[++i]);
         else if (arg === '--opt10-commitment')      config.opt10CommitmentBars  = parseInt(args[++i]);
+        else if (arg === '--no-price-regime-gate')  config.priceRegimeGate      = false;
+        else if (arg === '--price-regime-buffer-pct') config.priceRegimeMinDistancePct = parseFloat(args[++i]);
         else if (arg === '--chart')       config.chartFile                  = args[++i];
         else if (arg === '--sma-only')  config.smaOnly                      = true;
         else if (arg === '--all')       config.smaOnly                      = false;
@@ -133,6 +137,19 @@ Analyzer options:
   --kama-fast N  KAMA fast period (default 2)
   --kama-slow N  KAMA slow period (default 300)
   --confirm N    Bars required for confirmation (default 3)
+  --macd-fast N  MACD fast period (default 12)
+  --macd-slow N  MACD slow period (default 26)
+  --macd-signal N  MACD signal period (default 9)
+  --macd-min-hist N  MACD histogram/line threshold (default 0.02)
+  --rsi [N]      Enable RSI, optionally set period (default 14)
+  --rsi-zone N   RSI bull/bear zone offset from 50 (default 10)
+  --rsi-extreme N  RSI extreme threshold (default 90)
+  --interp-confirm N  Bars required to confirm BULL/BEAR (default 3)
+  --interp-hold N  Bars to hold confirmed BULL/BEAR downgrades (default 3)
+  --trend-filter  Enable derivative trend filter
+  --trend-filter-min-bars N  Sustained bars for trend filter (default 3)
+  --no-price-regime-gate  Disable slow-SMA macro regime gate
+  --price-regime-buffer-pct N  Required slow-SMA clearance in % (default 0.35)
   --sma-only     Show only SMA signals (default true)
   --all          Show all calculated indicators
 
@@ -174,6 +191,8 @@ async function analyze(source, config) {
         momentumGateMinBars:    config.momentumGateMinBars,
         momentumGateRsiZone:    config.momentumGateRsiZone,
         opt10CommitmentBars:    config.opt10CommitmentBars,
+        priceRegimeGateEnabled: config.priceRegimeGate,
+        priceRegimeMinDistancePct: config.priceRegimeMinDistancePct,
         rsiEnabled:             config.rsiEnabled,
         rsiPeriod:              config.rsiPeriod,
         interpConfirmBars:      config.interpConfirmBars,
@@ -227,6 +246,8 @@ async function analyze(source, config) {
             macdMinHist:         config.macdMinHist,
             trendFilter:         config.trendFilter,
             trendFilterMinBars:  config.trendFilterMinBars,
+            priceRegimeGate:     config.priceRegimeGate,
+            priceRegimeMinDistancePct: config.priceRegimeMinDistancePct,
             rsiEnabled:          config.rsiEnabled,
             rsiPeriod:           config.rsiPeriod,
             interpConfirmBars:   config.interpConfirmBars,
