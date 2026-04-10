@@ -200,7 +200,7 @@ class DerivativeAnalyzer {
         this.rsiBullThreshold    = config.rsiBullThreshold   ?? 55;
         this.rsiBearThreshold    = config.rsiBearThreshold   ?? 45;
         this.macdMinHist         = config.macdMinHist        ?? 0;
-        this.opt10CommitmentBars = config.opt10CommitmentBars ?? 2;
+        this.fastSmaCommitmentBars = config.fastSmaCommitmentBars ?? 2;
         this.trendFilterEnabled  = config.trendFilterEnabled ?? false;
         this.trendFilterMinBars  = config.trendFilterMinBars ?? 3;
         this.momentumGateEnabled = config.momentumGateEnabled ?? false;
@@ -292,7 +292,7 @@ class DerivativeAnalyzer {
         // Advance momentum divergence counters (for Momentum Gate optimization)
         this._advanceMomentumDivergence();
 
-        // Opt 10: price vs fast MA position tracking
+        // Fast-SMA commitment tracking: price vs fast MA position
         this._advancePriceFastSmaPosition();
 
         // Interpretation (computed after MACD + RSI are updated)
@@ -320,18 +320,18 @@ class DerivativeAnalyzer {
             this.currInterpretationRaw = rawInterp;
             // BULL/BEAR require confirmation bars; other states are immediate
             if (rawInterp === 'BULL' || rawInterp === 'BEAR') {
-                // Check if Opt 10 commitment is met (required before counting confirmation)
-                let opt10PassesCommitment = true;
+                // Check if fast-SMA commitment is met (required before counting confirmation)
+                let fastSmaPassesCommitment = true;
                 if (this.fastSma && this.currFastSma !== null && this.currPrice !== null) {
                     if (rawInterp === 'BULL') {
-                        opt10PassesCommitment = this.barsAboveFastSma >= this.opt10CommitmentBars;
+                        fastSmaPassesCommitment = this.barsAboveFastSma >= this.fastSmaCommitmentBars;
                     } else if (rawInterp === 'BEAR') {
-                        opt10PassesCommitment = this.barsBelowFastSma >= this.opt10CommitmentBars;
+                        fastSmaPassesCommitment = this.barsBelowFastSma >= this.fastSmaCommitmentBars;
                     }
                 }
 
-                // Only count confirmation bars if Opt 10 passes
-                if (opt10PassesCommitment) {
+                // Only count confirmation bars if the fast-SMA commitment passes
+                if (fastSmaPassesCommitment) {
                     if (rawInterp === this.prevRawInterp) {
                         this.barsInRawInterp++;
                     } else {
@@ -339,7 +339,7 @@ class DerivativeAnalyzer {
                         this.barsInRawInterp = 1;
                     }
                 } else {
-                    // Opt 10 not met — reset confirmation counter
+                    // Commitment not met — reset confirmation counter
                     this.prevRawInterp   = rawInterp === 'BULL' ? 'BEAR' : 'BULL';
                     this.barsInRawInterp = 0;
                 }
@@ -491,10 +491,10 @@ class DerivativeAnalyzer {
             if (interp === 'BEAR') return 'BEAR_WEAK';
         }
 
-        // Opt 10 — Price vs fast MA cross-check (N-bar commitment required)
+        // Fast-SMA commitment gate — price vs fast MA cross-check (N-bar commitment required)
         if (this.fastSma && this.currFastSma !== null && this.currPrice !== null) {
-            if (interp === 'BULL' && this.barsAboveFastSma < this.opt10CommitmentBars) return 'BULL_WEAK';
-            if (interp === 'BEAR' && this.barsBelowFastSma < this.opt10CommitmentBars) return 'BEAR_WEAK';
+            if (interp === 'BULL' && this.barsAboveFastSma < this.fastSmaCommitmentBars) return 'BULL_WEAK';
+            if (interp === 'BEAR' && this.barsBelowFastSma < this.fastSmaCommitmentBars) return 'BEAR_WEAK';
         }
 
         // Opt 12 — MACD Line & Histogram regime check

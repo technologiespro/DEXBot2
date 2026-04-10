@@ -5,7 +5,7 @@
 The derivative analyzer uses four indicators:
 
 - `SMA` (slow) for macro trend / regime
-- `fastSMA` (optional) for short-term direction — used as the trend filter source and Opt 10 commitment gate
+- `fastSMA` (optional) for short-term direction — used as the trend filter source and fast-SMA commitment gate
 - `MACD` for momentum
 - `RSI` for exhaustion and counter-trend filtering
 
@@ -73,7 +73,7 @@ When `--fast-sma` is set:
 
 - The trend filter reads **fastSMA direction** instead of slow SMA direction.
 - **Macro disagree cap**: if fastSMA and slow SMA point in opposite directions, a full `BULL`/`BEAR` is capped to `BULL_WEAK`/`BEAR_WEAK`.
-- **Opt 10 commitment gate**: `BULL`/`BEAR` confirmation requires price to have been on the correct side of fastSMA for ≥ `--opt10-commitment` consecutive bars (default 2). Failing bars reset the confirmation counter.
+- **Fast-SMA commitment gate**: `BULL`/`BEAR` confirmation requires price to have been on the correct side of fastSMA for ≥ `--fast-sma-commitment-bars` consecutive bars (default 2). Failing bars reset the confirmation counter.
 
 Both the price overlay line and the derivative direction panel in the chart show fastSMA alongside slow SMA.
 
@@ -193,7 +193,7 @@ The trend filter suppresses counter-trend signals when the fast MA (fastSMA if s
 When fastSMA is present, two additional checks run inside the trend filter:
 
 - **Macro disagree cap** — fastSMA and slow SMA point in opposite directions → full `BULL`/`BEAR` capped to `BULL_WEAK`/`BEAR_WEAK`.
-- **Opt 10 price commitment** — `BULL` requires price above fastSMA for ≥ N bars; `BEAR` requires price below fastSMA for ≥ N bars. Failing this downgrades to `BULL_WEAK`/`BEAR_WEAK`.
+- **Fast-SMA commitment** — `BULL` requires price above fastSMA for ≥ N bars; `BEAR` requires price below fastSMA for ≥ N bars. Failing this downgrades to `BULL_WEAK`/`BEAR_WEAK`.
 
 ### Momentum gate
 
@@ -298,11 +298,11 @@ BULL candidate:
   MACD line regime disagrees          -> BULL_WEAK
   trend filter rejects (fastSMA DOWN) -> NEUTRAL
   macro disagree cap (fastSMA≠SMA)    -> BULL_WEAK
-  Opt 10: price below fastSMA < N bars-> BULL_WEAK
+  Fast-SMA commitment: price below fastSMA < N bars-> BULL_WEAK
   momentum gate restores              -> BULL_WEAK
   price regime gate rejects           -> NEUTRAL
   post-filter trap suppression        -> NEUTRAL
-  Opt 10 confirmation not met         -> resets confirmation counter
+  Fast-SMA commitment not met         -> resets confirmation counter
   confirmed and held                  -> BULL
 
 BEAR candidate:
@@ -311,11 +311,11 @@ BEAR candidate:
   MACD line regime disagrees          -> BEAR_WEAK
   trend filter rejects (fastSMA UP)   -> NEUTRAL
   macro disagree cap (fastSMA≠SMA)    -> BEAR_WEAK
-  Opt 10: price above fastSMA < N bars-> BEAR_WEAK
+  Fast-SMA commitment: price above fastSMA < N bars-> BEAR_WEAK
   momentum gate restores              -> BEAR_WEAK
   price regime gate rejects           -> NEUTRAL
   post-filter trap suppression        -> NEUTRAL
-  Opt 10 confirmation not met         -> resets confirmation counter
+  Fast-SMA commitment not met         -> resets confirmation counter
   confirmed and held                  -> BEAR
 ```
 
@@ -323,31 +323,57 @@ BEAR candidate:
 
 ## Parameter Reference
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--sma N` | 500 | Slow SMA period |
-| `--fast-sma N` | off | Fast SMA period (enables trend filter source, macro cap, Opt 10) |
-| `--confirm N` | 3 | Bars required for trend confirmation |
+Start with the minimum tuning set below. The remaining flags are advanced defaults and
+usually only need adjustment when you are changing signal behavior, not when you are
+just using the analyzer.
+
+### Minimum tuning set
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `--sma N` | 500 | Slow macro regime anchor |
+| `--fast-sma N` | off | Short-term direction source and fast-SMA commitment gate |
 | `--macd-fast N` | 12 | MACD fast EMA period |
 | `--macd-slow N` | 26 | MACD slow EMA period |
 | `--macd-signal N` | 9 | MACD signal EMA period |
-| `--macd-min-hist F` | 0.02 | Histogram magnitude threshold |
+| `--macd-min-hist F` | 0.02 | Minimum histogram magnitude for direction |
 | `--rsi N` | 14 | RSI period |
-| `--rsi-zone N` | 10 | Counter-trend downgrade zone |
-| `--rsi-extreme N` | 90 | Exhaustion threshold |
+| `--trend-filter` | off | Enables counter-trend suppression |
+| `--fast-sma-commitment-bars N` | 2 | Requires price to stay beyond fastSMA before confirming |
+| `--price-regime-buffer-pct N` | 0.35 | Requires price clearance from slow SMA |
+
+### Advanced defaults
+
+#### Confirmation and hysteresis
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--confirm N` | 3 | Bars required for trend confirmation |
 | `--interp-confirm N` | 3 | Confirmation bars for BULL/BEAR |
 | `--interp-hold N` | 3 | Hysteresis bars for downgrades |
-| `--trend-filter` | off | Enable SMA trend filter |
+
+#### Trend filters and gates
+
+| Flag | Default | Description |
+|------|---------|-------------|
 | `--trend-filter-min-bars N` | 3 | SMA trend persistence before filtering |
 | `--momentum-gate` | off | Enable MACD+RSI recovery gate |
 | `--momentum-gate-bars N` | 3 | Momentum gate persistence |
 | `--momentum-gate-rsi-zone F` | 35 | RSI divergence threshold |
-| `--opt10-commitment N` | 2 | Consecutive bars price must stay beyond fastSMA before full BULL/BEAR confirmation can accumulate |
 | `--no-price-regime-gate` | off | Disable slow-SMA regime gate |
-| `--price-regime-buffer-pct N` | 0.35 | Minimum price clearance from slow SMA |
+
+### Source input
+
+| Flag | Default | Description |
+|------|---------|-------------|
 | `--source` | market_adapter | Data source |
-| `--pair` | XRP-BTS | Market adapter pair |
 | `--file PATH` | — | JSON candle input |
+| `--bot-key KEY` | XRP-BTS | Market adapter bot key used to load `market_adapter/state/price_adapter_centers.json` |
+
+### Output
+
+| Flag | Default | Description |
+|------|---------|-------------|
 | `--chart FILE` | analysis/charts/derivative_chart.html | HTML output path |
 
 ---

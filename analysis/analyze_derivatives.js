@@ -13,7 +13,7 @@
  *
  *   node analysis/analyze_derivatives.js \
  *     --source market_adapter \
- *     --pair XRP-BTS
+ *     --bot-key XRP-BTS
  *
  * Output:
  *   analysis/charts/derivative_chart.html
@@ -32,7 +32,7 @@ const { createSource }        = require('./price_sources');
 function parseArgs() {
     const args = process.argv.slice(2);
     const config = {
-        source: { type: 'market_adapter', config: { pair: 'XRP-BTS' } },
+        source: { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         slowSmaPeriod:        500,
         fastSmaPeriod:        null,
         minBarsForConfirmation: 3,
@@ -45,7 +45,7 @@ function parseArgs() {
         momentumGateEnabled: false,
         momentumGateMinBars: 3,
         momentumGateRsiZone: 35,
-        opt10CommitmentBars: 2,
+        fastSmaCommitmentBars: 2,
         priceRegimeGate: true,
         priceRegimeMinDistancePct: 0.35,
         rsiPeriod: 14,
@@ -60,7 +60,7 @@ function parseArgs() {
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
         if      (arg === '--source')    config.source.type                  = args[++i];
-        else if (arg === '--pair')      config.source.config.pair           = args[++i];
+        else if (arg === '--bot-key')   config.source.config.botKey         = args[++i];
         else if (arg === '--file')      config.source.config.filePath       = args[++i];
         else if (arg === '--pool')      config.source.config.poolId         = args[++i];
         else if (arg === '--precA')     config.source.config.precA          = parseInt(args[++i]);
@@ -82,7 +82,7 @@ function parseArgs() {
         else if (arg === '--momentum-gate')         config.momentumGateEnabled  = true;
         else if (arg === '--momentum-gate-bars')    config.momentumGateMinBars  = parseInt(args[++i]);
         else if (arg === '--momentum-gate-rsi-zone') config.momentumGateRsiZone = parseFloat(args[++i]);
-        else if (arg === '--opt10-commitment')      config.opt10CommitmentBars  = parseInt(args[++i]);
+        else if (arg === '--fast-sma-commitment-bars') config.fastSmaCommitmentBars = parseInt(args[++i]);
         else if (arg === '--no-price-regime-gate')  config.priceRegimeGate      = false;
         else if (arg === '--price-regime-buffer-pct') config.priceRegimeMinDistancePct = parseFloat(args[++i]);
         else if (arg === '--chart')       config.chartFile                  = args[++i];
@@ -103,35 +103,51 @@ Generates an interactive HTML chart.
 Usage:
   node analysis/analyze_derivatives.js \\
     --source <type> \\
-    [--pair PAIR] [--file PATH] [--pool ID] [--precA N] [--precB N]
+    [--bot-key KEY] [--file PATH] [--pool ID] [--precA N] [--precB N]
 
 Sources:
-  market_adapter   Use market_adapter state (default)   --pair XRP-BTS
+  market_adapter   Use market_adapter state (default)   --bot-key XRP-BTS
   json             JSON candles file                    --file path/to/file.json
   kibana           Kibana LP pool                       --pool ID --precA N --precB N
 
 Analyzer options:
-  --sma N        SMA period (default 500)
-  --fast-sma N   Fast SMA period (optional, enables trend filter source + Opt 10)
-  --confirm N    Bars required for confirmation (default 3)
-  --macd-fast N  MACD fast period (default 12)
-  --macd-slow N  MACD slow period (default 26)
-  --macd-signal N  MACD signal period (default 9)
-  --macd-min-hist N  MACD histogram/line threshold (default 0.02)
-  --rsi [N]      RSI period (default 14)
-  --rsi-zone N   RSI bull/bear zone offset from 50 (default 10)
-  --rsi-extreme N  RSI extreme threshold (default 90)
-  --interp-confirm N  Bars required to confirm BULL/BEAR (default 3)
-  --interp-hold N  Bars to hold confirmed BULL/BEAR downgrades (default 3)
-  --trend-filter  Enable derivative trend filter
-  --trend-filter-min-bars N  Sustained bars for trend filter (default 3)
-  --opt10-commitment N  Consecutive bars price must stay beyond fastSMA (default 2)
-  --no-price-regime-gate  Disable slow-SMA macro regime gate
-  --price-regime-buffer-pct N  Required slow-SMA clearance in % (default 0.35)
+  Core indicators:
+    --sma N        SMA period (default 500)
+    --fast-sma N   Fast SMA period (optional, enables trend filter source + fast-SMA commitment)
+    --macd-fast N  MACD fast period (default 12)
+    --macd-slow N  MACD slow period (default 26)
+    --macd-signal N  MACD signal period (default 9)
+    --macd-min-hist N  MACD histogram/line threshold (default 0.02)
+    --rsi [N]      RSI period (default 14)
+    --rsi-zone N   RSI bull/bear zone offset from 50 (default 10)
+    --rsi-extreme N  RSI extreme threshold (default 90)
 
-Output:
-  --chart FILE   Chart output path (default: analysis/charts/derivative_chart.html)
-  --quiet        Suppress log output
+  Confirmation and hysteresis:
+    --confirm N    Bars required for confirmation (default 3)
+    --interp-confirm N  Bars required to confirm BULL/BEAR (default 3)
+    --interp-hold N  Bars to hold confirmed BULL/BEAR downgrades (default 3)
+
+  Trend filters and gates:
+    --trend-filter  Enable derivative trend filter
+    --trend-filter-min-bars N  Sustained bars for trend filter (default 3)
+    --momentum-gate  Enable MACD+RSI recovery gate
+    --momentum-gate-bars N  Momentum gate persistence (default 3)
+    --momentum-gate-rsi-zone N  RSI divergence threshold (default 35)
+    --fast-sma-commitment-bars N  Consecutive bars price must stay beyond fastSMA (default 2)
+    --no-price-regime-gate  Disable slow-SMA macro regime gate
+    --price-regime-buffer-pct N  Required slow-SMA clearance in % (default 0.35)
+
+  Source input:
+    --source <type>  Data source (default market_adapter)
+    --bot-key KEY    Market adapter bot key (default XRP-BTS)
+    --file PATH      JSON candle input
+    --pool ID        Kibana LP pool ID
+    --precA N        Kibana asset precision A
+    --precB N        Kibana asset precision B
+
+  Output:
+    --chart FILE   Chart output path (default: analysis/charts/derivative_chart.html)
+    --quiet        Suppress log output
     `);
 }
 
@@ -158,7 +174,7 @@ async function analyze(source, config) {
         momentumGateEnabled:    config.momentumGateEnabled,
         momentumGateMinBars:    config.momentumGateMinBars,
         momentumGateRsiZone:    config.momentumGateRsiZone,
-        opt10CommitmentBars:    config.opt10CommitmentBars,
+        fastSmaCommitmentBars:  config.fastSmaCommitmentBars,
         priceRegimeGateEnabled: config.priceRegimeGate,
         priceRegimeMinDistancePct: config.priceRegimeMinDistancePct,
         rsiPeriod:              config.rsiPeriod,
@@ -205,7 +221,7 @@ async function analyze(source, config) {
             momentumGateEnabled: config.momentumGateEnabled,
             momentumGateMinBars: config.momentumGateMinBars,
             momentumGateRsiZone: config.momentumGateRsiZone,
-            opt10CommitmentBars: config.opt10CommitmentBars,
+            fastSmaCommitmentBars: config.fastSmaCommitmentBars,
             priceRegimeGate:     config.priceRegimeGate,
             priceRegimeMinDistancePct: config.priceRegimeMinDistancePct,
             rsiPeriod:           config.rsiPeriod,
@@ -229,7 +245,6 @@ async function main() {
         const srcConfig = config.source.config;
         if (config.source.type === 'market_adapter' && !srcConfig.stateDir) {
             srcConfig.stateDir = path.join(__dirname, '..', 'market_adapter', 'state');
-            srcConfig.botKey   = srcConfig.pair;
         }
 
         const source = createSource(config.source.type, srcConfig);
