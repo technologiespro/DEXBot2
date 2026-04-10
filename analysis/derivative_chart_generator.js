@@ -408,7 +408,7 @@ Plotly.newPlot('price-chart', priceTraces, {
     legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(0,0,0,0.4)', font: { size: 11 } },
     xaxis: { ...AXIS, type: 'date', rangeslider: { visible: false } },
     yaxis: { ...AXIS, title: { text: 'Price', standoff: 6 }, type: 'log', autorange: true },
-}, { responsive: true, displayModeBar: true });
+}, { responsive: true, displayModeBar: true, scrollZoom: true });
 
 const zeroLine = {
     x: [dates[0], dates[dates.length - 1]], y: [0, 0],
@@ -709,16 +709,98 @@ function wireAutoscaleToResetZoom(chartDiv) {
     chartDiv.__resetZoomObserver = observer;
 }
 
+function finiteWindowValues(trace, fromMs, toMs) {
+    if (!trace?.x || !trace?.y) return [];
+    const out = [];
+    const len = Math.min(trace.x.length, trace.y.length);
+    for (let i = 0; i < len; i++) {
+        const xMs = new Date(trace.x[i]).getTime();
+        const y = trace.y[i];
+        if (!Number.isFinite(xMs) || xMs < fromMs || xMs > toMs) continue;
+        if (Number.isFinite(y)) out.push(y);
+    }
+    return out;
+}
+
+function macdVisibleRange(chartDiv, x0, x1) {
+    if (chartDiv?.id !== 'macd-chart') return null;
+    const fromMs = new Date(x0).getTime();
+    const toMs = new Date(x1).getTime();
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null;
+
+    const values = [];
+    for (const trace of chartDiv.data || []) values.push(...finiteWindowValues(trace, fromMs, toMs));
+    values.push(0);
+    if (!values.length) return null;
+
+    let min = Math.min(...values);
+    let max = Math.max(...values);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+
+    if (min === max) {
+        const span = Math.max(Math.abs(min) * 0.15, 0.5);
+        min -= span;
+        max += span;
+    } else {
+        const pad = (max - min) * 0.12;
+        min -= pad;
+        max += pad;
+    }
+    return [min, max];
+}
+
+function priceVisibleRange(chartDiv, x0, x1) {
+    if (chartDiv?.id !== 'price-chart') return null;
+    const fromMs = new Date(x0).getTime();
+    const toMs = new Date(x1).getTime();
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null;
+
+    const values = [];
+    for (const trace of chartDiv.data || []) values.push(...finiteWindowValues(trace, fromMs, toMs));
+    const positive = values.filter(v => Number.isFinite(v) && v > 0);
+    if (!positive.length) return null;
+
+    let min = Math.min(...positive);
+    let max = Math.max(...positive);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max <= 0) return null;
+
+    if (min === max) {
+        min *= 0.97;
+        max *= 1.03;
+    } else {
+        min *= 0.96;
+        max *= 1.04;
+    }
+    return [Math.log10(min), Math.log10(max)];
+}
+
+function relayoutForVisibleWindow(chartDiv, x0, x1) {
+    const upd = { 'xaxis.range[0]': x0, 'xaxis.range[1]': x1 };
+    const priceRange = priceVisibleRange(chartDiv, x0, x1);
+    if (priceRange) {
+        upd['yaxis.range[0]'] = priceRange[0];
+        upd['yaxis.range[1]'] = priceRange[1];
+    }
+    const macdRange = macdVisibleRange(chartDiv, x0, x1);
+    if (macdRange) {
+        upd['yaxis.range[0]'] = macdRange[0];
+        upd['yaxis.range[1]'] = macdRange[1];
+    }
+    return upd;
+}
+
 function syncAxes(srcDiv, targets) {
     srcDiv.on('plotly_relayout', e => {
         if (isSyncing) return;
-        let upd;
+        let x0, x1;
         if (e['xaxis.range[0]'] !== undefined) {
-            upd = { 'xaxis.range[0]': e['xaxis.range[0]'], 'xaxis.range[1]': e['xaxis.range[1]'] };
+            x0 = e['xaxis.range[0]'];
+            x1 = e['xaxis.range[1]'];
         } else if (e['xaxis.autorange']) {
             const range = srcDiv.layout?.xaxis?.range;
             if (!range || range.length < 2) return;
-            upd = { 'xaxis.range[0]': range[0], 'xaxis.range[1]': range[1] };
+            x0 = range[0];
+            x1 = range[1];
         } else if (e['autosize']) {
             setTimeout(resetZoom, 0);
             return;
@@ -727,7 +809,7 @@ function syncAxes(srcDiv, targets) {
         }
 
         isSyncing = true;
-        Promise.all(targets.map(d => Plotly.relayout(d, upd)))
+        Promise.all([srcDiv, ...targets].map(d => Plotly.relayout(d, relayoutForVisibleWindow(d, x0, x1))))
             .finally(() => { setTimeout(() => { isSyncing = false; }, 50); });
     });
 }
@@ -749,9 +831,7 @@ function resetZoom() {
     }
     if (!xMin || !xMax) return;
     isSyncing = true;
-    Promise.all(allCharts.map(d => Plotly.relayout(d, {
-        'xaxis.range[0]': xMin, 'xaxis.range[1]': xMax, 'yaxis.autorange': true
-    })))
+    Promise.all(allCharts.map(d => Plotly.relayout(d, relayoutForVisibleWindow(d, xMin, xMax))))
     .finally(() => { setTimeout(() => { isSyncing = false; }, 50); });
 }
 
