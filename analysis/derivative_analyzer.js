@@ -562,17 +562,28 @@ class DerivativeAnalyzer {
 
     _advanceEntryBias(prevInterpretation) {
         const curr = this.currInterpretation;
+        const slowDir = this._rawSmaTrend();
+        const fastDir = this.fastSma ? this._rawFastSmaTrend() : slowDir;
         const prevBullish = prevInterpretation === 'BULL' || prevInterpretation === 'BULL_WEAK';
         const currBullish = curr === 'BULL' || curr === 'BULL_WEAK';
         const prevBearish = prevInterpretation === 'BEAR' || prevInterpretation === 'BEAR_WEAK';
         const currBearish = curr === 'BEAR' || curr === 'BEAR_WEAK';
+        const bullMacroAligned = slowDir === 'UP';
+        const bearMacroAligned = slowDir === 'DOWN';
+        const bullEntryAligned = bullMacroAligned && fastDir === 'UP';
+        const bearEntryAligned = bearMacroAligned && fastDir === 'DOWN';
 
         if (!currBullish) {
             this.bullEntrySetupActive = false;
             this.bullEntrySetupConfirmed = false;
         }
 
-        if (curr === 'BULL_WEAK' && !prevBullish) {
+        // Keep weak bullish states visible on the chart, but do not emit long
+        // entry events until both slow and fast SMA trends are aligned up.
+        if (!bullEntryAligned) {
+            this.bullEntrySetupActive = false;
+            this.bullEntrySetupConfirmed = false;
+        } else if (curr === 'BULL_WEAK' && (!prevBullish || !this.bullEntrySetupActive)) {
             this.bullEntrySetupActive = true;
             this.bullEntrySetupConfirmed = false;
             this.entryBias = 'EARLY_LONG';
@@ -585,9 +596,6 @@ class DerivativeAnalyzer {
                 this.bullEntrySetupConfirmed = true;
                 this.entryBias = 'CONFIRM_LONG';
                 this.isBullConfirmation = true;
-            } else if (!this.bullEntrySetupActive) {
-                this.entryBias = 'LATE_LONG';
-                this.isLateBullWithoutWeak = true;
             }
         }
 
@@ -596,7 +604,15 @@ class DerivativeAnalyzer {
             this.bearEntrySetupConfirmed = false;
         }
 
-        if (curr === 'BEAR_WEAK' && !prevBearish) {
+        // Keep weak bearish states visible on the chart, but do not emit short
+        // entry events until both slow and fast SMA trends are aligned down.
+        if (!bearEntryAligned) {
+            this.bearEntrySetupActive = false;
+            this.bearEntrySetupConfirmed = false;
+            return;
+        }
+
+        if (curr === 'BEAR_WEAK' && (!prevBearish || !this.bearEntrySetupActive)) {
             this.bearEntrySetupActive = true;
             this.bearEntrySetupConfirmed = false;
             this.entryBias = 'EARLY_SHORT';
@@ -609,9 +625,6 @@ class DerivativeAnalyzer {
                 this.bearEntrySetupConfirmed = true;
                 this.entryBias = 'CONFIRM_SHORT';
                 this.isBearConfirmation = true;
-            } else if (!this.bearEntrySetupActive) {
-                this.entryBias = 'LATE_SHORT';
-                this.isLateBearWithoutWeak = true;
             }
         }
     }

@@ -23,7 +23,7 @@ There are three independent output layers:
 
 - `trend` / `rawTrend` / `isConfirmed` come from SMA direction alone. `--confirm` controls only this MA-trend confirmation layer.
 - `interpretation` / `interpretationRaw` are the trading-style states (`BULL`, `BEAR`, `OVERBOUGHT`, etc.). `--interp-confirm` and `--interp-hold` control only this signal layer.
-- `entryBias` and its boolean helpers are derived execution hints built on top of the final `interpretation` state. They do not change the base signal engine. They classify whether a directional setup is an early weak entry, a proper confirmation, or a late standalone confirmation.
+- `entryBias` and its boolean helpers are derived execution hints built on top of the final `interpretation` state. They do not change the base signal engine. They classify whether a directional setup is an early weak entry or a proper confirmation once slow and fast SMA alignment is in place.
 
 ---
 
@@ -257,33 +257,31 @@ Possible values:
 - `NONE`
 - `EARLY_LONG`
 - `CONFIRM_LONG`
-- `LATE_LONG`
 - `EARLY_SHORT`
 - `CONFIRM_SHORT`
-- `LATE_SHORT`
 
 Boolean helpers are emitted alongside it:
 
 - `isBullWeakEntry`
 - `isBullConfirmation`
-- `isLateBullWithoutWeak`
 - `isBearWeakEntry`
 - `isBearConfirmation`
-- `isLateBearWithoutWeak`
 
 These fields are computed from the final post-hysteresis `interpretation`, not from raw MACD/RSI candidates.
+They are additionally gated by MA alignment:
+
+- long entry hints require slow SMA `UP` and fast SMA `UP`
+- short entry hints require slow SMA `DOWN` and fast SMA `DOWN`
 
 ### Long-side transitions
 
 - `NEUTRAL -> BULL_WEAK` => `EARLY_LONG`
 - `BULL_WEAK -> BULL` => `CONFIRM_LONG`
-- direct `BULL` without a live weak setup => `LATE_LONG`
 
 ### Short-side transitions
 
 - `NEUTRAL -> BEAR_WEAK` => `EARLY_SHORT`
 - `BEAR_WEAK -> BEAR` => `CONFIRM_SHORT`
-- direct `BEAR` without a live weak setup => `LATE_SHORT`
 
 If a weak setup fails back to `NEUTRAL` or the signal flips to the opposite side, the setup state is cleared.
 
