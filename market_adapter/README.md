@@ -150,7 +150,7 @@ market_adapter/
 
 For each bot, `MarketAdapterService` computes:
 - **AMA value** using per-bot `ama` config (or defaults: `erPeriod:90, fast:10, slow:100`)
-- **Dynamic offset** — activates when price deviates ≥15% from AMA; ramps linearly to full ±1.5% at 30% deviation
+- **Dynamic offset** — activates when price deviates ≥10% from AMA; ramps linearly to full ±5% at 20% deviation
 - **Effective center price** = AMA + dynamic offset, clamped to configured min/max
 
 ### 3. Trend Detection
@@ -159,7 +159,7 @@ For each bot, `MarketAdapterService` computes:
 each candle close as `UP`, `DOWN`, or `NEUTRAL` with a `confidence` score (0–100).
 
 This drives:
-- **Price offset**: ±1.5% × confidence/100 applied to the grid center
+- **Price offset**: signed deviation-driven shift applied to the grid center when the trend is UP or DOWN
 - **Weight offset**: Asymmetric bias toward buy or sell weight
 
 ### 4. ATR Volatility
@@ -236,8 +236,8 @@ If absent, built-in defaults apply (`erPeriod: 90, fastPeriod: 10, slowPeriod: 1
 ### Dynamic Grid Price Offset
 
 The offset is computed automatically — no manual config needed. It activates when the
-current price deviates ≥ `OFFSET_DEV_THRESHOLD` (15%) from the AMA center, ramping
-linearly to the full `TREND_OFFSET_MAX_PCT` (±1.5%) at 2× threshold (30%). Below 15%
+current price deviates ≥ `OFFSET_DEV_THRESHOLD` (10%) from the AMA center, ramping
+linearly to the full `TREND_OFFSET_MAX_PCT` (±5%) at 2× threshold (20%). Below 10%
 deviation the offset is zero.
 
 ---
@@ -377,7 +377,7 @@ per-bot entries:
   lastAmaPrice        - Latest computed AMA value
   centerPrice         - Stored center (baseline for delta comparison)
   effectiveCenterPrice- AMA + dynamic deviation offset, clamped
-  gridPriceOffsetPct  - Applied dynamic offset (0 when deviation < 15%)
+  gridPriceOffsetPct  - Applied dynamic offset (0 when deviation < 10%)
   lastDeltaPercent    - Delta computed last cycle
   thresholdPercent    - Active trigger threshold
   staleData           - true if candle age exceeded maxStaleHours
@@ -421,10 +421,10 @@ When threshold is exceeded, the adapter writes a trigger file like:
   "thresholdPercent": 0.8,
   "deltaPercent": 1.1,
   "previousCenterPrice": 1280.5,
-  "newCenterPrice": 1294.6,
+  "newCenterPrice": 1348.32,
   "referencePrice": 1294.6,
   "rawAmaPrice": 1294.6,
-  "gridPriceOffsetPct": 0.72,  // dynamic only — deviation-driven, no static component
+  "gridPriceOffsetPct": 4.15,  // dynamic only — deviation-driven, no static component
   "poolId": "1.19.133"
 }
 ```
@@ -436,8 +436,8 @@ When threshold is exceeded, the adapter writes a trigger file like:
 ```
 [09:00] Adapter cycle starts — updates candles for all bots
 [09:01] AMA computed, trend=UP, confidence=72
-[09:01] deviationPct=18.3% → gridPriceOffsetPct = 1.08% (dynamic, deviation-driven)
-[09:01] effectiveCenterPrice = 1307.5 (AMA 1294.6 + offset)
+[09:01] deviationPct=18.3% → gridPriceOffsetPct = 4.15% (dynamic, deviation-driven)
+[09:01] effectiveCenterPrice = 1348.32 (AMA 1294.6 + offset)
 [09:01] Delta vs stored center = 1.21% — exceeds threshold (1.0%)
 [09:01] weights={buy=0.57, sell=0.43}, collateral=1.62
 [09:01] Adapter writes profiles/recalculate.xrp-bts-0.trigger

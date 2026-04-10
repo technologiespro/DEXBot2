@@ -626,8 +626,8 @@ function resolveAmaForBot(bot, ctx = null) {
 
 // Default price offset config — used when no pair-specific market profile is set.
 const DEFAULT_PRICE_OFFSET = {
-    devThreshold: 15, // % deviation from AMA before offset activates
-    maxPct: 1.5,      // max offset applied at full confidence
+    devThreshold: 10, // % deviation from AMA before offset activates
+    maxPct: 5,        // max offset applied at full confidence
 };
 
 function getOffsetFromProfilesForBot(bot, ctx = null) {

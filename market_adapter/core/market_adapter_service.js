@@ -96,7 +96,7 @@ class MarketAdapterService {
         }
         const botOffset = typeof deps.resolveOffsetForBot === 'function'
             ? deps.resolveOffsetForBot(bot, ctx)
-            : { devThreshold: 15, maxPct: 1.5 };
+            : { devThreshold: 10, maxPct: 5 };
 
         const filePath = deps.candleFileForBot(bot.botKey);
         const existing = deps.loadJson(filePath, null);
