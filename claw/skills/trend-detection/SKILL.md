@@ -11,7 +11,8 @@ This skill covers:
 
 - candle-fed trend detection and signal monitoring
 - tuning trend-detection parameters and general settings
-- applying signal-driven bot-setting updates for `gridPriceOffsetPct` and `weightDistribution`
+- applying signal-driven bot-setting updates for `weightDistribution`
+- tuning runtime-managed center bias through market profile `priceOffset` policy when needed
 
 ## Workflow
 

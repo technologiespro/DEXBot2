@@ -208,8 +208,8 @@ Use the bridge to read, preview, and apply DEXBot2 bot settings through the lock
 
 ```bash
 node scripts/claw_bridge.js bot-settings --payload '{"botRef":"default"}'
-node scripts/claw_bridge.js bot-settings-preview --payload '{"botRef":"default","patch":{"gridPriceOffsetPct":0.2}}'
-node scripts/claw_bridge.js bot-settings-apply --payload '{"botRef":"default","patch":{"weightDistribution":{"sell":0.7,"buy":0.4}}}'
+node scripts/claw_bridge.js bot-settings-preview --payload '{"botRef":"default","patch":{"incrementPercent":0.4,"weightDistribution":{"sell":0.7,"buy":0.4}}}'
+node scripts/claw_bridge.js bot-settings-apply --payload '{"botRef":"default","patch":{"incrementPercent":0.4,"weightDistribution":{"sell":0.7,"buy":0.4}}}'
 ```
 
 Settings writes are serialized through the profile lock and the recalc trigger is written atomically, so concurrent bot-setting updates do not clobber each other.
@@ -396,7 +396,7 @@ The decision loop (`modules/decision_loop.js`) is exposed as a module API. Its `
 
 ## Dynamic Weights
 
-Dynamic weight updates adjust `weightDistribution` and `gridPriceOffsetPct` based on trend signals. The service evaluates bot eligibility, fetches trend data, computes weight and offset changes, enforces cooldowns, and optionally writes a recalculation trigger.
+Dynamic weight updates adjust `weightDistribution` based on trend signals. The service evaluates bot eligibility, fetches trend data, computes weight changes, enforces cooldowns, and optionally writes a recalculation trigger.
 
 Inspect the default policy:
 
@@ -407,13 +407,13 @@ node scripts/claw_bridge.js bot-settings --payload '{"botRef":"default"}'
 Preview an update without applying:
 
 ```bash
-node scripts/claw_bridge.js bot-settings-preview --payload '{"botRef":"default","patch":{"gridPriceOffsetPct":0.2}}'
+node scripts/claw_bridge.js bot-settings-preview --payload '{"botRef":"default","patch":{"weightDistribution":{"sell":0.7,"buy":0.4}}}'
 ```
 
 Apply the update and write the recalc trigger:
 
 ```bash
-node scripts/claw_bridge.js bot-settings-apply --payload '{"botRef":"default","patch":{"gridPriceOffsetPct":0.2}}'
+node scripts/claw_bridge.js bot-settings-apply --payload '{"botRef":"default","patch":{"weightDistribution":{"sell":0.7,"buy":0.4}}}'
 ```
 
 ## High-Level Actions

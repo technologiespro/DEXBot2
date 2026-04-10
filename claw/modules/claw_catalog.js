@@ -121,14 +121,6 @@ function botSettingsPatchSchema(description = null) {
       }, [], 'Per-side fund allocation'),
       dryRun: booleanSchema('Simulate instead of broadcasting'),
       gridPrice: numberOrStringOrNullSchema('Grid reference price mode or numeric value'),
-      gridPriceOffsetAllowNeutralReset: booleanSchema('Allow neutral trend to reset gridPriceOffsetPct'),
-      gridPriceOffsetCooldownMs: integerSchema('Cooldown between gridPrice offset updates'),
-      gridPriceOffsetMaxPct: numberSchema('Maximum gridPrice offset percentage'),
-      gridPriceOffsetMinConfidence: numberSchema('Minimum confidence for gridPrice offset changes'),
-      gridPriceOffsetMinDeltaPct: numberSchema('Minimum delta for gridPrice offset changes'),
-      gridPriceOffsetPct: numberSchema('Signed grid price offset percentage'),
-      gridPriceOffsetRequireConfirmedTrend: booleanSchema('Require confirmed trend for gridPrice offset updates'),
-      gridPriceOffsetScale: numberSchema('Scale factor for confidence-based gridPrice offset updates'),
       incrementPercent: numberSchema('Geometric step between grid levels'),
       maxPrice: numberOrStringSchema('Maximum grid bound'),
       minPrice: numberOrStringSchema('Minimum grid bound'),
@@ -260,7 +252,7 @@ const CLAW_TOOL_CATALOG = Object.freeze([
   createToolDefinition({
     command: 'bot-settings-preview',
     description: 'Preview a DEXBot2 bot settings patch without writing it',
-    exampleArgs: ['--payload', '{"botRef":"default","patch":{"gridPriceOffsetPct":0.2}}'],
+    exampleArgs: ['--payload', '{"botRef":"default","patch":{"incrementPercent":0.4,"weightDistribution":{"sell":0.7,"buy":0.4}}}'],
     args: {
       payload_json: 'JSON object with botRef, identifier, botId, or pair, plus a patch object'
     },
@@ -272,7 +264,7 @@ const CLAW_TOOL_CATALOG = Object.freeze([
   createToolDefinition({
     command: 'bot-settings-apply',
     description: 'Apply a DEXBot2 bot settings patch and optionally write a trigger',
-    exampleArgs: ['--payload', '{"botRef":"default","patch":{"gridPriceOffsetPct":0.2,"weightDistribution":{"sell":0.7,"buy":0.4}}}'],
+    exampleArgs: ['--payload', '{"botRef":"default","patch":{"incrementPercent":0.4,"weightDistribution":{"sell":0.7,"buy":0.4}}}'],
     args: {
       payload_json: 'JSON object with botRef, identifier, botId, or pair, plus a patch object'
     },

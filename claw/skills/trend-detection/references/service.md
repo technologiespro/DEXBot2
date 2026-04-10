@@ -9,7 +9,7 @@ This is the shared DEXBot/Claw trend service. It is independent of margin-tradin
 1. `market_adapter/market_adapter.js` keeps candles current and emits the per-bot center/state snapshot.
 2. `analysis/trend_detection/trend_analyzer.js` turns candle input plus feed price into trend output.
 3. The service monitors the signal output, premium/discount, and price-ratio context.
-4. Claw applies the result through `bot-settings-preview` and `bot-settings-apply`.
+4. Claw applies supported setting changes through `bot-settings-preview` and `bot-settings-apply`, while center-bias policy lives in `profiles/market_profiles.json`.
 
 ## Inputs
 
@@ -23,8 +23,10 @@ This is the shared DEXBot/Claw trend service. It is independent of margin-tradin
   - `minBarsForConfirmation`
   - `deadZonePercent`
 - Bot settings fields that the signal may update:
-  - `gridPriceOffsetPct`
   - `weightDistribution`
+- Market-profile policy that controls runtime center bias:
+  - `priceOffset.devThreshold`
+  - `priceOffset.maxPct`
 
 ## Outputs
 

@@ -311,19 +311,19 @@ async function testRunClawCommandDispatchMatrix() {
 
     const botSettingsPreview = await bridge.runClawCommand('bot-settings-preview', {
       botRef: 'alpha',
-      patch: { gridPriceOffsetPct: 0.2, weightDistribution: { buy: 0.4 } }
+      patch: { incrementPercent: 0.4, weightDistribution: { buy: 0.4 } }
     });
     assert.strictEqual(botSettingsPreview.source, 'bot-settings-preview');
     assert.strictEqual(botSettingsPreview.ref, 'alpha');
-    assert.strictEqual(botSettingsPreview.patch.gridPriceOffsetPct, 0.2);
+    assert.strictEqual(botSettingsPreview.patch.incrementPercent, 0.4);
     assert.strictEqual(botSettingsPreview.patch.weightDistribution.buy, 0.4);
 
     const botSettingsApply = await bridge.runClawCommand('bot-settings-apply', {
       botRef: 'alpha',
-      patch: { gridPriceOffsetPct: 0.3 }
+      patch: { incrementPercent: 0.3 }
     });
     assert.strictEqual(botSettingsApply.source, 'bot-settings-apply');
-    assert.strictEqual(botSettingsApply.updatedBot.gridPriceOffsetPct, 0.3);
+    assert.strictEqual(botSettingsApply.updatedBot.incrementPercent, 0.3);
     assert.strictEqual(calls.profiles.applyBotSettingsPatch.length, 1);
 
     const honestContext = await bridge.runClawCommand('honest-context', {
@@ -467,14 +467,14 @@ async function testRunClawCommandDispatchMatrix() {
     await assert.rejects(
       () => bridge.runClawCommand('dynamic-weight-preview', {
         botId: 'bot-123',
-        patch: { gridPriceOffsetPct: 0.2 }
+        patch: { weightDistribution: { buy: 0.4 } }
       }),
       /Unsupported Claw command: dynamic-weight-preview/
     );
     await assert.rejects(
       () => bridge.runClawCommand('dynamic-weight-apply', {
         botId: 'bot-123',
-        patch: { gridPriceOffsetPct: 0.2 }
+        patch: { weightDistribution: { buy: 0.4 } }
       }),
       /Unsupported Claw command: dynamic-weight-apply/
     );

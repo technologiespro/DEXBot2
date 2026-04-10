@@ -7,16 +7,12 @@ const { resolveRelativePrice } = require('../../modules/order/utils/math');
 const DEFAULT_MANIFEST_FILE = 'config.json';
 const DEFAULT_BOTS_FILE = 'bots.json';
 const DEFAULT_GENERAL_SETTINGS_FILE = 'general.settings.json';
-const DEFAULT_AMA_PROFILES_FILE = 'ama_profiles.json';
+const DEFAULT_MARKET_PROFILES_FILE = 'market_profiles.json';
 const DEFAULT_ORDERS_DIR = 'orders';
 
 const KNOWN_BOT_KEYS = new Set([
   'active', 'activeOrders', 'assetA', 'assetAId', 'assetB', 'assetBId',
-  'botFunds', 'dryRun', 'gridPrice', 'gridPriceOffsetCooldownMs',
-  'gridPriceOffsetAllowNeutralReset', 'gridPriceOffsetMaxPct',
-  'gridPriceOffsetMinConfidence', 'gridPriceOffsetMinDeltaPct', 'gridPriceOffsetPct',
-  'gridPriceOffsetRequireConfirmedTrend',
-  'gridPriceOffsetScale',
+  'botFunds', 'dryRun', 'gridPrice',
   'incrementPercent', 'maxPrice',
   'minPrice', 'name', 'preferredAccount', 'startPrice', 'strategy',
   'targetSpreadPercent', 'weightDistribution',
@@ -34,14 +30,6 @@ const BOT_SETTINGS_TRIGGER_KEYS = new Set([
   'botFunds',
   'dryRun',
   'gridPrice',
-  'gridPriceOffsetAllowNeutralReset',
-  'gridPriceOffsetCooldownMs',
-  'gridPriceOffsetMaxPct',
-  'gridPriceOffsetMinConfidence',
-  'gridPriceOffsetMinDeltaPct',
-  'gridPriceOffsetPct',
-  'gridPriceOffsetRequireConfirmedTrend',
-  'gridPriceOffsetScale',
   'incrementPercent',
   'maxPrice',
   'minPrice',
@@ -56,7 +44,6 @@ const REQUIRED_BOT_KEY_ALIASES = {
   assetB: ['assetB', 'assetBId']
 };
 
-const GRID_PRICE_OFFSET_BOUNDS = Object.freeze({ min: -10, max: 10 });
 const BOT_SETTINGS_NESTED_KEYS = Object.freeze({
   activeOrders: new Set(['buy', 'sell']),
   botFunds: new Set(['buy', 'sell']),
@@ -65,19 +52,11 @@ const BOT_SETTINGS_NESTED_KEYS = Object.freeze({
 const BOT_SETTINGS_STATE_FIELDS = Object.freeze({
   numeric: [
     'incrementPercent',
-    'targetSpreadPercent',
-    'gridPriceOffsetPct',
-    'gridPriceOffsetCooldownMs',
-    'gridPriceOffsetMinConfidence',
-    'gridPriceOffsetMinDeltaPct',
-    'gridPriceOffsetMaxPct',
-    'gridPriceOffsetScale'
+    'targetSpreadPercent'
   ],
   boolean: [
     'active',
-    'dryRun',
-    'gridPriceOffsetAllowNeutralReset',
-    'gridPriceOffsetRequireConfirmedTrend'
+    'dryRun'
   ],
   priceLike: [
     'startPrice',
@@ -240,10 +219,6 @@ function normalizeBotSettings(bot = {}) {
     ...cloneBotSettings(DEFAULT_CONFIG.activeOrders),
     ...(isPlainObject(normalized.activeOrders) ? normalized.activeOrders : {})
   };
-  normalized.gridPriceOffsetPct = normalized.gridPriceOffsetPct === undefined
-    ? 0
-    : normalizeNumberField(normalized.gridPriceOffsetPct, 0);
-
   return normalized;
 }
 
@@ -355,34 +330,7 @@ function validateBotSettingsValue(field, value, errors) {
       }
       break;
 
-    case 'gridPriceOffsetPct': {
-      const offset = Number(value);
-      if (!Number.isFinite(offset)) {
-        push('gridPriceOffsetPct must be a finite number');
-      } else if (offset < GRID_PRICE_OFFSET_BOUNDS.min || offset > GRID_PRICE_OFFSET_BOUNDS.max) {
-        push(`gridPriceOffsetPct must be between ${GRID_PRICE_OFFSET_BOUNDS.min} and ${GRID_PRICE_OFFSET_BOUNDS.max}`);
-      }
-      break;
-    }
 
-    case 'gridPriceOffsetCooldownMs':
-    case 'gridPriceOffsetMinConfidence':
-    case 'gridPriceOffsetMinDeltaPct':
-    case 'gridPriceOffsetMaxPct':
-    case 'gridPriceOffsetScale': {
-      const numeric = Number(value);
-      if (!Number.isFinite(numeric) || numeric < 0) {
-        push(`${field} must be a finite number greater than or equal to 0`);
-      }
-      break;
-    }
-
-    case 'gridPriceOffsetAllowNeutralReset':
-    case 'gridPriceOffsetRequireConfirmedTrend':
-      if (typeof value !== 'boolean') {
-        push(`${field} must be a boolean`);
-      }
-      break;
 
     case 'weightDistribution':
       if (!isPlainObject(value)) {
@@ -725,13 +673,13 @@ function resolveProfilesDir(profileRoot) {
     const manifestFile = path.join(candidate, DEFAULT_MANIFEST_FILE);
     const botsFile = path.join(candidate, DEFAULT_BOTS_FILE);
     const generalSettingsFile = path.join(candidate, DEFAULT_GENERAL_SETTINGS_FILE);
-    const amaProfilesFile = path.join(candidate, DEFAULT_AMA_PROFILES_FILE);
+    const marketProfilesFile = path.join(candidate, DEFAULT_MARKET_PROFILES_FILE);
 
     if (
       fs.existsSync(manifestFile) ||
       fs.existsSync(botsFile) ||
       fs.existsSync(generalSettingsFile) ||
-      fs.existsSync(amaProfilesFile)
+      fs.existsSync(marketProfilesFile)
     ) {
       return candidate;
     }
@@ -1004,13 +952,13 @@ async function loadDexbotProfileBundle(profileRoot, options = {}) {
   const manifestFile = options.manifestFile || path.join(profilesDir, DEFAULT_MANIFEST_FILE);
   const botsFile = options.botsFile || path.join(profilesDir, DEFAULT_BOTS_FILE);
   const generalSettingsFile = options.generalSettingsFile || path.join(profilesDir, DEFAULT_GENERAL_SETTINGS_FILE);
-  const amaProfilesFile = options.amaProfilesFile || path.join(profilesDir, DEFAULT_AMA_PROFILES_FILE);
+  const marketProfilesFile = options.marketProfilesFile || path.join(profilesDir, DEFAULT_MARKET_PROFILES_FILE);
 
-  const [manifest, botsConfig, generalSettings, amaProfiles, orderFiles] = await Promise.all([
+  const [manifest, botsConfig, generalSettings, marketProfiles, orderFiles] = await Promise.all([
     readJsonFile(manifestFile),
     readJsonFile(botsFile),
     readJsonFile(generalSettingsFile),
-    readJsonFile(amaProfilesFile),
+    readJsonFile(marketProfilesFile),
     listFiles(ordersDir)
   ]);
 
@@ -1020,14 +968,16 @@ async function loadDexbotProfileBundle(profileRoot, options = {}) {
   const botsByName = Object.fromEntries(bots.filter((bot) => bot.name).map((bot) => [bot.name, bot]));
 
   return {
-    amaProfiles,
+    marketProfiles,
+    amaProfiles: marketProfiles,
     activeBots,
     bots,
     botsByKey,
     botsByName,
     botsConfig,
     files: {
-      amaProfiles: amaProfilesFile,
+      marketProfiles: marketProfilesFile,
+      amaProfiles: marketProfilesFile,
       bots: botsFile,
       generalSettings: generalSettingsFile,
       manifest: manifestFile,
