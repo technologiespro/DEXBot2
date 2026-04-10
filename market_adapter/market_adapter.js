@@ -624,7 +624,7 @@ function resolveAmaForBot(bot, ctx = null) {
     return cfg;
 }
 
-// Default price offset config — used when no profile and no bot.priceOffset is set.
+// Default price offset config — used when no pair-specific market profile is set.
 const DEFAULT_PRICE_OFFSET = {
     devThreshold: 15, // % deviation from AMA before offset activates
     maxPct: 1.5,      // max offset applied at full confidence
@@ -646,14 +646,7 @@ function resolveOffsetForBot(bot, ctx = null) {
     const fromProfiles = getOffsetFromProfilesForBot(bot, ctx);
     if (fromProfiles) return fromProfiles;
 
-    const raw = (bot && typeof bot.priceOffset === 'object' && bot.priceOffset !== null) ? bot.priceOffset : {};
-    const devThreshold = Number.isFinite(Number(raw.devThreshold)) && Number(raw.devThreshold) > 0
-        ? Number(raw.devThreshold)
-        : DEFAULT_PRICE_OFFSET.devThreshold;
-    const maxPct = Number.isFinite(Number(raw.maxPct)) && Number(raw.maxPct) > 0
-        ? Number(raw.maxPct)
-        : DEFAULT_PRICE_OFFSET.maxPct;
-    return { devThreshold, maxPct };
+    return { ...DEFAULT_PRICE_OFFSET };
 }
 
 function mergeCandles(existing, incoming) {

@@ -40,7 +40,7 @@ Applies a signed percentage offset to the AMA center price, producing an **effec
 - `devThreshold`: Minimum % deviation of spot from AMA before the offset activates (default 15). Below this the grid is considered well-centered and no shift is applied.
 - `maxPct`: Maximum offset magnitude applied at full confidence (default 1.5%). Formula: `effectiveCenter = amaPrice × (1 + offset/100)`.
 
-Per-bot override: set `bot.priceOffset: { devThreshold, maxPct }` in `bots.json`. The profiles file wins over bot config when both are present.
+Offset policy is configured per pair in `profiles/market_profiles.json` via `priceOffset: { devThreshold, maxPct }`.
 
 ### How It Works
 

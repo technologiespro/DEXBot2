@@ -232,21 +232,14 @@ assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPr
     }
 }
 
-// resolveOffsetForBot: defaults when no profile and no bot.priceOffset
+// resolveOffsetForBot: defaults when no profile exists
 {
     const offset = resolveOffsetForBot({ assetA: 'UNKNOWN', assetB: 'UNKNOWN' });
     assert.strictEqual(offset.devThreshold, 15, 'default devThreshold should be 15');
     assert.strictEqual(offset.maxPct, 1.5, 'default maxPct should be 1.5');
 }
 
-// resolveOffsetForBot: bot-level override
-{
-    const offset = resolveOffsetForBot({ assetA: 'UNKNOWN', assetB: 'UNKNOWN', priceOffset: { devThreshold: 20, maxPct: 2.0 } });
-    assert.strictEqual(offset.devThreshold, 20, 'bot.priceOffset.devThreshold should override default');
-    assert.strictEqual(offset.maxPct, 2.0, 'bot.priceOffset.maxPct should override default');
-}
-
-// resolveOffsetForBot: market_profiles.json override wins over bot.priceOffset
+// resolveOffsetForBot: market_profiles.json overrides defaults
 {
     const hadOriginal = fs.existsSync(MARKET_PROFILES_FILE);
     const original = hadOriginal ? fs.readFileSync(MARKET_PROFILES_FILE, 'utf8') : null;
@@ -266,9 +259,9 @@ assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPr
             ],
         }, null, 2));
 
-        const offset = resolveOffsetForBot({ assetA: 'TESTA', assetB: 'TESTB', priceOffset: { devThreshold: 20, maxPct: 2.0 } });
-        assert.strictEqual(offset.devThreshold, 12, 'market_profiles priceOffset.devThreshold should take precedence over bot config');
-        assert.strictEqual(offset.maxPct, 1.0, 'market_profiles priceOffset.maxPct should take precedence over bot config');
+        const offset = resolveOffsetForBot({ assetA: 'TESTA', assetB: 'TESTB' });
+        assert.strictEqual(offset.devThreshold, 12, 'market_profiles priceOffset.devThreshold should override defaults');
+        assert.strictEqual(offset.maxPct, 1.0, 'market_profiles priceOffset.maxPct should override defaults');
     } finally {
         if (hadOriginal) {
             fs.writeFileSync(MARKET_PROFILES_FILE, original, 'utf8');
