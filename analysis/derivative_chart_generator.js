@@ -106,6 +106,7 @@ function generateHTML(data, title) {
     const rsiValues = results.map(r => r.rsi ?? null);
 
     const interpState = results.map(r => r.interpretation || 'NEUTRAL');
+    const interpBars = results.map(r => r.interpretationBars ?? 0);
     const interpBull     = interpState.map(s => s === 'BULL'       ?  1    : 0);
     const interpBullWeak = interpState.map(s => s === 'BULL_WEAK'  ?  0.5  : 0);
     const interpOB       = interpState.map(s => s === 'OVERBOUGHT' ?  0.75 : 0);
@@ -113,6 +114,35 @@ function generateHTML(data, title) {
     const interpBearWeak = interpState.map(s => s === 'BEAR_WEAK'  ? -0.5  : 0);
     const interpOS       = interpState.map(s => s === 'OVERSOLD'   ? -0.75 : 0);
     const entryBias      = results.map(r => r.entryBias || 'NONE');
+    const entryLabelMap = {
+        NONE: 'No fresh entry',
+        EARLY_LONG: 'Early long entry',
+        CONFIRM_LONG: 'Confirmed long entry',
+        LATE_LONG: 'Late long entry',
+        EARLY_SHORT: 'Early short entry',
+        CONFIRM_SHORT: 'Confirmed short entry',
+        LATE_SHORT: 'Late short entry',
+    };
+    const entryBiasLabel = entryBias.map(v => entryLabelMap[v] || v);
+    const signalPhase = results.map((r, i) => {
+        if (entryBias[i] !== 'NONE') return entryLabelMap[entryBias[i]] || entryBias[i];
+        switch (interpState[i]) {
+        case 'BULL':
+            return 'Bull trend active';
+        case 'BULL_WEAK':
+            return 'Bull setup active';
+        case 'BEAR':
+            return 'Bear trend active';
+        case 'BEAR_WEAK':
+            return 'Bear setup active';
+        case 'OVERBOUGHT':
+            return 'Overbought exit pressure';
+        case 'OVERSOLD':
+            return 'Oversold exit pressure';
+        default:
+            return 'No active setup';
+        }
+    });
     const bullWeakEntryMarkers = results.map(r => r.isBullWeakEntry ? 0.38 : null);
     const bullConfirmationMarkers = results.map(r => r.isBullConfirmation ? 0.88 : null);
     const lateBullMarkers = results.map(r => r.isLateBullWithoutWeak ? 0.88 : null);
@@ -319,7 +349,10 @@ const interpBear     = ${JSON.stringify(interpBear)};
 const interpBearWeak = ${JSON.stringify(interpBearWeak)};
 const interpOS       = ${JSON.stringify(interpOS)};
 const interpState    = ${JSON.stringify(interpState)};
+const interpBars     = ${JSON.stringify(interpBars)};
 const entryBias      = ${JSON.stringify(entryBias)};
+const entryBiasLabel = ${JSON.stringify(entryBiasLabel)};
+const signalPhase    = ${JSON.stringify(signalPhase)};
 const bullWeakEntryMarkers = ${JSON.stringify(bullWeakEntryMarkers)};
 const bullConfirmationMarkers = ${JSON.stringify(bullConfirmationMarkers)};
 const lateBullMarkers = ${JSON.stringify(lateBullMarkers)};
@@ -488,8 +521,8 @@ const interpTraces = [
         type: 'scattergl', mode: 'markers',
         marker: { color: '#67e8f9', size: 7, symbol: 'triangle-right' },
         name: 'Early Long',
-        customdata: entryBias,
-        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        customdata: entryBiasLabel,
+        hovertemplate: '%{customdata}<extra></extra>',
         showlegend: true,
     },
     {
@@ -497,8 +530,8 @@ const interpTraces = [
         type: 'scattergl', mode: 'markers',
         marker: { color: '#34d399', size: 8, symbol: 'diamond' },
         name: 'Confirm Long',
-        customdata: entryBias,
-        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        customdata: entryBiasLabel,
+        hovertemplate: '%{customdata}<extra></extra>',
         showlegend: true,
     },
     {
@@ -506,8 +539,8 @@ const interpTraces = [
         type: 'scattergl', mode: 'markers',
         marker: { color: '#f59e0b', size: 8, symbol: 'x' },
         name: 'Late Long',
-        customdata: entryBias,
-        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        customdata: entryBiasLabel,
+        hovertemplate: '%{customdata}<extra></extra>',
         showlegend: true,
     },
     {
@@ -515,8 +548,8 @@ const interpTraces = [
         type: 'scattergl', mode: 'markers',
         marker: { color: '#fca5a5', size: 7, symbol: 'triangle-left' },
         name: 'Early Short',
-        customdata: entryBias,
-        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        customdata: entryBiasLabel,
+        hovertemplate: '%{customdata}<extra></extra>',
         showlegend: true,
     },
     {
@@ -524,8 +557,8 @@ const interpTraces = [
         type: 'scattergl', mode: 'markers',
         marker: { color: '#ef4444', size: 8, symbol: 'diamond' },
         name: 'Confirm Short',
-        customdata: entryBias,
-        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        customdata: entryBiasLabel,
+        hovertemplate: '%{customdata}<extra></extra>',
         showlegend: true,
     },
     {
@@ -533,8 +566,8 @@ const interpTraces = [
         type: 'scattergl', mode: 'markers',
         marker: { color: '#fb7185', size: 8, symbol: 'x' },
         name: 'Late Short',
-        customdata: entryBias,
-        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        customdata: entryBiasLabel,
+        hovertemplate: '%{customdata}<extra></extra>',
         showlegend: true,
     },
     {
@@ -542,8 +575,8 @@ const interpTraces = [
         type: 'scattergl', mode: 'lines',
         line: { color: 'rgba(255,255,255,0)', width: 0 },
         name: 'Interpretation',
-        customdata: interpState.map((state, i) => [state, entryBias[i]]),
-        hovertemplate: 'Signal: <b>%{customdata[0]}</b><br>Entry: <b>%{customdata[1]}</b><extra></extra>',
+        customdata: interpState.map((state, i) => [state, signalPhase[i], interpBars[i]]),
+        hovertemplate: 'Signal: <b>%{customdata[0]}</b><br>Hint: <b>%{customdata[1]}</b><br>Bars: <b>%{customdata[2]}</b><extra></extra>',
         showlegend: true,
     },
 ];
