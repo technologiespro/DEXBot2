@@ -100,12 +100,12 @@ async function testUpdateBotSettingsPreservesSingleObjectFormat() {
 
   const adapter = createDexbotProfileAdapter(profilesDir);
   const updated = await adapter.updateBotSettings('solo', {
-    gridPriceOffsetPct: 0.4
+    incrementPercent: 0.4
   });
   const written = JSON.parse(await fs.readFile(botsFile, 'utf8'));
 
-  assert.strictEqual(updated.gridPriceOffsetPct, 0.4);
-  assert.strictEqual(written.gridPriceOffsetPct, 0.4);
+  assert.strictEqual(updated.incrementPercent, 0.4);
+  assert.strictEqual(written.incrementPercent, 0.4);
   assert.strictEqual(written.name, 'solo');
   assert.strictEqual(Array.isArray(written.bots), false, 'single-object format must not gain a wrapper array');
 }
@@ -133,13 +133,13 @@ async function testConcurrentUpdateBotSettingsPreservesBothPatches() {
 
   const adapter = createDexbotProfileAdapter(profilesDir);
   await Promise.all([
-    adapter.updateBotSettings('alpha', { gridPriceOffsetPct: 0.1 }),
-    adapter.updateBotSettings('beta', { gridPriceOffsetPct: 0.2 })
+    adapter.updateBotSettings('alpha', { incrementPercent: 0.1 }),
+    adapter.updateBotSettings('beta', { incrementPercent: 0.2 })
   ]);
 
   const written = JSON.parse(await fs.readFile(botsFile, 'utf8'));
-  assert.strictEqual(written.bots[0].gridPriceOffsetPct, 0.1, 'first concurrent patch should persist');
-  assert.strictEqual(written.bots[1].gridPriceOffsetPct, 0.2, 'second concurrent patch should persist');
+  assert.strictEqual(written.bots[0].incrementPercent, 0.1, 'first concurrent patch should persist');
+  assert.strictEqual(written.bots[1].incrementPercent, 0.2, 'second concurrent patch should persist');
 }
 
 async function testApplyBotSettingsPatchAcceptsNumericStringBounds() {
@@ -171,7 +171,7 @@ async function testApplyBotSettingsPatchAcceptsNumericStringBounds() {
   const adapter = createDexbotProfileAdapter(profilesDir);
   const view = await adapter.getBotSettings('legacy', true);
   const result = await adapter.applyBotSettingsPatch('legacy', {
-    gridPriceOffsetPct: 0.4
+    incrementPercent: 0.4
   }, {
     trigger: false
   });
@@ -179,8 +179,8 @@ async function testApplyBotSettingsPatchAcceptsNumericStringBounds() {
 
   assert.deepStrictEqual(view.validation.errors, []);
   assert.strictEqual(view.validation.valid, true);
-  assert.strictEqual(result.updatedBot.gridPriceOffsetPct, 0.4);
-  assert.strictEqual(written.bots[0].gridPriceOffsetPct, 0.4);
+  assert.strictEqual(result.updatedBot.incrementPercent, 0.4);
+  assert.strictEqual(written.bots[0].incrementPercent, 0.4);
   assert.strictEqual(written.bots[0].minPrice, '0.55', 'numeric-string bounds must remain valid during unrelated updates');
 }
 
@@ -249,20 +249,20 @@ async function testApplyBotSettingsPatchWritesTriggerAtomically() {
 
   const adapter = createDexbotProfileAdapter(profilesDir);
   const result = await adapter.applyBotSettingsPatch('solo', {
-    gridPriceOffsetPct: 0.4,
+    incrementPercent: 0.4,
     weightDistribution: { buy: 0.7 }
   }, {
     trigger: true,
-    triggerPayload: { reason: 'manual_test', changedKeys: ['gridPriceOffsetPct'] }
+    triggerPayload: { reason: 'manual_test', changedKeys: ["incrementPercent"] }
   });
 
   const written = JSON.parse(await fs.readFile(botsFile, 'utf8'));
   const trigger = JSON.parse(await fs.readFile(triggerFile, 'utf8'));
 
-  assert.strictEqual(result.updatedBot.gridPriceOffsetPct, 0.4);
+  assert.strictEqual(result.updatedBot.incrementPercent, 0.4);
   assert.strictEqual(result.updatedBot.weightDistribution.buy, 0.7);
   assert.strictEqual(result.updatedBot.weightDistribution.sell, 0.5, 'partial nested patch must preserve existing fields');
-  assert.strictEqual(written.bots[0].gridPriceOffsetPct, 0.4);
+  assert.strictEqual(written.bots[0].incrementPercent, 0.4);
   assert.strictEqual(written.bots[0].weightDistribution.buy, 0.7);
   assert.strictEqual(written.bots[0].weightDistribution.sell, 0.5);
   assert.strictEqual(result.triggerPath, triggerFile);
@@ -316,7 +316,7 @@ async function testInvalidPersistedOffsetPolicyBlocksUnrelatedPatch() {
         name: 'solo',
         assetA: 'USD',
         assetB: 'BTS',
-        gridPriceOffsetCooldownMs: -1,
+        incrementPercent: -1,
         weightDistribution: { sell: 0.5, buy: 0.5 },
         botFunds: { sell: '100%', buy: '100%' },
         activeOrders: { sell: 20, buy: 20 }
@@ -327,15 +327,15 @@ async function testInvalidPersistedOffsetPolicyBlocksUnrelatedPatch() {
   const adapter = createDexbotProfileAdapter(profilesDir);
   const view = await adapter.getBotSettings('solo', true);
 
-  assert.strictEqual(view.validation.valid, false, 'effective view must expose invalid persisted offset policy');
-  assert.match(view.validation.errors.join('\n'), /gridPriceOffsetCooldownMs must be a finite number greater than or equal to 0/);
+  assert.strictEqual(view.validation.valid, false, 'effective view must expose invalid persisted field');
+  assert.match(view.validation.errors.join('\n'), /incrementPercent must be a positive number/);
   await assert.rejects(
     () => adapter.applyBotSettingsPatch('solo', {
-      gridPriceOffsetPct: 0.4
+      targetSpreadPercent: 1.6
     }, {
       trigger: false
     }),
-    /gridPriceOffsetCooldownMs must be a finite number greater than or equal to 0/
+    /incrementPercent must be a positive number/
   );
 }
 
@@ -357,7 +357,7 @@ async function testApplyBotSettingsPatchWithoutIdentifierReturnsResolvedBotMetad
 
   const adapter = createDexbotProfileAdapter(profilesDir);
   const result = await adapter.applyBotSettingsPatch(null, {
-    gridPriceOffsetPct: 0.4
+    incrementPercent: 0.4
   }, {
     trigger: false
   });
@@ -381,20 +381,20 @@ async function testUpdateBotSettingsRetainsLegacyWriteBehaviorWithInvalidPersist
         name: 'legacy-update',
         assetA: 'USD',
         assetB: 'BTS',
-        gridPriceOffsetCooldownMs: -1
+        incrementPercent: -1
       }
     ]
   }, null, 2));
 
   const adapter = createDexbotProfileAdapter(profilesDir);
   const updated = await adapter.updateBotSettings('legacy-update', {
-    gridPriceOffsetPct: 0.4
+    targetSpreadPercent: 1.6
   });
   const written = JSON.parse(await fs.readFile(botsFile, 'utf8'));
 
-  assert.strictEqual(updated.gridPriceOffsetPct, 0.4);
-  assert.strictEqual(written.bots[0].gridPriceOffsetPct, 0.4);
-  assert.strictEqual(written.bots[0].gridPriceOffsetCooldownMs, -1, 'legacy updateBotSettings should still permit unrelated writes against invalid persisted fields');
+  assert.strictEqual(updated.targetSpreadPercent, 1.6);
+  assert.strictEqual(written.bots[0].targetSpreadPercent, 1.6);
+  assert.strictEqual(written.bots[0].incrementPercent, -1, 'legacy updateBotSettings should still permit unrelated writes against invalid persisted fields');
 }
 
 async function testWeightDistributionRejectsNullAndFalseValues() {
@@ -514,13 +514,13 @@ async function testUpdateBotSettingsWithoutIdentifierReturnsResolvedBot() {
 
   const adapter = createDexbotProfileAdapter(profilesDir);
   const updated = await adapter.updateBotSettings(null, {
-    gridPriceOffsetPct: 0.4
+    incrementPercent: 0.4
   });
 
   assert.ok(updated, 'updateBotSettings(null, patch) should return the resolved bot');
   assert.strictEqual(updated.botKey, 'solo-0');
   assert.strictEqual(updated.botIndex, 0);
-  assert.strictEqual(updated.gridPriceOffsetPct, 0.4);
+  assert.strictEqual(updated.incrementPercent, 0.4);
 }
 
 function testCreateBotKeyFallsBackToAssetIds() {

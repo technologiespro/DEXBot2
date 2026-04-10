@@ -80,7 +80,6 @@ async function testPreviewAndApplyFlow() {
     assetB: 'BTS',
     botKey: 'honest-usd-0',
     gridPrice: 'ama',
-    gridPriceOffsetPct: 0.2,
     name: 'HONEST-USD',
     weightDistribution: { buy: 0.5, sell: 0.5 }
   };
@@ -96,8 +95,6 @@ async function testPreviewAndApplyFlow() {
   assert.strictEqual(preview.reason, 'preview_only');
   assert.strictEqual(preview.nextWeights.sell, 1.1);
   assert.strictEqual(preview.delta.magnitude, 0.6);
-  assert.strictEqual(preview.gridPriceOffsetPct, 0.41);
-  assert.strictEqual(preview.gridPriceOffsetReason, 'trend_up');
 
   const applied = await service.applySelectedBot(bot, {
     policy: {
@@ -114,15 +111,14 @@ async function testPreviewAndApplyFlow() {
   assert.strictEqual(appliedPatches[0].patch.weightDistribution.buy, 0.3);
   assert.strictEqual(appliedPatches[0].patch.weightDistribution.sell, 1.1);
   assert.deepStrictEqual(Object.keys(appliedPatches[0].patch.weightDistribution).sort(), ['buy', 'sell']);
-  assert.strictEqual(appliedPatches[0].patch.gridPriceOffsetPct, 0.41);
+  assert.strictEqual(appliedPatches[0].patch.gridPriceOffsetPct, undefined);
   assert.strictEqual(appliedPatches[0].options.trigger, true);
   assert.strictEqual(appliedPatches[0].options.triggerPayload.reason, 'dynamic_weight_update');
-  assert.strictEqual(appliedPatches[0].options.triggerPayload.gridPriceOffsetPct, 0.41);
   assert.strictEqual(triggerWrites.length, 0, 'writeTrigger fallback should not run when applyBotSettingsPatch is available');
   assert.strictEqual(state.dynamicWeights['honest-usd-0'].lastReason, 'dynamic_weight_update');
 }
 
-async function testOffsetOnlyApplyDoesNotRewriteWeights() {
+async function testWeightsOnlyPatchDoesNotIncludeOffset() {
   const appliedPatches = [];
   const triggerWrites = [];
 
@@ -170,7 +166,6 @@ async function testOffsetOnlyApplyDoesNotRewriteWeights() {
     assetB: 'BTS',
     botKey: 'honest-usd-1',
     gridPrice: 'ama',
-    gridPriceOffsetPct: 0.2,
     name: 'HONEST-USD',
     weightDistribution: { buy: 0.5, sell: 0.5 }
   };
@@ -179,259 +174,15 @@ async function testOffsetOnlyApplyDoesNotRewriteWeights() {
     policy: {
       cooldownMs: 0,
       enabled: true,
-      gridPriceOffsetCooldownMs: 0,
-      gridPriceOffsetMinDeltaPct: 0.1,
       minWeightDelta: 0.25
     }
   });
 
-  assert.strictEqual(applied.applied, true);
-  assert.strictEqual(applied.canUpdateWeights, false);
-  assert.strictEqual(applied.canUpdateGridPriceOffset, true);
-  assert.strictEqual(appliedPatches.length, 1);
-  assert.strictEqual(appliedPatches[0].identifier, 'honest-usd-1');
-  assert.strictEqual(appliedPatches[0].patch.weightDistribution, undefined);
-  assert.strictEqual(appliedPatches[0].patch.gridPriceOffsetPct, 0.41);
-  assert.strictEqual(triggerWrites.length, 1);
-  assert.strictEqual(triggerWrites[0].payload.gridPriceOffsetPct, 0.41);
-}
-
-async function testZeroOffsetCanUpdate() {
-  const appliedPatches = [];
-  const triggerWrites = [];
-
-  const service = createDynamicWeightService({
-    computeDynamicWeights: () => ({
-      buy: 0.5,
-      profile: 'static',
-      sell: 0.5
-    }),
-    fetchTrendInput: async () => ({
-      feedPrice: 1,
-      marketPrice: 1.15,
-      premium: 15,
-      publicationTime: '2026-01-01T00:00:00Z'
-    }),
-    market: {
-      getAsset: async (ref) => (ref === 'BTS' ? { symbol: 'BTS' } : null)
-    },
-    profiles: {
-      updateBotSettings: async (identifier, patch) => {
-        appliedPatches.push({ identifier, patch });
-        return {
-          botKey: identifier,
-          ...patch
-        };
-      },
-      writeTrigger: async (botKey, payload) => {
-        triggerWrites.push({ botKey, payload });
-      }
-    },
-    stateStore: {
-      async patch() {
-        return {};
-      },
-      async read() {
-        return {};
-      }
-    },
-    TrendAnalyzerClass: FakeTrendAnalyzer
-  });
-
-  const bot = {
-    active: true,
-    assetA: 'HONEST.USD',
-    assetB: 'BTS',
-    botKey: 'honest-usd-1b',
-    gridPrice: 'ama',
-    gridPriceOffsetPct: 0,
-    name: 'HONEST-USD',
-    weightDistribution: { buy: 0.5, sell: 0.5 }
-  };
-
-  const applied = await service.applySelectedBot(bot, {
-    policy: {
-      cooldownMs: 0,
-      enabled: true,
-      gridPriceOffsetCooldownMs: 0,
-      minWeightDelta: 0.25
-    }
-  });
-
-  assert.strictEqual(applied.applied, true);
-  assert.strictEqual(applied.canUpdateWeights, false);
-  assert.strictEqual(applied.canUpdateGridPriceOffset, true);
-  assert.strictEqual(appliedPatches.length, 1);
-  assert.strictEqual(appliedPatches[0].identifier, 'honest-usd-1b');
-  assert.strictEqual(appliedPatches[0].patch.weightDistribution, undefined);
-  assert.strictEqual(appliedPatches[0].patch.gridPriceOffsetPct, 0.41);
-  assert.strictEqual(triggerWrites.length, 1);
-  assert.strictEqual(triggerWrites[0].payload.gridPriceOffsetPct, 0.41);
-}
-
-async function testNonAmaGridPriceCanUpdateOffset() {
-  const appliedPatches = [];
-  const triggerWrites = [];
-
-  const service = createDynamicWeightService({
-    computeDynamicWeights: () => ({
-      buy: 0.5,
-      profile: 'static',
-      sell: 0.5
-    }),
-    fetchTrendInput: async () => ({
-      feedPrice: 1,
-      marketPrice: 1.02,
-      premium: 2,
-      publicationTime: '2026-01-01T00:00:00Z'
-    }),
-    market: {
-      getAsset: async (ref) => (ref === 'BTS' ? { symbol: 'BTS' } : null)
-    },
-    profiles: {
-      updateBotSettings: async (identifier, patch) => {
-        appliedPatches.push({ identifier, patch });
-        return {
-          botKey: identifier,
-          ...patch
-        };
-      },
-      writeTrigger: async (botKey, payload) => {
-        triggerWrites.push({ botKey, payload });
-      }
-    },
-    stateStore: {
-      async patch() {
-        return {};
-      },
-      async read() {
-        return {};
-      }
-    },
-    TrendAnalyzerClass: FakeTrendAnalyzer
-  });
-
-  const bot = {
-    active: true,
-    assetA: 'HONEST.USD',
-    assetB: 'BTS',
-    botKey: 'honest-usd-2',
-    gridPrice: 'market',
-    gridPriceOffsetPct: 0.1,
-    name: 'HONEST-USD',
-    weightDistribution: { buy: 0.5, sell: 0.5 }
-  };
-
-  const applied = await service.applySelectedBot(bot, {
-    policy: {
-      cooldownMs: 0,
-      enabled: true,
-      gridPriceOffsetCooldownMs: 0,
-      minWeightDelta: 0.25
-    }
-  });
-
-  assert.strictEqual(applied.applied, true);
-  assert.strictEqual(applied.canUpdateWeights, false);
-  assert.strictEqual(applied.canUpdateGridPriceOffset, true);
-  assert.strictEqual(appliedPatches.length, 1);
-  assert.strictEqual(appliedPatches[0].identifier, 'honest-usd-2');
-  assert.strictEqual(appliedPatches[0].patch.weightDistribution, undefined);
-  assert.strictEqual(appliedPatches[0].patch.gridPriceOffsetPct, 0.41);
-  assert.strictEqual(triggerWrites.length, 1);
-  assert.strictEqual(triggerWrites[0].payload.gridPriceOffsetPct, 0.41);
-}
-
-async function testOffsetConfidenceGateHoldsPersistedBias() {
-  let updateCalled = false;
-
-  const service = createDynamicWeightService({
-    computeDynamicWeights: () => ({
-      buy: 0.5,
-      profile: 'static',
-      sell: 0.5
-    }),
-    fetchTrendInput: async () => ({
-      feedPrice: 1,
-      marketPrice: 1.05,
-      premium: 5,
-      publicationTime: '2026-01-01T00:00:00Z'
-    }),
-    market: {
-      getAsset: async () => ({ symbol: 'BTS' })
-    },
-    profiles: {
-      updateBotSettings: async () => {
-        updateCalled = true;
-        throw new Error('should not be called');
-      },
-      writeTrigger: async () => {
-        throw new Error('should not be called');
-      }
-    },
-    stateStore: {
-      async patch() {
-        return {};
-      },
-      async read() {
-        return {};
-      }
-    },
-    TrendAnalyzerClass: class {
-      update() {
-        return {
-          confidence: 50,
-          isConfirmed: true,
-          isReady: true,
-          oscillation: { ratio: 2 },
-          priceAnalysis: { inRange: 55 },
-          trend: 'UP'
-        };
-      }
-    }
-  });
-
-  const bot = {
-    active: true,
-    assetA: 'HONEST.USD',
-    assetB: 'BTS',
-    botKey: 'offset-confidence-0',
-    gridPrice: 'ama',
-    gridPriceOffsetPct: 0.4,
-    name: 'HONEST-USD',
-    weightDistribution: { buy: 0.5, sell: 0.5 }
-  };
-
-  const preview = await service.evaluateSelectedBot(bot, {
-    policy: {
-      cooldownMs: 0,
-      enabled: true,
-      gridPriceOffsetCooldownMs: 0,
-      gridPriceOffsetMinConfidence: 70,
-      minWeightDelta: 1
-    }
-  });
-
-  assert.strictEqual(preview.applied, false);
-  assert.strictEqual(preview.reason, 'changes_below_threshold');
-  assert.strictEqual(preview.canUpdateGridPriceOffset, undefined);
-  assert.strictEqual(preview.gridPriceOffsetPct, 0.4);
-  assert.strictEqual(preview.gridPriceOffsetReason, 'confidence_below_threshold');
-  assert.strictEqual(preview.gridPriceOffsetDelta, 0);
-
-  const applied = await service.applySelectedBot(bot, {
-    policy: {
-      cooldownMs: 0,
-      enabled: true,
-      gridPriceOffsetCooldownMs: 0,
-      gridPriceOffsetMinConfidence: 70,
-      minWeightDelta: 1
-    }
-  });
-
+  // Weights below minWeightDelta — nothing to apply
   assert.strictEqual(applied.applied, false);
   assert.strictEqual(applied.reason, 'changes_below_threshold');
-  assert.strictEqual(updateCalled, false);
+  assert.strictEqual(appliedPatches.length, 0);
+  assert.strictEqual(triggerWrites.length, 0);
 }
 
 async function testPolicyDefaultsAndGates() {
@@ -454,7 +205,6 @@ async function testPolicyDefaultsAndGates() {
   assert.strictEqual(policy.enabled, DEFAULT_DYNAMIC_WEIGHT_POLICY.enabled);
   assert.strictEqual(policy.minConfidence, DEFAULT_DYNAMIC_WEIGHT_POLICY.minConfidence);
   assert.strictEqual(policy.requireBtsQuote, true);
-  assert.strictEqual(policy.gridPriceOffsetAllowNeutralReset, DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetAllowNeutralReset);
 
   const skipped = await service.evaluateSelectedBot({
     active: false,
@@ -536,7 +286,6 @@ async function testNeutralTrendRespectsAllowNeutralUpdateFlag() {
       allowNeutralUpdate: false,
       cooldownMs: 0,
       enabled: true,
-      gridPriceOffsetCooldownMs: 0,
       minWeightDelta: 0.1
     }
   });
@@ -550,7 +299,6 @@ async function testNeutralTrendRespectsAllowNeutralUpdateFlag() {
       allowNeutralUpdate: false,
       cooldownMs: 0,
       enabled: true,
-      gridPriceOffsetCooldownMs: 0,
       minWeightDelta: 0.1
     }
   });
@@ -558,110 +306,6 @@ async function testNeutralTrendRespectsAllowNeutralUpdateFlag() {
   assert.strictEqual(applied.applied, false);
   assert.strictEqual(applied.reason, 'neutral_updates_disabled');
   assert.strictEqual(updateCalled, false);
-}
-
-async function testNeutralOffsetResetRemainsAvailableWhenNeutralWeightsAreDisabled() {
-  const appliedPatches = [];
-  const triggerWrites = [];
-
-  const service = createDynamicWeightService({
-    computeDynamicWeights: () => ({
-      buy: 0.1,
-      profile: 'double_mountain',
-      sell: 0.9
-    }),
-    fetchTrendInput: async () => ({
-      feedPrice: 1,
-      marketPrice: 1,
-      premium: 0,
-      publicationTime: '2026-01-01T00:00:00Z'
-    }),
-    market: {
-      getAsset: async () => ({ symbol: 'BTS' })
-    },
-    profiles: {
-      updateBotSettings: async (identifier, patch) => {
-        appliedPatches.push({ identifier, patch });
-        return {
-          botKey: identifier,
-          ...patch
-        };
-      },
-      writeTrigger: async (botKey, payload) => {
-        triggerWrites.push({ botKey, payload });
-      }
-    },
-    stateStore: {
-      async patch() {
-        return {};
-      },
-      async read() {
-        return {};
-      }
-    },
-    TrendAnalyzerClass: class {
-      update() {
-        return {
-          confidence: 95,
-          isConfirmed: true,
-          isReady: true,
-          oscillation: { ratio: 2 },
-          priceAnalysis: { inRange: 50 },
-          trend: 'NEUTRAL'
-        };
-      }
-    }
-  });
-
-  const bot = {
-    active: true,
-    assetA: 'HONEST.USD',
-    assetB: 'BTS',
-    botKey: 'neutral-offset-0',
-    gridPrice: 'ama',
-    gridPriceOffsetPct: 0.4,
-    name: 'HONEST-USD',
-    weightDistribution: { buy: 0.5, sell: 0.5 }
-  };
-
-  const preview = await service.evaluateSelectedBot(bot, {
-    policy: {
-      allowNeutralUpdate: false,
-      cooldownMs: 0,
-      enabled: true,
-      gridPriceOffsetAllowNeutralReset: true,
-      gridPriceOffsetCooldownMs: 0,
-      minWeightDelta: 0.1
-    }
-  });
-
-  assert.strictEqual(preview.applied, false);
-  assert.strictEqual(preview.reason, 'preview_only');
-  assert.strictEqual(preview.canUpdateWeights, false);
-  assert.strictEqual(preview.canUpdateGridPriceOffset, true);
-  assert.strictEqual(preview.gridPriceOffsetPct, 0);
-  assert.strictEqual(preview.gridPriceOffsetReason, 'neutral_reset');
-
-  const applied = await service.applySelectedBot(bot, {
-    policy: {
-      allowNeutralUpdate: false,
-      cooldownMs: 0,
-      enabled: true,
-      gridPriceOffsetAllowNeutralReset: true,
-      gridPriceOffsetCooldownMs: 0,
-      minWeightDelta: 0.1
-    }
-  });
-
-  assert.strictEqual(applied.applied, true);
-  assert.strictEqual(applied.canUpdateWeights, false);
-  assert.strictEqual(applied.canUpdateGridPriceOffset, true);
-  assert.strictEqual(appliedPatches.length, 1);
-  assert.strictEqual(appliedPatches[0].identifier, 'neutral-offset-0');
-  assert.strictEqual(appliedPatches[0].patch.weightDistribution, undefined);
-  assert.strictEqual(appliedPatches[0].patch.gridPriceOffsetPct, 0);
-  assert.strictEqual(triggerWrites.length, 1);
-  assert.strictEqual(triggerWrites[0].payload.gridPriceOffsetPct, 0);
 }
 
 async function testRequireConfirmedTrendBlocksWeightUpdates() {
@@ -911,10 +555,10 @@ async function testConcurrentAppliesPreserveAllBotState() {
 
   await Promise.all([
     service.applySelectedBot(makeBot('honest-usd-a'), {
-      policy: { cooldownMs: 0, enabled: true, gridPriceOffsetCooldownMs: 0 }
+      policy: { cooldownMs: 0, enabled: true }
     }),
     service.applySelectedBot(makeBot('honest-usd-b'), {
-      policy: { cooldownMs: 0, enabled: true, gridPriceOffsetCooldownMs: 0 }
+      policy: { cooldownMs: 0, enabled: true }
     })
   ]);
 
@@ -967,7 +611,6 @@ async function testApplyPathPreservesEmptyTriggerSemanticsWhenPayloadsAreDisable
     assetB: 'BTS',
     botKey: 'empty-trigger-0',
     gridPrice: 'ama',
-    gridPriceOffsetPct: 0.2,
     name: 'HONEST-USD',
     weightDistribution: { buy: 0.5, sell: 0.5 }
   };
@@ -988,13 +631,9 @@ async function testApplyPathPreservesEmptyTriggerSemanticsWhenPayloadsAreDisable
 
 async function main() {
   await testPreviewAndApplyFlow();
-  await testOffsetOnlyApplyDoesNotRewriteWeights();
-  await testZeroOffsetCanUpdate();
-  await testNonAmaGridPriceCanUpdateOffset();
-  await testOffsetConfidenceGateHoldsPersistedBias();
+  await testWeightsOnlyPatchDoesNotIncludeOffset();
   await testPolicyDefaultsAndGates();
   await testNeutralTrendRespectsAllowNeutralUpdateFlag();
-  await testNeutralOffsetResetRemainsAvailableWhenNeutralWeightsAreDisabled();
   await testRequireConfirmedTrendBlocksWeightUpdates();
   await testNonBtsQuoteRequiresCompatibleTrendSource();
   await testCustomTrendSourceCanHandleNonBtsQuotes();

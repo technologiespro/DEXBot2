@@ -9,7 +9,7 @@ DEXBot2 uses **four independent grid recalculation triggers** to keep the tradin
 | Mechanism | Trigger | Config | Location | Scope |
 |-----------|---------|--------|----------|-------|
 | **AMA Delta** | Market price moved significantly | `AMA_DELTA_THRESHOLD_PERCENT` | `general.settings.json` | Global (all bots) |
-| **Grid Price Offset** | Offset changes the resolved grid reference | `gridPriceOffsetPct` | `bots.json` | Per-bot |
+| **Grid Price Offset** | Dynamic offset activates when spot deviates ≥15% from AMA | `priceOffset` | `market_profiles.json` | Per-pair |
 | **RMS Divergence** | Grid state diverged from blockchain | `RMS_PERCENTAGE` | `general.settings.json` | Global (all bots) |
 | **Regeneration** | Available funds exceed threshold | `GRID_REGENERATION_PERCENTAGE` | `constants.js` | Per-side (BUY/SELL) |
 
@@ -17,39 +17,45 @@ Each mechanism is **independent and can be configured separately**. They don't i
 
 ---
 
-## 1. Grid Price Offset (Resolved Grid Price)
+## 1. Grid Price Offset (Dynamic, AMA-Deviation-Driven)
 
 ### What It Does
-Applies a signed percentage offset to the resolved `gridPrice` reference, producing an **effective center** for grid bound calculations without altering the raw reference price.
+Applies a signed percentage offset to the AMA center price, producing an **effective center** for grid bound calculations without altering the raw AMA anchor. The offset is computed purely by the market adapter — it is not a user-configurable field in `bots.json`.
 
-**Why it matters:** Lets you shift the grid center relative to the active reference price without changing the underlying reference source.
+**Why it matters:** Shifts the grid center toward the current market price when the spot price has drifted far enough from the AMA that inventory is at risk — while staying completely silent during normal oscillation.
 
 ### Configuration
 
-**File:** `profiles/bots.json` (per bot)
+**File:** `profiles/market_profiles.json` (per asset pair)
 ```json
 {
-  "gridPrice": "market",
-  "gridPriceOffsetPct": 1.5
+  "priceOffset": {
+    "devThreshold": 15,
+    "maxPct": 1.5
+  }
 }
 ```
 
 **Parameters:**
-- `gridPrice`: Can be `pool`, `market`, `ama`/`ama1`..`ama4`, a positive number, or `null`
-- `gridPriceOffsetPct`: Signed percentage offset (`-10` to `+10`). Formula: `effectiveCenter = resolvedGridPrice × (1 + offset/100)`. Set to `0` to disable the offset
+- `devThreshold`: Minimum % deviation of spot from AMA before the offset activates (default 15). Below this the grid is considered well-centered and no shift is applied.
+- `maxPct`: Maximum offset magnitude applied at full confidence (default 1.5%). Formula: `effectiveCenter = amaPrice × (1 + offset/100)`.
+
+Per-bot override: set `bot.priceOffset: { devThreshold, maxPct }` in `bots.json`. The profiles file wins over bot config when both are present.
 
 ### How It Works
 
-1. `initializeGrid()` resolves the current `gridPrice` reference using the configured mode
-2. For non-AMA references (`pool`, `market`, numeric, or `null -> startPrice`) it applies `gridPriceOffsetPct` directly before deriving min/max bounds
-3. For AMA references, `price_adapter` persists the effective AMA center so `initializeGrid()` can consume it without double-applying the offset
-4. Recalculation for non-AMA offsets is handled independently by whichever workflow updates the bot and writes `recalculate.<botKey>.trigger` (for example dynamic-weight updates)
+1. Market adapter computes `deviationPct = |spot − AMA| / AMA × 100`
+2. Below `devThreshold` → `offset = 0` (silent)
+3. Between `devThreshold` and `2 × devThreshold` → offset ramps linearly 0 → `maxPct`
+4. Above `2 × devThreshold` → offset capped at `maxPct`
+5. Sign follows trend direction (UP → positive shift, DOWN → negative shift)
+6. `price_adapter` persists the effective center; a grid recalculation trigger is written when the effective center crosses the delta threshold
 
 ### Debugging
 
-**Offset Trigger:**
+**Offset active:**
 ```
-[price_adapter] Offset change detected for <botKey>: 0% → 1.5%
+[price_adapter] deviationPct=18.3% → gridPriceOffsetPct=0.55% (dynamic, deviation-driven)
 ```
 
 ---
@@ -260,7 +266,7 @@ On the **first cycle** for a bot (when no `centerPrice` baseline exists yet), th
 ### How It Works
 
 1. `processBot()` detects the bootstrap case (`centerPrice` is not yet set).
-2. It calls `writeBotGridPriceCenter(botKey, referencePrice, { amaCenterPrice, gridPriceOffsetPct, effectiveCenterPrice })`.
+2. It calls `writeBotGridPriceCenter(botKey, referencePrice, { amaCenterPrice, gridPriceOffsetPct, effectiveCenterPrice })` where `gridPriceOffsetPct` is the dynamically computed offset for observability.
 3. **If the write succeeds** (returns anything other than `false`): the in-memory baseline (`centerPrice`, `amaCenterPrice`, `gridPriceOffsetPct`, `lastGridResetAt`) is set. No recalculation trigger is created during bootstrap — the bot enters normal delta-comparison behavior on subsequent cycles.
 4. **If the write fails** (returns `false`): the in-memory baseline is left unset, `triggerSuppressedReason` is set to `ama_center_persist_failed`, and no recalculation trigger is written. The next cycle will retry the bootstrap from scratch.
 

@@ -380,7 +380,8 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
     assert.strictEqual(state.bots['xrp-bts-bootstrap'].lastGridResetAt, undefined, 'bootstrap state should not pretend a reset happened');
 }
 
-async function testGridPriceOffsetTriggersRecenter() {
+// Dynamic offset is 0 when spot = AMA (0% deviation). Trigger fires from AMA delta.
+async function testDynamicOffsetZeroAtParityTriggeredByAmaDelta() {
     let triggerWrites = 0;
     let writeArgs = null;
 
@@ -430,14 +431,14 @@ async function testGridPriceOffsetTriggersRecenter() {
         assetA: 'IOB.XRP',
         assetB: 'BTS',
         gridPrice: 'ama',
-        gridPriceOffsetPct: 0.5,
         incrementPercent: 0.4,
     };
 
+    // Previous center 95 → AMA moved to 100 → delta = 5.26% > threshold 0.25% → triggered
     const state = {
         bots: {
             'xrp-bts-0': {
-                centerPrice: 100,
+                centerPrice: 95,
                 gridPriceOffsetPct: 0,
             },
         },
@@ -457,19 +458,20 @@ async function testGridPriceOffsetTriggersRecenter() {
     const result = await service.processBot(bot, state, cfg, new Map(), {});
 
     assert.strictEqual(result.ok, true, 'processBot should succeed');
-    assert.strictEqual(result.triggered, true, 'offset changes should recenter the grid');
-    assert.strictEqual(triggerWrites, 1, 'trigger file should be written for the offset change');
+    assert.strictEqual(result.triggered, true, 'AMA movement should trigger recenter');
+    assert.strictEqual(triggerWrites, 1, 'trigger file should be written');
     assert.ok(Array.isArray(writeArgs), 'writeBotGridPriceCenter should be called');
     assert.strictEqual(writeArgs[0], 'xrp-bts-0');
-    assert.strictEqual(writeArgs[1], 100);
-    assert.strictEqual(writeArgs[2].gridPriceOffsetPct, 0.5);
-    assert.strictEqual(writeArgs[2].effectiveCenterPrice, 100.5);
-    assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100.5, 'effective center should be stored in state');
-    assert.strictEqual(state.bots['xrp-bts-0'].amaCenterPrice, 100, 'raw center should be stored separately');
-    assert.strictEqual(state.bots['xrp-bts-0'].gridPriceOffsetPct, 0.5, 'offset should be tracked in state');
+    assert.strictEqual(writeArgs[1], 100, 'reference price should be AMA');
+    assert.strictEqual(writeArgs[2].gridPriceOffsetPct, 0, 'no static offset — dynamic offset is zero at parity');
+    assert.strictEqual(writeArgs[2].effectiveCenterPrice, 100, 'effective center equals AMA when spot = AMA');
+    assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'center updates to new AMA');
+    assert.strictEqual(state.bots['xrp-bts-0'].amaCenterPrice, 100, 'raw AMA center tracked separately');
+    assert.strictEqual(state.bots['xrp-bts-0'].gridPriceOffsetPct, 0, 'zero offset tracked in state');
 }
 
-async function testGridPriceOffsetRespectsDeltaThreshold() {
+// When AMA equals previous center, effective center is unchanged → no trigger even with low threshold.
+async function testDynamicOffsetNoTriggerWhenCenterMatchesAMA() {
     let triggerWrites = 0;
     let writeCalls = 0;
 
@@ -489,7 +491,7 @@ async function testGridPriceOffsetRespectsDeltaThreshold() {
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
-        calculateBotThreshold: () => 5,
+        calculateBotThreshold: () => 0.25,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: {
@@ -519,10 +521,10 @@ async function testGridPriceOffsetRespectsDeltaThreshold() {
         assetA: 'IOB.XRP',
         assetB: 'BTS',
         gridPrice: 'ama',
-        gridPriceOffsetPct: 0.5,
         incrementPercent: 0.4,
     };
 
+    // Previous center = AMA → effective center unchanged → no trigger
     const state = {
         bots: {
             'xrp-bts-0': {
@@ -546,18 +548,20 @@ async function testGridPriceOffsetRespectsDeltaThreshold() {
     const result = await service.processBot(bot, state, cfg, new Map(), {});
 
     assert.strictEqual(result.ok, true, 'processBot should succeed');
-    assert.strictEqual(result.deltaPercent, 0.5, 'offset delta should still be computed');
-    assert.strictEqual(result.triggered, false, 'offset changes below the threshold must not trigger a recenter');
-    assert.strictEqual(triggerWrites, 0, 'trigger file should not be written below the threshold');
-    assert.strictEqual(writeCalls, 0, 'effective center should not be persisted until the threshold is reached');
-    assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'stored center should remain unchanged below the threshold');
-    assert.strictEqual(state.bots['xrp-bts-0'].gridPriceOffsetPct, 0.5, 'current offset should still be tracked in state below the threshold');
+    assert.strictEqual(result.deltaPercent, 0, 'delta should be zero when center is unchanged');
+    assert.strictEqual(result.triggered, false, 'no trigger when effective center equals previous center');
+    assert.strictEqual(triggerWrites, 0, 'trigger file must not be written');
+    assert.strictEqual(writeCalls, 0, 'center must not be persisted when unchanged');
+    assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'stored center should remain unchanged');
+    assert.strictEqual(result.gridPriceOffsetPct, 0, 'dynamic offset is zero when spot = AMA');
 }
 
-async function testGridPriceOffsetClampAndDisable() {
+// Effective center is clamped to bot.minPrice/maxPrice bounds when AMA drifts outside them.
+async function testEffectiveCenterClampedByBotBounds() {
     let triggerWrites = 0;
     let lastWrite = null;
 
+    // AMA = 110, bot bounds [99, 101] → effective center = 101 (clamped to maxPrice)
     const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
@@ -568,8 +572,8 @@ async function testGridPriceOffsetClampAndDisable() {
         candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: [
-                [1700000000000, 100, 100, 100, 100, 1],
-                [1700003600000, 100, 100, 100, 100, 1],
+                [1700000000000, 110, 110, 110, 110, 1],
+                [1700003600000, 110, 110, 110, 110, 1],
             ],
         }),
         saveJson: () => {},
@@ -584,11 +588,11 @@ async function testGridPriceOffsetClampAndDisable() {
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 100,
+        calcAmaPrice: () => 110,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => {
             triggerWrites += 1;
-            return '/tmp/recalculate.xrp-bts-0.trigger';
+            return '/tmp/recalculate.xrp-bts-1.trigger';
         },
         writeBotGridPriceCenter: (...args) => {
             lastWrite = args;
@@ -597,27 +601,6 @@ async function testGridPriceOffsetClampAndDisable() {
         root: process.cwd(),
         path,
     });
-
-    const clampedBot = {
-        name: 'XRP-BTS',
-        botKey: 'xrp-bts-1',
-        assetA: 'IOB.XRP',
-        assetB: 'BTS',
-        gridPrice: 'ama',
-        gridPriceOffsetPct: 5,
-        minPrice: 99,
-        maxPrice: 101,
-        incrementPercent: 0.4,
-    };
-
-    const clampedState = {
-        bots: {
-            'xrp-bts-1': {
-                centerPrice: 100,
-                gridPriceOffsetPct: 0,
-            },
-        },
-    };
 
     const cfg = {
         intervalSeconds: 3600,
@@ -630,50 +613,47 @@ async function testGridPriceOffsetClampAndDisable() {
         maxStaleHours: 6,
     };
 
-    const clampedResult = await service.processBot(clampedBot, clampedState, cfg, new Map(), {});
-    assert.strictEqual(clampedResult.ok, true);
-    assert.strictEqual(clampedResult.triggered, true);
-    assert.strictEqual(clampedState.bots['xrp-bts-1'].centerPrice, 101, 'effective center should be clamped to maxPrice');
-    assert.strictEqual(lastWrite[2].effectiveCenterPrice, 101, 'written center should match the clamped value');
-
-    const disabledBot = {
-        ...clampedBot,
-        botKey: 'xrp-bts-2',
-        gridPriceOffsetPct: 0,
+    // AMA=110 is above maxPrice=101 → clamped to 101. Previous center=110 → delta = 8.2% > 0.5% → triggered.
+    const clampedBot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-1',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        minPrice: 99,
+        maxPrice: 101,
+        incrementPercent: 0.4,
     };
-    const disabledState = {
+    const clampedState = {
         bots: {
-            'xrp-bts-2': {
-                centerPrice: 105,
-                gridPriceOffsetPct: 5,
+            'xrp-bts-1': {
+                centerPrice: 110,
+                gridPriceOffsetPct: 0,
             },
         },
     };
 
-    const disabledResult = await service.processBot(disabledBot, disabledState, cfg, new Map(), {});
-    assert.strictEqual(disabledResult.ok, true);
-    assert.strictEqual(disabledResult.triggered, true, 'zero offset should recenter back to raw center once');
-    assert.strictEqual(disabledState.bots['xrp-bts-2'].centerPrice, 100, 'zero offset should fall back to raw center');
-    assert.strictEqual(disabledState.bots['xrp-bts-2'].gridPriceOffsetPct, 0, 'zero offset should be persisted as zero in state');
+    const clampedResult = await service.processBot(clampedBot, clampedState, cfg, new Map(), {});
+    assert.strictEqual(clampedResult.ok, true);
+    assert.strictEqual(clampedResult.triggered, true, 'clamped center change should trigger recenter');
+    assert.strictEqual(clampedState.bots['xrp-bts-1'].centerPrice, 101, 'effective center should be clamped to maxPrice');
+    assert.strictEqual(lastWrite[2].effectiveCenterPrice, 101, 'written center should match clamped value');
 
+    // AMA=110, previous=101 (already at clamp boundary) → no effective center change → no trigger.
+    const noOpBot = { ...clampedBot, botKey: 'xrp-bts-3' };
     const noOpState = {
         bots: {
             'xrp-bts-3': {
                 centerPrice: 101,
-                gridPriceOffsetPct: 4,
+                gridPriceOffsetPct: 0,
             },
         },
     };
-    const noOpBot = {
-        ...clampedBot,
-        botKey: 'xrp-bts-3',
-        gridPriceOffsetPct: 5,
-    };
     const noOpResult = await service.processBot(noOpBot, noOpState, cfg, new Map(), {});
     assert.strictEqual(noOpResult.ok, true);
-    assert.strictEqual(noOpResult.triggered, false, 'no trigger should fire when clamping keeps the effective center unchanged');
-    assert.strictEqual(noOpState.bots['xrp-bts-3'].centerPrice, 101, 'effective center should remain unchanged at the clamp boundary');
-    assert.strictEqual(triggerWrites, 2, 'only the clamp move and disable reset should have triggered');
+    assert.strictEqual(noOpResult.triggered, false, 'no trigger when clamping keeps effective center unchanged');
+    assert.strictEqual(noOpState.bots['xrp-bts-3'].centerPrice, 101, 'center should remain at clamp boundary');
+    assert.strictEqual(triggerWrites, 1, 'only the initial clamp move should have triggered');
 }
 
 async function testContextCacheInvalidatesOnPoolChange() {
@@ -987,9 +967,9 @@ async function run() {
     await testAmaGridPriceIsCaseInsensitive();
     await testAmaTriggerSuppressedWhenCenterPersistFails();
     await testBootstrapCenterDoesNotAdvanceWhenPersistFails();
-    await testGridPriceOffsetTriggersRecenter();
-    await testGridPriceOffsetRespectsDeltaThreshold();
-    await testGridPriceOffsetClampAndDisable();
+    await testDynamicOffsetZeroAtParityTriggeredByAmaDelta();
+    await testDynamicOffsetNoTriggerWhenCenterMatchesAMA();
+    await testEffectiveCenterClampedByBotBounds();
     await testContextCacheInvalidatesOnPoolChange();
     await testKibanaGapRepairPatchesMissingCandles();
     await testRemainingGapsAreReportedWhenKibanaHasNoPatchData();

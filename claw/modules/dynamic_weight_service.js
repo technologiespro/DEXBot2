@@ -11,13 +11,6 @@ const DEFAULT_DYNAMIC_WEIGHT_POLICY = Object.freeze({
   allowNeutralUpdate: true,
   cooldownMs: 30 * 60 * 1000,
   enabled: true,
-  gridPriceOffsetAllowNeutralReset: true,
-  gridPriceOffsetCooldownMs: 30 * 60 * 1000,
-  gridPriceOffsetMaxPct: 0.5,
-  gridPriceOffsetMinConfidence: 70,
-  gridPriceOffsetMinDeltaPct: 0.1,
-  gridPriceOffsetRequireConfirmedTrend: true,
-  gridPriceOffsetScale: 1,
   minConfidence: 60,
   minWeightDelta: 0.1,
   requireBtsQuote: true,
@@ -70,28 +63,6 @@ function normalizePolicy(policy = {}) {
 
   merged.allowNeutralUpdate = normalizeBoolean(policy.allowNeutralUpdate, DEFAULT_DYNAMIC_WEIGHT_POLICY.allowNeutralUpdate);
   merged.enabled = normalizeBoolean(policy.enabled, DEFAULT_DYNAMIC_WEIGHT_POLICY.enabled);
-  merged.gridPriceOffsetAllowNeutralReset = normalizeBoolean(
-    policy.gridPriceOffsetAllowNeutralReset,
-    DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetAllowNeutralReset
-  );
-  merged.gridPriceOffsetCooldownMs = normalizeNumber(
-    policy.gridPriceOffsetCooldownMs,
-    DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetCooldownMs
-  );
-  merged.gridPriceOffsetMaxPct = normalizeNumber(policy.gridPriceOffsetMaxPct, DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetMaxPct);
-  merged.gridPriceOffsetMinConfidence = normalizeNumber(
-    policy.gridPriceOffsetMinConfidence,
-    DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetMinConfidence
-  );
-  merged.gridPriceOffsetMinDeltaPct = normalizeNumber(
-    policy.gridPriceOffsetMinDeltaPct,
-    DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetMinDeltaPct
-  );
-  merged.gridPriceOffsetRequireConfirmedTrend = normalizeBoolean(
-    policy.gridPriceOffsetRequireConfirmedTrend,
-    DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetRequireConfirmedTrend
-  );
-  merged.gridPriceOffsetScale = normalizeNumber(policy.gridPriceOffsetScale, DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetScale);
   merged.minConfidence = normalizeNumber(policy.minConfidence, DEFAULT_DYNAMIC_WEIGHT_POLICY.minConfidence);
   merged.minWeightDelta = normalizeNumber(policy.minWeightDelta, DEFAULT_DYNAMIC_WEIGHT_POLICY.minWeightDelta);
   merged.requireBtsQuote = normalizeBoolean(policy.requireBtsQuote, DEFAULT_DYNAMIC_WEIGHT_POLICY.requireBtsQuote);
@@ -113,52 +84,6 @@ function normalizeWeightDistribution(weightDistribution) {
     sell: normalizeNumber(weightDistribution?.sell, DEFAULT_CONFIG.weightDistribution.sell),
     buy: normalizeNumber(weightDistribution?.buy, DEFAULT_CONFIG.weightDistribution.buy)
   };
-}
-
-function computeGridPriceOffset(bot, analysis, policy) {
-  const currentOffsetPct = normalizeNumber(bot?.gridPriceOffsetPct, 0);
-
-  if (!analysis?.isReady) {
-    return { offsetPct: currentOffsetPct, reason: 'trend_not_ready' };
-  }
-
-  if (policy.gridPriceOffsetRequireConfirmedTrend && analysis.isConfirmed === false) {
-    return { offsetPct: currentOffsetPct, reason: 'trend_not_confirmed' };
-  }
-
-  if (analysis.trend === 'NEUTRAL') {
-    if (policy.gridPriceOffsetAllowNeutralReset) {
-      return { offsetPct: 0, reason: 'neutral_reset' };
-    }
-    return { offsetPct: currentOffsetPct, reason: 'neutral_updates_disabled' };
-  }
-
-  if (analysis.trend !== 'UP' && analysis.trend !== 'DOWN') {
-    return { offsetPct: currentOffsetPct, reason: 'trend_unavailable' };
-  }
-
-  const minConfidence = normalizeNumber(policy.gridPriceOffsetMinConfidence, DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetMinConfidence);
-  if (Number.isFinite(minConfidence) && analysis.confidence < minConfidence) {
-    return { offsetPct: currentOffsetPct, reason: 'confidence_below_threshold' };
-  }
-
-  const scale = Math.max(0, normalizeNumber(policy.gridPriceOffsetScale, DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetScale));
-  const maxPct = Math.max(0, normalizeNumber(policy.gridPriceOffsetMaxPct, DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetMaxPct));
-  const confidenceFactor = Math.max(0, Math.min(1, normalizeNumber(analysis.confidence, 0) / 100));
-  const magnitude = Math.min(maxPct, maxPct * confidenceFactor * scale);
-  const direction = analysis.trend === 'UP' ? 1 : -1;
-  const offsetPct = Math.round(direction * magnitude * 1000) / 1000;
-
-  return {
-    offsetPct,
-    reason: analysis.trend === 'UP' ? 'trend_up' : 'trend_down'
-  };
-}
-
-function computeOffsetCooldownRemainingMs(lastAppliedAt, cooldownMs) {
-  const ms = normalizeNumber(cooldownMs, DEFAULT_DYNAMIC_WEIGHT_POLICY.gridPriceOffsetCooldownMs);
-  if (!Number.isFinite(lastAppliedAt) || ms <= 0) return 0;
-  return Math.max(0, ms - (Date.now() - lastAppliedAt));
 }
 
 function computeWeightDelta(currentWeights, nextWeights) {
@@ -347,21 +272,11 @@ function createDynamicWeightService(deps = {}) {
       currentWeights: preview.currentWeights,
       feedPrice: trendInput.feedPrice,
       marketPrice: trendInput.marketPrice,
-      gridPriceOffsetPct: preview.gridPriceOffsetPct,
-      gridPriceOffsetReason: preview.gridPriceOffsetReason,
-      gridPriceOffsetCooldownMs: policy.gridPriceOffsetCooldownMs,
       nextWeights: preview.nextWeights,
       decisionReason: preview.reason,
       policy: {
         allowNeutralUpdate: policy.allowNeutralUpdate,
         cooldownMs: policy.cooldownMs,
-        gridPriceOffsetAllowNeutralReset: policy.gridPriceOffsetAllowNeutralReset,
-        gridPriceOffsetMaxPct: policy.gridPriceOffsetMaxPct,
-        gridPriceOffsetMinConfidence: policy.gridPriceOffsetMinConfidence,
-        gridPriceOffsetMinDeltaPct: policy.gridPriceOffsetMinDeltaPct,
-        gridPriceOffsetRequireConfirmedTrend: policy.gridPriceOffsetRequireConfirmedTrend,
-        gridPriceOffsetScale: policy.gridPriceOffsetScale,
-        gridPriceOffsetCooldownMs: policy.gridPriceOffsetCooldownMs,
         enabled: policy.enabled,
         minConfidence: policy.minConfidence,
         minWeightDelta: policy.minWeightDelta,
@@ -432,9 +347,6 @@ function createDynamicWeightService(deps = {}) {
 
     const nextWeights = computeDynamicWeightsFn(analysis, options.priceContext || {}, currentWeights);
     const delta = computeWeightDelta(currentWeights, nextWeights);
-    const gridPriceOffset = computeGridPriceOffset(selectedBot, analysis, policy);
-    const currentGridPriceOffsetPct = normalizeNumber(selectedBot?.gridPriceOffsetPct, 0);
-    const gridPriceOffsetDelta = Math.abs(gridPriceOffset.offsetPct - currentGridPriceOffsetPct);
     let shouldUpdateWeights = delta.magnitude >= policy.minWeightDelta;
     let weightUpdateBlockedReason = shouldUpdateWeights && policy.requireConfirmedTrend && analysis.isConfirmed === false
       ? 'trend_not_confirmed'
@@ -442,7 +354,6 @@ function createDynamicWeightService(deps = {}) {
     if (weightUpdateBlockedReason) {
       shouldUpdateWeights = false;
     }
-    const shouldUpdateGridPriceOffset = gridPriceOffsetDelta >= policy.gridPriceOffsetMinDeltaPct;
 
     if (!policy.allowNeutralUpdate && analysis.trend === 'NEUTRAL' && shouldUpdateWeights) {
       shouldUpdateWeights = false;
@@ -454,15 +365,12 @@ function createDynamicWeightService(deps = {}) {
       weightUpdateBlockedReason = 'confidence_below_threshold';
     }
 
-    if (!shouldUpdateWeights && !shouldUpdateGridPriceOffset) {
+    if (!shouldUpdateWeights) {
       return {
         applied: false,
         currentWeights,
         eligible: true,
         nextWeights,
-        gridPriceOffsetPct: gridPriceOffset.offsetPct,
-        gridPriceOffsetReason: gridPriceOffset.reason,
-        gridPriceOffsetDelta,
         reason: weightUpdateBlockedReason || 'changes_below_threshold',
         policy,
         trendInput,
@@ -474,30 +382,19 @@ function createDynamicWeightService(deps = {}) {
     const state = await readServiceState();
     const botState = state[selectedBot.botKey] || {};
     const lastAppliedAt = botState.lastAppliedAt ? Date.parse(botState.lastAppliedAt) : null;
-    const lastGridPriceOffsetAppliedAt = botState.lastGridPriceOffsetAppliedAt ? Date.parse(botState.lastGridPriceOffsetAppliedAt) : null;
     const cooldownRemainingMs = Number.isFinite(lastAppliedAt)
       ? Math.max(0, policy.cooldownMs - (Date.now() - lastAppliedAt))
       : 0;
-    const gridPriceOffsetCooldownRemainingMs = computeOffsetCooldownRemainingMs(
-      lastGridPriceOffsetAppliedAt,
-      policy.gridPriceOffsetCooldownMs
-    );
     const canUpdateWeights = shouldUpdateWeights && cooldownRemainingMs === 0;
-    const canUpdateGridPriceOffset = shouldUpdateGridPriceOffset && gridPriceOffsetCooldownRemainingMs === 0;
 
-    if (!canUpdateWeights && !canUpdateGridPriceOffset) {
-      const hasPendingChanges = shouldUpdateWeights || shouldUpdateGridPriceOffset;
+    if (!canUpdateWeights) {
       return {
         applied: false,
         currentWeights,
         cooldownRemainingMs,
         eligible: true,
-        gridPriceOffsetCooldownRemainingMs,
         nextWeights,
-        gridPriceOffsetPct: gridPriceOffset.offsetPct,
-        gridPriceOffsetReason: gridPriceOffset.reason,
-        gridPriceOffsetDelta,
-        reason: hasPendingChanges ? 'cooldown_active' : 'changes_below_threshold',
+        reason: 'cooldown_active',
         policy,
         trendInput,
         trendAnalysis: analysis,
@@ -509,12 +406,7 @@ function createDynamicWeightService(deps = {}) {
       currentWeights,
       delta,
       eligible: true,
-      canUpdateGridPriceOffset,
       canUpdateWeights,
-      gridPriceOffsetDelta,
-      gridPriceOffsetPct: gridPriceOffset.offsetPct,
-      gridPriceOffsetReason: gridPriceOffset.reason,
-      gridPriceOffsetCooldownRemainingMs,
       nextWeights,
       policy,
       trendAnalysis: analysis,
@@ -558,9 +450,6 @@ function createDynamicWeightService(deps = {}) {
         sell: preview.nextWeights.sell,
         buy: preview.nextWeights.buy
       };
-    }
-    if (preview.canUpdateGridPriceOffset) {
-      patch.gridPriceOffsetPct = preview.gridPriceOffsetPct;
     }
 
     const triggerPayload = policy.triggerOnApply
@@ -607,12 +496,7 @@ function createDynamicWeightService(deps = {}) {
       lastAppliedAt: preview.canUpdateWeights ? new Date().toISOString() : botState.lastAppliedAt || null,
       lastReason: policy.triggerReason,
       lastTrend: preview.trendAnalysis?.trend || null,
-      lastWeights: preview.canUpdateWeights ? preview.nextWeights : (selectedBot.weightDistribution || preview.currentWeights),
-      lastGridPriceOffsetAppliedAt: preview.canUpdateGridPriceOffset ? new Date().toISOString() : botState.lastGridPriceOffsetAppliedAt || null,
-      lastGridPriceOffsetPct: preview.canUpdateGridPriceOffset
-        ? preview.gridPriceOffsetPct
-        : normalizeNumber(selectedBot?.gridPriceOffsetPct, 0),
-      lastGridPriceOffsetReason: preview.gridPriceOffsetReason
+      lastWeights: preview.canUpdateWeights ? preview.nextWeights : (selectedBot.weightDistribution || preview.currentWeights)
     };
     await writeBotServiceState(selectedBot.botKey, nextBotState);
 

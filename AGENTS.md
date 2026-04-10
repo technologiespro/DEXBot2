@@ -174,7 +174,7 @@ File: <path>
 - `profiles/ecosystem.config.js` - PM2 ecosystem configuration
 - `profiles/bots.json` - Bot configuration
 - `profiles/general.settings.json` - Global settings (auto-generated on first run)
-- `profiles/ama_profiles.json` - AMA configuration profiles
+- `profiles/market_profiles.json` - Market-specific settings (AMA params, price offset params)
 
 ### Claw Integration (`claw/`)
 - `index.js` - Main export combining all modules

@@ -8,9 +8,6 @@ const { DEFAULT_CONFIG } = require('../../modules/constants');
 const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order');
 const { applyGridPriceOffset } = require('../../modules/order/utils/system');
 
-// Max grid price offset (%) applied at 100% trend confidence.
-// At confidence C, dynamic offset = ±(C / 100) * TREND_OFFSET_MAX_PCT.
-const TREND_OFFSET_MAX_PCT = 1.5;
 
 class MarketAdapterService {
     constructor(deps = {}) {
@@ -97,6 +94,9 @@ class MarketAdapterService {
         if (!botAma.enabled) {
             return { ok: false, reason: 'ama disabled' };
         }
+        const botOffset = typeof deps.resolveOffsetForBot === 'function'
+            ? deps.resolveOffsetForBot(bot, ctx)
+            : { devThreshold: 15, maxPct: 1.5 };
 
         const filePath = deps.candleFileForBot(bot.botKey);
         const existing = deps.loadJson(filePath, null);
@@ -221,14 +221,23 @@ class MarketAdapterService {
 
         // 5. Grid Price Offset Calculation
         // trend_detection -> price_offset
+
+        // Inventory danger gate: only activate offset when price has deviated
+        // >= devThreshold % from AMA (grid center). Below this the grid
+        // is still well-centered and no correction is needed.
+        // Ramp: linearly scales 0→100 between threshold and 2x threshold.
+        // Below devThreshold → silent. At devThreshold → 0%. At 2x → full 100%. Above 2x → capped at 100%.
+        const currentClose = lastCandle[4] || 0;
+        const deviationPct = amaPrice > 0 ? Math.abs(currentClose - amaPrice) / amaPrice * 100 : 0;
+        const { devThreshold, maxPct: offsetMaxPct } = botOffset;
+        const effectiveConfidence = deviationPct < devThreshold ? 0 :
+            Math.min(100, Math.round(((deviationPct - devThreshold) / devThreshold) * 100));
+
         let dynamicTrendOffset = 0;
-        if (trendData.trend === 'UP') dynamicTrendOffset = (trendData.confidence / 100) * TREND_OFFSET_MAX_PCT; 
-        else if (trendData.trend === 'DOWN') dynamicTrendOffset = -(trendData.confidence / 100) * TREND_OFFSET_MAX_PCT; 
+        if (trendData.trend === 'UP')        dynamicTrendOffset =  (effectiveConfidence / 100) * offsetMaxPct;
+        else if (trendData.trend === 'DOWN') dynamicTrendOffset = -(effectiveConfidence / 100) * offsetMaxPct;
         
-        let gridPriceOffsetPct = Number.isFinite(Number(bot.gridPriceOffsetPct))
-            ? Number(bot.gridPriceOffsetPct)
-            : 0;
-        gridPriceOffsetPct += dynamicTrendOffset;
+        const gridPriceOffsetPct = dynamicTrendOffset;
 
         // AMA + price_offset -> Gridprice
         // ---------------------------------------------------------------
@@ -406,7 +415,9 @@ class MarketAdapterService {
                 collateral,
                 trend: trendData.trend,
                 atr,
-                weightVariance
+                weightVariance,
+                effectiveConfidence,
+                deviationPct
             };
         }
 
@@ -442,7 +453,9 @@ class MarketAdapterService {
                 slowPeriod: botAma.slowPeriod,
             },
             atr,
-            weightVariance
+            weightVariance,
+            effectiveConfidence,
+            deviationPct
         };
     }
 }

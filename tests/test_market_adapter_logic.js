@@ -10,13 +10,14 @@ const {
     calcAmaComparison,
     computeCandleStaleness,
     resolveAmaForBot,
+    resolveOffsetForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
     usesAmaGridPrice,
     applyRuntimeDefaultsFromGeneralSettings,
 } = require('../market_adapter/market_adapter');
 const { detectMissingCandleTimestamps } = require('../market_adapter/candle_utils');
 
-const AMA_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'ama_profiles.json');
+const MARKET_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'market_profiles.json');
 
 // Threshold behavior
 assert.strictEqual(
@@ -149,12 +150,12 @@ assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPr
 
 // AMA profile override behavior
 {
-    const hadOriginal = fs.existsSync(AMA_PROFILES_FILE);
-    const original = hadOriginal ? fs.readFileSync(AMA_PROFILES_FILE, 'utf8') : null;
+    const hadOriginal = fs.existsSync(MARKET_PROFILES_FILE);
+    const original = hadOriginal ? fs.readFileSync(MARKET_PROFILES_FILE, 'utf8') : null;
 
     try {
-        fs.mkdirSync(path.dirname(AMA_PROFILES_FILE), { recursive: true });
-        fs.writeFileSync(AMA_PROFILES_FILE, JSON.stringify({
+        fs.mkdirSync(path.dirname(MARKET_PROFILES_FILE), { recursive: true });
+        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
             profiles: [
                 {
                     assetA: 'TESTA',
@@ -171,27 +172,27 @@ assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPr
         }, null, 2));
 
         const ama1 = resolveAmaForBot({ assetA: 'TESTA', assetB: 'TESTB', gridPrice: 'ama1' });
-        assert.strictEqual(ama1.fastPeriod, 3.26, 'ama_profiles AMA1 override should preserve fractional fastPeriod');
+        assert.strictEqual(ama1.fastPeriod, 3.26, 'market_profiles AMA1 override should preserve fractional fastPeriod');
 
         const amaDefault = resolveAmaForBot({ assetA: 'TESTA', assetB: 'TESTB', gridPrice: 'ama' });
-        assert.strictEqual(amaDefault.fastPeriod, 2.73, 'ama_profiles default AMA should preserve fractional fastPeriod');
+        assert.strictEqual(amaDefault.fastPeriod, 2.73, 'market_profiles default AMA should preserve fractional fastPeriod');
     } finally {
         if (hadOriginal) {
-            fs.writeFileSync(AMA_PROFILES_FILE, original, 'utf8');
-        } else if (fs.existsSync(AMA_PROFILES_FILE)) {
-            fs.unlinkSync(AMA_PROFILES_FILE);
+            fs.writeFileSync(MARKET_PROFILES_FILE, original, 'utf8');
+        } else if (fs.existsSync(MARKET_PROFILES_FILE)) {
+            fs.unlinkSync(MARKET_PROFILES_FILE);
         }
     }
 }
 
 // AMA comparison behavior should follow pair-specific profiles
 {
-    const hadOriginal = fs.existsSync(AMA_PROFILES_FILE);
-    const original = hadOriginal ? fs.readFileSync(AMA_PROFILES_FILE, 'utf8') : null;
+    const hadOriginal = fs.existsSync(MARKET_PROFILES_FILE);
+    const original = hadOriginal ? fs.readFileSync(MARKET_PROFILES_FILE, 'utf8') : null;
 
     try {
-        fs.mkdirSync(path.dirname(AMA_PROFILES_FILE), { recursive: true });
-        fs.writeFileSync(AMA_PROFILES_FILE, JSON.stringify({
+        fs.mkdirSync(path.dirname(MARKET_PROFILES_FILE), { recursive: true });
+        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
             profiles: [
                 {
                     assetA: 'TESTA',
@@ -219,14 +220,60 @@ assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPr
                 { name: 'AMA3', erPeriod: 4, fastPeriod: 4.4, slowPeriod: 8 },
                 { name: 'AMA4', erPeriod: 5, fastPeriod: 5.5, slowPeriod: 9 },
             ],
-            'ama comparison should use pair-specific profile presets when present'
+            'market_profiles comparison should use pair-specific profile presets when present'
         );
         assert.ok(comparison.every((entry) => entry.ok), 'profile-based comparison presets should produce valid AMA values with enough candles');
     } finally {
         if (hadOriginal) {
-            fs.writeFileSync(AMA_PROFILES_FILE, original, 'utf8');
-        } else if (fs.existsSync(AMA_PROFILES_FILE)) {
-            fs.unlinkSync(AMA_PROFILES_FILE);
+            fs.writeFileSync(MARKET_PROFILES_FILE, original, 'utf8');
+        } else if (fs.existsSync(MARKET_PROFILES_FILE)) {
+            fs.unlinkSync(MARKET_PROFILES_FILE);
+        }
+    }
+}
+
+// resolveOffsetForBot: defaults when no profile and no bot.priceOffset
+{
+    const offset = resolveOffsetForBot({ assetA: 'UNKNOWN', assetB: 'UNKNOWN' });
+    assert.strictEqual(offset.devThreshold, 15, 'default devThreshold should be 15');
+    assert.strictEqual(offset.maxPct, 1.5, 'default maxPct should be 1.5');
+}
+
+// resolveOffsetForBot: bot-level override
+{
+    const offset = resolveOffsetForBot({ assetA: 'UNKNOWN', assetB: 'UNKNOWN', priceOffset: { devThreshold: 20, maxPct: 2.0 } });
+    assert.strictEqual(offset.devThreshold, 20, 'bot.priceOffset.devThreshold should override default');
+    assert.strictEqual(offset.maxPct, 2.0, 'bot.priceOffset.maxPct should override default');
+}
+
+// resolveOffsetForBot: market_profiles.json override wins over bot.priceOffset
+{
+    const hadOriginal = fs.existsSync(MARKET_PROFILES_FILE);
+    const original = hadOriginal ? fs.readFileSync(MARKET_PROFILES_FILE, 'utf8') : null;
+
+    try {
+        fs.mkdirSync(path.dirname(MARKET_PROFILES_FILE), { recursive: true });
+        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
+            profiles: [
+                {
+                    assetA: 'TESTA',
+                    assetB: 'TESTB',
+                    intervalSeconds: 3600,
+                    updatedAt: '2026-04-10T00:00:00.000Z',
+                    amas: { AMA3: { erPeriod: 372, fastPeriod: 1.8, slowPeriod: 1286 } },
+                    priceOffset: { devThreshold: 12, maxPct: 1.0 },
+                },
+            ],
+        }, null, 2));
+
+        const offset = resolveOffsetForBot({ assetA: 'TESTA', assetB: 'TESTB', priceOffset: { devThreshold: 20, maxPct: 2.0 } });
+        assert.strictEqual(offset.devThreshold, 12, 'market_profiles priceOffset.devThreshold should take precedence over bot config');
+        assert.strictEqual(offset.maxPct, 1.0, 'market_profiles priceOffset.maxPct should take precedence over bot config');
+    } finally {
+        if (hadOriginal) {
+            fs.writeFileSync(MARKET_PROFILES_FILE, original, 'utf8');
+        } else if (fs.existsSync(MARKET_PROFILES_FILE)) {
+            fs.unlinkSync(MARKET_PROFILES_FILE);
         }
     }
 }

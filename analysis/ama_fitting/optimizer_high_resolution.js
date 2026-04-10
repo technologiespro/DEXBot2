@@ -6,7 +6,7 @@ const os = require('os');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const { calculateAMA } = require('./ama');
 
-const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'ama_profiles.json');
+const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_profiles.json');
 
 /**
  * AMA GEOMETRIC OPTIMIZER

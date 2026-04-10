@@ -8,7 +8,7 @@
  * - Runs independently from dexbot runtime
  * - Loads active bots with AMA grid pricing from profiles/bots.json
  * - Uses built-in AMA defaults from constants, optionally overridden by pair-specific
- *   profiles in profiles/ama_profiles.json
+ *   profiles in profiles/market_profiles.json
  * - Bootstraps 1h candles from Kibana once (if local file missing)
  * - Then updates candles from native BitShares API only
  * - Persists candles incrementally, prunes to AMA-required window
@@ -70,7 +70,7 @@ const STATE_DIR = path.join(__dirname, 'state');
 const STATE_FILE = path.join(STATE_DIR, 'price_adapter_state.json');
 const CENTER_FILE = path.join(STATE_DIR, 'price_adapter_centers.json');
 const LOCK_FILE = path.join(STATE_DIR, 'price_adapter.lock');
-const AMA_PROFILES_FILE = path.join(PROFILES_DIR, 'ama_profiles.json');
+const MARKET_PROFILES_FILE = path.join(PROFILES_DIR, 'market_profiles.json');
 
 let bitsharesClient = null;
 
@@ -149,7 +149,7 @@ function usesAmaGridPrice(bot) {
 }
 
 function findAmaProfileForBot(bot, ctx = null) {
-    const profiles = loadAmaProfiles();
+    const profiles = loadMarketProfiles();
     if (profiles.length === 0) return null;
 
     const botAssetA = normalizeAssetSymbol(bot?.assetA);
@@ -200,10 +200,10 @@ function buildAmaComparisonPresets(bot, ctx = null) {
         .filter(Boolean);
 }
 
-function loadAmaProfiles() {
-    if (!fs.existsSync(AMA_PROFILES_FILE)) return [];
+function loadMarketProfiles() {
+    if (!fs.existsSync(MARKET_PROFILES_FILE)) return [];
     try {
-        const json = JSON.parse(fs.readFileSync(AMA_PROFILES_FILE, 'utf8'));
+        const json = JSON.parse(fs.readFileSync(MARKET_PROFILES_FILE, 'utf8'));
         return Array.isArray(json?.profiles) ? json.profiles : [];
     } catch (_) {
         return [];
@@ -624,6 +624,38 @@ function resolveAmaForBot(bot, ctx = null) {
     return cfg;
 }
 
+// Default price offset config — used when no profile and no bot.priceOffset is set.
+const DEFAULT_PRICE_OFFSET = {
+    devThreshold: 15, // % deviation from AMA before offset activates
+    maxPct: 1.5,      // max offset applied at full confidence
+};
+
+function getOffsetFromProfilesForBot(bot, ctx = null) {
+    const profile = findAmaProfileForBot(bot, ctx);
+    if (!profile) return null;
+    const raw = profile?.priceOffset;
+    if (!raw || typeof raw !== 'object') return null;
+    const devThreshold = Number(raw.devThreshold);
+    const maxPct = Number(raw.maxPct);
+    if (!Number.isFinite(devThreshold) || devThreshold <= 0) return null;
+    if (!Number.isFinite(maxPct) || maxPct <= 0) return null;
+    return { devThreshold, maxPct };
+}
+
+function resolveOffsetForBot(bot, ctx = null) {
+    const fromProfiles = getOffsetFromProfilesForBot(bot, ctx);
+    if (fromProfiles) return fromProfiles;
+
+    const raw = (bot && typeof bot.priceOffset === 'object' && bot.priceOffset !== null) ? bot.priceOffset : {};
+    const devThreshold = Number.isFinite(Number(raw.devThreshold)) && Number(raw.devThreshold) > 0
+        ? Number(raw.devThreshold)
+        : DEFAULT_PRICE_OFFSET.devThreshold;
+    const maxPct = Number.isFinite(Number(raw.maxPct)) && Number(raw.maxPct) > 0
+        ? Number(raw.maxPct)
+        : DEFAULT_PRICE_OFFSET.maxPct;
+    return { devThreshold, maxPct };
+}
+
 function mergeCandles(existing, incoming) {
     const map = new Map();
     (existing || []).forEach((c) => { if (Array.isArray(c)) map.set(c[0], c); });
@@ -793,6 +825,7 @@ const { MarketAdapterService } = require("./core/market_adapter_service");
 const adapterService = new MarketAdapterService({
     resolveBotContext,
     resolveAmaForBot,
+    resolveOffsetForBot,
     candleFileForBot,
     loadJson,
     saveJson,
@@ -1055,6 +1088,7 @@ module.exports = {
     calcAmaComparison,
     computeCandleStaleness,
     resolveAmaForBot,
+    resolveOffsetForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
     applyRuntimeDefaultsFromGeneralSettings,
     usesAmaGridPrice,

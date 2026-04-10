@@ -298,7 +298,7 @@ Reads the DEXBot2 `profiles/` directory and normalizes:
 - `profiles/config.json` when present
 - `profiles/bots.json`
 - `profiles/general.settings.json`
-- `profiles/ama_profiles.json`
+- `profiles/market_profiles.json`
 - per-bot files in `profiles/orders/`
 
 This is the profile-folder bridge for Claw.

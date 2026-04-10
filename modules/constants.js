@@ -569,12 +569,12 @@ let MARKET_ADAPTER = {
     AMA_DELTA_THRESHOLD_PERCENT: 2.5,
 
     // DEFAULT_AMA_KEY: Built-in default profile for `gridPrice: "ama"` when no
-    // pair-specific ama_profiles entry exists.
+    // pair-specific market_profiles entry exists.
     DEFAULT_AMA_KEY: 'AMA3',
 
     // AMAS: Built-in AMA presets derived from the local LP 1.19.133 fitting results.
     // These serve as stable defaults for the price adapter and can be overridden by
-    // pair-specific profiles in profiles/ama_profiles.json.
+    // pair-specific profiles in profiles/market_profiles.json.
     AMAS: {
         AMA1: {
             name: 'AMA1 (min move, cap 65%)',

@@ -11,7 +11,7 @@
  *
  * Chart shows:
  *   - Price line (VWAP per bucket)
- *   - 4 AMA overlays (from profiles/ama_profiles.json)
+ *   - 4 AMA overlays (from profiles/market_profiles.json)
  *   - AMA deviation % lines (bottom subplot, one per AMA)
  *   - Volume bars (middle subplot)
  */
@@ -28,7 +28,7 @@ const { calculateAMA } = require('../analysis/ama_fitting/ama');
 // Shared chart HTML generation (also used by analysis/ama_fitting/generate_unified_comparison_chart.js)
 const { generateHTML } = require('./lp_chart_core');
 
-const AMA_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'ama_profiles.json');
+const AMA_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'market_profiles.json');
 
 function normalizeSymbol(value) {
     return String(value || '').trim().toUpperCase();
@@ -103,7 +103,7 @@ function loadAmaConfigs(meta) {
     const fromProfiles = loadAmaConfigsFromProfiles(meta);
     if (fromProfiles) return fromProfiles;
     const pair = `${meta?.assetA?.symbol || '?'} / ${meta?.assetB?.symbol || '?'}`;
-    throw new Error(`AMA profile not found in profiles/ama_profiles.json for pair ${pair}`);
+    throw new Error(`AMA profile not found in profiles/market_profiles.json for pair ${pair}`);
 }
 
 // ─── CLI Args ─────────────────────────────────────────────────────────────────

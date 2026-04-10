@@ -316,7 +316,7 @@ async function runTests() {
         }
     }
 
-    console.log(' - Testing initializeGrid applies gridPriceOffsetPct to the resolved grid price...');
+    console.log(' - Testing initializeGrid ignores gridPriceOffsetPct for non-AMA grids (offset is now AMA-only)...');
     {
         const manager = new OrderManager({
             assetA: 'TESTA',
@@ -342,9 +342,9 @@ async function runTests() {
 
         await Grid.initializeGrid(manager);
 
-        assert(manager.orders.size > 0, 'initializeGrid should succeed with an offset applied to the resolved grid price');
-        assert.strictEqual(manager.config.minPrice, 55, 'gridPriceOffsetPct should shift the resolved grid reference before minPrice is derived');
-        assert.strictEqual(manager.config.maxPrice, 220, 'gridPriceOffsetPct should shift the resolved grid reference before maxPrice is derived');
+        assert(manager.orders.size > 0, 'initializeGrid should succeed without offset for non-AMA grid');
+        assert.strictEqual(manager.config.minPrice, 50, 'non-AMA grid should not apply gridPriceOffsetPct — offset is computed by market_adapter for AMA grids only');
+        assert.strictEqual(manager.config.maxPrice, 200, 'non-AMA grid should not apply gridPriceOffsetPct — offset is computed by market_adapter for AMA grids only');
     }
 
     console.log(' - Testing shouldFlagOutOfSpread with toleranceSteps = 0.5...');

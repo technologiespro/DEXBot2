@@ -547,18 +547,6 @@ class Grid {
             }
         }
 
-        const gridPriceOffsetPct = Number(manager.config.gridPriceOffsetPct);
-        if (gpSource !== 'ama' && Number.isFinite(gridPriceOffsetPct) && gridPriceOffsetPct !== 0) {
-            const offsetApplied = applyGridPriceOffset(gp, gridPriceOffsetPct);
-            if (Number.isFinite(offsetApplied) && offsetApplied > 0) {
-                gp = offsetApplied;
-                manager.logger?.log?.(
-                    `[DIAGNOSTIC] initializeGrid: applied gridPriceOffsetPct=${gridPriceOffsetPct} -> ${gp.toFixed(8)}`,
-                    'info'
-                );
-            }
-        }
-
         const minP = resolveConfiguredPriceBound(manager.config.minPrice, DEFAULT_CONFIG.minPrice, gp, 'min');
         const maxP = resolveConfiguredPriceBound(manager.config.maxPrice, DEFAULT_CONFIG.maxPrice, gp, 'max');
 
