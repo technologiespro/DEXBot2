@@ -112,6 +112,13 @@ function generateHTML(data, title) {
     const interpBear     = interpState.map(s => s === 'BEAR'       ? -1    : 0);
     const interpBearWeak = interpState.map(s => s === 'BEAR_WEAK'  ? -0.5  : 0);
     const interpOS       = interpState.map(s => s === 'OVERSOLD'   ? -0.75 : 0);
+    const entryBias      = results.map(r => r.entryBias || 'NONE');
+    const bullWeakEntryMarkers = results.map(r => r.isBullWeakEntry ? 0.38 : null);
+    const bullConfirmationMarkers = results.map(r => r.isBullConfirmation ? 0.88 : null);
+    const lateBullMarkers = results.map(r => r.isLateBullWithoutWeak ? 0.88 : null);
+    const bearWeakEntryMarkers = results.map(r => r.isBearWeakEntry ? -0.38 : null);
+    const bearConfirmationMarkers = results.map(r => r.isBearConfirmation ? -0.88 : null);
+    const lateBearMarkers = results.map(r => r.isLateBearWithoutWeak ? -0.88 : null);
 
     const priceSeries = prices.filter(v => Number.isFinite(v));
     const priceStart = priceSeries.length ? priceSeries[0] : null;
@@ -240,6 +247,17 @@ function generateHTML(data, title) {
             display: flex;
             flex-direction: column;
             height: 100vh;
+            position: relative;
+        }
+        #global-crosshair {
+            position: absolute;
+            top: 36px;
+            bottom: 8px;
+            width: 0;
+            border-left: 1px dashed rgba(255,255,255,0.35);
+            pointer-events: none;
+            z-index: 90;
+            display: none;
         }
         #reset-zoom-btn {
             background: #1e2330; color: #ccc; border: 1px solid #2a2e3e;
@@ -275,6 +293,7 @@ function generateHTML(data, title) {
 <div id="stats">${statsPanel}</div>
 
 <div id="charts">
+    <div id="global-crosshair"></div>
     <div id="price-chart"></div>
     <div id="deriv-chart"></div>
     <div id="interp-chart"></div>
@@ -300,6 +319,13 @@ const interpBear     = ${JSON.stringify(interpBear)};
 const interpBearWeak = ${JSON.stringify(interpBearWeak)};
 const interpOS       = ${JSON.stringify(interpOS)};
 const interpState    = ${JSON.stringify(interpState)};
+const entryBias      = ${JSON.stringify(entryBias)};
+const bullWeakEntryMarkers = ${JSON.stringify(bullWeakEntryMarkers)};
+const bullConfirmationMarkers = ${JSON.stringify(bullConfirmationMarkers)};
+const lateBullMarkers = ${JSON.stringify(lateBullMarkers)};
+const bearWeakEntryMarkers = ${JSON.stringify(bearWeakEntryMarkers)};
+const bearConfirmationMarkers = ${JSON.stringify(bearConfirmationMarkers)};
+const lateBearMarkers = ${JSON.stringify(lateBearMarkers)};
 const smaUp     = ${JSON.stringify(smaUp)};
 const smaDown   = ${JSON.stringify(smaDown)};
 const smaConf   = ${JSON.stringify(smaConf)};
@@ -308,7 +334,14 @@ const fastSmaDown = ${JSON.stringify(fastSmaDown)};
 const fastSmaConf = ${JSON.stringify(fastSmaConf)};` : ''}
 
 const DARK = { plot_bgcolor: '#0e1117', paper_bgcolor: '#0e1117', font: { color: '#ccc', size: 11 } };
-const AXIS = { gridcolor: '#1e2330', linecolor: '#2a2e3e', zerolinecolor: '#333', tickfont: { size: 10 } };
+const AXIS = {
+    gridcolor: '#1e2330',
+    linecolor: '#2a2e3e',
+    zerolinecolor: '#333',
+    tickfont: { size: 10 },
+    automargin: false,
+};
+const MARGIN_L = 88;
 const MARGIN_R = 250;
 
 const priceTraces = [
@@ -337,7 +370,7 @@ ${hasFastSma ? `    {
 
 Plotly.newPlot('price-chart', priceTraces, {
     ...DARK,
-    margin: { l: 60, r: MARGIN_R, t: 8, b: 28 },
+    margin: { l: MARGIN_L, r: MARGIN_R, t: 8, b: 28, autoexpand: false },
     showlegend: true,
     legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(0,0,0,0.4)', font: { size: 11 } },
     xaxis: { ...AXIS, type: 'date', rangeslider: { visible: false } },
@@ -400,9 +433,8 @@ ${hasFastSma ? `    {
 Plotly.newPlot('deriv-chart', derivTraces, {
     ...DARK,
     hovermode: 'x',
-    margin: { l: 60, r: MARGIN_R, t: 4, b: 4 },
-    showlegend: true,
-    legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(0,0,0,0.4)', font: { size: 11 } },
+    margin: { l: MARGIN_L, r: MARGIN_R, t: 4, b: 4, autoexpand: false },
+    showlegend: false,
     xaxis: { ...AXIS, type: 'date', showticklabels: false },
     yaxis: {
         ...AXIS,
@@ -452,12 +484,66 @@ const interpTraces = [
         showlegend: false, hoverinfo: 'skip',
     },
     {
+        x: dates, y: bullWeakEntryMarkers,
+        type: 'scattergl', mode: 'markers',
+        marker: { color: '#67e8f9', size: 7, symbol: 'triangle-right' },
+        name: 'Early Long',
+        customdata: entryBias,
+        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        showlegend: true,
+    },
+    {
+        x: dates, y: bullConfirmationMarkers,
+        type: 'scattergl', mode: 'markers',
+        marker: { color: '#34d399', size: 8, symbol: 'diamond' },
+        name: 'Confirm Long',
+        customdata: entryBias,
+        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        showlegend: true,
+    },
+    {
+        x: dates, y: lateBullMarkers,
+        type: 'scattergl', mode: 'markers',
+        marker: { color: '#f59e0b', size: 8, symbol: 'x' },
+        name: 'Late Long',
+        customdata: entryBias,
+        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        showlegend: true,
+    },
+    {
+        x: dates, y: bearWeakEntryMarkers,
+        type: 'scattergl', mode: 'markers',
+        marker: { color: '#fca5a5', size: 7, symbol: 'triangle-left' },
+        name: 'Early Short',
+        customdata: entryBias,
+        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        showlegend: true,
+    },
+    {
+        x: dates, y: bearConfirmationMarkers,
+        type: 'scattergl', mode: 'markers',
+        marker: { color: '#ef4444', size: 8, symbol: 'diamond' },
+        name: 'Confirm Short',
+        customdata: entryBias,
+        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        showlegend: true,
+    },
+    {
+        x: dates, y: lateBearMarkers,
+        type: 'scattergl', mode: 'markers',
+        marker: { color: '#fb7185', size: 8, symbol: 'x' },
+        name: 'Late Short',
+        customdata: entryBias,
+        hovertemplate: 'Entry: <b>%{customdata}</b><extra></extra>',
+        showlegend: true,
+    },
+    {
         x: dates, y: interpState.map(s => s === 'BULL' ? 0.75 : s === 'BULL_WEAK' ? 0.35 : s === 'OVERBOUGHT' ? 0.95 : s === 'BEAR' ? -0.75 : s === 'BEAR_WEAK' ? -0.35 : s === 'OVERSOLD' ? -0.95 : 0),
         type: 'scattergl', mode: 'lines',
         line: { color: 'rgba(255,255,255,0)', width: 0 },
         name: 'Interpretation',
-        customdata: interpState,
-        hovertemplate: 'Signal: <b>%{customdata}</b><extra></extra>',
+        customdata: interpState.map((state, i) => [state, entryBias[i]]),
+        hovertemplate: 'Signal: <b>%{customdata[0]}</b><br>Entry: <b>%{customdata[1]}</b><extra></extra>',
         showlegend: true,
     },
 ];
@@ -465,9 +551,8 @@ const interpTraces = [
 Plotly.newPlot('interp-chart', interpTraces, {
     ...DARK,
     hovermode: 'x',
-    margin: { l: 60, r: MARGIN_R, t: 4, b: 4 },
-    showlegend: true,
-    legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(0,0,0,0.4)', font: { size: 11 } },
+    margin: { l: MARGIN_L, r: MARGIN_R, t: 4, b: 4, autoexpand: false },
+    showlegend: false,
     xaxis: { ...AXIS, type: 'date', showticklabels: false },
     yaxis: {
         ...AXIS,
@@ -508,9 +593,8 @@ Plotly.newPlot('macd-chart', [
     zeroLine,
 ], {
     ...DARK,
-    margin: { l: 60, r: MARGIN_R, t: 4, b: 4 },
-    showlegend: true,
-    legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(0,0,0,0.4)', font: { size: 11 } },
+    margin: { l: MARGIN_L, r: MARGIN_R, t: 4, b: 4, autoexpand: false },
+    showlegend: false,
     xaxis: { ...AXIS, type: 'date', showticklabels: false },
     yaxis: { ...AXIS, title: { text: 'MACD %', standoff: 6 }, zeroline: true, zerolinecolor: '#333' },
 }, { responsive: true, displayModeBar: false });
@@ -549,9 +633,8 @@ Plotly.newPlot('rsi-chart', [
     },
 ], {
     ...DARK,
-    margin: { l: 60, r: MARGIN_R, t: 0, b: 20 },
-    showlegend: true,
-    legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(0,0,0,0.4)', font: { size: 11 } },
+    margin: { l: MARGIN_L, r: MARGIN_R, t: 0, b: 20, autoexpand: false },
+    showlegend: false,
     xaxis: { ...AXIS, type: 'date' },
     yaxis: { ...AXIS, title: { text: 'RSI', standoff: 6 }, range: [0, 100], fixedrange: true },
 }, { responsive: true, displayModeBar: false });
@@ -596,8 +679,6 @@ function wireAutoscaleToResetZoom(chartDiv) {
 function syncAxes(srcDiv, targets) {
     srcDiv.on('plotly_relayout', e => {
         if (isSyncing) return;
-        if (Object.keys(e).length === 1 && 'shapes' in e) return;
-
         let upd;
         if (e['xaxis.range[0]'] !== undefined) {
             upd = { 'xaxis.range[0]': e['xaxis.range[0]'], 'xaxis.range[1]': e['xaxis.range[1]'] };
@@ -642,23 +723,44 @@ function resetZoom() {
 }
 
 // ── Vertical crosshair across all panels ──────────────────────────────────
-let lastCrosshairX = null;
-function setCrosshair(xVal) {
-    if (lastCrosshairX === xVal) return;
-    lastCrosshairX = xVal;
-    const shape = xVal !== null ? [{
-        type: 'line',
-        x0: xVal, x1: xVal,
-        y0: 0, y1: 1,
-        yref: 'paper',
-        line: { color: 'rgba(255,255,255,0.35)', width: 1, dash: 'dot' },
-    }] : [];
-    allCharts.forEach(chart => Plotly.relayout(chart, { shapes: shape }));
+const chartsContainer = document.getElementById('charts');
+const globalCrosshair = document.getElementById('global-crosshair');
+let lastCrosshairLeft = null;
+
+function hideCrosshair() {
+    lastCrosshairLeft = null;
+    if (globalCrosshair) globalCrosshair.style.display = 'none';
 }
+
+function setCrosshairFromClientX(clientX) {
+    if (!globalCrosshair || !chartsContainer || !Number.isFinite(clientX)) return;
+    const rect = chartsContainer.getBoundingClientRect();
+    const left = clientX - rect.left;
+    if (lastCrosshairLeft !== null && Math.abs(lastCrosshairLeft - left) < 0.5) return;
+    lastCrosshairLeft = left;
+    globalCrosshair.style.left = left + 'px';
+    globalCrosshair.style.display = 'block';
+}
+
+function fallbackClientX(chart, point) {
+    const axis = point?.xaxis;
+    const value = point?.x;
+    const offsetLeft = chart?._fullLayout?._size?.l;
+    if (!axis || value == null || !Number.isFinite(offsetLeft)) return null;
+    const pixel = typeof axis.d2p === 'function' ? axis.d2p(value) : typeof axis.l2p === 'function' ? axis.l2p(value) : null;
+    if (!Number.isFinite(pixel)) return null;
+    const rect = chart.getBoundingClientRect();
+    return rect.left + offsetLeft + pixel;
+}
+
 allCharts.forEach(chart => {
-    chart.on('plotly_hover',   data => { const x = data.points[0]?.x; if (x != null) setCrosshair(x); });
-    chart.on('plotly_unhover', ()   => setCrosshair(null));
+    chart.on('plotly_hover', data => {
+        const clientX = data.event?.clientX ?? fallbackClientX(chart, data.points?.[0]);
+        if (clientX != null) setCrosshairFromClientX(clientX);
+    });
+    chart.on('plotly_unhover', hideCrosshair);
 });
+window.addEventListener('resize', hideCrosshair);
 </script>
 </body>
 </html>`;

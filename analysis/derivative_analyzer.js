@@ -216,6 +216,17 @@ class DerivativeAnalyzer {
         this.currInterpretationRaw = 'NEUTRAL';
         this.pendingInterp         = null;
         this.pendingInterpBars     = 0;
+        this.entryBias            = 'NONE';
+        this.isBullWeakEntry      = false;
+        this.isBullConfirmation   = false;
+        this.isLateBullWithoutWeak = false;
+        this.isBearWeakEntry      = false;
+        this.isBearConfirmation   = false;
+        this.isLateBearWithoutWeak = false;
+        this.bullEntrySetupActive = false;
+        this.bullEntrySetupConfirmed = false;
+        this.bearEntrySetupActive = false;
+        this.bearEntrySetupConfirmed = false;
 
         // Previous / current SMA values (for derivative)
         this.prevSma     = null;
@@ -286,6 +297,8 @@ class DerivativeAnalyzer {
 
         // Interpretation (computed after MACD + RSI are updated)
         if (this.macd || this.rsi) {
+            const prevInterpretation = this.currInterpretation;
+            this._resetEntryBias();
             let rawInterp = this.trendFilterEnabled
                 ? this._applyTrendFilter(this._computeInterpretation())
                 : this._computeInterpretation();
@@ -339,6 +352,7 @@ class DerivativeAnalyzer {
                 this.barsInRawInterp = 0;
                 this._applyWithHysteresis(rawInterp);
             }
+            this._advanceEntryBias(prevInterpretation);
         }
 
         this.updateCount++;
@@ -472,13 +486,9 @@ class DerivativeAnalyzer {
         // Macro regime gate: when fastSMA and SMA(slow) are both present and disagree,
         // cap full BULL/BEAR to WEAK — a short-term dip/bounce against the macro trend
         // does not warrant a confirmed directional signal.
-        if (this.fastSma && this.sma) {
-            const slowDir       = this._rawSmaTrend();
-            const slowBarsInDir = (slowDir === this.prevRawSmaTrend ? this.barsInSmaTrend + 1 : 1);
-            if (slowDir !== 'NEUTRAL' && slowBarsInDir >= this.trendFilterMinBars && fastDir !== slowDir) {
-                if (interp === 'BULL') return 'BULL_WEAK';
-                if (interp === 'BEAR') return 'BEAR_WEAK';
-            }
+        if (this._violatesMacroDisagreeGate(interp, fastDir)) {
+            if (interp === 'BULL') return 'BULL_WEAK';
+            if (interp === 'BEAR') return 'BEAR_WEAK';
         }
 
         // Opt 10 — Price vs fast MA cross-check (N-bar commitment required)
@@ -540,6 +550,72 @@ class DerivativeAnalyzer {
         }
     }
 
+    _resetEntryBias() {
+        this.entryBias = 'NONE';
+        this.isBullWeakEntry = false;
+        this.isBullConfirmation = false;
+        this.isLateBullWithoutWeak = false;
+        this.isBearWeakEntry = false;
+        this.isBearConfirmation = false;
+        this.isLateBearWithoutWeak = false;
+    }
+
+    _advanceEntryBias(prevInterpretation) {
+        const curr = this.currInterpretation;
+        const prevBullish = prevInterpretation === 'BULL' || prevInterpretation === 'BULL_WEAK';
+        const currBullish = curr === 'BULL' || curr === 'BULL_WEAK';
+        const prevBearish = prevInterpretation === 'BEAR' || prevInterpretation === 'BEAR_WEAK';
+        const currBearish = curr === 'BEAR' || curr === 'BEAR_WEAK';
+
+        if (!currBullish) {
+            this.bullEntrySetupActive = false;
+            this.bullEntrySetupConfirmed = false;
+        }
+
+        if (curr === 'BULL_WEAK' && !prevBullish) {
+            this.bullEntrySetupActive = true;
+            this.bullEntrySetupConfirmed = false;
+            this.entryBias = 'EARLY_LONG';
+            this.isBullWeakEntry = true;
+            return;
+        }
+
+        if (curr === 'BULL' && prevInterpretation !== 'BULL') {
+            if (this.bullEntrySetupActive && !this.bullEntrySetupConfirmed) {
+                this.bullEntrySetupConfirmed = true;
+                this.entryBias = 'CONFIRM_LONG';
+                this.isBullConfirmation = true;
+            } else if (!this.bullEntrySetupActive) {
+                this.entryBias = 'LATE_LONG';
+                this.isLateBullWithoutWeak = true;
+            }
+        }
+
+        if (!currBearish) {
+            this.bearEntrySetupActive = false;
+            this.bearEntrySetupConfirmed = false;
+        }
+
+        if (curr === 'BEAR_WEAK' && !prevBearish) {
+            this.bearEntrySetupActive = true;
+            this.bearEntrySetupConfirmed = false;
+            this.entryBias = 'EARLY_SHORT';
+            this.isBearWeakEntry = true;
+            return;
+        }
+
+        if (curr === 'BEAR' && prevInterpretation !== 'BEAR') {
+            if (this.bearEntrySetupActive && !this.bearEntrySetupConfirmed) {
+                this.bearEntrySetupConfirmed = true;
+                this.entryBias = 'CONFIRM_SHORT';
+                this.isBearConfirmation = true;
+            } else if (!this.bearEntrySetupActive) {
+                this.entryBias = 'LATE_SHORT';
+                this.isLateBearWithoutWeak = true;
+            }
+        }
+    }
+
     _isHardInvalidation(interp) {
         if (interp !== 'BULL' && interp !== 'BEAR') return false;
 
@@ -549,9 +625,25 @@ class DerivativeAnalyzer {
             if (interp === 'BEAR' && this.currMacd.macd > -threshold) return true;
         }
 
+        if (this._violatesMacroDisagreeGate(interp)) return true;
         if (this._violatesPriceRegimeGate(interp)) return true;
 
         return false;
+    }
+
+    _violatesMacroDisagreeGate(interp, fastDirOverride = null) {
+        if (!this.trendFilterEnabled || !this.fastSma || !this.sma) return false;
+        if (interp !== 'BULL' && interp !== 'BEAR') return false;
+
+        const fastDir = fastDirOverride ?? this._rawFastSmaTrend();
+        const slowDir = this._rawSmaTrend();
+        const slowBarsInDir = (slowDir === this.prevRawSmaTrend ? this.barsInSmaTrend + 1 : 1);
+
+        if (fastDir === 'NEUTRAL' || slowDir === 'NEUTRAL') return false;
+        if (slowBarsInDir < this.trendFilterMinBars) return false;
+        if (fastDir === slowDir) return false;
+
+        return fastDir !== slowDir;
     }
 
     _violatesPriceRegimeGate(interp) {
@@ -709,6 +801,13 @@ class DerivativeAnalyzer {
             interpretation:    this.currInterpretation,
             interpretationRaw: this.currInterpretationRaw,
             interpretationBars: this.barsInRawInterp,
+            entryBias: this.entryBias,
+            isBullWeakEntry: this.isBullWeakEntry,
+            isBullConfirmation: this.isBullConfirmation,
+            isLateBullWithoutWeak: this.isLateBullWithoutWeak,
+            isBearWeakEntry: this.isBearWeakEntry,
+            isBearConfirmation: this.isBearConfirmation,
+            isLateBearWithoutWeak: this.isLateBearWithoutWeak,
             // Values
             price:       this.currPrice,
             slowSma:     this.currSma     !== null ? Math.round(this.currSma     * 1e6) / 1e6 : null,
@@ -728,6 +827,13 @@ class DerivativeAnalyzer {
             macdLine: null, macdSignal: null, macdHistogram: null, macdTrend: null,
             rsi: null, rsiZone: null,
             interpretation: 'NEUTRAL', interpretationRaw: 'NEUTRAL', interpretationBars: 0,
+            entryBias: 'NONE',
+            isBullWeakEntry: false,
+            isBullConfirmation: false,
+            isLateBullWithoutWeak: false,
+            isBearWeakEntry: false,
+            isBearConfirmation: false,
+            isLateBearWithoutWeak: false,
         };
     }
 
@@ -742,6 +848,17 @@ class DerivativeAnalyzer {
         this.currInterpretation = 'NEUTRAL'; this.currInterpretationRaw = 'NEUTRAL';
         this.pendingInterp      = null;
         this.pendingInterpBars  = 0;
+        this.entryBias = 'NONE';
+        this.isBullWeakEntry = false;
+        this.isBullConfirmation = false;
+        this.isLateBullWithoutWeak = false;
+        this.isBearWeakEntry = false;
+        this.isBearConfirmation = false;
+        this.isLateBearWithoutWeak = false;
+        this.bullEntrySetupActive = false;
+        this.bullEntrySetupConfirmed = false;
+        this.bearEntrySetupActive = false;
+        this.bearEntrySetupConfirmed = false;
         this.prevSma     = null;
         this.currSma     = null;
         this.prevFastSma = null;

@@ -19,10 +19,11 @@ The output signal is one of:
 - `OVERSOLD`
 - `NEUTRAL`
 
-There are two independent outputs:
+There are three independent output layers:
 
 - `trend` / `rawTrend` / `isConfirmed` come from SMA direction alone. `--confirm` controls only this MA-trend confirmation layer.
 - `interpretation` / `interpretationRaw` are the trading-style states (`BULL`, `BEAR`, `OVERBOUGHT`, etc.). `--interp-confirm` and `--interp-hold` control only this signal layer.
+- `entryBias` and its boolean helpers are derived execution hints built on top of the final `interpretation` state. They do not change the base signal engine. They classify whether a directional setup is an early weak entry, a proper confirmation, or a late standalone confirmation.
 
 ---
 
@@ -158,6 +159,16 @@ Confirmed `BULL`/`BEAR` states do not drop immediately on a minor fluctuation.
 |------|---------|---------|
 | `--interp-hold N` | 3 | Bars a downgrade must persist before it is applied |
 
+### Hard invalidation
+
+Some regime failures bypass hysteresis completely. A confirmed `BULL`/`BEAR` is dropped immediately when the signal is no longer structurally valid.
+
+Immediate invalidation triggers:
+
+- **Post-filter MACD line regime failure** — `BULL` requires MACD line >= `macd-min-hist`; `BEAR` requires MACD line <= `-macd-min-hist`.
+- **Macro disagree failure** — when fastSMA and slow SMA disagree strongly enough to trigger the macro cap, a confirmed `BULL`/`BEAR` can no longer be held.
+- **Price regime failure** — price loses the buffered slow-SMA regime gate.
+
 ### RSI overrides
 
 - `BULL` + RSI > `--rsi-extreme` -> `OVERBOUGHT`
@@ -234,6 +245,47 @@ The threshold is not pure zero. It reuses `--macd-min-hist` as a small regime bu
 - `BEAR` / `BEAR_WEAK` require MACD line <= `-macd-min-hist`
 
 That means stale bullish or bearish holds are cleared immediately when the regime is invalidated.
+
+---
+
+## Entry Bias Metadata
+
+The analyzer also exposes a derived `entryBias` classification for downstream execution logic and chart overlays.
+
+Possible values:
+
+- `NONE`
+- `EARLY_LONG`
+- `CONFIRM_LONG`
+- `LATE_LONG`
+- `EARLY_SHORT`
+- `CONFIRM_SHORT`
+- `LATE_SHORT`
+
+Boolean helpers are emitted alongside it:
+
+- `isBullWeakEntry`
+- `isBullConfirmation`
+- `isLateBullWithoutWeak`
+- `isBearWeakEntry`
+- `isBearConfirmation`
+- `isLateBearWithoutWeak`
+
+These fields are computed from the final post-hysteresis `interpretation`, not from raw MACD/RSI candidates.
+
+### Long-side transitions
+
+- `NEUTRAL -> BULL_WEAK` => `EARLY_LONG`
+- `BULL_WEAK -> BULL` => `CONFIRM_LONG`
+- direct `BULL` without a live weak setup => `LATE_LONG`
+
+### Short-side transitions
+
+- `NEUTRAL -> BEAR_WEAK` => `EARLY_SHORT`
+- `BEAR_WEAK -> BEAR` => `CONFIRM_SHORT`
+- direct `BEAR` without a live weak setup => `LATE_SHORT`
+
+If a weak setup fails back to `NEUTRAL` or the signal flips to the opposite side, the setup state is cleared.
 
 ---
 

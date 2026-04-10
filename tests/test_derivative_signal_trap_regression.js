@@ -71,10 +71,39 @@ function testHardInvalidationBypassesHold() {
     assert.strictEqual(bearAnalyzer.currInterpretation, 'NEUTRAL', 'price regime invalidation should bypass BEAR hold');
 }
 
+function testMacroDisagreeBypassesBullHold() {
+    const analyzer = new DerivativeAnalyzer({
+        slowSmaPeriod: 500,
+        fastSmaPeriod: 100,
+        macdFastPeriod: 48,
+        macdSlowPeriod: 104,
+        macdSignalPeriod: 36,
+        macdMinHist: 0.02,
+        interpHoldBars: 3,
+        trendFilterEnabled: true,
+        trendFilterMinBars: 3,
+        priceRegimeGateEnabled: true,
+    });
+
+    analyzer.currInterpretation = 'BULL';
+    analyzer.currMacd = { macd: 0.3, signal: 0.2, histogram: 0.1 };
+    analyzer.currPrice = 105;
+    analyzer.currSma = 100;
+    analyzer.prevSma = 99;
+    analyzer.currFastSma = 101;
+    analyzer.prevFastSma = 102;
+    analyzer.prevRawSmaTrend = 'UP';
+    analyzer.barsInSmaTrend = 3;
+
+    analyzer._applyWithHysteresis('BULL_WEAK');
+    assert.strictEqual(analyzer.currInterpretation, 'BULL_WEAK', 'macro disagree invalidation should bypass BULL hold');
+}
+
 async function main() {
     console.log('Running test: derivative signal trap regression');
     await testHistoricalBullTrapExit();
     testHardInvalidationBypassesHold();
+    testMacroDisagreeBypassesBullHold();
     console.log('✓ derivative signal trap regression PASSED');
 }
 
