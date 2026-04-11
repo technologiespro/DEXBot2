@@ -28,6 +28,10 @@ Thumbs.db
 .gemini/
 
 *.html
+analysis/**/*.json
+market_adapter/**/*.json
+!**/package.json
+!**/package-lock.json
 
 # Test temporary files
 tests/tmp/
