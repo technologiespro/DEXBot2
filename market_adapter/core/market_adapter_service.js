@@ -375,51 +375,45 @@ class MarketAdapterService {
             },
             candles: nextCandles,
         };
-        if (!isDryRun) {
-            deps.saveJson(filePath, candlePayload);
-        } else {
-            dryRunMessages.push(`[DRY RUN] Would save candle file for ${bot.botKey}`);
-        }
+        deps.saveJson(filePath, candlePayload);
 
-        if (!isDryRun) {
-            state.bots[bot.botKey] = {
-                ...botState,
-                botName: bot.name,
-                botKey: bot.botKey,
-                poolId: ctx.poolId,
-                candleFile: deps.path.relative(deps.root, filePath),
-                candleCount: nextCandles.length,
-                kibanaGapRepairCount,
-                unresolvedGapCount,
-                lastCandleTs,
-                lastAmaPrice: amaPrice,
-                amaCenterPrice: amaPrice,
-                gridPriceOffsetPct,
-                effectiveCenterPrice,
-                amaConfig: {
-                    erPeriod: botAma.erPeriod,
-                    fastPeriod: botAma.fastPeriod,
-                    slowPeriod: botAma.slowPeriod,
-                },
-                amaComparison,
-                lastDeltaPercent: deltaPercent,
-                thresholdPercent: botThreshold,
-                referencePrice,
-                lastCycleSource: sourceLabel,
-                lastCycleAt: nowIso,
-                staleData,
-                staleAgeHours,
-                lastTriggerFile: triggerPath || botState.lastTriggerFile || null,
-                lastTriggerSuppressedReason: triggerSuppressedReason,
-                weights,
-                collateral,
-                trend: trendData.trend,
-                atr,
-                weightVariance,
-                effectiveConfidence,
-                deviationPct
-            };
-        }
+        state.bots[bot.botKey] = {
+            ...botState,
+            botName: bot.name,
+            botKey: bot.botKey,
+            poolId: ctx.poolId,
+            candleFile: deps.path.relative(deps.root, filePath),
+            candleCount: nextCandles.length,
+            kibanaGapRepairCount,
+            unresolvedGapCount,
+            lastCandleTs,
+            lastAmaPrice: amaPrice,
+            amaCenterPrice: amaPrice,
+            gridPriceOffsetPct,
+            effectiveCenterPrice,
+            amaConfig: {
+                erPeriod: botAma.erPeriod,
+                fastPeriod: botAma.fastPeriod,
+                slowPeriod: botAma.slowPeriod,
+            },
+            amaComparison,
+            lastDeltaPercent: deltaPercent,
+            thresholdPercent: botThreshold,
+            referencePrice,
+            lastCycleSource: sourceLabel,
+            lastCycleAt: nowIso,
+            staleData,
+            staleAgeHours,
+            lastTriggerFile: triggerPath || botState.lastTriggerFile || null,
+            lastTriggerSuppressedReason: triggerSuppressedReason,
+            weights,
+            collateral,
+            trend: trendData.trend,
+            atr,
+            weightVariance,
+            effectiveConfidence,
+            deviationPct
+        };
 
         return {
             ok: true,
@@ -443,7 +437,7 @@ class MarketAdapterService {
             collateral,
             trend: trendData.trend,
             poolId: ctx.poolId,
-            candleFile: isDryRun ? 'DRY_RUN' : deps.path.relative(deps.root, filePath),
+            candleFile: deps.path.relative(deps.root, filePath),
             lastCandleTs,
             gridPriceOffsetPct,
             effectiveCenterPrice,

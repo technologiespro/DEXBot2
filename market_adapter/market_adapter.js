@@ -626,8 +626,8 @@ function resolveAmaForBot(bot, ctx = null) {
 
 // Default price offset config — used when no pair-specific market profile is set.
 const DEFAULT_PRICE_OFFSET = {
-    devThreshold: 10, // % deviation from AMA before offset activates
-    maxPct: 5,        // max offset applied at full confidence
+    devThreshold: 20, // % deviation from AMA before offset activates
+    maxPct: 10,       // max offset applied at full confidence
 };
 
 function getOffsetFromProfilesForBot(bot, ctx = null) {
@@ -901,7 +901,7 @@ async function runOnce(cfg, state, contextCache) {
             const staleText = r.staleData ? ` STALE(${Number.isFinite(r.staleAgeHours) ? r.staleAgeHours.toFixed(2) : 'n/a'}h)` : '';
             const patchText = Number.isFinite(r.kibanaGapRepairCount) && r.kibanaGapRepairCount > 0 ? ` KIBANA_PATCH(${r.kibanaGapRepairCount})` : '';
             const gapText = Number.isFinite(r.unresolvedGapCount) && r.unresolvedGapCount > 0 ? ` GAPS(${r.unresolvedGapCount})` : '';
-            const trigText = r.triggered ? ` TRIGGERED -> ${r.triggerPath ? path.relative(ROOT, r.triggerPath) : '[DRY RUN]'}` : '';
+            const trigText = r.triggered ? ` TRIGGERED -> ${r.triggerPath ? path.relative(ROOT, r.triggerPath) : '[suppressed, dry-run]'}` : '';
             const weightText = r.weights ? ` weights[buy=${r.weights.buy}, sell=${r.weights.sell}]` : '';
             const trendText = r.trend ? ` trend=${r.trend}` : '';
             log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText}, delta=${deltaText}, threshold=${thresholdText}${staleText}${patchText}${gapText}${trigText}${trendText}${weightText}`);
@@ -959,10 +959,8 @@ async function runOnce(cfg, state, contextCache) {
     };
     state.meta.metrics = metrics;
 
-    if (!cfg.dryRun) {
-        saveJson(STATE_FILE, state);
-        writeCenterSnapshot(state);
-    }
+    saveJson(STATE_FILE, state);
+    writeCenterSnapshot(state);
     if (cfg.metricsJson) {
         log(cfg, `METRICS ${JSON.stringify(metrics)}`);
     }
