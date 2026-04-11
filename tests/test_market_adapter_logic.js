@@ -126,9 +126,9 @@ assert.strictEqual(
 }
 
 // Bot AMA config behavior
-assert.strictEqual(DEFAULT_AMA.erPeriod, 372, 'built-in default AMA should point to AMA3 erPeriod');
-assert.strictEqual(DEFAULT_AMA.fastPeriod, 1.8, 'built-in default AMA should point to AMA3 fastPeriod');
-assert.strictEqual(DEFAULT_AMA.slowPeriod, 1286, 'built-in default AMA should point to AMA3 slowPeriod');
+assert.strictEqual(DEFAULT_AMA.erPeriod, 395, 'built-in default AMA should point to AMA3 erPeriod');
+assert.strictEqual(DEFAULT_AMA.fastPeriod, 1.51, 'built-in default AMA should point to AMA3 fastPeriod');
+assert.strictEqual(DEFAULT_AMA.slowPeriod, 1944, 'built-in default AMA should point to AMA3 slowPeriod');
 
 {
     const ama = resolveAmaForBot({
@@ -235,8 +235,8 @@ assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPr
 // resolveOffsetForBot: defaults when no profile exists
 {
     const offset = resolveOffsetForBot({ assetA: 'UNKNOWN', assetB: 'UNKNOWN' });
-    assert.strictEqual(offset.devThreshold, 15, 'default devThreshold should be 15');
-    assert.strictEqual(offset.maxPct, 1.5, 'default maxPct should be 1.5');
+    assert.strictEqual(offset.devThreshold, 20, 'default devThreshold should be 20');
+    assert.strictEqual(offset.maxPct, 10, 'default maxPct should be 10');
 }
 
 // resolveOffsetForBot: market_profiles.json overrides defaults
