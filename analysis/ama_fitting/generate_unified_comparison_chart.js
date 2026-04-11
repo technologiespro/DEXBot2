@@ -27,19 +27,19 @@ const { generateHTML } = require('../../market_adapter/lp_chart_core');
 const DATA_DIR = path.join(__dirname, 'data');
 const MARKET_ADAPTER_DIR = path.join(__dirname, '..', '..', 'market_adapter');
 
-function marketAdapterChartPath(meta, dataFile) {
+function defaultChartPath(meta, dataFile) {
     if (meta?.pool) {
         const suffix = String(meta.pool).replace('1.19.', '');
-        return path.join(MARKET_ADAPTER_DIR, `lp_chart_pool_${suffix}.html`);
+        return path.join(__dirname, `lp_chart_pool_${suffix}.html`);
     }
 
     const fromMetaA = String(meta?.assetA?.symbol || '').trim();
     const fromMetaB = String(meta?.assetB?.symbol || '').trim();
     if (fromMetaA && fromMetaB) {
-        return path.join(MARKET_ADAPTER_DIR, `lp_chart_${fromMetaA}_${fromMetaB}.html`).replace(/\./g, '_').replace('_html', '.html');
+        return path.join(__dirname, `lp_chart_${fromMetaA}_${fromMetaB}.html`).replace(/\./g, '_').replace('_html', '.html');
     }
 
-    return path.join(MARKET_ADAPTER_DIR, `lp_chart_${path.basename(dataFile || 'comparison', '.json')}.html`)
+    return path.join(__dirname, `lp_chart_${path.basename(dataFile || 'comparison', '.json')}.html`)
         .replace(/\./g, '_')
         .replace('_html', '.html');
 }
@@ -73,7 +73,7 @@ function strategiesFromResults(resultsPath) {
         for (const [k, color, dash] of order) {
             const r = meta.amas[k];
             if (!r) continue;
-            const cleaned = String(r.label || '').replace(/^AMA\d\s*/i, '').replace(/^[-:\s]+/, '').trim();
+            const cleaned = String(r.label || '').replace(/^AMA\d\s*/i, '').replace(/^[-:\s]+/, '').replace(/min move,\s*/i, '').trim();
             const name = cleaned ? `${k} - ${cleaned}` : k;
             out.push({
                 name,
@@ -192,7 +192,7 @@ function run() {
                 assetA: { symbol: '?' }, assetB: { symbol: '?' },
                 intervalSeconds: 3600, fetchedAt: new Date().toISOString(),
             };
-            outFile = marketAdapterChartPath(meta, dataFile);
+            outFile = defaultChartPath(meta, dataFile);
 
             const resultsFile = path.join(__dirname, `optimization_results_${path.basename(dataFile, '.json')}.json`);
             const fromResults = strategiesFromResults(resultsFile);
@@ -219,7 +219,7 @@ function run() {
         }
         meta    = { pool: null, assetA: { symbol: 'XRP' }, assetB: { symbol: 'BTS' },
                     intervalSeconds: 14400, fetchedAt: new Date().toISOString() };
-        outFile = path.join(MARKET_ADAPTER_DIR, 'lp_chart_4h_UNIFIED_COMPARISON.html');
+        outFile = path.join(__dirname, 'lp_chart_4h_UNIFIED_COMPARISON.html');
         STRATEGIES = [...FALLBACK_STRATEGIES];
         console.log(`Data:        MEXC synthetic XRP/BTS (${candles.length} candles)`);
     }

@@ -42,10 +42,10 @@ const REPOS_THRESHOLD      = 0.004;                          // 0.4% candle-to-c
 const BAND_CAP_RATIO       = 0.8;                            // kept for backward-compat metadata
 
 const AMA_OBJECTIVES = [
-    { key: 'AMA1', name: 'AMA1 (min move, cap 65%)', distanceCapQuantile: 0.65 },
-    { key: 'AMA2', name: 'AMA2 (min move, cap 55%)', distanceCapQuantile: 0.55 },
-    { key: 'AMA3', name: 'AMA3 (min move, cap 45%)', distanceCapQuantile: 0.45 },
-    { key: 'AMA4', name: 'AMA4 (min move, cap 40%)', distanceCapQuantile: 0.40 },
+    { key: 'AMA1', name: 'AMA1 (min move, cap 70%)', distanceCapQuantile: 0.70 },
+    { key: 'AMA2', name: 'AMA2 (min move, cap 60%)', distanceCapQuantile: 0.60 },
+    { key: 'AMA3', name: 'AMA3 (min move, cap 50%)', distanceCapQuantile: 0.50 },
+    { key: 'AMA4', name: 'AMA4 (min move, cap 45%)', distanceCapQuantile: 0.45 },
 ];
 
 function cloneObjectives() {

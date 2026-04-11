@@ -1,0 +1,170 @@
+#!/usr/bin/env node
+'use strict';
+
+/**
+ * Fetch LP pool candles from Kibana for AMA optimizer input.
+ *
+ * Uses the same kibana_source as the market_adapter bootstrap, but saves
+ * the full uncut dataset (no pruning) for optimizer use.
+ *
+ * Usage:
+ *   node analysis/ama_fitting/fetch_lp_candles.js \
+ *     --pool 1.19.133 \
+ *     --assetA IOB.XRP --assetAId 1.3.3926 --assetAPrecision 4 \
+ *     --assetB BTS     --assetBId 1.3.0    --assetBPrecision 5 \
+ *     [--hours 26280]  [--out my_file.json]
+ *
+ * Default --hours: 26280 (3 years of 1h candles)
+ * Output: analysis/ama_fitting/data/<pool>_1h.json
+ */
+
+const fs   = require('fs');
+const path = require('path');
+
+const kibanaSource = require('../../market_adapter/inputs/kibana_source');
+
+const DATA_DIR  = path.join(__dirname, 'data');
+const HOURS_3Y  = 3 * 365 * 24; // 26280
+
+function parseArgs() {
+    const args = process.argv.slice(2);
+    const out = {
+        pool:             null,
+        assetASymbol:     null,
+        assetAId:         null,
+        assetAPrecision:  null,
+        assetBSymbol:     null,
+        assetBId:         null,
+        assetBPrecision:  null,
+        hours:            HOURS_3Y,
+        outFile:          null,
+    };
+
+    for (let i = 0; i < args.length; i++) {
+        const a = args[i];
+        const v = args[i + 1];
+        switch (a) {
+            case '--pool':             out.pool            = v;         i++; break;
+            case '--assetA':           out.assetASymbol    = v;         i++; break;
+            case '--assetAId':         out.assetAId        = v;         i++; break;
+            case '--assetAPrecision':  out.assetAPrecision = Number(v); i++; break;
+            case '--assetB':           out.assetBSymbol    = v;         i++; break;
+            case '--assetBId':         out.assetBId        = v;         i++; break;
+            case '--assetBPrecision':  out.assetBPrecision = Number(v); i++; break;
+            case '--hours':            out.hours           = Number(v); i++; break;
+            case '--out':              out.outFile         = v;         i++; break;
+            case '--help':
+            case '-h':
+                printHelp();
+                process.exit(0);
+        }
+    }
+    return out;
+}
+
+function printHelp() {
+    console.log('fetch_lp_candles.js — fetch LP pool 1h candles from Kibana for AMA optimizer');
+    console.log('');
+    console.log('Usage:');
+    console.log('  node fetch_lp_candles.js --pool 1.19.133 \\');
+    console.log('    --assetA IOB.XRP --assetAId 1.3.3926 --assetAPrecision 4 \\');
+    console.log('    --assetB BTS     --assetBId 1.3.0    --assetBPrecision 5');
+    console.log('');
+    console.log('Options:');
+    console.log('  --pool <id>              Pool ID (e.g. 1.19.133)');
+    console.log('  --assetA <symbol>        Asset A symbol (e.g. IOB.XRP)');
+    console.log('  --assetAId <id>          Asset A object ID (e.g. 1.3.3926)');
+    console.log('  --assetAPrecision <n>    Asset A precision (e.g. 8)');
+    console.log('  --assetB <symbol>        Asset B symbol (e.g. BTS)');
+    console.log('  --assetBId <id>          Asset B object ID (e.g. 1.3.0)');
+    console.log('  --assetBPrecision <n>    Asset B precision (e.g. 5)');
+    console.log('  --hours <n>              Lookback hours (default: 26280 = 3 years)');
+    console.log('  --out <filename>         Output filename (default: <pool>_1h.json in data/)');
+}
+
+function validateArgs(args) {
+    if (!args.pool)            throw new Error('--pool is required');
+    if (!args.assetAId)        throw new Error('--assetAId is required');
+    if (!Number.isFinite(args.assetAPrecision)) throw new Error('--assetAPrecision is required');
+    if (!args.assetBId)        throw new Error('--assetBId is required');
+    if (!Number.isFinite(args.assetBPrecision)) throw new Error('--assetBPrecision is required');
+    if (!Number.isFinite(args.hours) || args.hours <= 0) throw new Error('--hours must be > 0');
+}
+
+async function main() {
+    const args = parseArgs();
+    validateArgs(args);
+
+    const assetA = {
+        id:        args.assetAId,
+        precision: args.assetAPrecision,
+        symbol:    args.assetASymbol || args.assetAId,
+    };
+    const assetB = {
+        id:        args.assetBId,
+        precision: args.assetBPrecision,
+        symbol:    args.assetBSymbol || args.assetBId,
+    };
+
+    const poolId      = kibanaSource.normalizePoolId(args.pool);
+    const lookback    = Math.round(args.hours);
+    const yearsApprox = (lookback / (365 * 24)).toFixed(1);
+
+    console.log(`Fetching LP candles from Kibana`);
+    console.log(`  Pool:     ${poolId}`);
+    console.log(`  Pair:     ${assetA.symbol} / ${assetB.symbol}`);
+    console.log(`  Lookback: ${lookback}h (~${yearsApprox} years)`);
+    console.log(`  Interval: 1h`);
+    console.log('');
+
+    const candles = await kibanaSource.getLpCandlesForPool(poolId, assetA, assetB, {
+        intervalSeconds:       3600,
+        lookbackHours:         lookback,
+        consolidateByTimestamp: true,
+        apiKey:                null,
+        timeout:               60000,
+    });
+
+    if (!Array.isArray(candles) || candles.length === 0) {
+        throw new Error('Kibana returned no candles — check pool ID, asset IDs, and Kibana connectivity');
+    }
+
+    const firstTs = new Date(candles[0][0]).toISOString();
+    const lastTs  = new Date(candles[candles.length - 1][0]).toISOString();
+    console.log(`  Received: ${candles.length} candles  (${firstTs} → ${lastTs})`);
+
+    const payload = {
+        meta: {
+            fetchedAt:       new Date().toISOString(),
+            source:          'kibana',
+            pool:            poolId,
+            assetA,
+            assetB,
+            intervalSeconds: 3600,
+            lookbackHours:   lookback,
+            candleCount:     candles.length,
+            format:          '[timestamp_ms, open, high, low, close, volume_A]',
+        },
+        candles,
+    };
+
+    const poolShort = poolId.replace('1.19.', '');
+    const defaultName = `lp_pool_${poolShort}_${assetA.symbol}_${assetB.symbol}_1h.json`
+        .replace(/[^a-z0-9._-]/gi, '_')
+        .toLowerCase();
+    const outName = args.outFile || defaultName;
+    const outPath = path.isAbsolute(outName) ? outName : path.join(DATA_DIR, outName);
+
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(outPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+
+    console.log(`  Saved:    ${path.relative(process.cwd(), outPath)}`);
+    console.log('');
+    console.log('Run optimizer:');
+    console.log(`  node analysis/ama_fitting/optimizer_high_resolution.js --data ${path.relative(process.cwd(), outPath)}`);
+}
+
+main().catch((err) => {
+    console.error('Error:', err.message);
+    process.exit(1);
+});
