@@ -62,9 +62,9 @@ DEXBot2/
 │   └── bots_file_lock.js        # File locking (154 lines)
 ├── market_adapter/
 │   ├── market_adapter.js         # AMA calculation & trigger logic
-│   ├── blockchain_source.js     # Chain market data
-│   ├── kibana_source.js         # Kibana price data
-│   ├── native_api.js            # Native API source
+│   ├── inputs/kibana_source.js  # Kibana price data
+│   ├── inputs/fetch_lp_data.js  # LP analysis exporter
+│   ├── interval_utils.js        # Shared interval labels
 │   └── core/market_adapter_service.js  # Adapter service
 ├── analysis/                    # Standalone analysis tools (AMA fitting, trend detection)
 ├── scripts/                     # Utilities (git analysis, validation, etc.)

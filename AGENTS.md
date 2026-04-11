@@ -155,13 +155,11 @@ File: <path>
 - `market_adapter.js` - AMA delta threshold, grid price offset persistence, and grid recalculation trigger
 - `core/market_adapter_service.js` - Price adapter service core (offset calculation, bound clamping)
 - `ama_signal_runner.js` - AMA signal processing
-- `blockchain_source.js` - Blockchain data source
-- `kibana_source.js` - Kibana data source
-- `kibana_api.js` - Kibana API client
-- `native_api.js` - Native API client
-- `fetch_lp_data.js` - Liquidity pool data fetching
+- `inputs/kibana_source.js` - Kibana data source
+- `inputs/fetch_lp_data.js` - Liquidity pool data fetching
 - `merge_lp_data.js` - LP data merging
 - `candle_utils.js` - Candlestick utilities
+- `interval_utils.js` - Shared interval label helpers
 - `lp_chart_core.js` - LP chart core logic
 - `chart_lp_prices.js` - LP price charting
 

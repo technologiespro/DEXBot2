@@ -16,6 +16,7 @@
 'use strict';
 
 const https = require('https');
+const { toIntervalLabel } = require('../interval_utils');
 
 const KIBANA_URL = 'https://kibana.bitshares.dev';
 const INDEX      = 'bitshares-*';
@@ -28,18 +29,6 @@ const DEFAULT_CONFIG = Object.freeze({
 
 const PROXY_PATH = (index) =>
   `/api/console/proxy?path=${encodeURIComponent(index + '/_search')}&method=POST`;
-
-/**
- * ES fixed_interval string from seconds.
- * calendar_interval only supports 1m, 1h, 1d, 1w, 1M, 1q, 1y —
- * anything else (4h, 15m, 5m …) silently fails and returns no buckets.
- */
-function toFixedInterval(seconds) {
-  if (seconds % 86400 === 0) return `${seconds / 86400}d`;
-  if (seconds % 3600  === 0) return `${seconds / 3600}h`;
-  if (seconds % 60    === 0) return `${seconds / 60}m`;
-  return `${seconds}s`;
-}
 
 /**
  * Execute an Elasticsearch query against the Kibana proxy.
@@ -100,5 +89,5 @@ module.exports = {
   INDEX,
   KIBANA_URL,
   kibanaSearch,
-  toFixedInterval,
+  toFixedInterval: toIntervalLabel,
 };

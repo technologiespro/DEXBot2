@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const { calculateAMA } = require('./ama');
+const { toIntervalLabel } = require('../../market_adapter/interval_utils');
 
 const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_profiles.json');
 
@@ -236,9 +237,7 @@ function normalizeSymbol(value) {
 function inferIntervalLabel(dataFile, meta) {
     const fromMeta = Number(meta?.intervalSeconds);
     if (Number.isFinite(fromMeta) && fromMeta > 0) {
-        if (fromMeta % 3600 === 0) return `${Math.round(fromMeta / 3600)}h`;
-        if (fromMeta % 60 === 0) return `${Math.round(fromMeta / 60)}m`;
-        return `${fromMeta}s`;
+        return toIntervalLabel(fromMeta);
     }
 
     const m = String(path.basename(dataFile || '')).match(/_(\d+)([mhd])\.json$/i);

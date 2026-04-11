@@ -27,6 +27,7 @@ const { calculateAMA } = require('../analysis/ama_fitting/ama');
 
 // Shared chart HTML generation (also used by analysis/ama_fitting/generate_unified_comparison_chart.js)
 const { generateHTML } = require('./lp_chart_core');
+const { toIntervalLabel } = require('./interval_utils');
 
 const AMA_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'market_profiles.json');
 
@@ -37,9 +38,7 @@ function normalizeSymbol(value) {
 function inferIntervalLabel(meta) {
     const sec = Number(meta?.intervalSeconds);
     if (!Number.isFinite(sec) || sec <= 0) return null;
-    if (sec % 3600 === 0) return `${Math.round(sec / 3600)}h`;
-    if (sec % 60 === 0) return `${Math.round(sec / 60)}m`;
-    return `${sec}s`;
+    return toIntervalLabel(sec);
 }
 
 function loadAmaConfigsFromProfiles(meta) {

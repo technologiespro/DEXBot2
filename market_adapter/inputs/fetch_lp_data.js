@@ -158,7 +158,7 @@ async function findPool(BitShares, idA, idB) {
         } catch (e) {}
     }
 
-    // Fast path: get_liquidity_pools_by_assets (used by blockchain_source.js)
+    // Fast path: get_liquidity_pools_by_assets (used by the pool discovery helper)
     if (typeof BitShares.db?.get_liquidity_pools_by_assets === 'function') {
         try {
             const pools = await BitShares.db.get_liquidity_pools_by_assets(idA, idB, 10, false);

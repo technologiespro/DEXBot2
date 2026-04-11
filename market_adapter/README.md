@@ -116,13 +116,10 @@ market_adapter/
 │       ├── atr/
 │       │   └── calculator.js      # calculateATR(candles, period)
 │       └── trend_detection/
-│           └── analyzer.js        # TrendDetectionService — trend + confidence
+│           └── analyzer.js        # TrendAnalyzer — trend + confidence
 │
 ├── inputs/                      # Data source scripts (importable + CLI)
 │   ├── kibana_source.js           # Elasticsearch LP data source
-│   ├── blockchain_source.js       # Native BitShares data source
-│   ├── kibana_api.js              # Kibana trade inspector/exporter
-│   ├── native_api.js              # Native trade inspector/exporter
 │   └── fetch_lp_data.js           # Pool-centric historical Kibana exporter
 │
 ├── data/                        # Candle caches (per-bot JSON files)
@@ -154,7 +151,7 @@ For each bot, `MarketAdapterService` computes:
 
 ### 3. Trend Detection
 
-`TrendDetectionService` (in `core/strategies/trend_detection/analyzer.js`) classifies
+`TrendAnalyzer` (in `core/strategies/trend_detection/analyzer.js`) classifies
 each candle close as `UP`, `DOWN`, or `NEUTRAL` with a `confidence` score (0–100).
 
 This drives:
@@ -312,15 +309,9 @@ Output format (one entry per processed bot):
 
 ### LP Data Export (Analysis Inputs)
 
-These scripts live under `market_adapter/inputs/` and can be run standalone:
+The pool-centric exporter lives under `market_adapter/inputs/` and can be run standalone:
 
 ```bash
-# Kibana LP trades (long history) + optional candle export
-node market_adapter/inputs/kibana_api.js --pool 133 --hours 8760 --saveCandles --interval 1h --csv
-
-# Native BitShares LP trades (shorter, node-retained history) + optional candle export
-node market_adapter/inputs/native_api.js --pool 133 --hours 72 --saveCandles --interval 1h --csv
-
 # Pool-centric Kibana exporter used by analysis workflow
 node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --lookback 8760h
 ```
@@ -473,10 +464,6 @@ When threshold is exceeded, the adapter writes a trigger file like:
 1. Adjust `MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT` in `profiles/general.settings.json`
 2. Or pass `--deltaPercent <n>` for a one-off override
 3. Inspect `lastDeltaPercent` in state to see actual computed delta
-
-### Import errors after migration
-The legacy scripts at `market_adapter/kibana_source.js`, `blockchain_source.js`, etc. have been
-removed. Update any imports to reference `market_adapter/inputs/<file>` instead.
 
 ---
 

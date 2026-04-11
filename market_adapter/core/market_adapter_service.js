@@ -1,6 +1,6 @@
 'use strict';
 
-const { TrendDetectionService } = require('./strategies/trend_detection/analyzer');
+const { TrendAnalyzer } = require('../../analysis/trend_detection/trend_analyzer');
 const { calculateATR } = require('./strategies/atr/calculator');
 const { computeDynamicWeights } = require('./strategies/dynamic_weights');
 const { adjustCollateralRatio } = require('./strategies/collateral_manager');
@@ -17,13 +17,13 @@ class MarketAdapterService {
     }
 
     /**
-     * Get or create a TrendDetectionService for a specific bot.
+     * Get or create a TrendAnalyzer for a specific bot.
      * Each bot gets its own analyzer so accumulated AMA/oscillation
      * state is independent.
      */
     _getTrendService(botKey) {
         if (!this.trendServices.has(botKey)) {
-            this.trendServices.set(botKey, new TrendDetectionService());
+            this.trendServices.set(botKey, new TrendAnalyzer());
         }
         return this.trendServices.get(botKey);
     }
