@@ -55,7 +55,7 @@ function generateHTML(meta, candles, amaResults) {
     );
 
     // Serialise AMA config metadata for the browser (no values — passed separately)
-    const amaMeta = amaResults.map(a => ({ name: a.name, color: a.color, dash: a.dash, lineWidth: a.lineWidth }));
+    const amaMeta = amaResults.map(a => ({ name: a.name, color: a.color, dash: a.dash, lineWidth: a.lineWidth, erPeriod: a.erPeriod, fastPeriod: a.fastPeriod, slowPeriod: a.slowPeriod }));
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -80,17 +80,23 @@ function generateHTML(meta, candles, amaResults) {
         #header h1 { font-size: 18px; font-weight: 600; color: #fff; }
         #header .sub { font-size: 12px; color: #888; }
 
-        #stats {
-            position: fixed; top: 90px; right: 12px; z-index: 100;
+        #stats, #params {
+            position: fixed; right: 12px; z-index: 100;
             background: rgba(20,24,32,0.88); backdrop-filter: blur(4px);
             border: 1px solid #2a2e3e; border-radius: 6px;
             padding: 10px 14px; font-size: 12px; line-height: 1.8;
             min-width: 240px;
         }
-        #stats .label { color: #888; }
-        #stats .val   { color: #e0e0e0; font-weight: 600; }
+        #stats  { top: 90px; }
+        #params { top: 310px; }
+        #stats .label, #params .label  { color: #888; }
+        #stats .val,   #params .val    { color: #e0e0e0; font-weight: 600; }
         #stats .pos   { color: #26a69a; }
         #stats .neg   { color: #ef5350; }
+        #params table { border-collapse: collapse; width: 100%; margin-top: 4px; }
+        #params td    { padding: 1px 6px 1px 0; font-size: 11px; color: #ccc; white-space: nowrap; }
+        #params td:first-child { padding-left: 0; }
+        #params th    { font-size: 10px; color: #555; font-weight: 400; text-align: left; padding: 0 6px 3px 0; }
 
         #charts { padding-top: 44px; display: flex; flex-direction: column; height: 100vh; }
         #price-chart  { flex: 3; }
@@ -115,6 +121,11 @@ function generateHTML(meta, candles, amaResults) {
     <div><span class="label">Source      </span><span class="label" style="font-size:10px">Kibana LP (op_type 63)</span></div>
 </div>
 
+<div id="params">
+    <div style="margin-bottom:2px"><span class="label" style="font-size:10px">── AMA Parameters ──</span></div>
+    <table id="params-table"></table>
+</div>
+
 <div id="charts">
     <div id="price-chart"></div>
     <div id="vol-chart"></div>
@@ -128,6 +139,27 @@ const volumes      = ${JSON.stringify(volumes)};
 const amaMeta      = ${JSON.stringify(amaMeta)};
 const amaArrays    = ${JSON.stringify(amaResults.map(a => a.values.map(v => Math.round(v * 1e6) / 1e6)))};
 const amaDevArrays = ${JSON.stringify(amaDeviations)};
+
+// ── AMA params table ───────────────────────────────────────────────────────
+(function() {
+    const tbl = document.getElementById('params-table');
+    const hdr = tbl.insertRow();
+    ['', 'ER', 'Fast', 'Slow'].forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        hdr.appendChild(th);
+    });
+    amaMeta.forEach(a => {
+        const row = tbl.insertRow();
+        const dot = document.createElement('td');
+        dot.innerHTML = \`<span style="color:\${a.color}">●</span> \${a.name.split(' - ')[0]}\`;
+        row.appendChild(dot);
+        [a.erPeriod, a.fastPeriod, a.slowPeriod].forEach(v => {
+            const td = row.insertCell();
+            td.textContent = v ?? '—';
+        });
+    });
+})();
 
 const DARK = {
     plot_bgcolor:  '#0e1117',
@@ -159,35 +191,10 @@ const amaTraces = amaMeta.map((cfg, i) => ({
     hovertemplate: cfg.name + ': %{y:.6f}<extra></extra>',
 }));
 
-// Band: ±maxDev shaded region based on primary AMA (visual reference only)
-// Downsampled to ~300 pts — band is a smooth curve so full resolution is unnecessary
 const maxDev = ${maxDev.toFixed(6)};
-const primaryAMA = amaArrays[0];
-const BAND_STEP = Math.max(1, Math.floor(dates.length / 300));
-const bandDates = dates.filter((_, i) => i % BAND_STEP === 0 || i === dates.length - 1);
-const bandUpper = primaryAMA.filter((_, i) => i % BAND_STEP === 0 || i === primaryAMA.length - 1).map(v => v * (1 + maxDev / 100));
-const bandLower = primaryAMA.filter((_, i) => i % BAND_STEP === 0 || i === primaryAMA.length - 1).map(v => v * (1 - maxDev / 100));
-
-const traceUpper = {
-    x: bandDates, y: bandUpper,
-    type: 'scatter', mode: 'lines',
-    line: { color: 'rgba(66,165,245,0.25)', width: 1, dash: 'dot' },
-    name: '+MaxDev band', showlegend: false,
-    hoverinfo: 'skip',
-};
-
-const traceLower = {
-    x: bandDates, y: bandLower,
-    fill: 'tonexty',
-    fillcolor: 'rgba(66,165,245,0.04)',
-    type: 'scatter', mode: 'lines',
-    line: { color: 'rgba(66,165,245,0.25)', width: 1, dash: 'dot' },
-    name: '±MaxDev band', showlegend: true,
-    hoverinfo: 'skip',
-};
 
 Plotly.newPlot('price-chart',
-    [traceUpper, traceLower, tracePrice, ...amaTraces],
+    [tracePrice, ...amaTraces],
     {
         ...DARK,
         margin: { l: 70, r: 260, t: 10, b: 10 },
@@ -195,14 +202,14 @@ Plotly.newPlot('price-chart',
         xaxis: { ...AXIS, type: 'date', showticklabels: false, rangeslider: { visible: false } },
         yaxis: { ...AXIS, title: { text: '${assetA.symbol}/${assetB.symbol} (log scale)', standoff: 8 }, type: 'log' },
     },
-    { responsive: true, displayModeBar: true }   // toolbar shown here only
+    { responsive: true, displayModeBar: true, scrollZoom: true }   // toolbar shown here only
 );
 
 // ── Volume chart ───────────────────────────────────────────────────────────
 const traceVol = {
     x: dates, y: volumes,
     type: 'bar',
-    marker: { color: 'rgba(92,158,230,0.5)', line: { width: 0 } },
+    marker: { color: 'rgba(92,158,230,1)', line: { width: 0 } },
     name: 'Volume (${assetA.symbol})',
     hovertemplate: 'Vol: %{y:.4f}<extra></extra>',
 };
@@ -249,22 +256,88 @@ Plotly.newPlot('dev-chart',
     { responsive: true, displayModeBar: false }
 );
 
-// ── Link x-axes for synchronized zoom/pan ──────────────────────────────────
-// isSyncing guard prevents cascade: A→relayout(B,C)→relayout(A,C)→...
+// ── Y-axis autoscaling helpers ─────────────────────────────────────────────
+function finiteWindowValues(trace, x0ms, x1ms) {
+    if (!trace?.x || !trace?.y) return [];
+    const out = [];
+    const len = Math.min(trace.x.length, trace.y.length);
+    for (let i = 0; i < len; i++) {
+        const xMs = typeof trace.x[i] === 'number' ? trace.x[i] : new Date(trace.x[i]).getTime();
+        const y = trace.y[i];
+        if (!Number.isFinite(xMs) || xMs < x0ms || xMs > x1ms) continue;
+        if (Number.isFinite(y)) out.push(y);
+    }
+    return out;
+}
+
+function toMs(v) { return typeof v === 'number' ? v : new Date(v).getTime(); }
+
+// Price chart: log scale — returns [log10(min), log10(max)]
+function priceYRange(x0, x1) {
+    const x0ms = toMs(x0), x1ms = toMs(x1);
+    const values = [];
+    for (const trace of pc.data || []) values.push(...finiteWindowValues(trace, x0ms, x1ms));
+    const pos = values.filter(v => v > 0);
+    if (!pos.length) return null;
+    let min = Math.min(...pos), max = Math.max(...pos);
+    if (min === max) { min *= 0.97; max *= 1.03; }
+    else { min *= 0.96; max *= 1.04; }
+    return [Math.log10(min), Math.log10(max)];
+}
+
+// Volume chart: linear, baseline 0
+function volYRange(x0, x1) {
+    const x0ms = toMs(x0), x1ms = toMs(x1);
+    const values = [];
+    for (const trace of vc.data || []) values.push(...finiteWindowValues(trace, x0ms, x1ms));
+    const pos = values.filter(v => v > 0);
+    if (!pos.length) return null;
+    return [0, Math.max(...pos) * 1.12];
+}
+
+// Dev % chart: linear, symmetric padding around visible range
+function devYRange(x0, x1) {
+    const x0ms = toMs(x0), x1ms = toMs(x1);
+    const values = [0];
+    for (const trace of dc.data || []) values.push(...finiteWindowValues(trace, x0ms, x1ms));
+    let min = Math.min(...values), max = Math.max(...values);
+    if (min === max) { min -= 1; max += 1; }
+    else { const pad = (max - min) * 0.12; min -= pad; max += pad; }
+    return [min, max];
+}
+
+function buildUpdate(div, x0, x1) {
+    const upd = { 'xaxis.range[0]': x0, 'xaxis.range[1]': x1 };
+    let yr = null;
+    if (div === pc) yr = priceYRange(x0, x1);
+    else if (div === vc) yr = volYRange(x0, x1);
+    else if (div === dc) yr = devYRange(x0, x1);
+    if (yr) { upd['yaxis.range[0]'] = yr[0]; upd['yaxis.range[1]'] = yr[1]; }
+    return upd;
+}
+
+// ── Link x-axes for synchronized zoom/pan + per-chart y autoscale ──────────
 let isSyncing = false;
 function syncAxes(sourceDiv, targetDivs) {
     let rafId = null;
     sourceDiv.on('plotly_relayout', (e) => {
         if (isSyncing) return;
-        const update = e['xaxis.range[0]'] !== undefined
-            ? { 'xaxis.range[0]': e['xaxis.range[0]'], 'xaxis.range[1]': e['xaxis.range[1]'] }
-            : e['xaxis.autorange'] ? { 'xaxis.autorange': true } : null;
-        if (!update) return;
+        let x0, x1, isAuto = false;
+        if (e['xaxis.range[0]'] !== undefined) {
+            x0 = e['xaxis.range[0]']; x1 = e['xaxis.range[1]'];
+        } else if (e['xaxis.autorange']) {
+            isAuto = true;
+        } else {
+            return;
+        }
         if (rafId) cancelAnimationFrame(rafId);
         rafId = requestAnimationFrame(() => {
             isSyncing = true;
-            Promise.all(targetDivs.map(d => Plotly.relayout(d, update)))
-                .finally(() => { isSyncing = false; rafId = null; });
+            const autoUpd = { 'xaxis.autorange': true, 'yaxis.autorange': true };
+            const updates = isAuto
+                ? [sourceDiv, ...targetDivs].map(d => Plotly.relayout(d, autoUpd))
+                : [sourceDiv, ...targetDivs].map(d => Plotly.relayout(d, buildUpdate(d, x0, x1)));
+            Promise.all(updates).finally(() => { isSyncing = false; rafId = null; });
         });
     });
 }
