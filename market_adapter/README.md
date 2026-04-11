@@ -129,10 +129,9 @@ market_adapter/
 └── state/                       # Adapter runtime state files
 ```
 
-> **Legacy scripts removed**: `blockchain_source.js`, `kibana_source.js`, `kibana_api.js`,
-> `native_api.js`, `fetch_lp_data.js`, `dynamic_weights.js`, and `core/market_adapter_service.js`
-> have all been moved or replaced. The root `market_adapter/` directory is now clean; data sources
-> live under `inputs/` and the full service logic lives under `core/`.
+> **Refactored layout**: Data sources live under `inputs/` and the full signal pipeline lives
+> under `core/market_adapter_service.js`. The root `market_adapter/` directory contains only
+> the main entry point and shared utilities.
 
 ---
 
@@ -191,7 +190,7 @@ Adapter writes `profiles/recalculate.<botKey>.trigger` when:
 Threshold resolution order:
 1. CLI `--deltaPercent <n>` override
 2. `profiles/general.settings.json` → `MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT`
-3. Built-in default: `1` (%)
+3. Built-in default: `2.5` (%)
 
 ### 8. State Persistence
 
@@ -209,29 +208,29 @@ Adapter writes machine-readable state after every cycle:
 // profiles/general.settings.json
 {
   "MARKET_ADAPTER": {
-    "AMA_DELTA_THRESHOLD_PERCENT": 1
+    "AMA_DELTA_THRESHOLD_PERCENT": 2.5
   }
 }
 ```
 
 ### Per-Bot AMA Settings
 
-Each bot can define its own AMA calculation in `profiles/bots.json` under `ama`.
-If absent, built-in defaults apply (`erPeriod: 90, fastPeriod: 10, slowPeriod: 100`).
+Bots opt in to AMA grid pricing by setting `gridPrice` to one of the AMA keywords in `profiles/bots.json`.
+The AMA parameters are resolved from `profiles/market_profiles.json` (pair-matched, written by the optimizer).
+If no profile exists for the pair, built-in constants are used.
 
 ```json
 {
   "name": "XRP-BTS",
   "assetA": "IOB.XRP",
   "assetB": "BTS",
-  "ama": {
-    "enabled": true,
-    "erPeriod": 10,
-    "fastPeriod": 2,
-    "slowPeriod": 30
-  }
+  "gridPrice": "ama"
 }
 ```
+
+Valid `gridPrice` keywords: `ama`, `ama1`, `ama2`, `ama3`, `ama4`.
+`"ama"` resolves to the profile's `defaultAma` key (typically `AMA3`).
+Bots with any other `gridPrice` value are ignored by the market adapter.
 
 ### Dynamic Grid Price Offset
 
@@ -248,7 +247,7 @@ deviation the offset is zero.
 |------|---------|
 | `profiles/bots.json` | Active bots, symbols, pool IDs, per-bot AMA and offset settings |
 | `profiles/general.settings.json` | Global `MARKET_ADAPTER` settings (delta threshold, etc.) |
-| `market_adapter/state/price_adapter_whitelist.json` | Optional bot filter (process only listed bots) |
+| `profiles/price_adapter_whitelist.json` | Optional whitelist — bots not listed run in dry-run mode |
 | `market_adapter/state/price_adapter_state.json` | Runtime state — candle metadata, signals, weights, collateral |
 | `market_adapter/state/price_adapter_centers.json` | Lightweight center snapshot |
 
@@ -326,16 +325,31 @@ node market_adapter/inputs/native_api.js --pool 133 --hours 72 --saveCandles --i
 node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --lookback 8760h
 ```
 
-### Whitelist (Optional Bot Filter)
+### Dry-Run Mode
+
+By default, every bot that is **not whitelisted** runs in dry-run mode: candles and state are
+fully computed and persisted, but no files that dexbot acts on are written
+(`profiles/orders/<botKey>.gridprice.json` and `profiles/recalculate.<botKey>.trigger`).
+
+| Invocation | Behavior |
+|---|---|
+| No flags (default) | Whitelisted bots write for real; all others dry-run |
+| `--dryRun` | All bots dry-run regardless of whitelist |
+| `--whitelist-all` | All bots write for real regardless of whitelist |
+
+Dry-run output is visible in the log with `[DRY RUN]` tags and `[suppressed, dry-run]` on triggered lines.
+
+### Whitelist
 
 ```json
-// market_adapter/state/price_adapter_whitelist.json
+// profiles/price_adapter_whitelist.json
 {
-  "bots": ["XRP-BTS", "xrp-bts-0"]
+  "whitelist": ["xrp-bts-0", "h-bts-1"]
 }
 ```
 
-If the file exists with entries, only matching bot `name` or `botKey` values are processed.
+List bot **keys** (not names). Bots listed here write gridprice and trigger files for real.
+If the file is missing, all bots run in dry-run mode.
 
 ### Automated Execution (PM2)
 
