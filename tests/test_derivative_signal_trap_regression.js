@@ -1,7 +1,7 @@
 const assert = require('assert');
 const path = require('path');
 
-const { DerivativeAnalyzer } = require('../analysis/derivative_analyzer');
+const { DerivativeAnalyzer } = require('../analysis/trend_detection/derivative_analyzer');
 const { createSource } = require('../analysis/price_sources');
 
 function createAnalyzer() {

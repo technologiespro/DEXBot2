@@ -23,7 +23,7 @@
 
 const fs   = require('fs');
 const path = require('path');
-const { DerivativeAnalyzer } = require('./derivative_analyzer');
+const { DerivativeAnalyzer } = require('./trend_detection/derivative_analyzer');
 const { generateHTML }        = require('./derivative_chart_generator');
 const { createSource }        = require('./price_sources');
 

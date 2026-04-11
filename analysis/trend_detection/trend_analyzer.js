@@ -14,7 +14,7 @@
  * optional premium calculation via getFeedPremium().
  */
 
-const { DerivativeAnalyzer } = require('../derivative_analyzer');
+const { DerivativeAnalyzer } = require('./derivative_analyzer');
 
 class TrendAnalyzer {
     /**
