@@ -323,21 +323,26 @@ BEAR candidate:
 
 ## Parameter Reference
 
-Start with the minimum tuning set below. The remaining flags are advanced defaults and
-usually only need adjustment when you are changing signal behavior, not when you are
-just using the analyzer.
+Start with the base indicator set below. These are the parameters that define the
+signal model itself. The remaining flags are optional gates or advanced defaults
+that only need adjustment when you want to change how strict the signal is.
 
-### Minimum tuning set
+### Base indicator set
 
 | Flag | Default | Purpose |
 |------|---------|---------|
 | `--sma N` | 500 | Slow macro regime anchor |
-| `--fast-sma N` | off | Short-term direction source and fast-SMA commitment gate |
 | `--macd-fast N` | 12 | MACD fast EMA period |
 | `--macd-slow N` | 26 | MACD slow EMA period |
 | `--macd-signal N` | 9 | MACD signal EMA period |
 | `--macd-min-hist F` | 0.02 | Minimum histogram magnitude for direction |
 | `--rsi N` | 14 | RSI period |
+
+### Optional gate knobs
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `--fast-sma N` | off | Short-term direction source and fast-SMA commitment gate |
 | `--trend-filter` | off | Enables counter-trend suppression |
 | `--fast-sma-commitment-bars N` | 2 | Requires price to stay beyond fastSMA before confirming |
 | `--price-regime-buffer-pct N` | 0.35 | Requires price clearance from slow SMA |
