@@ -17,7 +17,6 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Spread Correction**: Conservative, fund-aware maintenance of constant spread width
 - **Periodic Market Price Refresh**: Background 4-hour price updates
 - **Pipeline Safety & Diagnostics**: 5-minute timeout safeguard and health monitoring
-- **AMA Grid Price Offset**: Signed percentage offset on the AMA center for grid positioning without altering the raw anchor
 - **Data Flow**: Visualization of how market data becomes trading operations and then blockchain transactions.
 
 ### 📖 [Developer Guide](developer_guide.md)

@@ -23,14 +23,13 @@ Use these adaptive settings for live trading behavior:
 
 - `weightDistribution`
 - `minPrice` / `maxPrice` ratio
-- `priceOffset` policy in `profiles/market_profiles.json`
 - debt / collateral actions
 
 That is the practical split:
 
 - increment/spread define the grid
 - AMA provides the anchor
-- the runtime-managed center bias and weights adapt to trend
+- weights adapt to trend
 - range ratio adapts slowly to former price action
 - debt/collateral actions manage CR
 
@@ -124,17 +123,6 @@ These define the outer range of the grid.
   - above `3x` = very conservative
 - treat range ratio as a slow-moving structural setting driven by former price action, not a fast tactical knob
 
-### `priceOffset` policy
-
-The market adapter can shift the effective grid center away from raw AMA when price deviates far enough from the anchor.
-
-- configure the policy in `profiles/market_profiles.json`
-- `devThreshold` controls when the bias activates
-- `maxPct` caps the runtime-applied center shift
-- the applied `gridPriceOffsetPct` is runtime state written by the adapter, not a manual bot setting to patch through the generic bridge
-
-Use this policy to express directional bias without changing the structural grid settings. The actual effective offset is computed dynamically from market deviation and trend state.
-
 ### `gridPrice`
 
 This controls the reference price used when the grid is rebuilt.
@@ -196,7 +184,7 @@ AMA is the recentering mechanism.
 - once the move crosses the configured threshold, DEXBot2 triggers a grid recalculation
 - `gridPrice: "ama"` tells the rebuilt grid to center itself on that AMA reference
 - `gridPrice: "pool"` or `gridPrice: "market"` centers the rebuilt grid on the live pair price instead
-- `gridPrice: null` falls back to the current `startPrice` reference before any runtime-managed center bias is applied
+- `gridPrice: null` falls back to the current `startPrice` reference
 
 Practical interpretation:
 

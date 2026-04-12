@@ -624,31 +624,6 @@ function resolveAmaForBot(bot, ctx = null) {
     return cfg;
 }
 
-// Default price offset config — used when no pair-specific market profile is set.
-const DEFAULT_PRICE_OFFSET = {
-    devThreshold: 20, // % deviation from AMA before offset activates
-    maxPct: 10,       // max offset applied at full confidence
-};
-
-function getOffsetFromProfilesForBot(bot, ctx = null) {
-    const profile = findAmaProfileForBot(bot, ctx);
-    if (!profile) return null;
-    const raw = profile?.priceOffset;
-    if (!raw || typeof raw !== 'object') return null;
-    const devThreshold = Number(raw.devThreshold);
-    const maxPct = Number(raw.maxPct);
-    if (!Number.isFinite(devThreshold) || devThreshold <= 0) return null;
-    if (!Number.isFinite(maxPct) || maxPct <= 0) return null;
-    return { devThreshold, maxPct };
-}
-
-function resolveOffsetForBot(bot, ctx = null) {
-    const fromProfiles = getOffsetFromProfilesForBot(bot, ctx);
-    if (fromProfiles) return fromProfiles;
-
-    return { ...DEFAULT_PRICE_OFFSET };
-}
-
 function mergeCandles(existing, incoming) {
     const map = new Map();
     (existing || []).forEach((c) => { if (Array.isArray(c)) map.set(c[0], c); });
@@ -780,27 +755,20 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
  * Called by price_adapter when a grid reset trigger fires (or on first initialisation).
  * Uses write-then-rename to prevent partial reads by the dexbot process.
  * @param {string} botKey   - Bot key (e.g. "iob-xrp-bts-0")
- * @param {number} amaPrice - Current raw AMA center price (B/A format)
+ * @param {number} centerPrice - Current AMA-derived center price (B/A format)
  * @param {Object} options
- * @param {number} options.gridPriceOffsetPct - Signed offset percentage applied to the center
- * @param {number} options.effectiveCenterPrice - Precomputed effective center price
+ * @param {number} options.amaCenterPrice - Raw AMA center price before any downstream handling
  */
-function writeBotGridPriceCenter(botKey, amaPrice, options = {}) {
+function writeBotGridPriceCenter(botKey, centerPrice, options = {}) {
     try {
         ensureDir(ORDERS_DIR);
         const filePath = path.join(ORDERS_DIR, `${botKey}.gridprice.json`);
         const tmpPath = `${filePath}.tmp`;
-        const gridPriceOffsetPct = Number(options.gridPriceOffsetPct || 0);
-        const effectiveCenterPrice = Number(options.effectiveCenterPrice);
-        const centerPriceRaw = Number.isFinite(effectiveCenterPrice) && effectiveCenterPrice > 0
-            ? effectiveCenterPrice
-            : amaPrice * (1 + (Number.isFinite(gridPriceOffsetPct) ? gridPriceOffsetPct : 0) / 100);
-        const centerPrice = Math.round(centerPriceRaw * 1e8) / 1e8;
+        const amaCenterPrice = Number(options.amaCenterPrice);
+        const resolvedCenterPrice = Math.round(Number(centerPrice) * 1e8) / 1e8;
         const payload = {
-            amaCenterPrice: amaPrice,
-            centerPrice,
-            effectiveCenterPrice: centerPrice,
-            gridPriceOffsetPct: Number.isFinite(gridPriceOffsetPct) ? gridPriceOffsetPct : 0,
+            centerPrice: resolvedCenterPrice,
+            amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : resolvedCenterPrice,
             updatedAt: new Date().toISOString(),
             source: 'market_adapter/market_adapter.js',
         };
@@ -818,7 +786,6 @@ const { MarketAdapterService } = require("./core/market_adapter_service");
 const adapterService = new MarketAdapterService({
     resolveBotContext,
     resolveAmaForBot,
-    resolveOffsetForBot,
     candleFileForBot,
     loadJson,
     saveJson,
@@ -854,8 +821,6 @@ function writeCenterSnapshot(state) {
             botName: v.botName,
             centerPrice: v.centerPrice,
             amaCenterPrice: v.amaCenterPrice,
-            effectiveCenterPrice: v.effectiveCenterPrice,
-            gridPriceOffsetPct: v.gridPriceOffsetPct,
             lastGridResetAt: v.lastGridResetAt,
             lastAmaPrice: v.lastAmaPrice,
             lastDeltaPercent: v.lastDeltaPercent,
@@ -1079,7 +1044,6 @@ module.exports = {
     calcAmaComparison,
     computeCandleStaleness,
     resolveAmaForBot,
-    resolveOffsetForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
     applyRuntimeDefaultsFromGeneralSettings,
     usesAmaGridPrice,

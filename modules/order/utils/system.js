@@ -319,23 +319,21 @@ const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
  * gridPrice: "ama", "ama1", "ama2", "ama3", or "ama4".
  * Called by initializeGrid() when manager.config.gridPrice uses an AMA keyword.
  * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
- * @returns {Object|null} Snapshot with raw AMA and effective center fields, or null if invalid
+ * @returns {Object|null} Snapshot with center fields, or null if invalid
  */
 function loadAmaCenterSnapshot(botKey) {
     try {
         const gridPriceFile = path.join(__dirname, '../../../profiles/orders', `${botKey}.gridprice.json`);
         const raw = fs.readFileSync(gridPriceFile, 'utf8');
         const data = JSON.parse(raw);
-        const effectiveCenterPrice = Number(data?.effectiveCenterPrice ?? data?.centerPrice);
+        const centerPrice = Number(data?.centerPrice);
         const amaCenterPrice = Number(data?.amaCenterPrice);
-        if (!Number.isFinite(effectiveCenterPrice) || effectiveCenterPrice <= 0) {
+        if (!Number.isFinite(centerPrice) || centerPrice <= 0) {
             return null;
         }
         return {
             amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : null,
-            centerPrice: effectiveCenterPrice,
-            effectiveCenterPrice,
-            gridPriceOffsetPct: Number.isFinite(Number(data?.gridPriceOffsetPct)) ? Number(data.gridPriceOffsetPct) : 0,
+            centerPrice,
             source: data?.source || null,
             updatedAt: data?.updatedAt || null
         };
@@ -345,30 +343,14 @@ function loadAmaCenterSnapshot(botKey) {
 }
 
 /**
- * Load the effective AMA grid center price written by price_adapter for a bot.
- * This is the legacy numeric accessor used by the order engine.
+ * Load the AMA grid center price written by price_adapter for a bot.
+ * This is the numeric accessor used by the order engine.
  * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
- * @returns {number|null} Effective center price in B/A format, or null if file absent/invalid
+ * @returns {number|null} Center price in B/A format, or null if file absent/invalid
  */
 function loadAmaCenterPrice(botKey) {
     const snapshot = loadAmaCenterSnapshot(botKey);
     return snapshot ? snapshot.centerPrice : null;
-}
-
-/**
- * Apply a signed percentage offset to a base price, rounding to 8 decimals.
- * @param {number} basePrice - The reference price to offset
- * @param {number} offsetPct - Signed percentage offset (e.g. 1.5 = +1.5%)
- * @returns {number|null} Adjusted price, or null if basePrice is invalid
- */
-function applyGridPriceOffset(basePrice, offsetPct) {
-    const base = Number(basePrice);
-    const offset = Number(offsetPct);
-    if (!Number.isFinite(base) || base <= 0) return null;
-    if (!Number.isFinite(offset) || offset === 0) return base;
-    const adjusted = base * (1 + (offset / 100));
-    const rounded = Math.round(adjusted * 1e8) / 1e8;
-    return Number.isFinite(rounded) && rounded > 0 ? rounded : base;
 }
 
 // ================================================================================
@@ -929,7 +911,6 @@ module.exports = {
     deriveMarketPrice,
     derivePoolPrice,
     derivePrice,
-    applyGridPriceOffset,
     loadAmaCenterPrice,
     loadAmaCenterSnapshot,
     initializeFeeCache,

@@ -103,13 +103,11 @@ These are the practical knobs for building an advanced margin trader on top of t
 - collateral adjustment
 - `weightDistribution`
 - `minPrice` / `maxPrice` ratio
-- runtime-managed center bias (`priceOffset` policy in `profiles/market_profiles.json`; planner may still emit a final `gridPriceOffsetPct` internally)
 
 These settings change behavior without redefining the whole ladder:
 
 - CR is repaired through debt first, collateral second
 - AMA remains the base anchor
-- the runtime-managed center bias can lead the effective center ahead of raw AMA when trend is confirmed
 - `weightDistribution` changes where size is concentrated within the existing ladder
 - the min/max ratio changes the outer operating envelope slowly based on former price action
 
@@ -127,14 +125,12 @@ The planner in `claw/modules/position_health.js` (`buildMarginTradingPlan(...)`)
 - position assessment
 - target CR resolution
 - debt/collateral action plan
-- final runtime center-bias decision
 - final `weightDistribution`
 - final min/max price ratio recommendation
 
 This keeps the bot architecture clean:
 
 - AMA = anchor
-- runtime center bias = short-term lead
 - weights = deployment bias within the grid
 - range ratio = slow structural width
 - debt/collateral actions = margin-risk control
@@ -142,12 +138,10 @@ This keeps the bot architecture clean:
 Example: weak short, strong DOWN trend
 
 - repair the weak short by reducing debt first
-- bias the grid center downward while the downtrend persists
 - front-load buys and flatten sells
 
 Example: sideways market
 
-- the runtime center bias stays neutral or resets toward zero
 - `weightDistribution` stays balanced or double-mountain
 - the bot keeps full deployment, centered by AMA, with no strong directional skew beyond the configured price bounds
 
@@ -163,7 +157,6 @@ Example unified plan output:
     collateralDelta: 920
   },
   gridPlan: {
-    finalGridPriceOffsetPct: -0.35,
     finalPriceRangeRatio: 2.4,
     weightDistribution: {
       sell: 0.1,
@@ -171,7 +164,6 @@ Example unified plan output:
     }
   },
   botPatch: {
-    gridPriceOffsetPct: -0.35,
     minPrice: '2.4x',
     maxPrice: '2.4x',
     weightDistribution: {
@@ -182,12 +174,9 @@ Example unified plan output:
 }
 ```
 
-`botPatch.gridPriceOffsetPct` in this planner output is an internal adaptive setting produced by the margin-trading planner. The generic `bot-settings-preview` / `bot-settings-apply` bridge is no longer the public surface for writing that field directly.
-
 Interpretation:
 
 - CR is below target, so debt reduction is the first action
-- the confirmed DOWN trend shifts the center lower with a negative offset
 - buys are front-loaded because they are the with-trend side
 - sells are flattened because price is moving away from them
 - the range ratio stays competitive rather than widening all the way to a conservative `3x`

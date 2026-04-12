@@ -10,7 +10,6 @@ const {
     calcAmaComparison,
     computeCandleStaleness,
     resolveAmaForBot,
-    resolveOffsetForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
     usesAmaGridPrice,
     applyRuntimeDefaultsFromGeneralSettings,
@@ -223,45 +222,6 @@ assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPr
             'market_profiles comparison should use pair-specific profile presets when present'
         );
         assert.ok(comparison.every((entry) => entry.ok), 'profile-based comparison presets should produce valid AMA values with enough candles');
-    } finally {
-        if (hadOriginal) {
-            fs.writeFileSync(MARKET_PROFILES_FILE, original, 'utf8');
-        } else if (fs.existsSync(MARKET_PROFILES_FILE)) {
-            fs.unlinkSync(MARKET_PROFILES_FILE);
-        }
-    }
-}
-
-// resolveOffsetForBot: defaults when no profile exists
-{
-    const offset = resolveOffsetForBot({ assetA: 'UNKNOWN', assetB: 'UNKNOWN' });
-    assert.strictEqual(offset.devThreshold, 20, 'default devThreshold should be 20');
-    assert.strictEqual(offset.maxPct, 10, 'default maxPct should be 10');
-}
-
-// resolveOffsetForBot: market_profiles.json overrides defaults
-{
-    const hadOriginal = fs.existsSync(MARKET_PROFILES_FILE);
-    const original = hadOriginal ? fs.readFileSync(MARKET_PROFILES_FILE, 'utf8') : null;
-
-    try {
-        fs.mkdirSync(path.dirname(MARKET_PROFILES_FILE), { recursive: true });
-        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
-            profiles: [
-                {
-                    assetA: 'TESTA',
-                    assetB: 'TESTB',
-                    intervalSeconds: 3600,
-                    updatedAt: '2026-04-10T00:00:00.000Z',
-                    amas: { AMA3: { erPeriod: 372, fastPeriod: 1.8, slowPeriod: 1286 } },
-                    priceOffset: { devThreshold: 12, maxPct: 1.0 },
-                },
-            ],
-        }, null, 2));
-
-        const offset = resolveOffsetForBot({ assetA: 'TESTA', assetB: 'TESTB' });
-        assert.strictEqual(offset.devThreshold, 12, 'market_profiles priceOffset.devThreshold should override defaults');
-        assert.strictEqual(offset.maxPct, 1.0, 'market_profiles priceOffset.maxPct should override defaults');
     } finally {
         if (hadOriginal) {
             fs.writeFileSync(MARKET_PROFILES_FILE, original, 'utf8');

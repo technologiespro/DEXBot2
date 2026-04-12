@@ -111,7 +111,6 @@ async function testPreviewAndApplyFlow() {
   assert.strictEqual(appliedPatches[0].patch.weightDistribution.buy, 0.3);
   assert.strictEqual(appliedPatches[0].patch.weightDistribution.sell, 1.1);
   assert.deepStrictEqual(Object.keys(appliedPatches[0].patch.weightDistribution).sort(), ['buy', 'sell']);
-  assert.strictEqual(appliedPatches[0].patch.gridPriceOffsetPct, undefined);
   assert.strictEqual(appliedPatches[0].options.trigger, true);
   assert.strictEqual(appliedPatches[0].options.triggerPayload.reason, 'dynamic_weight_update');
   assert.strictEqual(triggerWrites.length, 0, 'writeTrigger fallback should not run when applyBotSettingsPatch is available');

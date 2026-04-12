@@ -6,7 +6,6 @@ const { computeDynamicWeights } = require('./strategies/dynamic_weights');
 const { adjustCollateralRatio } = require('./strategies/collateral_manager');
 const { DEFAULT_CONFIG } = require('../../modules/constants');
 const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order');
-const { applyGridPriceOffset } = require('../../modules/order/utils/system');
 
 
 class MarketAdapterService {
@@ -94,10 +93,6 @@ class MarketAdapterService {
         if (!botAma.enabled) {
             return { ok: false, reason: 'ama disabled' };
         }
-        const botOffset = typeof deps.resolveOffsetForBot === 'function'
-            ? deps.resolveOffsetForBot(bot, ctx)
-            : { devThreshold: 10, maxPct: 5 };
-
         const filePath = deps.candleFileForBot(bot.botKey);
         const existing = deps.loadJson(filePath, null);
         const existingCandles = Array.isArray(existing?.candles) ? existing.candles : [];
@@ -219,39 +214,18 @@ class MarketAdapterService {
         // 4. Collateral Strategy
         const collateral = adjustCollateralRatio(trendData, 1.5, 2.0);
 
-        // 5. Grid Price Offset Calculation
-        // trend_detection -> price_offset
-
-        // Inventory danger gate: only activate offset when price has deviated
-        // >= devThreshold % from AMA (grid center). Below this the grid
-        // is still well-centered and no correction is needed.
-        // Ramp: linearly scales 0→100 between threshold and 2x threshold.
-        // Below devThreshold → silent. At devThreshold → 0%. At 2x → full 100%. Above 2x → capped at 100%.
-        const currentClose = lastCandle[4] || 0;
-        const deviationPct = amaPrice > 0 ? Math.abs(currentClose - amaPrice) / amaPrice * 100 : 0;
-        const { devThreshold, maxPct: offsetMaxPct } = botOffset;
-        const effectiveConfidence = deviationPct < devThreshold ? 0 :
-            Math.min(100, Math.round(((deviationPct - devThreshold) / devThreshold) * 100));
-
-        let dynamicTrendOffset = 0;
-        if (trendData.trend === 'UP')        dynamicTrendOffset =  (effectiveConfidence / 100) * offsetMaxPct;
-        else if (trendData.trend === 'DOWN') dynamicTrendOffset = -(effectiveConfidence / 100) * offsetMaxPct;
-        
-        const gridPriceOffsetPct = dynamicTrendOffset;
-
-        // AMA + price_offset -> Gridprice
-        // ---------------------------------------------------------------
-        
         const amaComparison = deps.calcAmaComparison(nextCandles, bot, ctx);
         const lastCandleTs = lastCandle[0] || null;
         const { staleData, staleAgeHours } = deps.computeCandleStaleness(lastCandleTs, cfg.maxStaleHours);
-        
+
         const referencePrice = amaPrice;
-        let effectiveCenterPrice = applyGridPriceOffset(amaPrice, gridPriceOffsetPct);
-        const clampedCenterPrice = this.clampGridPriceToBounds(effectiveCenterPrice, amaPrice, bot);
-        effectiveCenterPrice = Number.isFinite(clampedCenterPrice) && clampedCenterPrice > 0 ? clampedCenterPrice : effectiveCenterPrice;
+        const clampedCenterPrice = this.clampGridPriceToBounds(referencePrice, referencePrice, bot);
+        const centerPrice = Number.isFinite(clampedCenterPrice) && clampedCenterPrice > 0
+            ? clampedCenterPrice
+            : referencePrice;
 
         const botState = { ...(state.bots[bot.botKey] || {}) };
+        delete botState.gridPriceOffsetPct;
         delete botState.gridPriceOffsetClampToBounds;
         let triggered = false;
         let triggerPath = null;
@@ -260,25 +234,16 @@ class MarketAdapterService {
         let triggerSuppressedReason = null;
 
         if (!staleData && Number.isFinite(referencePrice) && referencePrice > 0) {
-            const centerPrice = Number(botState.centerPrice || 0);
-            const previousGridPriceOffsetPct = Number(botState.gridPriceOffsetPct || 0);
-            const offsetPctChanged = Number.isFinite(previousGridPriceOffsetPct)
-                ? Math.abs(previousGridPriceOffsetPct - gridPriceOffsetPct) > 1e-9
-                : false;
-            const effectiveCenterMoved = centerPrice > 0
-                && Math.abs(Number(effectiveCenterPrice || 0) - centerPrice) > 1e-8;
-            const offsetChanged = offsetPctChanged && effectiveCenterMoved;
+            const previousCenterPrice = Number(botState.centerPrice || 0);
 
-            if (!Number.isFinite(centerPrice) || centerPrice <= 0) {
-                const bootstrapCenterPrice = Number.isFinite(effectiveCenterPrice) && effectiveCenterPrice > 0
-                    ? effectiveCenterPrice
+            if (!Number.isFinite(previousCenterPrice) || previousCenterPrice <= 0) {
+                const bootstrapCenterPrice = Number.isFinite(centerPrice) && centerPrice > 0
+                    ? centerPrice
                     : referencePrice;
                 let amaCenterPersisted = true;
                 if (!isDryRun && typeof deps.writeBotGridPriceCenter === 'function') {
-                    amaCenterPersisted = deps.writeBotGridPriceCenter(bot.botKey, referencePrice, {
+                    amaCenterPersisted = deps.writeBotGridPriceCenter(bot.botKey, bootstrapCenterPrice, {
                         amaCenterPrice: amaPrice,
-                        gridPriceOffsetPct,
-                        effectiveCenterPrice: bootstrapCenterPrice,
                     }) !== false;
                 } else if (isDryRun) {
                     dryRunMessages.push(`[DRY RUN] Would write grid price center for ${bot.botKey}: ${bootstrapCenterPrice}`);
@@ -287,25 +252,22 @@ class MarketAdapterService {
                 if (amaCenterPersisted) {
                     botState.centerPrice = bootstrapCenterPrice;
                     botState.amaCenterPrice = amaPrice;
-                    botState.gridPriceOffsetPct = gridPriceOffsetPct;
                     botState.lastGridResetAt = nowIso;
                 } else {
                     triggerSuppressedReason = 'ama_center_persist_failed';
                 }
             } else {
-                deltaPercent = Math.abs((effectiveCenterPrice - centerPrice) / centerPrice) * 100;
+                deltaPercent = Math.abs((centerPrice - previousCenterPrice) / previousCenterPrice) * 100;
                 if (deltaPercent >= botThreshold) {
                     let amaCenterPersisted = true;
 
                     if (!isDryRun && typeof deps.writeBotGridPriceCenter === 'function') {
-                        amaCenterPersisted = deps.writeBotGridPriceCenter(bot.botKey, referencePrice, {
+                        amaCenterPersisted = deps.writeBotGridPriceCenter(bot.botKey, centerPrice, {
                             amaCenterPrice: amaPrice,
-                            gridPriceOffsetPct,
-                            effectiveCenterPrice,
-                            previousCenterPrice: centerPrice,
+                            previousCenterPrice,
                         }) !== false;
                     } else if (isDryRun) {
-                        dryRunMessages.push(`[DRY RUN] Would write grid price center for ${bot.botKey}: ${effectiveCenterPrice}`);
+                        dryRunMessages.push(`[DRY RUN] Would write grid price center for ${bot.botKey}: ${centerPrice}`);
                     }
 
                     if (!amaCenterPersisted) {
@@ -313,24 +275,20 @@ class MarketAdapterService {
                     } else {
                         if (!isDryRun) {
                             triggerPath = deps.writeGridResetTrigger(bot, {
-                                reason: offsetChanged
-                                    ? 'price_adapter_gridprice_offset_change'
-                                    : 'price_adapter_delta_threshold',
+                                reason: 'price_adapter_delta_threshold',
                                 thresholdPercent: botThreshold,
                                 deltaPercent,
-                                previousCenterPrice: centerPrice,
-                                newCenterPrice: effectiveCenterPrice,
+                                previousCenterPrice,
+                                newCenterPrice: centerPrice,
                                 referencePrice,
                                 rawAmaPrice: amaPrice,
-                                gridPriceOffsetPct,
                                 poolId: ctx.poolId,
                             });
                         } else {
                             dryRunMessages.push(`[DRY RUN] Would write grid reset trigger for ${bot.botKey}`);
                         }
-                        botState.centerPrice = effectiveCenterPrice;
+                        botState.centerPrice = centerPrice;
                         botState.amaCenterPrice = amaPrice;
-                        botState.gridPriceOffsetPct = gridPriceOffsetPct;
                         botState.lastGridResetAt = nowIso;
                         botState.triggerCount = Number(botState.triggerCount || 0) + 1;
                         triggered = true;
@@ -344,11 +302,10 @@ class MarketAdapterService {
                                     poolId: ctx.poolId,
                                     thresholdPercent: botThreshold,
                                     deltaPercent,
-                                    previousCenterPrice: centerPrice,
-                                    newCenterPrice: effectiveCenterPrice,
+                                    previousCenterPrice,
+                                    newCenterPrice: centerPrice,
                                     referencePrice,
                                     rawAmaPrice: amaPrice,
-                                    gridPriceOffsetPct,
                                     triggerPath,
                                 });
                             } catch (err) {
@@ -377,6 +334,10 @@ class MarketAdapterService {
         };
         deps.saveJson(filePath, candlePayload);
 
+        const persistedCenterPrice = Number(botState.centerPrice || 0) > 0
+            ? Number(botState.centerPrice)
+            : undefined;
+
         state.bots[bot.botKey] = {
             ...botState,
             botName: bot.name,
@@ -389,8 +350,7 @@ class MarketAdapterService {
             lastCandleTs,
             lastAmaPrice: amaPrice,
             amaCenterPrice: amaPrice,
-            gridPriceOffsetPct,
-            effectiveCenterPrice,
+            centerPrice: persistedCenterPrice,
             amaConfig: {
                 erPeriod: botAma.erPeriod,
                 fastPeriod: botAma.fastPeriod,
@@ -411,8 +371,6 @@ class MarketAdapterService {
             trend: trendData.trend,
             atr,
             weightVariance,
-            effectiveConfidence,
-            deviationPct
         };
 
         return {
@@ -439,8 +397,7 @@ class MarketAdapterService {
             poolId: ctx.poolId,
             candleFile: deps.path.relative(deps.root, filePath),
             lastCandleTs,
-            gridPriceOffsetPct,
-            effectiveCenterPrice,
+            centerPrice,
             amaConfig: {
                 erPeriod: botAma.erPeriod,
                 fastPeriod: botAma.fastPeriod,
@@ -448,8 +405,6 @@ class MarketAdapterService {
             },
             atr,
             weightVariance,
-            effectiveConfidence,
-            deviationPct
         };
     }
 }

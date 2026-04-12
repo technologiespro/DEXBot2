@@ -128,7 +128,7 @@ const {
     calculateIdealBoundary,
     assignGridRoles
 } = require('./utils/order');
-const { applyGridPriceOffset, derivePrice, loadAmaCenterPrice } = require('./utils/system');
+const { derivePrice, loadAmaCenterPrice } = require('./utils/system');
 
 class Grid {
     /**
@@ -512,7 +512,7 @@ class Grid {
         // Supported modes:
         //   - numeric: fixed value
         //   - "pool" / "market": live blockchain price for the pair
-        //   - "ama"/"ama1".."ama4": effective center from profiles/orders/<botKey>.gridprice.json
+        //   - "ama"/"ama1".."ama4": center from profiles/orders/<botKey>.gridprice.json
         //   - null/anything else: fallback to startPrice (backward-compatible)
         let gp = mp;
         let gpSource = 'startPrice';
@@ -541,7 +541,7 @@ class Grid {
             if (Number.isFinite(amaCenter) && amaCenter > 0) {
                 gp = amaCenter;
                 gpSource = 'ama';
-                manager.logger?.log?.(`[DIAGNOSTIC] initializeGrid: gridPrice=effective AMA center ${gp.toFixed(8)}`, 'info');
+                manager.logger?.log?.(`[DIAGNOSTIC] initializeGrid: gridPrice=AMA center ${gp.toFixed(8)}`, 'info');
             } else {
                 manager.logger?.log?.(`initializeGrid: AMA center unavailable for gridPrice, falling back to startPrice`, 'warn');
             }

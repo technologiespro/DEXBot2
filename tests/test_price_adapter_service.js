@@ -380,8 +380,8 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
     assert.strictEqual(state.bots['xrp-bts-bootstrap'].lastGridResetAt, undefined, 'bootstrap state should not pretend a reset happened');
 }
 
-// Dynamic offset is 0 when spot = AMA (0% deviation). Trigger fires from AMA delta.
-async function testDynamicOffsetZeroAtParityTriggeredByAmaDelta() {
+// Center remains AMA when there is no offset. Trigger fires from AMA delta.
+async function testCenterEqualsAmaTriggeredByAmaDelta() {
     let triggerWrites = 0;
     let writeArgs = null;
 
@@ -439,7 +439,6 @@ async function testDynamicOffsetZeroAtParityTriggeredByAmaDelta() {
         bots: {
             'xrp-bts-0': {
                 centerPrice: 95,
-                gridPriceOffsetPct: 0,
             },
         },
     };
@@ -462,16 +461,14 @@ async function testDynamicOffsetZeroAtParityTriggeredByAmaDelta() {
     assert.strictEqual(triggerWrites, 1, 'trigger file should be written');
     assert.ok(Array.isArray(writeArgs), 'writeBotGridPriceCenter should be called');
     assert.strictEqual(writeArgs[0], 'xrp-bts-0');
-    assert.strictEqual(writeArgs[1], 100, 'reference price should be AMA');
-    assert.strictEqual(writeArgs[2].gridPriceOffsetPct, 0, 'no static offset — dynamic offset is zero at parity');
-    assert.strictEqual(writeArgs[2].effectiveCenterPrice, 100, 'effective center equals AMA when spot = AMA');
+    assert.strictEqual(writeArgs[1], 100, 'written center should be the AMA center');
+    assert.strictEqual(writeArgs[2].amaCenterPrice, 100, 'raw AMA center should be persisted separately');
     assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'center updates to new AMA');
     assert.strictEqual(state.bots['xrp-bts-0'].amaCenterPrice, 100, 'raw AMA center tracked separately');
-    assert.strictEqual(state.bots['xrp-bts-0'].gridPriceOffsetPct, 0, 'zero offset tracked in state');
 }
 
-// When AMA equals previous center, effective center is unchanged → no trigger even with low threshold.
-async function testDynamicOffsetNoTriggerWhenCenterMatchesAMA() {
+// When AMA equals previous center, the center is unchanged → no trigger even with low threshold.
+async function testNoTriggerWhenCenterMatchesAma() {
     let triggerWrites = 0;
     let writeCalls = 0;
 
@@ -524,12 +521,11 @@ async function testDynamicOffsetNoTriggerWhenCenterMatchesAMA() {
         incrementPercent: 0.4,
     };
 
-    // Previous center = AMA → effective center unchanged → no trigger
+    // Previous center = AMA → center unchanged → no trigger
     const state = {
         bots: {
             'xrp-bts-0': {
                 centerPrice: 100,
-                gridPriceOffsetPct: 0,
             },
         },
     };
@@ -553,15 +549,14 @@ async function testDynamicOffsetNoTriggerWhenCenterMatchesAMA() {
     assert.strictEqual(triggerWrites, 0, 'trigger file must not be written');
     assert.strictEqual(writeCalls, 0, 'center must not be persisted when unchanged');
     assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'stored center should remain unchanged');
-    assert.strictEqual(result.gridPriceOffsetPct, 0, 'dynamic offset is zero when spot = AMA');
 }
 
-// Effective center is clamped to bot.minPrice/maxPrice bounds when AMA drifts outside them.
-async function testEffectiveCenterClampedByBotBounds() {
+// Center is clamped to bot.minPrice/maxPrice bounds when AMA drifts outside them.
+async function testCenterClampedByBotBounds() {
     let triggerWrites = 0;
     let lastWrite = null;
 
-    // AMA = 110, bot bounds [99, 101] → effective center = 101 (clamped to maxPrice)
+    // AMA = 110, bot bounds [99, 101] → center = 101 (clamped to maxPrice)
     const service = new MarketAdapterService({
         resolveBotContext: async () => ({
             assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
@@ -628,7 +623,6 @@ async function testEffectiveCenterClampedByBotBounds() {
         bots: {
             'xrp-bts-1': {
                 centerPrice: 110,
-                gridPriceOffsetPct: 0,
             },
         },
     };
@@ -636,22 +630,22 @@ async function testEffectiveCenterClampedByBotBounds() {
     const clampedResult = await service.processBot(clampedBot, clampedState, cfg, new Map(), {});
     assert.strictEqual(clampedResult.ok, true);
     assert.strictEqual(clampedResult.triggered, true, 'clamped center change should trigger recenter');
-    assert.strictEqual(clampedState.bots['xrp-bts-1'].centerPrice, 101, 'effective center should be clamped to maxPrice');
-    assert.strictEqual(lastWrite[2].effectiveCenterPrice, 101, 'written center should match clamped value');
+    assert.strictEqual(clampedState.bots['xrp-bts-1'].centerPrice, 101, 'center should be clamped to maxPrice');
+    assert.strictEqual(lastWrite[1], 101, 'written center should match clamped value');
+    assert.strictEqual(lastWrite[2].amaCenterPrice, 110, 'raw AMA center should be persisted separately');
 
-    // AMA=110, previous=101 (already at clamp boundary) → no effective center change → no trigger.
+    // AMA=110, previous=101 (already at clamp boundary) → no center change → no trigger.
     const noOpBot = { ...clampedBot, botKey: 'xrp-bts-3' };
     const noOpState = {
         bots: {
             'xrp-bts-3': {
                 centerPrice: 101,
-                gridPriceOffsetPct: 0,
             },
         },
     };
     const noOpResult = await service.processBot(noOpBot, noOpState, cfg, new Map(), {});
     assert.strictEqual(noOpResult.ok, true);
-    assert.strictEqual(noOpResult.triggered, false, 'no trigger when clamping keeps effective center unchanged');
+    assert.strictEqual(noOpResult.triggered, false, 'no trigger when clamping keeps center unchanged');
     assert.strictEqual(noOpState.bots['xrp-bts-3'].centerPrice, 101, 'center should remain at clamp boundary');
     assert.strictEqual(triggerWrites, 1, 'only the initial clamp move should have triggered');
 }
@@ -967,9 +961,9 @@ async function run() {
     await testAmaGridPriceIsCaseInsensitive();
     await testAmaTriggerSuppressedWhenCenterPersistFails();
     await testBootstrapCenterDoesNotAdvanceWhenPersistFails();
-    await testDynamicOffsetZeroAtParityTriggeredByAmaDelta();
-    await testDynamicOffsetNoTriggerWhenCenterMatchesAMA();
-    await testEffectiveCenterClampedByBotBounds();
+    await testCenterEqualsAmaTriggeredByAmaDelta();
+    await testNoTriggerWhenCenterMatchesAma();
+    await testCenterClampedByBotBounds();
     await testContextCacheInvalidatesOnPoolChange();
     await testKibanaGapRepairPatchesMissingCandles();
     await testRemainingGapsAreReportedWhenKibanaHasNoPatchData();

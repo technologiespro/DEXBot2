@@ -42,7 +42,6 @@
  *                                  //              profiles/orders/<botKey>.gridprice.json; grid reads the effective center on reset
  *                                  //   <number> = fixed numeric reference
  *                                  //   null     = use startPrice (default, backward-compatible)
- *       // gridPriceOffsetPct is runtime-managed by the price adapter and is not configured here
  *       "minPrice": "3x",
  *       "maxPrice": "3x",
  *       "incrementPercent": 0.5,
@@ -817,7 +816,7 @@ async function askGridPriceMode(promptText, defaultValue) {
 
 /**
  * Normalizes a bot draft for editing or saving.
- * Preserves existing fields and seeds defaults for optional grid-price offset controls.
+ * Preserves existing fields and strips unsupported runtime-managed fields.
  * @param {Object} [base={}] - The initial bot data to edit.
  * @returns {Object} A normalized bot draft.
  */
@@ -838,7 +837,6 @@ function normalizeBotDraft(base = {}) {
     if (data.gridPrice === undefined) data.gridPrice = null;
     delete data.gridPriceOffsetPct;
     delete data.gridPriceOffsetClampToBounds;
-
     return data;
 }
 

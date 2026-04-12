@@ -463,27 +463,6 @@ function crWeight(zone) {
 }
 
 /**
- * Compute a signed price-offset bias from trend direction and confidence.
- *
- * @param {string} trend       – 'UP', 'DOWN', or 'NEUTRAL'
- * @param {number} confidence  – 0–100
- * @returns {number} Signed bias in the range [-1, 1]
- */
-function computePriceOffsetBias(trend = 'NEUTRAL', confidence = 0) {
-  if (trend === 'NEUTRAL') {
-    return 0;
-  }
-  const strength = trendWeight(trend, confidence);
-  if (trend === 'UP') {
-    return strength;
-  }
-  if (trend === 'DOWN') {
-    return -strength;
-  }
-  return 0;
-}
-
-/**
  * Compute directional order-weight bias from trend direction and confidence.
  * Positive bias means front-load that side; negative means flatten that side.
  *
@@ -531,7 +510,6 @@ function computeOrderWeightBias(trend = 'NEUTRAL', confidence = 0) {
 /**
  * Build a unified margin-trading plan that combines:
  * - CR adjustment intent (debt first, collateral second)
- * - final grid price offset percentage
  * - final weightDistribution values
  *
  * @param {Object} position      – Position object with onChain collateral/debt/feed data
@@ -552,37 +530,14 @@ function buildMarginTradingPlan(position, trendSignal = null, botConfig = {}, op
   );
   const currentCollateral = Number(position?.onChain?.collateralAmount || 0);
   const currentDebt = Number(position?.onChain?.debtAmount || 0);
-  const currentGridPriceOffsetPct = Number.isFinite(Number(botConfig?.gridPriceOffsetPct))
-    ? Number(botConfig.gridPriceOffsetPct)
-    : 0;
-  const allowNeutralReset = options.allowNeutralGridReset !== undefined
-    ? !!options.allowNeutralGridReset
-    : botConfig?.gridPriceOffsetAllowNeutralReset !== false;
-  const maxGridPriceOffsetPct = Number.isFinite(Number(options.maxGridPriceOffsetPct))
-    ? Math.max(0, Number(options.maxGridPriceOffsetPct))
-    : Number.isFinite(Number(botConfig?.gridPriceOffsetMaxPct))
-      ? Math.max(0, Number(botConfig.gridPriceOffsetMaxPct))
-      : 0.5;
-  const priceOffsetScale = Number.isFinite(Number(options.priceOffsetScale))
-    ? Math.max(0, Number(options.priceOffsetScale))
-    : 1;
 
   const trend = trendSignal?.trend || 'NEUTRAL';
   const confidence = Number(trendSignal?.confidence || 0);
-  const priceOffsetBias = computePriceOffsetBias(trend, confidence);
   const orderWeightBias = computeOrderWeightBias(trend, confidence);
   const priceRangePlan = computePriceRangeRatioPlan(botConfig, {
     ...options,
     referencePrice
   });
-
-  let finalGridPriceOffsetPct = currentGridPriceOffsetPct;
-  if (trend === 'NEUTRAL') {
-    finalGridPriceOffsetPct = allowNeutralReset ? 0 : currentGridPriceOffsetPct;
-  } else {
-    const scaledBias = Math.max(-1, Math.min(1, priceOffsetBias * priceOffsetScale));
-    finalGridPriceOffsetPct = roundNumber(scaledBias * maxGridPriceOffsetPct, 3);
-  }
 
   const currentWeights = normalizeWeightDistribution(botConfig?.weightDistribution);
   const weightPlan = computeDynamicWeights(
@@ -621,14 +576,10 @@ function buildMarginTradingPlan(position, trendSignal = null, botConfig = {}, op
     marketPlan: {
       confidence,
       trend,
-      priceOffsetBias,
       orderWeightBias
     },
     gridPlan: {
-      currentGridPriceOffsetPct,
-      finalGridPriceOffsetPct,
       finalPriceRangeRatio,
-      maxGridPriceOffsetPct,
       priceRangePlan,
       weightProfile: weightPlan.profile,
       weightDistribution: {
@@ -637,7 +588,6 @@ function buildMarginTradingPlan(position, trendSignal = null, botConfig = {}, op
       }
     },
     botPatch: {
-      gridPriceOffsetPct: finalGridPriceOffsetPct,
       maxPrice: formatRatioAsMultiplier(finalPriceRangeRatio),
       minPrice: formatRatioAsMultiplier(finalPriceRangeRatio),
       weightDistribution: {
@@ -660,7 +610,6 @@ module.exports = {
   collateralForTargetCr,
   computePriceRangeRatioPlan,
   computeOrderWeightBias,
-  computePriceOffsetBias,
   crWeight,
   debtDeltaForTargetCr,
   debtForTargetCr,

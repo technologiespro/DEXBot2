@@ -9,7 +9,6 @@ DEXBot2 uses **four independent grid recalculation triggers** to keep the tradin
 | Mechanism | Trigger | Config | Location | Scope |
 |-----------|---------|--------|----------|-------|
 | **AMA Delta** | Market price moved significantly | `AMA_DELTA_THRESHOLD_PERCENT` | `general.settings.json` | Global (all bots) |
-| **Grid Price Offset** | Dynamic offset activates when spot deviates ≥15% from AMA | `priceOffset` | `market_profiles.json` | Per-pair |
 | **RMS Divergence** | Grid state diverged from blockchain | `RMS_PERCENTAGE` | `general.settings.json` | Global (all bots) |
 | **Regeneration** | Available funds exceed threshold | `GRID_REGENERATION_PERCENTAGE` | `constants.js` | Per-side (BUY/SELL) |
 
@@ -17,46 +16,13 @@ Each mechanism is **independent and can be configured separately**. They don't i
 
 ---
 
-## 1. Grid Price Offset (Dynamic, AMA-Deviation-Driven)
+## 1. AMA Center Baseline
 
-### What It Does
-Applies a signed percentage offset to the AMA center price, producing an **effective center** for grid bound calculations without altering the raw AMA anchor. The offset is computed purely by the market adapter — it is not a user-configurable field in `bots.json`.
+The market adapter persists the AMA-derived grid center directly. There is no
+additional deviation-based price adjustment layer on top of the AMA output.
 
-**Why it matters:** Shifts the grid center toward the current market price when the spot price has drifted far enough from the AMA that inventory is at risk — while staying completely silent during normal oscillation.
-
-### Configuration
-
-**File:** `profiles/market_profiles.json` (per asset pair)
-```json
-{
-  "priceOffset": {
-    "devThreshold": 15,
-    "maxPct": 1.5
-  }
-}
-```
-
-**Parameters:**
-- `devThreshold`: Minimum % deviation of spot from AMA before the offset activates (default 15). Below this the grid is considered well-centered and no shift is applied.
-- `maxPct`: Maximum offset magnitude applied at full confidence (default 1.5%). Formula: `effectiveCenter = amaPrice × (1 + offset/100)`.
-
-Offset policy is configured per pair in `profiles/market_profiles.json` via `priceOffset: { devThreshold, maxPct }`.
-
-### How It Works
-
-1. Market adapter computes `deviationPct = |spot − AMA| / AMA × 100`
-2. Below `devThreshold` → `offset = 0` (silent)
-3. Between `devThreshold` and `2 × devThreshold` → offset ramps linearly 0 → `maxPct`
-4. Above `2 × devThreshold` → offset capped at `maxPct`
-5. Sign follows trend direction (UP → positive shift, DOWN → negative shift)
-6. `price_adapter` persists the effective center; a grid recalculation trigger is written when the effective center crosses the delta threshold
-
-### Debugging
-
-**Offset active:**
-```
-[price_adapter] deviationPct=18.3% → gridPriceOffsetPct=0.55% (dynamic, deviation-driven)
-```
+The adapter writes the current center to `profiles/orders/<botKey>.gridprice.json`
+and the grid engine uses that snapshot as the baseline for future delta comparisons.
 
 ---
 
@@ -266,8 +232,8 @@ On the **first cycle** for a bot (when no `centerPrice` baseline exists yet), th
 ### How It Works
 
 1. `processBot()` detects the bootstrap case (`centerPrice` is not yet set).
-2. It calls `writeBotGridPriceCenter(botKey, referencePrice, { amaCenterPrice, gridPriceOffsetPct, effectiveCenterPrice })` where `gridPriceOffsetPct` is the dynamically computed offset for observability.
-3. **If the write succeeds** (returns anything other than `false`): the in-memory baseline (`centerPrice`, `amaCenterPrice`, `gridPriceOffsetPct`, `lastGridResetAt`) is set. No recalculation trigger is created during bootstrap — the bot enters normal delta-comparison behavior on subsequent cycles.
+2. It calls `writeBotGridPriceCenter(botKey, centerPrice, { amaCenterPrice })`.
+3. **If the write succeeds** (returns anything other than `false`): the in-memory baseline (`centerPrice`, `amaCenterPrice`, `lastGridResetAt`) is set. No recalculation trigger is created during bootstrap — the bot enters normal delta-comparison behavior on subsequent cycles.
 4. **If the write fails** (returns `false`): the in-memory baseline is left unset, `triggerSuppressedReason` is set to `ama_center_persist_failed`, and no recalculation trigger is written. The next cycle will retry the bootstrap from scratch.
 
 ### Debugging
@@ -287,7 +253,6 @@ If this appears repeatedly, check:
 
 ### Independence
 All four mechanisms are **independent**:
-- Grid price offset is triggered by offset parameter changes
 - AMA delta is triggered by market price changes
 - RMS divergence is triggered by blockchain state drift
 - Regeneration is triggered by available funds

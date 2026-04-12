@@ -18,7 +18,6 @@ const {
   collateralDeltaForTargetCr,
   computePriceRangeRatioPlan,
   computeOrderWeightBias,
-  computePriceOffsetBias,
   crWeight,
   debtDeltaForTargetCr,
   debtForTargetCr,
@@ -344,17 +343,6 @@ function testCrWeight() {
   console.log('    PASS');
 }
 
-function testComputePriceOffsetBias() {
-  console.log('  computePriceOffsetBias...');
-
-  assert.strictEqual(computePriceOffsetBias('UP', 90), 1.0);
-  assert.strictEqual(computePriceOffsetBias('DOWN', 70), -0.7);
-  assert.strictEqual(computePriceOffsetBias('NEUTRAL', 100), 0);
-  assert.strictEqual(computePriceOffsetBias('UNKNOWN', 100), 0);
-
-  console.log('    PASS');
-}
-
 function testComputeOrderWeightBias() {
   console.log('  computeOrderWeightBias...');
 
@@ -448,8 +436,6 @@ function testBuildMarginTradingPlanDowntrend() {
       trend: 'DOWN'
     },
     {
-      gridPriceOffsetMaxPct: 0.5,
-      gridPriceOffsetPct: 0.1,
       weightDistribution: { sell: 0.5, buy: 0.5 }
     },
     {
@@ -469,7 +455,6 @@ function testBuildMarginTradingPlanDowntrend() {
   assert.strictEqual(plan.targetCr, 2.2);
   assert.strictEqual(plan.crPlan.primaryAction, 'reduce_debt');
   assert.strictEqual(plan.crPlan.fallbackAction, 'add_collateral');
-  assert.strictEqual(plan.botPatch.gridPriceOffsetPct, -0.5);
   assert.strictEqual(plan.gridPlan.finalPriceRangeRatio, 1.83);
   assert.strictEqual(plan.gridPlan.weightProfile, 'mountain_valley');
   assert.strictEqual(plan.botPatch.minPrice, '1.83x');
@@ -480,8 +465,8 @@ function testBuildMarginTradingPlanDowntrend() {
   console.log('    PASS');
 }
 
-function testBuildMarginTradingPlanZeroOffsetStillPlansBias() {
-  console.log('  buildMarginTradingPlan (zero offset still plans trend bias)...');
+function testBuildMarginTradingPlanStillPlansWeightsWithoutOffset() {
+  console.log('  buildMarginTradingPlan (still plans weights without offset)...');
 
   const plan = buildMarginTradingPlan(
     makePosition(1.6, 100),
@@ -493,8 +478,6 @@ function testBuildMarginTradingPlanZeroOffsetStillPlansBias() {
       trend: 'DOWN'
     },
     {
-      gridPriceOffsetMaxPct: 0.5,
-      gridPriceOffsetPct: 0,
       weightDistribution: { sell: 0.5, buy: 0.5 }
     },
     {
@@ -513,14 +496,13 @@ function testBuildMarginTradingPlanZeroOffsetStillPlansBias() {
 
   assert.strictEqual(plan.targetCr, 2.2);
   assert.strictEqual(plan.crPlan.primaryAction, 'reduce_debt');
-  assert.strictEqual(plan.botPatch.gridPriceOffsetPct, -0.5);
-  assert.strictEqual(plan.gridPlan.finalGridPriceOffsetPct, -0.5);
+  assert.strictEqual(plan.gridPlan.finalPriceRangeRatio, 1.83);
 
   console.log('    PASS');
 }
 
-function testBuildMarginTradingPlanNeutralKeepsOffsetWhenConfigured() {
-  console.log('  buildMarginTradingPlan (neutral keeps offset when reset disabled)...');
+function testBuildMarginTradingPlanNeutralKeepsCenter() {
+  console.log('  buildMarginTradingPlan (neutral keeps center)...');
 
   const plan = buildMarginTradingPlan(
     makePosition(2.2, 100),
@@ -532,8 +514,6 @@ function testBuildMarginTradingPlanNeutralKeepsOffsetWhenConfigured() {
       trend: 'NEUTRAL'
     },
     {
-      gridPriceOffsetPct: 0.2,
-      gridPriceOffsetAllowNeutralReset: false,
       weightDistribution: { sell: 0.5, buy: 0.5 }
     },
     {
@@ -550,7 +530,6 @@ function testBuildMarginTradingPlanNeutralKeepsOffsetWhenConfigured() {
   );
 
   assert.strictEqual(plan.crPlan.primaryAction, 'hold');
-  assert.strictEqual(plan.botPatch.gridPriceOffsetPct, 0.2);
   assert.strictEqual(plan.gridPlan.finalPriceRangeRatio, 1.43);
   assert.strictEqual(plan.botPatch.minPrice, '1.43x');
   assert.strictEqual(plan.botPatch.maxPrice, '1.43x');
@@ -586,13 +565,12 @@ function main() {
   testPlanCrAdjustment();
   testTrendWeight();
   testCrWeight();
-  testComputePriceOffsetBias();
   testComputeOrderWeightBias();
   testClassifyPriceRangeRatio();
   testComputePriceRangeRatioPlan();
   testBuildMarginTradingPlanDowntrend();
-  testBuildMarginTradingPlanZeroOffsetStillPlansBias();
-  testBuildMarginTradingPlanNeutralKeepsOffsetWhenConfigured();
+  testBuildMarginTradingPlanStillPlansWeightsWithoutOffset();
+  testBuildMarginTradingPlanNeutralKeepsCenter();
 
   console.log('\n=== All 26 tests passed ===');
 }
