@@ -404,7 +404,7 @@ async function run() {
     console.log(`  Saved: ${path.relative(process.cwd(), outPath)}  (${kb} KB)`);
 
     console.log('\nNext — chart it:');
-    console.log(`  node market_adapter/chart_lp_prices.js --file ${path.relative(process.cwd(), outPath)}`);
+    console.log(`  npm run lp:chart -- --data ${path.relative(process.cwd(), outPath)}`);
 }
 
 if (require.main === module) {

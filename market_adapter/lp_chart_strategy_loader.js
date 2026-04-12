@@ -1,0 +1,174 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+const ANALYSIS_AMA_FITTING_DIR = path.resolve(__dirname, '..', 'analysis', 'ama_fitting');
+const MARKET_ADAPTER_DIR = path.resolve(__dirname);
+
+function normalizeSymbol(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function inferIntervalLabel(meta) {
+    const sec = Number(meta?.intervalSeconds);
+    if (!Number.isFinite(sec) || sec <= 0) return null;
+    if (sec % 86400 === 0) return `${sec / 86400}d`;
+    if (sec % 3600 === 0) return `${sec / 3600}h`;
+    if (sec % 60 === 0) return `${sec / 60}m`;
+    return `${sec}s`;
+}
+
+function buildAmaStrategy(name, ama, color, dash, lineWidth = 1.5) {
+    if (!ama) return null;
+    return {
+        name,
+        erPeriod: ama.erPeriod ?? ama.er,
+        fastPeriod: ama.fastPeriod ?? ama.fast,
+        slowPeriod: ama.slowPeriod ?? ama.slow,
+        color,
+        dash,
+        lineWidth,
+    };
+}
+
+function loadStrategiesFromResults(resultsPath) {
+    if (!resultsPath || !fs.existsSync(resultsPath)) return null;
+
+    const json = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+    const meta = json?.meta;
+    if (!meta) return null;
+
+    if (meta.amas && meta.amas.AMA1 && meta.amas.AMA2 && meta.amas.AMA3 && meta.amas.AMA4) {
+        const order = [
+            ['AMA1', '#fb8c00', 'solid'],
+            ['AMA2', '#42a5f5', 'dash'],
+            ['AMA3', '#66bb6a', 'longdash'],
+            ['AMA4', '#ef5350', 'longdashdot'],
+        ];
+        const out = [];
+        for (const [k, color, dash] of order) {
+            const r = meta.amas[k];
+            if (!r) continue;
+            const cleaned = String(r.label || '')
+                .replace(/^AMA\d\s*/i, '')
+                .replace(/^[-:\s]+/, '')
+                .replace(/min move,\s*/i, '')
+                .trim();
+            const name = cleaned ? `${k} - ${cleaned}` : k;
+            const strat = buildAmaStrategy(name, r, color, dash, 1.5);
+            if (strat) out.push(strat);
+        }
+        return out.length ? out : null;
+    }
+
+    const strategies = [];
+    function add(key, label, color, dash) {
+        const r = meta[key];
+        const strat = buildAmaStrategy(label, r, color, dash, 1.5);
+        if (strat) strategies.push(strat);
+    }
+
+    const areaCap = Number.isFinite(meta.areaCapPct) ? meta.areaCapPct : null;
+    const prodCap = Number.isFinite(meta.prodCapPct) ? meta.prodCapPct : null;
+    add('bestProdMaxDist', 'MAX PROD/MAXDIST', '#42a5f5', 'dash');
+    add('bestAreaMaxDist', 'MAX AREA/MAXDIST', '#fb8c00', 'solid');
+    add('bestAreaMaxDistCapped', areaCap === null ? 'MAX AREA/MAXDIST (cap)' : `MAX AREA/MAXDIST (<=${areaCap.toFixed(1)}%)`, '#66bb6a', 'longdash');
+    add('bestProdMaxDistCapped', prodCap === null ? 'MAX PROD/MAXDIST (cap)' : `MAX PROD/MAXDIST (<=${prodCap.toFixed(1)}%)`, '#ef5350', 'longdashdot');
+
+    return strategies.length ? strategies : null;
+}
+
+function loadStrategiesFromProfiles(profilesPath, meta) {
+    if (!profilesPath || !fs.existsSync(profilesPath)) return null;
+    if (!meta) return null;
+
+    const json = JSON.parse(fs.readFileSync(profilesPath, 'utf8'));
+    const profiles = Array.isArray(json?.profiles) ? json.profiles : [];
+    if (profiles.length === 0) return null;
+
+    const assetASymbol = normalizeSymbol(meta?.assetA?.symbol);
+    const assetBSymbol = normalizeSymbol(meta?.assetB?.symbol);
+    const assetAId = normalizeSymbol(meta?.assetA?.id);
+    const assetBId = normalizeSymbol(meta?.assetB?.id);
+    const intervalSeconds = Number(meta?.intervalSeconds);
+    const intervalLabel = inferIntervalLabel(meta);
+
+    const matches = profiles.filter((p) => {
+        const pA = normalizeSymbol(p?.assetA);
+        const pB = normalizeSymbol(p?.assetB);
+        const pAId = normalizeSymbol(p?.assetAId);
+        const pBId = normalizeSymbol(p?.assetBId);
+
+        const bySymbol = assetASymbol && assetBSymbol && pA === assetASymbol && pB === assetBSymbol;
+        const byId = assetAId && assetBId && pAId === assetAId && pBId === assetBId;
+        return bySymbol || byId;
+    });
+    if (matches.length === 0) return null;
+
+    const sameInterval = matches.filter((p) => {
+        if (Number.isFinite(intervalSeconds) && intervalSeconds > 0 && Number(p?.intervalSeconds) === intervalSeconds) {
+            return true;
+        }
+        if (intervalLabel && String(p?.intervalLabel || '').toLowerCase() === intervalLabel.toLowerCase()) {
+            return true;
+        }
+        return false;
+    });
+    const candidates = sameInterval.length > 0 ? sameInterval : matches;
+    const profile = [...candidates].sort((a, b) => {
+        const aTs = Date.parse(String(a?.updatedAt || 0)) || 0;
+        const bTs = Date.parse(String(b?.updatedAt || 0)) || 0;
+        return bTs - aTs;
+    })[0];
+
+    const ama1 = profile?.amas?.AMA1;
+    const ama2 = profile?.amas?.AMA2;
+    const ama3 = profile?.amas?.AMA3;
+    const ama4 = profile?.amas?.AMA4;
+    if (!ama1 || !ama2 || !ama3 || !ama4) return null;
+
+    return [
+        buildAmaStrategy(ama1.name || 'AMA1', ama1, '#fb8c00', 'solid'),
+        buildAmaStrategy(ama2.name || 'AMA2', ama2, '#42a5f5', 'dash', 2),
+        buildAmaStrategy(ama3.name || 'AMA3', ama3, '#66bb6a', 'longdash'),
+        buildAmaStrategy(ama4.name || 'AMA4', ama4, '#ef5350', 'longdashdot'),
+    ].filter(Boolean);
+}
+
+function candidateResultsPaths(dataFile, extraSearchDirs = []) {
+    const base = path.basename(dataFile, '.json');
+    const dirs = [
+        path.dirname(dataFile),
+        path.dirname(path.dirname(dataFile)),
+        ANALYSIS_AMA_FITTING_DIR,
+        MARKET_ADAPTER_DIR,
+        ...extraSearchDirs,
+    ].filter(Boolean);
+    const seen = new Set();
+    const out = [];
+
+    for (const dir of dirs) {
+        const resolved = path.resolve(dir);
+        if (seen.has(resolved)) continue;
+        seen.add(resolved);
+        out.push(path.join(resolved, `optimization_results_${base}.json`));
+    }
+
+    return out;
+}
+
+function loadStrategiesForLpChart({ dataFile, meta, profilesFile = null, extraSearchDirs = [] }) {
+    for (const resultsPath of candidateResultsPaths(dataFile, extraSearchDirs)) {
+        const fromResults = loadStrategiesFromResults(resultsPath);
+        if (fromResults) return fromResults;
+    }
+
+    return loadStrategiesFromProfiles(profilesFile, meta);
+}
+
+module.exports = {
+    loadStrategiesForLpChart,
+    loadStrategiesFromProfiles,
+    loadStrategiesFromResults,
+};

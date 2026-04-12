@@ -12,7 +12,7 @@ and collateral management into a single coherent service layer.
 - Keeping fresh LP candles per-bot
 - Computing the AMA-based market center (grid price)
 - Detecting trend and volatility regime
-- Computing dynamic buy/sell weight offsets
+- Computing dynamic buy/sell weight bias
 - Estimating target collateral ratio
 - Emitting trigger files for grid re-centering
 
@@ -27,7 +27,7 @@ by a timing setting (default: **1 hour**).
 ```
 price_candles ─→ price_adapter ─→ AMA ──────────────┐
                                                       ├─→ Grid Price
-price_candles ─→ trend_detection ─→ price_offset ────┘
+price_candles ─→ trend_detection ────────────────────┘
 
 trend_detection ─→ weight_offset  (asymmetric weight shift)     ┐
 price_candles ──→ ATR ─→ weight_variance (symmetric shift)      ├─→ weight_output
@@ -38,10 +38,10 @@ trend_detection ─→ expected Collateral Ratio
 
 **Inputs**:
 - `price_candles` — from `price_adapter` (Kibana bootstrap + native incremental)
-- `config_settings` — per-bot AMA, offset, and threshold config from `bots.json`
+- `config_settings` — per-bot AMA and threshold config from `bots.json`
 
 **Outputs** (per cycle, per bot):
-- `gridPrice` — AMA + trend-based offset, clamped to min/max bounds
+- `gridPrice` — AMA, clamped to min/max bounds
 - `weights` — `{ buy, sell }` — dynamic grid weighting
 - `collateral` — target collateral ratio recommendation
 - `trend` / `atr` — raw regime and volatility signals
@@ -76,10 +76,10 @@ spread_analysis/  ──┘
 ### ✅ In Scope
 - **Real-time Market Monitoring**: Track volatility, price action, and market regime per-bot
 - **Candle Synchronization**: Keep per-bot LP candles current and pruned to AMA-required windows
-- **AMA Center Calculation**: Compute AMA-based grid price with trend offset and clamping
-- **Trend Detection**: Classify market as UP / DOWN / NEUTRAL and derive price offset and weight bias
+- **AMA Center Calculation**: Compute AMA-based grid price with clamping
+- **Trend Detection**: Classify market as UP / DOWN / NEUTRAL and derive weight bias
 - **ATR Volatility**: Compute Average True Range for symmetric weight variance
-- **Dynamic Weights**: Combine trend offset + ATR variance into per-bot buy/sell weight output
+- **Dynamic Weights**: Combine trend bias + ATR variance into per-bot buy/sell weight output
 - **Collateral Management**: Recommend target collateral ratio based on trend regime
 - **Trigger Emission**: Create per-bot recalc trigger files when threshold is crossed
 - **Gap Repair**: Detect and patch missing candle timestamps via Kibana
@@ -103,8 +103,9 @@ market_adapter/
 ├── ama_signal_runner.js         # One-cycle JSON AMA output (CLI consumer)
 ├── candle_utils.js              # Trade/candle helpers (merge, prune, gap detect)
 ├── merge_lp_data.js             # LP data merge utilities
-├── lp_chart_core.js             # LP chart core logic
-├── chart_lp_prices.js           # Plotly chart generator
+├── lp_chart_core.js             # Shared LP chart HTML renderer
+├── lp_chart_strategy_loader.js  # Shared AMA strategy/result/profile resolution
+├── lp_chart_runner.js           # Shared LP chart orchestration and package-script entry
 │
 ├── core/                        # Service layer (no CLI)
 │   ├── market_adapter_service.js  # MarketAdapterService class — full signal pipeline
@@ -130,6 +131,28 @@ market_adapter/
 > under `core/market_adapter_service.js`. The root `market_adapter/` directory contains only
 > the main entry point and shared utilities.
 
+### LP Chart Workflow
+
+LP chart generation is now split into a shared runner plus thin wrappers.
+The user-facing entrypoint is:
+
+- Recommended user entrypoint: `npm run lp:chart -- --data <lp-export.json>`
+- Shared implementation: `market_adapter/lp_chart_runner.js`
+
+Responsibility split:
+
+- `scripts/generate_lp_chart.js` orchestrates the full "generate both charts" flow.
+- `analysis/ama_fitting/generate_unified_comparison_chart.js` is now synthetic-only.
+- `market_adapter/lp_chart_runner.js` owns LP data discovery, strategy loading, AMA calculation, output paths, HTML generation, and optional browser opening.
+- `market_adapter/lp_chart_core.js` stays focused on rendering HTML only.
+
+Typical usage:
+
+```bash
+# Generate both the market chart and the comparison chart from one LP export
+npm run lp:chart -- --data analysis/ama_fitting/data/lp_pool_133_iob.xrp_bts_1h.json
+```
+
 ---
 
 ## How It Works
@@ -146,8 +169,7 @@ market_adapter/
 
 For each bot, `MarketAdapterService` computes:
 - **AMA value** using per-bot `ama` config (or defaults: `erPeriod:90, fast:10, slow:100`)
-- **Dynamic offset** — activates when price deviates ≥10% from AMA; ramps linearly to full ±5% at 20% deviation
-- **Effective center price** = AMA + dynamic offset, clamped to configured min/max
+- **Center price** = AMA, clamped to configured min/max
 
 ### 3. Trend Detection
 
@@ -155,7 +177,6 @@ For each bot, `MarketAdapterService` computes:
 each candle close as `UP`, `DOWN`, or `NEUTRAL` with a `confidence` score (0–100).
 
 This drives:
-- **Price offset**: signed deviation-driven shift applied to the grid center when the trend is UP or DOWN
 - **Weight offset**: Asymmetric bias toward buy or sell weight
 
 ### 4. ATR Volatility
@@ -229,12 +250,10 @@ Valid `gridPrice` keywords: `ama`, `ama1`, `ama2`, `ama3`, `ama4`.
 `"ama"` resolves to the profile's `defaultAma` key (typically `AMA3`).
 Bots with any other `gridPrice` value are ignored by the market adapter.
 
-### Dynamic Grid Price Offset
+### AMA Center Behavior
 
-The offset is computed automatically — no manual config needed. It activates when the
-current price deviates ≥ `OFFSET_DEV_THRESHOLD` (10%) from the AMA center, ramping
-linearly to the full `TREND_OFFSET_MAX_PCT` (±5%) at 2× threshold (20%). Below 10%
-deviation the offset is zero.
+The market adapter persists the AMA-derived center price directly. There is no
+additional deviation-based price adjustment layer on top of the AMA output.
 
 ---
 
@@ -242,7 +261,7 @@ deviation the offset is zero.
 
 | File | Purpose |
 |------|---------|
-| `profiles/bots.json` | Active bots, symbols, pool IDs, per-bot AMA and offset settings |
+| `profiles/bots.json` | Active bots, symbols, pool IDs, and per-bot AMA settings |
 | `profiles/general.settings.json` | Global `MARKET_ADAPTER` settings (delta threshold, etc.) |
 | `profiles/price_adapter_whitelist.json` | Optional whitelist — bots not listed run in dry-run mode |
 | `market_adapter/state/price_adapter_state.json` | Runtime state — candle metadata, signals, weights, collateral |
@@ -381,8 +400,6 @@ cycleMs               - Cycle wall-clock duration (ms)
 per-bot entries:
   lastAmaPrice        - Latest computed AMA value
   centerPrice         - Stored center (baseline for delta comparison)
-  effectiveCenterPrice- AMA + dynamic deviation offset, clamped
-  gridPriceOffsetPct  - Applied dynamic offset (0 when deviation < 10%)
   lastDeltaPercent    - Delta computed last cycle
   thresholdPercent    - Active trigger threshold
   staleData           - true if candle age exceeded maxStaleHours
@@ -429,7 +446,6 @@ When threshold is exceeded, the adapter writes a trigger file like:
   "newCenterPrice": 1348.32,
   "referencePrice": 1294.6,
   "rawAmaPrice": 1294.6,
-  "gridPriceOffsetPct": 4.15,  // dynamic only — deviation-driven, no static component
   "poolId": "1.19.133"
 }
 ```
@@ -441,8 +457,7 @@ When threshold is exceeded, the adapter writes a trigger file like:
 ```
 [09:00] Adapter cycle starts — updates candles for all bots
 [09:01] AMA computed, trend=UP, confidence=72
-[09:01] deviationPct=18.3% → gridPriceOffsetPct = 4.15% (dynamic, deviation-driven)
-[09:01] effectiveCenterPrice = 1348.32 (AMA 1294.6 + offset)
+[09:01] centerPrice = 1294.6 (AMA center)
 [09:01] Delta vs stored center = 1.21% — exceeds threshold (1.0%)
 [09:01] weights={buy=0.57, sell=0.43}, collateral=1.62
 [09:01] Adapter writes profiles/recalculate.xrp-bts-0.trigger
@@ -477,7 +492,6 @@ When threshold is exceeded, the adapter writes a trigger file like:
 - [x] ATR-based volatility / weight variance
 - [x] Dynamic buy/sell weight output
 - [x] Collateral ratio recommendation (directional — execution in Phase 2)
-- [x] Grid price offset (static + dynamic trend)
 - [x] Trigger-file emission on threshold
 - [x] Extended state persistence (weights, collateral, trend, atr)
 - [x] Runtime lock/retry/stale-data safety controls

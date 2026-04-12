@@ -161,7 +161,7 @@ File: <path>
 - `candle_utils.js` - Candlestick utilities
 - `interval_utils.js` - Shared interval label helpers
 - `lp_chart_core.js` - LP chart core logic
-- `chart_lp_prices.js` - LP price charting
+- `lp_chart_runner.js` - Shared LP chart orchestration used by the supported chart scripts
 
 ### Blockchain Interaction
 - `modules/chain_orders.js` - Blockchain order operations

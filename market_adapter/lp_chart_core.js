@@ -1,9 +1,14 @@
 /**
  * LP CHART CORE — Shared chart generation
  *
- * Exports generateHTML(meta, candles, amaResults) used by:
- *   market_adapter/chart_lp_prices.js
- *   analysis/ama_fitting/generate_unified_comparison_chart.js
+ * Exports generateHTML(meta, candles, amaResults).
+ *
+ * This file is intentionally renderer-only.
+ * It does not load LP data, resolve AMA strategies, write output files, or parse CLI args.
+ * Those orchestration concerns live in `market_adapter/lp_chart_runner.js`.
+ *
+ * Current callers:
+ *   market_adapter/lp_chart_runner.js
  *
  * meta:
  *   { pool, assetA: { symbol }, assetB: { symbol }, intervalSeconds, fetchedAt }
@@ -98,10 +103,26 @@ function generateHTML(meta, candles, amaResults) {
         #params td:first-child { padding-left: 0; }
         #params th    { font-size: 10px; color: #555; font-weight: 400; text-align: left; padding: 0 6px 3px 0; }
 
-        #charts { padding-top: 44px; display: flex; flex-direction: column; height: 100vh; }
+        #charts {
+            padding-top: 44px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: relative;
+        }
+        #global-crosshair {
+            position: absolute;
+            top: 44px;
+            bottom: 8px;
+            width: 0;
+            border-left: 1px dashed rgba(255,255,255,0.35);
+            pointer-events: none;
+            z-index: 90;
+            display: none;
+        }
         #price-chart  { flex: 3; }
-        #vol-chart    { flex: 1; }
-        #dev-chart    { flex: 1; }
+        #dev-chart    { flex: 1.15; }
+        #vol-chart    { flex: 0.75; }
     </style>
 </head>
 <body>
@@ -127,9 +148,10 @@ function generateHTML(meta, candles, amaResults) {
 </div>
 
 <div id="charts">
+    <div id="global-crosshair"></div>
     <div id="price-chart"></div>
-    <div id="vol-chart"></div>
     <div id="dev-chart"></div>
+    <div id="vol-chart"></div>
 </div>
 
 <script>
@@ -180,7 +202,7 @@ const tracePrice = {
     type: 'scattergl', mode: 'lines',
     line: { color: '#5c9ee6', width: 1.5 },
     name: '${assetA.symbol}/${assetB.symbol} VWAP',
-    hovertemplate: '<b>%{x|%Y-%m-%d %H:%M}</b><br>Price: %{y:.6f}<extra></extra>',
+    hoverinfo: 'none',
 };
 
 const amaTraces = amaMeta.map((cfg, i) => ({
@@ -188,7 +210,7 @@ const amaTraces = amaMeta.map((cfg, i) => ({
     type: 'scattergl', mode: 'lines',
     line: { color: cfg.color, width: cfg.lineWidth, dash: cfg.dash },
     name: cfg.name,
-    hovertemplate: cfg.name + ': %{y:.6f}<extra></extra>',
+    hoverinfo: 'none',
 }));
 
 const maxDev = ${maxDev.toFixed(6)};
@@ -197,6 +219,7 @@ Plotly.newPlot('price-chart',
     [tracePrice, ...amaTraces],
     {
         ...DARK,
+        hovermode: 'x',
         margin: { l: 70, r: 260, t: 10, b: 10 },
         showlegend: false,
         xaxis: { ...AXIS, type: 'date', showticklabels: false, rangeslider: { visible: false } },
@@ -211,13 +234,14 @@ const traceVol = {
     type: 'bar',
     marker: { color: 'rgba(92,158,230,1)', line: { width: 0 } },
     name: 'Volume (${assetA.symbol})',
-    hovertemplate: 'Vol: %{y:.4f}<extra></extra>',
+    hoverinfo: 'none',
 };
 
 Plotly.newPlot('vol-chart',
     [traceVol],
     {
         ...DARK,
+        hovermode: 'x',
         margin: { l: 70, r: 260, t: 4, b: 10 },
         showlegend: false,
         xaxis: { ...AXIS, type: 'date', showticklabels: false },
@@ -232,7 +256,7 @@ const devTraces = amaMeta.map((cfg, i) => ({
     type: 'scattergl', mode: 'lines',
     line: { color: cfg.color, width: 1.2, dash: cfg.dash },
     name: cfg.name,
-    hovertemplate: cfg.name + ' dev: %{y:.2f}%<extra></extra>',
+    hoverinfo: 'none',
     showlegend: false,
 }));
 
@@ -247,6 +271,7 @@ Plotly.newPlot('dev-chart',
     [...devTraces, traceZero],
     {
         ...DARK,
+        hovermode: 'x',
         margin: { l: 70, r: 260, t: 4, b: 30 },
         showlegend: false,
         xaxis: { ...AXIS, type: 'date' },
@@ -255,6 +280,49 @@ Plotly.newPlot('dev-chart',
     },
     { responsive: true, displayModeBar: false }
 );
+
+// ── Vertical crosshair across all panels ──────────────────────────────────
+const chartsContainer = document.getElementById('charts');
+const globalCrosshair = document.getElementById('global-crosshair');
+let lastCrosshairLeft = null;
+
+function hideCrosshair() {
+    lastCrosshairLeft = null;
+    if (globalCrosshair) globalCrosshair.style.display = 'none';
+}
+
+function setCrosshairFromClientX(clientX) {
+    if (!globalCrosshair || !chartsContainer || !Number.isFinite(clientX)) return;
+    const rect = chartsContainer.getBoundingClientRect();
+    const left = clientX - rect.left;
+    if (lastCrosshairLeft !== null && Math.abs(lastCrosshairLeft - left) < 0.5) return;
+    lastCrosshairLeft = left;
+    globalCrosshair.style.left = left + 'px';
+    globalCrosshair.style.display = 'block';
+}
+
+function fallbackClientX(chart, point) {
+    const axis = point?.xaxis;
+    const value = point?.x;
+    const offsetLeft = chart?._fullLayout?._size?.l;
+    if (!axis || value == null || !Number.isFinite(offsetLeft)) return null;
+    const pixel = typeof axis.d2p === 'function' ? axis.d2p(value) : typeof axis.l2p === 'function' ? axis.l2p(value) : null;
+    if (!Number.isFinite(pixel)) return null;
+    const rect = chart.getBoundingClientRect();
+    return rect.left + offsetLeft + pixel;
+}
+
+const pc = document.getElementById('price-chart');
+const vc = document.getElementById('vol-chart');
+const dc = document.getElementById('dev-chart');
+[pc, vc, dc].forEach(chart => {
+    chart.on('plotly_hover', data => {
+        const clientX = data.event?.clientX ?? fallbackClientX(chart, data.points?.[0]);
+        if (clientX != null) setCrosshairFromClientX(clientX);
+    });
+    chart.on('plotly_unhover', hideCrosshair);
+});
+window.addEventListener('resize', hideCrosshair);
 
 // ── Y-axis autoscaling helpers ─────────────────────────────────────────────
 function finiteWindowValues(trace, x0ms, x1ms) {
@@ -341,10 +409,6 @@ function syncAxes(sourceDiv, targetDivs) {
         });
     });
 }
-
-const pc = document.getElementById('price-chart');
-const vc = document.getElementById('vol-chart');
-const dc = document.getElementById('dev-chart');
 syncAxes(pc, [vc, dc]);
 syncAxes(vc, [pc, dc]);
 syncAxes(dc, [pc, vc]);

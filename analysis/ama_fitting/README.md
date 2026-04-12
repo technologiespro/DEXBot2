@@ -11,7 +11,7 @@ and export the results into `profiles/market_profiles.json` for the market adapt
 1. fetch_lp_candles.js   →   data/<pool>_1h.json
 2. optimizer_high_resolution.js   →   optimization_results_*.json
                                   →   profiles/market_profiles.json  (auto-updated)
-3. generate_unified_comparison_chart.js   →   chart_*.html  (visual review)
+3. scripts/generate_lp_chart.js   →   market chart + comparison chart  (visual review)
 ```
 
 ---
@@ -111,14 +111,28 @@ optimizer warns you. Widen the affected range and re-run.
 
 ## Step 3 — Visual Review (optional)
 
+Recommended entrypoint:
+
 ```bash
-node analysis/ama_fitting/generate_unified_comparison_chart.js \
+npm run lp:chart -- \
   --data analysis/ama_fitting/data/lp_pool_133_iob.xrp_bts_1h.json
 ```
 
-Output: `analysis/ama_fitting/lp_chart_pool_133.html`
+This generates both:
+- `market_adapter/lp_chart_pool_133.html` — market-adapter style LP chart
+- `analysis/ama_fitting/lp_chart_pool_133.html` — unified comparison chart
 
-Open in a browser to compare all four AMA overlays against the candlestick price.
+Under the hood, LP-data chart generation now delegates into the shared runner in
+`market_adapter/lp_chart_runner.js`. The analysis script keeps only:
+- the synthetic MEXC fallback mode used for analysis-only review
+
+Supported synthetic entrypoint:
+
+```bash
+npm run ama:chart:synthetic
+```
+
+Open the generated HTML in a browser to compare all four AMA overlays against the candlestick price.
 
 ---
 

@@ -6,7 +6,7 @@
   "scripts": {
     "fetch": "node fetch_mexc_data.js",
     "optimize": "node optimizer_high_resolution.js",
-    "chart": "node generate_unified_comparison_chart.js"
+    "chart:synthetic": "node generate_unified_comparison_chart.js"
   },
   "dependencies": {
     "ccxt": "^4.0.0"
