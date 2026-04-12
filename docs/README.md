@@ -55,7 +55,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 
 ### 📊 [Grid Recalculation](GRID_RECALCULATION.md)
 *When and why the grid resets.*
-- **Four Independent Triggers**: Grid Price Offset (offset change), AMA Delta (market move), RMS Divergence (state drift), and Cache Regeneration (fund accumulation)
+- **Three Independent Triggers**: AMA Delta (market move), RMS Divergence (state drift), and Regeneration (fund accumulation)
 - **Configuration**: Per-trigger thresholds and their defaults
 - **AMA Delta**: How the market adapter's price signal drives grid repositioning
 

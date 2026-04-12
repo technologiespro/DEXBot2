@@ -1,10 +1,11 @@
 # Grid Recalculation Mechanisms
 
-DEXBot2 uses **four independent grid recalculation triggers** to keep the trading grid synchronized with market conditions and bot funds.
+DEXBot2 uses **three independent grid recalculation triggers** to keep the trading grid synchronized with market conditions and bot funds.
+The AMA center baseline supports the AMA trigger, but is not a separate trigger on its own.
 
 ---
 
-## Overview: Four Recalculation Mechanisms
+## Overview: Three Recalculation Triggers
 
 | Mechanism | Trigger | Config | Location | Scope |
 |-----------|---------|--------|----------|-------|
@@ -12,7 +13,7 @@ DEXBot2 uses **four independent grid recalculation triggers** to keep the tradin
 | **RMS Divergence** | Grid state diverged from blockchain | `RMS_PERCENTAGE` | `general.settings.json` | Global (all bots) |
 | **Regeneration** | Available funds exceed threshold | `GRID_REGENERATION_PERCENTAGE` | `constants.js` | Per-side (BUY/SELL) |
 
-Each mechanism is **independent and can be configured separately**. They don't interfere with each other.
+Each trigger is **independent and can be configured separately**. They don't interfere with each other.
 
 ---
 
@@ -227,7 +228,7 @@ GRID_LIMITS: {
 
 ## Bootstrap Center Persistence
 
-On the **first cycle** for a bot (when no `centerPrice` baseline exists yet), the price adapter must persist the initial AMA center to disk before advancing the in-memory baseline. This ordering prevents a dangerous split where the order engine reads stale or missing snapshot data while the adapter believes it succeeded.
+On the **first cycle** for a bot (when no `centerPrice` baseline exists yet), the market adapter must persist the initial AMA center to disk before advancing the in-memory baseline. This ordering prevents a dangerous split where the order engine reads stale or missing snapshot data while the adapter believes it succeeded.
 
 ### How It Works
 
@@ -252,14 +253,14 @@ If this appears repeatedly, check:
 ## Interaction Between Mechanisms
 
 ### Independence
-All four mechanisms are **independent**:
+All three triggers are **independent**:
 - AMA delta is triggered by market price changes
 - RMS divergence is triggered by blockchain state drift
 - Regeneration is triggered by available funds
 - They can all fire at the same time without conflict
 
 ### Configuration Priority
-1. **All four are INDEPENDENT** — no priority or suppression
+1. **All three are INDEPENDENT** — no priority or suppression
 2. Each can be configured and disabled separately
 3. Disabling one doesn't affect the others
 
@@ -329,7 +330,7 @@ Check the logs for these messages:
 
 **AMA Delta Trigger:**
 ```
-[price_adapter] Creating trigger: market_adapter/state/recalculate.<botKey>.trigger
+Creating trigger: market_adapter/state/recalculate.<botKey>.trigger
 ```
 
 **RMS Divergence Trigger:**

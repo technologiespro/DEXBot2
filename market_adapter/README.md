@@ -4,9 +4,9 @@
 
 The **Market Adapter** is the central entry point for all dynamic bot adjustment in DEXBot2.
 
-It replaces the legacy monolithic scripts by combining and modularizing candle synchronization,
-AMA signal computation, trend detection, ATR-based volatility analysis, dynamic weight calculation,
-and collateral management into a single coherent service layer.
+It combines candle synchronization, AMA signal computation, trend detection,
+ATR-based volatility analysis, dynamic weight calculation, and collateral
+management into a single service layer.
 
 **Core Purpose**: Bridge historical analysis (`/analysis`) and live operations by:
 - Keeping fresh LP candles per-bot
@@ -16,28 +16,26 @@ and collateral management into a single coherent service layer.
 - Estimating target collateral ratio
 - Emitting trigger files for grid re-centering
 
-The adapter runs as a standalone process (like the old `market_adapter.js` was), separate from
-`dexbot.js`. How often it fetches new candles from the BitShares API or Kibana server is governed
-by a timing setting (default: **1 hour**).
+The adapter runs as a standalone process, separate from `dexbot.js`. How often
+it fetches new candles from the BitShares API or Kibana server is governed by a
+timing setting (default: **1 hour**).
 
 ---
 
 ## Signal Pipeline
 
 ```
-price_candles ─→ price_adapter ─→ AMA ──────────────┐
-                                                      ├─→ Grid Price
-price_candles ─→ trend_detection ────────────────────┘
+price_candles -> price_adapter -> AMA -> Grid Price
 
-trend_detection ─→ weight_offset  (asymmetric weight shift)     ┐
-price_candles ──→ ATR ─→ weight_variance (symmetric shift)      ├─→ weight_output
-                                                                 ┘
-trend_detection ─→ expected Collateral Ratio
-  ─→ adjust debt ─→ adjust collateral ─→ delta liquidity ─→ reset bot
+price_candles -> trend_detection -> weight_offset   (asymmetric weight shift) \
+price_candles -> ATR             -> weight_variance (symmetric shift)         +-> weight_output
+
+trend_detection -> expected Collateral Ratio
+                -> adjust debt -> adjust collateral -> delta liquidity -> reset bot
 ```
 
 **Inputs**:
-- `price_candles` — from `price_adapter` (Kibana bootstrap + native incremental)
+- `price_candles` — from the adapter candle-sync pipeline (Kibana bootstrap + native incremental)
 - `config_settings` — per-bot AMA and threshold config from `bots.json`
 
 **Outputs** (per cycle, per bot):
@@ -65,7 +63,7 @@ spread_analysis/  ──┘
 **Data Flow**:
 1. `analysis/` produces optimization context and candidate AMA settings
 2. `market_adapter/` fetches/updates LP candles (Kibana bootstrap + native incremental)
-3. `market_adapter/` feeds candles through the full signal pipeline (AMA → trend → ATR → weights → collateral)
+3. `market_adapter/` computes the AMA-derived grid center and runs the separate trend / ATR / collateral signal branches
 4. `market_adapter/` writes state snapshots and trigger files
 5. `dexbot.js` reacts to `profiles/recalculate.<botKey>.trigger` to re-center the grid
 
@@ -98,20 +96,20 @@ spread_analysis/  ──┘
 ```
 market_adapter/
 ├── README.md
-├── README-update.md             # Architecture spec / update notes
-├── market_adapter.js             # Main candle-sync + signal loop (standalone daemon)
-├── ama_signal_runner.js         # One-cycle JSON AMA output (CLI consumer)
-├── candle_utils.js              # Trade/candle helpers (merge, prune, gap detect)
-├── merge_lp_data.js             # LP data merge utilities
-├── lp_chart_core.js             # Shared LP chart HTML renderer
-├── lp_chart_strategy_loader.js  # Shared AMA strategy/result/profile resolution
-├── lp_chart_runner.js           # Shared LP chart orchestration and package-script entry
+├── market_adapter.js            # Main adapter daemon: candle sync, AMA center, trigger loop
+├── ama_signal_runner.js         # One-cycle JSON CLI for AMA/adapter output
+├── candle_utils.js              # Candle transforms, gap detection, pruning helpers
+├── interval_utils.js            # Shared interval label formatting
+├── merge_lp_data.js             # CLI utility for merging exported LP candle files
+├── lp_chart_core.js             # Renderer-only LP chart HTML generator
+├── lp_chart_strategy_loader.js  # AMA strategy/profile resolution for LP charts
+├── lp_chart_runner.js           # Shared LP chart orchestration used by scripts and npm commands
 │
-├── core/                        # Service layer (no CLI)
+├── core/                        # Service layer used by the adapter loop
 │   ├── market_adapter_service.js  # MarketAdapterService class — full signal pipeline
 │   ├── kibana_client.js           # Low-level Kibana HTTP client
 │   ├── kibana_market_candles.js   # Kibana candle fetch/transform
-│   └── strategies/              # Pluggable strategy modules
+│   └── strategies/                # Signal and recommendation modules
 │       ├── dynamic_weights.js     # computeDynamicWeights(trend, volatility)
 │       ├── collateral_manager.js  # adjustCollateralRatio(trend, min, max)
 │       ├── atr/
@@ -119,17 +117,17 @@ market_adapter/
 │       └── trend_detection/
 │           └── analyzer.js        # TrendAnalyzer — trend + confidence
 │
-├── inputs/                      # Data source scripts (importable + CLI)
+├── inputs/                      # LP data acquisition tools (importable + CLI)
 │   ├── kibana_source.js           # Elasticsearch LP data source
 │   └── fetch_lp_data.js           # Pool-centric historical Kibana exporter
 │
-├── data/                        # Candle caches (per-bot JSON files)
-└── state/                       # Adapter runtime state files
+├── data/                        # Runtime-generated candle caches and LP exports
+└── state/                       # Runtime-generated adapter state, centers, and lock file
 ```
 
-> **Refactored layout**: Data sources live under `inputs/` and the full signal pipeline lives
-> under `core/market_adapter_service.js`. The root `market_adapter/` directory contains only
-> the main entry point and shared utilities.
+Top-level files are the operator-facing entrypoints plus shared utilities.
+`core/` holds the reusable runtime pipeline, and `inputs/` holds LP data acquisition tools.
+`data/` and `state/` are runtime output directories, not source modules.
 
 ### LP Chart Workflow
 
@@ -318,7 +316,6 @@ Output format (one entry per processed bot):
       "thresholdPercent": 1.0,
       "triggered": true,
       "triggerPath": "profiles/recalculate.xrp-bts-0.trigger",
-      "reason": "price_adapter_delta_threshold",
       "weights": { "buy": 0.55, "sell": 0.45 },
       "trend": "UP"
     }
@@ -425,7 +422,7 @@ Each bot processed emits a log line like:
 - ⚠️ **Trigger not firing**: Check `lastDeltaPercent` vs `thresholdPercent` in state file
 - ⚠️ **Stale data**: `staleData: true` — candle sync failing, check network/API access
 - ⚠️ **Gap warnings**: Unresolved candle gaps after Kibana repair attempt
-- 🔴 **Lock file stuck**: If `price_adapter.lock` remains after a crash, delete it manually
+- 🔴 **Lock file stuck**: If `market_adapter/state/price_adapter.lock` remains after a crash, delete it manually
 
 ---
 
@@ -439,7 +436,6 @@ When threshold is exceeded, the adapter writes a trigger file like:
   "source": "market_adapter/market_adapter.js",
   "botName": "XRP-BTS",
   "botKey": "xrp-bts-0",
-  "reason": "price_adapter_delta_threshold",
   "thresholdPercent": 0.8,
   "deltaPercent": 1.1,
   "previousCenterPrice": 1280.5,

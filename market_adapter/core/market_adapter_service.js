@@ -194,14 +194,13 @@ class MarketAdapterService {
         // 1. Trend analysis (price_candles -> trend_detection)
         //    Feed ALL candles through the per-bot analyzer so it accumulates
         //    enough history for isReady/confidence to be meaningful.
-        //    Use AMA price as the feed reference (LP pairs have no on-chain feed).
+        //    Trend is derived from candle closes only.
         const trendService = this._getTrendService(bot.botKey);
         trendService.reset();
-        const feedRef = Number.isFinite(amaPrice) && amaPrice > 0 ? amaPrice : 0;
         let trendData = { isReady: false, trend: 'NEUTRAL', confidence: 0 };
         for (let i = 0; i < nextCandles.length; i++) {
             const close = nextCandles[i][4] || 0;
-            trendData = trendService.update(close, feedRef);
+            trendData = trendService.update(close);
         }
 
         // 2. ATR Calculation (price_candles -> ATR -> weight_variance)
