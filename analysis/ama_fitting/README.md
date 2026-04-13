@@ -12,6 +12,8 @@ and export the results into `profiles/market_profiles.json` for the market adapt
 2. optimizer_high_resolution.js   →   optimization_results_*.json
                                   →   profiles/market_profiles.json  (auto-updated)
 3. scripts/generate_lp_chart.js   →   market chart + comparison chart  (visual review)
+   - ECharts parallel path: `npm run lp:chart:echarts`
+   - Synthetic ECharts comparison: `npm run ama:chart:synthetic:echarts`
 ```
 
 ---

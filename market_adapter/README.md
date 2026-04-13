@@ -135,6 +135,7 @@ LP chart generation is now split into a shared runner plus thin wrappers.
 The user-facing entrypoint is:
 
 - Recommended user entrypoint: `npm run lp:chart -- --data <lp-export.json>`
+- Parallel ECharts experiment: `npm run lp:chart:echarts -- --data <lp-export.json>`
 - Shared implementation: `market_adapter/lp_chart_runner.js`
 
 Responsibility split:

@@ -190,6 +190,50 @@ The following scripts allow you to call `dexbot` commands directly from the `scr
 
 ---
 
+## 📈 CHART GENERATION
+
+### LP Chart
+**File:** `generate_lp_chart.js`
+**Purpose:** Generate the current Plotly LP chart output.
+```bash
+# Generate the default LP chart flow
+npm run lp:chart -- --data <lp-export.json>
+```
+
+### LP Chart (ECharts)
+**File:** `generate_lp_chart_echarts.js`
+**Purpose:** Generate the parallel ECharts LP chart output for comparison.
+```bash
+# Generate the ECharts LP chart output
+npm run lp:chart:echarts -- --data <lp-export.json>
+```
+
+### Synthetic Comparison Chart
+**File:** `analysis/ama_fitting/generate_unified_comparison_chart.js`
+**Purpose:** Generate the existing Plotly synthetic comparison chart.
+```bash
+# Generate the synthetic comparison chart
+npm run ama:chart:synthetic
+```
+
+### Synthetic Comparison Chart (ECharts)
+**File:** `analysis/ama_fitting/generate_unified_comparison_chart_echarts.js`
+**Purpose:** Generate the parallel ECharts synthetic comparison chart.
+```bash
+# Generate the synthetic comparison chart using ECharts
+npm run ama:chart:synthetic:echarts
+```
+
+### Derivative Trend Analysis (ECharts)
+**File:** `analysis/derivative_chart_generator_echarts.js`
+**Purpose:** Generate the parallel ECharts derivative analysis report.
+```bash
+# Generate the derivative analysis report using ECharts
+npm run analysis:derivatives:echarts -- --input <file.json>
+```
+
+---
+
 ## 📚 DOCUMENTATION REFERENCES
 
 For understanding the systems these scripts interact with:
