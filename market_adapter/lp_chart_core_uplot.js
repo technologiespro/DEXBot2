@@ -133,7 +133,7 @@ function generateHTML(meta, candles, amaResults) {
             font-size: 12px;
             color: #b8c0d0;
         }
-        #stats, #params {
+        #stats, #params, #live {
             position: fixed;
             right: 12px;
             z-index: 100;
@@ -148,14 +148,19 @@ function generateHTML(meta, candles, amaResults) {
         }
         #stats { top: 90px; }
         #params { top: 310px; }
-        #stats .label, #params .label { color: #c0c8d8; }
-        #stats .val, #params .val { color: #f1f5ff; font-weight: 600; }
+        #live { top: 540px; bottom: 12px; overflow: auto; }
+        #stats .label, #params .label, #live .label { color: #c0c8d8; }
+        #stats .val, #params .val, #live .val { color: #f1f5ff; font-weight: 600; }
         #stats .pos { color: #26a69a; }
         #stats .neg { color: #ef5350; }
         #params table { border-collapse: collapse; width: 100%; margin-top: 4px; }
+        #live table { border-collapse: collapse; width: 100%; margin-top: 4px; }
         #params td { padding: 1px 6px 1px 0; font-size: 11px; color: #edf2ff; white-space: nowrap; }
+        #live td { padding: 1px 6px 1px 0; font-size: 11px; color: #edf2ff; white-space: nowrap; }
         #params td:first-child { padding-left: 0; }
         #params th { font-size: 10px; color: #d3daea; font-weight: 400; text-align: left; padding: 0 6px 3px 0; }
+        #live td:first-child { padding-left: 0; }
+        #live th { font-size: 10px; color: #d3daea; font-weight: 400; text-align: left; padding: 0 6px 3px 0; }
         #charts {
             position: fixed;
             top: 44px;
@@ -220,6 +225,11 @@ function generateHTML(meta, candles, amaResults) {
     <table id="params-table"></table>
 </div>
 
+<div id="live">
+    <div style="margin-bottom:2px"><span class="label" style="font-size:10px">── Live Values ──</span></div>
+    <table id="live-table"></table>
+</div>
+
 <div id="charts">
     <div id="price-chart" class="chart"></div>
     <div id="dev-chart" class="chart"></div>
@@ -282,6 +292,22 @@ function fmtShortDate(sec) {
         month: '2-digit',
         day: '2-digit',
     });
+}
+
+function escapeHtmlJs(str) {
+    return String(str).replace(/[&<>"']/g, (m) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+    }[m]));
+}
+
+function formatPctJs(v) {
+    const num = Number(v);
+    if (!Number.isFinite(num)) return 'n/a';
+    return (num >= 0 ? '+' : '') + num.toFixed(2) + '%';
 }
 
 function formatCompactNumber(v) {
@@ -361,7 +387,7 @@ function makeCursor() {
     };
 }
 
-function makePlotBase(showX, yFormatter, yScale, yRange) {
+function makePlotBase(showX, yFormatter, yScale, yRange, extraHooks = {}) {
     return {
         width: 0,
         height: 0,
@@ -389,6 +415,7 @@ function makePlotBase(showX, yFormatter, yScale, yRange) {
                     u.root.style.background = THEME.background;
                 },
             ],
+            ...extraHooks,
         },
     };
 }
@@ -442,6 +469,78 @@ function makeVolumeSplits(scaleMin, scaleMax, foundIncr, foundSpace) {
     return splits;
 }
 
+const liveCells = {
+    time: null,
+    price: null,
+    amas: [],
+    devs: [],
+    volume: null,
+};
+
+function setLiveCell(td, value, className = null) {
+    if (!td) return;
+    td.textContent = value;
+    if (className != null) td.className = className;
+}
+
+function renderLiveTable() {
+    const tbl = document.getElementById('live-table');
+    const rows = [
+        ['Time', null],
+        ['Price', null],
+    ];
+
+    amaMeta.forEach((a) => rows.push([a.name.split(' - ')[0], a.color]));
+    amaMeta.forEach((a) => rows.push([a.name.split(' - ')[0] + ' Dev', a.color]));
+    rows.push(['Volume', '#5c9ee6']);
+
+    rows.forEach(([label, color], i) => {
+        const tr = tbl.insertRow();
+        const labelCell = tr.insertCell();
+        labelCell.innerHTML = color ? '<span style="color:' + color + '">● </span>' + escapeHtmlJs(label) : escapeHtmlJs(label);
+        const valueCell = tr.insertCell();
+        valueCell.className = 'val';
+        valueCell.textContent = '--';
+
+        if (i === 0) liveCells.time = valueCell;
+        else if (i === 1) liveCells.price = valueCell;
+        else if (i > 1 && i <= 1 + amaMeta.length) liveCells.amas.push(valueCell);
+        else if (i > 1 + amaMeta.length && i <= 1 + amaMeta.length * 2) liveCells.devs.push(valueCell);
+        else liveCells.volume = valueCell;
+    });
+}
+
+function updateLivePanelAtIndex(idx) {
+    if (!Number.isInteger(idx) || idx < 0 || idx >= ts.length) return;
+
+    setLiveCell(liveCells.time, fmtDateTime(ts[idx]));
+    setLiveCell(liveCells.price, Number.isFinite(closes[idx]) ? closes[idx].toFixed(6) : 'n/a');
+
+    amaArrays.forEach((arr, i) => {
+        const val = arr[idx];
+        setLiveCell(liveCells.amas[i], Number.isFinite(val) ? val.toFixed(6) : 'n/a');
+    });
+
+    amaDevArrays.forEach((arr, i) => {
+        const val = arr[idx];
+        setLiveCell(liveCells.devs[i], Number.isFinite(val) ? formatPctJs(val) : 'n/a');
+    });
+
+    setLiveCell(liveCells.volume, Number.isFinite(volumes[idx]) ? formatCompactNumber(volumes[idx]) : 'n/a');
+}
+
+let lastLiveIdx = -1;
+
+function updateLivePanel(u) {
+    const idx = u && u.cursor ? u.cursor.idx : null;
+    if (idx == null) {
+        // cursor left the chart — restore last-candle values
+        if (lastLiveIdx >= 0) updateLivePanelAtIndex(lastLiveIdx);
+        return;
+    }
+    updateLivePanelAtIndex(idx);
+}
+
 function applyChartHeights() {
     const available = Math.max(window.innerHeight - 44, 600);
     const priceH = Math.max(320, Math.floor(available * 0.60));
@@ -477,8 +576,6 @@ function showFatal(message) {
     });
 })();
 
-applyChartHeights();
-
 const amaDevArrays = amaArrays.map((values, i) =>
     closes.map((p, idx) => {
         const v = values[idx];
@@ -486,6 +583,9 @@ const amaDevArrays = amaArrays.map((values, i) =>
         return Math.round(((p - v) / v) * 10000) / 100;
     })
 );
+
+renderLiveTable();
+applyChartHeights();
 
 const priceData = [ts, closes, ...amaArrays];
 const devData = [ts, ...amaDevArrays];
@@ -765,12 +865,39 @@ bindHoverState(priceChart);
 bindHoverState(devChart);
 bindHoverState(volChart);
 
+// Wire live panel to all chart plot areas. All charts share the same x-data,
+// so cursor.idx is identical across them. Track lastLiveIdx so mouseleave
+// restores the most-recently-hovered candle (not just the last data point).
+lastLiveIdx = ts.length - 1;
+
+let leavePending = null;
+
+charts.forEach((chart) => {
+    chart.over.addEventListener('mousemove', () => {
+        if (leavePending !== null) { clearTimeout(leavePending); leavePending = null; }
+        const idx = chart.cursor.idx;
+        if (idx != null) {
+            lastLiveIdx = idx;
+            updateLivePanelAtIndex(idx);
+        }
+    });
+    chart.over.addEventListener('mouseleave', () => {
+        // Small delay so moving between charts doesn't flash the last-candle values
+        leavePending = setTimeout(() => {
+            leavePending = null;
+            updateLivePanelAtIndex(lastLiveIdx);
+        }, 60);
+    });
+});
+
 const raf = window.requestAnimationFrame
     ? window.requestAnimationFrame.bind(window)
     : (fn) => setTimeout(fn, 0);
 
 raf(() => {
     sizeCharts();
+    // Set panel to last candle after all init-time setCursor events have settled
+    updateLivePanelAtIndex(lastLiveIdx);
 });
 </script>
 </body>
