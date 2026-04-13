@@ -22,6 +22,19 @@ function formatPct(v) {
     return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`;
 }
 
+function formatCompactNumber(v) {
+    const num = Number(v);
+    if (!Number.isFinite(num)) return 'n/a';
+    const abs = Math.abs(num);
+    const sign = num < 0 ? '-' : '';
+    if (abs >= 1e9) return sign + (abs / 1e9).toFixed(abs >= 1e10 ? 0 : 2) + 'b';
+    if (abs >= 1e6) return sign + (abs / 1e6).toFixed(abs >= 1e7 ? 0 : 2) + 'm';
+    if (abs >= 1e3) return sign + (abs / 1e3).toFixed(abs >= 1e4 ? 0 : 2) + 'k';
+    if (abs >= 100) return sign + abs.toFixed(0);
+    if (abs >= 10) return sign + abs.toFixed(1);
+    return sign + abs.toFixed(2);
+}
+
 function padRange(min, max, lower = 0.04, upper = 0.04) {
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
     if (min === max) {
@@ -30,15 +43,6 @@ function padRange(min, max, lower = 0.04, upper = 0.04) {
     }
     const span = max - min;
     return [min - span * lower, max + span * upper];
-}
-
-function dashToArray(dash) {
-    if (Array.isArray(dash)) return dash;
-    if (dash === 'dot') return [2, 4];
-    if (dash === 'dash') return [10, 5];
-    if (dash === 'longdash') return [14, 6];
-    if (dash === 'longdashdot') return [16, 5, 4, 5];
-    return null;
 }
 
 function generateHTML(meta, candles, amaResults) {
@@ -82,7 +86,6 @@ function generateHTML(meta, candles, amaResults) {
     const amaMeta = amaResults.map((a) => ({
         name: a.name,
         color: a.color,
-        dash: a.dash,
         lineWidth: a.lineWidth,
         erPeriod: a.erPeriod,
         fastPeriod: a.fastPeriod,
@@ -128,7 +131,7 @@ function generateHTML(meta, candles, amaResults) {
         }
         #header .sub {
             font-size: 12px;
-            color: #888;
+            color: #b8c0d0;
         }
         #stats, #params {
             position: fixed;
@@ -145,14 +148,14 @@ function generateHTML(meta, candles, amaResults) {
         }
         #stats { top: 90px; }
         #params { top: 310px; }
-        #stats .label, #params .label { color: #888; }
-        #stats .val, #params .val { color: #e0e0e0; font-weight: 600; }
+        #stats .label, #params .label { color: #c0c8d8; }
+        #stats .val, #params .val { color: #f1f5ff; font-weight: 600; }
         #stats .pos { color: #26a69a; }
         #stats .neg { color: #ef5350; }
         #params table { border-collapse: collapse; width: 100%; margin-top: 4px; }
-        #params td { padding: 1px 6px 1px 0; font-size: 11px; color: #ccc; white-space: nowrap; }
+        #params td { padding: 1px 6px 1px 0; font-size: 11px; color: #edf2ff; white-space: nowrap; }
         #params td:first-child { padding-left: 0; }
-        #params th { font-size: 10px; color: #555; font-weight: 400; text-align: left; padding: 0 6px 3px 0; }
+        #params th { font-size: 10px; color: #d3daea; font-weight: 400; text-align: left; padding: 0 6px 3px 0; }
         #charts {
             position: fixed;
             top: 44px;
@@ -241,11 +244,11 @@ const amaArrays = payload.amaArrays;
 const chartGroupId = ${JSON.stringify(chartId)};
 
 const THEME = {
-    text: '#ccc',
-    muted: '#888',
+    text: '#f1f5ff',
+    muted: '#c0c8d8',
     background: '#0e1117',
     grid: '#1e2330',
-    axis: '#2a2e3e',
+    axis: '#8d96ad',
 };
 
 function initChart(domId, opts, data) {
@@ -281,6 +284,19 @@ function fmtShortDate(sec) {
     });
 }
 
+function formatCompactNumber(v) {
+    const num = Number(v);
+    if (!Number.isFinite(num)) return 'n/a';
+    const abs = Math.abs(num);
+    const sign = num < 0 ? '-' : '';
+    if (abs >= 1e9) return sign + (abs / 1e9).toFixed(abs >= 1e10 ? 0 : 2) + 'b';
+    if (abs >= 1e6) return sign + (abs / 1e6).toFixed(abs >= 1e7 ? 0 : 2) + 'm';
+    if (abs >= 1e3) return sign + (abs / 1e3).toFixed(abs >= 1e4 ? 0 : 2) + 'k';
+    if (abs >= 100) return sign + abs.toFixed(0);
+    if (abs >= 10) return sign + abs.toFixed(1);
+    return sign + abs.toFixed(2);
+}
+
 function padRange(min, max, pctLower = 0.04, pctUpper = 0.04) {
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
     if (min === max) {
@@ -289,6 +305,19 @@ function padRange(min, max, pctLower = 0.04, pctUpper = 0.04) {
     }
     const span = max - min;
     return [min - span * pctLower, max + span * pctUpper];
+}
+
+function formatCompactNumber(v) {
+    const num = Number(v);
+    if (!Number.isFinite(num)) return 'n/a';
+    const abs = Math.abs(num);
+    const sign = num < 0 ? '-' : '';
+    if (abs >= 1e9) return sign + (abs / 1e9).toFixed(abs >= 1e10 ? 0 : 2) + 'b';
+    if (abs >= 1e6) return sign + (abs / 1e6).toFixed(abs >= 1e7 ? 0 : 2) + 'm';
+    if (abs >= 1e3) return sign + (abs / 1e3).toFixed(abs >= 1e4 ? 0 : 2) + 'k';
+    if (abs >= 100) return sign + abs.toFixed(0);
+    if (abs >= 10) return sign + abs.toFixed(1);
+    return sign + abs.toFixed(2);
 }
 
 function makeAxis(show, type) {
@@ -300,7 +329,7 @@ function makeAxis(show, type) {
         ticks: { show: true, stroke: THEME.axis, width: 1 },
         size: show ? 34 : 0,
         space: 50,
-        font: '10px Segoe UI, sans-serif',
+        font: '11px Segoe UI, sans-serif',
         label: '',
         values: show ? (u, splits) => splits.map((v) => fmtShortDate(v)) : () => [],
     };
@@ -314,9 +343,9 @@ function makeYAxis(show, formatter, size = 58) {
         grid: { show: true, stroke: THEME.grid },
         ticks: { show: true, stroke: THEME.axis, width: 1 },
         size,
-        space: 60,
-        font: '10px Segoe UI, sans-serif',
-        values: formatter,
+        space: 72,
+        font: '11px Segoe UI, sans-serif',
+        values: formatter || undefined,
     };
 }
 
@@ -353,7 +382,7 @@ function makePlotBase(showX, yFormatter, yScale, yRange) {
         series: [
             { label: 'Time' },
         ],
-        padding: [10, 16, 0, 0],
+        padding: [8, 8, 0, 8],
         hooks: {
             ready: [
                 (u) => {
@@ -369,11 +398,48 @@ function lineSeries(name, color, width, dash, extra = {}) {
         label: name,
         stroke: color,
         width,
-        dash: dashToArray(dash),
         points: { show: false },
         fill: null,
         ...extra,
     };
+}
+
+function makeDevSplits(scaleMin, scaleMax, foundIncr, foundSpace) {
+    if (!Number.isFinite(scaleMin) || !Number.isFinite(scaleMax)) return [];
+
+    const span = scaleMax - scaleMin;
+    const step = span <= 75 || foundSpace >= 60 ? 12.5 : 25;
+    const start = Math.ceil(scaleMin / step) * step;
+    const end = Math.floor(scaleMax / step) * step;
+    const splits = [];
+
+    for (let v = start; v <= end + 1e-9; v += step) {
+        const rounded = Math.round(v * 100) / 100;
+        if (!splits.length || splits[splits.length - 1] !== rounded) splits.push(rounded);
+    }
+
+    if (scaleMin <= 0 && scaleMax >= 0 && !splits.includes(0)) {
+        splits.push(0);
+        splits.sort((a, b) => a - b);
+    }
+
+    return splits;
+}
+
+function makeVolumeSplits(scaleMin, scaleMax, foundIncr, foundSpace) {
+    if (!Number.isFinite(scaleMin) || !Number.isFinite(scaleMax)) return [];
+
+    if (scaleMax <= scaleMin) return [];
+
+    const start = Math.round(scaleMin * 100) / 100;
+    const mid = Math.round(((scaleMin + scaleMax) / 2) * 100) / 100;
+    const end = Math.round(scaleMax * 100) / 100;
+    const splits = [start];
+
+    if (mid > start && mid < end) splits.push(mid);
+    if (end > start) splits.push(end);
+
+    return splits;
 }
 
 function applyChartHeights() {
@@ -434,33 +500,55 @@ try {
 priceChart = initChart('price-chart', {
     ...makePlotBase(false, (u, vals) => vals.map((v) => Number(v).toFixed(6)), {
         auto: true,
+        distr: 3,
         log: 10,
-        range: (u, min, max) => padRange(min, max, 0.02, 0.03) || [min, max],
+        range: (u, min, max) => {
+            if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max <= 0) {
+                return [min, max];
+            }
+            return [min * 0.98, max * 1.03];
+        },
     }),
     axes: [
         makeAxis(false, 'x'),
-        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(6)), 62),
+        {
+            ...makeYAxis(true, null, 80),
+            border: { show: true, stroke: THEME.axis, width: 2 },
+            grid: { show: true, stroke: THEME.grid, width: 2 },
+        },
     ],
+    padding: [8, 8, 12, 8],
     series: [
         { label: 'Time' },
         lineSeries('${escapeHtml(assetA.symbol || '?')}/${escapeHtml(assetB.symbol || '?')} VWAP', '#5c9ee6', 1.5),
-        ...amaMeta.map((cfg) => lineSeries(cfg.name, cfg.color, cfg.lineWidth || 1.5, cfg.dash)),
+        ...amaMeta.map((cfg) => lineSeries(cfg.name, cfg.color, cfg.lineWidth || 1.5)),
     ],
 }, priceData);
 
 devChart = initChart('dev-chart', {
     ...makePlotBase(false, (u, vals) => vals.map((v) => Number(v).toFixed(2) + '%'), {
         auto: true,
-        range: (u, min, max) => padRange(min, max, 0.08, 0.08) || [min, max],
+        range: (u, min, max) => {
+            if (!Number.isFinite(min) || !Number.isFinite(max)) return [min, max];
+            const maxAbs = Math.max(Math.abs(min), Math.abs(max));
+            const limit = Math.max(maxAbs * 1.15, 25);
+            return [-limit, limit];
+        },
     }),
     axes: [
         makeAxis(false, 'x'),
-        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(2) + '%'), 62),
+        {
+            ...makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(2) + '%'), 82),
+            border: { show: true, stroke: THEME.axis, width: 2 },
+            grid: { show: true, stroke: THEME.grid, width: 2 },
+            splits: (u, axisIdx, scaleMin, scaleMax) => makeDevSplits(scaleMin, scaleMax),
+        },
     ],
     series: [
         { label: 'Time' },
-        ...amaMeta.map((cfg) => lineSeries(cfg.name, cfg.color, 1.25, cfg.dash)),
+        ...amaMeta.map((cfg) => lineSeries(cfg.name, cfg.color, 1.25)),
     ],
+    padding: [8, 8, 12, 8],
 }, devData);
 
 volChart = initChart('vol-chart', {
@@ -470,7 +558,13 @@ volChart = initChart('vol-chart', {
     }),
     axes: [
         makeAxis(true, 'x'),
-        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toLocaleString()), 62),
+        {
+            ...makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toLocaleString()), 82),
+            border: { show: true, stroke: THEME.axis, width: 2 },
+            grid: { show: true, stroke: THEME.grid, width: 2 },
+            ticks: { show: true, stroke: THEME.axis, width: 2 },
+            splits: (u, axisIdx, scaleMin, scaleMax, foundIncr, foundSpace) => makeVolumeSplits(scaleMin, scaleMax, foundIncr, foundSpace),
+        },
     ],
     series: [
         { label: 'Time' },
