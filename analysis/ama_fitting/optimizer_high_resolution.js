@@ -14,15 +14,15 @@ const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_p
  *
  * Finds AMA parameters (ER, Fast, Slow) using geometric metrics only.
  *
- * New 4-AMA objective set:
- *   - Minimise total relative distance: Σ |close - AMA| / AMA
- *   - Minimise total AMA movement:      Σ |AMA_t - AMA_{t-1}| / AMA_{t-1}
+ * Objective flow:
+ *   1. Compute a per-AMA max-distance cap from the max candle deviation percentile.
+ *   2. Keep only candidates at or below that cap.
+ *   3. Select the candidate with the lowest additive linear score.
  *
- * AMA1..AMA4 use weighted minimisation, shifting weight from distance to movement:
- *   AMA1: distance-heavy
- *   AMA2: balanced
- *   AMA3: movement-heavy
- *   AMA4: movement-most-heavy
+ * Distance to price is still tracked for reporting.
+ * Winner selection uses an additive tradeoff between AMA movement and
+ * AMA-to-price distance, so candidates must stay close enough while also
+ * being smooth.
  *
  * Usage:
  *   node optimizer_high_resolution.js --data ../../market_adapter/data/lp_pool_133_4h.json
@@ -33,20 +33,22 @@ const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_p
 const DATA_DIR = path.join(__dirname, 'data');
 
 const DEFAULT_SEARCH = {
-    er: { min: 50, max: 500, count: 40, step: null, quantum: 1 },
-    fast: { min: 1, max: 10, count: 40, step: null, quantum: 0.01 },
-    slow: { min: 500, max: 5000, count: 40, step: null, quantum: 1 },
+    er: { min: 500, max: 1000, count: 15, step: null, quantum: 1 },
+    fast: { min: 2, max: 8, count: 30, step: null, quantum: 0.01 },
+    slow: { min: 50, max: 200, count: 30, step: null, quantum: 0.1 },
 };
 
 // ── Geometric analysis constants ──────────────────────────────────────────────
 const REPOS_THRESHOLD      = 0.004;                          // 0.4% candle-to-candle AMA move
 const BAND_CAP_RATIO       = 0.8;                            // kept for backward-compat metadata
+const BASE_DISTANCE_WEIGHT = 0.0024;
+const DISTANCE_WEIGHT_STEP  = 0.0002;
 
 const AMA_OBJECTIVES = [
-    { key: 'AMA1', name: 'AMA1 (min move, cap 70%)', distanceCapQuantile: 0.70 },
-    { key: 'AMA2', name: 'AMA2 (min move, cap 60%)', distanceCapQuantile: 0.60 },
-    { key: 'AMA3', name: 'AMA3 (min move, cap 50%)', distanceCapQuantile: 0.50 },
-    { key: 'AMA4', name: 'AMA4 (min move, cap 45%)', distanceCapQuantile: 0.45 },
+    { key: 'AMA1', name: 'AMA1 (min move, cap 25%)', distanceCapQuantile: 0.25 },
+    { key: 'AMA2', name: 'AMA2 (min move, cap 30%)', distanceCapQuantile: 0.30 },
+    { key: 'AMA3', name: 'AMA3 (min move, cap 35%)', distanceCapQuantile: 0.35 },
+    { key: 'AMA4', name: 'AMA4 (min move, cap 40%)', distanceCapQuantile: 0.40 },
 ];
 
 function cloneObjectives() {
@@ -487,10 +489,11 @@ async function run() {
     console.log(' AMA GEOMETRIC OPTIMIZER');
     console.log('================================================================================');
     console.log(`  4 AMAs — pure geometric, no grid or bot settings`);
-    console.log('  Objective: minimise AMA movement under per-AMA max distance caps');
+    console.log('  Objective: minimise movement + λ·distance under per-AMA max distance caps');
     for (const o of objectives) {
         console.log(`  ${o.key}: distance cap quantile q=${o.distanceCapQuantile.toFixed(2)}`);
     }
+    console.log(`  Distance penalty: λ=${BASE_DISTANCE_WEIGHT} → ${BASE_DISTANCE_WEIGHT - DISTANCE_WEIGHT_STEP * (objectives.length - 1)}`);
     console.log(`  Ranges:     ER ${ER_VALUES[0]}–${ER_VALUES[ER_VALUES.length-1]}  Fast ${FAST_VALUES[0]}–${FAST_VALUES[FAST_VALUES.length-1]}  Slow ${SLOW_VALUES_AREA[0]}–${SLOW_VALUES_AREA[SLOW_VALUES_AREA.length-1]}`);
     console.log(`  Sampling:   ER ${erDim.meta.mode}(${erDim.meta.count}${erDim.meta.ratio ? `,x${erDim.meta.ratio.toFixed(3)}` : ''})  Fast ${fastDim.meta.mode}(${fastDim.meta.count}${fastDim.meta.ratio ? `,x${fastDim.meta.ratio.toFixed(3)}` : ''})  Slow ${slowDim.meta.mode}(${slowDim.meta.count}${slowDim.meta.ratio ? `,x${slowDim.meta.ratio.toFixed(3)}` : ''})`);
     console.log(`  Combos:     ${totalCombos}\n`);
@@ -538,18 +541,21 @@ async function run() {
 
     const entries = shardResults.flatMap((r) => r.entries);
     const validCombos = shardResults.reduce((acc, r) => acc + r.validCombos, 0);
-    const distVals = entries.map((e) => e.distanceTotal);
+    const maxDistVals = entries.map((e) => e.area.maxDist);
 
-    const objectiveResults = objectives.map((objective) => {
-        const computedCap = percentile(distVals, objective.distanceCapQuantile);
-        const cappedEntries = entries.filter((e) => e.distanceTotal <= computedCap);
+    const objectiveResults = objectives.map((objective, idx) => {
+        const distanceWeight = BASE_DISTANCE_WEIGHT - (DISTANCE_WEIGHT_STEP * idx);
+        const computedCap = percentile(maxDistVals, objective.distanceCapQuantile);
+        const cappedEntries = entries.filter((e) => e.area.maxDist <= computedCap);
 
         let best = null;
         for (const e of cappedEntries) {
-            if (!best || e.amaMovementTotal < best.amaMovementTotal || (e.amaMovementTotal === best.amaMovementTotal && e.distanceTotal < best.distanceTotal)) {
+            const score = e.amaMovementTotal + (distanceWeight * e.distanceTotal);
+            const bestScore = best ? best.weightedScore : Infinity;
+            if (!best || score < bestScore || (score === bestScore && e.amaMovementTotal < best.amaMovementTotal) || (score === bestScore && e.amaMovementTotal === best.amaMovementTotal && e.distanceTotal < best.distanceTotal)) {
                 best = {
                     ...e,
-                    weightedScore: e.amaMovementTotal,
+                    weightedScore: score,
                     normDistance: null,
                     normMovement: null,
                     key: objective.key,
@@ -560,6 +566,7 @@ async function run() {
 
         return {
             objective,
+            distanceWeight,
             best,
             totalCombos,
             validCombos,
@@ -603,7 +610,7 @@ async function run() {
 
     for (const w of selected) {
         detail(w.label, w,
-            `minMove=${w.weightedScore.toFixed(6)}  rawDist=${w.distanceTotal.toFixed(2)}  rawMove=${w.amaMovementTotal.toFixed(2)}`);
+            `score=${w.weightedScore.toFixed(6)}  λ=${objectiveResults.find((r) => r.objective?.key === w.key)?.distanceWeight?.toFixed(4) || 'n/a'}  rawDist=${w.distanceTotal.toFixed(2)}  rawMove=${w.amaMovementTotal.toFixed(2)}`);
     }
 
     for (const r of objectiveResults) {
@@ -668,9 +675,12 @@ async function run() {
             },
             boundaryFlags: boundarySummary,
             objective: {
-                type: 'distance_and_movement_weighted',
+                type: 'distance_cap_then_movement_plus_linear_distance_minimization',
                 distanceMetric: 'sum(abs(close-ama)/ama)',
                 movementMetric: 'sum(abs(ama_t-ama_t-1)/ama_t-1)',
+                baseDistanceWeight: BASE_DISTANCE_WEIGHT,
+                distanceWeightStep: DISTANCE_WEIGHT_STEP,
+                distanceWeightByAma: Object.fromEntries(objectiveResults.map((r) => [r.objective.key, r.distanceWeight])),
                 weights: objectives,
                 maxDistanceCap: {
                     value: null,

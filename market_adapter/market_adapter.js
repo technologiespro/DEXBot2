@@ -42,10 +42,11 @@
  *
  * AMA PROFILE SELECTION (per bot via gridPrice keyword):
  * ───────────────────────────────────────────────────────
- *   gridPrice: "ama"  or "ama3" => default (best backtest score, ER=372)
- *   gridPrice: "ama1"             => min move, cap 65%
- *   gridPrice: "ama2"             => min move, cap 55%
- *   gridPrice: "ama3"             => min move, cap 45%
+ *   gridPrice: "ama"  or "ama3" => default (best backtest score)
+ *   gridPrice: "ama1"             => min move, cap 25%
+ *   gridPrice: "ama2"             => min move, cap 30%
+ *   gridPrice: "ama3"             => min move, cap 35%
+ *   gridPrice: "ama4"             => min move, cap 40%
  *
  * No wallet keys/password/auth required (read-only chain + Kibana bootstrap).
  */
