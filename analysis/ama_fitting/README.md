@@ -14,6 +14,8 @@ and export the results into `profiles/market_profiles.json` for the market adapt
 3. scripts/generate_lp_chart.js   →   market chart + comparison chart  (visual review)
    - ECharts parallel path: `npm run lp:chart:echarts`
    - Synthetic ECharts comparison: `npm run ama:chart:synthetic:echarts`
+   - uPlot parallel path: `npm run lp:chart:uplot`
+   - Synthetic uPlot comparison: `npm run ama:chart:synthetic:uplot -- --bts-file <path> --xrp-file <path>`
 ```
 
 ---
@@ -126,12 +128,14 @@ This generates both:
 
 Under the hood, LP-data chart generation now delegates into the shared runner in
 `market_adapter/lp_chart_runner.js`. The analysis script keeps only:
-- the synthetic MEXC fallback mode used for analysis-only review
+- the synthetic explicit-input mode used for analysis-only review
 
 Supported synthetic entrypoint:
 
 ```bash
-npm run ama:chart:synthetic
+npm run ama:chart:synthetic:uplot -- \
+  --bts-file /path/to/BTS.json \
+  --xrp-file /path/to/XRP.json
 ```
 
 Open the generated HTML in a browser to compare all four AMA overlays against the candlestick price.

@@ -208,6 +208,14 @@ npm run lp:chart -- --data <lp-export.json>
 npm run lp:chart:echarts -- --data <lp-export.json>
 ```
 
+### LP Chart (uPlot)
+**File:** `generate_lp_chart_uplot.js`
+**Purpose:** Generate the parallel uPlot LP chart output for comparison.
+```bash
+# Generate the uPlot LP chart output
+npm run lp:chart:uplot -- --data <lp-export.json>
+```
+
 ### Synthetic Comparison Chart
 **File:** `analysis/ama_fitting/generate_unified_comparison_chart.js`
 **Purpose:** Generate the existing Plotly synthetic comparison chart.
@@ -224,12 +232,28 @@ npm run ama:chart:synthetic
 npm run ama:chart:synthetic:echarts
 ```
 
+### Synthetic Comparison Chart (uPlot)
+**File:** `analysis/ama_fitting/generate_unified_comparison_chart_uplot.js`
+**Purpose:** Generate the parallel uPlot synthetic comparison chart from explicit BTS/XRP inputs.
+```bash
+# Generate the synthetic comparison chart using uPlot
+npm run ama:chart:synthetic:uplot -- --bts-file <path/to/BTS.json> --xrp-file <path/to/XRP.json>
+```
+
 ### Derivative Trend Analysis (ECharts)
 **File:** `analysis/derivative_chart_generator_echarts.js`
 **Purpose:** Generate the parallel ECharts derivative analysis report.
 ```bash
 # Generate the derivative analysis report using ECharts
 npm run analysis:derivatives:echarts -- --input <file.json>
+```
+
+### Derivative Trend Analysis (uPlot)
+**File:** `analysis/analyze_derivatives_uplot.js`
+**Purpose:** Generate the parallel uPlot derivative analysis report.
+```bash
+# Generate the derivative analysis report using uPlot
+npm run analysis:derivatives:uplot -- --source json --file <file.json>
 ```
 
 ---
