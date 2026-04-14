@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { calculateAMA } = require('../ama_fitting/ama');
 
-const DEFAULT_DATA = path.join(__dirname, '..', '..', 'market_adapter', 'data', 'lp_pool_133_1h.json');
+const DEFAULT_DATA = path.join(__dirname, '..', '..', 'market_adapter', 'data', 'lp', '1_3_5537_1_3_0', 'lp_pool_133_1h.json');
 const DEFAULT_ACTIVE_ORDERS = 5;
 const DEFAULT_FEE_ROUNDTRIP_PCT = 0.20;
 const DEFAULT_MIN_SPREAD_FACTOR = 2.1;

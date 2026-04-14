@@ -388,7 +388,7 @@ that only need adjustment when you want to change how strict the signal is.
 ```bash
 node analysis/analyze_derivatives.js \
   --source json \
-  --file market_adapter/inputs/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
+  --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
   --sma 500 --fast-sma 100 \
   --macd-fast 48 --macd-slow 104 --macd-signal 36 --macd-min-hist 0.02 \
   --rsi 96 --rsi-extreme 90 --rsi-zone 10 \

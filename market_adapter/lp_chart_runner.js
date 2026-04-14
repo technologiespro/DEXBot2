@@ -69,7 +69,6 @@ function parseLpChartCliArgs(argv, options = {}) {
 function findLatestLpData() {
     const dirs = [
         path.join(ROOT, 'analysis', 'ama_fitting', 'data'),
-        path.join(ROOT, 'market_adapter', 'inputs', 'data'),
         path.join(ROOT, 'market_adapter', 'data'),
     ];
     const out = [];

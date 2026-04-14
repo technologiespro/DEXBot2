@@ -95,7 +95,7 @@ function outputPath(poolId, intervalSeconds, assetA, assetB) {
     const label = toIntervalLabel(intervalSeconds);
     const id  = String(poolId).replace('1.19.', '');
     const pairFolder = pairFolderName(assetA, assetB);
-    return path.join(__dirname, 'data', 'lp', pairFolder, `lp_pool_${id}_${label}.json`);
+    return path.join(__dirname, '..', 'data', 'lp', pairFolder, `lp_pool_${id}_${label}.json`);
 }
 
 // ─── bots.json helper ─────────────────────────────────────────────────────────

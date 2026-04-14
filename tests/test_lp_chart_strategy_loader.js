@@ -124,7 +124,7 @@ function testProfilesMatchByIntervalLabelFallback() {
     }
 }
 
-function testLatestLpDataIncludesInputsDirectory() {
+function testLatestLpDataPrefersNewerFile() {
     const suffix = `${Date.now()}-${process.pid}`;
     const analysisFile = path.join(
         __dirname,
@@ -134,27 +134,26 @@ function testLatestLpDataIncludesInputsDirectory() {
         'data',
         `lp_pool_${suffix}_analysis.json`
     );
-    const inputsFile = path.join(
+    const dataFile = path.join(
         __dirname,
         '..',
         'market_adapter',
-        'inputs',
         'data',
-        `lp_pool_${suffix}_inputs.json`
+        `lp_pool_${suffix}_data.json`
     );
 
     writeJson(analysisFile, { meta: {}, candles: [] });
-    writeJson(inputsFile, { meta: {}, candles: [] });
+    writeJson(dataFile, { meta: {}, candles: [] });
 
     const now = Date.now();
     fs.utimesSync(analysisFile, new Date(now - 10_000), new Date(now - 10_000));
-    fs.utimesSync(inputsFile, new Date(now + 10_000), new Date(now + 10_000));
+    fs.utimesSync(dataFile, new Date(now + 10_000), new Date(now + 10_000));
 
     try {
-        assert.strictEqual(findLatestLpData(), inputsFile, 'latest LP data should include market_adapter/inputs/data');
+        assert.strictEqual(findLatestLpData(), dataFile, 'latest LP data should pick the newer file from market_adapter/data');
     } finally {
         removeFile(analysisFile);
-        removeFile(inputsFile);
+        removeFile(dataFile);
     }
 }
 
@@ -182,7 +181,7 @@ function testParseLpChartCliArgsSupportsWrapperModes() {
 function main() {
     testLoaderFindsOptimizerResultsFromAnalysisDir();
     testProfilesMatchByIntervalLabelFallback();
-    testLatestLpDataIncludesInputsDirectory();
+    testLatestLpDataPrefersNewerFile();
     testParseLpChartCliArgsSupportsWrapperModes();
     console.log('lp chart strategy loader tests passed');
 }

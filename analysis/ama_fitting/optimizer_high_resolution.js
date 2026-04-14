@@ -25,8 +25,8 @@ const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_p
  * being smooth.
  *
  * Usage:
- *   node optimizer_high_resolution.js --data ../../market_adapter/data/lp_pool_133_4h.json
- *   node optimizer_high_resolution.js --data ../../market_adapter/data/lp_pool_133_1h.json --erMax 400 --fastMax 20 --slowMax 200
+ *   node optimizer_high_resolution.js --data ../../market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_4h.json
+ *   node optimizer_high_resolution.js --data ../../market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json --erMax 400 --fastMax 20 --slowMax 200
  *
  */
 

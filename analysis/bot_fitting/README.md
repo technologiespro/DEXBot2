@@ -13,7 +13,7 @@ For each of the 4 AMA strategies, it searches for best:
 ### Input dependencies
 
 - LP candles JSON (recommended 1h):
-  - `market_adapter/data/lp_pool_133_1h.json`
+  - `market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json`
 - AMA optimization winners JSON:
   - `analysis/ama_fitting/optimization_results_lp_pool_133_1h.json`
 
@@ -21,14 +21,14 @@ For each of the 4 AMA strategies, it searches for best:
 
 ```bash
 node analysis/bot_fitting/backtest_bot_fitting.js \
-  --data market_adapter/data/lp_pool_133_1h.json
+  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
 ```
 
 Optional tuning:
 
 ```bash
 node analysis/bot_fitting/backtest_bot_fitting.js \
-  --data market_adapter/data/lp_pool_133_1h.json \
+  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
   --spread 0.4:1.6:0.1 \
   --increment 0.2:0.8:0.1 \
   --ratio 1.5,2,2.5,3,4,5,8,10 \
