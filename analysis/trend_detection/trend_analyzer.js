@@ -19,12 +19,14 @@ const { DerivativeAnalyzer } = require('./derivative_analyzer');
 class TrendAnalyzer {
     /**
      * @param {Object} config
-     * @param {number} config.slowSmaPeriod          – SMA period (default 800)
+     * @param {number} config.slowSmaPeriod          – Slow SMA period (default 500)
+     * @param {number} config.fastSmaPeriod          – Fast SMA period (default 100)
      * @param {number} config.minBarsForConfirmation  – Bars to confirm trend (default 3)
      */
     constructor(config = {}) {
         this.analyzer = new DerivativeAnalyzer({
-            slowSmaPeriod: config.slowSmaPeriod || 800,
+            slowSmaPeriod: config.slowSmaPeriod ?? 500,
+            fastSmaPeriod: config.fastSmaPeriod ?? 100,
             minBarsForConfirmation: config.minBarsForConfirmation || 3,
         });
 

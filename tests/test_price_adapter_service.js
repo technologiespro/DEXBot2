@@ -6,6 +6,15 @@ console.log('Running price adapter service tests');
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
 const { detectMissingCandleTimestamps } = require('../market_adapter/candle_utils');
 
+function generateCandles(count, price) {
+    const candles = [];
+    const baseTs = 1700000000000;
+    for (let i = 0; i < count; i++) {
+        candles.push([baseTs + i * 3600000, price, price, price, price, 1]);
+    }
+    return candles;
+}
+
 async function testTriggerHookCalledOnThreshold() {
     let triggerHookCalls = 0;
 
@@ -24,16 +33,12 @@ async function testTriggerHookCalledOnThreshold() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: {
-            getLpCandlesForPool: async () => ([
-                [1700000000000, 100, 100, 100, 100, 1],
-                [1700003600000, 100, 101, 99, 101, 1],
-            ]),
+            getLpCandlesForPool: async () => generateCandles(30, 105),
         },
         fetchNativeTradesSince: async () => [],
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 105,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
         root: process.cwd(),
@@ -116,7 +121,6 @@ async function testBootstrapFallsBackWhenKibanaIsEmpty() {
         tradesToCandles: () => [[1700000000000, 100, 100, 100, 100, 1]],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 105,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
         root: process.cwd(),
@@ -165,10 +169,7 @@ async function testAmaGridPriceIsCaseInsensitive() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: [
-                [1700000000000, 100, 100, 100, 100, 1],
-                [1700003600000, 101, 101, 101, 101, 1],
-            ],
+            candles: generateCandles(30, 101),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -182,7 +183,6 @@ async function testAmaGridPriceIsCaseInsensitive() {
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 103,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => {
             triggerWrites += 1;
@@ -244,10 +244,7 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: [
-                [1700000000000, 100, 100, 100, 100, 1],
-                [1700003600000, 101, 101, 101, 101, 1],
-            ],
+            candles: generateCandles(30, 101),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -261,7 +258,6 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 103,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => {
             triggerWrites += 1;
@@ -321,10 +317,7 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: [
-                [1700000000000, 100, 100, 100, 100, 1],
-                [1700003600000, 101, 101, 101, 101, 1],
-            ],
+            candles: generateCandles(30, 101),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -338,7 +331,6 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 103,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => {
             triggerWrites += 1;
@@ -411,7 +403,6 @@ async function testCenterEqualsAmaTriggeredByAmaDelta() {
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 100,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => {
             triggerWrites += 1;
@@ -498,7 +489,6 @@ async function testNoTriggerWhenCenterMatchesAma() {
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 100,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => {
             triggerWrites += 1;
@@ -566,10 +556,7 @@ async function testCenterClampedByBotBounds() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: [
-                [1700000000000, 110, 110, 110, 110, 1],
-                [1700003600000, 110, 110, 110, 110, 1],
-            ],
+            candles: generateCandles(30, 110),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -583,7 +570,6 @@ async function testCenterClampedByBotBounds() {
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 110,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => {
             triggerWrites += 1;
@@ -665,10 +651,7 @@ async function testContextCacheInvalidatesOnPoolChange() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: [
-                [1700000000000, 100, 100, 100, 100, 1],
-                [1700003600000, 101, 101, 101, 101, 1],
-            ],
+            candles: generateCandles(30, 101),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -682,7 +665,6 @@ async function testContextCacheInvalidatesOnPoolChange() {
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 100,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
         root: process.cwd(),
@@ -726,7 +708,6 @@ async function testContextCacheInvalidatesOnPoolChange() {
 
 async function testKibanaGapRepairPatchesMissingCandles() {
     let savedPayload = null;
-    let amaCandles = null;
     let kibanaCalls = 0;
     let kibanaTimeRange = null;
 
@@ -765,10 +746,6 @@ async function testKibanaGapRepairPatchesMissingCandles() {
         detectMissingCandleTimestamps,
         mergeCandles: (existing, incoming) => [...existing, ...incoming].sort((a, b) => a[0] - b[0]),
         pruneCandles: (candles) => candles,
-        calcAmaPrice: (candles) => {
-            amaCandles = candles;
-            return 100;
-        },
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
         root: process.cwd(),
@@ -815,7 +792,7 @@ async function testKibanaGapRepairPatchesMissingCandles() {
     assert.strictEqual(savedPayload.meta.kibanaGapRepairCount, 1, 'saved candle payload should include Kibana repair count');
     assert.strictEqual(savedPayload.meta.unresolvedGapCount, 0, 'saved candle payload should include remaining gap count');
     assert.deepStrictEqual(
-        amaCandles,
+        savedPayload.candles,
         [
             [1700000000000, 100, 100, 100, 100, 1],
             [1700003600000, 100.5, 100.5, 100.5, 100.5, 1.5],
@@ -857,7 +834,6 @@ async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
         detectMissingCandleTimestamps,
         mergeCandles: (existing, incoming) => [...existing, ...incoming].sort((a, b) => a[0] - b[0]),
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 100,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
         root: process.cwd(),
@@ -904,10 +880,7 @@ async function testIdOnlyBotIsNotRejected() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: [
-                [1700000000000, 100, 100, 100, 100, 1],
-                [1700003600000, 101, 101, 101, 101, 1],
-            ],
+            candles: generateCandles(30, 101),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -919,7 +892,6 @@ async function testIdOnlyBotIsNotRejected() {
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
-        calcAmaPrice: () => 103,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.id-bot.trigger',
         writeBotGridPriceCenter: () => true,

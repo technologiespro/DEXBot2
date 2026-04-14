@@ -162,18 +162,19 @@ class RSI {
 class DerivativeAnalyzer {
     /**
      * @param {Object} config
-     * @param {number}  config.slowSmaPeriod          – SMA period (null to disable)
+     * @param {number}  config.slowSmaPeriod          – SMA period (default 500, null to disable)
+     * @param {number}  config.fastSmaPeriod          – Fast SMA period (default 100, null to disable)
      * @param {number}  config.minBarsForConfirmation  – Bars to confirm trend (default 3)
      */
     constructor(config = {}) {
         this.minBarsForConfirmation = config.minBarsForConfirmation || 3;
 
         // SMA (slow)
-        this.slowSmaPeriod = config.slowSmaPeriod ?? 800;
+        this.slowSmaPeriod = config.slowSmaPeriod ?? 500;
         this.sma = this.slowSmaPeriod ? new SMA(this.slowSmaPeriod) : null;
 
         // SMA (fast)
-        this.fastSmaPeriod = config.fastSmaPeriod ?? null;
+        this.fastSmaPeriod = config.fastSmaPeriod ?? 100;
         this.fastSma = this.fastSmaPeriod ? new SMA(this.fastSmaPeriod) : null;
 
         // MACD

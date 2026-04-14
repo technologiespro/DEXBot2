@@ -27,11 +27,11 @@ timing setting (default: **1 hour**).
 ```
 price_candles -> price_adapter -> AMA -> Grid Price
 
-price_candles -> trend_detection -> weight_offset   (asymmetric weight shift) \
-price_candles -> ATR             -> weight_variance (symmetric shift)         +-> weight_output
+AMA           -> slope_analysis -> slope_offset      (asymmetric weight shift) \
+price_candles -> ATR            -> weight_variance  (symmetric shift)         +-> weight_output
 
-trend_detection -> expected Collateral Ratio
-                -> adjust debt -> adjust collateral -> delta liquidity -> reset bot
+slope_analysis -> expected Collateral Ratio
+               -> adjust debt -> adjust collateral -> delta liquidity -> reset bot
 ```
 
 **Inputs**:
@@ -75,7 +75,7 @@ spread_analysis/  ──┘
 - **Real-time Market Monitoring**: Track volatility, price action, and market regime per-bot
 - **Candle Synchronization**: Keep per-bot LP candles current and pruned to AMA-required windows
 - **AMA Center Calculation**: Compute AMA-based grid price with clamping
-- **Trend Detection**: Classify market as UP / DOWN / NEUTRAL and derive weight bias
+- **AMA Slope Analysis**: Compute buy/sell weight offset directly from AMA slope (trend speed and direction)
 - **ATR Volatility**: Compute Average True Range for symmetric weight variance
 - **Dynamic Weights**: Combine trend bias + ATR variance into per-bot buy/sell weight output
 - **Collateral Management**: Recommend target collateral ratio based on trend regime
@@ -110,12 +110,10 @@ market_adapter/
 │   ├── kibana_client.js           # Low-level Kibana HTTP client
 │   ├── kibana_market_candles.js   # Kibana candle fetch/transform
 │   └── strategies/                # Signal and recommendation modules
-│       ├── dynamic_weights.js     # computeDynamicWeights(trend, volatility)
+│       ├── ama_slope_model.js     # computeAmaSlopeWeights(amaValues, weightVariance)
 │       ├── collateral_manager.js  # adjustCollateralRatio(trend, min, max)
-│       ├── atr/
-│       │   └── calculator.js      # calculateATR(candles, period)
-│       └── trend_detection/
-│           └── analyzer.js        # TrendAnalyzer — trend + confidence
+│       └── atr/
+│           └── calculator.js      # calculateATR(candles, period)
 │
 ├── inputs/                      # LP data acquisition tools (importable + CLI)
 │   ├── kibana_source.js           # Elasticsearch LP data source
@@ -171,13 +169,12 @@ For each bot, `MarketAdapterService` computes:
 - **AMA value** using per-bot `ama` config (or defaults: `erPeriod:90, fast:10, slow:100`)
 - **Center price** = AMA, clamped to configured min/max
 
-### 3. Trend Detection
+### 3. AMA Slope Analysis
 
-`TrendAnalyzer` (in `core/strategies/trend_detection/analyzer.js`) classifies
-each candle close as `UP`, `DOWN`, or `NEUTRAL` with a `confidence` score (0–100).
-
-This drives:
-- **Weight offset**: Asymmetric bias toward buy or sell weight
+The adapter computes the slope of the AMA series over a lookback window
+(`computeAmaSlopeWeights` in `core/strategies/ama_slope_model.js`).
+This provides a direct, filtered measure of real market velocity, used to
+classify the trend as `UP`, `DOWN`, or `NEUTRAL` and derive a weight bias.
 
 ### 4. ATR Volatility
 
@@ -189,9 +186,11 @@ weight variance input.
 
 ### 5. Dynamic Weights
 
-`computeDynamicWeights(trendData, { oscillationRatio })` (in `core/strategies/dynamic_weights.js`):
-- Combines trend-based weight offset with ATR variance
-- Returns `{ buy, sell }` weight values for the bot grid
+The `ama_slope_model` combines the asymmetric `slopeOffset` (trend) and
+symmetric `symmetricDelta` (ATR volatility) into final buy/sell weights:
+- **Low volatility**: Concentrates orders toward the market
+- **High volatility**: Spreads orders out to reduce risk
+- **Trend**: Shifts weight toward the direction of market movement
 
 ### 6. Collateral Management
 

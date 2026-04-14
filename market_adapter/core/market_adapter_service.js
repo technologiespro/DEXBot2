@@ -1,8 +1,8 @@
 'use strict';
 
-const { TrendAnalyzer } = require('../../analysis/trend_detection/trend_analyzer');
 const { calculateATR } = require('./strategies/atr/calculator');
-const { computeDynamicWeights } = require('./strategies/dynamic_weights');
+const { computeAmaSlopeWeights } = require('./strategies/ama_slope_model');
+const { calculateAMA } = require('../../analysis/ama_fitting/ama');
 const { adjustCollateralRatio } = require('./strategies/collateral_manager');
 const { DEFAULT_CONFIG } = require('../../modules/constants');
 const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order');
@@ -11,20 +11,6 @@ const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order
 class MarketAdapterService {
     constructor(deps = {}) {
         this.deps = deps;
-        // Per-bot trend analyzers to prevent cross-bot state contamination
-        this.trendServices = new Map();
-    }
-
-    /**
-     * Get or create a TrendAnalyzer for a specific bot.
-     * Each bot gets its own analyzer so accumulated AMA/oscillation
-     * state is independent.
-     */
-    _getTrendService(botKey) {
-        if (!this.trendServices.has(botKey)) {
-            this.trendServices.set(botKey, new TrendAnalyzer());
-        }
-        return this.trendServices.get(botKey);
     }
 
     buildBotContextSignature(bot) {
@@ -187,31 +173,53 @@ class MarketAdapterService {
         const unresolvedGapCount = retainedGapAnalysis.gapCount;
         
         // ------------------ MARKET ADAPTER STRATEGIES ------------------
-        
-        const amaPrice = deps.calcAmaPrice(nextCandles, botAma);
-        const lastCandle = nextCandles[nextCandles.length - 1] || [0,0,0,0,0];
-        
-        // 1. Trend analysis (price_candles -> trend_detection)
-        //    Feed ALL candles through the per-bot analyzer so it accumulates
-        //    enough history for isReady/confidence to be meaningful.
-        //    Trend is derived from candle closes only.
-        const trendService = this._getTrendService(bot.botKey);
-        trendService.reset();
-        let trendData = { isReady: false, trend: 'NEUTRAL', confidence: 0 };
-        for (let i = 0; i < nextCandles.length; i++) {
-            const close = nextCandles[i][4] || 0;
-            trendData = trendService.update(close);
-        }
 
-        // 2. ATR Calculation (price_candles -> ATR -> weight_variance)
+        // 1. AMA series — used for price reference and slope-based weight offset
+        const closes = nextCandles.map((c) => Number(c[4])).filter((v) => Number.isFinite(v) && v > 0);
+        const amaValues = calculateAMA(closes, botAma);
+
+        // amaPrice is the last value of the full AMA series
+        const amaPrice = amaValues.length > 0 ? amaValues[amaValues.length - 1] : null;
+        const lastCandle = nextCandles[nextCandles.length - 1] || [0,0,0,0,0];
+
+        // 2. ATR — volatility input for symmetric weight factor
         const atr = calculateATR(nextCandles, 14);
         const weightVariance = amaPrice > 0 ? (atr / amaPrice) : 0;
-        
-        // 3. Dynamic Weights (trend_detection -> weight_offset, combine weight_variance)
-        const weights = computeDynamicWeights(trendData, { oscillationRatio: weightVariance * 100 });
-        
-        // 4. Collateral Strategy
-        const collateral = adjustCollateralRatio(trendData, 1.5, 2.0);
+
+        // 3. Slope + volatility → weights
+        //    slopeOffset (asymmetric) + symmetricDelta (volatility) combined in one call
+        const slopeCfg = cfg.amaSlope || {};
+        const slopeResult = computeAmaSlopeWeights(amaValues, weightVariance, slopeCfg);
+
+        const amaSlope = {
+            trend:          slopeResult.trend,
+            confidence:     slopeResult.confidence,
+            slopePct:       slopeResult.slopePct,
+            slopeOffset:    slopeResult.slopeOffset,
+            symmetricDelta: slopeResult.symmetricDelta,
+            weightVariance,
+            isReady:        slopeResult.isReady,
+        };
+
+        const weights = {
+            sell: slopeResult.sellW,
+            buy:  slopeResult.buyW,
+            profile: slopeResult.isReady
+                ? (slopeResult.trend === 'NEUTRAL' ? 'flat' : 'slope')
+                : 'static',
+            meta: {
+                source:         'ama_slope',
+                trend:          slopeResult.trend,
+                confidence:     slopeResult.confidence,
+                slopePct:       slopeResult.slopePct,
+                slopeOffset:    slopeResult.slopeOffset,
+                symmetricDelta: slopeResult.symmetricDelta,
+                isReady:        slopeResult.isReady,
+            },
+        };
+
+        // 4. Collateral Strategy — uses derived confidence (proportional to slope magnitude)
+        const collateral = adjustCollateralRatio(slopeResult, 1.5, 2.0);
 
         const amaComparison = deps.calcAmaComparison(nextCandles, bot, ctx);
         const lastCandleTs = lastCandle[0] || null;
@@ -367,9 +375,9 @@ class MarketAdapterService {
             lastTriggerSuppressedReason: triggerSuppressedReason,
             weights,
             collateral,
-            trend: trendData.trend,
             atr,
             weightVariance,
+            amaSlope,
         };
 
         return {
@@ -392,7 +400,7 @@ class MarketAdapterService {
             triggerSuppressedReason,
             weights,
             collateral,
-            trend: trendData.trend,
+            amaSlope,
             poolId: ctx.poolId,
             candleFile: deps.path.relative(deps.root, filePath),
             lastCandleTs,

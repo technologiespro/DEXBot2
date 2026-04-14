@@ -101,6 +101,12 @@ const DEFAULTS = {
     maxPages: 80,
     pageLimit: 100,
     once: false,
+    amaSlope: {
+        lookbackBars:           72,
+        maxSlopePct:            3.0,
+        neutralZonePct:         0.15,
+        maxVolatilityThreshold: 0.03,
+    },
 };
 
 const WHITELIST_FILE = path.join(PROFILES_DIR, 'price_adapter_whitelist.json');
@@ -827,7 +833,7 @@ function writeCenterSnapshot(state) {
             lastDeltaPercent: v.lastDeltaPercent,
             weights: v.weights,
             collateral: v.collateral,
-            trend: v.trend,
+            amaSlope: v.amaSlope,
             atr: v.atr
         };
     }
@@ -869,7 +875,7 @@ async function runOnce(cfg, state, contextCache) {
             const gapText = Number.isFinite(r.unresolvedGapCount) && r.unresolvedGapCount > 0 ? ` GAPS(${r.unresolvedGapCount})` : '';
             const trigText = r.triggered ? ` TRIGGERED -> ${r.triggerPath ? path.relative(ROOT, r.triggerPath) : '[suppressed, dry-run]'}` : '';
             const weightText = r.weights ? ` weights[buy=${r.weights.buy}, sell=${r.weights.sell}]` : '';
-            const trendText = r.trend ? ` trend=${r.trend}` : '';
+            const trendText = r.amaSlope?.trend ? ` trend=${r.amaSlope.trend}` : '';
             log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText}, delta=${deltaText}, threshold=${thresholdText}${staleText}${patchText}${gapText}${trigText}${trendText}${weightText}`);
             if (Array.isArray(r.dryRunMessages)) {
                 r.dryRunMessages.forEach(msg => log(cfg, `  ${msg}`));
