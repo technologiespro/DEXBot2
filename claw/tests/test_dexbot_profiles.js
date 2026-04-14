@@ -365,7 +365,7 @@ async function testApplyBotSettingsPatchWithoutIdentifierReturnsResolvedBotMetad
   assert.strictEqual(result.updatedBot.botKey, 'solo-0');
   assert.strictEqual(result.updatedBot.botIndex, 0);
   assert.strictEqual(result.next.files.orderSnapshot, path.join(profilesDir, 'orders', 'solo-0.json'));
-  assert.strictEqual(result.next.files.gridPriceSnapshot, path.join(profilesDir, 'orders', 'solo-0.gridprice.json'));
+  assert.strictEqual(result.next.files.gridPriceSnapshot, path.join(profilesDir, 'orders', 'solo-0.dynamicgrid.json'));
   assert.strictEqual(result.next.files.trigger, path.join(profilesDir, 'recalculate.solo-0.trigger'));
 }
 

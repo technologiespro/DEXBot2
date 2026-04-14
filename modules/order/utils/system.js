@@ -313,17 +313,18 @@ const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
 };
 
 /**
- * Load the full grid-center snapshot written by price_adapter for a bot.
- * The snapshot is stored atomically at profiles/orders/<botKey>.gridprice.json
- * whenever a grid reset trigger fires (or on first initialisation) for bots with
- * gridPrice: "ama", "ama1", "ama2", "ama3", or "ama4".
- * Called by initializeGrid() when manager.config.gridPrice uses an AMA keyword.
+ * Load the full dynamic grid snapshot written by price_adapter for a bot.
+ * The snapshot is stored atomically at profiles/orders/<botKey>.dynamicgrid.json
+ * and is updated every market adapter cycle. It contains the AMA-derived center
+ * price and, for dynamic-weight-whitelisted bots, computed effective weight offsets.
+ * Called by initializeGrid() when manager.config.gridPrice uses an AMA keyword,
+ * and by performGridResync() to apply dynamic weights on grid reset.
  * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
- * @returns {Object|null} Snapshot with center fields, or null if invalid
+ * @returns {Object|null} Snapshot with center and optional dynamicWeights fields, or null if invalid
  */
 function loadAmaCenterSnapshot(botKey) {
     try {
-        const gridPriceFile = path.join(__dirname, '../../../profiles/orders', `${botKey}.gridprice.json`);
+        const gridPriceFile = path.join(__dirname, '../../../profiles/orders', `${botKey}.dynamicgrid.json`);
         const raw = fs.readFileSync(gridPriceFile, 'utf8');
         const data = JSON.parse(raw);
         const centerPrice = Number(data?.centerPrice);
@@ -335,7 +336,8 @@ function loadAmaCenterSnapshot(botKey) {
             amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : null,
             centerPrice,
             source: data?.source || null,
-            updatedAt: data?.updatedAt || null
+            updatedAt: data?.updatedAt || null,
+            dynamicWeights: data?.dynamicWeights || null,
         };
     } catch (_) {
         return null;

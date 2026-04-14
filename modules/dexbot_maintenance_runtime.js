@@ -4,13 +4,24 @@ const { BitShares } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const Grid = require('./order/grid');
 const { ORDER_STATES, TIMING, MAINTENANCE, GRID_LIMITS } = require('./constants');
-const { retryPersistenceIfNeeded, applyGridDivergenceCorrections } = require('./order/utils/system');
+const { retryPersistenceIfNeeded, applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
 const Format = require('./order/format');
 const { virtualizeOrder } = require('./order/utils/order');
 const { parseJsonWithComments } = require('./account_bots');
 
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
 const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
+const DYNAMIC_WEIGHT_WHITELIST_FILE = path.join(PROFILES_DIR, 'dynamic_weight_whitelist.json');
+
+function isDynamicWeightWhitelisted(botKey) {
+    try {
+        if (!fs.existsSync(DYNAMIC_WEIGHT_WHITELIST_FILE)) return false;
+        const json = JSON.parse(fs.readFileSync(DYNAMIC_WEIGHT_WHITELIST_FILE, 'utf8'));
+        return Array.isArray(json?.whitelist) && json.whitelist.includes(botKey);
+    } catch (_) {
+        return false;
+    }
+}
 
 function performGridResync() {
     const self = this;
@@ -31,6 +42,19 @@ function performGridResync() {
                     const oldIndex = self.config.botIndex;
                     self.config = { ...updatedBot, botKey: oldKey, botIndex: oldIndex };
                     self.manager.config = { ...self.manager.config, ...self.config };
+
+                    // Apply dynamic weights as additive offsets on top of bots.json weightDistribution.
+                    // Only applied when bot is in the dynamic weight whitelist and the market adapter
+                    // has written ready weights to dynamicgrid.json.
+                    if (isDynamicWeightWhitelisted(oldKey)) {
+                        const snapshot = loadAmaCenterSnapshot(oldKey);
+                        const dw = snapshot?.dynamicWeights;
+                        if (dw?.isReady && dw?.effectiveWeights) {
+                            self._log(`Applying dynamic weights: sell=${dw.effectiveWeights.sell} buy=${dw.effectiveWeights.buy} (trend=${dw.trend}, confidence=${dw.confidence})`);
+                            self.config.weightDistribution = dw.effectiveWeights;
+                            self.manager.config.weightDistribution = dw.effectiveWeights;
+                        }
+                    }
                 }
             } catch (e) {
                 self._warn(`Failed to reload config during resync (using current settings): ${e.message}`);

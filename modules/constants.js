@@ -172,7 +172,7 @@ let DEFAULT_CONFIG = {
     gridPrice: null,              // Optional reference price for x-factor bounds calculation.
                                   // "pool"    = use the live pool price for the pair
                                   // "market"  = use the live market price for the pair
-                                  // "ama"/"ama1".."ama4" = use the effective center snapshot from profiles/orders/<botKey>.gridprice.json
+                                  // "ama"/"ama1".."ama4" = use the effective center snapshot from profiles/orders/<botKey>.dynamicgrid.json
                                   // numeric   = fixed numeric value
                                   // null      = use startPrice (default, backward-compatible)
     incrementPercent: 0.5,        // Price step between grid levels (0.5 = 0.5% geometric spacing)

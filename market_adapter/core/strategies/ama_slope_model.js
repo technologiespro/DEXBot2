@@ -2,7 +2,7 @@
 
 const { MARKET_ADAPTER } = require('../../../modules/constants');
 
-const MAX_OFFSET_FROM_NEUTRAL = 0.5; // structural cap — not configurable per bot
+const MAX_OFFSET_FROM_NEUTRAL = 0.5; // default cap — overridable per bot via opts
 const MIN_WEIGHT = -0.5;
 const MAX_WEIGHT = 1.5;
 const BASELINE_WEIGHT = 0.5;
@@ -31,6 +31,8 @@ function clamp(v, min, max) {
  * @param {number}   [opts.neutralZonePct=0.15]         Dead-band around zero slope
  * @param {number}   [opts.maxVolatilityThreshold=0.03] ATR/price ratio = full high-vol state
  * @param {number}   [opts.erPeriod=DEFAULT_ER_PERIOD]  AMA warm-up bars to skip in isReady guard
+ * @param {number}   [opts.maxSlopeOffset=0.5]          Per-bot cap on buy/sell asymmetry offset
+ * @param {number}   [opts.maxVolatilityOffset=0.5]     Per-bot cap on symmetric volatility offset
  * @returns {{ sellW, buyW, slopeOffset, symmetricDelta, slopePct, confidence, trend, isReady }}
  */
 function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
@@ -39,6 +41,8 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const neutralZonePct = opts.neutralZonePct ?? 0.15;
     const maxVolatilityThreshold = opts.maxVolatilityThreshold ?? 0.03;
     const erPeriod = opts.erPeriod ?? DEFAULT_ER_PERIOD;
+    const maxSlopeOffset = opts.maxSlopeOffset ?? MAX_OFFSET_FROM_NEUTRAL;
+    const maxVolatilityOffset = opts.maxVolatilityOffset ?? MAX_OFFSET_FROM_NEUTRAL;
 
     const notReady = {
         isReady: false,
@@ -74,16 +78,16 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
         slopeOffset = 0;
         trend = 'NEUTRAL';
     } else {
-        slopeOffset = clamp(slopePct / maxSlopePct, -1, 1) * MAX_OFFSET_FROM_NEUTRAL;
+        slopeOffset = clamp(slopePct / maxSlopePct, -1, 1) * maxSlopeOffset;
         trend = slopePct > 0 ? 'UP' : 'DOWN';
     }
 
     // 5. Confidence derived from slope offset magnitude (0–100)
-    const confidence = Math.round(Math.abs(slopeOffset) / MAX_OFFSET_FROM_NEUTRAL * 100);
+    const confidence = Math.round(Math.abs(slopeOffset) / maxSlopeOffset * 100);
 
     // 6. Volatility factor → symmetric delta
     const volFactor = 1 - clamp(weightVariance / maxVolatilityThreshold, 0, 1);
-    const symmetricDelta = (volFactor * 2 - 1) * MAX_OFFSET_FROM_NEUTRAL;
+    const symmetricDelta = (volFactor * 2 - 1) * maxVolatilityOffset;
 
     // 7-8. Final weights
     let sellW = clamp(BASELINE_WEIGHT + slopeOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT);

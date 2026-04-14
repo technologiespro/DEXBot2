@@ -187,39 +187,86 @@ class MarketAdapterService {
         const weightVariance = amaPrice > 0 ? (atr / amaPrice) : 0;
 
         // 3. Slope + volatility → weights
-        //    slopeOffset (asymmetric) + symmetricDelta (volatility) combined in one call
-        const slopeCfg = cfg.amaSlope || {};
-        const slopeResult = computeAmaSlopeWeights(amaValues, weightVariance, slopeCfg);
+        //    Computed only when bot is in the dynamic weight whitelist.
+        //    Weights are additive offsets on top of the bot's static weightDistribution from bots.json.
+        //    The bot picks up effectiveWeights from dynamicgrid.json on the next price-triggered reset.
+        const isDynamic = typeof deps.isBotDynamicWeightWhitelisted === 'function'
+            && deps.isBotDynamicWeightWhitelisted(bot.botKey);
 
-        const amaSlope = {
-            trend:          slopeResult.trend,
-            confidence:     slopeResult.confidence,
-            slopePct:       slopeResult.slopePct,
-            slopeOffset:    slopeResult.slopeOffset,
-            symmetricDelta: slopeResult.symmetricDelta,
-            weightVariance,
-            isReady:        slopeResult.isReady,
+        const slopeCfg = {
+            ...(cfg.amaSlope || {}),
+            maxSlopeOffset:      cfg.maxSlopeOffset,      // per-bot, from botOverrides
+            maxVolatilityOffset: cfg.maxVolatilityOffset, // per-bot, from botOverrides
         };
 
-        const weights = {
-            sell: slopeResult.sellW,
-            buy:  slopeResult.buyW,
-            profile: slopeResult.isReady
-                ? (slopeResult.trend === 'NEUTRAL' ? 'flat' : 'slope')
-                : 'static',
-            meta: {
-                source:         'ama_slope',
+        let slopeResult = null;
+        let amaSlope = null;
+        let weights = null;
+        let dynamicWeightsPayload = null;
+
+        if (isDynamic) {
+            slopeResult = computeAmaSlopeWeights(amaValues, weightVariance, slopeCfg);
+
+            amaSlope = {
                 trend:          slopeResult.trend,
                 confidence:     slopeResult.confidence,
                 slopePct:       slopeResult.slopePct,
                 slopeOffset:    slopeResult.slopeOffset,
                 symmetricDelta: slopeResult.symmetricDelta,
+                weightVariance,
                 isReady:        slopeResult.isReady,
-            },
-        };
+            };
+
+            // Additive application: static W from bots.json + slope/volatility offsets
+            const staticSell = Number.isFinite(bot.weightDistribution?.sell) ? bot.weightDistribution.sell : 0.5;
+            const staticBuy  = Number.isFinite(bot.weightDistribution?.buy)  ? bot.weightDistribution.buy  : 0.5;
+
+            const MIN_W = -0.5;
+            const MAX_W =  1.5;
+            const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+            const effectiveSell = slopeResult.isReady
+                ? Math.round(clamp(staticSell + slopeResult.slopeOffset + slopeResult.symmetricDelta, MIN_W, MAX_W) * 100) / 100
+                : staticSell;
+            const effectiveBuy = slopeResult.isReady
+                ? Math.round(clamp(staticBuy  - slopeResult.slopeOffset + slopeResult.symmetricDelta, MIN_W, MAX_W) * 100) / 100
+                : staticBuy;
+
+            weights = {
+                sell: effectiveSell,
+                buy:  effectiveBuy,
+                profile: slopeResult.isReady
+                    ? (slopeResult.trend === 'NEUTRAL' ? 'flat' : 'slope')
+                    : 'static',
+                meta: {
+                    source:         'ama_slope',
+                    staticSell,
+                    staticBuy,
+                    trend:          slopeResult.trend,
+                    confidence:     slopeResult.confidence,
+                    slopePct:       slopeResult.slopePct,
+                    slopeOffset:    slopeResult.slopeOffset,
+                    symmetricDelta: slopeResult.symmetricDelta,
+                    isReady:        slopeResult.isReady,
+                },
+            };
+
+            // Payload written to dynamicgrid.json — bot reads this at grid reset
+            dynamicWeightsPayload = {
+                effectiveWeights: { sell: effectiveSell, buy: effectiveBuy },
+                baseWeights:      { sell: staticSell,    buy: staticBuy },
+                slopeOffset:      slopeResult.slopeOffset,
+                symmetricDelta:   slopeResult.symmetricDelta,
+                trend:            slopeResult.trend,
+                confidence:       slopeResult.confidence,
+                slopePct:         slopeResult.slopePct,
+                isReady:          slopeResult.isReady,
+                updatedAt:        nowIso,
+            };
+        }
 
         // 4. Collateral Strategy — uses derived confidence (proportional to slope magnitude)
-        const collateral = adjustCollateralRatio(slopeResult, 1.5, 2.0);
+        const collateral = isDynamic ? adjustCollateralRatio(slopeResult, 1.5, 2.0) : null;
 
         const amaComparison = deps.calcAmaComparison(nextCandles, bot, ctx);
         const lastCandleTs = lastCandle[0] || null;
@@ -248,12 +295,13 @@ class MarketAdapterService {
                     ? centerPrice
                     : referencePrice;
                 let amaCenterPersisted = true;
-                if (!isDryRun && typeof deps.writeBotGridPriceCenter === 'function') {
-                    amaCenterPersisted = deps.writeBotGridPriceCenter(bot.botKey, bootstrapCenterPrice, {
+                if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
+                    amaCenterPersisted = deps.writeBotDynamicGrid(bot.botKey, bootstrapCenterPrice, {
                         amaCenterPrice: amaPrice,
+                        dynamicWeights: dynamicWeightsPayload,
                     }) !== false;
                 } else if (isDryRun) {
-                    dryRunMessages.push(`[DRY RUN] Would write grid price center for ${bot.botKey}: ${bootstrapCenterPrice}`);
+                    dryRunMessages.push(`[DRY RUN] Would write dynamic grid for ${bot.botKey}: ${bootstrapCenterPrice}`);
                 }
 
                 if (amaCenterPersisted) {
@@ -268,13 +316,14 @@ class MarketAdapterService {
                 if (deltaPercent >= botThreshold) {
                     let amaCenterPersisted = true;
 
-                    if (!isDryRun && typeof deps.writeBotGridPriceCenter === 'function') {
-                        amaCenterPersisted = deps.writeBotGridPriceCenter(bot.botKey, centerPrice, {
+                    if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
+                        amaCenterPersisted = deps.writeBotDynamicGrid(bot.botKey, centerPrice, {
                             amaCenterPrice: amaPrice,
                             previousCenterPrice,
+                            dynamicWeights: dynamicWeightsPayload,
                         }) !== false;
                     } else if (isDryRun) {
-                        dryRunMessages.push(`[DRY RUN] Would write grid price center for ${bot.botKey}: ${centerPrice}`);
+                        dryRunMessages.push(`[DRY RUN] Would write dynamic grid for ${bot.botKey}: ${centerPrice}`);
                     }
 
                     if (!amaCenterPersisted) {
@@ -344,6 +393,17 @@ class MarketAdapterService {
         const persistedCenterPrice = Number(botState.centerPrice || 0) > 0
             ? Number(botState.centerPrice)
             : undefined;
+
+        // Keep dynamicgrid.json fresh every cycle for whitelisted bots so the bot always
+        // reads up-to-date weights on the next price-triggered reset, even if no reset fired
+        // this cycle. Only runs when the center price is established (bootstrap or prior reset).
+        if (isDynamic && !triggered && !isDryRun && dynamicWeightsPayload && persistedCenterPrice > 0
+                && typeof deps.writeBotDynamicGrid === 'function') {
+            deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
+                amaCenterPrice: amaPrice,
+                dynamicWeights: dynamicWeightsPayload,
+            });
+        }
 
         state.bots[bot.botKey] = {
             ...botState,

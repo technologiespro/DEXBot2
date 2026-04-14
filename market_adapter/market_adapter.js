@@ -72,6 +72,8 @@ const STATE_FILE = path.join(STATE_DIR, 'price_adapter_state.json');
 const CENTER_FILE = path.join(STATE_DIR, 'price_adapter_centers.json');
 const LOCK_FILE = path.join(STATE_DIR, 'price_adapter.lock');
 const MARKET_PROFILES_FILE = path.join(PROFILES_DIR, 'market_profiles.json');
+const MARKET_ADAPTER_SETTINGS_FILE = path.join(PROFILES_DIR, 'market_adapter_settings.json');
+const DYNAMIC_WEIGHT_WHITELIST_FILE = path.join(PROFILES_DIR, 'dynamic_weight_whitelist.json');
 
 let bitsharesClient = null;
 
@@ -119,6 +121,96 @@ function isBotWhitelisted(botKey) {
     } catch (_) {
         return false;
     }
+}
+
+// Cycle-scoped caches — reset once per runOnce() so each cycle reads files fresh
+// but all bots within that cycle share the same loaded data (N bots → 1 file read).
+let _marketAdapterSettingsCache = null;
+let _dynamicWeightWhitelistCache = null; // Set<string> | false (file missing) | null (not loaded yet)
+
+function _resetCycleCache() {
+    _marketAdapterSettingsCache = null;
+    _dynamicWeightWhitelistCache = null;
+}
+
+function isBotDynamicWeightWhitelisted(botKey) {
+    if (_dynamicWeightWhitelistCache === null) {
+        if (!fs.existsSync(DYNAMIC_WEIGHT_WHITELIST_FILE)) {
+            _dynamicWeightWhitelistCache = false;
+        } else {
+            try {
+                const json = JSON.parse(fs.readFileSync(DYNAMIC_WEIGHT_WHITELIST_FILE, 'utf8'));
+                _dynamicWeightWhitelistCache = new Set(Array.isArray(json?.whitelist) ? json.whitelist : []);
+            } catch (_) {
+                _dynamicWeightWhitelistCache = false;
+            }
+        }
+    }
+    return _dynamicWeightWhitelistCache !== false && _dynamicWeightWhitelistCache.has(botKey);
+}
+
+function loadMarketAdapterSettings() {
+    if (_marketAdapterSettingsCache !== null) return _marketAdapterSettingsCache;
+    if (!fs.existsSync(MARKET_ADAPTER_SETTINGS_FILE)) return null;
+    try {
+        _marketAdapterSettingsCache = JSON.parse(fs.readFileSync(MARKET_ADAPTER_SETTINGS_FILE, 'utf8'));
+        return _marketAdapterSettingsCache;
+    } catch (_) {
+        return null;
+    }
+}
+
+function findPairForBot(bot, pairs) {
+    if (!Array.isArray(pairs)) return null;
+    const botAId = String(bot.assetAId || '');
+    const botBId = String(bot.assetBId || '');
+    const botA = normalizeAssetSymbol(bot.assetA);
+    const botB = normalizeAssetSymbol(bot.assetB);
+    return pairs.find((p) => {
+        const parts = String(p.key || '').split('|');
+        if (botAId && botBId && parts[0] === botAId && parts[1] === botBId) return true;
+        if (botA && botB &&
+            normalizeAssetSymbol(p.assetASymbol) === botA &&
+            normalizeAssetSymbol(p.assetBSymbol) === botB) return true;
+        return false;
+    }) || null;
+}
+
+function resolveBotCfg(bot, globalCfg) {
+    const settings = loadMarketAdapterSettings();
+    if (!settings) return globalCfg;
+
+    let merged = { ...globalCfg };
+
+    // Apply global amaSlope overrides from settings file
+    const globals = settings.globals || {};
+    if (globals.amaSlope && typeof globals.amaSlope === 'object') {
+        merged.amaSlope = { ...merged.amaSlope, ...globals.amaSlope };
+    }
+
+    // Pair-level overrides
+    const pair = findPairForBot(bot, settings.pairs);
+    if (pair?.marketAdapterSettings) {
+        const ps = pair.marketAdapterSettings;
+        if (ps.deltaThresholdPercent != null) merged.deltaThresholdPercent = ps.deltaThresholdPercent;
+        if (ps.pollSeconds != null) merged.pollSeconds = ps.pollSeconds;
+        if (ps.bootstrapLookbackHours != null) merged.bootstrapLookbackHours = ps.bootstrapLookbackHours;
+        if (ps.nativeBackfillHours != null) merged.nativeBackfillHours = ps.nativeBackfillHours;
+        if (ps.maxStaleHours != null) merged.maxStaleHours = ps.maxStaleHours;
+        if (ps.sourceRetries != null) merged.sourceRetries = ps.sourceRetries;
+        if (ps.retryDelayMs != null) merged.retryDelayMs = ps.retryDelayMs;
+    }
+
+    // Bot-level overrides
+    const botOverride = pair?.botOverrides?.[bot.name];
+    if (botOverride) {
+        if (botOverride.deltaThresholdPercent != null) merged.deltaThresholdPercent = botOverride.deltaThresholdPercent;
+        if (botOverride.defaultAmaKey) merged.defaultAmaKey = botOverride.defaultAmaKey;
+        if (botOverride.maxSlopeOffset != null) merged.maxSlopeOffset = botOverride.maxSlopeOffset;
+        if (botOverride.maxVolatilityOffset != null) merged.maxVolatilityOffset = botOverride.maxVolatilityOffset;
+    }
+
+    return merged;
 }
 
 const DEFAULT_AMA_KEY = String(MARKET_ADAPTER.DEFAULT_AMA_KEY || 'AMA3').toUpperCase();
@@ -758,18 +850,20 @@ async function resolveBotContext(bot) {
 const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
 
 /**
- * Atomically write the effective grid center for a bot to profiles/orders/<botKey>.gridprice.json.
- * Called by price_adapter when a grid reset trigger fires (or on first initialisation).
+ * Atomically write the dynamic grid snapshot for a bot to profiles/orders/<botKey>.dynamicgrid.json.
+ * Contains AMA-derived center price and, when the bot is dynamic-weight whitelisted, the
+ * computed effective weight offsets that will be applied on the next grid reset.
  * Uses write-then-rename to prevent partial reads by the dexbot process.
- * @param {string} botKey   - Bot key (e.g. "iob-xrp-bts-0")
+ * @param {string} botKey      - Bot key (e.g. "iob-xrp-bts-0")
  * @param {number} centerPrice - Current AMA-derived center price (B/A format)
  * @param {Object} options
- * @param {number} options.amaCenterPrice - Raw AMA center price before any downstream handling
+ * @param {number} [options.amaCenterPrice]   - Raw AMA center price before any downstream handling
+ * @param {Object} [options.dynamicWeights]   - Computed weight offsets (only when whitelisted)
  */
-function writeBotGridPriceCenter(botKey, centerPrice, options = {}) {
+function writeBotDynamicGrid(botKey, centerPrice, options = {}) {
     try {
         ensureDir(ORDERS_DIR);
-        const filePath = path.join(ORDERS_DIR, `${botKey}.gridprice.json`);
+        const filePath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
         const tmpPath = `${filePath}.tmp`;
         const amaCenterPrice = Number(options.amaCenterPrice);
         const resolvedCenterPrice = Math.round(Number(centerPrice) * 1e8) / 1e8;
@@ -779,12 +873,15 @@ function writeBotGridPriceCenter(botKey, centerPrice, options = {}) {
             updatedAt: new Date().toISOString(),
             source: 'market_adapter/market_adapter.js',
         };
+        if (options.dynamicWeights && typeof options.dynamicWeights === 'object') {
+            payload.dynamicWeights = options.dynamicWeights;
+        }
         // Atomic write: write to .tmp then rename — prevents dexbot reading a partial file
         fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
         fs.renameSync(tmpPath, filePath);
         return true;
     } catch (err) {
-        console.warn(`[writeBotGridPriceCenter] Failed to write grid price center for ${botKey}: ${err.message}`);
+        console.warn(`[writeBotDynamicGrid] Failed to write dynamic grid for ${botKey}: ${err.message}`);
         return false;
     }
 }
@@ -809,7 +906,8 @@ const adapterService = new MarketAdapterService({
     calcAmaPrice,
     calcAmaComparison,
     writeGridResetTrigger,
-    writeBotGridPriceCenter,
+    writeBotDynamicGrid,
+    isBotDynamicWeightWhitelisted,
     root: ROOT,
     path,
 });
@@ -841,6 +939,7 @@ function writeCenterSnapshot(state) {
 }
 
 async function runOnce(cfg, state, contextCache) {
+    _resetCycleCache(); // reload settings + whitelist files once per cycle, shared across all bots
     const startedAtMs = Date.now();
     const allBots = loadActiveBots();
     const bots = allBots.filter((bot) => usesAmaGridPrice(bot));
@@ -852,7 +951,8 @@ async function runOnce(cfg, state, contextCache) {
         const isDryRun = cfg.dryRun || (!cfg.whitelistAll && !isBotWhitelisted(bot.botKey));
         write(cfg, `- ${bot.name} (${bot.botKey})${isDryRun ? ' [DRY RUN]' : ''}: `);
         try {
-            const r = await processBot(bot, state, cfg, contextCache, {
+            const botCfg = resolveBotCfg(bot, cfg);
+            const r = await processBot(bot, state, botCfg, contextCache, {
                 onTrigger: cfg.onTrigger,
                 isDryRun
             });

@@ -337,7 +337,7 @@ node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --int
 
 By default, every bot that is **not whitelisted** runs in dry-run mode: candles and state are
 fully computed and persisted, but no files that dexbot acts on are written
-(`profiles/orders/<botKey>.gridprice.json` and `profiles/recalculate.<botKey>.trigger`).
+(`profiles/orders/<botKey>.dynamicgrid.json` and `profiles/recalculate.<botKey>.trigger`).
 
 | Invocation | Behavior |
 |---|---|
@@ -356,7 +356,7 @@ Dry-run output is visible in the log with `[DRY RUN]` tags and `[suppressed, dry
 }
 ```
 
-List bot **keys** (not names). Bots listed here write gridprice and trigger files for real.
+List bot **keys** (not names). Bots listed here write dynamicgrid and trigger files for real.
 If the file is missing, all bots run in dry-run mode.
 
 ### Automated Execution (PM2)

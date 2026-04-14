@@ -231,7 +231,7 @@ async function runTests() {
     {
         const botKey = `test-grid-ama-${process.pid}-case`;
         const ordersDir = path.join(__dirname, '..', 'profiles', 'orders');
-        const amaFile = path.join(ordersDir, `${botKey}.gridprice.json`);
+        const amaFile = path.join(ordersDir, `${botKey}.dynamicgrid.json`);
 
         fs.mkdirSync(ordersDir, { recursive: true });
         fs.writeFileSync(amaFile, JSON.stringify({ centerPrice: 1000, updatedAt: new Date().toISOString() }, null, 2) + '\n', 'utf8');
@@ -272,7 +272,7 @@ async function runTests() {
     {
         const botKey = `test-grid-ama-center-${process.pid}`;
         const ordersDir = path.join(__dirname, '..', 'profiles', 'orders');
-        const amaFile = path.join(ordersDir, `${botKey}.gridprice.json`);
+        const amaFile = path.join(ordersDir, `${botKey}.dynamicgrid.json`);
 
         fs.mkdirSync(ordersDir, { recursive: true });
         fs.writeFileSync(amaFile, JSON.stringify({

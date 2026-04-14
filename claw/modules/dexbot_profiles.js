@@ -530,7 +530,7 @@ function buildBotSettingsView(bot, bundle = null, options = {}) {
   const effectiveValidation = effective ? validateBotSettingsState(effective) : { errors: [], warnings: [], valid: true };
   const mutability = describeBotSettingMutability();
   const selectedBotFiles = current && bundle ? {
-    gridPriceSnapshot: path.join(bundle.ordersDir || path.join(bundle.profilesDir, DEFAULT_ORDERS_DIR), `${current.botKey}.gridprice.json`),
+    gridPriceSnapshot: path.join(bundle.ordersDir || path.join(bundle.profilesDir, DEFAULT_ORDERS_DIR), `${current.botKey}.dynamicgrid.json`),
     orderSnapshot: path.join(bundle.ordersDir || path.join(bundle.profilesDir, DEFAULT_ORDERS_DIR), `${current.botKey}.json`),
     trigger: path.join(bundle.profilesDir, `recalculate.${current.botKey}.trigger`)
   } : null;
@@ -899,7 +899,7 @@ function buildClawProfileContext(bundle, options = {}) {
 
   const selectedAmaProfile = findAmaProfile(bundle, selectedBot);
   const selectedOrderSnapshotPath = selectedBot ? path.join(bundle.ordersDir, `${selectedBot.botKey}.json`) : null;
-  const selectedGridPriceSnapshotPath = selectedBot ? path.join(bundle.ordersDir, `${selectedBot.botKey}.gridprice.json`) : null;
+  const selectedGridPriceSnapshotPath = selectedBot ? path.join(bundle.ordersDir, `${selectedBot.botKey}.dynamicgrid.json`) : null;
   const selectedTriggerPath = selectedBot ? path.join(bundle.profilesDir, `recalculate.${selectedBot.botKey}.trigger`) : null;
   const selectedOrderSnapshot = selectedBot
     ? clone(options.orderSnapshot !== undefined ? options.orderSnapshot : null)
@@ -1023,7 +1023,7 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
     }
 
     const orderSnapshotPath = path.join(bundle.ordersDir, `${bot.botKey}.json`);
-    const gridPriceSnapshotPath = path.join(bundle.ordersDir, `${bot.botKey}.gridprice.json`);
+    const gridPriceSnapshotPath = path.join(bundle.ordersDir, `${bot.botKey}.dynamicgrid.json`);
     const triggerPath = path.join(bundle.profilesDir, `recalculate.${bot.botKey}.trigger`);
 
     const [orderSnapshot, gridPriceSnapshot, trigger] = await Promise.all([

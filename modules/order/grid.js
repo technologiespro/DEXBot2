@@ -512,7 +512,7 @@ class Grid {
         // Supported modes:
         //   - numeric: fixed value
         //   - "pool" / "market": live blockchain price for the pair
-        //   - "ama"/"ama1".."ama4": center from profiles/orders/<botKey>.gridprice.json
+        //   - "ama"/"ama1".."ama4": center from profiles/orders/<botKey>.dynamicgrid.json
         //   - null/anything else: fallback to startPrice (backward-compatible)
         let gp = mp;
         let gpSource = 'startPrice';

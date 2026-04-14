@@ -22,7 +22,7 @@ Each trigger is **independent and can be configured separately**. They don't int
 The market adapter persists the AMA-derived grid center directly. There is no
 additional deviation-based price adjustment layer on top of the AMA output.
 
-The adapter writes the current center to `profiles/orders/<botKey>.gridprice.json`
+The adapter writes the current center to `profiles/orders/<botKey>.dynamicgrid.json`
 and the grid engine uses that snapshot as the baseline for future delta comparisons.
 
 ---
@@ -233,7 +233,7 @@ On the **first cycle** for a bot (when no `centerPrice` baseline exists yet), th
 ### How It Works
 
 1. `processBot()` detects the bootstrap case (`centerPrice` is not yet set).
-2. It calls `writeBotGridPriceCenter(botKey, centerPrice, { amaCenterPrice })`.
+2. It calls `writeBotDynamicGrid(botKey, centerPrice, { amaCenterPrice })`.
 3. **If the write succeeds** (returns anything other than `false`): the in-memory baseline (`centerPrice`, `amaCenterPrice`, `lastGridResetAt`) is set. No recalculation trigger is created during bootstrap — the bot enters normal delta-comparison behavior on subsequent cycles.
 4. **If the write fails** (returns `false`): the in-memory baseline is left unset, `triggerSuppressedReason` is set to `ama_center_persist_failed`, and no recalculation trigger is written. The next cycle will retry the bootstrap from scratch.
 
@@ -246,7 +246,7 @@ triggerSuppressedReason: 'ama_center_persist_failed'
 
 If this appears repeatedly, check:
 - disk space and write permissions on the state directory
-- whether `writeBotGridPriceCenter` is correctly wired in the service deps
+- whether `writeBotDynamicGrid` is correctly wired in the service deps
 
 ---
 

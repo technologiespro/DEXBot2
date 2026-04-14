@@ -11,7 +11,7 @@ const {
 
 async function testSnapshotReaderExposesCenterOnly() {
   const botKey = `snapshot-${Date.now()}`;
-  const filePath = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.gridprice.json`);
+  const filePath = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, JSON.stringify({
@@ -34,7 +34,7 @@ async function testSnapshotReaderExposesCenterOnly() {
 
 async function testSnapshotReaderRejectsLegacyEffectiveCenterOnly() {
   const botKey = `snapshot-legacy-${Date.now()}`;
-  const filePath = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.gridprice.json`);
+  const filePath = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, JSON.stringify({

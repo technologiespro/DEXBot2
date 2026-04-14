@@ -39,7 +39,7 @@
  *       "gridPrice": null,         // Reference price for x-factor bounds (3 options):
  *                                  //   "pool" / "market" = live pair price reference
  *                                  //   "ama"/"ama1".."ama4" = price_adapter writes a center snapshot to
- *                                  //              profiles/orders/<botKey>.gridprice.json; grid reads the effective center on reset
+ *                                  //              profiles/orders/<botKey>.dynamicgrid.json; grid reads the effective center on reset
  *                                  //   <number> = fixed numeric reference
  *                                  //   null     = use startPrice (default, backward-compatible)
  *       "minPrice": "3x",

@@ -41,6 +41,7 @@ async function testTriggerHookCalledOnThreshold() {
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -123,6 +124,7 @@ async function testBootstrapFallsBackWhenKibanaIsEmpty() {
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -188,10 +190,11 @@ async function testAmaGridPriceIsCaseInsensitive() {
             triggerWrites += 1;
             return '/tmp/recalculate.xrp-bts-0.trigger';
         },
-        writeBotGridPriceCenter: () => {
+        writeBotDynamicGrid: () => {
             writeAmaCenterCalls += 1;
             return true;
         },
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -263,7 +266,8 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
             triggerWrites += 1;
             return '/tmp/recalculate.xrp-bts-0.trigger';
         },
-        writeBotGridPriceCenter: () => false,
+        writeBotDynamicGrid: () => false,
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -336,7 +340,8 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
             triggerWrites += 1;
             return '/tmp/recalculate.xrp-bts-bootstrap.trigger';
         },
-        writeBotGridPriceCenter: () => false,
+        writeBotDynamicGrid: () => false,
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -408,10 +413,11 @@ async function testCenterEqualsAmaTriggeredByAmaDelta() {
             triggerWrites += 1;
             return '/tmp/recalculate.xrp-bts-0.trigger';
         },
-        writeBotGridPriceCenter: (...args) => {
+        writeBotDynamicGrid: (...args) => {
             writeArgs = args;
             return true;
         },
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -450,7 +456,7 @@ async function testCenterEqualsAmaTriggeredByAmaDelta() {
     assert.strictEqual(result.ok, true, 'processBot should succeed');
     assert.strictEqual(result.triggered, true, 'AMA movement should trigger recenter');
     assert.strictEqual(triggerWrites, 1, 'trigger file should be written');
-    assert.ok(Array.isArray(writeArgs), 'writeBotGridPriceCenter should be called');
+    assert.ok(Array.isArray(writeArgs), 'writeBotDynamicGrid should be called');
     assert.strictEqual(writeArgs[0], 'xrp-bts-0');
     assert.strictEqual(writeArgs[1], 100, 'written center should be the AMA center');
     assert.strictEqual(writeArgs[2].amaCenterPrice, 100, 'raw AMA center should be persisted separately');
@@ -494,10 +500,11 @@ async function testNoTriggerWhenCenterMatchesAma() {
             triggerWrites += 1;
             return '/tmp/recalculate.xrp-bts-0.trigger';
         },
-        writeBotGridPriceCenter: () => {
+        writeBotDynamicGrid: () => {
             writeCalls += 1;
             return true;
         },
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -575,10 +582,11 @@ async function testCenterClampedByBotBounds() {
             triggerWrites += 1;
             return '/tmp/recalculate.xrp-bts-1.trigger';
         },
-        writeBotGridPriceCenter: (...args) => {
+        writeBotDynamicGrid: (...args) => {
             lastWrite = args;
             return true;
         },
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -667,6 +675,7 @@ async function testContextCacheInvalidatesOnPoolChange() {
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -748,6 +757,7 @@ async function testKibanaGapRepairPatchesMissingCandles() {
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -836,6 +846,7 @@ async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -894,7 +905,8 @@ async function testIdOnlyBotIsNotRejected() {
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.id-bot.trigger',
-        writeBotGridPriceCenter: () => true,
+        writeBotDynamicGrid: () => true,
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
