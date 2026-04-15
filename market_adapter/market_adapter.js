@@ -202,6 +202,7 @@ function resolveBotCfg(bot, globalCfg) {
         if (ps.minWeightChangeDelta != null) merged.minWeightChangeDelta = ps.minWeightChangeDelta;
         if (ps.clipPercentile != null) merged.clipPercentile = ps.clipPercentile;
         if (ps.regimeSensitivity != null) merged.regimeSensitivity = ps.regimeSensitivity;
+        if (ps.regimeTable) merged.regimeTable = ps.regimeTable;
         if (ps.alpha != null) merged.alpha = ps.alpha;
         if (ps.dw != null) merged.dw = ps.dw;
         if (ps.gain != null) merged.gain = ps.gain;
@@ -228,6 +229,7 @@ function resolveBotCfg(bot, globalCfg) {
         if (botOverride.minWeightChangeDelta != null) merged.minWeightChangeDelta = botOverride.minWeightChangeDelta;
         if (botOverride.clipPercentile != null) merged.clipPercentile = botOverride.clipPercentile;
         if (botOverride.regimeSensitivity != null) merged.regimeSensitivity = botOverride.regimeSensitivity;
+        if (botOverride.regimeTable) merged.regimeTable = botOverride.regimeTable;
         if (botOverride.alpha != null) merged.alpha = botOverride.alpha;
         if (botOverride.dw != null) merged.dw = botOverride.dw;
         if (botOverride.gain != null) merged.gain = botOverride.gain;

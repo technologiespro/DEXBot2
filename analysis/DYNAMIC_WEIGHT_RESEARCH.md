@@ -231,6 +231,31 @@ Lower values = more noise, faster reaction. Higher values = smoother signals, mo
 - 1 = default table values used as-is
 - 2 = regime differences are squared (strong gating effect)
 
+### Regime Table (Custom Configuration)
+
+The 3×3 regime multiplier table can be customized per-market or per-bot:
+
+```json
+{
+  "marketAdapterSettings": {
+    "regimeTable": [
+      [1.0, 0.7, 0.3],
+      [0.6, 0.4, 0.15],
+      [0.3, 0.2, 0.05]
+    ]
+  }
+}
+```
+
+**Default Table:**
+|  | PE<0.60 (Structured) | PE 0.725 (Mixed) | PE>0.85 (Noise) |
+|--|---------------------|------------------|-----------------|
+| **H>0.55** (Trending) | 1.0 | 0.7 | 0.3 |
+| **H 0.45-0.55** (Random) | 0.6 | 0.4 | 0.15 |
+| **H<0.45** (Mean-Rev) | 0.3 | 0.2 | 0.05 |
+
+Best case (trending + structured) = 1.0 (full signal). Unclear situations reduce the offset.
+
 ## Data Pipeline
 
 ```

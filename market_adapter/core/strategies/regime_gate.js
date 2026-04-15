@@ -3,19 +3,7 @@
 const { HurstAnalyzer } = require('../../../analysis/trend_detection/hurst_analyzer');
 const { PermutationEntropyAnalyzer } = require('../../../analysis/trend_detection/permutation_entropy_analyzer');
 const { HURST_CONFIG, PE_CONFIG } = require('../../../analysis/trend_detection/regime_defaults');
-
-/**
- * Regime multiplier table (3×3).
- * Rows: H nodes [0.55, 0.50, 0.45]  (TRENDING, RANDOM, MEAN_REVERTING)
- * Cols: PE nodes [0.60, 0.725, 0.85] (STRUCTURED, MIXED, NOISE)
- *
- * Values from DYNAMIC_WEIGHT_RESEARCH.md bilinear lookup.
- */
-const REGIME_TABLE = [
-    [1.5, 1.1, 0.7], // TRENDING      (H node 0.55)
-    [0.8, 0.5, 0.2], // RANDOM        (H node 0.50)
-    [0.6, 0.3, 0.1], // MEAN_REVERTING (H node 0.45)
-];
+const { MARKET_ADAPTER } = require('../../../modules/constants');
 
 // Axis node values — bilinear interpolation is performed between adjacent nodes
 const H_NODES  = [0.55, 0.50, 0.45]; // H decreasing: higher index = lower H
@@ -32,7 +20,8 @@ const PE_NODES = [0.60, 0.725, 0.85]; // PE increasing: higher index = higher PE
  * @param {number} pe - Normalized permutation entropy [0, 1]
  * @returns {number}  - Interpolated multiplier
  */
-function bilinearInterpolate(h, pe) {
+function bilinearInterpolate(h, pe, regimeTable = null) {
+    const table = regimeTable ?? MARKET_ADAPTER.REGIME_TABLE;
     // --- Hurst axis (H_NODES = [0.55, 0.50, 0.45], decreasing) ---
     // Find which interval h falls in: row r0, r1 = r0+1, fraction tRow toward r1
     let r0, tRow;
@@ -62,10 +51,10 @@ function bilinearInterpolate(h, pe) {
     const c1 = Math.min(2, c0 + 1);
 
     // --- Bilinear blend ---
-    const v00 = REGIME_TABLE[r0][c0];
-    const v01 = REGIME_TABLE[r0][c1];
-    const v10 = REGIME_TABLE[r1][c0];
-    const v11 = REGIME_TABLE[r1][c1];
+    const v00 = table[r0][c0];
+    const v01 = table[r0][c1];
+    const v10 = table[r1][c0];
+    const v11 = table[r1][c1];
 
     const top    = v00 * (1 - tCol) + v01 * tCol;
     const bottom = v10 * (1 - tCol) + v11 * tCol;
@@ -82,6 +71,7 @@ function bilinearInterpolate(h, pe) {
  * @param {number[]} closes          - Full close price series (same array used for AMA)
  * @param {Object}   [opts]
  * @param {number}   [opts.regimeSensitivity=1.0] - Exponent on the base multiplier (0=off, 1=default)
+ * @param {Array}    [opts.regimeTable]           - Custom 3x3 regime multiplier table
  * @param {Object}   [opts.hurstConfig]           - Override for HurstAnalyzer config
  * @param {Object}   [opts.peConfig]              - Override for PermutationEntropyAnalyzer config
  * @returns {{ multiplier: number, hurst: number|null, pe: number|null,
@@ -89,6 +79,7 @@ function bilinearInterpolate(h, pe) {
  */
 function computeRegimeMultiplier(closes, opts = {}) {
     const sensitivity = Number.isFinite(opts.regimeSensitivity) ? opts.regimeSensitivity : 1.0;
+    const regimeTable = opts.regimeTable ?? null;
     const hurstCfg = opts.hurstConfig ?? HURST_CONFIG;
     const peCfg    = opts.peConfig    ?? PE_CONFIG;
 
@@ -117,7 +108,7 @@ function computeRegimeMultiplier(closes, opts = {}) {
     const h  = hurstResult.hurst;
     const ne = peResult.normalizedEntropy;
 
-    const baseMult  = bilinearInterpolate(h, ne);
+    const baseMult  = bilinearInterpolate(h, ne, regimeTable);
     const finalMult = sensitivity === 1.0 ? baseMult : Math.pow(baseMult, sensitivity);
 
     return {
@@ -130,4 +121,4 @@ function computeRegimeMultiplier(closes, opts = {}) {
     };
 }
 
-module.exports = { computeRegimeMultiplier, bilinearInterpolate, REGIME_TABLE };
+module.exports = { computeRegimeMultiplier, bilinearInterpolate, REGIME_TABLE: MARKET_ADAPTER.REGIME_TABLE };

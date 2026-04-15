@@ -288,11 +288,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         let currentAmaClipThreshold = currentClipPct === 0 ? maxAmaSlope : data.amaPercentiles[100 - currentClipPct];
         let currentKalClipThreshold = currentClipPct === 0 ? maxKalVel : data.kalPercentiles[100 - currentClipPct];
 
-        const REGIME_TABLE = [
+        // Regime table from payload (allows custom tables) or default
+        const REGIME_TABLE = data.regimeTable || [
             // PE: <0.60 (Structured)  0.725 (Mixed)  >0.85 (Noise)
-            [ 1.5,                 1.1,           0.7  ],  // H > 0.55  trending (hNode 0.60)
-            [ 0.8,                 0.5,           0.2  ],  // H 0.45-0.55  random (hNode 0.50)
-            [ 0.6,                 0.3,           0.1  ],  // H < 0.45  mean-rev (hNode 0.40)
+            [ 1.0,                 0.7,           0.3  ],  // H > 0.55  trending (hNode 0.60)
+            [ 0.6,                 0.4,           0.15 ],  // H 0.45-0.55  random (hNode 0.50)
+            [ 0.3,                 0.2,           0.05 ],  // H < 0.45  mean-rev (hNode 0.40)
         ];
 
         /**

@@ -596,6 +596,16 @@ let MARKET_ADAPTER = {
     // 0 = ignore regime (multiplier always 1.0), 1 = use table as-is, 2 = squared effect.
     DYNAMIC_WEIGHT_REGIME_SENSITIVITY: 0,
 
+    // REGIME_TABLE: Bilinear lookup table for Hurst + PE regime multiplier.
+    // Rows: Hurst regimes [trending, random, mean-reverting] (H nodes: 0.55, 0.50, 0.45)
+    // Cols: PE regimes [structured, mixed, noise] (PE nodes: 0.60, 0.725, 0.85)
+    // Best case (trending + structured) = 1.0, unclear situations < 1.0 to dampen signal
+    REGIME_TABLE: [
+        [1.0, 0.7, 0.3],  // Trending (H > 0.55)
+        [0.6, 0.4, 0.15], // Random (H 0.45-0.55)
+        [0.3, 0.2, 0.05], // Mean-reverting (H < 0.45)
+    ],
+
     // DEFAULT_AMA_KEY: Built-in default profile for `gridPrice: "ama"` when no
     // pair-specific market_profiles entry exists.
     DEFAULT_AMA_KEY: 'AMA3',
