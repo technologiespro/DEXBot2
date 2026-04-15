@@ -1,6 +1,6 @@
 # Dynamic Weight Research Tool
 
-Interactive HTML chart for researching optimal dynamic weight parameters by blending AMA slope and Kalman filter signals.
+Interactive HTML chart for researching optimal dynamic weight parameters by blending AMA slope and Kalman filter signals, gated by Hurst Exponent and Permutation Entropy regime detection.
 
 ## Signal design rationale
 
@@ -17,17 +17,64 @@ The Kalman filter is a state estimator: it separates true price and velocity fro
 
 Velocity and displacement carry different information and are kept in separate chart panels. The `dispWeight` knob only adds displacement confidence when the two signals agree on direction.
 
+### Hurst Exponent
+
+Estimates the long-memory property of the price series via Rescaled Range (R/S) analysis over a rolling window of 256 bars with scales `[8, 16, 32, 64]`.
+
+| H value | Regime | Meaning |
+|---|---|---|
+| H > 0.55 | TRENDING | Returns are persistent — trends continue |
+| H ≈ 0.5 | RANDOM | No memory — random walk |
+| H < 0.45 | MEAN_REVERTING | Returns are anti-persistent — reversals dominate |
+
+**Algorithm**: for each scale τ, partition the log-return window into non-overlapping chunks of length τ, compute the average R/S (Rescaled Range) per chunk, then OLS-fit `log(avgRS)` vs `log(τ)` — the slope is the Hurst exponent.
+
+**Role in the tool**: Hurst is one axis of the regime multiplier matrix (see [Regime Multiplier](#regime-multiplier)). It is a research overlay — it is visualized but not yet hardwired into the bot's weight logic.
+
+**Warmup**: requires 256 bars before `isReady = true`.
+
+### Permutation Entropy
+
+Measures market disorder by counting ordinal (rank-order) patterns in a rolling window of 54 bars, with embedding dimension `m=5` and delay `1`.
+
+| Normalized PE | Regime | Meaning |
+|---|---|---|
+| PE < 0.60 | STRUCTURED | Price movement is ordered — signals are trustworthy |
+| 0.60–0.85 | MIXED | Partial structure |
+| PE > 0.85 | NOISE | Maximum disorder — no reliable edge |
+
+**Algorithm**: for each position `i` in the window, extract the rank-order of `[price[i], price[i+1], ..., price[i+m-1]]` as an ordinal pattern key. Compute Shannon entropy over the distribution of all `m! = 120` possible patterns, normalized by `log(m!)` to give PE ∈ [0, 1].
+
+**Role in the tool**: PE is the second axis of the regime multiplier matrix. It complements Hurst — Hurst identifies trend persistence, PE identifies signal quality. Together they gate the output amplitude.
+
+**Warmup**: requires 58 bars (`window + (m-1) * delay`) before `isReady = true`.
+
+### Regime Multiplier
+
+Hurst and PE are combined into a single regime multiplier via bilinear interpolation over a 3×3 lookup table:
+
+```
+                PE < 0.60     PE 0.725     PE > 0.85
+                (Structured)  (Mixed)      (Noise)
+H > 0.55  →    1.5           1.1          0.7
+H 0.45–0.55 →  0.8           0.5          0.2
+H < 0.45  →    0.6           0.3          0.1
+```
+
+Best case (trending + structured): multiplier = **1.5×** — weight signal is amplified.
+Worst case (mean-reverting + noisy): multiplier = **0.1×** — weight signal is nearly silenced.
+
+The `regi` (regime sensitivity) knob raises the multiplier to a power: `finalMult = baseMult ^ sensitivity`. At sensitivity = 1.0 (default), the table is used as-is. Higher sensitivity exaggerates regime differences; lower sensitivity flattens them toward 1.0.
+
 ## Quick Start
 
 ```bash
-# From JSON candle file (recommended)
+# From JSON candle file
 node analysis/analyze_dynamic_weight.js \
-  --source json \
   --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
 
 # With custom initial parameters
 node analysis/analyze_dynamic_weight.js \
-  --source json \
   --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
   --alpha 0.6 \
   --gain 0.10 \
@@ -35,6 +82,8 @@ node analysis/analyze_dynamic_weight.js \
 ```
 
 Output: `analysis/charts/dynamic_weight_chart.html` (open in browser)
+
+**Note**: Hurst requires 256 bars and PE requires 58 bars before their regime signals become active. The first portion of the chart will show the full weight without regime gating.
 
 ## CLI Flags
 
@@ -53,27 +102,28 @@ Output: `analysis/charts/dynamic_weight_chart.html` (open in browser)
 
 Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pan, Ctrl+0 to reset):
 
-### Panel 1 — Log Price (36%)
+### Panel 1 — Log Price (34%)
 - **Blue line**: Price on logarithmic y-axis
 - **Gold line**: AMA3 (slow KAMA from `constants.js`, erPeriod=781) for macro trend reference
 - Background shading: green = BULL signal, red = BEAR signal
 
-### Panel 2 — AMA Slope Input (15%)
+### Panel 2 — AMA Slope Input (14%)
 - **Orange line**: AMA3 slope percentage
 - Shows the directional strength of the slow KAMA's trend movement
 - Values outside the clip threshold are flattened before entering the offset formula
-- Background shading: green = BULL signal, red = BEAR signal
+- Background shading mirrors the output signal direction
 
-### Panel 3 — Kalman Composite Input (19%)
-- **Purple line**: Kalman velocity percentage
-- **Cyan dashed line**: Kalman displacement percentage (distance from modal/fair-value price)
+### Panel 3 — Kalman Composite Input (21%)
+- **Purple line**: Kalman velocity percentage (tactical filter)
+- **Cyan dashed line**: Kalman displacement percentage (modal filter — distance from fair-value price)
 - Velocity measures *direction and speed* of price movement
 - Displacement measures *how far price has already moved* from equilibrium
 
-### Panel 4 — Combined Weight Output (remaining ~30%)
+### Panel 4 — Combined Weight Output (remaining ~31%)
 - Green/red fill: positive offset (sell weight > 0.5) vs negative offset (buy weight > 0.5)
 - Legend shows: offset value, sell weight (S), buy weight (B)
 - Interactive knobs for real-time parameter tuning
+- Weight amplitude is scaled by the Hurst+PE regime multiplier on each bar
 
 ## Interactive Knobs
 
@@ -84,6 +134,7 @@ Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pa
 | **gain** | 0.001–2.0 | 0.5 | Logarithmic. Acts as amplitude multiplier on normalized blend; final output hard-capped at ±0.5 |
 | **clip%** | 0–55 | 10 | Percentile clip: filters extreme inputs (research use only) |
 | **nz%** | 0–1 | 0.15 | Neutral zone: dead-band below which offset is forced to 0 |
+| **regi** | 0–2 | 1.0 | Regime sensitivity: exponent applied to the Hurst+PE multiplier (0 = ignore regime, 2 = strong gating) |
 
 ## Copy / Paste Parameters
 
@@ -108,6 +159,12 @@ kalComp   = kalClip × (1 − dw + dw × dispConf × momAlign)
 kalOff    = clamp(kalComp / maxS% × gain, ±gain)
 ```
 
+### Regime Multiplier
+```
+baseMult  = bilinear(REGIME_TABLE, H, PE)      // 0.1–1.5 depending on regime
+finalMult = baseMult ^ regimeSensitivity        // power scaling via regi knob
+```
+
 ### Final Weight (per-channel normalized blend + gain)
 
 Each channel is normalized to its own peak before blending, so α is a pure ratio knob. Gain scales the result linearly, hard-capped at ±0.5:
@@ -115,7 +172,8 @@ Each channel is normalized to its own peak before blending, so α is a pure rati
 ```
 aMax  = max(|amaOff|) over all bars
 kMax  = max(|kalOff|) over all bars
-off   = clamp((α × (amaOff / aMax) + (1 − α) × (kalOff / kMax)) × gain, ±0.5)
+rawOff = (α × (amaOff / aMax) + (1 − α) × (kalOff / kMax)) × gain
+off   = clamp(rawOff × finalMult, ±0.5)
 sellW = 0.5 + off
 buyW  = 0.5 − off
 ```
@@ -139,6 +197,11 @@ Each channel is normalized to its own peak before blending, so changing α only 
 ### nz% (neutral zone)
 Values below `nz%` in absolute terms are zeroed out before the offset formula.
 
+### regi (regime sensitivity)
+- 0 = regime multiplier is always 1.0 (Hurst+PE ignored)
+- 1 = default table values used as-is
+- 2 = regime differences are squared (strong gating effect)
+
 ## Data Pipeline
 
 ```
@@ -148,11 +211,22 @@ Candle Data
 │   ├── computeAmaSlopeWeights() → slope%
 │   └── Percentile clip → amaClip → amaOff
 │
-├── Kalman Filter
+├── Kalman Filter (tactical + modal)
 │   ├── KalmanTrendAnalyzer.update() → velocity%, displacement%, signal, isReady
 │   └── Percentile clip → kalClip → composite → kalOff
 │
-└── Normalized blend → off = (α·(amaOff/aMax) + (1−α)·(kalOff/kMax)) × gain
+├── Hurst Exponent  (window=256, scales=[8,16,32,64])
+│   └── HurstAnalyzer.update() → hurst, regime            [regime multiplier axis]
+│
+├── Permutation Entropy  (m=5, delay=1, window=54)
+│   └── PermutationEntropyAnalyzer.update() → normalizedEntropy, regime  [regime multiplier axis]
+│
+├── Regime Multiplier
+│   └── bilinear(REGIME_TABLE, H, PE) ^ regimeSensitivity → finalMult
+│
+└── Normalized blend × regime gate
+    rawOff = (α·(amaOff/aMax) + (1−α)·(kalOff/kMax)) × gain
+    off    = clamp(rawOff × finalMult, ±0.5)
     ├── sellW = 0.5 + off
     └── buyW  = 0.5 − off
 ```
@@ -161,9 +235,12 @@ Candle Data
 
 | File | Role |
 |------|------|
-| `analysis/analyze_dynamic_weight.js` | Runner: loads data, computes AMA + Kalman, generates chart |
+| `analysis/analyze_dynamic_weight.js` | Runner: loads data, computes all signals, generates chart |
 | `analysis/trend_detection/dynamic_weight_chart_generator.js` | HTML generator: 4-panel uPlot chart with interactive knobs |
 | `analysis/trend_detection/kalman_trend_analyzer.js` | Kalman filter with tactical/modal state tracking |
+| `analysis/trend_detection/hurst_analyzer.js` | Hurst Exponent via R/S analysis (rolling 256-bar window) |
+| `analysis/trend_detection/permutation_entropy_analyzer.js` | Permutation Entropy via ordinal pattern counting |
+| `analysis/trend_detection/regime_defaults.js` | Shared Hurst + PE config (window sizes, scales) |
 | `analysis/ama_fitting/ama.js` | Kaufman Adaptive Moving Average |
 | `market_adapter/core/strategies/ama_slope_model.js` | AMA slope weight computation |
 | `analysis/price_sources.js` | Unified candle data source abstraction |

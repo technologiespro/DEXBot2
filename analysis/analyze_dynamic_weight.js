@@ -3,14 +3,13 @@
 /**
  * DYNAMIC WEIGHT RESEARCH TOOL
  *
- * Compares AMA-based and trend-filter-based dynamic weight calculations.
- * Supports Kalman and Particle Filter analyzers via --cmd flag.
+ * Computes AMA slope + Kalman + Hurst + PE signals and generates an
+ * interactive HTML chart for researching dynamic weight parameters.
  *
  * Usage:
  *   node analysis/analyze_dynamic_weight.js \
  *     --source json \
- *     --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
- *     --cmd kalman|pf
+ *     --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
  */
 
 'use strict';
@@ -18,7 +17,6 @@
 const fs = require('fs');
 const path = require('path');
 const { KalmanTrendAnalyzer } = require('./trend_detection/kalman_trend_analyzer');
-const { ParticleFilterTrendAnalyzer } = require('./trend_detection/particle_filter_analyzer');
 const { HurstAnalyzer } = require('./trend_detection/hurst_analyzer');
 const { PermutationEntropyAnalyzer } = require('./trend_detection/permutation_entropy_analyzer');
 const { HURST_CONFIG, PE_CONFIG } = require('./trend_detection/regime_defaults');
@@ -52,14 +50,6 @@ const KALMAN_CONFIG = {
     qModal: 0.0001,
 };
 
-// Particle Filter configuration
-const PF_CONFIG = {
-    nParticles: 200,
-    processNoise: 0.005,
-    measurementNoise: 0.05,
-    resampleThreshold: 0.5,
-    velocityAlpha: 0.2,
-};
 
 function computeATR(candles, period = 14) {
     const atrs = [];
@@ -93,7 +83,6 @@ function parseArgs() {
         dispWeight: 1.0,
         clipPct: 10,
         quiet: false,
-        cmd: 'kalman',
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -110,13 +99,6 @@ function parseArgs() {
         else if (arg === '--dw') config.dispWeight = parseFloat(args[++i]);
         else if (arg === '--clip') config.clipPct = parseFloat(args[++i]);
         else if (arg === '--quiet') config.quiet = true;
-        else if (arg === '--cmd') {
-            const cmd = args[++i];
-            if (cmd !== 'kalman' && cmd !== 'pf') {
-                throw new Error(`Unknown --cmd "${cmd}". Valid options: kalman, pf`);
-            }
-            config.cmd = cmd;
-        }
     }
 
     return config;
@@ -138,19 +120,12 @@ async function main() {
             throw new Error('No candles returned from source');
         }
 
-        // ── Trend filter (Kalman or Particle Filter) ─────────────────────────
-        let analyzer;
-        if (config.cmd === 'pf') {
-            analyzer = new ParticleFilterTrendAnalyzer(PF_CONFIG);
-            if (!config.quiet) console.log('[DynamicWeight] Using Particle Filter analyzer');
-        } else {
-            analyzer = new KalmanTrendAnalyzer({
-                rNoise: KALMAN_CONFIG.rNoise,
-                qTactical: KALMAN_CONFIG.qTactical,
-                qModal: KALMAN_CONFIG.qModal,
-            });
-            if (!config.quiet) console.log('[DynamicWeight] Using Kalman analyzer');
-        }
+        // ── Kalman analysis ──────────────────────────────────────────────────
+        const analyzer = new KalmanTrendAnalyzer({
+            rNoise: KALMAN_CONFIG.rNoise,
+            qTactical: KALMAN_CONFIG.qTactical,
+            qModal: KALMAN_CONFIG.qModal,
+        });
 
         // ── Hurst & PE analyzers ──────────────────────────────────────────────
         const hurstAnalyzer = new HurstAnalyzer({
@@ -220,15 +195,11 @@ async function main() {
             clipPct: config.clipPct,
         }, 'Dynamic Weight Research Tool');
 
-        const chartBase = config.chartFile.replace(/\.html$/, '');
-        const suffix = config.cmd === 'pf' ? '_pf' : '';
-        const outFile = `${chartBase}${suffix}.html`;
-
-        const chartDir = path.dirname(outFile);
+        const chartDir = path.dirname(config.chartFile);
         if (!fs.existsSync(chartDir)) fs.mkdirSync(chartDir, { recursive: true });
-        fs.writeFileSync(outFile, html, 'utf8');
+        fs.writeFileSync(config.chartFile, html, 'utf8');
 
-        if (!config.quiet) console.log(`[DynamicWeight] ✓ Chart saved to ${outFile}`);
+        if (!config.quiet) console.log(`[DynamicWeight] ✓ Chart saved to ${config.chartFile}`);
     } catch (err) {
         console.error(`[DynamicWeight] Error: ${err.message}`);
         process.exit(1);

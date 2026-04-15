@@ -34,6 +34,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const clampedGain = Math.min(Math.max(defaultGain, 0.001), 0.5);
     const gainInitSlider = Math.round((Math.log(clampedGain) - GAIN_LOG_MIN_N) / (GAIN_LOG_MAX_N - GAIN_LOG_MIN_N) * 1000);
 
+    // Log mapping for maxS% slider
+    const MS_LOG_MIN_N = Math.log(0.05);
+    const MS_LOG_MAX_N = Math.log(20.0);
+    const clampedMs = Math.min(Math.max(maxSlopePct, 0.05), 20.0);
+    const msInitSlider = Math.round((Math.log(clampedMs) - MS_LOG_MIN_N) / (MS_LOG_MAX_N - MS_LOG_MIN_N) * 1000);
+
     const interval = results.length > 1 ?
         (new Date(results[1].timestamp).getTime() - new Date(results[0].timestamp).getTime()) / 1000 : 3600;
 
@@ -207,7 +213,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 
                 <div class="group-sep"></div>
                 <div class="ctrl nz"><label for="nz-slider">nz%</label><input type="range" id="nz-slider" min="0" max="100" value="${Math.round(defaultNeutralZone * 100)}" title="Neutral Zone %"><span class="val" id="nz-value">${defaultNeutralZone.toFixed(2)}</span></div>
-                <div class="ctrl ms"><label for="ms-slider">maxS%</label><input type="range" id="ms-slider" min="0" max="1000" value="${Math.round((Math.log(maxSlopePct) - Math.log(0.05)) / (Math.log(20) - Math.log(0.05)) * 1000)}" title="Max Slope % (Saturation Point)"><span class="val" id="ms-value">${maxSlopePct.toFixed(2)}</span></div>
+                <div class="ctrl ms"><label for="ms-slider">maxS%</label><input type="range" id="ms-slider" min="0" max="1000" value="${msInitSlider}" title="Max Slope % (Saturation Point)"><span class="val" id="ms-value">${maxSlopePct.toFixed(2)}</span></div>
                 <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="55" value="${Math.min(defaultClipPct, 55)}" title="Outlier Clip %"><span class="val" id="clip-value">${Math.min(defaultClipPct, 55)}%</span></div>
 
                 <div class="group-sep"></div>
@@ -231,7 +237,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: 1.0, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: 1.0, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -243,8 +249,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         let currentNz      = data.neutralZonePct;
         let currentDw      = data.dispWeight;
         let currentMaxSlopePct = data.maxSlopePct;
-        const MS_LOG_MIN = Math.log(0.05);
-        const MS_LOG_MAX = Math.log(20.0);
+        const MS_LOG_MIN = data.msLogMin;
+        const MS_LOG_MAX = data.msLogMax;
         const msSliderToVal = (pos) => Math.exp(MS_LOG_MIN + (pos / 1000) * (MS_LOG_MAX - MS_LOG_MIN));
         const GAIN_LOG_MIN = Math.log(0.001);
         const GAIN_LOG_MAX = Math.log(2.0);
@@ -763,7 +769,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     document.getElementById('alpha-value').textContent = currentAlpha.toFixed(2);
                 }
                 if (p.maxSlopePct != null) {
-                    currentMaxSlopePct = Math.max(0.05, Math.min(15, p.maxSlopePct));
+                    currentMaxSlopePct = Math.max(0.05, Math.min(20, p.maxSlopePct));
                     document.getElementById('ms-slider').value = Math.round((Math.log(currentMaxSlopePct) - MS_LOG_MIN) / (MS_LOG_MAX - MS_LOG_MIN) * 1000);
                     document.getElementById('ms-value').textContent = currentMaxSlopePct.toFixed(2);
                 }
