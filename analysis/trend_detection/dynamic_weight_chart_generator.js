@@ -30,7 +30,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
     // Log mapping for gain slider
     const GAIN_LOG_MIN_N = Math.log(0.001);
-    const GAIN_LOG_MAX_N = Math.log(2.0);
+    const GAIN_LOG_MAX_N = Math.log(3.0);
     const clampedGain = Math.min(Math.max(defaultGain, 0.001), 0.5);
     const gainInitSlider = Math.round((Math.log(clampedGain) - GAIN_LOG_MIN_N) / (GAIN_LOG_MAX_N - GAIN_LOG_MIN_N) * 1000);
 
@@ -256,7 +256,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const MS_LOG_MAX = data.msLogMax;
         const msSliderToVal = (pos) => Math.exp(MS_LOG_MIN + (pos / 1000) * (MS_LOG_MAX - MS_LOG_MIN));
         const GAIN_LOG_MIN = Math.log(0.001);
-        const GAIN_LOG_MAX = Math.log(2.0);
+        const GAIN_LOG_MAX = Math.log(3.0);
         const gainSliderToVal = (pos) => pos === 0 ? 0 : Math.exp(GAIN_LOG_MIN + (pos / 1000) * (GAIN_LOG_MAX - GAIN_LOG_MIN));
         const gainValToSlider = (val) => val <= 0 ? 0 : Math.round((Math.log(Math.max(0.001, val)) - GAIN_LOG_MIN) / (GAIN_LOG_MAX - GAIN_LOG_MIN) * 1000);
 
@@ -872,20 +872,12 @@ document.getElementById('nz-slider').value = Math.round(currentNz * 100);
                     try { showConfirm(JSON.parse(text), btn); }
                     catch { btn.textContent = 'error'; btn.classList.add('error'); setTimeout(() => { btn.textContent = 'paste'; btn.classList.remove('error'); }, 1500); }
                 };
-                // Primary: browser clipboard API (triggers native allow-paste prompt)
-                if (navigator.clipboard && navigator.clipboard.readText) {
-                    navigator.clipboard.readText().then(tryParse).catch(() => {
-                        // Fallback: same-browser localStorage
-                        const stored = localStorage.getItem(LS_KEY);
-                        if (stored) { try { showConfirm(JSON.parse(stored), btn); return; } catch {} }
-                    });
-                    return;
-                }
-                // Fallback for file:// where clipboard API is blocked: localStorage first, then Ctrl+V
+                // Use localStorage first (same-tab copy/paste), fallback to Ctrl+V
                 const stored = localStorage.getItem(LS_KEY);
                 if (stored) {
                     try { showConfirm(JSON.parse(stored), btn); return; } catch {}
                 }
+                // No localStorage data - use Ctrl+V method
                 btn.textContent = 'Ctrl+V…';
                 btn.classList.add('pasted');
                 const ta = document.createElement('textarea');
