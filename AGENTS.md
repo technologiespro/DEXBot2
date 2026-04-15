@@ -200,7 +200,7 @@ Research scripts for parameter tuning — output interactive HTML charts, not us
 #### Dynamic Weight Research
 - `analyze_dynamic_weight.js` - Runner: loads candles, computes AMA3 + Kalman, generates chart
 - `trend_detection/dynamic_weight_chart_generator.js` - 4-panel uPlot chart with interactive knobs (α, maxS%, gain, clip%, nz%)
-- Docs: `analysis/trend_detection/DYNAMIC_WEIGHT_RESEARCH.md`
+- Docs: `analysis/DYNAMIC_WEIGHT_RESEARCH.md`
 
 #### Derivative / Signal Research
 - `analyze_derivatives.js` - SMA/MACD/RSI signal analyzer runner

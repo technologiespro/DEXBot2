@@ -53,7 +53,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Mixed Order Fund Validation**: Separate validation for BUY vs SELL order fund checks
 - **Fee Management**: Detailed logic for BTS fee reservations and market fee deductions.
 
-### 📊 [Grid Recalculation](GRID_RECALCULATION.md)
+### 📊 [Grid Recalculation](../market_adapter/GRID_RECALCULATION.md)
 *When and why the grid resets.*
 - **Three Independent Triggers**: AMA Delta (market move), RMS Divergence (state drift), and Regeneration (fund accumulation)
 - **Configuration**: Per-trigger thresholds and their defaults
@@ -73,7 +73,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Session cache**: encrypted HKDF re-encryption with a random salt that is never persisted
 - **Runtime hardening**: lstat + owner/mode/type checks on all sockets and ready files; bootstrap socket destroyed after first use
 
-### 🧪 [Test Suite Updates](TEST_UPDATES_SUMMARY.md)
+### 🧪 [Test Suite Updates](../tests/TEST_UPDATES_SUMMARY.md)
 *Reliability and regression testing.*
 - **Recent Fixes**: Summary of test coverage added for the most recent critical bugfixes.
 - **Integration Scenarios**: Documentation of complex multi-fill and partial-fill test cases.

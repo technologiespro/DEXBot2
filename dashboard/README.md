@@ -51,4 +51,4 @@ cargo check --manifest-path dashboard/Cargo.toml
 
 If PM2 is not available, dashboard still runs and marks PM2 as offline.
 
-Full scope/spec: `docs/tui_dashboard_spec.md`.
+Full scope/spec: `tui_dashboard_spec.md`.

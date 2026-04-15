@@ -1681,7 +1681,7 @@ node tests/test_accounting_logic.js
 npm test
 ```
 
-See [TEST_UPDATES_SUMMARY.md](TEST_UPDATES_SUMMARY.md) for detailed coverage.
+See [TEST_UPDATES_SUMMARY.md](../tests/TEST_UPDATES_SUMMARY.md) for detailed coverage.
 
 ### Debugging Fund Issues in Tests
 

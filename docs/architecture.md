@@ -1216,7 +1216,7 @@ node tests/test_accounting_logic.js
 
 ### Test Documentation References
 
-- **[TEST_UPDATES_SUMMARY.md](TEST_UPDATES_SUMMARY.md)** - Detailed test coverage for 23 new test cases
+- **[TEST_UPDATES_SUMMARY.md](../tests/TEST_UPDATES_SUMMARY.md)** - Detailed test coverage for 23 new test cases
   - Maps each test to specific bugfixes
   - Shows what each test validates
   - Running instructions for specific areas
@@ -1226,11 +1226,6 @@ node tests/test_accounting_logic.js
   - Common test patterns
   - Debugging failing tests
   - Adding tests for new features
-
-- **[TESTING_IMPROVEMENTS.md](TESTING_IMPROVEMENTS.md)** - Lessons from bugfix iteration
-  - What caused bugs in 0.4.x
-  - How tests prevent regressions
-  - Design validation checklist
 
 ---
 
@@ -1278,7 +1273,7 @@ The strategy engine has been significantly strengthened with improvements to fun
 
 For detailed fund calculations and test coverage, see:
 - [developer_guide.md#testing-fund-calculations](developer_guide.md#testing-fund-calculations) - How fund calculations are tested
-- [TEST_UPDATES_SUMMARY.md](TEST_UPDATES_SUMMARY.md) - Detailed coverage of recent bugfix tests
+- [TEST_UPDATES_SUMMARY.md](../tests/TEST_UPDATES_SUMMARY.md) - Detailed coverage of recent bugfix tests
 
 ---
 
