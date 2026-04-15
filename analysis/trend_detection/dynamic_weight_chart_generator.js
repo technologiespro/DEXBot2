@@ -22,17 +22,17 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
     const amaWeightConfig = data.amaWeightConfig || {};
     const defaultAlpha        = data.alpha ?? 0.5;
-    const defaultMaxOff       = data.maxOff ?? 0.5;
+    const defaultGain       = data.gain ?? 0.5;
     const defaultNeutralZone  = amaWeightConfig.neutralZonePct ?? 0.15;
     const defaultDispWeight   = data.dispWeight ?? 0.4;
     const maxSlopePct         = amaWeightConfig.maxSlopePct ?? 3.0;
     const defaultClipPct      = data.clipPct ?? 10;
 
-    // Log mapping for maxOff slider
-    const MAXOFF_LOG_MIN_N = Math.log(0.001);
-    const MAXOFF_LOG_MAX_N = Math.log(0.25);
-    const clampedMaxOff = Math.min(Math.max(defaultMaxOff, 0.001), 0.25);
-    const maxOffInitSlider = Math.round((Math.log(clampedMaxOff) - MAXOFF_LOG_MIN_N) / (MAXOFF_LOG_MAX_N - MAXOFF_LOG_MIN_N) * 1000);
+    // Log mapping for gain slider
+    const GAIN_LOG_MIN_N = Math.log(0.001);
+    const GAIN_LOG_MAX_N = Math.log(2.0);
+    const clampedGain = Math.min(Math.max(defaultGain, 0.001), 0.5);
+    const gainInitSlider = Math.round((Math.log(clampedGain) - GAIN_LOG_MIN_N) / (GAIN_LOG_MAX_N - GAIN_LOG_MIN_N) * 1000);
 
     const interval = results.length > 1 ?
         (new Date(results[1].timestamp).getTime() - new Date(results[0].timestamp).getTime()) / 1000 : 3600;
@@ -136,8 +136,6 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         .ctrl.ms .val { color: #f0883e; }
         .ctrl.clip input[type="range"] { accent-color: #da3633; }
         .ctrl.clip .val { color: #da3633; }
-        .ctrl.gain input[type="range"] { accent-color: #d2a8ff; }
-        .ctrl.gain .val { color: #d2a8ff; }
 .section-label { position: absolute; top: 8px; right: 12px; font-size: 9px; color: #30363d; text-transform: uppercase; letter-spacing: 1px; z-index: 10; pointer-events: none; }
     </style>
 </head>
@@ -179,12 +177,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 <div class="legend-item">&nbsp;S:<span id="l-sell" style="color:#ff7b72;">-</span></div>
                 <div class="legend-item">&nbsp;B:<span id="l-buy" style="color:#58a6ff;">-</span></div>
                 <div class="ctrl alpha"><label for="alpha-slider">\u03b1</label><input type="range" id="alpha-slider" min="0" max="100" value="${Math.round(defaultAlpha * 100)}"><span class="val" id="alpha-value">${defaultAlpha.toFixed(2)}</span></div>
-                <div class="ctrl ms"><label for="ms-slider">maxS%</label><input type="range" id="ms-slider" min="0" max="1000" value="${Math.round((Math.log(maxSlopePct) - Math.log(0.05)) / (Math.log(15) - Math.log(0.05)) * 1000)}"><span class="val" id="ms-value">${maxSlopePct.toFixed(2)}</span></div>
-                <div class="ctrl off"><label for="off-slider">maxOff</label><input type="range" id="off-slider" min="0" max="1000" value="${maxOffInitSlider}"><span class="val" id="off-value">${Math.min(defaultMaxOff, 0.25).toFixed(3)}</span></div>
-                <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="50" value="${Math.min(defaultClipPct, 50)}"><span class="val" id="clip-value">${Math.min(defaultClipPct, 50)}%</span></div>
+                <div class="ctrl ms"><label for="ms-slider">maxS%</label><input type="range" id="ms-slider" min="0" max="1000" value="${Math.round((Math.log(maxSlopePct) - Math.log(0.05)) / (Math.log(20) - Math.log(0.05)) * 1000)}"><span class="val" id="ms-value">${maxSlopePct.toFixed(2)}</span></div>
+                <div class="ctrl off"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="${gainInitSlider}"><span class="val" id="gain-value">${defaultGain.toFixed(3)}</span></div>
+                <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="55" value="${Math.min(defaultClipPct, 55)}"><span class="val" id="clip-value">${Math.min(defaultClipPct, 55)}%</span></div>
 
                 <div class="ctrl nz"><label for="nz-slider">nz%</label><input type="range" id="nz-slider" min="0" max="100" value="${Math.round(defaultNeutralZone * 100)}"><span class="val" id="nz-value">${defaultNeutralZone.toFixed(2)}</span></div>
-                <div class="ctrl gain"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="500"><span class="val" id="gain-value">1.0×</span></div>
                 <button class="copy-btn" id="copy-params-btn">copy</button>
                 <button class="paste-btn" id="paste-params-btn">paste</button>
             </div>
@@ -201,7 +198,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, maxOff: defaultMaxOff, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -209,22 +206,17 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const Y_AXIS_SIZE = 58;
 
         let currentAlpha   = data.alpha;
-        let currentMaxOff  = Math.min(data.maxOff, 0.25);
-        let currentGain    = 1.0;
+        let currentGain  = Math.min(data.gain ?? 0.5, 0.5);
         let currentNz      = data.neutralZonePct;
         let currentDw      = data.dispWeight;
         let currentMaxSlopePct = data.maxSlopePct;
         const MS_LOG_MIN = Math.log(0.05);
-        const MS_LOG_MAX = Math.log(15.0);
+        const MS_LOG_MAX = Math.log(20.0);
         const msSliderToVal = (pos) => Math.exp(MS_LOG_MIN + (pos / 1000) * (MS_LOG_MAX - MS_LOG_MIN));
-        const MAXOFF_LOG_MIN = Math.log(0.001);
-        const MAXOFF_LOG_MAX = Math.log(0.25);
-        const maxOffSliderToVal = (pos) => pos === 0 ? 0 : Math.exp(MAXOFF_LOG_MIN + (pos / 1000) * (MAXOFF_LOG_MAX - MAXOFF_LOG_MIN));
-        const maxOffValToSlider = (val) => val <= 0 ? 0 : Math.round((Math.log(Math.max(0.001, val)) - MAXOFF_LOG_MIN) / (MAXOFF_LOG_MAX - MAXOFF_LOG_MIN) * 1000);
-        const GAIN_LOG_MIN = Math.log(0.1);
-        const GAIN_LOG_MAX = Math.log(10.0);
-        const gainSliderToVal = (pos) => Math.exp(GAIN_LOG_MIN + (pos / 1000) * (GAIN_LOG_MAX - GAIN_LOG_MIN));
-        const gainValToSlider = (val) => Math.round((Math.log(Math.max(0.1, val)) - GAIN_LOG_MIN) / (GAIN_LOG_MAX - GAIN_LOG_MIN) * 1000);
+        const GAIN_LOG_MIN = Math.log(0.001);
+        const GAIN_LOG_MAX = Math.log(2.0);
+        const gainSliderToVal = (pos) => pos === 0 ? 0 : Math.exp(GAIN_LOG_MIN + (pos / 1000) * (GAIN_LOG_MAX - GAIN_LOG_MIN));
+        const gainValToSlider = (val) => val <= 0 ? 0 : Math.round((Math.log(Math.max(0.001, val)) - GAIN_LOG_MIN) / (GAIN_LOG_MAX - GAIN_LOG_MIN) * 1000);
 
         let currentClipPct = data.clipPct;
         const maxAmaSlope = data.amaPercentiles[data.amaPercentiles.length - 1];
@@ -241,7 +233,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         function recalcInputs() {
             const nz = currentNz;
             const ms = currentMaxSlopePct;
-            const mo = currentMaxOff;
+            const mo = currentGain;
             const dw = currentDw;
             const acl = currentAmaClipThreshold;
             const kcl = currentKalClipThreshold;
@@ -281,7 +273,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
         function recalcWeights() {
             // Normalize each channel to its own peak so alpha is a pure ratio knob
-            // and maxOff is the sole amplitude controller
+            // and gain is the sole amplitude controller
             let aMax = 0, kMax = 0;
             for (let i = 0; i < data.realBarCount; i++) {
                 if (dynamicAmaOff[i] !== null) aMax = Math.max(aMax, Math.abs(dynamicAmaOff[i]));
@@ -290,14 +282,14 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             if (aMax === 0) aMax = 1;
             if (kMax === 0) kMax = 1;
 
-            const mo = currentMaxOff;
+            const mo = currentGain;
             for (let i = 0; i < data.dates.length; i++) {
                 const aOff = dynamicAmaOff[i];
                 const kOff = dynamicKalOff[i];
                 if (aOff === null || kOff === null) {
                     combinedOff[i] = null; combinedSell[i] = null; combinedBuy[i] = null;
                 } else {
-                    const off = Math.max(-0.5, Math.min(0.5, (currentAlpha * (aOff / aMax) + (1 - currentAlpha) * (kOff / kMax)) * mo * currentGain));
+                    const off = Math.max(-0.5, Math.min(0.5, (currentAlpha * (aOff / aMax) + (1 - currentAlpha) * (kOff / kMax)) * mo));
                     combinedOff[i] = Math.round(off * 1000) / 1000;
                     combinedSell[i] = Math.max(-0.5, Math.min(1.5, Math.round((0.5 + off) * 100) / 100));
                     combinedBuy[i]  = Math.max(-0.5, Math.min(1.5, Math.round((0.5 - off) * 100) / 100));
@@ -503,8 +495,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
         function init() {
             // Force all sliders to match JS state — overrides browser form-restore memory
+            document.getElementById('alpha-slider').value = Math.round(currentAlpha * 100);
+            document.getElementById('ms-slider').value = Math.round((Math.log(currentMaxSlopePct) - MS_LOG_MIN) / (MS_LOG_MAX - MS_LOG_MIN) * 1000);
             document.getElementById('gain-slider').value = gainValToSlider(currentGain);
-            document.getElementById('gain-value').textContent = currentGain.toFixed(2) + '×';
+            document.getElementById('clip-slider').value = currentClipPct;
+            document.getElementById('nz-slider').value = Math.round(currentNz * 100);
 
             const priceEl  = document.getElementById('price-panel');
             const amaEl    = document.getElementById('ama-panel');
@@ -575,7 +570,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 width: outputEl.offsetWidth, height: outputEl.offsetHeight,
                 padding: [20, 8, 0, 4], select: { show: false }, legend: { show: false },
                 scales: { x: { time: true }, ow: { auto: true, range: (u, min, max) => {
-                    const m = Math.min(0.5, Math.max(0.1, currentMaxOff * currentGain));
+                    const m = 0.5;
                     const pad = (max - min) * 0.1 || 0.02;
                     return [Math.min(min - pad, -m), Math.max(max + pad, m)];
                 }}},
@@ -587,7 +582,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     { show: false, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
                     { scale: 'ow', stroke: '#30363d', grid: { stroke: '#1c2128', dash: [4, 4] }, ticks: { stroke: '#30303d', width: 1 }, size: Y_AXIS_SIZE, font: '11px Segoe UI, sans-serif',
                       values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(2) : ''),
-                      splits: () => { const m = Math.min(0.5, Math.max(0.1, currentMaxOff * currentGain)); return [-m, -m/2, 0, m/2, m]; } }
+                      splits: () => { const m = 0.5; return [-m, -m/2, 0, m/2, m]; } }
                 ],
                 cursor: cursorCfg,
                 hooks: { draw: [makePctFillHook(combinedOff, 'ow', 'rgba(46,160,67,0.30)', 'rgba(248,81,73,0.30)')] }
@@ -634,9 +629,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 onSliderChange();
             });
 
-            document.getElementById('off-slider').addEventListener('input', (e) => {
-                currentMaxOff = maxOffSliderToVal(parseInt(e.target.value, 10));
-                document.getElementById('off-value').textContent = currentMaxOff.toFixed(3);
+            document.getElementById('gain-slider').addEventListener('input', (e) => {
+                currentGain = gainSliderToVal(parseInt(e.target.value, 10));
+                document.getElementById('gain-value').textContent = currentGain.toFixed(3);
                 onSliderChange();
             });
 
@@ -660,16 +655,6 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 onSliderChange();
             });
 
-            document.getElementById('gain-slider').addEventListener('input', (e) => {
-                currentGain = gainSliderToVal(parseInt(e.target.value, 10));
-                document.getElementById('gain-value').textContent = currentGain.toFixed(2) + '×';
-                recalcWeights();
-                const xs = outputChart.scales.x;
-                const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
-                outputChart.setData([data.dates, combinedOff]);
-                if (savedX) outputChart.setScale('x', savedX);
-            });
-
             function applyParams(p, btn) {
                 if (typeof p !== 'object' || p === null) throw new Error('not an object');
                 if (p.alpha != null) {
@@ -682,13 +667,13 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     document.getElementById('ms-slider').value = Math.round((Math.log(currentMaxSlopePct) - MS_LOG_MIN) / (MS_LOG_MAX - MS_LOG_MIN) * 1000);
                     document.getElementById('ms-value').textContent = currentMaxSlopePct.toFixed(2);
                 }
-                if (p.maxOff != null) {
-                    currentMaxOff = Math.max(0, Math.min(0.25, p.maxOff));
-                    document.getElementById('off-slider').value = maxOffValToSlider(currentMaxOff);
-                    document.getElementById('off-value').textContent = currentMaxOff.toFixed(3);
+                if (p.gain != null) {
+                    currentGain = Math.max(0, Math.min(0.5, p.gain));
+                    document.getElementById('gain-slider').value = gainValToSlider(currentGain);
+                    document.getElementById('gain-value').textContent = currentGain.toFixed(3);
                 }
                 if (p.clipPct != null) {
-                    currentClipPct = Math.max(0, Math.min(50, Math.round(p.clipPct)));
+                    currentClipPct = Math.max(0, Math.min(55, Math.round(p.clipPct)));
                     document.getElementById('clip-slider').value = currentClipPct;
                     document.getElementById('clip-value').textContent = currentClipPct + '%';
                     if (currentClipPct === 0) {
@@ -704,11 +689,6 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     document.getElementById('nz-slider').value = Math.round(currentNz * 100);
                     document.getElementById('nz-value').textContent = currentNz.toFixed(2);
                 }
-                if (p.gain != null) {
-                    currentGain = Math.max(0.1, Math.min(10, p.gain));
-                    document.getElementById('gain-slider').value = gainValToSlider(currentGain);
-                    document.getElementById('gain-value').textContent = currentGain.toFixed(2) + '×';
-                }
                 recalcInputs();
                 recalcWeights();
                 outputChart.setData([data.dates, combinedOff]);
@@ -718,7 +698,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             let _confirmPending = null;
             function showConfirm(p, btn) {
                 _confirmPending = { p, btn };
-                const labels = { alpha: 'alpha', maxSlopePct: 'maxS%', maxOff: 'maxOff', clipPct: 'clip%', neutralZonePct: 'nz%', gain: 'gain' };
+                const labels = { alpha: 'alpha', maxSlopePct: 'maxS%', gain: 'gain', clipPct: 'clip%', neutralZonePct: 'nz%' };
                 document.getElementById('paste-confirm-vals').innerHTML = Object.entries(labels)
                     .filter(([k]) => p[k] != null)
                     .map(([k, label]) => label + ': <span>' + p[k] + '</span>')
@@ -757,10 +737,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 const params = {
                     alpha:          +currentAlpha.toFixed(2),
                     maxSlopePct:    +currentMaxSlopePct.toFixed(2),
-                    maxOff:         +currentMaxOff.toFixed(3),
+                    gain:           +currentGain.toFixed(3),
                     clipPct:        currentClipPct,
                     neutralZonePct: +currentNz.toFixed(3),
-                    gain:           +currentGain.toFixed(2),
                 };
                 const json = JSON.stringify(params, null, 2);
                 localStorage.setItem(LS_KEY, json);

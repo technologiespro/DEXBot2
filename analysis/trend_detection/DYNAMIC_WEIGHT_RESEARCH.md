@@ -2,6 +2,21 @@
 
 Interactive HTML chart for researching optimal dynamic weight parameters by blending AMA slope and Kalman filter signals.
 
+## Signal design rationale
+
+### AMA slope
+
+The AMA's Efficiency Ratio (`ER = net price change / sum of bar-by-bar changes`) adapts its smoothing speed to market conditions. In a choppy pool `ER ≈ 0` and the AMA barely moves; in a trend `ER ≈ 1` and it tracks price closely. Taking the slope of the AMA therefore produces a signal that is already noise-filtered at the source — a near-zero slope genuinely means sideways, not oscillation that happened to average out. The neutral zone (`neutralZonePct`) dead-bands any remaining micro-slope residuals, which is all the additional filtering needed.
+
+### Kalman filter
+
+The Kalman filter is a state estimator: it separates true price and velocity from measurement noise via its R and Q parameters rather than smoothing over it. Running two filters at different Q values gives two orthogonal signals:
+
+- **Velocity** (tactical filter, high Q): direction and speed of price right now — responsive to inflections without reacting to wicks.
+- **Displacement** (modal filter, very low Q): how far price has moved from the long-run equilibrium ("center of gravity") — captures extension, not just momentum direction.
+
+Velocity and displacement carry different information and are kept in separate chart panels. The `dispWeight` knob only adds displacement confidence when the two signals agree on direction.
+
 ## Quick Start
 
 ```bash
@@ -15,7 +30,7 @@ node analysis/analyze_dynamic_weight.js \
   --source json \
   --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
   --alpha 0.6 \
-  --maxoff 0.10 \
+  --gain 0.10 \
   --clip 20
 ```
 
@@ -30,7 +45,7 @@ Output: `analysis/charts/dynamic_weight_chart.html` (open in browser)
 | `--bot-key` | `XRP-BTS` | Bot key for market adapter source |
 | `--chart` | `analysis/charts/dynamic_weight_chart.html` | Output HTML path |
 | `--alpha` | `0.5` | Initial α blend (0 = pure Kalman, 1 = pure AMA) |
-| `--maxoff` | `0.5` | Initial maxOff (UI range 0.001–0.25, log) |
+| `--gain` | `0.5` | Initial gain multiplier |
 | `--clip` | `10` | Initial clip percentile |
 | `--quiet` | `false` | Suppress console output |
 
@@ -65,24 +80,23 @@ Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pa
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
 | **α** | 0–1 | 0.5 | Blend ratio between AMA and Kalman channels (0 = pure Kalman, 1 = pure AMA) |
-| **maxS%** | 0.05–15 | 3.0 | Logarithmic. Gear ratio: slope% at which the output saturates |
-| **maxOff** | 0.001–0.25 | 0.10 | Logarithmic. Output ceiling: maximum offset the combined signal can produce |
-| **clip%** | 0–50 | 10 | ⚠️ Percentile clip: filters extreme inputs (research use only, see notes below) |
+| **maxS%** | 0.05–20 | 3.0 | Logarithmic. Gear ratio: slope% at which the output saturates |
+| **gain** | 0.001–2.0 | 0.5 | Logarithmic. Acts as amplitude multiplier on normalized blend; final output hard-capped at ±0.5 |
+| **clip%** | 0–55 | 10 | Percentile clip: filters extreme inputs (research use only) |
 | **nz%** | 0–1 | 0.15 | Neutral zone: dead-band below which offset is forced to 0 |
-| **gain** | 0.1×–10× | 1.0× | Logarithmic, symmetric. Amplifies or attenuates the final output; hard-capped at ±0.5 |
 
 ## Copy / Paste Parameters
 
-The **copy** button serializes all six knob values (α, maxS%, maxOff, clip%, nz%, gain) to JSON and writes them to both the clipboard and `localStorage`.
+The **copy** button serializes all knob values (α, maxS%, gain, clip%, nz%) to JSON and writes them to both the clipboard and `localStorage`.
 
-The **paste** button triggers the browser's native clipboard-read prompt. On accept, a confirmation popup shows the parsed values before applying them. Click **Apply** to set the knobs, **Cancel** or press **Escape** to dismiss. If the clipboard API is unavailable (e.g. `file://` URL in some browsers), it falls back to `localStorage` (same-browser copy) and then a Ctrl+V capture mode.
+The **paste** button triggers the browser's native clipboard-read prompt. On accept, a confirmation popup shows the parsed values before applying them. Click **Apply** to set the knobs, **Cancel** or press **Escape** to dismiss.
 
 ## Formulas
 
 ### AMA Offset
 ```
 amaClip = clamp(amaSlope%, ±clipThreshold)    // percentile-based clip
-amaOff  = clamp(amaClip / maxS% × maxOff, ±maxOff)
+amaOff  = clamp(amaClip / maxS% × gain, ±gain)
 ```
 
 ### Kalman Composite Offset
@@ -90,52 +104,40 @@ amaOff  = clamp(amaClip / maxS% × maxOff, ±maxOff)
 kalClip   = clamp(velocity%, ±clipThreshold)   // percentile-based clip
 dispConf  = min(|displacement%| / md%, 1)      // displacement confidence, 0–1
 momAlign  = sign(kalClip) == sign(displacement%) ? 1 : 0
-kalComp   = kalClip × (1 − dw + dw × dispConf × momAlign)  // dw hardcoded to 1.0
-kalOff    = clamp(kalComp / maxS% × maxOff, ±maxOff)
+kalComp   = kalClip × (1 − dw + dw × dispConf × momAlign)
+kalOff    = clamp(kalComp / maxS% × gain, ±gain)
 ```
 
 ### Final Weight (per-channel normalized blend + gain)
 
-Each channel is normalized to its own peak before blending, so α is a pure ratio knob and `maxOff` is the base amplitude. `gain` then scales the result linearly, hard-capped at ±0.5:
+Each channel is normalized to its own peak before blending, so α is a pure ratio knob. Gain scales the result linearly, hard-capped at ±0.5:
 
 ```
 aMax  = max(|amaOff|) over all bars
 kMax  = max(|kalOff|) over all bars
-off   = clamp((α × (amaOff / aMax) + (1 − α) × (kalOff / kMax)) × maxOff × gain, ±0.5)
+off   = clamp((α × (amaOff / aMax) + (1 − α) × (kalOff / kMax)) × gain, ±0.5)
 sellW = 0.5 + off
 buyW  = 0.5 − off
 ```
 
-## Clip Percentile Logic (EXPERIMENTAL — RESEARCH ONLY)
-
-The `clip%` knob uses **percentile-based thresholds** computed from the actual data distribution:
-
-- **clip = 0%**: No clipping — full raw range is passed through
-- **clip = 10%**: AMA threshold = P90 of |slope%|, Kalman threshold = P90 of |vel%| — top 10% outliers are flattened
-- **clip = 50%**: Thresholds = P50 (median) — only the middle 50% of values pass through unclipped
-
-Each input gets its own threshold from its own distribution.
-
-**NOTE**: Percentiles are computed from the full historical dataset loaded at startup. Currently unsuitable for live trading — for research use only.
-
 ## Parameter Relationships
 
-### maxS% + maxOff
+### maxS% + gain
 
 These are multiplicatively related:
-- `off = clip / maxS% × maxOff` — raising `maxS%` from 3→6 has the same effect as halving `maxOff`
-- `maxS%` = gear ratio (what slope% saturates the output). Logarithmic slider for fine control at small values.
-- `maxOff` = output amplitude (how strong the weight offset can become)
+- `off = clip / maxS% × gain` — raising `maxS%` from 3→6 has the same effect as halving `gain`
+- `maxS%` = gear ratio (what slope% saturates the output)
+- `gain` = output amplitude (how strong the weight offset can become)
 
 ### α (blend)
 - 0 = pure Kalman (momentum + displacement composite)
 - 1 = pure AMA slope
 - 0.5 = equal blend
 
-Each channel is normalized to its own peak before blending, so changing α only shifts the ratio — it does not change the output amplitude. `maxOff` is the sole amplitude control.
+Each channel is normalized to its own peak before blending, so changing α only shifts the ratio — it does not change the output amplitude. Gain is the sole amplitude control.
 
 ### nz% (neutral zone)
-Values below `nz%` in absolute terms are zeroed out before the offset formula. Raises the signal floor and suppresses noise in low-momentum periods.
+Values below `nz%` in absolute terms are zeroed out before the offset formula.
 
 ## Data Pipeline
 
@@ -150,7 +152,7 @@ Candle Data
 │   ├── KalmanTrendAnalyzer.update() → velocity%, displacement%, signal, isReady
 │   └── Percentile clip → kalClip → composite → kalOff
 │
-└── Normalized blend → off = (α·(amaOff/aMax) + (1−α)·(kalOff/kMax)) × maxOff
+└── Normalized blend → off = (α·(amaOff/aMax) + (1−α)·(kalOff/kMax)) × gain
     ├── sellW = 0.5 + off
     └── buyW  = 0.5 − off
 ```

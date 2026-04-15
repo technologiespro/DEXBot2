@@ -75,7 +75,7 @@ function parseArgs() {
         source: { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         chartFile: 'analysis/charts/dynamic_weight_chart.html',
         alpha: 0.5,
-        maxOff: 0.5,
+        gain: 0.5,
         dispWeight: 1.0,
         clipPct: 10,
         quiet: false,
@@ -91,7 +91,7 @@ function parseArgs() {
         }
         else if (arg === '--chart') config.chartFile = args[++i];
         else if (arg === '--alpha') config.alpha = parseFloat(args[++i]);
-        else if (arg === '--maxoff') config.maxOff = parseFloat(args[++i]);
+        else if (arg === '--gain') config.gain = parseFloat(args[++i]);
         else if (arg === '--dw') config.dispWeight = parseFloat(args[++i]);
         else if (arg === '--clip') config.clipPct = parseFloat(args[++i]);
         else if (arg === '--quiet') config.quiet = true;
@@ -173,7 +173,7 @@ async function main() {
             amaWeightConfig: AMA_WEIGHT_CONFIG,
             kalmanConfig: KALMAN_CONFIG,
             alpha: config.alpha,
-            maxOff: config.maxOff,
+            gain: config.gain,
             dispWeight: config.dispWeight,
             clipPct: config.clipPct,
         }, 'Dynamic Weight Research Tool');
