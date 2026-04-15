@@ -29,7 +29,7 @@ Estimates the long-memory property of the price series via Rescaled Range (R/S) 
 
 **Algorithm**: for each scale τ, partition the log-return window into non-overlapping chunks of length τ, compute the average R/S (Rescaled Range) per chunk, then OLS-fit `log(avgRS)` vs `log(τ)` — the slope is the Hurst exponent.
 
-**Role in the tool**: Hurst is one axis of the regime multiplier matrix (see [Regime Multiplier](#regime-multiplier)). It is a research overlay — it is visualized but not yet hardwired into the bot's weight logic.
+**Role in the tool**: Hurst is one axis of the regime multiplier matrix (see [Regime Multiplier](#regime-multiplier)). Gates the AMA+Kalman blend in production when `regimeSensitivity > 0`.
 
 **Warmup**: requires 256 bars before `isReady = true`.
 
@@ -56,13 +56,12 @@ Hurst and PE are combined into a single regime multiplier via bilinear interpola
 ```
                 PE < 0.60     PE 0.725     PE > 0.85
                 (Structured)  (Mixed)      (Noise)
-H > 0.55  →    1.5           1.1          0.7
-H 0.45–0.55 →  0.8           0.5          0.2
-H < 0.45  →    0.6           0.3          0.1
+H > 0.55  →    1.0           0.7          0.3
+H 0.45–0.55 →  0.6           0.4          0.15
+H < 0.45  →    0.3           0.2          0.05
 ```
 
-Best case (trending + structured): multiplier = **1.5×** — weight signal is amplified.
-Worst case (mean-reverting + noisy): multiplier = **0.1×** — weight signal is nearly silenced.
+Best case (trending + structured): multiplier = **1.0** (full signal). Unclear situations < 1.0 to dampen signal.
 
 The `regi` (regime sensitivity) knob raises the multiplier to a power: `finalMult = baseMult ^ sensitivity`. At sensitivity = 1.0 (default), the table is used as-is. Higher sensitivity exaggerates regime differences; lower sensitivity flattens them toward 1.0.
 
@@ -174,7 +173,7 @@ kalOff    = clamp(kalComp / maxS% × gain, ±gain)
 
 ### Regime Multiplier
 ```
-baseMult  = bilinear(REGIME_TABLE, H, PE)      // 0.1–1.5 depending on regime
+baseMult  = bilinear(REGIME_TABLE, H, PE)      // 0.05–1.0 depending on regime
 finalMult = baseMult ^ regimeSensitivity        // power scaling via regi knob
 ```
 

@@ -285,18 +285,26 @@ class MarketAdapterService {
             const dw = cfg.dw ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DW ?? 0.4;
             const gain = cfg.gain ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN ?? 0.5;
 
-            // Build AMA offset array using computeAmaSlopeWeights for each bar
+            // Build AMA offset array — compute slopeOffset directly from AMA values per bar.
+            // computeAmaSlopeWeights only reads amaValues[i] and amaValues[i-lookbackBars],
+            // so there is no need to slice the full series for each bar.
+            const amaErPeriod = slopeCfg.erPeriod ?? botAma.erPeriod;
             const amaOffsets = [];
             for (let i = 0; i < closes.length; i++) {
-                if (i < lookbackBars || !slopeResult.isReady) {
+                if (!slopeResult.isReady || i < amaErPeriod + lookbackBars) {
                     amaOffsets.push(0);
                     continue;
                 }
-                const barResult = computeAmaSlopeWeights(amaValues.slice(0, i + 1), weightVariance, slopeCfg);
-                // Convert to offset like research tool: (slopeOffset / maxSlopeOffset) * mo
-                const offset = barResult.isReady
-                    ? (barResult.slopeOffset / mo) * mo  // Already capped at mo by computeAmaSlopeWeights
-                    : 0;
+                const last = amaValues[i];
+                const past = amaValues[i - lookbackBars];
+                if (!Number.isFinite(last) || !Number.isFinite(past) || past === 0) {
+                    amaOffsets.push(0);
+                    continue;
+                }
+                const sp  = (last - past) / past * 100;
+                const csp = Math.max(-amaClipThreshold, Math.min(amaClipThreshold, sp));
+                const offset = Math.abs(csp) < nz ? 0
+                    : Math.max(-mo, Math.min(mo, (csp / maxS) * mo));
                 amaOffsets.push(offset);
             }
 
@@ -329,10 +337,12 @@ class MarketAdapterService {
                 kalmanOffsets.push(0);
             }
 
-            // Normalize each channel to its peak (avoid division by zero)
-            const aMax = Math.max(...amaOffsets.map(v => Math.abs(v)), 0.001);
-            const kValues = kalmanOffsets.filter(v => v !== 0);
-            const kMax = kValues.length > 0 ? Math.max(...kValues.map(v => Math.abs(v)), 0.001) : 0.001;
+            // Normalize each channel to its peak (avoid division by zero).
+            // Use a loop instead of spread to avoid call-stack overflow on large candle sets.
+            let aMax = 0.001;
+            for (const v of amaOffsets)   { const a = Math.abs(v); if (a > aMax) aMax = a; }
+            let kMax = 0.001;
+            for (const v of kalmanOffsets) { const a = Math.abs(v); if (a > kMax) kMax = a; }
 
             // Final blended offset with regime multiplier and gain
             const lastAmaOff = amaOffsets[amaOffsets.length - 1] ?? 0;
@@ -342,15 +352,18 @@ class MarketAdapterService {
             const rawOff = (alpha * normalizedAma + (1 - alpha) * normalizedKal) * gain;
             const finalOff = Math.max(-0.5, Math.min(0.5, rawOff * regimeMultiplier));
 
-            // Store for metadata
-            const gatedSlopeOffset = slopeResult.isReady ? slopeResult.slopeOffset * regimeMultiplier : 0;
+            // Store for metadata.
+            // amaSlopeGated is the raw AMA slope component after regime gating — a diagnostic
+            // value for the AMA signal alone. The actual weight offset applied is finalOff (below),
+            // which is the normalized blend of AMA + Kalman × gain × regimeMultiplier.
+            const amaSlopeGated = slopeResult.isReady ? slopeResult.slopeOffset * regimeMultiplier : 0;
 
             amaSlope = {
                 trend:          slopeResult.trend,
                 confidence:     slopeResult.confidence,
                 slopePct:       slopeResult.slopePct,
                 slopeOffset:    slopeResult.slopeOffset,
-                gatedSlopeOffset,
+                amaSlopeGated,
                 regimeMultiplier,
                 symmetricDelta: slopeResult.symmetricDelta,
                 weightVariance,
@@ -365,8 +378,8 @@ class MarketAdapterService {
             const staticSell = Number.isFinite(bot.weightDistribution?.sell) ? bot.weightDistribution.sell : 0.5;
             const staticBuy  = Number.isFinite(bot.weightDistribution?.buy)  ? bot.weightDistribution.buy  : 0.5;
 
-            const MIN_W = -0.5;
-            const MAX_W =  1.5;
+            const MIN_W = 0;
+            const MAX_W = 1.5;
             const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
             const effectiveSell = Math.round(clamp(staticSell + finalOff, MIN_W, MAX_W) * 100) / 100;
@@ -386,7 +399,7 @@ class MarketAdapterService {
                     confidence:       slopeResult.confidence,
                     slopePct:         slopeResult.slopePct,
                     slopeOffset:      slopeResult.slopeOffset,
-                    gatedSlopeOffset,
+                    amaSlopeGated,
                     regimeMultiplier,
                     symmetricDelta:   slopeResult.symmetricDelta,
                     alpha,
@@ -403,7 +416,7 @@ class MarketAdapterService {
                 effectiveWeights: { sell: effectiveSell, buy: effectiveBuy },
                 baseWeights:      { sell: staticSell,    buy: staticBuy },
                 slopeOffset:      slopeResult.slopeOffset,
-                gatedSlopeOffset,
+                amaSlopeGated,
                 symmetricDelta:   slopeResult.symmetricDelta,
                 finalOffset:      finalOff,
                 alpha,

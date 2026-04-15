@@ -334,8 +334,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
         let currentRegimeSensitivity = data.regimeSensitivity ?? 0;
 
-        const dynamicAmaOff  = new Array(data.dates.length).fill(null);
-        const dynamicKalOff  = new Array(data.dates.length).fill(null);
+        const dynamicAmaOff      = new Array(data.dates.length).fill(null);
+        const dynamicAmaSlopePct = new Array(data.dates.length).fill(null);
+        const dynamicKalOff      = new Array(data.dates.length).fill(null);
         const combinedOff     = new Array(data.dates.length).fill(null);
         const combinedSell    = new Array(data.dates.length).fill(null);
         const combinedBuy     = new Array(data.dates.length).fill(null);
@@ -376,6 +377,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             for (let i = 0; i < data.realBarCount; i++) {
                 // AMA: compute slope dynamically with current lookback, then clip and convert to offset
                 const sp = computeSlopeAtIndex(i, lb);
+                dynamicAmaSlopePct[i] = i < lb ? null : sp;
                 const effectiveAcl = currentClipPct > 0 ? dynamicClipThreshold : acl;
                 const clippedA = Math.max(-effectiveAcl, Math.min(effectiveAcl, sp));
                 if (Math.abs(clippedA) < nz || i < lb) { dynamicAmaOff[i] = 0; }
@@ -401,6 +403,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             }
             for (let i = data.realBarCount; i < data.dates.length; i++) {
                 dynamicAmaOff[i] = null;
+                dynamicAmaSlopePct[i] = null;
                 dynamicKalOff[i] = null;
             }
         }
@@ -529,7 +532,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             if (ama3 == null) { ama3El.textContent = '-'; ama3El.style.color = '#8b949e'; }
             else { ama3El.textContent = ama3.toFixed(4); ama3El.style.color = '#e3b341'; }
 
-            const sp = data.amaSlopePct[idx];
+            const sp = dynamicAmaSlopePct[idx];
             const spEl = document.getElementById('l-ama-slope');
             if (sp == null) { spEl.textContent = '-'; spEl.style.color = '#8b949e'; }
             else { spEl.textContent = (sp >= 0 ? '+' : '') + sp.toFixed(3) + '%'; spEl.style.color = sp > 0.01 ? '#2ea043' : sp < -0.01 ? '#f85149' : '#8b949e'; }
@@ -688,8 +691,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                       values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(1) + '%' : '') }
                 ],
                 cursor: cursorCfg,
-                hooks: { draw: [makePctFillHook(data.amaSlopePct, 'p', 'rgba(46,160,67,0.20)', 'rgba(248,81,73,0.20)'), makeSignalBgHook('p')] }
-            }, [data.dates, data.amaSlopePct], document.getElementById('ama-chart'));
+                hooks: { draw: [makePctFillHook(dynamicAmaSlopePct, 'p', 'rgba(46,160,67,0.20)', 'rgba(248,81,73,0.20)'), makeSignalBgHook('p')] }
+            }, [data.dates, dynamicAmaSlopePct], document.getElementById('ama-chart'));
 
             kalmanChart = new uPlot({
                 width: kalmanEl.offsetWidth, height: kalmanEl.offsetHeight,
@@ -755,6 +758,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 recalcWeights();
                 const xs = outputChart.scales.x;
                 const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
+                amaChart.setData([data.dates, dynamicAmaSlopePct]);
                 outputChart.setData([data.dates, combinedOff]);
                 if (savedX) outputChart.setScale('x', savedX);
             }
@@ -876,6 +880,7 @@ document.getElementById('nz-slider').value = Math.round(currentNz * 100);
                 }
                 recalcInputs();
                 recalcWeights();
+                amaChart.setData([data.dates, dynamicAmaSlopePct]);
                 outputChart.setData([data.dates, combinedOff]);
                 if (btn) { btn.textContent = 'pasted!'; btn.classList.add('pasted'); setTimeout(() => { btn.textContent = 'paste'; btn.classList.remove('pasted'); }, 1500); }
             }
