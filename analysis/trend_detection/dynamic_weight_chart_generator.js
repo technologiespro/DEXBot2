@@ -27,6 +27,13 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const defaultDispWeight   = data.dispWeight ?? 0.4;
     const maxSlopePct         = amaWeightConfig.maxSlopePct ?? 3.0;
     const defaultClipPct      = data.clipPct ?? 10;
+    const lookbackBars        = amaWeightConfig.lookbackBars ?? 72;
+
+    // Log mapping for lookback slider (4 to 256 bars)
+    const LB_LOG_MIN_N = Math.log(4);
+    const LB_LOG_MAX_N = Math.log(256);
+    const clampedLb = Math.min(Math.max(lookbackBars, 4), 256);
+    const lbInitSlider = Math.round((Math.log(clampedLb) - LB_LOG_MIN_N) / (LB_LOG_MAX_N - LB_LOG_MIN_N) * 1000);
 
     // Log mapping for gain slider
     const GAIN_LOG_MIN_N = Math.log(0.001);
@@ -145,6 +152,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         .group-label { font-size: 9px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 8px; font-weight: bold; }
         .ctrl.alpha input[type="range"] { accent-color: #58a6ff; width: 80px; }
         .ctrl.alpha .val { color: #58a6ff; }
+        .ctrl.dw label { min-width: 20px; }
+        .ctrl.dw input[type="range"] { accent-color: #a371f7; width: 80px; }
+        .ctrl.dw .val { color: #a371f7; }
+        .ctrl.lb label { min-width: 20px; }
+        .ctrl.lb input[type="range"] { accent-color: #39d0d8; width: 80px; }
+        .ctrl.lb .val { color: #39d0d8; }
         .ctrl.off input[type="range"] { accent-color: #3fb950; }
         .ctrl.off .val { color: #3fb950; }
         .ctrl.nz input[type="range"] { accent-color: #8b949e; }
@@ -213,9 +226,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 
                 <div class="group-sep"></div>
                 <div class="ctrl alpha"><label for="alpha-slider">α</label><input type="range" id="alpha-slider" min="0" max="100" value="${Math.round(defaultAlpha * 100)}" title="Alpha Mix (AMA vs Kalman)"><span class="val" id="alpha-value">${defaultAlpha.toFixed(2)}</span></div>
-                
+                <div class="ctrl dw"><label for="dw-slider">dw</label><input type="range" id="dw-slider" min="0" max="100" value="${Math.round(defaultDispWeight * 100)}" title="Displacement Weight"><span class="val" id="dw-value">${defaultDispWeight.toFixed(2)}</span></div>
+
                 <div class="group-sep"></div>
                 <div class="ctrl nz"><label for="nz-slider">nz%</label><input type="range" id="nz-slider" min="0" max="100" value="${Math.round(defaultNeutralZone * 100)}" title="Neutral Zone %"><span class="val" id="nz-value">${defaultNeutralZone.toFixed(2)}</span></div>
+                <div class="ctrl lb"><label for="lb-slider">lb</label><input type="range" id="lb-slider" min="0" max="1000" value="${lbInitSlider}" title="Lookback Bars (4-256)"><span class="val" id="lb-value">${lookbackBars}</span></div>
                 <div class="ctrl ms"><label for="ms-slider">maxS%</label><input type="range" id="ms-slider" min="0" max="1000" value="${msInitSlider}" title="Max Slope % (Saturation Point)"><span class="val" id="ms-value">${maxSlopePct.toFixed(2)}</span></div>
                 <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="55" value="${Math.min(defaultClipPct, 55)}" title="Outlier Clip %"><span class="val" id="clip-value">${Math.min(defaultClipPct, 55)}%</span></div>
 
@@ -240,7 +255,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -255,6 +270,13 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const MS_LOG_MIN = data.msLogMin;
         const MS_LOG_MAX = data.msLogMax;
         const msSliderToVal = (pos) => Math.exp(MS_LOG_MIN + (pos / 1000) * (MS_LOG_MAX - MS_LOG_MIN));
+
+        let currentLookbackBars = data.lookbackBars;
+        const LB_LOG_MIN = data.lbLogMin;
+        const LB_LOG_MAX = data.lbLogMax;
+        const lbSliderToVal = (pos) => Math.round(Math.exp(LB_LOG_MIN + (pos / 1000) * (LB_LOG_MAX - LB_LOG_MIN)));
+        const lbValToSlider = (val) => Math.round((Math.log(Math.max(4, val)) - LB_LOG_MIN) / (LB_LOG_MAX - LB_LOG_MIN) * 1000);
+
         const GAIN_LOG_MIN = Math.log(0.001);
         const GAIN_LOG_MAX = Math.log(3.0);
         const gainSliderToVal = (pos) => pos === 0 ? 0 : Math.exp(GAIN_LOG_MIN + (pos / 1000) * (GAIN_LOG_MAX - GAIN_LOG_MIN));
@@ -318,28 +340,51 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const combinedBuy     = new Array(data.dates.length).fill(null);
         const currentMults    = new Array(data.dates.length).fill(null);
 
+        function computeSlopeAtIndex(idx, lb) {
+            if (idx < lb || !data.ama3Prices[idx] || !data.ama3Prices[idx - lb]) return 0;
+            const current = data.ama3Prices[idx];
+            const past = data.ama3Prices[idx - lb];
+            if (past <= 0) return 0;
+            return (current - past) / past * 100;
+        }
+
         function recalcInputs() {
             const nz = currentNz;
             const ms = currentMaxSlopePct;
             const mo = currentGain;
             const dw = currentDw;
+            const lb = currentLookbackBars;
             const acl = currentAmaClipThreshold;
             const kcl = currentKalClipThreshold;
+
+            // Recompute clip threshold based on current lookback
+            let dynamicClipThreshold = Infinity;
+            if (currentClipPct > 0) {
+                const slopes = [];
+                for (let i = lb; i < data.realBarCount; i++) {
+                    const s = computeSlopeAtIndex(i, lb);
+                    if (s !== 0) slopes.push(Math.abs(s));
+                }
+                if (slopes.length > 0) {
+                    slopes.sort((a, b) => a - b);
+                    const idx = Math.min(Math.floor((100 - currentClipPct) / 100 * slopes.length), slopes.length - 1);
+                    dynamicClipThreshold = slopes[idx];
+                }
+            }
+
             for (let i = 0; i < data.realBarCount; i++) {
-                const sp = data.amaSlopePct[i];
+                // AMA: compute slope dynamically with current lookback, then clip and convert to offset
+                const sp = computeSlopeAtIndex(i, lb);
+                const effectiveAcl = currentClipPct > 0 ? dynamicClipThreshold : acl;
+                const clippedA = Math.max(-effectiveAcl, Math.min(effectiveAcl, sp));
+                if (Math.abs(clippedA) < nz || i < lb) { dynamicAmaOff[i] = 0; }
+                else { dynamicAmaOff[i] = Math.max(-mo, Math.min(mo, (clippedA / ms) * mo)); }
+
+                // Kalman: use pre-computed values (unchanged)
                 const vp = data.kalmanVelocityPct[i];
                 const dp = data.kalmanDisplacementPct[i];
                 const kr = data.kalmanIsReady[i];
 
-                // AMA: percentile-clip then convert to offset
-                if (sp === null) { dynamicAmaOff[i] = null; }
-                else {
-                    const clippedA = Math.max(-acl, Math.min(acl, sp));
-                    if (Math.abs(clippedA) < nz) { dynamicAmaOff[i] = 0; }
-                    else { dynamicAmaOff[i] = Math.max(-mo, Math.min(mo, (clippedA / ms) * mo)); }
-                }
-
-                // Kalman: percentile-clip velocity, composite with displacement, then offset
                 if (!kr || vp === null || dp === null) { dynamicKalOff[i] = null; }
                 else {
                     const clippedV = Math.max(-kcl, Math.min(kcl, vp));
@@ -599,6 +644,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             document.getElementById('gain-slider').value = gainValToSlider(currentGain);
             document.getElementById('clip-slider').value = currentClipPct;
             document.getElementById('nz-slider').value = Math.round(currentNz * 100);
+            document.getElementById('lb-slider').value = lbValToSlider(currentLookbackBars);
 
             const priceEl  = document.getElementById('price-panel');
             const amaEl    = document.getElementById('ama-panel');
@@ -722,6 +768,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 if (savedX) outputChart.setScale('x', savedX);
             });
 
+            document.getElementById('dw-slider').addEventListener('input', (e) => {
+                currentDw = parseInt(e.target.value, 10) / 100;
+                document.getElementById('dw-value').textContent = currentDw.toFixed(2);
+                onSliderChange();
+            });
+
             document.getElementById('ms-slider').addEventListener('input', (e) => {
                 currentMaxSlopePct = msSliderToVal(parseInt(e.target.value, 10));
                 document.getElementById('ms-value').textContent = currentMaxSlopePct.toFixed(2);
@@ -754,6 +806,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 onSliderChange();
             });
 
+            document.getElementById('lb-slider').addEventListener('input', (e) => {
+                currentLookbackBars = lbSliderToVal(parseInt(e.target.value, 10));
+                document.getElementById('lb-value').textContent = currentLookbackBars;
+                onSliderChange();
+            });
+
             document.getElementById('regime-slider').addEventListener('input', (e) => {
                 currentRegimeSensitivity = parseInt(e.target.value, 10) / 100;
                 document.getElementById('regime-value').textContent = currentRegimeSensitivity.toFixed(2);
@@ -770,6 +828,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     currentAlpha = Math.max(0, Math.min(1, p.alpha));
                     document.getElementById('alpha-slider').value = Math.round(currentAlpha * 100);
                     document.getElementById('alpha-value').textContent = currentAlpha.toFixed(2);
+                }
+                if (p.dispWeight != null) {
+                    currentDw = Math.max(0, Math.min(1, p.dispWeight));
+                    document.getElementById('dw-slider').value = Math.round(currentDw * 100);
+                    document.getElementById('dw-value').textContent = currentDw.toFixed(2);
                 }
                 if (p.maxSlopePct != null) {
                     currentMaxSlopePct = Math.max(0.05, Math.min(20, p.maxSlopePct));
@@ -805,6 +868,11 @@ document.getElementById('nz-slider').value = Math.round(currentNz * 100);
                     document.getElementById('regime-slider').value = Math.round(currentRegimeSensitivity * 100);
                     document.getElementById('regime-value').textContent = currentRegimeSensitivity.toFixed(2);
                 }
+                if (p.lookbackBars != null) {
+                    currentLookbackBars = Math.max(4, Math.min(256, Math.round(p.lookbackBars)));
+                    document.getElementById('lb-slider').value = lbValToSlider(currentLookbackBars);
+                    document.getElementById('lb-value').textContent = currentLookbackBars;
+                }
                 recalcInputs();
                 recalcWeights();
                 outputChart.setData([data.dates, combinedOff]);
@@ -814,7 +882,7 @@ document.getElementById('nz-slider').value = Math.round(currentNz * 100);
             let _confirmPending = null;
             function showConfirm(p, btn) {
                 _confirmPending = { p, btn };
-                const labels = { alpha: 'alpha', maxSlopePct: 'maxS%', gain: 'gain', clipPct: 'clip%', neutralZonePct: 'nz%', regimeSensitivity: 'regime' };
+                const labels = { alpha: 'alpha', maxSlopePct: 'maxS%', gain: 'gain', clipPct: 'clip%', neutralZonePct: 'nz%', regimeSensitivity: 'regime', dispWeight: 'dw', lookbackBars: 'lb' };
                 document.getElementById('paste-confirm-vals').innerHTML = Object.entries(labels)
                     .filter(([k]) => p[k] != null)
                     .map(([k, label]) => label + ': <span>' + p[k] + '</span>')
@@ -857,6 +925,8 @@ document.getElementById('nz-slider').value = Math.round(currentNz * 100);
                     clipPct:        currentClipPct,
                     neutralZonePct: +currentNz.toFixed(3),
                     regimeSensitivity: +currentRegimeSensitivity.toFixed(2),
+                    dispWeight:     +currentDw.toFixed(2),
+                    lookbackBars:   currentLookbackBars,
                 };
                 const json = JSON.stringify(params, null, 2);
                 localStorage.setItem(LS_KEY, json);

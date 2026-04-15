@@ -93,6 +93,7 @@ function parseArgs() {
         else if (arg === '--alpha') config.alpha = parseFloat(args[++i]);
         else if (arg === '--gain') config.gain = parseFloat(args[++i]);
         else if (arg === '--dw') config.dispWeight = parseFloat(args[++i]);
+        else if (arg === '--lb') config.lookbackBars = parseInt(args[++i], 10);
         else if (arg === '--clip') config.clipPct = parseFloat(args[++i]);
         else if (arg === '--quiet') config.quiet = true;
     }
@@ -159,7 +160,7 @@ async function main() {
 
             const weights = computeAmaSlopeWeights(ama3Values.slice(0, i + 1), weightVariance, {
                 erPeriod: AMA_CONFIG.erPeriod,
-                lookbackBars: AMA_WEIGHT_CONFIG.lookbackBars,
+                lookbackBars: config.lookbackBars ?? AMA_WEIGHT_CONFIG.lookbackBars,
                 maxSlopePct: AMA_WEIGHT_CONFIG.maxSlopePct,
                 neutralZonePct: AMA_WEIGHT_CONFIG.neutralZonePct,
                 maxVolatilityThreshold: AMA_WEIGHT_CONFIG.maxVolatilityThreshold,
@@ -183,7 +184,10 @@ async function main() {
         const html = generateHTML({
             allResults,
             amaConfig: AMA_CONFIG,
-            amaWeightConfig: AMA_WEIGHT_CONFIG,
+            amaWeightConfig: {
+                ...AMA_WEIGHT_CONFIG,
+                lookbackBars: config.lookbackBars ?? AMA_WEIGHT_CONFIG.lookbackBars,
+            },
             alpha: config.alpha,
             gain: config.gain,
             dispWeight: config.dispWeight,

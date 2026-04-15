@@ -201,6 +201,21 @@ function resolveBotCfg(bot, globalCfg) {
         if (ps.retryDelayMs != null) merged.retryDelayMs = ps.retryDelayMs;
         if (ps.minWeightChangeDelta != null) merged.minWeightChangeDelta = ps.minWeightChangeDelta;
         if (ps.clipPercentile != null) merged.clipPercentile = ps.clipPercentile;
+        if (ps.regimeSensitivity != null) merged.regimeSensitivity = ps.regimeSensitivity;
+        if (ps.alpha != null) merged.alpha = ps.alpha;
+        if (ps.dw != null) merged.dw = ps.dw;
+        if (ps.gain != null) merged.gain = ps.gain;
+        if (ps.kalman) merged.kalman = ps.kalman;
+        // amaSlope sub-parameters
+        if (ps.neutralZonePct != null) {
+            merged.amaSlope = { ...merged.amaSlope, neutralZonePct: ps.neutralZonePct };
+        }
+        if (ps.maxSlopePct != null) {
+            merged.amaSlope = { ...merged.amaSlope, maxSlopePct: ps.maxSlopePct };
+        }
+        if (ps.lookbackBars != null) {
+            merged.amaSlope = { ...merged.amaSlope, lookbackBars: ps.lookbackBars };
+        }
     }
 
     // Bot-level overrides
@@ -212,6 +227,21 @@ function resolveBotCfg(bot, globalCfg) {
         if (botOverride.maxVolatilityOffset != null) merged.maxVolatilityOffset = botOverride.maxVolatilityOffset;
         if (botOverride.minWeightChangeDelta != null) merged.minWeightChangeDelta = botOverride.minWeightChangeDelta;
         if (botOverride.clipPercentile != null) merged.clipPercentile = botOverride.clipPercentile;
+        if (botOverride.regimeSensitivity != null) merged.regimeSensitivity = botOverride.regimeSensitivity;
+        if (botOverride.alpha != null) merged.alpha = botOverride.alpha;
+        if (botOverride.dw != null) merged.dw = botOverride.dw;
+        if (botOverride.gain != null) merged.gain = botOverride.gain;
+        if (botOverride.kalman) merged.kalman = botOverride.kalman;
+        // amaSlope sub-parameters
+        if (botOverride.neutralZonePct != null) {
+            merged.amaSlope = { ...merged.amaSlope, neutralZonePct: botOverride.neutralZonePct };
+        }
+        if (botOverride.maxSlopePct != null) {
+            merged.amaSlope = { ...merged.amaSlope, maxSlopePct: botOverride.maxSlopePct };
+        }
+        if (botOverride.lookbackBars != null) {
+            merged.amaSlope = { ...merged.amaSlope, lookbackBars: botOverride.lookbackBars };
+        }
     }
 
     return merged;

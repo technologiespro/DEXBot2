@@ -94,6 +94,8 @@ Output: `analysis/charts/dynamic_weight_chart.html` (open in browser)
 | `--bot-key` | `XRP-BTS` | Bot key for market adapter source |
 | `--chart` | `analysis/charts/dynamic_weight_chart.html` | Output HTML path |
 | `--alpha` | `0.5` | Initial α blend (0 = pure Kalman, 1 = pure AMA) |
+| `--dw` | `1.0` | Initial displacement weight (0 = pure velocity, 1 = full displacement) |
+| `--lb` | `72` | Initial lookback bars (4-256) for AMA slope calculation |
 | `--gain` | `0.5` | Initial gain multiplier |
 | `--clip` | `10` | Initial clip percentile |
 | `--quiet` | `false` | Suppress console output |
@@ -127,20 +129,31 @@ Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pa
 
 ## Interactive Knobs
 
+### Blend Controls
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
 | **α** | 0–1 | 0.5 | Blend ratio between AMA and Kalman channels (0 = pure Kalman, 1 = pure AMA) |
-| **maxS%** | 0.05–20 | 3.0 | Logarithmic. Gear ratio: slope% at which the output saturates |
-| **gain** | 0.001–2.0 | 0.5 | Logarithmic. Acts as amplitude multiplier on normalized blend; final output hard-capped at ±0.5 |
-| **clip%** | 0–55 | 10 | Percentile clip: filters extreme inputs (research use only) |
+| **dw** | 0–1 | 1.0 | Displacement weight: how much Kalman displacement influences the composite signal |
+
+### Slope Calculation
+| Knob | Range | Default | Purpose |
+|------|-------|---------|---------|
 | **nz%** | 0–1 | 0.15 | Neutral zone: dead-band below which offset is forced to 0 |
-| **regi** | 0–2 | 1.0 | Regime sensitivity: exponent applied to the Hurst+PE multiplier (0 = ignore regime, 2 = strong gating) |
+| **lb** | 4–256 | 72 | Logarithmic. Lookback bars for AMA slope calculation |
+| **maxS%** | 0.05–20 | 3.0 | Logarithmic. Gear ratio: slope% at which the output saturates |
+| **clip%** | 0–55 | 10 | Percentile clip: filters extreme inputs (0 = off) |
+
+### Output Controls
+| Knob | Range | Default | Purpose |
+|------|-------|---------|---------|
+| **gain** | 0.001–3.0 | 0.5 | Logarithmic. Amplitude multiplier on normalized blend |
+| **regi** | 0–2 | 0.0 | Regime sensitivity: exponent applied to Hurst+PE multiplier |
 
 ## Copy / Paste Parameters
 
-The **copy** button serializes all knob values (α, maxS%, gain, clip%, nz%) to JSON and writes them to both the clipboard and `localStorage`.
+The **copy** button serializes all knob values (α, dw, lb, maxS%, gain, clip%, nz%, regi) to JSON and writes them to both the clipboard and `localStorage`.
 
-The **paste** button triggers the browser's native clipboard-read prompt. On accept, a confirmation popup shows the parsed values before applying them. Click **Apply** to set the knobs, **Cancel** or press **Escape** to dismiss.
+The **paste** button first checks `localStorage` for parameters from a previous copy in the same browser session. If none found, it prompts for Ctrl+V input. A confirmation popup shows the parsed values before applying them. Click **Apply** to set the knobs, **Cancel** or press **Escape** to dismiss.
 
 ## Formulas
 
@@ -196,6 +209,22 @@ Each channel is normalized to its own peak before blending, so changing α only 
 
 ### nz% (neutral zone)
 Values below `nz%` in absolute terms are zeroed out before the offset formula.
+
+### dw (displacement weight)
+Controls how much the Kalman displacement (distance from equilibrium) influences the composite signal:
+- `dw = 0`: Pure velocity — only direction and speed matter
+- `dw = 1`: Full displacement weighting — adds confidence when velocity and displacement agree on direction
+- Only active when `momAlign = 1` (velocity and displacement have same sign)
+
+Formula: `kalComp = clippedV × (1 − dw + dw × dispConf × momAlign)`
+
+### lb (lookback bars)
+Number of bars to look back when computing AMA slope:
+- `lb = 4`: Very short-term, highly responsive to recent price action
+- `lb = 72` (default): ~3 days of hourly candles, balanced responsiveness
+- `lb = 256`: ~10 days of hourly candles, very stable but slower to react
+
+Lower values = more noise, faster reaction. Higher values = smoother signals, more lag.
 
 ### regi (regime sensitivity)
 - 0 = regime multiplier is always 1.0 (Hurst+PE ignored)

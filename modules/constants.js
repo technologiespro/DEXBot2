@@ -581,6 +581,21 @@ let MARKET_ADAPTER = {
     // Configurable per market or per bot via market_profiles.json or botOverrides.
     DYNAMIC_WEIGHT_CLIP_PERCENTILE: 0,
 
+    // DYNAMIC_WEIGHT_ALPHA: Blend ratio between AMA and Kalman (0 = pure Kalman, 1 = pure AMA)
+    DYNAMIC_WEIGHT_ALPHA: 0.5,
+
+    // DYNAMIC_WEIGHT_DW: Displacement weight for Kalman channel (0 = pure velocity, 1 = full displacement)
+    DYNAMIC_WEIGHT_DW: 0.4,
+
+    // DYNAMIC_WEIGHT_GAIN: Master gain multiplier on the final blended offset.
+    // Scales the computed weight offset before clamping to ±0.5.
+    // 0.5 = half strength, 1.0 = full strength, 2.0 = double strength.
+    DYNAMIC_WEIGHT_GAIN: 0.5,
+
+    // DYNAMIC_WEIGHT_REGIME_SENSITIVITY: Exponent applied to regime multiplier.
+    // 0 = ignore regime (multiplier always 1.0), 1 = use table as-is, 2 = squared effect.
+    DYNAMIC_WEIGHT_REGIME_SENSITIVITY: 0,
+
     // DEFAULT_AMA_KEY: Built-in default profile for `gridPrice: "ama"` when no
     // pair-specific market_profiles entry exists.
     DEFAULT_AMA_KEY: 'AMA3',
