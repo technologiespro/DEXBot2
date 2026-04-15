@@ -17,6 +17,9 @@
 const fs = require('fs');
 const path = require('path');
 const { KalmanTrendAnalyzer } = require('./trend_detection/kalman_trend_analyzer');
+const { HurstAnalyzer } = require('./trend_detection/hurst_analyzer');
+const { PermutationEntropyAnalyzer } = require('./trend_detection/permutation_entropy_analyzer');
+const { HURST_CONFIG, PE_CONFIG } = require('./trend_detection/regime_defaults');
 const { generateHTML } = require('./trend_detection/dynamic_weight_chart_generator');
 const { createSource } = require('./price_sources');
 const { calculateAMA } = require('./ama_fitting/ama');
@@ -124,12 +127,27 @@ async function main() {
             qModal: KALMAN_CONFIG.qModal,
         });
 
+        // ── Hurst & PE analyzers ──────────────────────────────────────────────
+        const hurstAnalyzer = new HurstAnalyzer({
+            window: HURST_CONFIG.window,
+            scales: HURST_CONFIG.scales,
+        });
+        const peAnalyzer = new PermutationEntropyAnalyzer({
+            m:      PE_CONFIG.m,
+            delay:  PE_CONFIG.delay,
+            window: PE_CONFIG.window,
+        });
+
         const allResults = [];
         for (let i = 0; i < candles.length; i++) {
             const { marketPrice, timestamp } = source.extractMarketPrice(candles[i]);
             const result = analyzer.update(marketPrice);
+            const hurst = hurstAnalyzer.update(marketPrice);
+            const pe    = peAnalyzer.update(marketPrice);
             result.timestamp = timestamp;
             result.price = marketPrice;
+            result.hurst = hurst.isReady ? hurst.hurst : null;
+            result.pe    = pe.isReady    ? pe.normalizedEntropy : null;
             allResults.push(result);
         }
 

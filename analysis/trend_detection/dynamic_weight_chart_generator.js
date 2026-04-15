@@ -39,6 +39,10 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
     const dates              = results.map((r, idx) => toEpochSeconds(r.timestamp || Date.now(), idx));
     const prices             = results.map((r) => r.price);
+    const hurstArr           = results.map((r) => r.hurst ?? null);
+    const peArr             = results.map((r) => r.pe ?? null);
+    const hurstSegments     = results.map((r) => r.hurstSegment ?? null);
+    const peSegments        = results.map((r) => r.peSegment ?? null);
     const amaSlopePct       = results.map((r) => r.amaSlopePct ?? null);
     const kalmanVelocityPct  = results.map((r) => r.velocityPct ?? null);
     const kalmanDisplacementPct = results.map((r) => r.displacementPct ?? null);
@@ -50,6 +54,10 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     for (let i = 1; i <= 150; i++) {
         dates.push(lastDate + (i * interval));
         prices.push(null);
+        hurstArr.push(null);
+        peArr.push(null);
+        hurstSegments.push(null);
+        peSegments.push(null);
         amaSlopePct.push(null);
         kalmanVelocityPct.push(null);
         kalmanDisplacementPct.push(null);
@@ -102,17 +110,31 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         #kalman-panel { flex: 0 0 21%; min-height: 0; position: relative; border-bottom: 1px solid #30363d; }
         #output-panel { flex: 1 1 0;   min-height: 0; position: relative; }
         .uplot { background: #0b0e14; }
-        .legend { position: absolute; top: 8px; left: 70px; font-size: 11px; pointer-events: none; z-index: 10; display: flex; gap: 12px; color: #8b949e; white-space: nowrap; align-items: center; }
-        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend { position: absolute; top: 8px; left: 70px; font-size: 11px; pointer-events: none; z-index: 10; display: flex; gap: 8px; color: #8b949e; white-space: nowrap; align-items: center; }
+        .legend-item { display: flex; align-items: center; gap: 3px; }
+        .legend-val { font-family: monospace; display: inline-block; text-align: right; min-width: 45px; }
+        #l-price, #l-ama3 { min-width: 62px; }
+        #l-ama-slope, #l-kal-vel, #l-kal-disp { min-width: 54px; }
+        #l-signal { min-width: 70px; text-align: left; }
+        #l-combined { min-width: 42px; }
+        #l-mult { min-width: 38px; }
+        #l-sell, #l-buy { min-width: 30px; }
         .dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
         .u-cursor-x { border-left: 1px dashed rgba(255,255,255,0.3) !important; }
         .u-cursor-y { border-top:  1px dashed rgba(255,255,255,0.3) !important; display: none; }
         .is-hovered .u-cursor-y { display: block; }
-        .ctrl { pointer-events: auto; display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; }
-        .ctrl label { color: #8b949e; font-size: 10px; }
-        .ctrl input[type="range"] { width: 112px; height: 3px; }
-        .ctrl .val { font-weight: bold; font-size: 10px; min-width: 26px; }
-        .ctrl.alpha input[type="range"] { accent-color: #58a6ff; }
+        .ctrl { pointer-events: auto; display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
+        .ctrl label { color: #8b949e; font-size: 10px; min-width: 24px; text-align: right; margin-right: 2px; }
+        .ctrl.alpha label { min-width: 8px; }
+        .ctrl.ms label { min-width: 32px; }
+        .ctrl.clip label { min-width: 30px; }
+        .ctrl.off label { min-width: 24px; }
+        .ctrl.regime label { min-width: 24px; }
+        .ctrl input[type="range"] { width: 80px; height: 3px; }
+        .ctrl .val { font-weight: bold; font-size: 10px; min-width: 30px; display: inline-block; text-align: right; }
+        .group-sep { border-left: 1px solid #30363d; margin-left: 6px; padding-left: 4px; display: inline-flex; align-items: center; height: 16px; }
+        .group-label { font-size: 9px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 8px; font-weight: bold; }
+        .ctrl.alpha input[type="range"] { accent-color: #58a6ff; width: 80px; }
         .ctrl.alpha .val { color: #58a6ff; }
         .ctrl.off input[type="range"] { accent-color: #3fb950; }
         .ctrl.off .val { color: #3fb950; }
@@ -136,6 +158,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         .ctrl.ms .val { color: #f0883e; }
         .ctrl.clip input[type="range"] { accent-color: #da3633; }
         .ctrl.clip .val { color: #da3633; }
+        .ctrl.regime input[type="range"] { accent-color: #d2a8ff; }
+        .ctrl.regime .val { color: #d2a8ff; }
 .section-label { position: absolute; top: 8px; right: 12px; font-size: 9px; color: #30363d; text-transform: uppercase; letter-spacing: 1px; z-index: 10; pointer-events: none; }
     </style>
 </head>
@@ -149,39 +173,48 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         <div id="price-panel">
             <div class="section-label">PRICE (LOG)</div>
             <div class="legend">
-                <div class="legend-item"><div class="dot" style="background:#58a6ff;"></div>Price: <span id="l-price" style="font-weight:bold;">-</span></div>
-                <div class="legend-item"><div class="dot" style="background:#e3b341;"></div>AMA3: <span id="l-ama3" style="font-weight:bold;">-</span></div>
+                <div class="legend-item"><div class="dot" style="background:#58a6ff;"></div>Price: <span id="l-price" class="legend-val" style="font-weight:bold;">-</span></div>
+                <div class="legend-item"><div class="dot" style="background:#e3b341;"></div>AMA3: <span id="l-ama3" class="legend-val" style="font-weight:bold;">-</span></div>
             </div>
             <div id="price-chart"></div>
         </div>
         <div id="ama-panel">
             <div class="section-label">AMA SLOPE INPUT</div>
             <div class="legend">
-                <div class="legend-item"><div class="dot" style="background:#f0a000;"></div>Slope%: <span id="l-ama-slope" style="font-weight:bold;">-</span></div>
+                <div class="legend-item"><div class="dot" style="background:#f0a000;"></div>Slope%: <span id="l-ama-slope" class="legend-val" style="font-weight:bold;">-</span></div>
             </div>
             <div id="ama-chart"></div>
         </div>
         <div id="kalman-panel">
             <div class="section-label">KALMAN COMPOSITE INPUT</div>
             <div class="legend">
-                <div class="legend-item"><div class="dot" style="background:#d2a8ff;"></div>Vel%: <span id="l-kal-vel" style="font-weight:bold;">-</span></div>
-                <div class="legend-item"><div class="dot" style="background:#79c0ff;"></div>Disp%: <span id="l-kal-disp">-</span></div>
-                <div class="legend-item">Signal: <span id="l-signal" style="font-weight:bold;">-</span></div>
+                <div class="legend-item"><div class="dot" style="background:#d2a8ff;"></div>Vel%: <span id="l-kal-vel" class="legend-val" style="font-weight:bold;">-</span></div>
+                <div class="legend-item"><div class="dot" style="background:#79c0ff;"></div>Disp%: <span id="l-kal-disp" class="legend-val">-</span></div>
+                <div class="legend-item">Signal: <span id="l-signal" class="legend-val" style="font-weight:bold;">-</span></div>
             </div>
             <div id="kalman-chart"></div>
         </div>
         <div id="output-panel">
             <div class="section-label">COMBINED WEIGHT OUTPUT</div>
-            <div class="legend">
-                <div class="legend-item"><div class="dot" style="background:linear-gradient(to bottom,#2ea043,#f85149);"></div>Off: <span id="l-combined" style="font-weight:bold;">-</span></div>
-                <div class="legend-item">&nbsp;S:<span id="l-sell" style="color:#ff7b72;">-</span></div>
-                <div class="legend-item">&nbsp;B:<span id="l-buy" style="color:#58a6ff;">-</span></div>
-                <div class="ctrl alpha"><label for="alpha-slider">\u03b1</label><input type="range" id="alpha-slider" min="0" max="100" value="${Math.round(defaultAlpha * 100)}"><span class="val" id="alpha-value">${defaultAlpha.toFixed(2)}</span></div>
-                <div class="ctrl ms"><label for="ms-slider">maxS%</label><input type="range" id="ms-slider" min="0" max="1000" value="${Math.round((Math.log(maxSlopePct) - Math.log(0.05)) / (Math.log(20) - Math.log(0.05)) * 1000)}"><span class="val" id="ms-value">${maxSlopePct.toFixed(2)}</span></div>
-                <div class="ctrl off"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="${gainInitSlider}"><span class="val" id="gain-value">${defaultGain.toFixed(3)}</span></div>
-                <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="55" value="${Math.min(defaultClipPct, 55)}"><span class="val" id="clip-value">${Math.min(defaultClipPct, 55)}%</span></div>
+            <div class="legend" style="gap: 4px;">
+                <div class="legend-item"><div class="dot" style="background:linear-gradient(to bottom,#2ea043,#f85149);"></div>Off: <span id="l-combined" class="legend-val" style="font-weight:bold;">-</span></div>
+                <div class="legend-item">xMult: <span id="l-mult" class="legend-val" style="font-weight:bold;color:#d2a8ff;">-</span></div>
+                <div class="legend-item">S: <span id="l-sell" class="legend-val" style="color:#ff7b72;">-</span></div>
+                <div class="legend-item">B: <span id="l-buy" class="legend-val" style="color:#58a6ff;">-</span></div>
+                
+                <div class="group-sep"></div>
+                <div class="ctrl alpha"><label for="alpha-slider">α</label><input type="range" id="alpha-slider" min="0" max="100" value="${Math.round(defaultAlpha * 100)}" title="Alpha Mix (AMA vs Kalman)"><span class="val" id="alpha-value">${defaultAlpha.toFixed(2)}</span></div>
+                
+                <div class="group-sep"></div>
+                <div class="ctrl nz"><label for="nz-slider">nz%</label><input type="range" id="nz-slider" min="0" max="100" value="${Math.round(defaultNeutralZone * 100)}" title="Neutral Zone %"><span class="val" id="nz-value">${defaultNeutralZone.toFixed(2)}</span></div>
+                <div class="ctrl ms"><label for="ms-slider">maxS%</label><input type="range" id="ms-slider" min="0" max="1000" value="${Math.round((Math.log(maxSlopePct) - Math.log(0.05)) / (Math.log(20) - Math.log(0.05)) * 1000)}" title="Max Slope % (Saturation Point)"><span class="val" id="ms-value">${maxSlopePct.toFixed(2)}</span></div>
+                <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="55" value="${Math.min(defaultClipPct, 55)}" title="Outlier Clip %"><span class="val" id="clip-value">${Math.min(defaultClipPct, 55)}%</span></div>
 
-                <div class="ctrl nz"><label for="nz-slider">nz%</label><input type="range" id="nz-slider" min="0" max="100" value="${Math.round(defaultNeutralZone * 100)}"><span class="val" id="nz-value">${defaultNeutralZone.toFixed(2)}</span></div>
+                <div class="group-sep"></div>
+                <div class="ctrl off"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="${gainInitSlider}" title="Master Gain (Amplitude)"><span class="val" id="gain-value">${defaultGain.toFixed(3)}</span></div>
+                <div class="ctrl regime"><label for="regime-slider">regi</label><input type="range" id="regime-slider" min="0" max="200" value="100" title="Regime Sensitivity"><span class="val" id="regime-value">1.00</span></div>
+                
+                <div class="group-sep"></div>
                 <button class="copy-btn" id="copy-params-btn">copy</button>
                 <button class="paste-btn" id="paste-params-btn">paste</button>
             </div>
@@ -198,7 +231,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: 1.0, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -224,11 +257,57 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         let currentAmaClipThreshold = currentClipPct === 0 ? maxAmaSlope : data.amaPercentiles[100 - currentClipPct];
         let currentKalClipThreshold = currentClipPct === 0 ? maxKalVel : data.kalPercentiles[100 - currentClipPct];
 
+        const REGIME_TABLE = [
+            // PE: <0.60 (Structured)  0.725 (Mixed)  >0.85 (Noise)
+            [ 1.5,                 1.1,           0.7  ],  // H > 0.55  trending (hNode 0.60)
+            [ 0.8,                 0.5,           0.2  ],  // H 0.45-0.55  random (hNode 0.50)
+            [ 0.6,                 0.3,           0.1  ],  // H < 0.45  mean-rev (hNode 0.40)
+        ];
+
+        /**
+         * Bilinear interpolation for smooth regime multiplier
+         */
+        function getRegimeMultiplier(H, PE) {
+            if (H == null || PE == null) return 1.0;
+
+            // Define grid coordinates
+            const hNodes = [0.60, 0.50, 0.40]; // Indices 0, 1, 2
+            const pNodes = [0.55, 0.725, 0.90]; // Indices 0, 1, 2
+
+            // Clamp inputs to grid range
+            const h = Math.max(0.40, Math.min(0.60, H));
+            const p = Math.max(0.55, Math.min(0.90, PE));
+
+            // Find H segment
+            let i = h > 0.50 ? 0 : 1;
+            let h0 = hNodes[i], h1 = hNodes[i+1];
+            let th = (h - h1) / (h0 - h1); // 0 at h1, 1 at h0
+
+            // Find PE segment
+            let j = p < 0.725 ? 0 : 1;
+            let p0 = pNodes[j], p1 = pNodes[j+1];
+            let tp = (p - p0) / (p1 - p0); // 0 at p0, 1 at p1
+
+            // 4-point lookup
+            const v00 = REGIME_TABLE[i][j];     // h0, p0
+            const v01 = REGIME_TABLE[i][j+1];   // h0, p1
+            const v10 = REGIME_TABLE[i+1][j];   // h1, p0
+            const v11 = REGIME_TABLE[i+1][j+1]; // h1, p1
+
+            // Bilinear interpolation
+            const row0 = v00 * (1 - tp) + v01 * tp;
+            const row1 = v10 * (1 - tp) + v11 * tp;
+            return row0 * th + row1 * (1 - th);
+        }
+
+        let currentRegimeSensitivity = data.regimeSensitivity ?? 1.0;
+
         const dynamicAmaOff  = new Array(data.dates.length).fill(null);
         const dynamicKalOff  = new Array(data.dates.length).fill(null);
         const combinedOff     = new Array(data.dates.length).fill(null);
         const combinedSell    = new Array(data.dates.length).fill(null);
         const combinedBuy     = new Array(data.dates.length).fill(null);
+        const currentMults    = new Array(data.dates.length).fill(null);
 
         function recalcInputs() {
             const nz = currentNz;
@@ -287,9 +366,14 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 const aOff = dynamicAmaOff[i];
                 const kOff = dynamicKalOff[i];
                 if (aOff === null || kOff === null) {
-                    combinedOff[i] = null; combinedSell[i] = null; combinedBuy[i] = null;
+                    combinedOff[i] = null; combinedSell[i] = null; combinedBuy[i] = null; currentMults[i] = null;
                 } else {
-                    const off = Math.max(-0.5, Math.min(0.5, (currentAlpha * (aOff / aMax) + (1 - currentAlpha) * (kOff / kMax)) * mo));
+                    const rawOff = (currentAlpha * (aOff / aMax) + (1 - currentAlpha) * (kOff / kMax)) * mo;
+                    const baseMult = getRegimeMultiplier(data.hurstArr[i], data.peArr[i]);
+                    // Use power for sensitivity: pushes away from 1.0 in both directions without flipping sign
+                    const finalMult = Math.pow(baseMult, currentRegimeSensitivity);
+                    currentMults[i] = finalMult;
+                    const off = Math.max(-0.5, Math.min(0.5, rawOff * finalMult));
                     combinedOff[i] = Math.round(off * 1000) / 1000;
                     combinedSell[i] = Math.max(-0.5, Math.min(1.5, Math.round((0.5 + off) * 100) / 100));
                     combinedBuy[i]  = Math.max(-0.5, Math.min(1.5, Math.round((0.5 - off) * 100) / 100));
@@ -417,6 +501,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             const cEl = document.getElementById('l-combined');
             if (cOff == null) { cEl.textContent = '-'; cEl.style.color = '#8b949e'; }
             else { cEl.textContent = (cOff >= 0 ? '+' : '') + cOff.toFixed(3); cEl.style.color = cOff > 0.01 ? '#2ea043' : cOff < -0.01 ? '#f85149' : '#8b949e'; }
+
+            const mult = currentMults[idx];
+            const multEl = document.getElementById('l-mult');
+            if (mult == null) { multEl.textContent = '-'; }
+            else { multEl.textContent = 'x' + mult.toFixed(2); multEl.style.color = mult > 1.05 ? '#3fb950' : mult < 0.95 ? '#f85149' : '#d2a8ff'; }
+
             document.getElementById('l-sell').textContent = combinedSell[idx] != null ? combinedSell[idx].toFixed(2) : '-';
             document.getElementById('l-buy').textContent  = combinedBuy[idx]  != null ? combinedBuy[idx].toFixed(2) : '-';
         }
@@ -655,6 +745,16 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 onSliderChange();
             });
 
+            document.getElementById('regime-slider').addEventListener('input', (e) => {
+                currentRegimeSensitivity = parseInt(e.target.value, 10) / 100;
+                document.getElementById('regime-value').textContent = currentRegimeSensitivity.toFixed(2);
+                recalcWeights();
+                const xs = outputChart.scales.x;
+                const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
+                outputChart.setData([data.dates, combinedOff]);
+                if (savedX) outputChart.setScale('x', savedX);
+            });
+
             function applyParams(p, btn) {
                 if (typeof p !== 'object' || p === null) throw new Error('not an object');
                 if (p.alpha != null) {
@@ -689,6 +789,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     document.getElementById('nz-slider').value = Math.round(currentNz * 100);
                     document.getElementById('nz-value').textContent = currentNz.toFixed(2);
                 }
+                if (p.regimeSensitivity != null) {
+                    currentRegimeSensitivity = Math.max(0, Math.min(2, p.regimeSensitivity));
+                    document.getElementById('regime-slider').value = Math.round(currentRegimeSensitivity * 100);
+                    document.getElementById('regime-value').textContent = currentRegimeSensitivity.toFixed(2);
+                }
                 recalcInputs();
                 recalcWeights();
                 outputChart.setData([data.dates, combinedOff]);
@@ -698,7 +803,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             let _confirmPending = null;
             function showConfirm(p, btn) {
                 _confirmPending = { p, btn };
-                const labels = { alpha: 'alpha', maxSlopePct: 'maxS%', gain: 'gain', clipPct: 'clip%', neutralZonePct: 'nz%' };
+                const labels = { alpha: 'alpha', maxSlopePct: 'maxS%', gain: 'gain', clipPct: 'clip%', neutralZonePct: 'nz%', regimeSensitivity: 'regime' };
                 document.getElementById('paste-confirm-vals').innerHTML = Object.entries(labels)
                     .filter(([k]) => p[k] != null)
                     .map(([k, label]) => label + ': <span>' + p[k] + '</span>')
@@ -740,6 +845,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     gain:           +currentGain.toFixed(3),
                     clipPct:        currentClipPct,
                     neutralZonePct: +currentNz.toFixed(3),
+                    regimeSensitivity: +currentRegimeSensitivity.toFixed(2),
                 };
                 const json = JSON.stringify(params, null, 2);
                 localStorage.setItem(LS_KEY, json);
