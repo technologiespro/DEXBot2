@@ -412,35 +412,6 @@ The barrel export in `claw/index.js` spreads every module into one flat namespac
 
 When consuming `claw/index.js` as a library, use the disambiguated names above. The non-prefixed `resolveAccountName` and `describeZeroClawBridge` point to the query/manifest variants by default.
 
-## Dynamic Weight Service: Non-BTS Quote Support
-
-The dynamic weight service (`modules/dynamic_weight_service.js`) defaults to requiring BTS as the quote asset. Two mechanisms extend this for markets with non-BTS quote assets.
-
-### `supportsNonBtsQuotes` option
-
-Pass `supportsNonBtsQuotes: true` to `createDynamicWeightService(deps)` to allow bots whose quote asset is not BTS to pass eligibility checks.
-
-When omitted, the service auto-detects: if a custom `fetchTrendInput` function is injected (i.e. it differs from the built-in default), `supportsNonBtsQuotes` defaults to `true` on the assumption that custom trend sources know how to price non-BTS pairs. Pass `supportsNonBtsQuotes: false` explicitly to override the auto-detection.
-
-When a bot has a non-BTS quote and the trend source does not support it, `isEligibleBot` rejects with reason `trend_source_requires_bts_quote` before any trend data is fetched.
-
-### `fetchTrendInput` context parameter
-
-`fetchTrendInput` now receives a second argument — a context object:
-
-```ts
-type TrendInputContext = {
-  bot: object;         // deep clone of the selected bot
-  marketRef: string;   // resolved market asset reference
-  quoteRef: string;    // resolved quote asset reference
-  requireBtsQuote: boolean; // current policy value
-};
-```
-
-Custom `fetchTrendInput` implementations can use the context to route pricing for non-BTS markets (e.g. fetching an external oracle instead of the BTS feed).
-
-The built-in `fetchTrendInput` ignores the context parameter, so existing callers are unaffected.
-
 ## Suggested Runtime Flow
 
 1. Claw collects market data and its own state.

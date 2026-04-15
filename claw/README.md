@@ -25,7 +25,6 @@ npm install btsdex
 - Core BitShares runtime: `modules/bitshares_client.js` (loads `modules/btsdex_event_patch` for shared reconnect handling), `modules/chain_queries.js`, `modules/chain_broadcast.js`, `modules/chain_actions.js`
 - Strategy and state helpers: `modules/short_mpa_strategy.js`, `modules/position_manager.js`, `modules/position_manager_watch.js`
 - Position health: `modules/position_health.js`, `modules/position_discovery.js`, `modules/decision_loop.js`
-- Dynamic weights: `modules/dynamic_weight_service.js`
 - Price sources: `modules/feed_price_source.js`, `modules/kibana_price_source.js`
 - DEXBot2 and Claw integration: `modules/dexbot_bridge.js`, `modules/dexbot_profiles.js`, `modules/dexbot_credential_client.js`, `modules/claw_bridge.js`, `modules/claw_catalog.js`, `modules/claw_manifest.js`, `modules/claw_skill_md.js`, `modules/claw_runtime_matrix.js`, `scripts/claw_bridge.js`, `scripts/claw_mcp_server.js`
 - Hermes support: `modules/hermes_manifest.js`, `scripts/claw_mcp_server.js`

@@ -456,11 +456,8 @@ function testBuildMarginTradingPlanDowntrend() {
   assert.strictEqual(plan.crPlan.primaryAction, 'reduce_debt');
   assert.strictEqual(plan.crPlan.fallbackAction, 'add_collateral');
   assert.strictEqual(plan.gridPlan.finalPriceRangeRatio, 1.83);
-  assert.strictEqual(plan.gridPlan.weightProfile, 'mountain_valley');
   assert.strictEqual(plan.botPatch.minPrice, '1.83x');
   assert.strictEqual(plan.botPatch.maxPrice, '1.83x');
-  assert.strictEqual(plan.botPatch.weightDistribution.buy, 1.2);
-  assert.strictEqual(plan.botPatch.weightDistribution.sell, -0.15);
 
   console.log('    PASS');
 }
@@ -533,9 +530,6 @@ function testBuildMarginTradingPlanNeutralKeepsCenter() {
   assert.strictEqual(plan.gridPlan.finalPriceRangeRatio, 1.43);
   assert.strictEqual(plan.botPatch.minPrice, '1.43x');
   assert.strictEqual(plan.botPatch.maxPrice, '1.43x');
-  assert.strictEqual(plan.gridPlan.weightProfile, 'double_mountain');
-  assert.ok(plan.botPatch.weightDistribution.buy > 0.5);
-  assert.ok(plan.botPatch.weightDistribution.sell > 0.5);
 
   console.log('    PASS');
 }

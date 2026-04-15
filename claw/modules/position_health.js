@@ -8,7 +8,6 @@
 
 'use strict';
 
-const { computeDynamicWeights } = require('../../market_adapter/core/strategies/dynamic_weights');
 const { DEFAULT_CONFIG } = require('../../modules/constants');
 
 const DEFAULT_PRICE_RANGE_RATIO = 3.0;
@@ -279,16 +278,6 @@ function roundNumber(value, digits = 3) {
   return Math.round(numeric * factor) / factor;
 }
 
-function normalizeWeightDistribution(weightDistribution) {
-  return {
-    sell: Number.isFinite(Number(weightDistribution?.sell))
-      ? Number(weightDistribution.sell)
-      : DEFAULT_CONFIG.weightDistribution.sell,
-    buy: Number.isFinite(Number(weightDistribution?.buy))
-      ? Number(weightDistribution.buy)
-      : DEFAULT_CONFIG.weightDistribution.buy
-  };
-}
 
 function parseRatioValue(value, referencePrice, mode) {
   if (typeof value === 'string') {
@@ -539,21 +528,6 @@ function buildMarginTradingPlan(position, trendSignal = null, botConfig = {}, op
     referencePrice
   });
 
-  const currentWeights = normalizeWeightDistribution(botConfig?.weightDistribution);
-  const weightPlan = computeDynamicWeights(
-    trendSignal
-      ? {
-        confidence,
-        isReady: trendSignal.isReady !== false,
-        oscillation: trendSignal.oscillation,
-        priceAnalysis: trendSignal.priceAnalysis,
-        trend
-      }
-      : null,
-    options.priceContext || {},
-    currentWeights
-  );
-
   const crPlan = targetCr && Number.isFinite(feedPrice) && feedPrice > 0
     ? planCrAdjustment(currentCollateral, currentDebt, feedPrice, targetCr)
     : {
@@ -580,20 +554,11 @@ function buildMarginTradingPlan(position, trendSignal = null, botConfig = {}, op
     },
     gridPlan: {
       finalPriceRangeRatio,
-      priceRangePlan,
-      weightProfile: weightPlan.profile,
-      weightDistribution: {
-        sell: weightPlan.sell,
-        buy: weightPlan.buy
-      }
+      priceRangePlan
     },
     botPatch: {
       maxPrice: formatRatioAsMultiplier(finalPriceRangeRatio),
-      minPrice: formatRatioAsMultiplier(finalPriceRangeRatio),
-      weightDistribution: {
-        sell: weightPlan.sell,
-        buy: weightPlan.buy
-      }
+      minPrice: formatRatioAsMultiplier(finalPriceRangeRatio)
     }
   };
 }

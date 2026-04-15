@@ -188,7 +188,6 @@ File: <path>
 - `modules/dexbot_credential_client.js` - Credential daemon client
 - `modules/honest_ecosystem.js` - HONEST asset helpers
 - `modules/short_mpa_strategy.js` - Short MPA workflow
-- `modules/dynamic_weight_service.js` - Dynamic weight policy
 - `modules/claw_infra.js` - Shared runtime infrastructure
 - `docs/AI_BOT_LIBRARY_API.md` - API boundary and responsibility split
 - `docs/DEXBOT2_TUNING_CHEAT_SHEET.md` - Grid tuning reference

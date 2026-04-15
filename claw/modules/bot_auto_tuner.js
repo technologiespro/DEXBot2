@@ -4,17 +4,12 @@
  * Analyzes position health assessments from decision_loop and generates
  * tuning recommendations covering both bot settings patches and CR actions.
  *
- * Weight adjustments are delegated to market_adapter/dynamic_weights
- * (mountain/valley strategy) so sizing logic stays in one place.
- *
- * Green zone  → patch weightDistribution via computeDynamicWeights
- * Non-green   → crAction (reduce_debt / add_collateral / increase_debt /
- *               withdraw_collateral) derived from assessment.actions
+ * Non-green zones → crAction (reduce_debt / add_collateral / increase_debt /
+ *                   withdraw_collateral) derived from assessment.actions
+ * Weight distribution is owned by the market adapter (AMA slope model).
  */
 
 'use strict';
-
-const { computeDynamicWeights } = require('../../market_adapter/core/strategies/dynamic_weights');
 
 /**
  * Generate a universal tuning recommendation for a bot position.
@@ -59,24 +54,7 @@ function tuneBot(bot, assessment = {}) {
   const patch = {};
   let crAction = null;
   const reasoning = [];
-  let baseConfidence = 0.5;
-
-  // Weight distribution via market_adapter mountain/valley strategy
-  const currentWeights = bot.weightDistribution ?? { buy: 0.5, sell: 0.5 };
-  const nextWeights = computeDynamicWeights(
-    { isReady: true, trend: trend.signal, confidence: trendConfidence },
-    {},
-    currentWeights
-  );
-
-  if (nextWeights.profile !== 'static') {
-    patch.weightDistribution = { buy: nextWeights.buy, sell: nextWeights.sell };
-    reasoning.push(
-      `${nextWeights.meta.scenario} ${nextWeights.meta.trend} (${trendConfidence}%): ` +
-      `buy ${currentWeights.buy} → ${nextWeights.buy}, sell ${currentWeights.sell} → ${nextWeights.sell}`
-    );
-    baseConfidence = 0.75;
-  }
+  const baseConfidence = 0.5;
 
   // CR actions: only for non-green zones
   if (zone !== 'green') {
