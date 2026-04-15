@@ -26,21 +26,17 @@ const { calculateAMA } = require('./ama_fitting/ama');
 const { computeAmaSlopeWeights } = require('../market_adapter/core/strategies/ama_slope_model');
 const { MARKET_ADAPTER } = require('../modules/constants');
 
-// AMA configuration (matching bot defaults)
-const AMA_CONFIG = {
-    erPeriod: 10,
-    fastPeriod: 2,
-    slowPeriod: 30,
-};
+// AMA configuration — use AMA3 from constants (same as production)
+const AMA_CONFIG = MARKET_ADAPTER.AMAS.AMA3;
 
-// AMA Slope weight calculation config
+// AMA Slope weight calculation config — use DEFAULTS from market adapter
 const AMA_WEIGHT_CONFIG = {
-    lookbackBars: 72,
-    maxSlopePct: 3.0,
-    neutralZonePct: 0.15,
-    maxVolatilityThreshold: 0.03,
-    maxSlopeOffset: 0.5,
-    maxVolatilityOffset: 0.5,
+    lookbackBars:           72,
+    maxSlopePct:            3.0,
+    neutralZonePct:         0.15,
+    maxVolatilityThreshold:  0.03,
+    maxSlopeOffset:         0.5,
+    maxVolatilityOffset:    0.5,
 };
 
 // Kalman configuration
@@ -153,17 +149,16 @@ async function main() {
 
         // ── AMA weight calculation ───────────────────────────────────────────
         const closes = candles.map(c => Array.isArray(c) ? c[4] : 0);
-        const amaValues = calculateAMA(closes, AMA_CONFIG);
-        const ama3Values = calculateAMA(closes, MARKET_ADAPTER.AMAS.AMA3);
+        const ama3Values = calculateAMA(closes, AMA_CONFIG);
         const atrs = computeATR(candles, 14);
 
         for (let i = 0; i < allResults.length; i++) {
-            const amaPrice = amaValues[i];
+            const amaPrice = ama3Values[i] ?? null;
             const atr = atrs[i];
             const weightVariance = amaPrice > 0 ? atr / amaPrice : 0;
 
             const weights = computeAmaSlopeWeights(ama3Values.slice(0, i + 1), weightVariance, {
-                erPeriod: MARKET_ADAPTER.AMAS.AMA3.erPeriod,
+                erPeriod: AMA_CONFIG.erPeriod,
                 lookbackBars: AMA_WEIGHT_CONFIG.lookbackBars,
                 maxSlopePct: AMA_WEIGHT_CONFIG.maxSlopePct,
                 neutralZonePct: AMA_WEIGHT_CONFIG.neutralZonePct,

@@ -199,6 +199,8 @@ function resolveBotCfg(bot, globalCfg) {
         if (ps.maxStaleHours != null) merged.maxStaleHours = ps.maxStaleHours;
         if (ps.sourceRetries != null) merged.sourceRetries = ps.sourceRetries;
         if (ps.retryDelayMs != null) merged.retryDelayMs = ps.retryDelayMs;
+        if (ps.minWeightChangeDelta != null) merged.minWeightChangeDelta = ps.minWeightChangeDelta;
+        if (ps.clipPercentile != null) merged.clipPercentile = ps.clipPercentile;
     }
 
     // Bot-level overrides
@@ -208,6 +210,8 @@ function resolveBotCfg(bot, globalCfg) {
         if (botOverride.defaultAmaKey) merged.defaultAmaKey = botOverride.defaultAmaKey;
         if (botOverride.maxSlopeOffset != null) merged.maxSlopeOffset = botOverride.maxSlopeOffset;
         if (botOverride.maxVolatilityOffset != null) merged.maxVolatilityOffset = botOverride.maxVolatilityOffset;
+        if (botOverride.minWeightChangeDelta != null) merged.minWeightChangeDelta = botOverride.minWeightChangeDelta;
+        if (botOverride.clipPercentile != null) merged.clipPercentile = botOverride.clipPercentile;
     }
 
     return merged;

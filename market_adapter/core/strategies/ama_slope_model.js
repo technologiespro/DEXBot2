@@ -33,7 +33,9 @@ function clamp(v, min, max) {
  * @param {number}   [opts.erPeriod=DEFAULT_ER_PERIOD]  AMA warm-up bars to skip in isReady guard
  * @param {number}   [opts.maxSlopeOffset=0.5]          Per-bot cap on buy/sell asymmetry offset
  * @param {number}   [opts.maxVolatilityOffset=0.5]     Per-bot cap on symmetric volatility offset
- * @returns {{ sellW, buyW, slopeOffset, symmetricDelta, slopePct, confidence, trend, isReady }}
+ * @param {number}   [opts.clipPercentile=0]             Percentile clip on slope (0=off, 10=clip top 10%)
+ * @param {number}   [opts.clipThreshold]                Pre-computed clip threshold from slope history
+ * @returns {{ sellW, buyW, slopeOffset, symmetricDelta, slopePct, clippedSlopePct, confidence, trend, isReady }}
  */
 function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const lookbackBars = opts.lookbackBars ?? 72;
@@ -43,6 +45,7 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const erPeriod = opts.erPeriod ?? DEFAULT_ER_PERIOD;
     const maxSlopeOffset = opts.maxSlopeOffset ?? MAX_OFFSET_FROM_NEUTRAL;
     const maxVolatilityOffset = opts.maxVolatilityOffset ?? MAX_OFFSET_FROM_NEUTRAL;
+    const clipThreshold = opts.clipThreshold ?? Infinity;
 
     const notReady = {
         isReady: false,
@@ -51,6 +54,7 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
         slopeOffset: 0,
         symmetricDelta: 0,
         slopePct: 0,
+        clippedSlopePct: 0,
         confidence: 0,
         trend: 'NEUTRAL',
     };
@@ -68,32 +72,35 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
         return notReady;
     }
 
-    // 2-3. Slope percent over lookback window
+    // 2. Slope percent over lookback window
     const slopePct = (last - past) / past * 100;
 
-    // 4. Slope offset (asymmetric)
+    // 2b. Percentile clip — symmetric clip on slope magnitude
+    const clippedSlopePct = Math.max(-clipThreshold, Math.min(clipThreshold, slopePct));
+
+    // 3. Slope offset (asymmetric) — based on clipped slope
     let slopeOffset;
     let trend;
-    if (Math.abs(slopePct) < neutralZonePct) {
+    if (Math.abs(clippedSlopePct) < neutralZonePct) {
         slopeOffset = 0;
         trend = 'NEUTRAL';
     } else {
-        slopeOffset = clamp(slopePct / maxSlopePct, -1, 1) * maxSlopeOffset;
-        trend = slopePct > 0 ? 'UP' : 'DOWN';
+        slopeOffset = clamp(clippedSlopePct / maxSlopePct, -1, 1) * maxSlopeOffset;
+        trend = clippedSlopePct > 0 ? 'UP' : 'DOWN';
     }
 
-    // 5. Confidence derived from slope offset magnitude (0–100)
+    // 4. Confidence derived from slope offset magnitude (0–100)
     const confidence = Math.round(Math.abs(slopeOffset) / maxSlopeOffset * 100);
 
-    // 6. Volatility factor → symmetric delta
+    // 5. Volatility factor → symmetric delta
     const volFactor = 1 - clamp(weightVariance / maxVolatilityThreshold, 0, 1);
     const symmetricDelta = (volFactor * 2 - 1) * maxVolatilityOffset;
 
-    // 7-8. Final weights
+    // 6-7. Final weights
     let sellW = clamp(BASELINE_WEIGHT + slopeOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT);
     let buyW = clamp(BASELINE_WEIGHT - slopeOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT);
 
-    // 9. Round to 2 decimal places
+    // 8. Round to 2 decimal places
     sellW = Math.round(sellW * 100) / 100;
     buyW = Math.round(buyW * 100) / 100;
     const roundedSlopeOffset = Math.round(slopeOffset * 100) / 100;
@@ -105,6 +112,7 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
         slopeOffset: roundedSlopeOffset,
         symmetricDelta: roundedSymmetricDelta,
         slopePct,
+        clippedSlopePct,
         confidence,
         trend,
         isReady: true,

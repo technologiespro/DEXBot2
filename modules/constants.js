@@ -568,6 +568,19 @@ let MARKET_ADAPTER = {
     //   - Default: 2.5 (grid recalculates when market moves 2.5% from last recorded AMA center)
     AMA_DELTA_THRESHOLD_PERCENT: 2.5,
 
+    // MIN_WEIGHT_CHANGE_DELTA: Minimum change in effectiveSell or effectiveBuy (absolute)
+    // required to persist a weight update. Prevents micro-adjustments when regime is stable.
+    MIN_WEIGHT_CHANGE_DELTA: 0.02,
+
+    // DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD: Minimum |multiplier - 1.0| required before
+    // dynamic weight is applied. Below this, multiplier is treated as neutral (1.0).
+    DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD: 0.15,
+
+    // DYNAMIC_WEIGHT_CLIP_PERCENTILE: Percentile clip on AMA slope distribution.
+    // 0 = no clip; 10 = clip top 10% as outliers (90th percentile).
+    // Configurable per market or per bot via market_profiles.json or botOverrides.
+    DYNAMIC_WEIGHT_CLIP_PERCENTILE: 0,
+
     // DEFAULT_AMA_KEY: Built-in default profile for `gridPrice: "ama"` when no
     // pair-specific market_profiles entry exists.
     DEFAULT_AMA_KEY: 'AMA3',

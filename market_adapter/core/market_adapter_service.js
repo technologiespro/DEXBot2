@@ -2,9 +2,10 @@
 
 const { calculateATR } = require('./strategies/atr/calculator');
 const { computeAmaSlopeWeights } = require('./strategies/ama_slope_model');
+const { computeRegimeMultiplier } = require('./strategies/regime_gate');
 const { calculateAMA } = require('../../analysis/ama_fitting/ama');
 const { adjustCollateralRatio } = require('./strategies/collateral_manager');
-const { DEFAULT_CONFIG } = require('../../modules/constants');
+const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../../modules/constants');
 const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order');
 
 
@@ -193,10 +194,30 @@ class MarketAdapterService {
         const isDynamic = typeof deps.isBotDynamicWeightWhitelisted === 'function'
             && deps.isBotDynamicWeightWhitelisted(bot.botKey);
 
+        // Compute percentile clip threshold from full amaValues distribution
+        const lookbackBars = cfg.amaSlope?.lookbackBars ?? 72;
+        const clipPercentile = cfg.clipPercentile ?? 0;
+        let clipThreshold = Infinity;
+        if (clipPercentile > 0 && amaValues.length > lookbackBars) {
+            const slopes = [];
+            for (let i = lookbackBars; i < amaValues.length; i++) {
+                const last = amaValues[i];
+                const past = amaValues[i - lookbackBars];
+                if (past > 0) slopes.push(Math.abs((last - past) / past * 100));
+            }
+            if (slopes.length > 0) {
+                const sorted = slopes.sort((a, b) => a - b);
+                const idx = Math.min(Math.floor((100 - clipPercentile) / 100 * sorted.length), sorted.length - 1);
+                clipThreshold = sorted[idx];
+            }
+        }
+
         const slopeCfg = {
             ...(cfg.amaSlope || {}),
             maxSlopeOffset:      cfg.maxSlopeOffset,      // per-bot, from botOverrides
             maxVolatilityOffset: cfg.maxVolatilityOffset, // per-bot, from botOverrides
+            clipPercentile,
+            clipThreshold,
         };
 
         let slopeResult = null;
@@ -207,17 +228,39 @@ class MarketAdapterService {
         if (isDynamic) {
             slopeResult = computeAmaSlopeWeights(amaValues, weightVariance, slopeCfg);
 
+            // Regime gate (Hurst + PE bilinear multiplier) — only computed when sensitivity > 0.
+            // When disabled (default), slopeOffset is used as-is with no extra factor,
+            // matching the analysis tool behavior.
+            const regimeSensitivity = cfg.regimeSensitivity ?? 0;
+            let regimeResult = null;
+            let regimeMultiplier = 1.0;
+            let gatedSlopeOffset = slopeResult.isReady ? slopeResult.slopeOffset : 0;
+
+            if (regimeSensitivity > 0) {
+                regimeResult = computeRegimeMultiplier(closes, { regimeSensitivity });
+                const rawMultiplier = regimeResult.isReady ? regimeResult.multiplier : 1.0;
+                const absDelta = Math.abs(rawMultiplier - 1.0);
+                regimeMultiplier = regimeResult.isReady && absDelta >= MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD
+                    ? rawMultiplier
+                    : 1.0;
+                gatedSlopeOffset = slopeResult.isReady
+                    ? Math.round(slopeResult.slopeOffset * regimeMultiplier * 100) / 100
+                    : 0;
+            }
+
             amaSlope = {
                 trend:          slopeResult.trend,
                 confidence:     slopeResult.confidence,
                 slopePct:       slopeResult.slopePct,
                 slopeOffset:    slopeResult.slopeOffset,
+                gatedSlopeOffset,
+                regimeMultiplier,
                 symmetricDelta: slopeResult.symmetricDelta,
                 weightVariance,
                 isReady:        slopeResult.isReady,
             };
 
-            // Additive application: static W from bots.json + slope/volatility offsets
+            // Additive application: static W from bots.json + slope + volatility offsets
             const staticSell = Number.isFinite(bot.weightDistribution?.sell) ? bot.weightDistribution.sell : 0.5;
             const staticBuy  = Number.isFinite(bot.weightDistribution?.buy)  ? bot.weightDistribution.buy  : 0.5;
 
@@ -226,10 +269,10 @@ class MarketAdapterService {
             const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
             const effectiveSell = slopeResult.isReady
-                ? Math.round(clamp(staticSell + slopeResult.slopeOffset + slopeResult.symmetricDelta, MIN_W, MAX_W) * 100) / 100
+                ? Math.round(clamp(staticSell + gatedSlopeOffset + slopeResult.symmetricDelta, MIN_W, MAX_W) * 100) / 100
                 : staticSell;
             const effectiveBuy = slopeResult.isReady
-                ? Math.round(clamp(staticBuy  - slopeResult.slopeOffset + slopeResult.symmetricDelta, MIN_W, MAX_W) * 100) / 100
+                ? Math.round(clamp(staticBuy  - gatedSlopeOffset + slopeResult.symmetricDelta, MIN_W, MAX_W) * 100) / 100
                 : staticBuy;
 
             weights = {
@@ -239,15 +282,17 @@ class MarketAdapterService {
                     ? (slopeResult.trend === 'NEUTRAL' ? 'flat' : 'slope')
                     : 'static',
                 meta: {
-                    source:         'ama_slope',
+                    source:           'ama_slope',
                     staticSell,
                     staticBuy,
-                    trend:          slopeResult.trend,
-                    confidence:     slopeResult.confidence,
-                    slopePct:       slopeResult.slopePct,
-                    slopeOffset:    slopeResult.slopeOffset,
-                    symmetricDelta: slopeResult.symmetricDelta,
-                    isReady:        slopeResult.isReady,
+                    trend:            slopeResult.trend,
+                    confidence:       slopeResult.confidence,
+                    slopePct:         slopeResult.slopePct,
+                    slopeOffset:      slopeResult.slopeOffset,
+                    gatedSlopeOffset,
+                    regimeMultiplier,
+                    symmetricDelta:   slopeResult.symmetricDelta,
+                    isReady:          slopeResult.isReady,
                 },
             };
 
@@ -256,10 +301,19 @@ class MarketAdapterService {
                 effectiveWeights: { sell: effectiveSell, buy: effectiveBuy },
                 baseWeights:      { sell: staticSell,    buy: staticBuy },
                 slopeOffset:      slopeResult.slopeOffset,
+                gatedSlopeOffset,
                 symmetricDelta:   slopeResult.symmetricDelta,
                 trend:            slopeResult.trend,
                 confidence:       slopeResult.confidence,
                 slopePct:         slopeResult.slopePct,
+                regimeMultiplier,
+                ...(regimeResult ? {
+                    hurst:       regimeResult.hurst,
+                    pe:          regimeResult.pe,
+                    hurstRegime: regimeResult.hurstRegime,
+                    peRegime:    regimeResult.peRegime,
+                    regimeReady: regimeResult.isReady,
+                } : {}),
                 isReady:          slopeResult.isReady,
                 updatedAt:        nowIso,
             };
@@ -347,6 +401,10 @@ class MarketAdapterService {
                         botState.amaCenterPrice = amaPrice;
                         botState.lastGridResetAt = nowIso;
                         botState.triggerCount = Number(botState.triggerCount || 0) + 1;
+                        // Grid reset always carries fresh weights — sync the weight state
+                        if (dynamicWeightsPayload) {
+                            botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
+                        }
                         triggered = true;
 
                         if (typeof hooks.onTrigger === 'function') {
@@ -394,15 +452,25 @@ class MarketAdapterService {
             ? Number(botState.centerPrice)
             : undefined;
 
-        // Keep dynamicgrid.json fresh every cycle for whitelisted bots so the bot always
-        // reads up-to-date weights on the next price-triggered reset, even if no reset fired
-        // this cycle. Only runs when the center price is established (bootstrap or prior reset).
+        // Weight-only update path: persist fresh weights to dynamicgrid.json without a grid reset.
+        // Gate: effective weight values have changed by ≥ minWeightChangeDelta.
         if (isDynamic && !triggered && !isDryRun && dynamicWeightsPayload && persistedCenterPrice > 0
                 && typeof deps.writeBotDynamicGrid === 'function') {
-            deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
-                amaCenterPrice: amaPrice,
-                dynamicWeights: dynamicWeightsPayload,
-            });
+            const minDelta = cfg.minWeightChangeDelta ?? 0.02;
+            const prevW = botState.effectiveWeights;
+            const newSell = dynamicWeightsPayload.effectiveWeights?.sell;
+            const newBuy  = dynamicWeightsPayload.effectiveWeights?.buy;
+            const weightChanged = !prevW
+                || Math.abs(Number(newSell) - Number(prevW.sell)) >= minDelta
+                || Math.abs(Number(newBuy)  - Number(prevW.buy))  >= minDelta;
+
+            if (weightChanged) {
+                deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
+                    amaCenterPrice: amaPrice,
+                    dynamicWeights: dynamicWeightsPayload,
+                });
+                botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
+            }
         }
 
         state.bots[bot.botKey] = {
@@ -438,6 +506,7 @@ class MarketAdapterService {
             atr,
             weightVariance,
             amaSlope,
+            effectiveWeights:         botState.effectiveWeights || null,
         };
 
         return {

@@ -40,6 +40,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const clampedMs = Math.min(Math.max(maxSlopePct, 0.05), 20.0);
     const msInitSlider = Math.round((Math.log(clampedMs) - MS_LOG_MIN_N) / (MS_LOG_MAX_N - MS_LOG_MIN_N) * 1000);
 
+    const defaultRegimeSensitivity = data.regimeSensitivity ?? 0;
+    const regimeInitSlider = Math.round(defaultRegimeSensitivity * 100);
+
     const interval = results.length > 1 ?
         (new Date(results[1].timestamp).getTime() - new Date(results[0].timestamp).getTime()) / 1000 : 3600;
 
@@ -218,7 +221,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
                 <div class="group-sep"></div>
                 <div class="ctrl off"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="${gainInitSlider}" title="Master Gain (Amplitude)"><span class="val" id="gain-value">${defaultGain.toFixed(3)}</span></div>
-                <div class="ctrl regime"><label for="regime-slider">regi</label><input type="range" id="regime-slider" min="0" max="200" value="100" title="Regime Sensitivity"><span class="val" id="regime-value">1.00</span></div>
+                <div class="ctrl regime"><label for="regime-slider">regi</label><input type="range" id="regime-slider" min="0" max="200" value="${regimeInitSlider}" title="Regime Sensitivity"><span class="val" id="regime-value">${defaultRegimeSensitivity.toFixed(2)}</span></div>
                 
                 <div class="group-sep"></div>
                 <button class="copy-btn" id="copy-params-btn">copy</button>
@@ -237,7 +240,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: 1.0, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -306,7 +309,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             return row0 * th + row1 * (1 - th);
         }
 
-        let currentRegimeSensitivity = data.regimeSensitivity ?? 1.0;
+        let currentRegimeSensitivity = data.regimeSensitivity ?? 0;
 
         const dynamicAmaOff  = new Array(data.dates.length).fill(null);
         const dynamicKalOff  = new Array(data.dates.length).fill(null);
@@ -792,7 +795,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 }
                 if (p.neutralZonePct != null) {
                     currentNz = Math.max(0, Math.min(1, p.neutralZonePct));
-                    document.getElementById('nz-slider').value = Math.round(currentNz * 100);
+document.getElementById('nz-slider').value = Math.round(currentNz * 100);
+            document.getElementById('regime-slider').value = Math.round(currentRegimeSensitivity * 100);
+            document.getElementById('regime-value').textContent = currentRegimeSensitivity.toFixed(2);
                     document.getElementById('nz-value').textContent = currentNz.toFixed(2);
                 }
                 if (p.regimeSensitivity != null) {
