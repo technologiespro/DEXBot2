@@ -596,6 +596,15 @@ let MARKET_ADAPTER = {
     // 0 = ignore regime (multiplier always 1.0), 1 = use table as-is, 2 = squared effect.
     DYNAMIC_WEIGHT_REGIME_SENSITIVITY: 0,
 
+    // DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: Multiplier converting ATR% to displacement confidence scale.
+    // Full dispConf is reached when Kalman displacement >= MULT × ATR%. Default 200 means full
+    // confidence at 2× ATR from the modal (a ~2-sigma "unusual" move).
+    DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: 200,
+
+    // DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: Floor for displacement scale (percent).
+    // Prevents dispConf from saturating instantly in ultra-low-volatility (near-zero ATR) markets.
+    DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: 0.5,
+
     // REGIME_TABLE: Bilinear lookup table for Hurst + PE regime multiplier.
     // Rows: Hurst regimes [trending, random, mean-reverting] (H nodes: 0.55, 0.50, 0.45)
     // Cols: PE regimes [structured, mixed, noise] (PE nodes: 0.60, 0.725, 0.85)

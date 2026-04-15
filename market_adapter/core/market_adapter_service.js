@@ -198,7 +198,6 @@ class MarketAdapterService {
         const nz = cfg.neutralZonePct ?? 0.15;
         const maxS = cfg.amaSlope?.maxSlopePct ?? 3.0;
         const mo = cfg.maxSlopeOffset ?? 0.5;
-        const maxDispPct = 5.0;
 
         // Compute separate clip thresholds for AMA (slopes) and Kalman (velocities)
         let amaClipThreshold = Infinity;
@@ -284,6 +283,8 @@ class MarketAdapterService {
             const alpha = cfg.alpha ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA ?? 0.5;
             const dw = cfg.dw ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DW ?? 0.4;
             const gain = cfg.gain ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN ?? 0.5;
+            const dispScaleAtrMult = MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT;
+            const dispScaleMinPct  = MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
 
             // Build AMA offset array — compute slopeOffset directly from AMA values per bar.
             // computeAmaSlopeWeights only reads amaValues[i] and amaValues[i-lookbackBars],
@@ -324,8 +325,9 @@ class MarketAdapterService {
                 if (Math.abs(clippedV) < nz) {
                     kalmanOffsets.push(0);
                 } else {
-                    const dispConf = Math.min(Math.abs(dp) / maxDispPct, 1.0);
-                    const momAlign = (clippedV > 0 && dp > 0) || (clippedV < 0 && dp < 0) ? 1 : 0;
+                    const dispScale = Math.max(weightVariance * dispScaleAtrMult, dispScaleMinPct);
+                    const dispConf = Math.min(Math.abs(dp) / dispScale, 1.0);
+                    const momAlign = Math.max(0, (clippedV * dp) / (Math.abs(clippedV) * Math.abs(dp) + 1e-10));
                     const composite = clippedV * (1 - dw + dw * dispConf * momAlign);
                     // Convert to offset: (composite / maxS) * mo, capped at mo
                     kalmanOffsets.push(Math.max(-mo, Math.min(mo, (composite / maxS) * mo)));

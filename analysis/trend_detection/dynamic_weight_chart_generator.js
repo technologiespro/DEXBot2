@@ -47,7 +47,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const clampedMs = Math.min(Math.max(maxSlopePct, 0.05), 20.0);
     const msInitSlider = Math.round((Math.log(clampedMs) - MS_LOG_MIN_N) / (MS_LOG_MAX_N - MS_LOG_MIN_N) * 1000);
 
-    const defaultRegimeSensitivity = data.regimeSensitivity ?? 0;
+    const defaultRegimeSensitivity  = data.regimeSensitivity ?? 0;
+    const dispScaleAtrMult          = data.dispScaleAtrMult ?? 200;
+    const dispScaleMinPct           = data.dispScaleMinPct  ?? 0.5;
     const regimeInitSlider = Math.round(defaultRegimeSensitivity * 100);
 
     const interval = results.length > 1 ?
@@ -65,6 +67,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const kalmanIsReady      = results.map((r) => r.isReady ?? false);
     const signals            = results.map((r) => r.signal);
     const ama3Prices         = results.map((r) => r.ama3Price ?? null);
+    const weightVarianceArr  = results.map((r) => r.weightVariance ?? null);
 
     const lastDate = dates[dates.length - 1];
     for (let i = 1; i <= 150; i++) {
@@ -80,6 +83,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         kalmanIsReady.push(null);
         signals.push(null);
         ama3Prices.push(null);
+        weightVarianceArr.push(null);
     }
 
     const realBarCount = results.length;
@@ -255,7 +259,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, weightVarianceArr, dispScaleAtrMult, dispScaleMinPct })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -383,7 +387,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 if (Math.abs(clippedA) < nz || i < lb) { dynamicAmaOff[i] = 0; }
                 else { dynamicAmaOff[i] = Math.max(-mo, Math.min(mo, (clippedA / ms) * mo)); }
 
-                // Kalman: use pre-computed values (unchanged)
+                // Kalman: use pre-computed values from payload
                 const vp = data.kalmanVelocityPct[i];
                 const dp = data.kalmanDisplacementPct[i];
                 const kr = data.kalmanIsReady[i];
@@ -393,9 +397,10 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     const clippedV = Math.max(-kcl, Math.min(kcl, vp));
                     if (Math.abs(clippedV) < nz) { dynamicKalOff[i] = 0; }
                     else {
-                        const md = data.maxDispPct;
-                        const dispConf = Math.min(Math.abs(dp) / md, 1.0);
-                        const momAlign = (clippedV > 0 && dp > 0) || (clippedV < 0 && dp < 0) ? 1 : 0;
+                        const wv = data.weightVarianceArr[i] ?? 0;
+                        const dispScale = Math.max(wv * data.dispScaleAtrMult, data.dispScaleMinPct);
+                        const dispConf = Math.min(Math.abs(dp) / dispScale, 1.0);
+                        const momAlign = Math.max(0, (clippedV * dp) / (Math.abs(clippedV) * Math.abs(dp) + 1e-10));
                         const composite = clippedV * (1 - dw + dw * dispConf * momAlign);
                         dynamicKalOff[i] = Math.max(-mo, Math.min(mo, (composite / ms) * mo));
                     }

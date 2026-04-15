@@ -192,6 +192,8 @@ async function main() {
             gain: config.gain,
             dispWeight: config.dispWeight,
             clipPct: config.clipPct,
+            dispScaleAtrMult: MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT,
+            dispScaleMinPct:  MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT,
         }, 'Dynamic Weight Research Tool');
 
         const chartDir = path.dirname(config.chartFile);
