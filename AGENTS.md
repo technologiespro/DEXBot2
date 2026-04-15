@@ -193,6 +193,35 @@ File: <path>
 - `docs/AI_BOT_LIBRARY_API.md` - API boundary and responsibility split
 - `docs/DEXBOT2_TUNING_CHEAT_SHEET.md` - Grid tuning reference
 
+### Analysis Tools (`analysis/`)
+
+Research scripts for parameter tuning — output interactive HTML charts, not used in production.
+
+#### Dynamic Weight Research
+- `analyze_dynamic_weight.js` - Runner: loads candles, computes AMA3 + Kalman, generates chart
+- `trend_detection/dynamic_weight_chart_generator.js` - 4-panel uPlot chart with interactive knobs (α, maxS%, maxOff, clip%, nz%, gain)
+- Docs: `docs/DYNAMIC_WEIGHT_RESEARCH.md`
+
+#### Derivative / Signal Research
+- `analyze_derivatives.js` - SMA/MACD/RSI signal analyzer runner
+- `analyze_derivatives_uplot.js` - uPlot variant of the above
+- `trend_detection/derivative_analyzer.js` - Core signal engine (MACD, RSI, trend filter)
+- `trend_detection/trend_analyzer.js` - SMA-based trend direction helper
+- `trend_detection/kalman_trend_analyzer.js` - Kalman filter with tactical/modal state tracking
+- `trend_detection/kalman_chart_generator.js` - Kalman signal chart generator
+- `analyze_kalman_uplot.js` - Kalman standalone analyzer runner
+- Docs: `analysis/trend_detection/SIGNAL_DOCUMENTATION.md`
+
+#### AMA Fitting
+- `ama_fitting/ama.js` - Kaufman Adaptive Moving Average implementation
+- `ama_fitting/optimizer_high_resolution.js` - AMA parameter optimizer
+- `ama_fitting/generate_unified_comparison_chart_uplot.js` - AMA comparison chart
+- `ama_fitting/analyze_ama_price_changes.js` - AMA price change analysis
+
+#### Data Sources
+- `price_sources.js` - Unified candle source abstraction (`json`, `market_adapter`)
+- `mexc_fetcher.js` - MEXC exchange candle fetcher
+
 ### Testing
 - `tests/` - Comprehensive test suite (unit, integration, scenario tests)
 

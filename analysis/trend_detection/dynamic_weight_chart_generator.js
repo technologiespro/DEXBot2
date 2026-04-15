@@ -28,6 +28,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const maxSlopePct         = amaWeightConfig.maxSlopePct ?? 3.0;
     const defaultClipPct      = data.clipPct ?? 10;
 
+    // Log mapping for maxOff slider
+    const MAXOFF_LOG_MIN_N = Math.log(0.001);
+    const MAXOFF_LOG_MAX_N = Math.log(0.25);
+    const clampedMaxOff = Math.min(Math.max(defaultMaxOff, 0.001), 0.25);
+    const maxOffInitSlider = Math.round((Math.log(clampedMaxOff) - MAXOFF_LOG_MIN_N) / (MAXOFF_LOG_MAX_N - MAXOFF_LOG_MIN_N) * 1000);
+
     const interval = results.length > 1 ?
         (new Date(results[1].timestamp).getTime() - new Date(results[0].timestamp).getTime()) / 1000 : 3600;
 
@@ -38,6 +44,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const kalmanDisplacementPct = results.map((r) => r.displacementPct ?? null);
     const kalmanIsReady      = results.map((r) => r.isReady ?? false);
     const signals            = results.map((r) => r.signal);
+    const ama3Prices         = results.map((r) => r.ama3Price ?? null);
 
     const lastDate = dates[dates.length - 1];
     for (let i = 1; i <= 150; i++) {
@@ -48,6 +55,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         kalmanDisplacementPct.push(null);
         kalmanIsReady.push(null);
         signals.push(null);
+        ama3Prices.push(null);
     }
 
     const realBarCount = results.length;
@@ -75,6 +83,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     }
     const amaPercentiles = buildPercentiles(amaSlopePct);
     const kalPercentiles = buildPercentiles(kalmanVelocityPct);
+    const maxDispPct = Math.ceil(maxAbsPct(kalmanDisplacementPct) * 1.15) || 5;
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -88,8 +97,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         body { background: #0b0e14; color: #d1d5db; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; overflow: hidden; }
         #header { padding: 10px 20px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; height: 45px; z-index: 100; }
         #panels { display: flex; flex-direction: column; height: calc(100vh - 45px); width: 100vw; }
-        #ama-panel    { flex: 0 0 28%; min-height: 0; position: relative; border-bottom: 1px solid #30363d; }
-        #kalman-panel { flex: 0 0 28%; min-height: 0; position: relative; border-bottom: 1px solid #30363d; }
+        #price-panel  { flex: 0 0 34%; min-height: 0; position: relative; border-bottom: 1px solid #30363d; }
+        #ama-panel    { flex: 0 0 14%; min-height: 0; position: relative; border-bottom: 1px solid #30363d; }
+        #kalman-panel { flex: 0 0 21%; min-height: 0; position: relative; border-bottom: 1px solid #30363d; }
         #output-panel { flex: 1 1 0;   min-height: 0; position: relative; }
         .uplot { background: #0b0e14; }
         .legend { position: absolute; top: 8px; left: 70px; font-size: 11px; pointer-events: none; z-index: 10; display: flex; gap: 12px; color: #8b949e; white-space: nowrap; align-items: center; }
@@ -100,7 +110,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         .is-hovered .u-cursor-y { display: block; }
         .ctrl { pointer-events: auto; display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; }
         .ctrl label { color: #8b949e; font-size: 10px; }
-        .ctrl input[type="range"] { width: 90px; height: 3px; }
+        .ctrl input[type="range"] { width: 112px; height: 3px; }
         .ctrl .val { font-weight: bold; font-size: 10px; min-width: 26px; }
         .ctrl.alpha input[type="range"] { accent-color: #58a6ff; }
         .ctrl.alpha .val { color: #58a6ff; }
@@ -108,23 +118,44 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         .ctrl.off .val { color: #3fb950; }
         .ctrl.nz input[type="range"] { accent-color: #8b949e; }
         .ctrl.nz .val { color: #8b949e; }
-        .ctrl.dw input[type="range"] { accent-color: #79c0ff; }
-        .ctrl.dw .val { color: #79c0ff; }
+        .copy-btn, .paste-btn { pointer-events: auto; margin-left: 6px; padding: 2px 10px; font-size: 10px; background: #21262d; color: #8b949e; border: 1px solid #30363d; border-radius: 4px; cursor: pointer; }
+        .copy-btn:hover, .paste-btn:hover { background: #30363d; color: #e6edf3; }
+        .copy-btn.copied { color: #3fb950; border-color: #3fb950; }
+        .paste-btn.pasted { color: #58a6ff; border-color: #58a6ff; }
+        .paste-btn.error  { color: #f85149; border-color: #f85149; }
+        #paste-confirm { display: none; position: fixed; background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 14px 16px; z-index: 1000; box-shadow: 0 4px 24px rgba(0,0,0,0.7); min-width: 200px; }
+        #paste-confirm-title { font-size: 10px; color: #8b949e; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        #paste-confirm-vals { font-size: 11px; font-family: monospace; color: #e6edf3; line-height: 1.7; margin-bottom: 12px; }
+        #paste-confirm-vals span { color: #58a6ff; }
+        #paste-confirm-btns { display: flex; gap: 6px; justify-content: flex-end; }
+        #paste-confirm-btns button { padding: 3px 12px; font-size: 10px; border-radius: 4px; cursor: pointer; border: 1px solid #30363d; background: #21262d; color: #8b949e; }
+        #paste-confirm-apply { background: #1f4e23 !important; color: #3fb950 !important; border-color: #3fb950 !important; }
+        #paste-confirm-apply:hover { background: #2ea043 !important; color: #fff !important; }
+
         .ctrl.ms input[type="range"] { accent-color: #f0883e; }
         .ctrl.ms .val { color: #f0883e; }
         .ctrl.clip input[type="range"] { accent-color: #da3633; }
         .ctrl.clip .val { color: #da3633; }
-        .formula { position: absolute; bottom: 8px; left: 70px; font-size: 9.5px; color: #484f58; pointer-events: none; z-index: 10; line-height: 1.4; }
-        .section-label { position: absolute; top: 8px; right: 12px; font-size: 9px; color: #30363d; text-transform: uppercase; letter-spacing: 1px; z-index: 10; pointer-events: none; }
+        .ctrl.gain input[type="range"] { accent-color: #d2a8ff; }
+        .ctrl.gain .val { color: #d2a8ff; }
+.section-label { position: absolute; top: 8px; right: 12px; font-size: 9px; color: #30363d; text-transform: uppercase; letter-spacing: 1px; z-index: 10; pointer-events: none; }
     </style>
 </head>
 <body>
     <div id="header">
         <div style="font-weight:bold;color:#fff;">${escapeHtml(title)}</div>
-        <div style="font-size:11px;color:#8b949e;text-transform:uppercase;">AMA Slope &nbsp;\u2192&nbsp; Kalman Composite &nbsp;\u2192&nbsp; Dynamic Weight &nbsp;&nbsp;|&nbsp;&nbsp; Scroll \u00b7 Drag \u00b7 Ctrl+0</div>
+        <div style="font-size:11px;color:#8b949e;text-transform:uppercase;">Log Price &nbsp;\u2192&nbsp; AMA Slope &nbsp;\u2192&nbsp; Kalman Composite &nbsp;\u2192&nbsp; Dynamic Weight &nbsp;&nbsp;|&nbsp;&nbsp; Scroll \u00b7 Drag \u00b7 Ctrl+0</div>
     </div>
 
     <div id="panels">
+        <div id="price-panel">
+            <div class="section-label">PRICE (LOG)</div>
+            <div class="legend">
+                <div class="legend-item"><div class="dot" style="background:#58a6ff;"></div>Price: <span id="l-price" style="font-weight:bold;">-</span></div>
+                <div class="legend-item"><div class="dot" style="background:#e3b341;"></div>AMA3: <span id="l-ama3" style="font-weight:bold;">-</span></div>
+            </div>
+            <div id="price-chart"></div>
+        </div>
         <div id="ama-panel">
             <div class="section-label">AMA SLOPE INPUT</div>
             <div class="legend">
@@ -148,18 +179,29 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 <div class="legend-item">&nbsp;S:<span id="l-sell" style="color:#ff7b72;">-</span></div>
                 <div class="legend-item">&nbsp;B:<span id="l-buy" style="color:#58a6ff;">-</span></div>
                 <div class="ctrl alpha"><label for="alpha-slider">\u03b1</label><input type="range" id="alpha-slider" min="0" max="100" value="${Math.round(defaultAlpha * 100)}"><span class="val" id="alpha-value">${defaultAlpha.toFixed(2)}</span></div>
-                <div class="ctrl ms"><label for="ms-slider">maxS%</label><input type="range" id="ms-slider" min="5" max="1000" value="${Math.round(maxSlopePct * 100)}"><span class="val" id="ms-value">${maxSlopePct.toFixed(1)}</span></div>
-                <div class="ctrl off"><label for="off-slider">maxOff</label><input type="range" id="off-slider" min="0" max="100" value="${Math.round(defaultMaxOff * 100)}"><span class="val" id="off-value">${defaultMaxOff.toFixed(2)}</span></div>
-                <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="80" value="${defaultClipPct}"><span class="val" id="clip-value">${defaultClipPct}%</span></div>
-                <div class="ctrl dw"><label for="dw-slider">dw</label><input type="range" id="dw-slider" min="0" max="100" value="${Math.round(defaultDispWeight * 100)}"><span class="val" id="dw-value">${defaultDispWeight.toFixed(2)}</span></div>
+                <div class="ctrl ms"><label for="ms-slider">maxS%</label><input type="range" id="ms-slider" min="0" max="1000" value="${Math.round((Math.log(maxSlopePct) - Math.log(0.05)) / (Math.log(15) - Math.log(0.05)) * 1000)}"><span class="val" id="ms-value">${maxSlopePct.toFixed(2)}</span></div>
+                <div class="ctrl off"><label for="off-slider">maxOff</label><input type="range" id="off-slider" min="0" max="1000" value="${maxOffInitSlider}"><span class="val" id="off-value">${Math.min(defaultMaxOff, 0.25).toFixed(3)}</span></div>
+                <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="50" value="${Math.min(defaultClipPct, 50)}"><span class="val" id="clip-value">${Math.min(defaultClipPct, 50)}%</span></div>
+
                 <div class="ctrl nz"><label for="nz-slider">nz%</label><input type="range" id="nz-slider" min="0" max="100" value="${Math.round(defaultNeutralZone * 100)}"><span class="val" id="nz-value">${defaultNeutralZone.toFixed(2)}</span></div>
+                <div class="ctrl gain"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="500"><span class="val" id="gain-value">1.0×</span></div>
+                <button class="copy-btn" id="copy-params-btn">copy</button>
+                <button class="paste-btn" id="paste-params-btn">paste</button>
             </div>
             <div id="output-chart"></div>
-            <div class="formula">amaOff = clamp(amaClip / <span id="formula-ms">${maxSlopePct.toFixed(1)}%</span> \u00d7 <span id="formula-off">${defaultMaxOff.toFixed(2)}</span>, \u00b1<span id="formula-off2">${defaultMaxOff.toFixed(2)}</span>) &nbsp;\u2502&nbsp; kalOff = clamp(kalComp / <span id="formula-ms2">${maxSlopePct.toFixed(1)}%</span> \u00d7 <span id="formula-off3">${defaultMaxOff.toFixed(2)}</span>, \u00b1<span id="formula-off4">${defaultMaxOff.toFixed(2)}</span>) &nbsp;\u2502&nbsp; off = \u03b1\u00b7amaOff + (1\u2212\u03b1)\u00b7kalOff &nbsp;\u2502&nbsp; clip P<span id="formula-clip">${defaultClipPct}</span>%: \u00b1<span id="formula-ama-clip">-</span> / \u00b1<span id="formula-kal-clip">-</span></div>
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, maxOff: defaultMaxOff, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, clipPct: defaultClipPct, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles })}</script>
+    <div id="paste-confirm">
+        <div id="paste-confirm-title">Confirm paste parameters</div>
+        <div id="paste-confirm-vals"></div>
+        <div id="paste-confirm-btns">
+            <button id="paste-confirm-cancel">Cancel</button>
+            <button id="paste-confirm-apply">Apply</button>
+        </div>
+    </div>
+
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, maxOff: defaultMaxOff, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -167,10 +209,23 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const Y_AXIS_SIZE = 58;
 
         let currentAlpha   = data.alpha;
-        let currentMaxOff  = data.maxOff;
+        let currentMaxOff  = Math.min(data.maxOff, 0.25);
+        let currentGain    = 1.0;
         let currentNz      = data.neutralZonePct;
         let currentDw      = data.dispWeight;
         let currentMaxSlopePct = data.maxSlopePct;
+        const MS_LOG_MIN = Math.log(0.05);
+        const MS_LOG_MAX = Math.log(15.0);
+        const msSliderToVal = (pos) => Math.exp(MS_LOG_MIN + (pos / 1000) * (MS_LOG_MAX - MS_LOG_MIN));
+        const MAXOFF_LOG_MIN = Math.log(0.001);
+        const MAXOFF_LOG_MAX = Math.log(0.25);
+        const maxOffSliderToVal = (pos) => pos === 0 ? 0 : Math.exp(MAXOFF_LOG_MIN + (pos / 1000) * (MAXOFF_LOG_MAX - MAXOFF_LOG_MIN));
+        const maxOffValToSlider = (val) => val <= 0 ? 0 : Math.round((Math.log(Math.max(0.001, val)) - MAXOFF_LOG_MIN) / (MAXOFF_LOG_MAX - MAXOFF_LOG_MIN) * 1000);
+        const GAIN_LOG_MIN = Math.log(0.1);
+        const GAIN_LOG_MAX = Math.log(10.0);
+        const gainSliderToVal = (pos) => Math.exp(GAIN_LOG_MIN + (pos / 1000) * (GAIN_LOG_MAX - GAIN_LOG_MIN));
+        const gainValToSlider = (val) => Math.round((Math.log(Math.max(0.1, val)) - GAIN_LOG_MIN) / (GAIN_LOG_MAX - GAIN_LOG_MIN) * 1000);
+
         let currentClipPct = data.clipPct;
         const maxAmaSlope = data.amaPercentiles[data.amaPercentiles.length - 1];
         const maxKalVel = data.kalPercentiles[data.kalPercentiles.length - 1];
@@ -210,8 +265,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     const clippedV = Math.max(-kcl, Math.min(kcl, vp));
                     if (Math.abs(clippedV) < nz) { dynamicKalOff[i] = 0; }
                     else {
-                        const dispConf = Math.min(Math.abs(dp) / 1.0, 1.0);
-                        const momAlign = (clippedV > 0 && dp > 0) || (clippedV < 0 && dp < 0) ? 1 : -0.5;
+                        const md = data.maxDispPct;
+                        const dispConf = Math.min(Math.abs(dp) / md, 1.0);
+                        const momAlign = (clippedV > 0 && dp > 0) || (clippedV < 0 && dp < 0) ? 1 : 0;
                         const composite = clippedV * (1 - dw + dw * dispConf * momAlign);
                         dynamicKalOff[i] = Math.max(-mo, Math.min(mo, (composite / ms) * mo));
                     }
@@ -224,13 +280,24 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         }
 
         function recalcWeights() {
+            // Normalize each channel to its own peak so alpha is a pure ratio knob
+            // and maxOff is the sole amplitude controller
+            let aMax = 0, kMax = 0;
+            for (let i = 0; i < data.realBarCount; i++) {
+                if (dynamicAmaOff[i] !== null) aMax = Math.max(aMax, Math.abs(dynamicAmaOff[i]));
+                if (dynamicKalOff[i] !== null) kMax = Math.max(kMax, Math.abs(dynamicKalOff[i]));
+            }
+            if (aMax === 0) aMax = 1;
+            if (kMax === 0) kMax = 1;
+
+            const mo = currentMaxOff;
             for (let i = 0; i < data.dates.length; i++) {
                 const aOff = dynamicAmaOff[i];
                 const kOff = dynamicKalOff[i];
                 if (aOff === null || kOff === null) {
                     combinedOff[i] = null; combinedSell[i] = null; combinedBuy[i] = null;
                 } else {
-                    const off = currentAlpha * aOff + (1 - currentAlpha) * kOff;
+                    const off = Math.max(-0.5, Math.min(0.5, (currentAlpha * (aOff / aMax) + (1 - currentAlpha) * (kOff / kMax)) * mo * currentGain));
                     combinedOff[i] = Math.round(off * 1000) / 1000;
                     combinedSell[i] = Math.max(-0.5, Math.min(1.5, Math.round((0.5 + off) * 100) / 100));
                     combinedBuy[i]  = Math.max(-0.5, Math.min(1.5, Math.round((0.5 - off) * 100) / 100));
@@ -244,7 +311,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const xMax = data.dates[data.dates.length - 1];
         let pendingRange = null;
         let pendingRangeRaf = 0;
-        let amaChart, kalmanChart, outputChart;
+        let priceChart, amaChart, kalmanChart, outputChart;
 
         function clampXRange(min, max) {
             let nextMin = min, nextMax = max;
@@ -266,7 +333,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 pendingRange = null;
                 pendingRangeRaf = 0;
                 if (!next) return;
-                [amaChart, kalmanChart, outputChart].forEach(c => c.batch(() => c.setScale('x', next)));
+                [priceChart, amaChart, kalmanChart, outputChart].forEach(c => c.batch(() => c.setScale('x', next)));
             });
         }
 
@@ -320,6 +387,16 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         function updateLegend(idx) {
             if (idx == null) return;
             lastLiveIdx = idx;
+
+            const price = data.prices[idx];
+            const priceEl = document.getElementById('l-price');
+            if (price == null) { priceEl.textContent = '-'; priceEl.style.color = '#8b949e'; }
+            else { priceEl.textContent = price.toFixed(4); priceEl.style.color = '#58a6ff'; }
+
+            const ama3 = data.ama3Prices[idx];
+            const ama3El = document.getElementById('l-ama3');
+            if (ama3 == null) { ama3El.textContent = '-'; ama3El.style.color = '#8b949e'; }
+            else { ama3El.textContent = ama3.toFixed(4); ama3El.style.color = '#e3b341'; }
 
             const sp = data.amaSlopePct[idx];
             const spEl = document.getElementById('l-ama-slope');
@@ -425,17 +502,41 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         };
 
         function init() {
+            // Force all sliders to match JS state — overrides browser form-restore memory
+            document.getElementById('gain-slider').value = gainValToSlider(currentGain);
+            document.getElementById('gain-value').textContent = currentGain.toFixed(2) + '×';
+
+            const priceEl  = document.getElementById('price-panel');
             const amaEl    = document.getElementById('ama-panel');
             const kalmanEl = document.getElementById('kalman-panel');
             const outputEl = document.getElementById('output-panel');
 
-            const pctRangeAma = () => [-data.amaPctMax, data.amaPctMax];
-            const pctRangeKal = () => [-data.kalPctMax, data.kalPctMax];
+
+            priceChart = new uPlot({
+                width: priceEl.offsetWidth, height: priceEl.offsetHeight,
+                padding: [4, 8, 0, 4], select: { show: false }, legend: { show: false },
+                scales: {
+                    x: { time: true },
+                    y: { auto: true, distr: 3, log: 10, range: (u, min, max) => [min * 0.9, max * 1.1] }
+                },
+                series: [
+                    { label: 'Time' },
+                    { label: 'Price', stroke: '#58a6ff', width: 1.5, scale: 'y', points: { show: false } },
+                    { label: 'AMA3',  stroke: '#e3b341', width: 1.5, scale: 'y', points: { show: false } },
+                ],
+                axes: [
+                    { show: false, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
+                    { scale: 'y', stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: Y_AXIS_SIZE, font: '11px Segoe UI, sans-serif',
+                      values: (u, v) => v.map(x => x != null ? x.toFixed(4) : ''), }
+                ],
+                cursor: cursorCfg,
+                hooks: { draw: [makeSignalBgHook('y')] }
+            }, [data.dates, data.prices, data.ama3Prices], document.getElementById('price-chart'));
 
             amaChart = new uPlot({
                 width: amaEl.offsetWidth, height: amaEl.offsetHeight,
                 padding: [4, 8, 0, 4], select: { show: false }, legend: { show: false },
-                scales: { x: { time: true }, p: { range: pctRangeAma } },
+                scales: { x: { time: true }, p: { auto: true } },
                 series: [
                     { label: 'Time' },
                     { label: 'Slope%', stroke: '#f0a000', width: 2, scale: 'p', points: { show: false } },
@@ -443,8 +544,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 axes: [
                     { show: false, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
                     { scale: 'p', stroke: '#30363d', grid: { stroke: '#1c2128', dash: [4, 4] }, ticks: { stroke: '#30303d', width: 1 }, size: Y_AXIS_SIZE, font: '11px Segoe UI, sans-serif',
-                      values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(1) + '%' : ''),
-                      splits: () => { const m = data.amaPctMax; return [-m, -m/2, 0, m/2, m]; } }
+                      values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(1) + '%' : '') }
                 ],
                 cursor: cursorCfg,
                 hooks: { draw: [makePctFillHook(data.amaSlopePct, 'p', 'rgba(46,160,67,0.20)', 'rgba(248,81,73,0.20)'), makeSignalBgHook('p')] }
@@ -453,7 +553,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             kalmanChart = new uPlot({
                 width: kalmanEl.offsetWidth, height: kalmanEl.offsetHeight,
                 padding: [4, 8, 0, 4], select: { show: false }, legend: { show: false },
-                scales: { x: { time: true }, v: { range: pctRangeKal } },
+                scales: { x: { time: true }, v: { auto: true } },
                 series: [
                     { label: 'Time' },
                     { label: 'Vel%', stroke: '#d2a8ff', width: 2, scale: 'v', points: { show: false } },
@@ -462,8 +562,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 axes: [
                     { show: false, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30303d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
                     { scale: 'v', stroke: '#30363d', grid: { stroke: '#1c2128', dash: [4, 4] }, ticks: { stroke: '#30303d', width: 1 }, size: Y_AXIS_SIZE, font: '11px Segoe UI, sans-serif',
-                      values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(1) + '%' : ''),
-                      splits: () => { const m = data.kalPctMax; return [-m, -m/2, 0, m/2, m]; } }
+                      values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(1) + '%' : '') }
                 ],
                 cursor: cursorCfg,
                 hooks: { draw: [
@@ -472,37 +571,30 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 ] }
             }, [data.dates, data.kalmanVelocityPct, data.kalmanDisplacementPct], document.getElementById('kalman-chart'));
 
-const outRange = () => {
-                const m = Math.max(0.1, currentMaxOff);
-                return [-m * 1.1, m * 1.1];
-            };
-
             outputChart = new uPlot({
                 width: outputEl.offsetWidth, height: outputEl.offsetHeight,
-                padding: [4, 8, 0, 4], select: { show: false }, legend: { show: false },
-                scales: { x: { time: true }, ow: { range: outRange } },
+                padding: [20, 8, 0, 4], select: { show: false }, legend: { show: false },
+                scales: { x: { time: true }, ow: { auto: true, range: (u, min, max) => {
+                    const m = Math.min(0.5, Math.max(0.1, currentMaxOff * currentGain));
+                    const pad = (max - min) * 0.1 || 0.02;
+                    return [Math.min(min - pad, -m), Math.max(max + pad, m)];
+                }}},
                 series: [
                     { label: 'Time' },
                     { label: 'Off', stroke: 'transparent', scale: 'ow', points: { show: false } }
                 ],
                 axes: [
-                    { show: true, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
+                    { show: false, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
                     { scale: 'ow', stroke: '#30363d', grid: { stroke: '#1c2128', dash: [4, 4] }, ticks: { stroke: '#30303d', width: 1 }, size: Y_AXIS_SIZE, font: '11px Segoe UI, sans-serif',
                       values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(2) : ''),
-                      splits: () => { const m = Math.max(0.1, currentMaxOff); return [-m, -m/2, 0, m/2, m]; } }
-                ],
-                axes: [
-                    { show: true, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
-                    { scale: 'ow', stroke: '#30363d', grid: { stroke: '#1c2128', dash: [4, 4] }, ticks: { stroke: '#30303d', width: 1 }, size: Y_AXIS_SIZE, font: '11px Segoe UI, sans-serif',
-                      values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(2) : ''),
-                      splits: () => { const m = Math.max(0.1, currentMaxOff); return [-m, -m/2, 0, m/2, m]; } }
+                      splits: () => { const m = Math.min(0.5, Math.max(0.1, currentMaxOff * currentGain)); return [-m, -m/2, 0, m/2, m]; } }
                 ],
                 cursor: cursorCfg,
                 hooks: { draw: [makePctFillHook(combinedOff, 'ow', 'rgba(46,160,67,0.30)', 'rgba(248,81,73,0.30)')] }
             }, [data.dates, combinedOff], document.getElementById('output-chart'));
 
             let leavePending = null;
-            [amaChart, kalmanChart, outputChart].forEach(chart => {
+            [priceChart, amaChart, kalmanChart, outputChart].forEach(chart => {
                 chart.over.addEventListener('mousemove', () => {
                     if (leavePending !== null) { clearTimeout(leavePending); leavePending = null; }
                     const idx = chart.cursor.idx;
@@ -537,20 +629,14 @@ const outRange = () => {
             });
 
             document.getElementById('ms-slider').addEventListener('input', (e) => {
-                currentMaxSlopePct = parseInt(e.target.value, 10) / 100;
-                document.getElementById('ms-value').textContent = currentMaxSlopePct.toFixed(1);
-                document.getElementById('formula-ms').textContent = currentMaxSlopePct.toFixed(1) + '%';
-                document.getElementById('formula-ms2').textContent = currentMaxSlopePct.toFixed(1) + '%';
+                currentMaxSlopePct = msSliderToVal(parseInt(e.target.value, 10));
+                document.getElementById('ms-value').textContent = currentMaxSlopePct.toFixed(2);
                 onSliderChange();
             });
 
             document.getElementById('off-slider').addEventListener('input', (e) => {
-                currentMaxOff = parseInt(e.target.value, 10) / 100;
-                document.getElementById('off-value').textContent = currentMaxOff.toFixed(2);
-                document.getElementById('formula-off').textContent = currentMaxOff.toFixed(2);
-                document.getElementById('formula-off2').textContent = currentMaxOff.toFixed(2);
-                document.getElementById('formula-off3').textContent = currentMaxOff.toFixed(2);
-                document.getElementById('formula-off4').textContent = currentMaxOff.toFixed(2);
+                currentMaxOff = maxOffSliderToVal(parseInt(e.target.value, 10));
+                document.getElementById('off-value').textContent = currentMaxOff.toFixed(3);
                 onSliderChange();
             });
 
@@ -564,28 +650,166 @@ const outRange = () => {
                     currentKalClipThreshold = data.kalPercentiles[100 - currentClipPct];
                 }
                 document.getElementById('clip-value').textContent = currentClipPct + '%';
-                document.getElementById('formula-clip').textContent = currentClipPct;
-                document.getElementById('formula-ama-clip').textContent = currentAmaClipThreshold.toFixed(2) + '%';
-                document.getElementById('formula-kal-clip').textContent = currentKalClipThreshold.toFixed(2) + '%';
                 onSliderChange();
             });
 
-            document.getElementById('dw-slider').addEventListener('input', (e) => {
-                currentDw = parseInt(e.target.value, 10) / 100;
-                document.getElementById('dw-value').textContent = currentDw.toFixed(2);
-                onSliderChange();
-            });
 
             document.getElementById('nz-slider').addEventListener('input', (e) => {
                 currentNz = parseInt(e.target.value, 10) / 100;
                 document.getElementById('nz-value').textContent = currentNz.toFixed(2);
                 onSliderChange();
             });
+
+            document.getElementById('gain-slider').addEventListener('input', (e) => {
+                currentGain = gainSliderToVal(parseInt(e.target.value, 10));
+                document.getElementById('gain-value').textContent = currentGain.toFixed(2) + '×';
+                recalcWeights();
+                const xs = outputChart.scales.x;
+                const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
+                outputChart.setData([data.dates, combinedOff]);
+                if (savedX) outputChart.setScale('x', savedX);
+            });
+
+            function applyParams(p, btn) {
+                if (typeof p !== 'object' || p === null) throw new Error('not an object');
+                if (p.alpha != null) {
+                    currentAlpha = Math.max(0, Math.min(1, p.alpha));
+                    document.getElementById('alpha-slider').value = Math.round(currentAlpha * 100);
+                    document.getElementById('alpha-value').textContent = currentAlpha.toFixed(2);
+                }
+                if (p.maxSlopePct != null) {
+                    currentMaxSlopePct = Math.max(0.05, Math.min(15, p.maxSlopePct));
+                    document.getElementById('ms-slider').value = Math.round((Math.log(currentMaxSlopePct) - MS_LOG_MIN) / (MS_LOG_MAX - MS_LOG_MIN) * 1000);
+                    document.getElementById('ms-value').textContent = currentMaxSlopePct.toFixed(2);
+                }
+                if (p.maxOff != null) {
+                    currentMaxOff = Math.max(0, Math.min(0.25, p.maxOff));
+                    document.getElementById('off-slider').value = maxOffValToSlider(currentMaxOff);
+                    document.getElementById('off-value').textContent = currentMaxOff.toFixed(3);
+                }
+                if (p.clipPct != null) {
+                    currentClipPct = Math.max(0, Math.min(50, Math.round(p.clipPct)));
+                    document.getElementById('clip-slider').value = currentClipPct;
+                    document.getElementById('clip-value').textContent = currentClipPct + '%';
+                    if (currentClipPct === 0) {
+                        currentAmaClipThreshold = data.amaPercentiles[data.amaPercentiles.length - 1];
+                        currentKalClipThreshold = data.kalPercentiles[data.kalPercentiles.length - 1];
+                    } else {
+                        currentAmaClipThreshold = data.amaPercentiles[100 - currentClipPct];
+                        currentKalClipThreshold = data.kalPercentiles[100 - currentClipPct];
+                    }
+                }
+                if (p.neutralZonePct != null) {
+                    currentNz = Math.max(0, Math.min(1, p.neutralZonePct));
+                    document.getElementById('nz-slider').value = Math.round(currentNz * 100);
+                    document.getElementById('nz-value').textContent = currentNz.toFixed(2);
+                }
+                if (p.gain != null) {
+                    currentGain = Math.max(0.1, Math.min(10, p.gain));
+                    document.getElementById('gain-slider').value = gainValToSlider(currentGain);
+                    document.getElementById('gain-value').textContent = currentGain.toFixed(2) + '×';
+                }
+                recalcInputs();
+                recalcWeights();
+                outputChart.setData([data.dates, combinedOff]);
+                if (btn) { btn.textContent = 'pasted!'; btn.classList.add('pasted'); setTimeout(() => { btn.textContent = 'paste'; btn.classList.remove('pasted'); }, 1500); }
+            }
+
+            let _confirmPending = null;
+            function showConfirm(p, btn) {
+                _confirmPending = { p, btn };
+                const labels = { alpha: 'alpha', maxSlopePct: 'maxS%', maxOff: 'maxOff', clipPct: 'clip%', neutralZonePct: 'nz%', gain: 'gain' };
+                document.getElementById('paste-confirm-vals').innerHTML = Object.entries(labels)
+                    .filter(([k]) => p[k] != null)
+                    .map(([k, label]) => label + ': <span>' + p[k] + '</span>')
+                    .join('<br>');
+                const popup = document.getElementById('paste-confirm');
+                popup.style.display = 'block';
+                const r = btn.getBoundingClientRect();
+                const pw = popup.offsetWidth, ph = popup.offsetHeight;
+                let top = r.top - ph - 6;
+                let left = r.right - pw;
+                if (top < 4) top = r.bottom + 6;
+                if (left < 4) left = 4;
+                popup.style.top  = top + 'px';
+                popup.style.left = left + 'px';
+            }
+
+            document.getElementById('paste-confirm-apply').addEventListener('click', () => {
+                document.getElementById('paste-confirm').style.display = 'none';
+                if (_confirmPending) { applyParams(_confirmPending.p, _confirmPending.btn); _confirmPending = null; }
+            });
+            document.getElementById('paste-confirm-cancel').addEventListener('click', () => {
+                document.getElementById('paste-confirm').style.display = 'none';
+                _confirmPending = null;
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && document.getElementById('paste-confirm').style.display !== 'none') {
+                    document.getElementById('paste-confirm').style.display = 'none';
+                    _confirmPending = null;
+                }
+            });
+
+            const LS_KEY = 'dw_research_params';
+
+            document.getElementById('copy-params-btn').addEventListener('click', () => {
+                const btn = document.getElementById('copy-params-btn');
+                const params = {
+                    alpha:          +currentAlpha.toFixed(2),
+                    maxSlopePct:    +currentMaxSlopePct.toFixed(2),
+                    maxOff:         +currentMaxOff.toFixed(3),
+                    clipPct:        currentClipPct,
+                    neutralZonePct: +currentNz.toFixed(3),
+                    gain:           +currentGain.toFixed(2),
+                };
+                const json = JSON.stringify(params, null, 2);
+                localStorage.setItem(LS_KEY, json);
+                navigator.clipboard.writeText(json).catch(() => {});
+                btn.textContent = 'copied!';
+                btn.classList.add('copied');
+                setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1500);
+            });
+
+            document.getElementById('paste-params-btn').addEventListener('click', () => {
+                const btn = document.getElementById('paste-params-btn');
+                const tryParse = (text) => {
+                    try { showConfirm(JSON.parse(text), btn); }
+                    catch { btn.textContent = 'error'; btn.classList.add('error'); setTimeout(() => { btn.textContent = 'paste'; btn.classList.remove('error'); }, 1500); }
+                };
+                // Primary: browser clipboard API (triggers native allow-paste prompt)
+                if (navigator.clipboard && navigator.clipboard.readText) {
+                    navigator.clipboard.readText().then(tryParse).catch(() => {
+                        // Fallback: same-browser localStorage
+                        const stored = localStorage.getItem(LS_KEY);
+                        if (stored) { try { showConfirm(JSON.parse(stored), btn); return; } catch {} }
+                    });
+                    return;
+                }
+                // Fallback for file:// where clipboard API is blocked: localStorage first, then Ctrl+V
+                const stored = localStorage.getItem(LS_KEY);
+                if (stored) {
+                    try { showConfirm(JSON.parse(stored), btn); return; } catch {}
+                }
+                btn.textContent = 'Ctrl+V…';
+                btn.classList.add('pasted');
+                const ta = document.createElement('textarea');
+                ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0;width:1px;height:1px;font-size:16px;';
+                document.body.appendChild(ta);
+                ta.focus();
+                const cleanup = () => { document.body.removeChild(ta); btn.textContent = 'paste'; btn.classList.remove('pasted'); };
+                ta.addEventListener('paste', (e) => {
+                    const text = (e.clipboardData || window.clipboardData).getData('text');
+                    cleanup();
+                    tryParse(text);
+                }, { once: true });
+                ta.addEventListener('keydown', (e) => { if (e.key === 'Escape') cleanup(); });
+                setTimeout(cleanup, 10000);
+            });
         }
 
         function sizeCharts() {
-            if (!amaChart || !kalmanChart || !outputChart) return;
-            [[amaChart, 'ama-panel'], [kalmanChart, 'kalman-panel'], [outputChart, 'output-panel']].forEach(([chart, id]) => {
+            if (!priceChart || !amaChart || !kalmanChart || !outputChart) return;
+            [[priceChart, 'price-panel'], [amaChart, 'ama-panel'], [kalmanChart, 'kalman-panel'], [outputChart, 'output-panel']].forEach(([chart, id]) => {
                 const el = document.getElementById(id);
                 chart.setSize({ width: el.offsetWidth, height: el.offsetHeight });
             });

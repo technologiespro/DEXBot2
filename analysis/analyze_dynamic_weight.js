@@ -21,6 +21,7 @@ const { generateHTML } = require('./trend_detection/dynamic_weight_chart_generat
 const { createSource } = require('./price_sources');
 const { calculateAMA } = require('./ama_fitting/ama');
 const { computeAmaSlopeWeights } = require('../market_adapter/core/strategies/ama_slope_model');
+const { MARKET_ADAPTER } = require('../modules/constants');
 
 // AMA configuration (matching bot defaults)
 const AMA_CONFIG = {
@@ -75,7 +76,7 @@ function parseArgs() {
         chartFile: 'analysis/charts/dynamic_weight_chart.html',
         alpha: 0.5,
         maxOff: 0.5,
-        dispWeight: 0.4,
+        dispWeight: 1.0,
         clipPct: 10,
         quiet: false,
     };
@@ -128,12 +129,14 @@ async function main() {
             const { marketPrice, timestamp } = source.extractMarketPrice(candles[i]);
             const result = analyzer.update(marketPrice);
             result.timestamp = timestamp;
+            result.price = marketPrice;
             allResults.push(result);
         }
 
         // ── AMA weight calculation ───────────────────────────────────────────
         const closes = candles.map(c => Array.isArray(c) ? c[4] : 0);
         const amaValues = calculateAMA(closes, AMA_CONFIG);
+        const ama3Values = calculateAMA(closes, MARKET_ADAPTER.AMAS.AMA3);
         const atrs = computeATR(candles, 14);
 
         for (let i = 0; i < allResults.length; i++) {
@@ -141,8 +144,8 @@ async function main() {
             const atr = atrs[i];
             const weightVariance = amaPrice > 0 ? atr / amaPrice : 0;
 
-            const weights = computeAmaSlopeWeights(amaValues.slice(0, i + 1), weightVariance, {
-                erPeriod: AMA_CONFIG.erPeriod,
+            const weights = computeAmaSlopeWeights(ama3Values.slice(0, i + 1), weightVariance, {
+                erPeriod: MARKET_ADAPTER.AMAS.AMA3.erPeriod,
                 lookbackBars: AMA_WEIGHT_CONFIG.lookbackBars,
                 maxSlopePct: AMA_WEIGHT_CONFIG.maxSlopePct,
                 neutralZonePct: AMA_WEIGHT_CONFIG.neutralZonePct,
@@ -152,6 +155,7 @@ async function main() {
             });
 
             allResults[i].amaPrice = amaPrice;
+            allResults[i].ama3Price = ama3Values[i] ?? null;
             allResults[i].atr = atr;
             allResults[i].weightVariance = weightVariance;
             allResults[i].amaSlopePct = weights.slopePct;
