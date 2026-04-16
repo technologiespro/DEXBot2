@@ -92,10 +92,10 @@ Output: `analysis/charts/dynamic_weight_chart.html` (open in browser)
 | `--file` | — | Path to JSON candle file (implies `--source json`) |
 | `--bot-key` | `XRP-BTS` | Bot key for market adapter source |
 | `--chart` | `analysis/charts/dynamic_weight_chart.html` | Output HTML path |
-| `--alpha` | `0.5` | Initial α blend (0 = pure Kalman, 1 = pure AMA) |
+| `--alpha` | `0.7` | Initial α blend (0 = pure Kalman, 1 = pure AMA) |
 | `--dw` | `1.0` | Initial displacement weight (0 = pure velocity, 1 = full displacement) |
-| `--lb` | `72` | Initial lookback bars (4-256) for AMA slope calculation |
-| `--gain` | `0.5` | Initial gain multiplier |
+| `--lb` | `10` | Initial lookback bars (4-256) for AMA slope calculation |
+| `--gain` | `1.0` | Initial gain multiplier |
 | `--clip` | `10` | Initial clip percentile |
 | `--quiet` | `false` | Suppress console output |
 
@@ -131,22 +131,22 @@ Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pa
 ### Blend Controls
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
-| **α** | 0–1 | 0.5 | Blend ratio between AMA and Kalman channels (0 = pure Kalman, 1 = pure AMA) |
+| **α** | 0–1 | 0.7 | Blend ratio between AMA and Kalman channels (0 = pure Kalman, 1 = pure AMA) |
 | **dw** | 0–1 | 1.0 | Displacement weight: how much Kalman displacement influences the composite signal |
 
 ### Slope Calculation
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
 | **nz%** | 0–1 | 0.15 | Neutral zone: dead-band below which offset is forced to 0 |
-| **lb** | 4–256 | 72 | Logarithmic. Lookback bars for AMA slope calculation |
-| **maxS%** | 0.05–20 | 3.0 | Logarithmic. Gear ratio: slope% at which the output saturates |
+| **lb** | 4–256 | 10 | Logarithmic. Lookback bars for AMA slope calculation |
+| **maxS%** | 0.05–20 | 0.5 | Logarithmic. Gear ratio: slope% at which the output saturates |
 | **clip%** | 0–55 | 10 | Percentile clip: filters extreme inputs (0 = off) |
 
 ### Output Controls
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
-| **gain** | 0.001–3.0 | 0.5 | Logarithmic. Amplitude multiplier on normalized blend |
-| **regi** | 0–2 | 0.0 | Regime sensitivity: exponent applied to Hurst+PE multiplier |
+| **gain** | 0.1–3.0 | 1.0 | Logarithmic. Amplitude multiplier on normalized blend |
+| **regi** | 0–2 | 1.0 | Regime sensitivity: exponent applied to Hurst+PE multiplier |
 
 ## Copy / Paste Parameters
 
@@ -195,7 +195,7 @@ buyW  = 0.5 − off
 ### maxS% + gain
 
 These are multiplicatively related:
-- `off = clip / maxS% × gain` — raising `maxS%` from 3→6 has the same effect as halving `gain`
+- `off = clip / maxS% × gain` — raising `maxS%` from 0.5→1 has the same effect as halving `gain`
 - `maxS%` = gear ratio (what slope% saturates the output)
 - `gain` = output amplitude (how strong the weight offset can become)
 
@@ -220,7 +220,7 @@ Formula: `kalComp = clippedV × (1 − dw + dw × dispConf × momAlign)`
 ### lb (lookback bars)
 Number of bars to look back when computing AMA slope:
 - `lb = 4`: Very short-term, highly responsive to recent price action
-- `lb = 72` (default): ~3 days of hourly candles, balanced responsiveness
+- `lb = 10` (default): ~10 hours of hourly candles, responsive with some smoothing
 - `lb = 256`: ~10 days of hourly candles, very stable but slower to react
 
 Lower values = more noise, faster reaction. Higher values = smoother signals, more lag.

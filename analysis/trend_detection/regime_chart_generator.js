@@ -351,7 +351,7 @@ function generateRegimeHTML(data, title = 'Regime Analysis') {
             hurstChart = new uPlot({
                 width: hurstEl.offsetWidth, height: hurstEl.offsetHeight,
                 padding: [4, 4, 2, 4], select: { show: false }, legend: { show: false },
-                scales: { x: { time: true }, h: { range: [0, 1] } },
+                scales: { x: { time: true }, h: { auto: true } },
                 series: [
                     { label: 'Time' },
                     { label: 'Hurst', stroke: '#4dc3ff', width: 1.5, scale: 'h', points: { show: false } },
