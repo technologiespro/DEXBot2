@@ -195,7 +195,7 @@ class MarketAdapterService {
 
         const lookbackBars = cfg.amaSlope?.lookbackBars ?? 72;
         const clipPercentile = cfg.clipPercentile ?? 0;
-        const nz = cfg.neutralZonePct ?? 0.15;
+        const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
         const maxS = cfg.amaSlope?.maxSlopePct ?? 3.0;
         const mo = cfg.maxSlopeOffset ?? 0.5;
 
@@ -384,8 +384,17 @@ class MarketAdapterService {
             const MAX_W = 1.5;
             const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-            const effectiveSell = Math.round(clamp(staticSell + finalOff, MIN_W, MAX_W) * 100) / 100;
-            const effectiveBuy = Math.round(clamp(staticBuy - finalOff, MIN_W, MAX_W) * 100) / 100;
+            // Min-output threshold: if |finalOff| is below threshold, fall back to static
+            // weights (no dynamic offset applied). Default 0.25 = half the ±0.5 max output.
+            const minOutputThreshold = cfg.minOutputThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_OUTPUT_THRESHOLD ?? 0.25;
+            const belowMinOutputThreshold = Math.abs(finalOff) < minOutputThreshold;
+
+            const effectiveSell = belowMinOutputThreshold
+                ? staticSell
+                : Math.round(clamp(staticSell + finalOff, MIN_W, MAX_W) * 100) / 100;
+            const effectiveBuy = belowMinOutputThreshold
+                ? staticBuy
+                : Math.round(clamp(staticBuy - finalOff, MIN_W, MAX_W) * 100) / 100;
 
             weights = {
                 sell: effectiveSell,
@@ -394,26 +403,30 @@ class MarketAdapterService {
                     ? (slopeResult.trend === 'NEUTRAL' ? 'flat' : 'slope')
                     : 'static',
                 meta: {
-                    source:           'dynamic_weight',
+                    source:                  'dynamic_weight',
                     staticSell,
                     staticBuy,
-                    trend:            slopeResult.trend,
-                    confidence:       slopeResult.confidence,
-                    slopePct:         slopeResult.slopePct,
-                    slopeOffset:      slopeResult.slopeOffset,
+                    trend:                   slopeResult.trend,
+                    confidence:              slopeResult.confidence,
+                    slopePct:                slopeResult.slopePct,
+                    slopeOffset:             slopeResult.slopeOffset,
                     amaSlopeGated,
                     regimeMultiplier,
-                    symmetricDelta:   slopeResult.symmetricDelta,
+                    symmetricDelta:          slopeResult.symmetricDelta,
                     alpha,
                     dw,
                     gain,
-                    finalOffset:      finalOff,
-                    kalmanReady:      kalmanResult?.isReady ?? false,
-                    isReady:          slopeResult.isReady,
+                    finalOffset:             finalOff,
+                    minOutputThreshold,
+                    belowMinOutputThreshold,
+                    kalmanReady:             kalmanResult?.isReady ?? false,
+                    isReady:                 slopeResult.isReady,
                 },
             };
 
-            // Payload written to dynamicgrid.json — bot reads this at grid reset
+            // Payload written to dynamicgrid.json — bot reads this at grid reset.
+            // When belowMinOutputThreshold, effectiveWeights equal baseWeights so the bot
+            // applies no dynamic offset and isReady is set to false to prevent stale application.
             dynamicWeightsPayload = {
                 effectiveWeights: { sell: effectiveSell, buy: effectiveBuy },
                 baseWeights:      { sell: staticSell,    buy: staticBuy },
@@ -424,11 +437,13 @@ class MarketAdapterService {
                 alpha,
                 dw,
                 gain,
-                trend:            slopeResult.trend,
-                confidence:       slopeResult.confidence,
-                slopePct:         slopeResult.slopePct,
+                trend:                   slopeResult.trend,
+                confidence:              slopeResult.confidence,
+                slopePct:                slopeResult.slopePct,
                 regimeMultiplier,
-                kalmanReady:      kalmanResult?.isReady ?? false,
+                minOutputThreshold,
+                belowMinOutputThreshold,
+                kalmanReady:             kalmanResult?.isReady ?? false,
                 ...(regimeResult ? {
                     hurst:       regimeResult.hurst,
                     pe:          regimeResult.pe,
@@ -436,7 +451,7 @@ class MarketAdapterService {
                     peRegime:    regimeResult.peRegime,
                     regimeReady: regimeResult.isReady,
                 } : {}),
-                isReady:          slopeResult.isReady,
+                isReady:          slopeResult.isReady && !belowMinOutputThreshold,
                 updatedAt:        nowIso,
             };
         }

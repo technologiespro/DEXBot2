@@ -938,6 +938,149 @@ async function testIdOnlyBotIsNotRejected() {
     assert.notStrictEqual(result.reason, 'missing asset pair', 'should not fail with missing asset pair');
 }
 
+// Flat candles → finalOff = 0, which is below the default 0.25 threshold.
+// Bot side should receive isReady=false and effectiveWeights == baseWeights.
+// Requires 1000 candles so slopeResult.isReady=true (AMA3 erPeriod=781, lookback=72 → needs 854+).
+async function testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights() {
+    let writtenPayload = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateCandles(1000, 100) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-0.trigger',
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
+            writtenPayload = payload;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-0',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = { bots: { 'xrp-bts-dw-0': { centerPrice: 100 } } };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.ok(writtenPayload, 'writeBotDynamicGrid should be called via weight-only update path');
+
+    const dw = writtenPayload.dynamicWeights;
+    assert.ok(dw, 'dynamicWeights payload should be present');
+    assert.strictEqual(dw.belowMinOutputThreshold, true, 'flat candles produce finalOff=0 < default threshold 0.25');
+    assert.strictEqual(dw.isReady, false, 'isReady should be false when below min output threshold');
+    assert.strictEqual(dw.effectiveWeights.sell, 0.6, 'effectiveWeights.sell should equal static sell when below threshold');
+    assert.strictEqual(dw.effectiveWeights.buy, 0.4, 'effectiveWeights.buy should equal static buy when below threshold');
+    assert.deepStrictEqual(dw.effectiveWeights, dw.baseWeights, 'effectiveWeights should equal baseWeights when below threshold');
+    assert.strictEqual(dw.minOutputThreshold, 0.25, 'minOutputThreshold should be the default 0.25');
+}
+
+// With minOutputThreshold=0 the gate is disabled: even finalOff=0 passes, isReady reflects
+// slopeResult.isReady (true with enough flat candles), and belowMinOutputThreshold is false.
+async function testDynamicWeightMinOutputThresholdZeroDisablesGate() {
+    let writtenPayload = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateCandles(1000, 100) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-1.trigger',
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
+            writtenPayload = payload;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-1',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = { bots: { 'xrp-bts-dw-1': { centerPrice: 100 } } };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        minOutputThreshold: 0,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.ok(writtenPayload, 'writeBotDynamicGrid should be called');
+
+    const dw = writtenPayload.dynamicWeights;
+    assert.ok(dw, 'dynamicWeights payload should be present');
+    assert.strictEqual(dw.belowMinOutputThreshold, false, 'minOutputThreshold=0 disables the gate');
+    assert.strictEqual(dw.isReady, true, 'isReady should be true when gate is disabled and slopeResult is ready');
+    assert.strictEqual(dw.minOutputThreshold, 0, 'cfg.minOutputThreshold=0 should be reflected in payload');
+}
+
 async function run() {
     await testTriggerHookCalledOnThreshold();
     await testIdOnlyBotIsNotRejected();
@@ -951,6 +1094,8 @@ async function run() {
     await testContextCacheInvalidatesOnPoolChange();
     await testKibanaGapRepairPatchesMissingCandles();
     await testRemainingGapsAreReportedWhenKibanaHasNoPatchData();
+    await testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights();
+    await testDynamicWeightMinOutputThresholdZeroDisablesGate();
 }
 
 run()

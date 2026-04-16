@@ -200,6 +200,7 @@ function resolveBotCfg(bot, globalCfg) {
         if (ps.sourceRetries != null) merged.sourceRetries = ps.sourceRetries;
         if (ps.retryDelayMs != null) merged.retryDelayMs = ps.retryDelayMs;
         if (ps.minWeightChangeDelta != null) merged.minWeightChangeDelta = ps.minWeightChangeDelta;
+        if (ps.minOutputThreshold != null) merged.minOutputThreshold = ps.minOutputThreshold;
         if (ps.clipPercentile != null) merged.clipPercentile = ps.clipPercentile;
         if (ps.regimeSensitivity != null) merged.regimeSensitivity = ps.regimeSensitivity;
         if (ps.regimeTable) merged.regimeTable = ps.regimeTable;
@@ -227,6 +228,7 @@ function resolveBotCfg(bot, globalCfg) {
         if (botOverride.maxSlopeOffset != null) merged.maxSlopeOffset = botOverride.maxSlopeOffset;
         if (botOverride.maxVolatilityOffset != null) merged.maxVolatilityOffset = botOverride.maxVolatilityOffset;
         if (botOverride.minWeightChangeDelta != null) merged.minWeightChangeDelta = botOverride.minWeightChangeDelta;
+        if (botOverride.minOutputThreshold != null) merged.minOutputThreshold = botOverride.minOutputThreshold;
         if (botOverride.clipPercentile != null) merged.clipPercentile = botOverride.clipPercentile;
         if (botOverride.regimeSensitivity != null) merged.regimeSensitivity = botOverride.regimeSensitivity;
         if (botOverride.regimeTable) merged.regimeTable = botOverride.regimeTable;

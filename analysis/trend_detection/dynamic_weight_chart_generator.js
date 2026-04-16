@@ -260,12 +260,14 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, weightVarianceArr, dispScaleAtrMult, dispScaleMinPct })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: ma.absoluteThreshold ?? 0.15, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, weightVarianceArr, dispScaleAtrMult, dispScaleMinPct })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
         const SYNC_KEY = "dyn-wt-res-v3";
         const Y_AXIS_SIZE = 58;
+
+        const ABSOLUTE_THRESHOLD = data.absoluteThreshold ?? 0.15;
 
         let currentAlpha   = data.alpha;
         let currentGain  = data.gain ?? ma.gain;
@@ -435,7 +437,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     const rawOff = (currentAlpha * (aOff / aMax) + (1 - currentAlpha) * (kOff / kMax)) * mo;
                     const baseMult = getRegimeMultiplier(data.hurstArr[i], data.peArr[i]);
                     // Use power for sensitivity: pushes away from 1.0 in both directions without flipping sign
-                    const finalMult = Math.pow(baseMult, currentRegimeSensitivity);
+                    const rawMult = Math.pow(baseMult, currentRegimeSensitivity);
+                    // Dead-band: only apply regime multiplier when |mult - 1.0| >= absoluteThreshold
+                    const finalMult = Math.abs(rawMult - 1.0) >= ABSOLUTE_THRESHOLD ? rawMult : 1.0;
                     currentMults[i] = finalMult;
                     const off = Math.max(-0.5, Math.min(0.5, rawOff * finalMult));
                     combinedOff[i] = Math.round(off * 1000) / 1000;

@@ -204,6 +204,7 @@ async function main() {
                 amaLookbackBars:        MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
                 amaMaxSlopePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
                 amaNeutralZonePct:      MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
+                absoluteThreshold:      MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD,
                 dispScaleAtrMult:       MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT,
                 dispScaleMinPct:        MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT,
             },

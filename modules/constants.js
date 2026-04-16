@@ -570,51 +570,70 @@ let MARKET_ADAPTER = {
 
     // MIN_WEIGHT_CHANGE_DELTA: Minimum change in effectiveSell or effectiveBuy (absolute)
     // required to persist a weight update. Prevents micro-adjustments when regime is stable.
+    // (not exposed in chart UI)
     MIN_WEIGHT_CHANGE_DELTA: 0.02,
 
     // DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD: Minimum |multiplier - 1.0| required before
     // dynamic weight is applied. Below this, multiplier is treated as neutral (1.0).
+    // (not exposed in chart UI)
     DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD: 0.15,
+
+    // DYNAMIC_WEIGHT_MIN_OUTPUT_THRESHOLD: Minimum |finalOffset| required before the
+    // computed dynamic weight is applied to the bot. Below this the effective weights fall
+    // back to the bot's static weightDistribution (no dynamic offset applied).
+    // Default 0.25 = half the maximum possible offset (±0.5).
+    // (not exposed in chart UI)
+    DYNAMIC_WEIGHT_MIN_OUTPUT_THRESHOLD: 0.25,
 
     // DYNAMIC_WEIGHT_CLIP_PERCENTILE: Percentile clip on AMA slope distribution.
     // 0 = no clip; 10 = clip top 10% as outliers (90th percentile).
     // Configurable per market or per bot via market_profiles.json or botOverrides.
+    // nob: clip%
     DYNAMIC_WEIGHT_CLIP_PERCENTILE: 10,
 
     // DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: Bars to look back for AMA slope computation.
     // Lower = more responsive, higher = more smooth.
+    // nob: lb (Lookback Bars)
     DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: 10,
 
     // DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: Slope % that saturates the AMA offset.
     // The AMA slope is clamped to ±maxSlopePct before scaling to offset.
+    // nob: maxS% (Max Slope %)
     DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: 0.5,
 
     // DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT: Dead-band around zero slope (percent).
     // Slopes smaller than this are treated as neutral (no offset).
+    // nob: nz% (Neutral Zone %)
     DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT: 0.15,
 
     // DYNAMIC_WEIGHT_ALPHA: Blend ratio between AMA and Kalman (0 = pure Kalman, 1 = pure AMA)
+    // nob: alpha
     DYNAMIC_WEIGHT_ALPHA: 0.7,
 
     // DYNAMIC_WEIGHT_DW: Displacement weight for Kalman channel (0 = pure velocity, 1 = full displacement)
+    // nob: dw (Displacement Weight)
     DYNAMIC_WEIGHT_DW: 1.0,
 
     // DYNAMIC_WEIGHT_GAIN: Master gain multiplier on the final blended offset.
     // Scales the computed weight offset before clamping to ±0.5.
     // 0.5 = half strength, 1.0 = full strength, 2.0 = double strength.
+    // nob: gain
     DYNAMIC_WEIGHT_GAIN: 1,
 
     // DYNAMIC_WEIGHT_REGIME_SENSITIVITY: Exponent applied to regime multiplier.
     // 0 = ignore regime (multiplier always 1.0), 1 = use table as-is, 2 = squared effect.
+    // nob: regime
     DYNAMIC_WEIGHT_REGIME_SENSITIVITY: 1,
 
     // DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: Multiplier converting ATR% to displacement confidence scale.
     // Full dispConf is reached when Kalman displacement >= MULT × ATR%. Default 200 means full
     // confidence at 2× ATR from the modal (a ~2-sigma "unusual" move).
+    // (not exposed in chart UI)
     DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: 200,
 
     // DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: Floor for displacement scale (percent).
     // Prevents dispConf from saturating instantly in ultra-low-volatility (near-zero ATR) markets.
+    // (not exposed in chart UI)
     DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: 0.5,
 
     // REGIME_TABLE: Bilinear lookup table for Hurst + PE regime multiplier.
