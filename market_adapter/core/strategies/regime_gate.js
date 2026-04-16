@@ -6,8 +6,10 @@ const { HURST_CONFIG, PE_CONFIG } = require('../../../analysis/trend_detection/r
 const { MARKET_ADAPTER } = require('../../../modules/constants');
 
 // Axis node values — bilinear interpolation is performed between adjacent nodes
-const H_NODES  = [0.55, 0.50, 0.45]; // H decreasing: higher index = lower H
-const PE_NODES = [0.60, 0.725, 0.85]; // PE increasing: higher index = higher PE
+// Derived from constants so changes to HURST_ZONE_BAND / PE_NODES propagate automatically
+const _band    = MARKET_ADAPTER.HURST_ZONE_BAND;
+const H_NODES  = [0.5 + _band, 0.5, 0.5 - _band]; // H decreasing: higher index = lower H
+const PE_NODES = MARKET_ADAPTER.PE_NODES;           // PE increasing: higher index = higher PE
 
 /**
  * Bilinear interpolation over the 3×3 regime table.
@@ -18,11 +20,12 @@ const PE_NODES = [0.60, 0.725, 0.85]; // PE increasing: higher index = higher PE
  *
  * @param {number} h  - Hurst exponent [0, 1]
  * @param {number} pe - Normalized permutation entropy [0, 1]
+ * @param {Array}  [regimeTable] - Optional override for regime table
  * @returns {number}  - Interpolated multiplier
  */
 function bilinearInterpolate(h, pe, regimeTable = null) {
     const table = regimeTable ?? MARKET_ADAPTER.REGIME_TABLE;
-    // --- Hurst axis (H_NODES = [0.55, 0.50, 0.45], decreasing) ---
+    // --- Hurst axis (H_NODES derived from HURST_ZONE_BAND, decreasing) ---
     // Find which interval h falls in: row r0, r1 = r0+1, fraction tRow toward r1
     let r0, tRow;
     if (h >= H_NODES[0]) {
@@ -36,7 +39,7 @@ function bilinearInterpolate(h, pe, regimeTable = null) {
     }
     const r1 = Math.min(2, r0 + 1);
 
-    // --- PE axis (PE_NODES = [0.60, 0.725, 0.85], increasing) ---
+    // --- PE axis (PE_NODES from constants, increasing) ---
     // Find which interval pe falls in: col c0, c1 = c0+1, fraction tCol toward c1
     let c0, tCol;
     if (pe <= PE_NODES[0]) {
@@ -123,4 +126,4 @@ function computeRegimeMultiplier(closes, opts = {}) {
     };
 }
 
-module.exports = { computeRegimeMultiplier, bilinearInterpolate, REGIME_TABLE: MARKET_ADAPTER.REGIME_TABLE };
+module.exports = { computeRegimeMultiplier, bilinearInterpolate };

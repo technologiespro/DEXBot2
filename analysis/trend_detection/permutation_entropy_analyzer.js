@@ -1,5 +1,7 @@
 'use strict';
 
+const { MARKET_ADAPTER } = require('../../modules/constants');
+
 /**
  * Permutation Entropy Analyzer
  *
@@ -11,8 +13,9 @@
  * Normalized PE ≈ 0: price movement is highly ordered (strong structure; edge exists).
  * Normalized PE ≈ 1: maximum disorder (noise; no reliable edge).
  *
- * Threshold guidance: PE < 0.60 = structured (signals trustworthy);
- *                     PE > 0.85 = noise (suppress or gate signals).
+ * Threshold guidance: PE < PE_NODES[0] = structured (signals trustworthy);
+ *                     PE > PE_NODES[2] = noise (suppress or gate signals).
+ *                     Thresholds are defined in MARKET_ADAPTER.PE_NODES in constants.js.
  *
  * Default: m=5 (5!=120 patterns), window=100 bars.
  */
@@ -100,13 +103,14 @@ class PermutationEntropyAnalyzer {
 
     getAnalysis() {
         const ne = this.normalizedEntropy;
+        const [PE_LOW, , PE_HIGH] = MARKET_ADAPTER.PE_NODES;
         let regime, regimeStrength;
-        if (ne < 0.60) {
+        if (ne < PE_LOW) {
             regime = 'STRUCTURED';
-            regimeStrength = Math.min(1, (0.60 - ne) / 0.60);
-        } else if (ne > 0.85) {
+            regimeStrength = Math.min(1, (PE_LOW - ne) / PE_LOW);
+        } else if (ne > PE_HIGH) {
             regime = 'NOISE';
-            regimeStrength = Math.min(1, (ne - 0.85) / 0.15);
+            regimeStrength = Math.min(1, (ne - PE_HIGH) / (1 - PE_HIGH));
         } else {
             regime = 'MIXED';
             regimeStrength = 0;

@@ -631,14 +631,28 @@ let MARKET_ADAPTER = {
     // (not exposed in chart UI)
     DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: 0.5,
 
+    // HURST_ZONE_BAND: Symmetric offset from 0.5 defining the Hurst regime boundaries.
+    // H nodes derive as [0.5 + band, 0.5, 0.5 - band].
+    // Default 0.05 → trending threshold H > 0.55, mean-reverting threshold H < 0.45.
+    // The RANDOM band between the two thresholds acts as natural hysteresis — H must
+    // traverse the full neutral zone before switching between TRENDING and MEAN_REVERTING.
+    HURST_ZONE_BAND: 0.05,
+
+    // PE_NODES: Three zone boundaries for Permutation Entropy [structured, mixed, noise].
+    // PE < PE_NODES[0] = STRUCTURED (signals trustworthy)
+    // PE_NODES[0]..PE_NODES[2] = MIXED (interpolated)
+    // PE > PE_NODES[2] = NOISE (suppress signals)
+    // PE_NODES[1] is the mid-node for bilinear interpolation.
+    PE_NODES: [0.60, 0.725, 0.85],
+
     // REGIME_TABLE: Bilinear lookup table for Hurst + PE regime multiplier.
-    // Rows: Hurst regimes [trending, random, mean-reverting] (H nodes: 0.55, 0.50, 0.45)
-    // Cols: PE regimes [structured, mixed, noise] (PE nodes: 0.60, 0.725, 0.85)
+    // Rows: Hurst regimes [trending, random, mean-reverting] (H nodes derived from HURST_ZONE_BAND)
+    // Cols: PE regimes [structured, mixed, noise] (PE nodes from PE_NODES)
     // Best case (trending + structured) = 1.0, unclear situations < 1.0 to dampen signal
     REGIME_TABLE: [
-        [1.0, 0.7, 0.3],  // Trending (H > 0.55)
-        [0.6, 0.4, 0.15], // Random (H 0.45-0.55)
-        [0.3, 0.2, 0.05], // Mean-reverting (H < 0.45)
+        [1.0, 0.7, 0.3],  // Trending (H > 0.5 + HURST_ZONE_BAND)
+        [0.6, 0.4, 0.15], // Random
+        [0.3, 0.2, 0.05], // Mean-reverting (H < 0.5 - HURST_ZONE_BAND)
     ],
 
     // DEFAULT_AMA_KEY: Built-in default profile for `gridPrice: "ama"` when no

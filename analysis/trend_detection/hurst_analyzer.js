@@ -1,14 +1,19 @@
 'use strict';
 
+const { MARKET_ADAPTER } = require('../../modules/constants');
+
 /**
  * Hurst Exponent Analyzer
  *
  * Estimates the Hurst exponent via Rescaled Range (R/S) analysis over a rolling
- * price window. H > 0.55 = trending (persistent), H ≈ 0.5 = random walk,
- * H < 0.45 = mean-reverting (anti-persistent).
+ * price window. H > (0.5 + HURST_ZONE_BAND) = trending (persistent),
+ * H ≈ 0.5 = random walk, H < (0.5 - HURST_ZONE_BAND) = mean-reverting (anti-persistent).
  *
- * Use as a regime gate: trust trend-following signals when H > 0.55, suppress or
- * invert them when H < 0.45, stay flat when H ≈ 0.5.
+ * Zone boundaries are read from MARKET_ADAPTER.HURST_ZONE_BAND (default 0.05).
+ * The RANDOM band between the two thresholds acts as natural hysteresis.
+ *
+ * Use as a regime gate: trust trend-following signals when trending, suppress or
+ * invert them when mean-reverting, stay flat when random.
  *
  * Algorithm: for each scale τ in config.scales, partition the log-return window into
  * non-overlapping chunks of length τ, compute average R/S per chunk, then OLS-fit
@@ -125,13 +130,16 @@ class HurstAnalyzer {
 
     getAnalysis() {
         const h = this.hurst;
+        const H_UPPER = 0.5 + MARKET_ADAPTER.HURST_ZONE_BAND;
+        const H_LOWER = 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND;
+
         let regime, regimeStrength;
-        if (h >= 0.55) {
+        if (h >= H_UPPER) {
             regime = 'TRENDING';
-            regimeStrength = Math.min(1, (h - 0.55) / 0.25);
-        } else if (h <= 0.45) {
+            regimeStrength = Math.min(1, (h - H_UPPER) / 0.25);
+        } else if (h <= H_LOWER) {
             regime = 'MEAN_REVERTING';
-            regimeStrength = Math.min(1, (0.45 - h) / 0.25);
+            regimeStrength = Math.min(1, (H_LOWER - h) / 0.25);
         } else {
             regime = 'RANDOM';
             regimeStrength = 0;

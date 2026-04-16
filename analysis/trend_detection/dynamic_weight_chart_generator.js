@@ -1,5 +1,7 @@
 'use strict';
 
+const { MARKET_ADAPTER } = require('../../modules/constants');
+
 function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, (m) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
@@ -262,7 +264,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, weightVarianceArr, dispScaleAtrMult, dispScaleMinPct })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, weightVarianceArr, dispScaleAtrMult, dispScaleMinPct, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -297,36 +299,29 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         let currentAmaClipThreshold = currentClipPct === 0 ? maxAmaSlope : data.amaPercentiles[100 - currentClipPct];
         let currentKalClipThreshold = currentClipPct === 0 ? maxKalVel : data.kalPercentiles[100 - currentClipPct];
 
-        // Regime table from payload (allows custom tables) or default
-        const REGIME_TABLE = data.regimeTable || [
-            // PE: <0.60 (Structured)  0.725 (Mixed)  >0.85 (Noise)
-            [ 1.0,                 0.7,           0.3  ],  // H > 0.55  trending (hNode 0.60)
-            [ 0.6,                 0.4,           0.15 ],  // H 0.45-0.55  random (hNode 0.50)
-            [ 0.3,                 0.2,           0.05 ],  // H < 0.45  mean-rev (hNode 0.40)
-        ];
+        // Regime table and axis nodes from payload — sourced from MARKET_ADAPTER in constants.js
+        const REGIME_TABLE = data.regimeTable;
+        const H_NODES = data.hNodes; // [0.5+band, 0.5, 0.5-band]
+        const P_NODES = data.pNodes; // PE_NODES
 
         /**
-         * Bilinear interpolation for smooth regime multiplier
+         * Bilinear interpolation for smooth regime multiplier (mirrors regime_gate.js)
          */
         function getRegimeMultiplier(H, PE) {
             if (H == null || PE == null) return 1.0;
 
-            // Define grid coordinates
-            const hNodes = [0.60, 0.50, 0.40]; // Indices 0, 1, 2
-            const pNodes = [0.55, 0.725, 0.90]; // Indices 0, 1, 2
-
             // Clamp inputs to grid range
-            const h = Math.max(0.40, Math.min(0.60, H));
-            const p = Math.max(0.55, Math.min(0.90, PE));
+            const h = Math.max(H_NODES[2], Math.min(H_NODES[0], H));
+            const p = Math.max(P_NODES[0], Math.min(P_NODES[2], PE));
 
-            // Find H segment
-            let i = h > 0.50 ? 0 : 1;
-            let h0 = hNodes[i], h1 = hNodes[i+1];
+            // Find H segment (H_NODES decreasing)
+            let i = h > H_NODES[1] ? 0 : 1;
+            let h0 = H_NODES[i], h1 = H_NODES[i+1];
             let th = (h - h1) / (h0 - h1); // 0 at h1, 1 at h0
 
-            // Find PE segment
-            let j = p < 0.725 ? 0 : 1;
-            let p0 = pNodes[j], p1 = pNodes[j+1];
+            // Find PE segment (P_NODES increasing)
+            let j = p < P_NODES[1] ? 0 : 1;
+            let p0 = P_NODES[j], p1 = P_NODES[j+1];
             let tp = (p - p0) / (p1 - p0); // 0 at p0, 1 at p1
 
             // 4-point lookup
