@@ -129,7 +129,7 @@ Configuration options from `node dexbot bots`, stored in `profiles/bots.json`:
 | **`active`** | boolean | `false` to keep config without running |
 | **`dryRun`** | boolean | Simulate orders without broadcasting |
 | **`preferredAccount`** | string | BitShares account name for trading |
-| **`startPrice`** | num \| str | Initial price. `"pool"` (liquidity pool), `"market"` (order book), or numeric `A/B` ratio |
+| **`startPrice`** | num \| str | Initial price. `"pool"` (liquidity pool), `"book"` (order book), or numeric `A/B` ratio |
 | **`minPrice`** | num \| str | Lower bound. Number or multiplier (e.g., `"2x"` = `startPrice / 2`) |
 | **`maxPrice`** | num \| str | Upper bound. Number or multiplier (e.g., `"2x"` = `startPrice * 2`) |
 | **`gridPrice`** | num \| str \| null | Reference price for bound calculations. `null` (uses `startPrice`), numeric, or AMA keyword (`"ama"`, `"ama1"`-`"ama4"`) |

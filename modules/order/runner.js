@@ -101,7 +101,7 @@ async function runOrderManagerCalculation() {
     if (!isNumeric(rawMarketPrice)) {
         try {
             const { BitShares } = require('../bitshares_client');
-            const mode = botConfig.priceMode || (rawMarketPrice === 'market' ? 'market' : (rawMarketPrice === 'pool' ? 'pool' : 'auto'));
+            const mode = botConfig.priceMode || (rawMarketPrice === 'book' || rawMarketPrice === 'market' ? 'book' : (rawMarketPrice === 'pool' ? 'pool' : 'auto'));
 
             console.log(`Deriving startPrice using mode: ${mode}...`);
             const derived = await derivePrice(BitShares, botConfig.assetA, botConfig.assetB, mode);

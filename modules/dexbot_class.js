@@ -240,9 +240,10 @@ class DEXBot {
 
         // Validate startPrice is numeric or valid string mode
         const startPrice = config.startPrice;
-        const validPriceModes = ['pool', 'market', 'orderbook'];
+        const validPriceModes = ['pool', 'book'];
+        const legacyPriceModes = ['market', 'orderbook']; // accepted but normalized to 'book'
         const isPriceNumeric = typeof startPrice === 'number' && Number.isFinite(startPrice) && startPrice > 0;
-        const isPriceMode = typeof startPrice === 'string' && validPriceModes.includes(startPrice.toLowerCase());
+        const isPriceMode = typeof startPrice === 'string' && [...validPriceModes, ...legacyPriceModes].includes(startPrice.toLowerCase());
         if (!isPriceNumeric && !isPriceMode) {
             errors.push(`startPrice must be a positive number or valid mode (${validPriceModes.join('/')}), got: ${startPrice}`);
         }

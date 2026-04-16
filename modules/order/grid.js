@@ -488,7 +488,7 @@ class Grid {
         const mpRaw = manager.config.startPrice;
         manager.logger?.log?.(`[DIAGNOSTIC] initializeGrid: mpRaw type=${typeof mpRaw}, value=${mpRaw}`, 'debug');
 
-        // Auto-derive price if not a fixed numeric value (e.g. "pool", "market", or undefined)
+        // Auto-derive price if not a fixed numeric value (e.g. "pool", "book", or undefined)
         if (typeof mpRaw !== 'number' || isNaN(mpRaw)) {
             try {
                 const { BitShares } = require('../bitshares_client');
@@ -511,18 +511,19 @@ class Grid {
         // Derive gridPrice — separate reference for x-factor bounds (may differ from startPrice).
         // Supported modes:
         //   - numeric: fixed value
-        //   - "pool" / "market": live blockchain price for the pair
+        //   - "pool" / "book": live blockchain price for the pair ("market" is a legacy alias for "book")
         //   - "ama"/"ama1".."ama4": center from profiles/orders/<botKey>.dynamicgrid.json
         //   - null/anything else: fallback to startPrice (backward-compatible)
         let gp = mp;
         let gpSource = 'startPrice';
         const gpRaw = manager.config.gridPrice;
-        const gpMode = (typeof gpRaw === 'string') ? gpRaw.trim().toLowerCase() : null;
+        const gpModeRaw = (typeof gpRaw === 'string') ? gpRaw.trim().toLowerCase() : null;
+        const gpMode = gpModeRaw === 'market' ? 'book' : gpModeRaw; // normalize legacy alias
         if (typeof gpRaw === 'number' && Number.isFinite(gpRaw) && gpRaw > 0) {
             gp = gpRaw;
             gpSource = 'numeric';
             manager.logger?.log?.(`[DIAGNOSTIC] initializeGrid: gridPrice=numeric ${gp.toFixed(8)}`, 'info');
-        } else if (gpMode === 'pool' || gpMode === 'market') {
+        } else if (gpMode === 'pool' || gpMode === 'book') {
             try {
                 const { BitShares } = require('../bitshares_client');
                 const derived = await derivePrice(BitShares, manager.config.assetA, manager.config.assetB, gpMode);

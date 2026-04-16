@@ -26,7 +26,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Copy-on-Write Pattern**: How to work safely within the COW rebalance pipeline; `WorkingGrid` usage and master-grid commit rules (see [COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md))
 - **Startup Sequence & Lock Ordering**: Consolidated startup with deadlock prevention
 - **Zero-Amount Order Prevention**: Validation gates for healthy order sizes
-- **Configurable startPrice**: Fixed numeric, pool, or market-derived pricing modes
+- **Configurable startPrice**: Fixed numeric, pool, or book-derived pricing modes
 - **Pool ID Caching**: Optimization for price derivation
 - **Order State Helper Functions**: Centralized predicate functions for state checking
 - **Common Tasks**: Practical "how-to" guides for adding features or fixing bugs.

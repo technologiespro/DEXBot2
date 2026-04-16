@@ -78,7 +78,7 @@ async function testMarketPrice() {
         console.log(`${colors.bold}Test 2: Market (Order Book) Price${colors.reset}`);
         console.log(`Fetching market price from order book for ${symA}/${symB}...`);
         const startMarket = Date.now();
-        const startPrice = await derivePrice(BitShares, symA, symB, 'market');
+        const startPrice = await derivePrice(BitShares, symA, symB, 'book');
         const marketTime = Date.now() - startMarket;
 
         if (startPrice && startPrice > 0) {

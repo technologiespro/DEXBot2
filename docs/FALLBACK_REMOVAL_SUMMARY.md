@@ -55,7 +55,7 @@ const buyPrecision = manager.config.assetB.precision;
 ### 2. PRICE DERIVATION FALLBACK RESTRUCTURE
 
 **Scope**: `modules/order/utils/system.js` - `derivePrice()` function
-**Philosophy**: Make mode semantics explicit - no silent cross-fallback between pool/market
+**Philosophy**: Make mode semantics explicit - no silent cross-fallback between pool/book
 
 #### Changes:
 
@@ -81,11 +81,11 @@ if (mode === 'pool') {
     return await derivePoolPrice(BitShares, symA, symB).catch(() => null);
 }
 
-if (mode === 'market') {
+if (mode === 'book') {
     return await deriveMarketPrice(BitShares, symA, symB).catch(() => null);
 }
 
-// mode === 'auto': pool preferred, market fallback only in auto
+// mode === 'auto': pool preferred, book fallback only in auto
 let poolP = await derivePoolPrice(BitShares, symA, symB).catch(() => null);
 if (poolP > 0) return poolP;
 
@@ -100,8 +100,8 @@ return null;
 | Mode | Before | After |
 |------|--------|-------|
 | `pool` | Returns pool OR market | Returns pool only (null if unavailable) |
-| `market` | Returns market OR pool | Returns market only (null if unavailable) |
-| `auto` | Pool → market → limit orders | Pool → market (market is only fallback) |
+| `book` | Returns market OR pool | Returns book only (null if unavailable) |
+| `auto` | Pool → market → limit orders | Pool → book (book is only fallback) |
 
 **Impact**:
 - **Explicitness**: Each mode has clear, documented semantics
@@ -175,7 +175,7 @@ if (!match) {
 ### `tests/test_price_derive.js`
 **Major Test Logic Change**:
 
-**Before**: Test expected fallback behavior - pool mode could fallback to market
+**Before**: Test expected fallback behavior - pool mode could fallback to book
 ```javascript
 const derivedForcePoolMissing = await derivePrice(mock, assetA, assetB, 'pool');
 assert(derivedForcePoolMissing should match market fallback);
@@ -186,8 +186,8 @@ assert(derivedForcePoolMissing should match market fallback);
 const derivedPoolOnly = await derivePrice(mock, assetA, assetB, 'pool');
 assert(derivedPoolOnly === null, 'derivePrice(mode=pool) should return null when pool unavailable');
 
-const derivedMarketOnly = await derivePrice(mock, assetA, assetB, 'market');
-assert(Number.isFinite(derivedMarketOnly), 'market mode returns market only');
+const derivedBookOnly = await derivePrice(mock, assetA, assetB, 'book');
+assert(Number.isFinite(derivedBookOnly), 'book mode returns book price only');
 ```
 
 **Impact**: Tests now verify strict semantics, not fallback behavior
@@ -244,7 +244,7 @@ assert(Number.isFinite(derivedMarketOnly), 'market mode returns market only');
 
 ### ⚠️ Medium Risk
 - Price derivation restructure (may affect startup if pools unavailable)
-  - **Mitigation**: Auto mode still has market fallback; pool/market modes explicit
+  - **Mitigation**: Auto mode still has book fallback; pool/book modes explicit
 - Orphan order removal (unmatched orders may accumulate)
   - **Mitigation**: Strict matching is the intended design; orphans indicate sync issues
 
@@ -269,7 +269,7 @@ assert(Number.isFinite(derivedMarketOnly), 'market mode returns market only');
 - Explicit, strict semantics
 - Each component has single, clear behavior
 - Precision strictly validated at startup
-- Price modes independent (auto is only exception with pool→market fallback)
+- Price modes independent (auto is only exception with pool→book fallback)
 - Orphan orders left unmatched (indicates sync issue)
 
 **Net Effect**: System is more predictable, failures are clearer, configuration must be explicit.

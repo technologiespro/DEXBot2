@@ -533,10 +533,10 @@ this.periodicRefreshTimer = setInterval(
 // 2. When timer fires:
 async _performPeriodicRefresh() {
     // Fetch latest market price
-    const latestPrice = await derivePrice('market');  // Or 'pool'
+    const latestPrice = await derivePrice('book');  // Or 'pool'
 
     // Update internal anchor if using dynamic pricing
-    if (config.startPrice === 'market' || config.startPrice === 'pool') {
+    if (config.startPrice === 'book' || config.startPrice === 'pool') {
         this.manager.startPrice = latestPrice;
     }
 
@@ -1019,7 +1019,7 @@ The `startPrice` parameter follows a strict hierarchy of authority:
 |--------------|--------|----------|
 | **Numeric** | `bots.json` | **Single Source of Truth**. Blocks all auto-derivation. Used as a fixed anchor for valuation and grid resets. |
 | **"pool"** | Blockchain | Derived from current Liquidity Pool price during resets or 4h refresh cycles. |
-| **"market"** | Blockchain | Derived from current Orderbook price during resets or 4h refresh cycles. |
+| **"book"** | Blockchain | Derived from current order book price during resets or 4h refresh cycles. |
 
 ---
 

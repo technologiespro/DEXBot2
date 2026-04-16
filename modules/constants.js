@@ -166,12 +166,12 @@ const COW_ACTIONS = Object.freeze({
 // These values are used when a parameter is not explicitly provided in the bot config.
 let DEFAULT_CONFIG = {
     // Price configuration
-    startPrice: "pool",          // Market price source: "pool" (liquidity pool), "orderbook", or numeric value
+    startPrice: "pool",          // Market price source: "pool" (liquidity pool), "book" (order book), or numeric value
     minPrice: "3x",               // Lower price bound: "Nx" = N times below startPrice, or numeric value
     maxPrice: "3x",               // Upper price bound: "Nx" = N times above startPrice, or numeric value
     gridPrice: null,              // Optional reference price for x-factor bounds calculation.
                                   // "pool"    = use the live pool price for the pair
-                                  // "market"  = use the live market price for the pair
+                                  // "book"    = use the live order book price for the pair
                                   // "ama"/"ama1".."ama4" = use the effective center snapshot from profiles/orders/<botKey>.dynamicgrid.json
                                   // numeric   = fixed numeric value
                                   // null      = use startPrice (default, backward-compatible)

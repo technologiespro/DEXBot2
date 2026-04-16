@@ -35,9 +35,9 @@
  *       "assetB": "USD",
  *       "active": true,
  *       "dryRun": false,
- *       "startPrice": "pool",      // Price for order alignment: "pool", "market", or numeric
+ *       "startPrice": "pool",      // Price for order alignment: "pool", "book", or numeric
  *       "gridPrice": null,         // Reference price for x-factor bounds (3 options):
- *                                  //   "pool" / "market" = live pair price reference
+ *                                  //   "pool" / "book" = live pair price reference
  *                                  //   "ama"/"ama1".."ama4" = price_adapter writes a center snapshot to
  *                                  //              profiles/orders/<botKey>.dynamicgrid.json; grid reads the effective center on reset
  *                                  //   <number> = fixed numeric reference
@@ -760,7 +760,7 @@ async function askBoolean(promptText, defaultValue) {
 }
 
 /**
- * Prompts the user for the start price (numeric or "pool"/"market").
+ * Prompts the user for the start price (numeric or "pool"/"book").
  * @param {string} promptText - The prompt text to display.
  * @param {number|string} defaultValue - The default value to use if input is empty.
  * @returns {Promise<number|string>} The start price or '\x1b' if ESC.
@@ -780,10 +780,9 @@ async function askStartPrice(promptText, defaultValue) {
         }
 
         const lower = raw.toLowerCase();
-        // Accept 'pool' or 'market' strings
-        if (lower === 'pool' || lower === 'market') {
-            return lower;
-        }
+        // Accept 'pool' or 'book' strings; 'market' accepted as legacy alias for 'book'
+        if (lower === 'pool') return lower;
+        if (lower === 'book' || lower === 'market') return 'book';
 
         // Accept numeric values (including decimals)
         const num = Number(raw);
@@ -791,7 +790,7 @@ async function askStartPrice(promptText, defaultValue) {
             return num;
         }
 
-        console.log('Please enter "pool", "market", or a numeric value.');
+        console.log('Please enter "pool", "book", or a numeric value.');
     }
 }
 
@@ -804,13 +803,14 @@ async function askGridPriceMode(promptText, defaultValue) {
 
         const lower = raw.toLowerCase();
         if (lower === 'none' || lower === 'null' || lower === 'start' || lower === 'startprice') return null;
-        if (lower === 'pool' || lower === 'market') return lower;
+        if (lower === 'pool') return lower;
+        if (lower === 'book' || lower === 'market') return 'book'; // 'market' is a legacy alias
         if (/^ama(?:[1-4])?$/.test(lower)) return lower;
 
         const num = Number(raw);
         if (Number.isFinite(num) && num > 0) return num;
 
-        console.log('Please enter: pool, market, ama, ama1..ama4, a positive number, or none/startprice.');
+        console.log('Please enter: pool, book, ama, ama1..ama4, a positive number, or none/startprice.');
     }
 }
 
@@ -906,9 +906,9 @@ async function promptBotData(base = {}) {
                 if (minP === '\x1b') break;
                 const maxP = await askMaxPrice('maxPrice', data.maxPrice, minP);
                 if (maxP === '\x1b') break;
-                const startP = await askStartPrice('startPrice (pool, market or A/B)', data.startPrice);
+                const startP = await askStartPrice('startPrice (pool, book or A/B)', data.startPrice);
                 if (startP === '\x1b') break;
-                const gp = await askGridPriceMode('gridPrice (pool/market/ama/number/none)', data.gridPrice);
+                const gp = await askGridPriceMode('gridPrice (pool/book/ama/number/none)', data.gridPrice);
                 if (gp === '\x1b') break;
                 data.minPrice = minP;
                 data.maxPrice = maxP;

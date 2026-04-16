@@ -996,7 +996,7 @@ Post-mortem analysis of the Feb 7 market crash (8% spike + reversal) revealed th
 
 - **Startup Configuration Validation** in dexbot_class.js (commit 56dd4bd)
   - New method `_validateStartupConfig()` validates critical parameters at construction time:
-    - Validates `startPrice` is numeric or valid mode (pool/market/orderbook)
+    - Validates `startPrice` is numeric or valid mode (pool/book)
     - Validates `assetA` and `assetB` are present and non-empty
     - Validates `incrementPercent` is in valid range (0-100)
   - Consolidated error reporting shows all validation failures at once instead of cascading errors

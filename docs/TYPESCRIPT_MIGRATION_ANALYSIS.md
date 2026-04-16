@@ -164,7 +164,7 @@ DEXBot2/
 - **Type Challenges**:
   - Array manipulation with numeric precision
   - Complex grid state structures
-  - Union types for price derivation (pool/market/auto)
+  - Union types for price derivation (pool/book/auto)
 - **Math-Heavy**: Requires careful numeric typing
 
 **5. chain_orders.js** (1,021 lines)
@@ -260,7 +260,7 @@ interface FundTracker {
 **3. Configuration Union Types** (15-20 hours)
 ```typescript
 interface BotConfig {
-  startPrice: "pool" | "market" | number;  // Union type
+  startPrice: "pool" | "book" | number;  // Union type
   pair: [Asset, Asset];
   spreadPercent: number;
   gridDensity: number;

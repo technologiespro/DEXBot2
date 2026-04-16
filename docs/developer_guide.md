@@ -1031,8 +1031,8 @@ The `startPrice` is the anchor for valuation (calculating the relative value of 
     *   The bot fetches the current BitShares Liquidity Pool price.
     *   Updated periodically every 4 hours.
 
-3.  **"market"**:
-    *   The bot derives the price from the current orderbook.
+3.  **"book"**:
+    *   The bot derives the price from the current order book.
     *   Updated periodically every 4 hours.
 
 ### Numeric `startPrice` - Fixed Anchor
@@ -1051,7 +1051,7 @@ When you set a **numeric value** like `"startPrice": 105.5` in `bots.json`:
 
 The bot performs a **Periodic Configuration Refresh** (every 4 hours by default).
 
-**For Dynamic Pricing** (`startPrice: "market"` or `startPrice: "pool"`):
+**For Dynamic Pricing** (`startPrice: "book"` or `startPrice: "pool"`):
 *   **Valuation Update**: Fetches latest market/pool price and updates grid anchor
 *   **Grid Reposition**: Subsequent grid resets use updated valuation
 *   **Operational Stability**: During normal operation, the bot remains "fund-driven" and doesn't move orders on-chain

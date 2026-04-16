@@ -54,7 +54,7 @@ async function runAutoderiveForBot(botCfg) {
     // Override minPrice/maxPrice with wide bounds to accommodate any derived price
     // This ensures the test's mock derivation succeeds regardless of bot's configured bounds
     const cfg = Object.assign({}, botCfg, {
-        startPrice: botCfg.startPrice || 'market',
+        startPrice: botCfg.startPrice || 'book',
         minPrice: 1e-12,
         maxPrice: 1e12
     });

@@ -9,7 +9,7 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 
 ⚠️ **Updates (March 2026)**:
 - Numeric format precision fallback has been completely removed. Precision is now strictly validated at startup.
-- Price fallback system has been removed. All price modes (`pool`, `market`, `auto`) now use strict semantics with no cross-fallback.
+- Price fallback system has been removed. All price modes (`pool`, `book`, `auto`) now use strict semantics with no cross-fallback.
 - Orphan order lax tolerance fallback has been removed. Orphaned chain orders that don't strictly match grid orders are no longer recovered.
 - Rotation-to-creation fallback has been removed. Unmet rotations are no longer converted to placements.
 
@@ -217,7 +217,7 @@ Fallbacks are implemented at multiple layers:
 - **Financial Layer**: Fund sources, fee cache alternatives
 - **Configuration Layer**: Auto → interactive account selection
 
-**Price Derivation**: No fallback system. Each mode (`pool`, `market`, `auto`) uses strict semantics with explicit failures instead of silent fallbacks.
+**Price Derivation**: No fallback system. Each mode (`pool`, `book`, `auto`) uses strict semantics with explicit failures instead of silent fallbacks.
 
 ### Naming Convention
 Most fallbacks follow consistent patterns:

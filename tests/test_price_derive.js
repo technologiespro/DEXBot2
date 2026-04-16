@@ -60,26 +60,29 @@ async function main() {
         assert(Number.isFinite(derivedP), 'derived price must be numeric');
         assert(Math.abs(derivedP - poolP) < 1e-9, `derivePrice should choose pool price when pool exists (got ${derivedP}, expected ${poolP})`);
 
-        // Also verify explicit-mode behavior: forcing 'pool' or 'market' modes
+        // Also verify explicit-mode behavior: forcing 'pool' or 'book' modes
         const derivedForcePool = await derivePrice(mock, assetA, assetB, 'pool');
         assert(Number.isFinite(derivedForcePool) && Math.abs(derivedForcePool - poolP) < 1e-9, `derivePrice(mode=pool) should return pool price when available (got ${derivedForcePool}, expected ${poolP})`);
-        const derivedForceMarket = await derivePrice(mock, assetA, assetB, 'market');
-        assert(Number.isFinite(derivedForceMarket) && Math.abs(derivedForceMarket - marketP) < 1e-9, `derivePrice(mode=market) should return market price when available (got ${derivedForceMarket}, expected ${marketP})`);
+        const derivedForceBook = await derivePrice(mock, assetA, assetB, 'book');
+        assert(Number.isFinite(derivedForceBook) && Math.abs(derivedForceBook - marketP) < 1e-9, `derivePrice(mode=book) should return book price when available (got ${derivedForceBook}, expected ${marketP})`);
+        // Legacy alias: 'market' must behave identically to 'book'
+        const derivedForceLegacy = await derivePrice(mock, assetA, assetB, 'market');
+        assert(Number.isFinite(derivedForceLegacy) && Math.abs(derivedForceLegacy - marketP) < 1e-9, `derivePrice(mode=market legacy) should return book price (got ${derivedForceLegacy}, expected ${marketP})`);
 
-         // Now test strict behavior: remove pools so pool resolution returns null and derivePrice(auto) still prefers pool but falls back to market
+         // Now test strict behavior: remove pools so pool resolution returns null and derivePrice(auto) still prefers pool but falls back to book
          mock.db.get_liquidity_pools = async () => [];
          mock.db.get_objects = async () => [];
          const derivedStrictAuto = await derivePrice(mock, assetA, assetB);
-         assert(Number.isFinite(derivedStrictAuto), 'derivePrice(auto) must still return market when pool unavailable');
-         assert(Math.abs(derivedStrictAuto - marketP) < 1e-9, `derivePrice(auto) should fall back to market price when no pool (got ${derivedStrictAuto}, expected ${marketP})`);
+         assert(Number.isFinite(derivedStrictAuto), 'derivePrice(auto) must still return book price when pool unavailable');
+         assert(Math.abs(derivedStrictAuto - marketP) < 1e-9, `derivePrice(auto) should fall back to book price when no pool (got ${derivedStrictAuto}, expected ${marketP})`);
 
          // When pool is removed, forcing 'pool' mode returns ONLY pool (null if no pool)
          const derivedPoolOnly = await derivePrice(mock, assetA, assetB, 'pool');
-         assert(derivedPoolOnly === null, 'derivePrice(mode=pool) should return null when pool unavailable (no fallback to market)');
+         assert(derivedPoolOnly === null, 'derivePrice(mode=pool) should return null when pool unavailable (no fallback to book)');
 
-         // Forcing 'market' mode returns ONLY market (null if unavailable)
-         const derivedMarketOnly = await derivePrice(mock, assetA, assetB, 'market');
-         assert(Number.isFinite(derivedMarketOnly) && Math.abs(derivedMarketOnly - marketP) < 1e-9, 'derivePrice(mode=market) should return market price');
+         // Forcing 'book' mode returns ONLY book price (null if unavailable)
+         const derivedBookOnly = await derivePrice(mock, assetA, assetB, 'book');
+         assert(Number.isFinite(derivedBookOnly) && Math.abs(derivedBookOnly - marketP) < 1e-9, 'derivePrice(mode=book) should return book price');
 
          // Invalid mode must not silently fall back to auto behavior
          const derivedInvalidMode = await derivePrice(mock, assetA, assetB, 'markte');

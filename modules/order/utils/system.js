@@ -282,12 +282,13 @@ const derivePoolPrice = async (BitShares, symA, symB) => {
  * @param {Object} BitShares - BitShares client instance
  * @param {string} symA - First asset symbol
  * @param {string} symB - Second asset symbol
- * @param {string} [mode='auto'] - Derivation mode: "pool", "market", or "auto" (pool → market)
+ * @param {string} [mode='auto'] - Derivation mode: "pool", "book", or "auto" (pool → book). "market" is a legacy alias for "book".
  * @returns {Promise<number|null>} Derived price or null if all methods fail
  */
 const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
     mode = String(mode).toLowerCase();
-    const validModes = new Set(['pool', 'market', 'auto']);
+    if (mode === 'market') mode = 'book'; // legacy alias
+    const validModes = new Set(['pool', 'book', 'auto']);
 
     if (!validModes.has(mode)) {
         return null;
@@ -297,7 +298,7 @@ const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
         return await derivePoolPrice(BitShares, symA, symB).catch(() => null);
     }
 
-    if (mode === 'market') {
+    if (mode === 'book') {
         return await deriveMarketPrice(BitShares, symA, symB).catch(() => null);
     }
 
