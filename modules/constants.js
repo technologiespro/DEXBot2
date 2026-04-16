@@ -573,11 +573,6 @@ let MARKET_ADAPTER = {
     // (not exposed in chart UI)
     MIN_WEIGHT_CHANGE_DELTA: 0.02,
 
-    // DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD: Minimum |multiplier - 1.0| required before
-    // dynamic weight is applied. Below this, multiplier is treated as neutral (1.0).
-    // (not exposed in chart UI)
-    DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD: 0.15,
-
     // DYNAMIC_WEIGHT_MIN_OUTPUT_THRESHOLD: Minimum |finalOffset| required before the
     // computed dynamic weight is applied to the bot. Below this the effective weights fall
     // back to the bot's static weightDistribution (no dynamic offset applied).

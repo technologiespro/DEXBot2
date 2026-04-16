@@ -277,7 +277,7 @@ Candle Data
 ├── Regime Multiplier
 │   └── bilinear(REGIME_TABLE, H, PE) ^ regimeSensitivity → finalMult
 │
-└── Normalized blend × regime gate
+└── Normalized blend × regime multiplier
     rawOff = (α·(amaOff/aMax) + (1−α)·(kalOff/kMax)) × gain
     off    = clamp(rawOff × finalMult, ±0.5)
     ├── sellW = 0.5 + off
@@ -297,3 +297,15 @@ Candle Data
 | `analysis/ama_fitting/ama.js` | Kaufman Adaptive Moving Average |
 | `market_adapter/core/strategies/ama_slope_model.js` | AMA slope weight computation |
 | `analysis/price_sources.js` | Unified candle data source abstraction |
+
+## Production-only Behaviour
+
+These gates exist in `market_adapter_service.js` but are not reflected in the research chart:
+
+### Min-output threshold (`DYNAMIC_WEIGHT_MIN_OUTPUT_THRESHOLD`, default 0.25)
+
+After the final offset is computed, if `|finalOff| < minOutputThreshold` the dynamic weights are discarded and the bot falls back to its static `weightDistribution`. The payload flag `isReady` is set to `false` in this case so the bot knows not to apply the weights.
+
+Rationale: a small offset adds noise without meaningfully improving the weight split. The threshold is half the maximum output (±0.5), so only offsets with at least half-scale signal strength are applied.
+
+Can be overridden per-market or per-bot via `minOutputThreshold` in `marketAdapterSettings`.

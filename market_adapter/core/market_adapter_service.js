@@ -272,11 +272,7 @@ class MarketAdapterService {
 
             if (regimeSensitivity > 0) {
                 regimeResult = computeRegimeMultiplier(closes, { regimeSensitivity, regimeTable: cfg.regimeTable });
-                const rawMultiplier = regimeResult.isReady ? regimeResult.multiplier : 1.0;
-                const absDelta = Math.abs(rawMultiplier - 1.0);
-                regimeMultiplier = regimeResult.isReady && absDelta >= MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD
-                    ? rawMultiplier
-                    : 1.0;
+                regimeMultiplier = regimeResult.isReady ? regimeResult.multiplier : 1.0;
             }
 
             // Research tool parameters

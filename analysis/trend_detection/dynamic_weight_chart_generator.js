@@ -49,6 +49,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const msInitSlider = Math.round((Math.log(clampedMs) - MS_LOG_MIN_N) / (MS_LOG_MAX_N - MS_LOG_MIN_N) * 1000);
 
     const defaultRegimeSensitivity  = data.regimeSensitivity ?? ma.regimeSensitivity;
+    const defaultAbsoluteThreshold  = ma.absoluteThreshold ?? 0;
     const dispScaleAtrMult          = data.dispScaleAtrMult ?? ma.dispScaleAtrMult;
     const dispScaleMinPct           = data.dispScaleMinPct  ?? ma.dispScaleMinPct;
     const regimeInitSlider = Math.round(defaultRegimeSensitivity * 100);
@@ -187,6 +188,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         .ctrl.clip .val { color: #da3633; }
         .ctrl.regime input[type="range"] { accent-color: #d2a8ff; }
         .ctrl.regime .val { color: #d2a8ff; }
+
 .section-label { position: absolute; top: 8px; right: 12px; font-size: 9px; color: #30363d; text-transform: uppercase; letter-spacing: 1px; z-index: 10; pointer-events: none; }
     </style>
 </head>
@@ -242,7 +244,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 <div class="group-sep"></div>
                 <div class="ctrl off"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="${gainInitSlider}" title="Master Gain (Amplitude)"><span class="val" id="gain-value">${defaultGain.toFixed(3)}</span></div>
                 <div class="ctrl regime"><label for="regime-slider">regi</label><input type="range" id="regime-slider" min="0" max="200" value="${regimeInitSlider}" title="Regime Sensitivity"><span class="val" id="regime-value">${defaultRegimeSensitivity.toFixed(2)}</span></div>
-                
+
                 <div class="group-sep"></div>
                 <button class="copy-btn" id="copy-params-btn">copy</button>
                 <button class="paste-btn" id="paste-params-btn">paste</button>
@@ -260,14 +262,14 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: ma.absoluteThreshold ?? 0.15, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, weightVarianceArr, dispScaleAtrMult, dispScaleMinPct })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, weightVarianceArr, dispScaleAtrMult, dispScaleMinPct })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
         const SYNC_KEY = "dyn-wt-res-v3";
         const Y_AXIS_SIZE = 58;
 
-        const ABSOLUTE_THRESHOLD = data.absoluteThreshold ?? 0.15;
+        const ABSOLUTE_THRESHOLD = data.absoluteThreshold ?? 0;
 
         let currentAlpha   = data.alpha;
         let currentGain  = data.gain ?? ma.gain;
@@ -837,7 +839,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 if (savedX) outputChart.setScale('x', savedX);
             });
 
-            function applyParams(p, btn) {
+function applyParams(p, btn) {
                 if (typeof p !== 'object' || p === null) throw new Error('not an object');
                 if (p.alpha != null) {
                     currentAlpha = Math.max(0, Math.min(1, p.alpha));
@@ -873,9 +875,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 }
                 if (p.neutralZonePct != null) {
                     currentNz = Math.max(0, Math.min(1, p.neutralZonePct));
-document.getElementById('nz-slider').value = Math.round(currentNz * 100);
-            document.getElementById('regime-slider').value = Math.round(currentRegimeSensitivity * 100);
-            document.getElementById('regime-value').textContent = currentRegimeSensitivity.toFixed(2);
+                    document.getElementById('nz-slider').value = Math.round(currentNz * 100);
                     document.getElementById('nz-value').textContent = currentNz.toFixed(2);
                 }
                 if (p.regimeSensitivity != null) {
@@ -883,7 +883,7 @@ document.getElementById('nz-slider').value = Math.round(currentNz * 100);
                     document.getElementById('regime-slider').value = Math.round(currentRegimeSensitivity * 100);
                     document.getElementById('regime-value').textContent = currentRegimeSensitivity.toFixed(2);
                 }
-                if (p.lookbackBars != null) {
+if (p.lookbackBars != null) {
                     currentLookbackBars = Math.max(4, Math.min(256, Math.round(p.lookbackBars)));
                     document.getElementById('lb-slider').value = lbValToSlider(currentLookbackBars);
                     document.getElementById('lb-value').textContent = currentLookbackBars;
@@ -935,14 +935,14 @@ document.getElementById('nz-slider').value = Math.round(currentNz * 100);
             document.getElementById('copy-params-btn').addEventListener('click', () => {
                 const btn = document.getElementById('copy-params-btn');
                 const params = {
-                    alpha:          +currentAlpha.toFixed(2),
-                    maxSlopePct:    +currentMaxSlopePct.toFixed(2),
-                    gain:           +currentGain.toFixed(3),
-                    clipPct:        currentClipPct,
-                    neutralZonePct: +currentNz.toFixed(3),
+                    alpha:             +currentAlpha.toFixed(2),
+                    maxSlopePct:       +currentMaxSlopePct.toFixed(2),
+                    gain:              +currentGain.toFixed(3),
+                    clipPct:           currentClipPct,
+                    neutralZonePct:    +currentNz.toFixed(3),
                     regimeSensitivity: +currentRegimeSensitivity.toFixed(2),
-                    dispWeight:     +currentDw.toFixed(2),
-                    lookbackBars:   currentLookbackBars,
+                    dispWeight:        +currentDw.toFixed(2),
+                    lookbackBars:      currentLookbackBars,
                 };
                 const json = JSON.stringify(params, null, 2);
                 localStorage.setItem(LS_KEY, json);
