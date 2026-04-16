@@ -31,9 +31,9 @@ const AMA_CONFIG = MARKET_ADAPTER.AMAS.AMA3;
 
 // AMA Slope weight calculation config — use DEFAULTS from market adapter
 const AMA_WEIGHT_CONFIG = {
-    lookbackBars:           72,
-    maxSlopePct:            3.0,
-    neutralZonePct:         0.15,
+    lookbackBars:           MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
+    maxSlopePct:            MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
+    neutralZonePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
     maxVolatilityThreshold:  0.03,
     maxSlopeOffset:         0.5,
     maxVolatilityOffset:    0.5,
@@ -74,10 +74,10 @@ function parseArgs() {
     const config = {
         source: { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         chartFile: 'analysis/charts/dynamic_weight_chart.html',
-        alpha: 0.5,
-        gain: 0.5,
-        dispWeight: 1.0,
-        clipPct: 10,
+        alpha: MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA,
+        gain: MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN,
+        dispWeight: MARKET_ADAPTER.DYNAMIC_WEIGHT_DW,
+        clipPct: MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE,
         quiet: false,
     };
 
@@ -192,8 +192,21 @@ async function main() {
             gain: config.gain,
             dispWeight: config.dispWeight,
             clipPct: config.clipPct,
-            dispScaleAtrMult: MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT,
-            dispScaleMinPct:  MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT,
+            regimeSensitivity: MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY,
+            dispScaleAtrMult: config.dispScaleAtrMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT,
+            dispScaleMinPct:  config.dispScaleMinPct  ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT,
+            marketAdapter: {
+                alpha:                   MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA,
+                gain:                    MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN,
+                dispWeight:              MARKET_ADAPTER.DYNAMIC_WEIGHT_DW,
+                clipPercentile:         MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE,
+                regimeSensitivity:       MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY,
+                amaLookbackBars:        MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
+                amaMaxSlopePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
+                amaNeutralZonePct:      MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
+                dispScaleAtrMult:       MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT,
+                dispScaleMinPct:        MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT,
+            },
         }, 'Dynamic Weight Research Tool');
 
         const chartDir = path.dirname(config.chartFile);

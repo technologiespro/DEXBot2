@@ -166,7 +166,7 @@ class KalmanTrendAnalyzer {
             kalmanPrice: Math.round(this.tactical.x * 1e8) / 1e8,
             modalPrice: Math.round(this.modal.x * 1e8) / 1e8,
             velocity: Math.round(this.tactical.v * 1e8) / 1e8,
-            velocityPct: Math.round((this.tactical.v / this.currPrice) * 10000) / 100,
+            velocityPct: Math.round((this.tactical.v / this.modal.x) * 10000) / 100,
             displacementPct: Math.round(displacementPct * 100) / 100,
             signal,
             updateCount: this.updateCount,

@@ -104,9 +104,9 @@ const DEFAULTS = {
     pageLimit: 100,
     once: false,
     amaSlope: {
-        lookbackBars:           72,
-        maxSlopePct:            3.0,
-        neutralZonePct:         0.15,
+        lookbackBars:           MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
+        maxSlopePct:            MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
+        neutralZonePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
         maxVolatilityThreshold: 0.03,
     },
 };

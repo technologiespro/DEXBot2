@@ -20,14 +20,15 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const results = data.allResults || [];
     if (results.length === 0) throw new Error('No analysis results in input');
 
+    const ma = data.marketAdapter || {};
     const amaWeightConfig = data.amaWeightConfig || {};
-    const defaultAlpha        = data.alpha ?? 0.5;
-    const defaultGain       = data.gain ?? 0.5;
-    const defaultNeutralZone  = amaWeightConfig.neutralZonePct ?? 0.15;
-    const defaultDispWeight   = data.dispWeight ?? 0.4;
-    const maxSlopePct         = amaWeightConfig.maxSlopePct ?? 3.0;
-    const defaultClipPct      = data.clipPct ?? 10;
-    const lookbackBars        = amaWeightConfig.lookbackBars ?? 72;
+    const defaultAlpha        = data.alpha            ?? ma.alpha;
+    const defaultGain         = data.gain             ?? ma.gain;
+    const defaultNeutralZone  = amaWeightConfig.neutralZonePct ?? ma.amaNeutralZonePct;
+    const defaultDispWeight   = data.dispWeight       ?? ma.dispWeight;
+    const maxSlopePct         = amaWeightConfig.maxSlopePct    ?? ma.amaMaxSlopePct;
+    const defaultClipPct      = data.clipPct          ?? ma.clipPercentile;
+    const lookbackBars        = amaWeightConfig.lookbackBars  ?? ma.amaLookbackBars;
 
     // Log mapping for lookback slider (4 to 256 bars)
     const LB_LOG_MIN_N = Math.log(4);
@@ -36,9 +37,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const lbInitSlider = Math.round((Math.log(clampedLb) - LB_LOG_MIN_N) / (LB_LOG_MAX_N - LB_LOG_MIN_N) * 1000);
 
     // Log mapping for gain slider
-    const GAIN_LOG_MIN_N = Math.log(0.001);
+    const GAIN_LOG_MIN_N = Math.log(0.1);
     const GAIN_LOG_MAX_N = Math.log(3.0);
-    const clampedGain = Math.min(Math.max(defaultGain, 0.001), 0.5);
+    const clampedGain = Math.min(Math.max(defaultGain, 0.001), 3.0);
     const gainInitSlider = Math.round((Math.log(clampedGain) - GAIN_LOG_MIN_N) / (GAIN_LOG_MAX_N - GAIN_LOG_MIN_N) * 1000);
 
     // Log mapping for maxS% slider
@@ -47,9 +48,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const clampedMs = Math.min(Math.max(maxSlopePct, 0.05), 20.0);
     const msInitSlider = Math.round((Math.log(clampedMs) - MS_LOG_MIN_N) / (MS_LOG_MAX_N - MS_LOG_MIN_N) * 1000);
 
-    const defaultRegimeSensitivity  = data.regimeSensitivity ?? 0;
-    const dispScaleAtrMult          = data.dispScaleAtrMult ?? 200;
-    const dispScaleMinPct           = data.dispScaleMinPct  ?? 0.5;
+    const defaultRegimeSensitivity  = data.regimeSensitivity ?? ma.regimeSensitivity;
+    const dispScaleAtrMult          = data.dispScaleAtrMult ?? ma.dispScaleAtrMult;
+    const dispScaleMinPct           = data.dispScaleMinPct  ?? ma.dispScaleMinPct;
     const regimeInitSlider = Math.round(defaultRegimeSensitivity * 100);
 
     const interval = results.length > 1 ?
@@ -259,7 +260,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, weightVarianceArr, dispScaleAtrMult, dispScaleMinPct })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, weightVarianceArr, dispScaleAtrMult, dispScaleMinPct })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -267,24 +268,24 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const Y_AXIS_SIZE = 58;
 
         let currentAlpha   = data.alpha;
-        let currentGain  = Math.min(data.gain ?? 0.5, 0.5);
-        let currentNz      = data.neutralZonePct;
-        let currentDw      = data.dispWeight;
-        let currentMaxSlopePct = data.maxSlopePct;
+        let currentGain  = data.gain ?? ma.gain;
+        let currentNz      = (data.neutralZonePct ?? amaWeightConfig.neutralZonePct) ?? ma.amaNeutralZonePct;
+        let currentDw      = data.dispWeight ?? ma.dispWeight;
+        let currentMaxSlopePct = (data.maxSlopePct ?? amaWeightConfig.maxSlopePct) ?? ma.amaMaxSlopePct;
         const MS_LOG_MIN = data.msLogMin;
         const MS_LOG_MAX = data.msLogMax;
         const msSliderToVal = (pos) => Math.exp(MS_LOG_MIN + (pos / 1000) * (MS_LOG_MAX - MS_LOG_MIN));
 
-        let currentLookbackBars = data.lookbackBars;
+        let currentLookbackBars = (data.lookbackBars ?? amaWeightConfig.lookbackBars) ?? ma.amaLookbackBars;
         const LB_LOG_MIN = data.lbLogMin;
         const LB_LOG_MAX = data.lbLogMax;
         const lbSliderToVal = (pos) => Math.round(Math.exp(LB_LOG_MIN + (pos / 1000) * (LB_LOG_MAX - LB_LOG_MIN)));
         const lbValToSlider = (val) => Math.round((Math.log(Math.max(4, val)) - LB_LOG_MIN) / (LB_LOG_MAX - LB_LOG_MIN) * 1000);
 
-        const GAIN_LOG_MIN = Math.log(0.001);
-        const GAIN_LOG_MAX = Math.log(3.0);
-        const gainSliderToVal = (pos) => pos === 0 ? 0 : Math.exp(GAIN_LOG_MIN + (pos / 1000) * (GAIN_LOG_MAX - GAIN_LOG_MIN));
-        const gainValToSlider = (val) => val <= 0 ? 0 : Math.round((Math.log(Math.max(0.001, val)) - GAIN_LOG_MIN) / (GAIN_LOG_MAX - GAIN_LOG_MIN) * 1000);
+        const GAIN_LOG_MIN = data.gainLogMin;
+        const GAIN_LOG_MAX = data.gainLogMax;
+        const gainSliderToVal = (pos) => Math.exp(GAIN_LOG_MIN + (pos / 1000) * (GAIN_LOG_MAX - GAIN_LOG_MIN));
+        const gainValToSlider = (val) => Math.round((Math.log(Math.max(Math.exp(GAIN_LOG_MIN), val)) - GAIN_LOG_MIN) / (GAIN_LOG_MAX - GAIN_LOG_MIN) * 1000);
 
         let currentClipPct = data.clipPct;
         const maxAmaSlope = data.amaPercentiles[data.amaPercentiles.length - 1];
@@ -336,7 +337,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             return row0 * th + row1 * (1 - th);
         }
 
-        let currentRegimeSensitivity = data.regimeSensitivity ?? 0;
+        let currentRegimeSensitivity = data.regimeSensitivity ?? ma.regimeSensitivity;
 
         const dynamicAmaOff      = new Array(data.dates.length).fill(null);
         const dynamicAmaSlopePct = new Array(data.dates.length).fill(null);
@@ -850,7 +851,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     document.getElementById('ms-value').textContent = currentMaxSlopePct.toFixed(2);
                 }
                 if (p.gain != null) {
-                    currentGain = Math.max(0, Math.min(0.5, p.gain));
+                    currentGain = Math.max(0, Math.min(3.0, p.gain));
                     document.getElementById('gain-slider').value = gainValToSlider(currentGain);
                     document.getElementById('gain-value').textContent = currentGain.toFixed(3);
                 }

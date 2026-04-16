@@ -579,22 +579,34 @@ let MARKET_ADAPTER = {
     // DYNAMIC_WEIGHT_CLIP_PERCENTILE: Percentile clip on AMA slope distribution.
     // 0 = no clip; 10 = clip top 10% as outliers (90th percentile).
     // Configurable per market or per bot via market_profiles.json or botOverrides.
-    DYNAMIC_WEIGHT_CLIP_PERCENTILE: 0,
+    DYNAMIC_WEIGHT_CLIP_PERCENTILE: 10,
+
+    // DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: Bars to look back for AMA slope computation.
+    // Lower = more responsive, higher = more smooth.
+    DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: 10,
+
+    // DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: Slope % that saturates the AMA offset.
+    // The AMA slope is clamped to ±maxSlopePct before scaling to offset.
+    DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: 0.5,
+
+    // DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT: Dead-band around zero slope (percent).
+    // Slopes smaller than this are treated as neutral (no offset).
+    DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT: 0.15,
 
     // DYNAMIC_WEIGHT_ALPHA: Blend ratio between AMA and Kalman (0 = pure Kalman, 1 = pure AMA)
-    DYNAMIC_WEIGHT_ALPHA: 0.5,
+    DYNAMIC_WEIGHT_ALPHA: 0.7,
 
     // DYNAMIC_WEIGHT_DW: Displacement weight for Kalman channel (0 = pure velocity, 1 = full displacement)
-    DYNAMIC_WEIGHT_DW: 0.4,
+    DYNAMIC_WEIGHT_DW: 1.0,
 
     // DYNAMIC_WEIGHT_GAIN: Master gain multiplier on the final blended offset.
     // Scales the computed weight offset before clamping to ±0.5.
     // 0.5 = half strength, 1.0 = full strength, 2.0 = double strength.
-    DYNAMIC_WEIGHT_GAIN: 0.5,
+    DYNAMIC_WEIGHT_GAIN: 1,
 
     // DYNAMIC_WEIGHT_REGIME_SENSITIVITY: Exponent applied to regime multiplier.
     // 0 = ignore regime (multiplier always 1.0), 1 = use table as-is, 2 = squared effect.
-    DYNAMIC_WEIGHT_REGIME_SENSITIVITY: 0,
+    DYNAMIC_WEIGHT_REGIME_SENSITIVITY: 1,
 
     // DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: Multiplier converting ATR% to displacement confidence scale.
     // Full dispConf is reached when Kalman displacement >= MULT × ATR%. Default 200 means full

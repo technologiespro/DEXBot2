@@ -283,8 +283,8 @@ class MarketAdapterService {
             const alpha = cfg.alpha ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA ?? 0.5;
             const dw = cfg.dw ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DW ?? 0.4;
             const gain = cfg.gain ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN ?? 0.5;
-            const dispScaleAtrMult = MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT;
-            const dispScaleMinPct  = MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
+            const dispScaleAtrMult = cfg.dispScaleAtrMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT;
+            const dispScaleMinPct  = cfg.dispScaleMinPct  ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
 
             // Build AMA offset array — compute slopeOffset directly from AMA values per bar.
             // computeAmaSlopeWeights only reads amaValues[i] and amaValues[i-lookbackBars],
