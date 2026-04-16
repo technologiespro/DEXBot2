@@ -109,7 +109,9 @@ function computeRegimeMultiplier(closes, opts = {}) {
     const ne = peResult.normalizedEntropy;
 
     const baseMult  = bilinearInterpolate(h, ne, regimeTable);
-    const finalMult = sensitivity === 1.0 ? baseMult : Math.pow(baseMult, sensitivity);
+    // Clamp to 1.0 max: regime only dampens, never amplifies
+    const rawMult   = sensitivity === 1.0 ? baseMult : Math.pow(baseMult, sensitivity);
+    const finalMult = Math.min(rawMult, 1.0);
 
     return {
         multiplier:  Math.round(finalMult * 1000) / 1000,

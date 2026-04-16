@@ -65,6 +65,8 @@ Best case (trending + structured): multiplier = **1.0** (full signal). Unclear s
 
 The `regi` (regime sensitivity) knob raises the multiplier to a power: `finalMult = baseMult ^ sensitivity`. At sensitivity = 1.0 (default), the table is used as-is. Higher sensitivity exaggerates regime differences; lower sensitivity flattens them toward 1.0.
 
+**Dampen-only**: the multiplier is clamped to a maximum of 1.0. Regime can only reduce the signal — it never amplifies above what alpha+gain already produce. This was found to perform better in practice: letting a "good" regime boost the signal over-commits when the signal is already at its natural peak.
+
 ## Quick Start
 
 ```bash
@@ -174,7 +176,8 @@ kalOff    = clamp(kalComp / maxS% × gain, ±gain)
 ### Regime Multiplier
 ```
 baseMult  = bilinear(REGIME_TABLE, H, PE)      // 0.05–1.0 depending on regime
-finalMult = baseMult ^ regimeSensitivity        // power scaling via regi knob
+rawMult   = baseMult ^ regimeSensitivity        // power scaling via regi knob
+finalMult = min(rawMult, 1.0)                  // dampen-only: regime never amplifies
 ```
 
 ### Final Weight (per-channel normalized blend + gain)
@@ -230,6 +233,8 @@ Lower values = more noise, faster reaction. Higher values = smoother signals, mo
 - 1 = default table values used as-is
 - 2 = regime differences are squared (strong gating effect)
 
+Regime is **dampen-only**: the multiplier is capped at 1.0 regardless of sensitivity. A favorable regime (trending + structured) passes the signal through unchanged; an unfavorable regime reduces it.
+
 ### Regime Table (Custom Configuration)
 
 The 3×3 regime multiplier table can be customized per-market or per-bot:
@@ -275,7 +280,7 @@ Candle Data
 │   └── PermutationEntropyAnalyzer.update() → normalizedEntropy, regime  [regime multiplier axis]
 │
 ├── Regime Multiplier
-│   └── bilinear(REGIME_TABLE, H, PE) ^ regimeSensitivity → finalMult
+│   └── min(bilinear(REGIME_TABLE, H, PE) ^ regimeSensitivity, 1.0) → finalMult  [dampen-only]
 │
 └── Normalized blend × regime multiplier
     rawOff = (α·(amaOff/aMax) + (1−α)·(kalOff/kMax)) × gain

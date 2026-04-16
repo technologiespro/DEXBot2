@@ -441,7 +441,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     // Use power for sensitivity: pushes away from 1.0 in both directions without flipping sign
                     const rawMult = Math.pow(baseMult, currentRegimeSensitivity);
                     // Dead-band: only apply regime multiplier when |mult - 1.0| >= absoluteThreshold
-                    const finalMult = Math.abs(rawMult - 1.0) >= ABSOLUTE_THRESHOLD ? rawMult : 1.0;
+                    // Clamp to 1.0 max: regime only dampens, never amplifies
+                    const finalMult = Math.abs(rawMult - 1.0) >= ABSOLUTE_THRESHOLD ? Math.min(rawMult, 1.0) : 1.0;
                     currentMults[i] = finalMult;
                     const off = Math.max(-0.5, Math.min(0.5, rawOff * finalMult));
                     combinedOff[i] = Math.round(off * 1000) / 1000;
