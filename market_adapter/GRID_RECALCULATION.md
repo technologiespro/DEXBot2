@@ -47,7 +47,7 @@ Monitors the Adaptive Moving Average (AMA) of market prices. When the AMA center
 
 **Parameters:**
 - `AMA_DELTA_THRESHOLD_PERCENT`: Percentage change in AMA center that triggers grid reset
-  - Default: `1%`
+  - Default: `2.5%`
   - Range: `0.1` to `50.0` (configurable via CLI and bot editor)
   - Example: If set to `1`, grid recalculates when AMA center moves ±1% from last center
 
@@ -90,7 +90,7 @@ node market_adapter/market_adapter.js --deltaPercent 2
 3. Calculates AMA from 1h candlestick closing prices
 4. Tracks the **AMA center price** for each bot
 5. When `|currentAMA - lastRecordedAMA| >= AMA_DELTA_THRESHOLD_PERCENT`:
-   - Creates `market_adapter/state/recalculate.<botKey>.trigger` file
+   - Creates `profiles/recalculate.<botKey>.trigger` file
    - DEXBot's main loop detects the trigger and calls `Grid.recalculateGrid()`
 6. Last recorded center is updated after recalculation
 
@@ -308,7 +308,7 @@ All three triggers are **independent**:
 ```json
 {
   "MARKET_ADAPTER": {
-    "AMA_DELTA_THRESHOLD_PERCENT": 1  // Standard threshold
+    "AMA_DELTA_THRESHOLD_PERCENT": 2.5  // Standard threshold
   },
   "GRID_LIMITS": {
     "GRID_REGENERATION_PERCENTAGE": 3,  // Moderate utilization
@@ -330,7 +330,7 @@ Check the logs for these messages:
 
 **AMA Delta Trigger:**
 ```
-Creating trigger: market_adapter/state/recalculate.<botKey>.trigger
+Creating trigger: profiles/recalculate.<botKey>.trigger
 ```
 
 **RMS Divergence Trigger:**
@@ -374,7 +374,7 @@ Creating trigger: market_adapter/state/recalculate.<botKey>.trigger
 ## Related Issues
 
 - **Issue #5:** RMS Divergence Check Disabling — Ability to set `RMS_PERCENTAGE: 0` to disable checks
-- **Feature:** AMA Integration — Future work to use AMA prices in grid calculations (not just triggers)
+- **Feature:** AMA Integration — AMA-derived center snapshots are already used for market-adapter-triggered grid recentering
 - **Issue #1:** Fund Validation Bug — Fixed validation logic for order batch placement
 
 ---

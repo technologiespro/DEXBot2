@@ -104,10 +104,9 @@ const DEFAULTS = {
     pageLimit: 100,
     once: false,
     amaSlope: {
-        lookbackBars:           MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
-        maxSlopePct:            MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
-        neutralZonePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
-        maxVolatilityThreshold: 0.03,
+        lookbackBars:  MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
+        maxSlopePct:   MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
+        neutralZonePct: MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
     },
 };
 
@@ -199,14 +198,21 @@ function resolveBotCfg(bot, globalCfg) {
         if (ps.maxStaleHours != null) merged.maxStaleHours = ps.maxStaleHours;
         if (ps.sourceRetries != null) merged.sourceRetries = ps.sourceRetries;
         if (ps.retryDelayMs != null) merged.retryDelayMs = ps.retryDelayMs;
-        if (ps.minWeightChangeDelta != null) merged.minWeightChangeDelta = ps.minWeightChangeDelta;
+        if (ps.maxSlopeOffset != null) merged.maxSlopeOffset = ps.maxSlopeOffset;
         if (ps.minOutputThreshold != null) merged.minOutputThreshold = ps.minOutputThreshold;
+        if (ps.volatilityExponent != null) merged.volatilityExponent = ps.volatilityExponent;
+        if (ps.volatilityScalePct != null) merged.volatilityScalePct = ps.volatilityScalePct;
+        if (ps.volatilityThreshold != null) merged.volatilityThreshold = ps.volatilityThreshold;
         if (ps.clipPercentile != null) merged.clipPercentile = ps.clipPercentile;
         if (ps.regimeSensitivity != null) merged.regimeSensitivity = ps.regimeSensitivity;
+        if (ps.hurstZoneBand != null) merged.hurstZoneBand = ps.hurstZoneBand;
+        if (ps.peNodes) merged.peNodes = ps.peNodes;
         if (ps.regimeTable) merged.regimeTable = ps.regimeTable;
         if (ps.alpha != null) merged.alpha = ps.alpha;
         if (ps.dw != null) merged.dw = ps.dw;
         if (ps.gain != null) merged.gain = ps.gain;
+        if (ps.dispScaleAtrMult != null) merged.dispScaleAtrMult = ps.dispScaleAtrMult;
+        if (ps.dispScaleMinPct != null) merged.dispScaleMinPct = ps.dispScaleMinPct;
         if (ps.kalman) merged.kalman = ps.kalman;
         // amaSlope sub-parameters
         if (ps.neutralZonePct != null) {
@@ -226,15 +232,20 @@ function resolveBotCfg(bot, globalCfg) {
         if (botOverride.deltaThresholdPercent != null) merged.deltaThresholdPercent = botOverride.deltaThresholdPercent;
         if (botOverride.defaultAmaKey) merged.defaultAmaKey = botOverride.defaultAmaKey;
         if (botOverride.maxSlopeOffset != null) merged.maxSlopeOffset = botOverride.maxSlopeOffset;
-        if (botOverride.maxVolatilityOffset != null) merged.maxVolatilityOffset = botOverride.maxVolatilityOffset;
-        if (botOverride.minWeightChangeDelta != null) merged.minWeightChangeDelta = botOverride.minWeightChangeDelta;
+        if (botOverride.volatilityExponent != null) merged.volatilityExponent = botOverride.volatilityExponent;
+        if (botOverride.volatilityScalePct != null) merged.volatilityScalePct = botOverride.volatilityScalePct;
+        if (botOverride.volatilityThreshold != null) merged.volatilityThreshold = botOverride.volatilityThreshold;
         if (botOverride.minOutputThreshold != null) merged.minOutputThreshold = botOverride.minOutputThreshold;
         if (botOverride.clipPercentile != null) merged.clipPercentile = botOverride.clipPercentile;
         if (botOverride.regimeSensitivity != null) merged.regimeSensitivity = botOverride.regimeSensitivity;
+        if (botOverride.hurstZoneBand != null) merged.hurstZoneBand = botOverride.hurstZoneBand;
+        if (botOverride.peNodes) merged.peNodes = botOverride.peNodes;
         if (botOverride.regimeTable) merged.regimeTable = botOverride.regimeTable;
         if (botOverride.alpha != null) merged.alpha = botOverride.alpha;
         if (botOverride.dw != null) merged.dw = botOverride.dw;
         if (botOverride.gain != null) merged.gain = botOverride.gain;
+        if (botOverride.dispScaleAtrMult != null) merged.dispScaleAtrMult = botOverride.dispScaleAtrMult;
+        if (botOverride.dispScaleMinPct != null) merged.dispScaleMinPct = botOverride.dispScaleMinPct;
         if (botOverride.kalman) merged.kalman = botOverride.kalman;
         // amaSlope sub-parameters
         if (botOverride.neutralZonePct != null) {
@@ -1191,5 +1202,6 @@ module.exports = {
     resolveAmaForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
     applyRuntimeDefaultsFromGeneralSettings,
+    resolveBotCfg,
     usesAmaGridPrice,
 };

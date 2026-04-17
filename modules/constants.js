@@ -568,87 +568,110 @@ let MARKET_ADAPTER = {
     //   - Default: 2.5 (grid recalculates when market moves 2.5% from last recorded AMA center)
     AMA_DELTA_THRESHOLD_PERCENT: 2.5,
 
-    // MIN_WEIGHT_CHANGE_DELTA: Minimum change in effectiveSell or effectiveBuy (absolute)
-    // required to persist a weight update. Prevents micro-adjustments when regime is stable.
+    // DYNAMIC_WEIGHT_TREND_THRESHOLD: Minimum trend strength required before the
+    // bot applies a directional weight shift.
+    // Higher values ignore weaker trend signals and keep weights closer to the static baseline.
+    // Lower values allow smaller trend signals to affect buy/sell weighting.
     // (not exposed in chart UI)
-    MIN_WEIGHT_CHANGE_DELTA: 0.02,
+    DYNAMIC_WEIGHT_TREND_THRESHOLD: 0.25,
 
-    // DYNAMIC_WEIGHT_MIN_OUTPUT_THRESHOLD: Minimum |finalOffset| required before the
-    // computed dynamic weight is applied to the bot. Below this the effective weights fall
-    // back to the bot's static weightDistribution (no dynamic offset applied).
-    // Default 0.25 = half the maximum possible offset (±0.5).
-    // (not exposed in chart UI)
-    DYNAMIC_WEIGHT_MIN_OUTPUT_THRESHOLD: 0.25,
-
-    // DYNAMIC_WEIGHT_CLIP_PERCENTILE: Percentile clip on AMA slope distribution.
-    // 0 = no clip; 10 = clip top 10% as outliers (90th percentile).
+    // DYNAMIC_WEIGHT_CLIP_PERCENTILE: Outlier filter for unusually large AMA/Kalman moves.
+    // Higher values suppress more extreme spikes before they influence dynamic weights.
+    // 0 disables clipping.
     // Configurable per market or per bot via market_profiles.json or botOverrides.
     // nob: clip%
     DYNAMIC_WEIGHT_CLIP_PERCENTILE: 10,
 
-    // DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: Bars to look back for AMA slope computation.
-    // Lower = more responsive, higher = more smooth.
+    // DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: Lookback window for measuring AMA trend.
+    // Lower values react faster to recent price changes.
+    // Higher values smooth the signal and require a more sustained move.
     // nob: lb (Lookback Bars)
     DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: 10,
 
-    // DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: Slope % that saturates the AMA offset.
-    // The AMA slope is clamped to ±maxSlopePct before scaling to offset.
+    // DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: Trend size that counts as "full strength" for AMA.
+    // Lower values make the AMA channel reach maximum influence more easily.
+    // Higher values require a stronger price move before AMA reaches full effect.
     // nob: maxS% (Max Slope %)
     DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: 0.5,
 
-    // DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT: Dead-band around zero slope (percent).
-    // Slopes smaller than this are treated as neutral (no offset).
+    // DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT: Ignore small AMA moves around flat price action.
+    // Higher values create a larger neutral zone and reduce small trend reactions.
+    // Lower values make the AMA channel react to smaller moves.
     // nob: nz% (Neutral Zone %)
     DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT: 0.15,
 
-    // DYNAMIC_WEIGHT_ALPHA: Blend ratio between AMA and Kalman (0 = pure Kalman, 1 = pure AMA)
+    // DYNAMIC_WEIGHT_ALPHA: Blend between AMA trend and Kalman trend.
+    // 0 = pure Kalman, 1 = pure AMA.
+    // Higher values trust AMA more, lower values trust Kalman more.
     // nob: alpha
     DYNAMIC_WEIGHT_ALPHA: 0.7,
 
-    // DYNAMIC_WEIGHT_DW: Displacement weight for Kalman channel (0 = pure velocity, 1 = full displacement)
+    // DYNAMIC_WEIGHT_DW: Blend inside the Kalman signal between velocity and displacement.
+    // Lower values emphasize momentum/velocity.
+    // Higher values emphasize how far price has moved away from the modal baseline.
     // nob: dw (Displacement Weight)
     DYNAMIC_WEIGHT_DW: 1.0,
 
-    // DYNAMIC_WEIGHT_GAIN: Master gain multiplier on the final blended offset.
-    // Scales the computed weight offset before clamping to ±0.5.
-    // 0.5 = half strength, 1.0 = full strength, 2.0 = double strength.
+    // DYNAMIC_WEIGHT_GAIN: Overall strength of the blended dynamic-weight signal.
+    // Higher values make dynamic weights more aggressive.
+    // Lower values keep weights closer to the static baseline.
     // nob: gain
     DYNAMIC_WEIGHT_GAIN: 1,
 
-    // DYNAMIC_WEIGHT_REGIME_SENSITIVITY: Exponent applied to regime multiplier.
-    // 0 = ignore regime (multiplier always 1.0), 1 = use table as-is, 2 = squared effect.
+    // DYNAMIC_WEIGHT_REGIME_SENSITIVITY: How strongly the regime filter dampens or preserves
+    // the dynamic-weight signal.
+    // 0 ignores regime filtering, 1 uses the table as-is, and higher values make bad regimes
+    // suppress the signal more aggressively.
     // nob: regime
     DYNAMIC_WEIGHT_REGIME_SENSITIVITY: 1,
 
-    // DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: Multiplier converting ATR% to displacement confidence scale.
-    // Full dispConf is reached when Kalman displacement >= MULT × ATR%. Default 200 means full
-    // confidence at 2× ATR from the modal (a ~2-sigma "unusual" move).
+    // DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: Kalman displacement sensitivity relative to ATR.
+    // Higher values make the Kalman displacement signal more conservative, so it needs a larger
+    // move away from the modal price before it contributes at full strength.
+    // Lower values make the displacement channel react more aggressively.
     // (not exposed in chart UI)
     DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: 200,
 
-    // DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: Floor for displacement scale (percent).
-    // Prevents dispConf from saturating instantly in ultra-low-volatility (near-zero ATR) markets.
+    // DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: Minimum Kalman displacement scale in percent.
+    // Keeps the displacement channel from becoming too sensitive in very quiet markets where ATR
+    // is near zero.
     // (not exposed in chart UI)
     DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: 0.5,
 
-    // HURST_ZONE_BAND: Symmetric offset from 0.5 defining the Hurst regime boundaries.
-    // H nodes derive as [0.5 + band, 0.5, 0.5 - band].
-    // Default 0.05 → trending threshold H > 0.55, mean-reverting threshold H < 0.45.
-    // The RANDOM band between the two thresholds acts as natural hysteresis — H must
-    // traverse the full neutral zone before switching between TRENDING and MEAN_REVERTING.
+    // DYNAMIC_WEIGHT_VOLATILITY_EXPONENT: Controls how quickly the volatility penalty ramps up.
+    // Higher values delay the penalty in calm markets and make it matter more in higher volatility.
+    // Lower values make the penalty start affecting weights earlier.
+    // Overridable per market pair or per bot via market_adapter_settings.json.
+    DYNAMIC_WEIGHT_VOLATILITY_EXPONENT: 0.5,
+
+    // DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT: Overall strength of the ATR-based volatility penalty.
+    // Higher values reduce both buy and sell weights more aggressively during volatile periods.
+    // Lower values keep the volatility penalty milder.
+    // Overridable per market pair or per bot via market_adapter_settings.json.
+    DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT: 50,
+
+    // DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD: Minimum volatility effect required before the bot
+    // actually applies the ATR penalty.
+    // Higher values ignore small volatility adjustments.
+    // Lower values let even small ATR changes reduce the weights.
+    // Overridable per market pair or per bot via market_adapter_settings.json.
+    DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD: 0.1,
+
+    // HURST_ZONE_BAND: Width of the neutral Hurst zone between trending and mean-reverting regimes.
+    // Higher values classify more markets as "random/unclear".
+    // Lower values switch more quickly into trending or mean-reverting states.
     HURST_ZONE_BAND: 0.05,
 
-    // PE_NODES: Three zone boundaries for Permutation Entropy [structured, mixed, noise].
-    // PE < PE_NODES[0] = STRUCTURED (signals trustworthy)
-    // PE_NODES[0]..PE_NODES[2] = MIXED (interpolated)
-    // PE > PE_NODES[2] = NOISE (suppress signals)
-    // PE_NODES[1] is the mid-node for bilinear interpolation.
+    // PE_NODES: Signal-quality bands for permutation entropy.
+    // Lower entropy means cleaner, more structured price action.
+    // Higher entropy means noisier price action, where the bot should trust signals less.
     PE_NODES: [0.60, 0.725, 0.85],
 
-    // REGIME_TABLE: Bilinear lookup table for Hurst + PE regime multiplier.
-    // Rows: Hurst regimes [trending, random, mean-reverting] (H nodes derived from HURST_ZONE_BAND)
-    // Cols: PE regimes [structured, mixed, noise] (PE nodes from PE_NODES)
-    // Best case (trending + structured) = 1.0, unclear situations < 1.0 to dampen signal
+    // REGIME_TABLE: Signal-strength table for combinations of market structure and noise.
+    // Rows are Hurst regimes [trending, random, mean-reverting].
+    // Columns are entropy regimes [structured, mixed, noisy].
+    // Higher values preserve more of the dynamic-weight signal.
+    // Lower values dampen the signal in unclear or hostile conditions.
     REGIME_TABLE: [
         [1.0, 0.7, 0.3],  // Trending (H > 0.5 + HURST_ZONE_BAND)
         [0.6, 0.4, 0.15], // Random

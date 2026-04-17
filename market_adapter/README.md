@@ -166,7 +166,7 @@ npm run lp:chart -- --data analysis/ama_fitting/data/lp_pool_133_iob.xrp_bts_1h.
 ### 2. AMA Center + Grid Price
 
 For each bot, `MarketAdapterService` computes:
-- **AMA value** using per-bot `ama` config (or defaults: `erPeriod:90, fast:10, slow:100`)
+- **AMA value** using per-bot `ama` config (or the built-in default AMA profile, `AMA3`, when no pair-specific profile exists)
 - **Center price** = AMA, clamped to configured min/max
 
 ### 3. AMA Slope Analysis
@@ -188,9 +188,14 @@ weight variance input.
 
 The `ama_slope_model` combines the asymmetric `slopeOffset` (trend) and
 symmetric `symmetricDelta` (ATR volatility) into final buy/sell weights:
-- **Low volatility**: Concentrates orders toward the market
+- **Low volatility**: Applies little or no volatility penalty
 - **High volatility**: Spreads orders out to reduce risk
 - **Trend**: Shifts weight toward the direction of market movement
+
+At runtime, the directional trend component is only applied when it exceeds
+`DYNAMIC_WEIGHT_TREND_THRESHOLD` (or `minOutputThreshold` via overrides).
+The ATR penalty is independent, so the bot can still receive a volatility-only
+weight adjustment even when the trend signal is too weak to apply.
 
 ### 6. Collateral Management
 
@@ -262,7 +267,9 @@ additional deviation-based price adjustment layer on top of the AMA output.
 |------|---------|
 | `profiles/bots.json` | Active bots, symbols, pool IDs, and per-bot AMA settings |
 | `profiles/general.settings.json` | Global `MARKET_ADAPTER` settings (delta threshold, etc.) |
+| `profiles/market_adapter_settings.json` | Pair-level and bot-level overrides for dynamic-weight and adapter tuning |
 | `profiles/price_adapter_whitelist.json` | Optional whitelist — bots not listed run in dry-run mode |
+| `profiles/dynamic_weight_whitelist.json` | Optional whitelist — only listed bots receive dynamic weight payloads |
 | `market_adapter/state/price_adapter_state.json` | Runtime state — candle metadata, signals, weights, collateral |
 | `market_adapter/state/price_adapter_centers.json` | Lightweight center snapshot |
 

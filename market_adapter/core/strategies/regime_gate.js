@@ -5,11 +5,31 @@ const { PermutationEntropyAnalyzer } = require('../../../analysis/trend_detectio
 const { HURST_CONFIG, PE_CONFIG } = require('../../../analysis/trend_detection/regime_defaults');
 const { MARKET_ADAPTER } = require('../../../modules/constants');
 
-// Axis node values — bilinear interpolation is performed between adjacent nodes
-// Derived from constants so changes to HURST_ZONE_BAND / PE_NODES propagate automatically
-const _band    = MARKET_ADAPTER.HURST_ZONE_BAND;
-const H_NODES  = [0.5 + _band, 0.5, 0.5 - _band]; // H decreasing: higher index = lower H
-const PE_NODES = MARKET_ADAPTER.PE_NODES;           // PE increasing: higher index = higher PE
+function resolveHNodes(hurstZoneBand = null) {
+    const band = Number.isFinite(hurstZoneBand) ? hurstZoneBand : MARKET_ADAPTER.HURST_ZONE_BAND;
+    return [0.5 + band, 0.5, 0.5 - band];
+}
+
+function resolvePeNodes(peNodes = null) {
+    if (Array.isArray(peNodes) && peNodes.length === 3 && peNodes.every(Number.isFinite)) {
+        return peNodes;
+    }
+    return MARKET_ADAPTER.PE_NODES;
+}
+
+function classifyHurstRegime(h, hurstZoneBand = null) {
+    const [upper, , lower] = resolveHNodes(hurstZoneBand);
+    if (h >= upper) return 'TRENDING';
+    if (h <= lower) return 'MEAN_REVERTING';
+    return 'RANDOM';
+}
+
+function classifyPeRegime(pe, peNodes = null) {
+    const [low, , high] = resolvePeNodes(peNodes);
+    if (pe < low) return 'STRUCTURED';
+    if (pe > high) return 'NOISE';
+    return 'MIXED';
+}
 
 /**
  * Bilinear interpolation over the 3×3 regime table.
@@ -21,10 +41,13 @@ const PE_NODES = MARKET_ADAPTER.PE_NODES;           // PE increasing: higher ind
  * @param {number} h  - Hurst exponent [0, 1]
  * @param {number} pe - Normalized permutation entropy [0, 1]
  * @param {Array}  [regimeTable] - Optional override for regime table
+ * @param {Object} [opts]        - Optional threshold overrides for interpolation
  * @returns {number}  - Interpolated multiplier
  */
-function bilinearInterpolate(h, pe, regimeTable = null) {
+function bilinearInterpolate(h, pe, regimeTable = null, opts = {}) {
     const table = regimeTable ?? MARKET_ADAPTER.REGIME_TABLE;
+    const H_NODES = resolveHNodes(opts.hurstZoneBand);
+    const PE_NODES = resolvePeNodes(opts.peNodes);
     // --- Hurst axis (H_NODES derived from HURST_ZONE_BAND, decreasing) ---
     // Find which interval h falls in: row r0, r1 = r0+1, fraction tRow toward r1
     let r0, tRow;
@@ -75,6 +98,8 @@ function bilinearInterpolate(h, pe, regimeTable = null) {
  * @param {Object}   [opts]
  * @param {number}   [opts.regimeSensitivity=1.0] - Exponent on the base multiplier (0=off, 1=default)
  * @param {Array}    [opts.regimeTable]           - Custom 3x3 regime multiplier table
+ * @param {number}   [opts.hurstZoneBand]         - Override Hurst neutral-zone width
+ * @param {Array}    [opts.peNodes]               - Override entropy thresholds
  * @param {Object}   [opts.hurstConfig]           - Override for HurstAnalyzer config
  * @param {Object}   [opts.peConfig]              - Override for PermutationEntropyAnalyzer config
  * @returns {{ multiplier: number, hurst: number|null, pe: number|null,
@@ -83,6 +108,8 @@ function bilinearInterpolate(h, pe, regimeTable = null) {
 function computeRegimeMultiplier(closes, opts = {}) {
     const sensitivity = Number.isFinite(opts.regimeSensitivity) ? opts.regimeSensitivity : 1.0;
     const regimeTable = opts.regimeTable ?? null;
+    const hurstZoneBand = Number.isFinite(opts.hurstZoneBand) ? opts.hurstZoneBand : null;
+    const peNodes = Array.isArray(opts.peNodes) ? opts.peNodes : null;
     const hurstCfg = opts.hurstConfig ?? HURST_CONFIG;
     const peCfg    = opts.peConfig    ?? PE_CONFIG;
 
@@ -111,7 +138,7 @@ function computeRegimeMultiplier(closes, opts = {}) {
     const h  = hurstResult.hurst;
     const ne = peResult.normalizedEntropy;
 
-    const baseMult  = bilinearInterpolate(h, ne, regimeTable);
+    const baseMult  = bilinearInterpolate(h, ne, regimeTable, { hurstZoneBand, peNodes });
     // Clamp to 1.0 max: regime only dampens, never amplifies
     const rawMult   = sensitivity === 1.0 ? baseMult : Math.pow(baseMult, sensitivity);
     const finalMult = Math.min(rawMult, 1.0);
@@ -120,10 +147,17 @@ function computeRegimeMultiplier(closes, opts = {}) {
         multiplier:  Math.round(finalMult * 1000) / 1000,
         hurst:       h,
         pe:          Math.round(ne * 10000) / 10000,
-        hurstRegime: hurstResult.regime,
-        peRegime:    peResult.regime,
+        hurstRegime: classifyHurstRegime(h, hurstZoneBand),
+        peRegime:    classifyPeRegime(ne, peNodes),
         isReady:     true,
     };
 }
 
-module.exports = { computeRegimeMultiplier, bilinearInterpolate };
+module.exports = {
+    computeRegimeMultiplier,
+    bilinearInterpolate,
+    classifyHurstRegime,
+    classifyPeRegime,
+    resolveHNodes,
+    resolvePeNodes,
+};

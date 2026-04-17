@@ -222,11 +222,13 @@ class MarketAdapterService {
 
         const slopeCfg = {
             ...(cfg.amaSlope || {}),
-            maxSlopeOffset:      cfg.maxSlopeOffset,
-            maxVolatilityOffset: cfg.maxVolatilityOffset,
-            neutralZonePct:      nz,
+            maxSlopeOffset:        cfg.maxSlopeOffset,
+            volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
+            volatilityScalePct:    cfg.volatilityScalePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT,
+            volatilityThreshold:   cfg.volatilityThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
+            neutralZonePct:        nz,
             clipPercentile,
-            clipThreshold:       amaClipThreshold,
+            clipThreshold:         amaClipThreshold,
         };
 
         let slopeResult = null;
@@ -271,7 +273,12 @@ class MarketAdapterService {
             let regimeMultiplier = 1.0;
 
             if (regimeSensitivity > 0) {
-                regimeResult = computeRegimeMultiplier(closes, { regimeSensitivity, regimeTable: cfg.regimeTable });
+                regimeResult = computeRegimeMultiplier(closes, {
+                    regimeSensitivity,
+                    regimeTable: cfg.regimeTable,
+                    hurstZoneBand: cfg.hurstZoneBand,
+                    peNodes: cfg.peNodes,
+                });
                 regimeMultiplier = regimeResult.isReady ? regimeResult.multiplier : 1.0;
             }
 
@@ -380,24 +387,26 @@ class MarketAdapterService {
             const MAX_W = 1.5;
             const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-            // Min-output threshold: if |finalOff| is below threshold, fall back to static
-            // weights (no dynamic offset applied). Default 0.25 = half the ±0.5 max output.
-            const minOutputThreshold = cfg.minOutputThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_OUTPUT_THRESHOLD ?? 0.25;
+            // Min-output threshold: if |finalOff| is below threshold, the trend component is
+            // suppressed. The volatility penalty (symmetricDelta) is always applied independently.
+            const minOutputThreshold = cfg.minOutputThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_TREND_THRESHOLD ?? 0.25;
             const belowMinOutputThreshold = Math.abs(finalOff) < minOutputThreshold;
 
-            const effectiveSell = belowMinOutputThreshold
-                ? staticSell
-                : Math.round(clamp(staticSell + finalOff, MIN_W, MAX_W) * 100) / 100;
-            const effectiveBuy = belowMinOutputThreshold
-                ? staticBuy
-                : Math.round(clamp(staticBuy - finalOff, MIN_W, MAX_W) * 100) / 100;
+            // Volatility penalty: symmetric downward shift on both weights, linear to ATR/price.
+            // Applied regardless of trend gate — reduces weights whenever market is volatile.
+            const volPenalty = slopeResult.isReady ? (slopeResult.symmetricDelta ?? 0) : 0;
+            const trendOff   = belowMinOutputThreshold ? 0 : finalOff;
+
+            const effectiveSell = Math.round(clamp(staticSell + trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
+            const effectiveBuy  = Math.round(clamp(staticBuy  - trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
 
             weights = {
                 sell: effectiveSell,
                 buy:  effectiveBuy,
-                profile: slopeResult.isReady
-                    ? (slopeResult.trend === 'NEUTRAL' ? 'flat' : 'slope')
-                    : 'static',
+                profile: !slopeResult.isReady ? 'static'
+                    : trendOff !== 0 ? 'slope'
+                    : volPenalty !== 0 ? 'volatility'
+                    : 'flat',
                 meta: {
                     source:                  'dynamic_weight',
                     staticSell,
@@ -408,10 +417,11 @@ class MarketAdapterService {
                     slopeOffset:             slopeResult.slopeOffset,
                     amaSlopeGated,
                     regimeMultiplier,
-                    symmetricDelta:          slopeResult.symmetricDelta,
+                    volatilityPenalty:       volPenalty,
                     alpha,
                     dw,
                     gain,
+                    trendOffset:             trendOff,
                     finalOffset:             finalOff,
                     minOutputThreshold,
                     belowMinOutputThreshold,
@@ -428,7 +438,7 @@ class MarketAdapterService {
                 baseWeights:      { sell: staticSell,    buy: staticBuy },
                 slopeOffset:      slopeResult.slopeOffset,
                 amaSlopeGated,
-                symmetricDelta:   slopeResult.symmetricDelta,
+                volatilityPenalty: volPenalty,
                 finalOffset:      finalOff,
                 alpha,
                 dw,
@@ -447,7 +457,7 @@ class MarketAdapterService {
                     peRegime:    regimeResult.peRegime,
                     regimeReady: regimeResult.isReady,
                 } : {}),
-                isReady:          slopeResult.isReady && !belowMinOutputThreshold,
+                isReady:          slopeResult.isReady && (!belowMinOutputThreshold || volPenalty !== 0),
                 updatedAt:        nowIso,
             };
         }
@@ -586,24 +596,14 @@ class MarketAdapterService {
             : undefined;
 
         // Weight-only update path: persist fresh weights to dynamicgrid.json without a grid reset.
-        // Gate: effective weight values have changed by ≥ minWeightChangeDelta.
+        // The bot will pick these up on the next recalculation cycle after fills or config reload.
         if (isDynamic && !triggered && !isDryRun && dynamicWeightsPayload && persistedCenterPrice > 0
                 && typeof deps.writeBotDynamicGrid === 'function') {
-            const minDelta = cfg.minWeightChangeDelta ?? 0.02;
-            const prevW = botState.effectiveWeights;
-            const newSell = dynamicWeightsPayload.effectiveWeights?.sell;
-            const newBuy  = dynamicWeightsPayload.effectiveWeights?.buy;
-            const weightChanged = !prevW
-                || Math.abs(Number(newSell) - Number(prevW.sell)) >= minDelta
-                || Math.abs(Number(newBuy)  - Number(prevW.buy))  >= minDelta;
-
-            if (weightChanged) {
-                deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
-                    amaCenterPrice: amaPrice,
-                    dynamicWeights: dynamicWeightsPayload,
-                });
-                botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
-            }
+            deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
+                amaCenterPrice: amaPrice,
+                dynamicWeights: dynamicWeightsPayload,
+            });
+            botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
         }
 
         state.bots[bot.botKey] = {

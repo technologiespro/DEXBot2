@@ -34,9 +34,10 @@ const AMA_WEIGHT_CONFIG = {
     lookbackBars:           MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
     maxSlopePct:            MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
     neutralZonePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
-    maxVolatilityThreshold:  0.03,
+    volatilityExponent:     MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
+    volatilityScalePct:     MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT,
+    volatilityThreshold:    MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
     maxSlopeOffset:         0.5,
-    maxVolatilityOffset:    0.5,
 };
 
 // Kalman configuration
@@ -163,9 +164,10 @@ async function main() {
                 lookbackBars: config.lookbackBars ?? AMA_WEIGHT_CONFIG.lookbackBars,
                 maxSlopePct: AMA_WEIGHT_CONFIG.maxSlopePct,
                 neutralZonePct: AMA_WEIGHT_CONFIG.neutralZonePct,
-                maxVolatilityThreshold: AMA_WEIGHT_CONFIG.maxVolatilityThreshold,
+                volatilityExponent: AMA_WEIGHT_CONFIG.volatilityExponent,
+                volatilityScalePct: AMA_WEIGHT_CONFIG.volatilityScalePct,
+                volatilityThreshold: AMA_WEIGHT_CONFIG.volatilityThreshold,
                 maxSlopeOffset: AMA_WEIGHT_CONFIG.maxSlopeOffset,
-                maxVolatilityOffset: AMA_WEIGHT_CONFIG.maxVolatilityOffset,
             });
 
             allResults[i].amaPrice = amaPrice;

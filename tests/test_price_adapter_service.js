@@ -15,6 +15,25 @@ function generateCandles(count, price) {
     return candles;
 }
 
+function generateVolatileFlatCandles(count, close = 100, high = 110, low = 90) {
+    const candles = [];
+    const baseTs = 1700000000000;
+    for (let i = 0; i < count; i++) {
+        candles.push([baseTs + i * 3600000, close, high, low, close, 1]);
+    }
+    return candles;
+}
+
+function generateTrendingCandles(count, start = 100, step = 0.2) {
+    const candles = [];
+    const baseTs = 1700000000000;
+    for (let i = 0; i < count; i++) {
+        const price = start + i * step;
+        candles.push([baseTs + i * 3600000, price, price, price, price, 1]);
+    }
+    return candles;
+}
+
 async function testTriggerHookCalledOnThreshold() {
     let triggerHookCalls = 0;
 
@@ -1081,6 +1100,283 @@ async function testDynamicWeightMinOutputThresholdZeroDisablesGate() {
     assert.strictEqual(dw.minOutputThreshold, 0, 'cfg.minOutputThreshold=0 should be reflected in payload');
 }
 
+async function testDynamicWeightVolatilityOnlyPathRemainsReady() {
+    let writtenPayload = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateVolatileFlatCandles(1000, 100, 110, 90) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-vol.trigger',
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
+            writtenPayload = payload;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-vol',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = { bots: { 'xrp-bts-dw-vol': { centerPrice: 100 } } };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.ok(writtenPayload, 'dynamic weights should be persisted');
+    assert.strictEqual(result.weights.profile, 'volatility', 'volatility-only path should identify its profile');
+    assert.ok(result.weights.meta.volatilityPenalty < 0, 'volatility penalty should reduce weights');
+    assert.strictEqual(result.weights.meta.belowMinOutputThreshold, true, 'trend component should remain gated off');
+
+    const dw = writtenPayload.dynamicWeights;
+    assert.strictEqual(dw.belowMinOutputThreshold, true, 'flat candles should still fail the trend threshold');
+    assert.strictEqual(dw.isReady, true, 'volatility-only payload should remain ready');
+    assert.ok(dw.volatilityPenalty < 0, 'payload should expose a negative volatility penalty');
+    assert.ok(dw.effectiveWeights.sell < dw.baseWeights.sell, 'sell weight should be reduced by volatility');
+    assert.ok(dw.effectiveWeights.buy < dw.baseWeights.buy, 'buy weight should be reduced by volatility');
+    assert.notDeepStrictEqual(dw.effectiveWeights, dw.baseWeights, 'volatility-only weights should differ from the static baseline');
+}
+
+async function testDynamicWeightVolatilityOverridesFlowIntoService() {
+    let writtenPayload = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateVolatileFlatCandles(1000, 100, 110, 90) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-override.trigger',
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
+            writtenPayload = payload;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-override',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = { bots: { 'xrp-bts-dw-override': { centerPrice: 100 } } };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        volatilityExponent: 1.0,
+        volatilityScalePct: 20,
+        volatilityThreshold: 0.01,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.ok(writtenPayload, 'dynamic weights should be persisted');
+
+    const dw = writtenPayload.dynamicWeights;
+    assert.strictEqual(dw.volatilityPenalty, -0.04, 'override tuning should produce the expected service-level penalty');
+    assert.strictEqual(dw.effectiveWeights.sell, 0.56, 'sell weight should reflect the tuned penalty');
+    assert.strictEqual(dw.effectiveWeights.buy, 0.36, 'buy weight should reflect the tuned penalty');
+    assert.strictEqual(result.weights.meta.volatilityPenalty, -0.04, 'service metadata should reflect the tuned penalty');
+}
+
+async function testDynamicWeightSuppressedTrendUsesFlatProfile() {
+    let writtenPayload = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateTrendingCandles(1000, 100, 0.2) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-flat-profile.trigger',
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
+            writtenPayload = payload;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-flat-profile',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = { bots: { 'xrp-bts-dw-flat-profile': { centerPrice: 100 } } };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        gain: 0.1,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.ok(writtenPayload, 'dynamic weights should be persisted');
+    assert.strictEqual(result.weights.meta.trend, 'UP', 'raw trend should remain available in metadata');
+    assert.strictEqual(result.weights.meta.belowMinOutputThreshold, true, 'trend output should be gated off by threshold');
+    assert.strictEqual(result.weights.meta.trendOffset, 0, 'no trend offset should be applied when threshold suppresses it');
+    assert.strictEqual(result.weights.profile, 'flat', 'profile should reflect the applied weighting mode');
+
+    const dw = writtenPayload.dynamicWeights;
+    assert.strictEqual(dw.isReady, false, 'suppressed trend without volatility should not be ready');
+    assert.deepStrictEqual(dw.effectiveWeights, dw.baseWeights, 'effective weights should fall back to the static baseline');
+}
+
+async function testDynamicWeightWeightOnlyWritesPersistEveryCycle() {
+    let writeCount = 0;
+    let lastPayload = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateVolatileFlatCandles(1000, 100, 110, 90) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-persist.trigger',
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
+            writeCount += 1;
+            lastPayload = payload;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-persist',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = { bots: { 'xrp-bts-dw-persist': { centerPrice: 100 } } };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    await service.processBot(bot, state, cfg, new Map(), {});
+    const firstWeights = { ...lastPayload.dynamicWeights.effectiveWeights };
+    await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(writeCount, 2, 'weight-only dynamic weights should be persisted on every no-trigger cycle');
+    assert.deepStrictEqual(lastPayload.dynamicWeights.effectiveWeights, firstWeights, 'successive writes may carry identical effective weights');
+}
+
 async function run() {
     await testTriggerHookCalledOnThreshold();
     await testIdOnlyBotIsNotRejected();
@@ -1096,6 +1392,10 @@ async function run() {
     await testRemainingGapsAreReportedWhenKibanaHasNoPatchData();
     await testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights();
     await testDynamicWeightMinOutputThresholdZeroDisablesGate();
+    await testDynamicWeightVolatilityOnlyPathRemainsReady();
+    await testDynamicWeightVolatilityOverridesFlowIntoService();
+    await testDynamicWeightSuppressedTrendUsesFlatProfile();
+    await testDynamicWeightWeightOnlyWritesPersistEveryCycle();
 }
 
 run()
