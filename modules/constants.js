@@ -647,7 +647,7 @@ let MARKET_ADAPTER = {
 
     // Shared Kalman tuning defaults used by both the research HTML and the live dynamic-weight
     // market adapter so both paths start from the same smoothing and echo behavior.
-    DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT: 150,
+    DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT: 100,
     DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT: 1.5,
     DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT: 1.5,
     DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT: 100,

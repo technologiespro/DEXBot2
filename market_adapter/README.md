@@ -191,9 +191,43 @@ ATR remains part of the live output only as a separate symmetric penalty after t
 directional signal is built. The HTML research tool is a simplified trend view and
 does not include that live ATR penalty branch.
 
+In the research runner, ATR is intentionally hardcoded to `0` and `weightVariance` is
+set to `0` as well. That keeps the analysis focused on the directional AMA/Kalman
+signal path and prevents the live volatility penalty from contaminating the chart.
+
 At runtime, the directional trend component is only applied when it exceeds
 `DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD` (or `minOutputThreshold` via overrides).
 The separate symmetric ATR shift uses `DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD`.
+
+### Symmetric Shift
+
+The volatility branch is intentionally separate from the directional AMA/Kalman branch.
+
+Variable mapping:
+
+- `atr` = `calculateATR(candles, 14)`
+- `weightVariance` = `atr / amaPrice`
+- `volatilityExponent` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT`
+- `volatilityScalePct` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT`
+- `volatilityThreshold` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD` or legacy `DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD`
+- `MAX_SYMMETRIC_SHIFT` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP`
+
+Implementation shape:
+
+```text
+rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * (volatilityScalePct / 100)
+clampedRawDelta   = clamp(rawSymmetricDelta, -MAX_SYMMETRIC_SHIFT, 0)
+volatilityPenalty = |clampedRawDelta| < volatilityThreshold ? 0 : clampedRawDelta
+```
+
+The resulting `volatilityPenalty` is added to both sides after the trend term is built:
+
+```text
+effectiveSell = clamp(staticSell + trendOffset + volatilityPenalty, MIN_WEIGHT, MAX_WEIGHT)
+effectiveBuy  = clamp(staticBuy  - trendOffset + volatilityPenalty, MIN_WEIGHT, MAX_WEIGHT)
+```
+
+The research chart in `analysis/analyze_volatility.js` uses the same penalty math but omits the directional trend branch.
 
 ### 6. Collateral Management
 
@@ -279,7 +313,7 @@ The main runtime knobs are:
 - `alpha` - AMA vs Kalman blend
 - `dw` - Kalman displacement weighting
 - `gain` - output amplitude
-- `kalmanSmoothPct` - raw-vs-smoothed Kalman blend
+- `kalmanSmoothPct` - raw-vs-smoothed Kalman blend (0-200; 100 = normal adaptive smoothing)
 - `kalmanDispScaleMult` - displacement scale multiplier
 - `kalmanDispThresholdMult` - displacement threshold multiplier
 - `kalmanSmoothSpanPct` - adaptive EMA span ratio

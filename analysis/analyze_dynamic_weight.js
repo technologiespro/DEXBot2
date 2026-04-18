@@ -155,6 +155,8 @@ async function main() {
         const ama3Values = calculateAMA(closes, AMA_CONFIG);
         for (let i = 0; i < allResults.length; i++) {
             const amaPrice = ama3Values[i] ?? null;
+            // The research chart keeps ATR out of the Kalman branch on purpose.
+            // Production applies ATR later as a separate symmetric volatility penalty.
             const atr = 0;
             const weightVariance = 0;
 

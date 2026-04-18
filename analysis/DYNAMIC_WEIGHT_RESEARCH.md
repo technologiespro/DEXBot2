@@ -19,6 +19,41 @@ The chart now also carries an adaptive `velocityFilteredPct` series that low-pas
 
 Velocity and displacement carry different information and are kept in separate chart panels. The `dispWeight` knob only adds displacement confidence when the two signals agree on direction.
 
+### ATR handling
+
+The research runner intentionally sets `atr = 0` and `weightVariance = 0` for the AMA/Kalman chart so the tool isolates the directional signal path. In production, ATR is not part of the Kalman estimator; it is applied later as a separate symmetric volatility penalty in the live adapter.
+
+That split keeps the research chart aligned with the trend-confirmation logic while avoiding any double-counting of volatility in the Kalman branch.
+
+### Symmetric volatility shift
+
+The symmetric penalty is documented and implemented as a separate branch, not as part of the Kalman filter itself.
+
+Variables used by the live and research implementations:
+
+- `weightVariance` = `atr / amaPrice`
+- `volatilityExponent` = power applied to the variance
+- `volatilityScalePct` = penalty size in percent
+- `volatilityThreshold` = minimum absolute shift before the penalty is allowed through
+- `MAX_SYMMETRIC_SHIFT` / `DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP` = hard cap on the downward shift
+
+Formula:
+
+```text
+rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * (volatilityScalePct / 100)
+clampedRawDelta   = clamp(rawSymmetricDelta, -MAX_SYMMETRIC_SHIFT, 0)
+symmetricDelta    = |clampedRawDelta| < volatilityThreshold ? 0 : clampedRawDelta
+```
+
+Live application:
+
+```text
+effectiveSell = clamp(staticSell + trendOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT)
+effectiveBuy  = clamp(staticBuy  - trendOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT)
+```
+
+The dedicated volatility research chart in `analysis/analyze_volatility.js` uses the same `weightVariance → symmetricDelta` math, but with no directional trend component.
+
 ### Hurst Exponent
 
 Estimates the long-memory property of the price series via Rescaled Range (R/S) analysis over a rolling window of 256 bars with scales `[8, 16, 32, 64]`.
@@ -141,7 +176,7 @@ Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pa
 ### Kalman Smoothing
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
-| **kf** | 0–250 | 150 | Sideways-regime Kalman smoothing blend (0 = raw velocity, 100 = current adaptive smoothing, 250 = stronger smoothing) |
+| **kf** | 0–200 | 100 | Sideways-regime Kalman smoothing blend (0 = raw velocity, 100 = current adaptive smoothing, 200 = stronger smoothing) |
 | **kfd** | 1–3x | 1.50x | Displacement scale multiplier for the adaptive smoothing confidence ramp |
 | **kdt** | 0.25–3x | 1.50x | Displacement threshold multiplier for when the adaptive EMA starts to loosen |
 | **kfs** | 20–200% | 100% | Adaptive EMA span ratio |
@@ -193,6 +228,11 @@ trendConfidence  = clamp(|displacement%| / (kdt × kfd), 0, 1)
 smoothingAlpha   = min(smoothingBudget, smoothingFloor + (smoothingSpan × trendConfidence))
 velocityFiltered = EMA(rawVelocity, smoothingAlpha)
 ```
+
+Behavior:
+- `kf = 0` returns the raw Kalman velocity
+- `kf = 100` uses the current adaptive EMA result
+- `kf > 100` pushes further toward the adaptive signal than the base blend alone, up to 200
 
 ### Latched Signal
 ```

@@ -13,7 +13,7 @@ function resolveKalmanVelocitySmoothingConfig(config = {}) {
     const blend = clamp(
         config.kalmanSmoothPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT,
         0,
-        250
+        200
     ) / 100;
     const dispScale = clamp(
         config.kalmanDispScaleMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT,

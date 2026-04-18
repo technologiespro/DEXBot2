@@ -3,10 +3,17 @@
 /**
  * VOLATILITY / SYMMETRIC SHIFT RESEARCH TOOL
  *
- * Computes normalized weight variance and the symmetric volatility shift used by
- * the market adapter. ATR is still computed internally to derive the variance.
- * Produces an interactive HTML chart with live knobs for threshold, exponent,
- * scale, and clamp.
+ * Computes the symmetric volatility shift used by the market adapter.
+ *
+ * Signal path:
+ *   ATR(14) -> weightVariance = atr / amaPrice
+ *   rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * (volatilityScalePct / 100)
+ *   clampedRawDelta = clamp(rawSymmetricDelta, -DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP, 0)
+ *   symmetricDelta = |clampedRawDelta| < volatilityThreshold ? 0 : clampedRawDelta
+ *
+ * The live adapter adds this penalty to both sides after the trend term is built.
+ * This runner intentionally omits the directional trend branch so the volatility
+ * effect can be researched in isolation.
  *
  * Usage:
  *   node analysis/analyze_volatility.js \

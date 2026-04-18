@@ -283,8 +283,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 <button class="paste-btn" id="paste-params-btn">paste</button>
 
                 <div class="row-break"></div>
-                <div class="ctrl kf"><label for="kf-slider">kf</label><input type="range" id="kf-slider" min="0" max="250" value="${defaultKalmanSmoothPct}" title="Kalman smoothing blend (0 = raw, 100 = current, 250 = stronger)"><span class="val" id="kf-value">${defaultKalmanSmoothPct}%</span></div>
-                <div class="ctrl kfd"><label for="kfd-slider">kfd</label><input type="range" id="kfd-slider" min="100" max="300" value="${Math.round(defaultKalmanDispScaleMult * 100)}" title="Kalman displacement scale multiplier (1x to 3x)"><span class="val" id="kfd-value">${defaultKalmanDispScaleMult.toFixed(2)}x</span></div>
+        <div class="ctrl kf"><label for="kf-slider">kf</label><input type="range" id="kf-slider" min="0" max="200" value="${defaultKalmanSmoothPct}" title="Kalman smoothing blend (0 = raw, 100 = current adaptive smoothing, 200 = stronger smoothing)"><span class="val" id="kf-value">${defaultKalmanSmoothPct}%</span></div>
+        <div class="ctrl kfd"><label for="kfd-slider">kfd</label><input type="range" id="kfd-slider" min="100" max="300" value="${Math.round(defaultKalmanDispScaleMult * 100)}" title="Kalman displacement scale multiplier (1x to 3x)"><span class="val" id="kfd-value">${defaultKalmanDispScaleMult.toFixed(2)}x</span></div>
                 <div class="ctrl kdt"><label for="kdt-slider">kdt</label><input type="range" id="kdt-slider" min="25" max="300" value="${Math.round(defaultKalmanDispThresholdMult * 100)}" title="Kalman displacement threshold multiplier (0.25x to 3x)"><span class="val" id="kdt-value">${defaultKalmanDispThresholdMult.toFixed(2)}x</span></div>
                 <div class="ctrl kfs"><label for="kfs-slider">kfs</label><input type="range" id="kfs-slider" min="20" max="200" value="${defaultKalmanSmoothSpanPct}" title="Adaptive EMA span ratio (20% span / 200% span; floor fixed at 0)"><span class="val" id="kfs-value">${defaultKalmanSmoothSpanPct}%</span></div>
                 <div class="ctrl cf"><label for="cf-slider">cf</label><input type="range" id="cf-slider" min="0" max="5" value="${defaultSignalConfirmBars}" title="Signal confirmation bars (0 disables latching; otherwise flips after N opposite echo bars)"><span class="val" id="cf-value">${defaultSignalConfirmBars}</span></div>
@@ -403,7 +403,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const currentMults    = new Array(data.dates.length).fill(null);
 
         function recalcKalmanVelocity() {
-            const blend = Math.max(0, Math.min(250, currentKalmanSmoothPct)) / 100;
+            const blend = Math.max(0, Math.min(200, currentKalmanSmoothPct)) / 100;
             const rawSeries = data.kalmanVelocityPctRaw || data.kalmanVelocityPct;
             const dispSeries = data.kalmanDisplacementPct;
             const dispScale = Math.max(1.0, Math.min(3.0, currentKalmanDispScaleMult));
@@ -1165,7 +1165,7 @@ function applyParams(p, btn) {
                     document.getElementById('gain-value').textContent = currentGain.toFixed(3);
                 }
                 if (p.kalmanSmoothPct != null) {
-                    currentKalmanSmoothPct = Math.max(0, Math.min(250, Math.round(p.kalmanSmoothPct)));
+                currentKalmanSmoothPct = Math.max(0, Math.min(200, Math.round(p.kalmanSmoothPct)));
                     document.getElementById('kf-slider').value = currentKalmanSmoothPct;
                     document.getElementById('kf-value').textContent = currentKalmanSmoothPct + '%';
                 }
