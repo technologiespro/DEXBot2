@@ -568,11 +568,21 @@ let MARKET_ADAPTER = {
     //   - Default: 2.5 (grid recalculates when market moves 2.5% from last recorded AMA center)
     AMA_DELTA_THRESHOLD_PERCENT: 2.5,
 
-    // DYNAMIC_WEIGHT_TREND_THRESHOLD: Minimum trend strength required before the
-    // bot applies a directional weight shift.
+    // DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD: Minimum blended trend strength required
+    // before the bot applies a directional weight shift in the asymmetrical path.
     // Higher values ignore weaker trend signals and keep weights closer to the static baseline.
     // Lower values allow smaller trend signals to affect buy/sell weighting.
     // (not exposed in chart UI)
+    DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD: 0.25,
+
+    // DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD: Minimum volatility shift required before the
+    // symmetric ATR dampening actually changes the output weights.
+    // Higher values ignore smaller ATR-driven adjustments.
+    // Lower values let volatility influence the symmetric shift sooner.
+    // (used by the volatility research tool)
+    DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD: 0.1,
+
+    // Legacy aliases kept for backward compatibility with older settings files.
     DYNAMIC_WEIGHT_TREND_THRESHOLD: 0.25,
 
     // DYNAMIC_WEIGHT_CLIP_PERCENTILE: Outlier filter for unusually large AMA/Kalman moves.
@@ -618,6 +628,16 @@ let MARKET_ADAPTER = {
     // nob: gain
     DYNAMIC_WEIGHT_GAIN: 1.0,
 
+    // DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP: Maximum directional offset away from neutral.
+    DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP: 0.5,
+
+    // DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP: Maximum symmetric downward shift from volatility.
+    DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP: 0.5,
+
+    // DYNAMIC_WEIGHT_MIN_WEIGHT / MAX_WEIGHT: Final weight clamp after all adjustments.
+    DYNAMIC_WEIGHT_MIN_WEIGHT: -1,
+    DYNAMIC_WEIGHT_MAX_WEIGHT: 2,
+
     // DYNAMIC_WEIGHT_REGIME_SENSITIVITY: How strongly the regime filter dampens or preserves
     // the dynamic-weight signal.
     // 0 ignores regime filtering, 1 uses the table as-is, and higher values make bad regimes
@@ -656,10 +676,7 @@ let MARKET_ADAPTER = {
     // Overridable per market pair or per bot via market_adapter_settings.json.
     DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT: 50,
 
-    // DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD: Minimum volatility effect required before the bot
-    // actually applies the ATR penalty.
-    // Higher values ignore small volatility adjustments.
-    // Lower values let even small ATR changes reduce the weights.
+    // DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD: Legacy alias for the symmetric shift threshold.
     // Overridable per market pair or per bot via market_adapter_settings.json.
     DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD: 0.1,
 

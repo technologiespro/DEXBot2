@@ -6,7 +6,7 @@
  * Computes normalized weight variance and the symmetric volatility shift used by
  * the market adapter. ATR is still computed internally to derive the variance.
  * Produces an interactive HTML chart with live knobs for threshold, exponent,
- * and scale.
+ * scale, and clamp.
  *
  * Usage:
  *   node analysis/analyze_volatility.js \
@@ -25,6 +25,11 @@ const { MARKET_ADAPTER } = require('../modules/constants');
 
 const AMA_CONFIG = MARKET_ADAPTER.AMAS.AMA3;
 const ATR_PERIOD = 14;
+const MIN_WEIGHT = MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT;
+const MAX_WEIGHT = MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT;
+const DEFAULT_THRESHOLD = MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
+    ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD;
+const DEFAULT_CLAMP = MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP;
 const DEFAULT_CHART_DIR = path.join(__dirname, 'charts');
 const DEFAULT_CHART_FILE = path.join(DEFAULT_CHART_DIR, 'volatility_chart.html');
 
@@ -61,9 +66,10 @@ function parseArgs() {
     const config = {
         source: { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         chartFile: DEFAULT_CHART_FILE,
-        threshold: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
+        threshold: DEFAULT_THRESHOLD,
         exponent: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
         scalePct: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT,
+        clamp: DEFAULT_CLAMP,
         quiet: false,
     };
 
@@ -79,24 +85,26 @@ function parseArgs() {
         else if (arg === '--threshold') config.threshold = parseFloat(args[++i]);
         else if (arg === '--exp') config.exponent = parseFloat(args[++i]);
         else if (arg === '--scale') config.scalePct = parseFloat(args[++i]);
+        else if (arg === '--clamp') config.clamp = parseFloat(args[++i]);
         else if (arg === '--quiet') config.quiet = true;
     }
 
     return config;
 }
 
-function computeShift(weightVariance, exponent, scalePct, threshold) {
+function computeShift(weightVariance, exponent, scalePct, threshold, clampValue) {
     const safeVariance = Number.isFinite(weightVariance) && weightVariance > 0 ? weightVariance : 0;
     const safeExponent = Number.isFinite(exponent) && exponent >= 0 ? exponent : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
     const safeScalePct = Number.isFinite(scalePct) && scalePct >= 0 ? scalePct : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT;
-    const safeThreshold = Number.isFinite(threshold) && threshold >= 0 ? threshold : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD;
+    const safeThreshold = Number.isFinite(threshold) && threshold >= 0 ? threshold : DEFAULT_THRESHOLD;
+    const safeClamp = Number.isFinite(clampValue) && clampValue >= 0 ? clampValue : DEFAULT_CLAMP;
     const effectiveExponent = Math.max(safeExponent, 0.2);
     const effectiveScalePct = Math.max(safeScalePct, 10.0);
 
     const rawDelta = -Math.pow(safeVariance, effectiveExponent) * (effectiveScalePct / 100);
-    const clampedRawDelta = Math.max(-0.5, Math.min(0, rawDelta));
+    const clampedRawDelta = Math.max(safeClamp * -1, Math.min(0, rawDelta));
     const symmetricDelta = Math.abs(clampedRawDelta) < safeThreshold ? 0 : clampedRawDelta;
-    const effectiveWeight = Math.max(-0.5, Math.min(1.5, 0.5 + symmetricDelta));
+    const effectiveWeight = Math.max(MIN_WEIGHT, Math.min(MAX_WEIGHT, 0.5 + symmetricDelta));
 
     return {
         rawSymmetricDelta: clampedRawDelta,
@@ -133,7 +141,7 @@ async function main() {
             const amaPrice = ama3Values[i] ?? null;
             const atr = atrs[i] ?? 0;
             const weightVariance = amaPrice > 0 ? atr / amaPrice : 0;
-            const shift = computeShift(weightVariance, config.exponent, config.scalePct, config.threshold);
+            const shift = computeShift(weightVariance, config.exponent, config.scalePct, config.threshold, config.clamp);
 
             allResults.push({
                 timestamp,
@@ -155,6 +163,10 @@ async function main() {
             volatilityThreshold: config.threshold,
             volatilityExponent: config.exponent,
             volatilityScalePct: config.scalePct,
+            volatilityClamp: config.clamp,
+            minWeight: MIN_WEIGHT,
+            maxWeight: MAX_WEIGHT,
+            marketAdapter: MARKET_ADAPTER,
         }, 'ATR Volatility Research');
 
         const chartDir = path.dirname(config.chartFile);

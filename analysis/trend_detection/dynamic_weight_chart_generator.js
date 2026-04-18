@@ -302,14 +302,22 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPctRaw, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, kalmanSmoothPct: defaultKalmanSmoothPct, kalmanDispScaleMult: defaultKalmanDispScaleMult, kalmanDispThresholdMult: defaultKalmanDispThresholdMult, kalmanSmoothSpanPct: defaultKalmanSmoothSpanPct, signalConfirmBars: defaultSignalConfirmBars, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, amaErPeriod, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, dispScaleMinPct, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPctRaw, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, kalmanSmoothPct: defaultKalmanSmoothPct, kalmanDispScaleMult: defaultKalmanDispScaleMult, kalmanDispThresholdMult: defaultKalmanDispThresholdMult, kalmanSmoothSpanPct: defaultKalmanSmoothSpanPct, signalConfirmBars: defaultSignalConfirmBars, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, amaErPeriod, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, dispScaleMinPct, offsetClamp: MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP, weightMin: MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT, weightMax: MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT, marketAdapter: ma, amaWeightConfig, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
         const SYNC_KEY = "dyn-wt-res-v3";
         const Y_AXIS_SIZE = 58;
+        const ma = data.marketAdapter || {};
+        const amaWeightConfig = data.amaWeightConfig || {};
 
         const ABSOLUTE_THRESHOLD = data.absoluteThreshold ?? 0;
+        const WEIGHT_MIN = data.weightMin ?? -1;
+        const WEIGHT_MAX = data.weightMax ?? 2;
+        const OFFSET_CLAMP = data.offsetClamp ?? 0.5;
+        const weightDistribution = { sell: 0.5, buy: 0.5 };
+        const STATIC_SELL = Number.isFinite(weightDistribution.sell) ? weightDistribution.sell : 0.5;
+        const STATIC_BUY = Number.isFinite(weightDistribution.buy) ? weightDistribution.buy : 0.5;
 
         let currentAlpha   = data.alpha;
         let currentGain  = data.gain ?? ${JSON.stringify(defaultGain)};
@@ -617,10 +625,10 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     // Clamp to 1.0 max: regime only dampens, never amplifies
                     const finalMult = Math.abs(rawMult - 1.0) >= ABSOLUTE_THRESHOLD ? Math.min(rawMult, 1.0) : 1.0;
                     currentMults[i] = finalMult;
-                    const off = Math.max(-0.5, Math.min(0.5, rawOff * finalMult));
+                    const off = Math.max(-OFFSET_CLAMP, Math.min(OFFSET_CLAMP, rawOff * finalMult));
                     combinedOff[i] = Math.round(off * 1000) / 1000;
-                    combinedSell[i] = Math.max(-0.5, Math.min(1.5, Math.round((0.5 + off) * 100) / 100));
-                    combinedBuy[i]  = Math.max(-0.5, Math.min(1.5, Math.round((0.5 - off) * 100) / 100));
+                    combinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL + off) * 100) / 100));
+                    combinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY - off) * 100) / 100));
                 }
             }
             const confirmBars = Math.max(0, Math.min(5, currentSignalConfirmBars));
@@ -649,8 +657,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
                 if (sign === 0) {
                     echoCombinedOff[i] = latchedOff;
-                    echoCombinedSell[i] = Math.max(-0.5, Math.min(1.5, Math.round((0.5 + latchedOff) * 100) / 100));
-                    echoCombinedBuy[i]  = Math.max(-0.5, Math.min(1.5, Math.round((0.5 - latchedOff) * 100) / 100));
+                    echoCombinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL + latchedOff) * 100) / 100));
+                    echoCombinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY - latchedOff) * 100) / 100));
                     continue;
                 }
                 if (latchedSign === 0) {
@@ -677,8 +685,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     }
                 }
                 echoCombinedOff[i] = latchedOff;
-                echoCombinedSell[i] = Math.max(-0.5, Math.min(1.5, Math.round((0.5 + latchedOff) * 100) / 100));
-                echoCombinedBuy[i]  = Math.max(-0.5, Math.min(1.5, Math.round((0.5 - latchedOff) * 100) / 100));
+                echoCombinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL + latchedOff) * 100) / 100));
+                echoCombinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY - latchedOff) * 100) / 100));
             }
         }
         recalcInputs();

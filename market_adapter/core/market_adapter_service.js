@@ -191,7 +191,8 @@ class MarketAdapterService {
         const amaPrice = amaValues.length > 0 ? amaValues[amaValues.length - 1] : null;
         const lastCandle = nextCandles[nextCandles.length - 1] || [0,0,0,0,0];
 
-        // 2. ATR — volatility input for the live symmetric penalty and diagnostics
+        // 2. ATR — used only for the symmetric volatility shift. The asymmetrical
+        //    trend/Kalman branch stays ATR-free to match the research HTML.
         const atr = calculateATR(nextCandles, 14);
         const weightVariance = amaPrice > 0 ? (atr / amaPrice) : 0;
 
@@ -232,7 +233,9 @@ class MarketAdapterService {
             maxSlopeOffset:        cfg.maxSlopeOffset,
             volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
             volatilityScalePct:    cfg.volatilityScalePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT,
-            volatilityThreshold:   cfg.volatilityThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
+            volatilityThreshold:   cfg.volatilityThreshold
+                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
+                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
             neutralZonePct:        nz,
             clipPercentile,
             clipThreshold:         amaClipThreshold,
@@ -244,7 +247,8 @@ class MarketAdapterService {
         let dynamicWeightsPayload = null;
 
         if (isDynamic) {
-            // AMA slope computation (final state)
+            // AMA slope computation (final state). The trend branch stays ATR-free;
+            // symmetricDelta still uses weightVariance from the ATR/price ratio.
             slopeResult = computeAmaSlopeWeights(amaValues, weightVariance, slopeCfg);
 
             // Kalman filter computation - collect per-bar results in single pass
@@ -382,9 +386,10 @@ class MarketAdapterService {
             // Build the same per-bar combined output series as the research chart, then
             // optionally latch it with signalConfirmBars before taking the last live value.
             const combinedOffSeries = new Array(closes.length).fill(0);
+            const offsetClamp = MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
             for (let i = 0; i < closes.length; i++) {
                 const rawOff = (alpha * (amaOffsets[i] / aMax) + (1 - alpha) * (kalmanOffsets[i] / kMax)) * gain;
-                const off = Math.max(-0.5, Math.min(0.5, rawOff * regimeMultipliers[i]));
+                const off = Math.max(-offsetClamp, Math.min(offsetClamp, rawOff * regimeMultipliers[i]));
                 combinedOffSeries[i] = Math.round(off * 1000) / 1000;
             }
 
@@ -461,21 +466,27 @@ class MarketAdapterService {
                 signalConfirmBars,
             };
 
-            // Apply to bot weights
-            const staticSell = Number.isFinite(bot.weightDistribution?.sell) ? bot.weightDistribution.sell : 0.5;
-            const staticBuy  = Number.isFinite(bot.weightDistribution?.buy)  ? bot.weightDistribution.buy  : 0.5;
+            // Apply to bot weights. Dynamic weight requires explicit bot midpoint settings.
+            const staticSell = bot.weightDistribution?.sell;
+            const staticBuy  = bot.weightDistribution?.buy;
+            if (!Number.isFinite(staticSell) || !Number.isFinite(staticBuy)) {
+                throw new Error('Dynamic weight requires bot weightDistribution.sell and buy settings.');
+            }
 
-            const MIN_W = 0;
-            const MAX_W = 1.5;
+            const MIN_W = MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT;
+            const MAX_W = MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT;
             const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
             // Min-output threshold: if |finalOff| is below threshold, the trend component is
             // suppressed. The volatility penalty (symmetricDelta) is always applied independently.
-            const minOutputThreshold = cfg.minOutputThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_TREND_THRESHOLD ?? 0.25;
+            const minOutputThreshold = cfg.minOutputThreshold
+                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD
+                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_TREND_THRESHOLD
+                ?? 0.25;
             const belowMinOutputThreshold = Math.abs(finalOff) < minOutputThreshold;
 
-            // Volatility penalty: symmetric downward shift on both weights, linear to ATR/price.
-            // Applied regardless of trend gate — reduces weights whenever market is volatile.
+            // Volatility penalty is the separate symmetric ATR shift. It is independent of
+            // the trend gate so volatile markets reduce both sides even when trend is flat.
             const volPenalty = slopeResult.isReady ? (slopeResult.symmetricDelta ?? 0) : 0;
             const trendOff   = belowMinOutputThreshold ? 0 : finalOff;
 

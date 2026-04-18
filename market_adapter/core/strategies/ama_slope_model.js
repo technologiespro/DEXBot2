@@ -2,10 +2,8 @@
 
 const { MARKET_ADAPTER } = require('../../../modules/constants');
 
-const MAX_OFFSET_FROM_NEUTRAL = 0.5; // default cap — overridable per bot via opts
-const MIN_WEIGHT = -0.5;
-const MAX_WEIGHT = 1.5;
-const BASELINE_WEIGHT = 0.5;
+const MAX_OFFSET_FROM_NEUTRAL = MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
+const MAX_SYMMETRIC_SHIFT = MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP;
 
 const DEFAULT_ER_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod;
 
@@ -14,14 +12,11 @@ function clamp(v, min, max) {
 }
 
 /**
- * Compute buy/sell order weights from AMA slope and ATR volatility.
+ * Compute AMA slope and volatility offsets from the AMA series.
  *
  * Two independent additive factors:
- *   sellW = baseline + slopeOffset + symmetricDelta
- *   buyW  = baseline - slopeOffset + symmetricDelta
- *
- * slopeOffset (asymmetric): AMA slope magnitude → trend direction
- * symmetricDelta (symmetric): ATR/price ratio → noise level
+ *   slopeOffset (asymmetric): AMA slope magnitude → trend direction
+ *   symmetricDelta (symmetric): ATR/price ratio → noise level
  *
  * @param {number[]} amaValues           Full AMA series (output of calculateAMA)
  * @param {number}   weightVariance      ATR(14) / amaPrice  (0 = no volatility)
@@ -33,10 +28,10 @@ function clamp(v, min, max) {
  * @param {number}   [opts.volatilityScalePct=50]        Scale percentage penalty (50 = 50%)
  * @param {number}   [opts.volatilityThreshold=0.1]      Minimum |symmetricDelta| before penalty applies
  * @param {number}   [opts.erPeriod=DEFAULT_ER_PERIOD]  AMA warm-up bars to skip in isReady guard
- * @param {number}   [opts.maxSlopeOffset=0.5]          Per-bot cap on buy/sell asymmetry offset
+ * @param {number}   [opts.maxSlopeOffset=MAX_OFFSET_FROM_NEUTRAL]  Per-bot cap on buy/sell asymmetry offset
  * @param {number}   [opts.clipPercentile=0]             Percentile clip on slope (0=off, 10=clip top 10%)
  * @param {number}   [opts.clipThreshold]                Pre-computed clip threshold from slope history
- * @returns {{ sellW, buyW, slopeOffset, symmetricDelta, slopePct, clippedSlopePct, confidence, trend, isReady }}
+ * @returns {{ slopeOffset, symmetricDelta, slopePct, clippedSlopePct, confidence, trend, isReady }}
  */
 function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const lookbackBars = opts.lookbackBars ?? 72;
@@ -44,7 +39,9 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const neutralZonePct = opts.neutralZonePct ?? 0.15;
     const volatilityExponent = opts.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
     const volatilityScalePct = opts.volatilityScalePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT;
-    const volatilityThreshold = opts.volatilityThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD;
+    const volatilityThreshold = opts.volatilityThreshold
+        ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
+        ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD;
     const erPeriod = opts.erPeriod ?? DEFAULT_ER_PERIOD;
     const maxSlopeOffset = opts.maxSlopeOffset ?? MAX_OFFSET_FROM_NEUTRAL;
     const clipThreshold = opts.clipThreshold ?? Infinity;
@@ -57,12 +54,11 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
         : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT;
     const safeVolatilityThreshold = Number.isFinite(volatilityThreshold) && volatilityThreshold >= 0
         ? volatilityThreshold
-        : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD;
+        : (MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
+            ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD);
 
     const notReady = {
         isReady: false,
-        sellW: BASELINE_WEIGHT,
-        buyW: BASELINE_WEIGHT,
         slopeOffset: 0,
         symmetricDelta: 0,
         slopePct: 0,
@@ -106,25 +102,15 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
 
     // 5. Volatility penalty — symmetric downward shift from ATR/price ratio.
     //    Formula: symmetricDelta = -weightVariance^exponent * (scalePct / 100)
-    //    Clamped to weight bounds: only reduces weights, never raises.
+    //    Clamped to the configured symmetric shift bound: only reduces weights, never raises.
     //    Suppressed when |symmetricDelta| < volatilityThreshold (mirrors minOutputThreshold for trend).
     const volDelta = -Math.pow(safeWeightVariance, safeVolatilityExponent) * (safeVolatilityScalePct / 100);
-    const rawSymmetricDelta = clamp(volDelta, MIN_WEIGHT - BASELINE_WEIGHT, 0);
+    const rawSymmetricDelta = clamp(volDelta, -MAX_SYMMETRIC_SHIFT, 0);
     const symmetricDelta = Math.abs(rawSymmetricDelta) < safeVolatilityThreshold ? 0 : rawSymmetricDelta;
-
-    // 6-7. Final weights
-    let sellW = clamp(BASELINE_WEIGHT + slopeOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT);
-    let buyW = clamp(BASELINE_WEIGHT - slopeOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT);
-
-    // 8. Round to 2 decimal places
-    sellW = Math.round(sellW * 100) / 100;
-    buyW = Math.round(buyW * 100) / 100;
     const roundedSlopeOffset = Math.round(slopeOffset * 100) / 100;
     const roundedSymmetricDelta = (Math.round(symmetricDelta * 100) / 100) || 0;
 
     return {
-        sellW,
-        buyW,
         slopeOffset: roundedSlopeOffset,
         symmetricDelta: roundedSymmetricDelta,
         slopePct,
@@ -135,4 +121,4 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     };
 }
 
-module.exports = { computeAmaSlopeWeights, MAX_OFFSET_FROM_NEUTRAL };
+module.exports = { computeAmaSlopeWeights, MAX_OFFSET_FROM_NEUTRAL, MAX_SYMMETRIC_SHIFT };

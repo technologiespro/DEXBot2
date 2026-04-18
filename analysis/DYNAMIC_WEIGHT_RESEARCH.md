@@ -351,7 +351,7 @@ Candle Data
 
 These gates exist in `market_adapter_service.js` but are not reflected in the research chart:
 
-### Min-output threshold (`DYNAMIC_WEIGHT_TREND_THRESHOLD`, default 0.25)
+### Min-output threshold (`DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD`, default 0.25)
 
 After the final blended trend offset is computed, if `|finalOff| < minOutputThreshold` the trend component is suppressed and treated as `0`.
 The symmetric volatility penalty is still applied independently. This means the bot can still receive a volatility-only weight adjustment even when the trend signal is below threshold. The payload flag `isReady` is only `false` when neither a trend offset nor a volatility penalty is active.

@@ -36,7 +36,8 @@ const AMA_WEIGHT_CONFIG = {
     neutralZonePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
     volatilityExponent:     MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
     volatilityScalePct:     MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT,
-    volatilityThreshold:    MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
+    volatilityThreshold:    MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
+        ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
     maxSlopeOffset:         0.5,
 };
 
@@ -174,8 +175,6 @@ async function main() {
             allResults[i].weightVariance = weightVariance;
             allResults[i].amaSlopePct = weights.slopePct;
             allResults[i].amaWeightReady = weights.isReady;
-            allResults[i].amaSellW = weights.sellW;
-            allResults[i].amaBuyW = weights.buyW;
             allResults[i].amaSlopeOffset = weights.slopeOffset;
             allResults[i].amaSymmetricDelta = weights.symmetricDelta;
         }

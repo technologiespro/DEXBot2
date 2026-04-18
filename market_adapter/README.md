@@ -192,7 +192,8 @@ directional signal is built. The HTML research tool is a simplified trend view a
 does not include that live ATR penalty branch.
 
 At runtime, the directional trend component is only applied when it exceeds
-`DYNAMIC_WEIGHT_TREND_THRESHOLD` (or `minOutputThreshold` via overrides).
+`DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD` (or `minOutputThreshold` via overrides).
+The separate symmetric ATR shift uses `DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD`.
 
 ### 6. Collateral Management
 
