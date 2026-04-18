@@ -668,13 +668,14 @@ let MARKET_ADAPTER = {
     // Higher values delay the penalty in calm markets and make it matter more in higher volatility.
     // Lower values make the penalty start affecting weights earlier.
     // Overridable per market pair or per bot via market_adapter_settings.json.
-    DYNAMIC_WEIGHT_VOLATILITY_EXPONENT: 0.5,
+    DYNAMIC_WEIGHT_VOLATILITY_EXPONENT: 1.0,
 
-    // DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT: Overall strength of the ATR-based volatility penalty.
-    // Higher values reduce both buy and sell weights more aggressively during volatile periods.
-    // Lower values keep the volatility penalty milder.
+    // DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT: Overall strength multiplier of the ATR-based
+    // volatility penalty, expressed as an x-factor instead of a percent.
+    // 10.0x is the normal starting strength. Higher values reduce both buy and sell weights more
+    // aggressively during volatile periods.
     // Overridable per market pair or per bot via market_adapter_settings.json.
-    DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT: 50,
+    DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT: 10.0,
 
     // DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD: Legacy alias for the symmetric shift threshold.
     // Overridable per market pair or per bot via market_adapter_settings.json.

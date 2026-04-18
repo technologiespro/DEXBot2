@@ -33,14 +33,14 @@ Variables used by the live and research implementations:
 
 - `weightVariance` = `atr / amaPrice`
 - `volatilityExponent` = power applied to the variance
-- `volatilityScalePct` = penalty size in percent
+- `volatilityScaleX` = penalty multiplier in x-factor units (10x default, 2x–50x in the volatility chart)
 - `volatilityThreshold` = minimum absolute shift before the penalty is allowed through
 - `MAX_SYMMETRIC_SHIFT` / `DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP` = hard cap on the downward shift
 
 Formula:
 
 ```text
-rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * (volatilityScalePct / 100)
+rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * volatilityScaleX
 clampedRawDelta   = clamp(rawSymmetricDelta, -MAX_SYMMETRIC_SHIFT, 0)
 symmetricDelta    = |clampedRawDelta| < volatilityThreshold ? 0 : clampedRawDelta
 ```

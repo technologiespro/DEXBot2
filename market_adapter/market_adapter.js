@@ -201,7 +201,7 @@ function resolveBotCfg(bot, globalCfg) {
         if (ps.maxSlopeOffset != null) merged.maxSlopeOffset = ps.maxSlopeOffset;
         if (ps.minOutputThreshold != null) merged.minOutputThreshold = ps.minOutputThreshold;
         if (ps.volatilityExponent != null) merged.volatilityExponent = ps.volatilityExponent;
-        if (ps.volatilityScalePct != null) merged.volatilityScalePct = ps.volatilityScalePct;
+        if (ps.volatilityScaleX != null) merged.volatilityScaleX = ps.volatilityScaleX;
         if (ps.volatilityThreshold != null) merged.volatilityThreshold = ps.volatilityThreshold;
         if (ps.clipPercentile != null) merged.clipPercentile = ps.clipPercentile;
         if (ps.regimeSensitivity != null) merged.regimeSensitivity = ps.regimeSensitivity;
@@ -238,7 +238,7 @@ function resolveBotCfg(bot, globalCfg) {
         if (botOverride.defaultAmaKey) merged.defaultAmaKey = botOverride.defaultAmaKey;
         if (botOverride.maxSlopeOffset != null) merged.maxSlopeOffset = botOverride.maxSlopeOffset;
         if (botOverride.volatilityExponent != null) merged.volatilityExponent = botOverride.volatilityExponent;
-        if (botOverride.volatilityScalePct != null) merged.volatilityScalePct = botOverride.volatilityScalePct;
+        if (botOverride.volatilityScaleX != null) merged.volatilityScaleX = botOverride.volatilityScaleX;
         if (botOverride.volatilityThreshold != null) merged.volatilityThreshold = botOverride.volatilityThreshold;
         if (botOverride.minOutputThreshold != null) merged.minOutputThreshold = botOverride.minOutputThreshold;
         if (botOverride.clipPercentile != null) merged.clipPercentile = botOverride.clipPercentile;

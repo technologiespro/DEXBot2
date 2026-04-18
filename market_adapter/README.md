@@ -208,14 +208,14 @@ Variable mapping:
 - `atr` = `calculateATR(candles, 14)`
 - `weightVariance` = `atr / amaPrice`
 - `volatilityExponent` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT`
-- `volatilityScalePct` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT`
+- `volatilityScaleX` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT` (10x default, 2x–50x in the volatility chart)
 - `volatilityThreshold` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD` or legacy `DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD`
 - `MAX_SYMMETRIC_SHIFT` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP`
 
 Implementation shape:
 
 ```text
-rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * (volatilityScalePct / 100)
+rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * volatilityScaleX
 clampedRawDelta   = clamp(rawSymmetricDelta, -MAX_SYMMETRIC_SHIFT, 0)
 volatilityPenalty = |clampedRawDelta| < volatilityThreshold ? 0 : clampedRawDelta
 ```

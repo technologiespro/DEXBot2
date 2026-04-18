@@ -35,7 +35,7 @@ const AMA_WEIGHT_CONFIG = {
     maxSlopePct:            MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
     neutralZonePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
     volatilityExponent:     MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
-    volatilityScalePct:     MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT,
+    volatilityScaleX: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
     volatilityThreshold:    MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
         ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
     maxSlopeOffset:         0.5,
@@ -166,7 +166,7 @@ async function main() {
                 maxSlopePct: AMA_WEIGHT_CONFIG.maxSlopePct,
                 neutralZonePct: AMA_WEIGHT_CONFIG.neutralZonePct,
                 volatilityExponent: AMA_WEIGHT_CONFIG.volatilityExponent,
-                volatilityScalePct: AMA_WEIGHT_CONFIG.volatilityScalePct,
+                volatilityScaleX: AMA_WEIGHT_CONFIG.volatilityScaleX,
                 volatilityThreshold: AMA_WEIGHT_CONFIG.volatilityThreshold,
                 maxSlopeOffset: AMA_WEIGHT_CONFIG.maxSlopeOffset,
             });

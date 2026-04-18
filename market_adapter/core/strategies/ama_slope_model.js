@@ -24,8 +24,8 @@ function clamp(v, min, max) {
  * @param {number}   [opts.lookbackBars=72]             Bars to look back for slope
  * @param {number}   [opts.maxSlopePct=3.0]             Slope % that saturates slopeOffset
  * @param {number}   [opts.neutralZonePct=0.15]         Dead-band around zero slope
- * @param {number}   [opts.volatilityExponent=0.5]      Exponent for ATR-based penalty (sqrt=0.5)
- * @param {number}   [opts.volatilityScalePct=50]        Scale percentage penalty (50 = 50%)
+ * @param {number}   [opts.volatilityExponent=1.0]      Exponent for ATR-based penalty
+ * @param {number}   [opts.volatilityScaleX=10.0]       Scale factor penalty (10.0 = normal start)
  * @param {number}   [opts.volatilityThreshold=0.1]      Minimum |symmetricDelta| before penalty applies
  * @param {number}   [opts.erPeriod=DEFAULT_ER_PERIOD]  AMA warm-up bars to skip in isReady guard
  * @param {number}   [opts.maxSlopeOffset=MAX_OFFSET_FROM_NEUTRAL]  Per-bot cap on buy/sell asymmetry offset
@@ -38,7 +38,7 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const maxSlopePct = opts.maxSlopePct ?? 3.0;
     const neutralZonePct = opts.neutralZonePct ?? 0.15;
     const volatilityExponent = opts.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
-    const volatilityScalePct = opts.volatilityScalePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT;
+    const volatilityScaleX = opts.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT;
     const volatilityThreshold = opts.volatilityThreshold
         ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
         ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD;
@@ -49,9 +49,9 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const safeVolatilityExponent = Number.isFinite(volatilityExponent) && volatilityExponent >= 0
         ? volatilityExponent
         : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
-    const safeVolatilityScalePct = Number.isFinite(volatilityScalePct) && volatilityScalePct >= 0
-        ? volatilityScalePct
-        : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT;
+    const safeVolatilityScaleX = Number.isFinite(volatilityScaleX) && volatilityScaleX >= 0
+        ? volatilityScaleX
+        : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT;
     const safeVolatilityThreshold = Number.isFinite(volatilityThreshold) && volatilityThreshold >= 0
         ? volatilityThreshold
         : (MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
@@ -101,10 +101,11 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const confidence = Math.round(Math.abs(slopeOffset) / maxSlopeOffset * 100);
 
     // 5. Volatility penalty — symmetric downward shift from ATR/price ratio.
-    //    Formula: symmetricDelta = -weightVariance^exponent * (scalePct / 100)
+    //    Formula: symmetricDelta = -weightVariance^exponent * scaleX
     //    Clamped to the configured symmetric shift bound: only reduces weights, never raises.
     //    Suppressed when |symmetricDelta| < volatilityThreshold (mirrors minOutputThreshold for trend).
-    const volDelta = -Math.pow(safeWeightVariance, safeVolatilityExponent) * (safeVolatilityScalePct / 100);
+    const effectiveScaleX = clamp(safeVolatilityScaleX, 5.0, 50.0);
+    const volDelta = -Math.pow(safeWeightVariance, safeVolatilityExponent) * effectiveScaleX;
     const rawSymmetricDelta = clamp(volDelta, -MAX_SYMMETRIC_SHIFT, 0);
     const symmetricDelta = Math.abs(rawSymmetricDelta) < safeVolatilityThreshold ? 0 : rawSymmetricDelta;
     const roundedSlopeOffset = Math.round(slopeOffset * 100) / 100;

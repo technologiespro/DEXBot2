@@ -7,7 +7,7 @@
  *
  * Signal path:
  *   ATR(14) -> weightVariance = atr / amaPrice
- *   rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * (volatilityScalePct / 100)
+ *   rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * volatilityScaleX
  *   clampedRawDelta = clamp(rawSymmetricDelta, -DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP, 0)
  *   symmetricDelta = |clampedRawDelta| < volatilityThreshold ? 0 : clampedRawDelta
  *
@@ -75,7 +75,7 @@ function parseArgs() {
         chartFile: DEFAULT_CHART_FILE,
         threshold: DEFAULT_THRESHOLD,
         exponent: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
-        scalePct: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT,
+        scaleX: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
         clamp: DEFAULT_CLAMP,
         quiet: false,
     };
@@ -91,7 +91,7 @@ function parseArgs() {
         else if (arg === '--chart') config.chartFile = args[++i];
         else if (arg === '--threshold') config.threshold = parseFloat(args[++i]);
         else if (arg === '--exp') config.exponent = parseFloat(args[++i]);
-        else if (arg === '--scale') config.scalePct = parseFloat(args[++i]);
+        else if (arg === '--scale-x') config.scaleX = parseFloat(args[++i]);
         else if (arg === '--clamp') config.clamp = parseFloat(args[++i]);
         else if (arg === '--quiet') config.quiet = true;
     }
@@ -99,16 +99,16 @@ function parseArgs() {
     return config;
 }
 
-function computeShift(weightVariance, exponent, scalePct, threshold, clampValue) {
+function computeShift(weightVariance, exponent, scaleX, threshold, clampValue) {
     const safeVariance = Number.isFinite(weightVariance) && weightVariance > 0 ? weightVariance : 0;
     const safeExponent = Number.isFinite(exponent) && exponent >= 0 ? exponent : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
-    const safeScalePct = Number.isFinite(scalePct) && scalePct >= 0 ? scalePct : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT;
+    const safeScaleX = Number.isFinite(scaleX) && scaleX >= 0 ? scaleX : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT;
     const safeThreshold = Number.isFinite(threshold) && threshold >= 0 ? threshold : DEFAULT_THRESHOLD;
     const safeClamp = Number.isFinite(clampValue) && clampValue >= 0 ? clampValue : DEFAULT_CLAMP;
-    const effectiveExponent = Math.max(safeExponent, 0.2);
-    const effectiveScalePct = Math.max(safeScalePct, 10.0);
+    const effectiveExponent = Math.max(0.25, Math.min(4.0, safeExponent));
+    const effectiveScaleX = Math.max(2.0, Math.min(50.0, safeScaleX));
 
-    const rawDelta = -Math.pow(safeVariance, effectiveExponent) * (effectiveScalePct / 100);
+    const rawDelta = -Math.pow(safeVariance, effectiveExponent) * effectiveScaleX;
     const clampedRawDelta = Math.max(safeClamp * -1, Math.min(0, rawDelta));
     const symmetricDelta = Math.abs(clampedRawDelta) < safeThreshold ? 0 : clampedRawDelta;
     const effectiveWeight = Math.max(MIN_WEIGHT, Math.min(MAX_WEIGHT, 0.5 + symmetricDelta));
@@ -148,7 +148,7 @@ async function main() {
             const amaPrice = ama3Values[i] ?? null;
             const atr = atrs[i] ?? 0;
             const weightVariance = amaPrice > 0 ? atr / amaPrice : 0;
-            const shift = computeShift(weightVariance, config.exponent, config.scalePct, config.threshold, config.clamp);
+            const shift = computeShift(weightVariance, config.exponent, config.scaleX, config.threshold, config.clamp);
 
             allResults.push({
                 timestamp,
@@ -169,7 +169,7 @@ async function main() {
             atrPeriod: ATR_PERIOD,
             volatilityThreshold: config.threshold,
             volatilityExponent: config.exponent,
-            volatilityScalePct: config.scalePct,
+            volatilityScaleX: config.scaleX,
             volatilityClamp: config.clamp,
             minWeight: MIN_WEIGHT,
             maxWeight: MAX_WEIGHT,

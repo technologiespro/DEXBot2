@@ -228,16 +228,16 @@ class MarketAdapterService {
             // Kalman clip threshold from velocity distribution (computed after Kalman run)
         }
 
-        const slopeCfg = {
-            ...(cfg.amaSlope || {}),
-            maxSlopeOffset:        cfg.maxSlopeOffset,
-            volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
-            volatilityScalePct:    cfg.volatilityScalePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT,
-            volatilityThreshold:   cfg.volatilityThreshold
-                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
-                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
-            neutralZonePct:        nz,
-            clipPercentile,
+            const slopeCfg = {
+                ...(cfg.amaSlope || {}),
+                maxSlopeOffset:        cfg.maxSlopeOffset,
+                volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
+            volatilityScaleX: cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
+                volatilityThreshold:   cfg.volatilityThreshold
+                    ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
+                    ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
+                neutralZonePct:        nz,
+                clipPercentile,
             clipThreshold:         amaClipThreshold,
         };
 

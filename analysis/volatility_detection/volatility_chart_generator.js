@@ -27,7 +27,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
         ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD;
     const defaultExponent = data.volatilityExponent ?? volatilityCfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
-    const defaultScalePct = data.volatilityScalePct ?? volatilityCfg.volatilityScalePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_PCT;
+    const defaultScaleX = data.volatilityScaleX ?? volatilityCfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT;
     const defaultClamp = data.volatilityClamp ?? volatilityCfg.volatilityClamp ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP;
     const defaultMinWeight = data.minWeight ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT;
     const defaultMaxWeight = data.maxWeight ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT;
@@ -57,7 +57,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         realBarCount,
         volatilityThreshold: defaultThreshold,
         volatilityExponent: defaultExponent,
-        volatilityScalePct: defaultScalePct,
+        volatilityScaleX: defaultScaleX,
         volatilityClamp: defaultClamp,
         minWeight: defaultMinWeight,
         maxWeight: defaultMaxWeight,
@@ -78,11 +78,11 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         #header-left { font-weight: bold; color: #fff; }
         #hint { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap; }
         #panels { display: flex; flex-direction: column; height: calc(100vh - 48px); width: 100vw; }
-        #price-panel { flex: 0 0 35%; min-height: 0; position: relative; border-bottom: 1px solid #30363d; }
+        #price-panel { flex: 0 0 33%; min-height: 0; position: relative; border-bottom: 1px solid #30363d; }
         #variance-panel { flex: 0 0 27%; min-height: 0; position: relative; border-bottom: 1px solid #30363d; }
         #variance-panel .legend { top: 10px; }
         #variance-chart { margin-top: 0; height: 100%; }
-        #shift-panel { flex: 0 0 38%; min-height: 0; position: relative; }
+        #shift-panel { flex: 0 0 40%; min-height: 0; position: relative; }
         #shift-panel .legend { top: 18px; }
         #shift-chart { margin-top: 0; height: calc(100% - 30px); }
         .uplot { background: #0b0e14; }
@@ -145,9 +145,9 @@ function generateHTML(data, title = 'ATR Volatility Research') {
                 <div class="legend-item">B: <span id="l-buy" class="legend-val" style="color:#58a6ff;">-</span></div>
                 <div class="group-sep"></div>
                 <div class="ctrl thr"><label for="threshold-slider">thr</label><input type="range" id="threshold-slider" min="0" max="500" step="1" value="${Math.round(defaultThreshold * 1000)}"><span class="val" id="threshold-value">${defaultThreshold.toFixed(3)}</span></div>
-                <div class="ctrl clamp"><label for="clamp-slider">clamp</label><input type="range" id="clamp-slider" min="0" max="500" step="1" value="${Math.round(defaultClamp * 1000)}"><span class="val" id="clamp-value">${defaultClamp.toFixed(3)}</span></div>
+                <div class="ctrl clamp"><label for="clamp-slider">clamp</label><input type="range" id="clamp-slider" min="100" max="1000" step="1" value="${Math.round(defaultClamp * 1000)}"><span class="val" id="clamp-value">${defaultClamp.toFixed(3)}</span></div>
                 <div class="ctrl exp"><label for="exponent-slider">exp</label><input type="range" id="exponent-slider" min="0" max="1000" step="1" value="0"><span class="val" id="exponent-value">${defaultExponent.toFixed(2)}</span></div>
-                <div class="ctrl scale"><label for="scale-slider">scale%</label><input type="range" id="scale-slider" min="0" max="1000" step="1" value="0"><span class="val" id="scale-value">${defaultScalePct.toFixed(1)}%</span></div>
+                <div class="ctrl scale"><label for="scale-slider">scaleX</label><input type="range" id="scale-slider" min="0" max="1000" step="1" value="0"><span class="val" id="scale-value">${defaultScaleX.toFixed(2)}x</span></div>
             </div>
             <div id="shift-chart"></div>
         </div>
@@ -163,15 +163,15 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         const MIN_WEIGHT = data.minWeight ?? ${JSON.stringify(defaultMinWeight)};
         const MAX_WEIGHT = data.maxWeight ?? ${JSON.stringify(defaultMaxWeight)};
         const BASELINE_WEIGHT = 0.5;
-        const EXP_LOG_MIN = Math.log(0.2);
-        const EXP_LOG_MAX = Math.log(5.0);
-        const SCALE_LOG_MIN = Math.log(10.0);
-        const SCALE_LOG_MAX = Math.log(10000.0);
+        const EXP_LOG_MIN = Math.log(0.25);
+        const EXP_LOG_MAX = Math.log(4.0);
+        const SCALE_LOG_MIN = Math.log(2.0);
+        const SCALE_LOG_MAX = Math.log(50.0);
 
         let currentThreshold = data.volatilityThreshold;
         let currentExponent = data.volatilityExponent;
-        let currentScalePct = data.volatilityScalePct;
-        let currentClamp = data.volatilityClamp ?? ${JSON.stringify(defaultClamp)};
+        let currentScaleX = data.volatilityScaleX;
+        let currentClamp = Math.max(0.1, data.volatilityClamp ?? ${JSON.stringify(defaultClamp)});
 
         const xMin = data.dates[0];
         const xMax = data.dates[data.dates.length - 1];
@@ -223,12 +223,12 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         }
 
         function clampValToSlider(val) {
-            const clamped = Math.max(0, Math.min(0.5, val));
+            const clamped = Math.max(0.1, Math.min(1.0, val));
             return Math.round(clamped * 1000);
         }
 
         function clampSliderToVal(pos) {
-            return Math.max(0, Math.min(0.5, pos / 1000));
+            return Math.max(0.1, Math.min(1.0, pos / 1000));
         }
 
         function toPlotLog(values) {
@@ -245,10 +245,10 @@ function generateHTML(data, title = 'ATR Volatility Research') {
 
         function calcShift(weightVariance) {
             const safeVariance = Number.isFinite(weightVariance) && weightVariance > 0 ? weightVariance : 0;
-            const effectiveExponent = Math.max(currentExponent, Math.exp(EXP_LOG_MIN));
-            const effectiveScalePct = Math.max(currentScalePct, Math.exp(SCALE_LOG_MIN));
-            const effectiveClamp = Number.isFinite(currentClamp) && currentClamp >= 0 ? currentClamp : ${JSON.stringify(defaultClamp)};
-            const raw = -Math.pow(safeVariance, effectiveExponent) * (effectiveScalePct / 100);
+            const effectiveExponent = Math.max(Math.exp(EXP_LOG_MIN), Math.min(Math.exp(EXP_LOG_MAX), currentExponent));
+            const effectiveScaleX = Math.max(Math.exp(SCALE_LOG_MIN), Math.min(Math.exp(SCALE_LOG_MAX), currentScaleX));
+            const effectiveClamp = Number.isFinite(currentClamp) && currentClamp >= 0.1 ? currentClamp : ${JSON.stringify(defaultClamp)};
+            const raw = -Math.pow(safeVariance, effectiveExponent) * effectiveScaleX;
             const clampedRaw = clamp(raw, -effectiveClamp, 0);
             const delta = Math.abs(clampedRaw) < currentThreshold ? 0 : clampedRaw;
             const weff = clamp(BASELINE_WEIGHT + delta, MIN_WEIGHT, MAX_WEIGHT);
@@ -521,14 +521,15 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         }
 
         function init() {
-            currentExponent = Math.max(currentExponent, Math.exp(EXP_LOG_MIN));
-            currentScalePct = Math.max(currentScalePct, Math.exp(SCALE_LOG_MIN));
+            currentExponent = Math.max(Math.exp(EXP_LOG_MIN), Math.min(Math.exp(EXP_LOG_MAX), currentExponent));
+            currentScaleX = Math.max(Math.exp(SCALE_LOG_MIN), Math.min(Math.exp(SCALE_LOG_MAX), currentScaleX));
+            currentClamp = Math.max(0.1, Math.min(1.0, currentClamp));
             document.getElementById('threshold-slider').value = Math.round(currentThreshold * 1000);
             document.getElementById('exponent-slider').value = expValToSlider(currentExponent);
-            document.getElementById('scale-slider').value = scaleValToSlider(currentScalePct);
+            document.getElementById('scale-slider').value = scaleValToSlider(currentScaleX);
             document.getElementById('clamp-slider').value = clampValToSlider(currentClamp);
             document.getElementById('exponent-value').textContent = currentExponent.toFixed(3);
-            document.getElementById('scale-value').textContent = currentScalePct.toFixed(2) + '%';
+            document.getElementById('scale-value').textContent = currentScaleX.toFixed(2) + 'x';
             document.getElementById('clamp-value').textContent = currentClamp.toFixed(3);
 
             const priceEl = document.getElementById('price-panel');
@@ -652,8 +653,8 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             });
 
             document.getElementById('scale-slider').addEventListener('input', (e) => {
-                currentScalePct = scaleSliderToVal(parseInt(e.target.value, 10));
-                document.getElementById('scale-value').textContent = currentScalePct.toFixed(2) + '%';
+                currentScaleX = scaleSliderToVal(parseInt(e.target.value, 10));
+                document.getElementById('scale-value').textContent = currentScaleX.toFixed(2) + 'x';
                 applyShiftFromSliders();
             });
 
