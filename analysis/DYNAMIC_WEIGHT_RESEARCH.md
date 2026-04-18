@@ -15,6 +15,8 @@ The Kalman filter is a state estimator: it separates true price and velocity fro
 - **Velocity** (tactical filter, high Q): direction and speed of price right now — responsive to inflections without reacting to wicks.
 - **Displacement** (modal filter, very low Q): how far price has moved from the long-run equilibrium ("center of gravity") — captures extension, not just momentum direction.
 
+The chart now also carries an adaptive `velocityFilteredPct` series that low-passes the tactical velocity more aggressively when displacement is close to equilibrium. That keeps the fast reaction in trends, but trims the whipsaw you see in sideways chop.
+
 Velocity and displacement carry different information and are kept in separate chart panels. The `dispWeight` knob only adds displacement confidence when the two signals agree on direction.
 
 ### Hurst Exponent
@@ -78,7 +80,7 @@ node analysis/analyze_dynamic_weight.js \
 node analysis/analyze_dynamic_weight.js \
   --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
   --alpha 0.6 \
-  --gain 0.10 \
+  --gain 0.20 \
   --clip 20
 ```
 
@@ -94,7 +96,7 @@ Output: `analysis/charts/dynamic_weight_chart.html` (open in browser)
 | `--file` | — | Path to JSON candle file (implies `--source json`) |
 | `--bot-key` | `XRP-BTS` | Bot key for market adapter source |
 | `--chart` | `analysis/charts/dynamic_weight_chart.html` | Output HTML path |
-| `--alpha` | `0.7` | Initial α blend (0 = pure Kalman, 1 = pure AMA) |
+| `--alpha` | `0.5` | Initial α blend (0 = pure Kalman, 1 = pure AMA) |
 | `--dw` | `1.0` | Initial displacement weight (0 = pure velocity, 1 = full displacement) |
 | `--lb` | `10` | Initial lookback bars (4-256) for AMA slope calculation |
 | `--gain` | `1.0` | Initial gain multiplier |
@@ -117,7 +119,7 @@ Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pa
 - Background shading mirrors the output signal direction
 
 ### Panel 3 — Kalman Composite Input (21%)
-- **Purple line**: Kalman velocity percentage (tactical filter)
+- **Purple line**: Kalman velocity percentage, adaptively smoothed in sideways regimes
 - **Cyan dashed line**: Kalman displacement percentage (modal filter — distance from fair-value price)
 - Velocity measures *direction and speed* of price movement
 - Displacement measures *how far price has already moved* from equilibrium
@@ -133,8 +135,17 @@ Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pa
 ### Blend Controls
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
-| **α** | 0–1 | 0.7 | Blend ratio between AMA and Kalman channels (0 = pure Kalman, 1 = pure AMA) |
+| **α** | 0–1 | 0.5 | Blend ratio between AMA and Kalman channels (0 = pure Kalman, 1 = pure AMA) |
 | **dw** | 0–1 | 1.0 | Displacement weight: how much Kalman displacement influences the composite signal |
+
+### Kalman Smoothing
+| Knob | Range | Default | Purpose |
+|------|-------|---------|---------|
+| **kf** | 0–250 | 150 | Sideways-regime Kalman smoothing blend (0 = raw velocity, 100 = current adaptive smoothing, 250 = stronger smoothing) |
+| **kfd** | 1–3x | 1.50x | Displacement scale multiplier for the adaptive smoothing confidence ramp |
+| **kdt** | 0.25–3x | 1.50x | Displacement threshold multiplier for when the adaptive EMA starts to loosen |
+| **kfs** | 20–200% | 100% | Adaptive EMA span ratio |
+| **cf** | 1–5 | 1 | Signal confirmation bars for the latched/raw signal overlay |
 
 ### Slope Calculation
 | Knob | Range | Default | Purpose |
@@ -147,12 +158,12 @@ Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pa
 ### Output Controls
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
-| **gain** | 0.1–3.0 | 1.0 | Logarithmic. Amplitude multiplier on normalized blend |
+| **gain** | 0.2–3.0 | 1.0 | Logarithmic. Amplitude multiplier on normalized blend |
 | **regi** | 0–2 | 1.0 | Regime sensitivity: exponent applied to Hurst+PE multiplier |
 
 ## Copy / Paste Parameters
 
-The **copy** button serializes all knob values (α, dw, lb, maxS%, gain, clip%, nz%, regi) to JSON and writes them to both the clipboard and `localStorage`.
+The **copy** button serializes all knob values (α, dw, kf, kfd, kdt, kfs, cf, lb, maxS%, gain, clip%, nz%, regi) to JSON and writes them to both the clipboard and `localStorage`.
 
 The **paste** button first checks `localStorage` for parameters from a previous copy in the same browser session. If none found, it prompts for Ctrl+V input. A confirmation popup shows the parsed values before applying them. Click **Apply** to set the knobs, **Cancel** or press **Escape** to dismiss.
 
@@ -172,6 +183,39 @@ momAlign  = sign(kalClip) == sign(displacement%) ? 1 : 0
 kalComp   = kalClip × (1 − dw + dw × dispConf × momAlign)
 kalOff    = clamp(kalComp / maxS% × gain, ±gain)
 ```
+
+### Adaptive EMA
+```
+smoothingBudget = 0.60
+smoothingFloor   = 0
+smoothingSpan    = smoothingBudget × clamp(kfs, 0.2, 2.0)
+trendConfidence  = clamp(|displacement%| / (kdt × kfd), 0, 1)
+smoothingAlpha   = min(smoothingBudget, smoothingFloor + (smoothingSpan × trendConfidence))
+velocityFiltered = EMA(rawVelocity, smoothingAlpha)
+```
+
+### Latched Signal
+```
+echoDir = sign(rawSignal) when rawSignal is bullish/bearish else 0
+latchedSignal = hold(echoDir, cf)
+```
+
+Behavior:
+- `cf = 0` disables latching and shows the raw signal directly
+- `cf = 1` flips immediately on the first opposite echo direction
+- higher `cf` requires more consecutive opposite bars before the latched signal changes
+- neutral/equilibrium bars keep the current latched state and do not clear a pending reversal
+
+### Echoed Output
+```
+rawOff   = combined AMA/Kalman output
+echoOff  = hold(rawOff direction, cf)
+```
+
+Behavior:
+- `cf = 0` disables output echo and shows the raw output directly
+- `cf > 0` holds the last output direction/value until the opposite output is confirmed
+- neutral output bars keep the current echoed output state
 
 ### Regime Multiplier
 ```

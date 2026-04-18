@@ -115,6 +115,7 @@ class KalmanTrendAnalyzer {
         this.currPrice = null;
         this.tactical = { x: 0, v: 0 };
         this.modal = { x: 0, v: 0 };
+        this.velocityFilteredPct = null;
     }
 
     /**
@@ -146,13 +147,32 @@ class KalmanTrendAnalyzer {
             if (this.beams.length > this.maxBeams) this.beams.shift();
         }
 
+        const displacementPct = this.modal.x > 0
+            ? ((this.currPrice - this.modal.x) / this.modal.x) * 100
+            : 0;
+        const rawVelocityPct = this.modal.x > 0
+            ? (this.tactical.v / this.modal.x) * 100
+            : 0;
+        const trendConfidence = Math.max(0, Math.min(1, Math.abs(displacementPct) / 0.75));
+        const smoothingAlpha = 0.12 + (0.48 * trendConfidence);
+
+        // Adaptive low-pass filter:
+        // keep the tactical velocity reactive in trends, but smooth it harder when price
+        // sits near the modal equilibrium and the raw velocity tends to whip around.
+        if (this.velocityFilteredPct == null) {
+            this.velocityFilteredPct = rawVelocityPct;
+        } else {
+            this.velocityFilteredPct = (smoothingAlpha * rawVelocityPct) + ((1 - smoothingAlpha) * this.velocityFilteredPct);
+        }
+
         this.updateCount++;
         return this.getAnalysis();
     }
 
     getAnalysis() {
         const displacement = this.currPrice - this.modal.x;
-        const displacementPct = (displacement / this.modal.x) * 100;
+        const displacementPct = this.modal.x > 0 ? (displacement / this.modal.x) * 100 : 0;
+        const rawVelocityPct = this.modal.x > 0 ? (this.tactical.v / this.modal.x) * 100 : 0;
         
         // Signal Regime Logic
         let signal = 'NEUTRAL';
@@ -166,7 +186,8 @@ class KalmanTrendAnalyzer {
             kalmanPrice: Math.round(this.tactical.x * 1e8) / 1e8,
             modalPrice: Math.round(this.modal.x * 1e8) / 1e8,
             velocity: Math.round(this.tactical.v * 1e8) / 1e8,
-            velocityPct: Math.round((this.tactical.v / this.modal.x) * 10000) / 100,
+            velocityPct: Math.round(rawVelocityPct * 100) / 100,
+            velocityFilteredPct: this.velocityFilteredPct == null ? null : Math.round(this.velocityFilteredPct * 100) / 100,
             displacementPct: Math.round(displacementPct * 100) / 100,
             signal,
             updateCount: this.updateCount,
@@ -183,6 +204,7 @@ class KalmanTrendAnalyzer {
         this.modalKf = new KalmanFilter();
         this.beams = [];
         this.updateCount = 0;
+        this.velocityFilteredPct = null;
     }
 }
 

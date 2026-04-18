@@ -49,7 +49,7 @@ function generateHTML(data, title = 'Kalman Trajectory Analysis') {
     const trendUp        = results.map((r) =>
         r.kalmanPrice != null && r.modalPrice != null ? r.kalmanPrice > r.modalPrice : null
     );
-    const kalmanWeights  = results.map((r) => computeKalmanWeightOffset(r.velocityPct, r.isReady));
+    const kalmanWeights  = results.map((r) => computeKalmanWeightOffset(r.velocityFilteredPct ?? r.velocityPct, r.isReady));
     const amaWeights     = results.map((r) => r.amaWeightOffset ?? null);
 
     // Future Projection (150 bars)

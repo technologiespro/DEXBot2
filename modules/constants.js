@@ -604,7 +604,7 @@ let MARKET_ADAPTER = {
     // 0 = pure Kalman, 1 = pure AMA.
     // Higher values trust AMA more, lower values trust Kalman more.
     // nob: alpha
-    DYNAMIC_WEIGHT_ALPHA: 0.7,
+    DYNAMIC_WEIGHT_ALPHA: 0.5,
 
     // DYNAMIC_WEIGHT_DW: Blend inside the Kalman signal between velocity and displacement.
     // Lower values emphasize momentum/velocity.
@@ -616,7 +616,7 @@ let MARKET_ADAPTER = {
     // Higher values make dynamic weights more aggressive.
     // Lower values keep weights closer to the static baseline.
     // nob: gain
-    DYNAMIC_WEIGHT_GAIN: 1,
+    DYNAMIC_WEIGHT_GAIN: 1.0,
 
     // DYNAMIC_WEIGHT_REGIME_SENSITIVITY: How strongly the regime filter dampens or preserves
     // the dynamic-weight signal.

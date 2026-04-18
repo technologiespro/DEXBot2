@@ -25,7 +25,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const ma = data.marketAdapter || {};
     const amaWeightConfig = data.amaWeightConfig || {};
     const defaultAlpha        = data.alpha            ?? ma.alpha;
-    const defaultGain         = data.gain             ?? ma.gain;
+    const defaultGain         = 1.0;
     const defaultNeutralZone  = amaWeightConfig.neutralZonePct ?? ma.amaNeutralZonePct;
     const defaultDispWeight   = data.dispWeight       ?? ma.dispWeight;
     const maxSlopePct         = amaWeightConfig.maxSlopePct    ?? ma.amaMaxSlopePct;
@@ -39,9 +39,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const lbInitSlider = Math.round((Math.log(clampedLb) - LB_LOG_MIN_N) / (LB_LOG_MAX_N - LB_LOG_MIN_N) * 1000);
 
     // Log mapping for gain slider
-    const GAIN_LOG_MIN_N = Math.log(0.1);
+    const GAIN_LOG_MIN_N = Math.log(0.2);
     const GAIN_LOG_MAX_N = Math.log(3.0);
-    const clampedGain = Math.min(Math.max(defaultGain, 0.001), 3.0);
+    const clampedGain = Math.min(Math.max(defaultGain, 0.2), 3.0);
     const gainInitSlider = Math.round((Math.log(clampedGain) - GAIN_LOG_MIN_N) / (GAIN_LOG_MAX_N - GAIN_LOG_MIN_N) * 1000);
 
     // Log mapping for maxS% slider
@@ -66,7 +66,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const hurstSegments     = results.map((r) => r.hurstSegment ?? null);
     const peSegments        = results.map((r) => r.peSegment ?? null);
     const amaSlopePct       = results.map((r) => r.amaSlopePct ?? null);
-    const kalmanVelocityPct  = results.map((r) => r.velocityPct ?? null);
+    const kalmanVelocityPctRaw = results.map((r) => r.velocityPct ?? null);
+    const kalmanVelocityPct  = results.map((r) => r.velocityFilteredPct ?? r.velocityPct ?? null);
     const kalmanDisplacementPct = results.map((r) => r.displacementPct ?? null);
     const kalmanIsReady      = results.map((r) => r.isReady ?? false);
     const signals            = results.map((r) => r.signal);
@@ -82,6 +83,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         hurstSegments.push(null);
         peSegments.push(null);
         amaSlopePct.push(null);
+        kalmanVelocityPctRaw.push(null);
         kalmanVelocityPct.push(null);
         kalmanDisplacementPct.push(null);
         kalmanIsReady.push(null);
@@ -116,6 +118,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const amaPercentiles = buildPercentiles(amaSlopePct);
     const kalPercentiles = buildPercentiles(kalmanVelocityPct);
     const maxDispPct = Math.ceil(maxAbsPct(kalmanDisplacementPct) * 1.15) || 5;
+    const defaultKalmanSmoothPct = 150;
+    const defaultKalmanDispScaleMult = 1.5;
+    const defaultKalmanDispThresholdMult = 1.5;
+    const defaultKalmanSmoothSpanPct = 100;
+    const defaultSignalConfirmBars = 1;
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -134,13 +141,13 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         #kalman-panel { flex: 0 0 21%; min-height: 0; position: relative; border-bottom: 1px solid #30363d; }
         #output-panel { flex: 1 1 0;   min-height: 0; position: relative; }
         .uplot { background: #0b0e14; }
-        .legend { position: absolute; top: 8px; left: 70px; font-size: 11px; pointer-events: none; z-index: 10; display: flex; gap: 8px; color: #8b949e; white-space: nowrap; align-items: center; }
+        .legend { position: absolute; top: 8px; left: 70px; font-size: 11px; pointer-events: none; z-index: 10; display: flex; flex-wrap: wrap; gap: 4px 8px; color: #8b949e; white-space: nowrap; align-items: center; max-width: calc(100% - 86px); }
         .legend-item { display: flex; align-items: center; gap: 3px; }
         .legend-val { font-family: monospace; display: inline-block; text-align: right; min-width: 45px; }
         #l-price, #l-ama3 { min-width: 62px; }
         #l-ama-slope, #l-kal-vel, #l-kal-disp { min-width: 54px; }
-        #l-signal { min-width: 70px; text-align: left; }
-        #l-combined { min-width: 42px; }
+        #l-signal, #l-signal-latched { min-width: 70px; text-align: left; }
+        #l-combined-raw, #l-combined-echo { min-width: 42px; }
         #l-mult { min-width: 38px; }
         #l-sell, #l-buy { min-width: 30px; }
         .dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
@@ -163,6 +170,21 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         .ctrl.dw label { min-width: 20px; }
         .ctrl.dw input[type="range"] { accent-color: #a371f7; width: 80px; }
         .ctrl.dw .val { color: #a371f7; }
+        .ctrl.kf label { min-width: 20px; }
+        .ctrl.kf input[type="range"] { accent-color: #79c0ff; width: 80px; }
+        .ctrl.kf .val { color: #79c0ff; }
+        .ctrl.kfd label { min-width: 20px; }
+        .ctrl.kfd input[type="range"] { accent-color: #58a6ff; width: 80px; }
+        .ctrl.kfd .val { color: #58a6ff; }
+        .ctrl.kdt label { min-width: 20px; }
+        .ctrl.kdt input[type="range"] { accent-color: #f78166; width: 80px; }
+        .ctrl.kdt .val { color: #f78166; }
+        .ctrl.kfs label { min-width: 20px; }
+        .ctrl.kfs input[type="range"] { accent-color: #ffab70; width: 80px; }
+        .ctrl.kfs .val { color: #ffab70; }
+        .ctrl.cf label { min-width: 20px; }
+        .ctrl.cf input[type="range"] { accent-color: #d2a8ff; width: 80px; }
+        .ctrl.cf .val { color: #d2a8ff; }
         .ctrl.lb label { min-width: 20px; }
         .ctrl.lb input[type="range"] { accent-color: #39d0d8; width: 80px; }
         .ctrl.lb .val { color: #39d0d8; }
@@ -190,6 +212,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         .ctrl.clip .val { color: #da3633; }
         .ctrl.regime input[type="range"] { accent-color: #d2a8ff; }
         .ctrl.regime .val { color: #d2a8ff; }
+        .row-break { flex-basis: 100%; height: 0; }
 
 .section-label { position: absolute; top: 8px; right: 12px; font-size: 9px; color: #30363d; text-transform: uppercase; letter-spacing: 1px; z-index: 10; pointer-events: none; }
     </style>
@@ -221,14 +244,17 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             <div class="legend">
                 <div class="legend-item"><div class="dot" style="background:#d2a8ff;"></div>Vel%: <span id="l-kal-vel" class="legend-val" style="font-weight:bold;">-</span></div>
                 <div class="legend-item"><div class="dot" style="background:#79c0ff;"></div>Disp%: <span id="l-kal-disp" class="legend-val">-</span></div>
-                <div class="legend-item">Signal: <span id="l-signal" class="legend-val" style="font-weight:bold;">-</span></div>
+                <div class="legend-item">Raw: <span id="l-signal" class="legend-val" style="font-weight:bold;">-</span></div>
+                <div class="legend-item">Echo: <span id="l-signal-echo" class="legend-val" style="font-weight:bold;">-</span></div>
+                <div class="legend-item">Latched: <span id="l-signal-latched" class="legend-val" style="font-weight:bold;">-</span></div>
             </div>
             <div id="kalman-chart"></div>
         </div>
         <div id="output-panel">
             <div class="section-label">COMBINED WEIGHT OUTPUT</div>
             <div class="legend" style="gap: 4px;">
-                <div class="legend-item"><div class="dot" style="background:linear-gradient(to bottom,#2ea043,#f85149);"></div>Off: <span id="l-combined" class="legend-val" style="font-weight:bold;">-</span></div>
+                <div class="legend-item"><div class="dot" style="background:linear-gradient(to bottom,#8b949e,#8b949e);"></div>Raw: <span id="l-combined-raw" class="legend-val" style="font-weight:bold;">-</span></div>
+                <div class="legend-item"><div class="dot" style="background:linear-gradient(to bottom,#2ea043,#f85149);"></div>Echo: <span id="l-combined-echo" class="legend-val" style="font-weight:bold;">-</span></div>
                 <div class="legend-item">xMult: <span id="l-mult" class="legend-val" style="font-weight:bold;color:#d2a8ff;">-</span></div>
                 <div class="legend-item">S: <span id="l-sell" class="legend-val" style="color:#ff7b72;">-</span></div>
                 <div class="legend-item">B: <span id="l-buy" class="legend-val" style="color:#58a6ff;">-</span></div>
@@ -244,12 +270,19 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="55" value="${Math.min(defaultClipPct, 55)}" title="Outlier Clip %"><span class="val" id="clip-value">${Math.min(defaultClipPct, 55)}%</span></div>
 
                 <div class="group-sep"></div>
-                <div class="ctrl off"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="${gainInitSlider}" title="Master Gain (Amplitude)"><span class="val" id="gain-value">${defaultGain.toFixed(3)}</span></div>
+                <div class="ctrl off"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="${gainInitSlider}" title="Master Gain (Amplitude)"><span class="val" id="gain-value">${clampedGain.toFixed(3)}</span></div>
                 <div class="ctrl regime"><label for="regime-slider">regi</label><input type="range" id="regime-slider" min="0" max="200" value="${regimeInitSlider}" title="Regime Sensitivity"><span class="val" id="regime-value">${defaultRegimeSensitivity.toFixed(2)}</span></div>
 
                 <div class="group-sep"></div>
                 <button class="copy-btn" id="copy-params-btn">copy</button>
                 <button class="paste-btn" id="paste-params-btn">paste</button>
+
+                <div class="row-break"></div>
+                <div class="ctrl kf"><label for="kf-slider">kf</label><input type="range" id="kf-slider" min="0" max="250" value="${defaultKalmanSmoothPct}" title="Kalman smoothing blend (0 = raw, 100 = current, 250 = stronger)"><span class="val" id="kf-value">${defaultKalmanSmoothPct}%</span></div>
+                <div class="ctrl kfd"><label for="kfd-slider">kfd</label><input type="range" id="kfd-slider" min="100" max="300" value="${Math.round(defaultKalmanDispScaleMult * 100)}" title="Kalman displacement scale multiplier (1x to 3x)"><span class="val" id="kfd-value">${defaultKalmanDispScaleMult.toFixed(2)}x</span></div>
+                <div class="ctrl kdt"><label for="kdt-slider">kdt</label><input type="range" id="kdt-slider" min="25" max="300" value="${Math.round(defaultKalmanDispThresholdMult * 100)}" title="Kalman displacement threshold multiplier (0.25x to 3x)"><span class="val" id="kdt-value">${defaultKalmanDispThresholdMult.toFixed(2)}x</span></div>
+                <div class="ctrl kfs"><label for="kfs-slider">kfs</label><input type="range" id="kfs-slider" min="20" max="200" value="${defaultKalmanSmoothSpanPct}" title="Adaptive EMA span ratio (20% span / 200% span; floor fixed at 0)"><span class="val" id="kfs-value">${defaultKalmanSmoothSpanPct}%</span></div>
+                <div class="ctrl cf"><label for="cf-slider">cf</label><input type="range" id="cf-slider" min="0" max="5" value="${defaultSignalConfirmBars}" title="Signal confirmation bars (0 disables latching; otherwise flips after N opposite echo bars)"><span class="val" id="cf-value">${defaultSignalConfirmBars}</span></div>
             </div>
             <div id="output-chart"></div>
         </div>
@@ -264,7 +297,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, weightVarianceArr, dispScaleAtrMult, dispScaleMinPct, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPctRaw, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, kalmanSmoothPct: defaultKalmanSmoothPct, kalmanDispScaleMult: defaultKalmanDispScaleMult, kalmanDispThresholdMult: defaultKalmanDispThresholdMult, kalmanSmoothSpanPct: defaultKalmanSmoothSpanPct, signalConfirmBars: defaultSignalConfirmBars, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, weightVarianceArr, dispScaleAtrMult, dispScaleMinPct, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -274,7 +307,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const ABSOLUTE_THRESHOLD = data.absoluteThreshold ?? 0;
 
         let currentAlpha   = data.alpha;
-        let currentGain  = data.gain ?? ma.gain;
+        let currentGain  = 1.0;
+        let currentKalmanSmoothPct = data.kalmanSmoothPct ?? 100;
+        let currentKalmanDispScaleMult = data.kalmanDispScaleMult ?? 1.0;
+        let currentKalmanDispThresholdMult = 1.5;
+        let currentKalmanSmoothSpanPct = data.kalmanSmoothSpanPct ?? 100;
+        let currentSignalConfirmBars = data.signalConfirmBars ?? defaultSignalConfirmBars;
         let currentNz      = (data.neutralZonePct ?? amaWeightConfig.neutralZonePct) ?? ma.amaNeutralZonePct;
         let currentDw      = data.dispWeight ?? ma.dispWeight;
         let currentMaxSlopePct = (data.maxSlopePct ?? amaWeightConfig.maxSlopePct) ?? ma.amaMaxSlopePct;
@@ -338,13 +376,121 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
         let currentRegimeSensitivity = data.regimeSensitivity ?? ma.regimeSensitivity;
 
+        const currentKalmanVelocityPct = new Array(data.dates.length).fill(null);
+        const currentKalmanAdaptivePct = new Array(data.dates.length).fill(null);
+        const currentLatchedSignals = new Array(data.dates.length).fill(null);
         const dynamicAmaOff      = new Array(data.dates.length).fill(null);
         const dynamicAmaSlopePct = new Array(data.dates.length).fill(null);
         const dynamicKalOff      = new Array(data.dates.length).fill(null);
         const combinedOff     = new Array(data.dates.length).fill(null);
         const combinedSell    = new Array(data.dates.length).fill(null);
         const combinedBuy     = new Array(data.dates.length).fill(null);
+        const echoCombinedOff = new Array(data.dates.length).fill(null);
+        const echoCombinedSell = new Array(data.dates.length).fill(null);
+        const echoCombinedBuy  = new Array(data.dates.length).fill(null);
         const currentMults    = new Array(data.dates.length).fill(null);
+
+        function recalcKalmanVelocity() {
+            const blend = Math.max(0, Math.min(250, currentKalmanSmoothPct)) / 100;
+            const rawSeries = data.kalmanVelocityPctRaw || data.kalmanVelocityPct;
+            const dispSeries = data.kalmanDisplacementPct;
+            const dispScale = Math.max(1.0, Math.min(3.0, currentKalmanDispScaleMult));
+            const dispThreshold = Math.max(0.25, Math.min(3.0, currentKalmanDispThresholdMult));
+            const smoothingBudget = 0.60;
+            const smoothingFloor = 0;
+            const smoothingSpan = smoothingBudget * Math.max(20, Math.min(200, currentKalmanSmoothSpanPct)) / 100;
+            let prevAdaptive = null;
+            for (let i = 0; i < data.dates.length; i++) {
+                const raw = rawSeries[i];
+                const dp = dispSeries[i];
+                if (raw == null || dp == null) {
+                    currentKalmanVelocityPct[i] = null;
+                    currentKalmanAdaptivePct[i] = null;
+                    prevAdaptive = null;
+                } else {
+                    const trendConfidence = Math.max(0, Math.min(1, Math.abs(dp) / (dispScale * dispThreshold)));
+                    const smoothingAlpha = Math.min(smoothingBudget, smoothingFloor + (smoothingSpan * trendConfidence));
+                    const adaptive = prevAdaptive == null ? raw : (smoothingAlpha * raw) + ((1 - smoothingAlpha) * prevAdaptive);
+                    currentKalmanAdaptivePct[i] = adaptive;
+                    currentKalmanVelocityPct[i] = blend === 0 ? raw : (raw + ((adaptive - raw) * blend));
+                    prevAdaptive = adaptive;
+                }
+            }
+        }
+
+        function signalDirectionForIndex(i) {
+            const sig = data.signals[i];
+            if (!sig) return 0;
+            if (sig.includes('BULL')) return 1;
+            if (sig.includes('BEAR')) return -1;
+            return 0;
+        }
+
+        function directionToSignal(dir) {
+            if (dir > 0) return 'BULLISH_DISPLACEMENT';
+            if (dir < 0) return 'BEARISH_DISPLACEMENT';
+            return 'NEUTRAL';
+        }
+
+        function recalcLatchedSignals() {
+            const confirmBars = Math.max(0, Math.min(5, currentSignalConfirmBars));
+            if (confirmBars === 0) {
+                for (let i = 0; i < data.dates.length; i++) {
+                    currentLatchedSignals[i] = data.signals[i] || null;
+                }
+                return;
+            }
+            let latchedDir = 0;
+            let pendingDir = 0;
+            let pendingCount = 0;
+
+            for (let i = 0; i < data.dates.length; i++) {
+                const raw = data.signals[i];
+                const echoDir = signalDirectionForIndex(i);
+
+                if (raw == null) {
+                    currentLatchedSignals[i] = null;
+                    pendingDir = 0;
+                    pendingCount = 0;
+                    continue;
+                }
+
+                if (echoDir === 0) {
+                    currentLatchedSignals[i] = directionToSignal(latchedDir);
+                    continue;
+                }
+
+                if (latchedDir === 0) {
+                    latchedDir = echoDir;
+                    pendingDir = 0;
+                    pendingCount = 0;
+                    currentLatchedSignals[i] = directionToSignal(latchedDir);
+                    continue;
+                }
+
+                if (echoDir === latchedDir) {
+                    pendingDir = 0;
+                    pendingCount = 0;
+                    currentLatchedSignals[i] = directionToSignal(latchedDir);
+                    continue;
+                }
+
+                if (pendingDir !== echoDir) {
+                    pendingDir = echoDir;
+                    pendingCount = 1;
+                } else {
+                    pendingCount++;
+                }
+
+                if (pendingCount >= confirmBars) {
+                    latchedDir = echoDir;
+                    pendingDir = 0;
+                    pendingCount = 0;
+                }
+
+                currentLatchedSignals[i] = directionToSignal(latchedDir);
+            }
+        }
 
         function computeSlopeAtIndex(idx, lb) {
             if (idx < lb || !data.ama3Prices[idx] || !data.ama3Prices[idx - lb]) return 0;
@@ -355,6 +501,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         }
 
         function recalcInputs() {
+            recalcKalmanVelocity();
+            recalcLatchedSignals();
             const nz = currentNz;
             const ms = currentMaxSlopePct;
             const mo = currentGain;
@@ -388,7 +536,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 else { dynamicAmaOff[i] = Math.max(-mo, Math.min(mo, (clippedA / ms) * mo)); }
 
                 // Kalman: use pre-computed values from payload
-                const vp = data.kalmanVelocityPct[i];
+                const vp = currentKalmanVelocityPct[i];
                 const dp = data.kalmanDisplacementPct[i];
                 const kr = data.kalmanIsReady[i];
 
@@ -444,6 +592,63 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     combinedSell[i] = Math.max(-0.5, Math.min(1.5, Math.round((0.5 + off) * 100) / 100));
                     combinedBuy[i]  = Math.max(-0.5, Math.min(1.5, Math.round((0.5 - off) * 100) / 100));
                 }
+            }
+            const confirmBars = Math.max(0, Math.min(5, currentSignalConfirmBars));
+            let latchedSign = 0;
+            let pendingSign = 0;
+            let pendingCount = 0;
+            let latchedOff = 0;
+            for (let i = 0; i < data.dates.length; i++) {
+                const raw = combinedOff[i];
+                if (raw == null) {
+                    echoCombinedOff[i] = null;
+                    echoCombinedSell[i] = null;
+                    echoCombinedBuy[i] = null;
+                    latchedSign = 0;
+                    pendingSign = 0;
+                    pendingCount = 0;
+                    latchedOff = 0;
+                    continue;
+                }
+                if (confirmBars === 0) {
+                    echoCombinedOff[i] = raw;
+                    echoCombinedSell[i] = combinedSell[i];
+                    echoCombinedBuy[i] = combinedBuy[i];
+                    continue;
+                }
+                const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
+                if (sign === 0) {
+                    echoCombinedOff[i] = latchedOff;
+                    echoCombinedSell[i] = Math.max(-0.5, Math.min(1.5, Math.round((0.5 + latchedOff) * 100) / 100));
+                    echoCombinedBuy[i]  = Math.max(-0.5, Math.min(1.5, Math.round((0.5 - latchedOff) * 100) / 100));
+                    continue;
+                }
+                if (latchedSign === 0) {
+                    latchedSign = sign;
+                    pendingSign = 0;
+                    pendingCount = 0;
+                    latchedOff = raw;
+                } else if (sign === latchedSign) {
+                    pendingSign = 0;
+                    pendingCount = 0;
+                    latchedOff = raw;
+                } else {
+                    if (pendingSign !== sign) {
+                        pendingSign = sign;
+                        pendingCount = 1;
+                    } else {
+                        pendingCount++;
+                    }
+                    if (pendingCount >= confirmBars) {
+                        latchedSign = sign;
+                        pendingSign = 0;
+                        pendingCount = 0;
+                        latchedOff = raw;
+                    }
+                }
+                echoCombinedOff[i] = latchedOff;
+                echoCombinedSell[i] = Math.max(-0.5, Math.min(1.5, Math.round((0.5 + latchedOff) * 100) / 100));
+                echoCombinedBuy[i]  = Math.max(-0.5, Math.min(1.5, Math.round((0.5 - latchedOff) * 100) / 100));
             }
         }
         recalcInputs();
@@ -545,7 +750,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             if (sp == null) { spEl.textContent = '-'; spEl.style.color = '#8b949e'; }
             else { spEl.textContent = (sp >= 0 ? '+' : '') + sp.toFixed(3) + '%'; spEl.style.color = sp > 0.01 ? '#2ea043' : sp < -0.01 ? '#f85149' : '#8b949e'; }
 
-            const vp = data.kalmanVelocityPct[idx];
+            const vp = currentKalmanVelocityPct[idx];
             const vpEl = document.getElementById('l-kal-vel');
             if (vp == null) { vpEl.textContent = '-'; vpEl.style.color = '#8b949e'; }
             else { vpEl.textContent = (vp >= 0 ? '+' : '') + vp.toFixed(3) + '%'; vpEl.style.color = vp > 0.01 ? '#2ea043' : vp < -0.01 ? '#f85149' : '#8b949e'; }
@@ -556,25 +761,43 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             else { dpEl.textContent = (dp >= 0 ? '+' : '') + dp.toFixed(2) + '%'; dpEl.style.color = dp > 0.3 ? '#2ea043' : dp < -0.3 ? '#f85149' : '#8b949e'; }
 
             const sig = data.signals[idx];
+            const echoSig = directionToSignal(signalDirectionForIndex(idx));
+            const latchedSig = currentLatchedSignals[idx];
             const sigEl = document.getElementById('l-signal');
             if (!sig) { sigEl.textContent = '-'; sigEl.style.color = '#8b949e'; }
             else if (sig.includes('BULL')) { sigEl.textContent = '\u25b2 BULL'; sigEl.style.color = '#2ea043'; }
             else if (sig.includes('BEAR')) { sigEl.textContent = '\u25bc BEAR'; sigEl.style.color = '#f85149'; }
             else if (sig === 'EQUILIBRIUM') { sigEl.textContent = '\u2248 EQ'; sigEl.style.color = '#58a6ff'; }
             else { sigEl.textContent = '\u25cb NEU'; sigEl.style.color = '#8b949e'; }
+            const echoEl = document.getElementById('l-signal-echo');
+            if (!echoSig) { echoEl.textContent = '-'; echoEl.style.color = '#8b949e'; }
+            else if (echoSig.includes('BULL')) { echoEl.textContent = '\u25b2 BULL'; echoEl.style.color = '#3fb950'; }
+            else if (echoSig.includes('BEAR')) { echoEl.textContent = '\u25bc BEAR'; echoEl.style.color = '#ff7b72'; }
+            else { echoEl.textContent = '\u25cb NEU'; echoEl.style.color = '#8b949e'; }
+            const latchedEl = document.getElementById('l-signal-latched');
+            if (!latchedSig) { latchedEl.textContent = '-'; latchedEl.style.color = '#8b949e'; }
+            else if (latchedSig.includes('BULL')) { latchedEl.textContent = '\u25b2 BULL'; latchedEl.style.color = '#3fb950'; }
+            else if (latchedSig.includes('BEAR')) { latchedEl.textContent = '\u25bc BEAR'; latchedEl.style.color = '#ff7b72'; }
+            else if (latchedSig === 'EQUILIBRIUM') { latchedEl.textContent = '\u2248 EQ'; latchedEl.style.color = '#79c0ff'; }
+            else { latchedEl.textContent = '\u25cb NEU'; latchedEl.style.color = '#8b949e'; }
 
-            const cOff = combinedOff[idx];
-            const cEl = document.getElementById('l-combined');
-            if (cOff == null) { cEl.textContent = '-'; cEl.style.color = '#8b949e'; }
-            else { cEl.textContent = (cOff >= 0 ? '+' : '') + cOff.toFixed(3); cEl.style.color = cOff > 0.01 ? '#2ea043' : cOff < -0.01 ? '#f85149' : '#8b949e'; }
+            const cRaw = combinedOff[idx];
+            const cRawEl = document.getElementById('l-combined-raw');
+            if (cRaw == null) { cRawEl.textContent = '-'; cRawEl.style.color = '#8b949e'; }
+            else { cRawEl.textContent = (cRaw >= 0 ? '+' : '') + cRaw.toFixed(3); cRawEl.style.color = cRaw > 0.01 ? '#8b949e' : cRaw < -0.01 ? '#8b949e' : '#8b949e'; }
+
+            const cEcho = echoCombinedOff[idx];
+            const cEchoEl = document.getElementById('l-combined-echo');
+            if (cEcho == null) { cEchoEl.textContent = '-'; cEchoEl.style.color = '#8b949e'; }
+            else { cEchoEl.textContent = (cEcho >= 0 ? '+' : '') + cEcho.toFixed(3); cEchoEl.style.color = cEcho > 0.01 ? '#2ea043' : cEcho < -0.01 ? '#f85149' : '#8b949e'; }
 
             const mult = currentMults[idx];
             const multEl = document.getElementById('l-mult');
             if (mult == null) { multEl.textContent = '-'; }
             else { multEl.textContent = 'x' + mult.toFixed(2); multEl.style.color = mult > 1.05 ? '#3fb950' : mult < 0.95 ? '#f85149' : '#d2a8ff'; }
 
-            document.getElementById('l-sell').textContent = combinedSell[idx] != null ? combinedSell[idx].toFixed(2) : '-';
-            document.getElementById('l-buy').textContent  = combinedBuy[idx]  != null ? combinedBuy[idx].toFixed(2) : '-';
+            document.getElementById('l-sell').textContent = echoCombinedSell[idx] != null ? echoCombinedSell[idx].toFixed(2) : '-';
+            document.getElementById('l-buy').textContent  = echoCombinedBuy[idx]  != null ? echoCombinedBuy[idx].toFixed(2) : '-';
         }
 
         function makeSignalBgHook(scaleKey) {
@@ -585,12 +808,16 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 ctx.globalCompositeOperation = 'destination-over';
                 let i = 0;
                 while (i < data.signals.length) {
-                    const s = data.signals[i];
+                    const s = currentLatchedSignals[i] || data.signals[i];
                     if (!s || i >= data.realBarCount) { i++; continue; }
                     const isBull = s.includes('BULL');
                     const isBear = s.includes('BEAR');
                     let j = i + 1;
-                    while (j < data.realBarCount && data.signals[j] === s) j++;
+                    while (j < data.realBarCount) {
+                        const sj = currentLatchedSignals[j] || data.signals[j];
+                        if (sj !== s) break;
+                        j++;
+                    }
                     const x0 = u.valToPos(data.dates[i], 'x', true);
                     const x1 = j < data.realBarCount ? u.valToPos(data.dates[j], 'x', true) : bbox.left + bbox.width;
                     if (isBull) { ctx.fillStyle = 'rgba(46,160,67,0.06)'; ctx.fillRect(x0, bbox.top, x1 - x0, bbox.height); }
@@ -609,7 +836,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             };
         }
 
-        function makePctFillHook(values, scaleKey, posColor, negColor) {
+        function makePctFillHook(values, scaleKey, posColor, negColor, strokeStyle = 'rgba(255,255,255,0.35)') {
             return u => {
                 const { ctx, bbox } = u;
                 ctx.save();
@@ -635,9 +862,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 ctx.beginPath(); ctx.rect(bbox.left, zeroY, bbox.width, bbox.top + bbox.height - zeroY); ctx.clip();
                 ctx.fillStyle = negColor; ctx.fill(path);
                 ctx.restore();
-                ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.stroke(path);
-                ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1;
-                ctx.beginPath(); ctx.moveTo(bbox.left, zeroY); ctx.lineTo(bbox.left + bbox.width, zeroY); ctx.stroke();
+                if (strokeStyle) {
+                    ctx.strokeStyle = strokeStyle; ctx.lineWidth = 1; ctx.stroke(path);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(bbox.left, zeroY); ctx.lineTo(bbox.left + bbox.width, zeroY); ctx.stroke();
+                }
                 ctx.restore();
             };
         }
@@ -654,6 +883,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             document.getElementById('alpha-slider').value = Math.round(currentAlpha * 100);
             document.getElementById('ms-slider').value = Math.round((Math.log(currentMaxSlopePct) - MS_LOG_MIN) / (MS_LOG_MAX - MS_LOG_MIN) * 1000);
             document.getElementById('gain-slider').value = gainValToSlider(currentGain);
+            document.getElementById('kf-slider').value = currentKalmanSmoothPct;
+            document.getElementById('kfd-slider').value = Math.round(currentKalmanDispScaleMult * 100);
+            document.getElementById('kdt-slider').value = Math.round(currentKalmanDispThresholdMult * 100);
+            document.getElementById('kfs-slider').value = currentKalmanSmoothSpanPct;
+            document.getElementById('cf-slider').value = currentSignalConfirmBars;
             document.getElementById('clip-slider').value = currentClipPct;
             document.getElementById('nz-slider').value = Math.round(currentNz * 100);
             document.getElementById('lb-slider').value = lbValToSlider(currentLookbackBars);
@@ -718,10 +952,10 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 ],
                 cursor: cursorCfg,
                 hooks: { draw: [
-                    makePctFillHook(data.kalmanVelocityPct, 'v', 'rgba(210,168,255,0.18)', 'rgba(210,168,255,0.18)'),
+                    makePctFillHook(currentKalmanVelocityPct, 'v', 'rgba(210,168,255,0.18)', 'rgba(210,168,255,0.18)'),
                     makeSignalBgHook('v')
                 ] }
-            }, [data.dates, data.kalmanVelocityPct, data.kalmanDisplacementPct], document.getElementById('kalman-chart'));
+            }, [data.dates, currentKalmanVelocityPct, data.kalmanDisplacementPct], document.getElementById('kalman-chart'));
 
             outputChart = new uPlot({
                 width: outputEl.offsetWidth, height: outputEl.offsetHeight,
@@ -733,7 +967,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 }}},
                 series: [
                     { label: 'Time' },
-                    { label: 'Off', stroke: 'transparent', scale: 'ow', points: { show: false } }
+                    { label: 'RawOff', stroke: 'transparent', width: 0, scale: 'ow', points: { show: false } },
+                    { label: 'EchoOff', stroke: 'transparent', width: 0, scale: 'ow', points: { show: false } }
                 ],
                 axes: [
                     { show: false, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
@@ -742,8 +977,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                       splits: () => { const m = 0.5; return [-m, -m/2, 0, m/2, m]; } }
                 ],
                 cursor: cursorCfg,
-                hooks: { draw: [makePctFillHook(combinedOff, 'ow', 'rgba(46,160,67,0.30)', 'rgba(248,81,73,0.30)')] }
-            }, [data.dates, combinedOff], document.getElementById('output-chart'));
+                hooks: { draw: [
+                    makePctFillHook(combinedOff, 'ow', 'rgba(108,117,125,0.08)', 'rgba(108,117,125,0.06)', null),
+                    makePctFillHook(echoCombinedOff, 'ow', 'rgba(46,160,67,0.18)', 'rgba(248,81,73,0.18)', null)
+                ] }
+            }, [data.dates, combinedOff, echoCombinedOff], document.getElementById('output-chart'));
 
             let leavePending = null;
             [priceChart, amaChart, kalmanChart, outputChart].forEach(chart => {
@@ -767,7 +1005,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 const xs = outputChart.scales.x;
                 const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
                 amaChart.setData([data.dates, dynamicAmaSlopePct]);
-                outputChart.setData([data.dates, combinedOff]);
+                kalmanChart.setData([data.dates, currentKalmanVelocityPct, data.kalmanDisplacementPct]);
+                outputChart.setData([data.dates, combinedOff, echoCombinedOff]);
                 if (savedX) outputChart.setScale('x', savedX);
             }
 
@@ -777,7 +1016,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 recalcWeights();
                 const xs = outputChart.scales.x;
                 const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
-                outputChart.setData([data.dates, combinedOff]);
+                outputChart.setData([data.dates, combinedOff, echoCombinedOff]);
                 if (savedX) outputChart.setScale('x', savedX);
             });
 
@@ -796,6 +1035,36 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             document.getElementById('gain-slider').addEventListener('input', (e) => {
                 currentGain = gainSliderToVal(parseInt(e.target.value, 10));
                 document.getElementById('gain-value').textContent = currentGain.toFixed(3);
+                onSliderChange();
+            });
+
+            document.getElementById('kf-slider').addEventListener('input', (e) => {
+                currentKalmanSmoothPct = parseInt(e.target.value, 10);
+                document.getElementById('kf-value').textContent = currentKalmanSmoothPct + '%';
+                onSliderChange();
+            });
+
+            document.getElementById('kfd-slider').addEventListener('input', (e) => {
+                currentKalmanDispScaleMult = parseInt(e.target.value, 10) / 100;
+                document.getElementById('kfd-value').textContent = currentKalmanDispScaleMult.toFixed(2) + 'x';
+                onSliderChange();
+            });
+
+            document.getElementById('kdt-slider').addEventListener('input', (e) => {
+                currentKalmanDispThresholdMult = parseInt(e.target.value, 10) / 100;
+                document.getElementById('kdt-value').textContent = currentKalmanDispThresholdMult.toFixed(2) + 'x';
+                onSliderChange();
+            });
+
+            document.getElementById('kfs-slider').addEventListener('input', (e) => {
+                currentKalmanSmoothSpanPct = parseInt(e.target.value, 10);
+                document.getElementById('kfs-value').textContent = currentKalmanSmoothSpanPct + '%';
+                onSliderChange();
+            });
+
+            document.getElementById('cf-slider').addEventListener('input', (e) => {
+                currentSignalConfirmBars = parseInt(e.target.value, 10);
+                document.getElementById('cf-value').textContent = currentSignalConfirmBars;
                 onSliderChange();
             });
 
@@ -831,7 +1100,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 recalcWeights();
                 const xs = outputChart.scales.x;
                 const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
-                outputChart.setData([data.dates, combinedOff]);
+                outputChart.setData([data.dates, combinedOff, echoCombinedOff]);
                 if (savedX) outputChart.setScale('x', savedX);
             });
 
@@ -853,9 +1122,34 @@ function applyParams(p, btn) {
                     document.getElementById('ms-value').textContent = currentMaxSlopePct.toFixed(2);
                 }
                 if (p.gain != null) {
-                    currentGain = Math.max(0, Math.min(3.0, p.gain));
+                    currentGain = Math.max(0.2, Math.min(3.0, p.gain));
                     document.getElementById('gain-slider').value = gainValToSlider(currentGain);
                     document.getElementById('gain-value').textContent = currentGain.toFixed(3);
+                }
+                if (p.kalmanSmoothPct != null) {
+                    currentKalmanSmoothPct = Math.max(0, Math.min(250, Math.round(p.kalmanSmoothPct)));
+                    document.getElementById('kf-slider').value = currentKalmanSmoothPct;
+                    document.getElementById('kf-value').textContent = currentKalmanSmoothPct + '%';
+                }
+                if (p.kalmanDispScaleMult != null) {
+                    currentKalmanDispScaleMult = Math.max(1.0, Math.min(3.0, p.kalmanDispScaleMult));
+                    document.getElementById('kfd-slider').value = Math.round(currentKalmanDispScaleMult * 100);
+                    document.getElementById('kfd-value').textContent = currentKalmanDispScaleMult.toFixed(2) + 'x';
+                }
+                if (p.kalmanDispThresholdMult != null) {
+                    currentKalmanDispThresholdMult = Math.max(0.25, Math.min(3.0, p.kalmanDispThresholdMult));
+                    document.getElementById('kdt-slider').value = Math.round(currentKalmanDispThresholdMult * 100);
+                    document.getElementById('kdt-value').textContent = currentKalmanDispThresholdMult.toFixed(2) + 'x';
+                }
+                if (p.kalmanSmoothSpanPct != null) {
+                    currentKalmanSmoothSpanPct = Math.max(20, Math.min(200, Math.round(p.kalmanSmoothSpanPct)));
+                    document.getElementById('kfs-slider').value = currentKalmanSmoothSpanPct;
+                    document.getElementById('kfs-value').textContent = currentKalmanSmoothSpanPct + '%';
+                }
+                if (p.signalConfirmBars != null) {
+                    currentSignalConfirmBars = Math.max(0, Math.min(5, Math.round(p.signalConfirmBars)));
+                    document.getElementById('cf-slider').value = currentSignalConfirmBars;
+                    document.getElementById('cf-value').textContent = currentSignalConfirmBars;
                 }
                 if (p.clipPct != null) {
                     currentClipPct = Math.max(0, Math.min(55, Math.round(p.clipPct)));
@@ -879,7 +1173,7 @@ function applyParams(p, btn) {
                     document.getElementById('regime-slider').value = Math.round(currentRegimeSensitivity * 100);
                     document.getElementById('regime-value').textContent = currentRegimeSensitivity.toFixed(2);
                 }
-if (p.lookbackBars != null) {
+                if (p.lookbackBars != null) {
                     currentLookbackBars = Math.max(4, Math.min(256, Math.round(p.lookbackBars)));
                     document.getElementById('lb-slider').value = lbValToSlider(currentLookbackBars);
                     document.getElementById('lb-value').textContent = currentLookbackBars;
@@ -887,14 +1181,15 @@ if (p.lookbackBars != null) {
                 recalcInputs();
                 recalcWeights();
                 amaChart.setData([data.dates, dynamicAmaSlopePct]);
-                outputChart.setData([data.dates, combinedOff]);
+                kalmanChart.setData([data.dates, currentKalmanVelocityPct, data.kalmanDisplacementPct]);
+                outputChart.setData([data.dates, combinedOff, echoCombinedOff]);
                 if (btn) { btn.textContent = 'pasted!'; btn.classList.add('pasted'); setTimeout(() => { btn.textContent = 'paste'; btn.classList.remove('pasted'); }, 1500); }
             }
 
             let _confirmPending = null;
             function showConfirm(p, btn) {
                 _confirmPending = { p, btn };
-                const labels = { alpha: 'alpha', maxSlopePct: 'maxS%', gain: 'gain', clipPct: 'clip%', neutralZonePct: 'nz%', regimeSensitivity: 'regime', dispWeight: 'dw', lookbackBars: 'lb' };
+                const labels = { alpha: 'alpha', maxSlopePct: 'maxS%', gain: 'gain', kalmanSmoothPct: 'kf', kalmanDispScaleMult: 'kfd', kalmanDispThresholdMult: 'kdt', kalmanSmoothSpanPct: 'kfs', signalConfirmBars: 'cf', clipPct: 'clip%', neutralZonePct: 'nz%', regimeSensitivity: 'regime', dispWeight: 'dw', lookbackBars: 'lb' };
                 document.getElementById('paste-confirm-vals').innerHTML = Object.entries(labels)
                     .filter(([k]) => p[k] != null)
                     .map(([k, label]) => label + ': <span>' + p[k] + '</span>')
@@ -934,6 +1229,11 @@ if (p.lookbackBars != null) {
                     alpha:             +currentAlpha.toFixed(2),
                     maxSlopePct:       +currentMaxSlopePct.toFixed(2),
                     gain:              +currentGain.toFixed(3),
+                    kalmanSmoothPct:   currentKalmanSmoothPct,
+                    kalmanDispScaleMult: +currentKalmanDispScaleMult.toFixed(2),
+                    kalmanDispThresholdMult: +currentKalmanDispThresholdMult.toFixed(2),
+                    kalmanSmoothSpanPct: currentKalmanSmoothSpanPct,
+                    signalConfirmBars: currentSignalConfirmBars,
                     clipPct:           currentClipPct,
                     neutralZonePct:    +currentNz.toFixed(3),
                     regimeSensitivity: +currentRegimeSensitivity.toFixed(2),

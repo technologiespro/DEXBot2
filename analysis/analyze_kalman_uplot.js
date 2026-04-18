@@ -66,7 +66,10 @@ function parseArgs() {
         const arg = args[i];
         if (arg === '--source') config.source.type = args[++i];
         else if (arg === '--bot-key') config.source.config.botKey = args[++i];
-        else if (arg === '--file') config.source.config.filePath = args[++i];
+        else if (arg === '--file') {
+            config.source.config.filePath = args[++i];
+            config.source.type = 'json';
+        }
         else if (arg === '--r') config.rNoise = parseFloat(args[++i]);
         else if (arg === '--q') config.qNoise = parseFloat(args[++i]);
         else if (arg === '--chart') config.chartFile = args[++i];
