@@ -596,7 +596,7 @@ let MARKET_ADAPTER = {
     // Lower values react faster to recent price changes.
     // Higher values smooth the signal and require a more sustained move.
     // nob: lb (Lookback Bars)
-    DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: 10,
+    DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: 1,
 
     // DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: Trend size that counts as "full strength" for AMA.
     // Lower values make the AMA channel reach maximum influence more easily.
@@ -608,7 +608,7 @@ let MARKET_ADAPTER = {
     // Higher values create a larger neutral zone and reduce small trend reactions.
     // Lower values make the AMA channel react to smaller moves.
     // nob: nz% (Neutral Zone %)
-    DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT: 0.15,
+    DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT: 0,
 
     // DYNAMIC_WEIGHT_ALPHA: Blend between AMA trend and Kalman trend.
     // 0 = pure Kalman, 1 = pure AMA.
@@ -619,14 +619,15 @@ let MARKET_ADAPTER = {
     // DYNAMIC_WEIGHT_DW: Blend inside the Kalman signal between velocity and displacement.
     // Lower values emphasize momentum/velocity.
     // Higher values emphasize how far price has moved away from the modal baseline.
+    // Default 0.75 keeps displacement meaningful without fully overpowering velocity.
     // nob: dw (Displacement Weight)
-    DYNAMIC_WEIGHT_DW: 1.0,
+    DYNAMIC_WEIGHT_DW: 0.5,
 
     // DYNAMIC_WEIGHT_GAIN: Overall strength of the blended dynamic-weight signal.
     // Higher values make dynamic weights more aggressive.
     // Lower values keep weights closer to the static baseline.
     // nob: gain
-    DYNAMIC_WEIGHT_GAIN: 1.0,
+    DYNAMIC_WEIGHT_GAIN: 0.5,
 
     // DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP: Maximum directional offset away from neutral.
     DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP: 0.5,
@@ -648,7 +649,7 @@ let MARKET_ADAPTER = {
     // Shared Kalman tuning defaults used by both the research HTML and the live dynamic-weight
     // market adapter so both paths start from the same smoothing and echo behavior.
     DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT: 100,
-    DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT: 1.5,
+    DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT: 2.0,
     DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT: 1.5,
     DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT: 100,
     DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT: 1,

@@ -33,24 +33,25 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const defaultDispWeight   = data.dispWeight       ?? ma.dispWeight;
     const maxSlopePct         = amaWeightConfig.maxSlopePct    ?? ma.amaMaxSlopePct;
     const defaultClipPct      = data.clipPct          ?? ma.clipPercentile;
-    const lookbackBars        = amaWeightConfig.lookbackBars  ?? ma.amaLookbackBars;
+    const lookbackBarsRaw     = amaWeightConfig.lookbackBars  ?? ma.amaLookbackBars;
+    const lookbackBars        = Math.max(1, Math.min(32, Number.isFinite(lookbackBarsRaw) ? lookbackBarsRaw : 1));
 
-    // Log mapping for lookback slider (4 to 256 bars)
-    const LB_LOG_MIN_N = Math.log(4);
-    const LB_LOG_MAX_N = Math.log(256);
-    const clampedLb = Math.min(Math.max(lookbackBars, 4), 256);
+    // Log mapping for lookback slider (1 to 32 bars)
+    const LB_LOG_MIN_N = Math.log(1);
+    const LB_LOG_MAX_N = Math.log(32);
+    const clampedLb = Math.min(Math.max(lookbackBars, 1), 32);
     const lbInitSlider = Math.round((Math.log(clampedLb) - LB_LOG_MIN_N) / (LB_LOG_MAX_N - LB_LOG_MIN_N) * 1000);
 
     // Log mapping for gain slider
-    const GAIN_LOG_MIN_N = Math.log(0.2);
-    const GAIN_LOG_MAX_N = Math.log(3.0);
-    const clampedGain = Math.min(Math.max(defaultGain, 0.2), 3.0);
+    const GAIN_LOG_MIN_N = Math.log(0.25);
+    const GAIN_LOG_MAX_N = Math.log(2.0);
+    const clampedGain = Math.min(Math.max(defaultGain, 0.25), 2.0);
     const gainInitSlider = Math.round((Math.log(clampedGain) - GAIN_LOG_MIN_N) / (GAIN_LOG_MAX_N - GAIN_LOG_MIN_N) * 1000);
 
     // Log mapping for maxS% slider
     const MS_LOG_MIN_N = Math.log(0.05);
-    const MS_LOG_MAX_N = Math.log(20.0);
-    const clampedMs = Math.min(Math.max(maxSlopePct, 0.05), 20.0);
+    const MS_LOG_MAX_N = Math.log(15.0);
+    const clampedMs = Math.min(Math.max(maxSlopePct, 0.05), 15.0);
     const msInitSlider = Math.round((Math.log(clampedMs) - MS_LOG_MIN_N) / (MS_LOG_MAX_N - MS_LOG_MIN_N) * 1000);
 
     const defaultRegimeSensitivity  = data.regimeSensitivity ?? ma.regimeSensitivity;
@@ -270,12 +271,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
                 <div class="group-sep"></div>
                 <div class="ctrl nz"><label for="nz-slider">nz%</label><input type="range" id="nz-slider" min="0" max="100" value="${Math.round(defaultNeutralZone * 100)}" title="Neutral Zone %"><span class="val" id="nz-value">${defaultNeutralZone.toFixed(2)}</span></div>
-                <div class="ctrl lb"><label for="lb-slider">lb</label><input type="range" id="lb-slider" min="0" max="1000" value="${lbInitSlider}" title="Lookback Bars (4-256)"><span class="val" id="lb-value">${lookbackBars}</span></div>
-                <div class="ctrl ms"><label for="ms-slider">maxS%</label><input type="range" id="ms-slider" min="0" max="1000" value="${msInitSlider}" title="Max Slope % (Saturation Point)"><span class="val" id="ms-value">${maxSlopePct.toFixed(2)}</span></div>
+        <div class="ctrl lb"><label for="lb-slider">lb</label><input type="range" id="lb-slider" min="0" max="1000" value="${lbInitSlider}" title="Lookback Bars (1-32)"><span class="val" id="lb-value">${lookbackBars}</span></div>
+                <div class="ctrl ms"><label for="ms-slider">maxS%</label><input type="range" id="ms-slider" min="0" max="1000" value="${msInitSlider}" title="Max Slope % (0.05-15)"><span class="val" id="ms-value">${maxSlopePct.toFixed(2)}</span></div>
                 <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="55" value="${Math.min(defaultClipPct, 55)}" title="Outlier Clip %"><span class="val" id="clip-value">${Math.min(defaultClipPct, 55)}%</span></div>
 
                 <div class="group-sep"></div>
-                <div class="ctrl off"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="${gainInitSlider}" title="Master Gain (Amplitude)"><span class="val" id="gain-value">${clampedGain.toFixed(3)}</span></div>
+                <div class="ctrl off"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="${gainInitSlider}" title="Master Gain (0.25-2.0)"><span class="val" id="gain-value">${clampedGain.toFixed(3)}</span></div>
                 <div class="ctrl regime"><label for="regime-slider">regi</label><input type="range" id="regime-slider" min="0" max="200" value="${regimeInitSlider}" title="Regime Sensitivity"><span class="val" id="regime-value">${defaultRegimeSensitivity.toFixed(2)}</span></div>
 
                 <div class="group-sep"></div>
@@ -333,11 +334,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const MS_LOG_MAX = data.msLogMax;
         const msSliderToVal = (pos) => Math.exp(MS_LOG_MIN + (pos / 1000) * (MS_LOG_MAX - MS_LOG_MIN));
 
-        let currentLookbackBars = (data.lookbackBars ?? amaWeightConfig.lookbackBars) ?? ma.amaLookbackBars;
+        let currentLookbackBars = data.lookbackBars ?? lookbackBars;
         const LB_LOG_MIN = data.lbLogMin;
         const LB_LOG_MAX = data.lbLogMax;
         const lbSliderToVal = (pos) => Math.round(Math.exp(LB_LOG_MIN + (pos / 1000) * (LB_LOG_MAX - LB_LOG_MIN)));
-        const lbValToSlider = (val) => Math.round((Math.log(Math.max(4, val)) - LB_LOG_MIN) / (LB_LOG_MAX - LB_LOG_MIN) * 1000);
+        const lbValToSlider = (val) => Math.round((Math.log(Math.max(1, val)) - LB_LOG_MIN) / (LB_LOG_MAX - LB_LOG_MIN) * 1000);
 
         const GAIN_LOG_MIN = data.gainLogMin;
         const GAIN_LOG_MAX = data.gainLogMax;
@@ -916,6 +917,46 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             focus: { prox: -1 },
         };
 
+        const TIME_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        function pad2(n) {
+            return String(n).padStart(2, '0');
+        }
+
+        function formatTimeLabel(tsSec, spanSec) {
+            const d = new Date(tsSec * 1000);
+            if (!Number.isFinite(spanSec)) spanSec = 0;
+
+            if (spanSec >= 365 * 24 * 3600 * 2) {
+                return String(d.getUTCFullYear());
+            }
+            if (spanSec >= 90 * 24 * 3600) {
+                return TIME_MONTHS[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+            }
+            if (spanSec >= 14 * 24 * 3600) {
+                return TIME_MONTHS[d.getUTCMonth()] + ' ' + d.getUTCDate();
+            }
+            return TIME_MONTHS[d.getUTCMonth()] + ' ' + d.getUTCDate() + ' ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+        }
+
+        function makeTimeAxis(showLabels = false) {
+            return {
+                show: true,
+                stroke: '#30363d',
+                grid: { stroke: '#1c2128' },
+                ticks: { stroke: '#30363d', width: 1 },
+                size: showLabels ? 24 : 0,
+                font: '11px Segoe UI, sans-serif',
+                values: showLabels ? (u, vals) => {
+                    const xScale = u.scales.x || {};
+                    const spanSec = Number.isFinite(xScale.min) && Number.isFinite(xScale.max)
+                        ? Math.max(0, xScale.max - xScale.min)
+                        : (xMax - xMin);
+                    return vals.map((ts) => formatTimeLabel(ts, spanSec));
+                } : () => [],
+            };
+        }
+
         function init() {
             // Force all sliders to match JS state — overrides browser form-restore memory
             document.getElementById('alpha-slider').value = Math.round(currentAlpha * 100);
@@ -949,7 +990,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     { label: 'AMA3',  stroke: '#e3b341', width: 1.5, scale: 'y', points: { show: false } },
                 ],
                 axes: [
-                    { show: false, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
+                    makeTimeAxis(false),
                     { scale: 'y', stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: Y_AXIS_SIZE, font: '11px Segoe UI, sans-serif',
                       values: (u, v) => v.map(x => x != null ? x.toFixed(4) : ''), }
                 ],
@@ -966,7 +1007,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     { label: 'Slope%', stroke: '#f0a000', width: 2, scale: 'p', points: { show: false } },
                 ],
                 axes: [
-                    { show: false, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
+                    makeTimeAxis(false),
                     { scale: 'p', stroke: '#30363d', grid: { stroke: '#1c2128', dash: [4, 4] }, ticks: { stroke: '#30303d', width: 1 }, size: Y_AXIS_SIZE, font: '11px Segoe UI, sans-serif',
                       values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(1) + '%' : '') }
                 ],
@@ -984,7 +1025,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     { label: 'Disp%', stroke: '#79c0ff', width: 1.5, dash: [6, 3], scale: 'v', points: { show: false } },
                 ],
                 axes: [
-                    { show: false, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30303d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
+                    makeTimeAxis(false),
                     { scale: 'v', stroke: '#30363d', grid: { stroke: '#1c2128', dash: [4, 4] }, ticks: { stroke: '#30303d', width: 1 }, size: Y_AXIS_SIZE, font: '11px Segoe UI, sans-serif',
                       values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(1) + '%' : '') }
                 ],
@@ -1009,7 +1050,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     { label: 'EchoOff', stroke: 'transparent', width: 0, scale: 'ow', points: { show: false } }
                 ],
                 axes: [
-                    { show: false, stroke: '#30363d', grid: { stroke: '#1c2128' }, ticks: { stroke: '#30363d', width: 1 }, size: 34, font: '11px Segoe UI, sans-serif' },
+                    makeTimeAxis(true),
                     { scale: 'ow', stroke: '#30363d', grid: { stroke: '#1c2128', dash: [4, 4] }, ticks: { stroke: '#30303d', width: 1 }, size: Y_AXIS_SIZE, font: '11px Segoe UI, sans-serif',
                       values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(2) : ''),
                       splits: () => { const m = 0.5; return [-m, -m/2, 0, m/2, m]; } }
@@ -1155,12 +1196,12 @@ function applyParams(p, btn) {
                     document.getElementById('dw-value').textContent = currentDw.toFixed(2);
                 }
                 if (p.maxSlopePct != null) {
-                    currentMaxSlopePct = Math.max(0.05, Math.min(20, p.maxSlopePct));
+                    currentMaxSlopePct = Math.max(0.05, Math.min(15, p.maxSlopePct));
                     document.getElementById('ms-slider').value = Math.round((Math.log(currentMaxSlopePct) - MS_LOG_MIN) / (MS_LOG_MAX - MS_LOG_MIN) * 1000);
                     document.getElementById('ms-value').textContent = currentMaxSlopePct.toFixed(2);
                 }
                 if (p.gain != null) {
-                    currentGain = Math.max(0.2, Math.min(3.0, p.gain));
+                    currentGain = Math.max(0.25, Math.min(2.0, p.gain));
                     document.getElementById('gain-slider').value = gainValToSlider(currentGain);
                     document.getElementById('gain-value').textContent = currentGain.toFixed(3);
                 }
@@ -1212,7 +1253,7 @@ function applyParams(p, btn) {
                     document.getElementById('regime-value').textContent = currentRegimeSensitivity.toFixed(2);
                 }
                 if (p.lookbackBars != null) {
-                    currentLookbackBars = Math.max(4, Math.min(256, Math.round(p.lookbackBars)));
+                    currentLookbackBars = Math.max(1, Math.min(32, Math.round(p.lookbackBars)));
                     document.getElementById('lb-slider').value = lbValToSlider(currentLookbackBars);
                     document.getElementById('lb-value').textContent = currentLookbackBars;
                 }

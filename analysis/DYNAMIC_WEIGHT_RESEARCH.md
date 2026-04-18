@@ -115,7 +115,7 @@ node analysis/analyze_dynamic_weight.js \
 node analysis/analyze_dynamic_weight.js \
   --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
   --alpha 0.6 \
-  --gain 0.20 \
+  --gain 0.25 \
   --clip 20
 ```
 
@@ -132,15 +132,17 @@ Output: `analysis/charts/dynamic_weight_chart.html` (open in browser)
 | `--bot-key` | `XRP-BTS` | Bot key for market adapter source |
 | `--chart` | `analysis/charts/dynamic_weight_chart.html` | Output HTML path |
 | `--alpha` | `0.5` | Initial α blend (0 = pure Kalman, 1 = pure AMA) |
-| `--dw` | `1.0` | Initial displacement weight (0 = pure velocity, 1 = full displacement) |
-| `--lb` | `10` | Initial lookback bars (4-256) for AMA slope calculation |
-| `--gain` | `1.0` | Initial gain multiplier |
+| `--dw` | `0.50` | Initial displacement weight (0 = pure velocity, 1 = full displacement) |
+| `--lb` | `1` | Initial lookback bars (1-32) for AMA slope calculation |
+| `--gain` | `0.5` | Initial gain multiplier |
 | `--clip` | `10` | Initial clip percentile |
 | `--quiet` | `false` | Suppress console output |
 
 ## Chart Layout
 
 Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pan, Ctrl+0 to reset):
+
+All panels share aligned vertical time grid lines, and the bottom output panel shows the readable date axis so the visible time frame stays obvious while zooming and panning.
 
 ### Panel 1 — Log Price (34%)
 - **Blue line**: Price on logarithmic y-axis
@@ -171,13 +173,13 @@ Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pa
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
 | **α** | 0–1 | 0.5 | Blend ratio between AMA and Kalman channels (0 = pure Kalman, 1 = pure AMA) |
-| **dw** | 0–1 | 1.0 | Displacement weight: how much Kalman displacement influences the composite signal |
+| **dw** | 0–1 | 0.75 | Displacement weight: how much Kalman displacement influences the composite signal |
 
 ### Kalman Smoothing
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
 | **kf** | 0–200 | 100 | Sideways-regime Kalman smoothing blend (0 = raw velocity, 100 = current adaptive smoothing, 200 = stronger smoothing) |
-| **kfd** | 1–3x | 1.50x | Displacement scale multiplier for the adaptive smoothing confidence ramp |
+| **kfd** | 1–3x | 2.00x | Displacement scale multiplier for the adaptive smoothing confidence ramp |
 | **kdt** | 0.25–3x | 1.50x | Displacement threshold multiplier for when the adaptive EMA starts to loosen |
 | **kfs** | 20–200% | 100% | Adaptive EMA span ratio |
 | **cf** | 1–5 | 1 | Signal confirmation bars for the latched/raw signal overlay |
@@ -185,15 +187,15 @@ Four stacked uPlot panels with synchronized zoom/pan (scroll to zoom, drag to pa
 ### Slope Calculation
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
-| **nz%** | 0–1 | 0.15 | Neutral zone: dead-band below which offset is forced to 0 |
-| **lb** | 4–256 | 10 | Logarithmic. Lookback bars for AMA slope calculation |
-| **maxS%** | 0.05–20 | 0.5 | Logarithmic. Gear ratio: slope% at which the output saturates |
+| **nz%** | 0–1 | 0.00 | Neutral zone: dead-band below which offset is forced to 0 |
+| **lb** | 1–32 | 1 | Logarithmic. Lookback bars for AMA slope calculation |
+| **maxS%** | 0.05–15 | 0.5 | Logarithmic. Gear ratio: slope% at which the output saturates |
 | **clip%** | 0–55 | 10 | Percentile clip: filters extreme inputs (0 = off) |
 
 ### Output Controls
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
-| **gain** | 0.2–3.0 | 1.0 | Logarithmic. Amplitude multiplier on normalized blend |
+| **gain** | 0.25–2.0 | 0.5 | Logarithmic. Amplitude multiplier on normalized blend |
 | **regi** | 0–2 | 1.0 | Regime sensitivity: exponent applied to Hurst+PE multiplier |
 
 ## Copy / Paste Parameters
@@ -298,6 +300,7 @@ Values below `nz%` in absolute terms are zeroed out before the offset formula.
 
 ### dw (displacement weight)
 Controls how much the Kalman displacement (distance from equilibrium) influences the composite signal:
+- Default: `dw = 0.50`
 - `dw = 0`: Pure velocity — only direction and speed matter
 - `dw = 1`: Full displacement weighting — adds confidence when velocity and displacement agree on direction
 - Only active when `momAlign = 1` (velocity and displacement have same sign)
@@ -307,8 +310,8 @@ Formula: `kalComp = clippedV × (1 − dw + dw × dispConf × momAlign)`
 ### lb (lookback bars)
 Number of bars to look back when computing AMA slope:
 - `lb = 4`: Very short-term, highly responsive to recent price action
-- `lb = 10` (default): ~10 hours of hourly candles, responsive with some smoothing
-- `lb = 256`: ~10 days of hourly candles, very stable but slower to react
+- `lb = 1` (default): ~1 hour of hourly candles, very responsive and least smoothed
+- `lb = 32`: ~1.3 days of hourly candles, stable but slower to react
 
 Lower values = more noise, faster reaction. Higher values = smoother signals, more lag.
 

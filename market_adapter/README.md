@@ -311,11 +311,12 @@ The production adapter reads the same dynamic-weight defaults as the research ch
 The main runtime knobs are:
 
 - `alpha` - AMA vs Kalman blend
-- `dw` - Kalman displacement weighting
-- `gain` - output amplitude
+- `dw` - Kalman displacement weighting (default 0.50)
+- `gain` - output amplitude (default 0.5)
 - `kalmanSmoothPct` - raw-vs-smoothed Kalman blend (0-200; 100 = normal adaptive smoothing)
 - `kalmanDispScaleMult` - displacement scale multiplier
 - `kalmanDispThresholdMult` - displacement threshold multiplier
+- `lookbackBars` - AMA slope lookback (default 1)
 - `kalmanSmoothSpanPct` - adaptive EMA span ratio
 - `signalConfirmBars` - output/signal latch confirmation bars
 
