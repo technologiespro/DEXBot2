@@ -1,5 +1,7 @@
 'use strict';
 
+const { smoothKalmanVelocityPoint } = require('./kalman_velocity_smoothing');
+
 /**
  * Kalman Trend Analyzer
  * 
@@ -153,17 +155,14 @@ class KalmanTrendAnalyzer {
         const rawVelocityPct = this.modal.x > 0
             ? (this.tactical.v / this.modal.x) * 100
             : 0;
-        const trendConfidence = Math.max(0, Math.min(1, Math.abs(displacementPct) / 0.75));
-        const smoothingAlpha = 0.12 + (0.48 * trendConfidence);
-
-        // Adaptive low-pass filter:
-        // keep the tactical velocity reactive in trends, but smooth it harder when price
-        // sits near the modal equilibrium and the raw velocity tends to whip around.
-        if (this.velocityFilteredPct == null) {
-            this.velocityFilteredPct = rawVelocityPct;
-        } else {
-            this.velocityFilteredPct = (smoothingAlpha * rawVelocityPct) + ((1 - smoothingAlpha) * this.velocityFilteredPct);
-        }
+        // Keep the analyzer's filtered velocity on the same smoothing path that the
+        // research chart and live market adapter use at their default knob values.
+        const smoothingResult = smoothKalmanVelocityPoint(
+            rawVelocityPct,
+            displacementPct,
+            this.velocityFilteredPct
+        );
+        this.velocityFilteredPct = smoothingResult.smoothedVelocityPct;
 
         this.updateCount++;
         return this.getAnalysis();

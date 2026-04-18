@@ -76,8 +76,8 @@ spread_analysis/  ──┘
 - **Candle Synchronization**: Keep per-bot LP candles current and pruned to AMA-required windows
 - **AMA Center Calculation**: Compute AMA-based grid price with clamping
 - **AMA Slope Analysis**: Compute buy/sell weight offset directly from AMA slope (trend speed and direction)
-- **ATR Volatility**: Compute Average True Range for symmetric weight variance
-- **Dynamic Weights**: Combine trend bias + ATR variance into per-bot buy/sell weight output
+- **ATR Volatility**: Compute Average True Range for live symmetric penalty handling and diagnostics
+- **Dynamic Weights**: Live adapter combines AMA trend bias + Kalman confirmation, with ATR applied as a separate symmetric penalty
 - **Collateral Management**: Recommend target collateral ratio based on trend regime
 - **Trigger Emission**: Create per-bot recalc trigger files when threshold is crossed
 - **Gap Repair**: Detect and patch missing candle timestamps via Kibana
@@ -186,16 +186,13 @@ weight variance input.
 
 ### 5. Dynamic Weights
 
-The `ama_slope_model` combines the asymmetric `slopeOffset` (trend) and
-symmetric `symmetricDelta` (ATR volatility) into final buy/sell weights:
-- **Low volatility**: Applies little or no volatility penalty
-- **High volatility**: Spreads orders out to reduce risk
-- **Trend**: Shifts weight toward the direction of market movement
+Dynamic weight in production combines AMA slope, Kalman confirmation, and regime gating.
+ATR remains part of the live output only as a separate symmetric penalty after the
+directional signal is built. The HTML research tool is a simplified trend view and
+does not include that live ATR penalty branch.
 
 At runtime, the directional trend component is only applied when it exceeds
 `DYNAMIC_WEIGHT_TREND_THRESHOLD` (or `minOutputThreshold` via overrides).
-The ATR penalty is independent, so the bot can still receive a volatility-only
-weight adjustment even when the trend signal is too weak to apply.
 
 ### 6. Collateral Management
 
@@ -272,6 +269,22 @@ additional deviation-based price adjustment layer on top of the AMA output.
 | `profiles/dynamic_weight_whitelist.json` | Optional whitelist — only listed bots receive dynamic weight payloads |
 | `market_adapter/state/price_adapter_state.json` | Runtime state — candle metadata, signals, weights, collateral |
 | `market_adapter/state/price_adapter_centers.json` | Lightweight center snapshot |
+
+### Dynamic Weight Knobs
+
+The production adapter reads the same dynamic-weight defaults as the research chart from `modules/constants.js`.
+The main runtime knobs are:
+
+- `alpha` - AMA vs Kalman blend
+- `dw` - Kalman displacement weighting
+- `gain` - output amplitude
+- `kalmanSmoothPct` - raw-vs-smoothed Kalman blend
+- `kalmanDispScaleMult` - displacement scale multiplier
+- `kalmanDispThresholdMult` - displacement threshold multiplier
+- `kalmanSmoothSpanPct` - adaptive EMA span ratio
+- `signalConfirmBars` - output/signal latch confirmation bars
+
+These values can be overridden in `profiles/market_adapter_settings.json` at the pair or bot level.
 
 ---
 

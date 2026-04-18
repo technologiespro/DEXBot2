@@ -211,6 +211,11 @@ function resolveBotCfg(bot, globalCfg) {
         if (ps.alpha != null) merged.alpha = ps.alpha;
         if (ps.dw != null) merged.dw = ps.dw;
         if (ps.gain != null) merged.gain = ps.gain;
+        if (ps.kalmanSmoothPct != null) merged.kalmanSmoothPct = ps.kalmanSmoothPct;
+        if (ps.kalmanDispScaleMult != null) merged.kalmanDispScaleMult = ps.kalmanDispScaleMult;
+        if (ps.kalmanDispThresholdMult != null) merged.kalmanDispThresholdMult = ps.kalmanDispThresholdMult;
+        if (ps.kalmanSmoothSpanPct != null) merged.kalmanSmoothSpanPct = ps.kalmanSmoothSpanPct;
+        if (ps.signalConfirmBars != null) merged.signalConfirmBars = ps.signalConfirmBars;
         if (ps.dispScaleAtrMult != null) merged.dispScaleAtrMult = ps.dispScaleAtrMult;
         if (ps.dispScaleMinPct != null) merged.dispScaleMinPct = ps.dispScaleMinPct;
         if (ps.kalman) merged.kalman = ps.kalman;
@@ -244,6 +249,11 @@ function resolveBotCfg(bot, globalCfg) {
         if (botOverride.alpha != null) merged.alpha = botOverride.alpha;
         if (botOverride.dw != null) merged.dw = botOverride.dw;
         if (botOverride.gain != null) merged.gain = botOverride.gain;
+        if (botOverride.kalmanSmoothPct != null) merged.kalmanSmoothPct = botOverride.kalmanSmoothPct;
+        if (botOverride.kalmanDispScaleMult != null) merged.kalmanDispScaleMult = botOverride.kalmanDispScaleMult;
+        if (botOverride.kalmanDispThresholdMult != null) merged.kalmanDispThresholdMult = botOverride.kalmanDispThresholdMult;
+        if (botOverride.kalmanSmoothSpanPct != null) merged.kalmanSmoothSpanPct = botOverride.kalmanSmoothSpanPct;
+        if (botOverride.signalConfirmBars != null) merged.signalConfirmBars = botOverride.signalConfirmBars;
         if (botOverride.dispScaleAtrMult != null) merged.dispScaleAtrMult = botOverride.dispScaleAtrMult;
         if (botOverride.dispScaleMinPct != null) merged.dispScaleMinPct = botOverride.dispScaleMinPct;
         if (botOverride.kalman) merged.kalman = botOverride.kalman;

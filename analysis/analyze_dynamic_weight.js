@@ -152,12 +152,10 @@ async function main() {
         // ── AMA weight calculation ───────────────────────────────────────────
         const closes = candles.map(c => Array.isArray(c) ? c[4] : 0);
         const ama3Values = calculateAMA(closes, AMA_CONFIG);
-        const atrs = computeATR(candles, 14);
-
         for (let i = 0; i < allResults.length; i++) {
             const amaPrice = ama3Values[i] ?? null;
-            const atr = atrs[i];
-            const weightVariance = amaPrice > 0 ? atr / amaPrice : 0;
+            const atr = 0;
+            const weightVariance = 0;
 
             const weights = computeAmaSlopeWeights(ama3Values.slice(0, i + 1), weightVariance, {
                 erPeriod: AMA_CONFIG.erPeriod,
@@ -195,7 +193,6 @@ async function main() {
             dispWeight: config.dispWeight,
             clipPct: config.clipPct,
             regimeSensitivity: MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY,
-            dispScaleAtrMult: config.dispScaleAtrMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT,
             dispScaleMinPct:  config.dispScaleMinPct  ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT,
             marketAdapter: {
                 alpha:                   MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA,
@@ -206,7 +203,6 @@ async function main() {
                 amaLookbackBars:        MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
                 amaMaxSlopePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
                 amaNeutralZonePct:      MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
-                dispScaleAtrMult:       MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT,
                 dispScaleMinPct:        MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT,
             },
         }, 'Dynamic Weight Research Tool');

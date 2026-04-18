@@ -625,16 +625,22 @@ let MARKET_ADAPTER = {
     // nob: regime
     DYNAMIC_WEIGHT_REGIME_SENSITIVITY: 1,
 
-    // DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: Kalman displacement sensitivity relative to ATR.
-    // Higher values make the Kalman displacement signal more conservative, so it needs a larger
-    // move away from the modal price before it contributes at full strength.
-    // Lower values make the displacement channel react more aggressively.
-    // (not exposed in chart UI)
+    // Shared Kalman tuning defaults used by both the research HTML and the live dynamic-weight
+    // market adapter so both paths start from the same smoothing and echo behavior.
+    DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT: 150,
+    DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT: 1.5,
+    DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT: 1.5,
+    DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT: 100,
+    DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT: 1,
+
+    // DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: Legacy dynamic-weight tuning constant kept for
+    // backward-compatible config parsing. The active live signal path currently applies ATR
+    // only as a separate symmetric penalty, not as Kalman displacement scaling.
     DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: 200,
 
     // DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: Minimum Kalman displacement scale in percent.
-    // Keeps the displacement channel from becoming too sensitive in very quiet markets where ATR
-    // is near zero.
+    // This is the active Kalman displacement scale in both the HTML research tool and the
+    // live directional signal path.
     // (not exposed in chart UI)
     DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: 0.5,
 
