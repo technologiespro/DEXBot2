@@ -68,11 +68,14 @@ function generateHTML(data, title = 'ATR Volatility Research') {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="color-scheme" content="dark">
+    <meta name="darkreader-lock">
     <title>${escapeHtml(title)}</title>
     <link rel="stylesheet" href="https://unpkg.com/uplot@1.6.32/dist/uPlot.min.css">
     <script src="https://unpkg.com/uplot@1.6.32/dist/uPlot.iife.min.js"></script>
     <style>
         * { box-sizing: border-box; }
+        :root { color-scheme: dark; }
         body { background: #0b0e14; color: #d1d5db; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; overflow: hidden; }
         #header { padding: 10px 18px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 48px; }
         #header-left { font-weight: bold; color: #fff; }
@@ -95,9 +98,9 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         .is-hovered .u-cursor-y { display: block; }
         .section-label { position: absolute; top: 8px; right: 12px; font-size: 9px; color: #30363d; text-transform: uppercase; letter-spacing: 1px; z-index: 10; pointer-events: none; }
         .ctrl { pointer-events: auto; display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; }
-        .ctrl label { color: #8b949e; font-size: 10px; min-width: 34px; text-align: right; }
-        .ctrl input[type="range"] { width: 161px; height: 3px; }
-        .ctrl .val { font-weight: bold; font-size: 10px; min-width: 44px; display: inline-block; text-align: right; }
+        .ctrl label { color: #8b949e; font-size: 11px; min-width: 34px; text-align: right; }
+        .ctrl input[type="range"] { width: 145px; height: 3px; }
+        .ctrl .val { font-weight: bold; font-size: 11px; min-width: 44px; display: inline-block; text-align: right; }
         .ctrl.thr label { min-width: 26px; }
         .ctrl.exp label { min-width: 24px; }
         .ctrl.scale label { min-width: 38px; }
@@ -106,11 +109,23 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         .ctrl.thr .val { color: #8b949e; }
         .ctrl.exp input[type="range"] { accent-color: #58a6ff; }
         .ctrl.exp .val { color: #58a6ff; }
-        .ctrl.scale input[type="range"] { accent-color: #f0883e; }
+        .ctrl.scale input[type="range"] { width: 188px; accent-color: #f0883e; }
         .ctrl.scale .val { color: #f0883e; }
         .ctrl.clamp input[type="range"] { accent-color: #a371f7; }
         .ctrl.clamp .val { color: #a371f7; }
         .group-sep { border-left: 1px solid #30363d; margin-left: 4px; padding-left: 4px; display: inline-flex; align-items: center; height: 18px; }
+        .signal-summary { margin-left: 8px; min-width: 313px; max-width: 450px; flex: 0 0 338px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; justify-content: center; }
+        .signal-bar { display: flex; width: 100%; height: 15px; overflow: hidden; border-radius: 999px; background: #10151d; border: 1px solid #30363d; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 0 10px rgba(88,166,255,0.08); }
+        .signal-seg { position: relative; height: 100%; min-width: 1px; transition: width 0.18s ease; box-shadow: inset 0 0 8px rgba(255,255,255,0.14), 0 0 8px currentColor; }
+        .signal-seg:not(:last-child) { border-right: 1px solid rgba(255,255,255,0.34); }
+        .signal-seg.below { color: #58a6ff; background: linear-gradient(90deg, #3b82f6 0%, #7dd3fc 100%); box-shadow: inset 0 0 4px rgba(255,255,255,0.14); }
+        .signal-seg.mid { color: #ffd24a; background: linear-gradient(90deg, #ffe066 0%, #fff3a0 100%); box-shadow: inset 0 0 4px rgba(255,255,255,0.18); }
+        .signal-seg.over { color: #f85149; background: linear-gradient(90deg, #ff4d4d 0%, #ff8a8a 100%); box-shadow: inset 0 0 4px rgba(255,255,255,0.12); }
+        .signal-labels { position: relative; width: 100%; height: 12px; font-size: 10px; color: #8b949e; white-space: nowrap; }
+        .signal-labels span { position: absolute; top: 0; transform: translateY(0); pointer-events: none; }
+        .signal-labels span:nth-child(1) { left: 2px; color: #58a6ff; }
+        .signal-labels span:nth-child(2) { left: 50%; transform: translate(-50%, 0); color: #ffd24a; }
+        .signal-labels span:nth-child(3) { right: 2px; color: #f85149; }
     </style>
 </head>
 <body>
@@ -135,19 +150,28 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             </div>
             <div id="variance-chart"></div>
         </div>
-        <div id="shift-panel">
+            <div id="shift-panel">
             <div class="section-label">SYMMETRIC SHIFT</div>
             <div class="legend" style="gap: 10px;">
-                <div class="legend-item"><div class="dot" style="background:#8b949e;"></div>Raw Δ: <span id="l-raw-delta" class="legend-val" style="color:#8b949e;">-</span></div>
                 <div class="legend-item"><div class="dot" style="background:#f85149;"></div>Δ: <span id="l-delta" class="legend-val" style="color:#f85149;">-</span></div>
                 <div class="legend-item">Weff: <span id="l-weff" class="legend-val" style="color:#3fb950;">-</span></div>
-                <div class="legend-item">S: <span id="l-sell" class="legend-val" style="color:#58a6ff;">-</span></div>
-                <div class="legend-item">B: <span id="l-buy" class="legend-val" style="color:#58a6ff;">-</span></div>
                 <div class="group-sep"></div>
                 <div class="ctrl thr"><label for="threshold-slider">thr</label><input type="range" id="threshold-slider" min="0" max="500" step="1" value="${Math.round(defaultThreshold * 1000)}"><span class="val" id="threshold-value">${defaultThreshold.toFixed(3)}</span></div>
                 <div class="ctrl clamp"><label for="clamp-slider">clamp</label><input type="range" id="clamp-slider" min="100" max="1000" step="1" value="${Math.round(defaultClamp * 1000)}"><span class="val" id="clamp-value">${defaultClamp.toFixed(3)}</span></div>
-                <div class="ctrl exp"><label for="exponent-slider">exp</label><input type="range" id="exponent-slider" min="0" max="1000" step="1" value="0"><span class="val" id="exponent-value">${defaultExponent.toFixed(2)}</span></div>
+                <div class="ctrl exp"><label for="exponent-slider">exp</label><input type="range" id="exponent-slider" min="0" max="1000" step="1" value="0"><span class="val" id="exponent-value">${defaultExponent.toFixed(3)}</span></div>
                 <div class="ctrl scale"><label for="scale-slider">scaleX</label><input type="range" id="scale-slider" min="0" max="1000" step="1" value="0"><span class="val" id="scale-value">${defaultScaleX.toFixed(2)}x</span></div>
+                <div class="signal-summary">
+                    <div class="signal-bar" id="signal-bar" title="Signal distribution">
+                        <div id="signal-below" class="signal-seg below" style="width:0%"></div>
+                        <div id="signal-mid" class="signal-seg mid" style="width:0%"></div>
+                        <div id="signal-over" class="signal-seg over" style="width:0%"></div>
+                    </div>
+                    <div class="signal-labels">
+                        <span id="signal-below-label">below 0%</span>
+                        <span id="signal-mid-label">in 0%</span>
+                        <span id="signal-over-label">over 0%</span>
+                    </div>
+                </div>
             </div>
             <div id="shift-chart"></div>
         </div>
@@ -163,10 +187,10 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         const MIN_WEIGHT = data.minWeight ?? ${JSON.stringify(defaultMinWeight)};
         const MAX_WEIGHT = data.maxWeight ?? ${JSON.stringify(defaultMaxWeight)};
         const BASELINE_WEIGHT = 0.5;
-        const EXP_LOG_MIN = Math.log(0.25);
-        const EXP_LOG_MAX = Math.log(4.0);
-        const SCALE_LOG_MIN = Math.log(2.0);
-        const SCALE_LOG_MAX = Math.log(50.0);
+        const EXP_LOG_MIN = Math.log(0.5);
+        const EXP_LOG_MAX = Math.log(1.0);
+        const SCALE_LOG_MIN = Math.log(1.0);
+        const SCALE_LOG_MAX = Math.log(100.0);
 
         let currentThreshold = data.volatilityThreshold;
         let currentExponent = data.volatilityExponent;
@@ -240,8 +264,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         let rawDeltaArr = new Array(data.dates.length).fill(null);
         let deltaArr = new Array(data.dates.length).fill(null);
         let weffArr = new Array(data.dates.length).fill(null);
-        let sellArr = new Array(data.dates.length).fill(null);
-        let buyArr = new Array(data.dates.length).fill(null);
+        let signalSummary = { below: 0, mid: 0, over: 0, total: 0 };
 
         function calcShift(weightVariance) {
             const safeVariance = Number.isFinite(weightVariance) && weightVariance > 0 ? weightVariance : 0;
@@ -249,29 +272,61 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             const effectiveScaleX = Math.max(Math.exp(SCALE_LOG_MIN), Math.min(Math.exp(SCALE_LOG_MAX), currentScaleX));
             const effectiveClamp = Number.isFinite(currentClamp) && currentClamp >= 0.1 ? currentClamp : ${JSON.stringify(defaultClamp)};
             const raw = -Math.pow(safeVariance, effectiveExponent) * effectiveScaleX;
+            const rawAbs = Math.abs(raw);
             const clampedRaw = clamp(raw, -effectiveClamp, 0);
             const delta = Math.abs(clampedRaw) < currentThreshold ? 0 : clampedRaw;
             const weff = clamp(BASELINE_WEIGHT + delta, MIN_WEIGHT, MAX_WEIGHT);
-            return { raw: clampedRaw, delta, weff, sellW: weff, buyW: weff };
+            return { raw: clampedRaw, rawAbs, delta, weff, sellW: weff, buyW: weff };
         }
 
         function recalcShift() {
+            const effectiveClamp = Number.isFinite(currentClamp) && currentClamp >= 0.1 ? currentClamp : ${JSON.stringify(defaultClamp)};
+            let below = 0;
+            let mid = 0;
+            let over = 0;
+            let total = 0;
             for (let i = 0; i < data.dates.length; i++) {
                 if (i >= data.realBarCount) {
                     rawDeltaArr[i] = null;
                     deltaArr[i] = null;
                     weffArr[i] = null;
-                    sellArr[i] = null;
-                    buyArr[i] = null;
                     continue;
                 }
                 const r = calcShift(data.varianceSeries[i]);
                 rawDeltaArr[i] = r.raw;
                 deltaArr[i] = r.delta;
                 weffArr[i] = r.weff;
-                sellArr[i] = r.sellW;
-                buyArr[i] = r.buyW;
+                if (Number.isFinite(r.rawAbs)) {
+                    total++;
+                    if (r.rawAbs >= effectiveClamp) over++;
+                    else if (r.rawAbs < currentThreshold) below++;
+                    else mid++;
+                }
             }
+            signalSummary = { below, mid, over, total };
+        }
+
+        function updateSignalSummary() {
+            const total = signalSummary.total || 0;
+            const belowPct = total > 0 ? (signalSummary.below / total) * 100 : 0;
+            const midPct = total > 0 ? (signalSummary.mid / total) * 100 : 0;
+            const overPct = total > 0 ? (signalSummary.over / total) * 100 : 0;
+
+            const belowEl = document.getElementById('signal-below');
+            const midEl = document.getElementById('signal-mid');
+            const overEl = document.getElementById('signal-over');
+            belowEl.style.width = belowPct + '%';
+            midEl.style.width = midPct + '%';
+            overEl.style.width = overPct + '%';
+            belowEl.title = 'below: ' + signalSummary.below + '/' + total + ' (' + belowPct.toFixed(1) + '%)';
+            midEl.title = 'in: ' + signalSummary.mid + '/' + total + ' (' + midPct.toFixed(1) + '%)';
+            overEl.title = 'over: ' + signalSummary.over + '/' + total + ' (' + overPct.toFixed(1) + '%)';
+
+            const title = 'below: ' + signalSummary.below + '/' + total + ' (' + belowPct.toFixed(1) + '%) | in: ' + signalSummary.mid + '/' + total + ' (' + midPct.toFixed(1) + '%) | over: ' + signalSummary.over + '/' + total + ' (' + overPct.toFixed(1) + '%)';
+            document.getElementById('signal-bar').title = title;
+            document.getElementById('signal-below-label').textContent = 'below ' + belowPct.toFixed(1) + '%';
+            document.getElementById('signal-mid-label').textContent = 'in ' + midPct.toFixed(1) + '%';
+            document.getElementById('signal-over-label').textContent = 'over ' + overPct.toFixed(1) + '%';
         }
 
         function clampXRange(min, max) {
@@ -513,11 +568,8 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             document.getElementById('l-ama3').textContent = fmtNum(data.ama3Prices[idx], 6);
             const variance = data.varianceSeries[idx];
             document.getElementById('l-var').textContent = variance == null ? '-' : fmtNum(variance, 6) + ' (' + fmtNum(variance * 100, 4) + '%)';
-            document.getElementById('l-raw-delta').textContent = fmtSigned(rawDeltaArr[idx], 3);
             document.getElementById('l-delta').textContent = fmtSigned(deltaArr[idx], 3);
             document.getElementById('l-weff').textContent = fmtNum(weffArr[idx], 3);
-            document.getElementById('l-sell').textContent = fmtNum(sellArr[idx], 3);
-            document.getElementById('l-buy').textContent = fmtNum(buyArr[idx], 3);
         }
 
         function init() {
@@ -537,6 +589,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             const shiftEl = document.getElementById('shift-panel');
 
             recalcShift();
+            updateSignalSummary();
 
             priceChart = new uPlot({
                 width: priceEl.offsetWidth,
@@ -633,6 +686,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
 
             function applyShiftFromSliders() {
                 recalcShift();
+                updateSignalSummary();
                 const xs = shiftChart.scales.x;
                 const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
                 shiftChart.setData([data.dates, rawDeltaArr, deltaArr]);

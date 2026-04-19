@@ -105,8 +105,8 @@ function computeShift(weightVariance, exponent, scaleX, threshold, clampValue) {
     const safeScaleX = Number.isFinite(scaleX) && scaleX >= 0 ? scaleX : MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT;
     const safeThreshold = Number.isFinite(threshold) && threshold >= 0 ? threshold : DEFAULT_THRESHOLD;
     const safeClamp = Number.isFinite(clampValue) && clampValue >= 0 ? clampValue : DEFAULT_CLAMP;
-    const effectiveExponent = Math.max(0.25, Math.min(4.0, safeExponent));
-    const effectiveScaleX = Math.max(2.0, Math.min(50.0, safeScaleX));
+    const effectiveExponent = Math.max(0.5, Math.min(1.0, safeExponent));
+    const effectiveScaleX = Math.max(1.0, Math.min(100.0, safeScaleX));
 
     const rawDelta = -Math.pow(safeVariance, effectiveExponent) * effectiveScaleX;
     const clampedRawDelta = Math.max(safeClamp * -1, Math.min(0, rawDelta));
