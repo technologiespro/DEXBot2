@@ -4,18 +4,12 @@
  * SHARED REGIME DEFAULTS
  *
  * Consolidated defaults for Hurst Exponent and Permutation Entropy analyzers.
- * Best-fit values obtained from historical grid-search (analyze_regime_windows.js).
+ * Synchronized with modules/constants.js
  */
 
-module.exports = {
-    HURST_CONFIG: {
-        window: 256,
-        scales: [8, 16, 32, 64],
-    },
+const { MARKET_ADAPTER } = require('../../modules/constants');
 
-    PE_CONFIG: {
-        m:      5,
-        delay:  1,
-        window: 54,
-    },
+module.exports = {
+    HURST_CONFIG: MARKET_ADAPTER.HURST_CONFIG,
+    PE_CONFIG:    MARKET_ADAPTER.PE_CONFIG,
 };

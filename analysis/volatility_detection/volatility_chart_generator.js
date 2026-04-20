@@ -24,8 +24,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
 
     const volatilityCfg = data.volatilityConfig || {};
     const defaultThreshold = data.volatilityThreshold ?? volatilityCfg.volatilityThreshold
-        ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
-        ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD;
+        ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD;
     const defaultAtrPeriod = data.atrPeriod ?? volatilityCfg.atrPeriod ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT;
     const defaultExponent = data.volatilityExponent ?? volatilityCfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
     const defaultScaleX = data.volatilityScaleX ?? volatilityCfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT;
@@ -173,8 +172,8 @@ function generateHTML(data, title = 'ATR Volatility Research') {
                 <div class="ctrl thr"><label for="threshold-slider">thr</label><input type="range" id="threshold-slider" min="0" max="500" step="1" value="${Math.round(defaultThreshold * 1000)}"><span class="val" id="threshold-value">${defaultThreshold.toFixed(3)}</span></div>
                 <div class="ctrl atr"><label for="atr-slider">atr</label><input type="range" id="atr-slider" min="3" max="30" step="1" value="${Math.round(defaultAtrPeriod)}"><span class="val" id="atr-value">${Math.round(defaultAtrPeriod)}</span></div>
                 <div class="ctrl clamp"><label for="clamp-slider">clamp</label><input type="range" id="clamp-slider" min="100" max="1000" step="1" value="${Math.round(defaultClamp * 1000)}"><span class="val" id="clamp-value">${defaultClamp.toFixed(3)}</span></div>
-                <div class="ctrl exp"><label for="exponent-slider">exp</label><input type="range" id="exponent-slider" min="0" max="1000" step="1" value="0"><span class="val" id="exponent-value">${defaultExponent.toFixed(3)}</span></div>
-                <div class="ctrl scale"><label for="scale-slider">scaleX</label><input type="range" id="scale-slider" min="0" max="1000" step="1" value="0"><span class="val" id="scale-value">${defaultScaleX.toFixed(2)}x</span></div>
+                <div class="ctrl exp"><label for="exponent-slider">exp</label><input type="range" id="exponent-slider" min="500" max="1000" step="1" value="${Math.round(defaultExponent * 1000)}"><span class="val" id="exponent-value">${defaultExponent.toFixed(3)}</span></div>
+                <div class="ctrl scale"><label for="scale-slider">scaleX</label><input type="range" id="scale-slider" min="100" max="10000" step="1" value="${Math.round(defaultScaleX * 100)}"><span class="val" id="scale-value">${defaultScaleX.toFixed(2)}x</span></div>
                 <div class="signal-summary">
                     <div class="signal-bar" id="signal-bar" title="Signal distribution">
                         <div id="signal-below" class="signal-seg below" style="width:0%"></div>

@@ -209,8 +209,8 @@ Variable mapping:
 - `atr` = `calculateATR(candles, MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT)`
 - `weightVariance` = `atr / amaPrice`
 - `volatilityExponent` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT`
-- `volatilityScaleX` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT` (10x default, 2x–50x in the volatility chart)
-- `volatilityThreshold` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD` or legacy `DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD`
+- `volatilityScaleX` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT` (10x default, 1x–100x in the volatility chart)
+- `volatilityThreshold` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD`
 - `MAX_SYMMETRIC_SHIFT` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP` (default 0.5, overrideable per pair/bot via `maxVolatilityOffset`)
 - `atrPeriod` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT` (default 14, adjustable in the volatility research chart from 3 to 30)
 
@@ -313,7 +313,7 @@ The production adapter reads the same dynamic-weight defaults as the research ch
 The main runtime knobs are:
 
 - `alpha` - AMA vs Kalman blend
-- `dw` - Kalman displacement weighting (default 0.50)
+- `dw` - Kalman displacement weighting (default 0.5)
 - `gain` - output amplitude (default 0.8)
 - `maxSlopeOffset` - cap for the asymmetric trend offset
 - `maxVolatilityOffset` - cap for the symmetric ATR penalty

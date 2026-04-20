@@ -2,8 +2,8 @@
 
 const { MARKET_ADAPTER } = require('../../modules/constants');
 
-const KALMAN_SMOOTHING_BUDGET = 0.60;
-const KALMAN_SMOOTHING_FLOOR = 0;
+const KALMAN_SMOOTHING_BUDGET = MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTHING_BUDGET;
+const KALMAN_SMOOTHING_FLOOR = MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTHING_FLOOR;
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));

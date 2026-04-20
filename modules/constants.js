@@ -582,9 +582,6 @@ let MARKET_ADAPTER = {
     // (used by the volatility research tool)
     DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD: 0.1,
 
-    // Legacy aliases kept for backward compatibility with older settings files.
-    DYNAMIC_WEIGHT_TREND_THRESHOLD: 0.25,
-
     // DYNAMIC_WEIGHT_CLIP_PERCENTILE: Outlier filter for unusually large AMA/Kalman moves.
     // Higher values suppress more extreme spikes before they influence dynamic weights.
     // 0 disables clipping.
@@ -619,7 +616,7 @@ let MARKET_ADAPTER = {
     // DYNAMIC_WEIGHT_DW: Blend inside the Kalman signal between velocity and displacement.
     // Lower values emphasize momentum/velocity.
     // Higher values emphasize how far price has moved away from the modal baseline.
-    // Default 0.75 keeps displacement meaningful without fully overpowering velocity.
+    // Default 0.5 balances velocity and displacement.
     // nob: dw (Displacement Weight)
     DYNAMIC_WEIGHT_DW: 0.5,
 
@@ -664,6 +661,10 @@ let MARKET_ADAPTER = {
     DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT: 100,
     DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT: 1,
 
+    // Adaptive Kalman velocity smoothing budget (0-1.0)
+    DYNAMIC_WEIGHT_KALMAN_SMOOTHING_BUDGET: 0.60,
+    DYNAMIC_WEIGHT_KALMAN_SMOOTHING_FLOOR: 0,
+
     // DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT: Minimum raw regime multiplier deviation before
     // the dampening branch is allowed to reduce the output.
     DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT: 0,
@@ -692,9 +693,18 @@ let MARKET_ADAPTER = {
     // Overridable per market pair or per bot via market_adapter_settings.json.
     DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT: 10.0,
 
-    // DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD: Legacy alias for the symmetric shift threshold.
-    // Overridable per market pair or per bot via market_adapter_settings.json.
-    DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD: 0.1,
+    // HURST_CONFIG: Standard window and scales for Hurst exponent calculation.
+    HURST_CONFIG: {
+        window: 256,
+        scales: [8, 16, 32, 64],
+    },
+
+    // PE_CONFIG: Standard parameters for Permutation Entropy calculation.
+    PE_CONFIG: {
+        m:      5,
+        delay:  1,
+        window: 54,
+    },
 
     // HURST_ZONE_BAND: Width of the neutral Hurst zone between trending and mean-reverting regimes.
     // Higher values classify more markets as "random/unclear".

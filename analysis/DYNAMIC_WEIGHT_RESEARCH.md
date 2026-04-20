@@ -33,7 +33,7 @@ Variables used by the live and research implementations:
 
 - `weightVariance` = `atr / amaPrice`
 - `volatilityExponent` = power applied to the variance
-- `volatilityScaleX` = penalty multiplier in x-factor units (10x default, 2x–50x in the volatility chart)
+- `volatilityScaleX` = penalty multiplier in x-factor units (10x default, 1x–100x in the volatility chart)
 - `volatilityThreshold` = minimum absolute shift before the penalty is allowed through
 - `MAX_SYMMETRIC_SHIFT` / `DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP` = default cap on the downward shift (overrideable in live settings)
 
@@ -173,7 +173,7 @@ All panels share aligned vertical time grid lines, and the bottom output panel s
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
 | **α** | 0–1 | 0.5 | Blend ratio between AMA and Kalman channels (0 = pure Kalman, 1 = pure AMA) |
-| **dw** | 0–1 | 0.75 | Displacement weight: how much Kalman displacement influences the composite signal |
+| **dw** | 0–1 | 0.5 | Displacement weight: how much Kalman displacement influences the composite signal |
 
 ### Kalman Smoothing
 | Knob | Range | Default | Purpose |

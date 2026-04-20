@@ -156,11 +156,13 @@ function testResolveBotCfgSanitizesAtrPeriodAndVolatilityClampOverrides() {
                 marketAdapterSettings: {
                     atrPeriod: 0,
                     maxVolatilityOffset: -0.5,
+                    volatilityThreshold: -1,
                 },
                 botOverrides: {
                     'XRP-BTS': {
                         atrPeriod: 14.5,
                         maxVolatilityOffset: 0,
+                        volatilityThreshold: Number.NaN,
                     },
                 },
             },
@@ -184,8 +186,13 @@ function testResolveBotCfgSanitizesAtrPeriodAndVolatilityClampOverrides() {
     assert.strictEqual(merged.atrPeriod, 15, 'positive fractional ATR period should be normalized to an integer');
     assert.strictEqual(
         merged.maxVolatilityOffset,
-        MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP,
-        'non-positive volatility clamp overrides should fall back to the default clamp'
+        0,
+        'zero volatility clamp overrides should remain valid and disable the symmetric shift'
+    );
+    assert.strictEqual(
+        merged.volatilityThreshold,
+        MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD,
+        'invalid volatility thresholds should fall back to the default threshold'
     );
 }
 

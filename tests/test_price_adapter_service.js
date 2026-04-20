@@ -1236,10 +1236,10 @@ async function testDynamicWeightVolatilityOverridesFlowIntoService() {
     assert.ok(writtenPayload, 'dynamic weights should be persisted');
 
     const dw = writtenPayload.dynamicWeights;
-    assert.strictEqual(dw.volatilityPenalty, -0.04, 'override tuning should produce the expected service-level penalty');
-    assert.strictEqual(dw.effectiveWeights.sell, 0.56, 'sell weight should reflect the tuned penalty');
-    assert.strictEqual(dw.effectiveWeights.buy, 0.36, 'buy weight should reflect the tuned penalty');
-    assert.strictEqual(result.weights.meta.volatilityPenalty, -0.04, 'service metadata should reflect the tuned penalty');
+    assert.strictEqual(dw.volatilityPenalty, -0.2, 'service should clamp volatility scaleX to the live/research minimum');
+    assert.strictEqual(dw.effectiveWeights.sell, 0.4, 'sell weight should reflect the clamped volatility penalty');
+    assert.strictEqual(dw.effectiveWeights.buy, 0.2, 'buy weight should reflect the clamped volatility penalty');
+    assert.strictEqual(result.weights.meta.volatilityPenalty, -0.2, 'service metadata should reflect the clamped volatility penalty');
 }
 
 async function testDynamicWeightSuppressedTrendUsesFlatProfile() {

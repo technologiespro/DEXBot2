@@ -5,6 +5,7 @@ const { computeAmaSlopeWeights } = require('./strategies/ama_slope_model');
 const {
     normalizeAtrPeriod,
     normalizeMaxVolatilityOffset,
+    normalizeVolatilityThreshold,
 } = require('./config_normalizers');
 const { computeRegimeMultiplier, bilinearInterpolate } = require('./strategies/regime_gate');
 const { calculateAMA } = require('../../analysis/ama_fitting/ama');
@@ -213,14 +214,16 @@ class MarketAdapterService {
         const mo = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
         const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
 
+        const amaErPeriod = cfg.amaSlope?.erPeriod ?? botAma.erPeriod;
+
         // Compute separate clip thresholds for AMA (slopes) and Kalman (velocities)
         let amaClipThreshold = Infinity;
         let kalClipThreshold = Infinity;
 
-        if (clipPercentile > 0 && amaValues.length > lookbackBars) {
-            // AMA clip threshold from slope distribution
+        if (clipPercentile > 0 && amaValues.length > amaErPeriod + lookbackBars) {
+            // AMA clip threshold from slope distribution — skip initialization period
             const amaSlopes = [];
-            for (let i = lookbackBars; i < amaValues.length; i++) {
+            for (let i = amaErPeriod + lookbackBars; i < amaValues.length; i++) {
                 const last = amaValues[i];
                 const past = amaValues[i - lookbackBars];
                 if (past > 0) amaSlopes.push(Math.abs((last - past) / past * 100));
@@ -230,19 +233,16 @@ class MarketAdapterService {
                 const idx = Math.min(Math.floor((100 - clipPercentile) / 100 * sorted.length), sorted.length - 1);
                 amaClipThreshold = sorted[idx];
             }
-
-            // Kalman clip threshold from velocity distribution (computed after Kalman run)
         }
 
         const slopeCfg = {
             ...(cfg.amaSlope || {}),
+            erPeriod:              amaErPeriod,
             maxSlopeOffset:        cfg.maxSlopeOffset,
             maxVolatilityOffset:   volatilityClamp,
             volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
             volatilityScaleX:      cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
-            volatilityThreshold:   cfg.volatilityThreshold
-                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
-                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
+            volatilityThreshold:   normalizeVolatilityThreshold(cfg.volatilityThreshold),
             neutralZonePct:        nz,
             clipPercentile,
             clipThreshold:         amaClipThreshold,
@@ -328,8 +328,9 @@ class MarketAdapterService {
             });
 
             // Compute Kalman clip threshold from the research-chart filtered velocity distribution.
+            // Skip first 20 bars (warm-up period).
             kalClipThreshold = computeAbsolutePercentileThreshold(
-                kalmanSmoothedVelocityPct,
+                kalmanSmoothedVelocityPct.slice(20),
                 clipPercentile,
                 Infinity
             );
@@ -337,7 +338,6 @@ class MarketAdapterService {
             // Build AMA offset array — compute slopeOffset directly from AMA values per bar.
             // computeAmaSlopeWeights only reads amaValues[i] and amaValues[i-lookbackBars],
             // so there is no need to slice the full series for each bar.
-            const amaErPeriod = slopeCfg.erPeriod ?? botAma.erPeriod;
             const amaOffsets = [];
             for (let i = 0; i < closes.length; i++) {
                 if (!slopeResult.isReady || i < amaErPeriod + lookbackBars) {
@@ -494,8 +494,7 @@ class MarketAdapterService {
             // Min-output threshold: if |finalOff| is below threshold, the trend component is
             // suppressed. The volatility penalty (symmetricDelta) is always applied independently.
             const minOutputThreshold = cfg.minOutputThreshold
-                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD
-                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_TREND_THRESHOLD;
+                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD;
             const belowMinOutputThreshold = Math.abs(finalOff) < minOutputThreshold;
 
             // Volatility penalty is the separate symmetric ATR shift. It is independent of
