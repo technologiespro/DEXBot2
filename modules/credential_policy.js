@@ -23,6 +23,9 @@ const ALLOWED_OP_TYPES = [
     'call_order_update',
     'liquidity_pool_exchange',
     'limit_order_update',
+    'credit_offer_accept',
+    'credit_deal_repay',
+    'credit_deal_update',
 ];
 
 // Hardcoded fallback policy — now forces Strict Mode Granular constraints
@@ -33,7 +36,10 @@ const BUILTIN_DEFAULT_POLICY = Object.freeze({
         limit_order_update: null,
         call_order_update: null,
         liquidity_pool_exchange: null,
-        transfer: null
+        transfer: null,
+        credit_offer_accept: null,
+        credit_deal_repay: null,
+        credit_deal_update: null,
     }),
     maxOpsPerBatch: 200,
     allowedAssetIds: null,
@@ -148,6 +154,48 @@ function validateOpConstraints(opName, constraints) {
             errors.push('maxDeltaCollateral must be a positive integer');
         if (constraints.maxDeltaDebt !== undefined && !isPositiveInt(constraints.maxDeltaDebt))
             errors.push('maxDeltaDebt must be a positive integer');
+        if (constraints.minCollateralRatio !== undefined && typeof constraints.minCollateralRatio !== 'number')
+            errors.push('minCollateralRatio must be a number');
+        if (constraints.maxCollateralRatio !== undefined && typeof constraints.maxCollateralRatio !== 'number')
+            errors.push('maxCollateralRatio must be a number');
+        if (constraints.targetCollateralRatio !== undefined && typeof constraints.targetCollateralRatio !== 'number')
+            errors.push('targetCollateralRatio must be a number');
+    }
+
+    // credit_offer_accept
+    if (opName === 'credit_offer_accept') {
+        if (constraints.allowedOfferIds !== undefined && !isStringArray(constraints.allowedOfferIds))
+            errors.push('allowedOfferIds must be an array of strings');
+        if (constraints.allowedDebtAssets !== undefined && !isStringArray(constraints.allowedDebtAssets))
+            errors.push('allowedDebtAssets must be an array of strings');
+        if (constraints.allowedCollateralAssets !== undefined && !isStringArray(constraints.allowedCollateralAssets))
+            errors.push('allowedCollateralAssets must be an array of strings');
+        if (constraints.maxBorrowAmount !== undefined && !isPositiveInt(constraints.maxBorrowAmount))
+            errors.push('maxBorrowAmount must be a positive integer');
+        if (constraints.maxFeeRate !== undefined && !isPositiveInt(constraints.maxFeeRate))
+            errors.push('maxFeeRate must be a positive integer');
+        if (constraints.minDurationSeconds !== undefined && !isPositiveInt(constraints.minDurationSeconds))
+            errors.push('minDurationSeconds must be a positive integer');
+    }
+
+    // credit_deal_repay
+    if (opName === 'credit_deal_repay') {
+        if (constraints.allowedDealIds !== undefined && !isStringArray(constraints.allowedDealIds))
+            errors.push('allowedDealIds must be an array of strings');
+        if (constraints.allowedDebtAssets !== undefined && !isStringArray(constraints.allowedDebtAssets))
+            errors.push('allowedDebtAssets must be an array of strings');
+        if (constraints.maxRepayAmount !== undefined && !isPositiveInt(constraints.maxRepayAmount))
+            errors.push('maxRepayAmount must be a positive integer');
+        if (constraints.maxCreditFee !== undefined && !isPositiveInt(constraints.maxCreditFee))
+            errors.push('maxCreditFee must be a positive integer');
+    }
+
+    // credit_deal_update
+    if (opName === 'credit_deal_update') {
+        if (constraints.allowedDealIds !== undefined && !isStringArray(constraints.allowedDealIds))
+            errors.push('allowedDealIds must be an array of strings');
+        if (constraints.allowAutoRepay !== undefined && typeof constraints.allowAutoRepay !== 'boolean')
+            errors.push('allowAutoRepay must be a boolean');
     }
 
     // liquidity_pool_exchange
@@ -498,6 +546,152 @@ function evaluateOpConstraints(opName, opData, constraints) {
                 };
             }
         }
+        if (constraints.minCollateralRatio != null && d.extensions && d.extensions.target_collateral_ratio != null) {
+            const target = Number(d.extensions.target_collateral_ratio);
+            if (Number.isFinite(target) && target < constraints.minCollateralRatio) {
+                return {
+                    allow: false,
+                    reason: `call_order_update: target_collateral_ratio ${target} below minCollateralRatio ${constraints.minCollateralRatio}`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.maxCollateralRatio != null && d.extensions && d.extensions.target_collateral_ratio != null) {
+            const target = Number(d.extensions.target_collateral_ratio);
+            if (Number.isFinite(target) && target > constraints.maxCollateralRatio) {
+                return {
+                    allow: false,
+                    reason: `call_order_update: target_collateral_ratio ${target} above maxCollateralRatio ${constraints.maxCollateralRatio}`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+    }
+
+    if (opName === 'credit_offer_accept') {
+        if (constraints.allowedOfferIds) {
+            const offerId = d.offer_id;
+            if (offerId && !constraints.allowedOfferIds.includes(String(offerId))) {
+                return {
+                    allow: false,
+                    reason: `credit_offer_accept: offer "${offerId}" not in allowedOfferIds`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.allowedDebtAssets) {
+            const assetId = d.borrow_amount && d.borrow_amount.asset_id;
+            if (assetId && !constraints.allowedDebtAssets.includes(assetId)) {
+                return {
+                    allow: false,
+                    reason: `credit_offer_accept: debt asset "${assetId}" not in allowedDebtAssets`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.allowedCollateralAssets) {
+            const assetId = d.collateral && d.collateral.asset_id;
+            if (assetId && !constraints.allowedCollateralAssets.includes(assetId)) {
+                return {
+                    allow: false,
+                    reason: `credit_offer_accept: collateral asset "${assetId}" not in allowedCollateralAssets`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.maxBorrowAmount != null) {
+            const amt = d.borrow_amount && d.borrow_amount.amount;
+            if (typeof amt === 'number' && amt > constraints.maxBorrowAmount) {
+                return {
+                    allow: false,
+                    reason: `credit_offer_accept: borrow amount ${amt} exceeds maxBorrowAmount ${constraints.maxBorrowAmount}`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.maxFeeRate != null) {
+            const maxFeeRate = Number(d.max_fee_rate);
+            if (Number.isFinite(maxFeeRate) && maxFeeRate > constraints.maxFeeRate) {
+                return {
+                    allow: false,
+                    reason: `credit_offer_accept: max_fee_rate ${maxFeeRate} exceeds maxFeeRate ${constraints.maxFeeRate}`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.minDurationSeconds != null) {
+            const minDurationSeconds = Number(d.min_duration_seconds);
+            if (Number.isFinite(minDurationSeconds) && minDurationSeconds < constraints.minDurationSeconds) {
+                return {
+                    allow: false,
+                    reason: `credit_offer_accept: min_duration_seconds ${minDurationSeconds} below minDurationSeconds ${constraints.minDurationSeconds}`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+    }
+
+    if (opName === 'credit_deal_repay') {
+        if (constraints.allowedDealIds) {
+            const dealId = d.deal_id;
+            if (dealId && !constraints.allowedDealIds.includes(String(dealId))) {
+                return {
+                    allow: false,
+                    reason: `credit_deal_repay: deal "${dealId}" not in allowedDealIds`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.allowedDebtAssets) {
+            const assetId = d.repay_amount && d.repay_amount.asset_id;
+            if (assetId && !constraints.allowedDebtAssets.includes(assetId)) {
+                return {
+                    allow: false,
+                    reason: `credit_deal_repay: debt asset "${assetId}" not in allowedDebtAssets`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.maxRepayAmount != null) {
+            const amt = d.repay_amount && d.repay_amount.amount;
+            if (typeof amt === 'number' && amt > constraints.maxRepayAmount) {
+                return {
+                    allow: false,
+                    reason: `credit_deal_repay: repay amount ${amt} exceeds maxRepayAmount ${constraints.maxRepayAmount}`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.maxCreditFee != null) {
+            const fee = d.credit_fee && d.credit_fee.amount;
+            if (typeof fee === 'number' && fee > constraints.maxCreditFee) {
+                return {
+                    allow: false,
+                    reason: `credit_deal_repay: credit fee ${fee} exceeds maxCreditFee ${constraints.maxCreditFee}`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+    }
+
+    if (opName === 'credit_deal_update') {
+        if (constraints.allowedDealIds) {
+            const dealId = d.deal_id;
+            if (dealId && !constraints.allowedDealIds.includes(String(dealId))) {
+                return {
+                    allow: false,
+                    reason: `credit_deal_update: deal "${dealId}" not in allowedDealIds`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.allowAutoRepay === false && d.auto_repay) {
+            return {
+                allow: false,
+                reason: 'credit_deal_update: auto_repay change not permitted',
+                policyId: 'opParams',
+            };
+        }
     }
 
     if (opName === 'liquidity_pool_exchange') {
@@ -630,6 +824,57 @@ async function evaluatePolicy(policy, context) {
                         return {
                             allow: false,
                             reason: `asset_id "${opData.min_to_receive.asset_id}" not in allowlist`,
+                            policyId: 'allowedAssetIds',
+                        };
+                    }
+                }
+
+                if (op.op_name === 'call_order_update') {
+                    if (opData.delta_collateral && opData.delta_collateral.asset_id && !allowed.includes(opData.delta_collateral.asset_id)) {
+                        return {
+                            allow: false,
+                            reason: `asset_id "${opData.delta_collateral.asset_id}" not in allowlist`,
+                            policyId: 'allowedAssetIds',
+                        };
+                    }
+                    if (opData.delta_debt && opData.delta_debt.asset_id && !allowed.includes(opData.delta_debt.asset_id)) {
+                        return {
+                            allow: false,
+                            reason: `asset_id "${opData.delta_debt.asset_id}" not in allowlist`,
+                            policyId: 'allowedAssetIds',
+                        };
+                    }
+                }
+
+                if (op.op_name === 'credit_offer_accept') {
+                    if (opData.borrow_amount && opData.borrow_amount.asset_id && !allowed.includes(opData.borrow_amount.asset_id)) {
+                        return {
+                            allow: false,
+                            reason: `asset_id "${opData.borrow_amount.asset_id}" not in allowlist`,
+                            policyId: 'allowedAssetIds',
+                        };
+                    }
+                    if (opData.collateral && opData.collateral.asset_id && !allowed.includes(opData.collateral.asset_id)) {
+                        return {
+                            allow: false,
+                            reason: `asset_id "${opData.collateral.asset_id}" not in allowlist`,
+                            policyId: 'allowedAssetIds',
+                        };
+                    }
+                }
+
+                if (op.op_name === 'credit_deal_repay') {
+                    if (opData.repay_amount && opData.repay_amount.asset_id && !allowed.includes(opData.repay_amount.asset_id)) {
+                        return {
+                            allow: false,
+                            reason: `asset_id "${opData.repay_amount.asset_id}" not in allowlist`,
+                            policyId: 'allowedAssetIds',
+                        };
+                    }
+                    if (opData.credit_fee && opData.credit_fee.asset_id && !allowed.includes(opData.credit_fee.asset_id)) {
+                        return {
+                            allow: false,
+                            reason: `asset_id "${opData.credit_fee.asset_id}" not in allowlist`,
                             policyId: 'allowedAssetIds',
                         };
                     }

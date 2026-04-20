@@ -116,6 +116,7 @@ const {
 } = require('./order/processed_fill_store');
 const DexbotFillRuntime = require('./dexbot_fill_runtime');
 const DexbotMaintenanceRuntime = require('./dexbot_maintenance_runtime');
+const CreditRuntime = require('./credit_runtime');
 const {
     ORDER_STATES,
     ORDER_TYPES,
@@ -215,6 +216,7 @@ class DEXBot {
         this._dustMaintenanceTimer = null;
         this._mainLoopActive = false;
         this._mainLoopPromise = null;
+        this._creditRuntime = null;
 
         // Pipeline state flags (used by maintenance gating)
         this._batchInFlight = false;
@@ -738,6 +740,7 @@ class DEXBot {
                 });
 
                 await this._setupTriggerFileDetection();
+                await this._setupCreditRuntime();
                 this._setupBlockchainFetchInterval();
 
                 if (this._isOpenOrdersSyncLoopEnabled()) {
@@ -878,6 +881,7 @@ class DEXBot {
             });
 
             await this._setupTriggerFileDetection();
+            await this._setupCreditRuntime();
             this._setupBlockchainFetchInterval();
 
             if (this._isOpenOrdersSyncLoopEnabled()) {
@@ -2801,7 +2805,9 @@ class DEXBot {
      * @private
      */
     async _performPeriodicGridChecks() {
-        return DexbotMaintenanceRuntime.performPeriodicGridChecks.call(this);
+        const result = await DexbotMaintenanceRuntime.performPeriodicGridChecks.call(this);
+        await this._runCreditRuntimeMaintenance('periodic');
+        return result;
     }
 
     _isOpenOrdersSyncLoopEnabled() {
@@ -2840,6 +2846,35 @@ class DEXBot {
      */
     _stopBlockchainFetchInterval() {
         return DexbotMaintenanceRuntime.stopBlockchainFetchInterval.call(this);
+    }
+
+    _getCreditRuntime() {
+        if (!this.config || !this.config.debtPolicy) {
+            return null;
+        }
+        if (!this._creditRuntime) {
+            this._creditRuntime = new CreditRuntime(this, {
+                stateDir: path.join(PROFILES_DIR, 'credit_runtime'),
+            });
+        }
+        return this._creditRuntime;
+    }
+
+    async _setupCreditRuntime() {
+        const runtime = this._getCreditRuntime();
+        if (!runtime) {
+            return null;
+        }
+        await runtime.loadState();
+        return runtime;
+    }
+
+    async _runCreditRuntimeMaintenance(context = 'periodic') {
+        const runtime = this._getCreditRuntime();
+        if (!runtime) {
+            return null;
+        }
+        return runtime.runMaintenance(context);
     }
 
     /**
@@ -2983,6 +3018,14 @@ class DEXBot {
         }
 
         this._clearDustMaintenanceTimer();
+
+        if (this._creditRuntime) {
+            try {
+                await this._creditRuntime.shutdown();
+            } catch (err) {
+                this._warn(`Failed to persist credit runtime state: ${err.message}`);
+            }
+        }
 
         if (this._triggerWatcher && typeof this._triggerWatcher.close === 'function') {
             try {

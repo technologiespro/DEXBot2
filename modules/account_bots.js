@@ -998,6 +998,7 @@ async function promptBotData(base = {}) {
         botFunds: data.botFunds,
         activeOrders: data.activeOrders,
         gridPrice: data.gridPrice,
+        debtPolicy: data.debtPolicy,
     };
 }
 

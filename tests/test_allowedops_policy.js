@@ -469,8 +469,133 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     assert(evalResult18.reason.includes('pool'));
     console.log('  ✓ liquidity_pool_exchange for non-whitelisted pool denied');
 
-    // Test 12: maxOpsPerBatch limit enforcement
-    console.log('[Test 12] Evaluate allowedOps - maxOpsPerBatch limit enforcement');
+    // Test 12: credit_offer_accept parameter validation
+    console.log('[Test 12] Evaluate allowedOps - credit_offer_accept parameter validation');
+    const creditOfferPolicy = {
+        allowedOps: {
+            credit_offer_accept: {
+                allowedOfferIds: ['1.18.42'],
+                allowedDebtAssets: ['1.3.0'],
+                allowedCollateralAssets: ['1.3.861'],
+                maxBorrowAmount: 1000,
+                maxFeeRate: 30000,
+                minDurationSeconds: 3600,
+            },
+        },
+        maxOpsPerBatch: 20,
+    };
+
+    const creditOfferContext = {
+        accountName: 'test',
+        requestType: 'sign',
+        operations: [
+            {
+                op_name: 'credit_offer_accept',
+                op_data: {
+                    borrower: '1.2.100',
+                    offer_id: '1.18.42',
+                    borrow_amount: { asset_id: '1.3.0', amount: 500 },
+                    collateral: { asset_id: '1.3.861', amount: 1500 },
+                    max_fee_rate: 30000,
+                    min_duration_seconds: 3600,
+                    extensions: {},
+                },
+            },
+        ],
+    };
+    const creditOfferResult = await policy.evaluatePolicy(creditOfferPolicy, creditOfferContext);
+    assert.strictEqual(creditOfferResult.allow, true, `Expected allow, got deny: ${creditOfferResult.reason}`);
+    console.log('  ✓ credit_offer_accept within limits allowed');
+
+    const creditOfferTooExpensive = {
+        accountName: 'test',
+        requestType: 'sign',
+        operations: [
+            {
+                op_name: 'credit_offer_accept',
+                op_data: {
+                    borrower: '1.2.100',
+                    offer_id: '1.18.42',
+                    borrow_amount: { asset_id: '1.3.0', amount: 500 },
+                    collateral: { asset_id: '1.3.861', amount: 1500 },
+                    max_fee_rate: 40000,
+                    min_duration_seconds: 3600,
+                    extensions: {},
+                },
+            },
+        ],
+    };
+    const creditOfferTooExpensiveResult = await policy.evaluatePolicy(creditOfferPolicy, creditOfferTooExpensive);
+    assert.strictEqual(creditOfferTooExpensiveResult.allow, false, 'Expected deny for fee rate above maxFeeRate');
+    assert(creditOfferTooExpensiveResult.reason.includes('max_fee_rate'));
+    console.log('  ✓ credit_offer_accept fee cap enforced');
+
+    // Test 13: credit_deal_repay parameter validation
+    console.log('[Test 13] Evaluate allowedOps - credit_deal_repay parameter validation');
+    const creditRepayPolicy = {
+        allowedOps: {
+            credit_deal_repay: {
+                allowedDealIds: ['1.19.77'],
+                allowedDebtAssets: ['1.3.0'],
+                maxRepayAmount: 800,
+                maxCreditFee: 50,
+            },
+        },
+        maxOpsPerBatch: 20,
+    };
+
+    const creditRepayContext = {
+        accountName: 'test',
+        requestType: 'sign',
+        operations: [
+            {
+                op_name: 'credit_deal_repay',
+                op_data: {
+                    account: '1.2.100',
+                    deal_id: '1.19.77',
+                    repay_amount: { asset_id: '1.3.0', amount: 500 },
+                    credit_fee: { asset_id: '1.3.0', amount: 25 },
+                },
+            },
+        ],
+    };
+    const creditRepayResult = await policy.evaluatePolicy(creditRepayPolicy, creditRepayContext);
+    assert.strictEqual(creditRepayResult.allow, true, `Expected allow, got deny: ${creditRepayResult.reason}`);
+    console.log('  ✓ credit_deal_repay within limits allowed');
+
+    // Test 14: credit_deal_update parameter validation
+    console.log('[Test 14] Evaluate allowedOps - credit_deal_update parameter validation');
+    const creditUpdatePolicy = {
+        allowedOps: {
+            credit_deal_update: {
+                allowedDealIds: ['1.19.77'],
+                allowAutoRepay: false,
+            },
+        },
+        maxOpsPerBatch: 20,
+    };
+
+    const creditUpdateContext = {
+        accountName: 'test',
+        requestType: 'sign',
+        operations: [
+            {
+                op_name: 'credit_deal_update',
+                op_data: {
+                    account: '1.2.100',
+                    deal_id: '1.19.77',
+                    auto_repay: 1,
+                },
+            },
+        ],
+    };
+    const creditUpdateResult = await policy.evaluatePolicy(creditUpdatePolicy, creditUpdateContext);
+    assert.strictEqual(creditUpdateResult.allow, false, 'Expected deny for disallowed auto_repay update');
+    assert(creditUpdateResult.reason.includes('auto_repay'));
+    console.log('  ✓ credit_deal_update auto_repay change denied');
+
+    // Test 14: maxOpsPerBatch limit enforcement
+    console.log('[Test 15] Evaluate allowedOps - maxOpsPerBatch limit enforcement');
     const batchContext = {
         accountName: 'test',
         requestType: 'sign',

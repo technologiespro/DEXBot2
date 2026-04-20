@@ -11,7 +11,7 @@ const {
 
 const raw = {
     bots: [
-        { name: 'A', active: false },
+        { name: 'A', active: false, debtPolicy: { mpa: { minCollateralRatio: 2 } } },
         { name: 'B', assetA: 'BTS', assetB: 'USD' },
     ],
 };
@@ -20,6 +20,12 @@ assert.deepStrictEqual(
     resolveRawBotEntries(raw).map((bot) => bot.name),
     ['A', 'B'],
     'resolveRawBotEntries should return the bots array'
+);
+
+assert.strictEqual(
+    resolveRawBotEntries(raw)[0].debtPolicy.mpa.minCollateralRatio,
+    2,
+    'resolveRawBotEntries should preserve debtPolicy fields'
 );
 
 assert.deepStrictEqual(
@@ -33,6 +39,26 @@ assert.strictEqual(selectBotEntry(raw, 'B').name, 'B', 'selectBotEntry should fi
 const normalized = normalizeBotEntries([{ name: 'B', assetA: 'BTS', assetB: 'USD' }]);
 assert.strictEqual(normalized[0].botIndex, 0, 'normalizeBotEntries should add the bot index');
 assert.ok(normalized[0].botKey, 'normalizeBotEntries should create a bot key');
+
+const invalidCreditOffer = {
+    bots: [
+        {
+            name: 'C',
+            assetA: 'BTS',
+            assetB: 'USD',
+            debtPolicy: {
+                creditOffer: {
+                    allowedOfferIds: ['1.18.42'],
+                },
+            },
+        },
+    ],
+};
+
+assert(
+    require('../modules/bot_settings').validateBotEntry(invalidCreditOffer.bots[0], 0, 'test').includes('maxFeeRate'),
+    'validateBotEntry should require creditOffer.maxFeeRate'
+);
 
 console.log('bot settings tests passed');
 process.exit(0);

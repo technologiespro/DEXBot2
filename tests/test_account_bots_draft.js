@@ -5,10 +5,14 @@ const assert = require('assert');
 const { normalizeBotDraft } = require('../modules/account_bots');
 
 function testNormalizeBotDraftSeedsDefaults() {
-  const draft = normalizeBotDraft({ name: 'test-bot' });
+  const draft = normalizeBotDraft({
+    name: 'test-bot',
+    debtPolicy: { creditOffer: { maxFeeRate: 30000 } },
+  });
   assert.ok(draft.weightDistribution, 'defaults should still seed nested objects');
   assert.ok(draft.botFunds, 'defaults should still seed nested objects');
   assert.ok(draft.activeOrders, 'defaults should still seed nested objects');
+  assert.strictEqual(draft.debtPolicy.creditOffer.maxFeeRate, 30000, 'debtPolicy should survive normalization');
 }
 
 function testNormalizeBotDraftStripsLegacyOffsetFields() {

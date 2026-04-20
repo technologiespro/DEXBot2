@@ -81,6 +81,29 @@ function validateBotEntry(b, i, src) {
         }
     }
 
+    if ('debtPolicy' in b) {
+        if (typeof b.debtPolicy !== 'object' || b.debtPolicy === null) {
+            problems.push("'debtPolicy' must be an object");
+        } else {
+            if ('mpa' in b.debtPolicy && (typeof b.debtPolicy.mpa !== 'object' || b.debtPolicy.mpa === null)) {
+                problems.push("debtPolicy.mpa must be an object");
+            }
+            if ('creditOffer' in b.debtPolicy && (typeof b.debtPolicy.creditOffer !== 'object' || b.debtPolicy.creditOffer === null)) {
+                problems.push("debtPolicy.creditOffer must be an object");
+            } else if ('creditOffer' in b.debtPolicy) {
+                const creditOffer = b.debtPolicy.creditOffer;
+                if (!('maxFeeRate' in creditOffer)) {
+                    problems.push("debtPolicy.creditOffer.maxFeeRate is required");
+                } else {
+                    const feeRate = Number(creditOffer.maxFeeRate);
+                    if (!Number.isFinite(feeRate) || feeRate <= 0) {
+                        problems.push("debtPolicy.creditOffer.maxFeeRate must be a positive number");
+                    }
+                }
+            }
+        }
+    }
+
     if (problems.length) {
         const name = b.name || `<unnamed-${i}>`;
         return `Bot[${i}] '${name}' (${src}) -> ${problems.join('; ')}`;
