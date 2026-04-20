@@ -1,6 +1,6 @@
 'use strict';
 
-const { MARKET_ADAPTER } = require('../../modules/constants');
+const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../../modules/constants');
 const {
     buildKalmanVelocitySeries,
 } = require('./kalman_velocity_smoothing');
@@ -27,13 +27,14 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
     const ma = data.marketAdapter || {};
     const amaWeightConfig = data.amaWeightConfig || {};
-    const defaultAlpha        = data.alpha            ?? ma.alpha;
+    const defaultAlpha        = data.alpha            ?? ma.alpha ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA;
     const defaultGain         = data.gain             ?? ma.gain ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN;
-    const defaultNeutralZone  = amaWeightConfig.neutralZonePct ?? ma.amaNeutralZonePct;
-    const defaultDispWeight   = data.dispWeight       ?? ma.dispWeight;
-    const maxSlopePct         = amaWeightConfig.maxSlopePct    ?? ma.amaMaxSlopePct;
-    const defaultClipPct      = data.clipPct          ?? ma.clipPercentile;
-    const lookbackBarsRaw     = amaWeightConfig.lookbackBars  ?? ma.amaLookbackBars;
+    const defaultNeutralZone  = amaWeightConfig.neutralZonePct ?? ma.amaNeutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
+    const defaultDispWeight   = data.dispWeight       ?? ma.dispWeight ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DW;
+    const maxSlopePct         = amaWeightConfig.maxSlopePct    ?? ma.amaMaxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
+    const defaultClipPct      = data.clipPct          ?? ma.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
+    const defaultMinOutputThreshold = data.minOutputThreshold ?? ma.minOutputThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD;
+    const lookbackBarsRaw     = amaWeightConfig.lookbackBars  ?? ma.amaLookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
     const lookbackBars        = Math.max(1, Math.min(32, Number.isFinite(lookbackBarsRaw) ? lookbackBarsRaw : 1));
 
     // Log mapping for lookback slider (1 to 32 bars)
@@ -54,9 +55,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const clampedMs = Math.min(Math.max(maxSlopePct, 0.05), 15.0);
     const msInitSlider = Math.round((Math.log(clampedMs) - MS_LOG_MIN_N) / (MS_LOG_MAX_N - MS_LOG_MIN_N) * 1000);
 
-    const defaultRegimeSensitivity  = data.regimeSensitivity ?? ma.regimeSensitivity;
-    const defaultAbsoluteThreshold  = ma.absoluteThreshold ?? 0;
-    const dispScaleMinPct           = data.dispScaleMinPct  ?? ma.dispScaleMinPct;
+    const defaultRegimeSensitivity  = data.regimeSensitivity ?? ma.regimeSensitivity ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY;
+    const defaultAbsoluteThreshold  = ma.absoluteThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT;
+    const dispScaleMinPct           = data.dispScaleMinPct  ?? ma.dispScaleMinPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
     const defaultKalmanSmoothPct = data.kalmanSmoothPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT;
     const defaultKalmanDispScaleMult = data.kalmanDispScaleMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT;
     const defaultKalmanDispThresholdMult = data.kalmanDispThresholdMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT;
@@ -85,7 +86,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const kalmanIsReady      = results.map((r) => r.isReady ?? false);
     const signals            = results.map((r) => r.signal);
     const ama3Prices         = results.map((r) => r.ama3Price ?? null);
-    const amaErPeriod        = data.amaConfig?.erPeriod ?? 0;
+    const amaErPeriod        = data.amaConfig?.erPeriod ?? MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod;
 
     const lastDate = dates[dates.length - 1];
     for (let i = 1; i <= 150; i++) {
@@ -303,7 +304,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPctRaw, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, kalmanSmoothPct: defaultKalmanSmoothPct, kalmanDispScaleMult: defaultKalmanDispScaleMult, kalmanDispThresholdMult: defaultKalmanDispThresholdMult, kalmanSmoothSpanPct: defaultKalmanSmoothSpanPct, signalConfirmBars: defaultSignalConfirmBars, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, amaErPeriod, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, dispScaleMinPct, offsetClamp: MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP, weightMin: MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT, weightMax: MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT, marketAdapter: ma, amaWeightConfig, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPctRaw, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, kalmanSmoothPct: defaultKalmanSmoothPct, kalmanDispScaleMult: defaultKalmanDispScaleMult, kalmanDispThresholdMult: defaultKalmanDispThresholdMult, kalmanSmoothSpanPct: defaultKalmanSmoothSpanPct, signalConfirmBars: defaultSignalConfirmBars, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, minOutputThreshold: defaultMinOutputThreshold, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, amaErPeriod, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, dispScaleMinPct, weightMin: MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT, weightMax: MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT, marketAdapter: ma, amaWeightConfig, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -312,29 +313,29 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const ma = data.marketAdapter || {};
         const amaWeightConfig = data.amaWeightConfig || {};
 
-        const ABSOLUTE_THRESHOLD = data.absoluteThreshold ?? 0;
-        const WEIGHT_MIN = data.weightMin ?? -1;
-        const WEIGHT_MAX = data.weightMax ?? 2;
-        const OFFSET_CLAMP = data.offsetClamp ?? 0.5;
-        const weightDistribution = { sell: 0.5, buy: 0.5 };
-        const STATIC_SELL = Number.isFinite(weightDistribution.sell) ? weightDistribution.sell : 0.5;
-        const STATIC_BUY = Number.isFinite(weightDistribution.buy) ? weightDistribution.buy : 0.5;
+        const ABSOLUTE_THRESHOLD = data.absoluteThreshold ?? ${JSON.stringify(defaultAbsoluteThreshold)};
+        const WEIGHT_MIN = data.weightMin ?? ${JSON.stringify(MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT)};
+        const WEIGHT_MAX = data.weightMax ?? ${JSON.stringify(MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT)};
+        const MIN_OUTPUT_THRESHOLD = data.minOutputThreshold ?? ${JSON.stringify(defaultMinOutputThreshold)};
+        const weightDistribution = ${serializeJsonForScript(DEFAULT_CONFIG.weightDistribution)};
+        const STATIC_SELL = Number.isFinite(weightDistribution.sell) ? weightDistribution.sell : ${JSON.stringify(DEFAULT_CONFIG.weightDistribution.sell)};
+        const STATIC_BUY = Number.isFinite(weightDistribution.buy) ? weightDistribution.buy : ${JSON.stringify(DEFAULT_CONFIG.weightDistribution.buy)};
 
-        let currentAlpha   = data.alpha;
+        let currentAlpha   = data.alpha ?? ${JSON.stringify(defaultAlpha)};
         let currentGain  = data.gain ?? ${JSON.stringify(defaultGain)};
         let currentKalmanSmoothPct = data.kalmanSmoothPct ?? ${JSON.stringify(defaultKalmanSmoothPct)};
         let currentKalmanDispScaleMult = data.kalmanDispScaleMult ?? ${JSON.stringify(defaultKalmanDispScaleMult)};
         let currentKalmanDispThresholdMult = data.kalmanDispThresholdMult ?? ${JSON.stringify(defaultKalmanDispThresholdMult)};
         let currentKalmanSmoothSpanPct = data.kalmanSmoothSpanPct ?? ${JSON.stringify(defaultKalmanSmoothSpanPct)};
-        let currentSignalConfirmBars = data.signalConfirmBars ?? defaultSignalConfirmBars;
-        let currentNz      = (data.neutralZonePct ?? amaWeightConfig.neutralZonePct) ?? ma.amaNeutralZonePct;
-        let currentDw      = data.dispWeight ?? ma.dispWeight;
-        let currentMaxSlopePct = (data.maxSlopePct ?? amaWeightConfig.maxSlopePct) ?? ma.amaMaxSlopePct;
+        let currentSignalConfirmBars = data.signalConfirmBars ?? ${JSON.stringify(defaultSignalConfirmBars)};
+        let currentNz      = data.neutralZonePct ?? ${JSON.stringify(defaultNeutralZone)};
+        let currentDw      = data.dispWeight ?? ${JSON.stringify(defaultDispWeight)};
+        let currentMaxSlopePct = data.maxSlopePct ?? ${JSON.stringify(maxSlopePct)};
         const MS_LOG_MIN = data.msLogMin;
         const MS_LOG_MAX = data.msLogMax;
         const msSliderToVal = (pos) => Math.exp(MS_LOG_MIN + (pos / 1000) * (MS_LOG_MAX - MS_LOG_MIN));
 
-        let currentLookbackBars = data.lookbackBars ?? lookbackBars;
+        let currentLookbackBars = data.lookbackBars ?? ${JSON.stringify(lookbackBars)};
         const LB_LOG_MIN = data.lbLogMin;
         const LB_LOG_MAX = data.lbLogMax;
         const lbSliderToVal = (pos) => Math.round(Math.exp(LB_LOG_MIN + (pos / 1000) * (LB_LOG_MAX - LB_LOG_MIN)));
@@ -345,7 +346,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const gainSliderToVal = (pos) => Math.exp(GAIN_LOG_MIN + (pos / 1000) * (GAIN_LOG_MAX - GAIN_LOG_MIN));
         const gainValToSlider = (val) => Math.round((Math.log(Math.max(Math.exp(GAIN_LOG_MIN), val)) - GAIN_LOG_MIN) / (GAIN_LOG_MAX - GAIN_LOG_MIN) * 1000);
 
-        let currentClipPct = data.clipPct;
+        let currentClipPct = data.clipPct ?? ${JSON.stringify(defaultClipPct)};
         const maxAmaSlope = data.amaPercentiles[data.amaPercentiles.length - 1];
         let currentAmaClipThreshold = currentClipPct === 0 ? maxAmaSlope : data.amaPercentiles[100 - currentClipPct];
         let currentKalClipThreshold = currentClipPct === 0 ? Infinity : data.kalPercentiles[100 - currentClipPct];
@@ -402,6 +403,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const echoCombinedSell = new Array(data.dates.length).fill(null);
         const echoCombinedBuy  = new Array(data.dates.length).fill(null);
         const currentMults    = new Array(data.dates.length).fill(null);
+        let currentOutputAxisMax = 0.5;
 
         function recalcKalmanVelocity() {
             const blend = Math.max(0, Math.min(200, currentKalmanSmoothPct)) / 100;
@@ -547,7 +549,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             const mo = currentGain;
             const dw = currentDw;
             const lb = currentLookbackBars;
-            const amaReadyBar = Math.max(0, data.amaErPeriod ?? 0) + lb;
+            const amaReadyBar = Math.max(0, data.amaErPeriod ?? ${JSON.stringify(MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod)}) + lb;
             const acl = currentAmaClipThreshold;
             const kcl = currentKalClipThreshold;
 
@@ -603,6 +605,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         function recalcWeights() {
             // Normalize each channel to its own peak so alpha is a pure ratio knob
             // and gain is the sole amplitude controller
+            currentOutputAxisMax = 0.5;
             let aMax = 0, kMax = 0;
             for (let i = 0; i < data.realBarCount; i++) {
                 if (dynamicAmaOff[i] !== null) aMax = Math.max(aMax, Math.abs(dynamicAmaOff[i]));
@@ -626,10 +629,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     // Clamp to 1.0 max: regime only dampens, never amplifies
                     const finalMult = Math.abs(rawMult - 1.0) >= ABSOLUTE_THRESHOLD ? Math.min(rawMult, 1.0) : 1.0;
                     currentMults[i] = finalMult;
-                    const off = Math.max(-OFFSET_CLAMP, Math.min(OFFSET_CLAMP, rawOff * finalMult));
+                    const off = Math.abs(rawOff * finalMult) < MIN_OUTPUT_THRESHOLD ? 0 : (rawOff * finalMult);
                     combinedOff[i] = Math.round(off * 1000) / 1000;
                     combinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL + off) * 100) / 100));
                     combinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY - off) * 100) / 100));
+                    currentOutputAxisMax = Math.max(currentOutputAxisMax, Math.abs(off));
                 }
             }
             const confirmBars = Math.max(0, Math.min(5, currentSignalConfirmBars));
@@ -689,6 +693,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 echoCombinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL + latchedOff) * 100) / 100));
                 echoCombinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY - latchedOff) * 100) / 100));
             }
+
+            for (let i = 0; i < data.dates.length; i++) {
+                if (combinedOff[i] !== null) currentOutputAxisMax = Math.max(currentOutputAxisMax, Math.abs(combinedOff[i]));
+                if (echoCombinedOff[i] !== null) currentOutputAxisMax = Math.max(currentOutputAxisMax, Math.abs(echoCombinedOff[i]));
+            }
         }
         recalcInputs();
         recalcWeights();
@@ -721,6 +730,22 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 if (!next) return;
                 [priceChart, amaChart, kalmanChart, outputChart].forEach(c => c.batch(() => c.setScale('x', next)));
             });
+        }
+
+        function refreshChartsPreservingZoom() {
+            const xs = outputChart?.scales?.x;
+            const savedX = xs ? {
+                min: Number.isFinite(xs.min) ? xs.min : xMin,
+                max: Number.isFinite(xs.max) ? xs.max : xMax,
+            } : null;
+
+            amaChart.setData([data.dates, dynamicAmaSlopePct], false);
+            kalmanChart.setData([data.dates, currentKalmanVelocityPct, data.kalmanDisplacementPct], false);
+            outputChart.setData([data.dates, combinedOff, echoCombinedOff], false);
+
+            if (savedX) {
+                [priceChart, amaChart, kalmanChart, outputChart].forEach(c => c.batch(() => c.setScale('x', savedX)));
+            }
         }
 
         function bindWheelZoom(chart) {
@@ -1053,7 +1078,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     makeTimeAxis(true),
                     { scale: 'ow', stroke: '#30363d', grid: { stroke: '#1c2128', dash: [4, 4] }, ticks: { stroke: '#30303d', width: 1 }, size: Y_AXIS_SIZE, font: '11px Segoe UI, sans-serif',
                       values: (u, v) => v.map(x => x != null ? (x >= 0 ? '+' : '') + x.toFixed(2) : ''),
-                      splits: () => { const m = 0.5; return [-m, -m/2, 0, m/2, m]; } }
+                      splits: () => { const m = Math.max(0.5, currentOutputAxisMax || 0.5); return [-m, -m/2, 0, m/2, m]; } }
                 ],
                 cursor: cursorCfg,
                 hooks: { draw: [
@@ -1078,25 +1103,17 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 bindPan(chart);
             });
 
-            function onSliderChange() {
-                recalcInputs();
-                recalcWeights();
-                const xs = outputChart.scales.x;
-                const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
-                amaChart.setData([data.dates, dynamicAmaSlopePct]);
-                kalmanChart.setData([data.dates, currentKalmanVelocityPct, data.kalmanDisplacementPct]);
-                outputChart.setData([data.dates, combinedOff, echoCombinedOff]);
-                if (savedX) outputChart.setScale('x', savedX);
-            }
+        function onSliderChange() {
+            recalcInputs();
+            recalcWeights();
+            refreshChartsPreservingZoom();
+        }
 
             document.getElementById('alpha-slider').addEventListener('input', (e) => {
                 currentAlpha = parseInt(e.target.value, 10) / 100;
                 document.getElementById('alpha-value').textContent = currentAlpha.toFixed(2);
                 recalcWeights();
-                const xs = outputChart.scales.x;
-                const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
-                outputChart.setData([data.dates, combinedOff, echoCombinedOff]);
-                if (savedX) outputChart.setScale('x', savedX);
+                refreshChartsPreservingZoom();
             });
 
             document.getElementById('dw-slider').addEventListener('input', (e) => {
@@ -1177,10 +1194,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 currentRegimeSensitivity = parseInt(e.target.value, 10) / 100;
                 document.getElementById('regime-value').textContent = currentRegimeSensitivity.toFixed(2);
                 recalcWeights();
-                const xs = outputChart.scales.x;
-                const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
-                outputChart.setData([data.dates, combinedOff, echoCombinedOff]);
-                if (savedX) outputChart.setScale('x', savedX);
+                refreshChartsPreservingZoom();
             });
 
 function applyParams(p, btn) {
@@ -1259,9 +1273,7 @@ function applyParams(p, btn) {
                 }
                 recalcInputs();
                 recalcWeights();
-                amaChart.setData([data.dates, dynamicAmaSlopePct]);
-                kalmanChart.setData([data.dates, currentKalmanVelocityPct, data.kalmanDisplacementPct]);
-                outputChart.setData([data.dates, combinedOff, echoCombinedOff]);
+                refreshChartsPreservingZoom();
                 if (btn) { btn.textContent = 'pasted!'; btn.classList.add('pasted'); setTimeout(() => { btn.textContent = 'paste'; btn.classList.remove('pasted'); }, 1500); }
             }
 

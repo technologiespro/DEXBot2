@@ -6,7 +6,7 @@
  * Computes the symmetric volatility shift used by the market adapter.
  *
  * Signal path:
- *   ATR(14) -> weightVariance = atr / amaPrice
+ *   ATR(period, default 14) -> weightVariance = atr / amaPrice
  *   rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * volatilityScaleX
  *   clampedRawDelta = clamp(rawSymmetricDelta, -DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP, 0)
  *   symmetricDelta = |clampedRawDelta| < volatilityThreshold ? 0 : clampedRawDelta
@@ -31,19 +31,28 @@ const { generateHTML } = require('./volatility_detection/volatility_chart_genera
 const { MARKET_ADAPTER } = require('../modules/constants');
 
 const AMA_CONFIG = MARKET_ADAPTER.AMAS.AMA3;
-const ATR_PERIOD = 14;
+const DEFAULT_ATR_PERIOD = MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT;
 const MIN_WEIGHT = MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT;
 const MAX_WEIGHT = MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT;
 const DEFAULT_THRESHOLD = MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
     ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD;
 const DEFAULT_CLAMP = MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP;
+const MIN_ATR_PERIOD = 3;
+const MAX_ATR_PERIOD = 30;
 const DEFAULT_CHART_DIR = path.join(__dirname, 'charts');
 const DEFAULT_CHART_FILE = path.join(DEFAULT_CHART_DIR, 'volatility_chart.html');
 
-function computeATRSeries(candles, period = ATR_PERIOD) {
+function normalizeAtrPeriod(period) {
+    const n = Math.round(Number(period));
+    if (!Number.isFinite(n)) return DEFAULT_ATR_PERIOD;
+    return Math.max(MIN_ATR_PERIOD, Math.min(MAX_ATR_PERIOD, n));
+}
+
+function computeATRSeries(candles, period = DEFAULT_ATR_PERIOD) {
     const atrs = [];
     let prevClose = Array.isArray(candles[0]) ? candles[0][4] : 0;
     let atrVal = 0;
+    const safePeriod = normalizeAtrPeriod(period);
 
     for (let i = 0; i < candles.length; i++) {
         const c = candles[i];
@@ -56,10 +65,10 @@ function computeATRSeries(candles, period = ATR_PERIOD) {
             continue;
         }
         const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
-        if (i <= period) {
+        if (i <= safePeriod) {
             atrVal = atrVal === 0 ? tr : (atrVal * (i - 1) + tr) / i;
         } else {
-            atrVal = (atrVal * (period - 1) + tr) / period;
+            atrVal = (atrVal * (safePeriod - 1) + tr) / safePeriod;
         }
         atrs.push(atrVal);
         prevClose = close;
@@ -74,6 +83,7 @@ function parseArgs() {
         source: { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         chartFile: DEFAULT_CHART_FILE,
         threshold: DEFAULT_THRESHOLD,
+        atrPeriod: DEFAULT_ATR_PERIOD,
         exponent: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
         scaleX: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
         clamp: DEFAULT_CLAMP,
@@ -90,6 +100,10 @@ function parseArgs() {
         }
         else if (arg === '--chart') config.chartFile = args[++i];
         else if (arg === '--threshold') config.threshold = parseFloat(args[++i]);
+        else if (arg === '--atr-period') {
+            const next = parseInt(args[++i], 10);
+            if (Number.isFinite(next)) config.atrPeriod = normalizeAtrPeriod(next);
+        }
         else if (arg === '--exp') config.exponent = parseFloat(args[++i]);
         else if (arg === '--scale-x') config.scaleX = parseFloat(args[++i]);
         else if (arg === '--clamp') config.clamp = parseFloat(args[++i]);
@@ -140,7 +154,8 @@ async function main() {
 
         const closes = candles.map(c => Array.isArray(c) ? c[4] : 0);
         const ama3Values = calculateAMA(closes, AMA_CONFIG);
-        const atrs = computeATRSeries(candles, ATR_PERIOD);
+        const atrPeriod = normalizeAtrPeriod(config.atrPeriod);
+        const atrs = computeATRSeries(candles, atrPeriod);
 
         const allResults = [];
         for (let i = 0; i < candles.length; i++) {
@@ -166,11 +181,13 @@ async function main() {
 
         const html = generateHTML({
             allResults,
-            atrPeriod: ATR_PERIOD,
+            candles,
+            atrPeriod: config.atrPeriod,
             volatilityThreshold: config.threshold,
             volatilityExponent: config.exponent,
             volatilityScaleX: config.scaleX,
             volatilityClamp: config.clamp,
+            atrPeriod,
             minWeight: MIN_WEIGHT,
             maxWeight: MAX_WEIGHT,
             marketAdapter: MARKET_ADAPTER,

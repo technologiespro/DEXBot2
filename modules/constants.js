@@ -596,7 +596,7 @@ let MARKET_ADAPTER = {
     // Lower values react faster to recent price changes.
     // Higher values smooth the signal and require a more sustained move.
     // nob: lb (Lookback Bars)
-    DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: 1,
+    DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: 8,
 
     // DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: Trend size that counts as "full strength" for AMA.
     // Lower values make the AMA channel reach maximum influence more easily.
@@ -627,13 +627,20 @@ let MARKET_ADAPTER = {
     // Higher values make dynamic weights more aggressive.
     // Lower values keep weights closer to the static baseline.
     // nob: gain
-    DYNAMIC_WEIGHT_GAIN: 0.5,
+    DYNAMIC_WEIGHT_GAIN: 0.8,
 
     // DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP: Maximum directional offset away from neutral.
+    // Overridable per market pair or per bot via market_adapter_settings.json.
     DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP: 0.5,
 
     // DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP: Maximum symmetric downward shift from volatility.
+    // Overridable per market pair or per bot via market_adapter_settings.json.
     DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP: 0.5,
+
+    // DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT: ATR lookback used by the live volatility penalty
+    // and the volatility research chart. 14 is the standard Wilder ATR window.
+    // Overridable per market pair or per bot via market_adapter_settings.json.
+    DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT: 14,
 
     // DYNAMIC_WEIGHT_MIN_WEIGHT / MAX_WEIGHT: Final weight clamp after all adjustments.
     DYNAMIC_WEIGHT_MIN_WEIGHT: -1,
@@ -648,11 +655,18 @@ let MARKET_ADAPTER = {
 
     // Shared Kalman tuning defaults used by both the research HTML and the live dynamic-weight
     // market adapter so both paths start from the same smoothing and echo behavior.
+    DYNAMIC_WEIGHT_KALMAN_R_NOISE_DEFAULT: 0.05,
+    DYNAMIC_WEIGHT_KALMAN_Q_TACTICAL_DEFAULT: 0.01,
+    DYNAMIC_WEIGHT_KALMAN_Q_MODAL_DEFAULT: 0.0001,
     DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT: 100,
     DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT: 2.0,
     DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT: 1.5,
     DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT: 100,
     DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT: 1,
+
+    // DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT: Minimum raw regime multiplier deviation before
+    // the dampening branch is allowed to reduce the output.
+    DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT: 0,
 
     // DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: Legacy dynamic-weight tuning constant kept for
     // backward-compatible config parsing. The active live signal path currently applies ATR

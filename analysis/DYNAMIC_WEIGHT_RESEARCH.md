@@ -35,7 +35,7 @@ Variables used by the live and research implementations:
 - `volatilityExponent` = power applied to the variance
 - `volatilityScaleX` = penalty multiplier in x-factor units (10x default, 2x–50x in the volatility chart)
 - `volatilityThreshold` = minimum absolute shift before the penalty is allowed through
-- `MAX_SYMMETRIC_SHIFT` / `DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP` = hard cap on the downward shift
+- `MAX_SYMMETRIC_SHIFT` / `DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP` = default cap on the downward shift (overrideable in live settings)
 
 Formula:
 
@@ -133,8 +133,8 @@ Output: `analysis/charts/dynamic_weight_chart.html` (open in browser)
 | `--chart` | `analysis/charts/dynamic_weight_chart.html` | Output HTML path |
 | `--alpha` | `0.5` | Initial α blend (0 = pure Kalman, 1 = pure AMA) |
 | `--dw` | `0.50` | Initial displacement weight (0 = pure velocity, 1 = full displacement) |
-| `--lb` | `1` | Initial lookback bars (1-32) for AMA slope calculation |
-| `--gain` | `0.5` | Initial gain multiplier |
+| `--lb` | `8` | Initial lookback bars (1-32) for AMA slope calculation |
+| `--gain` | `0.8` | Initial gain multiplier |
 | `--clip` | `10` | Initial clip percentile |
 | `--quiet` | `false` | Suppress console output |
 
@@ -188,14 +188,14 @@ All panels share aligned vertical time grid lines, and the bottom output panel s
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
 | **nz%** | 0–1 | 0.00 | Neutral zone: dead-band below which offset is forced to 0 |
-| **lb** | 1–32 | 1 | Logarithmic. Lookback bars for AMA slope calculation |
+| **lb** | 1–32 | 8 | Logarithmic. Lookback bars for AMA slope calculation |
 | **maxS%** | 0.05–15 | 0.5 | Logarithmic. Gear ratio: slope% at which the output saturates |
 | **clip%** | 0–55 | 10 | Percentile clip: filters extreme inputs (0 = off) |
 
 ### Output Controls
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
-| **gain** | 0.25–2.0 | 0.5 | Logarithmic. Amplitude multiplier on normalized blend |
+| **gain** | 0.25–2.0 | 0.8 | Logarithmic. Amplitude multiplier on normalized blend |
 | **regi** | 0–2 | 1.0 | Regime sensitivity: exponent applied to Hurst+PE multiplier |
 
 ## Copy / Paste Parameters
@@ -274,10 +274,14 @@ Each channel is normalized to its own peak before blending, so α is a pure rati
 aMax  = max(|amaOff|) over all bars
 kMax  = max(|kalOff|) over all bars
 rawOff = (α × (amaOff / aMax) + (1 − α) × (kalOff / kMax)) × gain
-off   = clamp(rawOff × finalMult, ±0.5)
+off   = rawOff × finalMult
 sellW = 0.5 + off
 buyW  = 0.5 − off
 ```
+
+The research chart now plots the unclipped `off` series so large moves stay visible.
+The live market adapter still applies its own ±0.5 clamp before persisting the runtime
+weights.
 
 ## Parameter Relationships
 

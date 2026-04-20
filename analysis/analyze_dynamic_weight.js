@@ -35,17 +35,18 @@ const AMA_WEIGHT_CONFIG = {
     maxSlopePct:            MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
     neutralZonePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
     volatilityExponent:     MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
-    volatilityScaleX: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
+    volatilityScaleX:       MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
     volatilityThreshold:    MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
         ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
-    maxSlopeOffset:         0.5,
+    maxSlopeOffset:         MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP,
+    maxVolatilityOffset:    MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP,
 };
 
 // Kalman configuration
 const KALMAN_CONFIG = {
-    rNoise: 0.05,
-    qTactical: 0.01,
-    qModal: 0.0001,
+    rNoise: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_R_NOISE_DEFAULT,
+    qTactical: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_TACTICAL_DEFAULT,
+    qModal: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_MODAL_DEFAULT,
 };
 
 
@@ -169,6 +170,7 @@ async function main() {
                 volatilityScaleX: AMA_WEIGHT_CONFIG.volatilityScaleX,
                 volatilityThreshold: AMA_WEIGHT_CONFIG.volatilityThreshold,
                 maxSlopeOffset: AMA_WEIGHT_CONFIG.maxSlopeOffset,
+                maxVolatilityOffset: AMA_WEIGHT_CONFIG.maxVolatilityOffset,
             });
 
             allResults[i].amaPrice = amaPrice;
@@ -195,12 +197,14 @@ async function main() {
             clipPct: config.clipPct,
             regimeSensitivity: MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY,
             dispScaleMinPct:  config.dispScaleMinPct  ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT,
+            minOutputThreshold: MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD,
             marketAdapter: {
                 alpha:                   MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA,
                 gain:                    MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN,
                 dispWeight:              MARKET_ADAPTER.DYNAMIC_WEIGHT_DW,
                 clipPercentile:         MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE,
                 regimeSensitivity:       MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY,
+                minOutputThreshold:      MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD,
                 amaLookbackBars:        MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
                 amaMaxSlopePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
                 amaNeutralZonePct:      MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,

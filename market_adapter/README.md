@@ -178,8 +178,9 @@ classify the trend as `UP`, `DOWN`, or `NEUTRAL` and derive a weight bias.
 
 ### 4. ATR Volatility
 
-`calculateATR(candles, 14)` (in `core/strategies/atr/calculator.js`) computes the
-14-period Average True Range.
+`calculateATR(candles, MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT)` (in
+`core/strategies/atr/calculator.js`) computes the ATR used by the volatility branch.
+The built-in default is `14`.
 
 `weightVariance = atr / amaPrice` — a normalized volatility ratio used as a symmetric
 weight variance input.
@@ -205,12 +206,13 @@ The volatility branch is intentionally separate from the directional AMA/Kalman 
 
 Variable mapping:
 
-- `atr` = `calculateATR(candles, 14)`
+- `atr` = `calculateATR(candles, MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT)`
 - `weightVariance` = `atr / amaPrice`
 - `volatilityExponent` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT`
 - `volatilityScaleX` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT` (10x default, 2x–50x in the volatility chart)
 - `volatilityThreshold` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD` or legacy `DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD`
-- `MAX_SYMMETRIC_SHIFT` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP`
+- `MAX_SYMMETRIC_SHIFT` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP` (default 0.5, overrideable per pair/bot via `maxVolatilityOffset`)
+- `atrPeriod` = `MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT` (default 14, adjustable in the volatility research chart from 3 to 30)
 
 Implementation shape:
 
@@ -312,11 +314,18 @@ The main runtime knobs are:
 
 - `alpha` - AMA vs Kalman blend
 - `dw` - Kalman displacement weighting (default 0.50)
-- `gain` - output amplitude (default 0.5)
+- `gain` - output amplitude (default 0.8)
+- `maxSlopeOffset` - cap for the asymmetric trend offset
+- `maxVolatilityOffset` - cap for the symmetric ATR penalty
+- `absoluteThreshold` - dead-band before regime filtering is applied
+- `atrPeriod` - ATR lookback used by the volatility penalty
+- `volatilityExponent` - exponent for the ATR penalty
+- `volatilityScaleX` - scale factor for the ATR penalty
+- `volatilityThreshold` - minimum penalty before the volatility shift applies
 - `kalmanSmoothPct` - raw-vs-smoothed Kalman blend (0-200; 100 = normal adaptive smoothing)
 - `kalmanDispScaleMult` - displacement scale multiplier
 - `kalmanDispThresholdMult` - displacement threshold multiplier
-- `lookbackBars` - AMA slope lookback (default 1)
+- `lookbackBars` - AMA slope lookback (default 8)
 - `kalmanSmoothSpanPct` - adaptive EMA span ratio
 - `signalConfirmBars` - output/signal latch confirmation bars
 

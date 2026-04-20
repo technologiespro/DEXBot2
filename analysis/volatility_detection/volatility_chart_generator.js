@@ -26,6 +26,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
     const defaultThreshold = data.volatilityThreshold ?? volatilityCfg.volatilityThreshold
         ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
         ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD;
+    const defaultAtrPeriod = data.atrPeriod ?? volatilityCfg.atrPeriod ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT;
     const defaultExponent = data.volatilityExponent ?? volatilityCfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
     const defaultScaleX = data.volatilityScaleX ?? volatilityCfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT;
     const defaultClamp = data.volatilityClamp ?? volatilityCfg.volatilityClamp ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP;
@@ -38,7 +39,8 @@ function generateHTML(data, title = 'ATR Volatility Research') {
     const dates = results.map((r, i) => toEpochSeconds(r.timestamp || Date.now(), i));
     const prices = results.map((r) => r.price);
     const ama3Prices = results.map((r) => r.ama3Price ?? null);
-    const varianceSeries = results.map((r) => r.weightVariance ?? null);
+    const baseVarianceSeries = results.map((r) => r.weightVariance ?? null);
+    const candleRows = Array.isArray(data.candles) ? data.candles : [];
 
     const realBarCount = results.length;
     const lastDate = dates[dates.length - 1];
@@ -46,14 +48,16 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         dates.push(lastDate + (i * interval));
         prices.push(null);
         ama3Prices.push(null);
-        varianceSeries.push(null);
+        baseVarianceSeries.push(null);
     }
 
     const payload = {
         dates,
         prices,
         ama3Prices,
-        varianceSeries,
+        candles: candleRows,
+        atrPeriod: defaultAtrPeriod,
+        varianceSeries: baseVarianceSeries,
         realBarCount,
         volatilityThreshold: defaultThreshold,
         volatilityExponent: defaultExponent,
@@ -97,23 +101,33 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         .u-cursor-y { border-top: 1px dashed rgba(255,255,255,0.3) !important; display: none; }
         .is-hovered .u-cursor-y { display: block; }
         .section-label { position: absolute; top: 8px; right: 12px; font-size: 9px; color: #30363d; text-transform: uppercase; letter-spacing: 1px; z-index: 10; pointer-events: none; }
-        .ctrl { pointer-events: auto; display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; }
+        .ctrl { pointer-events: auto; display: inline-flex; align-items: center; gap: 3px; margin-left: 0; }
         .ctrl label { color: #8b949e; font-size: 11px; min-width: 34px; text-align: right; }
-        .ctrl input[type="range"] { width: 145px; height: 3px; }
-        .ctrl .val { font-weight: bold; font-size: 11px; min-width: 44px; display: inline-block; text-align: right; }
+        .ctrl input[type="range"] { width: 138px; height: 3px; margin-right: 0; }
+        .ctrl .val { font-weight: bold; font-size: 11px; min-width: 36px; display: inline-block; text-align: right; margin-left: 0; }
         .ctrl.thr label { min-width: 26px; }
+        .ctrl.atr label { min-width: 28px; }
         .ctrl.exp label { min-width: 24px; }
         .ctrl.scale label { min-width: 38px; }
         .ctrl.clamp label { min-width: 36px; }
         .ctrl.thr input[type="range"] { accent-color: #8b949e; }
         .ctrl.thr .val { color: #8b949e; }
+        .ctrl.atr input[type="range"] { accent-color: #3fb950; }
+        .ctrl.atr .val { color: #3fb950; }
+        .ctrl.atr input[type="range"] { margin-right: -6px; }
         .ctrl.exp input[type="range"] { accent-color: #58a6ff; }
         .ctrl.exp .val { color: #58a6ff; }
-        .ctrl.scale input[type="range"] { width: 188px; accent-color: #f0883e; }
+        .ctrl.thr input[type="range"],
+        .ctrl.atr input[type="range"],
+        .ctrl.exp input[type="range"],
+        .ctrl.scale input[type="range"],
+        .ctrl.clamp input[type="range"] { width: 138px; }
+        .ctrl.scale input[type="range"] { accent-color: #f0883e; }
+        .ctrl.scale input[type="range"] { margin-right: 8px; }
         .ctrl.scale .val { color: #f0883e; }
         .ctrl.clamp input[type="range"] { accent-color: #a371f7; }
         .ctrl.clamp .val { color: #a371f7; }
-        .group-sep { border-left: 1px solid #30363d; margin-left: 4px; padding-left: 4px; display: inline-flex; align-items: center; height: 18px; }
+        .group-sep { border-left: 1px solid #30363d; margin-left: 2px; padding-left: 2px; display: inline-flex; align-items: center; height: 18px; }
         .signal-summary { margin-left: 8px; min-width: 313px; max-width: 450px; flex: 0 0 338px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; justify-content: center; }
         .signal-bar { display: flex; width: 100%; height: 15px; overflow: hidden; border-radius: 999px; background: #10151d; border: 1px solid #30363d; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 0 10px rgba(88,166,255,0.08); }
         .signal-seg { position: relative; height: 100%; min-width: 1px; transition: width 0.18s ease; box-shadow: inset 0 0 8px rgba(255,255,255,0.14), 0 0 8px currentColor; }
@@ -157,6 +171,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
                 <div class="legend-item">Weff: <span id="l-weff" class="legend-val" style="color:#3fb950;">-</span></div>
                 <div class="group-sep"></div>
                 <div class="ctrl thr"><label for="threshold-slider">thr</label><input type="range" id="threshold-slider" min="0" max="500" step="1" value="${Math.round(defaultThreshold * 1000)}"><span class="val" id="threshold-value">${defaultThreshold.toFixed(3)}</span></div>
+                <div class="ctrl atr"><label for="atr-slider">atr</label><input type="range" id="atr-slider" min="3" max="30" step="1" value="${Math.round(defaultAtrPeriod)}"><span class="val" id="atr-value">${Math.round(defaultAtrPeriod)}</span></div>
                 <div class="ctrl clamp"><label for="clamp-slider">clamp</label><input type="range" id="clamp-slider" min="100" max="1000" step="1" value="${Math.round(defaultClamp * 1000)}"><span class="val" id="clamp-value">${defaultClamp.toFixed(3)}</span></div>
                 <div class="ctrl exp"><label for="exponent-slider">exp</label><input type="range" id="exponent-slider" min="0" max="1000" step="1" value="0"><span class="val" id="exponent-value">${defaultExponent.toFixed(3)}</span></div>
                 <div class="ctrl scale"><label for="scale-slider">scaleX</label><input type="range" id="scale-slider" min="0" max="1000" step="1" value="0"><span class="val" id="scale-value">${defaultScaleX.toFixed(2)}x</span></div>
@@ -191,7 +206,10 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         const EXP_LOG_MAX = Math.log(1.0);
         const SCALE_LOG_MIN = Math.log(1.0);
         const SCALE_LOG_MAX = Math.log(100.0);
+        const candleRows = Array.isArray(data.candles) ? data.candles : [];
+        const baseVarianceSeries = Array.isArray(data.varianceSeries) ? data.varianceSeries : [];
 
+        let currentAtrPeriod = Math.max(3, Math.min(30, Math.round(data.atrPeriod ?? ${JSON.stringify(defaultAtrPeriod)})));
         let currentThreshold = data.volatilityThreshold;
         let currentExponent = data.volatilityExponent;
         let currentScaleX = data.volatilityScaleX;
@@ -255,11 +273,56 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             return Math.max(0.1, Math.min(1.0, pos / 1000));
         }
 
+        function computeATRSeries(candles, period = 14) {
+            const atrs = [];
+            if (!Array.isArray(candles) || candles.length === 0) return atrs;
+
+            const safePeriod = Math.max(1, Math.round(period));
+            let prevClose = Array.isArray(candles[0]) ? Number(candles[0][4]) : 0;
+            let atrVal = 0;
+
+            for (let i = 0; i < candles.length; i++) {
+                const c = candles[i];
+                const high = Array.isArray(c) ? Number(c[2]) : 0;
+                const low = Array.isArray(c) ? Number(c[3]) : 0;
+                const close = Array.isArray(c) ? Number(c[4]) : 0;
+                if (i === 0) {
+                    atrs.push(0);
+                    prevClose = close;
+                    continue;
+                }
+                const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+                if (i <= safePeriod) {
+                    atrVal = atrVal === 0 ? tr : (atrVal * (i - 1) + tr) / i;
+                } else {
+                    atrVal = (atrVal * (safePeriod - 1) + tr) / safePeriod;
+                }
+                atrs.push(atrVal);
+                prevClose = close;
+            }
+
+            return atrs;
+        }
+
+        function rebuildVarianceSeries() {
+            if (!candleRows.length) return baseVarianceSeries.slice();
+
+            const atrSeries = computeATRSeries(candleRows, currentAtrPeriod);
+            const next = new Array(data.dates.length).fill(null);
+            for (let i = 0; i < data.realBarCount; i++) {
+                const amaPrice = data.ama3Prices[i];
+                const atr = atrSeries[i] ?? 0;
+                next[i] = amaPrice > 0 ? atr / amaPrice : 0;
+            }
+            return next;
+        }
+
         function toPlotLog(values) {
             return values.map((v) => (v != null && v > 0 ? v : null));
         }
 
-        const variancePlot = toPlotLog(data.varianceSeries);
+        let varianceSeries = rebuildVarianceSeries();
+        const variancePlot = toPlotLog(varianceSeries);
 
         let rawDeltaArr = new Array(data.dates.length).fill(null);
         let deltaArr = new Array(data.dates.length).fill(null);
@@ -280,6 +343,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         }
 
         function recalcShift() {
+            varianceSeries = rebuildVarianceSeries();
             const effectiveClamp = Number.isFinite(currentClamp) && currentClamp >= 0.1 ? currentClamp : ${JSON.stringify(defaultClamp)};
             let below = 0;
             let mid = 0;
@@ -292,7 +356,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
                     weffArr[i] = null;
                     continue;
                 }
-                const r = calcShift(data.varianceSeries[i]);
+                const r = calcShift(varianceSeries[i]);
                 rawDeltaArr[i] = r.raw;
                 deltaArr[i] = r.delta;
                 weffArr[i] = r.weff;
@@ -566,16 +630,19 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             if (idx == null || idx >= data.realBarCount) return;
             document.getElementById('l-price').textContent = fmtNum(data.prices[idx], 6);
             document.getElementById('l-ama3').textContent = fmtNum(data.ama3Prices[idx], 6);
-            const variance = data.varianceSeries[idx];
+            const variance = varianceSeries[idx];
             document.getElementById('l-var').textContent = variance == null ? '-' : fmtNum(variance, 6) + ' (' + fmtNum(variance * 100, 4) + '%)';
             document.getElementById('l-delta').textContent = fmtSigned(deltaArr[idx], 3);
             document.getElementById('l-weff').textContent = fmtNum(weffArr[idx], 3);
         }
 
         function init() {
+            currentAtrPeriod = Math.max(3, Math.min(30, Math.round(currentAtrPeriod)));
             currentExponent = Math.max(Math.exp(EXP_LOG_MIN), Math.min(Math.exp(EXP_LOG_MAX), currentExponent));
             currentScaleX = Math.max(Math.exp(SCALE_LOG_MIN), Math.min(Math.exp(SCALE_LOG_MAX), currentScaleX));
             currentClamp = Math.max(0.1, Math.min(1.0, currentClamp));
+            document.getElementById('atr-slider').value = currentAtrPeriod;
+            document.getElementById('atr-value').textContent = String(currentAtrPeriod);
             document.getElementById('threshold-slider').value = Math.round(currentThreshold * 1000);
             document.getElementById('exponent-slider').value = expValToSlider(currentExponent);
             document.getElementById('scale-slider').value = scaleValToSlider(currentScaleX);
@@ -684,15 +751,28 @@ function generateHTML(data, title = 'ATR Volatility Research') {
                 bindPan(chart);
             });
 
+            function refreshChartsPreservingZoom() {
+                const xs = shiftChart.scales.x;
+                const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
+                varianceChart.setData([data.dates, toPlotLog(varianceSeries)], false);
+                shiftChart.setData([data.dates, rawDeltaArr, deltaArr], false);
+                if (savedX) {
+                    [varianceChart, shiftChart].forEach((chart) => chart.batch(() => chart.setScale('x', savedX)));
+                }
+            }
+
             function applyShiftFromSliders() {
                 recalcShift();
                 updateSignalSummary();
-                const xs = shiftChart.scales.x;
-                const savedX = xs ? { min: Number.isFinite(xs.min) ? xs.min : xMin, max: Number.isFinite(xs.max) ? xs.max : xMax } : null;
-                shiftChart.setData([data.dates, rawDeltaArr, deltaArr]);
-                if (savedX) shiftChart.setScale('x', savedX);
+                refreshChartsPreservingZoom();
                 updateLegend(shiftChart.cursor.idx ?? data.realBarCount - 1);
             }
+
+            document.getElementById('atr-slider').addEventListener('input', (e) => {
+                currentAtrPeriod = parseInt(e.target.value, 10);
+                document.getElementById('atr-value').textContent = String(currentAtrPeriod);
+                applyShiftFromSliders();
+            });
 
             document.getElementById('threshold-slider').addEventListener('input', (e) => {
                 currentThreshold = parseInt(e.target.value, 10) / 1000;
