@@ -4,13 +4,16 @@
  */
 'use strict';
 
+const { normalizeAtrPeriod } = require('../../config_normalizers');
+
 /**
  * Calculates ATR from candles (High, Low, Close).
  * @param {Array} candles - Array of [timestamp, open, high, low, close, volume]
  * @param {number} period - ATR period
  */
 function calculateATR(candles, period = 14) {
-  if (candles.length < period + 1) return 0;
+  const safePeriod = normalizeAtrPeriod(period);
+  if (candles.length < safePeriod + 1) return 0;
 
   let tr = [];
   for (let i = 1; i < candles.length; i++) {
@@ -20,9 +23,9 @@ function calculateATR(candles, period = 14) {
     tr.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
   }
 
-  let atr = tr.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  for (let i = period; i < tr.length; i++) {
-    atr = (atr * (period - 1) + tr[i]) / period;
+  let atr = tr.slice(0, safePeriod).reduce((a, b) => a + b, 0) / safePeriod;
+  for (let i = safePeriod; i < tr.length; i++) {
+    atr = (atr * (safePeriod - 1) + tr[i]) / safePeriod;
   }
   return atr;
 }

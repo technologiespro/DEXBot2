@@ -2,6 +2,10 @@
 
 const { calculateATR } = require('./strategies/atr/calculator');
 const { computeAmaSlopeWeights } = require('./strategies/ama_slope_model');
+const {
+    normalizeAtrPeriod,
+    normalizeMaxVolatilityOffset,
+} = require('./config_normalizers');
 const { computeRegimeMultiplier, bilinearInterpolate } = require('./strategies/regime_gate');
 const { calculateAMA } = require('../../analysis/ama_fitting/ama');
 const { KalmanTrendAnalyzer } = require('../../analysis/trend_detection/kalman_trend_analyzer');
@@ -193,7 +197,8 @@ class MarketAdapterService {
 
         // 2. ATR — used only for the symmetric volatility shift. The asymmetrical
         //    trend/Kalman branch stays ATR-free to match the research HTML.
-        const atr = calculateATR(nextCandles, 14);
+        const atrPeriod = normalizeAtrPeriod(cfg.atrPeriod);
+        const atr = calculateATR(nextCandles, atrPeriod);
         const weightVariance = amaPrice > 0 ? (atr / amaPrice) : 0;
 
         // 3. Dynamic weight computation — live path uses AMA + Kalman + regime gate,
@@ -201,11 +206,12 @@ class MarketAdapterService {
         const isDynamic = typeof deps.isBotDynamicWeightWhitelisted === 'function'
             && deps.isBotDynamicWeightWhitelisted(bot.botKey);
 
-        const lookbackBars = cfg.amaSlope?.lookbackBars ?? 72;
-        const clipPercentile = cfg.clipPercentile ?? 0;
+        const lookbackBars = cfg.amaSlope?.lookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
+        const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
         const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
-        const maxS = cfg.amaSlope?.maxSlopePct ?? 3.0;
-        const mo = cfg.maxSlopeOffset ?? 0.5;
+        const maxS = cfg.amaSlope?.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
+        const mo = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
+        const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
 
         // Compute separate clip thresholds for AMA (slopes) and Kalman (velocities)
         let amaClipThreshold = Infinity;
@@ -228,16 +234,17 @@ class MarketAdapterService {
             // Kalman clip threshold from velocity distribution (computed after Kalman run)
         }
 
-            const slopeCfg = {
-                ...(cfg.amaSlope || {}),
-                maxSlopeOffset:        cfg.maxSlopeOffset,
-                volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
-            volatilityScaleX: cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
-                volatilityThreshold:   cfg.volatilityThreshold
-                    ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
-                    ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
-                neutralZonePct:        nz,
-                clipPercentile,
+        const slopeCfg = {
+            ...(cfg.amaSlope || {}),
+            maxSlopeOffset:        cfg.maxSlopeOffset,
+            maxVolatilityOffset:   volatilityClamp,
+            volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
+            volatilityScaleX:      cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
+            volatilityThreshold:   cfg.volatilityThreshold
+                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD
+                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_THRESHOLD,
+            neutralZonePct:        nz,
+            clipPercentile,
             clipThreshold:         amaClipThreshold,
         };
 
@@ -253,9 +260,9 @@ class MarketAdapterService {
 
             // Kalman filter computation - collect per-bar results in single pass
             const kalman = new KalmanTrendAnalyzer({
-                rNoise: cfg.kalman?.rNoise ?? 0.05,
-                qTactical: cfg.kalman?.qTactical ?? 0.01,
-                qModal: cfg.kalman?.qModal ?? 0.0001,
+                rNoise: cfg.kalman?.rNoise ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_R_NOISE_DEFAULT,
+                qTactical: cfg.kalman?.qTactical ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_TACTICAL_DEFAULT,
+                qModal: cfg.kalman?.qModal ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_MODAL_DEFAULT,
             });
 
             const kalmanHistory = [];
@@ -267,7 +274,8 @@ class MarketAdapterService {
             const kalmanResult = kalmanHistory[kalmanHistory.length - 1];
 
             // Regime gate (Hurst + PE bilinear multiplier)
-            const regimeSensitivity = cfg.regimeSensitivity ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY ?? 0;
+            const regimeSensitivity = cfg.regimeSensitivity ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY;
+            const absoluteThreshold = cfg.absoluteThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT;
             let regimeResult = null;
             let regimeMultiplier = 1.0;
             const regimeMultipliers = new Array(closes.length).fill(1.0);
@@ -279,7 +287,9 @@ class MarketAdapterService {
                     hurstZoneBand: cfg.hurstZoneBand,
                     peNodes: cfg.peNodes,
                 });
-                regimeMultiplier = regimeResult.isReady ? regimeResult.multiplier : 1.0;
+                regimeMultiplier = regimeResult.isReady && Math.abs(regimeResult.multiplier - 1.0) >= absoluteThreshold
+                    ? regimeResult.multiplier
+                    : 1.0;
 
                 const hurstAnalyzer = new HurstAnalyzer(HURST_CONFIG);
                 const peAnalyzer = new PermutationEntropyAnalyzer(PE_CONFIG);
@@ -294,14 +304,15 @@ class MarketAdapterService {
                         hurstZoneBand: cfg.hurstZoneBand,
                         peNodes: cfg.peNodes,
                     });
-                    regimeMultipliers[i] = Math.min(Math.pow(baseMult, regimeSensitivity), 1.0);
+                    const rawMult = Math.min(Math.pow(baseMult, regimeSensitivity), 1.0);
+                    regimeMultipliers[i] = Math.abs(rawMult - 1.0) >= absoluteThreshold ? rawMult : 1.0;
                 }
             }
 
             // Research tool parameters
-            const alpha = cfg.alpha ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA ?? 0.5;
-            const dw = cfg.dw ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DW ?? 1.0;
-            const gain = cfg.gain ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN ?? 1.0;
+            const alpha = cfg.alpha ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA;
+            const dw = cfg.dw ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DW;
+            const gain = cfg.gain ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN;
             const kalmanSmoothPct = cfg.kalmanSmoothPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT;
             const kalmanDispScaleMult = cfg.kalmanDispScaleMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT;
             const kalmanDispThresholdMult = cfg.kalmanDispThresholdMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT;
@@ -386,7 +397,7 @@ class MarketAdapterService {
             // Build the same per-bar combined output series as the research chart, then
             // optionally latch it with signalConfirmBars before taking the last live value.
             const combinedOffSeries = new Array(closes.length).fill(0);
-            const offsetClamp = MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
+            const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
             for (let i = 0; i < closes.length; i++) {
                 const rawOff = (alpha * (amaOffsets[i] / aMax) + (1 - alpha) * (kalmanOffsets[i] / kMax)) * gain;
                 const off = Math.max(-offsetClamp, Math.min(offsetClamp, rawOff * regimeMultipliers[i]));
@@ -459,6 +470,9 @@ class MarketAdapterService {
                 alpha,
                 dw,
                 gain,
+                atrPeriod,
+                maxSlopeOffset: mo,
+                maxVolatilityOffset: volatilityClamp,
                 kalmanSmoothPct,
                 kalmanDispScaleMult,
                 kalmanDispThresholdMult,
@@ -481,8 +495,7 @@ class MarketAdapterService {
             // suppressed. The volatility penalty (symmetricDelta) is always applied independently.
             const minOutputThreshold = cfg.minOutputThreshold
                 ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD
-                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_TREND_THRESHOLD
-                ?? 0.25;
+                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_TREND_THRESHOLD;
             const belowMinOutputThreshold = Math.abs(finalOff) < minOutputThreshold;
 
             // Volatility penalty is the separate symmetric ATR shift. It is independent of
@@ -514,6 +527,9 @@ class MarketAdapterService {
                     alpha,
                     dw,
                     gain,
+                    atrPeriod,
+                    maxSlopeOffset: mo,
+                    maxVolatilityOffset: volatilityClamp,
                     kalmanSmoothPct,
                     kalmanDispScaleMult,
                     kalmanDispThresholdMult,
@@ -542,6 +558,9 @@ class MarketAdapterService {
                 alpha,
                 dw,
                 gain,
+                atrPeriod,
+                maxSlopeOffset: mo,
+                maxVolatilityOffset: volatilityClamp,
                 kalmanSmoothPct,
                 kalmanDispScaleMult,
                 kalmanDispThresholdMult,

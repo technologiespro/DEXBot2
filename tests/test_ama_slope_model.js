@@ -16,6 +16,16 @@ function flatSeries(n, value) {
 const SMALL_OPTS = { erPeriod: 10, lookbackBars: 10 };
 const MIN_LEN = 21; // erPeriod + lookbackBars + 1
 const MODEL_NEUTRAL_WEIGHT = 0.5;
+const HALF_POWER_VOL_OPTS = {
+    ...SMALL_OPTS,
+    volatilityExponent: 0.5,
+    volatilityScaleX: 0.5,
+};
+const HALF_POWER_SLOPE_VOL_OPTS = {
+    ...HALF_POWER_VOL_OPTS,
+    maxSlopePct: 3.0,
+    neutralZonePct: 0.15,
+};
 
 function derivedWeights(result) {
     return {
@@ -139,7 +149,7 @@ function testNegativeSlopeFullSaturation() {
 
 function testZeroVolatilityNoPenalty() {
     // weightVariance=0 → pow(0, 0.5)=0 → symmetricDelta=0 (no penalty, no bonus)
-    const opts = { ...SMALL_OPTS };
+    const opts = { ...HALF_POWER_VOL_OPTS };
     const result = computeAmaSlopeWeights(flatSeries(MIN_LEN, 100), 0, opts);
     assert.strictEqual(result.symmetricDelta, 0);
     assert.deepStrictEqual(derivedWeights(result), { sellW: 0.5, buyW: 0.5 });
@@ -148,7 +158,7 @@ function testZeroVolatilityNoPenalty() {
 function testBelowVolatilityThresholdSuppressed() {
     // weightVariance=0.01, exponent=0.5, scalePct=50 → sqrt(0.01)=0.1 * 0.5 = 0.05 → delta=-0.05
     // |0.05| < 0.1 threshold → suppressed to 0
-    const opts = { ...SMALL_OPTS };
+    const opts = { ...HALF_POWER_VOL_OPTS };
     const result = computeAmaSlopeWeights(flatSeries(MIN_LEN, 100), 0.01, opts);
     assert.strictEqual(result.symmetricDelta, 0);
     assert.deepStrictEqual(derivedWeights(result), { sellW: 0.5, buyW: 0.5 });
@@ -157,7 +167,7 @@ function testBelowVolatilityThresholdSuppressed() {
 function testAtVolatilityThresholdPasses() {
     // weightVariance=0.04, exponent=0.5, scalePct=50 → sqrt(0.04)=0.2 * 0.5 = 0.1 → delta=-0.1
     // |0.1| >= 0.1 threshold → passes through
-    const opts = { ...SMALL_OPTS };
+    const opts = { ...HALF_POWER_VOL_OPTS };
     const result = computeAmaSlopeWeights(flatSeries(MIN_LEN, 100), 0.04, opts);
     assert.strictEqual(result.symmetricDelta, -0.10);
     assert.deepStrictEqual(derivedWeights(result), { sellW: 0.40, buyW: 0.40 });
@@ -165,7 +175,7 @@ function testAtVolatilityThresholdPasses() {
 
 function testMidVolatilityPenalty() {
     // weightVariance=0.09, exponent=0.5, scalePct=50 → sqrt(0.09)=0.3 * 0.5 = 0.15 → delta=-0.15
-    const opts = { ...SMALL_OPTS };
+    const opts = { ...HALF_POWER_VOL_OPTS };
     const result = computeAmaSlopeWeights(flatSeries(MIN_LEN, 100), 0.09, opts);
     assert.strictEqual(result.symmetricDelta, -0.15);
     assert.deepStrictEqual(derivedWeights(result), { sellW: 0.35, buyW: 0.35 });
@@ -174,7 +184,7 @@ function testMidVolatilityPenalty() {
 function testHighVolatilityPenaltyMaxed() {
     // weightVariance=1.0, exponent=0.5, scalePct=50 → pow(1, 0.5)=1 * 0.5 = 0.5 → delta=-0.5
     // Clamped to the configured symmetric shift bound.
-    const opts = { ...SMALL_OPTS };
+    const opts = { ...HALF_POWER_VOL_OPTS };
     const result = computeAmaSlopeWeights(flatSeries(MIN_LEN, 100), 1.0, opts);
     assert.strictEqual(result.symmetricDelta, -0.5);
     assert.deepStrictEqual(derivedWeights(result), { sellW: 0.0, buyW: 0.0 });
@@ -182,21 +192,21 @@ function testHighVolatilityPenaltyMaxed() {
 
 function testVolatilityAboveMaxClamped() {
     // weightVariance=1.0 is already max (pow(1, 0.5) = 1), so same as testHighVolatilityPenaltyMaxed
-    const opts = { ...SMALL_OPTS };
+    const opts = { ...HALF_POWER_VOL_OPTS };
     const result = computeAmaSlopeWeights(flatSeries(MIN_LEN, 100), 1.0, opts);
     assert.strictEqual(result.symmetricDelta, -0.5);
 }
 
 function testVolatilityPenaltyNeverPositive() {
     // penalty is strictly ≤ 0 regardless of low ATR
-    const opts = { ...SMALL_OPTS };
+    const opts = { ...HALF_POWER_VOL_OPTS };
     const result = computeAmaSlopeWeights(flatSeries(MIN_LEN, 100), 0, opts);
     assert.ok(result.symmetricDelta <= 0, 'volatility penalty must never be positive');
 }
 
 function testCustomVolatilityThreshold() {
     // Custom threshold=0.2: delta=-0.15 should be suppressed
-    const opts = { ...SMALL_OPTS, volatilityThreshold: 0.2 };
+    const opts = { ...HALF_POWER_VOL_OPTS, volatilityThreshold: 0.2 };
     // weightVariance=0.09 → delta=-0.15 → |0.15| < 0.2 → suppressed
     const result = computeAmaSlopeWeights(flatSeries(MIN_LEN, 100), 0.09, opts);
     assert.strictEqual(result.symmetricDelta, 0);
@@ -214,13 +224,20 @@ function testInvalidWeightVarianceFallsBackToNoPenalty() {
     assert.deepStrictEqual(derivedWeights(nanValue), { sellW: 0.5, buyW: 0.5 });
 }
 
+function testInvalidMaxVolatilityOffsetFallsBackToDefaultClamp() {
+    const opts = { ...SMALL_OPTS, maxVolatilityOffset: -0.25, volatilityThreshold: 0.01 };
+    const result = computeAmaSlopeWeights(flatSeries(MIN_LEN, 100), 1.0, opts);
+    assert.strictEqual(result.symmetricDelta, -0.5, 'invalid clamp should fall back to the default symmetric cap');
+    assert.ok(result.symmetricDelta <= 0, 'invalid clamp must not invert the volatility penalty');
+}
+
 // ─── Combined slope + volatility ─────────────────────────────────────────────
 
 function testCombinedUptrendZeroVol() {
     // slopeOffset=+0.25 (partial UP), symmetricDelta=0 (no penalty at zero ATR)
     const values = flatSeries(MIN_LEN, 100);
     values[MIN_LEN - 1] = 101.5;
-    const opts = { ...SMALL_OPTS, maxSlopePct: 3.0, neutralZonePct: 0.15 };
+    const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const result = computeAmaSlopeWeights(values, 0, opts);
     assert.deepStrictEqual(derivedWeights(result), { sellW: 0.75, buyW: 0.25 });
 }
@@ -229,7 +246,7 @@ function testCombinedUptrendHighVol() {
     // slopeOffset=+0.5 (full UP), weightVariance=0.09, exponent=0.5, scalePct=50 → delta=-0.15
     const values = flatSeries(MIN_LEN, 100);
     values[MIN_LEN - 1] = 106;
-    const opts = { ...SMALL_OPTS, maxSlopePct: 3.0, neutralZonePct: 0.15 };
+    const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const result = computeAmaSlopeWeights(values, 0.09, opts);
     assert.deepStrictEqual(derivedWeights(result), { sellW: 0.85, buyW: -0.15 });
 }
@@ -238,7 +255,7 @@ function testClampAtMaxPenalty() {
     // Full UP slope (slopeOffset=0.5) + max penalty (symmetricDelta=-0.5)
     const values = flatSeries(MIN_LEN, 100);
     values[MIN_LEN - 1] = 106;
-    const opts = { ...SMALL_OPTS, maxSlopePct: 3.0, neutralZonePct: 0.15 };
+    const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const result = computeAmaSlopeWeights(values, 1.0, opts);
     assert.deepStrictEqual(derivedWeights(result), { sellW: 0.5, buyW: -0.5 });
 }
@@ -268,7 +285,7 @@ function testConfidenceDerivation() {
 function testNeutralSlopeVolatilityTable() {
     // exponent=0.5, scalePct=50: symmetricDelta = -weightVariance^0.5 * 0.5
     // threshold=0.1: penalty suppressed when |delta| < 0.1
-    const opts = { ...SMALL_OPTS, maxSlopePct: 3.0, neutralZonePct: 0.15 };
+    const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const flat = flatSeries(MIN_LEN, 100);
 
     // ATR/price = 0.00 → delta=0 → derived weights remain at neutral 0.50 / 0.50
@@ -299,7 +316,7 @@ function testNeutralSlopeVolatilityTable() {
 
 function testUptrendSlopeOffsetTable() {
     // slopeOffset ≈ +0.33: slopePct = 2% → slopeOffset = (2/3)*0.5 = 0.333... → 0.33 rounded
-    const opts = { ...SMALL_OPTS, maxSlopePct: 3.0, neutralZonePct: 0.15 };
+    const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const values = flatSeries(MIN_LEN, 100);
     values[MIN_LEN - 1] = 102; // slopePct = 2%
 
@@ -349,6 +366,7 @@ async function run() {
     testVolatilityPenaltyNeverPositive();
     testCustomVolatilityThreshold();
     testInvalidWeightVarianceFallsBackToNoPenalty();
+    testInvalidMaxVolatilityOffsetFallsBackToDefaultClamp();
     testCombinedUptrendZeroVol();
     testCombinedUptrendHighVol();
     testClampAtMaxPenalty();

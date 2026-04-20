@@ -59,6 +59,10 @@ const { readGeneralSettings } = require('../modules/general_settings');
 const { MARKET_ADAPTER } = require('../modules/constants');
 const { createBotKey } = require('../modules/account_orders');
 const { calculateAMA } = require('../analysis/ama_fitting/ama');
+const {
+    normalizeAtrPeriod,
+    normalizeMaxVolatilityOffset,
+} = require('./core/config_normalizers');
 const kibanaSource = require('./inputs/kibana_source');
 const { normalizePoolId } = kibanaSource;
 const { tradesToCandles, detectMissingCandleTimestamps } = require('./candle_utils');
@@ -90,6 +94,7 @@ const API_MAX_PAGE = 101;
 const DEFAULTS = {
     pollSeconds: 3600,
     deltaThresholdPercent: MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT,
+    absoluteThreshold: MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT,
     intervalSeconds: 3600,
     bootstrapLookbackHours: 720,
     nativeBackfillHours: 6,
@@ -108,6 +113,7 @@ const DEFAULTS = {
         maxSlopePct:   MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
         neutralZonePct: MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
     },
+    atrPeriod: MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT,
 };
 
 const WHITELIST_FILE = path.join(PROFILES_DIR, 'price_adapter_whitelist.json');
@@ -199,6 +205,11 @@ function resolveBotCfg(bot, globalCfg) {
         if (ps.sourceRetries != null) merged.sourceRetries = ps.sourceRetries;
         if (ps.retryDelayMs != null) merged.retryDelayMs = ps.retryDelayMs;
         if (ps.maxSlopeOffset != null) merged.maxSlopeOffset = ps.maxSlopeOffset;
+        if (ps.maxVolatilityOffset != null) {
+            merged.maxVolatilityOffset = normalizeMaxVolatilityOffset(ps.maxVolatilityOffset);
+        }
+        if (ps.atrPeriod != null) merged.atrPeriod = normalizeAtrPeriod(ps.atrPeriod);
+        if (ps.absoluteThreshold != null) merged.absoluteThreshold = ps.absoluteThreshold;
         if (ps.minOutputThreshold != null) merged.minOutputThreshold = ps.minOutputThreshold;
         if (ps.volatilityExponent != null) merged.volatilityExponent = ps.volatilityExponent;
         if (ps.volatilityScaleX != null) merged.volatilityScaleX = ps.volatilityScaleX;
@@ -237,6 +248,11 @@ function resolveBotCfg(bot, globalCfg) {
         if (botOverride.deltaThresholdPercent != null) merged.deltaThresholdPercent = botOverride.deltaThresholdPercent;
         if (botOverride.defaultAmaKey) merged.defaultAmaKey = botOverride.defaultAmaKey;
         if (botOverride.maxSlopeOffset != null) merged.maxSlopeOffset = botOverride.maxSlopeOffset;
+        if (botOverride.maxVolatilityOffset != null) {
+            merged.maxVolatilityOffset = normalizeMaxVolatilityOffset(botOverride.maxVolatilityOffset);
+        }
+        if (botOverride.atrPeriod != null) merged.atrPeriod = normalizeAtrPeriod(botOverride.atrPeriod);
+        if (botOverride.absoluteThreshold != null) merged.absoluteThreshold = botOverride.absoluteThreshold;
         if (botOverride.volatilityExponent != null) merged.volatilityExponent = botOverride.volatilityExponent;
         if (botOverride.volatilityScaleX != null) merged.volatilityScaleX = botOverride.volatilityScaleX;
         if (botOverride.volatilityThreshold != null) merged.volatilityThreshold = botOverride.volatilityThreshold;

@@ -146,6 +146,49 @@ function testBilinearInterpolateUsesOverrideNodes() {
     assert.notStrictEqual(overrideValue, defaultValue, 'override nodes should change interpolation');
 }
 
+function testResolveBotCfgSanitizesAtrPeriodAndVolatilityClampOverrides() {
+    const settingsJson = {
+        pairs: [
+            {
+                key: '1.3.1|1.3.0',
+                assetASymbol: 'IOB.XRP',
+                assetBSymbol: 'BTS',
+                marketAdapterSettings: {
+                    atrPeriod: 0,
+                    maxVolatilityOffset: -0.5,
+                },
+                botOverrides: {
+                    'XRP-BTS': {
+                        atrPeriod: 14.5,
+                        maxVolatilityOffset: 0,
+                    },
+                },
+            },
+        ],
+    };
+
+    installMarketAdapterStubs(settingsJson);
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+    const { MARKET_ADAPTER } = require('../modules/constants');
+
+    const bot = {
+        name: 'XRP-BTS',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        assetAId: '1.3.1',
+        assetBId: '1.3.0',
+    };
+
+    const merged = resolveBotCfg(bot, { ...DEFAULTS });
+
+    assert.strictEqual(merged.atrPeriod, 15, 'positive fractional ATR period should be normalized to an integer');
+    assert.strictEqual(
+        merged.maxVolatilityOffset,
+        MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP,
+        'non-positive volatility clamp overrides should fall back to the default clamp'
+    );
+}
+
 async function main() {
     try {
         testResolveBotCfgWiresMissingPairAndBotOverrides();
@@ -155,6 +198,9 @@ async function main() {
         restoreMarketAdapterStubs();
 
         testBilinearInterpolateUsesOverrideNodes();
+        restoreMarketAdapterStubs();
+
+        testResolveBotCfgSanitizesAtrPeriodAndVolatilityClampOverrides();
         console.log('dynamic weight override wiring tests passed');
     } finally {
         restoreMarketAdapterStubs();
