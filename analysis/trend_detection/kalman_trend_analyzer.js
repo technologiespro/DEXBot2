@@ -112,6 +112,9 @@ class KalmanTrendAnalyzer {
         this.beams = [];
         this.inflections = [];
         this.maxBeams = config.beamCount ?? 100;
+        this.warmupBars = Number.isInteger(config.warmupBars) && config.warmupBars >= 0
+            ? config.warmupBars
+            : 20;
         this.updateCount = 0;
         
         this.currPrice = null;
@@ -180,7 +183,7 @@ class KalmanTrendAnalyzer {
         if (Math.abs(displacementPct) < 0.2) signal = 'EQUILIBRIUM';
 
         return {
-            isReady: this.updateCount > 20,
+            isReady: this.updateCount > this.warmupBars,
             price: this.currPrice,
             kalmanPrice: Math.round(this.tactical.x * 1e8) / 1e8,
             modalPrice: Math.round(this.modal.x * 1e8) / 1e8,

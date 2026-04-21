@@ -4,6 +4,7 @@ const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../../modules/constants');
 const {
     buildKalmanVelocitySeries,
 } = require('./kalman_velocity_smoothing');
+const { getAmaWarmupBars } = require('../ama_fitting/ama');
 
 function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, (m) => ({
@@ -57,7 +58,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
     const defaultRegimeSensitivity  = data.regimeSensitivity ?? ma.regimeSensitivity ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY;
     const defaultAbsoluteThreshold  = ma.absoluteThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT;
-    const dispScaleMinPct           = data.dispScaleMinPct  ?? ma.dispScaleMinPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
+    const defaultDispScaleMinPct     = data.dispScaleMinPct  ?? ma.dispScaleMinPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
     const defaultKalmanSmoothPct = data.kalmanSmoothPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT;
     const defaultKalmanDispScaleMult = data.kalmanDispScaleMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT;
     const defaultKalmanDispThresholdMult = data.kalmanDispThresholdMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT;
@@ -87,6 +88,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const signals            = results.map((r) => r.signal);
     const ama3Prices         = results.map((r) => r.ama3Price ?? null);
     const amaErPeriod        = data.amaConfig?.erPeriod ?? MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod;
+    const amaSlowPeriod      = data.amaConfig?.slowPeriod ?? MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod;
+    const amaWarmupBars      = getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars);
 
     const lastDate = dates[dates.length - 1];
     for (let i = 1; i <= 150; i++) {
@@ -117,9 +120,10 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const amaPctMax = Math.ceil(maxAbsPct(amaSlopePct) * 1.15) || 5;
     const kalPctMax = Math.ceil(Math.max(maxAbsPct(kalmanVelocityPct), maxAbsPct(kalmanDisplacementPct)) * 1.15) || 5;
 
-    function buildPercentiles(arr) {
+    function buildPercentiles(arr, startIndex = 0) {
+        const safeStartIndex = Math.max(0, Math.min(realBarCount, Math.ceil(startIndex)));
         const sorted = [];
-        for (let i = 0; i < realBarCount; i++) { if (arr[i] != null) sorted.push(Math.abs(arr[i])); }
+        for (let i = safeStartIndex; i < realBarCount; i++) { if (arr[i] != null) sorted.push(Math.abs(arr[i])); }
         sorted.sort((a, b) => a - b);
         const pcts = [];
         for (let p = 0; p <= 100; p++) {
@@ -128,7 +132,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         }
         return pcts;
     }
-    const amaPercentiles = buildPercentiles(amaSlopePct);
+    const amaPercentiles = buildPercentiles(amaSlopePct, amaWarmupBars);
     const kalPercentiles = buildPercentiles(kalmanVelocityPct);
     const maxDispPct = Math.ceil(maxAbsPct(kalmanDisplacementPct) * 1.15) || 5;
     return `<!DOCTYPE html>
@@ -286,7 +290,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
                 <div class="row-break"></div>
         <div class="ctrl kf"><label for="kf-slider">kf</label><input type="range" id="kf-slider" min="0" max="200" value="${defaultKalmanSmoothPct}" title="Kalman smoothing blend (0 = raw, 100 = current adaptive smoothing, 200 = stronger smoothing)"><span class="val" id="kf-value">${defaultKalmanSmoothPct}%</span></div>
-        <div class="ctrl kfd"><label for="kfd-slider">kfd</label><input type="range" id="kfd-slider" min="100" max="300" value="${Math.round(defaultKalmanDispScaleMult * 100)}" title="Kalman displacement scale multiplier (1x to 3x)"><span class="val" id="kfd-value">${defaultKalmanDispScaleMult.toFixed(2)}x</span></div>
+                <div class="ctrl kfd"><label for="kfd-slider">kfd</label><input type="range" id="kfd-slider" min="100" max="300" value="${Math.round(defaultKalmanDispScaleMult * 100)}" title="Kalman displacement scale multiplier (1x to 3x)"><span class="val" id="kfd-value">${defaultKalmanDispScaleMult.toFixed(2)}x</span></div>
+                <div class="ctrl dsp"><label for="dsp-slider">dsp</label><input type="range" id="dsp-slider" min="25" max="400" value="${Math.round(defaultDispScaleMinPct * 100)}" title="Minimum displacement scale floor (0.25x to 4.0x)"><span class="val" id="dsp-value">${defaultDispScaleMinPct.toFixed(2)}x</span></div>
                 <div class="ctrl kdt"><label for="kdt-slider">kdt</label><input type="range" id="kdt-slider" min="25" max="300" value="${Math.round(defaultKalmanDispThresholdMult * 100)}" title="Kalman displacement threshold multiplier (0.25x to 3x)"><span class="val" id="kdt-value">${defaultKalmanDispThresholdMult.toFixed(2)}x</span></div>
                 <div class="ctrl kfs"><label for="kfs-slider">kfs</label><input type="range" id="kfs-slider" min="20" max="200" value="${defaultKalmanSmoothSpanPct}" title="Adaptive EMA span ratio (20% span / 200% span; floor fixed at 0)"><span class="val" id="kfs-value">${defaultKalmanSmoothSpanPct}%</span></div>
                 <div class="ctrl cf"><label for="cf-slider">cf</label><input type="range" id="cf-slider" min="0" max="5" value="${defaultSignalConfirmBars}" title="Signal confirmation bars (0 disables latching; otherwise flips after N opposite echo bars)"><span class="val" id="cf-value">${defaultSignalConfirmBars}</span></div>
@@ -304,7 +309,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPctRaw, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, kalmanSmoothPct: defaultKalmanSmoothPct, kalmanDispScaleMult: defaultKalmanDispScaleMult, kalmanDispThresholdMult: defaultKalmanDispThresholdMult, kalmanSmoothSpanPct: defaultKalmanSmoothSpanPct, signalConfirmBars: defaultSignalConfirmBars, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, minOutputThreshold: defaultMinOutputThreshold, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, amaErPeriod, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, dispScaleMinPct, weightMin: MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT, weightMax: MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT, marketAdapter: ma, amaWeightConfig, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPctRaw, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, kalmanSmoothPct: defaultKalmanSmoothPct, kalmanDispScaleMult: defaultKalmanDispScaleMult, kalmanDispThresholdMult: defaultKalmanDispThresholdMult, kalmanSmoothSpanPct: defaultKalmanSmoothSpanPct, signalConfirmBars: defaultSignalConfirmBars, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, minOutputThreshold: defaultMinOutputThreshold, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, amaErPeriod, amaSlowPeriod, amaWarmupBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, dispScaleMinPct: defaultDispScaleMinPct, weightMin: MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT, weightMax: MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT, marketAdapter: ma, amaWeightConfig, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -327,6 +332,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         let currentKalmanDispScaleMult = data.kalmanDispScaleMult ?? ${JSON.stringify(defaultKalmanDispScaleMult)};
         let currentKalmanDispThresholdMult = data.kalmanDispThresholdMult ?? ${JSON.stringify(defaultKalmanDispThresholdMult)};
         let currentKalmanSmoothSpanPct = data.kalmanSmoothSpanPct ?? ${JSON.stringify(defaultKalmanSmoothSpanPct)};
+        let currentDispScaleMinPct = data.dispScaleMinPct ?? ${JSON.stringify(defaultDispScaleMinPct)};
         let currentSignalConfirmBars = data.signalConfirmBars ?? ${JSON.stringify(defaultSignalConfirmBars)};
         let currentNz      = data.neutralZonePct ?? ${JSON.stringify(defaultNeutralZone)};
         let currentDw      = data.dispWeight ?? ${JSON.stringify(defaultDispWeight)};
@@ -549,7 +555,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             const mo = currentGain;
             const dw = currentDw;
             const lb = currentLookbackBars;
-            const amaReadyBar = Math.max(0, data.amaErPeriod ?? ${JSON.stringify(MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod)}) + lb;
+            const amaErWarmup = Math.max(0, Number.isFinite(data.amaErPeriod) ? Math.ceil(data.amaErPeriod) : ${JSON.stringify(MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod)});
+            const amaSlowWarmup = Math.max(0, Number.isFinite(data.amaSlowPeriod) ? Math.ceil(data.amaSlowPeriod) : ${JSON.stringify(MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod)});
+            const amaReadyBar = amaErWarmup + amaSlowWarmup + lb;
             const acl = currentAmaClipThreshold;
             const kcl = currentKalClipThreshold;
 
@@ -557,7 +565,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             let dynamicClipThreshold = Infinity;
             if (currentClipPct > 0) {
                 const slopes = [];
-                for (let i = lb; i < data.realBarCount; i++) {
+                for (let i = amaReadyBar; i < data.realBarCount; i++) {
                     const s = computeSlopeAtIndex(i, lb);
                     if (s !== 0) slopes.push(Math.abs(s));
                 }
@@ -587,7 +595,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     const clippedV = Math.max(-kcl, Math.min(kcl, vp));
                     if (Math.abs(clippedV) < nz) { dynamicKalOff[i] = 0; }
                     else {
-                        const dispScale = data.dispScaleMinPct;
+                        const dispScale = currentDispScaleMinPct;
                         const dispConf = Math.min(Math.abs(dp) / dispScale, 1.0);
                         const momAlign = Math.max(0, (clippedV * dp) / (Math.abs(clippedV) * Math.abs(dp) + 1e-10));
                         const composite = clippedV * (1 - dw + dw * dispConf * momAlign);
@@ -603,16 +611,10 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         }
 
         function recalcWeights() {
-            // Normalize each channel to its own peak so alpha is a pure ratio knob
-            // and gain is the sole amplitude controller
+            // Normalize each channel by the configured cap so alpha remains a pure ratio knob
+            // without letting tiny startup wiggles become "full strength."
             currentOutputAxisMax = 0.5;
-            let aMax = 0, kMax = 0;
-            for (let i = 0; i < data.realBarCount; i++) {
-                if (dynamicAmaOff[i] !== null) aMax = Math.max(aMax, Math.abs(dynamicAmaOff[i]));
-                if (dynamicKalOff[i] !== null) kMax = Math.max(kMax, Math.abs(dynamicKalOff[i]));
-            }
-            if (aMax === 0) aMax = 1;
-            if (kMax === 0) kMax = 1;
+            const channelNorm = Math.max(Math.abs(currentGain), 1e-9);
 
             const mo = currentGain;
             for (let i = 0; i < data.dates.length; i++) {
@@ -621,7 +623,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 if (aOff === null || kOff === null) {
                     combinedOff[i] = null; combinedSell[i] = null; combinedBuy[i] = null; currentMults[i] = null;
                 } else {
-                    const rawOff = (currentAlpha * (aOff / aMax) + (1 - currentAlpha) * (kOff / kMax)) * mo;
+                    const rawOff = (currentAlpha * (aOff / channelNorm) + (1 - currentAlpha) * (kOff / channelNorm)) * mo;
                     const baseMult = getRegimeMultiplier(data.hurstArr[i], data.peArr[i]);
                     // Use power for sensitivity: pushes away from 1.0 in both directions without flipping sign
                     const rawMult = Math.pow(baseMult, currentRegimeSensitivity);
@@ -989,6 +991,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             document.getElementById('gain-slider').value = gainValToSlider(currentGain);
             document.getElementById('kf-slider').value = currentKalmanSmoothPct;
             document.getElementById('kfd-slider').value = Math.round(currentKalmanDispScaleMult * 100);
+            document.getElementById('dsp-slider').value = Math.round(currentDispScaleMinPct * 100);
             document.getElementById('kdt-slider').value = Math.round(currentKalmanDispThresholdMult * 100);
             document.getElementById('kfs-slider').value = currentKalmanSmoothSpanPct;
             document.getElementById('cf-slider').value = currentSignalConfirmBars;
@@ -1146,6 +1149,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 onSliderChange();
             });
 
+            document.getElementById('dsp-slider').addEventListener('input', (e) => {
+                currentDispScaleMinPct = parseInt(e.target.value, 10) / 100;
+                document.getElementById('dsp-value').textContent = currentDispScaleMinPct.toFixed(2) + 'x';
+                onSliderChange();
+            });
+
             document.getElementById('kdt-slider').addEventListener('input', (e) => {
                 currentKalmanDispThresholdMult = parseInt(e.target.value, 10) / 100;
                 document.getElementById('kdt-value').textContent = currentKalmanDispThresholdMult.toFixed(2) + 'x';
@@ -1229,6 +1238,11 @@ function applyParams(p, btn) {
                     document.getElementById('kfd-slider').value = Math.round(currentKalmanDispScaleMult * 100);
                     document.getElementById('kfd-value').textContent = currentKalmanDispScaleMult.toFixed(2) + 'x';
                 }
+                if (p.dispScaleMinPct != null) {
+                    currentDispScaleMinPct = Math.max(0.25, Math.min(4.0, p.dispScaleMinPct));
+                    document.getElementById('dsp-slider').value = Math.round(currentDispScaleMinPct * 100);
+                    document.getElementById('dsp-value').textContent = currentDispScaleMinPct.toFixed(2) + 'x';
+                }
                 if (p.kalmanDispThresholdMult != null) {
                     currentKalmanDispThresholdMult = Math.max(0.25, Math.min(3.0, p.kalmanDispThresholdMult));
                     document.getElementById('kdt-slider').value = Math.round(currentKalmanDispThresholdMult * 100);
@@ -1280,7 +1294,7 @@ function applyParams(p, btn) {
             let _confirmPending = null;
             function showConfirm(p, btn) {
                 _confirmPending = { p, btn };
-                const labels = { alpha: 'alpha', maxSlopePct: 'maxS%', gain: 'gain', kalmanSmoothPct: 'kf', kalmanDispScaleMult: 'kfd', kalmanDispThresholdMult: 'kdt', kalmanSmoothSpanPct: 'kfs', signalConfirmBars: 'cf', clipPct: 'clip%', neutralZonePct: 'nz%', regimeSensitivity: 'regime', dispWeight: 'dw', lookbackBars: 'lb' };
+                const labels = { alpha: 'alpha', maxSlopePct: 'maxS%', gain: 'gain', kalmanSmoothPct: 'kf', kalmanDispScaleMult: 'kfd', dispScaleMinPct: 'dsp', kalmanDispThresholdMult: 'kdt', kalmanSmoothSpanPct: 'kfs', signalConfirmBars: 'cf', clipPct: 'clip%', neutralZonePct: 'nz%', regimeSensitivity: 'regime', dispWeight: 'dw', lookbackBars: 'lb' };
                 document.getElementById('paste-confirm-vals').innerHTML = Object.entries(labels)
                     .filter(([k]) => p[k] != null)
                     .map(([k, label]) => label + ': <span>' + p[k] + '</span>')
@@ -1322,6 +1336,7 @@ function applyParams(p, btn) {
                     gain:              +currentGain.toFixed(3),
                     kalmanSmoothPct:   currentKalmanSmoothPct,
                     kalmanDispScaleMult: +currentKalmanDispScaleMult.toFixed(2),
+                    dispScaleMinPct:   +currentDispScaleMinPct.toFixed(2),
                     kalmanDispThresholdMult: +currentKalmanDispThresholdMult.toFixed(2),
                     kalmanSmoothSpanPct: currentKalmanSmoothSpanPct,
                     signalConfirmBars: currentSignalConfirmBars,

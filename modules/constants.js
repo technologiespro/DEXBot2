@@ -656,7 +656,7 @@ let MARKET_ADAPTER = {
     DYNAMIC_WEIGHT_KALMAN_Q_TACTICAL_DEFAULT: 0.01,
     DYNAMIC_WEIGHT_KALMAN_Q_MODAL_DEFAULT: 0.0001,
     DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT: 100,
-    DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT: 2.0,
+    DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT: 1.8,
     DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT: 1.5,
     DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT: 100,
     DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT: 1,
@@ -667,7 +667,7 @@ let MARKET_ADAPTER = {
 
     // DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT: Minimum raw regime multiplier deviation before
     // the dampening branch is allowed to reduce the output.
-    DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT: 0,
+    DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT: 0.05,
 
     // DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: Legacy dynamic-weight tuning constant kept for
     // backward-compatible config parsing. The active live signal path currently applies ATR
@@ -677,8 +677,10 @@ let MARKET_ADAPTER = {
     // DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: Minimum Kalman displacement scale in percent.
     // This is the active Kalman displacement scale in both the HTML research tool and the
     // live directional signal path.
-    // (not exposed in chart UI)
-    DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: 0.5,
+    // The live smoother clamps this to at least 1.0 so 0.5% displacements do not saturate
+    // confidence too early.
+    // Exposed in the research chart as the `dsp` control.
+    DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: 1.0,
 
     // DYNAMIC_WEIGHT_VOLATILITY_EXPONENT: Controls how quickly the volatility penalty ramps up.
     // Higher values delay the penalty in calm markets and make it matter more in higher volatility.

@@ -113,7 +113,15 @@ function computeRegimeMultiplier(closes, opts = {}) {
     const hurstCfg = opts.hurstConfig ?? HURST_CONFIG;
     const peCfg    = opts.peConfig    ?? PE_CONFIG;
 
-    const notReady = { multiplier: 1.0, hurst: null, pe: null, hurstRegime: null, peRegime: null, isReady: false };
+    const notReady = {
+        multiplier: 1.0,
+        hurst: null,
+        pe: null,
+        hurstRegime: null,
+        peRegime: null,
+        isReady: false,
+        series: [],
+    };
 
     if (!Array.isArray(closes) || closes.length === 0) return notReady;
 
@@ -122,12 +130,21 @@ function computeRegimeMultiplier(closes, opts = {}) {
 
     let hurstResult = null;
     let peResult    = null;
+    const series = new Array(closes.length).fill(1.0);
 
-    for (const price of closes) {
+    for (let i = 0; i < closes.length; i++) {
+        const price = closes[i];
         if (!Number.isFinite(price) || price <= 0) continue;
         try {
             hurstResult = hurst.update(price);
             peResult    = pe.update(price);
+            if (hurstResult?.isReady && peResult?.isReady) {
+                const h  = hurstResult.hurst;
+                const ne = peResult.normalizedEntropy;
+                const baseMult = bilinearInterpolate(h, ne, regimeTable, { hurstZoneBand, peNodes });
+                const rawMult = sensitivity === 1.0 ? baseMult : Math.pow(baseMult, sensitivity);
+                series[i] = Math.min(rawMult, 1.0);
+            }
         } catch (_) {
             // skip invalid prices
         }
@@ -150,6 +167,7 @@ function computeRegimeMultiplier(closes, opts = {}) {
         hurstRegime: classifyHurstRegime(h, hurstZoneBand),
         peRegime:    classifyPeRegime(ne, peNodes),
         isReady:     true,
+        series:      series.map((value) => Math.round(value * 1000) / 1000),
     };
 }
 

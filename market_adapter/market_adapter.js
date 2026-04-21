@@ -988,6 +988,7 @@ const adapterService = new MarketAdapterService({
     writeGridResetTrigger,
     writeBotDynamicGrid,
     isBotDynamicWeightWhitelisted,
+    logger,
     root: ROOT,
     path,
 });

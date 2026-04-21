@@ -348,13 +348,13 @@ The main runtime knobs are:
 - `gain` - output amplitude (default 0.8)
 - `maxSlopeOffset` - cap for the asymmetric trend offset
 - `maxVolatilityOffset` - cap for the symmetric ATR penalty
-- `absoluteThreshold` - dead-band before regime filtering is applied
+- `absoluteThreshold` - dead-band before regime filtering is applied (default 0.05)
 - `atrPeriod` - ATR lookback used by the volatility penalty
 - `volatilityExponent` - exponent for the ATR penalty
 - `volatilityScaleX` - scale factor for the ATR penalty
 - `volatilityThreshold` - minimum penalty before the volatility shift applies
 - `kalmanSmoothPct` - raw-vs-smoothed Kalman blend (0-200; 100 = normal adaptive smoothing)
-- `kalmanDispScaleMult` - displacement scale multiplier
+- `kalmanDispScaleMult` - displacement scale multiplier (default 1.8)
 - `kalmanDispThresholdMult` - displacement threshold multiplier
 - `lookbackBars` - AMA slope lookback (default 8)
 - `kalmanSmoothSpanPct` - adaptive EMA span ratio

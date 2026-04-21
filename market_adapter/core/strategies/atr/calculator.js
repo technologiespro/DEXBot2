@@ -13,15 +13,29 @@ const { normalizeAtrPeriod } = require('../../config_normalizers');
  */
 function calculateATR(candles, period = 14) {
   const safePeriod = normalizeAtrPeriod(period);
+  if (!Array.isArray(candles)) return Number.NaN;
   if (candles.length < safePeriod + 1) return 0;
 
   let tr = [];
-  for (let i = 1; i < candles.length; i++) {
-    const high = candles[i][2];
-    const low = candles[i][3];
-    const prevClose = candles[i - 1][4];
-    tr.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
+  let prevClose = null;
+  for (let i = 0; i < candles.length; i++) {
+    const high = Number(candles[i]?.[2]);
+    const low = Number(candles[i]?.[3]);
+    const close = Number(candles[i]?.[4]);
+    if (!Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close)) {
+      // Break the ATR chain across missing/invalid rows so a single bad candle
+      // does not synthesize a multi-bar gap into the next valid true range.
+      prevClose = null;
+      continue;
+    }
+    if (prevClose != null) {
+      tr.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
+    }
+    prevClose = close;
   }
+
+  if (tr.length === 0) return Number.NaN;
+  if (tr.length < safePeriod) return 0;
 
   let atr = tr.slice(0, safePeriod).reduce((a, b) => a + b, 0) / safePeriod;
   for (let i = safePeriod; i < tr.length; i++) {

@@ -179,7 +179,8 @@ All panels share aligned vertical time grid lines, and the bottom output panel s
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
 | **kf** | 0–200 | 100 | Sideways-regime Kalman smoothing blend (0 = raw velocity, 100 = current adaptive smoothing, 200 = stronger smoothing) |
-| **kfd** | 1–3x | 2.00x | Displacement scale multiplier for the adaptive smoothing confidence ramp |
+| **kfd** | 1–3x | 1.80x | Displacement scale multiplier for the adaptive smoothing confidence ramp |
+| **dsp** | 0.25–4x | 1.00x | Minimum displacement scale floor used by the Kalman confidence ramp |
 | **kdt** | 0.25–3x | 1.50x | Displacement threshold multiplier for when the adaptive EMA starts to loosen |
 | **kfs** | 20–200% | 100% | Adaptive EMA span ratio |
 | **cf** | 1–5 | 1 | Signal confirmation bars for the latched/raw signal overlay |
@@ -200,7 +201,7 @@ All panels share aligned vertical time grid lines, and the bottom output panel s
 
 ## Copy / Paste Parameters
 
-The **copy** button serializes all knob values (α, dw, kf, kfd, kdt, kfs, cf, lb, maxS%, gain, clip%, nz%, regi) to JSON and writes them to both the clipboard and `localStorage`.
+The **copy** button serializes all knob values (α, dw, kf, kfd, dsp, kdt, kfs, cf, lb, maxS%, gain, clip%, nz%, regi) to JSON and writes them to both the clipboard and `localStorage`.
 
 The **paste** button first checks `localStorage` for parameters from a previous copy in the same browser session. If none found, it prompts for Ctrl+V input. A confirmation popup shows the parsed values before applying them. Click **Apply** to set the knobs, **Cancel** or press **Escape** to dismiss.
 
@@ -225,7 +226,7 @@ kalOff    = clamp(kalComp / maxS% × gain, ±gain)
 ```
 smoothingBudget = 0.60
 smoothingFloor   = 0
-smoothingSpan    = smoothingBudget × clamp(kfs, 0.2, 2.0)
+smoothingSpan    = smoothingBudget × clamp(kfs / 100, 0.2, 2.0)
 trendConfidence  = clamp(|displacement%| / (kdt × kfd), 0, 1)
 smoothingAlpha   = min(smoothingBudget, smoothingFloor + (smoothingSpan × trendConfidence))
 velocityFiltered = EMA(rawVelocity, smoothingAlpha)
@@ -235,6 +236,18 @@ Behavior:
 - `kf = 0` returns the raw Kalman velocity
 - `kf = 100` uses the current adaptive EMA result
 - `kf > 100` pushes further toward the adaptive signal than the base blend alone, up to 200
+
+### dsp (minimum displacement scale)
+```
+dispScale = max(dsp, 1.0)   // live adapter floor; research chart lets you sweep the raw value
+dispConf  = min(|displacement%| / dispScale, 1)
+```
+
+Behavior:
+- Smaller `dsp` values make displacement confidence saturate faster
+- Larger `dsp` values require more displacement before the Kalman branch is treated as fully confident
+- The research chart exposes `dsp` as an interactive knob so you can explore this saturation point directly
+- The live adapter still clamps `dsp` to at least `1.0` for production stability
 
 ### Latched Signal
 ```
@@ -266,14 +279,13 @@ rawMult   = baseMult ^ regimeSensitivity        // power scaling via regi knob
 finalMult = min(rawMult, 1.0)                  // dampen-only: regime never amplifies
 ```
 
-### Final Weight (per-channel normalized blend + gain)
+### Final Weight (cap-normalized blend + gain)
 
-Each channel is normalized to its own peak before blending, so α is a pure ratio knob. Gain scales the result linearly, hard-capped at ±0.5:
+Each channel is normalized to the configured cap before blending, so α is a pure ratio knob without startup spikes dominating the blend. Gain scales the result linearly, hard-capped at the output clamp:
 
 ```
-aMax  = max(|amaOff|) over all bars
-kMax  = max(|kalOff|) over all bars
-rawOff = (α × (amaOff / aMax) + (1 − α) × (kalOff / kMax)) × gain
+cap   = configured channel clamp
+rawOff = (α × (amaOff / cap) + (1 − α) × (kalOff / cap)) × gain
 off   = rawOff × finalMult
 sellW = 0.5 + off
 buyW  = 0.5 − off

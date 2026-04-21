@@ -54,6 +54,13 @@ class AMA {
     }
 }
 
+function getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars = 0) {
+    const safeErPeriod = Number.isFinite(erPeriod) && erPeriod > 0 ? Math.ceil(erPeriod) : 0;
+    const safeSlowPeriod = Number.isFinite(slowPeriod) && slowPeriod > 0 ? Math.ceil(slowPeriod) : 0;
+    const safeLookbackBars = Number.isFinite(lookbackBars) && lookbackBars >= 0 ? Math.ceil(lookbackBars) : 0;
+    return safeErPeriod + safeSlowPeriod + safeLookbackBars;
+}
+
 /**
  * Batch process a list of candles
  * @param {Array} closes - Array of closing prices
@@ -65,4 +72,4 @@ function calculateAMA(closes, params) {
     return closes.map(price => indicator.update(price));
 }
 
-module.exports = { AMA, calculateAMA };
+module.exports = { AMA, calculateAMA, getAmaWarmupBars };

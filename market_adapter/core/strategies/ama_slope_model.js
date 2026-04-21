@@ -10,6 +10,7 @@ const MAX_OFFSET_FROM_NEUTRAL = MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_
 const MAX_SYMMETRIC_SHIFT = MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP;
 
 const DEFAULT_ER_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod;
+const DEFAULT_SLOW_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod;
 
 function clamp(v, min, max) {
     return Math.max(min, Math.min(max, v));
@@ -32,6 +33,7 @@ function clamp(v, min, max) {
  * @param {number}   [opts.volatilityScaleX=10.0]       Scale factor penalty (10.0 = normal start)
  * @param {number}   [opts.volatilityThreshold=0.1]      Minimum |symmetricDelta| before penalty applies
  * @param {number}   [opts.erPeriod=DEFAULT_ER_PERIOD]  AMA warm-up bars to skip in isReady guard
+ * @param {number}   [opts.slowPeriod=DEFAULT_SLOW_PERIOD]  AMA slow period used for warm-up guard
  * @param {number}   [opts.maxSlopeOffset=MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP]  Per-bot cap on buy/sell asymmetry offset
  * @param {number}   [opts.maxVolatilityOffset=MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP]  Per-bot cap on volatility shift
  * @param {number}   [opts.clipPercentile=0]             Percentile clip on slope (0=off, 10=clip top 10%)
@@ -39,13 +41,20 @@ function clamp(v, min, max) {
  * @returns {{ slopeOffset, symmetricDelta, slopePct, clippedSlopePct, confidence, trend, isReady }}
  */
 function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
-    const lookbackBars = opts.lookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
+    const lookbackBars = Number.isFinite(opts.lookbackBars) && opts.lookbackBars >= 0
+        ? Math.ceil(opts.lookbackBars)
+        : MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
     const maxSlopePct = opts.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
     const neutralZonePct = opts.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
     const volatilityExponent = opts.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
     const volatilityScaleX = opts.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT;
     const volatilityThreshold = normalizeVolatilityThreshold(opts.volatilityThreshold);
-    const erPeriod = opts.erPeriod ?? DEFAULT_ER_PERIOD;
+    const erPeriod = Number.isFinite(opts.erPeriod) && opts.erPeriod > 0
+        ? Math.ceil(opts.erPeriod)
+        : DEFAULT_ER_PERIOD;
+    const slowPeriod = Number.isFinite(opts.slowPeriod) && opts.slowPeriod > 0
+        ? Math.ceil(opts.slowPeriod)
+        : DEFAULT_SLOW_PERIOD;
     const maxSlopeOffset = opts.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
     const maxVolatilityOffset = normalizeMaxVolatilityOffset(opts.maxVolatilityOffset);
     const clipThreshold = opts.clipThreshold ?? Infinity;
@@ -67,8 +76,10 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
         trend: 'NEUTRAL',
     };
 
-    // 1. Guard: need erPeriod warm-up + lookback window + current bar
-    if (!Array.isArray(amaValues) || amaValues.length < erPeriod + lookbackBars + 1) {
+    const warmupBars = erPeriod + slowPeriod + lookbackBars;
+
+    // 1. Guard: need ER warm-up + slow-period convergence + lookback window + current bar.
+    if (!Array.isArray(amaValues) || amaValues.length < warmupBars + 1) {
         return notReady;
     }
 
