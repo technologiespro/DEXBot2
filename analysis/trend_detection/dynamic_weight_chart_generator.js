@@ -35,6 +35,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const maxSlopePct         = amaWeightConfig.maxSlopePct    ?? ma.amaMaxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
     const defaultClipPct      = data.clipPct          ?? ma.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
     const defaultMinOutputThreshold = data.minOutputThreshold ?? ma.minOutputThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD;
+    const defaultOutputClamp = data.outputClamp ?? ma.outputClamp ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
     const lookbackBarsRaw     = amaWeightConfig.lookbackBars  ?? ma.amaLookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
     const lookbackBars        = Math.max(1, Math.min(32, Number.isFinite(lookbackBarsRaw) ? lookbackBarsRaw : 1));
 
@@ -281,7 +282,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="55" value="${Math.min(defaultClipPct, 55)}" title="Outlier Clip %"><span class="val" id="clip-value">${Math.min(defaultClipPct, 55)}%</span></div>
 
                 <div class="group-sep"></div>
-                <div class="ctrl off"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="${gainInitSlider}" title="Master Gain (0.25-2.0)"><span class="val" id="gain-value">${clampedGain.toFixed(3)}</span></div>
+                <div class="ctrl off"><label for="gain-slider">gain</label><input type="range" id="gain-slider" min="0" max="1000" value="${gainInitSlider}" title="Output Gain (0.25-2.0)"><span class="val" id="gain-value">${clampedGain.toFixed(3)}</span></div>
                 <div class="ctrl regime"><label for="regime-slider">regi</label><input type="range" id="regime-slider" min="0" max="200" value="${regimeInitSlider}" title="Regime Sensitivity"><span class="val" id="regime-value">${defaultRegimeSensitivity.toFixed(2)}</span></div>
 
                 <div class="group-sep"></div>
@@ -309,7 +310,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPctRaw, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, kalmanSmoothPct: defaultKalmanSmoothPct, kalmanDispScaleMult: defaultKalmanDispScaleMult, kalmanDispThresholdMult: defaultKalmanDispThresholdMult, kalmanSmoothSpanPct: defaultKalmanSmoothSpanPct, signalConfirmBars: defaultSignalConfirmBars, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, minOutputThreshold: defaultMinOutputThreshold, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, amaErPeriod, amaSlowPeriod, amaWarmupBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, dispScaleMinPct: defaultDispScaleMinPct, weightMin: MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT, weightMax: MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT, marketAdapter: ma, amaWeightConfig, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPctRaw, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, kalmanSmoothPct: defaultKalmanSmoothPct, kalmanDispScaleMult: defaultKalmanDispScaleMult, kalmanDispThresholdMult: defaultKalmanDispThresholdMult, kalmanSmoothSpanPct: defaultKalmanSmoothSpanPct, signalConfirmBars: defaultSignalConfirmBars, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, maxSlopePct, maxDispPct, clipPct: defaultClipPct, minOutputThreshold: defaultMinOutputThreshold, outputClamp: defaultOutputClamp, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, amaErPeriod, amaSlowPeriod, amaWarmupBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, msLogMin: MS_LOG_MIN_N, msLogMax: MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, dispScaleMinPct: defaultDispScaleMinPct, weightMin: MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT, weightMax: MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT, marketAdapter: ma, amaWeightConfig, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -322,6 +323,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         const WEIGHT_MIN = data.weightMin ?? ${JSON.stringify(MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT)};
         const WEIGHT_MAX = data.weightMax ?? ${JSON.stringify(MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT)};
         const MIN_OUTPUT_THRESHOLD = data.minOutputThreshold ?? ${JSON.stringify(defaultMinOutputThreshold)};
+        const OUTPUT_CLAMP = data.outputClamp ?? ${JSON.stringify(defaultOutputClamp)};
         const weightDistribution = ${serializeJsonForScript(DEFAULT_CONFIG.weightDistribution)};
         const STATIC_SELL = Number.isFinite(weightDistribution.sell) ? weightDistribution.sell : ${JSON.stringify(DEFAULT_CONFIG.weightDistribution.sell)};
         const STATIC_BUY = Number.isFinite(weightDistribution.buy) ? weightDistribution.buy : ${JSON.stringify(DEFAULT_CONFIG.weightDistribution.buy)};
@@ -552,7 +554,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             recalcLatchedSignals();
             const nz = currentNz;
             const ms = currentMaxSlopePct;
-            const mo = currentGain;
+            const mo = OUTPUT_CLAMP;
             const dw = currentDw;
             const lb = currentLookbackBars;
             const amaErWarmup = Math.max(0, Number.isFinite(data.amaErPeriod) ? Math.ceil(data.amaErPeriod) : ${JSON.stringify(MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod)});
@@ -611,20 +613,19 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         }
 
         function recalcWeights() {
-            // Normalize each channel by the configured cap so alpha remains a pure ratio knob
-            // without letting tiny startup wiggles become "full strength."
-            currentOutputAxisMax = 0.5;
-            const channelNorm = Math.max(Math.abs(currentGain), 1e-9);
-            const outputThreshold = MIN_OUTPUT_THRESHOLD * channelNorm;
+            // Normalize each channel by the configured clamp so alpha remains a pure ratio knob.
+            // Gain then scales the blended output linearly after the dead-band decision.
+            currentOutputAxisMax = Math.max(0.5, OUTPUT_CLAMP);
+            const channelNorm = Math.max(Math.abs(OUTPUT_CLAMP), 1e-9);
+            const outputThreshold = MIN_OUTPUT_THRESHOLD;
 
-            const mo = currentGain;
             for (let i = 0; i < data.dates.length; i++) {
                 const aOff = dynamicAmaOff[i];
                 const kOff = dynamicKalOff[i];
                 if (aOff === null || kOff === null) {
                     combinedOff[i] = null; combinedSell[i] = null; combinedBuy[i] = null; currentMults[i] = null;
                 } else {
-                    const rawOff = (currentAlpha * (aOff / channelNorm) + (1 - currentAlpha) * (kOff / channelNorm)) * mo;
+                    const blendedOff = (currentAlpha * (aOff / channelNorm) + (1 - currentAlpha) * (kOff / channelNorm));
                     const baseMult = getRegimeMultiplier(data.hurstArr[i], data.peArr[i]);
                     // Use power for sensitivity: pushes away from 1.0 in both directions without flipping sign
                     const rawMult = Math.pow(baseMult, currentRegimeSensitivity);
@@ -632,7 +633,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     // Clamp to 1.0 max: regime only dampens, never amplifies
                     const finalMult = Math.abs(rawMult - 1.0) >= ABSOLUTE_THRESHOLD ? Math.min(rawMult, 1.0) : 1.0;
                     currentMults[i] = finalMult;
-                    const off = Math.abs(rawOff * finalMult) < outputThreshold ? 0 : (rawOff * finalMult);
+                    const gatedOff = Math.abs(blendedOff * finalMult) < outputThreshold ? 0 : (blendedOff * finalMult);
+                    const off = gatedOff * currentGain;
                     combinedOff[i] = Math.round(off * 1000) / 1000;
                     combinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL + off) * 100) / 100));
                     combinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY - off) * 100) / 100));
@@ -1027,8 +1029,6 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 } : () => [],
             };
         }
-
-        const OUTPUT_CLAMP = data.outputClamp ?? ${JSON.stringify(MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP)};
 
         function init() {
             // Force all sliders to match JS state — overrides browser form-restore memory

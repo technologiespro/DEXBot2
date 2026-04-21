@@ -395,36 +395,46 @@ class MarketAdapterService {
                 kalmanOffsets.push(0);
             }
 
-            // Normalize each channel by the configured gain so gain stays a dead-band knob
-            // instead of reshaping the output curve.
-            const channelNorm = Math.max(Math.abs(gain), 1e-9);
-            const outputThreshold = minOutputThreshold * channelNorm;
+            // Parity rule with the research chart:
+            // 1. Normalize AMA/Kalman rails by the runtime clamp so alpha only changes the blend ratio.
+            // 2. Decide regime/dead-band in pre-gain space so gain cannot reshape the signal.
+            // 3. Apply gain as the final scale factor, then clamp to the runtime offset cap.
+            const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
+            const channelNorm = Math.max(Math.abs(offsetClamp), 1e-9);
+            const outputThreshold = minOutputThreshold;
 
             // Build the same per-bar combined output series as the research chart, then
             // optionally latch it with signalConfirmBars before taking the last live value.
             const combinedOffSeries = new Array(closes.length).fill(0);
-            const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
+            const gatedOffSeries = new Array(closes.length).fill(0);
             for (let i = 0; i < closes.length; i++) {
-                const rawOff = (alpha * (amaOffsets[i] / channelNorm) + (1 - alpha) * (kalmanOffsets[i] / channelNorm)) * gain;
-                const gatedOff = Math.abs(rawOff * regimeMultipliers[i]) < outputThreshold ? 0 : (rawOff * regimeMultipliers[i]);
-                const off = Math.max(-offsetClamp, Math.min(offsetClamp, gatedOff));
+                const blendedOff = (alpha * (amaOffsets[i] / channelNorm) + (1 - alpha) * (kalmanOffsets[i] / channelNorm));
+                const gatedOff = Math.abs(blendedOff * regimeMultipliers[i]) < outputThreshold ? 0 : (blendedOff * regimeMultipliers[i]);
+                const off = Math.max(-offsetClamp, Math.min(offsetClamp, gatedOff * gain));
+                gatedOffSeries[i] = gatedOff;
                 combinedOffSeries[i] = Math.round(off * 1000) / 1000;
             }
 
             const confirmBars = Math.max(0, Math.min(5, Math.round(signalConfirmBars)));
             const echoedOffSeries = new Array(closes.length).fill(0);
+            const echoedGatedOffSeries = new Array(closes.length).fill(0);
             if (confirmBars === 0) {
-                for (let i = 0; i < closes.length; i++) echoedOffSeries[i] = combinedOffSeries[i];
+                for (let i = 0; i < closes.length; i++) {
+                    echoedOffSeries[i] = combinedOffSeries[i];
+                    echoedGatedOffSeries[i] = gatedOffSeries[i];
+                }
             } else {
                 let latchedSign = 0;
                 let pendingSign = 0;
                 let pendingCount = 0;
                 let latchedOff = 0;
+                let latchedGatedOff = 0;
                 for (let i = 0; i < closes.length; i++) {
                     const raw = combinedOffSeries[i];
                     const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
                     if (sign === 0) {
                         echoedOffSeries[i] = latchedOff;
+                        echoedGatedOffSeries[i] = latchedGatedOff;
                         continue;
                     }
                     if (latchedSign === 0) {
@@ -432,10 +442,12 @@ class MarketAdapterService {
                         pendingSign = 0;
                         pendingCount = 0;
                         latchedOff = raw;
+                        latchedGatedOff = gatedOffSeries[i];
                     } else if (sign === latchedSign) {
                         pendingSign = 0;
                         pendingCount = 0;
                         latchedOff = raw;
+                        latchedGatedOff = gatedOffSeries[i];
                     } else {
                         if (pendingSign !== sign) {
                             pendingSign = sign;
@@ -448,13 +460,17 @@ class MarketAdapterService {
                             pendingSign = 0;
                             pendingCount = 0;
                             latchedOff = raw;
+                            latchedGatedOff = gatedOffSeries[i];
                         }
                     }
                     echoedOffSeries[i] = latchedOff;
+                    echoedGatedOffSeries[i] = latchedGatedOff;
                 }
             }
 
             const rawFinalOff = combinedOffSeries[combinedOffSeries.length - 1] ?? 0;
+            const rawFinalPreGainOff = gatedOffSeries[gatedOffSeries.length - 1] ?? 0;
+            const finalPreGainOff = echoedGatedOffSeries[echoedGatedOffSeries.length - 1] ?? rawFinalPreGainOff;
             const finalOff = echoedOffSeries[echoedOffSeries.length - 1] ?? rawFinalOff;
 
             // Store for metadata.
@@ -504,9 +520,9 @@ class MarketAdapterService {
             const MAX_W = MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT;
             const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-            // Min-output threshold: if |finalOff| is below threshold, the trend component is
-            // suppressed. The volatility penalty (symmetricDelta) is always applied independently.
-            const belowMinOutputThreshold = Math.abs(finalOff) < outputThreshold;
+            // Min-output threshold: evaluate the same confirmed pre-gain state that drives
+            // the latched live output so signalConfirmBars affects gating and application consistently.
+            const belowMinOutputThreshold = Math.abs(finalPreGainOff) < outputThreshold;
 
             // Volatility penalty is the separate symmetric ATR shift. It is independent of
             // the trend gate so volatile markets reduce both sides even when trend is flat.

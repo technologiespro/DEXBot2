@@ -82,7 +82,7 @@ Measures market disorder by counting ordinal (rank-order) patterns in a rolling 
 
 **Algorithm**: for each position `i` in the window, extract the rank-order of `[price[i], price[i+1], ..., price[i+m-1]]` as an ordinal pattern key. Compute Shannon entropy over the distribution of all `m! = 120` possible patterns, normalized by `log(m!)` to give PE ∈ [0, 1].
 
-**Role in the tool**: PE is the second axis of the regime multiplier matrix. It complements Hurst — Hurst identifies trend persistence, PE identifies signal quality. Together they gate the output amplitude.
+**Role in the tool**: PE is the second axis of the regime multiplier matrix. It complements Hurst — Hurst identifies trend persistence, PE identifies signal quality. Together they gate the applied directional offset.
 
 **Warmup**: requires 58 bars (`window + (m-1) * delay`) before `isReady = true`.
 
@@ -102,7 +102,7 @@ Best case (trending + structured): multiplier = **1.0** (full signal). Unclear s
 
 The `regi` (regime sensitivity) knob raises the multiplier to a power: `finalMult = baseMult ^ sensitivity`. At sensitivity = 1.0 (default), the table is used as-is. Higher sensitivity exaggerates regime differences; lower sensitivity flattens them toward 1.0.
 
-**Dampen-only**: the multiplier is clamped to a maximum of 1.0. Regime can only reduce the signal — it never amplifies above what alpha+gain already produce. This was found to perform better in practice: letting a "good" regime boost the signal over-commits when the signal is already at its natural peak.
+**Dampen-only**: the multiplier is clamped to a maximum of 1.0. Regime can only reduce the signal — it never amplifies above what the blended channels and output clamp already allow. This was found to perform better in practice: letting a "good" regime boost the signal over-commits when the signal is already at its natural peak.
 
 ## Quick Start
 
@@ -196,7 +196,7 @@ All panels share aligned vertical time grid lines, and the bottom output panel s
 ### Output Controls
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
-| **gain** | 0.25–2.0 | 0.8 | Logarithmic. Amplitude multiplier on normalized blend |
+| **gain** | 0.25–2.0 | 0.8 | Logarithmic. Amplitude multiplier on the clamp-normalized blend |
 | **regi** | 0–2 | 1.0 | Regime sensitivity: exponent applied to Hurst+PE multiplier |
 
 ## Copy / Paste Parameters
@@ -210,7 +210,7 @@ The **paste** button first checks `localStorage` for parameters from a previous 
 ### AMA Offset
 ```
 amaClip = clamp(amaSlope%, ±clipThreshold)    // percentile-based clip
-amaOff  = clamp(amaClip / maxS% × gain, ±gain)
+amaOff  = clamp(amaClip / maxS% × outputClamp, ±outputClamp)
 ```
 
 ### Kalman Composite Offset
@@ -219,7 +219,7 @@ kalClip   = clamp(velocity%, ±clipThreshold)   // percentile-based clip
 dispConf  = min(|displacement%| / md%, 1)      // displacement confidence, 0–1
 momAlign  = sign(kalClip) == sign(displacement%) ? 1 : 0
 kalComp   = kalClip × (1 − dw + dw × dispConf × momAlign)
-kalOff    = clamp(kalComp / maxS% × gain, ±gain)
+kalOff    = clamp(kalComp / maxS% × outputClamp, ±outputClamp)
 ```
 
 ### Adaptive EMA
@@ -279,37 +279,37 @@ rawMult   = baseMult ^ regimeSensitivity        // power scaling via regi knob
 finalMult = min(rawMult, 1.0)                  // dampen-only: regime never amplifies
 ```
 
-### Final Weight (cap-normalized blend + gain)
+### Final Weight (clamp-normalized blend + gain)
 
-Each channel is normalized to the configured cap before blending, so α is a pure ratio knob without startup spikes dominating the blend. Gain scales the result linearly, hard-capped at the output clamp:
+Each channel is normalized by the configured output clamp before blending, so α stays a pure ratio knob. The dead-band is applied to that pre-gain blended shape first; `gain` then scales the surviving signal linearly at the end, while the clamp guides still show where the runtime cap sits:
 
 ```
-cap   = configured channel clamp
-rawOff = (α × (amaOff / cap) + (1 − α) × (kalOff / cap)) × gain
-off   = rawOff × finalMult
+cap            = configured channel clamp
+channelNorm    = max(|cap|, ε)
+blendedOff     = (α × (amaOff / channelNorm) + (1 − α) × (kalOff / channelNorm))
+gatedOff       = |blendedOff × finalMult| < minOutputThreshold ? 0 : (blendedOff × finalMult)
+off            = gatedOff × gain
 sellW = 0.5 + off
 buyW  = 0.5 − off
 ```
 
-The research chart now plots the unclipped `off` series so large moves stay visible.
-The live market adapter still applies its own ±0.5 clamp before persisting the runtime
-weights.
+The research chart intentionally plots the unclamped `off` series so moves above the runtime cap stay visible. The clamp guides still show where the live adapter would stop applying additional directional offset.
 
 ## Parameter Relationships
 
-### maxS% + gain
+### maxS% + maxSlopeOffset + gain
 
-These are multiplicatively related:
-- `off = clip / maxS% × gain` — raising `maxS%` from 0.5→1 has the same effect as halving `gain`
-- `maxS%` = gear ratio (what slope% saturates the output)
-- `gain` = output amplitude (how strong the weight offset can become)
+These knobs have separate jobs:
+- `maxS%` = gear ratio for how quickly AMA and Kalman inputs reach full directional strength
+- `maxSlopeOffset` / `outputClamp` = channel clamp used to normalize the AMA and Kalman rails
+- `gain` = final output scale after the blended shape has already been decided
 
 ### α (blend)
 - 0 = pure Kalman (momentum + displacement composite)
 - 1 = pure AMA slope
 - 0.5 = equal blend
 
-Each channel is normalized to its own peak before blending, so changing α only shifts the ratio — it does not change the output amplitude. Gain is the sole amplitude control.
+Each channel is normalized to the same clamp before blending, so changing α shifts the ratio between AMA and Kalman without changing their relative scale. Gain then scales that already-decided shape linearly, without changing where the chart gates to zero.
 
 ### nz% (neutral zone)
 Values below `nz%` in absolute terms are zeroed out before the offset formula.
@@ -386,8 +386,9 @@ Candle Data
 │   └── min(bilinear(REGIME_TABLE, H, PE) ^ regimeSensitivity, 1.0) → finalMult  [dampen-only]
 │
 └── Normalized blend × regime multiplier
-    rawOff = (α·(amaOff/aMax) + (1−α)·(kalOff/kMax)) × gain
-    off    = clamp(rawOff × finalMult, ±0.5)
+    blendedOff = (α·(amaOff / cap) + (1−α)·(kalOff / cap))
+    gatedOff   = |blendedOff × finalMult| < minOutputThreshold ? 0 : (blendedOff × finalMult)
+    off        = gatedOff × gain
     ├── sellW = 0.5 + off
     └── buyW  = 0.5 − off
 ```

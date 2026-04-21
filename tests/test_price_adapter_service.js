@@ -5,6 +5,14 @@ console.log('Running price adapter service tests');
 
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
 const { detectMissingCandleTimestamps } = require('../market_adapter/candle_utils');
+const { calculateATR } = require('../market_adapter/core/strategies/atr/calculator');
+const { computeAmaSlopeWeights } = require('../market_adapter/core/strategies/ama_slope_model');
+const { normalizeAtrPeriod, normalizeMaxVolatilityOffset, normalizeVolatilityThreshold } = require('../market_adapter/core/config_normalizers');
+const { computeRegimeMultiplier } = require('../market_adapter/core/strategies/regime_gate');
+const { MARKET_ADAPTER } = require('../modules/constants');
+const { calculateAMA, getAmaWarmupBars } = require('../analysis/ama_fitting/ama');
+const { KalmanTrendAnalyzer } = require('../analysis/trend_detection/kalman_trend_analyzer');
+const { buildKalmanVelocitySeries, computeAbsolutePercentileThreshold } = require('../analysis/trend_detection/kalman_velocity_smoothing');
 
 function generateCandles(count, price) {
     const candles = [];
@@ -32,6 +40,292 @@ function generateTrendingCandles(count, start = 100, step = 0.2) {
         candles.push([baseTs + i * 3600000, price, price, price, price, 1]);
     }
     return candles;
+}
+
+function generateTrendShiftCandles(count, start = 100) {
+    const candles = [];
+    const baseTs = 1700000000000;
+    let open = start;
+    for (let i = 0; i < count; i++) {
+        let drift = 0.28;
+        if (i >= 110 && i < 190) drift = -0.42;
+        else if (i >= 190 && i < 250) drift = 0.06;
+        else if (i >= 250) drift = 0.36;
+
+        const wave = ((i % 9) - 4) * 0.035;
+        const close = Math.max(1, open + drift + wave);
+        const high = Math.max(open, close) + 0.45 + ((i % 5) * 0.03);
+        const low = Math.max(0.01, Math.min(open, close) - 0.38 - ((i % 4) * 0.02));
+        candles.push([baseTs + i * 3600000, open, high, low, close, 1]);
+        open = close;
+    }
+    return candles;
+}
+
+function roundTo(value, decimals) {
+    const factor = 10 ** decimals;
+    return Math.round(value * factor) / factor;
+}
+
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function latchConfirmedSeries(appliedSeries, preGainSeries, confirmBars) {
+    const echoedAppliedSeries = new Array(appliedSeries.length).fill(0);
+    const echoedPreGainSeries = new Array(preGainSeries.length).fill(0);
+
+    if (confirmBars === 0) {
+        for (let i = 0; i < appliedSeries.length; i++) {
+            echoedAppliedSeries[i] = appliedSeries[i];
+            echoedPreGainSeries[i] = preGainSeries[i];
+        }
+        return { echoedAppliedSeries, echoedPreGainSeries };
+    }
+
+    let latchedSign = 0;
+    let pendingSign = 0;
+    let pendingCount = 0;
+    let latchedApplied = 0;
+    let latchedPreGain = 0;
+
+    for (let i = 0; i < appliedSeries.length; i++) {
+        const raw = appliedSeries[i];
+        const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
+        if (sign === 0) {
+            echoedAppliedSeries[i] = latchedApplied;
+            echoedPreGainSeries[i] = latchedPreGain;
+            continue;
+        }
+        if (latchedSign === 0) {
+            latchedSign = sign;
+            pendingSign = 0;
+            pendingCount = 0;
+            latchedApplied = raw;
+            latchedPreGain = preGainSeries[i];
+        } else if (sign === latchedSign) {
+            pendingSign = 0;
+            pendingCount = 0;
+            latchedApplied = raw;
+            latchedPreGain = preGainSeries[i];
+        } else {
+            if (pendingSign !== sign) {
+                pendingSign = sign;
+                pendingCount = 1;
+            } else {
+                pendingCount++;
+            }
+            if (pendingCount >= confirmBars) {
+                latchedSign = sign;
+                pendingSign = 0;
+                pendingCount = 0;
+                latchedApplied = raw;
+                latchedPreGain = preGainSeries[i];
+            }
+        }
+        echoedAppliedSeries[i] = latchedApplied;
+        echoedPreGainSeries[i] = latchedPreGain;
+    }
+
+    return { echoedAppliedSeries, echoedPreGainSeries };
+}
+
+function buildDynamicWeightParityInputs(candles, cfg, botAma) {
+    const closes = candles.map((c) => Number(c[4])).filter((value) => Number.isFinite(value) && value > 0);
+    const amaErPeriod = cfg.amaSlope?.erPeriod ?? botAma.erPeriod;
+    const amaSlowPeriod = cfg.amaSlope?.slowPeriod ?? botAma.slowPeriod;
+    const lookbackBars = cfg.amaSlope?.lookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
+    const amaValues = calculateAMA(closes, botAma);
+    const amaPrice = amaValues[amaValues.length - 1] ?? null;
+    const atrPeriod = normalizeAtrPeriod(cfg.atrPeriod);
+    const atr = calculateATR(candles, atrPeriod);
+    const weightVariance = Number.isFinite(atr) && amaPrice > 0 ? (atr / amaPrice) : 0;
+
+    const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
+    const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
+    const maxSlopePct = cfg.amaSlope?.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
+    const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
+    const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
+    const amaWarmupBars = getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars);
+
+    let amaClipThreshold = Infinity;
+    if (clipPercentile > 0 && amaValues.length > amaWarmupBars) {
+        const amaSlopes = [];
+        for (let i = amaWarmupBars; i < amaValues.length; i++) {
+            const last = amaValues[i];
+            const past = amaValues[i - lookbackBars];
+            if (past > 0) amaSlopes.push(Math.abs((last - past) / past * 100));
+        }
+        if (amaSlopes.length > 0) {
+            amaSlopes.sort((a, b) => a - b);
+            const idx = Math.min(Math.floor((100 - clipPercentile) / 100 * amaSlopes.length), amaSlopes.length - 1);
+            amaClipThreshold = amaSlopes[idx];
+        }
+    }
+
+    const slopeCfg = {
+        ...(cfg.amaSlope || {}),
+        erPeriod: amaErPeriod,
+        slowPeriod: amaSlowPeriod,
+        maxSlopeOffset: cfg.maxSlopeOffset,
+        maxVolatilityOffset: volatilityClamp,
+        volatilityExponent: cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
+        volatilityScaleX: cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
+        volatilityThreshold: normalizeVolatilityThreshold(cfg.volatilityThreshold),
+        neutralZonePct: nz,
+        clipPercentile,
+        clipThreshold: amaClipThreshold,
+    };
+
+    const slopeResult = computeAmaSlopeWeights(amaValues, weightVariance, slopeCfg);
+
+    const kalman = new KalmanTrendAnalyzer({
+        rNoise: cfg.kalman?.rNoise ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_R_NOISE_DEFAULT,
+        qTactical: cfg.kalman?.qTactical ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_TACTICAL_DEFAULT,
+        qModal: cfg.kalman?.qModal ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_MODAL_DEFAULT,
+        warmupBars: cfg.kalman?.warmupBars ?? 20,
+    });
+    const kalmanHistory = [];
+    for (const close of closes) kalmanHistory.push(kalman.update(close));
+
+    const kalmanSmoothedVelocityPct = buildKalmanVelocitySeries(kalmanHistory, {
+        kalmanSmoothPct: cfg.kalmanSmoothPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT,
+        kalmanDispScaleMult: cfg.kalmanDispScaleMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT,
+        kalmanDispThresholdMult: cfg.kalmanDispThresholdMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT,
+        kalmanSmoothSpanPct: cfg.kalmanSmoothSpanPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT,
+    });
+    const kalmanWarmupBars = kalman.warmupBars ?? 20;
+    const kalClipThreshold = computeAbsolutePercentileThreshold(
+        kalmanSmoothedVelocityPct.slice(kalmanWarmupBars),
+        clipPercentile,
+        Infinity
+    );
+
+    const regimeSensitivity = cfg.regimeSensitivity ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY;
+    const absoluteThreshold = cfg.absoluteThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT;
+    const regimeMultipliers = new Array(closes.length).fill(1.0);
+    if (regimeSensitivity > 0) {
+        const regimeResult = computeRegimeMultiplier(closes, {
+            regimeSensitivity,
+            regimeTable: cfg.regimeTable,
+            hurstZoneBand: cfg.hurstZoneBand,
+            peNodes: cfg.peNodes,
+        });
+        if (Array.isArray(regimeResult.series) && regimeResult.series.length === closes.length) {
+            for (let i = 0; i < closes.length; i++) {
+                const rawMult = regimeResult.series[i];
+                regimeMultipliers[i] = Math.abs(rawMult - 1.0) >= absoluteThreshold ? rawMult : 1.0;
+            }
+        }
+    }
+
+    const alpha = cfg.alpha ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA;
+    const dw = cfg.dw ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DW;
+    const gain = cfg.gain ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN;
+    const minOutputThreshold = cfg.minOutputThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD;
+    const signalConfirmBars = Math.max(0, Math.min(5, Math.round(
+        cfg.signalConfirmBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT
+    )));
+    const dispScaleMinPct = cfg.dispScaleMinPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
+
+    const amaOffsets = [];
+    for (let i = 0; i < closes.length; i++) {
+        if (!slopeResult.isReady || i < amaWarmupBars) {
+            amaOffsets.push(0);
+            continue;
+        }
+        const last = amaValues[i];
+        const past = amaValues[i - lookbackBars];
+        if (!Number.isFinite(last) || !Number.isFinite(past) || past === 0) {
+            amaOffsets.push(0);
+            continue;
+        }
+        const slopePct = (last - past) / past * 100;
+        const clippedSlopePct = clamp(slopePct, -amaClipThreshold, amaClipThreshold);
+        amaOffsets.push(Math.abs(clippedSlopePct) < nz ? 0 : clamp((clippedSlopePct / maxSlopePct) * offsetClamp, -offsetClamp, offsetClamp));
+    }
+
+    const kalmanOffsets = [];
+    for (let i = 0; i < kalmanHistory.length; i++) {
+        const point = kalmanHistory[i];
+        const velocityPct = kalmanSmoothedVelocityPct[i];
+        if (!point.isReady || velocityPct == null || point.displacementPct == null) {
+            kalmanOffsets.push(0);
+            continue;
+        }
+
+        const clippedVelocityPct = clamp(velocityPct, -kalClipThreshold, kalClipThreshold);
+        if (Math.abs(clippedVelocityPct) < nz) {
+            kalmanOffsets.push(0);
+            continue;
+        }
+
+        const dispScale = Math.max(1.0, dispScaleMinPct);
+        const dispConf = Math.min(Math.abs(point.displacementPct) / dispScale, 1.0);
+        const momAlign = Math.max(
+            0,
+            (clippedVelocityPct * point.displacementPct) /
+            (Math.abs(clippedVelocityPct) * Math.abs(point.displacementPct) + 1e-10)
+        );
+        const composite = clippedVelocityPct * (1 - dw + dw * dispConf * momAlign);
+        kalmanOffsets.push(clamp((composite / maxSlopePct) * offsetClamp, -offsetClamp, offsetClamp));
+    }
+
+    return {
+        alpha,
+        gain,
+        minOutputThreshold,
+        signalConfirmBars,
+        offsetClamp,
+        amaOffsets,
+        kalmanOffsets,
+        regimeMultipliers,
+        slopeResult,
+    };
+}
+
+function computeDirectionalOffsetSeries(parityInputs, { clampFinalOutput }) {
+    const {
+        alpha,
+        gain,
+        minOutputThreshold,
+        signalConfirmBars,
+        offsetClamp,
+        amaOffsets,
+        kalmanOffsets,
+        regimeMultipliers,
+    } = parityInputs;
+
+    const channelNorm = Math.max(Math.abs(offsetClamp), 1e-9);
+    const combinedOffSeries = new Array(amaOffsets.length).fill(0);
+    const gatedOffSeries = new Array(amaOffsets.length).fill(0);
+
+    for (let i = 0; i < amaOffsets.length; i++) {
+        const blendedOff = (alpha * (amaOffsets[i] / channelNorm) + (1 - alpha) * (kalmanOffsets[i] / channelNorm));
+        const gatedOff = Math.abs(blendedOff * regimeMultipliers[i]) < minOutputThreshold ? 0 : (blendedOff * regimeMultipliers[i]);
+        const appliedOff = clampFinalOutput
+            ? clamp(gatedOff * gain, -offsetClamp, offsetClamp)
+            : (gatedOff * gain);
+        gatedOffSeries[i] = gatedOff;
+        combinedOffSeries[i] = roundTo(appliedOff, 3);
+    }
+
+    const { echoedAppliedSeries, echoedPreGainSeries } = latchConfirmedSeries(
+        combinedOffSeries,
+        gatedOffSeries,
+        signalConfirmBars
+    );
+
+    return {
+        gatedOffSeries,
+        combinedOffSeries,
+        echoedOffSeries: echoedAppliedSeries,
+        echoedGatedOffSeries: echoedPreGainSeries,
+        rawFinalOff: combinedOffSeries[combinedOffSeries.length - 1] ?? 0,
+        rawFinalPreGainOff: gatedOffSeries[gatedOffSeries.length - 1] ?? 0,
+        finalPreGainOff: echoedPreGainSeries[echoedPreGainSeries.length - 1] ?? 0,
+        finalOff: echoedAppliedSeries[echoedAppliedSeries.length - 1] ?? 0,
+    };
 }
 
 async function testTriggerHookCalledOnThreshold() {
@@ -1105,7 +1399,7 @@ async function testDynamicWeightMinOutputThresholdZeroDisablesGate() {
     assert.strictEqual(dw.minOutputThreshold, 0, 'cfg.minOutputThreshold=0 should be reflected in payload');
 }
 
-async function testDynamicWeightGainDoesNotReshapeOutput() {
+async function testDynamicWeightGainScalesOutputLinearly() {
     const runWithGain = async (gain) => {
         let writtenPayload = null;
 
@@ -1177,8 +1471,158 @@ async function testDynamicWeightGainDoesNotReshapeOutput() {
 
     assert.ok(Number.isFinite(lowGain.rawFinalOffset), 'low-gain output should be finite');
     assert.ok(Number.isFinite(highGain.rawFinalOffset), 'high-gain output should be finite');
-    assert.strictEqual(lowGain.rawFinalOffset, highGain.rawFinalOffset, 'gain should not reshape the live output when the dead-band is disabled');
-    assert.deepStrictEqual(lowGain.effectiveWeights, highGain.effectiveWeights, 'gain should not alter effective weights when the dead-band is disabled');
+    const normalizedLow = lowGain.rawFinalOffset / 0.25;
+    const normalizedHigh = highGain.rawFinalOffset / 2.0;
+    assert.ok(Math.abs(normalizedLow - normalizedHigh) < 0.01,
+        'gain should act as a linear end-stage scale factor once the blended shape is decided');
+    assert.notDeepStrictEqual(lowGain.effectiveWeights, highGain.effectiveWeights,
+        'different gain values should produce different effective weights when the signal survives gating');
+}
+
+async function testDynamicWeightChartParityMatchesLiveService() {
+    let writtenPayload = null;
+
+    const candles = generateTrendShiftCandles(360, 100);
+    const botAma = { enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 };
+    const staticWeights = { sell: 0.6, buy: 0.4 };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        alpha: 0.35,
+        dw: 0.7,
+        gain: 1.75,
+        signalConfirmBars: 2,
+        minOutputThreshold: 0.08,
+        regimeSensitivity: 1.0,
+        maxSlopeOffset: 0.5,
+        clipPercentile: 10,
+        kalmanSmoothPct: 60,
+        kalmanDispScaleMult: 1.7,
+        kalmanDispThresholdMult: 1.15,
+        kalmanSmoothSpanPct: 120,
+        amaSlope: {
+            lookbackBars: 2,
+            maxSlopePct: 0.9,
+            neutralZonePct: 0.02,
+        },
+    };
+
+    const parityInputs = buildDynamicWeightParityInputs(candles, cfg, botAma);
+    const chartSeries = computeDirectionalOffsetSeries(parityInputs, { clampFinalOutput: false });
+    const liveSeries = computeDirectionalOffsetSeries(parityInputs, { clampFinalOutput: true });
+
+    assert.ok(
+        chartSeries.combinedOffSeries.some((value) => Math.abs(value) > parityInputs.offsetClamp),
+        'fixture should exercise chart values above the runtime clamp'
+    );
+    assert.ok(
+        liveSeries.echoedOffSeries.some((value, index) => index > 0 && value !== liveSeries.combinedOffSeries[index]),
+        'fixture should exercise signalConfirmBars latching'
+    );
+    assert.deepStrictEqual(
+        liveSeries.gatedOffSeries,
+        chartSeries.gatedOffSeries,
+        'chart and live runtime should share the same pre-gain gated series'
+    );
+    assert.deepStrictEqual(
+        liveSeries.echoedGatedOffSeries,
+        chartSeries.echoedGatedOffSeries,
+        'chart and live runtime should share the same confirmed pre-gain state'
+    );
+    assert.deepStrictEqual(
+        liveSeries.combinedOffSeries,
+        chartSeries.gatedOffSeries.map((value) => roundTo(clamp(value * parityInputs.gain, -parityInputs.offsetClamp, parityInputs.offsetClamp), 3)),
+        'live output should equal the chart shape after final gain and runtime clamping'
+    );
+
+    const expectedBelowThreshold = Math.abs(liveSeries.finalPreGainOff) < parityInputs.minOutputThreshold;
+    const expectedVolatilityPenalty = parityInputs.slopeResult.isReady ? (parityInputs.slopeResult.symmetricDelta ?? 0) : 0;
+    const expectedTrendOffset = expectedBelowThreshold ? 0 : liveSeries.finalOff;
+    const expectedEffectiveWeights = {
+        sell: roundTo(
+            clamp(
+                staticWeights.sell + expectedTrendOffset + expectedVolatilityPenalty,
+                MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT,
+                MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT
+            ),
+            2
+        ),
+        buy: roundTo(
+            clamp(
+                staticWeights.buy - expectedTrendOffset + expectedVolatilityPenalty,
+                MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT,
+                MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT
+            ),
+            2
+        ),
+    };
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => botAma,
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (series) => series,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-parity.trigger',
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
+            writtenPayload = payload;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-parity',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: staticWeights,
+    };
+
+    const state = { bots: { 'xrp-bts-dw-parity': { centerPrice: 100 } } };
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.ok(writtenPayload, 'dynamic weights should be persisted');
+
+    const dw = writtenPayload.dynamicWeights;
+    assert.strictEqual(dw.rawFinalOffset, liveSeries.rawFinalOff, 'persisted raw final offset should match the parity model');
+    assert.strictEqual(dw.finalOffset, liveSeries.finalOff, 'persisted final offset should match the parity model');
+    assert.strictEqual(dw.belowMinOutputThreshold, expectedBelowThreshold, 'persisted threshold gate should match the confirmed pre-gain state');
+    assert.deepStrictEqual(dw.effectiveWeights, expectedEffectiveWeights, 'persisted effective weights should match the parity model');
+    assert.strictEqual(result.weights.meta.rawFinalOffset, liveSeries.rawFinalOff, 'service metadata should expose the same raw final offset');
+    assert.strictEqual(result.weights.meta.finalOffset, liveSeries.finalOff, 'service metadata should expose the same final offset');
+    assert.strictEqual(result.weights.meta.belowMinOutputThreshold, expectedBelowThreshold, 'service metadata should expose the same threshold decision');
+    assert.strictEqual(result.weights.meta.trendOffset, expectedTrendOffset, 'applied trend offset should match the parity model');
+    assert.deepStrictEqual(
+        { sell: result.weights.sell, buy: result.weights.buy },
+        expectedEffectiveWeights,
+        'service weights should match the parity model'
+    );
 }
 
 async function testDynamicWeightVolatilityOnlyPathRemainsReady() {
@@ -1391,7 +1835,7 @@ async function testDynamicWeightSuppressedTrendUsesFlatProfile() {
 
     const dw = writtenPayload.dynamicWeights;
     assert.strictEqual(dw.isReady, false, 'suppressed trend without volatility should not be ready');
-    assert.strictEqual(dw.outputThreshold, 4, 'gain should scale the live output threshold');
+    assert.strictEqual(dw.outputThreshold, 2, 'live output threshold should stay in pre-gain space');
     assert.deepStrictEqual(dw.effectiveWeights, dw.baseWeights, 'effective weights should fall back to the static baseline');
 }
 
@@ -1687,7 +2131,8 @@ async function run() {
     await testRemainingGapsAreReportedWhenKibanaHasNoPatchData();
     await testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights();
     await testDynamicWeightMinOutputThresholdZeroDisablesGate();
-    await testDynamicWeightGainDoesNotReshapeOutput();
+    await testDynamicWeightGainScalesOutputLinearly();
+    await testDynamicWeightChartParityMatchesLiveService();
     await testDynamicWeightVolatilityOnlyPathRemainsReady();
     await testDynamicWeightVolatilityOverridesFlowIntoService();
     await testDynamicWeightSuppressedTrendUsesFlatProfile();

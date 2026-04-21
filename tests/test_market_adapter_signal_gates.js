@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const { MARKET_ADAPTER } = require('../modules/constants');
 const { getAmaWarmupBars } = require('../analysis/ama_fitting/ama');
 const { computeAmaSlopeWeights } = require('../market_adapter/core/strategies/ama_slope_model');
@@ -111,7 +113,7 @@ function testDynamicWeightChartUsesSlowPeriodWarmup() {
     assert.match(html, /for \(let i = amaReadyBar; i < data\.realBarCount; i\+\+\)/, 'interactive clip-threshold recompute should skip the full AMA warmup window');
 }
 
-function testDynamicWeightChartKeepsGainThresholdProportional() {
+function testDynamicWeightChartKeepsGainLinearAtEnd() {
     const html = generateHTML({
         allResults: [
             { timestamp: '2026-01-01T00:00:00Z', price: 100, ama3Price: 100, amaSlopePct: 0.4, velocityPct: 0.2, displacementPct: 0.1, isReady: true, signal: 'NEUTRAL' },
@@ -123,13 +125,33 @@ function testDynamicWeightChartKeepsGainThresholdProportional() {
 
     assert.match(
         html,
-        /const outputThreshold = MIN_OUTPUT_THRESHOLD \* channelNorm;/,
-        'gain-sensitive dead-band should be normalized by the current gain'
+        /const channelNorm = Math\.max\(Math\.abs\(OUTPUT_CLAMP\), 1e-9\);/,
+        'chart should normalize the blended channels by the configured output clamp'
     );
     assert.match(
         html,
-        /const off = Math\.abs\(rawOff \* finalMult\) < outputThreshold \? 0 : \(rawOff \* finalMult\);/,
-        'output threshold should use the gain-scaled dead-band'
+        /const outputThreshold = MIN_OUTPUT_THRESHOLD;/,
+        'chart should keep the dead-band independent from the final gain slider'
+    );
+    assert.match(
+        html,
+        /const mo = OUTPUT_CLAMP;/,
+        'chart should cap AMA and Kalman input channels with the runtime output clamp rather than gain'
+    );
+    assert.match(
+        html,
+        /const blendedOff = \(currentAlpha \* \(aOff \/ channelNorm\) \+ \(1 - currentAlpha\) \* \(kOff \/ channelNorm\)\);/,
+        'chart should compute the blended shape before applying gain'
+    );
+    assert.match(
+        html,
+        /const gatedOff = Math\.abs\(blendedOff \* finalMult\) < outputThreshold \? 0 : \(blendedOff \* finalMult\);/,
+        'chart should make the dead-band decision in pre-gain space so gain does not reshape the signal'
+    );
+    assert.match(
+        html,
+        /const off = gatedOff \* currentGain;/,
+        'chart should apply gain only as a final linear scale factor'
     );
 }
 
@@ -148,6 +170,56 @@ function testDynamicWeightChartShowsOutputClampGuide() {
         'bottom output panel should draw both clamp guide lines');
     assert.match(html, /makeClampLineHook\(scaleKey, -clampValue, 'clamp -' \+ clampValue\.toFixed\(2\)\)/,
         'bottom output panel should include the mirrored negative clamp guide');
+    assert.match(html, /const OUTPUT_CLAMP = data\.outputClamp \?\? 0\.5;[\s\S]*function recalcInputs\(\)/,
+        'output clamp constant should be declared before recalcInputs uses it');
+}
+
+function testLiveServiceMatchesChartGainStructure() {
+    const serviceSource = fs.readFileSync(
+        path.join(__dirname, '..', 'market_adapter', 'core', 'market_adapter_service.js'),
+        'utf8'
+    );
+
+    assert.match(
+        serviceSource,
+        /const channelNorm = Math\.max\(Math\.abs\(offsetClamp\), 1e-9\);/,
+        'live service should normalize the blended channels by the runtime offset clamp'
+    );
+    assert.match(
+        serviceSource,
+        /const outputThreshold = minOutputThreshold;/,
+        'live service should keep the dead-band in pre-gain space'
+    );
+    assert.match(
+        serviceSource,
+        /const blendedOff = \(alpha \* \(amaOffsets\[i\] \/ channelNorm\) \+ \(1 - alpha\) \* \(kalmanOffsets\[i\] \/ channelNorm\)\);/,
+        'live service should compute the blended shape before applying gain'
+    );
+    assert.match(
+        serviceSource,
+        /const gatedOff = Math\.abs\(blendedOff \* regimeMultipliers\[i\]\) < outputThreshold \? 0 : \(blendedOff \* regimeMultipliers\[i\]\);/,
+        'live service should make the dead-band decision in pre-gain space'
+    );
+    assert.match(
+        serviceSource,
+        /const off = Math\.max\(-offsetClamp, Math\.min\(offsetClamp, gatedOff \* gain\)\);/,
+        'live service should apply gain only as the final scale factor before the runtime clamp'
+    );
+    assert.match(
+        serviceSource,
+        /const echoedGatedOffSeries = new Array\(closes\.length\)\.fill\(0\);/,
+        'live service should track a latched pre-gain series alongside the applied output'
+    );
+    assert.match(
+        serviceSource,
+        /const finalPreGainOff = echoedGatedOffSeries\[echoedGatedOffSeries\.length - 1\] \?\? rawFinalPreGainOff;/,
+        'live service should evaluate the threshold against the confirmed pre-gain state'
+    );
+    assert.match(
+        serviceSource,
+        /const belowMinOutputThreshold = Math\.abs\(finalPreGainOff\) < outputThreshold;/,
+        'live service should keep thresholding aligned with the latched output state'
+    );
 }
 
 function main() {
@@ -157,8 +229,9 @@ function main() {
     testKalmanWarmupIsConfigurable();
     testRegimeMultiplierReturnsSeries();
     testDynamicWeightChartUsesSlowPeriodWarmup();
-    testDynamicWeightChartKeepsGainThresholdProportional();
+    testDynamicWeightChartKeepsGainLinearAtEnd();
     testDynamicWeightChartShowsOutputClampGuide();
+    testLiveServiceMatchesChartGainStructure();
     console.log('market adapter signal gate tests passed');
 }
 
