@@ -143,7 +143,12 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
 
     const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
     const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
-    const maxSlopePct = cfg.amaSlope?.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
+    const amaMaxSlopePct = cfg.amaSlope?.maxSlopePct
+        ?? cfg.amaMaxSlopePct
+        ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
+    const kalmanMaxSlopePct = cfg.kalmanSlope?.maxSlopePct
+        ?? cfg.kalmanMaxSlopePct
+        ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
     const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
     const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
     const amaWarmupBars = getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars);
@@ -242,7 +247,7 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
         }
         const slopePct = (last - past) / past * 100;
         const clippedSlopePct = clamp(slopePct, -amaClipThreshold, amaClipThreshold);
-        amaOffsets.push(Math.abs(clippedSlopePct) < nz ? 0 : clamp((clippedSlopePct / maxSlopePct) * offsetClamp, -offsetClamp, offsetClamp));
+        amaOffsets.push(Math.abs(clippedSlopePct) < nz ? 0 : clamp((clippedSlopePct / amaMaxSlopePct) * offsetClamp, -offsetClamp, offsetClamp));
     }
 
     const kalmanOffsets = [];
@@ -268,7 +273,7 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
             (Math.abs(clippedVelocityPct) * Math.abs(point.displacementPct) + 1e-10)
         );
         const composite = clippedVelocityPct * (1 - dw + dw * dispConf * momAlign);
-        kalmanOffsets.push(clamp((composite / maxSlopePct) * offsetClamp, -offsetClamp, offsetClamp));
+        kalmanOffsets.push(clamp((composite / kalmanMaxSlopePct) * offsetClamp, -offsetClamp, offsetClamp));
     }
 
     return {
@@ -1511,6 +1516,9 @@ async function testDynamicWeightChartParityMatchesLiveService() {
             maxSlopePct: 0.9,
             neutralZonePct: 0.02,
         },
+        kalmanSlope: {
+            maxSlopePct: 1.8,
+        },
     };
 
     const parityInputs = buildDynamicWeightParityInputs(candles, cfg, botAma);
@@ -1622,6 +1630,28 @@ async function testDynamicWeightChartParityMatchesLiveService() {
         { sell: result.weights.sell, buy: result.weights.buy },
         expectedEffectiveWeights,
         'service weights should match the parity model'
+    );
+
+    const narrowKalCfg = {
+        ...cfg,
+        kalmanSlope: { maxSlopePct: 0.45 },
+    };
+    const wideKalCfg = {
+        ...cfg,
+        kalmanSlope: { maxSlopePct: 1.8 },
+    };
+    const narrowKalInputs = buildDynamicWeightParityInputs(candles, narrowKalCfg, botAma);
+    const wideKalInputs = buildDynamicWeightParityInputs(candles, wideKalCfg, botAma);
+
+    assert.deepStrictEqual(
+        narrowKalInputs.amaOffsets,
+        wideKalInputs.amaOffsets,
+        'AMA offsets should not change when only the Kalman slope knob changes'
+    );
+    assert.notDeepStrictEqual(
+        narrowKalInputs.kalmanOffsets,
+        wideKalInputs.kalmanOffsets,
+        'Kalman offsets should respond to the separate Kalman slope knob'
     );
 }
 

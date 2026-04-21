@@ -114,6 +114,9 @@ const DEFAULTS = {
         maxSlopePct:   MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
         neutralZonePct: MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
     },
+    kalmanSlope: {
+        maxSlopePct: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT,
+    },
     atrPeriod: MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT,
 };
 
@@ -187,11 +190,19 @@ function applyAmaSlopeOverrides(target, overrides) {
     if (overrides.neutralZonePct != null) {
         target.amaSlope = { ...target.amaSlope, neutralZonePct: overrides.neutralZonePct };
     }
-    if (overrides.maxSlopePct != null) {
-        target.amaSlope = { ...target.amaSlope, maxSlopePct: overrides.maxSlopePct };
+    if (overrides.amaMaxSlopePct != null) {
+        target.amaSlope = { ...target.amaSlope, maxSlopePct: overrides.amaMaxSlopePct };
     }
     if (overrides.lookbackBars != null) {
         target.amaSlope = { ...target.amaSlope, lookbackBars: overrides.lookbackBars };
+    }
+    return target;
+}
+
+function applyKalmanSlopeOverrides(target, overrides) {
+    if (!overrides || typeof overrides !== 'object') return target;
+    if (overrides.maxSlopePct != null) {
+        target.kalmanSlope = { ...target.kalmanSlope, maxSlopePct: overrides.maxSlopePct };
     }
     return target;
 }
@@ -234,6 +245,8 @@ function applyMarketAdapterOverrides(target, overrides, opts = {}) {
     if (overrides.dispScaleAtrMult != null) target.dispScaleAtrMult = overrides.dispScaleAtrMult;
     if (overrides.dispScaleMinPct != null) target.dispScaleMinPct = overrides.dispScaleMinPct;
     if (overrides.kalman) target.kalman = overrides.kalman;
+    if (overrides.kalmanMaxSlopePct != null) target.kalmanSlope = { ...target.kalmanSlope, maxSlopePct: overrides.kalmanMaxSlopePct };
+    applyKalmanSlopeOverrides(target, overrides.kalmanSlope);
     applyAmaSlopeOverrides(target, overrides);
     return target;
 }
@@ -248,6 +261,9 @@ function resolveBotCfg(bot, globalCfg) {
     const globals = settings.globals || {};
     if (globals.amaSlope && typeof globals.amaSlope === 'object') {
         merged.amaSlope = { ...merged.amaSlope, ...globals.amaSlope };
+    }
+    if (globals.kalmanSlope && typeof globals.kalmanSlope === 'object') {
+        merged.kalmanSlope = { ...merged.kalmanSlope, ...globals.kalmanSlope };
     }
 
     // Pair-level overrides

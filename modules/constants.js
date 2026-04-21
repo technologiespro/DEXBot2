@@ -593,13 +593,21 @@ let MARKET_ADAPTER = {
     // Lower values react faster to recent price changes.
     // Higher values smooth the signal and require a more sustained move.
     // nob: lb (Lookback Bars)
-    DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: 8,
+    DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: 9,
 
     // DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: Trend size that counts as "full strength" for AMA.
     // Lower values make the AMA channel reach maximum influence more easily.
     // Higher values require a stronger price move before AMA reaches full effect.
     // nob: maxS% (Max Slope %)
-    DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: 0.5,
+    DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: 0.6,
+
+    // DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT: Trend size that counts as "full strength" for
+    // the Kalman composite branch. Kept separate from the AMA slope knob so the two
+    // channels can saturate independently.
+    // Lower values make the Kalman channel reach maximum influence more easily.
+    // Higher values require a stronger move before the Kalman branch reaches full effect.
+    // nob: kalS% (Kalman Max Slope %)
+    DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT: 0.5,
 
     // DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT: Ignore small AMA moves around flat price action.
     // Higher values create a larger neutral zone and reduce small trend reactions.
@@ -624,7 +632,7 @@ let MARKET_ADAPTER = {
     // Higher values make dynamic weights more aggressive.
     // Lower values keep weights closer to the static baseline.
     // nob: gain
-    DYNAMIC_WEIGHT_GAIN: 0.8,
+    DYNAMIC_WEIGHT_GAIN: 1.0,
 
     // DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP: Maximum directional offset away from neutral.
     // Overridable per market pair or per bot via market_adapter_settings.json.
@@ -659,7 +667,7 @@ let MARKET_ADAPTER = {
     DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT: 1.8,
     DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT: 1.5,
     DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT: 100,
-    DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT: 1,
+    DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT: 0,
 
     // Adaptive Kalman velocity smoothing budget (0-1.0)
     DYNAMIC_WEIGHT_KALMAN_SMOOTHING_BUDGET: 0.60,

@@ -32,7 +32,8 @@ const AMA_CONFIG = MARKET_ADAPTER.AMAS.AMA3;
 // AMA Slope weight calculation config — use DEFAULTS from market adapter
 const AMA_WEIGHT_CONFIG = {
     lookbackBars:           MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
-    maxSlopePct:            MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
+    amaMaxSlopePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
+    kalmanMaxSlopePct:      MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT,
     neutralZonePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
     volatilityExponent:     MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
     volatilityScaleX:       MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
@@ -164,7 +165,7 @@ async function main() {
                 erPeriod: AMA_CONFIG.erPeriod,
                 slowPeriod: AMA_CONFIG.slowPeriod,
                 lookbackBars: config.lookbackBars ?? AMA_WEIGHT_CONFIG.lookbackBars,
-                maxSlopePct: AMA_WEIGHT_CONFIG.maxSlopePct,
+                maxSlopePct: AMA_WEIGHT_CONFIG.amaMaxSlopePct,
                 neutralZonePct: AMA_WEIGHT_CONFIG.neutralZonePct,
                 volatilityExponent: AMA_WEIGHT_CONFIG.volatilityExponent,
                 volatilityScaleX: AMA_WEIGHT_CONFIG.volatilityScaleX,
@@ -209,6 +210,7 @@ async function main() {
                 outputClamp:             MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP,
                 amaLookbackBars:        MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
                 amaMaxSlopePct:         MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
+                kalmanMaxSlopePct:      MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT,
                 amaNeutralZonePct:      MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
                 dispScaleMinPct:        MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT,
             },

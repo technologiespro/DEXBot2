@@ -345,7 +345,8 @@ The main runtime knobs are:
 
 - `alpha` - AMA vs Kalman blend
 - `dw` - Kalman displacement weighting (default 0.5)
-- `gain` - output amplitude (default 0.8)
+- `gain` - output amplitude (default 1.0, research knob range 0.5-2.0)
+- `amaMaxSlopePct` - AMA slope saturation (default 0.6)
 - `maxSlopeOffset` - cap for the asymmetric trend offset
 - `maxVolatilityOffset` - cap for the symmetric ATR penalty
 - `absoluteThreshold` - dead-band before regime filtering is applied (default 0.05)
@@ -356,7 +357,8 @@ The main runtime knobs are:
 - `kalmanSmoothPct` - raw-vs-smoothed Kalman blend (0-200; 100 = normal adaptive smoothing)
 - `kalmanDispScaleMult` - displacement scale multiplier (default 1.8)
 - `kalmanDispThresholdMult` - displacement threshold multiplier
-- `lookbackBars` - AMA slope lookback (default 8)
+- `lookbackBars` - AMA slope lookback (default 9)
+- `kalmanMaxSlopePct` - Kalman composite saturation (default 0.5)
 - `kalmanSmoothSpanPct` - adaptive EMA span ratio
 - `signalConfirmBars` - output/signal latch confirmation bars
 

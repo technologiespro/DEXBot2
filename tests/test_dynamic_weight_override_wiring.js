@@ -56,6 +56,10 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
                     dispScaleMinPct: 0.25,
                     hurstZoneBand: 0.08,
                     peNodes: [0.58, 0.70, 0.82],
+                    amaMaxSlopePct: 1.2,
+                    kalmanSlope: {
+                        maxSlopePct: 1.2,
+                    },
                 },
                 botOverrides: {
                     'XRP-BTS': {
@@ -64,6 +68,8 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
                         dispScaleMinPct: 0.35,
                         hurstZoneBand: 0.09,
                         peNodes: [0.57, 0.69, 0.81],
+                        amaMaxSlopePct: 1.6,
+                        kalmanMaxSlopePct: 1.6,
                     },
                 },
             },
@@ -88,6 +94,8 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
     assert.strictEqual(merged.dispScaleMinPct, 0.35, 'bot override should win for dispScaleMinPct');
     assert.strictEqual(merged.hurstZoneBand, 0.09, 'bot override should win for hurstZoneBand');
     assert.deepStrictEqual(merged.peNodes, [0.57, 0.69, 0.81], 'bot override should win for peNodes');
+    assert.strictEqual(merged.amaSlope.maxSlopePct, 1.6, 'bot override should win for amaSlope.maxSlopePct');
+    assert.strictEqual(merged.kalmanSlope.maxSlopePct, 1.6, 'bot override should win for kalmanSlope.maxSlopePct');
 }
 
 function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
@@ -103,6 +111,10 @@ function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
                     dispScaleMinPct: 0.2,
                     hurstZoneBand: 0.07,
                     peNodes: [0.59, 0.71, 0.83],
+                    amaMaxSlopePct: 1.15,
+                    kalmanSlope: {
+                        maxSlopePct: 1.15,
+                    },
                 },
             },
         ],
@@ -126,6 +138,8 @@ function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
     assert.strictEqual(merged.dispScaleMinPct, 0.2, 'pair override should apply for dispScaleMinPct');
     assert.strictEqual(merged.hurstZoneBand, 0.07, 'pair override should apply for hurstZoneBand');
     assert.deepStrictEqual(merged.peNodes, [0.59, 0.71, 0.83], 'pair override should apply for peNodes');
+    assert.strictEqual(merged.amaSlope.maxSlopePct, 1.15, 'pair override should apply for amaSlope.maxSlopePct');
+    assert.strictEqual(merged.kalmanSlope.maxSlopePct, 1.15, 'pair override should apply for kalmanSlope.maxSlopePct');
 }
 
 function testBilinearInterpolateUsesOverrideNodes() {

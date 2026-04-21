@@ -224,7 +224,10 @@ class MarketAdapterService {
 
         const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
         const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
-        const maxS = cfg.amaSlope?.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
+        const amaMaxS = cfg.amaSlope?.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
+        const kalMaxS = cfg.kalmanSlope?.maxSlopePct
+            ?? cfg.kalmanMaxSlopePct
+            ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
         const mo = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
         const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
         const amaWarmupBars = getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars);
@@ -361,7 +364,7 @@ class MarketAdapterService {
                 const sp  = (last - past) / past * 100;
                 const csp = Math.max(-amaClipThreshold, Math.min(amaClipThreshold, sp));
                 const offset = Math.abs(csp) < nz ? 0
-                    : Math.max(-mo, Math.min(mo, (csp / maxS) * mo));
+                    : Math.max(-mo, Math.min(mo, (csp / amaMaxS) * mo));
                 amaOffsets.push(offset);
             }
 
@@ -385,8 +388,8 @@ class MarketAdapterService {
                     const dispConf = Math.min(Math.abs(dp) / dispScale, 1.0);
                     const momAlign = Math.max(0, (clippedV * dp) / (Math.abs(clippedV) * Math.abs(dp) + 1e-10));
                     const composite = clippedV * (1 - dw + dw * dispConf * momAlign);
-                    // Convert to offset: (composite / maxS) * mo, capped at mo
-                    kalmanOffsets.push(Math.max(-mo, Math.min(mo, (composite / maxS) * mo)));
+                    // Convert to offset: (composite / kalMaxS) * mo, capped at mo
+                    kalmanOffsets.push(Math.max(-mo, Math.min(mo, (composite / kalMaxS) * mo)));
                 }
             }
 
@@ -497,6 +500,8 @@ class MarketAdapterService {
                 gain,
                 atrPeriod,
                 maxSlopeOffset: mo,
+                amaMaxSlopePct: amaMaxS,
+                kalmanMaxSlopePct: kalMaxS,
                 maxVolatilityOffset: volatilityClamp,
                 kalmanSmoothPct,
                 kalmanDispScaleMult,
@@ -555,6 +560,8 @@ class MarketAdapterService {
                     gain,
                     atrPeriod,
                     maxSlopeOffset: mo,
+                    amaMaxSlopePct: amaMaxS,
+                    kalmanMaxSlopePct: kalMaxS,
                     maxVolatilityOffset: volatilityClamp,
                     kalmanSmoothPct,
                     kalmanDispScaleMult,
@@ -588,6 +595,8 @@ class MarketAdapterService {
                 gain,
                 atrPeriod,
                 maxSlopeOffset: mo,
+                amaMaxSlopePct: amaMaxS,
+                kalmanMaxSlopePct: kalMaxS,
                 maxVolatilityOffset: volatilityClamp,
                 kalmanSmoothPct,
                 kalmanDispScaleMult,

@@ -134,7 +134,7 @@ Output: `analysis/charts/dynamic_weight_chart.html` (open in browser)
 | `--alpha` | `0.5` | Initial α blend (0 = pure Kalman, 1 = pure AMA) |
 | `--dw` | `0.50` | Initial displacement weight (0 = pure velocity, 1 = full displacement) |
 | `--lb` | `8` | Initial lookback bars (1-32) for AMA slope calculation |
-| `--gain` | `0.8` | Initial gain multiplier |
+| `--gain` | `1.0` | Initial gain multiplier |
 | `--clip` | `10` | Initial clip percentile |
 | `--quiet` | `false` | Suppress console output |
 
@@ -183,25 +183,26 @@ All panels share aligned vertical time grid lines, and the bottom output panel s
 | **dsp** | 0.25–4x | 1.00x | Minimum displacement scale floor used by the Kalman confidence ramp |
 | **kdt** | 0.25–3x | 1.50x | Displacement threshold multiplier for when the adaptive EMA starts to loosen |
 | **kfs** | 20–200% | 100% | Adaptive EMA span ratio |
-| **cf** | 1–5 | 1 | Signal confirmation bars for the latched/raw signal overlay |
+| **cf** | 0–5 | 0 | Signal confirmation bars for the latched/raw signal overlay |
 
 ### Slope Calculation
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
 | **nz%** | 0–1 | 0.00 | Neutral zone: dead-band below which offset is forced to 0 |
-| **lb** | 1–32 | 8 | Logarithmic. Lookback bars for AMA slope calculation |
-| **maxS%** | 0.05–15 | 0.5 | Logarithmic. Gear ratio: slope% at which the output saturates |
+| **lb** | 1–32 | 9 | Logarithmic. Lookback bars for AMA slope calculation |
+| **amaS%** | 0.05–5 | 0.6 | Logarithmic. Gear ratio for AMA slope saturation |
+| **kalS%** | 0.05–1 | 0.5 | Logarithmic. Gear ratio for Kalman composite saturation |
 | **clip%** | 0–55 | 10 | Percentile clip: filters extreme inputs (0 = off) |
 
 ### Output Controls
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
-| **gain** | 0.25–2.0 | 0.8 | Logarithmic. Amplitude multiplier on the clamp-normalized blend |
+| **gain** | 0.5–2.0 | 1.0 | Logarithmic. Amplitude multiplier on the clamp-normalized blend |
 | **regi** | 0–2 | 1.0 | Regime sensitivity: exponent applied to Hurst+PE multiplier |
 
 ## Copy / Paste Parameters
 
-The **copy** button serializes all knob values (α, dw, kf, kfd, dsp, kdt, kfs, cf, lb, maxS%, gain, clip%, nz%, regi) to JSON and writes them to both the clipboard and `localStorage`.
+The **copy** button serializes all knob values (α, dw, kf, kfd, dsp, kdt, kfs, cf, lb, amaS%, kalS%, gain, clip%, nz%, regi) to JSON and writes them to both the clipboard and `localStorage`.
 
 The **paste** button first checks `localStorage` for parameters from a previous copy in the same browser session. If none found, it prompts for Ctrl+V input. A confirmation popup shows the parsed values before applying them. Click **Apply** to set the knobs, **Cancel** or press **Escape** to dismiss.
 
@@ -210,7 +211,7 @@ The **paste** button first checks `localStorage` for parameters from a previous 
 ### AMA Offset
 ```
 amaClip = clamp(amaSlope%, ±clipThreshold)    // percentile-based clip
-amaOff  = clamp(amaClip / maxS% × outputClamp, ±outputClamp)
+amaOff  = clamp(amaClip / amaS% × outputClamp, ±outputClamp)
 ```
 
 ### Kalman Composite Offset
@@ -219,7 +220,7 @@ kalClip   = clamp(velocity%, ±clipThreshold)   // percentile-based clip
 dispConf  = min(|displacement%| / md%, 1)      // displacement confidence, 0–1
 momAlign  = sign(kalClip) == sign(displacement%) ? 1 : 0
 kalComp   = kalClip × (1 − dw + dw × dispConf × momAlign)
-kalOff    = clamp(kalComp / maxS% × outputClamp, ±outputClamp)
+kalOff    = clamp(kalComp / kalS% × outputClamp, ±outputClamp)
 ```
 
 ### Adaptive EMA
@@ -297,10 +298,11 @@ The research chart intentionally plots the unclamped `off` series so moves above
 
 ## Parameter Relationships
 
-### maxS% + maxSlopeOffset + gain
+### amaS% / kalS% + maxSlopeOffset + gain
 
 These knobs have separate jobs:
-- `maxS%` = gear ratio for how quickly AMA and Kalman inputs reach full directional strength
+- `amaS%` = gear ratio for how quickly AMA slope reaches full directional strength
+- `kalS%` = gear ratio for how quickly the Kalman composite reaches full directional strength
 - `maxSlopeOffset` / `outputClamp` = channel clamp used to normalize the AMA and Kalman rails
 - `gain` = final output scale after the blended shape has already been decided
 
