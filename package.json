@@ -21,6 +21,7 @@
     "lp:chart": "node scripts/generate_lp_chart.js",
     "lp:chart:echarts": "node scripts/generate_lp_chart_echarts.js",
     "lp:chart:uplot": "node scripts/generate_lp_chart_uplot.js",
+    "analysis:tradingview": "node analysis/tradingview/analyze_tradingview.js",
     "ama:chart:synthetic": "node analysis/ama_fitting/generate_unified_comparison_chart.js",
     "ama:chart:synthetic:echarts": "node analysis/ama_fitting/generate_unified_comparison_chart_echarts.js",
     "ama:chart:synthetic:uplot": "node analysis/ama_fitting/generate_unified_comparison_chart_uplot.js",
