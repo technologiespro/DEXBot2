@@ -288,6 +288,37 @@ Valid `gridPrice` keywords: `ama`, `ama1`, `ama2`, `ama3`, `ama4`.
 `"ama"` resolves to the profile's `defaultAma` key (typically `AMA3`).
 Bots with any other `gridPrice` value are ignored by the market adapter.
 
+### AMA Fitting Caps
+
+The optimizer's active AMA presets are:
+
+| Key  | Fitted cap |
+|------|-----------:|
+| AMA1 | 25% |
+| AMA2 | 30% |
+| AMA3 | 35% |
+| AMA4 | 40% |
+
+### Inventory Price Range Guidance
+
+For inventory management, use a range above the fitted cap so the bot has room
+to absorb normal noise without making the book unnecessarily wide.
+
+An optimized AMA plus the recommended buffer table is intended to provide a
+relatively safe operating range for extreme market conditions while still
+preserving reasonable inventory turnover.
+
+- Safe buffer: `+10%` to `+15%` above the fitted cap
+- Borderline: `+20%`
+- Overkill: `+25%+`
+
+| AMA  | Fitted cap | Safe inventory range | Borderline | Overkill |
+|------|-----------:|----------------------:|-----------:|---------:|
+| AMA1 | 25% | 35% to 40% | 45% | 50%+ |
+| AMA2 | 30% | 40% to 45% | 50% | 55%+ |
+| AMA3 | 35% | 45% to 50% | 55% | 60%+ |
+| AMA4 | 40% | 50% to 55% | 60% | 65%+ |
+
 ### AMA Center Behavior
 
 The market adapter persists the AMA-derived center price directly. There is no

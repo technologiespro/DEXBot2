@@ -90,19 +90,40 @@ node analysis/ama_fitting/optimizer_high_resolution.js \
   --slowMin 800 --slowMax 6000
 ```
 
-**Override AMA cap quantiles:**
-```bash
-  --ama1Cap 0.65  --ama2Cap 0.55  --ama3Cap 0.45  --ama4Cap 0.40
-```
+**AMA fitting caps:**
 
-**AMA objectives:**
+These are the active defaults used by the optimizer:
+
+```bash
+--ama1Cap 0.25  --ama2Cap 0.30  --ama3Cap 0.35  --ama4Cap 0.40
+```
 
 | Key  | Distance cap quantile | Character |
 |------|-----------------------|-----------|
-| AMA1 | 0.70 | Most responsive, largest swing |
-| AMA2 | 0.60 | Balanced |
-| AMA3 | 0.50 | Slow, smooth — **default for market adapter** |
-| AMA4 | 0.45 | Most conservative |
+| AMA1 | 0.25 | Tightest fit, most reactive |
+| AMA2 | 0.30 | Balanced |
+| AMA3 | 0.35 | Default for market adapter |
+| AMA4 | 0.40 | Widest fit, most conservative |
+
+**Inventory price range guidance:**
+
+Use an inventory range that sits above the fitted cap so the market maker has
+room to absorb normal noise without widening the book too much.
+
+An optimized AMA plus the recommended buffer table is intended to provide a
+relatively safe operating range for extreme market conditions while still
+preserving reasonable inventory turnover.
+
+- Safe buffer: `+10%` to `+15%` above the fitted cap
+- Borderline: `+20%`
+- Overkill: `+25%+`
+
+| AMA  | Fitted cap | Safe inventory range | Borderline | Overkill |
+|------|-----------:|----------------------:|-----------:|---------:|
+| AMA1 | 25% | 35% to 40% | 45% | 50%+ |
+| AMA2 | 30% | 40% to 45% | 50% | 55%+ |
+| AMA3 | 35% | 45% to 50% | 55% | 60%+ |
+| AMA4 | 40% | 50% to 55% | 60% | 65%+ |
 
 **Outputs:**
 - `analysis/ama_fitting/optimization_results_<datafile>.json` — full results
