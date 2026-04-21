@@ -1,6 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const { MARKET_ADAPTER } = require('../modules/constants');
 
 console.log('Running market_adapter logic tests');
 
@@ -125,9 +126,11 @@ assert.strictEqual(
 }
 
 // Bot AMA config behavior
-assert.strictEqual(DEFAULT_AMA.erPeriod, 395, 'built-in default AMA should point to AMA3 erPeriod');
-assert.strictEqual(DEFAULT_AMA.fastPeriod, 1.51, 'built-in default AMA should point to AMA3 fastPeriod');
-assert.strictEqual(DEFAULT_AMA.slowPeriod, 1944, 'built-in default AMA should point to AMA3 slowPeriod');
+assert.deepStrictEqual(
+    DEFAULT_AMA,
+    MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY],
+    'built-in default AMA should match the configured default preset'
+);
 
 {
     const ama = resolveAmaForBot({

@@ -78,6 +78,7 @@ async function testTriggerHookCalledOnThreshold() {
         bots: {
             'xrp-bts-0': {
                 centerPrice: 100,
+                amaCenterPrice: 100,
             },
         },
     };
@@ -231,6 +232,7 @@ async function testAmaGridPriceIsCaseInsensitive() {
         bots: {
             'xrp-bts-0': {
                 centerPrice: 100,
+                amaCenterPrice: 100,
             },
         },
     };
@@ -304,6 +306,7 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
         bots: {
             'xrp-bts-0': {
                 centerPrice: 100,
+                amaCenterPrice: 100,
             },
         },
     };
@@ -326,6 +329,7 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
     assert.strictEqual(result.triggerSuppressedReason, 'ama_center_persist_failed', 'suppression reason should be reported');
     assert.strictEqual(triggerWrites, 0, 'trigger file must not be written when center persistence fails');
     assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'center price should not advance when trigger is suppressed');
+    assert.strictEqual(state.bots['xrp-bts-0'].amaCenterPrice, 100, 'raw AMA center should remain aligned with the persisted snapshot');
 }
 
 async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
@@ -393,6 +397,7 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
     assert.strictEqual(result.triggerSuppressedReason, 'ama_center_persist_failed', 'bootstrap failure should be reported');
     assert.strictEqual(triggerWrites, 0, 'trigger file must not be written during bootstrap persistence failure');
     assert.strictEqual(state.bots['xrp-bts-bootstrap'].centerPrice, undefined, 'bootstrap baseline should remain unset so the next cycle retries');
+    assert.strictEqual(state.bots['xrp-bts-bootstrap'].amaCenterPrice, undefined, 'bootstrap raw AMA center should remain unset when snapshot persistence fails');
     assert.strictEqual(state.bots['xrp-bts-bootstrap'].lastGridResetAt, undefined, 'bootstrap state should not pretend a reset happened');
 }
 
@@ -1377,6 +1382,150 @@ async function testDynamicWeightWeightOnlyWritesPersistEveryCycle() {
     assert.deepStrictEqual(lastPayload.dynamicWeights.effectiveWeights, firstWeights, 'successive writes may carry identical effective weights');
 }
 
+async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
+    let writeCount = 0;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateCandles(1000, 100) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-fail.trigger',
+        writeBotDynamicGrid: () => {
+            writeCount += 1;
+            return false;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-fail',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-dw-fail': {
+                centerPrice: 100,
+                amaCenterPrice: 100,
+            },
+        },
+    };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should still complete when weight-only persistence fails');
+    assert.strictEqual(result.triggered, false, 'weight-only persistence failure should not create a trigger');
+    assert.strictEqual(result.triggerSuppressedReason, 'dynamic_weight_persist_failed', 'failed weight-only write should be surfaced');
+    assert.strictEqual(writeCount, 1, 'weight-only persistence should still be attempted');
+    assert.strictEqual(state.bots['xrp-bts-dw-fail'].effectiveWeights, null, 'effective weights should not advance when snapshot write fails');
+    assert.strictEqual(state.bots['xrp-bts-dw-fail'].amaCenterPrice, 100, 'raw AMA center should remain aligned with the last persisted snapshot');
+}
+
+async function testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData() {
+    let writeCount = 0;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateCandles(1000, 100) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: true, staleAgeHours: 12.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-stale.trigger',
+        writeBotDynamicGrid: () => {
+            writeCount += 1;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-stale',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-dw-stale': {
+                centerPrice: 100,
+                amaCenterPrice: 100,
+            },
+        },
+    };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should still complete with stale data');
+    assert.strictEqual(result.staleData, true, 'stale flag should be surfaced');
+    assert.strictEqual(result.triggered, false, 'stale data should not create a trigger');
+    assert.strictEqual(writeCount, 0, 'stale data should suppress weight-only snapshot writes');
+    assert.strictEqual(state.bots['xrp-bts-dw-stale'].effectiveWeights, null, 'stale cycles should not update effective weights');
+    assert.strictEqual(state.bots['xrp-bts-dw-stale'].amaCenterPrice, 100, 'raw AMA center should remain aligned with the last persisted snapshot');
+}
+
 async function testDynamicWeightInvalidAtrPeriodAndClampAreSanitized() {
     let writtenPayload = null;
 
@@ -1464,6 +1613,8 @@ async function run() {
     await testDynamicWeightVolatilityOverridesFlowIntoService();
     await testDynamicWeightSuppressedTrendUsesFlatProfile();
     await testDynamicWeightWeightOnlyWritesPersistEveryCycle();
+    await testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState();
+    await testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData();
     await testDynamicWeightInvalidAtrPeriodAndClampAreSanitized();
 }
 
