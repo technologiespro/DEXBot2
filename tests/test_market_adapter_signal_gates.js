@@ -111,6 +111,45 @@ function testDynamicWeightChartUsesSlowPeriodWarmup() {
     assert.match(html, /for \(let i = amaReadyBar; i < data\.realBarCount; i\+\+\)/, 'interactive clip-threshold recompute should skip the full AMA warmup window');
 }
 
+function testDynamicWeightChartKeepsGainThresholdProportional() {
+    const html = generateHTML({
+        allResults: [
+            { timestamp: '2026-01-01T00:00:00Z', price: 100, ama3Price: 100, amaSlopePct: 0.4, velocityPct: 0.2, displacementPct: 0.1, isReady: true, signal: 'NEUTRAL' },
+            { timestamp: '2026-01-01T01:00:00Z', price: 101, ama3Price: 101, amaSlopePct: 0.5, velocityPct: 0.25, displacementPct: 0.15, isReady: true, signal: 'NEUTRAL' },
+        ],
+        gain: 0.8,
+        minOutputThreshold: 0.12,
+    }, 'Dynamic Weight Test');
+
+    assert.match(
+        html,
+        /const outputThreshold = MIN_OUTPUT_THRESHOLD \* channelNorm;/,
+        'gain-sensitive dead-band should be normalized by the current gain'
+    );
+    assert.match(
+        html,
+        /const off = Math\.abs\(rawOff \* finalMult\) < outputThreshold \? 0 : \(rawOff \* finalMult\);/,
+        'output threshold should use the gain-scaled dead-band'
+    );
+}
+
+function testDynamicWeightChartShowsOutputClampGuide() {
+    const html = generateHTML({
+        allResults: [
+            { timestamp: '2026-01-01T00:00:00Z', price: 100, ama3Price: 100, amaSlopePct: 0.4, velocityPct: 0.2, displacementPct: 0.1, isReady: true, signal: 'NEUTRAL' },
+            { timestamp: '2026-01-01T01:00:00Z', price: 101, ama3Price: 101, amaSlopePct: 0.5, velocityPct: 0.25, displacementPct: 0.15, isReady: true, signal: 'NEUTRAL' },
+        ],
+        gain: 0.8,
+    }, 'Dynamic Weight Test');
+
+    assert.match(html, /const OUTPUT_CLAMP = data\.outputClamp \?\? 0\.5;/,
+        'bottom output panel should resolve the clamp from payload data or the runtime default');
+    assert.match(html, /makeClampPairHooks\('ow', OUTPUT_CLAMP\)/,
+        'bottom output panel should draw both clamp guide lines');
+    assert.match(html, /makeClampLineHook\(scaleKey, -clampValue, 'clamp -' \+ clampValue\.toFixed\(2\)\)/,
+        'bottom output panel should include the mirrored negative clamp guide');
+}
+
 function main() {
     testAmaSlopeWarmupUsesSlowPeriod();
     testAtrRejectsInvalidCandles();
@@ -118,6 +157,8 @@ function main() {
     testKalmanWarmupIsConfigurable();
     testRegimeMultiplierReturnsSeries();
     testDynamicWeightChartUsesSlowPeriodWarmup();
+    testDynamicWeightChartKeepsGainThresholdProportional();
+    testDynamicWeightChartShowsOutputClampGuide();
     console.log('market adapter signal gate tests passed');
 }
 

@@ -182,6 +182,62 @@ function findPairForBot(bot, pairs) {
     }) || null;
 }
 
+function applyAmaSlopeOverrides(target, overrides) {
+    if (!overrides || typeof overrides !== 'object') return target;
+    if (overrides.neutralZonePct != null) {
+        target.amaSlope = { ...target.amaSlope, neutralZonePct: overrides.neutralZonePct };
+    }
+    if (overrides.maxSlopePct != null) {
+        target.amaSlope = { ...target.amaSlope, maxSlopePct: overrides.maxSlopePct };
+    }
+    if (overrides.lookbackBars != null) {
+        target.amaSlope = { ...target.amaSlope, lookbackBars: overrides.lookbackBars };
+    }
+    return target;
+}
+
+function applyMarketAdapterOverrides(target, overrides, opts = {}) {
+    if (!overrides || typeof overrides !== 'object') return target;
+    if (overrides.deltaThresholdPercent != null) target.deltaThresholdPercent = overrides.deltaThresholdPercent;
+    if (opts.includeDefaultAmaKey && overrides.defaultAmaKey) target.defaultAmaKey = overrides.defaultAmaKey;
+    if (overrides.pollSeconds != null) target.pollSeconds = overrides.pollSeconds;
+    if (overrides.bootstrapLookbackHours != null) target.bootstrapLookbackHours = overrides.bootstrapLookbackHours;
+    if (overrides.nativeBackfillHours != null) target.nativeBackfillHours = overrides.nativeBackfillHours;
+    if (overrides.maxStaleHours != null) target.maxStaleHours = overrides.maxStaleHours;
+    if (overrides.sourceRetries != null) target.sourceRetries = overrides.sourceRetries;
+    if (overrides.retryDelayMs != null) target.retryDelayMs = overrides.retryDelayMs;
+    if (overrides.maxSlopeOffset != null) target.maxSlopeOffset = overrides.maxSlopeOffset;
+    if (overrides.maxVolatilityOffset != null) {
+        target.maxVolatilityOffset = normalizeMaxVolatilityOffset(overrides.maxVolatilityOffset);
+    }
+    if (overrides.atrPeriod != null) target.atrPeriod = normalizeAtrPeriod(overrides.atrPeriod);
+    if (overrides.absoluteThreshold != null) target.absoluteThreshold = overrides.absoluteThreshold;
+    if (overrides.minOutputThreshold != null) target.minOutputThreshold = overrides.minOutputThreshold;
+    if (overrides.volatilityExponent != null) target.volatilityExponent = overrides.volatilityExponent;
+    if (overrides.volatilityScaleX != null) target.volatilityScaleX = overrides.volatilityScaleX;
+    if (overrides.volatilityThreshold != null) {
+        target.volatilityThreshold = normalizeVolatilityThreshold(overrides.volatilityThreshold);
+    }
+    if (overrides.clipPercentile != null) target.clipPercentile = overrides.clipPercentile;
+    if (overrides.regimeSensitivity != null) target.regimeSensitivity = overrides.regimeSensitivity;
+    if (overrides.hurstZoneBand != null) target.hurstZoneBand = overrides.hurstZoneBand;
+    if (overrides.peNodes) target.peNodes = overrides.peNodes;
+    if (overrides.regimeTable) target.regimeTable = overrides.regimeTable;
+    if (overrides.alpha != null) target.alpha = overrides.alpha;
+    if (overrides.dw != null) target.dw = overrides.dw;
+    if (overrides.gain != null) target.gain = overrides.gain;
+    if (overrides.kalmanSmoothPct != null) target.kalmanSmoothPct = overrides.kalmanSmoothPct;
+    if (overrides.kalmanDispScaleMult != null) target.kalmanDispScaleMult = overrides.kalmanDispScaleMult;
+    if (overrides.kalmanDispThresholdMult != null) target.kalmanDispThresholdMult = overrides.kalmanDispThresholdMult;
+    if (overrides.kalmanSmoothSpanPct != null) target.kalmanSmoothSpanPct = overrides.kalmanSmoothSpanPct;
+    if (overrides.signalConfirmBars != null) target.signalConfirmBars = overrides.signalConfirmBars;
+    if (overrides.dispScaleAtrMult != null) target.dispScaleAtrMult = overrides.dispScaleAtrMult;
+    if (overrides.dispScaleMinPct != null) target.dispScaleMinPct = overrides.dispScaleMinPct;
+    if (overrides.kalman) target.kalman = overrides.kalman;
+    applyAmaSlopeOverrides(target, overrides);
+    return target;
+}
+
 function resolveBotCfg(bot, globalCfg) {
     const settings = loadMarketAdapterSettings();
     if (!settings) return globalCfg;
@@ -197,97 +253,13 @@ function resolveBotCfg(bot, globalCfg) {
     // Pair-level overrides
     const pair = findPairForBot(bot, settings.pairs);
     if (pair?.marketAdapterSettings) {
-        const ps = pair.marketAdapterSettings;
-        if (ps.deltaThresholdPercent != null) merged.deltaThresholdPercent = ps.deltaThresholdPercent;
-        if (ps.pollSeconds != null) merged.pollSeconds = ps.pollSeconds;
-        if (ps.bootstrapLookbackHours != null) merged.bootstrapLookbackHours = ps.bootstrapLookbackHours;
-        if (ps.nativeBackfillHours != null) merged.nativeBackfillHours = ps.nativeBackfillHours;
-        if (ps.maxStaleHours != null) merged.maxStaleHours = ps.maxStaleHours;
-        if (ps.sourceRetries != null) merged.sourceRetries = ps.sourceRetries;
-        if (ps.retryDelayMs != null) merged.retryDelayMs = ps.retryDelayMs;
-        if (ps.maxSlopeOffset != null) merged.maxSlopeOffset = ps.maxSlopeOffset;
-        if (ps.maxVolatilityOffset != null) {
-            merged.maxVolatilityOffset = normalizeMaxVolatilityOffset(ps.maxVolatilityOffset);
-        }
-        if (ps.atrPeriod != null) merged.atrPeriod = normalizeAtrPeriod(ps.atrPeriod);
-        if (ps.absoluteThreshold != null) merged.absoluteThreshold = ps.absoluteThreshold;
-        if (ps.minOutputThreshold != null) merged.minOutputThreshold = ps.minOutputThreshold;
-        if (ps.volatilityExponent != null) merged.volatilityExponent = ps.volatilityExponent;
-        if (ps.volatilityScaleX != null) merged.volatilityScaleX = ps.volatilityScaleX;
-        if (ps.volatilityThreshold != null) {
-            merged.volatilityThreshold = normalizeVolatilityThreshold(ps.volatilityThreshold);
-        }
-        if (ps.clipPercentile != null) merged.clipPercentile = ps.clipPercentile;
-        if (ps.regimeSensitivity != null) merged.regimeSensitivity = ps.regimeSensitivity;
-        if (ps.hurstZoneBand != null) merged.hurstZoneBand = ps.hurstZoneBand;
-        if (ps.peNodes) merged.peNodes = ps.peNodes;
-        if (ps.regimeTable) merged.regimeTable = ps.regimeTable;
-        if (ps.alpha != null) merged.alpha = ps.alpha;
-        if (ps.dw != null) merged.dw = ps.dw;
-        if (ps.gain != null) merged.gain = ps.gain;
-        if (ps.kalmanSmoothPct != null) merged.kalmanSmoothPct = ps.kalmanSmoothPct;
-        if (ps.kalmanDispScaleMult != null) merged.kalmanDispScaleMult = ps.kalmanDispScaleMult;
-        if (ps.kalmanDispThresholdMult != null) merged.kalmanDispThresholdMult = ps.kalmanDispThresholdMult;
-        if (ps.kalmanSmoothSpanPct != null) merged.kalmanSmoothSpanPct = ps.kalmanSmoothSpanPct;
-        if (ps.signalConfirmBars != null) merged.signalConfirmBars = ps.signalConfirmBars;
-        if (ps.dispScaleAtrMult != null) merged.dispScaleAtrMult = ps.dispScaleAtrMult;
-        if (ps.dispScaleMinPct != null) merged.dispScaleMinPct = ps.dispScaleMinPct;
-        if (ps.kalman) merged.kalman = ps.kalman;
-        // amaSlope sub-parameters
-        if (ps.neutralZonePct != null) {
-            merged.amaSlope = { ...merged.amaSlope, neutralZonePct: ps.neutralZonePct };
-        }
-        if (ps.maxSlopePct != null) {
-            merged.amaSlope = { ...merged.amaSlope, maxSlopePct: ps.maxSlopePct };
-        }
-        if (ps.lookbackBars != null) {
-            merged.amaSlope = { ...merged.amaSlope, lookbackBars: ps.lookbackBars };
-        }
+        applyMarketAdapterOverrides(merged, pair.marketAdapterSettings);
     }
 
     // Bot-level overrides
     const botOverride = pair?.botOverrides?.[bot.name];
     if (botOverride) {
-        if (botOverride.deltaThresholdPercent != null) merged.deltaThresholdPercent = botOverride.deltaThresholdPercent;
-        if (botOverride.defaultAmaKey) merged.defaultAmaKey = botOverride.defaultAmaKey;
-        if (botOverride.maxSlopeOffset != null) merged.maxSlopeOffset = botOverride.maxSlopeOffset;
-        if (botOverride.maxVolatilityOffset != null) {
-            merged.maxVolatilityOffset = normalizeMaxVolatilityOffset(botOverride.maxVolatilityOffset);
-        }
-        if (botOverride.atrPeriod != null) merged.atrPeriod = normalizeAtrPeriod(botOverride.atrPeriod);
-        if (botOverride.absoluteThreshold != null) merged.absoluteThreshold = botOverride.absoluteThreshold;
-        if (botOverride.volatilityExponent != null) merged.volatilityExponent = botOverride.volatilityExponent;
-        if (botOverride.volatilityScaleX != null) merged.volatilityScaleX = botOverride.volatilityScaleX;
-        if (botOverride.volatilityThreshold != null) {
-            merged.volatilityThreshold = normalizeVolatilityThreshold(botOverride.volatilityThreshold);
-        }
-        if (botOverride.minOutputThreshold != null) merged.minOutputThreshold = botOverride.minOutputThreshold;
-        if (botOverride.clipPercentile != null) merged.clipPercentile = botOverride.clipPercentile;
-        if (botOverride.regimeSensitivity != null) merged.regimeSensitivity = botOverride.regimeSensitivity;
-        if (botOverride.hurstZoneBand != null) merged.hurstZoneBand = botOverride.hurstZoneBand;
-        if (botOverride.peNodes) merged.peNodes = botOverride.peNodes;
-        if (botOverride.regimeTable) merged.regimeTable = botOverride.regimeTable;
-        if (botOverride.alpha != null) merged.alpha = botOverride.alpha;
-        if (botOverride.dw != null) merged.dw = botOverride.dw;
-        if (botOverride.gain != null) merged.gain = botOverride.gain;
-        if (botOverride.kalmanSmoothPct != null) merged.kalmanSmoothPct = botOverride.kalmanSmoothPct;
-        if (botOverride.kalmanDispScaleMult != null) merged.kalmanDispScaleMult = botOverride.kalmanDispScaleMult;
-        if (botOverride.kalmanDispThresholdMult != null) merged.kalmanDispThresholdMult = botOverride.kalmanDispThresholdMult;
-        if (botOverride.kalmanSmoothSpanPct != null) merged.kalmanSmoothSpanPct = botOverride.kalmanSmoothSpanPct;
-        if (botOverride.signalConfirmBars != null) merged.signalConfirmBars = botOverride.signalConfirmBars;
-        if (botOverride.dispScaleAtrMult != null) merged.dispScaleAtrMult = botOverride.dispScaleAtrMult;
-        if (botOverride.dispScaleMinPct != null) merged.dispScaleMinPct = botOverride.dispScaleMinPct;
-        if (botOverride.kalman) merged.kalman = botOverride.kalman;
-        // amaSlope sub-parameters
-        if (botOverride.neutralZonePct != null) {
-            merged.amaSlope = { ...merged.amaSlope, neutralZonePct: botOverride.neutralZonePct };
-        }
-        if (botOverride.maxSlopePct != null) {
-            merged.amaSlope = { ...merged.amaSlope, maxSlopePct: botOverride.maxSlopePct };
-        }
-        if (botOverride.lookbackBars != null) {
-            merged.amaSlope = { ...merged.amaSlope, lookbackBars: botOverride.lookbackBars };
-        }
+        applyMarketAdapterOverrides(merged, botOverride, { includeDefaultAmaKey: true });
     }
 
     return merged;
@@ -627,7 +599,16 @@ function loadJson(filePath, fallback) {
 
 function saveJson(filePath, data) {
     ensureDir(path.dirname(filePath));
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+    const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    try {
+        fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+        fs.renameSync(tmpPath, filePath);
+    } catch (err) {
+        try {
+            if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+        } catch (_) {}
+        throw err;
+    }
 }
 
 function loadLockInfo(lockPath) {
@@ -850,6 +831,7 @@ function calcAmaComparison(candles, bot = null, ctx = null) {
 async function fetchNativeTradesSince(poolId, sinceMs, pageLimit, maxPages) {
     const { BitShares } = getBitsharesClient();
     const trades = [];
+    const seenSequences = new Set();
     let pages = 0;
     let startSeq = null;
 
@@ -867,6 +849,12 @@ async function fetchNativeTradesSince(poolId, sinceMs, pageLimit, maxPages) {
         let hitOld = false;
 
         for (const row of page) {
+            const seq = Number(row?.sequence);
+            if (Number.isFinite(seq)) {
+                if (seenSequences.has(seq)) continue;
+                seenSequences.add(seq);
+            }
+
             const tsMs = parseChainTimeToMs(row?.time || row?.op?.block_time);
             if (!Number.isFinite(tsMs)) continue;
             if (tsMs < sinceMs) {
@@ -890,9 +878,10 @@ async function fetchNativeTradesSince(poolId, sinceMs, pageLimit, maxPages) {
         }
 
         const last = page[page.length - 1];
-        if (!last || typeof last.sequence !== 'number' || last.sequence === 0) break;
+        const lastSeq = Number(last?.sequence);
+        if (!Number.isFinite(lastSeq) || lastSeq <= 1) break;
         if (hitOld) break;
-        startSeq = last.sequence - 1;
+        startSeq = lastSeq - 1;
     }
 
     return trades;
@@ -1011,6 +1000,7 @@ function writeCenterSnapshot(state) {
             lastAmaPrice: v.lastAmaPrice,
             lastDeltaPercent: v.lastDeltaPercent,
             weights: v.weights,
+            effectiveWeights: v.effectiveWeights,
             collateral: v.collateral,
             amaSlope: v.amaSlope,
             atr: v.atr

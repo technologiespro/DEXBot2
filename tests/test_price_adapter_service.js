@@ -1105,6 +1105,82 @@ async function testDynamicWeightMinOutputThresholdZeroDisablesGate() {
     assert.strictEqual(dw.minOutputThreshold, 0, 'cfg.minOutputThreshold=0 should be reflected in payload');
 }
 
+async function testDynamicWeightGainDoesNotReshapeOutput() {
+    const runWithGain = async (gain) => {
+        let writtenPayload = null;
+
+        const service = new MarketAdapterService({
+            resolveBotContext: async () => ({
+                assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+                assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+                poolId: '1.19.133',
+            }),
+            resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+            candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+            loadJson: () => ({ candles: generateTrendingCandles(220, 100, 1) }),
+            saveJson: () => {},
+            requiredCandlesForAma: () => 80,
+            calculateBotThreshold: () => 100,
+            computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+            withRetries: async (fn) => fn(),
+            kibanaSource: { getLpCandlesForPool: async () => [] },
+            fetchNativeTradesSince: async () => [],
+            tradesToCandles: () => [],
+            mergeCandles: (existing, incoming) => [...existing, ...incoming],
+            pruneCandles: (candles) => candles,
+            calcAmaComparison: () => [],
+            writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-gain-neutral.trigger',
+            writeBotDynamicGrid: (_botKey, _center, payload) => {
+                writtenPayload = payload;
+                return true;
+            },
+            isBotDynamicWeightWhitelisted: () => true,
+            root: process.cwd(),
+            path,
+        });
+
+        const bot = {
+            name: 'XRP-BTS',
+            botKey: 'xrp-bts-dw-gain-neutral',
+            assetA: 'IOB.XRP',
+            assetB: 'BTS',
+            gridPrice: 'ama',
+            incrementPercent: 0.4,
+            weightDistribution: { sell: 0.6, buy: 0.4 },
+        };
+
+        const state = { bots: { 'xrp-bts-dw-gain-neutral': { centerPrice: 100 } } };
+        const cfg = {
+            intervalSeconds: 3600,
+            bootstrapLookbackHours: 1200,
+            nativeBackfillHours: 6,
+            pageLimit: 100,
+            maxPages: 80,
+            sourceRetries: 1,
+            retryDelayMs: 0,
+            maxStaleHours: 6,
+            gain,
+            minOutputThreshold: 0,
+            signalConfirmBars: 0,
+            regimeSensitivity: 0,
+            maxSlopeOffset: 10,
+        };
+
+        const result = await service.processBot(bot, state, cfg, new Map(), {});
+        assert.strictEqual(result.ok, true, 'processBot should succeed');
+        assert.ok(writtenPayload, 'dynamic weights should be persisted');
+        return writtenPayload.dynamicWeights;
+    };
+
+    const lowGain = await runWithGain(0.25);
+    const highGain = await runWithGain(2.0);
+
+    assert.ok(Number.isFinite(lowGain.rawFinalOffset), 'low-gain output should be finite');
+    assert.ok(Number.isFinite(highGain.rawFinalOffset), 'high-gain output should be finite');
+    assert.strictEqual(lowGain.rawFinalOffset, highGain.rawFinalOffset, 'gain should not reshape the live output when the dead-band is disabled');
+    assert.deepStrictEqual(lowGain.effectiveWeights, highGain.effectiveWeights, 'gain should not alter effective weights when the dead-band is disabled');
+}
+
 async function testDynamicWeightVolatilityOnlyPathRemainsReady() {
     let writtenPayload = null;
 
@@ -1300,7 +1376,8 @@ async function testDynamicWeightSuppressedTrendUsesFlatProfile() {
         sourceRetries: 1,
         retryDelayMs: 0,
         maxStaleHours: 6,
-        gain: 0.1,
+        gain: 2.0,
+        minOutputThreshold: 2.0,
     };
 
     const result = await service.processBot(bot, state, cfg, new Map(), {});
@@ -1314,6 +1391,7 @@ async function testDynamicWeightSuppressedTrendUsesFlatProfile() {
 
     const dw = writtenPayload.dynamicWeights;
     assert.strictEqual(dw.isReady, false, 'suppressed trend without volatility should not be ready');
+    assert.strictEqual(dw.outputThreshold, 4, 'gain should scale the live output threshold');
     assert.deepStrictEqual(dw.effectiveWeights, dw.baseWeights, 'effective weights should fall back to the static baseline');
 }
 
@@ -1609,6 +1687,7 @@ async function run() {
     await testRemainingGapsAreReportedWhenKibanaHasNoPatchData();
     await testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights();
     await testDynamicWeightMinOutputThresholdZeroDisablesGate();
+    await testDynamicWeightGainDoesNotReshapeOutput();
     await testDynamicWeightVolatilityOnlyPathRemainsReady();
     await testDynamicWeightVolatilityOverridesFlowIntoService();
     await testDynamicWeightSuppressedTrendUsesFlatProfile();

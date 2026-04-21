@@ -324,6 +324,8 @@ class MarketAdapterService {
             const kalmanDispThresholdMult = cfg.kalmanDispThresholdMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT;
             const kalmanSmoothSpanPct = cfg.kalmanSmoothSpanPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT;
             const signalConfirmBars = cfg.signalConfirmBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT;
+            const minOutputThreshold = cfg.minOutputThreshold
+                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD;
             const dispScaleMinPct  = cfg.dispScaleMinPct  ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
 
             const kalmanSmoothedVelocityPct = buildKalmanVelocitySeries(kalmanHistory, {
@@ -393,9 +395,10 @@ class MarketAdapterService {
                 kalmanOffsets.push(0);
             }
 
-            // Normalize each channel by the configured cap rather than the observed peak.
-            // That keeps alpha as a blend ratio without letting tiny startup wiggles become "full strength".
-            const channelNorm = Math.max(Math.abs(mo), 1e-9);
+            // Normalize each channel by the configured gain so gain stays a dead-band knob
+            // instead of reshaping the output curve.
+            const channelNorm = Math.max(Math.abs(gain), 1e-9);
+            const outputThreshold = minOutputThreshold * channelNorm;
 
             // Build the same per-bar combined output series as the research chart, then
             // optionally latch it with signalConfirmBars before taking the last live value.
@@ -403,7 +406,8 @@ class MarketAdapterService {
             const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
             for (let i = 0; i < closes.length; i++) {
                 const rawOff = (alpha * (amaOffsets[i] / channelNorm) + (1 - alpha) * (kalmanOffsets[i] / channelNorm)) * gain;
-                const off = Math.max(-offsetClamp, Math.min(offsetClamp, rawOff * regimeMultipliers[i]));
+                const gatedOff = Math.abs(rawOff * regimeMultipliers[i]) < outputThreshold ? 0 : (rawOff * regimeMultipliers[i]);
+                const off = Math.max(-offsetClamp, Math.min(offsetClamp, gatedOff));
                 combinedOffSeries[i] = Math.round(off * 1000) / 1000;
             }
 
@@ -502,9 +506,7 @@ class MarketAdapterService {
 
             // Min-output threshold: if |finalOff| is below threshold, the trend component is
             // suppressed. The volatility penalty (symmetricDelta) is always applied independently.
-            const minOutputThreshold = cfg.minOutputThreshold
-                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD;
-            const belowMinOutputThreshold = Math.abs(finalOff) < minOutputThreshold;
+            const belowMinOutputThreshold = Math.abs(finalOff) < outputThreshold;
 
             // Volatility penalty is the separate symmetric ATR shift. It is independent of
             // the trend gate so volatile markets reduce both sides even when trend is flat.
@@ -548,6 +550,7 @@ class MarketAdapterService {
                     trendOffset:             trendOff,
                     finalOffset:             finalOff,
                     minOutputThreshold,
+                    outputThreshold,
                     belowMinOutputThreshold,
                     kalmanReady:             kalmanResult?.isReady ?? false,
                     isReady:                 slopeResult.isReady,
@@ -582,6 +585,7 @@ class MarketAdapterService {
                 slopePct:                slopeResult.slopePct,
                 regimeMultiplier,
                 minOutputThreshold,
+                outputThreshold,
                 belowMinOutputThreshold,
                 kalmanReady:             kalmanResult?.isReady ?? false,
                 ...(regimeResult ? {

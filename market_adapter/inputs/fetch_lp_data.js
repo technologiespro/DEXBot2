@@ -187,7 +187,16 @@ async function findPool(BitShares, idA, idB) {
             if (matches.length) {
                 // Pick pool with highest assetA balance
                 return matches.sort((a, b) => {
-                    const bal = (p) => Number(String(p.asset_a) === idAStr ? p.balance_a : p.balance_b);
+                    const bal = (p) => {
+                        const assetA = String(p.asset_a ?? p.asset_ids?.[0] ?? '');
+                        const assetB = String(p.asset_b ?? p.asset_ids?.[1] ?? '');
+                        const value = assetA === idAStr
+                            ? Number(p.balance_a)
+                            : assetB === idAStr
+                                ? Number(p.balance_b)
+                                : Number.NEGATIVE_INFINITY;
+                        return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+                    };
                     return bal(b) - bal(a);
                 })[0];
             }

@@ -30,6 +30,7 @@
 
 const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('./kibana_client');
 const { fillCandleGaps } = require('../candle_utils');
+const { consolidateCandlesByTimestamp } = require('./consolidate_candles');
 
 const OP_FILL_ORDER = 4;
 
@@ -109,27 +110,6 @@ function bucketsToCandles(buckets, soldPrecision, receivedPrecision) {
       return [b.key, vwap, vwap, vwap, vwap, soldAmt];
       //      ts    open  high  low  close  volume
     });
-}
-
-function consolidateCandlesByTimestamp(candles) {
-  if (!candles.length) return candles;
-  const sorted = [...candles].sort((a, b) => a[0] - b[0]);
-  const out = [];
-
-  for (const c of sorted) {
-    const [ts, open, high, low, close, volume] = c;
-    const last = out[out.length - 1];
-    if (!last || last[0] !== ts) {
-      out.push([ts, open, high, low, close, volume]);
-      continue;
-    }
-    last[2] = Math.max(last[2], high);   // high
-    last[3] = Math.min(last[3], low);    // low
-    last[4] = close;                     // close (latest)
-    last[5] += volume;                   // volume sum
-  }
-
-  return out;
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────

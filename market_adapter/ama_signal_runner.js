@@ -143,13 +143,14 @@ async function main() {
         payload = JSON.parse(fixtureRaw);
     } else {
         const original = {
-            log: console.log,
-            warn: console.warn,
-            error: console.error,
+            log: console.log.bind(console),
+            warn: console.warn.bind(console),
+            error: console.error.bind(console),
         };
+        // Keep stdout clean for JSON output, but preserve diagnostics on stderr.
         console.log = () => {};
-        console.warn = () => {};
-        console.error = () => {};
+        console.warn = original.warn;
+        console.error = original.error;
         try {
             payload = await runOnceForAma(cli.overrides);
         } finally {

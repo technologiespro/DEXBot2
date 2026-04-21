@@ -615,6 +615,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             // without letting tiny startup wiggles become "full strength."
             currentOutputAxisMax = 0.5;
             const channelNorm = Math.max(Math.abs(currentGain), 1e-9);
+            const outputThreshold = MIN_OUTPUT_THRESHOLD * channelNorm;
 
             const mo = currentGain;
             for (let i = 0; i < data.dates.length; i++) {
@@ -631,7 +632,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     // Clamp to 1.0 max: regime only dampens, never amplifies
                     const finalMult = Math.abs(rawMult - 1.0) >= ABSOLUTE_THRESHOLD ? Math.min(rawMult, 1.0) : 1.0;
                     currentMults[i] = finalMult;
-                    const off = Math.abs(rawOff * finalMult) < MIN_OUTPUT_THRESHOLD ? 0 : (rawOff * finalMult);
+                    const off = Math.abs(rawOff * finalMult) < outputThreshold ? 0 : (rawOff * finalMult);
                     combinedOff[i] = Math.round(off * 1000) / 1000;
                     combinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL + off) * 100) / 100));
                     combinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY - off) * 100) / 100));
@@ -937,6 +938,49 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             };
         }
 
+        function makeClampLineHook(scaleKey, clampValue, label = 'clamp') {
+            return u => {
+                const { ctx, bbox } = u;
+                ctx.save();
+                ctx.beginPath(); ctx.rect(bbox.left, bbox.top, bbox.width, bbox.height); ctx.clip();
+
+                const y = u.valToPos(clampValue, scaleKey, true);
+                ctx.strokeStyle = '#a371f7';
+                ctx.shadowColor = 'rgba(163,113,247,0.65)';
+                ctx.shadowBlur = 5;
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([5, 4]);
+                ctx.beginPath();
+                ctx.moveTo(bbox.left, y);
+                ctx.lineTo(bbox.left + bbox.width, y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.shadowBlur = 0;
+                ctx.shadowColor = 'transparent';
+
+                if (label) {
+                    ctx.font = 'bold 10px Segoe UI, sans-serif';
+                    ctx.textBaseline = 'middle';
+                    const textW = ctx.measureText(label).width + 8;
+                    const textX = Math.max(bbox.left + 4, bbox.left + bbox.width - textW - 2);
+                    const textY = y - 8;
+                    ctx.fillStyle = 'rgba(11,14,20,0.82)';
+                    ctx.fillRect(textX - 4, textY - 7, textW, 14);
+                    ctx.fillStyle = '#a371f7';
+                    ctx.fillText(label, textX, textY);
+                }
+
+                ctx.restore();
+            };
+        }
+
+        function makeClampPairHooks(scaleKey, clampValue) {
+            return [
+                makeClampLineHook(scaleKey, clampValue, 'clamp ' + clampValue.toFixed(2)),
+                makeClampLineHook(scaleKey, -clampValue, 'clamp -' + clampValue.toFixed(2)),
+            ];
+        }
+
         const cursorCfg = {
             show: true, x: true, y: true, points: { show: false },
             drag: { x: false, y: false, setScale: false },
@@ -983,6 +1027,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 } : () => [],
             };
         }
+
+        const OUTPUT_CLAMP = data.outputClamp ?? ${JSON.stringify(MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP)};
 
         function init() {
             // Force all sliders to match JS state — overrides browser form-restore memory
@@ -1086,7 +1132,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 cursor: cursorCfg,
                 hooks: { draw: [
                     makePctFillHook(combinedOff, 'ow', 'rgba(108,117,125,0.08)', 'rgba(108,117,125,0.06)', null),
-                    makePctFillHook(echoCombinedOff, 'ow', 'rgba(46,160,67,0.18)', 'rgba(248,81,73,0.18)', null)
+                    makePctFillHook(echoCombinedOff, 'ow', 'rgba(46,160,67,0.18)', 'rgba(248,81,73,0.18)', null),
+                    ...makeClampPairHooks('ow', OUTPUT_CLAMP)
                 ] }
             }, [data.dates, combinedOff, echoCombinedOff], document.getElementById('output-chart'));
 
