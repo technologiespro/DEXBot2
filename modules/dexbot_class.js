@@ -150,6 +150,18 @@ function normalizeBotEntry(entry, index = 0) {
     return { ...normalized, botIndex: index, botKey: createBotKey(normalized, index) };
 }
 
+function cloneWeightDistribution(weightDistribution, fallback = { sell: 0.5, buy: 0.5 }) {
+    const source = (weightDistribution && typeof weightDistribution === 'object')
+        ? weightDistribution
+        : fallback;
+    const sell = Number(source?.sell);
+    const buy = Number(source?.buy);
+    if (!Number.isFinite(sell) || !Number.isFinite(buy)) {
+        return { sell: 0.5, buy: 0.5 };
+    }
+    return { sell, buy };
+}
+
 class DEXBot {
     /**
      * Create a new DEXBot instance
@@ -162,6 +174,7 @@ class DEXBot {
         this._validateStartupConfig(config);
 
         this.config = config;
+        this._baseWeightDistribution = cloneWeightDistribution(config.weightDistribution);
         this.account = null;
         this.privateKey = null;
         this.manager = null;
@@ -618,6 +631,10 @@ class DEXBot {
         });
     }
 
+    _refreshDynamicWeightDistribution(context = 'runtime') {
+        return DexbotMaintenanceRuntime.refreshDynamicWeightDistribution.call(this, context);
+    }
+
     /**
      * Finalize the bot startup after account and initial grid sync are complete.
      * Consolidates common logic for start() and startWithPrivateKey().
@@ -702,6 +719,7 @@ class DEXBot {
 
                             // Process this fill through the full rebalance pipeline
                             // This will shift the boundary and place a new order on the filled slot
+                            this._refreshDynamicWeightDistribution('post-reset fill rebalance');
                             const rebalanceResult = await this.manager.processFilledOrders([gridOrder], new Set());
 
                             const batchResult = await this._executeBatchIfNeeded(rebalanceResult, `[POST-RESET] fill ${gridOrder.id}`);
@@ -716,6 +734,7 @@ class DEXBot {
                             const postResetChainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
                             const syncResult = await this.manager.syncFromOpenOrders(postResetChainOpenOrders);
                             if (syncResult.filledOrders?.length > 0) {
+                                this._refreshDynamicWeightDistribution('post-reset open-orders fallback');
                                 const rebalanceResult = await this.manager.processFilledOrders(syncResult.filledOrders, new Set());
                                 await this._executeBatchIfNeeded(rebalanceResult, '[POST-RESET] open-orders fallback');
                             }
@@ -811,6 +830,7 @@ class DEXBot {
             // Lock order: _fillProcessingLock → _divergenceLock (canonical order, same as _consumeFillQueue)
             await this.manager._fillProcessingLock.acquire(async () => {
                 try {
+                    this._refreshDynamicWeightDistribution('startup');
                     if (shouldRegenerate) {
                         await this.manager._initializeAssets();
 
@@ -841,6 +861,7 @@ class DEXBot {
 
                         if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
                             this._log(`Startup sync: ${syncResult.filledOrders.length} grid order(s) found filled. Processing proceeds.`, 'info');
+                            this._refreshDynamicWeightDistribution('startup fill rebalance');
                             const startupFillRebalance = await this.manager.processFilledOrders(syncResult.filledOrders, new Set(), { skipAccountTotalsUpdate: true });
                             const batchResult = await this._executeBatchIfNeeded(startupFillRebalance, 'startup sync fill rebalance');
 
@@ -1179,6 +1200,7 @@ class DEXBot {
 
                                 this.manager.logger.logFundsStatus(this.manager, `BEFORE fill set processing [${batchIds}]`);
 
+                                this._refreshDynamicWeightDistribution(`fill set [${batchIds}]`);
                                 const rebalanceResult = await this.manager.processFilledOrders(fillBatch, fullExcludeSet);
 
                                 this.manager.logger.logFundsStatus(
@@ -1613,6 +1635,7 @@ class DEXBot {
             this._warn(`Could not fetch account totals before initializing grid: ${errFetch && errFetch.message ? errFetch.message : errFetch}`);
         }
 
+        this._refreshDynamicWeightDistribution('initial order placement');
         await Grid.initializeGrid(this.manager);
 
         if (this.config.dryRun) {

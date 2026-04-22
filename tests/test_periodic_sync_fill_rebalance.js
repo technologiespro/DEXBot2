@@ -1,6 +1,7 @@
 const assert = require('assert');
 const DEXBot = require('../modules/dexbot_class');
 const chainOrders = require('../modules/chain_orders');
+const { withDynamicWeightFiles } = require('./helpers/dynamic_weight_files');
 
 class MockAsyncLock {
     constructor() {
@@ -39,6 +40,7 @@ async function runTests() {
         return { timer: 'mock-periodic' };
     };
     global.clearInterval = () => { };
+    const weightFiles = withDynamicWeightFiles('test_periodic_sync_fill_rebalance');
 
     try {
         let fetchCalls = 0;
@@ -47,6 +49,10 @@ async function runTests() {
         let batchCalls = 0;
         let persistCalls = 0;
         let maintenanceCalls = 0;
+        weightFiles.writeSnapshot({
+            isReady: true,
+            effectiveWeights: { sell: 0.41, buy: 0.21 },
+        });
 
         const bot = new DEXBot({
             botKey: 'test_periodic_sync_fill_rebalance',
@@ -54,7 +60,8 @@ async function runTests() {
             startPrice: 1,
             assetA: 'XRP',
             assetB: 'BTS',
-            incrementPercent: 0.5
+            incrementPercent: 0.5,
+            weightDistribution: { sell: 0.6, buy: 0.4 },
         });
 
         bot.accountId = '1.2.999';
@@ -83,6 +90,16 @@ async function runTests() {
                 processCalls++;
                 assert.strictEqual(filledOrders.length, 1, 'Expected one periodic sync-detected fill');
                 assert.strictEqual(filledOrders[0].orderId, '1.7.777777', 'Expected periodic detected order to flow into strategy');
+                assert.deepStrictEqual(
+                    bot.config.weightDistribution,
+                    { sell: 0.41, buy: 0.21 },
+                    'periodic sync should refresh bot config to live dynamic weights before rebalance'
+                );
+                assert.deepStrictEqual(
+                    bot.manager.config.weightDistribution,
+                    { sell: 0.41, buy: 0.21 },
+                    'periodic sync should refresh manager config to live dynamic weights before rebalance'
+                );
                 return {
                     actions: [{ type: 'create', id: 'slot-174', order: { id: 'slot-174', type: 'buy', size: 1, price: 100 } }],
                     ordersToPlace: [],
@@ -96,7 +113,10 @@ async function runTests() {
             persistGrid: async () => {
                 persistCalls++;
                 return { isValid: true };
-            }
+            },
+            config: {
+                weightDistribution: { sell: 0.6, buy: 0.4 },
+            },
         };
 
         bot.updateOrdersOnChainBatch = async () => {
@@ -125,6 +145,7 @@ async function runTests() {
 
         console.log('✓ Periodic sync processes detected fills through rebalance and batch pipeline');
     } finally {
+        weightFiles.cleanup();
         global.setInterval = originalSetInterval;
         global.clearInterval = originalClearInterval;
         chainOrders.readOpenOrders = originalReadOpenOrders;

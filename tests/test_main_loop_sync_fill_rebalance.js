@@ -1,6 +1,7 @@
 const assert = require('assert');
 const DEXBot = require('../modules/dexbot_class');
 const chainOrders = require('../modules/chain_orders');
+const { withDynamicWeightFiles } = require('./helpers/dynamic_weight_files');
 
 class MockAsyncLock {
     constructor() {
@@ -48,6 +49,7 @@ async function runTests() {
 
     process.env.OPEN_ORDERS_SYNC_LOOP_MS = '20';
     process.on('unhandledRejection', unhandledRejectionHandler);
+    const weightFiles = withDynamicWeightFiles('test_main_loop_sync_fill_rebalance');
 
     try {
         let syncCalls = 0;
@@ -55,6 +57,10 @@ async function runTests() {
         let batchCalls = 0;
         let persistCalls = 0;
         const unhandledRejectionListenersBefore = process.listeners('unhandledRejection').length;
+        weightFiles.writeSnapshot({
+            isReady: true,
+            effectiveWeights: { sell: 0.42, buy: 0.22 },
+        });
 
         const bot = new DEXBot({
             botKey: 'test_main_loop_sync_fill_rebalance',
@@ -62,7 +68,8 @@ async function runTests() {
             startPrice: 1,
             assetA: 'XRP',
             assetB: 'BTS',
-            incrementPercent: 0.5
+            incrementPercent: 0.5,
+            weightDistribution: { sell: 0.6, buy: 0.4 },
         });
 
         const syntheticFilledOrder = {
@@ -89,6 +96,16 @@ async function runTests() {
                 processCalls++;
                 assert.strictEqual(filledOrders.length, 1, 'Expected one sync-detected filled order');
                 assert.strictEqual(filledOrders[0].orderId, '1.7.999999', 'Expected detected order to flow into strategy');
+                assert.deepStrictEqual(
+                    bot.config.weightDistribution,
+                    { sell: 0.42, buy: 0.22 },
+                    'main loop should refresh bot config to live dynamic weights before rebalance'
+                );
+                assert.deepStrictEqual(
+                    bot.manager.config.weightDistribution,
+                    { sell: 0.42, buy: 0.22 },
+                    'main loop should refresh manager config to live dynamic weights before rebalance'
+                );
                 return {
                     actions: [{ type: 'create', id: 'slot-174', order: { id: 'slot-174', type: 'buy', size: 1, price: 100 } }],
                     ordersToPlace: [],
@@ -102,7 +119,10 @@ async function runTests() {
             persistGrid: async () => {
                 persistCalls++;
                 return { isValid: true };
-            }
+            },
+            config: {
+                weightDistribution: { sell: 0.6, buy: 0.4 },
+            },
         };
 
         bot.updateOrdersOnChainBatch = async () => {
@@ -133,6 +153,7 @@ async function runTests() {
 
         console.log('✓ Main loop processes sync-detected fills through rebalance pipeline');
     } finally {
+        weightFiles.cleanup();
         process.off('unhandledRejection', unhandledRejectionHandler);
         if (originalLoopMs === undefined) {
             delete process.env.OPEN_ORDERS_SYNC_LOOP_MS;

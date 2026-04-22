@@ -13,6 +13,19 @@ const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
 const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
 const DYNAMIC_WEIGHT_WHITELIST_FILE = path.join(PROFILES_DIR, 'dynamic_weight_whitelist.json');
 
+function cloneWeightDistribution(weightDistribution, fallback = null) {
+    const source = (weightDistribution && typeof weightDistribution === 'object')
+        ? weightDistribution
+        : (fallback && typeof fallback === 'object' ? fallback : null);
+    if (!source) return null;
+
+    const sell = Number(source.sell);
+    const buy = Number(source.buy);
+    if (!Number.isFinite(sell) || !Number.isFinite(buy)) return null;
+
+    return { sell, buy };
+}
+
 function isDynamicWeightWhitelisted(botKey) {
     try {
         if (!fs.existsSync(DYNAMIC_WEIGHT_WHITELIST_FILE)) return false;
@@ -21,6 +34,55 @@ function isDynamicWeightWhitelisted(botKey) {
     } catch (_) {
         return false;
     }
+}
+
+function refreshDynamicWeightDistribution(context = 'runtime') {
+    const baseWeights = cloneWeightDistribution(
+        this._baseWeightDistribution,
+        this.config?.weightDistribution || this.manager?.config?.weightDistribution
+    );
+
+    if (!this.config || !this.manager || !this.config.botKey || !baseWeights) {
+        return {
+            applied: false,
+            source: 'static',
+            weightDistribution: baseWeights,
+        };
+    }
+
+    const botKey = this.config.botKey;
+    let nextWeights = baseWeights;
+    let source = 'static';
+    let snapshot = null;
+
+    if (isDynamicWeightWhitelisted(botKey)) {
+        snapshot = loadAmaCenterSnapshot(botKey);
+        const dw = snapshot?.dynamicWeights;
+        const liveWeights = cloneWeightDistribution(dw?.effectiveWeights);
+        if (dw?.isReady && liveWeights) {
+            nextWeights = liveWeights;
+            source = 'dynamic';
+        }
+    }
+
+    this.config.weightDistribution = { ...nextWeights };
+    if (this.manager?.config) {
+        this.manager.config.weightDistribution = { ...nextWeights };
+    }
+
+    if (source === 'dynamic') {
+        this._log(
+            `Applied live dynamic weights (${context}): sell=${nextWeights.sell} buy=${nextWeights.buy}`,
+            'info'
+        );
+    }
+
+    return {
+        applied: source === 'dynamic',
+        source,
+        weightDistribution: nextWeights,
+        snapshotUpdatedAt: snapshot?.updatedAt || null,
+    };
 }
 
 function performGridResync() {
@@ -42,19 +104,11 @@ function performGridResync() {
                     const oldIndex = self.config.botIndex;
                     self.config = { ...updatedBot, botKey: oldKey, botIndex: oldIndex };
                     self.manager.config = { ...self.manager.config, ...self.config };
-
-                    // Apply dynamic weights as additive offsets on top of bots.json weightDistribution.
-                    // Only applied when bot is in the dynamic weight whitelist and the market adapter
-                    // has written ready weights to dynamicgrid.json.
-                    if (isDynamicWeightWhitelisted(oldKey)) {
-                        const snapshot = loadAmaCenterSnapshot(oldKey);
-                        const dw = snapshot?.dynamicWeights;
-                        if (dw?.isReady && dw?.effectiveWeights) {
-                            self._log(`Applying dynamic weights: sell=${dw.effectiveWeights.sell} buy=${dw.effectiveWeights.buy} (trend=${dw.trend}, confidence=${dw.confidence})`);
-                            self.config.weightDistribution = dw.effectiveWeights;
-                            self.manager.config.weightDistribution = dw.effectiveWeights;
-                        }
-                    }
+                    self._baseWeightDistribution = cloneWeightDistribution(
+                        updatedBot.weightDistribution,
+                        self._baseWeightDistribution
+                    );
+                    refreshDynamicWeightDistribution.call(self, 'grid resync');
                 }
             } catch (e) {
                 self._warn(`Failed to reload config during resync (using current settings): ${e.message}`);
@@ -186,6 +240,7 @@ function startOpenOrdersSyncLoop() {
 
                             if (syncResult?.filledOrders && syncResult.filledOrders.length > 0) {
                                 this._log(`Open-orders sync loop: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
+                                refreshDynamicWeightDistribution.call(this, 'open-orders sync rebalance');
                                 const rebalanceResult = await this.manager.processFilledOrders(syncResult.filledOrders, new Set());
                                 const batchResult = await this._executeBatchIfNeeded(rebalanceResult, 'open-orders sync fill rebalance');
                                 if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure && !batchResult?.skippedNoActions) {
@@ -257,6 +312,7 @@ function setupBlockchainFetchInterval() {
 
                         if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
                             this._log(`Periodic sync: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
+                            refreshDynamicWeightDistribution.call(this, 'periodic blockchain fetch rebalance');
                             const rebalanceResult = await this.manager.processFilledOrders(syncResult.filledOrders, new Set());
                             const batchResult = await this._executeBatchIfNeeded(rebalanceResult, 'periodic sync fill rebalance');
                             if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure && !batchResult?.skippedNoActions) {
@@ -345,6 +401,7 @@ async function executeMaintenanceLogic(context) {
             this._warn(`Error running divergence check during ${context}: ${err.message}`);
         }
 
+        refreshDynamicWeightDistribution.call(this, `${context} spread check`);
         const spreadResult = await this.manager.checkSpreadCondition(BitShares, this.updateOrdersOnChainPlan.bind(this));
         if (await this._abortFlowIfIllegalState(`${context} spread check`)) return;
         if (spreadResult && spreadResult.ordersPlaced > 0) {
@@ -420,6 +477,7 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
 
     let batchResult = null;
     if (syntheticFills.length > 0) {
+        refreshDynamicWeightDistribution.call(this, 'dust cancel rebalance');
         const rebalanceResult = await this.manager.processFilledOrders(syntheticFills, new Set());
         batchResult = await this._executeBatchIfNeeded(rebalanceResult, `dust cancel [${syntheticFills.map(o => o.id).join(', ')}]`);
         if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure) {
@@ -563,6 +621,7 @@ async function runGridMaintenance(context = 'periodic', options = {}) {
 }
 
 module.exports = {
+    refreshDynamicWeightDistribution,
     performGridResync,
     handlePendingTriggerReset,
     setupTriggerFileDetection,

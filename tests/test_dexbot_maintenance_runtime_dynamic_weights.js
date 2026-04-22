@@ -31,6 +31,7 @@ const originals = new Map([
 const originalExistsSync = fs.existsSync;
 const originalReadFileSync = fs.readFileSync;
 const originalUnlinkSync = fs.unlinkSync;
+let dynamicWeightSnapshotMode = 'live';
 
 async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
     const logs = [];
@@ -100,7 +101,7 @@ async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
         loadAmaCenterSnapshot: () => ({
             centerPrice: 100,
             dynamicWeights: {
-                isReady: true,
+                isReady: dynamicWeightSnapshotMode === 'live',
                 trend: 'NEUTRAL',
                 confidence: 0,
                 effectiveWeights: { sell: 0.42, buy: 0.22 },
@@ -155,14 +156,46 @@ async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
     assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.42, buy: 0.22 });
     assert.strictEqual(self.manager.funds.btsFeesOwed, 0, 'fee accumulator should reset after resync');
     assert.ok(
-        logs.some((msg) => String(msg).includes('Applying dynamic weights: sell=0.42 buy=0.22')),
+        logs.some((msg) => String(msg).includes('Applied live dynamic weights (grid resync): sell=0.42 buy=0.22')),
         'resync should log that it applied the dynamic weights'
     );
+}
+
+function testRefreshDynamicWeightDistributionAppliesAndFallsBack() {
+    const { refreshDynamicWeightDistribution } = require(runtimePath);
+
+    dynamicWeightSnapshotMode = 'live';
+    const self = {
+        config: {
+            name: 'Volatility Bot',
+            botKey: 'volatility-bot-0',
+            weightDistribution: { sell: 0.6, buy: 0.4 },
+        },
+        _baseWeightDistribution: { sell: 0.6, buy: 0.4 },
+        manager: {
+            config: {
+                weightDistribution: { sell: 0.6, buy: 0.4 },
+            },
+        },
+        _log: () => {},
+    };
+
+    const applied = refreshDynamicWeightDistribution.call(self, 'unit-test-live');
+    assert.strictEqual(applied.applied, true, 'ready dynamic weights should be applied');
+    assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.42, buy: 0.22 });
+    assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.42, buy: 0.22 });
+
+    dynamicWeightSnapshotMode = 'stale';
+    const reverted = refreshDynamicWeightDistribution.call(self, 'unit-test-stale');
+    assert.strictEqual(reverted.applied, false, 'stale dynamic weights should not be applied');
+    assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.6, buy: 0.4 });
+    assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.6, buy: 0.4 });
 }
 
 async function main() {
     try {
         await testPerformGridResyncAppliesVolatilityOnlyDynamicWeights();
+        testRefreshDynamicWeightDistributionAppliesAndFallsBack();
         console.log('dexbot maintenance runtime dynamic weight tests passed');
     } finally {
         fs.existsSync = originalExistsSync;

@@ -41,6 +41,7 @@ const Grid = require('../modules/order/grid');
 const { _setFeeCache } = require('../modules/order/utils/math');
 const DEXBot = require('../modules/dexbot_class');
 const chainOrders = require('../modules/chain_orders');
+const { withDynamicWeightFiles } = require('./helpers/dynamic_weight_files');
 
 async function testDustTrigger() {
     console.log('Testing Dust Detection Logic (COW Architecture)...');
@@ -248,11 +249,16 @@ async function testDustCancelSyntheticRotation() {
 
     const originalCancelOrder = chainOrders.cancelOrder;
     let bot;
+    const weightFiles = withDynamicWeightFiles('test_dust_cancel_rotation');
     try {
         let cancelCalls = 0;
         let syncCalls = 0;
         let processCalls = 0;
         let persistCalls = 0;
+        weightFiles.writeSnapshot({
+            isReady: true,
+            effectiveWeights: { sell: 0.38, buy: 0.18 },
+        });
 
         bot = new DEXBot({
             botKey: 'test_dust_cancel_rotation',
@@ -260,7 +266,8 @@ async function testDustCancelSyntheticRotation() {
             startPrice: 1,
             assetA: 'TESTA',
             assetB: 'BTS',
-            incrementPercent: 0.5
+            incrementPercent: 0.5,
+            weightDistribution: { sell: 0.6, buy: 0.4 },
         });
         bot.account = 'test-account';
         bot.privateKey = 'test-key';
@@ -277,6 +284,16 @@ async function testDustCancelSyntheticRotation() {
                 assert.strictEqual(fills[0].id, 'dust-buy-1');
                 assert.strictEqual(fills[0].isPartial, true, 'Synthetic dust trigger should remain marked partial');
                 assert.strictEqual(fills[0].isDelayedRotationTrigger, true, 'Synthetic dust trigger should enter delayed rotation path');
+                assert.deepStrictEqual(
+                    bot.config.weightDistribution,
+                    { sell: 0.38, buy: 0.18 },
+                    'dust cancel rebalance should refresh bot config to live dynamic weights'
+                );
+                assert.deepStrictEqual(
+                    bot.manager.config.weightDistribution,
+                    { sell: 0.38, buy: 0.18 },
+                    'dust cancel rebalance should refresh manager config to live dynamic weights'
+                );
                 return { actions: [] };
             },
             persistGrid: async () => {
@@ -284,7 +301,10 @@ async function testDustCancelSyntheticRotation() {
                 return { isValid: true };
             },
             recalculateFunds: async () => {},
-            checkGridHealth: async () => ({ buyDustOrders: [], sellDustOrders: [] })
+            checkGridHealth: async () => ({ buyDustOrders: [], sellDustOrders: [] }),
+            config: {
+                weightDistribution: { sell: 0.6, buy: 0.4 },
+            },
         };
 
         chainOrders.cancelOrder = async () => {
@@ -318,6 +338,7 @@ async function testDustCancelSyntheticRotation() {
             bot._clearDustMaintenanceTimer();
         }
         chainOrders.cancelOrder = originalCancelOrder;
+        weightFiles.cleanup();
     }
 }
 
