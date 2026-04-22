@@ -122,24 +122,32 @@ const DEFAULTS = {
 
 const WHITELIST_FILE = path.join(PROFILES_DIR, 'price_adapter_whitelist.json');
 
-function isBotWhitelisted(botKey) {
-    if (!fs.existsSync(WHITELIST_FILE)) return false;
-    try {
-        const json = JSON.parse(fs.readFileSync(WHITELIST_FILE, 'utf8'));
-        return Array.isArray(json?.whitelist) && json.whitelist.includes(botKey);
-    } catch (_) {
-        return false;
-    }
-}
-
 // Cycle-scoped caches — reset once per runOnce() so each cycle reads files fresh
 // but all bots within that cycle share the same loaded data (N bots → 1 file read).
 let _marketAdapterSettingsCache = null;
 let _dynamicWeightWhitelistCache = null; // Set<string> | false (file missing) | null (not loaded yet)
+let _priceAdapterWhitelistCache = null;   // Set<string> | false (file missing) | null (not loaded yet)
 
 function _resetCycleCache() {
     _marketAdapterSettingsCache = null;
     _dynamicWeightWhitelistCache = null;
+    _priceAdapterWhitelistCache = null;
+}
+
+function isBotWhitelisted(botKey) {
+    if (_priceAdapterWhitelistCache === null) {
+        if (!fs.existsSync(WHITELIST_FILE)) {
+            _priceAdapterWhitelistCache = false;
+        } else {
+            try {
+                const json = JSON.parse(fs.readFileSync(WHITELIST_FILE, 'utf8'));
+                _priceAdapterWhitelistCache = new Set(Array.isArray(json?.whitelist) ? json.whitelist : []);
+            } catch (_) {
+                _priceAdapterWhitelistCache = false;
+            }
+        }
+    }
+    return _priceAdapterWhitelistCache !== false && _priceAdapterWhitelistCache.has(botKey);
 }
 
 function isBotDynamicWeightWhitelisted(botKey) {
@@ -709,11 +717,14 @@ function releaseFileLock(lock) {
 }
 
 async function resolveAsset(symbol) {
+    if (!symbol || typeof symbol !== 'string') {
+        throw new Error(`Cannot resolve asset: invalid or missing symbol "${symbol}"`);
+    }
     const { BitShares } = getBitsharesClient();
     const results = await BitShares.db.lookup_asset_symbols([symbol]);
     const asset = results?.[0];
     if (!asset?.id || typeof asset.precision !== 'number') {
-        throw new Error(`Cannot resolve asset "${symbol}"`);
+        throw new Error(`Cannot resolve asset "${symbol}": lookup failed`);
     }
     return { id: asset.id, precision: asset.precision, symbol };
 }
@@ -925,6 +936,13 @@ function writeGridResetTrigger(bot, payload) {
 }
 
 async function resolveBotContext(bot) {
+    if (!bot.assetAId && !bot.assetA) {
+        throw new Error(`Bot "${bot.botKey}" config is missing assetA symbol or ID`);
+    }
+    if (!bot.assetBId && !bot.assetB) {
+        throw new Error(`Bot "${bot.botKey}" config is missing assetB symbol or ID`);
+    }
+
     const assetA = bot.assetAId && Number.isFinite(bot.assetAPrecision)
         ? { id: bot.assetAId, precision: bot.assetAPrecision, symbol: bot.assetA }
         : await resolveAsset(bot.assetA);
@@ -1251,4 +1269,9 @@ module.exports = {
     applyRuntimeDefaultsFromGeneralSettings,
     resolveBotCfg,
     usesAmaGridPrice,
+    isBotWhitelisted,
+    isBotDynamicWeightWhitelisted,
+    _resetCycleCache,
+    resolveAsset,
+    resolveBotContext,
 };

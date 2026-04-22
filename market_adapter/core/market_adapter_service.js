@@ -530,12 +530,13 @@ class MarketAdapterService {
             for (let i = 0; i < kalmanHistory.length; i++) {
                 const kr = kalmanHistory[i];
                 const vp = kalmanSmoothedVelocityPct[i];
-                if (!kr.isReady || vp == null || kr.displacementPct == null) {
+                // kr.displacementRawPct provides higher precision than the rounded displacementPct
+                if (!kr.isReady || vp == null || kr.displacementRawPct == null) {
                     kalmanOffsets.push(0);
                     continue;
                 }
 
-                const dp = kr.displacementPct;
+                const dp = kr.displacementRawPct;
                 const clippedV = Math.max(-kalClipThreshold, Math.min(kalClipThreshold, vp));
 
                 if (Math.abs(clippedV) < nz) {
@@ -598,11 +599,20 @@ class MarketAdapterService {
                         continue;
                     }
                     if (latchedSign === 0) {
-                        latchedSign = sign;
-                        pendingSign = 0;
-                        pendingCount = 0;
-                        latchedOff = raw;
-                        latchedGatedOff = gatedOffSeries[i];
+                        // For the initial latch, we also require consistency over confirmBars.
+                        if (pendingSign !== sign) {
+                            pendingSign = sign;
+                            pendingCount = 1;
+                        } else {
+                            pendingCount++;
+                        }
+                        if (pendingCount >= confirmBars) {
+                            latchedSign = sign;
+                            pendingSign = 0;
+                            pendingCount = 0;
+                            latchedOff = raw;
+                            latchedGatedOff = gatedOffSeries[i];
+                        }
                     } else if (sign === latchedSign) {
                         pendingSign = 0;
                         pendingCount = 0;
