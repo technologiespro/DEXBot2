@@ -24,6 +24,30 @@ class MarketAdapterService {
         this.deps = deps;
     }
 
+    static isRetryableClosedCandleFailure(reason) {
+        return reason === 'ama_center_persist_failed' || reason === 'dynamic_weight_persist_failed';
+    }
+
+    getNowMs() {
+        return typeof this.deps.getNowMs === 'function' ? this.deps.getNowMs() : Date.now();
+    }
+
+    selectClosedCandles(candles, intervalSeconds, nowMs = this.getNowMs()) {
+        const bucketMs = Number(intervalSeconds) * 1000;
+        if (!Number.isFinite(bucketMs) || bucketMs <= 0) {
+            return {
+                closedCandles: Array.isArray(candles) ? candles.slice() : [],
+                currentBucketStartMs: null,
+            };
+        }
+
+        const currentBucketStartMs = Math.floor(Number(nowMs) / bucketMs) * bucketMs;
+        const closedCandles = (Array.isArray(candles) ? candles : [])
+            .filter((c) => Array.isArray(c) && Number.isFinite(c[0]) && c[0] < currentBucketStartMs);
+
+        return { closedCandles, currentBucketStartMs };
+    }
+
     buildBotContextSignature(bot) {
         return [
             bot?.assetA,
@@ -98,111 +122,244 @@ class MarketAdapterService {
         const existingCandles = Array.isArray(existing?.candles) ? existing.candles : [];
 
         const needBootstrap = existingCandles.length === 0;
-        const keepCount = Math.max(
+        const analysisKeepCount = Math.max(
             deps.requiredCandlesForAma(botAma),
             getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars) + 1
         );
+        // Retain one extra raw candle so the closed-candle analysis window still keeps a
+        // full warmup/history set when the newest bucket is the current in-progress bar.
+        const rawKeepCount = analysisKeepCount + 1;
         const nowIso = new Date().toISOString();
         const botThreshold = deps.calculateBotThreshold(cfg);
         if (!Number.isFinite(botThreshold) || botThreshold <= 0) {
             throw new Error(`deltaThresholdPercent missing/invalid for bot ${bot.name}`);
         }
 
-        let nextCandles = existingCandles;
-        let sourceLabel = 'native-incremental';
+        const loadCandles = async () => {
+            let nextCandles = existingCandles;
+            let sourceLabel = 'native-incremental';
 
-        if (needBootstrap) {
-            const lookbackHours = Math.max(cfg.bootstrapLookbackHours, keepCount * 2);
-            let kibanaCandles = null;
-            try {
-                kibanaCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
-                    intervalSeconds: cfg.intervalSeconds,
-                    lookbackHours,
-                    consolidateByTimestamp: true,
-                    apiKey: null,
-                }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana bootstrap failed');
-            } catch (_) {
-                kibanaCandles = null;
-            }
+            if (needBootstrap) {
+                const lookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
+                let kibanaCandles = null;
+                try {
+                    kibanaCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
+                        intervalSeconds: cfg.intervalSeconds,
+                        lookbackHours,
+                        consolidateByTimestamp: true,
+                        apiKey: null,
+                    }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana bootstrap failed');
+                } catch (_) {
+                    kibanaCandles = null;
+                }
 
-            if (Array.isArray(kibanaCandles) && kibanaCandles.length > 0) {
-                nextCandles = kibanaCandles;
-                sourceLabel = 'kibana-bootstrap';
+                if (Array.isArray(kibanaCandles) && kibanaCandles.length > 0) {
+                    nextCandles = kibanaCandles;
+                    sourceLabel = 'kibana-bootstrap';
+                } else {
+                    const sinceMs = Date.now() - (lookbackHours * 3600 * 1000);
+                    const trades = await deps.withRetries(
+                        () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
+                        cfg.sourceRetries,
+                        cfg.retryDelayMs,
+                        'native bootstrap fallback failed'
+                    );
+                    nextCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
+                    sourceLabel = 'native-bootstrap-fallback';
+                }
             } else {
-                const sinceMs = Date.now() - (lookbackHours * 3600 * 1000);
+                const lastTs = existingCandles[existingCandles.length - 1]?.[0] || 0;
+                const sinceMs = lastTs - (cfg.nativeBackfillHours * 3600 * 1000);
                 const trades = await deps.withRetries(
                     () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
                     cfg.sourceRetries,
                     cfg.retryDelayMs,
-                    'native bootstrap fallback failed'
+                    'native incremental fetch failed'
                 );
-                nextCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
-                sourceLabel = 'native-bootstrap-fallback';
+                const incomingCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
+                nextCandles = deps.mergeCandles(existingCandles, incomingCandles);
             }
-        } else {
-            const lastTs = existingCandles[existingCandles.length - 1]?.[0] || 0;
-            const sinceMs = lastTs - (cfg.nativeBackfillHours * 3600 * 1000);
-            const trades = await deps.withRetries(
-                () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
-                cfg.sourceRetries,
-                cfg.retryDelayMs,
-                'native incremental fetch failed'
-            );
-            const incomingCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
-            nextCandles = deps.mergeCandles(existingCandles, incomingCandles);
-        }
 
-        let kibanaGapRepairTimestamps = [];
-        let gapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
-            ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
-            : { gapCount: 0, missingTimestamps: [] };
-
-        if (gapAnalysis.gapCount > 0 && deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function') {
-            const timeRange = this.buildGapRepairTimeRange(gapAnalysis.missingTimestamps, cfg.intervalSeconds);
-            if (timeRange) {
-                try {
-                    const kibanaGapCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
-                        intervalSeconds: cfg.intervalSeconds,
-                        consolidateByTimestamp: true,
-                        apiKey: null,
-                        timeRange,
-                    }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana gap repair failed');
-
-                    if (Array.isArray(kibanaGapCandles) && kibanaGapCandles.length > 0) {
-                        const beforeTimestamps = new Set(nextCandles.map((c) => c[0]));
-                        nextCandles = deps.mergeCandles(nextCandles, kibanaGapCandles);
-                        const afterTimestamps = new Set(nextCandles.map((c) => c[0]));
-                        kibanaGapRepairTimestamps = gapAnalysis.missingTimestamps.filter((ts) => !beforeTimestamps.has(ts) && afterTimestamps.has(ts));
-                    }
-                } catch (_) {}
-            }
-            gapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
+            let kibanaGapRepairTimestamps = [];
+            let gapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
                 ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
                 : { gapCount: 0, missingTimestamps: [] };
-        }
 
-        nextCandles = deps.pruneCandles(nextCandles, keepCount);
-        const retainedTimestamps = new Set(nextCandles.map((c) => c[0]));
-        const kibanaGapRepairCount = kibanaGapRepairTimestamps.filter((ts) => retainedTimestamps.has(ts)).length;
-        const retainedGapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
-            ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
-            : { gapCount: 0, missingTimestamps: [] };
-        const unresolvedGapCount = retainedGapAnalysis.gapCount;
+            if (gapAnalysis.gapCount > 0 && deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function') {
+                const timeRange = this.buildGapRepairTimeRange(gapAnalysis.missingTimestamps, cfg.intervalSeconds);
+                if (timeRange) {
+                    try {
+                        const kibanaGapCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
+                            intervalSeconds: cfg.intervalSeconds,
+                            consolidateByTimestamp: true,
+                            apiKey: null,
+                            timeRange,
+                        }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana gap repair failed');
+
+                        if (Array.isArray(kibanaGapCandles) && kibanaGapCandles.length > 0) {
+                            const beforeTimestamps = new Set(nextCandles.map((c) => c[0]));
+                            nextCandles = deps.mergeCandles(nextCandles, kibanaGapCandles);
+                            const afterTimestamps = new Set(nextCandles.map((c) => c[0]));
+                            kibanaGapRepairTimestamps = gapAnalysis.missingTimestamps.filter((ts) => !beforeTimestamps.has(ts) && afterTimestamps.has(ts));
+                        }
+                    } catch (_) {}
+                }
+                gapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
+                    ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
+                    : { gapCount: 0, missingTimestamps: [] };
+            }
+
+            nextCandles = deps.pruneCandles(nextCandles, rawKeepCount);
+            const retainedTimestamps = new Set(nextCandles.map((c) => c[0]));
+            const kibanaGapRepairCount = kibanaGapRepairTimestamps.filter((ts) => retainedTimestamps.has(ts)).length;
+            const retainedGapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
+                ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
+                : { gapCount: 0, missingTimestamps: [] };
+            return {
+                nextCandles,
+                sourceLabel,
+                kibanaGapRepairCount,
+                unresolvedGapCount: retainedGapAnalysis.gapCount,
+            };
+        };
+
+        let closedCandles = [];
+        let currentBucketStartMs = null;
+        let rawLastCandle = [0, 0, 0, 0, 0];
+        let rawLastCandleTs = null;
+        let latestClosedCandle = null;
+        let lastClosedCandleTs = null;
+        let botState = {};
+        let previousClosedCandleTs = 0;
+        let hasNewClosedCandle = false;
+        let consumedClosedCandleTs = null;
+        let nextCandles = existingCandles;
+        let sourceLabel = 'native-incremental';
+        let kibanaGapRepairCount = 0;
+        let unresolvedGapCount = 0;
+
+        const loadResult = await loadCandles();
+        nextCandles = loadResult.nextCandles;
+        sourceLabel = loadResult.sourceLabel;
+        kibanaGapRepairCount = loadResult.kibanaGapRepairCount;
+        unresolvedGapCount = loadResult.unresolvedGapCount;
+
+        const nowMs = this.getNowMs();
+        ({ closedCandles, currentBucketStartMs } = this.selectClosedCandles(nextCandles, cfg.intervalSeconds, nowMs));
+        rawLastCandle = nextCandles[nextCandles.length - 1] || [0, 0, 0, 0, 0];
+        rawLastCandleTs = rawLastCandle[0] || null;
+        latestClosedCandle = closedCandles[closedCandles.length - 1] || null;
+        lastClosedCandleTs = latestClosedCandle ? latestClosedCandle[0] : null;
+        botState = { ...(state.bots[bot.botKey] || {}) };
+        delete botState.gridPriceOffsetPct;
+        delete botState.gridPriceOffsetClampToBounds;
+        previousClosedCandleTs = Number(botState.lastClosedCandleTs || 0);
+        consumedClosedCandleTs = Number.isFinite(previousClosedCandleTs) && previousClosedCandleTs > 0
+            ? previousClosedCandleTs
+            : null;
+        hasNewClosedCandle = Number.isFinite(lastClosedCandleTs) && lastClosedCandleTs > previousClosedCandleTs;
+
+        const candlePayload = {
+            meta: {
+                updatedAt: nowIso,
+                source: sourceLabel,
+                pool: ctx.poolId,
+                assetA: ctx.assetA,
+                assetB: ctx.assetB,
+                intervalSeconds: cfg.intervalSeconds,
+                candleCount: nextCandles.length,
+                analysisCandleCount: closedCandles.length,
+                currentBucketStartMs,
+                lastClosedCandleTs,
+                rawLastCandleTs,
+                kibanaGapRepairCount,
+                unresolvedGapCount,
+                format: '[timestamp_ms, open, high, low, close, volume_A]',
+            },
+            candles: nextCandles,
+        };
+        deps.saveJson(filePath, candlePayload);
+
+        if (!hasNewClosedCandle) {
+            const { staleData, staleAgeHours } = deps.computeCandleStaleness(lastClosedCandleTs, cfg.maxStaleHours);
+            const pendingClosedCandle = !staleData;
+            const triggerSuppressedReason = staleData
+                ? 'stale_candle_data'
+                : 'waiting_for_new_closed_candle';
+            state.bots[bot.botKey] = {
+                ...botState,
+                botName: bot.name,
+                botKey: bot.botKey,
+                poolId: ctx.poolId,
+                candleFile: deps.path.relative(deps.root, filePath),
+                candleCount: nextCandles.length,
+                analysisCandleCount: closedCandles.length,
+                kibanaGapRepairCount,
+                unresolvedGapCount,
+                lastCandleTs: rawLastCandleTs,
+                rawLastCandleTs,
+                lastClosedCandleTs: consumedClosedCandleTs,
+                lastCycleSource: sourceLabel,
+                lastCycleAt: nowIso,
+                staleData,
+                staleAgeHours,
+                pendingClosedCandle,
+                lastTriggerSuppressedReason: triggerSuppressedReason,
+            };
+            return {
+                ok: true,
+                dryRunMessages,
+                source: sourceLabel,
+                candleCount: nextCandles.length,
+                analysisCandleCount: closedCandles.length,
+                kibanaGapRepairCount,
+                unresolvedGapCount,
+                amaPrice: null,
+                deltaPercent: null,
+                thresholdPercent: botThreshold,
+                referencePrice: null,
+                amaComparison: [],
+                triggered: false,
+                triggerPath: null,
+                staleData,
+                staleAgeHours,
+                triggerCallbackError: null,
+                triggerSuppressedReason,
+                weights: null,
+                collateral: null,
+                amaSlope: null,
+                poolId: ctx.poolId,
+                candleFile: deps.path.relative(deps.root, filePath),
+                lastCandleTs: rawLastCandleTs,
+                rawLastCandleTs,
+                lastClosedCandleTs: consumedClosedCandleTs,
+                centerPrice: null,
+                amaConfig: {
+                    erPeriod: botAma.erPeriod,
+                    fastPeriod: botAma.fastPeriod,
+                    slowPeriod: botAma.slowPeriod,
+                },
+                atr: null,
+                weightVariance: null,
+                pendingClosedCandle,
+            };
+        }
         
         // ------------------ MARKET ADAPTER STRATEGIES ------------------
 
         // 1. AMA series and closes — used for price reference and signal computation
-        const closes = nextCandles.map((c) => Number(c[4])).filter((v) => Number.isFinite(v) && v > 0);
+        const analysisCandles = closedCandles;
+        const closes = analysisCandles.map((c) => Number(c[4])).filter((v) => Number.isFinite(v) && v > 0);
         const amaValues = calculateAMA(closes, botAma);
 
         // amaPrice is the last value of the full AMA series
         const amaPrice = amaValues.length > 0 ? amaValues[amaValues.length - 1] : null;
-        const lastCandle = nextCandles[nextCandles.length - 1] || [0,0,0,0,0];
+        const lastCandle = latestClosedCandle || [0, 0, 0, 0, 0];
 
         // 2. ATR — used only for the symmetric volatility shift. The asymmetrical
         //    trend/Kalman branch stays ATR-free to match the research HTML.
         const atrPeriod = normalizeAtrPeriod(cfg.atrPeriod);
-        const atr = calculateATR(nextCandles, atrPeriod);
+        const atr = calculateATR(analysisCandles, atrPeriod);
         const warn = (message) => {
             if (typeof deps.logger?.log === 'function') {
                 deps.logger.log(message, 'warn');
@@ -628,9 +785,9 @@ class MarketAdapterService {
         // 4. Collateral Strategy — uses derived confidence (proportional to slope magnitude)
         const collateral = isDynamic ? adjustCollateralRatio(slopeResult, 1.5, 2.0) : null;
 
-        const amaComparison = deps.calcAmaComparison(nextCandles, bot, ctx);
-        const lastCandleTs = lastCandle[0] || null;
-        const { staleData, staleAgeHours } = deps.computeCandleStaleness(lastCandleTs, cfg.maxStaleHours);
+        const amaComparison = deps.calcAmaComparison(analysisCandles, bot, ctx);
+        const closedCandleTs = lastCandle[0] || null;
+        const { staleData, staleAgeHours } = deps.computeCandleStaleness(closedCandleTs, cfg.maxStaleHours);
 
         const referencePrice = amaPrice;
         const clampedCenterPrice = this.clampGridPriceToBounds(referencePrice, referencePrice, bot);
@@ -638,9 +795,6 @@ class MarketAdapterService {
             ? clampedCenterPrice
             : referencePrice;
 
-        const botState = { ...(state.bots[bot.botKey] || {}) };
-        delete botState.gridPriceOffsetPct;
-        delete botState.gridPriceOffsetClampToBounds;
         let triggered = false;
         let triggerPath = null;
         let deltaPercent = null;
@@ -737,23 +891,6 @@ class MarketAdapterService {
             }
         }
 
-        const candlePayload = {
-            meta: {
-                updatedAt: nowIso,
-                source: sourceLabel,
-                pool: ctx.poolId,
-                assetA: ctx.assetA,
-                assetB: ctx.assetB,
-                intervalSeconds: cfg.intervalSeconds,
-                candleCount: nextCandles.length,
-                kibanaGapRepairCount,
-                unresolvedGapCount,
-                format: '[timestamp_ms, open, high, low, close, volume_A]',
-            },
-            candles: nextCandles,
-        };
-        deps.saveJson(filePath, candlePayload);
-
         const persistedCenterPrice = Number(botState.centerPrice || 0) > 0
             ? Number(botState.centerPrice)
             : undefined;
@@ -774,6 +911,11 @@ class MarketAdapterService {
             }
         }
 
+        if (Number.isFinite(lastClosedCandleTs) && lastClosedCandleTs > 0
+                && (!hasNewClosedCandle || !MarketAdapterService.isRetryableClosedCandleFailure(triggerSuppressedReason))) {
+            consumedClosedCandleTs = lastClosedCandleTs;
+        }
+
         state.bots[bot.botKey] = {
             ...botState,
             botName: bot.name,
@@ -781,9 +923,12 @@ class MarketAdapterService {
             poolId: ctx.poolId,
             candleFile: deps.path.relative(deps.root, filePath),
             candleCount: nextCandles.length,
+            analysisCandleCount: analysisCandles.length,
             kibanaGapRepairCount,
             unresolvedGapCount,
-            lastCandleTs,
+            lastCandleTs: rawLastCandleTs,
+            rawLastCandleTs,
+            lastClosedCandleTs: consumedClosedCandleTs,
             lastAmaPrice: amaPrice,
             amaCenterPrice: Number(botState.amaCenterPrice || 0) > 0
                 ? Number(botState.amaCenterPrice)
@@ -803,13 +948,14 @@ class MarketAdapterService {
             staleData,
             staleAgeHours,
             lastTriggerFile: triggerPath || botState.lastTriggerFile || null,
-            lastTriggerSuppressedReason: triggerSuppressedReason,
+            lastTriggerSuppressedReason: triggerSuppressedReason || null,
             weights,
             collateral,
             atr,
             weightVariance,
             amaSlope,
             effectiveWeights:         botState.effectiveWeights || null,
+            pendingClosedCandle: false,
         };
 
         return {
@@ -817,6 +963,7 @@ class MarketAdapterService {
             dryRunMessages,
             source: sourceLabel,
             candleCount: nextCandles.length,
+            analysisCandleCount: analysisCandles.length,
             kibanaGapRepairCount,
             unresolvedGapCount,
             amaPrice,
@@ -835,7 +982,9 @@ class MarketAdapterService {
             amaSlope,
             poolId: ctx.poolId,
             candleFile: deps.path.relative(deps.root, filePath),
-            lastCandleTs,
+            lastCandleTs: rawLastCandleTs,
+            rawLastCandleTs,
+            lastClosedCandleTs: consumedClosedCandleTs,
             centerPrice,
             amaConfig: {
                 erPeriod: botAma.erPeriod,
@@ -844,6 +993,7 @@ class MarketAdapterService {
             },
             atr,
             weightVariance,
+            pendingClosedCandle: false,
         };
     }
 }

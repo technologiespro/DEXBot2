@@ -16,9 +16,10 @@ management into a single service layer.
 - Estimating target collateral ratio
 - Emitting trigger files for grid re-centering
 
-The adapter runs as a standalone process, separate from `dexbot.js`. How often
-it fetches new candles from the BitShares API or Kibana server is governed by a
-timing setting (default: **1 hour**).
+The adapter runs as a standalone process, separate from `dexbot.js`. It polls
+on a fixed cadence for fresh candles, but it only acts on the latest **closed**
+1h candle. The active config now runs on strict top-of-hour boundaries so it
+never acts on the still-forming bar.
 
 ---
 
@@ -162,6 +163,7 @@ npm run lp:chart -- --data analysis/ama_fitting/data/lp_pool_133_iob.xrp_bts_1h.
 - **Incremental**: Merge incoming native trades into existing candle cache
 - **Gap repair**: Detect missing candle timestamps and patch them with a targeted Kibana fetch
 - **Prune**: Trim to the minimum window required for the current AMA config
+- **Close gating**: Only the latest completed 1h candle is used for action, trigger emission, and weight writes
 
 ### 2. AMA Center + Grid Price
 
@@ -346,7 +348,8 @@ The main runtime knobs are:
 - `alpha` - AMA vs Kalman blend
 - `dw` - Kalman displacement weighting (default 0.5)
 - `gain` - output amplitude (default 1.0, research knob range 0.5-2.0)
-- `amaMaxSlopePct` - AMA slope saturation (default 0.6)
+- `amaMaxSlopePct` - AMA slope saturation (default 0.75, research knob `amaS%`)
+- `minOutputThreshold` - minimum pre-gain blended trend output required before the directional shift applies (default 0, research knob `th%`)
 - `maxSlopeOffset` - cap for the asymmetric trend offset
 - `maxVolatilityOffset` - cap for the symmetric ATR penalty
 - `absoluteThreshold` - dead-band before regime filtering is applied (default 0.05)
@@ -358,7 +361,7 @@ The main runtime knobs are:
 - `kalmanDispScaleMult` - displacement scale multiplier (default 1.8)
 - `kalmanDispThresholdMult` - displacement threshold multiplier
 - `lookbackBars` - AMA slope lookback (default 9)
-- `kalmanMaxSlopePct` - Kalman composite saturation (default 0.5)
+- `kalmanMaxSlopePct` - Kalman composite saturation (default 0.75, research knob `kalS%`, range 0.05-1.5)
 - `kalmanSmoothSpanPct` - adaptive EMA span ratio
 - `signalConfirmBars` - output/signal latch confirmation bars
 
@@ -374,7 +377,7 @@ These values can be overridden in `profiles/market_adapter_settings.json` at the
 # One full sync + signal cycle (safe test)
 node market_adapter/market_adapter.js --once
 
-# Continuous daemon loop (runs every configured interval)
+# Continuous daemon loop (polls on wall-clock boundaries; actions still wait for the next closed 1h candle)
 node market_adapter/market_adapter.js
 
 # Custom trigger threshold

@@ -130,7 +130,7 @@ function testDynamicWeightChartKeepsGainLinearAtEnd() {
     );
     assert.match(
         html,
-        /const outputThreshold = MIN_OUTPUT_THRESHOLD;/,
+        /const outputThreshold = currentMinOutputThreshold;/,
         'chart should keep the dead-band independent from the final gain slider'
     );
     assert.match(

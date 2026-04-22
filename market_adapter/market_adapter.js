@@ -405,6 +405,14 @@ function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function sleepUntilAlignedBoundary(pollSeconds, referenceNowMs = Date.now(), nowMs = Date.now()) {
+    const intervalMs = Math.max(1, Math.floor(Number(pollSeconds) || 0)) * 1000;
+    const bufferMs = 1000;
+    const targetBoundaryMs = Math.floor(Number(referenceNowMs) / intervalMs) * intervalMs + intervalMs;
+    const delayMs = targetBoundaryMs - Number(nowMs) + bufferMs;
+    return Math.max(bufferMs, delayMs);
+}
+
 function withRetries(fn, attempts, baseDelayMs, label) {
     return (async () => {
         let lastErr;
@@ -508,7 +516,7 @@ function printHelp() {
     console.log('');
     console.log('Options:');
     console.log('  --once                 Run one cycle and exit');
-    console.log('  --pollSeconds <n>      Loop interval seconds (default 3600)');
+    console.log('  --pollSeconds <n>      Loop interval seconds (default 3600, wall-clock aligned)');
     console.log('  --deltaPercent <n>     Trigger threshold percent (default: general.settings MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT or 2.5)');
     console.log('  --bootstrapHours <n>   Kibana bootstrap lookback hours (default 720)');
     console.log('  --nativeBackfillHours  Native incremental lookback hours (default 6)');
@@ -1061,9 +1069,10 @@ async function runOnce(cfg, state, contextCache) {
             const patchText = Number.isFinite(r.kibanaGapRepairCount) && r.kibanaGapRepairCount > 0 ? ` KIBANA_PATCH(${r.kibanaGapRepairCount})` : '';
             const gapText = Number.isFinite(r.unresolvedGapCount) && r.unresolvedGapCount > 0 ? ` GAPS(${r.unresolvedGapCount})` : '';
             const trigText = r.triggered ? ` TRIGGERED -> ${r.triggerPath ? path.relative(ROOT, r.triggerPath) : '[suppressed, dry-run]'}` : '';
+            const pendingText = r.pendingClosedCandle ? ' WAITING_FOR_CLOSED_CANDLE' : '';
             const weightText = r.weights ? ` weights[buy=${r.weights.buy}, sell=${r.weights.sell}]` : '';
             const trendText = r.amaSlope?.trend ? ` trend=${r.amaSlope.trend}` : '';
-            log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText}, delta=${deltaText}, threshold=${thresholdText}${staleText}${patchText}${gapText}${trigText}${trendText}${weightText}`);
+            log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText}, delta=${deltaText}, threshold=${thresholdText}${staleText}${patchText}${gapText}${trigText}${pendingText}${trendText}${weightText}`);
             if (Array.isArray(r.dryRunMessages)) {
                 r.dryRunMessages.forEach(msg => log(cfg, `  ${msg}`));
             }
@@ -1211,8 +1220,7 @@ async function main() {
             const started = Date.now();
             log(cfg, `\n[cycle ${new Date(started).toISOString()}]`);
             await runOnce(cfg, state, contextCache);
-            const elapsed = Date.now() - started;
-            const sleepMs = Math.max(1000, cfg.pollSeconds * 1000 - elapsed);
+            const sleepMs = sleepUntilAlignedBoundary(cfg.pollSeconds, started, Date.now());
             await sleep(sleepMs);
         }
     } finally {
@@ -1237,6 +1245,7 @@ module.exports = {
     calculateBotThreshold,
     calcAmaComparison,
     computeCandleStaleness,
+    sleepUntilAlignedBoundary,
     resolveAmaForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
     applyRuntimeDefaultsFromGeneralSettings,

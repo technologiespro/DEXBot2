@@ -190,19 +190,20 @@ All panels share aligned vertical time grid lines, and the bottom output panel s
 |------|-------|---------|---------|
 | **nz%** | 0–1 | 0.00 | Neutral zone: dead-band below which offset is forced to 0 |
 | **lb** | 1–32 | 9 | Logarithmic. Lookback bars for AMA slope calculation |
-| **amaS%** | 0.05–5 | 0.6 | Logarithmic. Gear ratio for AMA slope saturation |
-| **kalS%** | 0.05–1 | 0.5 | Logarithmic. Gear ratio for Kalman composite saturation |
+| **amaS%** | 0.05–5 | 0.75 | Logarithmic. Gear ratio for AMA slope saturation |
+| **kalS%** | 0.05–1.5 | 0.75 | Logarithmic. Gear ratio for Kalman composite saturation |
 | **clip%** | 0–55 | 10 | Percentile clip: filters extreme inputs (0 = off) |
 
 ### Output Controls
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
+| **th%** | 0–0.5 | 0.00 | Minimum pre-gain blended output required before the signal is allowed through |
 | **gain** | 0.5–2.0 | 1.0 | Logarithmic. Amplitude multiplier on the clamp-normalized blend |
 | **regi** | 0–2 | 1.0 | Regime sensitivity: exponent applied to Hurst+PE multiplier |
 
 ## Copy / Paste Parameters
 
-The **copy** button serializes all knob values (α, dw, kf, kfd, dsp, kdt, kfs, cf, lb, amaS%, kalS%, gain, clip%, nz%, regi) to JSON and writes them to both the clipboard and `localStorage`.
+The **copy** button serializes all knob values (α, dw, kf, kfd, dsp, kdt, kfs, cf, lb, amaS%, kalS%, th%, gain, clip%, nz%, regi) to JSON and writes them to both the clipboard and `localStorage`.
 
 The **paste** button first checks `localStorage` for parameters from a previous copy in the same browser session. If none found, it prompts for Ctrl+V input. A confirmation popup shows the parsed values before applying them. Click **Apply** to set the knobs, **Cancel** or press **Escape** to dismiss.
 
@@ -295,6 +296,8 @@ buyW  = 0.5 − off
 ```
 
 The research chart intentionally plots the unclamped `off` series so moves above the runtime cap stay visible. The clamp guides still show where the live adapter would stop applying additional directional offset.
+
+`th%` maps to `minOutputThreshold`. It is applied after the AMA/Kalman blend and regime multiplier, but before `gain`, so it controls which small blended moves are zeroed out rather than how the remaining moves are scaled.
 
 ## Parameter Relationships
 
@@ -409,15 +412,15 @@ Candle Data
 | `market_adapter/core/strategies/ama_slope_model.js` | AMA slope weight computation |
 | `analysis/price_sources.js` | Unified candle data source abstraction |
 
-## Production-only Behaviour
+## Runtime Notes
 
-These gates exist in `market_adapter_service.js` but are not reflected in the research chart:
-
-### Min-output threshold (`DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD`, default 0.25)
+### Min-output threshold (`DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD`, default 0)
 
 After the final blended trend offset is computed, if `|finalOff| < minOutputThreshold` the trend component is suppressed and treated as `0`.
 The symmetric volatility penalty is still applied independently. This means the bot can still receive a volatility-only weight adjustment even when the trend signal is below threshold. The payload flag `isReady` is only `false` when neither a trend offset nor a volatility penalty is active.
 
-Rationale: a small offset adds noise without meaningfully improving the weight split. The threshold is half the maximum output (±0.5), so only offsets with at least half-scale signal strength are applied.
+The research chart now exposes this gate as the `th%` knob, so chart tuning and runtime overrides use the same threshold concept.
+
+The runtime default is `0`, which disables the gate unless a market or bot override sets a higher threshold.
 
 Can be overridden per-market or per-bot via `minOutputThreshold` in `marketAdapterSettings`.

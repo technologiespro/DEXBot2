@@ -572,8 +572,9 @@ let MARKET_ADAPTER = {
     // before the bot applies a directional weight shift in the asymmetrical path.
     // Higher values ignore weaker trend signals and keep weights closer to the static baseline.
     // Lower values allow smaller trend signals to affect buy/sell weighting.
-    // (not exposed in chart UI)
-    DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD: 0.25,
+    // Default is 0 so the gate stays disabled unless a market/bot override enables it.
+    // nob: th% (Min Output Threshold)
+    DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD: 0,
 
     // DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD: Minimum volatility shift required before the
     // symmetric ATR dampening actually changes the output weights.
@@ -598,8 +599,8 @@ let MARKET_ADAPTER = {
     // DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: Trend size that counts as "full strength" for AMA.
     // Lower values make the AMA channel reach maximum influence more easily.
     // Higher values require a stronger price move before AMA reaches full effect.
-    // nob: maxS% (Max Slope %)
-    DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: 0.6,
+    // nob: amaS% (AMA Max Slope %)
+    DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: 0.75,
 
     // DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT: Trend size that counts as "full strength" for
     // the Kalman composite branch. Kept separate from the AMA slope knob so the two
@@ -607,7 +608,7 @@ let MARKET_ADAPTER = {
     // Lower values make the Kalman channel reach maximum influence more easily.
     // Higher values require a stronger move before the Kalman branch reaches full effect.
     // nob: kalS% (Kalman Max Slope %)
-    DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT: 0.5,
+    DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT: 0.75,
 
     // DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT: Ignore small AMA moves around flat price action.
     // Higher values create a larger neutral zone and reduce small trend reactions.

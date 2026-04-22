@@ -13,6 +13,7 @@ const { MARKET_ADAPTER } = require('../modules/constants');
 const { calculateAMA, getAmaWarmupBars } = require('../analysis/ama_fitting/ama');
 const { KalmanTrendAnalyzer } = require('../analysis/trend_detection/kalman_trend_analyzer');
 const { buildKalmanVelocitySeries, computeAbsolutePercentileThreshold } = require('../analysis/trend_detection/kalman_velocity_smoothing');
+const { sleepUntilAlignedBoundary } = require('../market_adapter/market_adapter');
 
 function generateCandles(count, price) {
     const candles = [];
@@ -633,6 +634,7 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
 
 async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
     let triggerWrites = 0;
+    let writeAttempts = 0;
 
     const service = new MarketAdapterService({
         resolveBotContext: async () => ({
@@ -662,7 +664,10 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
             triggerWrites += 1;
             return '/tmp/recalculate.xrp-bts-bootstrap.trigger';
         },
-        writeBotDynamicGrid: () => false,
+        writeBotDynamicGrid: () => {
+            writeAttempts += 1;
+            return writeAttempts > 1;
+        },
         isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
@@ -689,15 +694,27 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
         maxStaleHours: 6,
     };
 
-    const result = await service.processBot(bot, state, cfg, new Map(), {});
+    const contextCache = new Map();
+    const firstResult = await service.processBot(bot, state, cfg, contextCache, {});
 
-    assert.strictEqual(result.ok, true, 'processBot should still complete on bootstrap persistence failure');
-    assert.strictEqual(result.triggered, false, 'bootstrap persistence failure should not produce a trigger');
-    assert.strictEqual(result.triggerSuppressedReason, 'ama_center_persist_failed', 'bootstrap failure should be reported');
+    assert.strictEqual(firstResult.ok, true, 'processBot should still complete on bootstrap persistence failure');
+    assert.strictEqual(firstResult.triggered, false, 'bootstrap persistence failure should not produce a trigger');
+    assert.strictEqual(firstResult.triggerSuppressedReason, 'ama_center_persist_failed', 'bootstrap failure should be reported');
     assert.strictEqual(triggerWrites, 0, 'trigger file must not be written during bootstrap persistence failure');
     assert.strictEqual(state.bots['xrp-bts-bootstrap'].centerPrice, undefined, 'bootstrap baseline should remain unset so the next cycle retries');
     assert.strictEqual(state.bots['xrp-bts-bootstrap'].amaCenterPrice, undefined, 'bootstrap raw AMA center should remain unset when snapshot persistence fails');
     assert.strictEqual(state.bots['xrp-bts-bootstrap'].lastGridResetAt, undefined, 'bootstrap state should not pretend a reset happened');
+    assert.strictEqual(state.bots['xrp-bts-bootstrap'].lastClosedCandleTs, null, 'failed bootstrap persistence should not consume the closed candle');
+
+    const secondResult = await service.processBot(bot, state, cfg, contextCache, {});
+
+    assert.strictEqual(secondResult.ok, true, 'bootstrap retry should still complete');
+    assert.strictEqual(secondResult.triggered, false, 'bootstrap retry should establish the baseline without a trigger');
+    assert.strictEqual(secondResult.triggerSuppressedReason, null, 'successful bootstrap retry should clear the suppression reason');
+    assert.strictEqual(writeAttempts, 2, 'the same closed candle should be retried after bootstrap persistence failure');
+    assert.strictEqual(secondResult.pendingClosedCandle, false, 'successful retry should process the closed candle rather than skip it');
+    assert.ok(Number.isFinite(state.bots['xrp-bts-bootstrap'].centerPrice), 'bootstrap retry should establish the center baseline');
+    assert.ok(Number.isFinite(state.bots['xrp-bts-bootstrap'].lastClosedCandleTs), 'successful bootstrap retry should finally consume the closed candle');
 }
 
 // Center remains AMA when there is no offset. Trigger fires from AMA delta.
@@ -1204,6 +1221,294 @@ async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
     assert.strictEqual(savedPayload.meta.unresolvedGapCount, 1, 'saved payload should retain unresolved gap count');
 }
 
+async function testClosedCandleGateSkipsCurrentPartialHour() {
+    let triggerWrites = 0;
+    let weightWrites = 0;
+    let savedPayload = null;
+    const nowMs = Date.parse('2026-01-01T01:30:00Z');
+    const closedTs = Date.parse('2026-01-01T00:00:00Z');
+    const partialTs = Date.parse('2026-01-01T01:00:00Z');
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 3 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [closedTs, 100, 100, 100, 100, 1],
+                [partialTs, 110, 110, 110, 110, 1],
+            ],
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        requiredCandlesForAma: () => 2,
+        calculateBotThreshold: () => 0.25,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => {
+            throw new Error('calcAmaComparison should not run before a new closed candle exists');
+        },
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-closed-hour.trigger';
+        },
+        writeBotDynamicGrid: () => {
+            weightWrites += 1;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        getNowMs: () => nowMs,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-closed-0',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-closed-0': {
+                centerPrice: 100,
+                lastClosedCandleTs: closedTs,
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.strictEqual(result.pendingClosedCandle, true, 'current partial hour should be ignored');
+    assert.strictEqual(result.triggered, false, 'no trigger should fire before a new closed candle exists');
+    assert.strictEqual(result.analysisCandleCount, 1, 'only the closed candle should be used for analysis');
+    assert.strictEqual(result.lastCandleTs, partialTs, 'raw latest candle timestamp should still be reported');
+    assert.strictEqual(result.lastClosedCandleTs, closedTs, 'closed candle timestamp should drive the signal');
+    assert.strictEqual(triggerWrites, 0, 'grid reset should not run for a partial candle');
+    assert.strictEqual(weightWrites, 0, 'weight writes should not run for a partial candle');
+    assert.ok(savedPayload, 'raw candle file should still be persisted');
+    assert.strictEqual(savedPayload.meta.candleCount, 2, 'raw candle payload should keep both candles');
+    assert.strictEqual(savedPayload.meta.analysisCandleCount, 1, 'raw candle payload should record the closed-candle count');
+    assert.strictEqual(state.bots['xrp-bts-closed-0'].centerPrice, 100, 'state should remain unchanged when waiting for a close');
+}
+
+async function testClosedCandleGateSurfacesStaleData() {
+    let savedPayload = null;
+    let stalenessChecks = 0;
+    const staleTs = Date.parse('2026-01-01T00:00:00Z');
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 3 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_stale_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [staleTs, 100, 100, 100, 100, 1],
+            ],
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        requiredCandlesForAma: () => 2,
+        calculateBotThreshold: () => 0.25,
+        computeCandleStaleness: () => {
+            stalenessChecks += 1;
+            return { staleData: true, staleAgeHours: 13.5 };
+        },
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => {
+            throw new Error('calcAmaComparison should not run while stale data blocks closed-candle processing');
+        },
+        getNowMs: () => Date.parse('2026-01-01T13:30:00Z'),
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-stale-0',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-stale-0': {
+                centerPrice: 100,
+                lastClosedCandleTs: staleTs,
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should still complete when data is stale');
+    assert.strictEqual(stalenessChecks, 1, 'staleness must be evaluated before returning from the closed-candle gate');
+    assert.strictEqual(result.staleData, true, 'stale status should be surfaced to the caller');
+    assert.strictEqual(result.staleAgeHours, 13.5, 'stale age should be preserved');
+    assert.strictEqual(result.pendingClosedCandle, false, 'stale data should not masquerade as a normal pending close');
+    assert.strictEqual(result.triggerSuppressedReason, 'stale_candle_data', 'suppression reason should distinguish stale data from a normal wait');
+    assert.ok(savedPayload, 'raw candle payload should still be persisted');
+    assert.strictEqual(state.bots['xrp-bts-stale-0'].pendingClosedCandle, false, 'state should not mark stale data as a pending close');
+    assert.strictEqual(state.bots['xrp-bts-stale-0'].staleData, true, 'state should retain stale status');
+    assert.strictEqual(state.bots['xrp-bts-stale-0'].lastTriggerSuppressedReason, 'stale_candle_data', 'state should persist the stale suppression reason');
+}
+
+async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
+    let writtenPayload = null;
+    let pruneKeepCount = null;
+    const intervalSeconds = 3600;
+    const bucketMs = intervalSeconds * 1000;
+    const baseTs = Date.parse('2026-01-01T00:00:00Z');
+    const candles = [
+        [baseTs + 0 * bucketMs, 100, 100, 100, 100, 1],
+        [baseTs + 1 * bucketMs, 101, 101, 101, 101, 1],
+        [baseTs + 2 * bucketMs, 102, 102, 102, 102, 1],
+        [baseTs + 3 * bucketMs, 103, 103, 103, 103, 1],
+        [baseTs + 4 * bucketMs, 104, 104, 104, 104, 1],
+        [baseTs + 5 * bucketMs, 105, 105, 105, 105, 1],
+    ];
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 2 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_prune_1h.json`),
+        loadJson: () => ({ candles }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 2,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 0.5 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (inputCandles, keepCount) => {
+            pruneKeepCount = keepCount;
+            return inputCandles.slice(inputCandles.length - keepCount);
+        },
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-prune.trigger',
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
+            writtenPayload = payload;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        getNowMs: () => baseTs + (5 * bucketMs) + (30 * 60 * 1000),
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-prune',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = { bots: { 'xrp-bts-prune': { centerPrice: 100 } } };
+    const cfg = {
+        intervalSeconds,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        minOutputThreshold: 0,
+        amaSlope: {
+            lookbackBars: 1,
+            maxSlopePct: 0.5,
+            neutralZonePct: 0,
+        },
+        kalmanSlope: {
+            maxSlopePct: 0.5,
+        },
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed with a partial trailing candle');
+    assert.strictEqual(result.analysisCandleCount, 5, 'analysis should retain the full closed-candle warmup window');
+    assert.strictEqual(pruneKeepCount, 6, 'raw candle pruning should keep one extra bucket beyond the analysis window');
+    assert.ok(writtenPayload, 'dynamic weights should still persist when the warmup window is fully retained');
+    assert.strictEqual(writtenPayload.dynamicWeights.isReady, true, 'dynamic weights should stay ready after pruning away only the partial bucket');
+}
+
+function testSleepUntilAlignedBoundaryAnchorsToCycleStart() {
+    const intervalSeconds = 3600;
+    const startedAt = Date.parse('2026-01-01T12:59:59.900Z');
+    const finishedAt = Date.parse('2026-01-01T13:00:01.500Z');
+    const midCycleStartedAt = Date.parse('2026-01-01T12:15:00.000Z');
+    const midCycleFinishedAt = Date.parse('2026-01-01T12:20:00.000Z');
+
+    const crossedBoundaryDelay = sleepUntilAlignedBoundary(intervalSeconds, startedAt, finishedAt);
+    const midCycleDelay = sleepUntilAlignedBoundary(intervalSeconds, midCycleStartedAt, midCycleFinishedAt);
+
+    assert.strictEqual(crossedBoundaryDelay, 1000, 'crossing a boundary during the cycle should rerun immediately after the buffer');
+    assert.strictEqual(midCycleDelay, 2401000, 'sleep should still target the next aligned boundary from the cycle start');
+}
+
 async function testIdOnlyBotIsNotRejected() {
     const service = new MarketAdapterService({
         resolveBotContext: async () => ({
@@ -1261,7 +1566,7 @@ async function testIdOnlyBotIsNotRejected() {
     assert.notStrictEqual(result.reason, 'missing asset pair', 'should not fail with missing asset pair');
 }
 
-// Flat candles → finalOff = 0, which is below the default 0.25 threshold.
+// Flat candles → finalOff = 0, which is below the configured 0.25 threshold.
 // Bot side should receive isReady=false and effectiveWeights == baseWeights.
 // Requires 1000 candles so slopeResult.isReady=true (AMA3 erPeriod=781, lookback=72 → needs 854+).
 async function testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights() {
@@ -1317,6 +1622,7 @@ async function testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights(
         sourceRetries: 1,
         retryDelayMs: 0,
         maxStaleHours: 6,
+        minOutputThreshold: 0.25,
     };
 
     const result = await service.processBot(bot, state, cfg, new Map(), {});
@@ -1326,12 +1632,12 @@ async function testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights(
 
     const dw = writtenPayload.dynamicWeights;
     assert.ok(dw, 'dynamicWeights payload should be present');
-    assert.strictEqual(dw.belowMinOutputThreshold, true, 'flat candles produce finalOff=0 < default threshold 0.25');
+    assert.strictEqual(dw.belowMinOutputThreshold, true, 'flat candles produce finalOff=0 < configured threshold 0.25');
     assert.strictEqual(dw.isReady, false, 'isReady should be false when below min output threshold');
     assert.strictEqual(dw.effectiveWeights.sell, 0.6, 'effectiveWeights.sell should equal static sell when below threshold');
     assert.strictEqual(dw.effectiveWeights.buy, 0.4, 'effectiveWeights.buy should equal static buy when below threshold');
     assert.deepStrictEqual(dw.effectiveWeights, dw.baseWeights, 'effectiveWeights should equal baseWeights when below threshold');
-    assert.strictEqual(dw.minOutputThreshold, 0.25, 'minOutputThreshold should be the default 0.25');
+    assert.strictEqual(dw.minOutputThreshold, 0.25, 'minOutputThreshold should reflect the configured 0.25 override');
 }
 
 // With minOutputThreshold=0 the gate is disabled: even finalOff=0 passes, isReady reflects
@@ -1708,6 +2014,7 @@ async function testDynamicWeightVolatilityOnlyPathRemainsReady() {
         sourceRetries: 1,
         retryDelayMs: 0,
         maxStaleHours: 6,
+        minOutputThreshold: 0.08,
     };
 
     const result = await service.processBot(bot, state, cfg, new Map(), {});
@@ -1869,7 +2176,7 @@ async function testDynamicWeightSuppressedTrendUsesFlatProfile() {
     assert.deepStrictEqual(dw.effectiveWeights, dw.baseWeights, 'effective weights should fall back to the static baseline');
 }
 
-async function testDynamicWeightWeightOnlyWritesPersistEveryCycle() {
+async function testDynamicWeightWeightOnlyWritesPersistOnClosedCandle() {
     let writeCount = 0;
     let lastPayload = null;
 
@@ -1926,16 +2233,21 @@ async function testDynamicWeightWeightOnlyWritesPersistEveryCycle() {
         maxStaleHours: 6,
     };
 
-    await service.processBot(bot, state, cfg, new Map(), {});
+    const firstResult = await service.processBot(bot, state, cfg, new Map(), {});
     const firstWeights = { ...lastPayload.dynamicWeights.effectiveWeights };
-    await service.processBot(bot, state, cfg, new Map(), {});
+    assert.strictEqual(state.bots['xrp-bts-dw-persist'].pendingClosedCandle, false, 'successful closed candle processing should clear the pending flag');
+    const secondResult = await service.processBot(bot, state, cfg, new Map(), {});
 
-    assert.strictEqual(writeCount, 2, 'weight-only dynamic weights should be persisted on every no-trigger cycle');
-    assert.deepStrictEqual(lastPayload.dynamicWeights.effectiveWeights, firstWeights, 'successive writes may carry identical effective weights');
+    assert.strictEqual(firstResult.pendingClosedCandle, false, 'first closed candle cycle should process normally');
+    assert.strictEqual(state.bots['xrp-bts-dw-persist'].pendingClosedCandle, true, 'state should mark the waiting poll after the second pass');
+    assert.strictEqual(secondResult.pendingClosedCandle, true, 'second poll with no new closed candle should be skipped');
+    assert.strictEqual(writeCount, 1, 'weight-only dynamic weights should only persist when a new closed candle is available');
+    assert.deepStrictEqual(lastPayload.dynamicWeights.effectiveWeights, firstWeights, 'identical closed-candle data should yield identical effective weights');
 }
 
 async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
     let writeCount = 0;
+    let lastPayload = null;
 
     const service = new MarketAdapterService({
         resolveBotContext: async () => ({
@@ -1958,9 +2270,10 @@ async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-fail.trigger',
-        writeBotDynamicGrid: () => {
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
             writeCount += 1;
-            return false;
+            lastPayload = payload;
+            return writeCount > 1;
         },
         isBotDynamicWeightWhitelisted: () => true,
         root: process.cwd(),
@@ -1996,14 +2309,26 @@ async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
         maxStaleHours: 6,
     };
 
-    const result = await service.processBot(bot, state, cfg, new Map(), {});
+    const contextCache = new Map();
+    const firstResult = await service.processBot(bot, state, cfg, contextCache, {});
 
-    assert.strictEqual(result.ok, true, 'processBot should still complete when weight-only persistence fails');
-    assert.strictEqual(result.triggered, false, 'weight-only persistence failure should not create a trigger');
-    assert.strictEqual(result.triggerSuppressedReason, 'dynamic_weight_persist_failed', 'failed weight-only write should be surfaced');
+    assert.strictEqual(firstResult.ok, true, 'processBot should still complete when weight-only persistence fails');
+    assert.strictEqual(firstResult.triggered, false, 'weight-only persistence failure should not create a trigger');
+    assert.strictEqual(firstResult.triggerSuppressedReason, 'dynamic_weight_persist_failed', 'failed weight-only write should be surfaced');
     assert.strictEqual(writeCount, 1, 'weight-only persistence should still be attempted');
     assert.strictEqual(state.bots['xrp-bts-dw-fail'].effectiveWeights, null, 'effective weights should not advance when snapshot write fails');
     assert.strictEqual(state.bots['xrp-bts-dw-fail'].amaCenterPrice, 100, 'raw AMA center should remain aligned with the last persisted snapshot');
+    assert.strictEqual(state.bots['xrp-bts-dw-fail'].lastClosedCandleTs, null, 'failed weight-only persistence should not consume the closed candle');
+
+    const secondResult = await service.processBot(bot, state, cfg, contextCache, {});
+
+    assert.strictEqual(secondResult.ok, true, 'retry after weight-only persistence failure should complete');
+    assert.strictEqual(secondResult.pendingClosedCandle, false, 'successful retry should process the same closed candle instead of skipping it');
+    assert.strictEqual(secondResult.triggerSuppressedReason, null, 'successful retry should clear the persistence failure reason');
+    assert.strictEqual(writeCount, 2, 'the same closed candle should be retried after weight-only persistence failure');
+    assert.ok(lastPayload?.dynamicWeights, 'successful retry should write the dynamic weight payload');
+    assert.ok(state.bots['xrp-bts-dw-fail'].effectiveWeights, 'effective weights should advance after a successful retry');
+    assert.ok(Number.isFinite(state.bots['xrp-bts-dw-fail'].lastClosedCandleTs), 'successful retry should finally consume the closed candle');
 }
 
 async function testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData() {
@@ -2159,6 +2484,10 @@ async function run() {
     await testContextCacheInvalidatesOnPoolChange();
     await testKibanaGapRepairPatchesMissingCandles();
     await testRemainingGapsAreReportedWhenKibanaHasNoPatchData();
+    await testClosedCandleGateSkipsCurrentPartialHour();
+    await testClosedCandleGateSurfacesStaleData();
+    await testClosedCandlePruningRetainsFullDynamicWeightWarmup();
+    testSleepUntilAlignedBoundaryAnchorsToCycleStart();
     await testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights();
     await testDynamicWeightMinOutputThresholdZeroDisablesGate();
     await testDynamicWeightGainScalesOutputLinearly();
@@ -2166,7 +2495,7 @@ async function run() {
     await testDynamicWeightVolatilityOnlyPathRemainsReady();
     await testDynamicWeightVolatilityOverridesFlowIntoService();
     await testDynamicWeightSuppressedTrendUsesFlatProfile();
-    await testDynamicWeightWeightOnlyWritesPersistEveryCycle();
+    await testDynamicWeightWeightOnlyWritesPersistOnClosedCandle();
     await testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState();
     await testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData();
     await testDynamicWeightInvalidAtrPeriodAndClampAreSanitized();
