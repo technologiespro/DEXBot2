@@ -9,6 +9,13 @@
 'use strict';
 
 const { DEFAULT_CONFIG } = require('../../modules/constants');
+const {
+  collateralDeltaForTargetCr,
+  collateralForTargetCr,
+  debtDeltaForTargetCr,
+  debtForTargetCr,
+  planCrAdjustment: sharedPlanCrAdjustment
+} = require('../../modules/cr_planner');
 
 const DEFAULT_PRICE_RANGE_RATIO = 3.0;
 
@@ -171,103 +178,7 @@ function assessAllPositions(positions, trendSignal = null) {
   return (positions || []).map((p) => assessPosition(p, trendSignal));
 }
 
-/**
- * Calculate the minimum collateral needed to reach a target CR.
- *
- * @param {number} debtAmount  – MPA debt amount
- * @param {number} feedPrice   – BTS per MPA (from feed)
- * @param {number} targetCr    – Target collateral ratio (default 2.0)
- * @returns {number} BTS collateral needed
- */
-function collateralForTargetCr(debtAmount, feedPrice, targetCr = 2.0) {
-  if (!Number.isFinite(debtAmount) || !Number.isFinite(feedPrice) || debtAmount <= 0 || feedPrice <= 0) {
-    return 0;
-  }
-  return debtAmount * feedPrice * targetCr;
-}
-
-/**
- * Calculate how much collateral to add/remove to reach target CR.
- *
- * @param {number} currentCollateral – Current BTS collateral
- * @param {number} debtAmount        – MPA debt amount
- * @param {number} feedPrice         – BTS per MPA
- * @param {number} targetCr          – Target CR (default 2.0)
- * @returns {number} Delta (positive = add, negative = can remove)
- */
-function collateralDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, targetCr = 2.0) {
-  const needed = collateralForTargetCr(debtAmount, feedPrice, targetCr);
-  return needed - (currentCollateral || 0);
-}
-
-/**
- * Calculate the maximum debt supportable by the current collateral at a target CR.
- *
- * @param {number} currentCollateral – Current BTS collateral
- * @param {number} feedPrice         – BTS per MPA
- * @param {number} targetCr          – Target collateral ratio (default 2.0)
- * @returns {number} Debt level that matches the target CR
- */
-function debtForTargetCr(currentCollateral, feedPrice, targetCr = 2.0) {
-  if (!Number.isFinite(currentCollateral) || !Number.isFinite(feedPrice) || !Number.isFinite(targetCr)) {
-    return 0;
-  }
-  if (currentCollateral <= 0 || feedPrice <= 0 || targetCr <= 0) {
-    return 0;
-  }
-  return currentCollateral / (feedPrice * targetCr);
-}
-
-/**
- * Calculate how much debt to add/remove to reach a target CR using debt first.
- *
- * @param {number} currentCollateral – Current BTS collateral
- * @param {number} debtAmount        – Current MPA debt
- * @param {number} feedPrice         – BTS per MPA
- * @param {number} targetCr          – Target collateral ratio (default 2.0)
- * @returns {number} Delta (positive = can increase debt, negative = should reduce debt)
- */
-function debtDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, targetCr = 2.0) {
-  const targetDebt = debtForTargetCr(currentCollateral, feedPrice, targetCr);
-  return targetDebt - (debtAmount || 0);
-}
-
-/**
- * Build a CR adjustment plan using the actual strategy levers:
- * change debt first, then collateral if needed or desired.
- *
- * @param {number} currentCollateral – Current BTS collateral
- * @param {number} debtAmount        – Current MPA debt
- * @param {number} feedPrice         – BTS per MPA
- * @param {number} targetCr          – Target collateral ratio (default 2.0)
- * @returns {Object} Adjustment plan
- */
-function planCrAdjustment(currentCollateral, debtAmount, feedPrice, targetCr = 2.0) {
-  const targetDebt = debtForTargetCr(currentCollateral, feedPrice, targetCr);
-  const debtDelta = debtDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, targetCr);
-  const targetCollateral = collateralForTargetCr(debtAmount, feedPrice, targetCr);
-  const collateralDelta = collateralDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, targetCr);
-
-  let primaryAction = 'hold';
-  let fallbackAction = 'hold';
-  if (debtDelta < 0) {
-    primaryAction = 'reduce_debt';
-    fallbackAction = collateralDelta > 0 ? 'add_collateral' : 'hold';
-  } else if (debtDelta > 0) {
-    primaryAction = 'increase_debt';
-    fallbackAction = collateralDelta < 0 ? 'withdraw_collateral' : 'hold';
-  }
-
-  return {
-    targetCr,
-    targetDebt,
-    targetCollateral,
-    debtDelta,
-    collateralDelta,
-    primaryAction,
-    fallbackAction
-  };
-}
+const planCrAdjustment = sharedPlanCrAdjustment;
 
 function roundNumber(value, digits = 3) {
   const numeric = Number(value);

@@ -13,8 +13,8 @@
  * Confidence scales the adjustment:
  *   ratio = midpoint + direction × (confidence / 100) × halfRange
  *
- * The output is a recommendation only.  Phase-2 execution (adjust debt →
- * adjust collateral → delta liquidity → reset bot) is not yet wired.
+ * The output is recommendation only. Execution is owned by the debt runtime
+ * and any CR adjustment should trigger a grid rebuild from fresh on-chain state.
  */
 
 /**

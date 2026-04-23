@@ -138,6 +138,8 @@ function installStubs(calls, dbCalls, options = {}) {
     return [];
   };
 
+  const onExecuteBatch = typeof options.onExecuteBatch === 'function' ? options.onExecuteBatch : null;
+
   const originalBitshares = setCachedModule(bitsharesClientPath, {
     BitShares: {
       db: {
@@ -180,6 +182,9 @@ function installStubs(calls, dbCalls, options = {}) {
     },
     executeBatch: async (accountName, privateKey, operations) => {
       calls.push({ accountName, privateKey, operations });
+      if (onExecuteBatch) {
+        await onExecuteBatch({ accountName, privateKey, operations });
+      }
       return { tx_id: `tx-${calls.length}`, operation_results: operations.map((op, index) => [index, op.op_name]) };
     },
   });
@@ -222,7 +227,53 @@ function createBaseBotConfig(overrides = {}) {
 async function testRefreshAndMpaPlan() {
   const calls = [];
   const dbCalls = [];
-  const restore = installStubs(calls, dbCalls);
+  const callOrders = [
+    {
+      id: '1.8.1',
+      borrower: '1.2.3',
+      debt: { amount: 10000, asset_id: '1.3.10' },
+      collateral: { amount: 25000, asset_id: '1.3.0' },
+      call_price: {
+        base: { amount: 200, asset_id: '1.3.0' },
+        quote: { amount: 100, asset_id: '1.3.10' },
+      },
+    },
+  ];
+  const restore = installStubs(calls, dbCalls, {
+    assetsById: {
+      '1.3.10': {
+        id: '1.3.10',
+        symbol: 'HONEST.USD',
+        precision: 2,
+        bitasset_data_id: '2.4.1',
+      },
+      '1.3.0': {
+        id: '1.3.0',
+        symbol: 'BTS',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+    },
+    bitassetObjects: {
+      '2.4.1': {
+        id: '2.4.1',
+        current_feed: {
+          settlement_price: {
+            base: { amount: 200, asset_id: '1.3.0' },
+            quote: { amount: 100, asset_id: '1.3.10' },
+          },
+        },
+      },
+    },
+    callOrders,
+    onExecuteBatch: async ({ operations }) => {
+      for (const op of operations) {
+        if (op.op_name !== 'call_order_update') continue;
+        callOrders[0].debt.amount += Number(op.op_data?.delta_debt?.amount || 0);
+        callOrders[0].collateral.amount += Number(op.op_data?.delta_collateral?.amount || 0);
+      }
+    },
+  });
   const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-runtime-'));
 
   try {
@@ -331,6 +382,111 @@ async function testMpaPrecisionAwareBroadcast() {
     const op = await runtime.buildMpaUpdateOperation(plan);
     assert.strictEqual(op.op_data.delta_debt.amount, -3750, 'debt delta should convert to blockchain units once');
     assert.strictEqual(op.op_data.delta_collateral.amount, 0, 'collateral should not change for debt-first recovery');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testMpaDebtFirstThenCollateralFallbackTriggersReset() {
+  const calls = [];
+  const dbCalls = [];
+  const resetCalls = [];
+  const callOrders = [
+    {
+      id: '1.8.9',
+      borrower: '1.2.3',
+      debt: { amount: 10000, asset_id: '1.3.10' },
+      collateral: { amount: 25000, asset_id: '1.3.0' },
+      call_price: {
+        base: { amount: 200, asset_id: '1.3.0' },
+        quote: { amount: 100, asset_id: '1.3.10' },
+      },
+    },
+  ];
+  const restore = installStubs(calls, dbCalls, {
+    assetsById: {
+      '1.3.10': {
+        id: '1.3.10',
+        symbol: 'HONEST.USD',
+        precision: 2,
+        bitasset_data_id: '2.4.1',
+      },
+      '1.3.0': {
+        id: '1.3.0',
+        symbol: 'BTS',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+    },
+    bitassetObjects: {
+      '2.4.1': {
+        id: '2.4.1',
+        current_feed: {
+          settlement_price: {
+            base: { amount: 200, asset_id: '1.3.0' },
+            quote: { amount: 100, asset_id: '1.3.10' },
+          },
+        },
+      },
+    },
+    callOrders,
+    onExecuteBatch: async ({ operations }) => {
+      for (const op of operations) {
+        if (op.op_name !== 'call_order_update') continue;
+        const debtDelta = Number(op.op_data?.delta_debt?.amount || 0);
+        const collateralDelta = Number(op.op_data?.delta_collateral?.amount || 0);
+        callOrders[0].debt.amount += debtDelta;
+        callOrders[0].collateral.amount += collateralDelta;
+      }
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-cr-reset-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-cr-reset',
+        debtPolicy: {
+          mpa: {
+            allowedDebtAssets: ['1.3.10'],
+            allowedCollateralAssets: ['1.3.0'],
+            maxBorrowAmount: 10,
+            maxCollateralAmount: 10000,
+            minCollateralRatio: 2,
+            maxCollateralRatio: 2.5,
+            targetCollateralRatio: 2.2,
+          },
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+      requestGridReset: async (reason, options = {}) => {
+        resetCalls.push({ reason, options });
+        return { requested: true, reason, options };
+      },
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    const result = await runtime.runMaintenance('periodic');
+
+    assert.strictEqual(calls.length, 2, 'CR repair should broadcast debt and collateral legs separately');
+    assert.strictEqual(calls[0].operations[0].op_data.delta_debt.amount < 0, true, 'first leg should reduce debt');
+    assert.strictEqual(calls[0].operations[0].op_data.delta_collateral.amount, 0, 'debt leg should not change collateral');
+    assert.strictEqual(calls[1].operations[0].op_data.delta_debt.amount, 0, 'collateral leg should not change debt');
+    assert.strictEqual(calls[1].operations[0].op_data.delta_collateral.amount > 0, true, 'second leg should add collateral');
+    assert.deepStrictEqual(result.mpa.executed.map((entry) => entry.leg), ['debt', 'collateral'], 'maintenance should record both legs');
+    assert.strictEqual(result.mpa.resetResult.reason, 'cr-adjustment', 'grid reset should be requested after CR adjustment');
+    assert.strictEqual(resetCalls[0].options.fillLockAlreadyHeld, true, 'periodic CR reset should reuse the existing fill lock');
+
+    const persisted = JSON.parse(fs.readFileSync(path.join(baseDir, 'credit_runtime', 'credit-bot-cr-reset.json'), 'utf8'));
+    assert.strictEqual(typeof persisted.lastGridResetAt, 'string', 'reset timestamp should be persisted');
+    assert.strictEqual(typeof persisted.lastCrAdjustment, 'object', 'CR adjustment metadata should be persisted');
   } finally {
     restore();
     try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
@@ -963,6 +1119,7 @@ async function testStatePersistsAcrossRestart() {
 (async () => {
   await testRefreshAndMpaPlan();
   await testMpaPrecisionAwareBroadcast();
+  await testMpaDebtFirstThenCollateralFallbackTriggersReset();
   await testRepayAndReborrowFlow();
   await testMultipleMpaPositionsAreBlocked();
   await testMissingFeeCapIsRejected();

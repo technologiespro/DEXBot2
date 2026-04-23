@@ -327,7 +327,7 @@ class MarketAdapterService {
                 triggerCallbackError: null,
                 triggerSuppressedReason,
                 weights: null,
-                collateral: null,
+                collateralRecommendation: null,
                 amaSlope: null,
                 poolId: ctx.poolId,
                 candleFile: deps.path.relative(deps.root, filePath),
@@ -814,8 +814,8 @@ class MarketAdapterService {
             };
         }
 
-        // 4. Collateral Strategy — uses derived confidence (proportional to slope magnitude)
-        const collateral = isDynamic ? adjustCollateralRatio(slopeResult, 1.5, 2.0) : null;
+        // 4. Advisory collateral-ratio hint only; execution is owned by the debt runtime.
+        const collateralRecommendation = isDynamic ? adjustCollateralRatio(slopeResult, 1.5, 2.0) : null;
 
         const amaComparison = deps.calcAmaComparison(analysisCandles, bot, ctx);
         const closedCandleTs = lastCandle[0] || null;
@@ -990,7 +990,7 @@ class MarketAdapterService {
             lastTriggerFile: triggerPath || botState.lastTriggerFile || null,
             lastTriggerSuppressedReason: triggerSuppressedReason || null,
             weights,
-            collateral,
+            collateralRecommendation,
             atr,
             weightVariance,
             amaSlope,
@@ -1019,7 +1019,7 @@ class MarketAdapterService {
             triggerCallbackError,
             triggerSuppressedReason,
             weights,
-            collateral,
+            collateralRecommendation,
             amaSlope,
             poolId: ctx.poolId,
             candleFile: deps.path.relative(deps.root, filePath),

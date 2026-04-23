@@ -24,6 +24,7 @@ const {
   planCrAdjustment,
   trendWeight,
 } = require('../modules/position_health');
+const sharedPlanner = require('../../modules/cr_planner');
 
 // --- classifyCrZone ---
 
@@ -231,6 +232,7 @@ function testCollateralForTargetCr() {
   assert.strictEqual(collateralForTargetCr(100, 50, 2.5), 12500);
   assert.strictEqual(collateralForTargetCr(0, 50, 2.0), 0);
   assert.strictEqual(collateralForTargetCr(-1, 50, 2.0), 0);
+  assert.strictEqual(collateralForTargetCr, sharedPlanner.collateralForTargetCr, 'Claw should reuse the shared collateral formula');
 
   console.log('    PASS');
 }
@@ -244,6 +246,7 @@ function testCollateralDelta() {
   assert.strictEqual(collateralDeltaForTargetCr(12000, 100, 50, 2.0), -2000);
   // Need 10000, have 10000 → no change
   assert.strictEqual(collateralDeltaForTargetCr(10000, 100, 50, 2.0), 0);
+  assert.strictEqual(collateralDeltaForTargetCr, sharedPlanner.collateralDeltaForTargetCr, 'Claw should reuse the shared collateral delta formula');
 
   console.log('    PASS');
 }
@@ -255,6 +258,7 @@ function testDebtForTargetCr() {
   assert.strictEqual(debtForTargetCr(12000, 50, 2.0), 120);
   assert.strictEqual(debtForTargetCr(0, 50, 2.0), 0);
   assert.strictEqual(debtForTargetCr(10000, 0, 2.0), 0);
+  assert.strictEqual(debtForTargetCr, sharedPlanner.debtForTargetCr, 'Claw should reuse the shared debt formula');
 
   console.log('    PASS');
 }
@@ -265,6 +269,7 @@ function testDebtDeltaForTargetCr() {
   assert.strictEqual(debtDeltaForTargetCr(8000, 100, 50, 2.0), -20);
   assert.strictEqual(debtDeltaForTargetCr(12000, 100, 50, 2.0), 20);
   assert.strictEqual(debtDeltaForTargetCr(10000, 100, 50, 2.0), 0);
+  assert.strictEqual(debtDeltaForTargetCr, sharedPlanner.debtDeltaForTargetCr, 'Claw should reuse the shared debt delta formula');
 
   console.log('    PASS');
 }
@@ -273,6 +278,7 @@ function testPlanCrAdjustment() {
   console.log('  planCrAdjustment...');
 
   const lowCr = planCrAdjustment(8000, 100, 50, 2.0);
+  assert.strictEqual(planCrAdjustment, sharedPlanner.planCrAdjustment, 'Claw should reuse the shared CR planner');
   assert.strictEqual(lowCr.primaryAction, 'reduce_debt');
   assert.strictEqual(lowCr.fallbackAction, 'add_collateral');
   assert.strictEqual(lowCr.debtDelta, -20);

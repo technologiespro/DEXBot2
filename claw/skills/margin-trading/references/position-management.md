@@ -127,6 +127,7 @@ The planner in `claw/modules/position_health.js` (`buildMarginTradingPlan(...)`)
 - debt/collateral action plan
 - final `weightDistribution`
 - final min/max price ratio recommendation
+- a structural reset requirement when the CR plan changes debt or collateral
 
 This keeps the bot architecture clean:
 
@@ -134,6 +135,7 @@ This keeps the bot architecture clean:
 - weights = deployment bias within the grid
 - range ratio = slow structural width
 - debt/collateral actions = margin-risk control
+- CR execution is not the market-adapter's responsibility; the debt runtime applies the change and then rebuilds the grid from the new capital base
 
 Example: weak short, strong DOWN trend
 
@@ -154,7 +156,8 @@ Example unified plan output:
     primaryAction: 'reduce_debt',
     fallbackAction: 'add_collateral',
     debtDelta: -18.4,
-    collateralDelta: 920
+    collateralDelta: 920,
+    needsGridReset: true
   },
   gridPlan: {
     finalPriceRangeRatio: 2.4,
@@ -177,6 +180,7 @@ Example unified plan output:
 Interpretation:
 
 - CR is below target, so debt reduction is the first action
+- if a CR leg executes, the bot must rebuild the grid before reusing fund assumptions
 - buys are front-loaded because they are the with-trend side
 - sells are flattened because price is moving away from them
 - the range ratio stays competitive rather than widening all the way to a conservative `3x`

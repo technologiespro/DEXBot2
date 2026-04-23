@@ -1011,7 +1011,7 @@ function writeCenterSnapshot(state) {
             lastDeltaPercent: v.lastDeltaPercent,
             weights: v.weights,
             effectiveWeights: v.effectiveWeights,
-            collateral: v.collateral,
+            collateralRecommendation: v.collateralRecommendation ?? null,
             amaSlope: v.amaSlope,
             atr: v.atr
         };
@@ -1246,6 +1246,7 @@ module.exports = {
     isBotWhitelisted,
     isBotDynamicWeightWhitelisted,
     _resetCycleCache,
+    writeCenterSnapshot,
     resolveAsset,
     resolveBotContext,
 };

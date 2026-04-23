@@ -2829,7 +2829,7 @@ class DEXBot {
      */
     async _performPeriodicGridChecks() {
         const result = await DexbotMaintenanceRuntime.performPeriodicGridChecks.call(this);
-        await this._runCreditRuntimeMaintenance('periodic');
+        await this._runCreditRuntimeMaintenance('periodic', { fillLockAlreadyHeld: true });
         return result;
     }
 
@@ -2892,12 +2892,27 @@ class DEXBot {
         return runtime;
     }
 
-    async _runCreditRuntimeMaintenance(context = 'periodic') {
+    async _runCreditRuntimeMaintenance(context = 'periodic', options = {}) {
         const runtime = this._getCreditRuntime();
         if (!runtime) {
             return null;
         }
-        return runtime.runMaintenance(context);
+        return runtime.runMaintenance(context, options);
+    }
+
+    async requestGridReset(reason = 'structural change', options = {}) {
+        if (!this.manager || typeof this._performGridResync !== 'function') {
+            return { skipped: true, reason: 'grid resync unavailable' };
+        }
+
+        const message = reason ? `[CR-RESET] ${reason}` : '[CR-RESET] grid reset requested';
+        this._log(`${message}; rebuilding grid from fresh on-chain state`, 'info');
+
+        if (options.fillLockAlreadyHeld || !this.manager._fillProcessingLock) {
+            return this._performGridResync();
+        }
+
+        return this.manager._fillProcessingLock.acquire(async () => this._performGridResync());
     }
 
     /**

@@ -18,6 +18,12 @@ Included:
 - Runtime enforcement before signing
 - Optional Claw support for reading and managing the same bot policy
 
+Current implementation note:
+
+- `modules/cr_planner.js` is the shared CR math layer.
+- `modules/credit_runtime.js` owns execution, persisted worker state, and grid-reset requests.
+- `market_adapter` remains advisory only for CR hints.
+
 Excluded:
 
 - General market-making grid logic
@@ -25,6 +31,12 @@ Excluded:
 - Any new chain primitives
 - `market_adapter` runtime changes
 - Fee fields for MPA borrowing
+
+Implementation note:
+
+- The shared CR planner now lives in `modules/cr_planner.js`.
+- CR execution is handled by `modules/credit_runtime.js`, and every successful CR adjustment requests a grid rebuild through `DEXBot.requestGridReset()`.
+- `market_adapter` remains advisory only for collateral ratio hints.
 
 ## Configuration Model
 
@@ -224,6 +236,8 @@ Task:
   - when CR is below `minCollateralRatio`, reduce debt first, then add collateral if needed
   - when CR is above `maxCollateralRatio`, increase debt first, then withdraw collateral if needed
 - Use the same debt-first adjustment order as the Claw MPA docs, but keep the planner native to DEXBot2.
+- If the debt leg changes the position, re-read chain state before considering collateral fallback.
+- Any successful CR adjustment must trigger a grid rebuild so the order book is resized from the new capital base.
 - Allow only the configured MPA assets and collateral assets.
 - Enforce `maxBorrowAmount`, `maxCollateralAmount`, `minCollateralRatio`, `maxCollateralRatio`, and `targetCollateralRatio` when present.
 - Treat `minCollateralRatio` as the absolute floor and `maxCollateralRatio` as the absolute ceiling.
@@ -285,37 +299,33 @@ Implementation note:
 
 ## Credit Runtime API
 
-`modules/credit_runtime.js` should stay small and bot-scoped. It should coordinate policy, chain state, and persisted worker state, but it should not own market adapter logic or signing policy.
+`modules/credit_runtime.js` is the bot-scoped executor for debt operations. It coordinates policy, chain state, persisted worker state, and grid-reset requests. It does not own market adapter logic or signing policy.
 
-Proposed exports:
+Current runtime surface:
 
-- `initRuntime(bot)`
-  - Bind the runtime to one bot instance.
-  - Capture the bot config, logger, chain helpers, and profile path.
 - `loadState()`
   - Read the persisted worker file under `profiles/credit_runtime/`.
   - Return an empty default state when no file exists yet.
 - `refreshState()`
-  - Query chain data for all current credit deals.
+  - Query chain data for all current credit deals and the active MPA position.
   - Reconcile the chain result with the persisted worker state.
-- `refreshMpaState()`
-  - Query the current call order, collateral ratio, and feed price for the tracked MPA position.
-- `resolveTargetCr()`
-  - Resolve the active CR target from policy and runtime defaults, falling back to the midpoint of `minCollateralRatio` and `maxCollateralRatio` when no target is set.
-- `buildMpaPlan(position)`
+- `runMaintenance(context)`
+  - Evaluate the current MPA position.
+  - Apply the debt-first plan.
+  - Re-read chain state between the debt and collateral legs.
+  - Request a grid rebuild after any successful CR adjustment.
+- `buildMpaPlanFromState()`
   - Produce a debt-first plan that reduces debt or increases debt before collateral adjustment, depending on which side of the CR band the position is on.
-- `validateMpaBorrow(request)`
-  - Verify that the borrow or adjustment request satisfies the MPA policy and CR target.
-- `validateBorrow(request)`
-  - Check the request against `debtPolicy.creditOffer` or `debtPolicy.mpa`.
-  - Return a reject reason before any signing or broadcast happens.
-- `validateRepay(request)`
-  - Confirm the repay targets one of the tracked active credit deals.
-  - Confirm the repay stays within the bot policy.
-- `shouldReborrow()`
-  - Return `true` only when `autoReborrow` is enabled, the post-repay state still satisfies policy, and the offer is still available.
+- `buildMpaUpdateOperation(plan, options)`
+  - Build a `call_order_update` op for either the debt leg or the collateral leg.
+- `openCreditPosition(...)`
+  - Build and broadcast `credit_offer_accept`.
+- `repayCreditDeal(...)`
+  - Build and broadcast `credit_deal_repay`, with optional reborrow handling.
 - `persistState(reason)`
   - Write the current runtime state back to `profiles/credit_runtime/`.
+- `requestGridReset(reason)`
+  - Ask `DEXBot` to rebuild the grid after a structural CR change.
 - `shutdown()`
   - Flush any pending state and stop runtime activity cleanly.
 
@@ -340,6 +350,8 @@ Persisted state fields:
   - Array of tracked credit deal records.
 - `lastBorrowRequest`
 - `lastMpaAction`
+- `lastCrAdjustment`
+- `lastGridResetAt`
 - `lastRepayAt`
 - `reborrowPending`
 

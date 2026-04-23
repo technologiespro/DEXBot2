@@ -5,15 +5,15 @@
 The **Market Adapter** is the central entry point for all dynamic bot adjustment in DEXBot2.
 
 It combines candle synchronization, AMA signal computation, trend detection,
-ATR-based volatility analysis, dynamic weight calculation, and collateral
-management into a single service layer.
+ATR-based volatility analysis, dynamic weight calculation, and advisory
+collateral-ratio hinting into a single service layer.
 
 **Core Purpose**: Bridge historical analysis (`/analysis`) and live operations by:
 - Keeping fresh LP candles per-bot
 - Computing the AMA-based market center (grid price)
 - Detecting trend and volatility regime
 - Computing dynamic buy/sell weight bias
-- Estimating target collateral ratio
+- Estimating a target collateral-ratio hint
 - Emitting trigger files for grid re-centering
 
 The adapter runs as a standalone process, separate from `dexbot.js`. It polls
@@ -32,7 +32,7 @@ AMA           -> slope_analysis -> slope_offset      (asymmetric weight shift) \
 price_candles -> ATR            -> weight_variance  (symmetric shift)         +-> weight_output
 
 slope_analysis -> expected Collateral Ratio
-               -> adjust debt -> adjust collateral -> delta liquidity -> reset bot
+               -> adjust debt -> advisory collateral hint -> debt runtime rebuilds grid
 ```
 
 **Inputs**:
@@ -42,7 +42,7 @@ slope_analysis -> expected Collateral Ratio
 **Outputs** (per cycle, per bot):
 - `gridPrice` — AMA, clamped to min/max bounds
 - `weights` — `{ buy, sell }` — dynamic grid weighting
-- `collateral` — target collateral ratio recommendation
+- `collateralRecommendation` — advisory collateral ratio hint only; execution is owned by the debt runtime
 - `trend` / `atr` — raw regime and volatility signals
 - Trigger files when grid price delta exceeds threshold
 
@@ -64,7 +64,7 @@ spread_analysis/  ──┘
 **Data Flow**:
 1. `analysis/` produces optimization context and candidate AMA settings
 2. `market_adapter/` fetches/updates LP candles (Kibana bootstrap + native incremental)
-3. `market_adapter/` computes the AMA-derived grid center and runs the separate trend / ATR / collateral signal branches
+3. `market_adapter/` computes the AMA-derived grid center and runs the separate trend / ATR / collateral-advisory signal branches
 4. `market_adapter/` writes state snapshots and trigger files
 5. `dexbot.js` reacts to `profiles/recalculate.<botKey>.trigger` to re-center the grid
 
@@ -79,7 +79,7 @@ spread_analysis/  ──┘
 - **AMA Slope Analysis**: Compute buy/sell weight offset directly from AMA slope (trend speed and direction)
 - **ATR Volatility**: Compute Average True Range for live symmetric penalty handling and diagnostics
 - **Dynamic Weights**: Live adapter combines AMA trend bias + Kalman confirmation, with ATR applied as a separate symmetric penalty
-- **Collateral Management**: Recommend target collateral ratio based on trend regime
+- **Collateral Ratio Recommendation**: Recommend a target collateral ratio based on trend regime; execution lives in the debt runtime
 - **Trigger Emission**: Create per-bot recalc trigger files when threshold is crossed
 - **Gap Repair**: Detect and patch missing candle timestamps via Kibana
 - **Runtime Safety**: Single-instance lock, retries/backoff, stale-data suppression
@@ -112,7 +112,7 @@ market_adapter/
 │   ├── kibana_market_candles.js   # Kibana candle fetch/transform
 │   └── strategies/                # Signal and recommendation modules
 │       ├── ama_slope_model.js     # computeAmaSlopeWeights(amaValues, weightVariance)
-│       ├── collateral_manager.js  # adjustCollateralRatio(trend, min, max)
+│       ├── collateral_manager.js  # adjustCollateralRatio(trend, min, max) advisory only
 │       └── atr/
 │           └── calculator.js      # calculateATR(candles, period)
 │
@@ -237,7 +237,7 @@ The research chart in `analysis/analyze_volatility.js` uses the same penalty mat
 
 `adjustCollateralRatio(trendData, minRatio, maxRatio)` (in `core/strategies/collateral_manager.js`):
 - Recommends a target collateral ratio based on trend regime
-- Used to drive collateral rebalancing (adjust debt → adjust collateral → delta liquidity → reset bot)
+- This is advisory only; `modules/credit_runtime.js` owns the actual debt/collateral adjustment and grid reset path
 
 ### 7. Trigger Decision
 
@@ -253,7 +253,7 @@ Threshold resolution order:
 ### 8. State Persistence
 
 Adapter writes machine-readable state after every cycle:
-- `market_adapter/state/price_adapter_state.json` — full per-bot state including `weights`, `collateral`, `trend`, `atr`
+- `market_adapter/state/price_adapter_state.json` — full per-bot state including `weights`, `collateralRecommendation`, `trend`, `atr`
 - `market_adapter/state/price_adapter_centers.json` — lightweight center snapshot
 
 ---
@@ -336,7 +336,7 @@ additional deviation-based price adjustment layer on top of the AMA output.
 | `profiles/general.settings.json` | Global `MARKET_ADAPTER` settings (delta threshold, etc.) |
 | `profiles/market_adapter_settings.json` | Pair-level and bot-level overrides for dynamic-weight and adapter tuning |
 | `profiles/market_adapter_whitelist.json` | Optional whitelist — per-bot `ama` and `dynamicWeight` flags |
-| `market_adapter/state/price_adapter_state.json` | Runtime state — candle metadata, signals, weights, collateral |
+| `market_adapter/state/price_adapter_state.json` | Runtime state — candle metadata, signals, weights, collateralRecommendation |
 | `market_adapter/state/price_adapter_centers.json` | Lightweight center snapshot |
 
 ### Dynamic Weight Knobs
@@ -512,7 +512,7 @@ per-bot entries:
   atr                 - 14-period Average True Range value
   weightVariance      - Normalized volatility ratio (atr / amaPrice)
   weights             - { buy, sell } dynamic weight output
-  collateral          - Recommended target collateral ratio
+  collateralRecommendation - Recommended target collateral-ratio hint
 ```
 
 ### Cycle Log Format
@@ -561,7 +561,7 @@ When threshold is exceeded, the adapter writes a trigger file like:
 [09:01] AMA computed, trend=UP, confidence=72
 [09:01] centerPrice = 1294.6 (AMA center)
 [09:01] Delta vs stored center = 1.21% — exceeds threshold (1.0%)
-[09:01] weights={buy=0.57, sell=0.43}, collateral=1.62
+[09:01] weights={buy=0.57, sell=0.43}, collateralRecommendation=1.62
 [09:01] Adapter writes profiles/recalculate.xrp-bts-0.trigger
 [09:02] dexbot consumes trigger and recalculates grid center
 [10:00] Next cycle repeats with incremental native candle updates
@@ -593,13 +593,13 @@ When threshold is exceeded, the adapter writes a trigger file like:
 - [x] Trend detection with confidence scoring
 - [x] ATR-based volatility / weight variance
 - [x] Dynamic buy/sell weight output
-- [x] Collateral ratio recommendation (directional — execution in Phase 2)
+- [x] Collateral ratio recommendation (directional hint only)
 - [x] Trigger-file emission on threshold
-- [x] Extended state persistence (weights, collateral, trend, atr)
+- [x] Extended state persistence (weights, collateralRecommendation, trend, atr)
 - [x] Runtime lock/retry/stale-data safety controls
 
-### Phase 2 — Planned
-- [ ] Collateral rebalancing execution (wire delta liquidity → bot reset)
+### Execution
+- Collateral rebalancing execution is now owned by `modules/credit_runtime.js`; any successful CR adjustment must rebuild the grid from fresh on-chain state.
 - [ ] Multi-pair correlation analysis
 - [ ] Hot-reload support (zero-downtime parameter updates)
 - [ ] Machine learning-based regime detection

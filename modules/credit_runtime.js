@@ -7,6 +7,7 @@ const chainOrders = require('./chain_orders');
 const { blockchainToFloat, floatToBlockchainInt, resolveConfigValue } = require('./order/utils/math');
 const { deriveLiquidityPoolTokenValue } = require('./order/utils/system');
 const { createBotKey } = require('./account_orders');
+const { buildDebtFirstCrPlan, resolveTargetCollateralRatio } = require('./cr_planner');
 
 const CREDIT_FEE_RATE_DENOM = 1_000_000;
 const ZERO_ASSET_ID = '1.3.0';
@@ -43,17 +44,6 @@ function roundToPlaces(value, places = 6) {
     if (!Number.isFinite(num)) return null;
     const factor = 10 ** places;
     return Math.round(num * factor) / factor;
-}
-
-function clampToAbsLimit(value, maxAbs) {
-    const numeric = Number(value);
-    const limit = positiveOrNull(maxAbs);
-    if (!Number.isFinite(numeric) || limit === null) {
-        return numeric;
-    }
-    if (numeric > limit) return limit;
-    if (numeric < -limit) return -limit;
-    return numeric;
 }
 
 function getMapEntries(value) {
@@ -209,6 +199,8 @@ class CreditRuntime {
             lastBorrowRequest: null,
             lastMpaAction: null,
             lastRepayAt: null,
+            lastGridResetAt: null,
+            lastCrAdjustment: null,
             reborrowPending: false,
             pendingReborrows: [],
         };
@@ -371,17 +363,6 @@ class CreditRuntime {
         if (base.asset_id === debtAsset.id && quote.asset_id === backingAsset.id) {
             return quoteAmount / baseAmount;
         }
-        return null;
-    }
-
-    _resolveTargetCollateralRatio(policy = {}) {
-        const minCr = positiveOrNull(policy.minCollateralRatio);
-        const maxCr = positiveOrNull(policy.maxCollateralRatio);
-        const targetCr = positiveOrNull(policy.targetCollateralRatio);
-        if (targetCr !== null) return targetCr;
-        if (minCr !== null && maxCr !== null) return (minCr + maxCr) / 2;
-        if (minCr !== null) return minCr;
-        if (maxCr !== null) return maxCr;
         return null;
     }
 
@@ -588,7 +569,7 @@ class CreditRuntime {
             this.state.currentCollateralAmount = 0;
             this.state.currentCollateralRatio = null;
             this.state.feedPrice = null;
-            this.state.targetCollateralRatio = this._resolveTargetCollateralRatio(policy);
+            this.state.targetCollateralRatio = resolveTargetCollateralRatio(policy);
             this.state.minCollateralRatio = positiveOrNull(policy.minCollateralRatio);
             this.state.maxCollateralRatio = positiveOrNull(policy.maxCollateralRatio);
             return this.state;
@@ -603,7 +584,7 @@ class CreditRuntime {
             this.state.currentCollateralAmount = 0;
             this.state.currentCollateralRatio = null;
             this.state.feedPrice = null;
-            this.state.targetCollateralRatio = this._resolveTargetCollateralRatio(policy);
+            this.state.targetCollateralRatio = resolveTargetCollateralRatio(policy);
             this.state.minCollateralRatio = positiveOrNull(policy.minCollateralRatio);
             this.state.maxCollateralRatio = positiveOrNull(policy.maxCollateralRatio);
             return this.state;
@@ -622,7 +603,7 @@ class CreditRuntime {
         const currentCollateralRatio = debtAmount > 0 && feedPrice > 0
             ? collateralAmount / (debtAmount * feedPrice)
             : null;
-        const targetCollateralRatio = this._resolveTargetCollateralRatio(policy);
+        const targetCollateralRatio = resolveTargetCollateralRatio(policy);
         const minCollateralRatio = positiveOrNull(policy.minCollateralRatio);
         const maxCollateralRatio = positiveOrNull(policy.maxCollateralRatio);
 
@@ -705,90 +686,30 @@ class CreditRuntime {
         if (this.state.mpaSelectionConflict) {
             return { blocked: true, reason: this.state.mpaSelectionConflict };
         }
+        const plan = buildDebtFirstCrPlan({
+            currentCollateralAmount: this.state.currentCollateralAmount,
+            currentDebtAmount: this.state.currentDebtAmount,
+            feedPrice: this.state.feedPrice,
+            minCollateralRatio: policy.minCollateralRatio,
+            maxCollateralRatio: policy.maxCollateralRatio,
+            targetCollateralRatio: policy.targetCollateralRatio,
+            maxBorrowAmount: policy.maxBorrowAmount,
+            maxCollateralAmount: policy.maxCollateralAmount,
+        });
 
-        const currentCr = positiveOrNull(this.state.currentCollateralRatio);
-        const feedPrice = positiveOrNull(this.state.feedPrice);
-        const debtAmount = positiveOrNull(this.state.currentDebtAmount);
-        const collateralAmount = positiveOrNull(this.state.currentCollateralAmount);
-        const minCr = positiveOrNull(policy.minCollateralRatio);
-        const maxCr = positiveOrNull(policy.maxCollateralRatio);
-        const maxBorrowAmount = positiveOrNull(policy.maxBorrowAmount);
-        const maxCollateralAmount = positiveOrNull(policy.maxCollateralAmount);
-
-        if (!Number.isFinite(currentCr) || !Number.isFinite(feedPrice) || !Number.isFinite(debtAmount) || !Number.isFinite(collateralAmount)) {
-            return null;
-        }
-        if (minCr !== null && maxCr !== null && minCr > maxCr) {
-            return { blocked: true, reason: 'minCollateralRatio exceeds maxCollateralRatio' };
-        }
-
-        const targetCr = this._resolveTargetCollateralRatio(policy);
-        const lowerBound = minCr !== null ? minCr : targetCr;
-        const upperBound = maxCr !== null ? maxCr : targetCr;
-
-        if (!Number.isFinite(lowerBound) || !Number.isFinite(upperBound)) {
-            return null;
-        }
-
-        let desiredCr = null;
-        let primaryAction = null;
-        let fallbackAction = null;
-
-        if (currentCr < lowerBound) {
-            desiredCr = lowerBound;
-            primaryAction = 'reduce_debt';
-            fallbackAction = 'add_collateral';
-        } else if (currentCr > upperBound) {
-            desiredCr = upperBound;
-            primaryAction = 'increase_debt';
-            fallbackAction = 'withdraw_collateral';
-        } else {
-            return null;
-        }
-
-        const targetDebt = collateralAmount / (feedPrice * desiredCr);
-        const rawDebtDelta = targetDebt - debtAmount;
-        let debtDelta = primaryAction === 'reduce_debt'
-            ? Math.min(0, rawDebtDelta)
-            : Math.max(0, rawDebtDelta);
-        debtDelta = clampToAbsLimit(debtDelta, maxBorrowAmount);
-
-        const projectedDebt = Math.max(0, debtAmount + debtDelta);
-        const desiredCollateral = desiredCr * feedPrice * projectedDebt;
-        let collateralDelta = desiredCollateral - collateralAmount;
-
-        if (primaryAction === 'reduce_debt' && collateralDelta < 0) {
-            collateralDelta = 0;
-        }
-        if (primaryAction === 'increase_debt' && collateralDelta > 0) {
-            collateralDelta = 0;
-        }
-        if (maxCollateralAmount !== null && Math.abs(collateralDelta) > maxCollateralAmount) {
-            return {
-                blocked: true,
-                reason: `required collateral adjustment ${Math.abs(collateralDelta)} exceeds maxCollateralAmount ${maxCollateralAmount}`
-            };
-        }
-
-        return {
-            action: primaryAction,
-            fallbackAction,
-            targetCollateralRatio: desiredCr,
-            currentCollateralRatio: currentCr,
-            currentDebtAmount: debtAmount,
-            currentCollateralAmount: collateralAmount,
-            feedPrice,
-            debtDelta: roundToPlaces(debtDelta, 8),
-            collateralDelta: roundToPlaces(collateralDelta, 8),
-        };
+        if (!plan) return null;
+        if (plan.blocked) return plan;
+        return plan;
     }
 
-    async buildMpaUpdateOperation(plan) {
+    async buildMpaUpdateOperation(plan, options = {}) {
         const policy = this.debtPolicy?.mpa;
         if (!policy || !plan) return null;
         if (plan.blocked) {
             throw new Error(plan.reason || 'MPA plan blocked');
         }
+
+        const leg = options.leg || 'debt';
 
         const accountId = await this._resolveAccountId(getAccountRef(this.bot));
         if (!accountId) {
@@ -805,8 +726,10 @@ class CreditRuntime {
             throw new Error('Unable to resolve MPA asset metadata');
         }
 
-        const debtInt = floatToBlockchainInt(plan.debtDelta, debtAsset.precision);
-        const collateralInt = floatToBlockchainInt(plan.collateralDelta, collateralAsset.precision);
+        const debtDelta = leg === 'collateral' ? 0 : plan.debtDelta;
+        const collateralDelta = leg === 'debt' ? 0 : plan.collateralDelta;
+        const debtInt = floatToBlockchainInt(debtDelta, debtAsset.precision);
+        const collateralInt = floatToBlockchainInt(collateralDelta, collateralAsset.precision);
         if (debtInt === 0 && collateralInt === 0) {
             return null;
         }
@@ -1254,7 +1177,7 @@ class CreditRuntime {
         return { processed, remaining: nextQueue.length };
     }
 
-    async runMaintenance(context = 'periodic') {
+    async runMaintenance(context = 'periodic', options = {}) {
         if (!this.isEnabled()) {
             return { skipped: true, reason: 'debt policy disabled' };
         }
@@ -1270,20 +1193,57 @@ class CreditRuntime {
 
         if (this.debtPolicy?.mpa) {
             const plan = this._buildMpaPlanFromState();
-            if (plan && !plan.blocked) {
-                const op = await this.buildMpaUpdateOperation(plan);
-                if (op) {
-                    const result = await this.executeOperations([op], `mpa maintenance:${context}`);
-                    results.mpa = { plan, result };
+            if (plan?.blocked) {
+                results.mpa = { blocked: true, reason: plan.reason };
+            } else if (plan) {
+                const executed = [];
+                let result = null;
+
+                const debtOp = await this.buildMpaUpdateOperation(plan, { leg: 'debt' });
+                if (debtOp) {
+                    result = await this.executeOperations([debtOp], `mpa maintenance:${context} debt`);
+                    executed.push({ leg: 'debt', operation: debtOp, result });
+                    await this.refreshMpaState();
+                }
+
+                const fallbackPlan = this._buildMpaPlanFromState();
+                if (fallbackPlan && !fallbackPlan.blocked) {
+                    const collateralOp = await this.buildMpaUpdateOperation(fallbackPlan, { leg: 'collateral' });
+                    if (collateralOp) {
+                        result = await this.executeOperations([collateralOp], `mpa maintenance:${context} collateral`);
+                        executed.push({ leg: 'collateral', operation: collateralOp, result });
+                        await this.refreshMpaState();
+                    }
+                }
+
+                if (executed.length > 0) {
                     this.state.lastMpaAction = {
                         context,
                         plan,
                         executedAt: new Date().toISOString(),
+                        executed,
                     };
-                    await this.refreshMpaState();
+                    this.state.lastCrAdjustment = {
+                        context,
+                        plan,
+                        executedAt: new Date().toISOString(),
+                    };
+                    if (typeof this.bot?.requestGridReset === 'function') {
+                        try {
+                            const resetReason = plan.resetReason || 'cr-adjustment';
+                            const resetResult = await this.bot.requestGridReset(resetReason, {
+                                fillLockAlreadyHeld: options.fillLockAlreadyHeld ?? (context === 'periodic'),
+                            });
+                            this.state.lastGridResetAt = new Date().toISOString();
+                            results.mpa = { plan, executed, resetResult };
+                        } catch (err) {
+                            results.mpa = { plan, executed, resetError: err.message };
+                            this.warn(`credit runtime: grid reset after CR adjustment failed: ${err.message}`);
+                        }
+                    } else {
+                        results.mpa = { plan, executed };
+                    }
                 }
-            } else if (plan?.blocked) {
-                results.mpa = { blocked: true, reason: plan.reason };
             }
         }
 
