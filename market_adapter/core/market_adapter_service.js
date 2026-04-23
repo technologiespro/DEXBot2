@@ -491,73 +491,79 @@ class MarketAdapterService {
             const minOutputThreshold = cfg.minOutputThreshold
                 ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD;
             const dispScaleMinPct  = cfg.dispScaleMinPct  ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
+            const hasDirectionalOffset = mo > 0;
+            const useAmaBlend = hasDirectionalOffset && alpha !== 0;
+            const useKalmanBlend = hasDirectionalOffset && alpha !== 1;
+            const useNeutralZone = nz > 0;
+            const useClipThreshold = clipPercentile > 0;
+            const zeroOutputThreshold = minOutputThreshold === 0;
 
-            const kalmanSmoothedVelocityPct = buildKalmanVelocitySeries(kalmanHistory, {
-                kalmanSmoothPct,
-                kalmanDispScaleMult,
-                kalmanDispThresholdMult,
-                kalmanSmoothSpanPct,
-            });
+            let kalmanSmoothedVelocityPct = new Array(kalmanHistory.length).fill(null);
+            let amaOffsets = new Array(closes.length).fill(0);
+            let kalmanOffsets = new Array(closes.length).fill(0);
 
-            // Compute Kalman clip threshold from the research-chart filtered velocity distribution.
-            // Skip the analyzer warm-up period so the percentile is not contaminated by startup noise.
-            kalClipThreshold = computeAbsolutePercentileThreshold(
-                kalmanSmoothedVelocityPct.slice(kalmanWarmupBars),
-                clipPercentile,
-                Infinity
-            );
+            if (useKalmanBlend) {
+                kalmanSmoothedVelocityPct = buildKalmanVelocitySeries(kalmanHistory, {
+                    kalmanSmoothPct,
+                    kalmanDispScaleMult,
+                    kalmanDispThresholdMult,
+                    kalmanSmoothSpanPct,
+                });
 
-            // Build AMA offset array — compute slopeOffset directly from AMA values per bar.
-            // computeAmaSlopeWeights only reads amaValues[i] and amaValues[i-lookbackBars],
-            // so there is no need to slice the full series for each bar.
-            const amaOffsets = [];
-            for (let i = 0; i < closes.length; i++) {
-                if (!slopeResult.isReady || i < amaWarmupBars) {
-                    amaOffsets.push(0);
-                    continue;
-                }
-                const last = amaValues[i];
-                const past = amaValues[i - lookbackBars];
-                if (!Number.isFinite(last) || !Number.isFinite(past) || past === 0) {
-                    amaOffsets.push(0);
-                    continue;
-                }
-                const sp  = (last - past) / past * 100;
-                const csp = Math.max(-amaClipThreshold, Math.min(amaClipThreshold, sp));
-                const offset = Math.abs(csp) < nz ? 0
-                    : Math.max(-mo, Math.min(mo, (csp / amaMaxS) * mo));
-                amaOffsets.push(offset);
-            }
+                // Compute Kalman clip threshold from the research-chart filtered velocity distribution.
+                // Skip the analyzer warm-up period so the percentile is not contaminated by startup noise.
+                kalClipThreshold = useClipThreshold
+                    ? computeAbsolutePercentileThreshold(
+                        kalmanSmoothedVelocityPct.slice(kalmanWarmupBars),
+                        clipPercentile,
+                        Infinity
+                    )
+                    : Infinity;
 
-            // Build Kalman offset array using the research-chart filtered velocity series.
-            const kalmanOffsets = [];
-            for (let i = 0; i < kalmanHistory.length; i++) {
-                const kr = kalmanHistory[i];
-                const vp = kalmanSmoothedVelocityPct[i];
-                // kr.displacementRawPct provides higher precision than the rounded displacementPct
-                if (!kr.isReady || vp == null || kr.displacementRawPct == null) {
-                    kalmanOffsets.push(0);
-                    continue;
-                }
+                // Build Kalman offset array using the research-chart filtered velocity series.
+                for (let i = 0; i < kalmanHistory.length; i++) {
+                    const kr = kalmanHistory[i];
+                    const vp = kalmanSmoothedVelocityPct[i];
+                    // kr.displacementRawPct provides higher precision than the rounded displacementPct
+                    if (!kr.isReady || vp == null || kr.displacementRawPct == null) {
+                        continue;
+                    }
 
-                const dp = kr.displacementRawPct;
-                const clippedV = Math.max(-kalClipThreshold, Math.min(kalClipThreshold, vp));
+                    const dp = kr.displacementRawPct;
+                    const clippedV = Math.max(-kalClipThreshold, Math.min(kalClipThreshold, vp));
 
-                if (Math.abs(clippedV) < nz) {
-                    kalmanOffsets.push(0);
-                } else {
+                    if (useNeutralZone && Math.abs(clippedV) < nz) {
+                        continue;
+                    }
+
                     const dispScale = Math.max(1.0, dispScaleMinPct);
                     const dispConf = Math.min(Math.abs(dp) / dispScale, 1.0);
                     const momAlign = Math.max(0, (clippedV * dp) / (Math.abs(clippedV) * Math.abs(dp) + 1e-10));
                     const composite = clippedV * (1 - dw + dw * dispConf * momAlign);
                     // Convert to offset: (composite / kalMaxS) * mo, capped at mo
-                    kalmanOffsets.push(Math.max(-mo, Math.min(mo, (composite / kalMaxS) * mo)));
+                    kalmanOffsets[i] = Math.max(-mo, Math.min(mo, (composite / kalMaxS) * mo));
                 }
             }
 
-            // Pad kalmanOffsets if shorter than closes
-            while (kalmanOffsets.length < closes.length) {
-                kalmanOffsets.push(0);
+            if (useAmaBlend) {
+                // Build AMA offset array — compute slopeOffset directly from AMA values per bar.
+                // computeAmaSlopeWeights only reads amaValues[i] and amaValues[i-lookbackBars],
+                // so there is no need to slice the full series for each bar.
+                for (let i = 0; i < closes.length; i++) {
+                    if (!slopeResult.isReady || i < amaWarmupBars) {
+                        continue;
+                    }
+                    const last = amaValues[i];
+                    const past = amaValues[i - lookbackBars];
+                    if (!Number.isFinite(last) || !Number.isFinite(past) || past === 0) {
+                        continue;
+                    }
+                    const sp  = (last - past) / past * 100;
+                    const csp = Math.max(-amaClipThreshold, Math.min(amaClipThreshold, sp));
+                    amaOffsets[i] = (!useNeutralZone || Math.abs(csp) >= nz)
+                        ? Math.max(-mo, Math.min(mo, (csp / amaMaxS) * mo))
+                        : 0;
+                }
             }
 
             // Parity rule with the research chart:
@@ -567,27 +573,39 @@ class MarketAdapterService {
             const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
             const channelNorm = Math.max(Math.abs(offsetClamp), 1e-9);
             const outputThreshold = minOutputThreshold;
+            const outputThresholdIsZero = zeroOutputThreshold;
 
             // Build the same per-bar combined output series as the research chart, then
             // optionally latch it with signalConfirmBars before taking the last live value.
             const combinedOffSeries = new Array(closes.length).fill(0);
             const gatedOffSeries = new Array(closes.length).fill(0);
             for (let i = 0; i < closes.length; i++) {
-                const blendedOff = (alpha * (amaOffsets[i] / channelNorm) + (1 - alpha) * (kalmanOffsets[i] / channelNorm));
-                const gatedOff = Math.abs(blendedOff * regimeMultipliers[i]) < outputThreshold ? 0 : (blendedOff * regimeMultipliers[i]);
+                let blendedOff;
+                if (useAmaBlend && useKalmanBlend) {
+                    blendedOff = (alpha * (amaOffsets[i] / channelNorm) + (1 - alpha) * (kalmanOffsets[i] / channelNorm));
+                } else if (useAmaBlend) {
+                    blendedOff = amaOffsets[i] / channelNorm;
+                } else if (useKalmanBlend) {
+                    blendedOff = kalmanOffsets[i] / channelNorm;
+                } else {
+                    blendedOff = 0;
+                }
+
+                const regimeAdjusted = blendedOff * regimeMultipliers[i];
+                const gatedOff = outputThresholdIsZero
+                    ? regimeAdjusted
+                    : (Math.abs(regimeAdjusted) < outputThreshold ? 0 : regimeAdjusted);
                 const off = Math.max(-offsetClamp, Math.min(offsetClamp, gatedOff * gain));
                 gatedOffSeries[i] = gatedOff;
                 combinedOffSeries[i] = Math.round(off * 1000) / 1000;
             }
 
             const confirmBars = Math.max(0, Math.min(5, Math.round(signalConfirmBars)));
-            const echoedOffSeries = new Array(closes.length).fill(0);
-            const echoedGatedOffSeries = new Array(closes.length).fill(0);
+            let echoedOffSeries = new Array(closes.length).fill(0);
+            let echoedGatedOffSeries = new Array(closes.length).fill(0);
             if (confirmBars === 0) {
-                for (let i = 0; i < closes.length; i++) {
-                    echoedOffSeries[i] = combinedOffSeries[i];
-                    echoedGatedOffSeries[i] = gatedOffSeries[i];
-                }
+                echoedOffSeries = combinedOffSeries;
+                echoedGatedOffSeries = gatedOffSeries;
             } else {
                 let latchedSign = 0;
                 let pendingSign = 0;
@@ -650,7 +668,7 @@ class MarketAdapterService {
             // Store for metadata.
             // amaSlopeGated tracks the AMA channel contribution after the live normalization
             // and regime gate, so the diagnostic aligns with the actual signal path.
-            const lastAmaOffset = amaOffsets[amaOffsets.length - 1] ?? 0;
+            const lastAmaOffset = useAmaBlend ? (amaOffsets[amaOffsets.length - 1] ?? 0) : 0;
             const amaSlopeGated = slopeResult.isReady
                 ? Math.round((alpha * (lastAmaOffset / channelNorm) * gain * regimeMultiplier) * 1000) / 1000
                 : 0;

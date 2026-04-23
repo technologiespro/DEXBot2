@@ -11,10 +11,10 @@ function flatSeries(n, value) {
     return new Array(n).fill(value);
 }
 
-// Default opts use erPeriod=781, lookbackBars=72 — too large for unit tests.
-// Override erPeriod=10, lookbackBars=10 so we need 10+10+1=21 values minimum.
-const SMALL_OPTS = { erPeriod: 10, lookbackBars: 10 };
-const MIN_LEN = 21; // erPeriod + lookbackBars + 1
+// Default opts use large AMA warmup periods — too large for unit tests.
+// Override erPeriod=10, slowPeriod=10, lookbackBars=10 so we need 10+10+10+1=31 values minimum.
+const SMALL_OPTS = { erPeriod: 10, slowPeriod: 10, lookbackBars: 10 };
+const MIN_LEN = 31; // erPeriod + slowPeriod + lookbackBars + 1
 const MODEL_NEUTRAL_WEIGHT = 0.5;
 const HALF_POWER_VOL_OPTS = {
     ...SMALL_OPTS,
@@ -296,6 +296,19 @@ function testConfidenceDerivation() {
     assert.strictEqual(r3.confidence, 50);
 }
 
+function testZeroMaxSlopeOffsetKeepsConfidenceFinite() {
+    const values = flatSeries(MIN_LEN, 100);
+    values[MIN_LEN - 1] = 106;
+    const result = computeAmaSlopeWeights(values, 0, {
+        ...SMALL_OPTS,
+        maxSlopePct: 3.0,
+        neutralZonePct: 0.15,
+        maxSlopeOffset: 0,
+    });
+    assert.strictEqual(result.slopeOffset, 0);
+    assert.strictEqual(result.confidence, 0);
+}
+
 // ─── Volatility penalty table (exponent=0.5, scalePct=50) ───────────
 
 function testNeutralSlopeVolatilityTable() {
@@ -388,6 +401,7 @@ async function run() {
     testCombinedUptrendHighVol();
     testClampAtMaxPenalty();
     testConfidenceDerivation();
+    testZeroMaxSlopeOffsetKeepsConfidenceFinite();
     testNeutralSlopeVolatilityTable();
     testUptrendSlopeOffsetTable();
 }

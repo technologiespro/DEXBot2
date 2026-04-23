@@ -58,6 +58,7 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const maxSlopeOffset = opts.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
     const maxVolatilityOffset = normalizeMaxVolatilityOffset(opts.maxVolatilityOffset);
     const clipThreshold = opts.clipThreshold ?? Infinity;
+    const hasDirectionalOffset = Number.isFinite(maxSlopeOffset) && maxSlopeOffset > 0;
     const safeWeightVariance = Number.isFinite(weightVariance) && weightVariance > 0 ? weightVariance : 0;
     const safeVolatilityExponent = Number.isFinite(volatilityExponent) && volatilityExponent >= 0
         ? volatilityExponent
@@ -110,7 +111,9 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
 
     // 4. Confidence derived from slope offset magnitude (0–100)
     const roundedSlopeOffset = Math.round(slopeOffset * 100) / 100;
-    const confidence = Math.round((Math.abs(slopeOffset) / maxSlopeOffset) * 100);
+    const confidence = hasDirectionalOffset
+        ? Math.round((Math.abs(slopeOffset) / maxSlopeOffset) * 100)
+        : 0;
 
     // 5. Volatility penalty — symmetric downward shift from ATR/price ratio.
     //    Formula: symmetricDelta = -weightVariance^exponent * scaleX
@@ -121,9 +124,12 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const effectiveExponent = Math.max(0.5, Math.min(1.0, safeVolatilityExponent));
     const effectiveScaleX = Math.max(1.0, Math.min(100.0, safeVolatilityScaleX));
 
-    const volDelta = -Math.pow(safeWeightVariance, effectiveExponent) * effectiveScaleX;
-    const rawSymmetricDelta = clamp(volDelta, -maxVolatilityOffset, 0);
-    const symmetricDelta = Math.abs(rawSymmetricDelta) < volatilityThreshold ? 0 : rawSymmetricDelta;
+    let symmetricDelta = 0;
+    if (safeWeightVariance > 0 && maxVolatilityOffset > 0) {
+        const volDelta = -Math.pow(safeWeightVariance, effectiveExponent) * effectiveScaleX;
+        const rawSymmetricDelta = clamp(volDelta, -maxVolatilityOffset, 0);
+        symmetricDelta = Math.abs(rawSymmetricDelta) < volatilityThreshold ? 0 : rawSymmetricDelta;
+    }
 
     const roundedSymmetricDelta = (Math.round(symmetricDelta * 100) / 100) || 0;
 

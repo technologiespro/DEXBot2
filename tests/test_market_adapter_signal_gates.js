@@ -192,22 +192,37 @@ function testLiveServiceMatchesChartGainStructure() {
     );
     assert.match(
         serviceSource,
-        /const blendedOff = \(alpha \* \(amaOffsets\[i\] \/ channelNorm\) \+ \(1 - alpha\) \* \(kalmanOffsets\[i\] \/ channelNorm\)\);/,
-        'live service should compute the blended shape before applying gain'
+        /const hasDirectionalOffset = mo > 0;/,
+        'live service should disable the directional branch when maxSlopeOffset is zero'
     );
     assert.match(
         serviceSource,
-        /const gatedOff = Math\.abs\(blendedOff \* regimeMultipliers\[i\]\) < outputThreshold \? 0 : \(blendedOff \* regimeMultipliers\[i\]\);/,
-        'live service should make the dead-band decision in pre-gain space'
+        /const useAmaBlend = hasDirectionalOffset && alpha !== 0;/,
+        'live service should short-circuit the AMA branch when alpha is zero or directional offset is disabled'
+    );
+    assert.match(
+        serviceSource,
+        /const useKalmanBlend = hasDirectionalOffset && alpha !== 1;/,
+        'live service should short-circuit the Kalman branch when alpha is one'
+    );
+    assert.match(
+        serviceSource,
+        /if \(useAmaBlend && useKalmanBlend\) \{/,
+        'live service should still compute the full blend when both channels participate'
+    );
+    assert.match(
+        serviceSource,
+        /const gatedOff = outputThresholdIsZero\s*\?\s*regimeAdjusted\s*:\s*\(Math\.abs\(regimeAdjusted\) < outputThreshold \? 0 : regimeAdjusted\);/,
+        'live service should skip the dead-band comparison when the threshold is zero'
     );
     assert.match(
         serviceSource,
         /const off = Math\.max\(-offsetClamp, Math\.min\(offsetClamp, gatedOff \* gain\)\);/,
-        'live service should apply gain only as the final scale factor before the runtime clamp'
+        'live service should still apply gain as the final scale factor before the runtime clamp'
     );
     assert.match(
         serviceSource,
-        /const echoedGatedOffSeries = new Array\(closes\.length\)\.fill\(0\);/,
+        /let echoedGatedOffSeries = new Array\(closes\.length\)\.fill\(0\);/,
         'live service should track a latched pre-gain series alongside the applied output'
     );
     assert.match(

@@ -75,6 +75,18 @@ function smoothKalmanVelocityPoint(rawVelocityPct, displacementPct, prevAdaptive
 function buildKalmanVelocitySeries(kalmanHistory, config = {}) {
     if (!Array.isArray(kalmanHistory) || kalmanHistory.length === 0) return [];
 
+    const resolved = resolveKalmanVelocitySmoothingConfig(config);
+    if (resolved.blend === 0) {
+        const rawSeries = new Array(kalmanHistory.length).fill(null);
+        for (let i = 0; i < kalmanHistory.length; i++) {
+            const point = kalmanHistory[i];
+            const rawVelocityPct = point?.velocityPct ?? null;
+            const displacementPct = point?.displacementPct ?? null;
+            rawSeries[i] = rawVelocityPct == null || displacementPct == null ? null : rawVelocityPct;
+        }
+        return rawSeries;
+    }
+
     const series = new Array(kalmanHistory.length).fill(null);
     let prevAdaptiveVelocity = null;
 
