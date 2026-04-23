@@ -45,7 +45,7 @@ async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
     fs.existsSync = (filePath) => {
         const text = String(filePath);
         if (text.endsWith('/profiles/bots.json')) return true;
-        if (text.endsWith('/profiles/dynamic_weight_whitelist.json')) return true;
+        if (text.endsWith('/profiles/market_adapter_whitelist.json')) return true;
         if (text.endsWith('/tmp/nonexistent-dw.trigger')) return false;
         return originalExistsSync(filePath);
     };
@@ -62,8 +62,12 @@ async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
                 ],
             });
         }
-        if (text.endsWith('/profiles/dynamic_weight_whitelist.json')) {
-            return JSON.stringify({ whitelist: ['volatility-bot-0'] });
+        if (text.endsWith('/profiles/market_adapter_whitelist.json')) {
+            return JSON.stringify({
+                whitelist: {
+                    'volatility-bot-0': { ama: true, dynamicWeight: true },
+                },
+            });
         }
         return originalReadFileSync(filePath, encoding);
     };
@@ -192,10 +196,60 @@ function testRefreshDynamicWeightDistributionAppliesAndFallsBack() {
     assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.6, buy: 0.4 });
 }
 
+function testRefreshDynamicWeightDistributionReloadsWhitelistFlags() {
+    const { refreshDynamicWeightDistribution } = require(runtimePath);
+
+    let whitelistEnabled = true;
+    fs.existsSync = (filePath) => {
+        const text = String(filePath);
+        if (text.endsWith('/profiles/market_adapter_whitelist.json')) return true;
+        return originalExistsSync(filePath);
+    };
+    fs.readFileSync = (filePath, encoding) => {
+        const text = String(filePath);
+        if (text.endsWith('/profiles/market_adapter_whitelist.json')) {
+            return JSON.stringify({
+                whitelist: {
+                    'volatility-bot-0': { ama: true, dynamicWeight: whitelistEnabled },
+                },
+            });
+        }
+        return originalReadFileSync(filePath, encoding);
+    };
+
+    dynamicWeightSnapshotMode = 'live';
+    const self = {
+        config: {
+            name: 'Volatility Bot',
+            botKey: 'volatility-bot-0',
+            weightDistribution: { sell: 0.6, buy: 0.4 },
+        },
+        _baseWeightDistribution: { sell: 0.6, buy: 0.4 },
+        manager: {
+            config: {
+                weightDistribution: { sell: 0.6, buy: 0.4 },
+            },
+        },
+        _log: () => {},
+    };
+
+    const applied = refreshDynamicWeightDistribution.call(self, 'unit-test-live-whitelist');
+    assert.strictEqual(applied.applied, true, 'whitelisted bot should apply live weights');
+    assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.42, buy: 0.22 });
+    assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.42, buy: 0.22 });
+
+    whitelistEnabled = false;
+    const reverted = refreshDynamicWeightDistribution.call(self, 'unit-test-whitelist-removed');
+    assert.strictEqual(reverted.applied, false, 'refresh should pick up whitelist removal without restart');
+    assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.6, buy: 0.4 });
+    assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.6, buy: 0.4 });
+}
+
 async function main() {
     try {
         await testPerformGridResyncAppliesVolatilityOnlyDynamicWeights();
         testRefreshDynamicWeightDistributionAppliesAndFallsBack();
+        testRefreshDynamicWeightDistributionReloadsWhitelistFlags();
         console.log('dexbot maintenance runtime dynamic weight tests passed');
     } finally {
         fs.existsSync = originalExistsSync;

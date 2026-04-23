@@ -22,6 +22,14 @@ const lockPath = path.join(root, 'market_adapter', 'state', 'price_adapter.lock'
 }
 
 {
+    const res = spawnSync('node', ['market_adapter/market_adapter.js', '--whitelist-all', '--once', '--dryRun', '--quiet'], {
+        cwd: root,
+        encoding: 'utf8',
+    });
+    assert.strictEqual(res.status, 0, `--whitelist-all should be accepted, got ${res.status}\n${res.stderr || ''}`);
+}
+
+{
     const fixture = {
         updatedAt: '2026-03-01T00:00:00.000Z',
         metrics: {

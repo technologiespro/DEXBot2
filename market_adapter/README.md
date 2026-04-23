@@ -335,8 +335,7 @@ additional deviation-based price adjustment layer on top of the AMA output.
 | `profiles/bots.json` | Active bots, symbols, pool IDs, and per-bot AMA settings |
 | `profiles/general.settings.json` | Global `MARKET_ADAPTER` settings (delta threshold, etc.) |
 | `profiles/market_adapter_settings.json` | Pair-level and bot-level overrides for dynamic-weight and adapter tuning |
-| `profiles/price_adapter_whitelist.json` | Optional whitelist — bots not listed run in dry-run mode |
-| `profiles/dynamic_weight_whitelist.json` | Optional whitelist — only listed bots receive dynamic weight payloads |
+| `profiles/market_adapter_whitelist.json` | Optional whitelist — per-bot `ama` and `dynamicWeight` flags |
 | `market_adapter/state/price_adapter_state.json` | Runtime state — candle metadata, signals, weights, collateral |
 | `market_adapter/state/price_adapter_centers.json` | Lightweight center snapshot |
 
@@ -436,13 +435,14 @@ node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --int
 
 ### Dry-Run Mode
 
-By default, every bot that is **not whitelisted** runs in dry-run mode: candles and state are
-fully computed and persisted, but no files that dexbot acts on are written
+By default, every bot that is **not AMA-whitelisted** runs in dry-run mode for the live AMA write path:
+candles and state are fully computed and persisted, but no files that dexbot acts on are written
 (`profiles/orders/<botKey>.dynamicgrid.json` and `profiles/recalculate.<botKey>.trigger`).
+Dynamic weights are controlled separately by the `dynamicWeight` flag in the same whitelist file.
 
 | Invocation | Behavior |
 |---|---|
-| No flags (default) | Whitelisted bots write for real; all others dry-run |
+| No flags (default) | AMA-whitelisted bots write for real; all others dry-run |
 | `--dryRun` | All bots dry-run regardless of whitelist |
 | `--whitelist-all` | All bots write for real regardless of whitelist |
 
@@ -451,14 +451,18 @@ Dry-run output is visible in the log with `[DRY RUN]` tags and `[suppressed, dry
 ### Whitelist
 
 ```json
-// profiles/price_adapter_whitelist.json
+// profiles/market_adapter_whitelist.json
 {
-  "whitelist": ["xrp-bts-0", "h-bts-1"]
+  "whitelist": {
+    "xrp-bts-0": { "ama": true, "dynamicWeight": true },
+    "h-bts-1": { "ama": true, "dynamicWeight": false }
+  }
 }
 ```
 
-List bot **keys** (not names). Bots listed here write dynamicgrid and trigger files for real.
-If the file is missing, all bots run in dry-run mode.
+`ama` controls writing `dynamicgrid.json` and `recalculate.<botKey>.trigger`.
+`dynamicWeight` controls whether live dynamic weights are written into the snapshot and applied by the bot runtime.
+If the file is missing, all bots run in dry-run mode for live AMA writes and dynamic weights stay static.
 
 ### Automated Execution (PM2)
 

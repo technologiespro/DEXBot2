@@ -91,6 +91,7 @@ class MarketAdapterService {
     async processBot(bot, state, cfg, contextCache, hooks = {}) {
         const deps = this.deps;
         const isDryRun = !!hooks.isDryRun;
+        const forceWhitelistAll = !!hooks.forceWhitelistAll;
         let dryRunMessages = [];
         
         if ((!bot.assetA && !bot.assetAId) || (!bot.assetB && !bot.assetBId)) {
@@ -376,8 +377,11 @@ class MarketAdapterService {
 
         // 3. Dynamic weight computation — live path uses AMA + Kalman + regime gate,
         //    with ATR applied only as a separate symmetric penalty.
-        const isDynamic = typeof deps.isBotDynamicWeightWhitelisted === 'function'
-            && deps.isBotDynamicWeightWhitelisted(bot.botKey);
+        //    Calculations always run for AMA-grid bots; live application is gated
+        //    later by the AMA whitelist and the dynamic-weight whitelist.
+        const isDynamic = true;
+        const isDynamicWeightWhitelisted = forceWhitelistAll || (typeof deps.isBotDynamicWeightWhitelisted === 'function'
+            && deps.isBotDynamicWeightWhitelisted(bot.botKey));
 
         const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
         const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
@@ -810,10 +814,10 @@ class MarketAdapterService {
         let deltaPercent = null;
         let triggerCallbackError = null;
         let triggerSuppressedReason = null;
+        let snapshotPersistedThisCycle = false;
+        const previousCenterPrice = Number(botState.centerPrice || 0);
 
         if (!staleData && Number.isFinite(referencePrice) && referencePrice > 0) {
-            const previousCenterPrice = Number(botState.centerPrice || 0);
-
             if (!Number.isFinite(previousCenterPrice) || previousCenterPrice <= 0) {
                 const bootstrapCenterPrice = Number.isFinite(centerPrice) && centerPrice > 0
                     ? centerPrice
@@ -822,7 +826,9 @@ class MarketAdapterService {
                 if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
                     amaCenterPersisted = deps.writeBotDynamicGrid(bot.botKey, bootstrapCenterPrice, {
                         amaCenterPrice: amaPrice,
-                        dynamicWeights: dynamicWeightsPayload,
+                        ...(isDynamicWeightWhitelisted && dynamicWeightsPayload
+                            ? { dynamicWeights: dynamicWeightsPayload }
+                            : {}),
                     }) !== false;
                 } else if (isDryRun) {
                     dryRunMessages.push(`[DRY RUN] Would write dynamic grid for ${bot.botKey}: ${bootstrapCenterPrice}`);
@@ -832,6 +838,7 @@ class MarketAdapterService {
                     botState.centerPrice = bootstrapCenterPrice;
                     botState.amaCenterPrice = amaPrice;
                     botState.lastGridResetAt = nowIso;
+                    snapshotPersistedThisCycle = true;
                 } else {
                     triggerSuppressedReason = 'ama_center_persist_failed';
                 }
@@ -844,7 +851,9 @@ class MarketAdapterService {
                         amaCenterPersisted = deps.writeBotDynamicGrid(bot.botKey, centerPrice, {
                             amaCenterPrice: amaPrice,
                             previousCenterPrice,
-                            dynamicWeights: dynamicWeightsPayload,
+                            ...(isDynamicWeightWhitelisted && dynamicWeightsPayload
+                                ? { dynamicWeights: dynamicWeightsPayload }
+                                : {}),
                         }) !== false;
                     } else if (isDryRun) {
                         dryRunMessages.push(`[DRY RUN] Would write dynamic grid for ${bot.botKey}: ${centerPrice}`);
@@ -853,6 +862,7 @@ class MarketAdapterService {
                     if (!amaCenterPersisted) {
                         triggerSuppressedReason = 'ama_center_persist_failed';
                     } else {
+                        snapshotPersistedThisCycle = true;
                         if (!isDryRun) {
                             triggerPath = deps.writeGridResetTrigger(bot, {
                                 reason: 'price_adapter_delta_threshold',
@@ -871,8 +881,8 @@ class MarketAdapterService {
                         botState.amaCenterPrice = amaPrice;
                         botState.lastGridResetAt = nowIso;
                         botState.triggerCount = Number(botState.triggerCount || 0) + 1;
-                        // Grid reset always carries fresh weights — sync the weight state
-                        if (dynamicWeightsPayload) {
+                        // Grid reset only syncs live weights when the dynamic-weight whitelist permits it.
+                        if (isDynamicWeightWhitelisted && dynamicWeightsPayload) {
                             botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
                         }
                         triggered = true;
@@ -907,7 +917,8 @@ class MarketAdapterService {
 
         // Weight-only update path: persist fresh weights to dynamicgrid.json without a grid reset.
         // The bot will pick these up on the next recalculation cycle after fills or config reload.
-        if (isDynamic && !triggered && !isDryRun && !staleData && dynamicWeightsPayload && persistedCenterPrice > 0
+        if (!snapshotPersistedThisCycle && !triggered && !isDryRun && !staleData && isDynamicWeightWhitelisted
+                && dynamicWeightsPayload && persistedCenterPrice > 0
                 && typeof deps.writeBotDynamicGrid === 'function') {
             const dynamicWeightsPersisted = deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
                 amaCenterPrice: amaPrice,
@@ -916,6 +927,7 @@ class MarketAdapterService {
             if (dynamicWeightsPersisted) {
                 botState.amaCenterPrice = amaPrice;
                 botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
+                snapshotPersistedThisCycle = true;
             } else if (!triggerSuppressedReason) {
                 triggerSuppressedReason = 'dynamic_weight_persist_failed';
             }
@@ -977,6 +989,7 @@ class MarketAdapterService {
             kibanaGapRepairCount,
             unresolvedGapCount,
             amaPrice,
+            previousCenterPrice,
             deltaPercent,
             thresholdPercent: botThreshold,
             referencePrice,

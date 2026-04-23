@@ -64,6 +64,11 @@ const {
     normalizeMaxVolatilityOffset,
     normalizeVolatilityThreshold,
 } = require('./core/config_normalizers');
+const {
+    resetMarketAdapterWhitelistCache,
+    isBotWhitelisted,
+    isBotDynamicWeightWhitelisted,
+} = require('../modules/market_adapter_whitelist');
 const kibanaSource = require('./inputs/kibana_source');
 const { normalizePoolId } = kibanaSource;
 const { tradesToCandles, detectMissingCandleTimestamps } = require('./candle_utils');
@@ -78,8 +83,6 @@ const CENTER_FILE = path.join(STATE_DIR, 'price_adapter_centers.json');
 const LOCK_FILE = path.join(STATE_DIR, 'price_adapter.lock');
 const MARKET_PROFILES_FILE = path.join(PROFILES_DIR, 'market_profiles.json');
 const MARKET_ADAPTER_SETTINGS_FILE = path.join(PROFILES_DIR, 'market_adapter_settings.json');
-const DYNAMIC_WEIGHT_WHITELIST_FILE = path.join(PROFILES_DIR, 'dynamic_weight_whitelist.json');
-
 let bitsharesClient = null;
 
 function getBitsharesClient() {
@@ -120,50 +123,13 @@ const DEFAULTS = {
     atrPeriod: MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT,
 };
 
-const WHITELIST_FILE = path.join(PROFILES_DIR, 'price_adapter_whitelist.json');
-
 // Cycle-scoped caches — reset once per runOnce() so each cycle reads files fresh
 // but all bots within that cycle share the same loaded data (N bots → 1 file read).
 let _marketAdapterSettingsCache = null;
-let _dynamicWeightWhitelistCache = null; // Set<string> | false (file missing) | null (not loaded yet)
-let _priceAdapterWhitelistCache = null;   // Set<string> | false (file missing) | null (not loaded yet)
 
 function _resetCycleCache() {
     _marketAdapterSettingsCache = null;
-    _dynamicWeightWhitelistCache = null;
-    _priceAdapterWhitelistCache = null;
-}
-
-function isBotWhitelisted(botKey) {
-    if (_priceAdapterWhitelistCache === null) {
-        if (!fs.existsSync(WHITELIST_FILE)) {
-            _priceAdapterWhitelistCache = false;
-        } else {
-            try {
-                const json = JSON.parse(fs.readFileSync(WHITELIST_FILE, 'utf8'));
-                _priceAdapterWhitelistCache = new Set(Array.isArray(json?.whitelist) ? json.whitelist : []);
-            } catch (_) {
-                _priceAdapterWhitelistCache = false;
-            }
-        }
-    }
-    return _priceAdapterWhitelistCache !== false && _priceAdapterWhitelistCache.has(botKey);
-}
-
-function isBotDynamicWeightWhitelisted(botKey) {
-    if (_dynamicWeightWhitelistCache === null) {
-        if (!fs.existsSync(DYNAMIC_WEIGHT_WHITELIST_FILE)) {
-            _dynamicWeightWhitelistCache = false;
-        } else {
-            try {
-                const json = JSON.parse(fs.readFileSync(DYNAMIC_WEIGHT_WHITELIST_FILE, 'utf8'));
-                _dynamicWeightWhitelistCache = new Set(Array.isArray(json?.whitelist) ? json.whitelist : []);
-            } catch (_) {
-                _dynamicWeightWhitelistCache = false;
-            }
-        }
-    }
-    return _dynamicWeightWhitelistCache !== false && _dynamicWeightWhitelistCache.has(botKey);
+    resetMarketAdapterWhitelistCache();
 }
 
 function loadMarketAdapterSettings() {
@@ -509,6 +475,8 @@ function parseArgs() {
                 printHelp();
                 process.exit(0);
                 break;
+            default:
+                throw new Error(`Unknown argument: ${a}`);
         }
     }
 
@@ -592,8 +560,8 @@ function applyRuntimeDefaultsFromGeneralSettings(cfg, provided = {}, settingsOve
 }
 
 const Logger = require('../modules/logger');
-const priceAdapterLogFile = path.join(__dirname, '..', 'logs', 'price_adapter.log');
-const logger = new Logger('PriceAdapter', { quiet: DEFAULTS.quiet, logFile: priceAdapterLogFile });
+const marketAdapterLogFile = path.join(PROFILES_DIR, 'market_adapter.log');
+const logger = new Logger('PriceAdapter', { quiet: DEFAULTS.quiet, logFile: marketAdapterLogFile });
 
 function log(cfg, ...args) {
     logger.quiet = !!cfg?.quiet;
@@ -962,14 +930,14 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
 
 /**
  * Atomically write the dynamic grid snapshot for a bot to profiles/orders/<botKey>.dynamicgrid.json.
- * Contains AMA-derived center price and, when the bot is dynamic-weight whitelisted, the
- * computed effective weight offsets that will be applied on the next grid reset.
+ * Contains AMA-derived center price and any computed effective weight offsets
+ * that will be applied on the next grid reset.
  * Uses write-then-rename to prevent partial reads by the dexbot process.
  * @param {string} botKey      - Bot key (e.g. "iob-xrp-bts-0")
  * @param {number} centerPrice - Current AMA-derived center price (B/A format)
  * @param {Object} options
  * @param {number} [options.amaCenterPrice]   - Raw AMA center price before any downstream handling
- * @param {Object} [options.dynamicWeights]   - Computed weight offsets (only when whitelisted)
+ * @param {Object} [options.dynamicWeights]   - Computed weight offsets for the next grid reset
  */
 function writeBotDynamicGrid(botKey, centerPrice, options = {}) {
     try {
@@ -1052,7 +1020,7 @@ function writeCenterSnapshot(state) {
 }
 
 async function runOnce(cfg, state, contextCache) {
-    _resetCycleCache(); // reload settings + whitelist files once per cycle, shared across all bots
+    _resetCycleCache(); // reload settings and cached file-backed config once per cycle
     const startedAtMs = Date.now();
     const allBots = loadActiveBots();
     const bots = allBots.filter((bot) => usesAmaGridPrice(bot));
@@ -1067,7 +1035,8 @@ async function runOnce(cfg, state, contextCache) {
             const botCfg = resolveBotCfg(bot, cfg);
             const r = await processBot(bot, state, botCfg, contextCache, {
                 onTrigger: cfg.onTrigger,
-                isDryRun
+                isDryRun,
+                forceWhitelistAll: cfg.whitelistAll,
             });
             if (!r.ok) {
                 log(cfg, `skip (${r.reason})`);
@@ -1081,8 +1050,13 @@ async function runOnce(cfg, state, contextCache) {
             }
 
             const amaText = Number.isFinite(r.amaPrice) ? r.amaPrice.toFixed(8) : 'n/a';
+            const prevCenterText = Number.isFinite(r.previousCenterPrice) ? r.previousCenterPrice.toFixed(8) : 'n/a';
             const deltaText = Number.isFinite(r.deltaPercent) ? `${r.deltaPercent.toFixed(3)}%` : 'n/a';
             const thresholdText = Number.isFinite(r.thresholdPercent) ? `${r.thresholdPercent.toFixed(3)}%` : 'n/a';
+            const offText = r.weights?.meta?.finalOffset != null ? ` off=${r.weights.meta.finalOffset.toFixed(3)}` : '';
+            const amaOffText = r.amaSlope?.amaSlopeGated != null ? ` (amaOff=${r.amaSlope.amaSlopeGated.toFixed(3)})` : '';
+            const regimeText = r.amaSlope?.regimeMultiplier != null ? ` regime=${r.amaSlope.regimeMultiplier.toFixed(2)}` : '';
+
             const staleText = r.staleData ? ` STALE(${Number.isFinite(r.staleAgeHours) ? r.staleAgeHours.toFixed(2) : 'n/a'}h)` : '';
             const patchText = Number.isFinite(r.kibanaGapRepairCount) && r.kibanaGapRepairCount > 0 ? ` KIBANA_PATCH(${r.kibanaGapRepairCount})` : '';
             const gapText = Number.isFinite(r.unresolvedGapCount) && r.unresolvedGapCount > 0 ? ` GAPS(${r.unresolvedGapCount})` : '';
@@ -1090,7 +1064,8 @@ async function runOnce(cfg, state, contextCache) {
             const pendingText = r.pendingClosedCandle ? ' WAITING_FOR_CLOSED_CANDLE' : '';
             const weightText = r.weights ? ` weights[buy=${r.weights.buy}, sell=${r.weights.sell}]` : '';
             const trendText = r.amaSlope?.trend ? ` trend=${r.amaSlope.trend}` : '';
-            log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText}, delta=${deltaText}, threshold=${thresholdText}${staleText}${patchText}${gapText}${trigText}${pendingText}${trendText}${weightText}`);
+
+            log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText} (prevCenter=${prevCenterText}, delta=${deltaText}), threshold=${thresholdText}${offText}${amaOffText}${regimeText}${staleText}${patchText}${gapText}${trigText}${pendingText}${trendText}${weightText}`);
             if (Array.isArray(r.dryRunMessages)) {
                 r.dryRunMessages.forEach(msg => log(cfg, `  ${msg}`));
             }
@@ -1207,7 +1182,6 @@ async function main() {
         log(cfg, `  - Poll Interval: ${cfg.pollSeconds}s`);
         log(cfg, `  - Delta Threshold: ${cfg.deltaThresholdPercent}%`);
         log(cfg, `  - Dry Run: ${cfg.dryRun}`);
-        log(cfg, `  - Whitelist All: ${cfg.whitelistAll}`);
         log(cfg, `  - Max Pages: ${cfg.maxPages} (Limit: ${cfg.pageLimit})`);
         log(cfg, `  - Native Backfill: ${cfg.nativeBackfillHours}h (Max Stale: ${cfg.maxStaleHours}h)`);
         log(cfg, `  - Bootstrap Lookback: ${cfg.bootstrapLookbackHours}h`);

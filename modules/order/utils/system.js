@@ -317,7 +317,7 @@ const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
  * Load the full dynamic grid snapshot written by price_adapter for a bot.
  * The snapshot is stored atomically at profiles/orders/<botKey>.dynamicgrid.json
  * and is updated every market adapter cycle. It contains the AMA-derived center
- * price and, for dynamic-weight-whitelisted bots, computed effective weight offsets.
+ * price and, for dynamic-weight-whitelisted bots, any computed effective weight offsets.
  * Called by initializeGrid() when manager.config.gridPrice uses an AMA keyword,
  * and by performGridResync() to apply dynamic weights on grid reset.
  * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")

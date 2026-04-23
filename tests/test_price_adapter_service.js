@@ -360,7 +360,7 @@ async function testTriggerHookCalledOnThreshold() {
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
-        isBotDynamicWeightWhitelisted: () => false,
+        isBotDynamicWeightWhitelisted: () => true,
         root: process.cwd(),
         path,
     });
@@ -444,7 +444,7 @@ async function testBootstrapFallsBackWhenKibanaIsEmpty() {
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
-        isBotDynamicWeightWhitelisted: () => false,
+        isBotDynamicWeightWhitelisted: () => true,
         root: process.cwd(),
         path,
     });
@@ -805,9 +805,11 @@ async function testCenterEqualsAmaTriggeredByAmaDelta() {
 }
 
 // When AMA equals previous center, the center is unchanged → no trigger even with low threshold.
+// The adapter still refreshes the dynamic snapshot so the bot side can consume the latest
+// calculation output on the next grid reset.
 async function testNoTriggerWhenCenterMatchesAma() {
     let triggerWrites = 0;
-    let writeCalls = 0;
+    let lastWrite = null;
 
     const service = new MarketAdapterService({
         resolveBotContext: async () => ({
@@ -840,11 +842,11 @@ async function testNoTriggerWhenCenterMatchesAma() {
             triggerWrites += 1;
             return '/tmp/recalculate.xrp-bts-0.trigger';
         },
-        writeBotDynamicGrid: () => {
-            writeCalls += 1;
+        writeBotDynamicGrid: (...args) => {
+            lastWrite = args;
             return true;
         },
-        isBotDynamicWeightWhitelisted: () => false,
+        isBotDynamicWeightWhitelisted: () => true,
         root: process.cwd(),
         path,
     });
@@ -884,7 +886,11 @@ async function testNoTriggerWhenCenterMatchesAma() {
     assert.strictEqual(result.deltaPercent, 0, 'delta should be zero when center is unchanged');
     assert.strictEqual(result.triggered, false, 'no trigger when effective center equals previous center');
     assert.strictEqual(triggerWrites, 0, 'trigger file must not be written');
-    assert.strictEqual(writeCalls, 0, 'center must not be persisted when unchanged');
+    assert.ok(Array.isArray(lastWrite), 'unchanged center should still refresh the dynamic snapshot');
+    assert.strictEqual(lastWrite[0], 'xrp-bts-0');
+    assert.strictEqual(lastWrite[1], 100, 'snapshot refresh should preserve the current center');
+    assert.strictEqual(lastWrite[2].amaCenterPrice, 100, 'snapshot refresh should persist the AMA center');
+    assert.ok(lastWrite[2].dynamicWeights, 'snapshot refresh should persist dynamic weight metadata');
     assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'stored center should remain unchanged');
 }
 

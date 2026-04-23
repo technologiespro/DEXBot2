@@ -4,6 +4,7 @@ const path = require('path');
 
 const {
     isBotWhitelisted,
+    isBotDynamicWeightWhitelisted,
     _resetCycleCache,
     resolveAsset,
     resolveBotContext,
@@ -15,9 +16,8 @@ const { MarketAdapterService } = require('../market_adapter/core/market_adapter_
 async function testWhitelistCache() {
     console.log(' - Testing isBotWhitelisted caching...');
     const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
-    const WHITELIST_FILE = path.join(PROFILES_DIR, 'price_adapter_whitelist.json');
+    const WHITELIST_FILE = path.join(PROFILES_DIR, 'market_adapter_whitelist.json');
 
-    // Backup original whitelist if it exists
     let originalContent = null;
     if (fs.existsSync(WHITELIST_FILE)) {
         originalContent = fs.readFileSync(WHITELIST_FILE, 'utf8');
@@ -25,28 +25,41 @@ async function testWhitelistCache() {
 
     try {
         _resetCycleCache();
-        const testContent = JSON.stringify({ whitelist: ['test-bot-1'] });
-        fs.writeFileSync(WHITELIST_FILE, testContent, 'utf8');
+        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+            whitelist: {
+                'test-bot-1': { ama: true, dynamicWeight: false },
+                'test-bot-2': { ama: false, dynamicWeight: true },
+            },
+        }), 'utf8');
 
         assert.strictEqual(isBotWhitelisted('test-bot-1'), true, 'Should find bot in whitelist');
-        assert.strictEqual(isBotWhitelisted('test-bot-2'), false, 'Should not find bot not in whitelist');
+        assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-1'), false, 'AMA-only whitelist should not imply dynamic weights');
+        assert.strictEqual(isBotWhitelisted('test-bot-2'), false, 'Should not find AMA flag when disabled');
+        assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-2'), true, 'Dynamic-weight flag should be read independently');
 
-        // Modify file on disk WITHOUT resetting cache
-        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({ whitelist: ['test-bot-2'] }), 'utf8');
+        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+            whitelist: {
+                'test-bot-1': { ama: false, dynamicWeight: true },
+                'test-bot-2': { ama: true, dynamicWeight: false },
+            },
+        }), 'utf8');
         assert.strictEqual(isBotWhitelisted('test-bot-1'), true, 'Should still return old value due to cache');
+        assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-1'), false, 'Should still return old value due to cache');
         assert.strictEqual(isBotWhitelisted('test-bot-2'), false, 'Should still return old value due to cache');
+        assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-2'), true, 'Should still return old value due to cache');
 
-        // Reset cache and check again
         _resetCycleCache();
         assert.strictEqual(isBotWhitelisted('test-bot-1'), false, 'Should now reflect file change after cache reset');
+        assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-1'), true, 'Should now reflect file change after cache reset');
         assert.strictEqual(isBotWhitelisted('test-bot-2'), true, 'Should now reflect file change after cache reset');
-
+        assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-2'), false, 'Should now reflect file change after cache reset');
     } finally {
         if (originalContent !== null) {
             fs.writeFileSync(WHITELIST_FILE, originalContent, 'utf8');
         } else if (fs.existsSync(WHITELIST_FILE)) {
             fs.unlinkSync(WHITELIST_FILE);
         }
+        _resetCycleCache();
     }
 }
 

@@ -1,17 +1,237 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const Grid = require('./order/grid');
 const { ORDER_STATES, TIMING, MAINTENANCE, GRID_LIMITS } = require('./constants');
 const { retryPersistenceIfNeeded, applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
+const {
+    resetMarketAdapterWhitelistCache,
+    isBotDynamicWeightWhitelisted,
+} = require('./market_adapter_whitelist');
 const Format = require('./order/format');
 const { virtualizeOrder } = require('./order/utils/order');
 const { parseJsonWithComments } = require('./account_bots');
 
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
 const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
-const DYNAMIC_WEIGHT_WHITELIST_FILE = path.join(PROFILES_DIR, 'dynamic_weight_whitelist.json');
+const LOGS_DIR = path.join(PROFILES_DIR, 'logs');
+const PRICE_ADAPTER_APP_NAME = 'dexbot-price-adapter';
+const PRICE_ADAPTER_SCRIPT = path.join(__dirname, '..', 'market_adapter', 'market_adapter.js');
+const PRICE_ADAPTER_ERROR_FILE = path.join(LOGS_DIR, 'dexbot-price-adapter-error.log');
+const PRICE_ADAPTER_OUT_FILE = path.join(LOGS_DIR, 'dexbot-price-adapter.log');
+function usesAmaGridPrice(bot) {
+    const gridPrice = String(bot?.gridPrice || '').trim().toLowerCase();
+    return /^ama(?:[1-4])?$/.test(gridPrice);
+}
+
+function loadBotsConfigSnapshot() {
+    if (!fs.existsSync(PROFILES_BOTS_FILE)) {
+        return {
+            exists: false,
+            fingerprint: null,
+            activeBots: [],
+            needsPriceAdapter: false,
+        };
+    }
+
+    const raw = fs.readFileSync(PROFILES_BOTS_FILE, 'utf8');
+    if (!raw || !raw.trim()) {
+        return {
+            exists: false,
+            fingerprint: null,
+            activeBots: [],
+            needsPriceAdapter: false,
+        };
+    }
+
+    const fingerprint = crypto.createHash('sha1').update(raw).digest('hex');
+    const parsed = parseJsonWithComments(raw);
+    const bots = Array.isArray(parsed?.bots) ? parsed.bots.filter(Boolean) : [];
+    const activeBots = bots.filter((bot) => bot.active !== false);
+
+    return {
+        exists: true,
+        fingerprint,
+        config: parsed,
+        activeBots,
+        needsPriceAdapter: activeBots.some(usesAmaGridPrice),
+    };
+}
+
+function parsePm2JlistOutput(stdout) {
+    const output = String(stdout || '').trim();
+    if (!output) return [];
+
+    const jsonStart = output.indexOf('[');
+    if (jsonStart === -1) {
+        throw new Error('pm2 jlist output did not contain JSON');
+    }
+
+    const parsed = JSON.parse(output.slice(jsonStart));
+    if (!Array.isArray(parsed)) {
+        throw new Error('pm2 jlist output was not an array');
+    }
+
+    return parsed.map((proc) => String(proc?.name || '')).filter(Boolean);
+}
+
+function runPm2Command(args) {
+    return new Promise((resolve, reject) => {
+        const child = spawn('pm2', args, {
+            stdio: 'pipe',
+            shell: process.platform === 'win32',
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        child.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        child.on('close', (code) => {
+            if (code === 0) {
+                resolve({ stdout, stderr });
+                return;
+            }
+            reject(new Error(stderr || stdout || `pm2 exited with code ${code}`));
+        });
+
+        child.on('error', reject);
+    });
+}
+
+async function getPm2ProcessNames() {
+    const { stdout } = await runPm2Command(['jlist']);
+    return parsePm2JlistOutput(stdout);
+}
+
+async function startPriceAdapterPm2() {
+    if (!fs.existsSync(LOGS_DIR)) {
+        fs.mkdirSync(LOGS_DIR, { recursive: true });
+    }
+
+    await runPm2Command([
+        'start',
+        PRICE_ADAPTER_SCRIPT,
+        '--name',
+        PRICE_ADAPTER_APP_NAME,
+        '--cwd',
+        path.join(__dirname, '..'),
+        '--output',
+        PRICE_ADAPTER_OUT_FILE,
+        '--error',
+        PRICE_ADAPTER_ERROR_FILE,
+        '--max-memory-restart',
+        '150M',
+        '--log-date-format',
+        'YY-MM-DD HH:mm:ss.SSS',
+    ]);
+}
+
+async function stopPriceAdapterPm2() {
+    await runPm2Command(['delete', PRICE_ADAPTER_APP_NAME]);
+}
+
+async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
+    if (this._marketAdapterWatchdogInFlight) {
+        return { skipped: true, reason: 'in-flight' };
+    }
+
+    this._marketAdapterWatchdogInFlight = true;
+
+    try {
+        const snapshot = typeof this._loadBotsConfigSnapshot === 'function'
+            ? await this._loadBotsConfigSnapshot()
+            : loadBotsConfigSnapshot();
+        const previousFingerprint = this._marketAdapterWatchdogFingerprint || null;
+        const changed = snapshot.fingerprint !== previousFingerprint;
+        this._marketAdapterWatchdogFingerprint = snapshot.fingerprint;
+
+        if (changed) {
+            this._log(`Detected bots.json changes during ${context}; re-evaluating market adapter requirements.`);
+        }
+
+        const getPm2ProcessNamesFn = typeof this._getPm2ProcessNames === 'function'
+            ? this._getPm2ProcessNames.bind(this)
+            : getPm2ProcessNames;
+        const startPriceAdapterFn = typeof this._startPriceAdapterPm2 === 'function'
+            ? this._startPriceAdapterPm2.bind(this)
+            : startPriceAdapterPm2;
+        const stopPriceAdapterFn = typeof this._stopPriceAdapterPm2 === 'function'
+            ? this._stopPriceAdapterPm2.bind(this)
+            : stopPriceAdapterPm2;
+
+        let processNames = [];
+        let pm2QueryFailed = false;
+        try {
+            processNames = await getPm2ProcessNamesFn();
+        } catch (err) {
+            pm2QueryFailed = true;
+            this._warn(`Could not query PM2 for ${PRICE_ADAPTER_APP_NAME}: ${err.message}. Falling back to a direct PM2 action.`);
+        }
+
+        if (!snapshot.exists || !snapshot.needsPriceAdapter) {
+            const shouldStop = pm2QueryFailed || processNames.includes(PRICE_ADAPTER_APP_NAME);
+            if (!shouldStop) {
+                return {
+                    changed,
+                    required: false,
+                    running: false,
+                    started: false,
+                    stopped: false,
+                };
+            }
+
+            await stopPriceAdapterFn();
+            this._log(`Stopped ${PRICE_ADAPTER_APP_NAME} because no AMA grid bots are active.`, 'info');
+            return {
+                changed,
+                required: false,
+                running: false,
+                started: false,
+                stopped: true,
+            };
+        }
+
+        if (processNames.includes(PRICE_ADAPTER_APP_NAME)) {
+            return {
+                changed,
+                required: true,
+                running: true,
+                started: false,
+            };
+        }
+
+        await startPriceAdapterFn();
+        this._log(`Started ${PRICE_ADAPTER_APP_NAME} because AMA grid pricing is active.`, 'info');
+
+        return {
+            changed,
+            required: true,
+            running: false,
+            started: true,
+        };
+    } catch (err) {
+        this._warn(`Market adapter watchdog failed during ${context}: ${err.message}`);
+        return {
+            changed: false,
+            required: false,
+            running: false,
+            started: false,
+            error: err.message,
+        };
+    } finally {
+        this._marketAdapterWatchdogInFlight = false;
+    }
+}
 
 function cloneWeightDistribution(weightDistribution, fallback = null) {
     const source = (weightDistribution && typeof weightDistribution === 'object')
@@ -24,16 +244,6 @@ function cloneWeightDistribution(weightDistribution, fallback = null) {
     if (!Number.isFinite(sell) || !Number.isFinite(buy)) return null;
 
     return { sell, buy };
-}
-
-function isDynamicWeightWhitelisted(botKey) {
-    try {
-        if (!fs.existsSync(DYNAMIC_WEIGHT_WHITELIST_FILE)) return false;
-        const json = JSON.parse(fs.readFileSync(DYNAMIC_WEIGHT_WHITELIST_FILE, 'utf8'));
-        return Array.isArray(json?.whitelist) && json.whitelist.includes(botKey);
-    } catch (_) {
-        return false;
-    }
 }
 
 function refreshDynamicWeightDistribution(context = 'runtime') {
@@ -55,7 +265,10 @@ function refreshDynamicWeightDistribution(context = 'runtime') {
     let source = 'static';
     let snapshot = null;
 
-    if (isDynamicWeightWhitelisted(botKey)) {
+    // Re-read the shared whitelist on every refresh so live flag changes apply
+    // without requiring a bot restart.
+    resetMarketAdapterWhitelistCache();
+    if (isBotDynamicWeightWhitelisted(botKey)) {
         snapshot = loadAmaCenterSnapshot(botKey);
         const dw = snapshot?.dynamicWeights;
         const liveWeights = cloneWeightDistribution(dw?.effectiveWeights);
@@ -273,6 +486,11 @@ async function stopOpenOrdersSyncLoop() {
 function setupBlockchainFetchInterval() {
     const intervalMin = TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN;
 
+    syncMarketAdapterOnPeriodicConfigCheck.call(this, 'startup blockchain fetch setup')
+        .catch((err) => {
+            this._warn(`Market adapter watchdog failed during startup blockchain fetch setup: ${err.message}`);
+        });
+
     if (this._blockchainFetchInterval !== null && this._blockchainFetchInterval !== undefined) {
         this._stopBlockchainFetchInterval();
     }
@@ -295,6 +513,8 @@ function setupBlockchainFetchInterval() {
     const intervalMs = intervalMin * 60 * 1000;
     this._blockchainFetchInterval = setInterval(async () => {
         try {
+            await syncMarketAdapterOnPeriodicConfigCheck.call(this, 'periodic blockchain fetch');
+
             await this.manager._fillProcessingLock.acquire(async () => {
                 if (this.manager.accountant && typeof this.manager.accountant.resetRecoveryState === 'function') {
                     this.manager.accountant.resetRecoveryState();
@@ -621,6 +841,7 @@ async function runGridMaintenance(context = 'periodic', options = {}) {
 }
 
 module.exports = {
+    loadBotsConfigSnapshot,
     refreshDynamicWeightDistribution,
     performGridResync,
     handlePendingTriggerReset,
@@ -636,5 +857,7 @@ module.exports = {
     clearDustMaintenanceTimer,
     scheduleDustMaintenanceCheck,
     seedDustTimersFromPartialUpdates,
-    runGridMaintenance
+    runGridMaintenance,
+    stopPriceAdapterPm2,
+    syncMarketAdapterOnPeriodicConfigCheck,
 };

@@ -5,7 +5,9 @@ const path = require('path');
 
 const PROFILES_DIR = path.resolve(__dirname, '..', '..', 'profiles');
 const ORDERS_DIR = path.join(PROFILES_DIR, 'orders');
-const WHITELIST_FILE = path.join(PROFILES_DIR, 'dynamic_weight_whitelist.json');
+const {
+    WHITELIST_FILE,
+} = require('../../modules/market_adapter_whitelist');
 
 function readOptionalFile(filePath) {
     if (!fs.existsSync(filePath)) {
@@ -35,7 +37,11 @@ function withDynamicWeightFiles(botKey) {
     fs.mkdirSync(ORDERS_DIR, { recursive: true });
     fs.writeFileSync(
         WHITELIST_FILE,
-        JSON.stringify({ whitelist: [botKey] }, null, 2),
+        JSON.stringify({
+            whitelist: {
+                [botKey]: { ama: true, dynamicWeight: true },
+            },
+        }, null, 2),
         'utf8'
     );
 
