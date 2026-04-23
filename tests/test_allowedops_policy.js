@@ -476,7 +476,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
             credit_offer_accept: {
                 allowedOfferIds: ['1.18.42'],
                 allowedDebtAssets: ['1.3.0'],
-                allowedCollateralAssets: ['1.3.861'],
+                allowedCollateralAssets: ['1.3.861', '1.3.862'],
                 maxBorrowAmount: 1000,
                 maxFeeRate: 30000,
                 minDurationSeconds: 3600,
@@ -529,6 +529,20 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     assert.strictEqual(creditOfferTooExpensiveResult.allow, false, 'Expected deny for fee rate above maxFeeRate');
     assert(creditOfferTooExpensiveResult.reason.includes('max_fee_rate'));
     console.log('  ✓ credit_offer_accept fee cap enforced');
+
+    const creditOfferWrongOffer = JSON.parse(JSON.stringify(creditOfferContext));
+    creditOfferWrongOffer.operations[0].op_data.offer_id = '1.18.999';
+    const creditOfferWrongOfferResult = await policy.evaluatePolicy(creditOfferPolicy, creditOfferWrongOffer);
+    assert.strictEqual(creditOfferWrongOfferResult.allow, false, 'Expected deny for non-whitelisted credit offer');
+    assert(creditOfferWrongOfferResult.reason.includes('allowedOfferIds'));
+    console.log('  ✓ credit_offer_accept offer allowlist enforced');
+
+    const creditOfferTooLarge = JSON.parse(JSON.stringify(creditOfferContext));
+    creditOfferTooLarge.operations[0].op_data.borrow_amount.amount = 1001;
+    const creditOfferTooLargeResult = await policy.evaluatePolicy(creditOfferPolicy, creditOfferTooLarge);
+    assert.strictEqual(creditOfferTooLargeResult.allow, false, 'Expected deny for borrow amount above maxBorrowAmount');
+    assert(creditOfferTooLargeResult.reason.includes('maxBorrowAmount'));
+    console.log('  ✓ credit_offer_accept borrow cap enforced');
 
     // Test 13: credit_deal_repay parameter validation
     console.log('[Test 13] Evaluate allowedOps - credit_deal_repay parameter validation');

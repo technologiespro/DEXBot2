@@ -122,6 +122,9 @@ function installStubs(calls, dbCalls, options = {}) {
             dealResponseIndex += 1;
             return response;
           }
+          if (method === 'get_on_chain_asset_balances') {
+            return options.assetBalances || {};
+          }
           return [];
         },
       },
@@ -143,6 +146,15 @@ function installStubs(calls, dbCalls, options = {}) {
     resolveAccountName: async (accountRef) => {
       if (accountRef === '1.2.3' || accountRef === 'alice') return 'alice';
       return null;
+    },
+    getOnChainAssetBalances: async (accountRef, assets) => {
+      const balanceMap = options.assetBalances || {};
+      const out = {};
+      for (const asset of assets || []) {
+        const key = String(asset);
+        out[key] = balanceMap[key] || balanceMap[String(key)] || { free: 0, locked: 0, total: 0 };
+      }
+      return out;
     },
     executeBatch: async (accountName, privateKey, operations) => {
       calls.push({ accountName, privateKey, operations });
@@ -333,13 +345,13 @@ async function testRepayAndReborrowFlow() {
     }, { stateDir: path.join(baseDir, 'credit_runtime') });
 
     await runtime.refreshState();
-    const result = await runtime.repayCreditDeal('1.19.77', 200, { reborrowAmount: 200 });
+    const result = await runtime.repayCreditDeal('1.19.77', 200);
     assert.strictEqual(result.tx_id, 'tx-1', 'repay flow should broadcast one batch');
     assert.strictEqual(calls.length, 1, 'repay flow should use one batch');
     assert.strictEqual(calls[0].operations[0].op_name, 'credit_deal_repay', 'first op should repay the deal');
     assert.strictEqual(calls[0].operations[1].op_name, 'credit_offer_accept', 'second op should reborrow the deal');
-    assert.strictEqual(calls[0].operations[1].op_data.borrow_amount.amount, 200, 'reborrow amount should match request');
-    assert.strictEqual(calls[0].operations[1].op_data.collateral.amount, 400, 'reborrow collateral should follow offer price');
+    assert.strictEqual(calls[0].operations[1].op_data.borrow_amount.amount, 200, 'default reborrow amount should match the repaid amount');
+    assert.strictEqual(calls[0].operations[1].op_data.collateral.amount, 400, 'default reborrow collateral should follow offer price');
     assert.strictEqual(calls[0].operations[0].op_data.credit_fee.amount, 6, 'credit fee should be derived from fee rate');
 
     const persisted = JSON.parse(fs.readFileSync(path.join(baseDir, 'credit_runtime', 'credit-bot-1.json'), 'utf8'));
@@ -440,7 +452,6 @@ async function testMissingFeeCapIsRejected() {
     await assert.rejects(
       () => runtime.buildCreditOfferAcceptOperation({
         offer: { id: '1.18.42', asset_type: '1.3.10', fee_rate: 30000, enabled: true, acceptable_collateral: { '1.3.0': { base: { amount: 2, asset_id: '1.3.0' }, quote: { amount: 1, asset_id: '1.3.10' } } } },
-        borrowAmount: 100,
         collateralAmount: { amount: 200, asset_id: '1.3.0' },
       }),
       /maxFeeRate is required/,
@@ -452,11 +463,15 @@ async function testMissingFeeCapIsRejected() {
   }
 }
 
-async function testCreditBorrowLimitIsEnforced() {
+async function testCreditBorrowIsDerivedFromCollateral() {
   const calls = [];
   const dbCalls = [];
-  const restore = installStubs(calls, dbCalls);
-  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-borrow-cap-'));
+  const restore = installStubs(calls, dbCalls, {
+    assetBalances: {
+      '1.3.0': { free: 400, locked: 0, total: 400 },
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-borrow-derivation-'));
 
   try {
     delete require.cache[creditRuntimePath];
@@ -471,6 +486,24 @@ async function testCreditBorrowLimitIsEnforced() {
     }, { stateDir: path.join(baseDir, 'credit_runtime') });
 
     await runtime.refreshState();
+    const op = await runtime.buildCreditOfferAcceptOperation({
+      offer: {
+        id: '1.18.42',
+        asset_type: '1.3.10',
+        fee_rate: 30000,
+        enabled: true,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 2, asset_id: '1.3.0' },
+            quote: { amount: 1, asset_id: '1.3.10' },
+          },
+        },
+      },
+      collateralAmount: { amount: '50%', asset_id: '1.3.0' },
+    });
+    assert.strictEqual(op.op_data.collateral.amount, 200, 'percentage collateral should resolve against available balance');
+    assert.strictEqual(op.op_data.borrow_amount.amount, 100, 'borrow amount should derive from collateral');
+
     await assert.rejects(
       () => runtime.buildCreditOfferAcceptOperation({
         offer: {
@@ -485,10 +518,10 @@ async function testCreditBorrowLimitIsEnforced() {
             },
           },
         },
-        borrowAmount: 1001,
+        collateralAmount: { amount: 3000, asset_id: '1.3.0' },
       }),
       /exceeds maxBorrowAmount/,
-      'credit borrows should fail closed above maxBorrowAmount'
+      'collateral-derived borrows should still enforce maxBorrowAmount'
     );
   } finally {
     restore();
@@ -613,7 +646,7 @@ async function testDeferredReborrowQueuesAfterConfirmedRepay() {
     }, { stateDir: path.join(baseDir, 'credit_runtime') });
 
     await runtime.refreshState();
-    const result = await runtime.repayCreditDeal('1.19.77', 200, { reborrowAmount: 200 });
+    const result = await runtime.repayCreditDeal('1.19.77', 200);
     assert.strictEqual(result.tx_id, 'tx-1', 'repay should still broadcast successfully');
     assert.strictEqual(calls.length, 1, 'only the repay batch should be sent when reborrow cannot be built inline');
     assert.strictEqual(calls[0].operations.length, 1, 'repay batch should not include a speculative reborrow');
@@ -748,7 +781,7 @@ async function testStatePersistsAcrossRestart() {
   await testRepayAndReborrowFlow();
   await testMultipleMpaPositionsAreBlocked();
   await testMissingFeeCapIsRejected();
-  await testCreditBorrowLimitIsEnforced();
+  await testCreditBorrowIsDerivedFromCollateral();
   await testDealDisappearanceDoesNotAutoQueueReborrow();
   await testDeferredReborrowQueuesAfterConfirmedRepay();
   await testAutoReborrowQueueIsIgnoredWhenDisabled();

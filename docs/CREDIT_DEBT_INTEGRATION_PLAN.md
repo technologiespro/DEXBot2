@@ -59,7 +59,7 @@ Recommended shape:
     "creditOffer": {
       "allowedOfferIds": ["1.18.42"],
       "allowedDebtAssets": ["HONEST.USD"],
-      "allowedCollateralAssets": ["BTS"],
+      "allowedCollateralAssets": ["BTS", "HONEST.LP"],
       "maxBorrowAmount": 1000,
       "maxFeeRate": 30000,
       "autoReborrow": true
@@ -74,6 +74,8 @@ Recommended shape:
   - Assets the bot may borrow.
 - `allowedCollateralAssets`
   - Assets the bot may post as collateral.
+  - Credit offers may allow multiple collateral assets here.
+  - MPA uses one active collateral asset per call-order position.
 - `allowedOfferIds`
   - Credit offers the bot may use.
 - `maxBorrowAmount`
@@ -229,6 +231,8 @@ Task:
 
 - Use `credit_offer_accept`.
 - Allow only configured offers, debt assets, and collateral assets.
+- Derive borrow size from the resolved collateral amount and offer price.
+- When a borrow amount is explicit, derive the minimum required collateral from the offer price.
 - Enforce `maxBorrowAmount`.
 - Enforce `maxFeeRate`.
 
@@ -253,6 +257,7 @@ Task:
 - Reborrow only after a successful repay confirmation.
 - Reborrow only if the same offer and policy are still valid.
 - Reborrow only if collateral and borrow ceilings still pass validation.
+- Partial repay auto-reborrow defaults to the amount that was just repaid, not the full previous deal size.
 
 ## Credit Runtime API
 

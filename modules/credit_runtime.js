@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { BitShares, waitForConnected } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
-const { blockchainToFloat, floatToBlockchainInt } = require('./order/utils/math');
+const { blockchainToFloat, floatToBlockchainInt, resolveConfigValue } = require('./order/utils/math');
 const { createBotKey } = require('./account_orders');
 
 const CREDIT_FEE_RATE_DENOM = 1_000_000;
@@ -105,6 +105,20 @@ function normalizeCollateralMap(acceptableCollateral) {
         result.set(String(assetId), price);
     }
     return result;
+}
+
+function normalizeAmountSpec(spec) {
+    if (spec === null || spec === undefined) return null;
+    if (typeof spec === 'number' || typeof spec === 'string') {
+        return { amount: spec, assetId: null };
+    }
+    if (typeof spec === 'object') {
+        return {
+            amount: spec.amount ?? spec.value ?? null,
+            assetId: spec.asset_id || spec.assetId || spec.asset || null,
+        };
+    }
+    return null;
 }
 
 function getAccountRef(bot) {
@@ -374,6 +388,63 @@ class CreditRuntime {
         return normalizeNumberArray(value);
     }
 
+    async _resolveAmountToBlockchainInt(spec, asset, accountRef, { balanceField = 'free' } = {}) {
+        const normalized = normalizeAmountSpec(spec);
+        if (!normalized || normalized.amount === null || normalized.amount === undefined) {
+            return null;
+        }
+        if (!asset || !asset.id) {
+            throw new Error('Unable to resolve asset metadata for amount spec');
+        }
+
+        const isPercent = typeof normalized.amount === 'string' && normalized.amount.trim().endsWith('%');
+        let total = null;
+        if (isPercent) {
+            if (!accountRef) {
+                throw new Error(`Unable to resolve account for percentage amount on ${asset.id}`);
+            }
+            const balances = await chainOrders.getOnChainAssetBalances(accountRef, [asset.id]);
+            const balance = balances?.[String(asset.id)] || balances?.[String(asset.symbol)] || null;
+            total = toFiniteNumber(balance?.[balanceField], null);
+            if (!Number.isFinite(total) || total < 0) {
+                throw new Error(`Unable to resolve available balance for ${asset.id}`);
+            }
+        }
+
+        const resolved = resolveConfigValue(normalized.amount, total);
+        if (!Number.isFinite(resolved) || resolved <= 0) {
+            return null;
+        }
+        if (isPercent && resolved > total) {
+            throw new Error(`Requested amount ${resolved} exceeds available ${balanceField} balance ${total} for ${asset.id}`);
+        }
+
+        const intValue = floatToBlockchainInt(resolved, asset.precision);
+        if (!Number.isFinite(intValue) || intValue <= 0) {
+            return null;
+        }
+
+        return intValue;
+    }
+
+    _calculateBorrowAmountFromCollateral(collateralAmountInt, collateralPrice) {
+        const baseAmount = toFiniteNumber(collateralPrice?.base?.amount, null);
+        const quoteAmount = toFiniteNumber(collateralPrice?.quote?.amount, null);
+        if (!Number.isFinite(baseAmount) || !Number.isFinite(quoteAmount) || baseAmount <= 0 || quoteAmount <= 0) {
+            return null;
+        }
+        return Math.floor((Number(collateralAmountInt) * quoteAmount) / baseAmount);
+    }
+
+    _enforceMaxBorrowAmount(policy, borrowInt, debtAsset) {
+        const maxBorrowAmountValue = positiveOrNull(policy?.maxBorrowAmount);
+        if (maxBorrowAmountValue === null) return;
+        const borrowFloat = blockchainToFloat(borrowInt, debtAsset.precision);
+        if (Number.isFinite(borrowFloat) && borrowFloat > maxBorrowAmountValue) {
+            throw new Error(`borrowAmount ${borrowFloat} exceeds maxBorrowAmount ${maxBorrowAmountValue}`);
+        }
+    }
+
     _validateMpaPolicy(policy, debtAssetId, collateralAssetId) {
         if (!policy || typeof policy !== 'object') return { allow: false, reason: 'MPA policy missing' };
 
@@ -555,9 +626,8 @@ class CreditRuntime {
             : await this._fetchBorrowerDeals();
         const trackedOffers = new Map();
 
-        const offerIdsFromPolicy = this._normalizePolicyList(policy.allowedOfferIds);
         const offerIdsFromDeals = normalizedDeals.map((deal) => deal.offerId).filter(Boolean);
-        const offerIds = Array.from(new Set([...offerIdsFromPolicy, ...offerIdsFromDeals].map(String)));
+        const offerIds = Array.from(new Set(offerIdsFromDeals.map(String)));
 
         if (offerIds.length > 0) {
             const offerObjects = await this._dbCall('get_objects', [offerIds]);
@@ -655,9 +725,6 @@ class CreditRuntime {
             ? Math.min(0, rawDebtDelta)
             : Math.max(0, rawDebtDelta);
         debtDelta = clampToAbsLimit(debtDelta, maxBorrowAmount);
-
-        if (primaryAction === 'reduce_debt' && debtDelta > 0) debtDelta = 0;
-        if (primaryAction === 'increase_debt' && debtDelta < 0) debtDelta = 0;
 
         const projectedDebt = Math.max(0, debtAmount + debtDelta);
         const desiredCollateral = desiredCr * feedPrice * projectedDebt;
@@ -762,22 +829,12 @@ class CreditRuntime {
             throw new Error('Unable to resolve debt asset metadata for credit offer');
         }
 
-        const requestedBorrowAmount = positiveOrNull(borrowAmount);
-        if (requestedBorrowAmount === null) {
-            throw new Error('borrowAmount must be positive');
-        }
-        const maxBorrowAmountValue = positiveOrNull(policy.maxBorrowAmount);
-        if (maxBorrowAmountValue !== null && requestedBorrowAmount > maxBorrowAmountValue) {
-            throw new Error(`borrowAmount ${requestedBorrowAmount} exceeds maxBorrowAmount ${maxBorrowAmountValue}`);
-        }
-
-        const borrowInt = floatToBlockchainInt(requestedBorrowAmount, debtAsset.precision);
-        if (!Number.isFinite(borrowInt) || borrowInt <= 0) {
-            throw new Error('borrowAmount must be positive');
-        }
-
         const collateralMap = normalizeCollateralMap(offerObj?.acceptable_collateral);
-        const collateralAssetId = collateralAmount?.asset_id || offerObj?.collateral_asset_id || null;
+        const collateralSpec = normalizeAmountSpec(collateralAmount);
+        const collateralAssetId = collateralSpec?.assetId || offerObj?.collateral_asset_id || null;
+        if (!collateralAssetId && collateralMap.size > 1) {
+            throw new Error('collateral asset is required for multi-asset credit offers');
+        }
         let collateralPrice = collateralAssetId ? collateralMap.get(String(collateralAssetId)) : null;
         if (!collateralPrice && collateralMap.size === 1) {
             collateralPrice = collateralMap.values().next().value;
@@ -791,12 +848,44 @@ class CreditRuntime {
             throw new Error('Unable to resolve collateral asset metadata for credit offer');
         }
 
-        const requiredCollateralInt = collateralAmount?.amount != null
-            ? floatToBlockchainInt(collateralAmount.amount, collateralAsset.precision)
-            : this._calculateRequiredCollateral(borrowInt, collateralPrice);
+        let borrowInt = null;
+        let requiredCollateralInt = null;
+        const requestedBorrowAmount = borrowAmount !== undefined && borrowAmount !== null
+            ? positiveOrNull(borrowAmount)
+            : null;
+
+        if (borrowAmount !== undefined && borrowAmount !== null && requestedBorrowAmount === null) {
+            throw new Error('borrowAmount must be positive');
+        }
+
+        if (requestedBorrowAmount !== null) {
+            borrowInt = floatToBlockchainInt(requestedBorrowAmount, debtAsset.precision);
+            if (!Number.isFinite(borrowInt) || borrowInt <= 0) {
+                throw new Error('borrowAmount must be positive');
+            }
+            this._enforceMaxBorrowAmount(policy, borrowInt, debtAsset);
+
+            const minimumCollateralInt = this._calculateRequiredCollateral(borrowInt, collateralPrice);
+            requiredCollateralInt = collateralSpec?.amount !== null && collateralSpec?.amount !== undefined
+                ? await this._resolveAmountToBlockchainInt(collateralSpec, collateralAsset, accountId, { balanceField: 'free' })
+                : minimumCollateralInt;
+            if (Number.isFinite(minimumCollateralInt) && Number.isFinite(requiredCollateralInt) && requiredCollateralInt < minimumCollateralInt) {
+                throw new Error(`collateral amount ${requiredCollateralInt} is below required collateral ${minimumCollateralInt}`);
+            }
+        } else {
+            requiredCollateralInt = await this._resolveAmountToBlockchainInt(collateralSpec, collateralAsset, accountId, { balanceField: 'free' });
+            borrowInt = this._calculateBorrowAmountFromCollateral(requiredCollateralInt, collateralPrice);
+            if (Number.isFinite(borrowInt) && borrowInt > 0) {
+                this._enforceMaxBorrowAmount(policy, borrowInt, debtAsset);
+            }
+        }
 
         if (!Number.isFinite(requiredCollateralInt) || requiredCollateralInt <= 0) {
             throw new Error('Unable to determine collateral amount for credit offer');
+        }
+
+        if (!Number.isFinite(borrowInt) || borrowInt <= 0) {
+            throw new Error('Unable to determine borrow amount from collateral amount');
         }
 
         const minDealAmount = toFiniteNumber(offerObj?.min_deal_amount, null);
@@ -978,16 +1067,19 @@ class CreditRuntime {
         let inlineReborrowPlanned = false;
 
         if (shouldAutoReborrow) {
+            const reborrowAmount = options.reborrowAmount !== undefined && options.reborrowAmount !== null
+                ? options.reborrowAmount
+                : repayAmount;
+            const reborrowCollateralAmount = options.collateralAmount !== undefined
+                ? options.collateralAmount
+                : null;
             const offer = await this._getOfferById(dealSummary.offerId);
             if (offer) {
                 try {
-                    const borrowSize = options.reborrowAmount !== undefined && options.reborrowAmount !== null
-                        ? options.reborrowAmount
-                        : repayAmount;
                     const acceptOp = await this.buildCreditOfferAcceptOperation({
                         offer,
-                        borrowAmount: borrowSize,
-                        collateralAmount: options.collateralAmount || null,
+                        borrowAmount: reborrowAmount,
+                        collateralAmount: reborrowCollateralAmount,
                         autoRepay: false,
                     });
                     operations.push(acceptOp);
@@ -996,7 +1088,8 @@ class CreditRuntime {
                     deferredReborrowRequest = {
                         sourceDealId: dealSummary.id,
                         offerId: dealSummary.offerId,
-                        borrowAmount: options.reborrowAmount !== undefined && options.reborrowAmount !== null ? options.reborrowAmount : repayAmount,
+                        borrowAmount: reborrowAmount,
+                        collateralAmount: reborrowCollateralAmount,
                         requestedAt: new Date().toISOString(),
                         reason: err.message,
                     };
@@ -1005,7 +1098,8 @@ class CreditRuntime {
                 deferredReborrowRequest = {
                     sourceDealId: dealSummary.id,
                     offerId: dealSummary.offerId,
-                    borrowAmount: options.reborrowAmount !== undefined && options.reborrowAmount !== null ? options.reborrowAmount : repayAmount,
+                    borrowAmount: reborrowAmount,
+                    collateralAmount: reborrowCollateralAmount,
                     requestedAt: new Date().toISOString(),
                     reason: 'offer unavailable',
                 };
@@ -1079,7 +1173,7 @@ class CreditRuntime {
         let processed = 0;
 
         for (const request of this.state.pendingReborrows) {
-            if (!request?.offerId || request.borrowAmount == null) {
+            if (!request?.offerId || (request.borrowAmount == null && request.collateralAmount == null)) {
                 continue;
             }
             if (request.sourceDealId && activeDealIds.has(String(request.sourceDealId))) {
@@ -1096,7 +1190,7 @@ class CreditRuntime {
             try {
                 const acceptOp = await this.buildCreditOfferAcceptOperation({
                     offer,
-                    borrowAmount: request.borrowAmount,
+                    borrowAmount: request.borrowAmount ?? null,
                     collateralAmount: request.collateralAmount || null,
                     autoRepay: false,
                 });
