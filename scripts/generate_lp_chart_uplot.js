@@ -49,7 +49,7 @@ function defaultUplotMarketChartPath(meta) {
     const suffix = meta?.pool
         ? `pool_${String(meta.pool).replace('1.19.', '')}`
         : `${meta?.assetA?.symbol || '?'}_${meta?.assetB?.symbol || '?'}`;
-    return path.join(__dirname, '..', 'market_adapter', `lp_chart_${suffix}.uplot.html`);
+    return path.join(__dirname, '..', 'analysis', 'charts', `lp_AMA_chart_${suffix}.html`);
 }
 
 function openInBrowser(filePath) {

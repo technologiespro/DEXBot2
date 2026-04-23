@@ -126,33 +126,36 @@ function testProfilesMatchByIntervalLabelFallback() {
 
 function testLatestLpDataPrefersNewerFile() {
     const suffix = `${Date.now()}-${process.pid}`;
-    const analysisFile = path.join(
+    const olderFile = path.join(
         __dirname,
         '..',
-        'analysis',
-        'ama_fitting',
+        'market_adapter',
         'data',
-        `lp_pool_${suffix}_analysis.json`
+        'lp',
+        `older_pair_${suffix}`,
+        `lp_pool_${suffix}_older.json`
     );
     const dataFile = path.join(
         __dirname,
         '..',
         'market_adapter',
         'data',
+        'lp',
+        `newer_pair_${suffix}`,
         `lp_pool_${suffix}_data.json`
     );
 
-    writeJson(analysisFile, { meta: {}, candles: [] });
+    writeJson(olderFile, { meta: {}, candles: [] });
     writeJson(dataFile, { meta: {}, candles: [] });
 
     const now = Date.now();
-    fs.utimesSync(analysisFile, new Date(now - 10_000), new Date(now - 10_000));
+    fs.utimesSync(olderFile, new Date(now - 10_000), new Date(now - 10_000));
     fs.utimesSync(dataFile, new Date(now + 10_000), new Date(now + 10_000));
 
     try {
         assert.strictEqual(findLatestLpData(), dataFile, 'latest LP data should pick the newer file from market_adapter/data');
     } finally {
-        removeFile(analysisFile);
+        removeFile(olderFile);
         removeFile(dataFile);
     }
 }
@@ -164,17 +167,17 @@ function testParseLpChartCliArgsSupportsWrapperModes() {
     assert.ok(scriptArgs.dataFile.endsWith(path.join('market_adapter', 'data', 'example.json')));
     assert.strictEqual(scriptArgs.noOpen, true);
 
-    const marketArgs = parseLpChartCliArgs(['--file', 'analysis/ama_fitting/data/example.json'], {
+    const marketArgs = parseLpChartCliArgs(['--file', 'market_adapter/data/example.json'], {
         dataFlags: ['--file'],
     });
-    assert.ok(marketArgs.dataFile.endsWith(path.join('analysis', 'ama_fitting', 'data', 'example.json')));
+    assert.ok(marketArgs.dataFile.endsWith(path.join('market_adapter', 'data', 'example.json')));
     assert.strictEqual(marketArgs.noOpen, false);
 
-    const analysisArgs = parseLpChartCliArgs(['--data', 'analysis/ama_fitting/data/example.json', 'ignored.json'], {
+    const analysisArgs = parseLpChartCliArgs(['--data', 'market_adapter/data/example.json', 'ignored.json'], {
         dataFlags: ['--data'],
         allowPositional: false,
     });
-    assert.ok(analysisArgs.dataFile.endsWith(path.join('analysis', 'ama_fitting', 'data', 'example.json')));
+    assert.ok(analysisArgs.dataFile.endsWith(path.join('market_adapter', 'data', 'example.json')));
     assert.strictEqual(analysisArgs.noOpen, false);
 }
 

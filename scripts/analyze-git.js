@@ -276,7 +276,7 @@ class RepoAnalyzer {
      * - Builds daily stats arrays aligned with dates
      * - Calculates cumulative sums for growth visualization
      *
-     * Output: Writes file to repo-stats.html in current directory
+     * Output: Writes file to analysis/charts/repo-stats.html
      * Browser compatible: Uses Chart.js from CDN
      *
      * @param {Array<[string, Object]>} sortedFiles - Sorted files with their stats
@@ -816,7 +816,8 @@ class RepoAnalyzer {
 </body>
 </html>`;
 
-        const outputPath = path.join(process.cwd(), 'repo-stats.html');
+        const outputPath = path.join(process.cwd(), 'analysis', 'charts', 'repo-stats.html');
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
         fs.writeFileSync(outputPath, html);
         console.log(`✅ HTML chart generated: ${outputPath}`);
         console.log(`   Open in browser: file://${outputPath}`);

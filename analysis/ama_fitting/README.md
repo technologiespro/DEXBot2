@@ -8,13 +8,11 @@ and export the results into `profiles/market_profiles.json` for the market adapt
 ## Workflow Overview
 
 ```
-1. fetch_lp_candles.js   →   data/<pool>_1h.json
+1. fetch_lp_candles.js   →   market_adapter/data/<pool>_1h.json
 2. optimizer_high_resolution.js   →   optimization_results_*.json
                                   →   profiles/market_profiles.json  (auto-updated)
 3. scripts/generate_lp_chart.js   →   market chart + comparison chart  (visual review)
-   - ECharts parallel path: `npm run lp:chart:echarts`
-   - Synthetic ECharts comparison: `npm run ama:chart:synthetic:echarts`
-   - uPlot parallel path: `npm run lp:chart:uplot`
+   - uPlot chart path: `npm run lp:chart:uplot`
    - Synthetic uPlot comparison: `npm run ama:chart:synthetic:uplot -- --bts-file <path> --xrp-file <path>`
 ```
 
@@ -43,7 +41,7 @@ node analysis/ama_fitting/fetch_lp_candles.js \
   --hours 26280
 ```
 
-Output: `analysis/ama_fitting/data/lp_pool_133_iob.xrp_bts_1h.json`
+Output: `market_adapter/data/lp_pool_133_iob.xrp_bts_1h.json`
 
 **Options:**
 
@@ -57,7 +55,7 @@ Output: `analysis/ama_fitting/data/lp_pool_133_iob.xrp_bts_1h.json`
 | `--assetBId` | required | Asset B object ID |
 | `--assetBPrecision` | required | Asset B precision |
 | `--hours` | `26280` | Lookback hours (26280 = 3 years) |
-| `--out` | auto | Output filename (placed in `data/` if not absolute) |
+| `--out` | auto | Output filename (placed in `market_adapter/data/` if not absolute) |
 
 ---
 
@@ -71,7 +69,7 @@ different distance-cap quantiles, writes results to a JSON file, and
 **Run on the fetched LP data:**
 ```bash
 node analysis/ama_fitting/optimizer_high_resolution.js \
-  --data analysis/ama_fitting/data/lp_pool_133_iob.xrp_bts_1h.json
+  --data market_adapter/data/lp_pool_133_iob.xrp_bts_1h.json
 ```
 
 **Default search ranges:**
@@ -85,7 +83,7 @@ node analysis/ama_fitting/optimizer_high_resolution.js \
 Override ranges via CLI:
 ```bash
 node analysis/ama_fitting/optimizer_high_resolution.js \
-  --data analysis/ama_fitting/data/lp_pool_133_iob.xrp_bts_1h.json \
+  --data market_adapter/data/lp_pool_133_iob.xrp_bts_1h.json \
   --erMin 100 --erMax 600 \
   --slowMin 800 --slowMax 6000
 ```
@@ -140,16 +138,17 @@ Recommended entrypoint:
 
 ```bash
 npm run lp:chart -- \
-  --data analysis/ama_fitting/data/lp_pool_133_iob.xrp_bts_1h.json
+  --data market_adapter/data/lp_pool_133_iob.xrp_bts_1h.json
 ```
 
 This generates both:
-- `market_adapter/lp_chart_pool_133.html` — market-adapter style LP chart
-- `analysis/ama_fitting/lp_chart_pool_133.html` — unified comparison chart
+- `analysis/charts/lp_AMA_chart_pool_133.html` — market-adapter style LP chart
+- `analysis/charts/lp_chart_4h_UNIFIED_COMPARISON.html` — unified comparison chart
 
 Under the hood, LP-data chart generation now delegates into the shared runner in
 `market_adapter/lp_chart_runner.js`. The analysis script keeps only:
 - the synthetic explicit-input mode used for analysis-only review
+- the uPlot comparison renderer used for the chart export
 
 Supported synthetic entrypoint:
 

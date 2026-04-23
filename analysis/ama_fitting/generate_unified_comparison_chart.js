@@ -3,7 +3,8 @@ const path = require('path');
 const { calculateAMA } = require('./ama');
 
 // Shared chart HTML generation
-const { generateHTML } = require('../../market_adapter/lp_chart_core');
+const { generateHTML } = require('../../market_adapter/lp_chart_core_uplot');
+const { MARKET_ADAPTER_DATA_DIR } = require('../../market_adapter/data_paths');
 
 /**
  * UNIFIED COMPARISON CHART GENERATOR — Synthetic analysis mode
@@ -24,7 +25,7 @@ const { generateHTML } = require('../../market_adapter/lp_chart_core');
  *   npm run ama:chart:synthetic
  */
 
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = MARKET_ADAPTER_DATA_DIR;
 
 // Fallback strategies used by the synthetic comparison workflow.
 const FALLBACK_STRATEGIES = [
@@ -104,7 +105,7 @@ function run() {
     }
     meta    = { pool: null, assetA: { symbol: 'XRP' }, assetB: { symbol: 'BTS' },
                 intervalSeconds: 14400, fetchedAt: new Date().toISOString() };
-    outFile = path.join(__dirname, 'lp_chart_4h_UNIFIED_COMPARISON.html');
+    outFile = path.join(__dirname, '..', 'charts', 'lp_chart_4h_UNIFIED_COMPARISON.html');
     STRATEGIES = [...FALLBACK_STRATEGIES];
     console.log(`Data:        MEXC synthetic XRP/BTS (${candles.length} candles)`);
 
@@ -132,7 +133,7 @@ function run() {
     console.log(`Generating chart (${amaResults.length} AMAs)...`);
     const html = generateHTML(meta, candleArrays, amaResults);
     fs.mkdirSync(path.dirname(outFile), { recursive: true });
-    fs.writeFileSync(outFile, html);
+    fs.writeFileSync(outFile, html, 'utf8');
 
     console.log(`\nChart saved: ${path.relative(process.cwd(), outFile)}`);
     console.log(`Open:        file://${outFile}`);

@@ -160,7 +160,7 @@ File: <path>
 - `merge_lp_data.js` - LP data merging
 - `candle_utils.js` - Candlestick utilities
 - `interval_utils.js` - Shared interval label helpers
-- `lp_chart_core.js` - LP chart core logic
+- `lp_chart_core_uplot.js` - LP chart core logic
 - `lp_chart_runner.js` - Shared LP chart orchestration used by the supported chart scripts
 
 ### Blockchain Interaction
@@ -202,8 +202,7 @@ Research scripts for parameter tuning — output interactive HTML charts, not us
 - Docs: `analysis/DYNAMIC_WEIGHT_RESEARCH.md`
 
 #### Derivative / Signal Research
-- `analyze_derivatives.js` - SMA/MACD/RSI signal analyzer runner
-- `analyze_derivatives_uplot.js` - uPlot variant of the above
+- `analyze_derivatives_uplot.js` - SMA/MACD/RSI signal analyzer runner
 - `trend_detection/derivative_analyzer.js` - Core signal engine (MACD, RSI, trend filter)
 - `trend_detection/trend_analyzer.js` - SMA-based trend direction helper
 - `trend_detection/kalman_trend_analyzer.js` - Kalman filter with tactical/modal state tracking

@@ -115,7 +115,7 @@ function calculateMetrics(amaValues, candles) {
 }
 
 function defaultUplotComparisonChartPath() {
-    return path.join(__dirname, 'lp_chart_4h_UNIFIED_COMPARISON.uplot.html');
+    return path.join(__dirname, '..', 'charts', 'lp_chart_4h_UNIFIED_COMPARISON.explicit.html');
 }
 
 function generateUnifiedComparisonChartUplot(options = {}) {

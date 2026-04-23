@@ -5,16 +5,17 @@
  * then calculates synthetic XRP/BTS pair.
  *
  * Output:
- * - data/XRP_USDT.json
- * - data/BTS_USDT.json
- * - data/XRP_BTS_SYNTHETIC.json
+ * - market_adapter/data/XRP_USDT.json
+ * - market_adapter/data/BTS_USDT.json
+ * - market_adapter/data/XRP_BTS_SYNTHETIC.json
  */
 
 const fs = require('fs');
 const path = require('path');
 const { fetchFromMEXC, generateSyntheticPair } = require('../mexc_fetcher');
+const { MARKET_ADAPTER_DATA_DIR } = require('../../market_adapter/data_paths');
 
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = MARKET_ADAPTER_DATA_DIR;
 const INTERVAL = '4h';
 
 async function run() {
@@ -51,9 +52,9 @@ async function run() {
         );
 
         console.log(`\nData saved:`);
-        console.log(`   - data/XRP_USDT.json (${xrpData.length} ${INTERVAL} candles)`);
-        console.log(`   - data/BTS_USDT.json (${btsData.length} ${INTERVAL} candles)`);
-        console.log(`   - data/XRP_BTS_SYNTHETIC.json (${synthetic.length} ${INTERVAL} candles)`);
+        console.log(`   - ${path.relative(process.cwd(), path.join(DATA_DIR, 'XRP_USDT.json'))} (${xrpData.length} ${INTERVAL} candles)`);
+        console.log(`   - ${path.relative(process.cwd(), path.join(DATA_DIR, 'BTS_USDT.json'))} (${btsData.length} ${INTERVAL} candles)`);
+        console.log(`   - ${path.relative(process.cwd(), path.join(DATA_DIR, 'XRP_BTS_SYNTHETIC.json'))} (${synthetic.length} ${INTERVAL} candles)`);
 
         console.log(`\nSynthetic pair date range:`);
         console.log(`  Start: ${new Date(synthetic[0][0]).toISOString()}`);

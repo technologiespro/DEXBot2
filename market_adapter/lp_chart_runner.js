@@ -13,11 +13,11 @@
  * - resolve AMA strategies from optimizer results and/or market profiles
  * - calculate AMA series and comparison metrics
  * - choose output paths
- * - render and write HTML via `lp_chart_core`
+ * - render and write HTML via `lp_chart_core_uplot`
  * - optionally open the generated chart in a browser
  *
  * Non-responsibilities:
- * - rendering HTML internals (`lp_chart_core.js`)
+ * - rendering HTML internals (`lp_chart_core_uplot.js`)
  * - synthetic MEXC comparison mode (kept in analysis/ama_fitting)
  * - fetch/export of LP data (`market_adapter/inputs/fetch_lp_data.js`)
  */
@@ -27,11 +27,11 @@ const path = require('path');
 const { exec } = require('child_process');
 
 const { calculateAMA } = require('../analysis/ama_fitting/ama');
-const { generateHTML } = require('./lp_chart_core');
+const { generateHTML } = require('./lp_chart_core_uplot');
 const { loadStrategiesForLpChart } = require('./lp_chart_strategy_loader');
 
 const ROOT = path.resolve(__dirname, '..');
-const ANALYSIS_AMA_FITTING_DIR = path.join(ROOT, 'analysis', 'ama_fitting');
+const ANALYSIS_CHARTS_DIR = path.join(ROOT, 'analysis', 'charts');
 const AMA_PROFILES_FILE = path.join(ROOT, 'profiles', 'market_profiles.json');
 const DEFAULT_COMPARISON_FALLBACK_STRATEGIES = [
     { name: 'FAST', erPeriod: 15, fastPeriod: 5, slowPeriod: 30, color: '#26a69a', dash: 'dot' },
@@ -67,10 +67,7 @@ function parseLpChartCliArgs(argv, options = {}) {
 }
 
 function findLatestLpData() {
-    const dirs = [
-        path.join(ROOT, 'analysis', 'ama_fitting', 'data'),
-        path.join(ROOT, 'market_adapter', 'data'),
-    ];
+    const dirs = [path.join(ROOT, 'market_adapter', 'data')];
     const out = [];
 
     for (const dataDir of dirs) {
@@ -147,24 +144,24 @@ function defaultMarketChartPath(meta) {
     const suffix = meta?.pool
         ? `pool_${String(meta.pool).replace('1.19.', '')}`
         : `${meta?.assetA?.symbol || '?'}_${meta?.assetB?.symbol || '?'}`;
-    return path.join(__dirname, `lp_chart_${suffix}.html`).replace(/\./g, '_').replace('_html', '.html');
+    return path.join(ANALYSIS_CHARTS_DIR, `lp_AMA_chart_${suffix}.html`).replace(/\./g, '_').replace('_html', '.html');
 }
 
 function defaultComparisonChartPath(meta, dataFile) {
     if (meta?.pool) {
         const suffix = String(meta.pool).replace('1.19.', '');
-        return path.join(ANALYSIS_AMA_FITTING_DIR, `lp_chart_pool_${suffix}.html`);
+        return path.join(ANALYSIS_CHARTS_DIR, `lp_chart_pool_${suffix}.comparison.html`);
     }
 
     const fromMetaA = String(meta?.assetA?.symbol || '').trim();
     const fromMetaB = String(meta?.assetB?.symbol || '').trim();
     if (fromMetaA && fromMetaB) {
-        return path.join(ANALYSIS_AMA_FITTING_DIR, `lp_chart_${fromMetaA}_${fromMetaB}.html`)
+        return path.join(ANALYSIS_CHARTS_DIR, `lp_chart_${fromMetaA}_${fromMetaB}.comparison.html`)
             .replace(/\./g, '_')
             .replace('_html', '.html');
     }
 
-    return path.join(ANALYSIS_AMA_FITTING_DIR, `lp_chart_${path.basename(dataFile || 'comparison', '.json')}.html`)
+    return path.join(ANALYSIS_CHARTS_DIR, `lp_chart_${path.basename(dataFile || 'comparison', '.json')}.comparison.html`)
         .replace(/\./g, '_')
         .replace('_html', '.html');
 }
@@ -335,7 +332,6 @@ function runLpChartCli(argv = process.argv.slice(2), options = {}) {
 }
 
 module.exports = {
-    ANALYSIS_AMA_FITTING_DIR,
     AMA_PROFILES_FILE,
     DEFAULT_COMPARISON_FALLBACK_STRATEGIES,
     defaultComparisonChartPath,
@@ -344,6 +340,7 @@ module.exports = {
     generateComparisonLpChart,
     generateLpChartBundle,
     generateMarketLpChart,
+    ANALYSIS_CHARTS_DIR,
     loadLpDataFile,
     parseLpChartCliArgs,
     resolveLpDataFile,

@@ -15,15 +15,16 @@
  *     [--hours 26280]  [--out my_file.json]
  *
  * Default --hours: 26280 (3 years of 1h candles)
- * Output: analysis/ama_fitting/data/<pool>_1h.json
+ * Output: market_adapter/data/<pool>_1h.json
  */
 
 const fs   = require('fs');
 const path = require('path');
 
 const kibanaSource = require('../../market_adapter/inputs/kibana_source');
+const { MARKET_ADAPTER_DATA_DIR } = require('../../market_adapter/data_paths');
 
-const DATA_DIR  = path.join(__dirname, 'data');
+const DATA_DIR  = MARKET_ADAPTER_DATA_DIR;
 const HOURS_3Y  = 3 * 365 * 24; // 26280
 
 function parseArgs() {
@@ -79,7 +80,7 @@ function printHelp() {
     console.log('  --assetBId <id>          Asset B object ID (e.g. 1.3.0)');
     console.log('  --assetBPrecision <n>    Asset B precision (e.g. 5)');
     console.log('  --hours <n>              Lookback hours (default: 26280 = 3 years)');
-    console.log('  --out <filename>         Output filename (default: <pool>_1h.json in data/)');
+    console.log('  --out <filename>         Output filename (default: <pool>_1h.json in market_adapter/data/)');
 }
 
 function validateArgs(args) {

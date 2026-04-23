@@ -6,6 +6,7 @@ const os = require('os');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const { calculateAMA } = require('./ama');
 const { toIntervalLabel } = require('../../market_adapter/interval_utils');
+const { MARKET_ADAPTER_DATA_DIR } = require('../../market_adapter/data_paths');
 
 const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_profiles.json');
 
@@ -30,7 +31,7 @@ const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_p
  *
  */
 
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = MARKET_ADAPTER_DATA_DIR;
 
 const DEFAULT_SEARCH = {
     er: { min: 500, max: 1000, count: 15, step: null, quantum: 1 },

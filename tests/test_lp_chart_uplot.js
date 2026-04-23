@@ -100,7 +100,7 @@ function testGenerateMarketLpChartUplot() {
     assert.ok(match, 'expected browser script block');
     new vm.Script(match[1]);
     assert.ok(result.amaResults.length > 0);
-    assert.ok(defaultUplotMarketChartPath(result.meta).endsWith('.uplot.html'));
+    assert.ok(defaultUplotMarketChartPath(result.meta).endsWith('.html'));
 }
 
 function main() {
