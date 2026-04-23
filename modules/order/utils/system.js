@@ -313,6 +313,117 @@ const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
     return null;
 };
 
+async function resolveLiquidityPoolByShareAsset(BitShares, shareAssetRef) {
+    if (!BitShares?.db || typeof BitShares.db.get_liquidity_pools_by_share_asset !== 'function') {
+        return null;
+    }
+
+    const shareAsset = await lookupAsset(BitShares, shareAssetRef).catch(() => null);
+    if (!shareAsset?.id) {
+        return null;
+    }
+
+    const response = await BitShares.db.get_liquidity_pools_by_share_asset([shareAsset.id], false, false).catch(() => null);
+    if (!Array.isArray(response)) {
+        return null;
+    }
+
+    const pool = response.find((entry) => entry && (entry.id || entry.pool?.id)) || null;
+    if (!pool) {
+        return null;
+    }
+
+    return {
+        shareAsset,
+        pool: pool.pool || pool,
+    };
+}
+
+async function getAssetCurrentSupply(BitShares, assetRef) {
+    const asset = typeof assetRef === 'object' && assetRef !== null
+        ? assetRef
+        : await lookupAsset(BitShares, assetRef).catch(() => null);
+    if (!asset) {
+        return null;
+    }
+
+    const directSupply = toFiniteNumber(asset.current_supply?.amount ?? asset.current_supply, null);
+    if (Number.isFinite(directSupply) && directSupply >= 0) {
+        return directSupply;
+    }
+
+    const dynamicId = asset.dynamic_asset_data_id || asset.dynamicDataId || asset.dynamic_data_id || null;
+    if (!dynamicId || typeof BitShares?.db?.get_objects !== 'function') {
+        return null;
+    }
+
+    const objects = await BitShares.db.get_objects([dynamicId]).catch(() => null);
+    const dynamicData = Array.isArray(objects) ? objects[0] : null;
+    const supply = toFiniteNumber(
+        dynamicData?.current_supply?.amount
+        ?? dynamicData?.current_supply?.value
+        ?? dynamicData?.current_supply,
+        null
+    );
+    return Number.isFinite(supply) && supply >= 0 ? supply : null;
+}
+
+async function deriveLiquidityPoolTokenValue(BitShares, shareAssetRef, denominationAssetRef, mode = 'auto') {
+    try {
+        const [shareAsset, denominationAsset] = await Promise.all([
+            lookupAsset(BitShares, shareAssetRef),
+            lookupAsset(BitShares, denominationAssetRef),
+        ]);
+
+        if (!shareAsset?.id || !denominationAsset?.id) {
+            return null;
+        }
+
+        const poolInfo = await resolveLiquidityPoolByShareAsset(BitShares, shareAsset.id);
+        if (!poolInfo?.pool) {
+            return null;
+        }
+
+        const [assetA, assetB, supply] = await Promise.all([
+            lookupAsset(BitShares, poolInfo.pool.asset_a),
+            lookupAsset(BitShares, poolInfo.pool.asset_b),
+            getAssetCurrentSupply(BitShares, shareAsset),
+        ]);
+
+        if (!assetA?.id || !assetB?.id || !Number.isFinite(supply) || supply <= 0) {
+            return null;
+        }
+
+        const reserveA = MathUtils.blockchainToFloat(poolInfo.pool.balance_a, assetA.precision);
+        const reserveB = MathUtils.blockchainToFloat(poolInfo.pool.balance_b, assetB.precision);
+        if (!isValidNumber(reserveA) || !isValidNumber(reserveB)) {
+            return null;
+        }
+
+        const priceA = String(assetA.id) === String(denominationAsset.id)
+            ? 1
+            : await derivePrice(BitShares, assetA.id, denominationAsset.id, mode).catch(() => null);
+        const priceB = String(assetB.id) === String(denominationAsset.id)
+            ? 1
+            : await derivePrice(BitShares, assetB.id, denominationAsset.id, mode).catch(() => null);
+
+        if (!isValidNumber(priceA) || !isValidNumber(priceB) || priceA <= 0 || priceB <= 0) {
+            return null;
+        }
+
+        const supplyFloat = MathUtils.blockchainToFloat(supply, shareAsset.precision);
+        if (!isValidNumber(supplyFloat) || supplyFloat <= 0) {
+            return null;
+        }
+
+        const totalValue = reserveA * priceA + reserveB * priceB;
+        const valuePerShare = totalValue / supplyFloat;
+        return isValidNumber(valuePerShare) && valuePerShare > 0 ? valuePerShare : null;
+    } catch (err) {
+        return null;
+    }
+}
+
 /**
  * Load the full dynamic grid snapshot written by price_adapter for a bot.
  * The snapshot is stored atomically at profiles/orders/<botKey>.dynamicgrid.json
@@ -914,6 +1025,8 @@ module.exports = {
     deriveMarketPrice,
     derivePoolPrice,
     derivePrice,
+    resolveLiquidityPoolByShareAsset,
+    deriveLiquidityPoolTokenValue,
     loadAmaCenterPrice,
     loadAmaCenterSnapshot,
     initializeFeeCache,

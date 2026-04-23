@@ -49,6 +49,7 @@ const invalidCreditOffer = {
             debtPolicy: {
                 creditOffer: {
                     allowedOfferIds: ['1.18.42'],
+                    maxCollateralRatio: 2.5,
                 },
             },
         },
@@ -58,6 +59,27 @@ const invalidCreditOffer = {
 assert(
     require('../modules/bot_settings').validateBotEntry(invalidCreditOffer.bots[0], 0, 'test').includes('maxFeeRate'),
     'validateBotEntry should require creditOffer.maxFeeRate'
+);
+
+const invalidCreditOfferRatio = {
+    bots: [
+        {
+            name: 'D',
+            assetA: 'BTS',
+            assetB: 'USD',
+            debtPolicy: {
+                creditOffer: {
+                    allowedOfferIds: ['1.18.42'],
+                    maxFeeRate: 30000,
+                },
+            },
+        },
+    ],
+};
+
+assert(
+    require('../modules/bot_settings').validateBotEntry(invalidCreditOfferRatio.bots[0], 0, 'test').includes('maxCollateralRatio'),
+    'validateBotEntry should require creditOffer.maxCollateralRatio'
 );
 
 console.log('bot settings tests passed');

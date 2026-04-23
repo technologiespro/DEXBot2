@@ -62,6 +62,7 @@ Recommended shape:
       "allowedCollateralAssets": ["BTS", "HONEST.LP"],
       "maxBorrowAmount": 1000,
       "maxFeeRate": 30000,
+      "maxCollateralRatio": 2.5,
       "autoReborrow": true
     }
   }
@@ -90,6 +91,9 @@ Recommended shape:
   - Optional in-band CR target used by the MPA planner when reducing or increasing debt first and then optimizing collateral.
 - `maxFeeRate`
   - Maximum fee rate permitted when accepting a credit offer.
+- `creditOffer.maxCollateralRatio`
+  - Hard ceiling for the accepted offer's effective collateral ratio after LP token collateral is valued.
+  - Applies when collateral is an LP share asset or otherwise needs pool-backed valuation.
 - `autoReborrow`
   - Worker-level flag that allows a new credit offer accept after a successful repay.
 
@@ -210,7 +214,7 @@ Task:
 - If a bot has `debtPolicy.creditOffer` settings and matching live credit offers or credit deals, the credit-offer path is fully active.
 - The bot may evaluate both paths independently when both are present.
 - `dexbot_class.js` is responsible for starting the credit runtime when the bot config contains debt-specific settings.
-- The credit runtime evaluates on the bot’s 4h maintenance cadence, not on a separate always-on loop.
+- The credit runtime evaluates on the bot's 4h maintenance cadence, not on a separate always-on loop.
 
 ### MPA borrow
 
@@ -235,12 +239,15 @@ Task:
 - When a borrow amount is explicit, derive the minimum required collateral from the offer price.
 - Enforce `maxBorrowAmount`.
 - Enforce `maxFeeRate`.
+- When collateral is a liquidity-pool share asset, resolve the pool, fetch the share supply, and compute collateral value from the underlying reserves before evaluating CR.
+- Reject the offer if the resulting collateral ratio is above `creditOffer.maxCollateralRatio`.
+- Fail closed if pool lookup, supply lookup, or collateral valuation cannot be resolved.
 
 ### Credit offer repay
 
 - Use `credit_deal_repay`.
 - Repay each tracked credit deal owned by the bot.
-- Do not add new fee configuration for repay beyond the chain’s required credit fee handling.
+- Do not add new fee configuration for repay beyond the chain's required credit fee handling.
 - After a successful repay, the runtime may reborrow the same deal again when `autoReborrow` is enabled and the offer is still valid.
 
 ### Credit deal discovery
@@ -258,6 +265,23 @@ Task:
 - Reborrow only if the same offer and policy are still valid.
 - Reborrow only if collateral and borrow ceilings still pass validation.
 - Partial repay auto-reborrow defaults to the amount that was just repaid, not the full previous deal size.
+
+### LP-backed credit valuation
+
+For credit offers that accept LP share tokens as collateral, DEXBot2 needs a deterministic valuation path before signing the borrow op.
+
+Plan:
+
+- Resolve the LP pool through the BitShares database API using the share asset as the lookup key.
+- Read the pool's `balance_a`, `balance_b`, and the share asset's `current_supply`.
+- Compute the collateral value per LP token from the underlying reserves and supply.
+- Convert that pool value into the debt asset denomination used by the offer.
+- Compare the derived effective CR against `debtPolicy.creditOffer.maxCollateralRatio`.
+- Reject the offer if the ratio exceeds the configured ceiling or if any valuation step is unavailable.
+
+Implementation note:
+
+- This belongs in the DEXBot2 runtime layer, not the signing policy layer, because the policy layer only sees the raw operation payload and cannot infer pool value on its own.
 
 ## Credit Runtime API
 
@@ -324,9 +348,10 @@ Persisted state fields:
 1. Extend bot config loading and validation to preserve `debtPolicy`.
 2. Keep the policy block JSON-only in the editor for the experimental phase.
 3. Extend the signing policy layer with the new operation constraints and op allowlists.
-4. Add native DEXBot2 credit deal discovery and worker state handling.
-5. Add credit operation builders and broadcast helpers.
-6. Add Claw profile support so the same bot model can be managed from Claw later.
+4. Add LP-backed collateral valuation helpers for credit offers.
+5. Add native DEXBot2 credit deal discovery and worker state handling.
+6. Add credit operation builders and broadcast helpers.
+7. Add Claw profile support so the same bot model can be managed from Claw later.
 
 ## Success Criteria
 
@@ -334,6 +359,7 @@ Persisted state fields:
 - MPA borrow stays fee-free in the bot model.
 - The bot has a hard minimum CR floor for MPA actions.
 - The bot has a hard minimum and maximum CR band for MPA actions.
-- Credit offers are blocked if the offered fee rate exceeds the bot’s `maxFeeRate`.
+- Credit offers are blocked if the offered fee rate exceeds the bot's `maxFeeRate`.
+- Credit offers using LP collateral are blocked if the derived collateral ratio exceeds `maxCollateralRatio`.
 - The worker can repay and then reborrow when `autoReborrow` is enabled.
 - Claw can read the same bot policy without redefining the rules.

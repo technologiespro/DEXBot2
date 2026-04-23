@@ -5,6 +5,7 @@ const path = require('path');
 const { BitShares, waitForConnected } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const { blockchainToFloat, floatToBlockchainInt, resolveConfigValue } = require('./order/utils/math');
+const { deriveLiquidityPoolTokenValue } = require('./order/utils/system');
 const { createBotKey } = require('./account_orders');
 
 const CREDIT_FEE_RATE_DENOM = 1_000_000;
@@ -479,9 +480,13 @@ class CreditRuntime {
         const allowedDebtAssets = this._normalizePolicyList(policy.allowedDebtAssets);
         const allowedCollateralAssets = this._normalizePolicyList(policy.allowedCollateralAssets);
         const maxFeeRate = positiveOrNull(policy.maxFeeRate);
+        const maxCollateralRatio = positiveOrNull(policy.maxCollateralRatio);
 
         if (maxFeeRate === null) {
             return { allow: false, reason: 'creditOffer maxFeeRate is required' };
+        }
+        if (maxCollateralRatio === null) {
+            return { allow: false, reason: 'creditOffer maxCollateralRatio is required' };
         }
 
         if (allowedOfferIds.length > 0 && offer?.id && !allowedOfferIds.includes(String(offer.id))) {
@@ -507,6 +512,28 @@ class CreditRuntime {
         }
 
         return { allow: true, reason: null };
+    }
+
+    async _calculateCollateralValueInDebtAsset(collateralAmountInt, collateralAsset, debtAsset, collateralPrice) {
+        const collateralAmountFloat = blockchainToFloat(collateralAmountInt, collateralAsset.precision);
+        if (!Number.isFinite(collateralAmountFloat) || collateralAmountFloat <= 0) {
+            return null;
+        }
+
+        if (collateralAsset?.for_liquidity_pool) {
+            const valuePerShare = await deriveLiquidityPoolTokenValue(BitShares, collateralAsset.id, debtAsset.id);
+            if (!Number.isFinite(valuePerShare) || valuePerShare <= 0) {
+                return null;
+            }
+            return collateralAmountFloat * valuePerShare;
+        }
+
+        const baseAmount = toFiniteNumber(collateralPrice?.base?.amount, null);
+        const quoteAmount = toFiniteNumber(collateralPrice?.quote?.amount, null);
+        if (!Number.isFinite(baseAmount) || !Number.isFinite(quoteAmount) || baseAmount <= 0 || quoteAmount <= 0) {
+            return null;
+        }
+        return (collateralAmountFloat * quoteAmount) / baseAmount;
     }
 
     async _fetchBorrowerDeals() {
@@ -911,6 +938,24 @@ class CreditRuntime {
         const maxCollateralAssets = this._normalizePolicyList(policy.allowedCollateralAssets);
         if (maxCollateralAssets.length > 0 && collateralAsset?.id && !maxCollateralAssets.includes(String(collateralAsset.id))) {
             throw new Error(`collateral asset ${collateralAsset.id} is not allowed`);
+        }
+
+        const maxCollateralRatioValue = positiveOrNull(policy.maxCollateralRatio);
+        if (maxCollateralRatioValue === null) {
+            throw new Error('creditOffer maxCollateralRatio is required');
+        }
+
+        const borrowAmountFloat = blockchainToFloat(borrowInt, debtAsset.precision);
+        const collateralValueInDebtAsset = await this._calculateCollateralValueInDebtAsset(requiredCollateralInt, collateralAsset, debtAsset, collateralPrice);
+        if (!Number.isFinite(borrowAmountFloat) || borrowAmountFloat <= 0 || !Number.isFinite(collateralValueInDebtAsset) || collateralValueInDebtAsset <= 0) {
+            throw new Error(collateralAsset?.for_liquidity_pool
+                ? 'Unable to value liquidity pool collateral for credit offer'
+                : 'Unable to determine collateral value for credit offer');
+        }
+
+        const collateralRatio = collateralValueInDebtAsset / borrowAmountFloat;
+        if (collateralRatio > maxCollateralRatioValue) {
+            throw new Error(`collateral ratio ${collateralRatio} exceeds maxCollateralRatio ${maxCollateralRatioValue}`);
         }
 
         const op = {

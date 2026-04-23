@@ -67,6 +67,7 @@ function installStubs(calls, dbCalls, options = {}) {
       },
     },
   };
+  const assetDynamicData = options.assetDynamicData || {};
   const offersById = options.offersById || {
     '1.18.42': {
       id: '1.18.42',
@@ -84,49 +85,70 @@ function installStubs(calls, dbCalls, options = {}) {
       },
     },
   };
+  const poolByShareAsset = options.poolByShareAsset || {};
+  const poolByAssetPair = options.poolByAssetPair || {};
+  const pairKey = (left, right) => [String(left), String(right)].sort().join('|');
+  const handleDbCall = async (method, args) => {
+    dbCalls.push({ method, args });
+    if (method === 'get_full_accounts') {
+      return [
+        ['alice', {
+          account: {
+            id: '1.2.3',
+            name: 'alice',
+            call_orders: callOrders,
+          },
+        }],
+      ];
+    }
+    if (method === 'get_assets') {
+      const ids = Array.isArray(args?.[0]) ? args[0] : [];
+      return ids.map((id) => assetsById[id] || null);
+    }
+    if (method === 'lookup_asset_symbols') {
+      const symbols = Array.isArray(args?.[0]) ? args[0] : [];
+      return symbols.map((symbol) => assetsBySymbol.get(symbol) || null);
+    }
+    if (method === 'get_objects') {
+      const ids = Array.isArray(args?.[0]) ? args[0] : [];
+      return ids.map((id) => {
+        if (bitassetObjects[id]) return bitassetObjects[id];
+        if (assetDynamicData[id]) return assetDynamicData[id];
+        if (Object.prototype.hasOwnProperty.call(offersById, id)) return offersById[id];
+        return null;
+      });
+    }
+    if (method === 'get_liquidity_pools_by_share_asset') {
+      const ids = Array.isArray(args?.[0]) ? args[0] : [];
+      return ids.map((id) => poolByShareAsset[id] || null);
+    }
+    if (method === 'get_liquidity_pool_by_asset_ids') {
+      const left = args?.[0];
+      const right = args?.[1];
+      return poolByAssetPair[pairKey(left, right)] || null;
+    }
+    if (method === 'get_credit_deals_by_borrower') {
+      const response = dealResponses[Math.min(dealResponseIndex, dealResponses.length - 1)];
+      dealResponseIndex += 1;
+      return response;
+    }
+    if (method === 'get_on_chain_asset_balances') {
+      return options.assetBalances || {};
+    }
+    return [];
+  };
 
   const originalBitshares = setCachedModule(bitsharesClientPath, {
     BitShares: {
       db: {
-        call: async (method, args) => {
-          dbCalls.push({ method, args });
-          if (method === 'get_full_accounts') {
-            return [
-              ['alice', {
-                account: {
-                  id: '1.2.3',
-                  name: 'alice',
-                  call_orders: callOrders,
-                },
-              }],
-            ];
-          }
-          if (method === 'get_assets') {
-            const ids = Array.isArray(args?.[0]) ? args[0] : [];
-            return ids.map((id) => assetsById[id] || null);
-          }
-          if (method === 'lookup_asset_symbols') {
-            const symbols = Array.isArray(args?.[0]) ? args[0] : [];
-            return symbols.map((symbol) => assetsBySymbol.get(symbol) || null);
-          }
-          if (method === 'get_objects') {
-            const ids = Array.isArray(args?.[0]) ? args[0] : [];
-            return ids.map((id) => {
-              if (bitassetObjects[id]) return bitassetObjects[id];
-              if (Object.prototype.hasOwnProperty.call(offersById, id)) return offersById[id];
-              return null;
-            });
-          }
-          if (method === 'get_credit_deals_by_borrower') {
-            const response = dealResponses[Math.min(dealResponseIndex, dealResponses.length - 1)];
-            dealResponseIndex += 1;
-            return response;
-          }
-          if (method === 'get_on_chain_asset_balances') {
-            return options.assetBalances || {};
-          }
-          return [];
-        },
+        call: handleDbCall,
+        lookup_asset_symbols: async (symbols) => handleDbCall('lookup_asset_symbols', [symbols]),
+        get_assets: async (ids) => handleDbCall('get_assets', [ids]),
+        get_objects: async (ids) => handleDbCall('get_objects', [ids]),
+        get_liquidity_pools_by_share_asset: async (ids, subscribe, withStatistics) => handleDbCall('get_liquidity_pools_by_share_asset', [ids, subscribe, withStatistics]),
+        get_liquidity_pool_by_asset_ids: async (left, right) => handleDbCall('get_liquidity_pool_by_asset_ids', [left, right]),
+        get_credit_deals_by_borrower: async (accountId) => handleDbCall('get_credit_deals_by_borrower', [accountId]),
+        get_on_chain_asset_balances: async (accountRef, assets) => handleDbCall('get_on_chain_asset_balances', [accountRef, assets]),
       },
     },
     waitForConnected: async () => {},
@@ -187,6 +209,7 @@ function createBaseBotConfig(overrides = {}) {
         allowedDebtAssets: ['1.3.10'],
         allowedCollateralAssets: ['1.3.0'],
         maxBorrowAmount: 1000,
+        maxCollateralRatio: 2.5,
         maxFeeRate: 30000,
         autoReborrow: true,
       },
@@ -332,6 +355,7 @@ async function testRepayAndReborrowFlow() {
             allowedDebtAssets: ['1.3.10'],
             allowedCollateralAssets: ['1.3.0'],
             maxBorrowAmount: 1000,
+            maxCollateralRatio: 2.5,
             maxFeeRate: 30000,
             autoReborrow: true,
           },
@@ -436,6 +460,7 @@ async function testMissingFeeCapIsRejected() {
             allowedDebtAssets: ['1.3.10'],
             allowedCollateralAssets: ['1.3.0'],
             maxBorrowAmount: 1000,
+            maxCollateralRatio: 2.5,
             autoReborrow: true,
           },
         },
@@ -529,6 +554,163 @@ async function testCreditBorrowIsDerivedFromCollateral() {
   }
 }
 
+async function testLpCollateralRatioGate() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    assetsById: {
+      '1.3.10': {
+        id: '1.3.10',
+        symbol: 'HONEST.USD',
+        precision: 2,
+        bitasset_data_id: '2.4.1',
+      },
+      '1.3.0': {
+        id: '1.3.0',
+        symbol: 'BTS',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+      '1.3.11': {
+        id: '1.3.11',
+        symbol: 'ALT',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+      '1.3.20': {
+        id: '1.3.20',
+        symbol: 'LP-USD-BTS',
+        precision: 0,
+        bitasset_data_id: null,
+        dynamic_asset_data_id: '2.4.20',
+        for_liquidity_pool: '1.19.1',
+      },
+    },
+    assetDynamicData: {
+      '2.4.20': {
+        id: '2.4.20',
+        current_supply: 10000,
+      },
+    },
+    poolByShareAsset: {
+      '1.3.20': {
+        id: '1.19.1',
+        asset_a: '1.3.0',
+        asset_b: '1.3.11',
+        balance_a: 10000,
+        balance_b: 10000,
+        share_asset: '1.3.20',
+      },
+    },
+    poolByAssetPair: {
+      '1.3.0|1.3.10': {
+        id: '1.19.2',
+        asset_a: '1.3.0',
+        asset_b: '1.3.10',
+        balance_a: 10000,
+        balance_b: 5000,
+        share_asset: '1.3.21',
+      },
+      '1.3.10|1.3.11': {
+        id: '1.19.3',
+        asset_a: '1.3.10',
+        asset_b: '1.3.11',
+        balance_a: 5000,
+        balance_b: 10000,
+        share_asset: '1.3.22',
+      },
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-lp-cr-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const offer = {
+      id: '1.18.42',
+      asset_type: '1.3.10',
+      fee_rate: 30000,
+      enabled: true,
+      min_deal_amount: 1,
+      acceptable_collateral: {
+        '1.3.20': {
+          base: { amount: 2, asset_id: '1.3.20' },
+          quote: { amount: 1, asset_id: '1.3.10' },
+        },
+      },
+    };
+
+    const rejectRuntime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-lp-reject',
+        debtPolicy: {
+          creditOffer: {
+            allowedOfferIds: ['1.18.42'],
+            allowedDebtAssets: ['1.3.10'],
+            allowedCollateralAssets: ['1.3.20'],
+            maxBorrowAmount: 1000,
+            maxCollateralRatio: 1.5,
+            maxFeeRate: 30000,
+            autoReborrow: true,
+          },
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime_reject') });
+
+    await rejectRuntime.refreshState();
+    await assert.rejects(
+      () => rejectRuntime.buildCreditOfferAcceptOperation({
+        offer,
+        borrowAmount: 100,
+      }),
+      /maxCollateralRatio/,
+      'LP-backed credit offers must be rejected when the actual CR exceeds the cap'
+    );
+
+    const acceptRuntime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-lp-accept',
+        debtPolicy: {
+          creditOffer: {
+            allowedOfferIds: ['1.18.42'],
+            allowedDebtAssets: ['1.3.10'],
+            allowedCollateralAssets: ['1.3.20'],
+            maxBorrowAmount: 1000,
+            maxCollateralRatio: 2.5,
+            maxFeeRate: 30000,
+            autoReborrow: true,
+          },
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime_accept') });
+
+    await acceptRuntime.refreshState();
+    const op = await acceptRuntime.buildCreditOfferAcceptOperation({
+      offer,
+      borrowAmount: 100,
+    });
+
+    assert.strictEqual(op.op_name, 'credit_offer_accept', 'LP-backed offer should still build a credit accept op');
+    assert.strictEqual(op.op_data.collateral.amount, 20000, 'offer collateral should be resolved from the configured price in chain units');
+    assert.strictEqual(op.op_data.borrow_amount.amount, 10000, 'borrow amount should remain intact in chain units');
+  } finally {
+    restore();
+    try {
+      fs.rmSync(baseDir, { recursive: true, force: true });
+    } catch (err) { }
+  }
+}
+
 async function testDealDisappearanceDoesNotAutoQueueReborrow() {
   const calls = [];
   const dbCalls = [];
@@ -566,6 +748,7 @@ async function testDealDisappearanceDoesNotAutoQueueReborrow() {
             allowedDebtAssets: ['1.3.10'],
             allowedCollateralAssets: ['1.3.0'],
             maxBorrowAmount: 1000,
+            maxCollateralRatio: 2.5,
             maxFeeRate: 30000,
             autoReborrow: true,
           },
@@ -633,6 +816,7 @@ async function testDeferredReborrowQueuesAfterConfirmedRepay() {
             allowedDebtAssets: ['1.3.10'],
             allowedCollateralAssets: ['1.3.0'],
             maxBorrowAmount: 1000,
+            maxCollateralRatio: 2.5,
             maxFeeRate: 30000,
             autoReborrow: true,
           },
@@ -695,6 +879,7 @@ async function testAutoReborrowQueueIsIgnoredWhenDisabled() {
             allowedDebtAssets: ['1.3.10'],
             allowedCollateralAssets: ['1.3.0'],
             maxBorrowAmount: 1000,
+            maxCollateralRatio: 2.5,
             maxFeeRate: 30000,
             autoReborrow: false,
           },
@@ -782,6 +967,7 @@ async function testStatePersistsAcrossRestart() {
   await testMultipleMpaPositionsAreBlocked();
   await testMissingFeeCapIsRejected();
   await testCreditBorrowIsDerivedFromCollateral();
+  await testLpCollateralRatioGate();
   await testDealDisappearanceDoesNotAutoQueueReborrow();
   await testDeferredReborrowQueuesAfterConfirmedRepay();
   await testAutoReborrowQueueIsIgnoredWhenDisabled();

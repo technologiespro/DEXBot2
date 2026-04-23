@@ -100,6 +100,14 @@ function validateBotEntry(b, i, src) {
                         problems.push("debtPolicy.creditOffer.maxFeeRate must be a positive number");
                     }
                 }
+                if (!('maxCollateralRatio' in creditOffer)) {
+                    problems.push("debtPolicy.creditOffer.maxCollateralRatio is required");
+                } else {
+                    const maxCollateralRatio = Number(creditOffer.maxCollateralRatio);
+                    if (!Number.isFinite(maxCollateralRatio) || maxCollateralRatio <= 0) {
+                        problems.push("debtPolicy.creditOffer.maxCollateralRatio must be a positive number");
+                    }
+                }
             }
         }
     }
