@@ -208,22 +208,13 @@ npm run lp:chart -- --data <lp-export.json>
 npm run lp:chart:uplot -- --data <lp-export.json>
 ```
 
-### Synthetic Comparison Chart
+### Local LP Comparison Chart
 **File:** `analysis/ama_fitting/generate_unified_comparison_chart.js`
-**Purpose:** Generate the synthetic comparison chart with the uPlot renderer.
+**Purpose:** Generate the local LP comparison chart from an LP candle export.
 **Output:** `analysis/charts/lp_chart_4h_UNIFIED_COMPARISON.html`
 ```bash
-# Generate the synthetic comparison chart
-npm run ama:chart:synthetic
-```
-
-### Synthetic Comparison Chart (uPlot)
-**File:** `analysis/ama_fitting/generate_unified_comparison_chart_uplot.js`
-**Purpose:** Generate the parallel uPlot synthetic comparison chart from explicit BTS/XRP inputs.
-**Output:** `analysis/charts/lp_chart_4h_UNIFIED_COMPARISON.explicit.html`
-```bash
-# Generate the synthetic comparison chart using uPlot
-npm run ama:chart:synthetic:uplot -- --bts-file <path/to/BTS.json> --xrp-file <path/to/XRP.json>
+# Generate the local LP comparison chart
+npm run ama:chart:lp-local -- --data <lp-export.json>
 ```
 
 ### Derivative Trend Analysis (uPlot)

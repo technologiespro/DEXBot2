@@ -196,10 +196,12 @@ File: <path>
 
 Research scripts for parameter tuning — output interactive HTML charts, not used in production.
 
+- `analysis/README.md` - top-level analysis index and folder map
+
 #### Dynamic Weight Research
 - `analyze_dynamic_weight.js` - Runner: loads candles, computes AMA3 + Kalman, generates chart
 - `trend_detection/dynamic_weight_chart_generator.js` - 4-panel uPlot chart with interactive knobs (α, maxS%, gain, clip%, nz%)
-- Docs: `analysis/DYNAMIC_WEIGHT_RESEARCH.md`
+- Docs: `analysis/trend_detection/DYNAMIC_WEIGHT_RESEARCH.md`
 
 #### Derivative / Signal Research
 - `analyze_derivatives_uplot.js` - SMA/MACD/RSI signal analyzer runner
@@ -207,8 +209,10 @@ Research scripts for parameter tuning — output interactive HTML charts, not us
 - `trend_detection/trend_analyzer.js` - SMA-based trend direction helper
 - `trend_detection/kalman_trend_analyzer.js` - Kalman filter with tactical/modal state tracking
 - `trend_detection/kalman_chart_generator.js` - Kalman signal chart generator
+- `trend_detection/volatility_chart_generator.js` - Volatility / symmetric shift chart generator
 - `analyze_kalman_uplot.js` - Kalman standalone analyzer runner
 - Docs: `analysis/trend_detection/SIGNAL_DOCUMENTATION.md`
+- `trend_detection/README.md` - local index for the trend detection research docs
 
 #### AMA Fitting
 - `ama_fitting/ama.js` - Kaufman Adaptive Moving Average implementation
@@ -218,7 +222,6 @@ Research scripts for parameter tuning — output interactive HTML charts, not us
 
 #### Data Sources
 - `price_sources.js` - Unified candle source abstraction (`json`, `market_adapter`)
-- `mexc_fetcher.js` - MEXC exchange candle fetcher
 
 ### Testing
 - `tests/` - Comprehensive test suite (unit, integration, scenario tests)

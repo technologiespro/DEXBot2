@@ -13,7 +13,7 @@ and export the results into `profiles/market_profiles.json` for the market adapt
                                   →   profiles/market_profiles.json  (auto-updated)
 3. scripts/generate_lp_chart.js   →   market chart + comparison chart  (visual review)
    - uPlot chart path: `npm run lp:chart:uplot`
-   - Synthetic uPlot comparison: `npm run ama:chart:synthetic:uplot -- --bts-file <path> --xrp-file <path>`
+   - Local LP comparison alias: `npm run ama:chart:lp-local -- --data <lp-export.json>`
 ```
 
 ---
@@ -65,6 +65,7 @@ Output: `market_adapter/data/lp_pool_133_iob.xrp_bts_1h.json`
 ER × Fast × Slow combinations. Produces four AMA winners (AMA1–AMA4) using
 different distance-cap quantiles, writes results to a JSON file, and
 **auto-updates `profiles/market_profiles.json`** with the winning parameters.
+Because it updates `profiles/market_profiles.json`, `--data` is required.
 
 **Run on the fetched LP data:**
 ```bash
@@ -147,15 +148,13 @@ This generates both:
 
 Under the hood, LP-data chart generation now delegates into the shared runner in
 `market_adapter/lp_chart_runner.js`. The analysis script keeps only:
-- the synthetic explicit-input mode used for analysis-only review
-- the uPlot comparison renderer used for the chart export
+- the local LP comparison mode used for analysis-only review
 
-Supported synthetic entrypoint:
+Local LP comparison entrypoint:
 
 ```bash
-npm run ama:chart:synthetic:uplot -- \
-  --bts-file /path/to/BTS.json \
-  --xrp-file /path/to/XRP.json
+npm run ama:chart:lp-local -- \
+  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
 ```
 
 Open the generated HTML in a browser to compare all four AMA overlays against the candlestick price.

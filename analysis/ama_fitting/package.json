@@ -4,9 +4,8 @@
   "description": "Tools for fitting AMA parameters to market data",
   "main": "optimizer_high_resolution.js",
   "scripts": {
-    "fetch": "node fetch_mexc_data.js",
     "optimize": "node optimizer_high_resolution.js",
-    "chart:synthetic": "node generate_unified_comparison_chart.js"
+    "chart:lp-local": "node generate_unified_comparison_chart.js"
   },
   "dependencies": {
     "ccxt": "^4.0.0"

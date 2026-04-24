@@ -15,8 +15,6 @@ const fs = require('fs');
 const path = require('path');
 const { fillCandleGaps } = require('../market_adapter/candle_utils');
 
-// ─── JSON File Source ───────────────────────────────────────────────────────
-
 class JsonFileSource {
     constructor(config = {}) {
         this.filePath = config.filePath;
@@ -30,11 +28,6 @@ class JsonFileSource {
         try {
             const data = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
 
-            // Handle three formats:
-            // 1. Direct array: [candle, candle, ...]
-            // 2. Object with .candles: { candles: [...], meta: {...} }
-            // 3. Object with .data: { data: [...], ... }
-
             let candles = null;
             let meta = null;
 
@@ -45,12 +38,11 @@ class JsonFileSource {
                 meta = data.meta;
             } else if (data.data && Array.isArray(data.data)) {
                 candles = data.data;
-                meta = data; // some exports have meta fields at the root
+                meta = data;
             } else {
                 throw new Error('Expected JSON array or object with .candles or .data property');
             }
 
-            // Fill gaps if we have enough info
             const intervalSeconds = meta?.intervalSeconds || 3600;
             const lookbackHours = meta?.lookbackHours;
 
@@ -66,18 +58,12 @@ class JsonFileSource {
         }
     }
 
-    /**
-     * Assumes candle: [timestamp, open, high, low, close, volume]
-     * or { timestamp, open, high, low, close, volume }
-     */
     extractMarketPrice(candle) {
         const close = Array.isArray(candle) ? candle[4] : candle.close;
         const ts = Array.isArray(candle) ? candle[0] : candle.timestamp;
         return { marketPrice: close, timestamp: ts };
     }
 }
-
-// ─── Market Adapter State Source ───────────────────────────────────────────
 
 class MarketAdapterSource {
     constructor(config = {}) {
@@ -86,10 +72,6 @@ class MarketAdapterSource {
         this.name = `market_adapter:${this.botKey}`;
     }
 
-    /**
-     * Load candles from market_adapter state for a specific bot.
-     * Reads from market_adapter/state/price_adapter_centers.json
-     */
     async fetchCandles() {
         const centersFile = path.join(this.stateDir, 'price_adapter_centers.json');
         if (!fs.existsSync(centersFile)) {
@@ -99,7 +81,6 @@ class MarketAdapterSource {
         try {
             const data = JSON.parse(fs.readFileSync(centersFile, 'utf8'));
 
-            // Handle both flat and nested structure
             let botData = data[this.botKey];
             if (!botData && data.bots && data.bots[this.botKey]) {
                 botData = data.bots[this.botKey];
@@ -109,7 +90,6 @@ class MarketAdapterSource {
                 throw new Error(`Bot '${this.botKey}' not found in centers file`);
             }
 
-            // Convert bot center history to candle format
             return botData.history?.map(entry => ({
                 timestamp: entry.timestamp,
                 open: entry.center,
@@ -127,8 +107,6 @@ class MarketAdapterSource {
         return { marketPrice: candle.close, timestamp: candle.timestamp };
     }
 }
-
-// ─── Kibana LP Source (stub) ────────────────────────────────────────────────
 
 class KibanaSource {
     constructor(config = {}) {
@@ -153,8 +131,6 @@ class KibanaSource {
         };
     }
 }
-
-// ─── Factory ────────────────────────────────────────────────────────────────
 
 function createSource(type, config) {
     switch (type.toLowerCase()) {

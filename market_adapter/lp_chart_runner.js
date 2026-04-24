@@ -18,7 +18,7 @@
  *
  * Non-responsibilities:
  * - rendering HTML internals (`lp_chart_core_uplot.js`)
- * - synthetic MEXC comparison mode (kept in analysis/ama_fitting)
+ * - synthetic comparison mode (kept in analysis/ama_fitting)
  * - fetch/export of LP data (`market_adapter/inputs/fetch_lp_data.js`)
  */
 
@@ -31,6 +31,7 @@ const { generateHTML } = require('./lp_chart_core_uplot');
 const { loadStrategiesForLpChart } = require('./lp_chart_strategy_loader');
 
 const ROOT = path.resolve(__dirname, '..');
+const LP_DATA_DIR = path.join(ROOT, 'market_adapter', 'data', 'lp');
 const ANALYSIS_CHARTS_DIR = path.join(ROOT, 'analysis', 'charts');
 const AMA_PROFILES_FILE = path.join(ROOT, 'profiles', 'market_profiles.json');
 const DEFAULT_COMPARISON_FALLBACK_STRATEGIES = [
@@ -66,31 +67,56 @@ function parseLpChartCliArgs(argv, options = {}) {
     return { dataFile, noOpen };
 }
 
-function findLatestLpData() {
-    const dirs = [path.join(ROOT, 'market_adapter', 'data')];
+function findLatestLpData(options = {}) {
+    const includePriceSnapshots = options.includePriceSnapshots === true;
+    const dataDir = options.dataDir ? path.resolve(options.dataDir) : LP_DATA_DIR;
     const out = [];
 
-    for (const dataDir of dirs) {
-        if (!fs.existsSync(dataDir)) continue;
-        const stack = [dataDir];
-        while (stack.length > 0) {
-            const dir = stack.pop();
-            const entries = fs.readdirSync(dir, { withFileTypes: true });
-            for (const entry of entries) {
-                const full = path.join(dir, entry.name);
-                if (entry.isDirectory()) {
-                    stack.push(full);
-                    continue;
-                }
-                if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-                if (!(entry.name.startsWith('lp_pool_') || entry.name.startsWith('lp_prices_'))) continue;
-                out.push({ path: full, mtime: fs.statSync(full).mtimeMs });
+    if (!fs.existsSync(dataDir)) return null;
+    const stack = [dataDir];
+    while (stack.length > 0) {
+        const dir = stack.pop();
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                stack.push(full);
+                continue;
             }
+            if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+            if (!entry.name.startsWith('lp_pool_') && !(includePriceSnapshots && entry.name.startsWith('lp_prices_'))) continue;
+            out.push({ path: full, mtime: fs.statSync(full).mtimeMs });
         }
     }
 
     out.sort((a, b) => b.mtime - a.mtime);
     return out.length > 0 ? out[0].path : null;
+}
+
+function normalizeLpCandle(candle, index) {
+    if (Array.isArray(candle)) {
+        if (candle.length < 5) {
+            throw new Error(`Invalid candle row at index ${index}: expected at least 5 entries`);
+        }
+        return [
+            candle[0],
+            candle[1],
+            candle[2],
+            candle[3],
+            candle[4],
+            candle[5] ?? 0,
+        ];
+    }
+
+    if (candle && typeof candle === 'object') {
+        const { timestamp, open, high, low, close, volume = 0 } = candle;
+        if ([timestamp, open, high, low, close].some((value) => value == null)) {
+            throw new Error(`Invalid candle object at index ${index}: missing OHLC fields`);
+        }
+        return [timestamp, open, high, low, close, volume];
+    }
+
+    throw new Error(`Invalid candle row at index ${index}: unsupported format`);
 }
 
 function resolveLpDataFile(dataFile) {
@@ -116,15 +142,18 @@ function loadLpDataFile(dataFile) {
     return {
         dataFile: resolved,
         meta,
-        candleArrays: candles.map((c) => [c[0], c[1], c[2], c[3], c[4], c[5] ?? 0]),
-        candleObjects: candles.map((c) => ({
-            timestamp: c[0],
-            open: c[1],
-            high: c[2],
-            low: c[3],
-            close: c[4],
-            volume: c[5] ?? 0,
-        })),
+        candleArrays: candles.map((c, index) => normalizeLpCandle(c, index)),
+        candleObjects: candles.map((c, index) => {
+            const normalized = normalizeLpCandle(c, index);
+            return {
+                timestamp: normalized[0],
+                open: normalized[1],
+                high: normalized[2],
+                low: normalized[3],
+                close: normalized[4],
+                volume: normalized[5] ?? 0,
+            };
+        }),
     };
 }
 
@@ -341,6 +370,7 @@ module.exports = {
     generateLpChartBundle,
     generateMarketLpChart,
     ANALYSIS_CHARTS_DIR,
+    LP_DATA_DIR,
     loadLpDataFile,
     parseLpChartCliArgs,
     resolveLpDataFile,

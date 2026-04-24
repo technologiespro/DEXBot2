@@ -27,7 +27,7 @@ const path = require('path');
 
 const { createSource } = require('./price_sources');
 const { calculateAMA } = require('./ama_fitting/ama');
-const { generateHTML } = require('./volatility_detection/volatility_chart_generator');
+const { generateHTML } = require('./trend_detection/volatility_chart_generator');
 const { MARKET_ADAPTER } = require('../modules/constants');
 
 const AMA_CONFIG = MARKET_ADAPTER.AMAS.AMA3;

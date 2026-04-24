@@ -6,7 +6,9 @@ const os = require('os');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const { calculateAMA } = require('./ama');
 const { toIntervalLabel } = require('../../market_adapter/interval_utils');
-const { MARKET_ADAPTER_DATA_DIR } = require('../../market_adapter/data_paths');
+const {
+    loadLpDataFile,
+} = require('../../market_adapter/lp_chart_runner');
 
 const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_profiles.json');
 
@@ -30,8 +32,6 @@ const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_p
  *   node optimizer_high_resolution.js --data ../../market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json --erMax 400 --fastMax 20 --slowMax 200
  *
  */
-
-const DATA_DIR = MARKET_ADAPTER_DATA_DIR;
 
 const DEFAULT_SEARCH = {
     er: { min: 500, max: 1000, count: 15, step: null, quantum: 1 },
@@ -208,26 +208,6 @@ function boundaryFlags(winner, erValues, fastValues, slowValues) {
 }
 
 // ── Data loaders ──────────────────────────────────────────────────────────────
-
-function toCandles(arr) {
-    return arr.map(c => ({ timestamp: c[0], open: c[1], high: c[2], low: c[3], close: c[4], volume: c[5] }));
-}
-
-function loadMexc() {
-    const bts = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'BTS_USDT.json')));
-    const xrp = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'XRP_USDT.json')));
-    const btsC = toCandles(bts);
-    const xrpM = new Map(toCandles(xrp).map(c => [c.timestamp, c]));
-    return btsC
-        .filter(b => xrpM.has(b.timestamp))
-        .map(b => { const x = xrpM.get(b.timestamp); return { timestamp: b.timestamp, open: b.open / x.open, high: b.high / x.low, low: b.low / x.high, close: b.close / x.close }; })
-        .sort((a, b) => a.timestamp - b.timestamp);
-}
-
-function loadLp(filePath) {
-    const json = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    return { candles: toCandles(json.candles ?? json), meta: json.meta ?? null };
-}
 
 function ensureDir(dirPath) {
     if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
@@ -468,7 +448,7 @@ function splitIntoShards(values, shardCount) {
 
 async function run() {
     const args = parseArgs();
-    const dataFile = args.dataFile;
+    let dataFile = args.dataFile;
     const objectives = getAmaObjectivesFromArgs(args);
 
     ensureValidRange('ER', args.er);
@@ -501,16 +481,14 @@ async function run() {
 
     // Load data
     let candles, dataLabel, dataMeta = null;
-    if (dataFile) {
-        const loaded = loadLp(path.resolve(dataFile));
-        candles   = loaded.candles;
-        const m   = loaded.meta;
-        dataMeta = m;
-        dataLabel = m ? `LP Pool ${m.pool} (${m.assetA?.symbol}/${m.assetB?.symbol})` : path.basename(dataFile);
-    } else {
-        candles   = loadMexc();
-        dataLabel = 'MEXC Synthetic XRP/BTS';
+    if (!dataFile) {
+        throw new Error('Optimizer requires --data <lp_pool_*.json> because it updates profiles/market_profiles.json.');
     }
+    const loaded = loadLpDataFile(path.resolve(dataFile));
+    candles   = loaded.candleObjects;
+    const m   = loaded.meta;
+    dataMeta = m;
+    dataLabel = m ? `LP Pool ${m.pool} (${m.assetA?.symbol}/${m.assetB?.symbol})` : path.basename(dataFile);
     const closes = candles.map(c => c.close);
     console.log(`  Data:       ${dataLabel}  (${candles.length} candles)\n`);
 
