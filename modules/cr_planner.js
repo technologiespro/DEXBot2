@@ -1,9 +1,6 @@
 'use strict';
 
-function toFiniteNumber(value, fallback = null) {
-    const num = Number(value);
-    return Number.isFinite(num) ? num : fallback;
-}
+const { toFiniteNumber } = require('./order/format');
 
 function positiveOrNull(value) {
     const num = toFiniteNumber(value, null);

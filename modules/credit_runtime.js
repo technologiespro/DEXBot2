@@ -6,6 +6,7 @@ const { BitShares, waitForConnected } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const { blockchainToFloat, floatToBlockchainInt, resolveConfigValue } = require('./order/utils/math');
 const { deriveLiquidityPoolTokenValue } = require('./order/utils/system');
+const { toFiniteNumber } = require('./order/format');
 const { createBotKey } = require('./account_orders');
 const { buildDebtFirstCrPlan, resolveTargetCollateralRatio } = require('./cr_planner');
 
@@ -13,19 +14,10 @@ const CREDIT_FEE_RATE_DENOM = 1_000_000;
 const ZERO_ASSET_ID = '1.3.0';
 const DEFAULT_STATE_DIR = path.join(__dirname, '..', 'profiles', 'credit_runtime');
 
-function ensureDirSync(dirPath) {
-    if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
-    }
-}
+const { ensureDir: ensureDirSync } = require('./order/utils/system');
 
 function deepClone(value) {
     return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-}
-
-function toFiniteNumber(value, fallback = null) {
-    const num = Number(value);
-    return Number.isFinite(num) ? num : fallback;
 }
 
 function positiveOrNull(value) {

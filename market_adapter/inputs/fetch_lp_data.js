@@ -32,7 +32,7 @@ const fs   = require('fs');
 const path = require('path');
 const kibanaSource = require('./kibana_source');
 const { toIntervalLabel, fillCandleGaps } = require('../candle_utils');
-const { parseJsonWithComments } = require('../../modules/account_bots');
+const { parseJsonWithComments } = require('../../modules/order/utils/system');
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 

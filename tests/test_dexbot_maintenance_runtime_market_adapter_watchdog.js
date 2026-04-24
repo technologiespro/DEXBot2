@@ -49,14 +49,13 @@ function loadRuntimeWithStubs() {
         retryPersistenceIfNeeded: async () => {},
         applyGridDivergenceCorrections: async () => {},
         loadAmaCenterSnapshot: () => null,
+        parseJsonWithComments: (text) => JSON.parse(text),
     });
     setCachedModule(formatPath, {});
     setCachedModule(orderUtilsPath, {
         virtualizeOrder: (order) => order,
     });
-    setCachedModule(accountBotsPath, {
-        parseJsonWithComments: (text) => JSON.parse(text),
-    });
+    setCachedModule(accountBotsPath, {});
 
     return require(runtimePath);
 }

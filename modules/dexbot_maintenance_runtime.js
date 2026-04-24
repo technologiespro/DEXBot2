@@ -13,7 +13,8 @@ const {
 } = require('./market_adapter_whitelist');
 const Format = require('./order/format');
 const { virtualizeOrder } = require('./order/utils/order');
-const { parseJsonWithComments } = require('./account_bots');
+const { parseJsonWithComments } = require('./order/utils/system');
+const { cloneWeightDistribution } = require('./order/utils/math');
 
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
 const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
@@ -231,19 +232,6 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
     } finally {
         this._marketAdapterWatchdogInFlight = false;
     }
-}
-
-function cloneWeightDistribution(weightDistribution, base = null) {
-    const source = (weightDistribution && typeof weightDistribution === 'object')
-        ? weightDistribution
-        : (base && typeof base === 'object' ? base : null);
-    if (!source) return null;
-
-    const sell = Number(source.sell);
-    const buy = Number(source.buy);
-    if (!Number.isFinite(sell) || !Number.isFinite(buy)) return null;
-
-    return { sell, buy };
 }
 
 function refreshDynamicWeightDistribution(context = 'runtime') {

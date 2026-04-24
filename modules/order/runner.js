@@ -62,7 +62,7 @@ const path = require('path');
 const { OrderManager } = require('./manager');
 const Grid = require('./grid');
 const { readBotsFileSync } = require('../bots_file_lock');
-const { parseJsonWithComments } = require('../account_bots');
+const { parseJsonWithComments } = require('./utils/system');
 const { derivePrice } = require('./utils/system');
 const { isNumeric } = require('./format');
 

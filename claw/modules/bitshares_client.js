@@ -43,9 +43,7 @@ function ensureConnectionListeners() {
   attachConnectionListeners();
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const { sleep } = require('../../modules/order/utils/system');
 
 function setSuppressConnectionLog(suppress) {
   suppressConnectionLog = Boolean(suppress);

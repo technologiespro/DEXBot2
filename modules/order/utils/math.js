@@ -4,7 +4,7 @@
  * Pure numeric calculations, blockchain conversions, fee math, and fund allocation.
  *
  * ===============================================================================
- * TABLE OF CONTENTS (37 exported functions)
+ * TABLE OF CONTENTS (38 exported functions)
  * ===============================================================================
  *
  * SECTION 1: PARSING & VALIDATION (4 functions)
@@ -1030,5 +1030,28 @@ module.exports = {
     calculateOrderCreationFees,
     deductOrderFeesFromFunds,
     _setFeeCache,
-    _getFeeCache
+    _getFeeCache,
+    cloneWeightDistribution
 };
+
+/**
+ * Safely clone a weight distribution object.
+ * Validates numeric sell/buy values and falls back to a base object if provided.
+ * Returns null if neither primary nor base yields valid numbers.
+ *
+ * @param {Object|null} weightDistribution - Primary weights (e.g. { sell, buy })
+ * @param {Object|null} base - Fallback weights if primary is missing/invalid
+ * @returns {{sell:number,buy:number}|null}
+ */
+function cloneWeightDistribution(weightDistribution, base = null) {
+    const source = (weightDistribution && typeof weightDistribution === 'object')
+        ? weightDistribution
+        : (base && typeof base === 'object' ? base : null);
+    if (!source) return null;
+
+    const sell = Number(source.sell);
+    const buy = Number(source.buy);
+    if (!Number.isFinite(sell) || !Number.isFinite(buy)) return null;
+
+    return { sell, buy };
+}

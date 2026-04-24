@@ -129,38 +129,13 @@ const {
 } = require('./constants');
 const { attemptResumePersistedGridByPriceMatch, decideStartupGridAction, reconcileStartupOrders } = require('./order/startup_reconcile');
 const { AccountOrders, createBotKey } = require('./account_orders');
-const { parseJsonWithComments } = require('./account_bots');
+const { parseJsonWithComments } = require('./order/utils/system');
+const { cloneWeightDistribution } = require('./order/utils/math');
+const { normalizeBotEntry } = require('./bot_settings');
 const Format = require('./order/format');
 
 const PROFILES_BOTS_FILE = path.join(__dirname, '..', 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
-
-// ================================================================================
-// Shared utility functions used by bot.js and dexbot.js
-// ================================================================================
-
-/**
- * Normalize bot entry with metadata (active flag and botKey)
- * @param {Object} entry - Bot configuration entry from bots.json
- * @param {number} index - Index in bots array
- * @returns {Object} Normalized entry with active, botIndex, and botKey fields
- */
-function normalizeBotEntry(entry, index = 0) {
-    const normalized = { active: entry.active === undefined ? true : !!entry.active, ...entry };
-    return { ...normalized, botIndex: index, botKey: createBotKey(normalized, index) };
-}
-
-function cloneWeightDistribution(weightDistribution, fallback = { sell: 0.5, buy: 0.5 }) {
-    const source = (weightDistribution && typeof weightDistribution === 'object')
-        ? weightDistribution
-        : fallback;
-    const sell = Number(source?.sell);
-    const buy = Number(source?.buy);
-    if (!Number.isFinite(sell) || !Number.isFinite(buy)) {
-        return { sell: 0.5, buy: 0.5 };
-    }
-    return { sell, buy };
-}
 
 class DEXBot {
     /**
@@ -174,7 +149,7 @@ class DEXBot {
         this._validateStartupConfig(config);
 
         this.config = config;
-        this._baseWeightDistribution = cloneWeightDistribution(config.weightDistribution);
+        this._baseWeightDistribution = cloneWeightDistribution(config.weightDistribution) || { sell: 0.5, buy: 0.5 };
         this.account = null;
         this.privateKey = null;
         this.manager = null;
@@ -3152,4 +3127,4 @@ class DEXBot {
 }
 
 module.exports = DEXBot;
-module.exports.normalizeBotEntry = normalizeBotEntry;
+module.exports.normalizeBotEntry = require('./bot_settings').normalizeBotEntry;

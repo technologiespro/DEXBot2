@@ -1,6 +1,6 @@
 const fs = require('fs');
 const { readBotsFileSync } = require('./bots_file_lock');
-const { parseJsonWithComments } = require('./account_bots');
+const { parseJsonWithComments } = require('./order/utils/system');
 const { createBotKey } = require('./account_orders');
 
 function loadSettingsFile(filePath, { silent = false, exitOnError = true } = {}) {
@@ -41,11 +41,13 @@ function resolveRawBotEntries(settings) {
     return [];
 }
 
+function normalizeBotEntry(entry, index = 0) {
+    const normalized = { active: entry.active === undefined ? true : !!entry.active, ...entry };
+    return { ...normalized, botIndex: index, botKey: createBotKey(normalized, index) };
+}
+
 function normalizeBotEntries(rawEntries) {
-    return rawEntries.map((entry, index) => {
-        const normalized = { active: entry.active === undefined ? true : !!entry.active, ...entry };
-        return { ...normalized, botIndex: index, botKey: createBotKey(normalized, index) };
-    });
+    return rawEntries.map((entry, index) => normalizeBotEntry(entry, index));
 }
 
 function selectBotEntry(settings, botName) {
@@ -135,6 +137,7 @@ function collectValidationIssues(entries, sourceName) {
 module.exports = {
     collectValidationIssues,
     loadSettingsFile,
+    normalizeBotEntry,
     normalizeBotEntries,
     resolveRawBotEntries,
     saveSettingsFile,

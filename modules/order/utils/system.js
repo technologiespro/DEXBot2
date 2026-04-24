@@ -4,7 +4,7 @@
  * Price derivation, persistence, grid correction, and UI/interactive utilities.
  *
  * ===============================================================================
- * TABLE OF CONTENTS (16 exported functions)
+ * TABLE OF CONTENTS (17 exported functions)
  * ===============================================================================
  *
  * SECTION 1: PRICE DERIVATION (4 functions)
@@ -31,10 +31,12 @@
  *   - readPassword(prompt) - Read password with masked echo
  *   - withRetry(fn, options) - Execute async function with exponential backoff
  *
- * SECTION 6: GENERAL UTILITIES (3 functions)
+ * SECTION 6: GENERAL UTILITIES (5 functions)
  *   - resolveAccountRef(manager, account) - Resolve best account reference
  *   - deepFreeze(obj) - Recursively freeze object for immutability
  *   - cloneMap(map) - Create shallow clone of Map
+ *   - ensureDir(dirPath) - Ensure directory exists, creating recursively
+ *   - parseJsonWithComments(raw) - Parse JSON with comment stripping
  *
  * ===============================================================================
  */
@@ -944,21 +946,23 @@ async function readPassword(prompt) { return readInput(prompt, { mask: '*', hide
 /**
  * Execute async function with exponential backoff retry logic.
  * Retries on failure with increasing delays up to maxDelayMs.
- * 
+ *
  * @param {Function} fn - Async function to retry
  * @param {Object} [options={}] - Retry options
- * @param {number} [options.maxAttempts=3] - Maximum retry attempts (default 3)
- * @param {number} [options.baseDelayMs=1000] - Base delay in milliseconds (default 1000)
- * @param {number} [options.maxDelayMs=10000] - Maximum delay in milliseconds (default 10000)
+ * @param {number} [options.maxAttempts=3] - Maximum retry attempts
+ * @param {number} [options.baseDelayMs=1000] - Base delay in milliseconds
+ * @param {number} [options.maxDelayMs=10000] - Maximum delay in milliseconds
  * @param {Object} [options.logger=null] - Optional logger for retry messages
- * @param {string} [options.operationName='operation'] - Name for log messages (default 'operation')
+ * @param {string} [options.operationName='operation'] - Name for log messages
  * @returns {Promise<*>} Result of function execution
  * @throws {Error} If all attempts fail, throws the final error
  */
 async function withRetry(fn, options = {}) {
     const { maxAttempts = 3, baseDelayMs = 1000, maxDelayMs = 10000, logger = null, operationName = 'operation' } = options;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try { return await fn(); } catch (err) {
+        try {
+            return await fn();
+        } catch (err) {
             if (attempt === maxAttempts) throw err;
             const delay = Math.min(baseDelayMs * Math.pow(2, attempt - 1), maxDelayMs);
             logger?.log?.(`${operationName} attempt ${attempt} failed. Retrying in ${delay}ms...`, 'warn');
@@ -1020,6 +1024,28 @@ function cloneMap(map) {
     return new Map(map);
 }
 
+/**
+ * Ensure a directory exists, creating it recursively if it doesn't.
+ * Safe to call when the directory already exists.
+ * @param {string} dirPath - Directory path to ensure
+ */
+function ensureDir(dirPath) {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
+}
+
+/**
+ * Parses JSON content that may contain comments (/* or //).
+ * Strips block comments then line comments before parsing.
+ * @param {string} raw - The raw string content with possible comments.
+ * @returns {Object} The parsed JSON object.
+ */
+function parseJsonWithComments(raw) {
+    const stripped = raw.replace(/\/\*(?:.|[\r\n])*?\*\//g, '').replace(/(^|\s*)\/\/.*$/gm, '');
+    return JSON.parse(stripped);
+}
+
 module.exports = {
     lookupAsset,
     deriveMarketPrice,
@@ -1041,5 +1067,7 @@ module.exports = {
     withRetry,
     resolveAccountRef,
     deepFreeze,
-    cloneMap
+    cloneMap,
+    ensureDir,
+    parseJsonWithComments
 };

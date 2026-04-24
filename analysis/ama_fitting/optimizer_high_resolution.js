@@ -207,11 +207,9 @@ function boundaryFlags(winner, erValues, fastValues, slowValues) {
     return { er, fast, slow, any: !!(er || fast || slow) };
 }
 
-// ── Data loaders ──────────────────────────────────────────────────────────────
+const { ensureDir } = require('../../modules/order/utils/system');
 
-function ensureDir(dirPath) {
-    if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
-}
+// ── Data loaders ──────────────────────────────────────────────────────────────
 
 function normalizeSymbol(value) {
     return String(value || '').trim().toUpperCase();

@@ -74,15 +74,7 @@ const { ensureProfilesDirectory, readInput } = require('./order/utils/system');
 const { DEFAULT_CONFIG, GRID_LIMITS, TIMING, LOG_LEVEL, UPDATER, MARKET_ADAPTER } = require('./constants');
 const { SETTINGS_FILE, readGeneralSettings, writeGeneralSettings } = require('./general_settings');
 
-/**
- * Parses JSON content that may contain comments (/* or //).
- * @param {string} raw - The raw string content with possible comments.
- * @returns {Object} The parsed JSON object.
- */
-function parseJsonWithComments(raw) {
-    const stripped = raw.replace(/\/\*(?:.|[\r\n])*?\*\//g, '').replace(/(^|\s*)\/\/.*$/gm, '');
-    return JSON.parse(stripped);
-}
+const { parseJsonWithComments } = require('./order/utils/system');
 
 const BOTS_FILE = path.join(__dirname, '..', 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');

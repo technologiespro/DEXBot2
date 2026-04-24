@@ -57,14 +57,15 @@ const { isPhantomOrder } = require('./order/utils/order');
 const Format = require('./order/format');
 const { toFiniteNumber } = Format;
 
+const { ensureDir } = require('./order/utils/system');
+
 /**
  * Ensures that the directory for the given file path exists.
  * @param {string} filePath - The file path to check.
  * @private
  */
 function ensureDirExists(filePath) {
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  ensureDir(path.dirname(filePath));
 }
 
 /**
@@ -590,18 +591,16 @@ class AccountOrders {
    * Calculate asset balances from a stored grid.
    * Sums order sizes by asset and state (active vs virtual).
    * @param {string} botKeyOrName - Bot key or name to look up
-   * @param {boolean} forceReload - If true, reload from disk to ensure fresh data (fixes Issue #6)
+   * @param {boolean} forceReload - If true, reload from disk to ensure fresh data
    * @returns {Object|null} Balance summary or null if not found
    */
   getDBAssetBalances(botKeyOrName, forceReload = false) {
     if (!botKeyOrName) return null;
 
-    // Optionally reload from disk to prevent using stale in-memory data
     if (forceReload) {
       this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
     }
 
-    // Find entry by key or by matching meta.name (case-insensitive)
     let key = null;
     if (this.data && this.data.bots) {
       if (this.data.bots[botKeyOrName]) key = botKeyOrName;
@@ -609,16 +608,20 @@ class AccountOrders {
         const lower = String(botKeyOrName).toLowerCase();
         for (const k of Object.keys(this.data.bots)) {
           const meta = this.data.bots[k] && this.data.bots[k].meta;
-          if (meta && meta.name && String(meta.name).toLowerCase() === lower) { key = k; break; }
+          if (meta && meta.name && String(meta.name).toLowerCase() === lower) {
+            key = k;
+            break;
+          }
         }
       }
     }
     if (!key) return null;
+
     const entry = this.data.bots[key];
     if (!entry) return null;
+
     const meta = entry.meta || {};
     const grid = Array.isArray(entry.grid) ? entry.grid : [];
-
     const sums = {
       assetA: { active: 0, virtual: 0 },
       assetB: { active: 0, virtual: 0 },

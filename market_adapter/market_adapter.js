@@ -54,7 +54,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { parseJsonWithComments } = require('../modules/account_bots');
+const { parseJsonWithComments, sleep, ensureDir } = require('../modules/order/utils/system');
 const { readGeneralSettings } = require('../modules/general_settings');
 const { MARKET_ADAPTER } = require('../modules/constants');
 const { createBotKey } = require('../modules/account_orders');
@@ -377,10 +377,6 @@ function getAmaFromProfilesForBot(bot, ctx = null, cfg = null) {
     };
 }
 
-function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function sleepUntilAlignedBoundary(pollSeconds, referenceNowMs = Date.now(), nowMs = Date.now()) {
     const intervalMs = Math.max(1, Math.floor(Number(pollSeconds) || 0)) * 1000;
     const bufferMs = 1000;
@@ -577,10 +573,6 @@ function loadActiveBots() {
     return bots
         .map((b, i) => ({ ...b, botIndex: i, botKey: createBotKey(b, i), active: b.active === undefined ? true : !!b.active }))
         .filter((b) => b.active);
-}
-
-function ensureDir(dir) {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
 function loadJson(filePath, defaultValue) {

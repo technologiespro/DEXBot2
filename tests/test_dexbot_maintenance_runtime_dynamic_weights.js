@@ -111,14 +111,13 @@ async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
                 effectiveWeights: { sell: 0.42, buy: 0.22 },
             },
         }),
+        parseJsonWithComments: (text) => JSON.parse(text),
     });
     setCachedModule(formatPath, {});
     setCachedModule(orderUtilsPath, {
         virtualizeOrder: (order) => order,
     });
-    setCachedModule(accountBotsPath, {
-        parseJsonWithComments: (text) => JSON.parse(text),
-    });
+    setCachedModule(accountBotsPath, {});
 
     const { performGridResync } = require(runtimePath);
 
