@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 to February 2026, covering **983 commits** across **2.5 months** of intensive development.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7 development cycle.
 
 ### Key Metrics
 - **Total Commits**: 1159
@@ -11,7 +11,8 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 - **Primary Developer**: froooze - 99.1% of commits
 - **Lines of Code**: ~25,000+ (core modules)
 - **Test Coverage**: 152 test files covering unit, integration, scenario, and regression tests
-- **Version Releases**: 20 tagged releases (v0.1.0 to v0.6.0)
+- **Tagged Releases**: 15 tagged releases (v0.1.0 to v0.6.0)
+- **Current Internal Version**: v0.7
 
 ---
 
@@ -122,7 +123,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 - **Mar 1**: Grid recalculation documentation, AMA and market-adapter config semantics
 - **Mar 1-3**: Shard-parallel cap-based AMA fitting and profile sync
 - **Mar 3**: Fixed-cap batching finalized, adaptive-tier references removed
-- **Mar 3**: Release v0.6.0 — gridPrice merge, market adapter signal gates
+- **Mar 3**: Release v0.6.0 — gridPrice merge and market adapter foundation
 
 #### Major Changes
 1. **Fixed-Cap Fill Batching**: Finalized at 4-fill cap; adaptive-tier system fully removed
@@ -352,13 +353,29 @@ dexbot.js (entry)
 - Copy-on-Write architecture
 - Atomic operations
 
-### v0.6.0 - Market Adapter Milestone (March 3, 2026)
+### v0.6.0 - Market Adapter Release (March 3, 2026)
+v0.6.0 is the last tagged release version. The version boundary should remain anchored to the March 3, 2026 release state.
+
 - gridPrice merge into Price section with AMA keyword support
-- Market adapter signal gates and dynamic weight output
-- Derivative signal interpretation and momentum gate
-- Regime detection (Hurst/PE) and dynamic weight regime filtering
+- Market adapter signal gates and grid recalculation trigger wiring
+- Market adapter consolidation with split data sources and whitelist fallback removal
+- AMA-derived grid center during initialization
+- Fixed-cap fill batching finalized at a 4-fill cap
+- Shard-parallel cap-based AMA fitting and profile sync
 - Credential daemon signing cache and secure runtime
 - Claw Hermes runtime manifest and skill support
+
+### v0.7 - Internal Development (March-April 2026)
+v0.7 is the active internal version after the v0.6.0 release. It collects the unreleased signal intelligence, strict runtime, and credit/debt work now under development.
+
+- Dynamic weight system with live AMA slope, Kalman confirmation, ATR penalty, and weight-only updates
+- Regime detection using Hurst Exponent and Permutation Entropy filters
+- Derivative signal interpretation with SMA, MACD, RSI, fast-SMA commitment, and momentum gates
+- Market adapter signal pipeline with full weight output, collateral recommendations, and trend/ATR exports
+- Native MPA borrowing and credit-offer runtime workflows, including accept, repay, and auto-reborrow paths
+- Bot auto-tuner and direct tuning bridge for parameter optimization
+- Strict precision and price-derivation modes with fallback/orphan lax matching removed
+- TradingView uPlot exporter, volatility research chart, and synthetic analysis cleanup
 
 ---
 
@@ -453,7 +470,7 @@ dexbot.js (entry)
 - Inline code comments
 - Limited architecture documentation
 
-### Current Documentation (February 2026)
+### Current Documentation (April 2026, v0.7)
 - **README.md**: Comprehensive user guide with icons and sections
 - **docs/architecture.md**: System architecture and module relationships
 - **docs/developer_guide.md**: Developer quick start and glossary

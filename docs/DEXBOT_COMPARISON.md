@@ -1,7 +1,7 @@
 # DEXBot vs DEXBot2 — Detailed Comparison Report
 
-> **Date:** 2026-02-19 *(metrics updated 2026-03-03)*
-> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite, v0.6.x).
+> **Date:** 2026-02-19 *(metrics updated 2026-04-24)*
+> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite). DEXBot2 v0.6.0 is the latest tagged release; current internal documentation tracks v0.7.
 > **Audience:** Developers, contributors, and operators evaluating or migrating between the two projects.
 
 ---
@@ -35,10 +35,10 @@
 
 | Attribute | DEXBot (original) | DEXBot2 |
 |---|---|---|
-| **Version** | 1.0.0 | 0.6.0+ |
+| **Version** | 1.0.0 | 0.7 internal; v0.6.0 tagged release |
 | **Language** | Python 3.6+ | Node.js (JavaScript ES2022) |
 | **Status** | Alpha / Maintenance | Active Development |
-| **Last Update** | ~May 2020 | March 2026 |
+| **Last Update** | ~May 2020 | April 2026 |
 | **License** | MIT | MIT |
 | **Origin** | BitShares worker-proposal funded, Codaone Oy | Private rewrite by froooze |
 | **Primary Goal** | Multi-strategy, extensible trading framework | Hardened, single-strategy grid bot |
@@ -635,7 +635,7 @@ Where:
 | `docs/GRID_RECALCULATION.md` | 11 KB | Three independent grid recalculation triggers |
 | `docs/TYPESCRIPT_MIGRATION_ANALYSIS.md` | 23 KB | Future TypeScript migration roadmap |
 | `AGENTS.md` | 6.5 KB | AI development context |
-| `CHANGELOG.md` | Very large | Full version history (995+ commits) |
+| `CHANGELOG.md` | Very large | Full version history (1159+ commits) |
 
 ### Documentation Comparison
 
@@ -729,10 +729,10 @@ Where:
 
 | Metric | DEXBot | DEXBot2 |
 |---|---|---|
-| **Version** | 1.0.0 | 0.6.0+ |
+| **Version** | 1.0.0 | 0.7 internal; v0.6.0 tagged release |
 | **Active Since** | ~2018 | December 2025 |
-| **Last Commit** | ~May 2020 | March 2026 |
-| **Total Commits** | Unknown (mature project) | 995+ (4 months) |
+| **Last Commit** | ~May 2020 | April 2026 |
+| **Total Commits** | Unknown (mature project) | 1159+ (5 months) |
 | **Lines of Code** | ~10,846 | ~21,000+ |
 | **Source Files** | 72 Python files | 30+ JS modules |
 | **Test Files** | ~20-30 | 102 |
@@ -769,7 +769,7 @@ Where:
 - Rust TUI dashboard not yet complete
 - No community/plugin ecosystem
 - Heavy documentation suggests significant learning curve for contributors
-- 995+ commits in 4 months suggests rapid iteration (stabilizing as COW architecture and fill batching are finalized)
+- 1159+ commits in 5 months suggests rapid iteration (stabilizing as COW architecture, signal intelligence, and credit/debt runtime work mature)
 
 ---
 

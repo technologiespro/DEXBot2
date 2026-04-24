@@ -959,7 +959,7 @@ graph TB
     SKIP --> DONE
 ```
 
-**Key Improvement (v0.6.1)**: Force reload mechanism now ensures fresh persisted grid data before comparison, preventing stale cache from causing false divergence detections.
+**Key Improvement (v0.7)**: Force reload mechanism now ensures fresh persisted grid data before comparison, preventing stale cache from causing false divergence detections.
 
 ---
 

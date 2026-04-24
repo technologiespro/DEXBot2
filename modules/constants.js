@@ -6,8 +6,11 @@
  * Local overrides can be loaded from profiles/general.settings.json
  *
  * ===============================================================================
- * EXPORTED CONSTANTS (19 configuration objects)
+ * EXPORTED CONSTANTS
  * ===============================================================================
+ *
+ * VERSION:
+ *   APP_VERSION - DEXBot2 package version from root package.json
  *
  * ENUM DEFINITIONS:
  *   1. ORDER_TYPES - Grid entry categories
@@ -117,6 +120,7 @@
  */
 
 const { readGeneralSettings } = require('./general_settings');
+const { version: APP_VERSION } = require('../package.json');
 
 function migrateDustCancelDelaySettings(gridSettings = {}) {
     const cleanGridSettings = { ...gridSettings };
@@ -1015,4 +1019,4 @@ Object.freeze(MARKET_ADAPTER.AMAS.AMA4);
 Object.freeze(MARKET_ADAPTER.AMAS);
 Object.freeze(MARKET_ADAPTER);
 
-module.exports = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE, MARKET_ADAPTER };
+module.exports = { APP_VERSION, ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE, MARKET_ADAPTER };

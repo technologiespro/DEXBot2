@@ -89,6 +89,18 @@ node scripts/analyze-orders.js
 node scripts/analyze-repo-stats.js
 ```
 
+### Version Manifest Sync
+**File:** `sync-version.js`
+**Purpose:** Keep DEXBot2-owned package and plugin manifests aligned to the root `package.json` version.
+```bash
+# Check that package-lock.json and Claw manifests match root package.json
+npm run version:check
+
+# Rewrite aligned manifests from root package.json
+npm run version:sync
+```
+**Reference:** Runtime code reads `APP_VERSION` from `modules/constants.js`, which imports the root package version.
+
 ---
 
 ## 🔍 GIT & DEVELOPMENT WORKFLOW
