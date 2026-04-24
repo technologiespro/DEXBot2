@@ -3,6 +3,7 @@ const fsPromises = require('fs/promises');
 const path = require('path');
 const { DEFAULT_CONFIG, GRID_LIMITS, INCREMENT_BOUNDS } = require('../../modules/constants');
 const { resolveRelativePrice } = require('../../modules/order/utils/math');
+const { acquireFileLock } = require('../../market_adapter/utils/file_lock');
 
 const DEFAULT_MANIFEST_FILE = 'config.json';
 const DEFAULT_BOTS_FILE = 'bots.json';
@@ -707,46 +708,6 @@ async function readJsonFile(filePath) {
   }
 }
 
-async function acquireFileLock(filePath) {
-  const lockPath = `${filePath}.lock`;
-
-  // Acquire advisory lock
-  const deadline = Date.now() + 5000;
-  while (Date.now() < deadline) {
-    try {
-      await fsPromises.writeFile(lockPath, JSON.stringify({ pid: process.pid, at: Date.now() }), { flag: 'wx' });
-      return async () => {
-        await fsPromises.unlink(lockPath).catch(() => {});
-      };
-    } catch (err) {
-      if (err.code !== 'EEXIST') throw err;
-      try {
-        const stat = await fsPromises.stat(lockPath);
-        if (Date.now() - stat.mtimeMs > 30000) {
-          // Stale lock — attempt to break it atomically by re-creating with wx.
-          // If another process grabbed it between our stat and this write, the
-          // wx flag will throw EEXIST and we retry on the next iteration.
-          try {
-            await fsPromises.unlink(lockPath);
-            await fsPromises.writeFile(lockPath, JSON.stringify({ pid: process.pid, at: Date.now() }), { flag: 'wx' });
-            return async () => {
-              await fsPromises.unlink(lockPath).catch(() => {});
-            };
-          } catch {
-            // Another writer beat us — fall through and retry
-          }
-          continue;
-        }
-      } catch {
-        continue;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  }
-
-  throw new Error(`Could not acquire lock on ${filePath} within 5000ms`);
-}
-
 async function writeJsonPayload(filePath, data) {
   const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
   try {
@@ -1299,7 +1260,6 @@ module.exports = {
   resolveProfilesDir,
   resolveRawBotEntries,
   sanitizeKey,
-  acquireFileLock,
   validateBotEntry,
   validateBotSettingsPatch,
   validateBotSettingsState,

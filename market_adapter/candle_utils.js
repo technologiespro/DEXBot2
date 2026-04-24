@@ -165,16 +165,20 @@ function fillCandleGaps(candles, intervalSeconds, startTs = null, endTs = null) 
     return filled;
 }
 
-function writeCandlesJson(filePath, payload) {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
-}
-
-function writeCandlesCsv(filePath, candles) {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    const header = 'timestamp_ms,open,high,low,close,volume_A';
-    const rows = candles.map((c) => c.join(','));
-    fs.writeFileSync(filePath, `${header}\n${rows.join('\n')}\n`);
+function mergeCandles(a, b, { onCollision } = {}) {
+    const map = new Map();
+    for (const c of [...(a || []), ...(b || [])]) {
+        if (!Array.isArray(c)) continue;
+        const ts = c[0];
+        if (!map.has(ts)) {
+            map.set(ts, c);
+        } else if (typeof onCollision === 'function') {
+            map.set(ts, onCollision(map.get(ts), c));
+        } else {
+            map.set(ts, c);
+        }
+    }
+    return [...map.values()].sort((x, y) => x[0] - y[0]);
 }
 
 module.exports = {
@@ -183,6 +187,5 @@ module.exports = {
     tradesToCandles,
     detectMissingCandleTimestamps,
     fillCandleGaps,
-    writeCandlesJson,
-    writeCandlesCsv,
+    mergeCandles,
 };

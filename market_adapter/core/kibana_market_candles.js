@@ -31,6 +31,7 @@
 const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('./kibana_client');
 const { fillCandleGaps } = require('../candle_utils');
 const { consolidateCandlesByTimestamp } = require('./consolidate_candles');
+const { bucketsToCandles, fetchKibanaCandles, fetchKibanaClosePrices } = require('./kibana_candles');
 
 const OP_FILL_ORDER = 4;
 
@@ -39,6 +40,13 @@ const DEFAULT_CONFIG = {
   intervalSeconds: 3600,   // 1h candles
   lookbackHours:   500,    // ~20 days
   consolidateByTimestamp: true,
+};
+
+const FILL_FIELD_MAP = {
+  soldAssetField: 'operation_history.op_object.pays.asset_id.keyword',
+  receivedAssetField: 'operation_history.op_object.receives.asset_id.keyword',
+  soldAmountField: 'operation_history.op_object.pays.amount',
+  receivedAmountField: 'operation_history.op_object.receives.amount',
 };
 
 // ─── Query Builders ──────────────────────────────────────────────────────────
@@ -97,21 +105,6 @@ function buildFillCandleQuery(soldAssetId, receivedAssetId, lookbackHours, inter
 
 // ─── Bucket → Candle ─────────────────────────────────────────────────────────
 
-function bucketsToCandles(buckets, soldPrecision, receivedPrecision) {
-  const soldScale = Math.pow(10, soldPrecision);
-  const recvScale = Math.pow(10, receivedPrecision);
-
-  return buckets
-    .filter((b) => b.sum_sold.value > 0 && b.sum_received.value > 0)
-    .map((b) => {
-      const soldAmt = b.sum_sold.value     / soldScale;
-      const recvAmt = b.sum_received.value / recvScale;
-      const vwap    = recvAmt / soldAmt;
-      return [b.key, vwap, vwap, vwap, vwap, soldAmt];
-      //      ts    open  high  low  close  volume
-    });
-}
-
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -126,60 +119,26 @@ function bucketsToCandles(buckets, soldPrecision, receivedPrecision) {
  * @returns {Promise<Array>} OHLCV candles in B-per-A units
  */
 async function getMarketCandles(assetA, assetB, config = {}) {
-  const cfg = { ...DEFAULT_CONFIG, ...config };
-
-  // Direction 1: A sold → B received (price = B/A)
-  const queryAtoB = buildFillCandleQuery(
-    assetA.id, assetB.id,
-    cfg.lookbackHours, cfg.intervalSeconds, cfg.timeRange ?? null
-  );
-
-  // Direction 2: B sold → A received (price = A/B, needs inversion)
-  const queryBtoA = buildFillCandleQuery(
-    assetB.id, assetA.id,
-    cfg.lookbackHours, cfg.intervalSeconds, cfg.timeRange ?? null
-  );
-
-  const [resultAtoB, resultBtoA] = await Promise.all([
-    kibanaSearch(cfg, queryAtoB),
-    kibanaSearch(cfg, queryBtoA),
-  ]);
-
-  const candlesAtoB = bucketsToCandles(
-    resultAtoB.aggregations?.by_time?.buckets ?? [],
-    assetA.precision, assetB.precision
-  );
-
-  const candlesBtoARaw = bucketsToCandles(
-    resultBtoA.aggregations?.by_time?.buckets ?? [],
-    assetB.precision, assetA.precision
-  );
-
-  // Invert B→A: price was A-per-B → convert to B-per-A
-  const candlesBtoA = candlesBtoARaw.map(([ts, o, h, l, c, volB]) => {
-    const invO = 1 / o;
-    const invH = 1 / l;   // high/low swap on inversion
-    const invL = 1 / h;
-    const invC = 1 / c;
-    const volA = invC > 0 ? (volB / invC) : 0;
-    return [ts, invO, invH, invL, invC, volA];
+  return fetchKibanaCandles({
+    opType: OP_FILL_ORDER,
+    fieldMap: FILL_FIELD_MAP,
+    assetA,
+    assetB,
+    config,
   });
-
-  const merged = [...candlesAtoB, ...candlesBtoA].sort((a, b) => a[0] - b[0]);
-  const consolidated = cfg.consolidateByTimestamp ? consolidateCandlesByTimestamp(merged) : merged;
-
-  // Fill gaps and stretch to full requested range (lookbackHours)
-  const nowMs = Date.now();
-  const startTs = nowMs - (cfg.lookbackHours * 3600 * 1000);
-  return fillCandleGaps(consolidated, cfg.intervalSeconds, startTs, nowMs);
 }
 
 /**
  * Close prices only — convenience wrapper for AMA / trend analyzer input.
  */
 async function getMarketClosePrices(assetA, assetB, config = {}) {
-  const candles = await getMarketCandles(assetA, assetB, config);
-  return candles.map(([, , , , close]) => close);
+  return fetchKibanaClosePrices({
+    opType: OP_FILL_ORDER,
+    fieldMap: FILL_FIELD_MAP,
+    assetA,
+    assetB,
+    config,
+  });
 }
 
 /**

@@ -33,6 +33,7 @@ const path = require('path');
 const kibanaSource = require('./kibana_source');
 const { toIntervalLabel, fillCandleGaps } = require('../candle_utils');
 const { parseJsonWithComments } = require('../../modules/order/utils/system');
+const { resolveAsset, findPoolByAssets } = require('../utils/chain');
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -130,85 +131,6 @@ function selectBot(bots, botName) {
     return bot;
 }
 
-// ─── Pool finder (mirrors derivePoolPrice logic from modules/order/utils/system.js) ──
-
-/**
- * Resolve asset symbol to { id, precision } via BitShares blockchain.
- */
-async function resolveAsset(BitShares, symbol) {
-    const results = await BitShares.db.lookup_asset_symbols([symbol]);
-    const asset = results?.[0];
-    if (!asset?.id || typeof asset.precision !== 'number') {
-        throw new Error(`Cannot resolve asset "${symbol}" from blockchain`);
-    }
-    return { id: asset.id, precision: asset.precision, symbol };
-}
-
-/**
- * Find the liquidity pool for an asset pair.
- * Mirrors the logic in modules/order/utils/system.js::derivePoolPrice().
- * Returns the pool object with .id and balances, or throws if not found.
- */
-async function findPool(BitShares, idA, idB) {
-    // Fast path: direct lookup by asset ID pair
-    if (typeof BitShares.db?.get_liquidity_pool_by_asset_ids === 'function') {
-        try {
-            const pool = await BitShares.db.get_liquidity_pool_by_asset_ids(idA, idB);
-            if (pool?.id) return pool;
-        } catch (e) {}
-    }
-
-    // Fast path: get_liquidity_pools_by_assets (used by the pool discovery helper)
-    if (typeof BitShares.db?.get_liquidity_pools_by_assets === 'function') {
-        try {
-            const pools = await BitShares.db.get_liquidity_pools_by_assets(idA, idB, 10, false);
-            if (pools?.length > 0) return pools[0];
-        } catch (e) {}
-    }
-
-    // Fallback: paginated scan through all pools
-    const listFn = BitShares.db?.list_liquidity_pools ?? BitShares.db?.get_liquidity_pools;
-    if (typeof listFn === 'function') {
-        let startId  = '1.19.0';
-        const PAGE   = 100;
-        const idAStr = String(idA);
-        const idBStr = String(idB);
-
-        while (true) {
-            const pools = await listFn(PAGE, startId);
-            if (!pools?.length) break;
-
-            const effective = startId === '1.19.0' ? pools : pools.slice(1);
-            const matches = effective.filter(p => {
-                const ids = (p.asset_ids ?? [p.asset_a, p.asset_b]).map(String);
-                return ids.includes(idAStr) && ids.includes(idBStr);
-            });
-
-            if (matches.length) {
-                // Pick pool with highest assetA balance
-                return matches.sort((a, b) => {
-                    const bal = (p) => {
-                        const assetA = String(p.asset_a ?? p.asset_ids?.[0] ?? '');
-                        const assetB = String(p.asset_b ?? p.asset_ids?.[1] ?? '');
-                        const value = assetA === idAStr
-                            ? Number(p.balance_a)
-                            : assetB === idAStr
-                                ? Number(p.balance_b)
-                                : Number.NEGATIVE_INFINITY;
-                        return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
-                    };
-                    return bal(b) - bal(a);
-                })[0];
-            }
-
-            if (pools.length < PAGE) break;
-            startId = pools[pools.length - 1].id;
-        }
-    }
-
-    throw new Error(`No liquidity pool found for ${idA} / ${idB}`);
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function run() {
@@ -279,8 +201,8 @@ async function run() {
         let metaA, metaB;
         try {
             [metaA, metaB] = await Promise.all([
-                resolveAsset(BitShares, bot.assetA),
-                resolveAsset(BitShares, bot.assetB),
+                resolveAsset(bot.assetA, BitShares),
+                resolveAsset(bot.assetB, BitShares),
             ]);
         } catch (err) {
             console.error(`  Asset resolution failed: ${err.message}`);
@@ -301,7 +223,7 @@ async function run() {
         console.log(`\n[2/4] Finding liquidity pool for ${bot.assetA} / ${bot.assetB}...`);
         let pool;
         try {
-            pool = await findPool(BitShares, assetA.id, assetB.id);
+            pool = await findPoolByAssets(assetA.id, assetB.id, { bitsharesClient: BitShares, sortBy: 'assetABalance' });
         } catch (err) {
             console.error(`  Pool lookup failed: ${err.message}`);
             process.exit(1);

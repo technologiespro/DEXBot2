@@ -71,8 +71,10 @@ const {
 } = require('../modules/market_adapter_whitelist');
 const kibanaSource = require('./inputs/kibana_source');
 const { normalizePoolId } = kibanaSource;
-const { tradesToCandles, detectMissingCandleTimestamps, fillCandleGaps } = require('./candle_utils');
+const { tradesToCandles, detectMissingCandleTimestamps, fillCandleGaps, mergeCandles } = require('./candle_utils');
 const { toIntervalLabel } = require('./interval_utils');
+const { resolveAsset, findPoolByAssets, resolveBotContext } = require('./utils/chain');
+const { acquireFileLockSync, releaseFileLockSync } = require('./utils/file_lock');
 
 const ROOT = path.join(__dirname, '..');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
@@ -598,144 +600,6 @@ function saveJson(filePath, data) {
     }
 }
 
-function loadLockInfo(lockPath) {
-    try {
-        const raw = fs.readFileSync(lockPath, 'utf8');
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch (_) {
-        return {};
-    }
-}
-
-function isProcessAlive(pid) {
-    if (!Number.isInteger(pid) || pid <= 0) return false;
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (_) {
-        return false;
-    }
-}
-
-function acquireFileLock(lockPath, opts = {}) {
-    const staleMs = Number.isFinite(opts.staleMs) && opts.staleMs > 0 ? opts.staleMs : (6 * 3600 * 1000);
-    const now = Date.now();
-
-    for (let pass = 0; pass < 2; pass++) {
-        try {
-            const fd = fs.openSync(lockPath, 'wx');
-            const payload = {
-                pid: process.pid,
-                createdAt: new Date(now).toISOString(),
-            };
-            fs.writeFileSync(fd, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-            const heartbeatMs = Math.max(30000, Math.floor(staleMs / 2));
-            const heartbeat = setInterval(() => {
-                try {
-                    const ts = new Date();
-                    fs.utimesSync(lockPath, ts, ts);
-                } catch (_) {}
-            }, heartbeatMs);
-            if (typeof heartbeat.unref === 'function') heartbeat.unref();
-            return { fd, lockPath, heartbeat };
-        } catch (err) {
-            if (err.code !== 'EEXIST') throw err;
-
-            const info = loadLockInfo(lockPath);
-            let stale = false;
-            try {
-                const stat = fs.statSync(lockPath);
-                stale = (now - stat.mtimeMs) > staleMs;
-            } catch (_) {
-                stale = true;
-            }
-
-            const alive = isProcessAlive(Number(info.pid));
-            if (stale || !alive) {
-                try { fs.unlinkSync(lockPath); } catch (_) {}
-                continue;
-            }
-
-            throw new Error(`market adapter already running (lock: ${lockPath}, pid: ${info.pid})`);
-        }
-    }
-
-    throw new Error(`cannot acquire lock: ${lockPath}`);
-}
-
-function releaseFileLock(lock) {
-    if (!lock) return;
-    try { if (lock.heartbeat) clearInterval(lock.heartbeat); } catch (_) {}
-    try { if (typeof lock.fd === 'number') fs.closeSync(lock.fd); } catch (_) {}
-    try { if (lock.lockPath) fs.unlinkSync(lock.lockPath); } catch (_) {}
-}
-
-async function resolveAsset(symbol) {
-    if (!symbol || typeof symbol !== 'string') {
-        throw new Error(`Cannot resolve asset: invalid or missing symbol "${symbol}"`);
-    }
-    const { BitShares } = getBitsharesClient();
-    const results = await BitShares.db.lookup_asset_symbols([symbol]);
-    const asset = results?.[0];
-    if (!asset?.id || typeof asset.precision !== 'number') {
-        throw new Error(`Cannot resolve asset "${symbol}": lookup failed`);
-    }
-    return { id: asset.id, precision: asset.precision, symbol };
-}
-
-async function findPoolByAssets(assetAId, assetBId) {
-    const { BitShares } = getBitsharesClient();
-    if (typeof BitShares.db?.get_liquidity_pool_by_asset_ids === 'function') {
-        try {
-            const pool = await BitShares.db.get_liquidity_pool_by_asset_ids(assetAId, assetBId);
-            if (pool?.id) return pool;
-        } catch (_) {}
-    }
-
-    if (typeof BitShares.db?.get_liquidity_pools_by_assets === 'function') {
-        try {
-            const pools = await BitShares.db.get_liquidity_pools_by_assets(assetAId, assetBId, 10, false);
-            if (Array.isArray(pools) && pools.length > 0) {
-                return pools.sort((x, y) => {
-                    const bal = (p) => Number(p.balance_a ?? 0) + Number(p.balance_b ?? 0);
-                    return bal(y) - bal(x);
-                })[0];
-            }
-        } catch (_) {}
-    }
-
-    const listFn = BitShares.db?.list_liquidity_pools ?? BitShares.db?.get_liquidity_pools;
-    if (typeof listFn === 'function') {
-        let startId = '1.19.0';
-        const page = 100;
-        const a = String(assetAId);
-        const b = String(assetBId);
-
-        while (true) {
-            const pools = await listFn(page, startId);
-            if (!Array.isArray(pools) || pools.length === 0) break;
-
-            const effective = startId === '1.19.0' ? pools : pools.slice(1);
-            const matches = effective.filter((p) => {
-                const ids = (p.asset_ids ?? [p.asset_a, p.asset_b]).map(String);
-                return ids.includes(a) && ids.includes(b);
-            });
-            if (matches.length > 0) {
-                return matches.sort((x, y) => {
-                    const bal = (p) => Number(p.balance_a ?? 0) + Number(p.balance_b ?? 0);
-                    return bal(y) - bal(x);
-                })[0];
-            }
-
-            if (pools.length < page) break;
-            startId = pools[pools.length - 1].id;
-        }
-    }
-
-    throw new Error(`No liquidity pool found for ${assetAId}/${assetBId}`);
-}
-
 function parseChainTimeToMs(timeStr) {
     if (!timeStr) return Number.NaN;
     const s = String(timeStr);
@@ -784,13 +648,6 @@ function resolveAmaForBot(bot, ctx = null, cfg = null) {
         amaCfg.slowPeriod = t;
     }
     return amaCfg;
-}
-
-function mergeCandles(existing, incoming) {
-    const map = new Map();
-    (existing || []).forEach((c) => { if (Array.isArray(c)) map.set(c[0], c); });
-    (incoming || []).forEach((c) => { if (Array.isArray(c)) map.set(c[0], c); });
-    return [...map.values()].sort((a, b) => a[0] - b[0]);
 }
 
 function pruneCandles(candles, keepCount) {
@@ -904,29 +761,6 @@ function writeGridResetTrigger(bot, payload) {
     };
     fs.writeFileSync(triggerPath, JSON.stringify(content, null, 2) + '\n', 'utf8');
     return triggerPath;
-}
-
-async function resolveBotContext(bot) {
-    if (!bot.assetAId && !bot.assetA) {
-        throw new Error(`Bot "${bot.botKey}" config is missing assetA symbol or ID`);
-    }
-    if (!bot.assetBId && !bot.assetB) {
-        throw new Error(`Bot "${bot.botKey}" config is missing assetB symbol or ID`);
-    }
-
-    const assetA = bot.assetAId && Number.isFinite(bot.assetAPrecision)
-        ? { id: bot.assetAId, precision: bot.assetAPrecision, symbol: bot.assetA }
-        : await resolveAsset(bot.assetA);
-
-    const assetB = bot.assetBId && Number.isFinite(bot.assetBPrecision)
-        ? { id: bot.assetBId, precision: bot.assetBPrecision, symbol: bot.assetB }
-        : await resolveAsset(bot.assetB);
-
-    const poolId = bot.poolId
-        ? normalizePoolId(bot.poolId)
-        : normalizePoolId((await findPoolByAssets(assetA.id, assetB.id)).id);
-
-    return { assetA, assetB, poolId };
 }
 
 const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
@@ -1148,7 +982,7 @@ async function runOnceForAma(overrides = {}) {
     ensureDir(DATA_DIR);
     ensureDir(STATE_DIR);
 
-    const lock = acquireFileLock(LOCK_FILE, {
+    const lock = acquireFileLockSync(LOCK_FILE, {
         staleMs: Math.max(2, cfg.pollSeconds) * 1000 * 2,
     });
     try {
@@ -1164,7 +998,7 @@ async function runOnceForAma(overrides = {}) {
             state,
         };
     } finally {
-        releaseFileLock(lock);
+        releaseFileLockSync(lock);
     }
 }
 
@@ -1175,7 +1009,7 @@ async function main() {
     ensureDir(DATA_DIR);
     ensureDir(STATE_DIR);
 
-    const lock = acquireFileLock(LOCK_FILE, {
+    const lock = acquireFileLockSync(LOCK_FILE, {
         staleMs: Math.max(2, cfg.pollSeconds) * 1000 * 2,
     });
 
@@ -1219,7 +1053,7 @@ async function main() {
             await sleep(sleepMs);
         }
     } finally {
-        releaseFileLock(lock);
+        releaseFileLockSync(lock);
     }
 }
 
@@ -1250,6 +1084,4 @@ module.exports = {
     isBotDynamicWeightWhitelisted,
     _resetCycleCache,
     writeCenterSnapshot,
-    resolveAsset,
-    resolveBotContext,
 };

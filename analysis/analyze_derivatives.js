@@ -26,6 +26,7 @@ const path = require('path');
 const { DerivativeAnalyzer } = require('./trend_detection/derivative_analyzer');
 const { generateHTML }        = require('./derivative_chart_generator');
 const { createSource }        = require('./price_sources');
+const { findLatestLpData }    = require('../market_adapter/utils/data_discovery');
 
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -230,24 +231,6 @@ async function analyze(source, config) {
         allResults,
         lastAnalysis: last,
     };
-}
-
-function findLatestLpData() {
-    const lpDir = path.join(__dirname, '..', 'market_adapter', 'data', 'lp');
-    if (!fs.existsSync(lpDir)) return null;
-    const dirs = fs.readdirSync(lpDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => path.join(lpDir, d.name));
-    let newest = null;
-    for (const dir of dirs) {
-        const files = fs.readdirSync(dir)
-            .filter((f) => f.startsWith('lp_pool_') && f.endsWith('.json'))
-            .map((f) => ({ file: path.join(dir, f), mtime: fs.statSync(path.join(dir, f)).mtime }));
-        for (const f of files) {
-            if (!newest || f.mtime > newest.mtime) newest = f;
-        }
-    }
-    return newest ? newest.file : null;
 }
 
 async function main() {

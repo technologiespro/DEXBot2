@@ -32,6 +32,7 @@
 const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('../core/kibana_client');
 const { fillCandleGaps } = require('../candle_utils');
 const { consolidateCandlesByTimestamp } = require('../core/consolidate_candles');
+const { bucketsToCandles, fetchKibanaCandles, fetchKibanaClosePrices } = require('../core/kibana_candles');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -157,21 +158,6 @@ function buildDiscoveryQuery(poolId, lookbackHours) {
 
 // ─── Bucket → Candle ──────────────────────────────────────────────────────────
 
-function bucketsToCandles(buckets, soldPrecision, receivedPrecision) {
-    const soldScale = Math.pow(10, soldPrecision);
-    const recvScale = Math.pow(10, receivedPrecision);
-
-    return buckets
-        .filter((b) => b.sum_sold.value > 0 && b.sum_received.value > 0)
-        .map((b) => {
-            const soldAmt = b.sum_sold.value     / soldScale;
-            const recvAmt = b.sum_received.value / recvScale;
-            const vwap    = recvAmt / soldAmt;
-            return [b.key, vwap, vwap, vwap, vwap, soldAmt];
-            //      ts    open  high  low  close  volume
-        });
-}
-
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -208,6 +194,14 @@ async function getLpCandles(poolId, soldAssetId, soldPrecision, receivedPrecisio
     return bucketsToCandles(buckets, soldPrecision, receivedPrecision);
 }
 
+const LP_FIELD_MAP = {
+    soldAssetField: 'operation_history.op_object.amount_to_sell.asset_id.keyword',
+    receivedAssetField: 'operation_history.op_object.min_to_receive.asset_id.keyword',
+    soldAmountField: 'operation_history.op_object.amount_to_sell.amount',
+    receivedAmountField: 'operation_history.operation_result_object.data_object.received.amount',
+    poolField: 'operation_history.op_object.pool.keyword',
+};
+
 /**
  * Fetch bidirectional LP price candles for a specific pool.
  *
@@ -222,38 +216,15 @@ async function getLpCandles(poolId, soldAssetId, soldPrecision, receivedPrecisio
  * @returns {Promise<Array>}      OHLCV candles
  */
 async function getLpCandlesForPool(poolId, assetA, assetB, config = {}) {
-    const cfg = { ...DEFAULT_CONFIG, ...config };
     const fullId = normalizePoolId(poolId);
-
-    // When poolId is null (any-pool path), filter on the counterpart asset
-    // to avoid mixing swaps from unrelated pools.
-    const pairScopeA = fullId ? null : assetB.id;
-    const pairScopeB = fullId ? null : assetA.id;
-
-    const [candlesAtoB, candlesBtoARaw] = await Promise.all([
-        getLpCandles(fullId, assetA.id, assetA.precision, assetB.precision, cfg, pairScopeA),
-        getLpCandles(fullId, assetB.id, assetB.precision, assetA.precision, cfg, pairScopeB),
-    ]);
-
-    // Invert B→A candles: price was A-per-B → convert to B-per-A
-    // high/low swap on inversion: 1/low_price > 1/high_price
-    // Convert volume from B-units to A-units for consistent merged volume_A.
-    const candlesBtoA = candlesBtoARaw.map(([ts, o, h, l, c, volB]) => {
-        const invO = 1 / o;
-        const invH = 1 / l;
-        const invL = 1 / h;
-        const invC = 1 / c;
-        const volA = invC > 0 ? (volB / invC) : 0;
-        return [ts, invO, invH, invL, invC, volA];
+    return fetchKibanaCandles({
+        opType: OP_TYPE_LP,
+        fieldMap: LP_FIELD_MAP,
+        assetA,
+        assetB,
+        config,
+        poolId: fullId,
     });
-
-    const merged = [...candlesAtoB, ...candlesBtoA].sort((a, b) => a[0] - b[0]);
-    const consolidated = cfg.consolidateByTimestamp ? consolidateCandlesByTimestamp(merged) : merged;
-
-    // Fill gaps and stretch to full requested range (lookbackHours)
-    const nowMs = Date.now();
-    const startTs = nowMs - (cfg.lookbackHours * 3600 * 1000);
-    return fillCandleGaps(consolidated, cfg.intervalSeconds, startTs, nowMs);
 }
 
 /**
@@ -266,8 +237,15 @@ async function getLpCandlesForPool(poolId, assetA, assetB, config = {}) {
  * @returns {Promise<number[]>}
  */
 async function getLpClosePricesForPool(poolId, assetA, assetB, config = {}) {
-    const candles = await getLpCandlesForPool(poolId, assetA, assetB, config);
-    return candles.map(([, , , , close]) => close);
+    const fullId = normalizePoolId(poolId);
+    return fetchKibanaClosePrices({
+        opType: OP_TYPE_LP,
+        fieldMap: LP_FIELD_MAP,
+        assetA,
+        assetB,
+        config,
+        poolId: fullId,
+    });
 }
 
 /**
@@ -286,28 +264,12 @@ async function getRawBuckets(poolId, soldAssetId, config = {}) {
     return result.aggregations?.by_time?.buckets ?? [];
 }
 
-/**
- * Bidirectional candles scoped to an asset pair (any pool).
- * Retained for analysis tooling that is not pool-id scoped.
- */
-async function getLpCandlesBidirectional(assetA, assetB, config = {}) {
-    return getLpCandlesForPool(null, assetA, assetB, config);
-}
-
-async function getLpClosePrices(assetA, assetB, config = {}) {
-    return getLpClosePricesForPool(null, assetA, assetB, config);
-}
-
 module.exports = {
     // Pool-centric API (preferred)
     discoverPoolAssets,
     getLpCandlesForPool,
     getLpClosePricesForPool,
     getRawBuckets,
-
-    // Asset-pair API (any pool)
-    getLpCandlesBidirectional,
-    getLpClosePrices,
 
     // Low-level (testing / custom queries)
     kibanaSearch,

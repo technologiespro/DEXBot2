@@ -70,7 +70,7 @@ async function testCenterSnapshotWriterUsesOnlyNewCollateralField() {
       capturedWrites.push({ rename: [src, dst] });
     };
 
-    const { writeCenterSnapshot } = require('../market_adapter/market_adapter.js');
+    const { writeCenterSnapshot } = require('../market_adapter/test_helpers.js');
     writeCenterSnapshot({
       bots: {
         testBot: {
@@ -117,7 +117,7 @@ async function testCenterSnapshotWriterIgnoresLegacyCollateralInput() {
       capturedWrites.push({ rename: [src, dst] });
     };
 
-    const { writeCenterSnapshot } = require('../market_adapter/market_adapter.js');
+    const { writeCenterSnapshot } = require('../market_adapter/test_helpers.js');
     writeCenterSnapshot({
       bots: {
         testBot: {

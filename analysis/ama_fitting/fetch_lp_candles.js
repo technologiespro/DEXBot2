@@ -22,9 +22,8 @@ const fs   = require('fs');
 const path = require('path');
 
 const kibanaSource = require('../../market_adapter/inputs/kibana_source');
-const { MARKET_ADAPTER_DATA_DIR } = require('../../market_adapter/data_paths');
 
-const DATA_DIR  = MARKET_ADAPTER_DATA_DIR;
+const DATA_DIR = path.resolve(__dirname, '../../market_adapter/data');
 const HOURS_3Y  = 3 * 365 * 24; // 26280
 
 function parseArgs() {

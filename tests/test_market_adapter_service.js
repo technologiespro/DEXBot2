@@ -13,7 +13,7 @@ const { MARKET_ADAPTER } = require('../modules/constants');
 const { calculateAMA, getAmaWarmupBars } = require('../analysis/ama_fitting/ama');
 const { KalmanTrendAnalyzer } = require('../analysis/trend_detection/kalman_trend_analyzer');
 const { buildKalmanVelocitySeries, computeAbsolutePercentileThreshold } = require('../analysis/trend_detection/kalman_velocity_smoothing');
-const { sleepUntilAlignedBoundary } = require('../market_adapter/market_adapter');
+const { sleepUntilAlignedBoundary } = require('../market_adapter/test_helpers');
 
 function generateCandles(count, price) {
     const candles = [];

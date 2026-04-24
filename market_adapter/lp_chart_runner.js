@@ -29,6 +29,7 @@ const { calculateAMA } = require('../analysis/ama_fitting/ama');
 const { MARKET_ADAPTER } = require('../modules/constants');
 const { generateHTML } = require('./lp_chart_core');
 const { loadStrategiesForLpChart } = require('./lp_chart_strategy_loader');
+const { findLatestLpData } = require('./utils/data_discovery');
 
 const ROOT = path.resolve(__dirname, '..');
 const LP_DATA_DIR = path.join(ROOT, 'market_adapter', 'data', 'lp');
@@ -73,32 +74,6 @@ function parseLpChartCliArgs(argv, options = {}) {
     }
 
     return { dataFile, noOpen };
-}
-
-function findLatestLpData(options = {}) {
-    const includePriceSnapshots = options.includePriceSnapshots === true;
-    const dataDir = options.dataDir ? path.resolve(options.dataDir) : LP_DATA_DIR;
-    const out = [];
-
-    if (!fs.existsSync(dataDir)) return null;
-    const stack = [dataDir];
-    while (stack.length > 0) {
-        const dir = stack.pop();
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-            const full = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-                stack.push(full);
-                continue;
-            }
-            if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-            if (!entry.name.startsWith('lp_pool_') && !(includePriceSnapshots && entry.name.startsWith('lp_prices_'))) continue;
-            out.push({ path: full, mtime: fs.statSync(full).mtimeMs });
-        }
-    }
-
-    out.sort((a, b) => b.mtime - a.mtime);
-    return out.length > 0 ? out[0].path : null;
 }
 
 function normalizeLpCandle(candle, index) {

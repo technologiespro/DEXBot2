@@ -144,4 +144,4 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     };
 }
 
-module.exports = { computeAmaSlopeWeights, MAX_OFFSET_FROM_NEUTRAL, MAX_SYMMETRIC_SHIFT };
+module.exports = { computeAmaSlopeWeights };

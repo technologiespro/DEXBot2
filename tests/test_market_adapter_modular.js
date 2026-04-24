@@ -1,5 +1,5 @@
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
-const { TrendDetectionService } = require('../market_adapter/core/strategies/trend_detection/analyzer');
+const { TrendAnalyzer } = require('../analysis/trend_detection/trend_analyzer');
 const { calculateATR } = require('../market_adapter/core/strategies/atr/calculator');
 
 console.log('Testing MarketAdapterService structure...');
@@ -7,7 +7,7 @@ console.log('Testing MarketAdapterService structure...');
 const service = new MarketAdapterService();
 console.log('Service instantiated:', !!service);
 
-const trend = new TrendDetectionService();
+const trend = new TrendAnalyzer();
 console.log('TrendDetection instantiated:', !!trend);
 
 const candles = [[1, 10, 15, 5, 12, 100], [2, 12, 18, 8, 15, 100], [3, 15, 20, 10, 18, 100]];

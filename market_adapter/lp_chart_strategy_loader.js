@@ -6,7 +6,7 @@ const path = require('path');
 const ANALYSIS_AMA_FITTING_DIR = path.resolve(__dirname, '..', 'analysis', 'ama_fitting');
 const MARKET_ADAPTER_DIR = path.resolve(__dirname);
 
-function normalizeSymbol(value) {
+function normalizeAssetSymbol(value) {
     return String(value || '').trim().toUpperCase();
 }
 
@@ -87,18 +87,18 @@ function loadStrategiesFromProfiles(profilesPath, meta) {
     const profiles = Array.isArray(json?.profiles) ? json.profiles : [];
     if (profiles.length === 0) return null;
 
-    const assetASymbol = normalizeSymbol(meta?.assetA?.symbol);
-    const assetBSymbol = normalizeSymbol(meta?.assetB?.symbol);
-    const assetAId = normalizeSymbol(meta?.assetA?.id);
-    const assetBId = normalizeSymbol(meta?.assetB?.id);
+    const assetASymbol = normalizeAssetSymbol(meta?.assetA?.symbol);
+    const assetBSymbol = normalizeAssetSymbol(meta?.assetB?.symbol);
+    const assetAId = normalizeAssetSymbol(meta?.assetA?.id);
+    const assetBId = normalizeAssetSymbol(meta?.assetB?.id);
     const intervalSeconds = Number(meta?.intervalSeconds);
     const intervalLabel = inferIntervalLabel(meta);
 
     const matches = profiles.filter((p) => {
-        const pA = normalizeSymbol(p?.assetA);
-        const pB = normalizeSymbol(p?.assetB);
-        const pAId = normalizeSymbol(p?.assetAId);
-        const pBId = normalizeSymbol(p?.assetBId);
+        const pA = normalizeAssetSymbol(p?.assetA);
+        const pB = normalizeAssetSymbol(p?.assetB);
+        const pAId = normalizeAssetSymbol(p?.assetAId);
+        const pBId = normalizeAssetSymbol(p?.assetBId);
 
         const bySymbol = assetASymbol && assetBSymbol && pA === assetASymbol && pB === assetBSymbol;
         const byId = assetAId && assetBId && pAId === assetAId && pBId === assetBId;

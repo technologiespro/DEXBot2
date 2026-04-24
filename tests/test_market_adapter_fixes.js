@@ -5,10 +5,13 @@ const path = require('path');
 const {
     isBotWhitelisted,
     isBotDynamicWeightWhitelisted,
+} = require('../market_adapter/market_adapter');
+
+const {
     _resetCycleCache,
     resolveAsset,
     resolveBotContext,
-} = require('../market_adapter/market_adapter');
+} = require('../market_adapter/test_helpers');
 
 const { KalmanTrendAnalyzer } = require('../analysis/trend_detection/kalman_trend_analyzer');
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');

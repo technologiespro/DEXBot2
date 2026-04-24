@@ -23,6 +23,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const { mergeCandles } = require('./candle_utils');
 
 // ─── CLI ──────────────────────────────────────────────────────────────────────
 
@@ -74,20 +75,6 @@ function validate(a, b) {
 
 // ─── Merge ────────────────────────────────────────────────────────────────────
 
-function mergeCandles(candlesA, candlesB) {
-    const map = new Map();
-    for (const c of [...candlesA, ...candlesB]) {
-        const ts = c[0];
-        if (!map.has(ts)) {
-            map.set(ts, c);
-        } else {
-            // Keep the one with higher volume (more data)
-            if (c[5] > map.get(ts)[5]) map.set(ts, c);
-        }
-    }
-    return [...map.values()].sort((a, b) => a[0] - b[0]);
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function run() {
@@ -108,7 +95,9 @@ function run() {
 
     validate(dataA, dataB);
 
-    const merged = mergeCandles(dataA.candles, dataB.candles);
+    const merged = mergeCandles(dataA.candles, dataB.candles, {
+        onCollision: (existing, incoming) => incoming[5] > existing[5] ? incoming : existing,
+    });
 
     const firstTs = new Date(merged[0][0]).toISOString();
     const lastTs  = new Date(merged[merged.length - 1][0]).toISOString();
