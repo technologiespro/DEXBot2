@@ -5,12 +5,12 @@
 DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7 development cycle.
 
 ### Key Metrics
-- **Total Commits**: 1159
+- **Total Commits**: 1166
 - **Development Period**: December 2, 2025 - April 2026 (ongoing)
 - **Active Months**: 5 (Dec 2025, Jan 2026, Feb 2026, Mar 2026, Apr 2026)
-- **Primary Developer**: froooze - 99.1% of commits
+- **Primary Developer**: froooze - 99.2% of commits
 - **Lines of Code**: ~25,000+ (core modules)
-- **Test Coverage**: 152 test files covering unit, integration, scenario, and regression tests
+- **Test Coverage**: 163 test files covering unit, integration, scenario, and regression tests
 - **Tagged Releases**: 15 tagged releases (v0.1.0 to v0.6.0)
 - **Current Internal Version**: v0.7
 
@@ -20,7 +20,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Phase 1: Foundation & Core Architecture (December 2025)
 **Duration**: December 2 - December 31, 2025  
-**Commits**: 408 (41.5% of total)  
+**Commits**: 401 (34.4% of total)
 **Focus**: Establishing core trading infrastructure, order management, and fund accounting
 
 #### Key Milestones
@@ -48,7 +48,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Phase 2: Stabilization & Advanced Features (January 2026)
 **Duration**: January 1 - January 31, 2026  
-**Commits**: 425 (43.2% of total)  
+**Commits**: 421 (36.1% of total)
 **Focus**: Bug fixes, race condition resolution, advanced trading strategies, and system hardening
 
 #### Key Milestones
@@ -83,7 +83,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Phase 3: Architecture Refinement & COW Pattern (February 2026)
 **Duration**: February 1 - February 18, 2026  
-**Commits**: 150 (15.3% of total)  
+**Commits**: 129 (11.1% of total)
 **Focus**: Copy-on-Write architecture, code quality, and production hardening
 
 #### Key Milestones
@@ -113,7 +113,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Phase 4: Market Adapter & Production Hardening (Late Feb - March 2026)
 **Duration**: February 19 - March 3, 2026
-**Commits**: 50+
+**Commits**: 48 (4.1% of total)
 **Focus**: AMA integration, market adapter consolidation, fill processing finalization, credential daemon hardening
 
 #### Key Milestones
@@ -138,9 +138,9 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 ---
 
 ### Phase 5: Signal Intelligence & Debt Runtime (March - April 2026)
-**Duration**: March 3 - April 24, 2026 (ongoing)
-**Commits**: 173+
-**Focus**: Dynamic weight regime detection, derivative signals, market adapter signal pipeline, credit/debt runtime
+**Duration**: March 4 - April 24, 2026 (ongoing)
+**Commits**: 167 (14.3% of total)
+**Focus**: Dynamic weight regime detection, derivative signals, market adapter signal pipeline, credential/Claw hardening, credit/debt runtime
 
 #### Key Milestones
 - **Mar 4-10**: Dynamic weight research tooling — Kalman-AMA composite, uPlot charts
@@ -148,10 +148,14 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 - **Mar 16-20**: Dynamic weight production parity — regime gate, percentile clip, weight-only updates
 - **Mar 21-25**: Derivative analysis engine — SMA, MACD, RSI signal interpretation, momentum gate
 - **Mar 26-31**: Market adapter signal hardening — slope model, ATR volatility, collateral advisory
-- **Apr 1-10**: Credit/debt runtime — MPA borrowing, credit offer accept/repay, auto-reborrow
-- **Apr 11-15**: Fallback removal — precision fallbacks, orphan lax tolerance, strict mode semantics
+- **Apr 1-4**: Fill replay hardening, runtime extraction, Claw bridge expansion, credential daemon strict policy/session hardening
+- **Apr 5-10**: Derivative signal engine and market-profile offset controls — SMA/MACD/RSI, momentum gate, dry-run output separation
+- **Apr 11-15**: Fallback removal and dynamic grid groundwork — precision fallbacks, legacy runtime removal, dynamicgrid snapshots
 - **Apr 16-20**: Dynamic weight runtime alignment — research-to-production parity, volatility chart
-- **Apr 21-24**: Synthetic analysis cleanup, TradingView exporter, research doc reorganization
+- **Apr 20**: Credit/debt runtime — MPA borrowing, credit offer accept/repay, auto-reborrow
+- **Apr 21-22**: Dynamic weight snapshot persistence, warmup/closed-candle alignment, rebalance refresh wiring
+- **Apr 23**: Credit-offer and CR safety hardening — LP credit-offer CR ceiling, safe borrow sizing, shared adapter whitelist
+- **Apr 24**: Market adapter patch hardening, maintenance deferral during active fills, chart entrypoint simplification, Claw validation/tests, v0.7 metadata
 
 #### Major Changes
 1. **Dynamic Weight System**: Live AMA slope + Kalman confirmation with ATR symmetric penalty
@@ -161,7 +165,9 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 5. **Credit/Debt Runtime**: Native MPA and credit-offer workflows with `modules/credit_runtime.js`
 6. **Bot Auto-Tuner**: Direct tuning and reasoning bridge for parameter optimization
 7. **Fallback Removal**: Strict precision, explicit price derivation modes, no orphan lax matching
-8. **Analysis Tooling**: TradingView uPlot exporter, volatility research chart, regime window analyzer
+8. **Credential/Claw Hardening**: Strict daemon policy, daemon signing cache, secure credential runtime, Claw bridge/runtime support
+9. **Analysis Tooling**: TradingView uPlot exporter, volatility research chart, regime window analyzer, simplified chart entrypoints
+10. **Maintenance Safety**: Grid maintenance defers structural work during active fills and dust-cancel windows
 
 ---
 
@@ -181,12 +187,12 @@ dexbot.js (entry)
 ### Current Architecture (April 2026)
 ```
 dexbot.js (entry)
-    ├── modules/dexbot_class.js (core bot class - 3,133 lines)
+    ├── modules/dexbot_class.js (core bot class - 3,155 lines)
     ├── modules/dexbot_fill_runtime.js (fill processing - 142 lines)
-    ├── modules/dexbot_maintenance_runtime.js (maintenance loops - 863 lines)
-    ├── modules/constants.js (centralized configuration - 1,013 lines)
+    ├── modules/dexbot_maintenance_runtime.js (maintenance loops - 1,001 lines)
+    ├── modules/constants.js (centralized configuration - 1,022 lines)
     ├── modules/chain_orders.js (blockchain operations - 1,104 lines)
-    ├── modules/chain_keys.js (authentication - 632 lines)
+    ├── modules/chain_keys.js (authentication - 1,047 lines)
     ├── modules/account_orders.js (order queries - 682 lines)
     ├── modules/account_bots.js (bot management - 1,223 lines)
     ├── modules/node_manager.js (multi-node failover - 455 lines)
@@ -215,15 +221,15 @@ dexbot.js (entry)
         ├── startup_reconcile.js (startup reconciliation - 1,317 lines)
         ├── working_grid.js (COW wrapper - 238 lines)
         ├── processed_fill_store.js (fill dedupe persistence - 161 lines)
-        ├── logger.js (logging system - 504 lines)
+        ├── logger.js (logging system - 512 lines)
         ├── format.js (formatting utilities - 319 lines)
-        ├── export.js (data export - 326 lines)
+        ├── export.js (data export - 327 lines)
         ├── runner.js (order execution - 141 lines)
         ├── async_lock.js (concurrency control - 200 lines)
         └── utils/
-            ├── math.js (precision, RMS, fund math - 1,029 lines)
-            ├── order.js (order predicates, helpers - 1,108 lines)
-            ├── system.js (price derivation, fill dedup - 900 lines)
+            ├── math.js (precision, RMS, fund math - 1,034 lines)
+            ├── order.js (order predicates, helpers - 1,133 lines)
+            ├── system.js (price derivation, fill dedup - 1,045 lines)
             └── validate.js (COW action building - 1,022 lines)
 ```
 
@@ -300,13 +306,24 @@ dexbot.js (entry)
 - ✅ Claw runtime expansion (Hermes, launcher bridge)
 
 ### April 2026 Features
+- ✅ Fill replay hardening and fill/maintenance runtime extraction
+- ✅ Credential daemon strict policy, session hardening, signing cache, and memory safety
+- ✅ Claw runtime bridge expansion (NullClaw, Hermes manifest, launcher command bridge, skill support)
 - ✅ Credit/debt runtime (MPA borrowing, credit offer accept/repay, auto-reborrow)
 - ✅ Dynamic weight production parity (regime gate, percentile clip, weight-only updates)
 - ✅ Fallback removal (precision strictness, explicit price modes, no orphan lax matching)
 - ✅ Bot auto-tuner with direct tuning bridge
+- ✅ Market profile offset policy and dry-run/write-output separation
+- ✅ Dynamicgrid snapshots, per-bot offset caps, and live dynamic weight overlay
+- ✅ Shared market adapter whitelist and dynamic weight rebalance refresh wiring
+- ✅ Closed-candle processing, dynamic-weight warmup, and snapshot persistence hardening
+- ✅ Credit-offer safety checks (LP CR ceiling, safe borrow sizing)
+- ✅ Grid maintenance deferral during active fills and dust-cancel windows
+- ✅ Claw validation hardening and test coverage refresh
 - ✅ TradingView uPlot exporter
-- ✅ Volatility research chart and dynamic weight override wiring
-- ✅ Synthetic analysis path removal and research doc reorganization
+- ✅ Volatility research chart, dynamic weight override wiring, and chart parity coverage
+- ✅ Synthetic analysis path removal, chart entrypoint simplification, and research doc reorganization
+- ✅ v0.7 internal version metadata and merge-readiness test-suite stabilization
 
 ---
 
@@ -385,38 +402,38 @@ v0.7 is the active internal version after the v0.6.0 release. It collects the un
 
 | Type | December | January | February | March | April | Total | Percentage |
 |------|----------|---------|----------|-------|-------|-------|------------|
-| feat | 23 | 54 | 15 | 45 | 38 | 175 | 15.1% |
-| fix | 38 | 151 | 59 | 72 | 68 | 388 | 33.5% |
-| refactor | 13 | 56 | 22 | 28 | 24 | 143 | 12.3% |
-| docs | 42 | 46 | 18 | 15 | 12 | 133 | 11.5% |
-| chore | 9 | 8 | 0 | 3 | 2 | 22 | 1.9% |
-| Other | 283 | 110 | 36 | 20 | 29 | 478 | 41.2% |
+| feat | 25 | 61 | 15 | 17 | 39 | 157 | 13.5% |
+| fix | 38 | 169 | 87 | 15 | 53 | 362 | 31.0% |
+| refactor | 15 | 58 | 32 | 9 | 18 | 132 | 11.3% |
+| docs | 43 | 46 | 26 | 11 | 10 | 136 | 11.7% |
+| chore | 16 | 8 | 1 | 3 | 1 | 29 | 2.5% |
+| Other | 264 | 79 | 3 | 2 | 2 | 350 | 30.0% |
 
 ### Monthly Activity
 
 | Month | Commits | Percentage | Avg/Day |
 |-------|---------|------------|---------|
-| December 2025 | 408 | 35.2% | 13.2 |
-| January 2026 | 425 | 36.7% | 13.7 |
-| February 2026 | 150 | 12.9% | 8.3 |
-| March 2026 | 183 | 15.8% | 5.9 |
-| April 2026 | 24 | 2.1% | 1.0 |
+| December 2025 | 401 | 34.4% | 13.4 |
+| January 2026 | 421 | 36.1% | 13.6 |
+| February 2026 | 164 | 14.1% | 5.9 |
+| March 2026 | 57 | 4.9% | 1.8 |
+| April 2026 | 123 | 10.5% | 5.1 |
 
 *Note: April 2026 figure is partial (through April 24).*
 
 ### Code Metrics
 
 #### Largest Files (by line count)
-1. **modules/dexbot_class.js**: 3,133 lines
+1. **modules/dexbot_class.js**: 3,155 lines
 2. **modules/order/grid.js**: 1,833 lines
 3. **modules/order/manager.js**: 1,496 lines
 4. **modules/order/startup_reconcile.js**: 1,317 lines
 5. **modules/account_bots.js**: 1,223 lines
 6. **modules/order/sync_engine.js**: 1,122 lines
-7. **modules/order/utils/order.js**: 1,108 lines
+7. **modules/order/utils/order.js**: 1,133 lines
 
 #### Test Coverage
-- **Total Test Files**: 152
+- **Total Test Files**: 163
 - **Test Categories**:
   - Unit tests (logic ported from Jest)
   - Integration tests (fill processing, grid, manager)
@@ -482,7 +499,7 @@ v0.7 is the active internal version after the v0.6.0 release. It collects the un
 - **Inline JSDoc**: Comprehensive function documentation
 
 ### Documentation Statistics
-- **Total Documentation Commits**: 106 (10.8% of total)
+- **Total Documentation Commits**: 136 (11.7% of total)
 - **README Updates**: 50+ commits
 - **JSDoc Coverage**: 80%+ of exported functions
 - **Architecture Docs**: 15+ pages
@@ -559,7 +576,7 @@ v0.7 is the active internal version after the v0.6.0 release. It collects the un
 - [x] Complete COW architecture migration *(done Feb 2026)*
 - [ ] Enhance dashboard with real-time metrics
 - [ ] Implement additional trading strategies
-- [x] Expand test coverage *(152 test files as of Apr 2026)*
+- [x] Expand test coverage *(163 test files as of Apr 2026)*
 - [ ] Performance optimization for high-frequency trading
 
 ### Medium-Term (3-6 Months)
@@ -606,10 +623,10 @@ v0.7 is the active internal version after the v0.6.0 release. It collects the un
 ## Acknowledgments
 
 ### Primary Developer
-- **froooze**: 974 commits (99.1%)
+- **froooze**: 1,157 commits (99.2%)
 
 ### Contributors
-- **froooze** (via GitHub): 9 commits (0.9%)
+- **froooze** (via GitHub): 9 commits (0.8%)
 
 ### Tools & Technologies
 - **BitShares Blockchain**: Decentralized exchange platform
@@ -624,12 +641,12 @@ v0.7 is the active internal version after the v0.6.0 release. It collects the un
 
 DEXBot2 has evolved from a basic trading bot to a sophisticated, production-ready system with:
 
-- **Robust Architecture**: Modular, maintainable, and scalable (~25,000+ lines across 40+ modules)
-- **Comprehensive Testing**: 152 test files covering all critical paths
+- **Robust Architecture**: Modular, maintainable, and scalable (~25,000+ lines across 80+ runtime modules)
+- **Comprehensive Testing**: 163 test files covering all critical paths
 - **Production Hardening**: Battle-tested with real funds on mainnet
 - **Advanced Features**: COW architecture, self-healing, multi-node support, AMA market adaptation, dynamic weight regime detection, derivative signals, credit/debt runtime
 - **Excellent Documentation**: Comprehensive guides for users and developers
-- **Active Development**: 1159 commits over 5 months
+- **Active Development**: 1166 commits over 5 months
 
 The project demonstrates strong engineering practices, continuous improvement, and a commitment to quality. The Copy-on-Write architecture, dynamic weight signal pipeline, and native credit/debt runtime represent the current production-grade foundation.
 
@@ -637,6 +654,6 @@ The project demonstrates strong engineering practices, continuous improvement, a
 
 **Report Originally Generated**: February 19, 2026
 **Last Updated**: April 24, 2026
-**Total Commits**: 1159
+**Total Commits**: 1166
 **Date Range**: December 2, 2025 - April 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)
