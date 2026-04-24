@@ -117,7 +117,7 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
 
     // 5. Volatility penalty — symmetric downward shift from ATR/price ratio.
     //    Formula: symmetricDelta = -weightVariance^exponent * scaleX
-    
+
     // Sync clamps with research tools:
     // Exponent: 0.5 to 1.0 (prevents over-aggressive scaling on low ATR)
     // ScaleX: 1.0 to 100.0

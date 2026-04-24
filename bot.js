@@ -121,7 +121,8 @@ async function getSigningSecretForAccount(accountName) {
             const sessionId = await chainKeys.probeAccountInDaemon(accountName);
             const botHmacSecret = credentialPolicy.loadBotHmacSecret(
                 accountName,
-                path.join(__dirname, 'profiles', 'daemon-policies.json')
+                path.join(__dirname, 'profiles', 'daemon-policies.json'),
+                { quiet: true }
             );
             return chainKeys.createDaemonSigningToken(accountName, { sessionId, botHmacSecret });
         } catch (err) {

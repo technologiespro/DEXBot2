@@ -1586,7 +1586,8 @@ class DEXBot {
                         const sessionId = await chainKeys.probeAccountInDaemon(this.config.preferredAccount);
                         const botHmacSecret = credentialPolicy.loadBotHmacSecret(
                             this.config.preferredAccount,
-                            path.join(__dirname, '..', 'profiles', 'daemon-policies.json')
+                            path.join(__dirname, '..', 'profiles', 'daemon-policies.json'),
+                            { quiet: true }
                         );
                         privateKey = chainKeys.createDaemonSigningToken(this.config.preferredAccount, {
                             sessionId,

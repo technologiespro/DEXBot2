@@ -285,7 +285,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 <div class="legend-item">xMult: <span id="l-mult" class="legend-val" style="font-weight:bold;color:#d2a8ff;">-</span></div>
                 <div class="legend-item">S: <span id="l-sell" class="legend-val" style="color:#ff7b72;">-</span></div>
                 <div class="legend-item">B: <span id="l-buy" class="legend-val" style="color:#58a6ff;">-</span></div>
-                
+
                 <div class="group-sep"></div>
                 <div class="ctrl alpha"><label for="alpha-slider">α</label><input type="range" id="alpha-slider" min="0" max="100" value="${Math.round(defaultAlpha * 100)}" title="Alpha Mix (AMA vs Kalman)"><span class="val" id="alpha-value">${defaultAlpha.toFixed(2)}</span></div>
                 <div class="ctrl dw"><label for="dw-slider">dw</label><input type="range" id="dw-slider" min="0" max="100" value="${Math.round(defaultDispWeight * 100)}" title="Displacement Weight"><span class="val" id="dw-value">${defaultDispWeight.toFixed(2)}</span></div>

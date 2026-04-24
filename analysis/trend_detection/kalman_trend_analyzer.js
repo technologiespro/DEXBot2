@@ -4,12 +4,12 @@ const { smoothKalmanVelocityPoint } = require('./kalman_velocity_smoothing');
 
 /**
  * Kalman Trend Analyzer
- * 
+ *
  * Implements a Constant Velocity Kalman Filter to estimate price and velocity.
  * Projects tangential "beams" (trajectories) forward in time.
- * 
+ *
  * The Kalman filter is optimal for "State Estimation" in noisy environments
- * (like crypto markets). It separates the "true" price and velocity from 
+ * (like crypto markets). It separates the "true" price and velocity from
  * the high-frequency "noise" (wicks).
  */
 
@@ -21,13 +21,13 @@ class KalmanFilter {
      */
     constructor(opts = {}) {
         // R represents our confidence in the data (High R = ignore noise, but more lag)
-        this.R = opts.R ?? 0.05; 
-        
+        this.R = opts.R ?? 0.05;
+
         // Q represents how much we expect the velocity to change (High Q = adapt faster)
-        this.Q = opts.Q ?? 0.005; 
+        this.Q = opts.Q ?? 0.005;
 
         // State vector [x, v]: [position, velocity]
-        this.x = 0; 
+        this.x = 0;
         this.v = 0;
 
         // Covariance matrix P (estimates error in our state)
@@ -116,7 +116,7 @@ class KalmanTrendAnalyzer {
             ? config.warmupBars
             : 20;
         this.updateCount = 0;
-        
+
         this.currPrice = null;
         this.tactical = { x: 0, v: 0 };
         this.modal = { x: 0, v: 0 };
@@ -133,7 +133,7 @@ class KalmanTrendAnalyzer {
 
         this.currPrice = price;
         const prevTactical = { ...this.tactical };
-        
+
         this.tactical = this.tacticalKf.update(price);
         this.modal = this.modalKf.update(price);
 
@@ -175,7 +175,7 @@ class KalmanTrendAnalyzer {
         const displacement = this.currPrice - this.modal.x;
         const displacementPct = this.modal.x > 0 ? (displacement / this.modal.x) * 100 : 0;
         const rawVelocityPct = this.modal.x > 0 ? (this.tactical.v / this.modal.x) * 100 : 0;
-        
+
         // Signal Regime Logic
         let signal = 'NEUTRAL';
         if (displacementPct > 0.5 && this.tactical.v > 0) signal = 'BULLISH_DISPLACEMENT';
@@ -203,7 +203,7 @@ class KalmanTrendAnalyzer {
             }
         };
     }
-    
+
     reset() {
         this.tacticalKf = new KalmanFilter();
         this.modalKf = new KalmanFilter();

@@ -987,7 +987,11 @@ function evaluateExecutable(exePath, context) {
  * @param {string} policyConfigPath - Path to daemon-policies.json
  * @returns {string|null} The botHmacSecret, or null if not configured
  */
-function loadBotHmacSecret(accountName, policyConfigPath) {
+function loadBotHmacSecret(accountName, policyConfigPath, options = {}) {
+    const quiet = options.quiet === true || options.silent === true;
+    const info = (...args) => {
+        if (!quiet) console.log(...args);
+    };
     let config = loadPolicyConfig(policyConfigPath);
     if (!config) config = {};
     if (!config.accounts) config.accounts = {};
@@ -998,22 +1002,22 @@ function loadBotHmacSecret(accountName, policyConfigPath) {
     if (!secret) {
         const newSecret = crypto.randomBytes(32).toString('hex');
         config.accounts[accountName].botHmacSecret = newSecret;
-        
+
         fs.writeFileSync(policyConfigPath, JSON.stringify(config, null, 2), 'utf8');
-        console.log(`[policy] Auto-provisioned strict botHmacSecret for ${accountName}`);
+        info(`[policy] Auto-provisioned strict botHmacSecret for ${accountName}`);
 
         try {
             // Check if credential daemon is running to reload config via SIGHUP
             const readyFile = path.join(__dirname, '..', 'profiles', 'runtime', 'credential-daemon.ready');
             if (fs.existsSync(readyFile)) {
-                const info = JSON.parse(fs.readFileSync(readyFile, 'utf8'));
-                if (info && info.pid) {
-                    process.kill(info.pid, 'SIGHUP');
-                    console.log(`[policy] Sent SIGHUP to credential daemon (pid ${info.pid}) to activate new secret`);
+                const daemonInfo = JSON.parse(fs.readFileSync(readyFile, 'utf8'));
+                if (daemonInfo && daemonInfo.pid) {
+                    process.kill(daemonInfo.pid, 'SIGHUP');
+                    info(`[policy] Sent SIGHUP to credential daemon (pid ${daemonInfo.pid}) to activate new secret`);
                 }
             }
         } catch (e) {
-            console.log(`[policy] Note: Could not send SIGHUP to daemon: ${e.message}`);
+            info(`[policy] Note: Could not send SIGHUP to daemon: ${e.message}`);
         }
         secret = newSecret;
     }

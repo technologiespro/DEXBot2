@@ -133,14 +133,14 @@ graph TB
 
     subgraph "Order Management System"
         MANAGER[OrderManager<br/>modules/order/manager.js]
-        
+
         subgraph "Specialized Engines"
             ACCOUNTANT[Accountant<br/>accounting.js]
             STRATEGY[StrategyEngine<br/>strategy.js]
             SYNC[SyncEngine<br/>sync_engine.js]
             GRID[Grid<br/>grid.js]
         end
-        
+
         UTILS[Utils<br/>utils/]
         LOGGER[Logger<br/>logger.js]
         RUNNER[Runner<br/>runner.js]
@@ -172,13 +172,13 @@ graph TB
     PM2 --> DEXBOT
     UNLOCK --> CRED_DAEMON
     CRED_DAEMON --> DEXBOT
-    
+
     DEXBOT --> MANAGER
     DEXBOT --> FILL_RUNTIME
     DEXBOT --> MAINT_RUNTIME
     DEXBOT --> CONSTANTS
     DEXBOT --> CR_RUNTIME
-    
+
     MANAGER --> ACCOUNTANT
     MANAGER --> STRATEGY
     MANAGER --> SYNC
@@ -187,26 +187,26 @@ graph TB
     MANAGER --> LOGGER
     MANAGER --> RUNNER
     MANAGER --> FILL_STORE
-    
+
     STRATEGY --> UTILS
     ACCOUNTANT --> UTILS
     SYNC --> UTILS
     GRID --> UTILS
-    
+
     RUNNER --> CHAIN_ORDERS
     SYNC --> ACCOUNT_ORDERS
     MANAGER --> ACCOUNT_BOTS
-    
+
     CHAIN_ORDERS --> BTS_CLIENT
     ACCOUNT_ORDERS --> BTS_CLIENT
     BTS_CLIENT --> NODE_MGR
-    
+
     MA --> MA_SVC
     MA_SVC --> KIBANA
-    
+
     CLAW --> CHAIN_ACT
     CLAW --> DEXBOT
-    
+
     NODE_MGR -.->|BitShares API| BLOCKCHAIN[(BitShares<br/>Blockchain)]
     CHAIN_ACT -.->|BitShares API| BLOCKCHAIN
 ```
@@ -689,9 +689,9 @@ sequenceDiagram
     Chain-->>Sync: Balance data
     Sync->>Acct: Set account totals
     Acct->>Acct: Recalculate funds
-    
+
     Note over Mgr: Grid initialized, ready for trading
-    
+
     Bot->>Sync: Detect fills (polling)
     Sync->>Chain: Get open orders
     Chain-->>Sync: Order data
@@ -713,29 +713,29 @@ Orders transition through three primary **states** during their lifecycle. **SPR
 ```mermaid
 stateDiagram-v2
     [*] --> VIRTUAL: Grid created
-    
+
     VIRTUAL --> ACTIVE: Order placed on-chain
     VIRTUAL --> VIRTUAL: Rotated or rebuilt
-    
+
     ACTIVE --> PARTIAL: Partial fill detected
     ACTIVE --> VIRTUAL: Order cancelled/rotated
-    
+
     PARTIAL --> ACTIVE: Consolidated (size >= ideal)
     PARTIAL --> VIRTUAL: Moved/consolidated
-    
+
     VIRTUAL --> [*]: Grid regenerated
-    
+
     note right of VIRTUAL
         No on-chain presence
         Funds reserved in virtual pool
         Includes spread-zone placeholders
     end note
-    
+
     note right of ACTIVE
         On-chain with orderId
         Funds locked/committed
     end note
-    
+
     note right of PARTIAL
         Partially filled on-chain
         Waiting for consolidation
@@ -786,18 +786,18 @@ graph LR
         CHAIN_FREE[chainFree<br/>Unallocated funds]
         CHAIN_COMMITTED[committed.chain<br/>On-chain orders]
     end
-    
+
     subgraph "Internal Tracking"
         VIRTUAL[virtual<br/>Reserved for VIRTUAL orders]
         GRID_COMMITTED[committed.grid<br/>ACTIVE order sizes]
     end
-    
+
     subgraph "Calculated Values"
         AVAILABLE[available<br/>= chainFree - virtual<br/>- fees]
         TOTAL_CHAIN[total.chain<br/>= chainFree + committed.chain]
         TOTAL_GRID[total.grid<br/>= committed.grid + virtual]
     end
-    
+
     CHAIN_FREE --> AVAILABLE
     VIRTUAL --> AVAILABLE
 
@@ -828,9 +828,9 @@ sequenceDiagram
     participant Mgr as OrderManager
 
     Note over Strat: Want to place order<br/>size = 100
-    
+
     Strat->>Acct: tryDeductFromChainFree(type, 100)
-    
+
     alt Sufficient funds (available >= 100)
         Acct->>Acct: chainFree -= 100
         Acct->>Acct: virtual += 100
@@ -863,11 +863,11 @@ graph LR
         SELL1[sell-174<br/>ACTIVE]
         SELL2[sell-175<br/>VIRTUAL]
     end
-    
+
     B0 --> B1 --> B2 --> BOUNDARY
     BOUNDARY --> S0 --> S1 --> S2
     S2 --> SELL0 --> SELL1 --> SELL2
-    
+
     style B1 fill:#90EE90
     style B2 fill:#90EE90
     style S0 fill:#FFD700
@@ -923,18 +923,18 @@ graph TB
     START[Fill Detected] --> SHIFT[Shift Boundary]
     SHIFT --> IDENTIFY[Identify Shortages<br/>Empty slots in active window]
     IDENTIFY --> CHECK{Surpluses<br/>Available?}
-    
+
     CHECK -->|Yes| CRAWL[Select Crawl Candidate<br/>Furthest active order]
     CHECK -->|No| NEW[Place New Order<br/>if funds available]
-    
+
     CRAWL --> COMPARE{Shortage price<br/>better than<br/>surplus price?}
     COMPARE -->|Yes| ROTATE[Rotate Order<br/>Cancel old, place new]
     COMPARE -->|No| SKIP[Skip rotation]
-    
+
     ROTATE --> NEXT{More<br/>shortages?}
     SKIP --> NEXT
     NEW --> NEXT
-    
+
     NEXT -->|Yes| IDENTIFY
     NEXT -->|No| DONE[Rebalance Complete]
 ```
@@ -949,11 +949,11 @@ graph TB
     CALC --> RELOAD["Force Reload Persisted Grid<br/>Ensure fresh blockchain state"]
     RELOAD --> COMPARE[Compare to Persisted Grid]
     COMPARE --> RMS[Calculate RMS Divergence<br/>For PARTIAL orders only]
-    
+
     RMS --> CHECK{RMS > Threshold?}
     CHECK -->|Yes| UPDATE[Update Grid Sizes<br/>Trigger rebalance]
     CHECK -->|No| SKIP[Skip update]
-    
+
     UPDATE --> PERSIST[Persist New Grid State]
     PERSIST --> DONE[Complete]
     SKIP --> DONE
@@ -978,16 +978,16 @@ sequenceDiagram
     Note over Sync: Detected fill on order P1
     Sync->>Mgr: lockOrders([P1])
     Sync->>Sync: Process fill
-    
+
     par Concurrent Strategy Check
         Strat->>Mgr: isOrderLocked(P1)?
         Mgr-->>Strat: true
         Note over Strat: Skip P1 (locked)
     end
-    
+
     Sync->>Sync: Complete fill processing
     Sync->>Mgr: unlockOrders([P1])
-    
+
     Note over Strat: Next cycle can now process P1
 ```
 
@@ -1046,18 +1046,18 @@ graph LR
         FUNDS[funds Object<br/>Fund tracking]
         INDICES[Indices<br/>_ordersByState<br/>_ordersByType]
     end
-    
+
     subgraph "Persisted State"
         ACCOUNT_JSON[account.json<br/>Grid snapshot<br/>feesOwed, boundaryIdx]
         BOTS_JSON[bots.json<br/>Bot config]
     end
-    
+
     ORDERS --> ACCOUNT_JSON
     FUNDS --> ACCOUNT_JSON
-    
+
     ACCOUNT_JSON -.->|Load on startup| ORDERS
     ACCOUNT_JSON -.->|Load on startup| FUNDS
-    
+
     BOTS_JSON -.->|Load on startup| CONFIG[Bot Config]
 ```
 
