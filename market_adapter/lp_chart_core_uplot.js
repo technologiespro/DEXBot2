@@ -22,19 +22,6 @@ function formatPct(v) {
     return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`;
 }
 
-function formatCompactNumber(v) {
-    const num = Number(v);
-    if (!Number.isFinite(num)) return 'n/a';
-    const abs = Math.abs(num);
-    const sign = num < 0 ? '-' : '';
-    if (abs >= 1e9) return sign + (abs / 1e9).toFixed(abs >= 1e10 ? 0 : 2) + 'b';
-    if (abs >= 1e6) return sign + (abs / 1e6).toFixed(abs >= 1e7 ? 0 : 2) + 'm';
-    if (abs >= 1e3) return sign + (abs / 1e3).toFixed(abs >= 1e4 ? 0 : 2) + 'k';
-    if (abs >= 100) return sign + abs.toFixed(0);
-    if (abs >= 10) return sign + abs.toFixed(1);
-    return sign + abs.toFixed(2);
-}
-
 function padRange(min, max, lower = 0.04, upper = 0.04) {
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
     if (min === max) {
@@ -186,13 +173,11 @@ function generateHTML(meta, candles, amaResults) {
         }
         .u-cursor-y {
             display: none !important;
+            border-top: 1px dashed rgba(255, 255, 255, 0.35) !important;
+            background: transparent !important;
         }
         .uplot.is-hovered .u-cursor-y {
             display: block !important;
-        }
-        .u-cursor-y {
-            border-top: 1px dashed rgba(255, 255, 255, 0.35) !important;
-            background: transparent !important;
         }
         .u-cursor-x {
             border-left: 1px dashed rgba(255, 255, 255, 0.35) !important;
@@ -331,19 +316,6 @@ function padRange(min, max, pctLower = 0.04, pctUpper = 0.04) {
     }
     const span = max - min;
     return [min - span * pctLower, max + span * pctUpper];
-}
-
-function formatCompactNumber(v) {
-    const num = Number(v);
-    if (!Number.isFinite(num)) return 'n/a';
-    const abs = Math.abs(num);
-    const sign = num < 0 ? '-' : '';
-    if (abs >= 1e9) return sign + (abs / 1e9).toFixed(abs >= 1e10 ? 0 : 2) + 'b';
-    if (abs >= 1e6) return sign + (abs / 1e6).toFixed(abs >= 1e7 ? 0 : 2) + 'm';
-    if (abs >= 1e3) return sign + (abs / 1e3).toFixed(abs >= 1e4 ? 0 : 2) + 'k';
-    if (abs >= 100) return sign + abs.toFixed(0);
-    if (abs >= 10) return sign + abs.toFixed(1);
-    return sign + abs.toFixed(2);
 }
 
 function makeAxis(show, type) {

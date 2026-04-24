@@ -224,8 +224,6 @@ async function run() {
 
     // ── Mode A: manual --pool override (no blockchain connection needed) ──────
     if (cliPoolId) {
-        const { waitForConnected, BitShares } = require('../../modules/bitshares_client');
-
         console.log(`  Mode:     Manual (--pool ${cliPoolId})`);
         fullPoolId = kibanaSource.normalizePoolId(cliPoolId);
 

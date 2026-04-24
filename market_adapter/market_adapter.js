@@ -739,9 +739,10 @@ async function findPoolByAssets(assetAId, assetBId) {
     throw new Error(`No liquidity pool found for ${assetAId}/${assetBId}`);
 }
 
-function parseChainTimeToMs(timeNoZ) {
-    if (!timeNoZ) return Number.NaN;
-    return Date.parse(`${timeNoZ}Z`);
+function parseChainTimeToMs(timeStr) {
+    if (!timeStr) return Number.NaN;
+    const s = String(timeStr);
+    return Date.parse(s.endsWith('Z') ? s : `${s}Z`);
 }
 
 function candleFileForBot(botKey) {
@@ -1156,8 +1157,7 @@ async function runOnceForAma(overrides = {}) {
 
         return {
             updatedAt: state?.meta?.updatedAt || new Date().toISOString(),
-            results: run.results,
-            metrics: run.metrics,
+            ...run,
             state,
         };
     } finally {

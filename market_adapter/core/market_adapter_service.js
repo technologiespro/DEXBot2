@@ -379,9 +379,9 @@ class MarketAdapterService {
         //    with ATR applied only as a separate symmetric penalty.
         //    Calculations always run for AMA-grid bots; live application is gated
         //    later by the AMA whitelist and the dynamic-weight whitelist.
-        const isDynamic = true;
         const isDynamicWeightWhitelisted = forceWhitelistAll || (typeof deps.isBotDynamicWeightWhitelisted === 'function'
             && deps.isBotDynamicWeightWhitelisted(bot.botKey));
+        const isDynamic = isDynamicWeightWhitelisted;
 
         const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
         const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
@@ -536,7 +536,7 @@ class MarketAdapterService {
                         continue;
                     }
 
-                    const dispScale = Math.max(1.0, dispScaleMinPct);
+                    const dispScale = Math.max(1e-6, dispScaleMinPct);
                     const dispConf = Math.min(Math.abs(dp) / dispScale, 1.0);
                     const momAlign = Math.max(0, (clippedV * dp) / (Math.abs(clippedV) * Math.abs(dp) + 1e-10));
                     const composite = clippedV * (1 - dw + dw * dispConf * momAlign);

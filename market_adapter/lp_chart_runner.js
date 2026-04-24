@@ -198,8 +198,8 @@ function defaultComparisonChartPath(meta, dataFile) {
 function calculateMetrics(amaValues, candles) {
     let maxDriftUp = 0;
     let maxDriftDown = 0;
-    let areaAbove = 0;
-    let areaBelow = 0;
+    let cumDevAbove = 0;
+    let cumDevBelow = 0;
     const skip = Math.max(20, Math.floor(candles.length * 0.1));
 
     for (let i = skip; i < candles.length; i++) {
@@ -208,16 +208,16 @@ function calculateMetrics(amaValues, candles) {
         const driftDown = (ama - candles[i].low) / ama;
         if (driftUp > maxDriftUp) maxDriftUp = driftUp;
         if (driftDown > maxDriftDown) maxDriftDown = driftDown;
-        if (candles[i].high > ama) areaAbove += driftUp;
-        if (candles[i].low < ama) areaBelow += driftDown;
+        if (candles[i].high > ama) cumDevAbove += driftUp;
+        if (candles[i].low < ama) cumDevBelow += driftDown;
     }
 
     return {
         maxDriftUp,
         maxDriftDown,
-        areaAbove,
-        areaBelow,
-        totalArea: areaAbove + areaBelow,
+        cumDevAbove,
+        cumDevBelow,
+        totalDeviation: cumDevAbove + cumDevBelow,
         maxDistance: Math.max(maxDriftUp, maxDriftDown),
     };
 }
@@ -300,7 +300,7 @@ function generateComparisonLpChart(options = {}) {
         amaResults.push({ ...strategy, lineWidth: index === 0 ? 2 : 1.5, values });
 
         logger.log(`${strategy.name}`);
-        logger.log(`   ├─ Total Area:     ${metrics.totalArea.toFixed(2)}%`);
+        logger.log(`   ├─ Total Deviation: ${metrics.totalDeviation.toFixed(2)}%`);
         logger.log(`   ├─ Max UP:         ${(metrics.maxDriftUp * 100).toFixed(2)}%`);
         logger.log(`   ├─ Max DOWN:       ${(metrics.maxDriftDown * 100).toFixed(2)}%`);
         logger.log(`   └─ Band Factor:    ${(metrics.maxDistance * 200).toFixed(2)}%\n`);

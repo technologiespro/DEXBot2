@@ -119,7 +119,8 @@ function run() {
     console.log(`  merged:      ${firstTs} → ${lastTs}  (${merged.length} candles)`);
 
     // Overlap check
-    const overlapCount = dataA.candles.filter(c => dataB.candles.some(c2 => c2[0] === c[0])).length;
+    const bTimestamps = new Set(dataB.candles.map(c => c[0]));
+    const overlapCount = dataA.candles.filter(c => bTimestamps.has(c[0])).length;
     if (overlapCount > 0) {
         console.log(`  overlap:     ${overlapCount} candles (deduplicated, higher-volume kept)`);
     }
