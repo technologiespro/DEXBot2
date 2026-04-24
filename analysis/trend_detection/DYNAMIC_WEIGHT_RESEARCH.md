@@ -133,7 +133,7 @@ Output: `analysis/charts/dynamic_weight_chart.html` (open in browser)
 | `--chart` | `analysis/charts/dynamic_weight_chart.html` | Output HTML path |
 | `--alpha` | `0.5` | Initial α blend (0 = pure Kalman, 1 = pure AMA) |
 | `--dw` | `0.50` | Initial displacement weight (0 = pure velocity, 1 = full displacement) |
-| `--lb` | `8` | Initial lookback bars (1-32) for AMA slope calculation |
+| `--lb` | `9` | Initial lookback bars (1-32) for AMA slope calculation |
 | `--gain` | `1.0` | Initial gain multiplier |
 | `--clip` | `10` | Initial clip percentile |
 | `--quiet` | `false` | Suppress console output |
@@ -331,7 +331,7 @@ Formula: `kalComp = clippedV × (1 − dw + dw × dispConf × momAlign)`
 ### lb (lookback bars)
 Number of bars to look back when computing AMA slope:
 - `lb = 4`: Very short-term, highly responsive to recent price action
-- `lb = 1` (default): ~1 hour of hourly candles, very responsive and least smoothed
+- `lb = 9` (default): ~9 hours of hourly candles, balanced responsiveness and smoothing
 - `lb = 32`: ~1.3 days of hourly candles, stable but slower to react
 
 Lower values = more noise, faster reaction. Higher values = smoother signals, more lag.

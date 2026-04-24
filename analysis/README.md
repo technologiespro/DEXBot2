@@ -6,6 +6,7 @@ This directory contains research runners, chart generators, and helper modules u
 
 - `trend_detection/` - SMA, MACD, RSI, Hurst, Kalman, and regime analysis plus the related research docs
 - `ama_fitting/` - AMA fitting, synthetic comparison charts, and LP data workflows
+- `bot_fitting/` - Grid parameter sweep backtests for AMA winners
 - `bot_usage/` - DEXBot account discovery and Kibana query helpers
 - `tradingview/` - TradingView-style chart export
 

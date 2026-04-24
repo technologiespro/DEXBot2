@@ -107,7 +107,7 @@ flowchart TD
 | **Immutability** | Master Grid is frozen; all changes go through a disposable WorkingGrid (Copy-on-Write) |
 | **Single Source of Truth** | Accounting engine owns all fund data; everything reads from it |
 | **Event-driven + Polling** | Fill Events (real-time) and Open-Order polling feed the same queue |
-| **Adaptive throughput** | Batcher scales 1–4 operations per broadcast based on queue depth |
+| **Fixed-Cap Batching** | Deterministic batching with hard cap per broadcast (default 4 fills) |
 | **Persistence** | Grid snapshot written after every confirmed blockchain commit |
 
 ---
@@ -120,10 +120,14 @@ graph TB
         CLI[dexbot.js]
         BOT[bot.js]
         PM2[pm2.js]
+        UNLOCK[unlock-start.js]
+        CRED_DAEMON[credential-daemon.js]
     end
 
     subgraph "Core Bot"
         DEXBOT[DexBotClass<br/>modules/dexbot_class.js]
+        FILL_RUNTIME[FillRuntime<br/>modules/dexbot_fill_runtime.js]
+        MAINT_RUNTIME[MaintenanceRuntime<br/>modules/dexbot_maintenance_runtime.js]
         CONSTANTS[Constants<br/>modules/constants.js]
     end
 
@@ -140,20 +144,40 @@ graph TB
         UTILS[Utils<br/>utils/]
         LOGGER[Logger<br/>logger.js]
         RUNNER[Runner<br/>runner.js]
+        FILL_STORE[ProcessedFillStore<br/>processed_fill_store.js]
     end
 
     subgraph "Blockchain Layer"
         CHAIN_ORDERS[ChainOrders<br/>modules/chain_orders.js]
         ACCOUNT_ORDERS[AccountOrders<br/>modules/account_orders.js]
         ACCOUNT_BOTS[AccountBots<br/>modules/account_bots.js]
+        NODE_MGR[NodeManager<br/>modules/node_manager.js]
+        BTS_CLIENT[BitSharesClient<br/>modules/bitshares_client.js]
+    end
+
+    subgraph "Market Adapter"
+        MA[MarketAdapter<br/>market_adapter/market_adapter.js]
+        MA_SVC[AdapterService<br/>core/market_adapter_service.js]
+        KIBANA[inputs/kibana_source.js]
+    end
+
+    subgraph "Claw Integration"
+        CLAW[claw/index.js]
+        CR_RUNTIME[credit_runtime.js]
+        CHAIN_ACT[chain_actions.js]
     end
 
     CLI --> DEXBOT
     BOT --> DEXBOT
     PM2 --> DEXBOT
+    UNLOCK --> CRED_DAEMON
+    CRED_DAEMON --> DEXBOT
     
     DEXBOT --> MANAGER
+    DEXBOT --> FILL_RUNTIME
+    DEXBOT --> MAINT_RUNTIME
     DEXBOT --> CONSTANTS
+    DEXBOT --> CR_RUNTIME
     
     MANAGER --> ACCOUNTANT
     MANAGER --> STRATEGY
@@ -162,6 +186,7 @@ graph TB
     MANAGER --> UTILS
     MANAGER --> LOGGER
     MANAGER --> RUNNER
+    MANAGER --> FILL_STORE
     
     STRATEGY --> UTILS
     ACCOUNTANT --> UTILS
@@ -172,8 +197,18 @@ graph TB
     SYNC --> ACCOUNT_ORDERS
     MANAGER --> ACCOUNT_BOTS
     
-    CHAIN_ORDERS -.->|BitShares API| BLOCKCHAIN[(BitShares<br/>Blockchain)]
-    ACCOUNT_ORDERS -.->|BitShares API| BLOCKCHAIN
+    CHAIN_ORDERS --> BTS_CLIENT
+    ACCOUNT_ORDERS --> BTS_CLIENT
+    BTS_CLIENT --> NODE_MGR
+    
+    MA --> MA_SVC
+    MA_SVC --> KIBANA
+    
+    CLAW --> CHAIN_ACT
+    CLAW --> DEXBOT
+    
+    NODE_MGR -.->|BitShares API| BLOCKCHAIN[(BitShares<br/>Blockchain)]
+    CHAIN_ACT -.->|BitShares API| BLOCKCHAIN
 ```
 
 ---
@@ -207,11 +242,11 @@ The master grid (`this.orders`) is **immutable** - it can only be replaced atomi
 
 | Mechanism | Location | Purpose |
 |-----------|----------|---------|
-| `Object.freeze()` | `manager.js:396` | Master Map is frozen at initialization |
-| `deepFreeze()` | `manager.js:813` | Individual order objects are deep-frozen |
-| `_gridVersion` | `manager.js:828` | Version counter for staleness detection |
-| `_gridLock` | `manager.js:431` | AsyncLock serializes grid mutations |
-| Encapsulation | `manager.js:406-415` | Index Sets are private; mutations only via `_applyOrderUpdate()` |
+| `Object.freeze()` | `manager.js:416` | Master Map is frozen at initialization |
+| `deepFreeze()` | `manager.js:825` | Individual order objects are deep-frozen |
+| `_gridVersion` | `manager.js:466` | Version counter for staleness detection |
+| `_gridLock` | `manager.js:456` | AsyncLock serializes grid mutations |
+| Encapsulation | `manager.js:429-434` | Index Sets are private; mutations only via `_applyOrderUpdate()` |
 
 ### Master Grid Update Pattern
 
@@ -280,11 +315,11 @@ Only blockchain-confirmed events trigger master updates:
 
 | Event | Entry Point | Mechanism |
 |-------|-------------|-----------|
-| Order Created | `sync_engine.js:877-921` | `synchronizeWithChain('createOrder')` |
-| Order Cancelled | `sync_engine.js:923-940` | `synchronizeWithChain('cancelOrder')` |
-| Order Filled | `sync_engine.js:662-823` | `syncFromFillHistory()` |
-| Full Sync | `sync_engine.js:942-947` | `syncFromOpenOrders()` |
-| Grid Init/Load | `grid.js:495-626` | Bootstrap operations |
+| Order Created | `sync_engine.js:858+` | `synchronizeWithChain('createOrder')` |
+| Order Cancelled | `sync_engine.js:858+` | `synchronizeWithChain('cancelOrder')` |
+| Order Filled | `sync_engine.js:syncFromFillHistory()` | `syncFromFillHistory()` |
+| Full Sync | `sync_engine.js:syncFromOpenOrders()` | `syncFromOpenOrders()` |
+| Grid Init/Load | `grid.js:createOrderGrid()` | Bootstrap operations |
 
 ### Defensive Measures
 
@@ -626,30 +661,15 @@ PIPELINE_TIMING: {
 - Non-destructive recovery: clears operation flags only, does NOT delete orders or modify grid state
 - Recovery called from `_executeMaintenanceLogic()` during periodic maintenance checks
 
-**Location**: `modules/order/manager.js` lines 570-650
+**Location**: `modules/order/manager.js` lines 1083-1148
 
-### Pipeline Health Diagnostics
+**How It Works**:
+- `isPipelineEmpty()` tracks when pipeline operations started blocking via `_pipelineBlockedSince` timestamp
+- If blockage exceeds 5 minutes, `clearStalePipelineOperations()` is called
+- Non-destructive recovery: clears operation flags only, does NOT delete orders or modify grid state
+- Recovery called from `_executeMaintenanceLogic()` during periodic maintenance checks
 
-**Purpose**: Enable production monitoring dashboards and alerting systems.
-
-**Method**: `getPipelineHealth()`
-
-**Returns** (8 diagnostic fields):
-```javascript
-{
-    isEmpty: boolean,              // Pipeline is empty/clear?
-    reasons: string[],             // Why pipeline is blocked (if blocked)
-    blockedSince: number,          // Timestamp when blockage started (ms since epoch)
-    blockedDurationMs: number,     // How long blocked (milliseconds)
-    blockedDurationHuman: string,  // How long blocked (human-readable: "5m 30s")
-    correctionsPending: number,    // Count of pending spread corrections
-    gridSidesUpdated: string[],    // Which sides have queued updates ("BUY", "SELL", "BOTH")
-}
-```
-
-**Integration**: Post-fill logging shows health status for operational visibility.
-
-**Location**: `modules/order/manager.js` lines 650-700
+**Location**: `modules/order/manager.js` lines 1149+
 
 ### Data Flow
 
@@ -688,28 +708,27 @@ sequenceDiagram
 
 ## Order State Machine
 
-Orders transition through three primary states during their lifecycle:
+Orders transition through three primary **states** during their lifecycle. **SPREAD** is an *order type* (like BUY or SELL), not a state — spread-zone slots always carry `state: VIRTUAL`.
 
 ```mermaid
 stateDiagram-v2
     [*] --> VIRTUAL: Grid created
     
     VIRTUAL --> ACTIVE: Order placed on-chain
-    VIRTUAL --> SPREAD: After fill (placeholder)
+    VIRTUAL --> VIRTUAL: Rotated or rebuilt
     
     ACTIVE --> PARTIAL: Partial fill detected
     ACTIVE --> VIRTUAL: Order cancelled/rotated
-    ACTIVE --> SPREAD: Order cancelled after fill
     
     PARTIAL --> ACTIVE: Consolidated (size >= ideal)
     PARTIAL --> VIRTUAL: Moved/consolidated
-    PARTIAL --> SPREAD: Absorbed into spread
     
-    SPREAD --> [*]: Grid regenerated
+    VIRTUAL --> [*]: Grid regenerated
     
     note right of VIRTUAL
         No on-chain presence
         Funds reserved in virtual pool
+        Includes spread-zone placeholders
     end note
     
     note right of ACTIVE
@@ -720,11 +739,6 @@ stateDiagram-v2
     note right of PARTIAL
         Partially filled on-chain
         Waiting for consolidation
-    end note
-    
-    note right of SPREAD
-        Placeholder for spread zone
-        Always VIRTUAL state
     end note
 ```
 
@@ -1150,6 +1164,8 @@ DEXBot2 uses a native Node.js `assert` testing strategy to ensure reliability wi
 graph LR
     A["Logic Tests<br/>(tests/test_*_logic.js)"]
     B["Integration Tests<br/>(tests/test_*.js)"]
+    C["Signal Tests<br/>(tests/test_*_signal*.js)"]
+    D["Credit/Debt Tests<br/>(tests/test_*_credit*.js)"]
 
     A -->|Manager, State Machine| A1["manager_logic"]
     A -->|Fund Tracking| A2["accounting_logic"]
@@ -1160,6 +1176,14 @@ graph LR
     B -->|Multi-step Scenarios| B1["Market Scenarios"]
     B -->|Edge Cases| B2["Partial Order Tests"]
     B -->|Real-world Scenarios| B3["Fills/FEE Tests"]
+
+    C -->|Dynamic Weight| C1["dynamic_weight"]
+    C -->|Derivative Trap| C2["derivative_signal"]
+    C -->|Momentum Gate| C3["momentum_gate"]
+
+    D -->|CR Planner| D1["cr_planner"]
+    D -->|Credit Runtime| D2["credit_runtime"]
+    D -->|MPA Wiring| D3["dexbot_credit_wiring"]
 ```
 
 ### Running Tests
@@ -1170,6 +1194,14 @@ npm test
 
 # Specific logic area
 node tests/test_accounting_logic.js
+
+# Signal tests
+node tests/test_market_adapter_signal_gates.js
+node tests/test_dynamic_weight_override_wiring.js
+
+# Credit/debt tests
+node tests/test_cr_planner.js
+node tests/test_dexbot_credit_wiring.js
 ```
 
 ### Test Quality Metrics
@@ -1180,12 +1212,14 @@ node tests/test_accounting_logic.js
 - ✅ Edge cases covered (zero funds, max orders, etc.)
 - ✅ Concurrent operations tested with locks
 - ✅ State transitions validated end-to-end
+- ✅ Signal pipelines tested (dynamic weight, derivative traps)
+- ✅ Credit/debt runtime tested (CR planner, MPA wiring)
 
-**Recent Improvements (2026-01-09):**
-- Added 23 new test cases for recent bugfixes
-- Created comprehensive strategy engine tests
-- Enhanced accounting tests with fee validation
-- Added fund precision and delta tests
+**Recent Improvements (2026-03-01):**
+- Added 50+ new test cases for signal intelligence and credit runtime
+- Created dynamic weight override and market adapter signal gate tests
+- Added derivative momentum gate and signal trap regression tests
+- Enhanced credit/debt tests with CR planner and MPA wiring validation
 
 ### Testing Best Practices
 
@@ -1216,7 +1250,7 @@ node tests/test_accounting_logic.js
 
 ### Test Documentation References
 
-- **[TEST_UPDATES_SUMMARY.md](../tests/TEST_UPDATES_SUMMARY.md)** - Detailed test coverage for 23 new test cases
+- **[TEST_UPDATES_SUMMARY.md](../tests/TEST_UPDATES_SUMMARY.md)** - Detailed test coverage for recent test cases
   - Maps each test to specific bugfixes
   - Shows what each test validates
   - Running instructions for specific areas
@@ -1226,6 +1260,74 @@ node tests/test_accounting_logic.js
   - Common test patterns
   - Debugging failing tests
   - Adding tests for new features
+
+---
+
+## Market Adapter Signal Pipeline
+
+The market adapter runs as a standalone process that computes AMA-derived grid prices, trend signals, dynamic weights, and collateral-ratio advisories.
+
+### Signal Flow
+
+```
+price_candles -> AMA -> gridPrice
+                |
+                +-> slope_analysis -> trend_offset (asymmetric weight shift)
+                |
+price_candles -> ATR -> weight_variance (symmetric shift)
+                |
+                +-> regime_detection (Hurst/PE) -> regime_filter
+                |
+                +-> Kalman_confirmation -> blended_dynamic_weight
+```
+
+### Outputs (per cycle, per bot)
+- `gridPrice` — AMA center price, clamped to min/max bounds
+- `weights` — `{ buy, sell }` dynamic grid weighting
+- `collateralRecommendation` — advisory collateral ratio hint
+- `trend` / `atr` — raw regime and volatility signals
+- Trigger files when grid price delta exceeds threshold
+
+### Integration with Bot Runtime
+
+1. Adapter writes `profiles/recalculate.<botKey>.trigger` when threshold crossed
+2. `dexbot_maintenance_runtime.js` picks up trigger and requests grid reset
+3. Dynamic weights are read from `market_adapter/state/price_adapter_state.json`
+4. Bot runtime applies weight offsets during grid recalculation
+
+---
+
+## Credential Security Architecture
+
+DEXBot2 uses a hardened credential daemon (`credential-daemon.js`) for key management and signing.
+
+### Security Layers
+- **Vault v2**: scrypt (N=2^17) key derivation, per-record HKDF isolation, AES-256-GCM encryption
+- **Daemon-backed signing**: Primary bot flow uses signing tokens; compatibility clients can request raw keys
+- **Session cache**: Encrypted HKDF re-encryption with a random salt never persisted
+- **Runtime hardening**: lstat + owner/mode/type checks on all sockets and ready files; bootstrap socket destroyed after first use
+- **Strict daemon policy**: Memory safety and zeroing, session hardening, signing cache with time-based expiry
+
+### PM2 Integration
+
+`node pm2` unlocks `dexbot-cred` through a one-shot local bootstrap channel instead of exporting the master password to every PM2 app. Use `node pm2 restart ...` or `node pm2 reload ...` for DEXBot-managed PM2 actions.
+
+---
+
+## Credit/Debt Runtime
+
+Native DEXBot2 support for MPA borrowing and credit offer workflows via `modules/credit_runtime.js`.
+
+### Scope
+- **MPA borrowing**: Call-order updates with debt-first CR planning
+- **Credit offers**: Accept/repay with auto-reborrow, LP-backed collateral valuation
+- **Policy enforcement**: Per-bot `debtPolicy` with hard CR floors/ceilings and max fee rates
+- **Grid reset coupling**: Every successful CR adjustment requests a grid rebuild
+
+### Runtime Rules
+- Evaluates on the bot's 4h maintenance cadence
+- No separate enable switch — active when `debtPolicy` is present in bot config
+- Claw can read the same bot policy without redefining rules
 
 ---
 

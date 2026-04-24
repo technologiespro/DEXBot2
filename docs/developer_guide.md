@@ -32,15 +32,21 @@ Follow this path through the codebase:
 4. modules/order/accounting.js             (5 min)   - Fund tracking, read recalculateFunds() and resetRecoveryState()
 5. modules/order/strategy.js               (5 min)   - Rebalancing logic, read rebalance()
 6. modules/order/grid.js                   (5 min)   - Grid creation, read createOrderGrid()
-7. modules/dexbot_class.js::processFilledOrders (5-10 min) - Fill batch processing pipeline
+7. modules/dexbot_fill_runtime.js          (5 min)   - Fill batch processing pipeline and replay-safe accounting
+8. modules/dexbot_maintenance_runtime.js   (5 min)   - Sync loops, grid maintenance, trigger handling
+9. modules/dexbot_class.js                 (5 min)   - Bot lifecycle, credit runtime startup, maintenance orchestration
 ```
 
 **Additional Resources**:
 - `modules/constants.js::FILL_PROCESSING` - Batch configuration (`MAX_FILL_BATCH_SIZE`)
 - `modules/constants.js::PIPELINE_TIMING` - Recovery configuration (RECOVERY_RETRY_INTERVAL_MS, MAX_RECOVERY_ATTEMPTS)
+- `modules/constants.js::MARKET_ADAPTER` - AMA, dynamic weight, and regime detection defaults
+- `modules/constants.js::REGIME_TABLE` - Hurst/PE regime signal-strength table
 - `modules/dexbot_class.js::_handleBatchHardAbort()` - Hard-abort recovery handler
 - `modules/dexbot_class.js::_staleCleanedOrderIds` - Orphan-fill deduplication tracking
 - `modules/dexbot_class.js::_cancelDustOrders()` - Auto-cancel dust partials; timer state in `_dustSinceMap`
+- `modules/credit_runtime.js` - Debt workflow executor (MPA and credit offer)
+- `market_adapter/core/market_adapter_service.js` - Signal pipeline (AMA, dynamic weights, collateral advisory)
 
 ---
 
@@ -112,6 +118,21 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 | **Delta / COW Action** | A `{ type, id, ... }` object describing a single Create / Update / Cancel operation derived by comparing master vs. working grid. Only deltas are sent to the blockchain. |
 | **Rebalance States** | `NORMAL → REBALANCING → BROADCASTING → NORMAL`. Fills during REBALANCING sync into working grid. Fills during BROADCASTING mark it stale. |
 
+### Signal & Market Adapter Concepts
+
+| Term | Meaning |
+|------|---------|
+| **Dynamic Weight** | Live buy/sell weight bias computed from AMA slope + Kalman confirmation + ATR volatility penalty |
+| **Regime Detection** | Hurst Exponent + Permutation Entropy classification of market structure (trending, mean-reverting, noisy) |
+| **Regime Table** | Signal-strength lookup table in `constants.js` that dampens or preserves dynamic weight based on regime |
+| **AMA Slope** | Filtered measure of AMA velocity used to derive directional weight offset |
+| **Kalman Confirmation** | Kalman-filtered trend signal blended with AMA slope for smoother weight transitions |
+| **Symmetric Shift** | Volatility-driven downward weight penalty applied equally to both sides (ATR-based) |
+| **Asymmetric Offset** | Directional weight shift (buy-heavy or sell-heavy) driven by AMA/Kalman trend |
+| **Derivative Signal** | SMA/MACD/RSI-based entry bias and momentum gate for optional strategy filtering |
+| **Momentum Gate** | N-bar commitment tracking that confirms derivative signals before acting |
+| **Grid Price** | Price anchor for grid math; can be numeric, `"pool"`, `"book"`, or AMA keyword (`"ama"`, `"ama1"`–`"ama4"`) |
+
 ### Grid Concepts
 
 | Term | Meaning |
@@ -125,6 +146,18 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 | **Hard Surplus** | Order beyond the configured `activeOrders` count |
 | **Dust** | Partial order < 5% of ideal size |
 | **Dust Cancel** | Auto-cancellation of dust partials on-chain after `DUST_CANCEL_DELAY_SEC` seconds, freeing the slot for a fresh counter-order. Timer tracked per `orderId` in `_dustSinceMap`. |
+
+### Credit/Debt Runtime Concepts
+
+| Term | Meaning |
+|------|---------|
+| **Debt Policy** | Per-bot configuration block (`debtPolicy.mpa` / `debtPolicy.creditOffer`) governing borrowing behavior |
+| **MPA Borrow** | Market-pegged asset call-order update (debt-first CR planning) |
+| **Credit Offer** | On-chain peer-to-peer lending offer acceptance and repayment |
+| **Auto-Reborrow** | Bot-side flag allowing a new credit offer accept after successful repay |
+| **CR Planner** | Shared collateral-ratio math layer in `modules/cr_planner.js` |
+| **Credit Runtime** | Bot-scoped executor in `modules/credit_runtime.js` for debt operations and grid-reset requests |
+| **LP-Backed Collateral** | Liquidity-pool share tokens used as collateral, valued from underlying reserves |
 
 ### Operations
 
@@ -1065,6 +1098,46 @@ The bot performs a **Periodic Configuration Refresh** (every 4 hours by default)
 
 ---
 
+## Debt Policy Configuration
+
+Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
+
+### Example `debtPolicy`
+
+```json
+{
+  "name": "credit-bot-1",
+  "debtPolicy": {
+    "mpa": {
+      "allowedDebtAssets": ["HONEST.USD"],
+      "allowedCollateralAssets": ["BTS"],
+      "maxBorrowAmount": 1000,
+      "maxCollateralAmount": 25000,
+      "minCollateralRatio": 2.0,
+      "maxCollateralRatio": 2.5,
+      "targetCollateralRatio": 2.2
+    },
+    "creditOffer": {
+      "allowedOfferIds": ["1.18.42"],
+      "allowedDebtAssets": ["HONEST.USD"],
+      "allowedCollateralAssets": ["BTS", "HONEST.LP"],
+      "maxBorrowAmount": 1000,
+      "maxFeeRate": 30000,
+      "maxCollateralRatio": 2.5,
+      "autoReborrow": true
+    }
+  }
+}
+```
+
+### Key Rules
+- No separate runtime switch — active when `debtPolicy` is present in bot config
+- Evaluated on the bot's 4h maintenance cadence
+- Every successful CR adjustment triggers a grid rebuild via `requestGridReset()`
+- Signing policy enforces `maxFeeRate`, CR ceilings, and allowed assets before broadcasting
+
+---
+
 ## How to Add New Features
 
 ### Example: Adding a New Order Type
@@ -1144,6 +1217,13 @@ Located in `tests/` (flat directory, no subdirectories):
 - `test_sync_logic.js` - Blockchain synchronization tests
 - `test_strategy_logic.js` - Rebalancing and rotation logic
 - `test_bts_fee_logic.js` - BTS fee deduction and settlement
+- `test_market_adapter_signal_gates.js` - Market adapter signal validation
+- `test_dynamic_weight_override_wiring.js` - Dynamic weight config wiring
+- `test_derivative_signal_trap_regression.js` - Derivative signal trap tests
+- `test_derivative_momentum_gate.js` - Momentum gate tests
+- `test_cr_planner.js` - Collateral ratio planner tests
+- `test_dexbot_credit_wiring.js` - Credit runtime integration tests
+- `test_credential_daemon.js` / `test_credential_session_cache.js` - Credential security tests
 
 **Run tests**:
 ```bash
@@ -1433,13 +1513,19 @@ console.log('Locked?', manager.isOrderLocked(order.id));
 ### Documentation
 - [Architecture](architecture.md) - System design and module relationships
 - [Copy-on-Write Master Plan](COPY_ON_WRITE_MASTER_PLAN.md) - COW architecture, phases, state machine, and test results
+- [COW Invariants](COW_INVARIANTS.md) - Stable theory contract for COW pipeline
 - [Fund Movement Logic](FUND_MOVEMENT_AND_ACCOUNTING.md) - Algorithms and formulas
+- [Market Adapter](../market_adapter/README.md) - Signal pipeline and AMA integration
+- [Credit Debt Integration Plan](CREDIT_DEBT_INTEGRATION_PLAN.md) - MPA and credit offer workflows
+- [Improvement Roadmap](IMPROVEMENT_ROADMAP.md) - Prioritized improvement backlog
 - [README](../README.md) - User documentation
 - [WORKFLOW](WORKFLOW.md) - Git branch workflow
 
 ### Code Entry Points
 - `dexbot.js` - CLI entry point
 - `modules/dexbot_class.js` - Core bot class
+- `modules/dexbot_fill_runtime.js` - Fill processing runtime
+- `modules/dexbot_maintenance_runtime.js` - Maintenance runtime
 - `modules/order/manager.js` - Order management hub
 
 ### Key Modules
@@ -1448,10 +1534,15 @@ console.log('Locked?', manager.isOrderLocked(order.id));
 - `modules/order/grid.js` - Grid creation
 - `modules/order/sync_engine.js` - Blockchain sync
 - `modules/order/working_grid.js` - COW working copy (clone/delta/commit)
+- `modules/order/processed_fill_store.js` - Fill dedupe persistence
 - `modules/order/utils/order.js` - Order state predicates and helpers
 - `modules/order/utils/math.js` - Precision, quantization, fund math
 - `modules/order/utils/validate.js` - Validation and COW action building
 - `modules/order/utils/system.js` - Price derivation, deduplication
+- `modules/credit_runtime.js` - Debt workflow executor
+- `modules/cr_planner.js` - Collateral ratio math layer
+- `market_adapter/core/market_adapter_service.js` - Signal pipeline
+- `claw/modules/chain_actions.js` - Claw chain operations
 
 ---
 
@@ -1660,7 +1751,7 @@ The test suite provides comprehensive coverage of fund calculations and rebalanc
 - ✅ Grid divergence detection with stale cache
 - ✅ BoundaryIdx persistence and recovery
 - ✅ BUY side geometric weighting
-- ✅ CacheFunds integration and deduction
+- ✅ Real-time commitment accounting (CacheFunds removed)
 - ✅ Rotation completion and skip prevention
 - ✅ Fee calculation with isMaker parameter
 - ✅ Market and blockchain taker fees

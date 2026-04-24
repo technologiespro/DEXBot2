@@ -10,7 +10,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 *The blueprint of the system.*
 - **Design Philosophy**: Simplicity, constant spread, minimal blockchain interaction, and closed-loop market dynamics.
 - **System Design**: High-level overview of how the bot components interact.
-- **Module Responsibilities**: Detailed breakdown of the **Manager**, **Accountant**, **Strategy**, and **Grid** modules.
+- **Module Responsibilities**: Detailed breakdown of the **Manager**, **Accountant**, **Strategy**, **Grid**, **FillRuntime**, and **MaintenanceRuntime** modules.
 - **Copy-on-Write Pattern**: Safe concurrent rebalancing with isolated working grids (see [COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md))
 - **Fill Processing Pipeline**: Fixed-cap batch fill processing (1-4 fills per broadcast, ~24s for 29 fills)
 - **Fund-Driven Boundary Sync**: Automatic grid alignment with inventory distribution
@@ -18,6 +18,8 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Periodic Market Price Refresh**: Background 4-hour price updates
 - **Pipeline Safety & Diagnostics**: 5-minute timeout safeguard and health monitoring
 - **Data Flow**: Visualization of how market data becomes trading operations and then blockchain transactions.
+- **Market Adapter Signal Pipeline**: AMA center, dynamic weights, regime detection, and collateral advisories
+- **Credit/Debt Runtime**: Native MPA and credit offer workflows with CR planning and grid reset coupling
 
 ### 📖 [Developer Guide](developer_guide.md)
 *Your daily companion for coding.*
@@ -26,11 +28,13 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Copy-on-Write Pattern**: How to work safely within the COW rebalance pipeline; `WorkingGrid` usage and master-grid commit rules (see [COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md))
 - **Startup Sequence & Lock Ordering**: Consolidated startup with deadlock prevention
 - **Zero-Amount Order Prevention**: Validation gates for healthy order sizes
-- **Configurable startPrice**: Fixed numeric, pool, or book-derived pricing modes
+- **Configurable startPrice & gridPrice**: Fixed numeric, pool, book-derived, or AMA keyword pricing modes
 - **Pool ID Caching**: Optimization for price derivation
 - **Order State Helper Functions**: Centralized predicate functions for state checking
+- **Signal Concepts**: Dynamic weights, regime detection, derivative signals, and market adapter integration
+- **Debt Policy**: Native MPA and credit offer configuration and runtime rules
 - **Common Tasks**: Practical "how-to" guides for adding features or fixing bugs.
-- **Glossary**: Definitions of project-specific terminology (e.g., "Virtual Orders", "Rotation", "Pipeline Safety", "Fund-Driven Boundary", "WorkingGrid", "COW Commit").
+- **Glossary**: Definitions of project-specific terminology (e.g., "Virtual Orders", "Rotation", "Pipeline Safety", "Fund-Driven Boundary", "WorkingGrid", "COW Commit", "Dynamic Weight", "Regime Detection").
 
 ### 🔄 [Workflow](WORKFLOW.md)
 *How we build and release.*
@@ -78,7 +82,42 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Recent Fixes**: Summary of test coverage added for the most recent critical bugfixes.
 - **Integration Scenarios**: Documentation of complex multi-fill and partial-fill test cases.
 - **Fill Batching Tests**: Regression tests for fixed-cap batching and recovery retry system.
+- **Signal Tests**: Dynamic weight, derivative trap, and momentum gate coverage.
+- **Credit/Debt Tests**: CR planner, credit runtime, and MPA wiring validation.
 - **Verification**: How to use the test suite to validate grid stability.
+
+### 💳 [Credit Debt Integration Plan](CREDIT_DEBT_INTEGRATION_PLAN.md)
+*Native MPA and credit offer workflows.*
+- **Debt Policy**: Per-bot `debtPolicy.mpa` and `debtPolicy.creditOffer` configuration
+- **MPA Borrowing**: Call-order updates with debt-first CR planning
+- **Credit Offers**: Accept/repay with auto-reborrow and LP-backed collateral valuation
+- **Signing Policy**: Operation allowlists and limit enforcement before broadcast
+
+### 📈 [Improvement Roadmap](IMPROVEMENT_ROADMAP.md)
+*Prioritized backlog and architectural recommendations.*
+- **Historical Bug Patterns**: Race conditions, precision errors, state inconsistency
+- **Short-Term**: Property-based testing, integration stress tests
+- **Medium-Term**: Event sourcing, schema validation
+- **Long-Term**: Chaos engineering, formal verification, observability infrastructure
+
+### 🐄 [COW Evolution Report](COW_EVOLUTION_REPORT.md)
+*Copy-on-Write implementation timeline.*
+- **28 COW-specific commits** over 7 days (Feb 14–21, 2026)
+- **Phases**: Initial implementation, deadlock fixes, state centralization, atomic boundary shifts, invariant sealing
+- **Test Coverage**: Core mechanics, commit guards, concurrent fills, divergence correction
+
+### 🔒 [COW Invariants](COW_INVARIANTS.md)
+*Stable theory contract for COW pipeline.*
+- **Non-negotiable invariants**: Master immutability, commit atomicity, projection rules, accounting separation
+- **Test mapping**: Links each invariant to regression tests
+- **Review checklist**: Quick-use verification for COW/accounting changes
+
+### 🗑️ [Fallback Removal Summary](FALLBACK_REMOVAL_SUMMARY.md)
+*Systematic removal of permissive fallback mechanisms.*
+- **Precision fallbacks**: Strict asset precision validation at startup
+- **Price derivation**: Explicit mode semantics (`pool`, `book`, `auto`)
+- **Orphan matching**: Strict grid-to-chain matching only (no lax tolerance)
+- **Impact**: More predictable failures and clearer configuration requirements
 
 ---
 
@@ -87,9 +126,9 @@ This directory contains the comprehensive technical documentation for the DEXBot
 While these docs explain the *why*, the *how* lives in the code. Key source modules:
 
 **Core Modules:**
-- **`modules/dexbot_class.js`**: Bot initialization, account setup, lifecycle orchestration, and shared runtime wiring
+- **`modules/dexbot_class.js`**: Bot initialization, account setup, lifecycle orchestration, credit runtime startup, and shared runtime wiring
 - **`modules/dexbot_fill_runtime.js`**: Fill processing, replay-safe accounting, and fill queue handling
-- **`modules/dexbot_maintenance_runtime.js`**: Open-orders sync loop, blockchain fetch loop, grid maintenance, and trigger handling
+- **`modules/dexbot_maintenance_runtime.js`**: Open-orders sync loop, blockchain fetch loop, grid maintenance, trigger handling, and market adapter watchdog
 - **`modules/order/manager.js`**: Central controller with Copy-on-Write rebalancing pattern (see [COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md))
 - **`modules/order/working_grid.js`**: COW grid wrapper enabling safe concurrent rebalancing with isolated modifications
 - **`modules/order/grid.js`**: Grid generation, sizing, divergence detection, and spread management
@@ -97,6 +136,8 @@ While these docs explain the *why*, the *how* lives in the code. Key source modu
 - **`modules/order/processed_fill_store.js`**: Processed fill dedupe tracker and persistence batching
 - **`modules/order/strategy.js`**: Grid rebalancing, order activation, consolidation, rotation, and spread management
 - **`modules/order/sync_engine.js`**: Blockchain synchronization, fill detection, order reconciliation
+- **`modules/credit_runtime.js`**: Bot-scoped debt workflow executor (MPA and credit offer accept/repay/reborrow)
+- **`modules/cr_planner.js`**: Shared collateral-ratio math layer for debt-first planning
 
 **Utilities & Support:**
 - **`modules/order/utils/math.js`**: Precision conversions, RMS divergence calculation, fund allocation math
@@ -104,6 +145,7 @@ While these docs explain the *why*, the *how* lives in the code. Key source modu
 - **`modules/order/utils/validate.js`**: Order validation, grid reconciliation, COW action building
 - **`modules/order/utils/system.js`**: System utilities, price derivation, fill deduplication
 - **`modules/order/startup_reconcile.js`**: Startup grid reconciliation and offline fill detection
+- **`modules/credential_policy.js`**: Signing policy validation and operation allowlists
 
 ---
 

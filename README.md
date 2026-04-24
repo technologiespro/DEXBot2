@@ -6,16 +6,11 @@ DEXBot2 is an automated market maker for the BitShares decentralized exchange.
 
 ## 🚀 Features
 
-- **Geometric Grid Trading** — fund-driven recalculation with configurable weight distribution
-- **Constant Spread** — fixed bid-ask gap that adapts to market movement
-- **Copy-on-Write Grid** — transactional rebalancing on isolated working copies ([details](docs/COPY_ON_WRITE_MASTER_PLAN.md))
-- **Adaptive Fill Batching** — 1-4 fills per broadcast, ~24s for 29 fills
-- **Self-Healing Recovery** — periodic retries with automatic state reset
-- **Dust Auto-Cancellation** — configurable delay before cancelling small remainders on-chain
-- **Boundary-Crawl Rebalancing** — periodic grid regeneration and fund invariant verification
-- **AES-Encrypted Key Storage** — RAM-only password handling
-- **PM2 Integration** — multi-bot management with auto-updates and monitoring
-- **Claw Integration Layer** — bridge exposing BitShares capabilities and DEXBot2 infrastructure to external runtimes ([details](claw/README.md))
+- **Smart Grid Trading** — automated geometric order grids that rebalance as the market moves, capturing volatility round the clock
+- **Adaptive Market Signals** — real-time trend detection and dynamic weight adjustments keep your grid aligned with market conditions
+- **Self-Healing & Reliable** — automatic recovery from network issues, batch fill processing, and dust cleanup keep the bot running smoothly 24/7
+- **Bank-Grade Security** — AES-encrypted keys, a hardened credential daemon, and RAM-only password handling protect your funds
+- **Advanced DeFi Workflows** — native margin trading, credit offer management, and multi-bot operation via PM2
 
 ## 🔥 Quick Start
 

@@ -10,6 +10,11 @@ For each of the 4 AMA strategies, it searches for best:
 - `increment` (% grid step)
 - `max/min ratio` (symmetric range around AMA, e.g. `2.0` means `[AMA/2, AMA*2]`)
 
+### Scripts
+
+- `backtest_bot_fitting.js` — lightweight sweep across spread / increment / ratio with basic risk scoring
+- `backtest_ama_sweep.js` — persistent grid simulation with fixed-chain-price mechanics, reposition thresholds, and worker-thread parallelization
+
 ### Input dependencies
 
 - LP candles JSON (recommended 1h):

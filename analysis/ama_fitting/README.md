@@ -41,7 +41,7 @@ node analysis/ama_fitting/fetch_lp_candles.js \
   --hours 26280
 ```
 
-Output: `market_adapter/data/lp_pool_133_iob.xrp_bts_1h.json`
+Output: `market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json`
 
 **Options:**
 
@@ -70,7 +70,7 @@ Because it updates `profiles/market_profiles.json`, `--data` is required.
 **Run on the fetched LP data:**
 ```bash
 node analysis/ama_fitting/optimizer_high_resolution.js \
-  --data market_adapter/data/lp_pool_133_iob.xrp_bts_1h.json
+  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json
 ```
 
 **Default search ranges:**
@@ -84,7 +84,7 @@ node analysis/ama_fitting/optimizer_high_resolution.js \
 Override ranges via CLI:
 ```bash
 node analysis/ama_fitting/optimizer_high_resolution.js \
-  --data market_adapter/data/lp_pool_133_iob.xrp_bts_1h.json \
+  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json \
   --erMin 100 --erMax 600 \
   --slowMin 800 --slowMax 6000
 ```
@@ -139,7 +139,7 @@ Recommended entrypoint:
 
 ```bash
 npm run lp:chart -- \
-  --data market_adapter/data/lp_pool_133_iob.xrp_bts_1h.json
+  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json
 ```
 
 This generates both:
