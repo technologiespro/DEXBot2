@@ -890,4 +890,4 @@ class DerivativeAnalyzer {
     getUpdateCount() { return this.updateCount; }
 }
 
-module.exports = { DerivativeAnalyzer, SMA, EMA, MACD, RSI };
+module.exports = { DerivativeAnalyzer };

@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { escapeHtml, serializeJsonForScript, toEpochSeconds, UPLOT_SHARED_SCRIPT } = require('./chart_utils');
 
 function parseArgs(argv = process.argv.slice(2)) {
     const cfg = {
@@ -47,20 +48,6 @@ Options:
     `);
 }
 
-function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, (m) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;',
-    }[m]));
-}
-
-function serializeJsonForScript(value) {
-    return JSON.stringify(value).replace(/</g, '\\u003c');
-}
-
 function trendToNum(trend) {
     if (trend === 'UP') return 1;
     if (trend === 'DOWN') return -1;
@@ -85,12 +72,6 @@ function countStates(arr, positive, negative) {
         else acc.neutral += 1;
         return acc;
     }, { total: 0, positive: 0, negative: 0, neutral: 0 });
-}
-
-function toEpochSeconds(ts, fallbackIdx) {
-    const ms = new Date(ts).getTime();
-    if (Number.isFinite(ms)) return Math.floor(ms / 1000);
-    return fallbackIdx * 3600;
 }
 
 function generateHTML(data, title) {
@@ -913,106 +894,7 @@ rsiChart = initChart('rsi-chart', {
 
 charts = [priceChart, derivChart, interpChart, macdChart, rsiChart];
 
-function clampXRange(min, max) {
-    let nextMin = min;
-    let nextMax = max;
-    if (!Number.isFinite(nextMin) || !Number.isFinite(nextMax) || nextMax <= nextMin) {
-        return { min: xMin, max: xMax };
-    }
-    if (nextMin < xMin) {
-        nextMax += xMin - nextMin;
-        nextMin = xMin;
-    }
-    if (nextMax > xMax) {
-        nextMin -= nextMax - xMax;
-        nextMax = xMax;
-    }
-    if (nextMin < xMin) nextMin = xMin;
-    if (nextMax > xMax) nextMax = xMax;
-    return { min: nextMin, max: nextMax };
-}
-
-function syncXRange(min, max) {
-    pendingRange = clampXRange(min, max);
-    if (pendingRangeRaf) return;
-    const raf = window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : (fn) => setTimeout(fn, 0);
-    pendingRangeRaf = raf(() => {
-        const next = pendingRange;
-        pendingRange = null;
-        pendingRangeRaf = 0;
-        if (!next) return;
-        charts.forEach((chart) => {
-            chart.batch(() => chart.setScale('x', next));
-        });
-    });
-}
-
-function bindWheelZoom(chart) {
-    const onWheel = (e) => {
-        if (!e || e.ctrlKey || e.metaKey || e.altKey) return;
-        e.preventDefault();
-        e.stopPropagation();
-
-        const rect = chart.root.getBoundingClientRect();
-        const left = e.clientX - rect.left;
-        const center = chart.posToVal(left, 'x');
-        const xScale = chart.scales.x || {};
-        const currMin = Number.isFinite(xScale.min) ? xScale.min : xMin;
-        const currMax = Number.isFinite(xScale.max) ? xScale.max : xMax;
-        const span = currMax - currMin;
-        if (!Number.isFinite(span) || span <= 0) return;
-
-        const factor = e.deltaY < 0 ? 0.85 : 1.15;
-        const nextSpan = Math.max(1, Math.min(xMax - xMin, span * factor));
-        const ratio = (center - currMin) / span;
-        const nextMin = center - nextSpan * ratio;
-        const nextMax = nextMin + nextSpan;
-        syncXRange(nextMin, nextMax);
-    };
-    chart.root.addEventListener('wheel', onWheel, { passive: false });
-}
-
-function bindPan(chart) {
-    let dragging = false;
-    let startClientX = 0;
-    let startMin = xMin;
-    let startMax = xMax;
-
-    const onMouseMove = (e) => {
-        if (!dragging) return;
-        e.preventDefault();
-        const rect = chart.root.getBoundingClientRect();
-        const currentLeft = e.clientX - rect.left;
-        const startLeft = startClientX - rect.left;
-        const startVal = chart.posToVal(startLeft, 'x');
-        const currentVal = chart.posToVal(currentLeft, 'x');
-        const delta = currentVal - startVal;
-        syncXRange(startMin - delta, startMax - delta);
-    };
-
-    const endDrag = () => {
-        dragging = false;
-        document.body.style.cursor = '';
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', endDrag);
-    };
-
-    chart.root.addEventListener('mousedown', (e) => {
-        if (!e || e.button !== 0 || e.ctrlKey || e.metaKey || e.altKey) return;
-        const rect = chart.root.getBoundingClientRect();
-        if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
-        e.preventDefault();
-        e.stopPropagation();
-        dragging = true;
-        startClientX = e.clientX;
-        const xScale = chart.scales.x || {};
-        startMin = Number.isFinite(xScale.min) ? xScale.min : xMin;
-        startMax = Number.isFinite(xScale.max) ? xScale.max : xMax;
-        document.body.style.cursor = 'grabbing';
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', endDrag, { once: true });
-    });
-}
+${UPLOT_SHARED_SCRIPT}
 
 function bindHoverState(chart) {
     const root = chart.root;

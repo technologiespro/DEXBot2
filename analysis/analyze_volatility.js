@@ -22,13 +22,14 @@
 
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 
 const { createSource } = require('./price_sources');
 const { calculateAMA } = require('./ama_fitting/ama');
 const { generateHTML } = require('./trend_detection/volatility_chart_generator');
 const { MARKET_ADAPTER } = require('../modules/constants');
+const { computeATR, getCandleClose } = require('./math_utils');
+const { writeChartFile } = require('./chart_utils');
 
 const AMA_CONFIG = MARKET_ADAPTER.AMAS.AMA3;
 const DEFAULT_ATR_PERIOD = MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT;
@@ -48,32 +49,7 @@ function normalizeAtrPeriod(period) {
 }
 
 function computeATRSeries(candles, period = DEFAULT_ATR_PERIOD) {
-    const atrs = [];
-    let prevClose = Array.isArray(candles[0]) ? candles[0][4] : 0;
-    let atrVal = 0;
-    const safePeriod = normalizeAtrPeriod(period);
-
-    for (let i = 0; i < candles.length; i++) {
-        const c = candles[i];
-        const high = Array.isArray(c) ? c[2] : 0;
-        const low = Array.isArray(c) ? c[3] : 0;
-        const close = Array.isArray(c) ? c[4] : 0;
-        if (i === 0) {
-            atrs.push(0);
-            prevClose = close;
-            continue;
-        }
-        const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
-        if (i <= safePeriod) {
-            atrVal = atrVal === 0 ? tr : (atrVal * (i - 1) + tr) / i;
-        } else {
-            atrVal = (atrVal * (safePeriod - 1) + tr) / safePeriod;
-        }
-        atrs.push(atrVal);
-        prevClose = close;
-    }
-
-    return atrs;
+    return computeATR(candles, normalizeAtrPeriod(period));
 }
 
 function parseArgs() {
@@ -151,7 +127,7 @@ async function main() {
             throw new Error('No candles returned from source');
         }
 
-        const closes = candles.map(c => Array.isArray(c) ? c[4] : 0);
+        const closes = candles.map(c => getCandleClose(c) ?? 0);
         const ama3Values = calculateAMA(closes, AMA_CONFIG);
         const atrPeriod = normalizeAtrPeriod(config.atrPeriod);
         const atrs = computeATRSeries(candles, atrPeriod);
@@ -192,9 +168,7 @@ async function main() {
             marketAdapter: MARKET_ADAPTER,
         }, 'ATR Volatility Research');
 
-        const chartDir = path.dirname(config.chartFile);
-        if (!fs.existsSync(chartDir)) fs.mkdirSync(chartDir, { recursive: true });
-        fs.writeFileSync(config.chartFile, html, 'utf8');
+        writeChartFile(config.chartFile, html);
 
         if (!config.quiet) console.log(`[Volatility] ✓ Chart saved to ${config.chartFile}`);
     } catch (err) {

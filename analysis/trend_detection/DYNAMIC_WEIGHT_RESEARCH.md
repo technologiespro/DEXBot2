@@ -407,7 +407,7 @@ Candle Data
 | `analysis/trend_detection/kalman_trend_analyzer.js` | Kalman filter with tactical/modal state tracking |
 | `analysis/trend_detection/hurst_analyzer.js` | Hurst Exponent via R/S analysis (rolling 256-bar window) |
 | `analysis/trend_detection/permutation_entropy_analyzer.js` | Permutation Entropy via ordinal pattern counting |
-| `analysis/trend_detection/regime_defaults.js` | Shared Hurst + PE config (window sizes, scales) |
+| `modules/constants.js` (`MARKET_ADAPTER.HURST_CONFIG`, `PE_CONFIG`) | Shared Hurst + PE config (window sizes, scales) |
 | `analysis/ama_fitting/ama.js` | Kaufman Adaptive Moving Average |
 | `market_adapter/core/strategies/ama_slope_model.js` | AMA slope weight computation |
 | `analysis/price_sources.js` | Unified candle data source abstraction |

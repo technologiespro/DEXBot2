@@ -279,7 +279,7 @@ async function testDecisionLoopReusesAnalyzerStateForDuplicateMarkets() {
   const discoveryPath = require.resolve('../modules/position_discovery');
   const healthPath = require.resolve('../modules/position_health');
   const feedPriceSourcePath = require.resolve('../modules/feed_price_source');
-  const trendAnalyzerPath = require.resolve('../../analysis/trend_detection/trend_analyzer');
+  const trendAnalyzerPath = require.resolve('../../analysis/trend_detection/kalman_trend_analyzer');
   let trendFetchCount = 0;
 
   class FakeTrendAnalyzer {
@@ -350,7 +350,7 @@ async function testDecisionLoopReusesAnalyzerStateForDuplicateMarkets() {
     id: trendAnalyzerPath,
     filename: trendAnalyzerPath,
     loaded: true,
-    exports: { TrendAnalyzer: FakeTrendAnalyzer }
+    exports: { KalmanTrendAnalyzer: FakeTrendAnalyzer }
   };
   clearModule(decisionLoopPath);
 
@@ -376,7 +376,7 @@ async function testDecisionLoopReplacesAnalyzerOnConfigChange() {
   const discoveryPath = require.resolve('../modules/position_discovery');
   const healthPath = require.resolve('../modules/position_health');
   const feedPriceSourcePath = require.resolve('../modules/feed_price_source');
-  const trendAnalyzerPath = require.resolve('../../analysis/trend_detection/trend_analyzer');
+  const trendAnalyzerPath = require.resolve('../../analysis/trend_detection/kalman_trend_analyzer');
   let constructionCount = 0;
 
   class ConfigTrackingAnalyzer {
@@ -412,7 +412,7 @@ async function testDecisionLoopReplacesAnalyzerOnConfigChange() {
   };
   require.cache[trendAnalyzerPath] = {
     id: trendAnalyzerPath, filename: trendAnalyzerPath, loaded: true,
-    exports: { TrendAnalyzer: ConfigTrackingAnalyzer }
+    exports: { KalmanTrendAnalyzer: ConfigTrackingAnalyzer }
   };
   clearModule(decisionLoopPath);
 

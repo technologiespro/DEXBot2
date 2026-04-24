@@ -14,17 +14,17 @@
 
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const { KalmanTrendAnalyzer } = require('./trend_detection/kalman_trend_analyzer');
 const { HurstAnalyzer } = require('./trend_detection/hurst_analyzer');
 const { PermutationEntropyAnalyzer } = require('./trend_detection/permutation_entropy_analyzer');
-const { HURST_CONFIG, PE_CONFIG } = require('./trend_detection/regime_defaults');
 const { generateHTML } = require('./trend_detection/dynamic_weight_chart_generator');
 const { createSource } = require('./price_sources');
 const { calculateAMA } = require('./ama_fitting/ama');
 const { computeAmaSlopeWeights } = require('../market_adapter/core/strategies/ama_slope_model');
 const { MARKET_ADAPTER } = require('../modules/constants');
+const { writeChartFile } = require('./chart_utils');
+const { getCandleClose } = require('./math_utils');
 
 // AMA configuration — use AMA3 from constants (same as production)
 const AMA_CONFIG = MARKET_ADAPTER.AMAS.AMA3;
@@ -49,28 +49,6 @@ const KALMAN_CONFIG = {
     qModal: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_MODAL_DEFAULT,
 };
 
-
-function computeATR(candles, period = 14) {
-    const atrs = [];
-    let prevClose = Array.isArray(candles[0]) ? candles[0][4] : 0;
-    let atrVal = 0;
-    for (let i = 0; i < candles.length; i++) {
-        const c = candles[i];
-        const high  = Array.isArray(c) ? c[2] : 0;
-        const low   = Array.isArray(c) ? c[3] : 0;
-        const close = Array.isArray(c) ? c[4] : 0;
-        if (i === 0) { atrs.push(0); prevClose = close; continue; }
-        const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
-        if (i <= period) {
-            atrVal = atrVal === 0 ? tr : (atrVal * (i - 1) + tr) / i;
-        } else {
-            atrVal = (atrVal * (period - 1) + tr) / period;
-        }
-        atrs.push(atrVal);
-        prevClose = close;
-    }
-    return atrs;
-}
 
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -152,7 +130,7 @@ async function main() {
         }
 
         // ── AMA weight calculation ───────────────────────────────────────────
-        const closes = candles.map(c => Array.isArray(c) ? c[4] : 0);
+        const closes = candles.map(c => getCandleClose(c) ?? 0);
         const ama3Values = calculateAMA(closes, AMA_CONFIG);
         for (let i = 0; i < allResults.length; i++) {
             const amaPrice = ama3Values[i] ?? null;
@@ -216,9 +194,7 @@ async function main() {
             },
         }, 'Dynamic Weight Research Tool');
 
-        const chartDir = path.dirname(config.chartFile);
-        if (!fs.existsSync(chartDir)) fs.mkdirSync(chartDir, { recursive: true });
-        fs.writeFileSync(config.chartFile, html, 'utf8');
+        writeChartFile(config.chartFile, html);
 
         if (!config.quiet) console.log(`[DynamicWeight] ✓ Chart saved to ${config.chartFile}`);
     } catch (err) {

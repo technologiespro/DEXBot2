@@ -237,7 +237,7 @@ discover → trend → assess → recommend
 ```
 
 1. **Discover** (`position_discovery.js`) — scan account's on-chain call orders to find all open debt positions
-2. **Trend** (`feed_price_source.js` + `trend_analyzer.js`) — fetch feed price and market mid-price per market, update the AMA-based trend detector
+2. **Trend** (`feed_price_source.js` + `kalman_trend_analyzer.js`) — fetch feed price and market mid-price per market, update the Kalman-based trend detector
 3. **Assess** (`position_health.js`) — classify each position into a CR zone, check trend alignment, generate prioritized actions
 4. **Recommend** (`decision_loop.js`) — sort actions by priority (immediate → soon → evaluate → fallback), return structured assessment
 

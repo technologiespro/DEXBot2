@@ -13,12 +13,13 @@
 
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const { KalmanTrendAnalyzer } = require('./trend_detection/kalman_trend_analyzer');
 const { generateHTML } = require('./trend_detection/kalman_chart_generator');
 const { createSource } = require('./price_sources');
 const { calculateAMA } = require('./ama_fitting/ama');
+const { computeATR, getCandleClose } = require('./math_utils');
+const { writeChartFile } = require('./chart_utils');
 
 // Mirror ama_slope_model.js defaults for a fair comparison
 const AMA_ER_PERIOD   = 10;
@@ -29,28 +30,6 @@ const NEUTRAL_ZONE    = 0.15;
 const MAX_SLOPE_PCT   = 3.0;
 const MAX_SLOPE_OFFSET = 0.5;
 const ATR_PERIOD      = 14;
-
-function computeATR(candles) {
-    const atrs = [];
-    let prevClose = Array.isArray(candles[0]) ? candles[0][4] : 0;
-    let atrVal = 0;
-    for (let i = 0; i < candles.length; i++) {
-        const c = candles[i];
-        const high  = Array.isArray(c) ? c[2] : 0;
-        const low   = Array.isArray(c) ? c[3] : 0;
-        const close = Array.isArray(c) ? c[4] : 0;
-        if (i === 0) { atrs.push(0); prevClose = close; continue; }
-        const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
-        if (i <= ATR_PERIOD) {
-            atrVal = atrVal === 0 ? tr : (atrVal * (i - 1) + tr) / i;
-        } else {
-            atrVal = (atrVal * (ATR_PERIOD - 1) + tr) / ATR_PERIOD; // Wilder smoothing
-        }
-        atrs.push(atrVal);
-        prevClose = close;
-    }
-    return atrs;
-}
 
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -111,9 +90,9 @@ async function main() {
         }
 
         // ── AMA weight offset (for comparison panel) ─────────────────────────
-        const closes    = candles.map(c => Array.isArray(c) ? c[4] : 0);
+        const closes    = candles.map(c => getCandleClose(c) ?? 0);
         const amaValues = calculateAMA(closes, { erPeriod: AMA_ER_PERIOD, fastPeriod: AMA_FAST, slowPeriod: AMA_SLOW });
-        const atrs      = computeATR(candles);
+        const atrs      = computeATR(candles, ATR_PERIOD);
         const warmup    = AMA_ER_PERIOD + LOOKBACK_BARS + 1;
 
         for (let i = 0; i < allResults.length; i++) {
@@ -132,9 +111,7 @@ async function main() {
 
         // ── Generate chart ───────────────────────────────────────────────────
         const html = generateHTML({ allResults }, 'Kalman Trend Analysis');
-        const chartDir = path.dirname(config.chartFile);
-        if (!fs.existsSync(chartDir)) fs.mkdirSync(chartDir, { recursive: true });
-        fs.writeFileSync(config.chartFile, html, 'utf8');
+        writeChartFile(config.chartFile, html);
 
         if (!config.quiet) console.log(`[Kalman] ✓ Chart saved to ${config.chartFile}`);
     } catch (err) {

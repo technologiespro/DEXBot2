@@ -20,12 +20,15 @@
 
 'use strict';
 
-const fs   = require('fs');
 const path = require('path');
 const { HurstAnalyzer }              = require('./trend_detection/hurst_analyzer');
 const { PermutationEntropyAnalyzer } = require('./trend_detection/permutation_entropy_analyzer');
-const { HURST_CONFIG, PE_CONFIG } = require('./trend_detection/regime_defaults');
+const { MARKET_ADAPTER } = require('../modules/constants');
+const HURST_CONFIG = MARKET_ADAPTER.HURST_CONFIG;
+const PE_CONFIG = MARKET_ADAPTER.PE_CONFIG;
 const { createSource }              = require('./price_sources');
+const { writeChartFile }            = require('./chart_utils');
+const { getCandleClose }            = require('./math_utils');
 
 const HURST_CENTER   = HURST_CONFIG.window;
 const PE_CENTER      = PE_CONFIG.window;
@@ -408,10 +411,7 @@ async function main() {
             throw new Error('No candles returned from source');
         }
 
-        const prices = candles.map(c => {
-            const p = source.extractMarketPrice(c);
-            return Array.isArray(c) ? c[4] : p.marketPrice;
-        });
+        const prices = candles.map(c => getCandleClose(c) ?? 0);
 
         if (!config.quiet) console.log(`[RegimeWindows] ${prices.length} candles — running grid search...`);
 
@@ -437,9 +437,7 @@ async function main() {
         }
 
         const html = generateHeatmapHTML(results, HURST_WINDOWS, PE_WINDOWS);
-        const chartDir = path.dirname(config.chartFile);
-        if (!fs.existsSync(chartDir)) fs.mkdirSync(chartDir, { recursive: true });
-        fs.writeFileSync(config.chartFile, html, 'utf8');
+        writeChartFile(config.chartFile, html);
 
         if (!config.quiet) console.log(`[RegimeWindows] ✓ Chart saved to ${config.chartFile}`);
 

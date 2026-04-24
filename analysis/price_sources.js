@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const { fillCandleGaps } = require('../market_adapter/candle_utils');
+const { getCandleClose, getCandleTimestamp } = require('./math_utils');
 
 class JsonFileSource {
     constructor(config = {}) {
@@ -59,9 +60,7 @@ class JsonFileSource {
     }
 
     extractMarketPrice(candle) {
-        const close = Array.isArray(candle) ? candle[4] : candle.close;
-        const ts = Array.isArray(candle) ? candle[0] : candle.timestamp;
-        return { marketPrice: close, timestamp: ts };
+        return { marketPrice: getCandleClose(candle), timestamp: getCandleTimestamp(candle) };
     }
 }
 
@@ -108,34 +107,8 @@ class MarketAdapterSource {
     }
 }
 
-class KibanaSource {
-    constructor(config = {}) {
-        this.poolId = config.poolId;
-        this.soldAssetId = config.soldAssetId;
-        this.receivedAssetId = config.receivedAssetId;
-        this.precA = config.precA;
-        this.precB = config.precB;
-        this.intervalSeconds = config.intervalSeconds || 3600;
-        this.lookbackHours = config.lookbackHours || 720;
-        this.name = `kibana:pool=${this.poolId}`;
-    }
-
-    async fetchCandles() {
-        throw new Error('[KibanaSource] Kibana source requires kibana_source module (not available in this build)');
-    }
-
-    extractMarketPrice(candle) {
-        return {
-            marketPrice: candle.close || candle[4],
-            timestamp: candle.timestamp || candle[0],
-        };
-    }
-}
-
 function createSource(type, config) {
     switch (type.toLowerCase()) {
-        case 'kibana':
-            return new KibanaSource(config);
         case 'json':
             return new JsonFileSource(config);
         case 'market_adapter':
@@ -146,7 +119,6 @@ function createSource(type, config) {
 }
 
 module.exports = {
-    KibanaSource,
     JsonFileSource,
     MarketAdapterSource,
     createSource,

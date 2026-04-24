@@ -20,6 +20,8 @@ const path = require('path');
 const os = require('os');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const { calculateAMA } = require('../ama_fitting/ama');
+const { range } = require('../math_utils');
+const { toCandles, parseListOrRange, loadLpData, fmt } = require('./shared_utils');
 
 const DEFAULT_DATA = path.join(__dirname, '..', '..', 'market_adapter', 'data', 'lp', '1_3_5537_1_3_0', 'lp_pool_133_1h.json');
 const DEFAULT_RESULTS = path.join(__dirname, '..', 'ama_fitting', 'optimization_results_lp_pool_133_1h.json');
@@ -52,27 +54,9 @@ const DEFAULT_RATIO_VALUES = [1.05, 1.1, 1.15, 1.2, 1.3, 1.5, 2, 3, 5, 10];
 // Reposition threshold: AMA must move this fraction from last grid center to trigger re-center
 const DEFAULT_REPOSITION_PCT = 2.5;
 
-function range(min, max, step) {
-    const out = [];
-    for (let v = min; v <= max + 1e-9; v += step) out.push(Number(v.toFixed(4)));
-    return out;
-}
-
-function toCandles(arr) {
-    return arr.map((c) => ({
-        timestamp: c[0], open: c[1], high: c[2], low: c[3], close: c[4], volume: c[5],
-    }));
-}
-
-function parseListOrRange(spec, fallback) {
-    if (!spec) return fallback;
-    if (spec.includes(':')) {
-        const [a, b, s] = spec.split(':').map(Number);
-        if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(s) || s <= 0) return fallback;
-        return range(a, b, s);
-    }
-    const vals = spec.split(',').map((x) => Number(x.trim())).filter(Number.isFinite);
-    return vals.length ? vals : fallback;
+function jsonSafe(key, val) {
+    if (val === -Infinity || val === Infinity) return null;
+    return val;
 }
 
 function parseArgs() {
@@ -143,11 +127,6 @@ function printHelp() {
     console.log('  --maker-create-factor   Maker share of create fee (default: 0.10)');
     console.log('  --tx-fee-price <n>      Convert BTS fees into backtest units (default: 1.0)');
     console.log('  --top <n>               Show top N results (default: 15)');
-}
-
-function loadLpData(filePath) {
-    const json = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    return { candles: toCandles(json.candles ?? json), meta: json.meta ?? null };
 }
 
 function loadAmaStrategies(resultsPath) {
@@ -515,16 +494,6 @@ function simulatePersistentGrid(candles, amaValues, params, weightName, weightFa
         netScore,
         score,
     };
-}
-
-function fmt(x, d = 2) {
-    if (!Number.isFinite(x)) return '  n/a';
-    return Number(x).toFixed(d);
-}
-
-function jsonSafe(key, val) {
-    if (val === -Infinity || val === Infinity) return null;
-    return val;
 }
 
 // ── Per-AMA sweep logic (runs in main thread or worker) ─────────────────────

@@ -1029,7 +1029,6 @@ class Grid {
      * - Buy side RMS is checked against GRID_COMPARISON.RMS_PERCENTAGE independently
      * - Sell side RMS is checked against GRID_COMPARISON.RMS_PERCENTAGE independently
      * - One side can diverge while the other remains stable (no update for stable side)
-     * - CacheFunds are updated only for sides being recalculated
      *
      * RC-4: Atomic snapshot taking prevents stale data from concurrent fill operations
      *   - Grids are snapshotted atomically before comparison

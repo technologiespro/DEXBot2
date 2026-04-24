@@ -21,12 +21,12 @@
 
 'use strict';
 
-const fs   = require('fs');
 const path = require('path');
 const { DerivativeAnalyzer } = require('./trend_detection/derivative_analyzer');
 const { generateHTML }        = require('./derivative_chart_generator');
 const { createSource }        = require('./price_sources');
 const { findLatestLpData }    = require('../market_adapter/utils/data_discovery');
+const { writeChartFile }      = require('./chart_utils');
 
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -255,9 +255,7 @@ async function main() {
         const report = await analyze(source, config);
 
         const html = generateHTML(report, 'Derivative Trend Analysis');
-        const chartDir = path.dirname(config.chartFile);
-        if (!fs.existsSync(chartDir)) fs.mkdirSync(chartDir, { recursive: true });
-        fs.writeFileSync(config.chartFile, html, 'utf8');
+        writeChartFile(config.chartFile, html);
 
         if (!config.quiet) console.log(`[Analyzer] ✓ Chart saved to ${config.chartFile}`);
     } catch (err) {

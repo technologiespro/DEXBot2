@@ -71,7 +71,7 @@ Tests for the core trading strategies, specifically the grid logic.
 *   `test_grid_funding_manual.js` - Tests manual funding scenarios for grids.
 *   `test_rebalance_orders.js` - Tests logic for rebalancing orders within a grid.
 *   `test_rotation_order_sizing.js` - Verifies order sizing logic for rotation strategies.
-*   `test_rotation_cachefunds.js` - Tests fund caching in rotation strategies.
+*   `test_rotation_available_funds.js` - Tests available-funds budget in rotation strategies.
 *   `test_conditional_rotation.js` - Tests conditional rotation logic.
 *   `test_crossed_rotation.js` - Tests scenarios where rotation orders might cross.
 *   `test_strategy_edge_cases.js` - Tests various edge cases in strategy execution.

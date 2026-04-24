@@ -17,6 +17,4 @@ This folder contains the SMA, MACD, RSI, Hurst, Kalman, and regime analysis code
 - `kalman_velocity_smoothing.js`
 - `permutation_entropy_analyzer.js`
 - `regime_chart_generator.js`
-- `regime_defaults.js`
-- `trend_analyzer.js`
 - `volatility_chart_generator.js`

@@ -2,8 +2,9 @@
 
 const { HurstAnalyzer } = require('../../../analysis/trend_detection/hurst_analyzer');
 const { PermutationEntropyAnalyzer } = require('../../../analysis/trend_detection/permutation_entropy_analyzer');
-const { HURST_CONFIG, PE_CONFIG } = require('../../../analysis/trend_detection/regime_defaults');
 const { MARKET_ADAPTER } = require('../../../modules/constants');
+const HURST_CONFIG = MARKET_ADAPTER.HURST_CONFIG;
+const PE_CONFIG = MARKET_ADAPTER.PE_CONFIG;
 
 function resolveHNodes(hurstZoneBand = null) {
     const band = Number.isFinite(hurstZoneBand) ? hurstZoneBand : MARKET_ADAPTER.HURST_ZONE_BAND;

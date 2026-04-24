@@ -57,12 +57,6 @@ function cloneObjectives() {
 }
 
 // ── Parameter ranges ──────────────────────────────────────────────────────────
-function range(min, max, step) {
-    const out = [];
-    for (let v = min; v <= max + 1e-9; v += step) out.push(parseFloat(v.toFixed(2)));
-    return [...new Set(out)];
-}
-
 function quantize(value, quantum) {
     if (!Number.isFinite(quantum) || quantum <= 0) return value;
     return Math.round(value / quantum) * quantum;
@@ -90,7 +84,7 @@ function buildDimension(label, cfg) {
     const quantum = Number(cfg.quantum);
 
     if (Number.isFinite(step) && step > 0) {
-        const values = range(min, max, step);
+        const values = range(min, max, step, 2);
         return {
             values,
             meta: {
@@ -208,6 +202,7 @@ function boundaryFlags(winner, erValues, fastValues, slowValues) {
 }
 
 const { ensureDir } = require('../../modules/order/utils/system');
+const { range } = require('../math_utils');
 
 // ── Data loaders ──────────────────────────────────────────────────────────────
 

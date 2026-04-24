@@ -20,16 +20,18 @@
 
 'use strict';
 
-const fs   = require('fs');
 const path = require('path');
 
-const { HURST_CONFIG, PE_CONFIG }       = require('./trend_detection/regime_defaults');
+const { MARKET_ADAPTER }              = require('../modules/constants');
+const HURST_CONFIG = MARKET_ADAPTER.HURST_CONFIG;
+const PE_CONFIG = MARKET_ADAPTER.PE_CONFIG;
 const { HurstAnalyzer }               = require('./trend_detection/hurst_analyzer');
 const { PermutationEntropyAnalyzer }  = require('./trend_detection/permutation_entropy_analyzer');
 const { generateRegimeHTML }          = require('./trend_detection/regime_chart_generator');
 const { createSource }                = require('./price_sources');
 const { calculateAMA }                = require('./ama_fitting/ama');
-const { MARKET_ADAPTER }              = require('../modules/constants');
+const { writeChartFile }              = require('./chart_utils');
+const { getCandleClose }              = require('./math_utils');
 
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -110,7 +112,7 @@ async function main() {
         }
 
         // ── AMA3 overlay for price panel ─────────────────────────────────────
-        const closes    = candles.map(c => Array.isArray(c) ? c[4] : 0);
+        const closes    = candles.map(c => getCandleClose(c) ?? 0);
         const ama3Values = calculateAMA(closes, MARKET_ADAPTER.AMAS.AMA3);
         for (let i = 0; i < allResults.length; i++) {
             allResults[i].ama3Price = ama3Values[i] ?? null;
@@ -132,9 +134,7 @@ async function main() {
             peConfig:    { m: config.peM, window: config.peWindow },
         }, 'Regime Analysis \u2014 Hurst \u00b7 Permutation Entropy');
 
-        const chartDir = path.dirname(config.chartFile);
-        if (!fs.existsSync(chartDir)) fs.mkdirSync(chartDir, { recursive: true });
-        fs.writeFileSync(config.chartFile, html, 'utf8');
+        writeChartFile(config.chartFile, html);
 
         if (!config.quiet) console.log(`[Regime] \u2713 Chart saved to ${config.chartFile}`);
 

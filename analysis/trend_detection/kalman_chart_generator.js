@@ -1,27 +1,6 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-
-function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, (m) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;',
-    }[m]));
-}
-
-function serializeJsonForScript(value) {
-    return JSON.stringify(value).replace(/</g, '\\u003c');
-}
-
-function toEpochSeconds(ts, fallbackIdx) {
-    const ms = new Date(ts).getTime();
-    if (Number.isFinite(ms)) return Math.floor(ms / 1000);
-    return fallbackIdx * 3600;
-}
+const { escapeHtml, serializeJsonForScript, toEpochSeconds, UPLOT_SHARED_SCRIPT } = require('../chart_utils');
 
 const NEUTRAL_ZONE_PCT = 0.15;
 const MAX_SLOPE_PCT    = 3.0;
@@ -149,86 +128,9 @@ function generateHTML(data, title = 'Kalman Trajectory Analysis') {
         let pendingRange = null;
         let pendingRangeRaf = 0;
         let priceChart, kalmanChart, amaChart;
+        let charts;
 
-        function clampXRange(min, max) {
-            let nextMin = min, nextMax = max;
-            const span = nextMax - nextMin;
-            if (!Number.isFinite(span) || span <= 0) return { min: xMin, max: xMax };
-            if (nextMin < xMin) { nextMax += xMin - nextMin; nextMin = xMin; }
-            if (nextMax > xMax) { nextMin -= nextMax - xMax; nextMax = xMax; }
-            if (nextMin < xMin) nextMin = xMin;
-            if (nextMax > xMax) nextMax = xMax;
-            if (nextMax <= nextMin) return { min: xMin, max: xMax };
-            return { min: nextMin, max: nextMax };
-        }
-
-        function syncXRange(min, max) {
-            pendingRange = clampXRange(min, max);
-            if (pendingRangeRaf) return;
-            pendingRangeRaf = requestAnimationFrame(() => {
-                const next = pendingRange;
-                pendingRange = null;
-                pendingRangeRaf = 0;
-                if (!next) return;
-                [priceChart, kalmanChart, amaChart].forEach(c => c.batch(() => c.setScale('x', next)));
-            });
-        }
-
-        function bindWheelZoom(chart) {
-            chart.root.addEventListener('wheel', (e) => {
-                if (e.ctrlKey || e.metaKey || e.altKey) return;
-                e.preventDefault();
-                e.stopPropagation();
-                const rect = chart.root.getBoundingClientRect();
-                const center = chart.posToVal(e.clientX - rect.left, 'x');
-                const s = chart.scales.x || {};
-                const currMin = Number.isFinite(s.min) ? s.min : xMin;
-                const currMax = Number.isFinite(s.max) ? s.max : xMax;
-                const span = currMax - currMin;
-                if (!Number.isFinite(span) || span <= 0) return;
-                const factor = e.deltaY < 0 ? 0.85 : 1.15;
-                const nextSpan = Math.max(1, Math.min(xMax - xMin, span * factor));
-                const ratio = (center - currMin) / span;
-                syncXRange(center - nextSpan * ratio, center - nextSpan * ratio + nextSpan);
-            }, { passive: false });
-        }
-
-        function bindPan(chart) {
-            let dragging = false, startClientX = 0, startMin = xMin, startMax = xMax;
-            const getScale = () => {
-                const s = chart.scales.x || {};
-                return { currMin: Number.isFinite(s.min) ? s.min : xMin, currMax: Number.isFinite(s.max) ? s.max : xMax };
-            };
-            const onMouseMove = (e) => {
-                if (!dragging) return;
-                e.preventDefault();
-                const rect = chart.root.getBoundingClientRect();
-                const delta = chart.posToVal(e.clientX - rect.left, 'x') - chart.posToVal(startClientX - rect.left, 'x');
-                syncXRange(startMin - delta, startMax - delta);
-            };
-            const endDrag = () => {
-                if (!dragging) return;
-                dragging = false;
-                document.body.style.cursor = '';
-                window.removeEventListener('mousemove', onMouseMove);
-                window.removeEventListener('mouseup', endDrag);
-            };
-            chart.root.addEventListener('mousedown', (e) => {
-                if (!e || e.button !== 0 || e.ctrlKey || e.metaKey || e.altKey) return;
-                const rect = chart.root.getBoundingClientRect();
-                if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
-                e.preventDefault();
-                e.stopPropagation();
-                dragging = true;
-                startClientX = e.clientX;
-                const cur = getScale();
-                startMin = cur.currMin; startMax = cur.currMax;
-                document.body.style.cursor = 'grabbing';
-                window.addEventListener('mousemove', onMouseMove);
-                window.addEventListener('mouseup', endDrag, { once: true });
-            });
-            chart.root.addEventListener('mouseleave', () => { if (dragging) document.body.style.cursor = 'grabbing'; });
-        }
+        ${UPLOT_SHARED_SCRIPT}
 
         // ── Legend ────────────────────────────────────────────────────────────
         let lastLiveIdx = data.prices.length - 151; // last real bar (before future nulls)
@@ -459,9 +361,11 @@ function generateHTML(data, title = 'Kalman Trajectory Analysis') {
                 document.getElementById('ama-chart')
             );
 
+            charts = [priceChart, kalmanChart, amaChart];
+
             // Wire mousemove on all chart plot areas to update legend
             let leavePending = null;
-            [priceChart, kalmanChart, amaChart].forEach(chart => {
+            charts.forEach(chart => {
                 chart.over.addEventListener('mousemove', () => {
                     if (leavePending !== null) { clearTimeout(leavePending); leavePending = null; }
                     const idx = chart.cursor.idx;

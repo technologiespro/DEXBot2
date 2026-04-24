@@ -279,21 +279,11 @@ function fmtShortDate(sec) {
     });
 }
 
-function escapeHtmlJs(str) {
-    return String(str).replace(/[&<>"']/g, (m) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;',
-    }[m]));
-}
+${escapeHtml.toString()}
 
-function formatPctJs(v) {
-    const num = Number(v);
-    if (!Number.isFinite(num)) return 'n/a';
-    return (num >= 0 ? '+' : '') + num.toFixed(2) + '%';
-}
+${formatPct.toString()}
+
+${padRange.toString()}
 
 function formatCompactNumber(v) {
     const num = Number(v);
@@ -306,16 +296,6 @@ function formatCompactNumber(v) {
     if (abs >= 100) return sign + abs.toFixed(0);
     if (abs >= 10) return sign + abs.toFixed(1);
     return sign + abs.toFixed(2);
-}
-
-function padRange(min, max, pctLower = 0.04, pctUpper = 0.04) {
-    if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
-    if (min === max) {
-        const delta = Math.abs(min) * 0.03 || 1;
-        return [min - delta, max + delta];
-    }
-    const span = max - min;
-    return [min - span * pctLower, max + span * pctUpper];
 }
 
 function makeAxis(show, type) {
@@ -469,7 +449,7 @@ function renderLiveTable() {
     rows.forEach(([label, color], i) => {
         const tr = tbl.insertRow();
         const labelCell = tr.insertCell();
-        labelCell.innerHTML = color ? '<span style="color:' + color + '">● </span>' + escapeHtmlJs(label) : escapeHtmlJs(label);
+        labelCell.innerHTML = color ? '<span style="color:' + color + '">● </span>' + escapeHtml(label) : escapeHtml(label);
         const valueCell = tr.insertCell();
         valueCell.className = 'val';
         valueCell.textContent = '--';
@@ -495,7 +475,7 @@ function updateLivePanelAtIndex(idx) {
 
     amaDevArrays.forEach((arr, i) => {
         const val = arr[idx];
-        setLiveCell(liveCells.devs[i], Number.isFinite(val) ? formatPctJs(val) : 'n/a');
+        setLiveCell(liveCells.devs[i], Number.isFinite(val) ? formatPct(val) : 'n/a');
     });
 
     setLiveCell(liveCells.volume, Number.isFinite(volumes[idx]) ? formatCompactNumber(volumes[idx]) : 'n/a');

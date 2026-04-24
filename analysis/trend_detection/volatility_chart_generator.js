@@ -1,22 +1,7 @@
 'use strict';
 
 const { MARKET_ADAPTER } = require('../../modules/constants');
-
-function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, (m) => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
-    }[m]));
-}
-
-function serializeJsonForScript(value) {
-    return JSON.stringify(value).replace(/</g, '\\u003c');
-}
-
-function toEpochSeconds(ts, fallbackIdx) {
-    const ms = new Date(ts).getTime();
-    if (Number.isFinite(ms)) return Math.floor(ms / 1000);
-    return fallbackIdx * 3600;
-}
+const { escapeHtml, serializeJsonForScript, toEpochSeconds, UPLOT_SHARED_SCRIPT } = require('../chart_utils');
 
 function generateHTML(data, title = 'ATR Volatility Research') {
     const results = data.allResults || [];
@@ -208,6 +193,10 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         const candleRows = Array.isArray(data.candles) ? data.candles : [];
         const baseVarianceSeries = Array.isArray(data.varianceSeries) ? data.varianceSeries : [];
 
+        function getCandleClose(c) { return Array.isArray(c) ? c[4] : c?.close; }
+        function getCandleHigh(c)  { return Array.isArray(c) ? c[2] : c?.high; }
+        function getCandleLow(c)   { return Array.isArray(c) ? c[3] : c?.low; }
+
         let currentAtrPeriod = Math.max(3, Math.min(30, Math.round(data.atrPeriod ?? ${JSON.stringify(defaultAtrPeriod)})));
         let currentThreshold = data.volatilityThreshold;
         let currentExponent = data.volatilityExponent;
@@ -219,6 +208,9 @@ function generateHTML(data, title = 'ATR Volatility Research') {
         let pendingRange = null;
         let pendingRangeRaf = 0;
         let priceChart, varianceChart, shiftChart;
+        let charts;
+
+        ${UPLOT_SHARED_SCRIPT}
 
         function clamp(v, lo, hi) {
             return Math.max(lo, Math.min(hi, v));
@@ -277,14 +269,14 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             if (!Array.isArray(candles) || candles.length === 0) return atrs;
 
             const safePeriod = Math.max(1, Math.round(period));
-            let prevClose = Array.isArray(candles[0]) ? Number(candles[0][4]) : 0;
+            let prevClose = Number(getCandleClose(candles[0]) ?? 0);
             let atrVal = 0;
 
             for (let i = 0; i < candles.length; i++) {
                 const c = candles[i];
-                const high = Array.isArray(c) ? Number(c[2]) : 0;
-                const low = Array.isArray(c) ? Number(c[3]) : 0;
-                const close = Array.isArray(c) ? Number(c[4]) : 0;
+                const high = Number(getCandleHigh(c) ?? 0);
+                const low = Number(getCandleLow(c) ?? 0);
+                const close = Number(getCandleClose(c) ?? 0);
                 if (i === 0) {
                     atrs.push(0);
                     prevClose = close;
@@ -392,18 +384,6 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             document.getElementById('signal-over-label').textContent = 'over ' + overPct.toFixed(1) + '%';
         }
 
-        function clampXRange(min, max) {
-            let lo = min, hi = max;
-            const span = hi - lo;
-            if (!Number.isFinite(span) || span <= 0) return { min: xMin, max: xMax };
-            if (lo < xMin) { hi += xMin - lo; lo = xMin; }
-            if (hi > xMax) { lo -= hi - xMax; hi = xMax; }
-            if (lo < xMin) lo = xMin;
-            if (hi > xMax) hi = xMax;
-            if (hi <= lo) return { min: xMin, max: xMax };
-            return { min: lo, max: hi };
-        }
-
         function rangeFrom(values, fallbackMin, fallbackMax, padFrac = 0.12) {
             let min = Infinity;
             let max = -Infinity;
@@ -441,80 +421,6 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             if (!splits.includes(0)) splits.push(0);
             if (!splits.includes(-currentThreshold)) splits.push(-currentThreshold);
             return splits.sort((a, b) => a - b);
-        }
-
-        function syncXRange(min, max) {
-            pendingRange = clampXRange(min, max);
-            if (pendingRangeRaf) return;
-            pendingRangeRaf = requestAnimationFrame(() => {
-                const next = pendingRange;
-                pendingRange = null;
-                pendingRangeRaf = 0;
-                if (!next) return;
-                [priceChart, varianceChart, shiftChart].forEach(c => c && c.batch(() => c.setScale('x', next)));
-            });
-        }
-
-        function bindWheelZoom(chart) {
-            chart.root.addEventListener('wheel', (e) => {
-                if (e.ctrlKey || e.metaKey || e.altKey) return;
-                e.preventDefault();
-                e.stopPropagation();
-                const rect = chart.root.getBoundingClientRect();
-                const center = chart.posToVal(e.clientX - rect.left, 'x');
-                const s = chart.scales.x || {};
-                const currMin = Number.isFinite(s.min) ? s.min : xMin;
-                const currMax = Number.isFinite(s.max) ? s.max : xMax;
-                const span = currMax - currMin;
-                if (!Number.isFinite(span) || span <= 0) return;
-                const factor = e.deltaY < 0 ? 0.85 : 1.15;
-                const nextSpan = Math.max(1, Math.min(xMax - xMin, span * factor));
-                const ratio = (center - currMin) / span;
-                syncXRange(center - nextSpan * ratio, center - nextSpan * ratio + nextSpan);
-            }, { passive: false });
-        }
-
-        function bindPan(chart) {
-            let dragging = false;
-            let startClientX = 0;
-            let startMin = xMin;
-            let startMax = xMax;
-
-            const onMove = (e) => {
-                if (!dragging) return;
-                e.preventDefault();
-                const rect = chart.root.getBoundingClientRect();
-                const delta = chart.posToVal(e.clientX - rect.left, 'x') - chart.posToVal(startClientX - rect.left, 'x');
-                syncXRange(startMin - delta, startMax - delta);
-            };
-
-            const endDrag = () => {
-                if (!dragging) return;
-                dragging = false;
-                document.body.style.cursor = '';
-                window.removeEventListener('mousemove', onMove);
-                window.removeEventListener('mouseup', endDrag);
-            };
-
-            chart.root.addEventListener('mousedown', (e) => {
-                if (!e || e.button !== 0 || e.ctrlKey || e.metaKey || e.altKey) return;
-                const rect = chart.root.getBoundingClientRect();
-                if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
-                e.preventDefault();
-                e.stopPropagation();
-                dragging = true;
-                startClientX = e.clientX;
-                const s = chart.scales.x || {};
-                startMin = Number.isFinite(s.min) ? s.min : xMin;
-                startMax = Number.isFinite(s.max) ? s.max : xMax;
-                document.body.style.cursor = 'grabbing';
-                window.addEventListener('mousemove', onMove);
-                window.addEventListener('mouseup', endDrag, { once: true });
-            });
-
-            chart.root.addEventListener('mouseleave', () => {
-                if (dragging) document.body.style.cursor = 'grabbing';
-            });
         }
 
         function makeDeltaHook(values, scaleKey, thresholdGetter) {
@@ -729,8 +635,9 @@ function generateHTML(data, title = 'ATR Volatility Research') {
                 },
             }, [data.dates, rawDeltaArr, deltaArr], document.getElementById('shift-chart'));
 
+            charts = [priceChart, varianceChart, shiftChart];
             let leavePending = null;
-            [priceChart, varianceChart, shiftChart].forEach(chart => {
+            charts.forEach(chart => {
                 chart.over.addEventListener('mousemove', () => {
                     if (leavePending !== null) {
                         clearTimeout(leavePending);

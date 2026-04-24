@@ -1,39 +1,8 @@
 'use strict';
 
 const { MARKET_ADAPTER } = require('../../modules/constants');
-
-function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, (m) => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
-    }[m]));
-}
-
-function serializeJsonForScript(value) {
-    return JSON.stringify(value).replace(/</g, '\\u003c');
-}
-
-function normalizeCandle(candle) {
-    if (!candle) return null;
-    if (Array.isArray(candle)) {
-        const ts = Number(candle[0]);
-        const open = Number(candle[1]);
-        const high = Number(candle[2]);
-        const low = Number(candle[3]);
-        const close = Number(candle[4]);
-        const volume = Number(candle[5] ?? 0);
-        if (![ts, open, high, low, close].every(Number.isFinite)) return null;
-        return { time: Math.floor(ts / 1000), open, high, low, close, volume: Number.isFinite(volume) ? volume : 0 };
-    }
-
-    const ts = Number(candle.timestamp ?? candle.ts ?? candle.time);
-    const open = Number(candle.open);
-    const high = Number(candle.high);
-    const low = Number(candle.low);
-    const close = Number(candle.close);
-    const volume = Number(candle.volume ?? candle.volumeA ?? 0);
-    if (![ts, open, high, low, close].every(Number.isFinite)) return null;
-    return { time: Math.floor(ts / 1000), open, high, low, close, volume: Number.isFinite(volume) ? volume : 0 };
-}
+const { escapeHtml, serializeJsonForScript } = require('../chart_utils');
+const { normalizeCandle } = require('../math_utils');
 
 function inferBaseIntervalSeconds(candles, fallback = 3600) {
     if (!Array.isArray(candles) || candles.length < 2) return fallback;

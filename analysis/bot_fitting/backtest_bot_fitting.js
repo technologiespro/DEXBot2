@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const { calculateAMA } = require('../ama_fitting/ama');
+const { range } = require('../math_utils');
+const { toCandles, parseListOrRange, loadLpData, fmt } = require('./shared_utils');
 
 const DEFAULT_DATA = path.join(__dirname, '..', '..', 'market_adapter', 'data', 'lp', '1_3_5537_1_3_0', 'lp_pool_133_1h.json');
 const DEFAULT_ACTIVE_ORDERS = 5;
@@ -18,34 +20,6 @@ const RISK_W_CANCEL = 0.15;    // canceled on reposition
 const DEFAULT_SPREAD_VALUES = range(0.4, 1.6, 0.1);
 const DEFAULT_INCREMENT_VALUES = range(0.2, 0.8, 0.1);
 const DEFAULT_RATIO_VALUES = [1.5, 1.75, 2, 2.5, 3, 4, 5, 8, 10];
-
-function range(min, max, step) {
-    const out = [];
-    for (let v = min; v <= max + 1e-9; v += step) out.push(Number(v.toFixed(4)));
-    return out;
-}
-
-function toCandles(arr) {
-    return arr.map((c) => ({
-        timestamp: c[0],
-        open: c[1],
-        high: c[2],
-        low: c[3],
-        close: c[4],
-        volume: c[5],
-    }));
-}
-
-function parseListOrRange(spec, fallback) {
-    if (!spec) return fallback;
-    if (spec.includes(':')) {
-        const [a, b, s] = spec.split(':').map(Number);
-        if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(s) || s <= 0) return fallback;
-        return range(a, b, s);
-    }
-    const vals = spec.split(',').map((x) => Number(x.trim())).filter(Number.isFinite);
-    return vals.length ? vals : fallback;
-}
 
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -126,11 +100,6 @@ function parseArgs() {
     }
 
     return out;
-}
-
-function loadLpData(filePath) {
-    const json = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    return { candles: toCandles(json.candles ?? json), meta: json.meta ?? null };
 }
 
 function loadAmaStrategies(resultsPath) {
@@ -287,10 +256,6 @@ function simulateForParams(candles, amaValues, params) {
         utilization,
         score,
     };
-}
-
-function fmt(x, d = 2) {
-    return Number(x).toFixed(d);
 }
 
 function run() {

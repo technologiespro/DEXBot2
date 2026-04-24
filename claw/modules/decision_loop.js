@@ -7,7 +7,7 @@
  * Flow:
  *   1. Discover on-chain positions (position_discovery)
  *   2. Fetch trend input per market (feed_price_source)
- *   3. Update trend analyzer per market (trend_analyzer)
+ *   3. Update trend analyzer per market (kalman_trend_analyzer)
  *   4. Assess each position's health (position_health)
  *   5. Return assessments with prioritized actions
  *
@@ -22,13 +22,13 @@ const { assessPosition } = require('./position_health');
 const { fetchTrendInput } = require('./feed_price_source');
 const { tuneBot } = require('./bot_auto_tuner');
 
-// Lazy-load TrendAnalyzer to avoid circular dependency issues at startup
-let TrendAnalyzer = null;
+// Lazy-load KalmanTrendAnalyzer to avoid circular dependency issues at startup
+let KalmanTrendAnalyzer = null;
 function getTrendAnalyzer() {
-  if (!TrendAnalyzer) {
-    TrendAnalyzer = require('../../analysis/trend_detection/trend_analyzer').TrendAnalyzer;
+  if (!KalmanTrendAnalyzer) {
+    KalmanTrendAnalyzer = require('../../analysis/trend_detection/kalman_trend_analyzer').KalmanTrendAnalyzer;
   }
-  return TrendAnalyzer;
+  return KalmanTrendAnalyzer;
 }
 
 /**

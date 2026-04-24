@@ -1,16 +1,14 @@
 {
   "name": "trend-detection",
   "version": "2.0.0",
-  "description": "Derivative-based trend detection using SMA rate-of-change signals",
-  "main": "trend_analyzer.js",
+  "description": "Kalman filter trend detection with tactical/modal state tracking",
+  "main": "kalman_trend_analyzer.js",
   "scripts": {
-    "test": "node tests/test_trend_analyzer.js"
+    "test": "node tests/test_kalman_trend.js && node tests/test_kalman_velocity_smoothing.js"
   },
   "keywords": [
     "trend-detection",
-    "SMA",
-    "uptrend",
-    "downtrend",
+    "kalman",
     "trading",
     "indicator"
   ],

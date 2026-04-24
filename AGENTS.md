@@ -206,7 +206,6 @@ Research scripts for parameter tuning — output interactive HTML charts, not us
 #### Derivative / Signal Research
 - `analyze_derivatives.js` - SMA/MACD/RSI signal analyzer runner
 - `trend_detection/derivative_analyzer.js` - Core signal engine (MACD, RSI, trend filter)
-- `trend_detection/trend_analyzer.js` - SMA-based trend direction helper
 - `trend_detection/kalman_trend_analyzer.js` - Kalman filter with tactical/modal state tracking
 - `trend_detection/kalman_chart_generator.js` - Kalman signal chart generator
 - `trend_detection/volatility_chart_generator.js` - Volatility / symmetric shift chart generator

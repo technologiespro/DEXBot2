@@ -182,6 +182,16 @@ class KalmanTrendAnalyzer {
         if (displacementPct < -0.5 && this.tactical.v < 0) signal = 'BEARISH_DISPLACEMENT';
         if (Math.abs(displacementPct) < 0.2) signal = 'EQUILIBRIUM';
 
+        let trend = 'FLAT';
+        if (this.tactical.v > 0) trend = 'UP';
+        else if (this.tactical.v < 0) trend = 'DOWN';
+
+        // Confidence rises with warmup progress and signal clarity (velocity magnitude)
+        const warmupRatio = Math.min(1, this.updateCount / (this.warmupBars || 1));
+        const confidence = Math.min(100, Math.round(
+            warmupRatio * 60 + Math.min(40, Math.abs(rawVelocityPct) * 8)
+        ));
+
         return {
             isReady: this.updateCount > this.warmupBars,
             price: this.currPrice,
@@ -195,6 +205,8 @@ class KalmanTrendAnalyzer {
             displacementPct: Math.round(displacementPct * 100) / 100,
             displacementRawPct: displacementPct,
             signal,
+            trend,
+            confidence,
             updateCount: this.updateCount,
             beams: this.beams,
             projections: {

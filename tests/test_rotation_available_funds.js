@@ -50,12 +50,12 @@ async function seedGridForRotation(mgr, targetType) {
     await mgr.recalculateFunds();
 
     // Trigger rebalance with an opposite side fill to force inward rotation
-    const result = await mgr.strategy.rebalance([{ type: ORDER_TYPES.SELL, price: 105 }]);
+    const result = await mgr.performSafeRebalance([{ type: ORDER_TYPES.SELL, price: 105 }]);
 
-    // New architecture performs placements rather than direct rotations.
-    assert.strictEqual(result.ordersToPlace.length, 1);
-    assert.strictEqual(result.ordersToRotate.length, 0);
-    const placement = result.ordersToPlace[0];
+    // New architecture performs placements (COW_ACTIONS.CREATE) rather than direct rotations.
+    const creates = result.actions.filter(a => a.type === constants.COW_ACTIONS.CREATE);
+    assert.strictEqual(creates.length, 1);
+    const placement = creates[0].order;
     assert(placement && placement.size > 0, `Expected a placement with positive size, got ${placement?.size}`);
     assert(placement.type === ORDER_TYPES.SELL, 'Expected new placement to be on the SELL side');
 

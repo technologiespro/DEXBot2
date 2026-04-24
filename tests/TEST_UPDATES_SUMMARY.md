@@ -165,7 +165,7 @@ npm test
 | Grid Divergence | 2 | Cache & reload logic |
 | BoundaryIdx | 3 | Init, recovery, persistence |
 | BUY Weighting | 2 | Reverse parameter & distribution |
-| CacheFunds | 2 | Deduction tracking |
+| Available Funds | 2 | Deduction tracking |
 | Rotations | 2 | Completion & divergence |
 | Fees (isMaker) | 2 | Parameter handling |
 | Taker Fees | 3 | Market & blockchain fees |
