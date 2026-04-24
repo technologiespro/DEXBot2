@@ -5,12 +5,12 @@
 DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7 development cycle.
 
 ### Key Metrics
-- **Total Commits**: 1166
+- **Total Commits**: 1206
 - **Development Period**: December 2, 2025 - April 2026 (ongoing)
 - **Active Months**: 5 (Dec 2025, Jan 2026, Feb 2026, Mar 2026, Apr 2026)
 - **Primary Developer**: froooze - 99.2% of commits
 - **Lines of Code**: ~25,000+ (core modules)
-- **Test Coverage**: 163 test files covering unit, integration, scenario, and regression tests
+- **Test Coverage**: 156 test files covering unit, integration, scenario, and regression tests
 - **Tagged Releases**: 15 tagged releases (v0.1.0 to v0.6.0)
 - **Current Internal Version**: v0.7
 
@@ -20,7 +20,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Phase 1: Foundation & Core Architecture (December 2025)
 **Duration**: December 2 - December 31, 2025  
-**Commits**: 401 (34.4% of total)
+**Commits**: 408 (33.8% of total)
 **Focus**: Establishing core trading infrastructure, order management, and fund accounting
 
 #### Key Milestones
@@ -48,7 +48,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Phase 2: Stabilization & Advanced Features (January 2026)
 **Duration**: January 1 - January 31, 2026  
-**Commits**: 421 (36.1% of total)
+**Commits**: 425 (35.2% of total)
 **Focus**: Bug fixes, race condition resolution, advanced trading strategies, and system hardening
 
 #### Key Milestones
@@ -83,7 +83,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Phase 3: Architecture Refinement & COW Pattern (February 2026)
 **Duration**: February 1 - February 18, 2026  
-**Commits**: 129 (11.1% of total)
+**Commits**: 150 (12.4% of total)
 **Focus**: Copy-on-Write architecture, code quality, and production hardening
 
 #### Key Milestones
@@ -113,7 +113,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Phase 4: Market Adapter & Production Hardening (Late Feb - March 2026)
 **Duration**: February 19 - March 3, 2026
-**Commits**: 48 (4.1% of total)
+**Commits**: 54 (4.5% of total)
 **Focus**: AMA integration, market adapter consolidation, fill processing finalization, credential daemon hardening
 
 #### Key Milestones
@@ -139,28 +139,29 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Phase 5: Signal Intelligence & Debt Runtime (March - April 2026)
 **Duration**: March 4 - April 24, 2026 (ongoing)
-**Commits**: 167 (14.3% of total)
-**Focus**: Dynamic weight regime detection, derivative signals, market adapter signal pipeline, credential/Claw hardening, credit/debt runtime
+**Commits**: 169 (14.0% of total)
+**Focus**: Market adapter offset groundwork, Claw/credential hardening, SMA derivative signals, dynamic-weight/Kalman research, regime filtering, credit/debt runtime
 
 #### Key Milestones
-- **Mar 4-10**: Dynamic weight research tooling — Kalman-AMA composite, uPlot charts
-- **Mar 11-15**: Regime detection — Hurst Exponent and Permutation Entropy analyzers
-- **Mar 16-20**: Dynamic weight production parity — regime gate, percentile clip, weight-only updates
-- **Mar 21-25**: Derivative analysis engine — SMA, MACD, RSI signal interpretation, momentum gate
-- **Mar 26-31**: Market adapter signal hardening — slope model, ATR volatility, collateral advisory
-- **Apr 1-4**: Fill replay hardening, runtime extraction, Claw bridge expansion, credential daemon strict policy/session hardening
-- **Apr 5-10**: Derivative signal engine and market-profile offset controls — SMA/MACD/RSI, momentum gate, dry-run output separation
-- **Apr 11-15**: Fallback removal and dynamic grid groundwork — precision fallbacks, legacy runtime removal, dynamicgrid snapshots
-- **Apr 16-20**: Dynamic weight runtime alignment — research-to-production parity, volatility chart
+- **Mar 4-10**: AMA and adapter research tooling — AMA3 defaults, expanded candle history, Kibana date-range/merge tools
+- **Mar 20-24**: Dust-cancel delay, settings/analyze-orders cleanup, README refresh
+- **Mar 28-31**: Claw bridge/runtime expansion, feed-anchored trend research, AMA grid-price offset state, dynamic weight policy scaffolding
+- **Apr 1-5**: Fill replay hardening, runtime extraction, Claw bridge expansion, credential daemon strict policy/session hardening
+- **Apr 6-8**: Market adapter modularization, PM2/dry-run logging cleanup, orphaned-grid-slot recovery
+- **Apr 9-10**: Derivative signal engine and market-profile offset controls — SMA/fastSMA/MACD/RSI, momentum gate, dry-run output separation
+- **Apr 11-13**: Fallback removal and analysis chart cleanup — legacy input/runtime removal, AMA preset refresh, uPlot chart paths
+- **Apr 14**: Dynamic grid and dynamic-weight groundwork — AMA slope weight adjustment, ATR volatility scaling, Kalman-AMA research chart
+- **Apr 15-16**: Regime detection and production parity — Hurst/PE analyzers, regime gate, percentile clip, weight-only updates
+- **Apr 17-20**: Dynamic weight runtime alignment — volatility chart, Kalman echo latching, research-to-production parity
 - **Apr 20**: Credit/debt runtime — MPA borrowing, credit offer accept/repay, auto-reborrow
 - **Apr 21-22**: Dynamic weight snapshot persistence, warmup/closed-candle alignment, rebalance refresh wiring
 - **Apr 23**: Credit-offer and CR safety hardening — LP credit-offer CR ceiling, safe borrow sizing, shared adapter whitelist
 - **Apr 24**: Market adapter patch hardening, maintenance deferral during active fills, chart entrypoint simplification, Claw validation/tests, v0.7 metadata
 
 #### Major Changes
-1. **Dynamic Weight System**: Live AMA slope + Kalman confirmation with ATR symmetric penalty
-2. **Regime Detection**: Hurst/PE-based market regime classification (trending, mean-reverting, noisy)
-3. **Derivative Signals**: SMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
+1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
+2. **Dynamic Weight System**: Live AMA slope, ATR volatility scaling, Kalman confirmation, and weight-only updates
+3. **Regime Detection**: Hurst/PE-based dampening for trending, mean-reverting, and noisy states
 4. **Market Adapter Signal Pipeline**: Full weight output, collateral recommendation, trend/atr export
 5. **Credit/Debt Runtime**: Native MPA and credit-offer workflows with `modules/credit_runtime.js`
 6. **Bot Auto-Tuner**: Direct tuning and reasoning bridge for parameter optimization
@@ -298,23 +299,27 @@ dexbot.js (entry)
 - ✅ AMA-derived grid center initialization
 - ✅ Shard-parallel cap-based AMA fitting
 - ✅ Grid recalculation documentation
-- ✅ Dynamic weight research tooling (Kalman-AMA composite, uPlot charts)
-- ✅ Regime detection (Hurst Exponent, Permutation Entropy)
-- ✅ Derivative analysis engine (SMA, MACD, RSI, momentum gate)
-- ✅ Market adapter signal pipeline (weights, collateral recommendation)
-- ✅ Credential daemon strict policy and session hardening
-- ✅ Claw runtime expansion (Hermes, launcher bridge)
+- ✅ AMA and adapter research tooling (AMA3 defaults, expanded candle history, Kibana date-range/merge tools)
+- ✅ Dust-cancel delay and recovery semantics cleanup
+- ✅ Analyze-orders report layout cleanup
+- ✅ Feed-anchored trend research
+- ✅ AMA grid-price offset state and grid-price reference generalization
+- ✅ Claw runtime expansion (ZeroClaw bridge, native BitShares integration, margin planner, runtime path hardening)
 
 ### April 2026 Features
 - ✅ Fill replay hardening and fill/maintenance runtime extraction
 - ✅ Credential daemon strict policy, session hardening, signing cache, and memory safety
 - ✅ Claw runtime bridge expansion (NullClaw, Hermes manifest, launcher command bridge, skill support)
-- ✅ Credit/debt runtime (MPA borrowing, credit offer accept/repay, auto-reborrow)
+- ✅ Derivative analysis engine (SMA, fastSMA, MACD, RSI, momentum gate)
+- ✅ Market profile offset policy and dry-run/write-output separation
+- ✅ Dynamic grid groundwork, per-bot offset caps, and live dynamic weight overlay
+- ✅ Dynamic weight research tooling (AMA slope, ATR scaling, Kalman-AMA composite, uPlot charts)
+- ✅ Regime detection (Hurst Exponent, Permutation Entropy)
 - ✅ Dynamic weight production parity (regime gate, percentile clip, weight-only updates)
+- ✅ Credit/debt runtime (MPA borrowing, credit offer accept/repay, auto-reborrow)
 - ✅ Fallback removal (precision strictness, explicit price modes, no orphan lax matching)
 - ✅ Bot auto-tuner with direct tuning bridge
-- ✅ Market profile offset policy and dry-run/write-output separation
-- ✅ Dynamicgrid snapshots, per-bot offset caps, and live dynamic weight overlay
+- ✅ Dynamicgrid snapshots
 - ✅ Shared market adapter whitelist and dynamic weight rebalance refresh wiring
 - ✅ Closed-candle processing, dynamic-weight warmup, and snapshot persistence hardening
 - ✅ Credit-offer safety checks (LP CR ceiling, safe borrow sizing)
@@ -385,9 +390,9 @@ v0.6.0 is the last tagged release version. The version boundary should remain an
 ### v0.7 - Internal Development (March-April 2026)
 v0.7 is the active internal version after the v0.6.0 release. It collects the unreleased signal intelligence, strict runtime, and credit/debt work now under development.
 
-- Dynamic weight system with live AMA slope, Kalman confirmation, ATR penalty, and weight-only updates
-- Regime detection using Hurst Exponent and Permutation Entropy filters
 - Derivative signal interpretation with SMA, MACD, RSI, fast-SMA commitment, and momentum gates
+- Dynamic weight system with live AMA slope, ATR penalty, Kalman confirmation, and weight-only updates
+- Regime detection using Hurst Exponent and Permutation Entropy filters
 - Market adapter signal pipeline with full weight output, collateral recommendations, and trend/ATR exports
 - Native MPA borrowing and credit-offer runtime workflows, including accept, repay, and auto-reborrow paths
 - Bot auto-tuner and direct tuning bridge for parameter optimization
@@ -413,11 +418,11 @@ v0.7 is the active internal version after the v0.6.0 release. It collects the un
 
 | Month | Commits | Percentage | Avg/Day |
 |-------|---------|------------|---------|
-| December 2025 | 401 | 34.4% | 13.4 |
-| January 2026 | 421 | 36.1% | 13.6 |
-| February 2026 | 164 | 14.1% | 5.9 |
-| March 2026 | 57 | 4.9% | 1.8 |
-| April 2026 | 123 | 10.5% | 5.1 |
+| December 2025 | 408 | 33.8% | 13.2 |
+| January 2026 | 425 | 35.2% | 13.7 |
+| February 2026 | 186 | 15.4% | 6.6 |
+| March 2026 | 62 | 5.1% | 2.0 |
+| April 2026 | 125 | 10.4% | 5.2 |
 
 *Note: April 2026 figure is partial (through April 24).*
 
@@ -433,7 +438,7 @@ v0.7 is the active internal version after the v0.6.0 release. It collects the un
 7. **modules/order/utils/order.js**: 1,133 lines
 
 #### Test Coverage
-- **Total Test Files**: 163
+- **Total Test Files**: 156
 - **Test Categories**:
   - Unit tests (logic ported from Jest)
   - Integration tests (fill processing, grid, manager)
