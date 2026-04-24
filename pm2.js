@@ -105,13 +105,13 @@ function usesAmaGridPrice(bot) {
     return /^ama(?:[1-4])?$/.test(gridPrice);
 }
 
-function needsPriceAdapter(bots) {
+function needsMarketAdapter(bots) {
     return (bots || []).some((bot) => usesAmaGridPrice(bot));
 }
 
 function isServiceApp(app) {
     const name = String(app?.name || '');
-    return name === 'dexbot-update' || name === CREDENTIAL_DAEMON_APP_NAME || name === 'dexbot-price-adapter';
+    return name === 'dexbot-update' || name === CREDENTIAL_DAEMON_APP_NAME || name === 'dexbot-adapter';
 }
 
 function countManagedBots(apps) {
@@ -181,16 +181,16 @@ function buildEcosystemApps(bots, { includeUpdater = true } = {}) {
         };
     });
 
-    if (needsPriceAdapter(bots)) {
+    if (needsMarketAdapter(bots)) {
         apps.unshift({
-            name: 'dexbot-price-adapter',
+            name: 'dexbot-adapter',
             script: path.join(ROOT, 'market_adapter', 'market_adapter.js'),
             cwd: ROOT,
             watch: false,
             autorestart: true,
             max_memory_restart: '150M',
-            error_file: path.join(LOGS_DIR, 'dexbot-price-adapter-error.log'),
-            out_file: path.join(LOGS_DIR, 'dexbot-price-adapter.log'),
+            error_file: path.join(LOGS_DIR, 'dexbot-adapter-error.log'),
+            out_file: path.join(LOGS_DIR, 'dexbot-adapter.log'),
             log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
             merge_logs: false,
             combine_logs: true,
@@ -984,7 +984,7 @@ module.exports = {
     generateEcosystemConfig,
     isServiceApp,
     main,
-    needsPriceAdapter,
+    needsMarketAdapter,
     reloadPM2Processes,
     restartPM2Processes,
     stopPM2Processes,

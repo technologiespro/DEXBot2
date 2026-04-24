@@ -52,7 +52,7 @@ function generateLpChartCli(options = {}) {
             logger,
             profilesFile: options.profilesFile,
             comparisonProfilesFile: options.comparisonProfilesFile,
-            fallbackStrategies: options.fallbackStrategies,
+            defaultStrategies: options.defaultStrategies,
         });
     }
 
@@ -67,7 +67,7 @@ function generateLpChartCli(options = {}) {
         dataFile: marketChart.dataFile,
         noOpen: true,
         logger,
-        fallbackStrategies: options.fallbackStrategies,
+        defaultStrategies: options.defaultStrategies,
         profilesFile: options.comparisonProfilesFile ?? null,
     });
 

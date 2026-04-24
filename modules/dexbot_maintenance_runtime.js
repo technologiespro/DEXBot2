@@ -18,10 +18,10 @@ const { parseJsonWithComments } = require('./account_bots');
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
 const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
 const LOGS_DIR = path.join(PROFILES_DIR, 'logs');
-const PRICE_ADAPTER_APP_NAME = 'dexbot-price-adapter';
-const PRICE_ADAPTER_SCRIPT = path.join(__dirname, '..', 'market_adapter', 'market_adapter.js');
-const PRICE_ADAPTER_ERROR_FILE = path.join(LOGS_DIR, 'dexbot-price-adapter-error.log');
-const PRICE_ADAPTER_OUT_FILE = path.join(LOGS_DIR, 'dexbot-price-adapter.log');
+const MARKET_ADAPTER_APP_NAME = 'dexbot-adapter';
+const MARKET_ADAPTER_SCRIPT = path.join(__dirname, '..', 'market_adapter', 'market_adapter.js');
+const MARKET_ADAPTER_ERROR_FILE = path.join(LOGS_DIR, 'dexbot-adapter-error.log');
+const MARKET_ADAPTER_OUT_FILE = path.join(LOGS_DIR, 'dexbot-adapter.log');
 function usesAmaGridPrice(bot) {
     const gridPrice = String(bot?.gridPrice || '').trim().toLowerCase();
     return /^ama(?:[1-4])?$/.test(gridPrice);
@@ -33,7 +33,7 @@ function loadBotsConfigSnapshot() {
             exists: false,
             fingerprint: null,
             activeBots: [],
-            needsPriceAdapter: false,
+            needsMarketAdapter: false,
         };
     }
 
@@ -43,7 +43,7 @@ function loadBotsConfigSnapshot() {
             exists: false,
             fingerprint: null,
             activeBots: [],
-            needsPriceAdapter: false,
+            needsMarketAdapter: false,
         };
     }
 
@@ -57,7 +57,7 @@ function loadBotsConfigSnapshot() {
         fingerprint,
         config: parsed,
         activeBots,
-        needsPriceAdapter: activeBots.some(usesAmaGridPrice),
+        needsMarketAdapter: activeBots.some(usesAmaGridPrice),
     };
 }
 
@@ -113,22 +113,22 @@ async function getPm2ProcessNames() {
     return parsePm2JlistOutput(stdout);
 }
 
-async function startPriceAdapterPm2() {
+async function startMarketAdapterPm2() {
     if (!fs.existsSync(LOGS_DIR)) {
         fs.mkdirSync(LOGS_DIR, { recursive: true });
     }
 
     await runPm2Command([
         'start',
-        PRICE_ADAPTER_SCRIPT,
+        MARKET_ADAPTER_SCRIPT,
         '--name',
-        PRICE_ADAPTER_APP_NAME,
+        MARKET_ADAPTER_APP_NAME,
         '--cwd',
         path.join(__dirname, '..'),
         '--output',
-        PRICE_ADAPTER_OUT_FILE,
+        MARKET_ADAPTER_OUT_FILE,
         '--error',
-        PRICE_ADAPTER_ERROR_FILE,
+        MARKET_ADAPTER_ERROR_FILE,
         '--max-memory-restart',
         '150M',
         '--log-date-format',
@@ -136,8 +136,8 @@ async function startPriceAdapterPm2() {
     ]);
 }
 
-async function stopPriceAdapterPm2() {
-    await runPm2Command(['delete', PRICE_ADAPTER_APP_NAME]);
+async function stopMarketAdapterPm2() {
+    await runPm2Command(['delete', MARKET_ADAPTER_APP_NAME]);
 }
 
 async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
@@ -162,12 +162,12 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
         const getPm2ProcessNamesFn = typeof this._getPm2ProcessNames === 'function'
             ? this._getPm2ProcessNames.bind(this)
             : getPm2ProcessNames;
-        const startPriceAdapterFn = typeof this._startPriceAdapterPm2 === 'function'
-            ? this._startPriceAdapterPm2.bind(this)
-            : startPriceAdapterPm2;
-        const stopPriceAdapterFn = typeof this._stopPriceAdapterPm2 === 'function'
-            ? this._stopPriceAdapterPm2.bind(this)
-            : stopPriceAdapterPm2;
+        const startMarketAdapterFn = typeof this._startMarketAdapterPm2 === 'function'
+            ? this._startMarketAdapterPm2.bind(this)
+            : startMarketAdapterPm2;
+        const stopMarketAdapterFn = typeof this._stopMarketAdapterPm2 === 'function'
+            ? this._stopMarketAdapterPm2.bind(this)
+            : stopMarketAdapterPm2;
 
         let processNames = [];
         let pm2QueryFailed = false;
@@ -175,11 +175,11 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             processNames = await getPm2ProcessNamesFn();
         } catch (err) {
             pm2QueryFailed = true;
-            this._warn(`Could not query PM2 for ${PRICE_ADAPTER_APP_NAME}: ${err.message}. Falling back to a direct PM2 action.`);
+            this._warn(`Could not query PM2 for ${MARKET_ADAPTER_APP_NAME}: ${err.message}. Using a direct PM2 action.`);
         }
 
-        if (!snapshot.exists || !snapshot.needsPriceAdapter) {
-            const shouldStop = pm2QueryFailed || processNames.includes(PRICE_ADAPTER_APP_NAME);
+        if (!snapshot.exists || !snapshot.needsMarketAdapter) {
+            const shouldStop = pm2QueryFailed || processNames.includes(MARKET_ADAPTER_APP_NAME);
             if (!shouldStop) {
                 return {
                     changed,
@@ -190,8 +190,8 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
                 };
             }
 
-            await stopPriceAdapterFn();
-            this._log(`Stopped ${PRICE_ADAPTER_APP_NAME} because no AMA grid bots are active.`, 'info');
+            await stopMarketAdapterFn();
+            this._log(`Stopped ${MARKET_ADAPTER_APP_NAME} because no AMA grid bots are active.`, 'info');
             return {
                 changed,
                 required: false,
@@ -201,7 +201,7 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             };
         }
 
-        if (processNames.includes(PRICE_ADAPTER_APP_NAME)) {
+        if (processNames.includes(MARKET_ADAPTER_APP_NAME)) {
             return {
                 changed,
                 required: true,
@@ -210,8 +210,8 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             };
         }
 
-        await startPriceAdapterFn();
-        this._log(`Started ${PRICE_ADAPTER_APP_NAME} because AMA grid pricing is active.`, 'info');
+        await startMarketAdapterFn();
+        this._log(`Started ${MARKET_ADAPTER_APP_NAME} because AMA grid pricing is active.`, 'info');
 
         return {
             changed,
@@ -233,10 +233,10 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
     }
 }
 
-function cloneWeightDistribution(weightDistribution, fallback = null) {
+function cloneWeightDistribution(weightDistribution, base = null) {
     const source = (weightDistribution && typeof weightDistribution === 'object')
         ? weightDistribution
-        : (fallback && typeof fallback === 'object' ? fallback : null);
+        : (base && typeof base === 'object' ? base : null);
     if (!source) return null;
 
     const sell = Number(source.sell);
@@ -996,6 +996,6 @@ module.exports = {
     scheduleDustMaintenanceCheck,
     seedDustTimersFromPartialUpdates,
     runGridMaintenance,
-    stopPriceAdapterPm2,
+    stopMarketAdapterPm2,
     syncMarketAdapterOnPeriodicConfigCheck,
 };

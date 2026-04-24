@@ -38,10 +38,10 @@
  *       "startPrice": "pool",      // Price for order alignment: "pool", "book", or numeric
  *       "gridPrice": null,         // Reference price for x-factor bounds (3 options):
  *                                  //   "pool" / "book" = live pair price reference
- *                                  //   "ama"/"ama1".."ama4" = price_adapter writes a center snapshot to
+ *                                  //   "ama"/"ama1".."ama4" = market adapter writes a center snapshot to
  *                                  //              profiles/orders/<botKey>.dynamicgrid.json; grid reads the effective center on reset
  *                                  //   <number> = fixed numeric reference
- *                                  //   null     = use startPrice (default, backward-compatible)
+ *                                  //   null     = use startPrice
  *       "minPrice": "3x",
  *       "maxPrice": "3x",
  *       "incrementPercent": 0.5,
@@ -183,22 +183,10 @@ function loadGeneralSettings() {
     }
 
     const configuredDeltaPercent = Number(settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT);
-    const renamedDeltaPercent = Number(settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT);
-    const legacyResetFactor = Number(settings.MARKET_ADAPTER.GRID_RESET_FACTOR);
     const effectiveDeltaPercent = Number.isFinite(configuredDeltaPercent) && configuredDeltaPercent > 0
         ? configuredDeltaPercent
-        : (Number.isFinite(renamedDeltaPercent) && renamedDeltaPercent > 0
-            ? renamedDeltaPercent
-            : (Number.isFinite(legacyResetFactor) && legacyResetFactor > 0
-                ? legacyResetFactor
-                : MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT));
+        : MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT;
     settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT = effectiveDeltaPercent;
-    if (Object.prototype.hasOwnProperty.call(settings.MARKET_ADAPTER, 'DELTA_THRESHOLD_PERCENT')) {
-        delete settings.MARKET_ADAPTER.DELTA_THRESHOLD_PERCENT;
-    }
-    if (Object.prototype.hasOwnProperty.call(settings.MARKET_ADAPTER, 'GRID_RESET_FACTOR')) {
-        delete settings.MARKET_ADAPTER.GRID_RESET_FACTOR;
-    }
 
     return settings;
 }

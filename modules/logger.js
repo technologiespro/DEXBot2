@@ -13,14 +13,14 @@
  *   logger.info('Starting bot');
  *
  *   // Market adapter / dryrun logging (to separate file)
- *   const logger = new Logger('PriceAdapter', { logFile: './logs/price_adapter.log' });
+ *   const logger = new Logger('MarketAdapter', { logFile: './logs/market_adapter.log' });
  *   logger.info('Processing bot');
  *
  *   // Quiet mode (for tests)
  *   const logger = new Logger('Test', { quiet: true });
  *
  * Constructor Options:
- *   - category: {string} Logger prefix (e.g., 'DEXBot', 'PriceAdapter')
+ *   - category: {string} Logger prefix (e.g., 'DEXBot', 'MarketAdapter')
  *   - quiet: {boolean} Suppress console output (default false)
  *   - logFile: {string} Path to optional log file (appends output)
  *   - level: {string} Log level: 'debug', 'info', 'warn', 'error' (default 'info')

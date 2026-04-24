@@ -78,9 +78,9 @@ const PROFILES_DIR = path.join(ROOT, 'profiles');
 const BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
 const DATA_DIR = path.join(__dirname, 'data');
 const STATE_DIR = path.join(__dirname, 'state');
-const STATE_FILE = path.join(STATE_DIR, 'price_adapter_state.json');
-const CENTER_FILE = path.join(STATE_DIR, 'price_adapter_centers.json');
-const LOCK_FILE = path.join(STATE_DIR, 'price_adapter.lock');
+const STATE_FILE = path.join(STATE_DIR, 'market_adapter_state.json');
+const CENTER_FILE = path.join(STATE_DIR, 'market_adapter_centers.json');
+const LOCK_FILE = path.join(STATE_DIR, 'market_adapter.lock');
 const MARKET_PROFILES_FILE = path.join(PROFILES_DIR, 'market_profiles.json');
 const MARKET_ADAPTER_SETTINGS_FILE = path.join(PROFILES_DIR, 'market_adapter_settings.json');
 let bitsharesClient = null;
@@ -216,7 +216,6 @@ function applyMarketAdapterOverrides(target, overrides, opts = {}) {
     if (overrides.kalmanDispThresholdMult != null) target.kalmanDispThresholdMult = overrides.kalmanDispThresholdMult;
     if (overrides.kalmanSmoothSpanPct != null) target.kalmanSmoothSpanPct = overrides.kalmanSmoothSpanPct;
     if (overrides.signalConfirmBars != null) target.signalConfirmBars = overrides.signalConfirmBars;
-    if (overrides.dispScaleAtrMult != null) target.dispScaleAtrMult = overrides.dispScaleAtrMult;
     if (overrides.dispScaleMinPct != null) target.dispScaleMinPct = overrides.dispScaleMinPct;
     if (overrides.kalman) target.kalman = overrides.kalman;
     if (overrides.kalmanMaxSlopePct != null) target.kalmanSlope = { ...target.kalmanSlope, maxSlopePct: overrides.kalmanMaxSlopePct };
@@ -485,7 +484,7 @@ function parseArgs() {
 }
 
 function printHelp() {
-    console.log('Price adapter (standalone): Kibana bootstrap + native incremental updates');
+    console.log('Market adapter (standalone): Kibana bootstrap + native incremental updates');
     console.log('');
     console.log('Usage:');
     console.log('  node market_adapter/market_adapter.js [--once] [--pollSeconds 3600]');
@@ -535,13 +534,6 @@ function validateConfig(input) {
 function resolveDeltaThresholdPercentFromGeneralSettings(settings) {
     const explicit = Number(settings?.MARKET_ADAPTER?.AMA_DELTA_THRESHOLD_PERCENT);
     if (Number.isFinite(explicit) && explicit > 0) return explicit;
-
-    const renamed = Number(settings?.MARKET_ADAPTER?.DELTA_THRESHOLD_PERCENT);
-    if (Number.isFinite(renamed) && renamed > 0) return renamed;
-
-    const legacy = Number(settings?.MARKET_ADAPTER?.GRID_RESET_FACTOR);
-    if (Number.isFinite(legacy) && legacy > 0) return legacy;
-
     return null;
 }
 
@@ -561,7 +553,7 @@ function applyRuntimeDefaultsFromGeneralSettings(cfg, provided = {}, settingsOve
 
 const Logger = require('../modules/logger');
 const marketAdapterLogFile = path.join(PROFILES_DIR, 'market_adapter.log');
-const logger = new Logger('PriceAdapter', { quiet: DEFAULTS.quiet, logFile: marketAdapterLogFile });
+const logger = new Logger('MarketAdapter', { quiet: DEFAULTS.quiet, logFile: marketAdapterLogFile });
 
 function log(cfg, ...args) {
     logger.quiet = !!cfg?.quiet;
@@ -588,12 +580,12 @@ function ensureDir(dir) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-function loadJson(filePath, fallback) {
+function loadJson(filePath, defaultValue) {
     try {
-        if (!fs.existsSync(filePath)) return fallback;
+        if (!fs.existsSync(filePath)) return defaultValue;
         return JSON.parse(fs.readFileSync(filePath, 'utf8'));
     } catch (_) {
-        return fallback;
+        return defaultValue;
     }
 }
 
@@ -670,7 +662,7 @@ function acquireFileLock(lockPath, opts = {}) {
                 continue;
             }
 
-            throw new Error(`price adapter already running (lock: ${lockPath}, pid: ${info.pid})`);
+            throw new Error(`market adapter already running (lock: ${lockPath}, pid: ${info.pid})`);
         }
     }
 
@@ -746,7 +738,7 @@ function parseChainTimeToMs(timeStr) {
 }
 
 function candleFileForBot(botKey) {
-    return path.join(DATA_DIR, `price_adapter_${botKey}_1h.json`);
+    return path.join(DATA_DIR, `market_adapter_${botKey}_1h.json`);
 }
 
 function requiredCandlesForAma(ama = DEFAULT_AMA) {

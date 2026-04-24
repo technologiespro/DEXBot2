@@ -36,7 +36,7 @@ const ANALYSIS_CHARTS_DIR = path.join(ROOT, 'analysis', 'charts');
 const AMA_PROFILES_FILE = path.join(ROOT, 'profiles', 'market_profiles.json');
 const DEFAULT_COMPARISON_COLORS = ['#26a69a', '#fb8c00', '#5c9ee6', '#ef5350'];
 const DEFAULT_COMPARISON_DASHES = ['dot', 'solid', 'dash', 'dashdot'];
-const DEFAULT_COMPARISON_FALLBACK_STRATEGIES = Object.keys(MARKET_ADAPTER.AMAS).map((key, index) => {
+const DEFAULT_COMPARISON_STRATEGIES = Object.keys(MARKET_ADAPTER.AMAS).map((key, index) => {
     const ama = MARKET_ADAPTER.AMAS[key];
     return {
         name: ama.name || key,
@@ -284,19 +284,19 @@ function generateMarketLpChart(options = {}) {
 function generateComparisonLpChart(options = {}) {
     const logger = options.logger ?? console;
     const { dataFile, meta, candleArrays, candleObjects } = loadLpDataFile(options.dataFile);
-    const fallbackStrategies = options.fallbackStrategies ?? DEFAULT_COMPARISON_FALLBACK_STRATEGIES;
+    const defaultStrategies = options.defaultStrategies ?? DEFAULT_COMPARISON_STRATEGIES;
     const strategies = loadStrategiesForLpChart({
         dataFile,
         meta,
         profilesFile: options.profilesFile ?? null,
-    }) ?? fallbackStrategies;
+    }) ?? defaultStrategies;
 
     logger.log(`Data:        ${path.basename(dataFile)}  (${candleObjects.length} candles)`);
-    if (strategies.length && strategies !== fallbackStrategies) {
+    if (strategies.length && strategies !== defaultStrategies) {
         logger.log('Strategies:  loaded from shared strategy loader');
         strategies.forEach((s) => logger.log(`  ${s.name.padEnd(28)} ER=${s.erPeriod}  Fast=${s.fastPeriod}  Slow=${s.slowPeriod}`));
     } else {
-        logger.log('Strategies:  results file not found — using fallback');
+        logger.log('Strategies:  results file not found — using defaults');
     }
 
     const closes = candleObjects.map((c) => c.close);
@@ -343,7 +343,7 @@ function generateLpChartBundle(options = {}) {
         dataFile,
         noOpen: options.openComparison === true ? !!options.noOpen : true,
         logger,
-        fallbackStrategies: options.fallbackStrategies ?? DEFAULT_COMPARISON_FALLBACK_STRATEGIES,
+        defaultStrategies: options.defaultStrategies ?? DEFAULT_COMPARISON_STRATEGIES,
         profilesFile: options.comparisonProfilesFile ?? null,
     });
 
@@ -364,13 +364,13 @@ function runLpChartCli(argv = process.argv.slice(2), options = {}) {
         logger: options.logger ?? console,
         profilesFile: options.profilesFile,
         comparisonProfilesFile: options.comparisonProfilesFile,
-        fallbackStrategies: options.fallbackStrategies,
+        defaultStrategies: options.defaultStrategies,
     });
 }
 
 module.exports = {
     AMA_PROFILES_FILE,
-    DEFAULT_COMPARISON_FALLBACK_STRATEGIES,
+    DEFAULT_COMPARISON_STRATEGIES,
     defaultComparisonChartPath,
     defaultMarketChartPath,
     findLatestLpData,

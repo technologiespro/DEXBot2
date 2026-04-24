@@ -6,7 +6,7 @@ const path = require('path');
 console.log('Running market_adapter smoke tests');
 
 const root = path.join(__dirname, '..');
-const lockPath = path.join(root, 'market_adapter', 'state', 'price_adapter.lock');
+const lockPath = path.join(root, 'market_adapter', 'state', 'market_adapter.lock');
 
 {
     if (fs.existsSync(lockPath)) {
@@ -17,8 +17,8 @@ const lockPath = path.join(root, 'market_adapter', 'state', 'price_adapter.lock'
         cwd: root,
         encoding: 'utf8',
     });
-    assert.strictEqual(res.status, 0, `price_adapter --once --dryRun should exit 0, got ${res.status}\n${res.stderr || ''}`);
-    assert.strictEqual(fs.existsSync(lockPath), false, 'price_adapter lock file should be released after dry run');
+    assert.strictEqual(res.status, 0, `market_adapter --once --dryRun should exit 0, got ${res.status}\n${res.stderr || ''}`);
+    assert.strictEqual(fs.existsSync(lockPath), false, 'market_adapter lock file should be released after dry run');
 }
 
 {

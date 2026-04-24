@@ -15,7 +15,7 @@ const {
 /**
  * UNIFIED COMPARISON CHART GENERATOR — Local LP analysis mode
  *
- * Shows fallback AMA strategies on a local LP candle export. The preferred
+ * Shows default AMA strategies on a local LP candle export. The preferred
  * end-to-end LP workflow is still:
  *   npm run lp:chart -- --data <lp-export.json>
  *
@@ -38,7 +38,7 @@ function buildDefaultStrategies() {
     }));
 }
 
-const FALLBACK_STRATEGIES = buildDefaultStrategies();
+const DEFAULT_STRATEGIES = buildDefaultStrategies();
 
 function showHelp() {
     console.log(`
@@ -147,7 +147,7 @@ function generateLocalLpComparisonChart(options = {}) {
     const outFile = options.outFile ? path.resolve(options.outFile) : defaultLocalComparisonChartPath(intervalLabel);
     const strategies = Array.isArray(options.strategies) && options.strategies.length
         ? options.strategies
-        : [...FALLBACK_STRATEGIES];
+        : [...DEFAULT_STRATEGIES];
 
     logger.log(`Data:        ${path.relative(process.cwd(), dataFile)} (${candles.length} candles)`);
     const closes = candles.map((c) => c.close);
@@ -211,7 +211,7 @@ if (require.main === module) {
 module.exports = {
     calculateMetrics,
     defaultLocalComparisonChartPath,
-    FALLBACK_STRATEGIES,
+    DEFAULT_STRATEGIES,
     generateLocalLpComparisonChart,
     parseArgs,
     run,

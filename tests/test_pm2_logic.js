@@ -8,25 +8,25 @@ const {
     buildScopedChildEnv,
     countManagedBots,
     isServiceApp,
-    needsPriceAdapter,
+    needsMarketAdapter,
     usesAmaGridPrice,
 } = require('../pm2');
 const { selectActiveBotEntries } = require('../modules/bot_settings');
 
 assert.strictEqual(isServiceApp({ name: 'dexbot-cred' }), true, 'credential daemon should be treated as a service app');
 assert.strictEqual(isServiceApp({ name: 'dexbot-update' }), true, 'updater should be treated as a service app');
-assert.strictEqual(isServiceApp({ name: 'dexbot-price-adapter' }), true, 'price adapter should be treated as a service app');
+assert.strictEqual(isServiceApp({ name: 'dexbot-adapter' }), true, 'adapter should be treated as a service app');
 assert.strictEqual(isServiceApp({ name: 'XRP-BTS' }), false, 'bot processes should not be treated as service apps');
-assert.strictEqual(usesAmaGridPrice({ gridPrice: 'ama' }), true, 'ama should require the price adapter');
-assert.strictEqual(usesAmaGridPrice({ gridPrice: 'book' }), false, 'book should not require the price adapter');
+assert.strictEqual(usesAmaGridPrice({ gridPrice: 'ama' }), true, 'ama should require the market adapter');
+assert.strictEqual(usesAmaGridPrice({ gridPrice: 'book' }), false, 'book should not require the market adapter');
 assert.strictEqual(usesAmaGridPrice({ gridPrice: '  AMA4  ' }), true, 'ama4 matching should be case-insensitive');
-assert.strictEqual(needsPriceAdapter([{ gridPrice: 'book' }, { gridPrice: null }]), false, 'non-AMA bots should not require the price adapter');
-assert.strictEqual(needsPriceAdapter([{ gridPrice: 'book' }, { gridPrice: 'ama2' }]), true, 'any AMA bot should require the price adapter');
+assert.strictEqual(needsMarketAdapter([{ gridPrice: 'book' }, { gridPrice: null }]), false, 'non-AMA bots should not require the market adapter');
+assert.strictEqual(needsMarketAdapter([{ gridPrice: 'book' }, { gridPrice: 'ama2' }]), true, 'any AMA bot should require the market adapter');
 
 assert.strictEqual(
     countManagedBots([
         { name: 'dexbot-cred' },
-        { name: 'dexbot-price-adapter' },
+        { name: 'dexbot-adapter' },
         { name: 'dexbot-update' },
         { name: 'XRP-BTS' },
         { name: 'USD-BTS' },

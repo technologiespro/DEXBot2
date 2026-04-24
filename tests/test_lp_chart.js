@@ -15,10 +15,10 @@ const {
     parseArgs,
 } = require('../scripts/generate_lp_chart');
 const {
-    DEFAULT_COMPARISON_FALLBACK_STRATEGIES,
+    DEFAULT_COMPARISON_STRATEGIES,
 } = require('../market_adapter/lp_chart_runner');
 const {
-    FALLBACK_STRATEGIES,
+    DEFAULT_STRATEGIES,
 } = require('../analysis/ama_fitting/generate_unified_comparison_chart');
 const { MARKET_ADAPTER } = require('../modules/constants');
 
@@ -110,7 +110,7 @@ function testGenerateMarketLpChartUplot() {
     assert.ok(defaultUplotMarketChartPath(result.meta).endsWith('.html'));
 }
 
-function assertProductionAmaFallbacks(strategies) {
+function assertProductionAmaDefaults(strategies) {
     const expected = Object.values(MARKET_ADAPTER.AMAS);
     assert.strictEqual(strategies.length, expected.length);
     for (let i = 0; i < expected.length; i++) {
@@ -121,16 +121,16 @@ function assertProductionAmaFallbacks(strategies) {
     }
 }
 
-function testProductionAmaFallbacks() {
-    assertProductionAmaFallbacks(DEFAULT_COMPARISON_FALLBACK_STRATEGIES);
-    assertProductionAmaFallbacks(FALLBACK_STRATEGIES);
+function testProductionAmaDefaults() {
+    assertProductionAmaDefaults(DEFAULT_COMPARISON_STRATEGIES);
+    assertProductionAmaDefaults(DEFAULT_STRATEGIES);
 }
 
 function main() {
     testParseArgs();
     testGenerateHtml();
     testGenerateMarketLpChartUplot();
-    testProductionAmaFallbacks();
+    testProductionAmaDefaults();
     console.log('lp chart tests passed');
 }
 

@@ -82,7 +82,7 @@ async function testSnapshotReaderDetectsAMAConfig() {
 
     assert.strictEqual(snapshot.exists, true, 'bots.json should be detected');
     assert.strictEqual(snapshot.activeBots.length, 2, 'all active bots should be returned');
-    assert.strictEqual(snapshot.needsPriceAdapter, true, 'AMA grid pricing should require the price adapter');
+    assert.strictEqual(snapshot.needsMarketAdapter, true, 'AMA grid pricing should require the market adapter');
     assert.ok(snapshot.fingerprint, 'fingerprint should be populated');
 }
 
@@ -98,13 +98,13 @@ async function testWatchdogStartsAdapterWhenMissing() {
             exists: true,
             fingerprint: 'fingerprint-1',
             activeBots: [{ name: 'AMA Bot', active: true, gridPrice: 'ama' }],
-            needsPriceAdapter: true,
+            needsMarketAdapter: true,
         }),
         _getPm2ProcessNames: async () => {
             queried = true;
             return [];
         },
-        _startPriceAdapterPm2: async () => {
+        _startMarketAdapterPm2: async () => {
             started = true;
         },
         _log: (msg) => logs.push(msg),
@@ -119,7 +119,7 @@ async function testWatchdogStartsAdapterWhenMissing() {
     assert.strictEqual(result.required, true, 'AMA pricing should require the adapter');
     assert.strictEqual(result.started, true, 'watchdog should report a successful start');
     assert.ok(
-        logs.some((msg) => String(msg).includes('Started dexbot-price-adapter')),
+        logs.some((msg) => String(msg).includes('Started dexbot-adapter')),
         'watchdog should log the adapter start'
     );
 }
@@ -136,16 +136,16 @@ async function testWatchdogSkipsLaunchWhenAdapterNotNeeded() {
             exists: true,
             fingerprint: 'new-fingerprint',
             activeBots: [{ name: 'Book Bot', active: true, gridPrice: 'book' }],
-            needsPriceAdapter: false,
+            needsMarketAdapter: false,
         }),
         _getPm2ProcessNames: async () => {
             queried = true;
-            return ['dexbot-price-adapter'];
+            return ['dexbot-adapter'];
         },
-        _startPriceAdapterPm2: async () => {
+        _startMarketAdapterPm2: async () => {
             started = true;
         },
-        _stopPriceAdapterPm2: async () => {
+        _stopMarketAdapterPm2: async () => {
             stopped = true;
         },
         _log: () => {},
@@ -172,10 +172,10 @@ async function testWatchdogLeavesAdapterStoppedWhenAlreadyAbsent() {
             exists: true,
             fingerprint: 'new-fingerprint',
             activeBots: [{ name: 'Book Bot', active: true, gridPrice: 'book' }],
-            needsPriceAdapter: false,
+            needsMarketAdapter: false,
         }),
         _getPm2ProcessNames: async () => [],
-        _stopPriceAdapterPm2: async () => {
+        _stopMarketAdapterPm2: async () => {
             stopped = true;
         },
         _log: () => {},
@@ -205,11 +205,11 @@ async function testSetupBlockchainFetchIntervalRunsWatchdogBeforeDisabledReturn(
                 exists: true,
                 fingerprint: 'startup-fingerprint',
                 activeBots: [{ name: 'AMA Bot', active: true, gridPrice: 'ama' }],
-                needsPriceAdapter: true,
+                needsMarketAdapter: true,
             };
         },
-        _getPm2ProcessNames: async () => ['dexbot-price-adapter'],
-        _startPriceAdapterPm2: async () => {
+        _getPm2ProcessNames: async () => ['dexbot-adapter'],
+        _startMarketAdapterPm2: async () => {
             throw new Error('should not start when already running');
         },
         _stopBlockchainFetchInterval: () => {},

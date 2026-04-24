@@ -71,7 +71,7 @@
  *   10. MARKET_ADAPTER - Price tracking and grid recalculation trigger settings
  *       AMA_DELTA_THRESHOLD_PERCENT: % change in AMA center price that triggers grid reset
  *       DEFAULT_AMA_KEY: Default AMA profile used for `gridPrice: "ama"`
- *       AMAS: Built-in AMA1..AMA4 presets for price adapter fallback/defaults
+ *       AMAS: Built-in AMA1..AMA4 presets for market adapter defaults
  *       Related to bot AMA configuration (profiles/bots.json: ama.enabled, erPeriod, etc.)
  *       Stored in: profiles/general.settings.json
  *
@@ -125,11 +125,11 @@ const { version: APP_VERSION } = require('../package.json');
 function migrateDustCancelDelaySettings(gridSettings = {}) {
     const cleanGridSettings = { ...gridSettings };
 
-    // Migrate legacy DUST_CANCEL_DELAY_MIN (minutes) → DUST_CANCEL_DELAY_SEC (seconds).
+    // Migrate old DUST_CANCEL_DELAY_MIN (minutes) → DUST_CANCEL_DELAY_SEC (seconds).
     if ('DUST_CANCEL_DELAY_MIN' in cleanGridSettings && !('DUST_CANCEL_DELAY_SEC' in cleanGridSettings)) {
-        const legacyMin = Number(cleanGridSettings.DUST_CANCEL_DELAY_MIN);
-        if (Number.isFinite(legacyMin)) {
-            cleanGridSettings.DUST_CANCEL_DELAY_SEC = legacyMin < 0 ? legacyMin : legacyMin * 60;
+        const oldMin = Number(cleanGridSettings.DUST_CANCEL_DELAY_MIN);
+        if (Number.isFinite(oldMin)) {
+            cleanGridSettings.DUST_CANCEL_DELAY_SEC = oldMin < 0 ? oldMin : oldMin * 60;
         }
     }
 
@@ -178,7 +178,7 @@ let DEFAULT_CONFIG = {
                                   // "book"    = use the live order book price for the pair
                                   // "ama"/"ama1".."ama4" = use the effective center snapshot from profiles/orders/<botKey>.dynamicgrid.json
                                   // numeric   = fixed numeric value
-                                  // null      = use startPrice (default, backward-compatible)
+                                  // null      = use startPrice
     incrementPercent: 0.5,        // Price step between grid levels (0.5 = 0.5% geometric spacing)
     targetSpreadPercent: 2,       // Target spread width between best buy and best sell (2 = 2%)
 
@@ -455,7 +455,7 @@ let FILL_PROCESSING = {
     // Behavior:
     // - 1..MAX_FILL_BATCH_SIZE fills -> single unified batch
     // - >MAX_FILL_BATCH_SIZE fills   -> fixed-size chunking at MAX_FILL_BATCH_SIZE
-    // Set to 1 for legacy sequential behavior.
+    // Set to 1 for current sequential behavior.
     MAX_FILL_BATCH_SIZE: 4
 };
 
@@ -687,11 +687,6 @@ let MARKET_ADAPTER = {
     // the dampening branch is allowed to reduce the output.
     DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT: 0.05,
 
-    // DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: Legacy dynamic-weight tuning constant kept for
-    // backward-compatible config parsing. The active live signal path currently applies ATR
-    // only as a separate symmetric penalty, not as Kalman displacement scaling.
-    DYNAMIC_WEIGHT_DISP_SCALE_ATR_MULT: 200,
-
     // DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT: Minimum Kalman displacement scale in percent.
     // This is the active Kalman displacement scale in both the HTML research tool and the
     // live directional signal path.
@@ -752,7 +747,7 @@ let MARKET_ADAPTER = {
     DEFAULT_AMA_KEY: 'AMA3',
 
     // AMAS: Built-in AMA presets derived from the local LP 1.19.133 fitting results.
-    // These serve as stable defaults for the price adapter and can be overridden by
+    // These serve as stable defaults for the market adapter and can be overridden by
     // pair-specific profiles in profiles/market_profiles.json.
     AMAS: {
         AMA1: {

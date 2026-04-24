@@ -163,10 +163,10 @@ class MarketAdapterService {
                         () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
                         cfg.sourceRetries,
                         cfg.retryDelayMs,
-                        'native bootstrap fallback failed'
+                        'native bootstrap failed'
                     );
                     nextCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
-                    sourceLabel = 'native-bootstrap-fallback';
+                    sourceLabel = 'native-bootstrap';
                 }
             } else {
                 const lastTs = existingCandles[existingCandles.length - 1]?.[0] || 0;
@@ -381,7 +381,12 @@ class MarketAdapterService {
         //    later by the AMA whitelist and the dynamic-weight whitelist.
         const isDynamicWeightWhitelisted = forceWhitelistAll || (typeof deps.isBotDynamicWeightWhitelisted === 'function'
             && deps.isBotDynamicWeightWhitelisted(bot.botKey));
-        const isDynamic = isDynamicWeightWhitelisted;
+        const hasExplicitBaseWeights = Number.isFinite(bot.weightDistribution?.sell)
+            && Number.isFinite(bot.weightDistribution?.buy);
+        if (isDynamicWeightWhitelisted && !hasExplicitBaseWeights) {
+            warn(`[market_adapter] ${bot.botKey} is missing explicit weightDistribution; skipping dynamic volatility weights for this cycle.`);
+        }
+        const isDynamic = isDynamicWeightWhitelisted && hasExplicitBaseWeights;
 
         const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
         const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
@@ -700,15 +705,8 @@ class MarketAdapterService {
             };
 
             // Apply to bot weights. Dynamic weight requires explicit bot midpoint settings.
-            const staticSell = Number.isFinite(bot.weightDistribution?.sell)
-                ? bot.weightDistribution.sell
-                : DEFAULT_CONFIG.weightDistribution.sell;
-            const staticBuy = Number.isFinite(bot.weightDistribution?.buy)
-                ? bot.weightDistribution.buy
-                : DEFAULT_CONFIG.weightDistribution.buy;
-            if (!Number.isFinite(bot.weightDistribution?.sell) || !Number.isFinite(bot.weightDistribution?.buy)) {
-                warn(`[market_adapter] ${bot.botKey} is missing weightDistribution; falling back to DEFAULT_CONFIG.weightDistribution.`);
-            }
+            const staticSell = bot.weightDistribution.sell;
+            const staticBuy = bot.weightDistribution.buy;
 
             const MIN_W = MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT;
             const MAX_W = MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT;
@@ -883,7 +881,7 @@ class MarketAdapterService {
                         snapshotPersistedThisCycle = true;
                         if (!isDryRun) {
                             triggerPath = deps.writeGridResetTrigger(bot, {
-                                reason: 'price_adapter_delta_threshold',
+                                reason: 'market_adapter_delta_threshold',
                                 thresholdPercent: botThreshold,
                                 deltaPercent,
                                 previousCenterPrice,

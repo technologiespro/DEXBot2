@@ -6,7 +6,7 @@ const fs = require('fs');
 /**
  * AMA SIGNAL RUNNER
  *
- * Runs one candle-sync cycle (same logic as price_adapter), then returns
+ * Runs one candle-sync cycle (same logic as market_adapter), then returns
  * machine-readable AMA outputs per bot.
  *
  * Usage:

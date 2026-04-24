@@ -97,14 +97,14 @@ assert.strictEqual(
 
 assert.strictEqual(
     resolveDeltaThresholdPercentFromGeneralSettings({ MARKET_ADAPTER: { DELTA_THRESHOLD_PERCENT: 3.0 } }),
-    3.0,
-    'renamed DELTA_THRESHOLD_PERCENT should be accepted as fallback'
+    null,
+    'old DELTA_THRESHOLD_PERCENT should be ignored'
 );
 
 assert.strictEqual(
     resolveDeltaThresholdPercentFromGeneralSettings({ MARKET_ADAPTER: { GRID_RESET_FACTOR: 2.2 } }),
-    2.2,
-    'legacy GRID_RESET_FACTOR should be accepted as fallback threshold percent'
+    null,
+    'old GRID_RESET_FACTOR should be ignored'
 );
 
 {
@@ -144,11 +144,11 @@ assert.deepStrictEqual(
     assert.strictEqual(ama.fastPeriod, 2.73, 'fractional fastPeriod from bot config should be preserved');
 }
 
-assert.strictEqual(usesAmaGridPrice({ gridPrice: 'ama' }), true, 'ama should enable price adapter processing');
-assert.strictEqual(usesAmaGridPrice({ gridPrice: 'ama3' }), true, 'ama3 should enable price adapter processing');
+assert.strictEqual(usesAmaGridPrice({ gridPrice: 'ama' }), true, 'ama should enable market adapter processing');
+assert.strictEqual(usesAmaGridPrice({ gridPrice: 'ama3' }), true, 'ama3 should enable market adapter processing');
 assert.strictEqual(usesAmaGridPrice({ gridPrice: '  AMA4  ' }), true, 'ama4 matching should be case-insensitive');
-assert.strictEqual(usesAmaGridPrice({ gridPrice: 1.2345 }), false, 'numeric gridPrice should not enable price adapter processing');
-assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPrice should not enable price adapter processing');
+assert.strictEqual(usesAmaGridPrice({ gridPrice: 1.2345 }), false, 'numeric gridPrice should not enable market adapter processing');
+assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPrice should not enable market adapter processing');
 
 // AMA profile override behavior
 {

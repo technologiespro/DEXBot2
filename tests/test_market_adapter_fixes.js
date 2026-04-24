@@ -122,7 +122,7 @@ async function testSignalConfirmationInitialLatch() {
     console.log(' - Testing signal confirmation initial latching...');
 
     // We can't easily run the full MarketAdapterService without lots of mocks,
-    // but we can test the logic change by looking at the echoed series in the test_price_adapter_service pattern.
+    // but we can test the logic change by looking at the echoed series in the test_market_adapter_service pattern.
 
     // Mocking a simplified version of the logic we fixed:
     function simplifiedLatch(combinedOffSeries, confirmBars) {

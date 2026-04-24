@@ -48,7 +48,7 @@ class Logger {
      * - new Logger(level) - Old interface for tests (level='debug'|'info'|'warn'|'error')
      * - new Logger(level, configOverride) - Old interface with config override
      * - new Logger(category, options) - New interface for market_adapter
-     *   - category: Logger prefix ('PriceAdapter', 'DEXBot', etc.)
+     *   - category: Logger prefix ('MarketAdapter', 'DEXBot', etc.)
      *   - options: { quiet, logFile, level, configOverride }
      */
     constructor(firstArg = 'DEXBot', secondArg = null) {

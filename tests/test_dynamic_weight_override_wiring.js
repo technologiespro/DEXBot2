@@ -52,7 +52,6 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
                 assetBSymbol: 'BTS',
                 marketAdapterSettings: {
                     maxSlopeOffset: 0.33,
-                    dispScaleAtrMult: 150,
                     dispScaleMinPct: 0.25,
                     hurstZoneBand: 0.08,
                     peNodes: [0.58, 0.70, 0.82],
@@ -64,7 +63,6 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
                 botOverrides: {
                     'XRP-BTS': {
                         maxSlopeOffset: 0.44,
-                        dispScaleAtrMult: 175,
                         dispScaleMinPct: 0.35,
                         hurstZoneBand: 0.09,
                         peNodes: [0.57, 0.69, 0.81],
@@ -90,7 +88,7 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
     const merged = resolveBotCfg(bot, { ...DEFAULTS });
 
     assert.strictEqual(merged.maxSlopeOffset, 0.44, 'bot override should win for maxSlopeOffset');
-    assert.strictEqual(merged.dispScaleAtrMult, 175, 'bot override should win for dispScaleAtrMult');
+    assert.strictEqual(merged.dispScaleAtrMult, undefined, 'removed dispScaleAtrMult should not be carried forward');
     assert.strictEqual(merged.dispScaleMinPct, 0.35, 'bot override should win for dispScaleMinPct');
     assert.strictEqual(merged.hurstZoneBand, 0.09, 'bot override should win for hurstZoneBand');
     assert.deepStrictEqual(merged.peNodes, [0.57, 0.69, 0.81], 'bot override should win for peNodes');
@@ -107,7 +105,6 @@ function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
                 assetBSymbol: 'BTS',
                 marketAdapterSettings: {
                     maxSlopeOffset: 0.31,
-                    dispScaleAtrMult: 140,
                     dispScaleMinPct: 0.2,
                     hurstZoneBand: 0.07,
                     peNodes: [0.59, 0.71, 0.83],
@@ -134,7 +131,7 @@ function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
     const merged = resolveBotCfg(bot, { ...DEFAULTS });
 
     assert.strictEqual(merged.maxSlopeOffset, 0.31, 'pair override should apply for maxSlopeOffset');
-    assert.strictEqual(merged.dispScaleAtrMult, 140, 'pair override should apply for dispScaleAtrMult');
+    assert.strictEqual(merged.dispScaleAtrMult, undefined, 'removed dispScaleAtrMult should not be carried forward');
     assert.strictEqual(merged.dispScaleMinPct, 0.2, 'pair override should apply for dispScaleMinPct');
     assert.strictEqual(merged.hurstZoneBand, 0.07, 'pair override should apply for hurstZoneBand');
     assert.deepStrictEqual(merged.peNodes, [0.59, 0.71, 0.83], 'pair override should apply for peNodes');

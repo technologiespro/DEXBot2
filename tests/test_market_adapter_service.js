@@ -1,7 +1,7 @@
 const assert = require('assert');
 const path = require('path');
 
-console.log('Running price adapter service tests');
+console.log('Running market adapter service tests');
 
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
 const { detectMissingCandleTimestamps } = require('../market_adapter/candle_utils');
@@ -344,7 +344,7 @@ async function testTriggerHookCalledOnThreshold() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => null,
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -372,6 +372,7 @@ async function testTriggerHookCalledOnThreshold() {
         assetB: 'BTS',
         gridPrice: 'ama',
         incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
     };
 
     const state = {
@@ -418,7 +419,7 @@ async function testBootstrapFallsBackWhenKibanaIsEmpty() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => null,
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -456,6 +457,7 @@ async function testBootstrapFallsBackWhenKibanaIsEmpty() {
         assetB: 'BTS',
         gridPrice: 'ama',
         incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
     };
 
     const state = { bots: {} };
@@ -472,10 +474,10 @@ async function testBootstrapFallsBackWhenKibanaIsEmpty() {
 
     const result = await service.processBot(bot, state, cfg, new Map(), {});
 
-    assert.strictEqual(result.ok, true, 'processBot should succeed with fallback source');
-    assert.strictEqual(result.source, 'native-bootstrap-fallback', 'bootstrap should fallback to native when Kibana is empty');
+    assert.strictEqual(result.ok, true, 'processBot should succeed with native bootstrap source');
+    assert.strictEqual(result.source, 'native-bootstrap', 'bootstrap should use native candles when Kibana is empty');
     assert.strictEqual(kibanaCalls, 1, 'Kibana should be attempted once');
-    assert.strictEqual(nativeCalls, 1, 'native fallback should be called once');
+    assert.strictEqual(nativeCalls, 1, 'native bootstrap should be called once');
 }
 
 async function testAmaGridPriceIsCaseInsensitive() {
@@ -489,7 +491,7 @@ async function testAmaGridPriceIsCaseInsensitive() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(30, 101),
         }),
@@ -566,7 +568,7 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(30, 101),
         }),
@@ -643,7 +645,7 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(30, 101),
         }),
@@ -729,7 +731,7 @@ async function testCenterEqualsAmaTriggeredByAmaDelta() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: [
                 [1700000000000, 100, 100, 100, 100, 1],
@@ -769,6 +771,7 @@ async function testCenterEqualsAmaTriggeredByAmaDelta() {
         assetB: 'BTS',
         gridPrice: 'ama',
         incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
     };
 
     // Previous center 95 → AMA moved to 100 → delta = 5.26% > threshold 0.25% → triggered
@@ -818,7 +821,7 @@ async function testNoTriggerWhenCenterMatchesAma() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: [
                 [1700000000000, 100, 100, 100, 100, 1],
@@ -858,6 +861,7 @@ async function testNoTriggerWhenCenterMatchesAma() {
         assetB: 'BTS',
         gridPrice: 'ama',
         incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
     };
 
     // Previous center = AMA → center unchanged → no trigger
@@ -907,7 +911,7 @@ async function testCenterClampedByBotBounds() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(30, 110),
         }),
@@ -1003,7 +1007,7 @@ async function testContextCacheInvalidatesOnPoolChange() {
             };
         },
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(30, 101),
         }),
@@ -1073,7 +1077,7 @@ async function testKibanaGapRepairPatchesMissingCandles() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: [
                 [1700000000000, 100, 100, 100, 100, 1],
@@ -1168,7 +1172,7 @@ async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: [
                 [1700000000000, 100, 100, 100, 100, 1],
@@ -1242,7 +1246,7 @@ async function testClosedCandleGateSkipsCurrentPartialHour() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 3 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: [
                 [closedTs, 100, 100, 100, 100, 1],
@@ -1338,7 +1342,7 @@ async function testClosedCandleGateSurfacesStaleData() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 3 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_stale_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_stale_1h.json`),
         loadJson: () => ({
             candles: [
                 [staleTs, 100, 100, 100, 100, 1],
@@ -1434,7 +1438,7 @@ async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 2 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_prune_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_prune_1h.json`),
         loadJson: () => ({ candles }),
         saveJson: () => {},
         requiredCandlesForAma: () => 2,
@@ -1523,7 +1527,7 @@ async function testIdOnlyBotIsNotRejected() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(30, 101),
         }),
@@ -1585,7 +1589,7 @@ async function testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights(
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateCandles(1000, 100) }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -1658,7 +1662,7 @@ async function testDynamicWeightMinOutputThresholdZeroDisablesGate() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateCandles(1000, 100) }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -1727,7 +1731,7 @@ async function testDynamicWeightGainScalesOutputLinearly() {
                 poolId: '1.19.133',
             }),
             resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-            candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+            candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
             loadJson: () => ({ candles: generateTrendingCandles(220, 100, 1) }),
             saveJson: () => {},
             requiredCandlesForAma: () => 80,
@@ -1890,7 +1894,7 @@ async function testDynamicWeightChartParityMatchesLiveService() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => botAma,
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -1977,7 +1981,7 @@ async function testDynamicWeightVolatilityOnlyPathRemainsReady() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateVolatileFlatCandles(1000, 100, 110, 90) }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -2050,7 +2054,7 @@ async function testDynamicWeightVolatilityOverridesFlowIntoService() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateVolatileFlatCandles(1000, 100, 110, 90) }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -2120,7 +2124,7 @@ async function testDynamicWeightSuppressedTrendUsesFlatProfile() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateTrendingCandles(1000, 100, 0.2) }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -2193,7 +2197,7 @@ async function testDynamicWeightWeightOnlyWritesPersistOnClosedCandle() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateVolatileFlatCandles(1000, 100, 110, 90) }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -2262,7 +2266,7 @@ async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateCandles(1000, 100) }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -2347,7 +2351,7 @@ async function testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateCandles(1000, 100) }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -2419,7 +2423,7 @@ async function testDynamicWeightInvalidAtrPeriodAndClampAreSanitized() {
             poolId: '1.19.133',
         }),
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
-        candleFileForBot: (botKey) => path.join('/tmp', `price_adapter_${botKey}_1h.json`),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateVolatileFlatCandles(1000, 100, 110, 90) }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -2509,7 +2513,7 @@ async function run() {
 
 run()
     .then(() => {
-        console.log('price adapter service tests passed');
+        console.log('market adapter service tests passed');
     })
     .catch((err) => {
         console.error(err.message || err);

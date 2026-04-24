@@ -425,7 +425,7 @@ async function deriveLiquidityPoolTokenValue(BitShares, shareAssetRef, denominat
 }
 
 /**
- * Load the full dynamic grid snapshot written by price_adapter for a bot.
+ * Load the full dynamic grid snapshot written by market_adapter for a bot.
  * The snapshot is stored atomically at profiles/orders/<botKey>.dynamicgrid.json
  * and is updated every market adapter cycle. It contains the AMA-derived center
  * price and, for dynamic-weight-whitelisted bots, any computed effective weight offsets.
@@ -457,7 +457,7 @@ function loadAmaCenterSnapshot(botKey) {
 }
 
 /**
- * Load the AMA grid center price written by price_adapter for a bot.
+ * Load the AMA grid center price written by market_adapter for a bot.
  * This is the numeric accessor used by the order engine.
  * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
  * @returns {number|null} Center price in B/A format, or null if file absent/invalid

@@ -1292,7 +1292,7 @@ price_candles -> ATR -> weight_variance (symmetric shift)
 
 1. Adapter writes `profiles/recalculate.<botKey>.trigger` when threshold crossed
 2. `dexbot_maintenance_runtime.js` picks up trigger and requests grid reset
-3. Dynamic weights are read from `market_adapter/state/price_adapter_state.json`
+3. Dynamic weights are read from `market_adapter/state/market_adapter_state.json`
 4. Bot runtime applies weight offsets during grid recalculation
 
 ---

@@ -26,7 +26,7 @@ never acts on the still-forming bar.
 ## Signal Pipeline
 
 ```
-price_candles -> price_adapter -> AMA -> Grid Price
+price_candles -> market_adapter -> AMA -> Grid Price
 
 AMA           -> slope_analysis -> slope_offset      (asymmetric weight shift) \
 price_candles -> ATR            -> weight_variance  (symmetric shift)         +-> weight_output
@@ -251,8 +251,8 @@ Threshold resolution order:
 ### 8. State Persistence
 
 Adapter writes machine-readable state after every cycle:
-- `market_adapter/state/price_adapter_state.json` — full per-bot state including `weights`, `collateralRecommendation`, `trend`, `atr`
-- `market_adapter/state/price_adapter_centers.json` — lightweight center snapshot
+- `market_adapter/state/market_adapter_state.json` — full per-bot state including `weights`, `collateralRecommendation`, `trend`, `atr`
+- `market_adapter/state/market_adapter_centers.json` — lightweight center snapshot
 
 ---
 
@@ -334,8 +334,8 @@ additional deviation-based price adjustment layer on top of the AMA output.
 | `profiles/general.settings.json` | Global `MARKET_ADAPTER` settings (delta threshold, etc.) |
 | `profiles/market_adapter_settings.json` | Pair-level and bot-level overrides for dynamic-weight and adapter tuning |
 | `profiles/market_adapter_whitelist.json` | Optional whitelist — per-bot `ama` and `dynamicWeight` flags |
-| `market_adapter/state/price_adapter_state.json` | Runtime state — candle metadata, signals, weights, collateralRecommendation |
-| `market_adapter/state/price_adapter_centers.json` | Lightweight center snapshot |
+| `market_adapter/state/market_adapter_state.json` | Runtime state — candle metadata, signals, weights, collateralRecommendation |
+| `market_adapter/state/market_adapter_centers.json` | Lightweight center snapshot |
 
 ### Dynamic Weight Knobs
 
@@ -381,7 +381,7 @@ node market_adapter/market_adapter.js
 node market_adapter/market_adapter.js --deltaPercent 1.5
 
 # View latest state snapshot
-cat market_adapter/state/price_adapter_state.json
+cat market_adapter/state/market_adapter_state.json
 ```
 
 ### AMA Signal Runner (JSON Output)
@@ -491,7 +491,7 @@ The adapter does **not** edit `profiles/bots.json`, start/stop bots, or place/ca
 
 ### Runtime State Fields
 
-Key fields in `market_adapter/state/price_adapter_state.json`:
+Key fields in `market_adapter/state/market_adapter_state.json`:
 
 ```
 lastRunAt             - Timestamp of last completed cycle
@@ -526,7 +526,7 @@ Each bot processed emits a log line like:
 - ⚠️ **Trigger not firing**: Check `lastDeltaPercent` vs `thresholdPercent` in state file
 - ⚠️ **Stale data**: `staleData: true` — candle sync failing, check network/API access
 - ⚠️ **Gap warnings**: Unresolved candle gaps after Kibana repair attempt
-- 🔴 **Lock file stuck**: If `market_adapter/state/price_adapter.lock` remains after a crash, delete it manually
+- 🔴 **Lock file stuck**: If `market_adapter/state/market_adapter.lock` remains after a crash, delete it manually
 
 ---
 
