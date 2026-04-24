@@ -7,7 +7,7 @@ const path = require('path');
 function parseArgs(argv = process.argv.slice(2)) {
     const cfg = {
         inputFile: null,
-        outputFile: 'analysis/charts/derivative_chart.uplot.html',
+        outputFile: 'analysis/charts/derivative_chart.html',
         title: 'Derivative Trend Analysis',
         quiet: false,
     };
@@ -38,10 +38,10 @@ function showHelp() {
 Derivative Chart Generator (uPlot)
 
 Usage:
-  node analysis/derivative_chart_generator_uplot.js --input <file.json> [options]
+  node analysis/derivative_chart_generator.js --input <file.json> [options]
 
 Options:
-  --output FILE   Output HTML (default: analysis/charts/derivative_chart.uplot.html)
+  --output FILE   Output HTML (default: analysis/charts/derivative_chart.html)
   --title TEXT    Chart title
   --quiet         Suppress output
     `);
@@ -353,9 +353,31 @@ function generateHTML(data, title) {
         .uplot.is-hovered .u-cursor-y { display: block !important; }
         .u-cursor-x { border-left: 1px dashed rgba(255,255,255,0.35) !important; background: transparent !important; }
         .u-legend { display: none !important; }
+        #global-tooltip {
+            position: fixed;
+            z-index: 200;
+            pointer-events: none;
+            background: rgba(14,17,23,0.96);
+            border: 1px solid #2a2e3e;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 11px;
+            line-height: 1.6;
+            color: #e0e0e0;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            display: none;
+            max-width: 260px;
+            white-space: nowrap;
+        }
+        #global-tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; }
+        #global-tooltip .tt-label { color: #888; }
+        #global-tooltip .tt-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+        #global-tooltip .tt-sep { border-top: 1px solid #263042; margin: 4px 0; }
+        #global-tooltip .tt-head { color: #fff; font-weight: 700; margin-bottom: 4px; }
     </style>
 </head>
 <body>
+<div id="global-tooltip"></div>
 
 <div id="header">
     <h1>&#x1F4CA; ${escapeHtml(title)}</h1>
@@ -462,6 +484,7 @@ const smaUp = payload.smaUp;
 const smaDown = payload.smaDown;
 const smaConf = payload.smaConf;
 const smaNum = payload.smaNum;
+const hasFastSma = Array.isArray(payload.fastSmaValues) && payload.fastSmaValues.length > 0;
 const fastSmaUp = payload.fastSmaUp || [];
 const fastSmaDown = payload.fastSmaDown || [];
 const fastSmaConf = payload.fastSmaConf || [];
@@ -528,7 +551,7 @@ function makeAxis(show, type) {
     };
 }
 
-function makeYAxis(show, formatter, size = 58) {
+function makeYAxis(show, formatter, size = 58, label = '') {
     return {
         show,
         scale: 'y',
@@ -539,6 +562,10 @@ function makeYAxis(show, formatter, size = 58) {
         space: 60,
         font: '10px Segoe UI, sans-serif',
         values: formatter,
+        label,
+        labelSize: label ? 14 : 0,
+        labelGap: 4,
+        labelFont: '10px Segoe UI, sans-serif',
     };
 }
 
@@ -617,6 +644,101 @@ function blockSeries(name, color, fill) {
     };
 }
 
+function markerSeries(name, color, size = 7) {
+    return {
+        label: name,
+        stroke: 'transparent',
+        width: 0,
+        points: { show: true, size, space: 0, fill: color, stroke: color },
+    };
+}
+
+function tooltipPlugin() {
+    const tooltip = document.getElementById('global-tooltip');
+    let lastIdx = -1;
+
+    function updateTooltip(u) {
+        const idx = u.cursor.idx;
+        if (idx == null || idx === lastIdx) return;
+        lastIdx = idx;
+
+        const d = new Date(dates[idx] * 1000);
+        const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+            + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+        const priceVal = prices[idx];
+        const smaVal = smaValues[idx];
+        const fsVal = hasFastSma ? fastSmaValues[idx] : null;
+        const macdL = macdLine[idx];
+        const macdS = macdSignal[idx];
+        const macdH = macdHistogram[idx];
+        const rsiVal = rsiValues[idx];
+        const state = interpState[idx];
+        const entry = entryBiasLabel[idx];
+        const bars = interpBars[idx];
+
+        const rows = [
+            '<div class="tt-head">' + dateStr + '</div>',
+        ];
+
+        if (Number.isFinite(priceVal)) {
+            rows.push('<div class="tt-row"><span class="tt-label">Price</span><span class="tt-val">' + priceVal.toFixed(6) + '</span></div>');
+        }
+        if (Number.isFinite(smaVal)) {
+            rows.push('<div class="tt-row"><span class="tt-label">SMA(' + smaPeriod + ')</span><span class="tt-val">' + smaVal.toFixed(6) + '</span></div>');
+        }
+        if (hasFastSma && Number.isFinite(fsVal)) {
+            rows.push('<div class="tt-row"><span class="tt-label">fastSMA</span><span class="tt-val">' + fsVal.toFixed(6) + '</span></div>');
+        }
+
+        rows.push('<div class="tt-sep"></div>');
+
+        if (entry && entry !== 'No fresh entry') {
+            const entryColor = entry.includes('Long') ? '#26a69a' : entry.includes('Short') ? '#ef5350' : '#ccc';
+            rows.push('<div class="tt-row"><span class="tt-label">Entry</span><span class="tt-val" style="color:' + entryColor + '">' + entry + '</span></div>');
+        }
+        if (state && state !== 'NEUTRAL') {
+            const stateColor = state.startsWith('BULL') || state === 'OVERBOUGHT' ? '#26a69a' : state.startsWith('BEAR') || state === 'OVERSOLD' ? '#ef5350' : '#ccc';
+            rows.push('<div class="tt-row"><span class="tt-label">State</span><span class="tt-val" style="color:' + stateColor + '">' + state + (bars > 0 ? ' (' + bars + ' bars)' : '') + '</span></div>');
+        }
+
+        rows.push('<div class="tt-sep"></div>');
+
+        if (Number.isFinite(macdL) && Number.isFinite(macdS)) {
+            rows.push('<div class="tt-row"><span class="tt-label">MACD</span><span class="tt-val">' + macdL.toFixed(4) + '</span></div>');
+            rows.push('<div class="tt-row"><span class="tt-label">Signal</span><span class="tt-val">' + macdS.toFixed(4) + '</span></div>');
+            rows.push('<div class="tt-row"><span class="tt-label">Hist</span><span class="tt-val">' + (macdH >= 0 ? '+' : '') + macdH.toFixed(4) + '</span></div>');
+        }
+        if (Number.isFinite(rsiVal)) {
+            rows.push('<div class="tt-row"><span class="tt-label">RSI</span><span class="tt-val">' + rsiVal.toFixed(1) + '</span></div>');
+        }
+
+        tooltip.innerHTML = rows.join('');
+    }
+
+    return {
+        hooks: {
+            init: [(u) => {
+                u.over.addEventListener('mouseenter', () => { tooltip.style.display = 'block'; });
+                u.over.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; lastIdx = -1; });
+            }],
+            setCursor: [(u) => {
+                updateTooltip(u);
+                const { left, top } = u.cursor;
+                const rect = u.root.getBoundingClientRect();
+                const ttWidth = tooltip.offsetWidth || 220;
+                const ttHeight = tooltip.offsetHeight || 180;
+                let x = rect.left + left + 16;
+                let y = rect.top + top + 16;
+                if (x + ttWidth > window.innerWidth - 12) x = rect.left + left - ttWidth - 16;
+                if (y + ttHeight > window.innerHeight - 12) y = rect.top + top - ttHeight - 16;
+                tooltip.style.left = x + 'px';
+                tooltip.style.top = y + 'px';
+            }],
+        },
+    };
+}
+
 function applyChartHeights() {
     const available = Math.max(window.innerHeight - 44, 300);
     const specs = [
@@ -671,8 +793,9 @@ priceChart = initChart('price-chart', {
     }),
     axes: [
         makeAxis(false, 'x'),
-        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(6)), 62),
+        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(6)), 62, 'Price'),
     ],
+    plugins: [tooltipPlugin()],
     series: [
         { label: 'Time' },
         lineSeries('Price', '#67a8ff', 2.35, { fill: 'rgba(103,168,255,0.08)' }),
@@ -688,15 +811,17 @@ derivChart = initChart('deriv-chart', {
     }),
     axes: [
         makeAxis(false, 'x'),
-        makeYAxis(true, (u, vals) => vals.map((v) => (v === 1 ? 'UP' : v === -1 ? 'DOWN' : '—')), 56),
+        makeYAxis(true, (u, vals) => vals.map((v) => (v === 1 ? 'UP' : v === -1 ? 'DOWN' : '—')), 56, 'Trend'),
     ],
     series: [
         { label: 'Time' },
         blockSeries('SMA Up', 'rgba(83,214,184,0.88)', 'rgba(83,214,184,0.88)'),
         blockSeries('SMA Down', 'rgba(255,114,105,0.88)', 'rgba(255,114,105,0.88)'),
+        ${hasFastSma ? `blockSeries('fastSMA Up', 'rgba(251,146,60,0.35)', 'rgba(251,146,60,0.35)'),
+        blockSeries('fastSMA Down', 'rgba(251,146,60,0.35)', 'rgba(251,146,60,0.35)'),` : ''}
         lineSeries('Zero', 'rgba(255,255,255,0.20)', 1),
     ],
-}, [dates, smaUp, smaDown, dates.map(() => 0)]);
+}, [dates, smaUp, smaDown, ${hasFastSma ? 'fastSmaUp, fastSmaDown, ' : ''}dates.map(() => 0)]);
 
 interpChart = initChart('interp-chart', {
     ...makePlotBase(false, (u, vals) => vals.map((v) => {
@@ -722,7 +847,7 @@ interpChart = initChart('interp-chart', {
             if (v === -0.75) return 'OB';
             if (v === -1) return 'BEAR';
             return '—';
-        }), 56),
+        }), 56, 'Signal'),
     ],
     series: [
         { label: 'Time' },
@@ -732,8 +857,15 @@ interpChart = initChart('interp-chart', {
         blockSeries('Bear', SIGNAL_RED, SIGNAL_RED),
         blockSeries('Bear Weak', SIGNAL_RED_WEAK, SIGNAL_RED_WEAK),
         blockSeries('Oversold', SIGNAL_RED_LIGHT, SIGNAL_RED_LIGHT),
+        lineSeries('Interp', 'rgba(255,255,255,0.35)', 1, { dash: [4, 4] }),
+        markerSeries('Early Long', '#67e8f9', 7),
+        markerSeries('Confirm Long', '#34d399', 8),
+        markerSeries('Late Long', '#f59e0b', 8),
+        markerSeries('Early Short', '#fca5a5', 7),
+        markerSeries('Confirm Short', '#ef4444', 8),
+        markerSeries('Late Short', '#fb7185', 8),
     ],
-}, [dates, interpBullBlock, interpBullWeakBlock, interpOBBlock, interpBearBlock, interpBearWeakBlock, interpOSBlock]);
+}, [dates, interpBullBlock, interpBullWeakBlock, interpOBBlock, interpBearBlock, interpBearWeakBlock, interpOSBlock, interpValues, bullWeakEntryMarkers, bullConfirmationMarkers, lateBullMarkers, bearWeakEntryMarkers, bearConfirmationMarkers, lateBearMarkers]);
 
 macdChart = initChart('macd-chart', {
     ...makePlotBase(false, (u, vals) => vals.map((v) => Number(v).toFixed(4)), {
@@ -745,7 +877,7 @@ macdChart = initChart('macd-chart', {
     }),
     axes: [
         makeAxis(false, 'x'),
-        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(4)), 62),
+        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(4)), 62, 'MACD %'),
     ],
     series: [
         { label: 'Time' },
@@ -763,7 +895,7 @@ rsiChart = initChart('rsi-chart', {
     }),
     axes: [
         makeAxis(true, 'x'),
-        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(1)), 56),
+        makeYAxis(true, (u, vals) => vals.map((v) => Number(v).toFixed(1)), 56, 'RSI'),
     ],
     series: [
         { label: 'Time' },

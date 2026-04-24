@@ -7,16 +7,16 @@
  * Trend is detected from SMA, MACD, and RSI only.
  *
  * Usage:
- *   node analysis/analyze_derivatives_uplot.js \
+ *   node analysis/analyze_derivatives.js \\
  *     --source json \
  *     --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
  *
- *   node analysis/analyze_derivatives_uplot.js \
+ *   node analysis/analyze_derivatives.js \\
  *     --source market_adapter \
  *     --bot-key XRP-BTS
  *
  * Output:
- *   analysis/charts/derivative_chart.uplot.html
+ *   analysis/charts/derivative_chart.html
  */
 
 'use strict';
@@ -24,7 +24,7 @@
 const fs   = require('fs');
 const path = require('path');
 const { DerivativeAnalyzer } = require('./trend_detection/derivative_analyzer');
-const { generateHTML }        = require('./derivative_chart_generator_uplot');
+const { generateHTML }        = require('./derivative_chart_generator');
 const { createSource }        = require('./price_sources');
 
 function parseArgs() {
@@ -51,7 +51,7 @@ function parseArgs() {
         interpHoldBars: 3,
         rsiZone: 10,
         rsiExtreme: 90,
-        chartFile: 'analysis/charts/derivative_chart.uplot.html',
+        chartFile: 'analysis/charts/derivative_chart.html',
         quiet: false,
     };
 
@@ -99,7 +99,7 @@ Analyzes candle data using SMA, MACD, and RSI as trend signals.
 Generates an interactive HTML chart.
 
 Usage:
-  node analysis/analyze_derivatives_uplot.js \\
+  node analysis/analyze_derivatives.js \\
     --source <type> \\
     [--bot-key KEY] [--file PATH] [--pool ID] [--precA N] [--precB N]
 
@@ -144,7 +144,7 @@ Analyzer options:
     --precB N        Kibana asset precision B
 
   Output:
-    --chart FILE   Chart output path (default: analysis/charts/derivative_chart.uplot.html)
+    --chart FILE   Chart output path (default: analysis/charts/derivative_chart.html)
     --quiet        Suppress log output
     `);
 }
@@ -232,6 +232,24 @@ async function analyze(source, config) {
     };
 }
 
+function findLatestLpData() {
+    const lpDir = path.join(__dirname, '..', 'market_adapter', 'data', 'lp');
+    if (!fs.existsSync(lpDir)) return null;
+    const dirs = fs.readdirSync(lpDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => path.join(lpDir, d.name));
+    let newest = null;
+    for (const dir of dirs) {
+        const files = fs.readdirSync(dir)
+            .filter((f) => f.startsWith('lp_pool_') && f.endsWith('.json'))
+            .map((f) => ({ file: path.join(dir, f), mtime: fs.statSync(path.join(dir, f)).mtime }));
+        for (const f of files) {
+            if (!newest || f.mtime > newest.mtime) newest = f;
+        }
+    }
+    return newest ? newest.file : null;
+}
+
 async function main() {
     const config = parseArgs();
 
@@ -239,6 +257,15 @@ async function main() {
         const srcConfig = config.source.config;
         if (config.source.type === 'market_adapter' && !srcConfig.stateDir) {
             srcConfig.stateDir = path.join(__dirname, '..', 'market_adapter', 'state');
+        }
+        if (config.source.type === 'json' && !srcConfig.filePath) {
+            const autoFile = findLatestLpData();
+            if (autoFile) {
+                srcConfig.filePath = autoFile;
+                if (!config.quiet) console.log(`[Analyzer] Auto-discovered LP data: ${autoFile}`);
+            } else {
+                throw new Error('No --file provided and no LP data auto-discovered in market_adapter/data/lp');
+            }
         }
 
         const source = createSource(config.source.type, srcConfig);

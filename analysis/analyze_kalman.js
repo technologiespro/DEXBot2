@@ -6,7 +6,7 @@
  * Runs KalmanTrendAnalyzer over candle data and generates an interactive HTML chart.
  *
  * Usage:
- *   node analysis/analyze_kalman_uplot.js \
+ *   node analysis/analyze_kalman.js \
  *     --source json \
  *     --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
  */
@@ -58,7 +58,7 @@ function parseArgs() {
         source: { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         rNoise: 0.05,
         qNoise: 0.005,
-        chartFile: 'analysis/charts/kalman_chart.uplot.html',
+        chartFile: 'analysis/charts/kalman_chart.html',
         quiet: false,
     };
 

@@ -3,8 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 const { calculateAMA } = require('./ama');
+const { MARKET_ADAPTER } = require('../../modules/constants');
 
-const { generateHTML } = require('../../market_adapter/lp_chart_core_uplot');
+const { generateHTML } = require('../../market_adapter/lp_chart_core');
 const {
     LP_DATA_DIR,
     findLatestLpData,
@@ -22,11 +23,22 @@ const {
  * uses the explicit `ama:chart:lp-local` / `chart:lp-local` naming.
  */
 
-const FALLBACK_STRATEGIES = [
-    { name: 'FAST', erPeriod: 15, fastPeriod: 5, slowPeriod: 30, color: '#26a69a', dash: 'dot' },
-    { name: 'MEDIUM', erPeriod: 50, fastPeriod: 5, slowPeriod: 30, color: '#fb8c00', dash: 'solid' },
-    { name: 'SLOW', erPeriod: 100, fastPeriod: 2, slowPeriod: 30, color: '#9E9E9E', dash: 'dash' },
-];
+const DEFAULT_COLORS = ['#26a69a', '#fb8c00', '#5c9ee6', '#ef5350'];
+const DEFAULT_DASHES = ['dot', 'solid', 'dash', 'dashdot'];
+
+function buildDefaultStrategies() {
+    const presets = MARKET_ADAPTER.AMAS;
+    return Object.keys(presets).map((key, i) => ({
+        name: presets[key].name || key,
+        erPeriod: presets[key].erPeriod,
+        fastPeriod: presets[key].fastPeriod,
+        slowPeriod: presets[key].slowPeriod,
+        color: DEFAULT_COLORS[i % DEFAULT_COLORS.length],
+        dash: DEFAULT_DASHES[i % DEFAULT_DASHES.length],
+    }));
+}
+
+const FALLBACK_STRATEGIES = buildDefaultStrategies();
 
 function showHelp() {
     console.log(`
@@ -71,8 +83,16 @@ function parseArgs(argv = process.argv.slice(2)) {
     return cfg;
 }
 
-function defaultLocalComparisonChartPath() {
-    return path.join(__dirname, '..', 'charts', 'lp_chart_4h_UNIFIED_COMPARISON.html');
+function intervalLabelFromSeconds(sec) {
+    if (!sec || sec <= 0) return 'unknown';
+    if (sec % 86400 === 0) return `${sec / 86400}d`;
+    if (sec % 3600 === 0) return `${sec / 3600}h`;
+    if (sec % 60 === 0) return `${sec / 60}m`;
+    return `${sec}s`;
+}
+
+function defaultLocalComparisonChartPath(intervalLabel) {
+    return path.join(__dirname, '..', 'charts', `lp_chart_${intervalLabel}_UNIFIED_COMPARISON.html`);
 }
 
 function calculateMetrics(amaValues, candles) {
@@ -123,7 +143,8 @@ function generateLocalLpComparisonChart(options = {}) {
     if (!meta.intervalSeconds) meta.intervalSeconds = 3600;
     if (!meta.fetchedAt) meta.fetchedAt = new Date().toISOString();
 
-    const outFile = options.outFile ? path.resolve(options.outFile) : defaultLocalComparisonChartPath();
+    const intervalLabel = intervalLabelFromSeconds(meta.intervalSeconds);
+    const outFile = options.outFile ? path.resolve(options.outFile) : defaultLocalComparisonChartPath(intervalLabel);
     const strategies = Array.isArray(options.strategies) && options.strategies.length
         ? options.strategies
         : [...FALLBACK_STRATEGIES];

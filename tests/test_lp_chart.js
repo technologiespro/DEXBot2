@@ -8,12 +8,19 @@ const vm = require('vm');
 
 const {
     generateHTML,
-} = require('../market_adapter/lp_chart_core_uplot');
+} = require('../market_adapter/lp_chart_core');
 const {
     defaultUplotMarketChartPath,
     generateMarketLpChartUplot,
     parseArgs,
-} = require('../scripts/generate_lp_chart_uplot');
+} = require('../scripts/generate_lp_chart');
+const {
+    DEFAULT_COMPARISON_FALLBACK_STRATEGIES,
+} = require('../market_adapter/lp_chart_runner');
+const {
+    FALLBACK_STRATEGIES,
+} = require('../analysis/ama_fitting/generate_unified_comparison_chart');
+const { MARKET_ADAPTER } = require('../modules/constants');
 
 function testParseArgs() {
     const parsed = parseArgs(['--data', 'foo.json', '--out', 'out.html', '--no-open']);
@@ -84,7 +91,7 @@ function testGenerateMarketLpChartUplot() {
         'lp_pool_133_1h.json',
     );
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot2-lp-uplot-'));
-    const outFile = path.join(tmpDir, 'lp_chart.uplot.html');
+    const outFile = path.join(tmpDir, 'lp_chart.html');
     const result = generateMarketLpChartUplot({
         dataFile,
         noOpen: true,
@@ -103,11 +110,28 @@ function testGenerateMarketLpChartUplot() {
     assert.ok(defaultUplotMarketChartPath(result.meta).endsWith('.html'));
 }
 
+function assertProductionAmaFallbacks(strategies) {
+    const expected = Object.values(MARKET_ADAPTER.AMAS);
+    assert.strictEqual(strategies.length, expected.length);
+    for (let i = 0; i < expected.length; i++) {
+        assert.strictEqual(strategies[i].name, expected[i].name);
+        assert.strictEqual(strategies[i].erPeriod, expected[i].erPeriod);
+        assert.strictEqual(strategies[i].fastPeriod, expected[i].fastPeriod);
+        assert.strictEqual(strategies[i].slowPeriod, expected[i].slowPeriod);
+    }
+}
+
+function testProductionAmaFallbacks() {
+    assertProductionAmaFallbacks(DEFAULT_COMPARISON_FALLBACK_STRATEGIES);
+    assertProductionAmaFallbacks(FALLBACK_STRATEGIES);
+}
+
 function main() {
     testParseArgs();
     testGenerateHtml();
     testGenerateMarketLpChartUplot();
-    console.log('lp chart uplot tests passed');
+    testProductionAmaFallbacks();
+    console.log('lp chart tests passed');
 }
 
 main();

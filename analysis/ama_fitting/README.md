@@ -12,7 +12,7 @@ and export the results into `profiles/market_profiles.json` for the market adapt
 2. optimizer_high_resolution.js   →   optimization_results_*.json
                                   →   profiles/market_profiles.json  (auto-updated)
 3. scripts/generate_lp_chart.js   →   market chart + comparison chart  (visual review)
-   - uPlot chart path: `npm run lp:chart:uplot`
+   - LP chart: `npm run lp:chart -- --data <lp-export.json>`
    - Local LP comparison alias: `npm run ama:chart:lp-local -- --data <lp-export.json>`
 ```
 
@@ -144,7 +144,7 @@ npm run lp:chart -- \
 
 This generates both:
 - `analysis/charts/lp_AMA_chart_pool_133.html` — market-adapter style LP chart
-- `analysis/charts/lp_chart_4h_UNIFIED_COMPARISON.html` — unified comparison chart
+- `analysis/charts/lp_chart_1h_UNIFIED_COMPARISON.html` — unified comparison chart, with the interval derived from LP metadata
 
 Under the hood, LP-data chart generation now delegates into the shared runner in
 `market_adapter/lp_chart_runner.js`. The analysis script keeps only:

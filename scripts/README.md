@@ -200,29 +200,29 @@ The following scripts allow you to call `dexbot` commands directly from the `scr
 npm run lp:chart -- --data <lp-export.json>
 ```
 
-### LP Chart (uPlot)
-**File:** `generate_lp_chart_uplot.js`
-**Purpose:** Generate the parallel uPlot LP chart output for comparison.
+### LP Chart
+**File:** `generate_lp_chart.js`
+**Purpose:** Generate the standard LP chart output.
 ```bash
-# Generate the uPlot LP chart output
-npm run lp:chart:uplot -- --data <lp-export.json>
+# Generate the LP chart output
+npm run lp:chart -- --data <lp-export.json>
 ```
 
 ### Local LP Comparison Chart
 **File:** `analysis/ama_fitting/generate_unified_comparison_chart.js`
 **Purpose:** Generate the local LP comparison chart from an LP candle export.
-**Output:** `analysis/charts/lp_chart_4h_UNIFIED_COMPARISON.html`
+**Output:** `analysis/charts/lp_chart_<interval>_UNIFIED_COMPARISON.html`
 ```bash
 # Generate the local LP comparison chart
 npm run ama:chart:lp-local -- --data <lp-export.json>
 ```
 
-### Derivative Trend Analysis (uPlot)
-**File:** `analysis/analyze_derivatives_uplot.js`
-**Purpose:** Generate the parallel uPlot derivative analysis report.
+### Derivative Trend Analysis
+**File:** `analysis/analyze_derivatives.js`
+**Purpose:** Generate the derivative analysis report.
 ```bash
-# Generate the derivative analysis report using uPlot
-npm run analysis:derivatives:uplot -- --source json --file <file.json>
+# Generate the derivative analysis report
+npm run analysis:derivatives -- --source json --file <file.json>
 ```
 
 ---

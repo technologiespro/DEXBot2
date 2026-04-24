@@ -379,14 +379,14 @@ that only need adjustment when you want to change how strict the signal is.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--chart FILE` | analysis/charts/derivative_chart.uplot.html | HTML output path |
+| `--chart FILE` | analysis/charts/derivative_chart.html | HTML output path |
 
 ---
 
 ## Recommended 1h Setup
 
 ```bash
-node analysis/analyze_derivatives_uplot.js \
+node analysis/analyze_derivatives.js \
   --source json \
   --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
   --sma 500 --fast-sma 100 \

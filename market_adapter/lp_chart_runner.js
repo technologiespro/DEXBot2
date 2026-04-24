@@ -13,11 +13,10 @@
  * - resolve AMA strategies from optimizer results and/or market profiles
  * - calculate AMA series and comparison metrics
  * - choose output paths
- * - render and write HTML via `lp_chart_core_uplot`
- * - optionally open the generated chart in a browser
+ * - render and write HTML via `lp_chart_core`
  *
  * Non-responsibilities:
- * - rendering HTML internals (`lp_chart_core_uplot.js`)
+ * - rendering HTML internals (`lp_chart_core.js`)
  * - synthetic comparison mode (kept in analysis/ama_fitting)
  * - fetch/export of LP data (`market_adapter/inputs/fetch_lp_data.js`)
  */
@@ -27,18 +26,27 @@ const path = require('path');
 const { exec } = require('child_process');
 
 const { calculateAMA } = require('../analysis/ama_fitting/ama');
-const { generateHTML } = require('./lp_chart_core_uplot');
+const { MARKET_ADAPTER } = require('../modules/constants');
+const { generateHTML } = require('./lp_chart_core');
 const { loadStrategiesForLpChart } = require('./lp_chart_strategy_loader');
 
 const ROOT = path.resolve(__dirname, '..');
 const LP_DATA_DIR = path.join(ROOT, 'market_adapter', 'data', 'lp');
 const ANALYSIS_CHARTS_DIR = path.join(ROOT, 'analysis', 'charts');
 const AMA_PROFILES_FILE = path.join(ROOT, 'profiles', 'market_profiles.json');
-const DEFAULT_COMPARISON_FALLBACK_STRATEGIES = [
-    { name: 'FAST', erPeriod: 15, fastPeriod: 5, slowPeriod: 30, color: '#26a69a', dash: 'dot' },
-    { name: 'MEDIUM', erPeriod: 50, fastPeriod: 5, slowPeriod: 30, color: '#fb8c00', dash: 'solid' },
-    { name: 'SLOW', erPeriod: 100, fastPeriod: 2, slowPeriod: 30, color: '#9E9E9E', dash: 'dash' },
-];
+const DEFAULT_COMPARISON_COLORS = ['#26a69a', '#fb8c00', '#5c9ee6', '#ef5350'];
+const DEFAULT_COMPARISON_DASHES = ['dot', 'solid', 'dash', 'dashdot'];
+const DEFAULT_COMPARISON_FALLBACK_STRATEGIES = Object.keys(MARKET_ADAPTER.AMAS).map((key, index) => {
+    const ama = MARKET_ADAPTER.AMAS[key];
+    return {
+        name: ama.name || key,
+        erPeriod: ama.erPeriod,
+        fastPeriod: ama.fastPeriod,
+        slowPeriod: ama.slowPeriod,
+        color: DEFAULT_COMPARISON_COLORS[index % DEFAULT_COMPARISON_COLORS.length],
+        dash: DEFAULT_COMPARISON_DASHES[index % DEFAULT_COMPARISON_DASHES.length],
+    };
+});
 
 function parseLpChartCliArgs(argv, options = {}) {
     const args = Array.isArray(argv) ? argv : [];

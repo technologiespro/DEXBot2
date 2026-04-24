@@ -102,7 +102,7 @@ market_adapter/
 ├── candle_utils.js              # Candle transforms, gap detection, pruning helpers
 ├── interval_utils.js            # Shared interval label formatting
 ├── merge_lp_data.js             # CLI utility for merging exported LP candle files
-├── lp_chart_core_uplot.js       # Renderer-only LP chart HTML generator
+├── lp_chart_core.js       # Renderer-only LP chart HTML generator
 ├── lp_chart_strategy_loader.js  # AMA strategy/profile resolution for LP charts
 ├── lp_chart_runner.js           # Shared LP chart orchestration used by scripts and npm commands
 │
@@ -134,7 +134,6 @@ LP chart generation is now split into a shared runner plus thin wrappers.
 The user-facing entrypoint is:
 
 - Recommended user entrypoint: `npm run lp:chart -- --data <lp-export.json>`
-- Parallel uPlot experiment: `npm run lp:chart:uplot -- --data <lp-export.json>`
 - Shared implementation: `market_adapter/lp_chart_runner.js`
 
 Responsibility split:
@@ -142,7 +141,7 @@ Responsibility split:
 - `scripts/generate_lp_chart.js` orchestrates the full "generate both charts" flow.
 - `analysis/ama_fitting/generate_unified_comparison_chart.js` is now synthetic-only and uses the uPlot renderer.
 - `market_adapter/lp_chart_runner.js` owns LP data discovery, strategy loading, AMA calculation, output paths, HTML generation, and optional browser opening.
-- `market_adapter/lp_chart_core_uplot.js` stays focused on rendering HTML only.
+- `market_adapter/lp_chart_core.js` stays focused on rendering HTML only.
 
 Typical usage:
 

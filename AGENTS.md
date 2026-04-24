@@ -160,7 +160,7 @@ File: <path>
 - `merge_lp_data.js` - LP data merging
 - `candle_utils.js` - Candlestick utilities
 - `interval_utils.js` - Shared interval label helpers
-- `lp_chart_core_uplot.js` - LP chart core logic
+- `lp_chart_core.js` - LP chart core logic
 - `lp_chart_runner.js` - Shared LP chart orchestration used by the supported chart scripts
 
 ### Blockchain Interaction
@@ -204,20 +204,20 @@ Research scripts for parameter tuning — output interactive HTML charts, not us
 - Docs: `analysis/trend_detection/DYNAMIC_WEIGHT_RESEARCH.md`
 
 #### Derivative / Signal Research
-- `analyze_derivatives_uplot.js` - SMA/MACD/RSI signal analyzer runner
+- `analyze_derivatives.js` - SMA/MACD/RSI signal analyzer runner
 - `trend_detection/derivative_analyzer.js` - Core signal engine (MACD, RSI, trend filter)
 - `trend_detection/trend_analyzer.js` - SMA-based trend direction helper
 - `trend_detection/kalman_trend_analyzer.js` - Kalman filter with tactical/modal state tracking
 - `trend_detection/kalman_chart_generator.js` - Kalman signal chart generator
 - `trend_detection/volatility_chart_generator.js` - Volatility / symmetric shift chart generator
-- `analyze_kalman_uplot.js` - Kalman standalone analyzer runner
+- `analyze_kalman.js` - Kalman standalone analyzer runner
 - Docs: `analysis/trend_detection/SIGNAL_DOCUMENTATION.md`
 - `trend_detection/README.md` - local index for the trend detection research docs
 
 #### AMA Fitting
 - `ama_fitting/ama.js` - Kaufman Adaptive Moving Average implementation
 - `ama_fitting/optimizer_high_resolution.js` - AMA parameter optimizer
-- `ama_fitting/generate_unified_comparison_chart_uplot.js` - AMA comparison chart
+- `ama_fitting/generate_unified_comparison_chart.js` - AMA comparison chart
 - `ama_fitting/analyze_ama_price_changes.js` - AMA price change analysis
 
 #### Data Sources

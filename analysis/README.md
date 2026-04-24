@@ -12,9 +12,9 @@ This directory contains research runners, chart generators, and helper modules u
 
 ## Main Entry Points
 
-- `analyze_derivatives_uplot.js`
+- `analyze_derivatives.js`
 - `analyze_dynamic_weight.js`
-- `analyze_kalman_uplot.js`
+- `analyze_kalman.js`
 - `analyze_regime.js`
 - `analyze_regime_windows.js`
 - `analyze_volatility.js`
