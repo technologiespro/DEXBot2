@@ -795,6 +795,7 @@ function bindPan(chart) {
         if (!dragging) return;
         document.body.style.cursor = 'grabbing';
     });
+    window.addEventListener('blur', endDrag);
 }
 
 function bindHoverState(chart) {

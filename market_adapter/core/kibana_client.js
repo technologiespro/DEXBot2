@@ -37,50 +37,60 @@ const PROXY_PATH = (index) =>
  * @param {Object} esQuery  – Elasticsearch query body
  * @returns {Promise<Object>} Parsed JSON response
  */
+function doKibanaRequest(cfg, esQuery, resolve, reject, redirectCount = 0) {
+  const body = JSON.stringify(esQuery);
+  const url  = new URL(cfg.kibanaUrl);
+
+  const headers = {
+    'Content-Type':   'application/json',
+    'kbn-xsrf':       'true',
+    'Content-Length': Buffer.byteLength(body),
+  };
+  if (cfg.apiKey) headers['Authorization'] = `ApiKey ${cfg.apiKey}`;
+
+  const req = https.request({
+    hostname: url.hostname,
+    port:     url.port || 443,
+    path:     PROXY_PATH(INDEX),
+    method:   'POST',
+    headers,
+    timeout:  cfg.timeout,
+  }, (res) => {
+    // Follow a single redirect (common with auth or load-balancer rewrites)
+    if (redirectCount === 0 && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+      const redirectUrl = new URL(res.headers.location, cfg.kibanaUrl);
+      return doKibanaRequest({ ...cfg, kibanaUrl: redirectUrl.href }, esQuery, resolve, reject, redirectCount + 1);
+    }
+
+    let raw = '';
+    res.on('data', (c) => { raw += c; });
+    res.on('end', () => {
+      if (res.statusCode === 401 || res.statusCode === 403) {
+        reject(new Error(
+          `Kibana auth required (HTTP ${res.statusCode}). ` +
+          `Set config.apiKey — generate in Kibana → Stack Management → API Keys.`
+        ));
+        return;
+      }
+      if (res.statusCode >= 400) {
+        reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 300)}`));
+        return;
+      }
+      try { resolve(JSON.parse(raw)); }
+      catch (e) { reject(new Error(`JSON parse failed: ${e.message}\n${raw.slice(0, 200)}`)); }
+    });
+  });
+
+  req.on('error', reject);
+  req.on('timeout', () => { req.destroy(); reject(new Error('Kibana request timed out')); });
+  req.write(body);
+  req.end();
+}
+
 function kibanaSearch(config, esQuery) {
   return new Promise((resolve, reject) => {
-    const cfg  = { ...DEFAULT_CONFIG, ...config };
-    const body = JSON.stringify(esQuery);
-    const url  = new URL(cfg.kibanaUrl);
-
-    const headers = {
-      'Content-Type':   'application/json',
-      'kbn-xsrf':       'true',
-      'Content-Length': Buffer.byteLength(body),
-    };
-    if (cfg.apiKey) headers['Authorization'] = `ApiKey ${cfg.apiKey}`;
-
-    const req = https.request({
-      hostname: url.hostname,
-      port:     url.port || 443,
-      path:     PROXY_PATH(INDEX),
-      method:   'POST',
-      headers,
-      timeout:  cfg.timeout,
-    }, (res) => {
-      let raw = '';
-      res.on('data', (c) => { raw += c; });
-      res.on('end', () => {
-        if (res.statusCode === 401 || res.statusCode === 403) {
-          reject(new Error(
-            `Kibana auth required (HTTP ${res.statusCode}). ` +
-            `Set config.apiKey — generate in Kibana → Stack Management → API Keys.`
-          ));
-          return;
-        }
-        if (res.statusCode >= 400) {
-          reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 300)}`));
-          return;
-        }
-        try { resolve(JSON.parse(raw)); }
-        catch (e) { reject(new Error(`JSON parse failed: ${e.message}\n${raw.slice(0, 200)}`)); }
-      });
-    });
-
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('Kibana request timed out')); });
-    req.write(body);
-    req.end();
+    const cfg = { ...DEFAULT_CONFIG, ...config };
+    doKibanaRequest(cfg, esQuery, resolve, reject);
   });
 }
 

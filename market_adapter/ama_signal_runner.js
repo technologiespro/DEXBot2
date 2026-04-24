@@ -146,21 +146,13 @@ async function main() {
     if (fixtureRaw) {
         payload = JSON.parse(fixtureRaw);
     } else {
-        const original = {
-            log: console.log.bind(console),
-            warn: console.warn.bind(console),
-            error: console.error.bind(console),
-        };
-        // Keep stdout clean for JSON output, but preserve diagnostics on stderr.
-        console.log = () => {};
-        console.warn = original.warn;
-        console.error = original.error;
+        // Suppress stdout so JSON output stays clean, but preserve stderr (warn/error).
+        const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+        process.stdout.write = () => true;
         try {
             payload = await runOnceForAma(cli.overrides);
         } finally {
-            console.log = original.log;
-            console.warn = original.warn;
-            console.error = original.error;
+            process.stdout.write = originalStdoutWrite;
         }
     }
     const out = buildOutput(payload, cli.bot);

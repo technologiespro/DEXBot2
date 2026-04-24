@@ -72,6 +72,7 @@ const {
 const kibanaSource = require('./inputs/kibana_source');
 const { normalizePoolId } = kibanaSource;
 const { tradesToCandles, detectMissingCandleTimestamps, fillCandleGaps } = require('./candle_utils');
+const { toIntervalLabel } = require('./interval_utils');
 
 const ROOT = path.join(__dirname, '..');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
@@ -112,6 +113,7 @@ const DEFAULTS = {
     maxPages: 80,
     pageLimit: 100,
     once: false,
+    maxNativeGapFillCandles: 3,
     amaSlope: {
         lookbackBars:  MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
         maxSlopePct:   MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
@@ -256,7 +258,7 @@ function resolveBotCfg(bot, globalCfg) {
 
 const DEFAULT_AMA_KEY = String(MARKET_ADAPTER.DEFAULT_AMA_KEY || 'AMA3').toUpperCase();
 const BUILTIN_AMAS = MARKET_ADAPTER.AMAS || {};
-const DEFAULT_AMA = BUILTIN_AMAS[DEFAULT_AMA_KEY] || BUILTIN_AMAS.AMA3 || { erPeriod: 372, fastPeriod: 1.8, slowPeriod: 1286 };
+const DEFAULT_AMA = BUILTIN_AMAS[DEFAULT_AMA_KEY] || BUILTIN_AMAS.AMA3 || { erPeriod: 781, fastPeriod: 5.2, slowPeriod: 112.7 };
 const AMA_KEYWORDS = new Set(['ama', 'ama1', 'ama2', 'ama3', 'ama4']);
 const AMA_PRESET_KEYS = ['AMA1', 'AMA2', 'AMA3', 'AMA4'];
 
@@ -350,20 +352,21 @@ function loadMarketProfiles() {
     }
 }
 
-function getAmaFromProfilesForBot(bot, ctx = null) {
+function getAmaFromProfilesForBot(bot, ctx = null, cfg = null) {
     const profile = findAmaProfileForBot(bot, ctx);
     if (!profile) return null;
 
     const rawGridPrice = String(bot?.gridPrice || '').trim().toLowerCase();
+    const overrideDefaultAmaKey = cfg?.defaultAmaKey ? normalizeAmaKey(cfg.defaultAmaKey) : null;
     const requestedKey = rawGridPrice === 'ama'
-        ? normalizeAmaKey(profile?.defaultAma)
+        ? (overrideDefaultAmaKey || normalizeAmaKey(profile?.defaultAma))
         : (isAmaKeyword(rawGridPrice)
             ? normalizeAmaKey(rawGridPrice)
-            : normalizeAmaKey(profile?.defaultAma));
+            : (overrideDefaultAmaKey || normalizeAmaKey(profile?.defaultAma)));
     const selected = normalizeAmaPreset(profile?.amas?.[requestedKey])
-        || normalizeAmaPreset(profile?.amas?.[DEFAULT_AMA_KEY])
+        || normalizeAmaPreset(profile?.amas?.[overrideDefaultAmaKey || DEFAULT_AMA_KEY])
         || getAmaPresetForKey(requestedKey)
-        || getAmaPresetForKey(DEFAULT_AMA_KEY);
+        || getAmaPresetForKey(overrideDefaultAmaKey || DEFAULT_AMA_KEY);
     if (!selected) return null;
 
     return {
@@ -701,7 +704,12 @@ async function findPoolByAssets(assetAId, assetBId) {
     if (typeof BitShares.db?.get_liquidity_pools_by_assets === 'function') {
         try {
             const pools = await BitShares.db.get_liquidity_pools_by_assets(assetAId, assetBId, 10, false);
-            if (Array.isArray(pools) && pools.length > 0) return pools[0];
+            if (Array.isArray(pools) && pools.length > 0) {
+                return pools.sort((x, y) => {
+                    const bal = (p) => Number(p.balance_a ?? 0) + Number(p.balance_b ?? 0);
+                    return bal(y) - bal(x);
+                })[0];
+            }
         } catch (_) {}
     }
 
@@ -721,7 +729,12 @@ async function findPoolByAssets(assetAId, assetBId) {
                 const ids = (p.asset_ids ?? [p.asset_a, p.asset_b]).map(String);
                 return ids.includes(a) && ids.includes(b);
             });
-            if (matches.length > 0) return matches[0];
+            if (matches.length > 0) {
+                return matches.sort((x, y) => {
+                    const bal = (p) => Number(p.balance_a ?? 0) + Number(p.balance_b ?? 0);
+                    return bal(y) - bal(x);
+                })[0];
+            }
 
             if (pools.length < page) break;
             startId = pools[pools.length - 1].id;
@@ -737,8 +750,9 @@ function parseChainTimeToMs(timeStr) {
     return Date.parse(s.endsWith('Z') ? s : `${s}Z`);
 }
 
-function candleFileForBot(botKey) {
-    return path.join(DATA_DIR, `market_adapter_${botKey}_1h.json`);
+function candleFileForBot(botKey, intervalSeconds = 3600) {
+    const label = intervalSeconds === 3600 ? '1h' : toIntervalLabel(intervalSeconds);
+    return path.join(DATA_DIR, `market_adapter_${botKey}_${label}.json`);
 }
 
 function requiredCandlesForAma(ama = DEFAULT_AMA) {
@@ -757,27 +771,27 @@ function computeCandleStaleness(lastCandleTs, maxStaleHours) {
     return { staleData, staleAgeHours };
 }
 
-function resolveAmaForBot(bot, ctx = null) {
-    const fromProfiles = getAmaFromProfilesForBot(bot, ctx);
+function resolveAmaForBot(bot, ctx = null, cfg = null) {
+    const fromProfiles = getAmaFromProfilesForBot(bot, ctx, cfg);
     if (fromProfiles) return fromProfiles;
 
     const raw = (bot && typeof bot.ama === 'object' && bot.ama !== null) ? bot.ama : {};
-    const cfg = {
+    const amaCfg = {
         erPeriod: Number(raw.erPeriod),
         fastPeriod: Number(raw.fastPeriod),
         slowPeriod: Number(raw.slowPeriod),
         enabled: raw.enabled !== false,
     };
 
-    if (!Number.isInteger(cfg.erPeriod) || cfg.erPeriod < 1) cfg.erPeriod = DEFAULT_AMA.erPeriod;
-    if (!Number.isFinite(cfg.fastPeriod) || cfg.fastPeriod < 1) cfg.fastPeriod = DEFAULT_AMA.fastPeriod;
-    if (!Number.isInteger(cfg.slowPeriod) || cfg.slowPeriod < 1) cfg.slowPeriod = DEFAULT_AMA.slowPeriod;
-    if (cfg.fastPeriod > cfg.slowPeriod) {
-        const t = cfg.fastPeriod;
-        cfg.fastPeriod = cfg.slowPeriod;
-        cfg.slowPeriod = t;
+    if (!Number.isInteger(amaCfg.erPeriod) || amaCfg.erPeriod < 1) amaCfg.erPeriod = DEFAULT_AMA.erPeriod;
+    if (!Number.isFinite(amaCfg.fastPeriod) || amaCfg.fastPeriod < 1) amaCfg.fastPeriod = DEFAULT_AMA.fastPeriod;
+    if (!Number.isInteger(amaCfg.slowPeriod) || amaCfg.slowPeriod < 1) amaCfg.slowPeriod = DEFAULT_AMA.slowPeriod;
+    if (amaCfg.fastPeriod > amaCfg.slowPeriod) {
+        const t = amaCfg.fastPeriod;
+        amaCfg.fastPeriod = amaCfg.slowPeriod;
+        amaCfg.slowPeriod = t;
     }
-    return cfg;
+    return amaCfg;
 }
 
 function mergeCandles(existing, incoming) {
@@ -878,6 +892,10 @@ async function fetchNativeTradesSince(poolId, sinceMs, pageLimit, maxPages) {
         if (!Number.isFinite(lastSeq) || lastSeq <= 1) break;
         if (hitOld) break;
         startSeq = lastSeq - 1;
+    }
+
+    if (pages >= maxPages && !hitOld) {
+        console.warn(`[market_adapter] fetchNativeTradesSince exhausted maxPages (${maxPages}) before reaching sinceMs; data may be incomplete`);
     }
 
     return trades;

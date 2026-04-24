@@ -60,16 +60,19 @@ class MarketAdapterService {
         ].map((v) => String(v ?? '')).join('|');
     }
 
-    buildGapRepairTimeRange(missingTimestamps, intervalSeconds) {
+    buildGapRepairTimeRange(missingTimestamps, intervalSeconds, maxGapHours = 24) {
         const bucketMs = Number(intervalSeconds) * 1000;
         if (!Array.isArray(missingTimestamps) || missingTimestamps.length === 0) return null;
         if (!Number.isFinite(bucketMs) || bucketMs <= 0) return null;
 
-        const startTs = Math.max(0, missingTimestamps[0] - bucketMs);
-        const endTs = missingTimestamps[missingTimestamps.length - 1] + (bucketMs * 2) - 1;
+        const maxGapMs = Number.isFinite(maxGapHours) && maxGapHours > 0 ? maxGapHours * 3600 * 1000 : 24 * 3600 * 1000;
+        const requestedStart = missingTimestamps[0] - bucketMs;
+        const requestedEnd = missingTimestamps[missingTimestamps.length - 1] + (bucketMs * 2) - 1;
+        const cappedStart = Math.max(requestedStart, requestedEnd - maxGapMs);
+
         return {
-            gte: new Date(startTs).toISOString(),
-            lte: new Date(endTs).toISOString(),
+            gte: new Date(cappedStart).toISOString(),
+            lte: new Date(requestedEnd).toISOString(),
         };
     }
 
@@ -135,21 +138,19 @@ class MarketAdapterService {
             });
         }
 
-        const botAma = deps.resolveAmaForBot(bot, ctx);
+        const botAma = deps.resolveAmaForBot(bot, ctx, cfg);
         if (!botAma.enabled) {
             return { ok: false, reason: 'ama disabled' };
         }
-        const amaErPeriod = cfg.amaSlope?.erPeriod ?? botAma.erPeriod;
-        const amaSlowPeriod = cfg.amaSlope?.slowPeriod ?? botAma.slowPeriod;
         const lookbackBars = cfg.amaSlope?.lookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
-        const filePath = deps.candleFileForBot(bot.botKey);
+        const filePath = deps.candleFileForBot(bot.botKey, cfg.intervalSeconds);
         const existing = deps.loadJson(filePath, null);
         const existingCandles = Array.isArray(existing?.candles) ? existing.candles : [];
 
         const needBootstrap = existingCandles.length === 0;
         const analysisKeepCount = Math.max(
             deps.requiredCandlesForAma(botAma),
-            getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars) + 1
+            getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars) + 1
         );
         // Retain one extra raw candle so the closed-candle analysis window still keeps a
         // full warmup/history set when the newest bucket is the current in-progress bar.
@@ -190,6 +191,12 @@ class MarketAdapterService {
                         'native bootstrap failed'
                     );
                     nextCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
+                    // Fill internal gaps within the fetched bootstrap range so AMA has a continuous series.
+                    if (nextCandles.length > 0 && typeof deps.fillCandleGaps === 'function') {
+                        const earliestTs = nextCandles[0][0];
+                        const latestTs = nextCandles[nextCandles.length - 1][0];
+                        nextCandles = deps.fillCandleGaps(nextCandles, cfg.intervalSeconds, earliestTs, latestTs);
+                    }
                     sourceLabel = 'native-bootstrap';
                 }
             } else {
@@ -203,7 +210,19 @@ class MarketAdapterService {
                 );
                 const incomingCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
                 nextCandles = deps.mergeCandles(existingCandles, incomingCandles);
-                nextCandles = this.fillNativeIncrementalClosedGaps(nextCandles, lastTs, cfg.intervalSeconds);
+
+                // Only auto-fill small gaps from native incremental fetch. Large gaps usually
+                // mean fetchNativeTradesSince exhausted maxPages before reaching the prior tail,
+                // so we leave them visible for Kibana repair instead of carrying stale prices.
+                const bucketMs = Number(cfg.intervalSeconds) * 1000;
+                const earliestIncomingTs = incomingCandles.length > 0 ? incomingCandles[0][0] : null;
+                const gapBuckets = Number.isFinite(earliestIncomingTs) && earliestIncomingTs > lastTs
+                    ? Math.round((earliestIncomingTs - lastTs) / bucketMs) - 1
+                    : 0;
+                const maxNativeGapFill = Number.isFinite(cfg.maxNativeGapFillCandles) ? cfg.maxNativeGapFillCandles : 3;
+                if (gapBuckets <= maxNativeGapFill) {
+                    nextCandles = this.fillNativeIncrementalClosedGaps(nextCandles, lastTs, cfg.intervalSeconds);
+                }
             }
 
             let kibanaGapRepairTimestamps = [];
@@ -212,7 +231,7 @@ class MarketAdapterService {
                 : { gapCount: 0, missingTimestamps: [] };
 
             if (gapAnalysis.gapCount > 0 && deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function') {
-                const timeRange = this.buildGapRepairTimeRange(gapAnalysis.missingTimestamps, cfg.intervalSeconds);
+                const timeRange = this.buildGapRepairTimeRange(gapAnalysis.missingTimestamps, cfg.intervalSeconds, cfg.nativeBackfillHours);
                 if (timeRange) {
                     try {
                         const kibanaGapCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
@@ -421,7 +440,7 @@ class MarketAdapterService {
             ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
         const mo = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
         const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
-        const amaWarmupBars = getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars);
+        const amaWarmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars);
 
         // Compute separate clip thresholds for AMA (slopes) and Kalman (velocities)
         let amaClipThreshold = Infinity;
@@ -444,8 +463,8 @@ class MarketAdapterService {
 
         const slopeCfg = {
             ...(cfg.amaSlope || {}),
-            erPeriod:              amaErPeriod,
-            slowPeriod:            amaSlowPeriod,
+            erPeriod:              botAma.erPeriod,
+            slowPeriod:            botAma.slowPeriod,
             maxSlopeOffset:        cfg.maxSlopeOffset,
             maxVolatilityOffset:   volatilityClamp,
             volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
