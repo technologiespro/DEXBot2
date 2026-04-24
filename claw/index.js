@@ -73,17 +73,11 @@ module.exports = {
 
   // Disambiguate root exports that would otherwise be overwritten by spread order.
   describeHermesBridge: hermesManifest.describeHermesBridge,
-  describeHermesRuntimeBridge: hermesManifest.describeHermesBridge,
   describeOpenClawBridge: openclawManifest.describeOpenClawBridge,
-  describeOpenClawRuntimeBridge: openclawManifest.describeOpenClawBridge,
   describeOpenFangBridge: openfangBridge.describeOpenFangBridge,
-  describeOpenFangRuntimeBridge: openfangBridge.describeOpenFangBridge,
   describeNanoClawBridge: nanoclawBridge.describeNanoClawBridge,
-  describeNanoClawRuntimeBridge: nanoclawBridge.describeNanoClawBridge,
   describeNullClawBridge: nullclawManifest.describeNullClawBridge,
-  describeNullClawRuntimeBridge: nullclawBridge.describeNullClawBridge,
   describeZeroClawBridge: zeroclawManifest.describeZeroClawBridge,
-  describeZeroClawRuntimeBridge: zeroclawBridge.describeZeroClawBridge,
   resolveAccountName: chainQueries.resolveAccountName,
   resolveSigningAccountName: chainBroadcast.resolveAccountName
 };

@@ -54,7 +54,7 @@ function tuneBot(bot, assessment = {}) {
   const patch = {};
   let crAction = null;
   const reasoning = [];
-  const baseConfidence = 0.5;
+  let baseConfidence = 0.5;
 
   // CR actions: only for non-green zones
   if (zone !== 'green') {

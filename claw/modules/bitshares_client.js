@@ -77,9 +77,6 @@ function createAccountClient(accountName, privateKey) {
 module.exports = {
   BitShares: BitSharesLib,
   createAccountClient,
-  getNodeManager: () => null,
-  getNodeStats: () => null,
-  getNodeSummary: () => null,
   isConnected: () => connected,
   setSuppressConnectionLog,
   waitForConnected

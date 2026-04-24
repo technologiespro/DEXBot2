@@ -369,8 +369,8 @@ async function testApplyBotSettingsPatchWithoutIdentifierReturnsResolvedBotMetad
   assert.strictEqual(result.next.files.trigger, path.join(profilesDir, 'recalculate.solo-0.trigger'));
 }
 
-async function testUpdateBotSettingsRetainsLegacyWriteBehaviorWithInvalidPersistedFields() {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-legacy-update-'));
+async function testUpdateBotSettingsValidatesPatchAndPreservesExistingFields() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dexbot-profiles-validated-update-'));
   const profilesDir = path.join(dir, 'profiles');
   const botsFile = path.join(profilesDir, 'bots.json');
 
@@ -378,23 +378,29 @@ async function testUpdateBotSettingsRetainsLegacyWriteBehaviorWithInvalidPersist
   await fs.writeFile(botsFile, JSON.stringify({
     bots: [
       {
-        name: 'legacy-update',
+        name: 'validated-update',
         assetA: 'USD',
         assetB: 'BTS',
-        incrementPercent: -1
+        incrementPercent: 1.0
       }
     ]
   }, null, 2));
 
   const adapter = createDexbotProfileAdapter(profilesDir);
-  const updated = await adapter.updateBotSettings('legacy-update', {
-    targetSpreadPercent: 1.6
+  const updated = await adapter.updateBotSettings('validated-update', {
+    targetSpreadPercent: 2.2
   });
   const written = JSON.parse(await fs.readFile(botsFile, 'utf8'));
 
-  assert.strictEqual(updated.targetSpreadPercent, 1.6);
-  assert.strictEqual(written.bots[0].targetSpreadPercent, 1.6);
-  assert.strictEqual(written.bots[0].incrementPercent, -1, 'legacy updateBotSettings should still permit unrelated writes against invalid persisted fields');
+  assert.strictEqual(updated.targetSpreadPercent, 2.2);
+  assert.strictEqual(written.bots[0].targetSpreadPercent, 2.2);
+  assert.strictEqual(written.bots[0].incrementPercent, 1.0, 'updateBotSettings should preserve existing fields while validating the patch');
+
+  // Verify invalid patches are now rejected
+  await assert.rejects(
+    adapter.updateBotSettings('validated-update', { incrementPercent: -1 }),
+    /incrementPercent must be a positive number/
+  );
 }
 
 async function testWeightDistributionRejectsNullAndFalseValues() {
@@ -563,7 +569,7 @@ async function main() {
   await testSparseBotPatchRespectsDefaultBackedValidation();
   await testInvalidPersistedOffsetPolicyBlocksUnrelatedPatch();
   await testApplyBotSettingsPatchWithoutIdentifierReturnsResolvedBotMetadata();
-  await testUpdateBotSettingsRetainsLegacyWriteBehaviorWithInvalidPersistedFields();
+  await testUpdateBotSettingsValidatesPatchAndPreservesExistingFields();
   await testWeightDistributionRejectsNullAndFalseValues();
   await testNestedPatchValidationDoesNotDuplicateErrors();
   await testNestedStateValidationRejectsWrongContainerTypes();

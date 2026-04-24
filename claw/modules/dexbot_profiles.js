@@ -1239,10 +1239,14 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
       }
       selectedBotIndex = bot.botIndex;
 
-      const nextEntry = {
-        ...currentRawEntries[bot.botIndex],
-        ...patch
-      };
+      const validation = validateBotSettingsPatch(patch, currentRawEntries[bot.botIndex], {});
+      if (!validation.valid) {
+        const error = new Error(`Bot settings validation failed:\n${validation.errors.map((entry) => `  - ${entry}`).join('\n')}`);
+        error.validation = validation;
+        throw error;
+      }
+
+      const nextEntry = validation.merged;
       const nextRawEntries = currentRawEntries.slice();
       nextRawEntries[bot.botIndex] = nextEntry;
 

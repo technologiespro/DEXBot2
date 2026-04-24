@@ -151,7 +151,7 @@ function runServerProcess(input) {
   fs.writeFileSync(inputPath, input, 'utf8');
 
   try {
-    const shellCommand = `cat ${shellQuote(inputPath)} | node ${shellQuote(scriptPath)} --profile-root ${shellQuote(repoRoot)} > ${shellQuote(outputPath)}`;
+    const shellCommand = `cat ${shellQuote(inputPath)} | ${shellQuote(process.execPath)} ${shellQuote(scriptPath)} --profile-root ${shellQuote(repoRoot)} > ${shellQuote(outputPath)}`;
     const run = spawnSync('/bin/sh', ['-lc', shellCommand], {
       cwd: repoRoot,
       encoding: 'utf8'

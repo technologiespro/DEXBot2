@@ -408,7 +408,6 @@ The barrel export in `claw/index.js` spreads every module into one flat namespac
 | `resolveAccountName` | `chain_queries` | Async lookup — returns the account name string for an ID, or passes through the original name |
 | `resolveSigningAccountName` | `chain_broadcast` | Sync extraction — returns the signing account name string from a context object |
 | `describeZeroClawBridge` | `zeroclaw_manifest` | Returns the ZeroClaw manifest descriptor (runtime name, command examples) |
-| `describeZeroClawRuntimeBridge` | `zeroclaw_bridge` | Returns the ZeroClaw runtime bridge descriptor |
 
 When consuming `claw/index.js` as a library, use the disambiguated names above. The non-prefixed `resolveAccountName` and `describeZeroClawBridge` point to the query/manifest variants by default.
 
