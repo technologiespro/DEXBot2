@@ -71,7 +71,7 @@ const {
 } = require('../modules/market_adapter_whitelist');
 const kibanaSource = require('./inputs/kibana_source');
 const { normalizePoolId } = kibanaSource;
-const { tradesToCandles, detectMissingCandleTimestamps } = require('./candle_utils');
+const { tradesToCandles, detectMissingCandleTimestamps, fillCandleGaps } = require('./candle_utils');
 
 const ROOT = path.join(__dirname, '..');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
@@ -973,6 +973,7 @@ const adapterService = new MarketAdapterService({
     fetchNativeTradesSince,
     tradesToCandles,
     detectMissingCandleTimestamps,
+    fillCandleGaps,
     mergeCandles,
     pruneCandles,
     calcAmaPrice,

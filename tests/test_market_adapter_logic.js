@@ -15,7 +15,8 @@ const {
     usesAmaGridPrice,
     applyRuntimeDefaultsFromGeneralSettings,
 } = require('../market_adapter/market_adapter');
-const { detectMissingCandleTimestamps } = require('../market_adapter/candle_utils');
+const { detectMissingCandleTimestamps, fillCandleGaps } = require('../market_adapter/candle_utils');
+const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
 
 const MARKET_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'market_profiles.json');
 
@@ -80,6 +81,68 @@ assert.strictEqual(
     const result = detectMissingCandleTimestamps(candles, 3600);
     assert.strictEqual(result.gapCount, 0, 'continuous candles should not report gaps');
     assert.deepStrictEqual(result.missingTimestamps, [], 'continuous series should not return missing timestamps');
+}
+
+// Native incremental gap fill behavior
+{
+    const hour = 3600 * 1000;
+    const base = 1700002800000;
+    const service = new MarketAdapterService({
+        fillCandleGaps,
+        mergeCandles: (existing, incoming) => {
+            const map = new Map();
+            existing.forEach((c) => map.set(c[0], c));
+            incoming.forEach((c) => map.set(c[0], c));
+            return [...map.values()].sort((a, b) => a[0] - b[0]);
+        },
+    });
+
+    const candles = [
+        [base, 100, 100, 100, 100, 1],
+        [base + (3 * hour), 103, 104, 102, 103, 2],
+    ];
+    const filled = service.fillNativeIncrementalClosedGaps(candles, base, 3600, base + (4 * hour) + 1);
+
+    assert.deepStrictEqual(
+        filled.map((c) => c[0]),
+        [base, base + hour, base + (2 * hour), base + (3 * hour)],
+        'native incremental fill should carry no-trade closed hours forward'
+    );
+    assert.deepStrictEqual(
+        filled[1],
+        [base + hour, 100, 100, 100, 100, 0],
+        'filled no-trade candle should use previous close and zero volume'
+    );
+    assert.deepStrictEqual(
+        filled[2],
+        [base + (2 * hour), 100, 100, 100, 100, 0],
+        'multiple no-trade closed hours should be filled before the next trade candle'
+    );
+}
+
+{
+    const hour = 3600 * 1000;
+    const base = 1700002800000;
+    const service = new MarketAdapterService({
+        fillCandleGaps,
+        mergeCandles: (existing, incoming) => {
+            const map = new Map();
+            existing.forEach((c) => map.set(c[0], c));
+            incoming.forEach((c) => map.set(c[0], c));
+            return [...map.values()].sort((a, b) => a[0] - b[0]);
+        },
+    });
+
+    const candles = [
+        [base, 100, 100, 100, 100, 1],
+    ];
+    const filled = service.fillNativeIncrementalClosedGaps(candles, base, 3600, base + (2 * hour) + 1);
+
+    assert.deepStrictEqual(
+        filled.map((c) => c[0]),
+        [base, base + hour],
+        'native incremental fill should not synthesize the current in-progress hour'
+    );
 }
 
 // General settings → runtime defaults behavior

@@ -73,6 +73,30 @@ class MarketAdapterService {
         };
     }
 
+    fillNativeIncrementalClosedGaps(candles, previousLastTs, intervalSeconds, nowMs = this.getNowMs()) {
+        const deps = this.deps;
+        if (typeof deps.fillCandleGaps !== 'function') return candles;
+        if (!Array.isArray(candles) || candles.length === 0) return candles;
+
+        const bucketMs = Number(intervalSeconds) * 1000;
+        const startTs = Number(previousLastTs);
+        if (!Number.isFinite(bucketMs) || bucketMs <= 0 || !Number.isFinite(startTs) || startTs <= 0) {
+            return candles;
+        }
+
+        const currentBucketStartMs = Math.floor(Number(nowMs) / bucketMs) * bucketMs;
+        const latestClosedBucketTs = currentBucketStartMs - bucketMs;
+        if (!Number.isFinite(latestClosedBucketTs) || latestClosedBucketTs < startTs) {
+            return candles;
+        }
+
+        const tailCandles = candles.filter((c) => Array.isArray(c) && Number.isFinite(c[0]) && c[0] >= startTs);
+        if (tailCandles.length === 0) return candles;
+
+        const filledTail = deps.fillCandleGaps(tailCandles, intervalSeconds, startTs, latestClosedBucketTs);
+        return deps.mergeCandles(candles, filledTail);
+    }
+
     clampGridPriceToBounds(centerPrice, referencePrice, bot) {
         const base = Number(centerPrice);
         const ref = Number(referencePrice);
@@ -179,6 +203,7 @@ class MarketAdapterService {
                 );
                 const incomingCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
                 nextCandles = deps.mergeCandles(existingCandles, incomingCandles);
+                nextCandles = this.fillNativeIncrementalClosedGaps(nextCandles, lastTs, cfg.intervalSeconds);
             }
 
             let kibanaGapRepairTimestamps = [];
