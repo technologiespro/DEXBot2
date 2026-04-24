@@ -228,6 +228,11 @@ let TIMING = {
     OPEN_ORDERS_SYNC_LOOP_ENABLED: false,  // Preferred flag: continuous open-order watchdog sync loop
     CHECK_INTERVAL_MS: 100,  // 100 milliseconds - polling interval for connection/daemon readiness checks
 
+    // Blockchain settle delay before follow-up structural work after a scheduled maintenance action.
+    // Gives maintenance-triggered cancels/rebalances time to acquire locks, broadcast, and settle
+    // before a deferred grid resync attempts more on-chain changes.
+    BLOCKCHAIN_SETTLE_DELAY_MS: 6000,
+
     // LOCK_REFRESH_MIN_MS: Minimum interval for refreshing order lock leases during long operations.
     // Prevents lock expiration during extended reconciliations or batch operations.
     // Default: 250ms (4 refreshes per second minimum during long operations).
@@ -292,11 +297,11 @@ let GRID_LIMITS = {
     // Values:
     //   -1 = disabled — dust orders are never auto-cancelled
     //    0 = cancel immediately on first dust detection in the active window
-    //    N = cancel after N seconds of continuous dust state (default: 60, timer resets if order recovers)
-    // Example: 60 → order stays dust for 60 seconds → cancel + treat slot as fully filled
+    //    N = cancel after N seconds of continuous dust state (default: 30, timer resets if order recovers)
+    // Example: 30 → order stays dust for 30 seconds → cancel + treat slot as fully filled
     //   - Bot then places a fresh order at proper size on the freed slot
     //   - The cancelled dust remainder is returned to the bot's free balance
-    DUST_CANCEL_DELAY_SEC: 60,
+    DUST_CANCEL_DELAY_SEC: 30,
 
     // FUND_INVARIANT_PERCENT_TOLERANCE: Allowed percentage drift in fund tracking before triggering recovery.
     // Formula: tolerance = max(precisionSlack, balance × percentTolerance)

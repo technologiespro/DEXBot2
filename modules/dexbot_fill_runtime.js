@@ -123,6 +123,7 @@ function createFillCallback(chainOrders) {
         }
 
         if (this.manager && !this.config.dryRun && Array.isArray(fills) && fills.length > 0) {
+            this._markGridActivity?.('fill queued');
             this._incomingFillQueue.push(...fills);
             this._consumeFillQueue(chainOrders).catch(err => {
                 this._warn(`Fill queue consume failed: ${err.message}`);

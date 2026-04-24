@@ -227,6 +227,8 @@ class DEXBot {
         this._triggerWatcher = null;
         this._triggerDebounceTimer = null;
         this._dustMaintenanceTimer = null;
+        this._deferredGridResyncTimer = null;
+        this._maintenanceIdleTimer = null;
         this._mainLoopActive = false;
         this._mainLoopPromise = null;
         this._creditRuntime = null;
@@ -236,6 +238,7 @@ class DEXBot {
         this._batchRetryInFlight = false;
         this._recoverySyncInFlight = false;
         this._maintenanceCooldownCycles = 0;
+        this._lastGridActivityAt = 0;
 
         // Tracks when each order first entered the dust state (orderId → timestamp ms).
         // Used by _cancelDustOrders to enforce DUST_CANCEL_DELAY_SEC.
@@ -345,6 +348,11 @@ class DEXBot {
             recoveryInFlight: this._recoverySyncInFlight,
             broadcasting: this.manager?._state?.isBroadcastingActive() || false
         };
+    }
+
+    _markGridActivity(reason = 'activity') {
+        this._lastGridActivityAt = Date.now();
+        this.manager?.logger?.log?.(`[MAINT-IDLE] Activity observed: ${reason}`, 'debug');
     }
 
     async _triggerStateRecoverySync(reason = 'state recovery sync') {
@@ -1334,6 +1342,7 @@ class DEXBot {
 
                 } // End while(_incomingFillQueue)
 
+                this._markGridActivity('fill processing end');
             });
         } catch (err) {
             this._log(`Error processing fills: ${err.message}`);
@@ -2222,6 +2231,7 @@ class DEXBot {
 
         try {
             this._batchInFlight = true;
+            this._markGridActivity('batch start');
             this.manager._setRebalanceState(REBALANCE_STATES.BROADCASTING);
             this.manager.startBroadcasting();
 
@@ -2497,6 +2507,7 @@ class DEXBot {
             throw err;
         } finally {
             this._batchInFlight = false;
+            this._markGridActivity('batch end');
             this.manager.unlockOrders(idsToLock);
         }
     }
@@ -3053,6 +3064,16 @@ class DEXBot {
         if (this._triggerDebounceTimer) {
             clearTimeout(this._triggerDebounceTimer);
             this._triggerDebounceTimer = null;
+        }
+
+        if (this._deferredGridResyncTimer) {
+            clearTimeout(this._deferredGridResyncTimer);
+            this._deferredGridResyncTimer = null;
+        }
+
+        if (this._maintenanceIdleTimer) {
+            clearTimeout(this._maintenanceIdleTimer);
+            this._maintenanceIdleTimer = null;
         }
 
         this._clearDustMaintenanceTimer();

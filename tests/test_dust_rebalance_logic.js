@@ -36,7 +36,7 @@ Module._load = function(request, parent, isMain) {
 };
 
 const { OrderManager } = require('../modules/order/manager');
-const { ORDER_TYPES, ORDER_STATES, GRID_LIMITS } = require('../modules/constants');
+const { ORDER_TYPES, ORDER_STATES, GRID_LIMITS, TIMING } = require('../modules/constants');
 const Grid = require('../modules/order/grid');
 const { _setFeeCache } = require('../modules/order/utils/math');
 const DEXBot = require('../modules/dexbot_class');
@@ -775,7 +775,11 @@ async function testStartupDustSchedulesTimer() {
         bot._dustSinceMap.set('1.7.920', Date.now());
         bot._scheduleDustMaintenanceCheck();
 
-        assert.ok(scheduledDelay >= 59000 && scheduledDelay <= 60000, 'Dust timer should schedule near configured delay');
+        const configuredDelayMs = GRID_LIMITS.DUST_CANCEL_DELAY_SEC * 1_000;
+        assert.ok(
+            scheduledDelay >= configuredDelayMs - 1000 && scheduledDelay <= configuredDelayMs,
+            'Dust timer should schedule near configured delay'
+        );
         assert.strictEqual(typeof scheduledFn, 'function', 'Dust timer should install a callback');
 
         scheduledFn();
@@ -942,6 +946,132 @@ async function testDustReseedHealthFailureDoesNotAbort() {
     }
 }
 
+async function testMaintenanceDefersStructuralWorkWhileDustPending() {
+    console.log('Testing Maintenance Defers Structural Work While Dust Timer Pending...');
+
+    const originalSetTimeout = global.setTimeout;
+    const originalClearTimeout = global.clearTimeout;
+    const originalDelay = GRID_LIMITS.DUST_CANCEL_DELAY_SEC;
+
+    try {
+        GRID_LIMITS.DUST_CANCEL_DELAY_SEC = 60;
+        const scheduledDelays = [];
+        global.setTimeout = (fn, delay) => {
+            scheduledDelays.push(delay);
+            return { fakeTimer: true };
+        };
+        global.clearTimeout = () => {};
+
+        const bot = new DEXBot({
+            botKey: 'test_dust_defers_structural_work',
+            dryRun: false,
+            startPrice: 1,
+            assetA: 'TESTA',
+            assetB: 'BTS',
+            incrementPercent: 0.5
+        });
+
+        const dustOrder = {
+            id: 'dust-sell-1',
+            orderId: '1.7.940',
+            type: ORDER_TYPES.SELL,
+            state: ORDER_STATES.PARTIAL,
+            size: 0.0001,
+            price: 1.1
+        };
+
+        let divergenceChecked = false;
+        let spreadChecked = false;
+
+        bot.manager = {
+            recalculateFunds: async () => {},
+            clearStalePipelineOperations: () => {},
+            isPipelineEmpty: () => ({ isEmpty: true }),
+            checkGridHealth: async () => ({ buyDustOrders: [], sellDustOrders: [dustOrder] }),
+            checkSpreadCondition: async () => {
+                spreadChecked = true;
+                return { ordersPlaced: 0 };
+            },
+            _fillProcessingLock: {
+                acquire: async (fn) => fn()
+            },
+            orders: new Map()
+        };
+        bot.accountOrders = {
+            loadBotGrid: () => {
+                divergenceChecked = true;
+                return [];
+            }
+        };
+        bot._abortFlowIfIllegalState = async () => false;
+
+        bot._dustSinceMap.set('1.7.940', Date.now());
+        await bot._executeMaintenanceLogic('periodic');
+
+        assert.strictEqual(divergenceChecked, false, 'Divergence should wait for the dust timer');
+        assert.strictEqual(spreadChecked, false, 'Spread correction should wait for the dust timer');
+        assert.strictEqual(bot._dustSinceMap.has('1.7.940'), true, 'Pending dust timer should remain tracked');
+        const expectedDeferredDelay = (GRID_LIMITS.DUST_CANCEL_DELAY_SEC * 1_000) + 6_000;
+        assert.ok(
+            scheduledDelays.some(delay => delay >= expectedDeferredDelay - 100 && delay <= expectedDeferredDelay),
+            'Deferred grid resync should allow a 6s blockchain settle window after the dust timer'
+        );
+        console.log('  ✓ Structural maintenance waits while dust cancellation is pending');
+    } finally {
+        GRID_LIMITS.DUST_CANCEL_DELAY_SEC = originalDelay;
+        global.setTimeout = originalSetTimeout;
+        global.clearTimeout = originalClearTimeout;
+    }
+}
+
+async function testGridMaintenanceWaitsForQuietPeriod() {
+    console.log('Testing Grid Maintenance Waits For Quiet Period...');
+
+    const originalSetTimeout = global.setTimeout;
+    const originalClearTimeout = global.clearTimeout;
+
+    try {
+        const scheduledDelays = [];
+        global.setTimeout = (_fn, delay) => {
+            scheduledDelays.push(delay);
+            return { fakeTimer: true };
+        };
+        global.clearTimeout = () => {};
+
+        const bot = new DEXBot({
+            botKey: 'test_maintenance_idle_gate',
+            dryRun: false,
+            startPrice: 1,
+            assetA: 'TESTA',
+            assetB: 'BTS',
+            incrementPercent: 0.5
+        });
+
+        let maintenanceRan = false;
+        bot.manager = {
+            orders: new Map([['slot-1', { id: 'slot-1' }]]),
+            _fillProcessingLock: { acquire: async (fn) => fn() },
+            _divergenceLock: { acquire: async (fn) => fn() }
+        };
+        bot._executeMaintenanceLogic = async () => {
+            maintenanceRan = true;
+        };
+
+        bot._markGridActivity('test activity');
+        await bot._runGridMaintenance('periodic');
+
+        assert.strictEqual(maintenanceRan, false, 'Maintenance should not run during the quiet-period gate');
+        assert.ok(
+            scheduledDelays.some(delay => delay > 0 && delay <= TIMING.BLOCKCHAIN_SETTLE_DELAY_MS),
+            'Maintenance should schedule a retry after the configured idle delay'
+        );
+        console.log('  ✓ Grid maintenance waits for the configured inactivity window');
+    } finally {
+        global.setTimeout = originalSetTimeout;
+        global.clearTimeout = originalClearTimeout;
+    }
+}
+
 Promise.resolve()
     .then(() => testDustTrigger())
     .then(() => testDustCancelSyntheticRotation())
@@ -953,6 +1083,8 @@ Promise.resolve()
     .then(() => testStartupDustSchedulesTimer())
     .then(() => testConsecutiveDustCancelSeeding())
     .then(() => testDustReseedHealthFailureDoesNotAbort())
+    .then(() => testMaintenanceDefersStructuralWorkWhileDustPending())
+    .then(() => testGridMaintenanceWaitsForQuietPeriod())
     .finally(() => {
         Module._load = originalModuleLoad;
     })

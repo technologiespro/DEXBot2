@@ -301,6 +301,20 @@ function refreshDynamicWeightDistribution(context = 'runtime') {
 function performGridResync() {
     const self = this;
     let success = false;
+    const dustDelayMs = getPendingDustDelayMs(self);
+    const idleDelayMs = getMaintenanceIdleDelayMs(self);
+    if (dustDelayMs !== null || idleDelayMs > 0) {
+        self._log(
+            `[MAINT-IDLE] Deferring grid resync until bot is idle` +
+            (dustDelayMs !== null ? ` and pending dust timer completes` : '') +
+            ` (next check in ${Math.ceil(Math.max(dustDelayMs || 0, idleDelayMs) / 1000)}s)`,
+            'info'
+        );
+        self._scheduleDustMaintenanceCheck?.();
+        scheduleDeferredGridResync(self);
+        return Promise.resolve(false);
+    }
+
     self.manager.startBootstrap();
     self._log('Grid regeneration triggered. Performing full grid resync...');
     return (async () => {
@@ -448,17 +462,22 @@ function startOpenOrdersSyncLoop() {
                     if (!this.manager._fillProcessingLock.isLocked() &&
                         this.manager._fillProcessingLock.getQueueLength() === 0) {
                         await this.manager._fillProcessingLock.acquire(async () => {
-                            const chainOpenOrders = await readOpenOrdersFn.call(chainOrders, this.accountId);
-                            const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders');
+                            this._markGridActivity?.('open-orders sync');
+                            try {
+                                const chainOpenOrders = await readOpenOrdersFn.call(chainOrders, this.accountId);
+                                const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders');
 
-                            if (syncResult?.filledOrders && syncResult.filledOrders.length > 0) {
-                                this._log(`Open-orders sync loop: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
-                                refreshDynamicWeightDistribution.call(this, 'open-orders sync rebalance');
-                                const rebalanceResult = await this.manager.processFilledOrders(syncResult.filledOrders, new Set());
-                                const batchResult = await this._executeBatchIfNeeded(rebalanceResult, 'open-orders sync fill rebalance');
-                                if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure && !batchResult?.skippedNoActions) {
-                                    await this.manager.persistGrid();
+                                if (syncResult?.filledOrders && syncResult.filledOrders.length > 0) {
+                                    this._log(`Open-orders sync loop: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
+                                    refreshDynamicWeightDistribution.call(this, 'open-orders sync rebalance');
+                                    const rebalanceResult = await this.manager.processFilledOrders(syncResult.filledOrders, new Set());
+                                    const batchResult = await this._executeBatchIfNeeded(rebalanceResult, 'open-orders sync fill rebalance');
+                                    if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure && !batchResult?.skippedNoActions) {
+                                        await this.manager.persistGrid();
+                                    }
                                 }
+                            } finally {
+                                this._markGridActivity?.('open-orders sync end');
                             }
                         });
                     }
@@ -522,11 +541,14 @@ function setupBlockchainFetchInterval() {
                     this.manager._recoveryAttempted = false;
                 }
                 this._log(`Fetching blockchain account values (interval: every ${intervalMin}min)`);
+                this._markGridActivity?.('periodic account fetch');
                 await this.manager.fetchAccountTotals(this.accountId);
+                this._markGridActivity?.('periodic account fetch end');
 
                 let chainOpenOrders = [];
                 if (!this.config.dryRun) {
                     try {
+                        this._markGridActivity?.('periodic open-orders sync');
                         chainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
                         const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'periodicBlockchainFetch');
 
@@ -545,6 +567,8 @@ function setupBlockchainFetchInterval() {
                         }
                     } catch (err) {
                         this._warn(`Error reading open orders during periodic fetch: ${err.message}`);
+                    } finally {
+                        this._markGridActivity?.('periodic open-orders sync end');
                     }
                 }
 
@@ -564,6 +588,100 @@ function stopBlockchainFetchInterval() {
         this._blockchainFetchInterval = null;
         this._log('Stopped periodic blockchain fetch interval');
     }
+}
+
+function getPendingDustDelayMs(ctx) {
+    const delaySec = GRID_LIMITS.DUST_CANCEL_DELAY_SEC;
+    if (
+        !ctx?._dustSinceMap ||
+        ctx._dustSinceMap.size === 0 ||
+        !Number.isFinite(delaySec) ||
+        delaySec < 0
+    ) {
+        return null;
+    }
+
+    const delayMs = delaySec * 1_000;
+    const now = Date.now();
+    let nextRunAt = Number.POSITIVE_INFINITY;
+    for (const firstSeen of ctx._dustSinceMap.values()) {
+        if (!Number.isFinite(firstSeen)) continue;
+        nextRunAt = Math.min(nextRunAt, firstSeen + delayMs);
+    }
+
+    if (!Number.isFinite(nextRunAt)) return delayMs;
+    return Math.max(0, nextRunAt - now);
+}
+
+function getMaintenanceIdleDelayMs(ctx) {
+    const settleDelayMs = Number.isFinite(TIMING.BLOCKCHAIN_SETTLE_DELAY_MS)
+        ? Math.max(0, TIMING.BLOCKCHAIN_SETTLE_DELAY_MS)
+        : 6_000;
+    if (settleDelayMs <= 0) return 0;
+
+    if (ctx?._incomingFillQueue?.length > 0) return settleDelayMs;
+
+    const lastActivityAt = Number(ctx?._lastGridActivityAt || 0);
+    if (!Number.isFinite(lastActivityAt) || lastActivityAt <= 0) return 0;
+
+    return Math.max(0, settleDelayMs - (Date.now() - lastActivityAt));
+}
+
+function scheduleMaintenanceAfterIdle(ctx, context, options = {}) {
+    if (!ctx || ctx._shuttingDown || ctx._maintenanceIdleTimer || !ctx.manager?._fillProcessingLock) return;
+
+    const delayMs = getMaintenanceIdleDelayMs(ctx);
+    if (!(delayMs > 0)) return;
+
+    const timerOptions = {
+        ...options,
+        fillLockAlreadyHeld: false,
+    };
+
+    ctx._maintenanceIdleTimer = setTimeout(() => {
+        ctx._maintenanceIdleTimer = null;
+        if (ctx._shuttingDown) return;
+        ctx._runGridMaintenance(context, timerOptions)
+            .catch(err => ctx._warn(`Deferred ${context} grid maintenance failed: ${err.message}`));
+    }, delayMs);
+}
+
+function scheduleDeferredGridResync(ctx) {
+    if (
+        !ctx ||
+        ctx._shuttingDown ||
+        ctx._deferredGridResyncTimer ||
+        !ctx.manager?._fillProcessingLock
+    ) {
+        return;
+    }
+
+    const dustDelayMs = getPendingDustDelayMs(ctx);
+    const idleDelayMs = getMaintenanceIdleDelayMs(ctx);
+    const triggerFileWasPresent = !!(ctx.triggerFile && fs.existsSync(ctx.triggerFile));
+    const settleDelayMs = Number.isFinite(TIMING.BLOCKCHAIN_SETTLE_DELAY_MS)
+        ? Math.max(0, TIMING.BLOCKCHAIN_SETTLE_DELAY_MS)
+        : 6_000;
+    const delayMs = Math.max(
+        dustDelayMs !== null ? dustDelayMs + settleDelayMs : 0,
+        idleDelayMs
+    );
+    if (!(delayMs > 0)) return;
+
+    ctx._deferredGridResyncTimer = setTimeout(() => {
+        ctx._deferredGridResyncTimer = null;
+        if (ctx._shuttingDown) return;
+        if (triggerFileWasPresent && !fs.existsSync(ctx.triggerFile)) return;
+
+        ctx.manager._fillProcessingLock.acquire(async () => {
+            const ok = await ctx._performGridResync();
+            if (!ok && !ctx._shuttingDown) {
+                ctx._warn('Deferred trigger reset still blocked or failed; retaining existing grid state.');
+            }
+        }).catch(err => {
+            ctx._warn(`Deferred trigger reset lock error: ${err.message}`);
+        });
+    }, delayMs);
 }
 
 async function executeMaintenanceLogic(context) {
@@ -588,6 +706,16 @@ async function executeMaintenanceLogic(context) {
             sell: healthResult.sellDustOrders,
         });
         if (dustCancelResult?.batchResult?.abortedForIllegalState || dustCancelResult?.batchResult?.abortedForAccountingFailure) {
+            return;
+        }
+        if (this._dustSinceMap?.size > 0) {
+            const delayMs = getPendingDustDelayMs(this);
+            this._log(
+                `[DUST-CANCEL] Deferring ${context} structural maintenance until dust timer completes` +
+                (delayMs !== null ? ` (next check in ${Math.ceil(delayMs / 1000)}s)` : ''),
+                'info'
+            );
+            scheduleDeferredGridResync(this);
             return;
         }
 
@@ -818,6 +946,16 @@ async function runGridMaintenance(context = 'periodic', options = {}) {
         throw new TypeError('Grid maintenance options must be an object');
     }
     const fillLockAlreadyHeld = options.fillLockAlreadyHeld === true;
+    const idleDelayMs = getMaintenanceIdleDelayMs(this);
+    if (idleDelayMs > 0) {
+        this._log(
+            `[MAINT-IDLE] Deferring ${context} grid maintenance until ` +
+            `${Math.ceil(idleDelayMs / 1000)}s of inactivity has passed`,
+            'debug'
+        );
+        scheduleMaintenanceAfterIdle(this, context, options);
+        return;
+    }
 
     try {
         if (!this.manager || !this.manager.orders || this.manager.orders.size === 0) return;
