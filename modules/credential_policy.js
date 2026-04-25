@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { isPositiveInt } = require('./order/utils/math');
 
 const POLICY_DENIED_PREFIX = 'POLICY_DENIED: ';
 const EXECUTABLE_TIMEOUT_MS = 5000;
@@ -92,13 +93,6 @@ function loadPolicyConfig(filePath, options = {}) {
  */
 function isStringArray(v) {
     return Array.isArray(v) && v.every((x) => typeof x === 'string');
-}
-
-/**
- * Helper: check if value is a positive integer
- */
-function isPositiveInt(v) {
-    return typeof v === 'number' && Number.isInteger(v) && v > 0;
 }
 
 /**

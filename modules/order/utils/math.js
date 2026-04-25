@@ -4,7 +4,7 @@
  * Pure numeric calculations, blockchain conversions, fee math, and fund allocation.
  *
  * ===============================================================================
- * TABLE OF CONTENTS (38 exported functions)
+ * TABLE OF CONTENTS (41 exported functions)
  * ===============================================================================
  *
  * SECTION 1: PARSING & VALIDATION (4 functions)
@@ -106,6 +106,40 @@ function isExplicitZeroAllocation(value) {
  */
 function isPercentageString(v) {
     return typeof v === 'string' && v.trim().endsWith('%');
+}
+
+/**
+ * Check if a value is a positive number.
+ *
+ * @param {*} value - Value to test
+ * @returns {boolean} True if the value is a finite number greater than 0
+ */
+function isPositiveNumber(value) {
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0;
+}
+
+/**
+ * Check if a value is a positive number or a positive percentage string.
+ *
+ * @param {*} value - Value to test
+ * @returns {boolean} True if the value is a positive number or a percentage string like "25%"
+ */
+function isPositiveNumberOrPercent(value) {
+    if (isPositiveNumber(value)) return true;
+    if (!isPercentageString(value)) return false;
+    const percent = parseFloat(value.trim().slice(0, -1));
+    return Number.isFinite(percent) && percent > 0;
+}
+
+/**
+ * Check if a value is a positive integer.
+ *
+ * @param {*} value - Value to test
+ * @returns {boolean} True if the value is an integer greater than 0
+ */
+function isPositiveInt(value) {
+    return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 /**
@@ -996,6 +1030,9 @@ function calculateGapSlots(incrementPercent, targetSpreadPercent, GRID_LIMITS = 
 module.exports = {
     calculateGapSlots,
     isPercentageString,
+    isPositiveNumber,
+    isPositiveNumberOrPercent,
+    isPositiveInt,
     parsePercentageString,
     resolveRelativePrice,
     isExplicitZeroAllocation,

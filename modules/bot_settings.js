@@ -2,20 +2,7 @@ const fs = require('fs');
 const { readBotsFileSync } = require('./bots_file_lock');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { createBotKey } = require('./account_orders');
-
-function isPositiveNumber(value) {
-    const num = Number(value);
-    return Number.isFinite(num) && num > 0;
-}
-
-function isPositiveNumberOrPercent(value) {
-    if (isPositiveNumber(value)) return true;
-    if (typeof value !== 'string') return false;
-    const trimmed = value.trim();
-    if (!trimmed.endsWith('%')) return false;
-    const percent = Number.parseFloat(trimmed.slice(0, -1));
-    return Number.isFinite(percent) && percent > 0;
-}
+const { isPositiveNumber, isPositiveNumberOrPercent } = require('./order/utils/math');
 
 function loadSettingsFile(filePath, { silent = false, exitOnError = true } = {}) {
     if (!fs.existsSync(filePath)) {
