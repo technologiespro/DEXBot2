@@ -1325,7 +1325,7 @@ Native DEXBot2 support for MPA borrowing and credit offer workflows via `modules
 - **Grid reset coupling**: Every successful CR adjustment requests a grid rebuild
 
 ### Runtime Rules
-- Evaluates on the bot's 4h maintenance cadence
+- Evaluates on the dedicated credit watchdog interval
 - No separate enable switch — active when `debtPolicy` is present in bot config
 - Claw can read the same bot policy without redefining rules
 

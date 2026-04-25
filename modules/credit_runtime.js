@@ -90,6 +90,17 @@ function normalizeCollateralMap(acceptableCollateral) {
     return result;
 }
 
+function resolveAutoRepayValue(value) {
+    if (value === true) return 1;
+    if (value === false || value === null || value === undefined) return 0;
+    const num = Number(value);
+    if (!Number.isFinite(num)) return 0;
+    const int = Math.trunc(num);
+    if (int < 0) return 0;
+    if (int > 2) return 2;
+    return int;
+}
+
 function normalizeAmountSpec(spec) {
     if (spec === null || spec === undefined) return null;
     if (typeof spec === 'number' || typeof spec === 'string') {
@@ -447,17 +458,28 @@ class CreditRuntime {
         return { allow: true, reason: null };
     }
 
+    _calculateDailyFeeRate(offer) {
+        const feeRate = toFiniteNumber(offer?.fee_rate, 0) || 0;
+        const maxDurationSeconds = toFiniteNumber(offer?.max_duration_seconds, 0) || 0;
+        if (feeRate <= 0 || maxDurationSeconds <= 0) return 0;
+        const feeRateDenom = this.bot?.config?.FEE_PARAMETERS?.GRAPHENE_FEE_RATE_DENOM ?? 1000000;
+        const flatFeePercent = feeRate / feeRateDenom;
+        const durationDays = maxDurationSeconds / 86400;
+        return flatFeePercent / durationDays;
+    }
+
+    _getDefaultMaxFeeRatePerDay() {
+        return this.bot?.config?.FEE_PARAMETERS?.DEFAULT_MAX_FEE_RATE_PER_DAY ?? (1 / 3000);
+    }
+
     _validateCreditPolicy(policy, offer, deal = null) {
         if (!policy || typeof policy !== 'object') return { allow: false, reason: 'creditOffer policy missing' };
         const allowedOfferIds = this._normalizePolicyList(policy.allowedOfferIds);
         const allowedDebtAssets = this._normalizePolicyList(policy.allowedDebtAssets);
         const allowedCollateralAssets = this._normalizePolicyList(policy.allowedCollateralAssets);
-        const maxFeeRate = positiveOrNull(policy.maxFeeRate);
+        const maxFeeRatePerDay = positiveOrNull(policy.maxFeeRatePerDay) ?? this._getDefaultMaxFeeRatePerDay();
         const maxCollateralRatio = positiveOrNull(policy.maxCollateralRatio);
 
-        if (maxFeeRate === null) {
-            return { allow: false, reason: 'creditOffer maxFeeRate is required' };
-        }
         if (maxCollateralRatio === null) {
             return { allow: false, reason: 'creditOffer maxCollateralRatio is required' };
         }
@@ -479,9 +501,11 @@ class CreditRuntime {
             if (allowedCollateralAssets.length > 0 && deal.collateralAssetId && !allowedCollateralAssets.includes(String(deal.collateralAssetId))) {
                 return { allow: false, reason: `deal collateral asset ${deal.collateralAssetId} is not allowed` };
             }
-            if (maxFeeRate !== null && deal.feeRate > maxFeeRate) {
-                return { allow: false, reason: `deal fee rate ${deal.feeRate} exceeds maxFeeRate ${maxFeeRate}` };
-            }
+        }
+
+        const dailyRate = this._calculateDailyFeeRate(offer);
+        if (dailyRate > maxFeeRatePerDay) {
+            return { allow: false, reason: `offer daily fee rate ${dailyRate.toFixed(6)} exceeds maxFeeRatePerDay ${maxFeeRatePerDay}` };
         }
 
         return { allow: true, reason: null };
@@ -835,14 +859,13 @@ class CreditRuntime {
             throw new Error(`borrowAmount ${borrowInt} is below min_deal_amount ${minDealAmount}`);
         }
 
-        const maxFeeRateValue = positiveOrNull(policy.maxFeeRate);
-        if (maxFeeRateValue === null) {
-            throw new Error('creditOffer maxFeeRate is required');
+        const maxFeeRatePerDayValue = positiveOrNull(policy.maxFeeRatePerDay) ?? this._getDefaultMaxFeeRatePerDay();
+        const dailyRate = this._calculateDailyFeeRate(offerObj);
+        if (dailyRate > maxFeeRatePerDayValue) {
+            throw new Error(`offer daily fee rate ${dailyRate.toFixed(6)} exceeds maxFeeRatePerDay ${maxFeeRatePerDayValue}`);
         }
+
         const offerFeeRate = toFiniteNumber(offerObj?.fee_rate, 0) || 0;
-        if (offerFeeRate > maxFeeRateValue) {
-            throw new Error(`offer fee rate ${offerFeeRate} exceeds maxFeeRate ${maxFeeRateValue}`);
-        }
 
         if (offerObj?.enabled === false) {
             throw new Error(`credit offer ${offerId} is disabled`);
@@ -873,6 +896,12 @@ class CreditRuntime {
             throw new Error(`collateral ratio ${collateralRatio} exceeds maxCollateralRatio ${maxCollateralRatioValue}`);
         }
 
+        const extensions = {};
+        const autoRepayValue = resolveAutoRepayValue(autoRepay);
+        if (autoRepayValue > 0) {
+            extensions.auto_repay = autoRepayValue;
+        }
+
         const op = {
             op_name: 'credit_offer_accept',
             op_data: {
@@ -881,9 +910,9 @@ class CreditRuntime {
                 offer_id: offerId,
                 borrow_amount: toAmountObject(borrowInt, debtAsset.id),
                 collateral: toAmountObject(requiredCollateralInt, collateralAsset.id),
-                max_fee_rate: maxFeeRateValue,
+                max_fee_rate: offerFeeRate,
                 min_duration_seconds: minDuration,
-                extensions: autoRepay ? { auto_repay: true } : {}
+                extensions,
             }
         };
 
@@ -954,6 +983,7 @@ class CreditRuntime {
                 deal_id: dealSummary.id,
                 repay_amount: toAmountObject(repayInt, debtAsset.id),
                 credit_fee: toAmountObject(creditFee, debtAsset.id),
+                extensions: [],
             }
         };
     }
@@ -962,6 +992,11 @@ class CreditRuntime {
         const dealSummary = typeof deal === 'object' ? parseDealSummary(deal) : null;
         if (!dealSummary) {
             throw new Error('credit deal is required');
+        }
+
+        const policy = this.debtPolicy?.creditOffer;
+        if (!policy) {
+            throw new Error('creditOffer policy missing');
         }
 
         const accountId = await this._resolveAccountId(getAccountRef(this.bot));
@@ -975,7 +1010,8 @@ class CreditRuntime {
                 fee: { amount: 0, asset_id: ZERO_ASSET_ID },
                 account: accountId,
                 deal_id: dealSummary.id,
-                auto_repay: !!autoRepay,
+                auto_repay: resolveAutoRepayValue(autoRepay),
+                extensions: [],
             }
         };
     }
@@ -1033,6 +1069,10 @@ class CreditRuntime {
             const reborrowCollateralAmount = options.collateralAmount !== undefined
                 ? options.collateralAmount
                 : null;
+            const policyHasAutoRepay = Object.prototype.hasOwnProperty.call(this.debtPolicy?.creditOffer || {}, 'autoRepay');
+            const autoRepaySetting = options.autoRepay !== undefined
+                ? options.autoRepay
+                : (policyHasAutoRepay ? this.debtPolicy.creditOffer.autoRepay : (dealSummary.autoRepay ?? false));
             const offer = await this._getOfferById(dealSummary.offerId);
             if (offer) {
                 try {
@@ -1040,7 +1080,7 @@ class CreditRuntime {
                         offer,
                         borrowAmount: reborrowAmount,
                         collateralAmount: reborrowCollateralAmount,
-                        autoRepay: false,
+                        autoRepay: autoRepaySetting,
                     });
                     operations.push(acceptOp);
                     inlineReborrowPlanned = true;
@@ -1050,6 +1090,7 @@ class CreditRuntime {
                         offerId: dealSummary.offerId,
                         borrowAmount: reborrowAmount,
                         collateralAmount: reborrowCollateralAmount,
+                        autoRepay: autoRepaySetting,
                         requestedAt: new Date().toISOString(),
                         reason: err.message,
                     };
@@ -1060,6 +1101,7 @@ class CreditRuntime {
                     offerId: dealSummary.offerId,
                     borrowAmount: reborrowAmount,
                     collateralAmount: reborrowCollateralAmount,
+                    autoRepay: autoRepaySetting,
                     requestedAt: new Date().toISOString(),
                     reason: 'offer unavailable',
                 };
@@ -1086,6 +1128,7 @@ class CreditRuntime {
             offerId: request.offerId || null,
             borrowAmount: request.borrowAmount ?? null,
             collateralAmount: request.collateralAmount ?? null,
+            autoRepay: request.autoRepay ?? false,
             requestedAt: request.requestedAt || new Date().toISOString(),
             reason: request.reason || null,
         });
@@ -1152,7 +1195,7 @@ class CreditRuntime {
                     offer,
                     borrowAmount: request.borrowAmount ?? null,
                     collateralAmount: request.collateralAmount || null,
-                    autoRepay: false,
+                    autoRepay: request.autoRepay ?? false,
                 });
                 await this.executeOperations([acceptOp], 'credit reborrow');
                 processed++;
@@ -1167,6 +1210,102 @@ class CreditRuntime {
         await this.persistState('pending reborrows');
 
         return { processed, remaining: nextQueue.length };
+    }
+
+    async _runMpaMaintenance(context, options) {
+        const plan = this._buildMpaPlanFromState();
+        if (plan?.blocked) {
+            return { blocked: true, reason: plan.reason };
+        }
+        if (!plan) {
+            return null;
+        }
+
+        const executed = [];
+        let result = null;
+
+        const debtOp = await this.buildMpaUpdateOperation(plan, { leg: 'debt' });
+        if (debtOp) {
+            result = await this.executeOperations([debtOp], `mpa maintenance:${context} debt`);
+            executed.push({ leg: 'debt', operation: debtOp, result });
+            await this.refreshMpaState();
+        }
+
+        const fallbackPlan = this._buildMpaPlanFromState();
+        if (fallbackPlan && !fallbackPlan.blocked) {
+            const collateralOp = await this.buildMpaUpdateOperation(fallbackPlan, { leg: 'collateral' });
+            if (collateralOp) {
+                result = await this.executeOperations([collateralOp], `mpa maintenance:${context} collateral`);
+                executed.push({ leg: 'collateral', operation: collateralOp, result });
+                await this.refreshMpaState();
+            }
+        }
+
+        if (executed.length > 0) {
+            this.state.lastMpaAction = {
+                context,
+                plan,
+                executedAt: new Date().toISOString(),
+                executed,
+            };
+            this.state.lastCrAdjustment = {
+                context,
+                plan,
+                executedAt: new Date().toISOString(),
+            };
+            if (typeof this.bot?.requestGridReset === 'function') {
+                try {
+                    const resetReason = plan.resetReason || 'cr-adjustment';
+                    const resetResult = await this.bot.requestGridReset(resetReason, {
+                        fillLockAlreadyHeld: options.fillLockAlreadyHeld ?? (context === 'periodic'),
+                    });
+                    this.state.lastGridResetAt = new Date().toISOString();
+                    return { plan, executed, resetResult };
+                } catch (err) {
+                    this.warn(`credit runtime: grid reset after CR adjustment failed: ${err.message}`);
+                    return { plan, executed, resetError: err.message };
+                }
+            }
+            return { plan, executed };
+        }
+        return null;
+    }
+
+    async _runCreditMaintenance() {
+        // Phase 1: Proactively repay deals nearing expiration before processing reborrows
+        const expiryThresholdHours = this.bot?.config?.TIMING?.CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS ?? 12;
+        const expiryThresholdMs = expiryThresholdHours * 60 * 60 * 1000;
+        const dealsSnapshot = Array.isArray(this.state.creditDeals) ? [...this.state.creditDeals] : [];
+        for (const deal of dealsSnapshot) {
+            if (!deal.latestRepayTime) continue;
+            const timeLeft = new Date(deal.latestRepayTime) - Date.now();
+            if (timeLeft < expiryThresholdMs) {
+                try {
+                    this.warn(`credit runtime: deal ${deal.id} expires in ${Math.round(timeLeft / 60000)}m; proactively repaying and reborrowing`);
+                    await this.repayCreditDeal(deal, deal.debtAmount, { autoReborrow: true });
+                } catch (err) {
+                    this.warn(`credit runtime: proactive repay/reborrow for deal ${deal.id} failed: ${err.message}`);
+                }
+            }
+        }
+
+        // Phase 3: Ensure auto_repay matches policy on existing deals
+        const policyAutoRepay = resolveAutoRepayValue(this.debtPolicy.creditOffer?.autoRepay);
+        if (policyAutoRepay > 0) {
+            for (const deal of this.state.creditDeals) {
+                if (resolveAutoRepayValue(deal.autoRepay) !== policyAutoRepay) {
+                    try {
+                        this.log(`credit runtime: updating auto_repay on deal ${deal.id} to ${policyAutoRepay}`);
+                        const updateOp = await this.buildCreditDealUpdateOperation(deal, policyAutoRepay);
+                        await this.executeOperations([updateOp], 'credit deal auto_repay update');
+                    } catch (err) {
+                        this.warn(`credit runtime: failed to update auto_repay on deal ${deal.id}: ${err.message}`);
+                    }
+                }
+            }
+        }
+
+        return this.processPendingReborrows();
     }
 
     async runMaintenance(context = 'periodic', options = {}) {
@@ -1184,68 +1323,46 @@ class CreditRuntime {
         };
 
         if (this.debtPolicy?.mpa) {
-            const plan = this._buildMpaPlanFromState();
-            if (plan?.blocked) {
-                results.mpa = { blocked: true, reason: plan.reason };
-            } else if (plan) {
-                const executed = [];
-                let result = null;
-
-                const debtOp = await this.buildMpaUpdateOperation(plan, { leg: 'debt' });
-                if (debtOp) {
-                    result = await this.executeOperations([debtOp], `mpa maintenance:${context} debt`);
-                    executed.push({ leg: 'debt', operation: debtOp, result });
-                    await this.refreshMpaState();
-                }
-
-                const fallbackPlan = this._buildMpaPlanFromState();
-                if (fallbackPlan && !fallbackPlan.blocked) {
-                    const collateralOp = await this.buildMpaUpdateOperation(fallbackPlan, { leg: 'collateral' });
-                    if (collateralOp) {
-                        result = await this.executeOperations([collateralOp], `mpa maintenance:${context} collateral`);
-                        executed.push({ leg: 'collateral', operation: collateralOp, result });
-                        await this.refreshMpaState();
-                    }
-                }
-
-                if (executed.length > 0) {
-                    this.state.lastMpaAction = {
-                        context,
-                        plan,
-                        executedAt: new Date().toISOString(),
-                        executed,
-                    };
-                    this.state.lastCrAdjustment = {
-                        context,
-                        plan,
-                        executedAt: new Date().toISOString(),
-                    };
-                    if (typeof this.bot?.requestGridReset === 'function') {
-                        try {
-                            const resetReason = plan.resetReason || 'cr-adjustment';
-                            const resetResult = await this.bot.requestGridReset(resetReason, {
-                                fillLockAlreadyHeld: options.fillLockAlreadyHeld ?? (context === 'periodic'),
-                            });
-                            this.state.lastGridResetAt = new Date().toISOString();
-                            results.mpa = { plan, executed, resetResult };
-                        } catch (err) {
-                            results.mpa = { plan, executed, resetError: err.message };
-                            this.warn(`credit runtime: grid reset after CR adjustment failed: ${err.message}`);
-                        }
-                    } else {
-                        results.mpa = { plan, executed };
-                    }
-                }
-            }
+            results.mpa = await this._runMpaMaintenance(context, options);
         }
 
         if (this.debtPolicy?.creditOffer) {
-            const pending = await this.processPendingReborrows();
-            results.credit = pending;
+            results.credit = await this._runCreditMaintenance();
         }
 
         await this.persistState(context);
         return results;
+    }
+
+    async runCreditWatchdog() {
+        if (!this.isEnabled()) {
+            return { skipped: true, reason: 'debt policy disabled' };
+        }
+        try {
+            await this.loadState();
+            await this.refreshState();
+
+            let mpaResult = null;
+            let creditResult = null;
+
+            if (this.debtPolicy?.mpa) {
+                mpaResult = await this._runMpaMaintenance('watchdog', {});
+            }
+
+            if (this.debtPolicy?.creditOffer) {
+                creditResult = await this._runCreditMaintenance();
+            }
+
+            await this.persistState('watchdog');
+            return {
+                mpa: mpaResult,
+                credit: creditResult,
+                remainingDeals: Array.isArray(this.state.creditDeals) ? this.state.creditDeals.length : 0,
+            };
+        } catch (err) {
+            this.warn(`credit runtime: watchdog error: ${err.message}`);
+            return { skipped: true, reason: err.message };
+        }
     }
 
     getStateSnapshot() {

@@ -207,6 +207,7 @@ class DEXBot {
         this._mainLoopActive = false;
         this._mainLoopPromise = null;
         this._creditRuntime = null;
+        this._creditWatchdogInterval = null;
 
         // Pipeline state flags (used by maintenance gating)
         this._batchInFlight = false;
@@ -744,6 +745,7 @@ class DEXBot {
                 await this._setupTriggerFileDetection();
                 await this._setupCreditRuntime();
                 this._setupBlockchainFetchInterval();
+                this._setupCreditWatchdogInterval();
 
                 if (this._isOpenOrdersSyncLoopEnabled()) {
                     this._startOpenOrdersSyncLoop();
@@ -887,6 +889,7 @@ class DEXBot {
             await this._setupTriggerFileDetection();
             await this._setupCreditRuntime();
             this._setupBlockchainFetchInterval();
+            this._setupCreditWatchdogInterval();
 
             if (this._isOpenOrdersSyncLoopEnabled()) {
                 this._startOpenOrdersSyncLoop();
@@ -2815,9 +2818,7 @@ class DEXBot {
      * @private
      */
     async _performPeriodicGridChecks() {
-        const result = await DexbotMaintenanceRuntime.performPeriodicGridChecks.call(this);
-        await this._runCreditRuntimeMaintenance('periodic', { fillLockAlreadyHeld: true });
-        return result;
+        return DexbotMaintenanceRuntime.performPeriodicGridChecks.call(this);
     }
 
     _isOpenOrdersSyncLoopEnabled() {
@@ -2885,6 +2886,38 @@ class DEXBot {
             return null;
         }
         return runtime.runMaintenance(context, options);
+    }
+
+    _setupCreditWatchdogInterval() {
+        const runtime = this._getCreditRuntime();
+        if (!runtime) {
+            return;
+        }
+        const intervalMin = Number(this.config?.TIMING?.CREDIT_DEAL_CHECK_INTERVAL_MIN ?? TIMING.CREDIT_DEAL_CHECK_INTERVAL_MIN);
+        if (!Number.isFinite(intervalMin) || intervalMin <= 0) {
+            this._log('Credit deal watchdog disabled by configuration (TIMING.CREDIT_DEAL_CHECK_INTERVAL_MIN <= 0)');
+            return;
+        }
+        if (this._creditWatchdogInterval) {
+            clearInterval(this._creditWatchdogInterval);
+            this._creditWatchdogInterval = null;
+        }
+        const intervalMs = intervalMin * 60 * 1000;
+        this._creditWatchdogInterval = setInterval(async () => {
+            try {
+                await runtime.runCreditWatchdog();
+            } catch (err) {
+                this._warn(`Credit watchdog error: ${err.message}`);
+            }
+        }, intervalMs);
+        this._log(`Credit deal watchdog started (${intervalMin}min interval)`);
+    }
+
+    _stopCreditWatchdogInterval() {
+        if (this._creditWatchdogInterval) {
+            clearInterval(this._creditWatchdogInterval);
+            this._creditWatchdogInterval = null;
+        }
     }
 
     async requestGridReset(reason = 'structural change', options = {}) {
@@ -3053,6 +3086,7 @@ class DEXBot {
         }
 
         this._clearDustMaintenanceTimer();
+        this._stopCreditWatchdogInterval();
 
         if (this._creditRuntime) {
             try {

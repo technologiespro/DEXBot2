@@ -40,37 +40,18 @@ const normalized = normalizeBotEntries([{ name: 'B', assetA: 'BTS', assetB: 'USD
 assert.strictEqual(normalized[0].botIndex, 0, 'normalizeBotEntries should add the bot index');
 assert.ok(normalized[0].botKey, 'normalizeBotEntries should create a bot key');
 
-const invalidCreditOffer = {
-    bots: [
-        {
-            name: 'C',
-            assetA: 'BTS',
-            assetB: 'USD',
-            debtPolicy: {
-                creditOffer: {
-                    allowedOfferIds: ['1.18.42'],
-                    maxCollateralRatio: 2.5,
-                },
-            },
-        },
-    ],
-};
-
-assert(
-    require('../modules/bot_settings').validateBotEntry(invalidCreditOffer.bots[0], 0, 'test').includes('maxFeeRate'),
-    'validateBotEntry should require creditOffer.maxFeeRate'
-);
-
 const invalidCreditOfferRatio = {
     bots: [
         {
             name: 'D',
             assetA: 'BTS',
             assetB: 'USD',
+            activeOrders: { sell: 20, buy: 20 },
+            botFunds: { sell: '100%', buy: '100%' },
             debtPolicy: {
                 creditOffer: {
                     allowedOfferIds: ['1.18.42'],
-                    maxFeeRate: 30000,
+                    maxFeeRatePerDay: 0.001,
                 },
             },
         },
@@ -80,6 +61,55 @@ const invalidCreditOfferRatio = {
 assert(
     require('../modules/bot_settings').validateBotEntry(invalidCreditOfferRatio.bots[0], 0, 'test').includes('maxCollateralRatio'),
     'validateBotEntry should require creditOffer.maxCollateralRatio'
+);
+
+const validCreditOfferPerDay = {
+    bots: [
+        {
+            name: 'E',
+            assetA: 'BTS',
+            assetB: 'USD',
+            activeOrders: { sell: 20, buy: 20 },
+            botFunds: { sell: '100%', buy: '100%' },
+            debtPolicy: {
+                creditOffer: {
+                    allowedOfferIds: ['1.18.42'],
+                    maxFeeRatePerDay: 0.001,
+                    maxCollateralRatio: 2.5,
+                },
+            },
+        },
+    ],
+};
+
+assert.strictEqual(
+    require('../modules/bot_settings').validateBotEntry(validCreditOfferPerDay.bots[0], 0, 'test'),
+    null,
+    'validateBotEntry should accept maxFeeRatePerDay instead of maxFeeRate'
+);
+
+const invalidCreditOfferPerDay = {
+    bots: [
+        {
+            name: 'F',
+            assetA: 'BTS',
+            assetB: 'USD',
+            activeOrders: { sell: 20, buy: 20 },
+            botFunds: { sell: '100%', buy: '100%' },
+            debtPolicy: {
+                creditOffer: {
+                    allowedOfferIds: ['1.18.42'],
+                    maxFeeRatePerDay: -0.001,
+                    maxCollateralRatio: 2.5,
+                },
+            },
+        },
+    ],
+};
+
+assert(
+    require('../modules/bot_settings').validateBotEntry(invalidCreditOfferPerDay.bots[0], 0, 'test').includes('maxFeeRatePerDay'),
+    'validateBotEntry should reject negative maxFeeRatePerDay'
 );
 
 console.log('bot settings tests passed');

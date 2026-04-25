@@ -52,6 +52,7 @@ function installStubs(calls) {
       this.bot = bot;
       this.loadStateCalls = 0;
       this.runMaintenanceCalls = [];
+      this.runCreditWatchdogCalls = 0;
     }
 
     async loadState() {
@@ -62,6 +63,12 @@ function installStubs(calls) {
       this.runMaintenanceCalls.push(context);
       calls.push(`credit-${context}`);
       return { context };
+    }
+
+    async runCreditWatchdog() {
+      this.runCreditWatchdogCalls += 1;
+      calls.push('credit-watchdog');
+      return { mpa: null, credit: null };
     }
   }
 
@@ -79,11 +86,12 @@ function installStubs(calls) {
 async function main() {
   const calls = [];
   const restore = installStubs(calls);
+  let bot;
   try {
     delete require.cache[dexbotClassPath];
     const DEXBot = require('../modules/dexbot_class');
 
-    const bot = new DEXBot({
+    bot = new DEXBot({
       name: 'credit-bot',
       active: true,
       dryRun: false,
@@ -114,9 +122,14 @@ async function main() {
 
     const result = await bot._performPeriodicGridChecks();
     assert.strictEqual(result, 'grid-ok', 'periodic maintenance should preserve grid result');
-    assert.deepStrictEqual(calls, ['grid-maintenance', 'credit-periodic'], 'credit runtime should run after grid maintenance');
-    assert.deepStrictEqual(runtime.runMaintenanceCalls, ['periodic'], 'credit runtime should receive the periodic context');
+    assert.deepStrictEqual(calls, ['grid-maintenance'], 'periodic grid checks should not touch credit runtime');
+    assert.deepStrictEqual(runtime.runMaintenanceCalls, [], 'credit runMaintenance should not be called from periodic grid checks');
+
+    bot._setupCreditWatchdogInterval();
+    assert.ok(bot._creditWatchdogInterval, 'credit watchdog interval should be created');
+    assert.strictEqual(runtime.runCreditWatchdogCalls, 0, 'watchdog should not fire immediately');
   } finally {
+    bot._stopCreditWatchdogInterval();
     restore();
   }
 

@@ -215,7 +215,7 @@ function createBaseBotConfig(overrides = {}) {
         allowedCollateralAssets: ['1.3.0'],
         maxBorrowAmount: 1000,
         maxCollateralRatio: 2.5,
-        maxFeeRate: 30000,
+        maxFeeRatePerDay: 0.05,
         autoReborrow: true,
       },
     },
@@ -512,8 +512,9 @@ async function testRepayAndReborrowFlow() {
             allowedCollateralAssets: ['1.3.0'],
             maxBorrowAmount: 1000,
             maxCollateralRatio: 2.5,
-            maxFeeRate: 30000,
+            maxFeeRatePerDay: 0.05,
             autoReborrow: true,
+            autoRepay: 2,
           },
         },
       }),
@@ -532,6 +533,7 @@ async function testRepayAndReborrowFlow() {
     assert.strictEqual(calls[0].operations[1].op_name, 'credit_offer_accept', 'second op should reborrow the deal');
     assert.strictEqual(calls[0].operations[1].op_data.borrow_amount.amount, 200, 'default reborrow amount should match the repaid amount');
     assert.strictEqual(calls[0].operations[1].op_data.collateral.amount, 400, 'default reborrow collateral should follow offer price');
+    assert.deepStrictEqual(calls[0].operations[1].op_data.extensions, { auto_repay: 2 }, 'credit offer accept should carry forward auto_repay from policy');
     assert.strictEqual(calls[0].operations[0].op_data.credit_fee.amount, 6, 'credit fee should be derived from fee rate');
 
     const persisted = JSON.parse(fs.readFileSync(path.join(baseDir, 'credit_runtime', 'credit-bot-1.json'), 'utf8'));
@@ -597,7 +599,7 @@ async function testMultipleMpaPositionsAreBlocked() {
   }
 }
 
-async function testMissingFeeCapIsRejected() {
+async function testDefaultFeeRateCapRejectsExpensiveOffer() {
   const calls = [];
   const dbCalls = [];
   const restore = installStubs(calls, dbCalls);
@@ -630,14 +632,72 @@ async function testMissingFeeCapIsRejected() {
     }, { stateDir: path.join(baseDir, 'credit_runtime') });
 
     await runtime.refreshState();
+    // Default maxFeeRatePerDay is ~0.000333 (1/3000 = 0.033% per day).
+    // Offer: 3% flat / 1 day = 3% per day → should be rejected by default.
     await assert.rejects(
       () => runtime.buildCreditOfferAcceptOperation({
-        offer: { id: '1.18.42', asset_type: '1.3.10', fee_rate: 30000, enabled: true, acceptable_collateral: { '1.3.0': { base: { amount: 2, asset_id: '1.3.0' }, quote: { amount: 1, asset_id: '1.3.10' } } } },
+        offer: { id: '1.18.42', asset_type: '1.3.10', fee_rate: 30000, max_duration_seconds: 86400, enabled: true, acceptable_collateral: { '1.3.0': { base: { amount: 2, asset_id: '1.3.0' }, quote: { amount: 1, asset_id: '1.3.10' } } } },
         collateralAmount: { amount: 200, asset_id: '1.3.0' },
       }),
-      /maxFeeRate is required/,
-      'credit offers must fail closed without a maxFeeRate'
+      /exceeds maxFeeRatePerDay/,
+      'expensive offer should be rejected by default maxFeeRatePerDay'
     );
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testMaxFeeRatePerDayRejectsExpensiveOffer() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls);
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-fee-day-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: {
+        botKey: 'credit-bot-fee-day',
+        preferredAccount: 'alice',
+        debtPolicy: {
+          creditOffer: {
+            allowedOfferIds: ['1.18.42'],
+            allowedDebtAssets: ['1.3.10'],
+            allowedCollateralAssets: ['1.3.0'],
+            maxBorrowAmount: 1000,
+            maxCollateralRatio: 2.5,
+            maxFeeRatePerDay: 0.001,
+            autoReborrow: true,
+          },
+        },
+        dryRun: false,
+      },
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    // Offer: 3% flat fee, 1 day duration → 3% per day. Policy limit: 0.1% per day.
+    await assert.rejects(
+      () => runtime.buildCreditOfferAcceptOperation({
+        offer: { id: '1.18.42', asset_type: '1.3.10', fee_rate: 30000, max_duration_seconds: 86400, enabled: true, acceptable_collateral: { '1.3.0': { base: { amount: 2, asset_id: '1.3.0' }, quote: { amount: 1, asset_id: '1.3.10' } } } },
+        collateralAmount: { amount: 200, asset_id: '1.3.0' },
+      }),
+      /daily fee rate .* exceeds maxFeeRatePerDay/,
+      'expensive daily fee rate should be rejected'
+    );
+
+    // Offer: 3% flat fee, 30 day duration → 0.1% per day. Policy limit: 0.1% per day.
+    const op = await runtime.buildCreditOfferAcceptOperation({
+      offer: { id: '1.18.42', asset_type: '1.3.10', fee_rate: 30000, max_duration_seconds: 2592000, enabled: true, acceptable_collateral: { '1.3.0': { base: { amount: 2, asset_id: '1.3.0' }, quote: { amount: 1, asset_id: '1.3.10' } } } },
+      collateralAmount: { amount: 200, asset_id: '1.3.0' },
+    });
+    assert.strictEqual(op.op_name, 'credit_offer_accept', 'acceptable daily fee rate should pass');
   } finally {
     restore();
     try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
@@ -806,7 +866,7 @@ async function testLpCollateralRatioGate() {
             allowedCollateralAssets: ['1.3.20'],
             maxBorrowAmount: 1000,
             maxCollateralRatio: 1.5,
-            maxFeeRate: 30000,
+            maxFeeRatePerDay: 0.05,
             autoReborrow: true,
           },
         },
@@ -838,8 +898,9 @@ async function testLpCollateralRatioGate() {
             allowedCollateralAssets: ['1.3.20'],
             maxBorrowAmount: 1000,
             maxCollateralRatio: 2.5,
-            maxFeeRate: 30000,
+            maxFeeRatePerDay: 0.05,
             autoReborrow: true,
+            autoRepay: 2,
           },
         },
       }),
@@ -905,8 +966,9 @@ async function testDealDisappearanceDoesNotAutoQueueReborrow() {
             allowedCollateralAssets: ['1.3.0'],
             maxBorrowAmount: 1000,
             maxCollateralRatio: 2.5,
-            maxFeeRate: 30000,
+            maxFeeRatePerDay: 0.05,
             autoReborrow: true,
+            autoRepay: 2,
           },
         },
       }),
@@ -973,8 +1035,9 @@ async function testDeferredReborrowQueuesAfterConfirmedRepay() {
             allowedCollateralAssets: ['1.3.0'],
             maxBorrowAmount: 1000,
             maxCollateralRatio: 2.5,
-            maxFeeRate: 30000,
+            maxFeeRatePerDay: 0.05,
             autoReborrow: true,
+            autoRepay: 2,
           },
         },
       }),
@@ -992,6 +1055,48 @@ async function testDeferredReborrowQueuesAfterConfirmedRepay() {
     assert.strictEqual(calls[0].operations.length, 1, 'repay batch should not include a speculative reborrow');
     assert.strictEqual(runtime.state.pendingReborrows.length, 1, 'confirmed repay without inline reborrow should queue a deferred reborrow');
     assert.strictEqual(runtime.state.pendingReborrows[0].sourceDealId, '1.19.77', 'queued deferred reborrow should reference the repaid deal');
+    assert.strictEqual(runtime.state.pendingReborrows[0].autoRepay, 2, 'queued deferred reborrow should preserve policy autoRepay mode');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testCreditDealUpdatePreservesAutoRepayMode() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls);
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-update-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-update',
+        debtPolicy: {
+          creditOffer: {
+            allowedOfferIds: ['1.18.42'],
+            allowedDebtAssets: ['1.3.10'],
+            allowedCollateralAssets: ['1.3.0'],
+            maxBorrowAmount: 1000,
+            maxCollateralRatio: 2.5,
+            maxFeeRatePerDay: 0.05,
+            autoReborrow: true,
+            autoRepay: 2,
+          },
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    const op = await runtime.buildCreditDealUpdateOperation({ id: '1.19.77' }, 2);
+    assert.strictEqual(op.op_name, 'credit_deal_update', 'credit deal update op should be built');
+    assert.strictEqual(op.op_data.auto_repay, 2, 'credit deal update should preserve autoRepay mode 2');
   } finally {
     restore();
     try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
@@ -1036,7 +1141,7 @@ async function testAutoReborrowQueueIsIgnoredWhenDisabled() {
             allowedCollateralAssets: ['1.3.0'],
             maxBorrowAmount: 1000,
             maxCollateralRatio: 2.5,
-            maxFeeRate: 30000,
+            maxFeeRatePerDay: 0.05,
             autoReborrow: false,
           },
         },
@@ -1122,11 +1227,13 @@ async function testStatePersistsAcrossRestart() {
   await testMpaDebtFirstThenCollateralFallbackTriggersReset();
   await testRepayAndReborrowFlow();
   await testMultipleMpaPositionsAreBlocked();
-  await testMissingFeeCapIsRejected();
+  await testDefaultFeeRateCapRejectsExpensiveOffer();
+  await testMaxFeeRatePerDayRejectsExpensiveOffer();
   await testCreditBorrowIsDerivedFromCollateral();
   await testLpCollateralRatioGate();
   await testDealDisappearanceDoesNotAutoQueueReborrow();
   await testDeferredReborrowQueuesAfterConfirmedRepay();
+  await testCreditDealUpdatePreservesAutoRepayMode();
   await testAutoReborrowQueueIsIgnoredWhenDisabled();
   await testStatePersistsAcrossRestart();
   console.log('credit runtime tests passed');

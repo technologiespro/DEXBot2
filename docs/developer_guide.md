@@ -1124,7 +1124,8 @@ Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
       "maxBorrowAmount": 1000,
       "maxFeeRate": 30000,
       "maxCollateralRatio": 2.5,
-      "autoReborrow": true
+      "autoReborrow": true,
+      "autoRepay": 2
     }
   }
 }
@@ -1132,9 +1133,10 @@ Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
 
 ### Key Rules
 - No separate runtime switch — active when `debtPolicy` is present in bot config
-- Evaluated on the bot's 4h maintenance cadence
+- Credit and MPA checks run from the dedicated credit watchdog interval
 - Every successful CR adjustment triggers a grid rebuild via `requestGridReset()`
 - Signing policy enforces `maxFeeRate`, CR ceilings, and allowed assets before broadcasting
+- Full usage details live in [MPA and Credit Usage](MPA_CREDIT_USAGE.md)
 
 ---
 
@@ -1516,7 +1518,7 @@ console.log('Locked?', manager.isOrderLocked(order.id));
 - [COW Invariants](COW_INVARIANTS.md) - Stable theory contract for COW pipeline
 - [Fund Movement Logic](FUND_MOVEMENT_AND_ACCOUNTING.md) - Algorithms and formulas
 - [Market Adapter](../market_adapter/README.md) - Signal pipeline and AMA integration
-- [Credit Debt Integration Plan](CREDIT_DEBT_INTEGRATION_PLAN.md) - MPA and credit offer workflows
+- [MPA and Credit Usage](MPA_CREDIT_USAGE.md) - MPA and credit offer workflows
 - [Improvement Roadmap](IMPROVEMENT_ROADMAP.md) - Prioritized improvement backlog
 - [README](../README.md) - User documentation
 - [WORKFLOW](WORKFLOW.md) - Git branch workflow

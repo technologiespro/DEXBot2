@@ -88,12 +88,12 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Credit/Debt Tests**: CR planner, credit runtime, and MPA wiring validation.
 - **Verification**: How to use the test suite to validate grid stability.
 
-### 💳 [Credit Debt Integration Plan](CREDIT_DEBT_INTEGRATION_PLAN.md)
-*Native MPA and credit offer workflows.*
+### 💳 [MPA and Credit Usage](MPA_CREDIT_USAGE.md)
+*User-facing MPA and credit offer workflow guide.*
 - **Debt Policy**: Per-bot `debtPolicy.mpa` and `debtPolicy.creditOffer` configuration
 - **MPA Borrowing**: Call-order updates with debt-first CR planning
 - **Credit Offers**: Accept/repay with auto-reborrow and LP-backed collateral valuation
-- **Signing Policy**: Operation allowlists and limit enforcement before broadcast
+- **Watchdog Timing**: Dedicated credit deal renewal interval and expiry threshold settings
 
 ### 📈 [Improvement Roadmap](IMPROVEMENT_ROADMAP.md)
 *Prioritized backlog and architectural recommendations.*

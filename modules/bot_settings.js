@@ -94,12 +94,10 @@ function validateBotEntry(b, i, src) {
                 problems.push("debtPolicy.creditOffer must be an object");
             } else if ('creditOffer' in b.debtPolicy) {
                 const creditOffer = b.debtPolicy.creditOffer;
-                if (!('maxFeeRate' in creditOffer)) {
-                    problems.push("debtPolicy.creditOffer.maxFeeRate is required");
-                } else {
-                    const feeRate = Number(creditOffer.maxFeeRate);
-                    if (!Number.isFinite(feeRate) || feeRate <= 0) {
-                        problems.push("debtPolicy.creditOffer.maxFeeRate must be a positive number");
+                if ('maxFeeRatePerDay' in creditOffer) {
+                    const feeRatePerDay = Number(creditOffer.maxFeeRatePerDay);
+                    if (!Number.isFinite(feeRatePerDay) || feeRatePerDay < 0) {
+                        problems.push("debtPolicy.creditOffer.maxFeeRatePerDay must be a non-negative number");
                     }
                 }
                 if (!('maxCollateralRatio' in creditOffer)) {
@@ -108,6 +106,12 @@ function validateBotEntry(b, i, src) {
                     const maxCollateralRatio = Number(creditOffer.maxCollateralRatio);
                     if (!Number.isFinite(maxCollateralRatio) || maxCollateralRatio <= 0) {
                         problems.push("debtPolicy.creditOffer.maxCollateralRatio must be a positive number");
+                    }
+                }
+                if ('autoRepay' in creditOffer) {
+                    const autoRepay = Number(creditOffer.autoRepay);
+                    if (![0, 1, 2].includes(autoRepay)) {
+                        problems.push("debtPolicy.creditOffer.autoRepay must be 0, 1, or 2");
                     }
                 }
             }

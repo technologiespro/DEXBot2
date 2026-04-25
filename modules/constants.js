@@ -237,6 +237,10 @@ let TIMING = {
     // before a deferred grid resync attempts more on-chain changes.
     BLOCKCHAIN_SETTLE_DELAY_MS: 6000,
 
+    // Credit deal proactive renewal timing
+    CREDIT_DEAL_CHECK_INTERVAL_MIN: 60,      // How often to check credit deal expiry (minutes)
+    CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS: 12,  // Proactively renew deals expiring within this window
+
     // LOCK_REFRESH_MIN_MS: Minimum interval for refreshing order lock leases during long operations.
     // Prevents lock expiration during extended reconciliations or batch operations.
     // Default: 250ms (4 refreshes per second minimum during long operations).
@@ -427,7 +431,18 @@ let FEE_PARAMETERS = {
     //   - 1.0 = 100% of the base order creation fee
     //   - Typical: 2 BTS base fee × 1.0 = 2 BTS charged (no refund)
     //   - Full fee covers order broadcast and execution costs
-    TAKER_FEE_PERCENT: 1.0
+    TAKER_FEE_PERCENT: 1.0,
+
+    // GRAPHENE_FEE_RATE_DENOM: BitShares credit-offer fee-rate denominator.
+    // The on-chain fee_rate is an integer; fee percent = fee_rate / DENOM.
+    // Example: fee_rate 30000 → 30000 / 1000000 = 3% flat fee at repayment.
+    GRAPHENE_FEE_RATE_DENOM: 1000000,
+
+    // DEFAULT_MAX_FEE_RATE_PER_DAY: Default maximum daily fee rate for credit offers.
+    // 1/3000 ≈ 0.0003333 = 0.03333% per day = ~1% per month.
+    // This provides a reasonable default cap so short-duration high-flat-fee offers
+    // are rejected while long-duration low-flat-fee offers are accepted.
+    DEFAULT_MAX_FEE_RATE_PER_DAY: 1 / 3000,
 };
 
 // API request limits and batch sizes for blockchain operations
