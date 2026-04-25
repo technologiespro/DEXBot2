@@ -478,6 +478,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
                 allowedDebtAssets: ['1.3.0'],
                 allowedCollateralAssets: ['1.3.861', '1.3.862'],
                 maxBorrowAmount: 1000,
+                maxCollateralAmount: 1600,
                 maxFeeRate: 30000,
                 minDurationSeconds: 3600,
             },
@@ -543,6 +544,13 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     assert.strictEqual(creditOfferTooLargeResult.allow, false, 'Expected deny for borrow amount above maxBorrowAmount');
     assert(creditOfferTooLargeResult.reason.includes('maxBorrowAmount'));
     console.log('  ✓ credit_offer_accept borrow cap enforced');
+
+    const creditOfferTooMuchCollateral = JSON.parse(JSON.stringify(creditOfferContext));
+    creditOfferTooMuchCollateral.operations[0].op_data.collateral.amount = 1601;
+    const creditOfferTooMuchCollateralResult = await policy.evaluatePolicy(creditOfferPolicy, creditOfferTooMuchCollateral);
+    assert.strictEqual(creditOfferTooMuchCollateralResult.allow, false, 'Expected deny for collateral amount above maxCollateralAmount');
+    assert(creditOfferTooMuchCollateralResult.reason.includes('maxCollateralAmount'));
+    console.log('  ✓ credit_offer_accept collateral cap enforced');
 
     // Test 13: credit_deal_repay parameter validation
     console.log('[Test 13] Evaluate allowedOps - credit_deal_repay parameter validation');

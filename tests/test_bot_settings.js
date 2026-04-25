@@ -51,6 +51,8 @@ const invalidCreditOfferRatio = {
             debtPolicy: {
                 creditOffer: {
                     allowedOfferIds: ['1.18.42'],
+                    maxBorrowAmount: 1000,
+                    maxCollateralAmount: 25000,
                     maxFeeRatePerDay: 0.001,
                 },
             },
@@ -74,6 +76,8 @@ const validCreditOfferPerDay = {
             debtPolicy: {
                 creditOffer: {
                     allowedOfferIds: ['1.18.42'],
+                    maxBorrowAmount: 1000,
+                    maxCollateralAmount: '25%',
                     maxFeeRatePerDay: 0.001,
                     maxCollateralRatio: 2.5,
                 },
@@ -86,6 +90,54 @@ assert.strictEqual(
     require('../modules/bot_settings').validateBotEntry(validCreditOfferPerDay.bots[0], 0, 'test'),
     null,
     'validateBotEntry should accept maxFeeRatePerDay instead of maxFeeRate'
+);
+
+const invalidCreditOfferBorrowCap = {
+    bots: [
+        {
+            name: 'G',
+            assetA: 'BTS',
+            assetB: 'USD',
+            activeOrders: { sell: 20, buy: 20 },
+            botFunds: { sell: '100%', buy: '100%' },
+            debtPolicy: {
+                creditOffer: {
+                    allowedOfferIds: ['1.18.42'],
+                    maxBorrowAmount: 0,
+                    maxCollateralRatio: 2.5,
+                },
+            },
+        },
+    ],
+};
+
+assert(
+    require('../modules/bot_settings').validateBotEntry(invalidCreditOfferBorrowCap.bots[0], 0, 'test').includes('maxBorrowAmount'),
+    'validateBotEntry should reject non-positive maxBorrowAmount'
+);
+
+const invalidCreditOfferBorrowPercent = {
+    bots: [
+        {
+            name: 'H',
+            assetA: 'BTS',
+            assetB: 'USD',
+            activeOrders: { sell: 20, buy: 20 },
+            botFunds: { sell: '100%', buy: '100%' },
+            debtPolicy: {
+                creditOffer: {
+                    allowedOfferIds: ['1.18.42'],
+                    maxBorrowAmount: '25%',
+                    maxCollateralRatio: 2.5,
+                },
+            },
+        },
+    ],
+};
+
+assert(
+    require('../modules/bot_settings').validateBotEntry(invalidCreditOfferBorrowPercent.bots[0], 0, 'test').includes('maxBorrowAmount'),
+    'validateBotEntry should reject percentage maxBorrowAmount'
 );
 
 const invalidCreditOfferPerDay = {

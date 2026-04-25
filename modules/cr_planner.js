@@ -1,10 +1,20 @@
 'use strict';
 
 const { toFiniteNumber } = require('./order/format');
+const { resolveConfigValue } = require('./order/utils/math');
 
 function positiveOrNull(value) {
     const num = toFiniteNumber(value, null);
     return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+function resolveCollateralLimit(value, referenceAmount) {
+    const resolved = resolveConfigValue(value, referenceAmount);
+    if (!Number.isFinite(resolved)) return null;
+    if (typeof value === 'string' && value.trim().endsWith('%')) {
+        return resolved >= 0 ? resolved : null;
+    }
+    return resolved > 0 ? resolved : null;
 }
 
 function roundToPlaces(value, places = 8) {
@@ -14,15 +24,22 @@ function roundToPlaces(value, places = 8) {
     return Math.round(num * factor) / factor;
 }
 
-function clampToAbsLimit(value, maxAbs) {
-    const numeric = Number(value);
-    const limit = positiveOrNull(maxAbs);
-    if (!Number.isFinite(numeric) || limit === null) {
+function clampIncreaseToTotalMax(rawIncrease, currentTotal, maxTotal) {
+    const numeric = Number(rawIncrease);
+    const current = Number(currentTotal);
+    const limit = positiveOrNull(maxTotal);
+    if (!Number.isFinite(numeric) || !Number.isFinite(current) || limit === null) {
         return numeric;
     }
-    if (numeric > limit) return limit;
-    if (numeric < -limit) return -limit;
-    return numeric;
+    if (numeric <= 0) {
+        return numeric;
+    }
+
+    const remaining = limit - current;
+    if (remaining <= 0) {
+        return 0;
+    }
+    return Math.min(numeric, remaining);
 }
 
 function resolveTargetCollateralRatio(policy = {}) {
@@ -98,6 +115,7 @@ function buildDebtFirstCrPlan({
     targetCollateralRatio,
     maxBorrowAmount,
     maxCollateralAmount,
+    collateralLimitReferenceAmount,
 } = {}) {
     const currentCr = calculateCollateralRatio(currentCollateralAmount, currentDebtAmount, feedPrice);
     const policy = {
@@ -135,12 +153,16 @@ function buildDebtFirstCrPlan({
 
     const targetDebt = currentCollateralAmount / (feedPrice * desiredCr);
     const rawDebtDelta = targetDebt - currentDebtAmount;
-    const debtDelta = clampToAbsLimit(rawDebtDelta, maxBorrowAmount);
+    const debtDelta = clampIncreaseToTotalMax(rawDebtDelta, currentDebtAmount, maxBorrowAmount);
     const projectedDebt = Math.max(0, currentDebtAmount + debtDelta);
     const targetCollateral = desiredCr * feedPrice * projectedDebt;
     const collateralDelta = targetCollateral - currentCollateralAmount;
 
-    if (maxCollateralAmount !== null && Math.abs(collateralDelta) > maxCollateralAmount) {
+    const collateralLimit = resolveCollateralLimit(
+        maxCollateralAmount,
+        collateralLimitReferenceAmount ?? currentCollateralAmount
+    );
+    if (collateralLimit !== null && Math.abs(collateralDelta) > collateralLimit) {
         return {
             blocked: true,
             reason: `required collateral adjustment ${Math.abs(collateralDelta)} exceeds maxCollateralAmount ${maxCollateralAmount}`,
@@ -181,7 +203,8 @@ function buildCollateralFallbackPlan({
         return null;
     }
 
-    if (maxCollateralAmount !== null && Math.abs(collateralDelta) > maxCollateralAmount) {
+    const collateralLimit = resolveCollateralLimit(maxCollateralAmount, currentCollateralAmount);
+    if (collateralLimit !== null && Math.abs(collateralDelta) > collateralLimit) {
         return {
             blocked: true,
             reason: `required collateral adjustment ${Math.abs(collateralDelta)} exceeds maxCollateralAmount ${maxCollateralAmount}`,

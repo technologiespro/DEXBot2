@@ -85,6 +85,7 @@ function installStubs(calls, dbCalls, options = {}) {
       },
     },
   };
+  const creditOffersByOwner = options.creditOffersByOwner || Object.values(offersById);
   const poolByShareAsset = options.poolByShareAsset || {};
   const poolByAssetPair = options.poolByAssetPair || {};
   const pairKey = (left, right) => [String(left), String(right)].sort().join('|');
@@ -132,6 +133,9 @@ function installStubs(calls, dbCalls, options = {}) {
       dealResponseIndex += 1;
       return response;
     }
+    if (method === 'get_credit_offers_by_owner') {
+      return creditOffersByOwner;
+    }
     if (method === 'get_on_chain_asset_balances') {
       return options.assetBalances || {};
     }
@@ -150,6 +154,7 @@ function installStubs(calls, dbCalls, options = {}) {
         get_liquidity_pools_by_share_asset: async (ids, subscribe, withStatistics) => handleDbCall('get_liquidity_pools_by_share_asset', [ids, subscribe, withStatistics]),
         get_liquidity_pool_by_asset_ids: async (left, right) => handleDbCall('get_liquidity_pool_by_asset_ids', [left, right]),
         get_credit_deals_by_borrower: async (accountId) => handleDbCall('get_credit_deals_by_borrower', [accountId]),
+        get_credit_offers_by_owner: async (accountId) => handleDbCall('get_credit_offers_by_owner', [accountId]),
         get_on_chain_asset_balances: async (accountRef, assets) => handleDbCall('get_on_chain_asset_balances', [accountRef, assets]),
       },
     },
@@ -291,7 +296,13 @@ async function testRefreshAndMpaPlan() {
     await runtime.refreshState();
     assert.strictEqual(runtime.state.activeCallOrderId, '1.8.1', 'MPA call order should be discovered');
     assert.deepStrictEqual(runtime.state.activeDealIds, ['1.19.77'], 'credit deal should be discovered');
+    assert.deepStrictEqual(runtime.state.mpaCallOrders.map((entry) => entry.id), ['1.8.1'], 'MPA call orders should be captured in state');
+    assert.strictEqual(runtime.state.ownedCreditOffers.length, 1, 'owned credit offers should be discovered');
+    assert.strictEqual(runtime.state.debtSnapshot.assets['1.3.0'].mpaCollateral, 25000, 'MPA collateral should be tracked in the debt snapshot');
+    assert.strictEqual(runtime.state.debtSnapshot.assets['1.3.0'].creditCollateral, 1000, 'credit deal collateral should be tracked in the debt snapshot');
+    assert.strictEqual(runtime.state.debtSnapshot.assets['1.3.10'].offeredBalance, 10000, 'owned credit offer balance should be tracked in the debt snapshot');
     assert.strictEqual(runtime.state.debtAssetId, '1.3.10', 'debt asset should be tracked');
+    assert(dbCalls.some((entry) => entry.method === 'get_credit_offers_by_owner'), 'refreshState should query owned credit offers');
 
     const plan = runtime._buildMpaPlanFromState();
     assert(plan, 'MPA plan should be generated');
@@ -311,6 +322,172 @@ async function testRefreshAndMpaPlan() {
     assert.strictEqual(persisted.botKey, 'credit-bot-0', 'state file should be keyed by bot');
     assert.strictEqual(persisted.activeCallOrderId, '1.8.1', 'state file should store the active call order');
     assert.strictEqual(persisted.activeDealIds[0], '1.19.77', 'state file should store the active credit deal');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testCreditOfferCollateralPercentUsesDebtSnapshot() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    assetBalances: {
+      '1.3.0': { free: 10, locked: 25990, total: 26000 },
+    },
+    offersById: {
+      '1.18.42': {
+        id: '1.18.42',
+        asset_type: '1.3.10',
+        current_balance: 10000,
+        fee_rate: 30000,
+        min_deal_amount: 1,
+        enabled: true,
+        max_duration_seconds: 86400,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 2, asset_id: '1.3.0' },
+            quote: { amount: 1, asset_id: '1.3.10' },
+          },
+        },
+      },
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-percent-snapshot-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-percent-snapshot',
+        debtPolicy: {
+          mpa: {
+            allowedDebtAssets: ['1.3.10'],
+            allowedCollateralAssets: ['1.3.0'],
+            maxBorrowAmount: 1000,
+            maxCollateralAmount: '50%',
+            minCollateralRatio: 2,
+            maxCollateralRatio: 2.5,
+            targetCollateralRatio: 2.2,
+          },
+          creditOffer: {
+            allowedOfferIds: ['1.18.42'],
+            allowedDebtAssets: ['1.3.10'],
+            allowedCollateralAssets: ['1.3.0'],
+            maxBorrowAmount: 1000,
+            maxCollateralAmount: '50%',
+            maxCollateralRatio: 1000,
+            maxFeeRatePerDay: 0.05,
+            autoReborrow: true,
+          },
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    assert.strictEqual(runtime.state.currentCollateralFundsTotal, 27250, 'collateral total should include free, locked, and contract collateral');
+    const op = await runtime.buildCreditOfferAcceptOperation({
+      offer: {
+        id: '1.18.42',
+        asset_type: '1.3.10',
+        fee_rate: 30000,
+        enabled: true,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 2, asset_id: '1.3.0' },
+            quote: { amount: 1, asset_id: '1.3.10' },
+          },
+        },
+      },
+      borrowAmount: 100,
+      collateralAmount: { amount: '50%', asset_id: '1.3.0' },
+    });
+
+    assert.strictEqual(op.op_data.collateral.amount, 13625, 'percentage collateral should resolve against the full collateral base');
+    assert.strictEqual(dbCalls.filter((entry) => entry.method === 'get_credit_offers_by_owner').length > 0, true, 'credit offer ownership should be queried');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testCreditOfferCollateralPercentDoesNotRequireRefresh() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    assetBalances: {
+      '1.3.0': { free: 10, locked: 25990, total: 26000 },
+    },
+    dealResponses: [[
+      {
+        id: '1.19.77',
+        borrower: '1.2.3',
+        offer_id: '1.18.42',
+        offer_owner: '1.2.9',
+        debt_asset: '1.3.10',
+        debt_amount: 500,
+        collateral_asset: '1.3.0',
+        collateral_amount: 1000,
+        fee_rate: 30000,
+        latest_repay_time: '2030-01-01T00:00:00',
+        auto_repay: 0,
+      },
+    ]],
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-stale-free-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-stale-free',
+        debtPolicy: {
+          creditOffer: {
+            allowedOfferIds: ['1.18.42'],
+            allowedDebtAssets: ['1.3.10'],
+            allowedCollateralAssets: ['1.3.0'],
+            maxBorrowAmount: 1000,
+            maxCollateralAmount: '50%',
+            maxCollateralRatio: 1000,
+            maxFeeRatePerDay: 0.05,
+            autoReborrow: true,
+          },
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    runtime.state.currentCollateralFundsTotal = 1;
+    const op = await runtime.buildCreditOfferAcceptOperation({
+      offer: {
+        id: '1.18.42',
+        asset_type: '1.3.10',
+        fee_rate: 30000,
+        enabled: true,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 2, asset_id: '1.3.0' },
+            quote: { amount: 1, asset_id: '1.3.10' },
+          },
+        },
+      },
+      borrowAmount: 100,
+      collateralAmount: { amount: '50%', asset_id: '1.3.0' },
+    });
+
+    assert.strictEqual(op.op_data.collateral.amount, 13625, 'percentage collateral should ignore stale runtime state and use a fresh collateral base');
+    assert(dbCalls.some((entry) => entry.method === 'get_credit_deals_by_borrower'), 'fresh collateral base should query current deals');
   } finally {
     restore();
     try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
@@ -397,7 +574,7 @@ async function testMpaDebtFirstThenCollateralFallbackTriggersReset() {
       id: '1.8.9',
       borrower: '1.2.3',
       debt: { amount: 10000, asset_id: '1.3.10' },
-      collateral: { amount: 25000, asset_id: '1.3.0' },
+      collateral: { amount: 60000, asset_id: '1.3.0' },
       call_price: {
         base: { amount: 200, asset_id: '1.3.0' },
         quote: { amount: 100, asset_id: '1.3.10' },
@@ -453,7 +630,7 @@ async function testMpaDebtFirstThenCollateralFallbackTriggersReset() {
           mpa: {
             allowedDebtAssets: ['1.3.10'],
             allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 10,
+            maxBorrowAmount: 110,
             maxCollateralAmount: 10000,
             minCollateralRatio: 2,
             maxCollateralRatio: 2.5,
@@ -476,10 +653,10 @@ async function testMpaDebtFirstThenCollateralFallbackTriggersReset() {
     const result = await runtime.runMaintenance('periodic');
 
     assert.strictEqual(calls.length, 2, 'CR repair should broadcast debt and collateral legs separately');
-    assert.strictEqual(calls[0].operations[0].op_data.delta_debt.amount < 0, true, 'first leg should reduce debt');
+    assert.strictEqual(calls[0].operations[0].op_data.delta_debt.amount, 1000, 'first leg should increase debt up to the total cap');
     assert.strictEqual(calls[0].operations[0].op_data.delta_collateral.amount, 0, 'debt leg should not change collateral');
     assert.strictEqual(calls[1].operations[0].op_data.delta_debt.amount, 0, 'collateral leg should not change debt');
-    assert.strictEqual(calls[1].operations[0].op_data.delta_collateral.amount > 0, true, 'second leg should add collateral');
+    assert.strictEqual(calls[1].operations[0].op_data.delta_collateral.amount < 0, true, 'second leg should withdraw collateral after the capped debt increase');
     assert.deepStrictEqual(result.mpa.executed.map((entry) => entry.leg), ['debt', 'collateral'], 'maintenance should record both legs');
     assert.strictEqual(result.mpa.resetResult.reason, 'cr-adjustment', 'grid reset should be requested after CR adjustment');
     assert.strictEqual(resetCalls[0].options.fillLockAlreadyHeld, true, 'periodic CR reset should reuse the existing fill lock');
@@ -496,7 +673,22 @@ async function testMpaDebtFirstThenCollateralFallbackTriggersReset() {
 async function testRepayAndReborrowFlow() {
   const calls = [];
   const dbCalls = [];
-  const restore = installStubs(calls, dbCalls);
+  const activeDeal = {
+    id: '1.19.77',
+    borrower: '1.2.3',
+    offer_id: '1.18.42',
+    offer_owner: '1.2.9',
+    debt_asset: '1.3.10',
+    debt_amount: 500,
+    collateral_asset: '1.3.0',
+    collateral_amount: 1000,
+    fee_rate: 30000,
+    latest_repay_time: '2030-01-01T00:00:00',
+    auto_repay: 0,
+  };
+  const restore = installStubs(calls, dbCalls, {
+    dealResponses: [[activeDeal], []],
+  });
   const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-repay-'));
 
   try {
@@ -528,7 +720,7 @@ async function testRepayAndReborrowFlow() {
     await runtime.refreshState();
     const result = await runtime.repayCreditDeal('1.19.77', 200);
     assert.strictEqual(result.tx_id, 'tx-1', 'repay flow should broadcast one batch');
-    assert.strictEqual(calls.length, 1, 'repay flow should use one batch');
+    assert.strictEqual(calls.length, 1, 'repay flow should not execute a second reborrow after a successful inline reborrow');
     assert.strictEqual(calls[0].operations[0].op_name, 'credit_deal_repay', 'first op should repay the deal');
     assert.strictEqual(calls[0].operations[1].op_name, 'credit_offer_accept', 'second op should reborrow the deal');
     assert.strictEqual(calls[0].operations[1].op_data.borrow_amount.amount, 200, 'default reborrow amount should match the repaid amount');
@@ -539,6 +731,105 @@ async function testRepayAndReborrowFlow() {
     const persisted = JSON.parse(fs.readFileSync(path.join(baseDir, 'credit_runtime', 'credit-bot-1.json'), 'utf8'));
     assert.strictEqual(persisted.reborrowPending, false, 'reborrow queue should be empty after successful batch');
     assert.strictEqual(typeof persisted.lastRepayAt, 'string', 'repay timestamp should be persisted');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testFixedCreditCollateralDoesNotResolvePercentageBase() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    dealResponses: [[]],
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-fixed-collateral-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-fixed-collateral',
+        debtPolicy: {
+          creditOffer: {
+            allowedOfferIds: ['1.18.42'],
+            allowedDebtAssets: ['1.3.10'],
+            allowedCollateralAssets: ['1.3.0'],
+            maxBorrowAmount: 1000,
+            maxCollateralRatio: 2.5,
+            maxFeeRatePerDay: 0.05,
+          },
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    const op = await runtime.buildCreditOfferAcceptOperation({
+      offer: {
+        id: '1.18.42',
+        asset_type: '1.3.10',
+        fee_rate: 30000,
+        enabled: true,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 2, asset_id: '1.3.0' },
+            quote: { amount: 1, asset_id: '1.3.10' },
+          },
+        },
+      },
+      borrowAmount: 100,
+      collateralAmount: { amount: 200, asset_id: '1.3.0' },
+    });
+
+    assert.strictEqual(op.op_data.collateral.amount, 200, 'fixed collateral should still build the requested amount');
+    assert.strictEqual(
+      dbCalls.some((entry) => entry.method === 'get_on_chain_asset_balances' || entry.method === 'get_full_accounts' || entry.method === 'get_credit_deals_by_borrower'),
+      false,
+      'fixed collateral should not query the percentage collateral base'
+    );
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testMpaPolicyRejectsInvalidBorrowCap() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls);
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-mpa-invalid-borrow-cap-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'mpa-invalid-borrow-cap',
+        debtPolicy: {
+          mpa: {
+            allowedDebtAssets: ['1.3.10'],
+            allowedCollateralAssets: ['1.3.0'],
+            maxBorrowAmount: 0,
+            minCollateralRatio: 2,
+            maxCollateralRatio: 2.5,
+          },
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    const validation = runtime._validateMpaPolicy(runtime.debtPolicy.mpa, '1.3.10', '1.3.0');
+    assert.strictEqual(validation.allow, false, 'MPA policy should reject a provided non-positive maxBorrowAmount');
+    assert(validation.reason.includes('maxBorrowAmount'), 'rejection should identify maxBorrowAmount');
   } finally {
     restore();
     try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
@@ -602,7 +893,11 @@ async function testMultipleMpaPositionsAreBlocked() {
 async function testDefaultFeeRateCapRejectsExpensiveOffer() {
   const calls = [];
   const dbCalls = [];
-  const restore = installStubs(calls, dbCalls);
+  const restore = installStubs(calls, dbCalls, {
+    assetBalances: {
+      '1.3.0': { free: 400, locked: 0, total: 400 },
+    },
+  });
   const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-fee-cap-'));
 
   try {
@@ -618,6 +913,7 @@ async function testDefaultFeeRateCapRejectsExpensiveOffer() {
             allowedDebtAssets: ['1.3.10'],
             allowedCollateralAssets: ['1.3.0'],
             maxBorrowAmount: 1000,
+            maxCollateralAmount: '50%',
             maxCollateralRatio: 2.5,
             autoReborrow: true,
           },
@@ -651,7 +947,11 @@ async function testDefaultFeeRateCapRejectsExpensiveOffer() {
 async function testMaxFeeRatePerDayRejectsExpensiveOffer() {
   const calls = [];
   const dbCalls = [];
-  const restore = installStubs(calls, dbCalls);
+  const restore = installStubs(calls, dbCalls, {
+    assetBalances: {
+      '1.3.0': { free: 400, locked: 0, total: 400 },
+    },
+  });
   const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-fee-day-'));
 
   try {
@@ -667,6 +967,7 @@ async function testMaxFeeRatePerDayRejectsExpensiveOffer() {
             allowedDebtAssets: ['1.3.10'],
             allowedCollateralAssets: ['1.3.0'],
             maxBorrowAmount: 1000,
+            maxCollateralAmount: '50%',
             maxCollateralRatio: 2.5,
             maxFeeRatePerDay: 0.001,
             autoReborrow: true,
@@ -698,6 +999,15 @@ async function testMaxFeeRatePerDayRejectsExpensiveOffer() {
       collateralAmount: { amount: 200, asset_id: '1.3.0' },
     });
     assert.strictEqual(op.op_name, 'credit_offer_accept', 'acceptable daily fee rate should pass');
+
+    await assert.rejects(
+      () => runtime.buildCreditOfferAcceptOperation({
+        offer: { id: '1.18.42', asset_type: '1.3.10', fee_rate: 30000, max_duration_seconds: 2592000, enabled: true, acceptable_collateral: { '1.3.0': { base: { amount: 2, asset_id: '1.3.0' }, quote: { amount: 1, asset_id: '1.3.10' } } } },
+        collateralAmount: { amount: 1000, asset_id: '1.3.0' },
+      }),
+      /exceeds maxCollateralAmount/,
+      'credit offer collateral cap should accept percentages and enforce the resolved limit'
+    );
   } finally {
     restore();
     try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
@@ -742,8 +1052,8 @@ async function testCreditBorrowIsDerivedFromCollateral() {
       },
       collateralAmount: { amount: '50%', asset_id: '1.3.0' },
     });
-    assert.strictEqual(op.op_data.collateral.amount, 200, 'percentage collateral should resolve against available balance');
-    assert.strictEqual(op.op_data.borrow_amount.amount, 100, 'borrow amount should derive from collateral');
+    assert.strictEqual(op.op_data.collateral.amount, 825, 'percentage collateral should resolve against the full collateral base');
+    assert.strictEqual(op.op_data.borrow_amount.amount, 412, 'borrow amount should derive from the full collateral base');
 
     await assert.rejects(
       () => runtime.buildCreditOfferAcceptOperation({
@@ -1223,9 +1533,13 @@ async function testStatePersistsAcrossRestart() {
 
 (async () => {
   await testRefreshAndMpaPlan();
+  await testCreditOfferCollateralPercentUsesDebtSnapshot();
+  await testCreditOfferCollateralPercentDoesNotRequireRefresh();
   await testMpaPrecisionAwareBroadcast();
   await testMpaDebtFirstThenCollateralFallbackTriggersReset();
   await testRepayAndReborrowFlow();
+  await testFixedCreditCollateralDoesNotResolvePercentageBase();
+  await testMpaPolicyRejectsInvalidBorrowCap();
   await testMultipleMpaPositionsAreBlocked();
   await testDefaultFeeRateCapRejectsExpensiveOffer();
   await testMaxFeeRatePerDayRejectsExpensiveOffer();

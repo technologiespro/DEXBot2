@@ -3,6 +3,20 @@ const { readBotsFileSync } = require('./bots_file_lock');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { createBotKey } = require('./account_orders');
 
+function isPositiveNumber(value) {
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0;
+}
+
+function isPositiveNumberOrPercent(value) {
+    if (isPositiveNumber(value)) return true;
+    if (typeof value !== 'string') return false;
+    const trimmed = value.trim();
+    if (!trimmed.endsWith('%')) return false;
+    const percent = Number.parseFloat(trimmed.slice(0, -1));
+    return Number.isFinite(percent) && percent > 0;
+}
+
 function loadSettingsFile(filePath, { silent = false, exitOnError = true } = {}) {
     if (!fs.existsSync(filePath)) {
         if (!silent) {
@@ -89,11 +103,33 @@ function validateBotEntry(b, i, src) {
         } else {
             if ('mpa' in b.debtPolicy && (typeof b.debtPolicy.mpa !== 'object' || b.debtPolicy.mpa === null)) {
                 problems.push("debtPolicy.mpa must be an object");
+            } else if ('mpa' in b.debtPolicy) {
+                const mpa = b.debtPolicy.mpa;
+                if ('maxBorrowAmount' in mpa) {
+                    if (!isPositiveNumber(mpa.maxBorrowAmount)) {
+                        problems.push("debtPolicy.mpa.maxBorrowAmount must be a positive number");
+                    }
+                }
+                if ('maxCollateralAmount' in mpa) {
+                    if (!isPositiveNumberOrPercent(mpa.maxCollateralAmount)) {
+                        problems.push("debtPolicy.mpa.maxCollateralAmount must be a positive number or percentage");
+                    }
+                }
             }
             if ('creditOffer' in b.debtPolicy && (typeof b.debtPolicy.creditOffer !== 'object' || b.debtPolicy.creditOffer === null)) {
                 problems.push("debtPolicy.creditOffer must be an object");
             } else if ('creditOffer' in b.debtPolicy) {
                 const creditOffer = b.debtPolicy.creditOffer;
+                if ('maxBorrowAmount' in creditOffer) {
+                    if (!isPositiveNumber(creditOffer.maxBorrowAmount)) {
+                        problems.push("debtPolicy.creditOffer.maxBorrowAmount must be a positive number");
+                    }
+                }
+                if ('maxCollateralAmount' in creditOffer) {
+                    if (!isPositiveNumberOrPercent(creditOffer.maxCollateralAmount)) {
+                        problems.push("debtPolicy.creditOffer.maxCollateralAmount must be a positive number or percentage");
+                    }
+                }
                 if ('maxFeeRatePerDay' in creditOffer) {
                     const feeRatePerDay = Number(creditOffer.maxFeeRatePerDay);
                     if (!Number.isFinite(feeRatePerDay) || feeRatePerDay < 0) {

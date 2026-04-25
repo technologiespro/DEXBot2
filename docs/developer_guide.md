@@ -1122,6 +1122,7 @@ Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
       "allowedDebtAssets": ["HONEST.USD"],
       "allowedCollateralAssets": ["BTS", "HONEST.LP"],
       "maxBorrowAmount": 1000,
+      "maxCollateralAmount": 25000,
       "maxFeeRate": 30000,
       "maxCollateralRatio": 2.5,
       "autoReborrow": true,
