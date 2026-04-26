@@ -477,8 +477,6 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
                 allowedOfferIds: ['1.18.42'],
                 allowedDebtAssets: ['1.3.0'],
                 allowedCollateralAssets: ['1.3.861', '1.3.862'],
-                maxBorrowAmount: 1000,
-                maxCollateralAmount: 1600,
                 maxFeeRate: 30000,
                 minDurationSeconds: 3600,
             },
@@ -538,19 +536,16 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     assert(creditOfferWrongOfferResult.reason.includes('allowedOfferIds'));
     console.log('  ✓ credit_offer_accept offer allowlist enforced');
 
-    const creditOfferTooLarge = JSON.parse(JSON.stringify(creditOfferContext));
-    creditOfferTooLarge.operations[0].op_data.borrow_amount.amount = 1001;
-    const creditOfferTooLargeResult = await policy.evaluatePolicy(creditOfferPolicy, creditOfferTooLarge);
-    assert.strictEqual(creditOfferTooLargeResult.allow, false, 'Expected deny for borrow amount above maxBorrowAmount');
-    assert(creditOfferTooLargeResult.reason.includes('maxBorrowAmount'));
-    console.log('  ✓ credit_offer_accept borrow cap enforced');
-
-    const creditOfferTooMuchCollateral = JSON.parse(JSON.stringify(creditOfferContext));
-    creditOfferTooMuchCollateral.operations[0].op_data.collateral.amount = 1601;
-    const creditOfferTooMuchCollateralResult = await policy.evaluatePolicy(creditOfferPolicy, creditOfferTooMuchCollateral);
-    assert.strictEqual(creditOfferTooMuchCollateralResult.allow, false, 'Expected deny for collateral amount above maxCollateralAmount');
-    assert(creditOfferTooMuchCollateralResult.reason.includes('maxCollateralAmount'));
-    console.log('  ✓ credit_offer_accept collateral cap enforced');
+    const creditOfferLargeOperation = JSON.parse(JSON.stringify(creditOfferContext));
+    creditOfferLargeOperation.operations[0].op_data.borrow_amount.amount = 1001;
+    creditOfferLargeOperation.operations[0].op_data.collateral.amount = 1601;
+    const creditOfferLargeOperationResult = await policy.evaluatePolicy(creditOfferPolicy, creditOfferLargeOperation);
+    assert.strictEqual(
+        creditOfferLargeOperationResult.allow,
+        true,
+        `Expected signer policy to leave cumulative amount caps to runtime, got deny: ${creditOfferLargeOperationResult.reason}`
+    );
+    console.log('  ✓ credit_offer_accept cumulative amount caps left to runtime');
 
     // Test 13: credit_deal_repay parameter validation
     console.log('[Test 13] Evaluate allowedOps - credit_deal_repay parameter validation');

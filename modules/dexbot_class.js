@@ -744,6 +744,7 @@ class DEXBot {
 
                 await this._setupTriggerFileDetection();
                 await this._setupCreditRuntime();
+                await this._refreshAndSyncCreditRuntime();
                 this._setupBlockchainFetchInterval();
                 this._setupCreditWatchdogInterval();
 
@@ -888,6 +889,7 @@ class DEXBot {
 
             await this._setupTriggerFileDetection();
             await this._setupCreditRuntime();
+            await this._refreshAndSyncCreditRuntime();
             this._setupBlockchainFetchInterval();
             this._setupCreditWatchdogInterval();
 
@@ -2880,6 +2882,32 @@ class DEXBot {
         return runtime;
     }
 
+    async _syncCreditCollateralToManager() {
+        if (!this.manager || !this._creditRuntime) return;
+        try {
+            const assetAId = this.manager.assets?.assetA?.id;
+            const assetBId = this.manager.assets?.assetB?.id;
+            if (!assetAId || !assetBId) return;
+            const offsets = this._creditRuntime.getCollateralOffsets([assetAId, assetBId]);
+            const sellOffset = offsets[String(assetAId)] || 0;
+            const buyOffset = offsets[String(assetBId)] || 0;
+            this.manager.setCollateralOffsets({ buy: buyOffset, sell: sellOffset });
+        } catch (err) {
+            this._warn(`Failed to sync credit collateral offsets: ${err.message}`);
+        }
+    }
+
+    async _refreshAndSyncCreditRuntime() {
+        const runtime = this._getCreditRuntime();
+        if (!runtime) return;
+        try {
+            await runtime.refreshState();
+            await this._syncCreditCollateralToManager();
+        } catch (err) {
+            this._warn(`Credit runtime refresh/sync failed: ${err.message}`);
+        }
+    }
+
     async _runCreditRuntimeMaintenance(context = 'periodic', options = {}) {
         const runtime = this._getCreditRuntime();
         if (!runtime) {
@@ -2906,6 +2934,7 @@ class DEXBot {
         this._creditWatchdogInterval = setInterval(async () => {
             try {
                 await runtime.runCreditWatchdog();
+                await this._syncCreditCollateralToManager();
             } catch (err) {
                 this._warn(`Credit watchdog error: ${err.message}`);
             }

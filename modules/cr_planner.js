@@ -156,17 +156,20 @@ function buildDebtFirstCrPlan({
     const debtDelta = clampIncreaseToTotalMax(rawDebtDelta, currentDebtAmount, maxBorrowAmount);
     const projectedDebt = Math.max(0, currentDebtAmount + debtDelta);
     const targetCollateral = desiredCr * feedPrice * projectedDebt;
-    const collateralDelta = targetCollateral - currentCollateralAmount;
+    let collateralDelta = targetCollateral - currentCollateralAmount;
 
     const collateralLimit = resolveCollateralLimit(
         maxCollateralAmount,
         collateralLimitReferenceAmount ?? currentCollateralAmount
     );
-    if (collateralLimit !== null && Math.abs(collateralDelta) > collateralLimit) {
-        return {
-            blocked: true,
-            reason: `required collateral adjustment ${Math.abs(collateralDelta)} exceeds maxCollateralAmount ${maxCollateralAmount}`,
-        };
+    // Total collateral ceiling: only cap additions; withdrawals are always allowed.
+    if (collateralDelta > 0 && collateralLimit !== null) {
+        const remaining = collateralLimit - currentCollateralAmount;
+        if (remaining <= 0) {
+            collateralDelta = 0;
+        } else {
+            collateralDelta = Math.min(collateralDelta, remaining);
+        }
     }
 
     return {
@@ -190,6 +193,7 @@ function buildCollateralFallbackPlan({
     feedPrice,
     targetCollateralRatio,
     maxCollateralAmount,
+    collateralLimitReferenceAmount,
 } = {}) {
     const targetCr = positiveOrNull(targetCollateralRatio);
     const currentCr = calculateCollateralRatio(currentCollateralAmount, currentDebtAmount, feedPrice);
@@ -198,17 +202,22 @@ function buildCollateralFallbackPlan({
     }
 
     const targetCollateral = targetCr * feedPrice * currentDebtAmount;
-    const collateralDelta = targetCollateral - currentCollateralAmount;
+    let collateralDelta = targetCollateral - currentCollateralAmount;
     if (!Number.isFinite(collateralDelta) || collateralDelta === 0) {
         return null;
     }
 
-    const collateralLimit = resolveCollateralLimit(maxCollateralAmount, currentCollateralAmount);
-    if (collateralLimit !== null && Math.abs(collateralDelta) > collateralLimit) {
-        return {
-            blocked: true,
-            reason: `required collateral adjustment ${Math.abs(collateralDelta)} exceeds maxCollateralAmount ${maxCollateralAmount}`,
-        };
+    const collateralLimit = resolveCollateralLimit(
+        maxCollateralAmount,
+        collateralLimitReferenceAmount ?? currentCollateralAmount
+    );
+    // Total collateral ceiling: only cap additions; withdrawals are always allowed.
+    if (collateralDelta > 0 && collateralLimit !== null) {
+        const remaining = collateralLimit - currentCollateralAmount;
+        if (remaining <= 0) {
+            return null;
+        }
+        collateralDelta = Math.min(collateralDelta, remaining);
     }
 
     if (collateralDelta === 0) {

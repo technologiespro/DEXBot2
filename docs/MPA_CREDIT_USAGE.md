@@ -72,8 +72,8 @@ Set `CREDIT_DEAL_CHECK_INTERVAL_MIN` to `0` or a negative value to disable the w
 | --- | --- |
 | `allowedDebtAssets` | MPA assets the bot may borrow. |
 | `allowedCollateralAssets` | Collateral assets the bot may use. For HONEST MPAs this is usually `BTS`. |
-| `maxBorrowAmount` | Maximum total debt allowed. The planner will not increase debt above this ceiling. Fixed number only. |
-| `maxCollateralAmount` | Maximum collateral increase allowed in one action. May be an absolute amount or a percentage of the current collateral amount. |
+| `maxBorrowAmount` | Maximum total debt allowed. The planner will not increase the call order's total debt above this ceiling. Fixed number only. |
+| `maxCollateralAmount` | Maximum total collateral allowed for the MPA call order. May be an absolute amount or a percentage of the current collateral amount. |
 | `minCollateralRatio` | Hard minimum CR floor. |
 | `maxCollateralRatio` | Hard maximum CR ceiling. |
 | `targetCollateralRatio` | Preferred operating CR inside the min/max band. |
@@ -97,14 +97,23 @@ The runtime does not create arbitrary debt outside the configured asset and CR l
 | `allowedOfferIds` | Credit offer object ids the bot may accept. |
 | `allowedDebtAssets` | Assets the bot may borrow from credit offers. |
 | `allowedCollateralAssets` | Assets the bot may post as credit collateral. |
-| `maxBorrowAmount` | Maximum borrowed amount allowed in one accept operation. Optional. Fixed number only. |
-| `maxCollateralAmount` | Maximum collateral amount allowed in one accept operation. Optional. May be an absolute amount or a percentage of the full collateral base. |
+| `maxBorrowAmount` | Maximum total borrowed amount allowed across all active credit deals. Optional. Fixed number only. |
+| `maxCollateralAmount` | Maximum total collateral amount allowed across all active credit deals. Optional. May be an absolute amount or a percentage of the full collateral base. |
 | `maxFeeRatePerDay` | Maximum acceptable **daily** fee rate. The bot calculates this from the offer's flat `fee_rate` and `max_duration_seconds`. Example: `0.001` = 0.1% per day. Defaults to `1/3000` (~0.033% per day, or ~1% per month). |
 | `maxCollateralRatio` | Maximum effective collateral ratio allowed for the accept operation. |
 | `autoReborrow` | Bot-side rule to reborrow after a confirmed repay. |
 | `autoRepay` | On-chain credit deal auto-repay mode: `0`, `1`, or `2`. |
 
 Either amount cap may be omitted. `maxBorrowAmount` must be numeric. `maxCollateralAmount` can be numeric or percentage, and the runtime resolves percentage caps against the full collateral base for the asset, including on-chain balance, limit orders, MPA collateral, and credit-deal collateral.
+
+**Amount cap semantics**
+
+| Policy | Field | Scope |
+| --- | --- | --- |
+| `mpa` | `maxBorrowAmount` | **Total debt ceiling** — the planner will not let the call order's total debt exceed this value. |
+| `mpa` | `maxCollateralAmount` | **Total collateral ceiling** — the planner will not let the call order's total collateral exceed this value. Withdrawals are still allowed. |
+| `creditOffer` | `maxBorrowAmount` | **Total debt ceiling** — the runtime will not accept a deal that would push the total credit debt for the asset above this value. |
+| `creditOffer` | `maxCollateralAmount` | **Total collateral ceiling** — the runtime will not accept a deal that would push the total credit collateral for the asset above this value. |
 
 Important distinction:
 

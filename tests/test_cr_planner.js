@@ -70,8 +70,8 @@ function testCollateralCapPercentage() {
   });
 
   assert(plan, 'plan should be produced for a high-CR position');
-  assert.strictEqual(plan.blocked, true, 'percentage collateral cap should still block oversized adjustments');
-  assert(plan.reason.includes('maxCollateralAmount'), 'blocked reason should mention maxCollateralAmount');
+  assert.strictEqual(plan.blocked, undefined, 'total collateral ceiling should not block withdrawals when current is above limit');
+  assert.strictEqual(plan.collateralDelta, -50, 'collateral withdrawal should proceed despite low limit');
 }
 
 function testCollateralFallbackPlanner() {
@@ -88,6 +88,47 @@ function testCollateralFallbackPlanner() {
   assert.strictEqual(plan.needsGridReset, true, 'fallback collateral change should reset the grid');
 }
 
+function testCollateralFallbackPlannerClamped() {
+  const plan = buildCollateralFallbackPlan({
+    currentCollateralAmount: 200,
+    currentDebtAmount: 100,
+    feedPrice: 2,
+    targetCollateralRatio: 2.5,
+    maxCollateralAmount: 400,
+  });
+
+  assert(plan, 'fallback collateral plan should be produced');
+  assert.strictEqual(plan.action, 'add_collateral', 'fallback should add collateral for low CR');
+  assert.strictEqual(plan.collateralDelta, 200, 'collateral increase should be clamped to total ceiling');
+}
+
+function testCollateralFallbackPlannerAtCeiling() {
+  const plan = buildCollateralFallbackPlan({
+    currentCollateralAmount: 450,
+    currentDebtAmount: 100,
+    feedPrice: 2,
+    targetCollateralRatio: 2.5,
+    maxCollateralAmount: 400,
+  });
+
+  assert.strictEqual(plan, null, 'fallback should return null when already above total ceiling');
+}
+
+function testCollateralFallbackPlannerUsesReferenceAmount() {
+  const plan = buildCollateralFallbackPlan({
+    currentCollateralAmount: 200,
+    currentDebtAmount: 100,
+    feedPrice: 2,
+    targetCollateralRatio: 2.5,
+    maxCollateralAmount: '50%',
+    collateralLimitReferenceAmount: 800,
+  });
+
+  assert(plan, 'fallback collateral plan should be produced');
+  assert.strictEqual(plan.action, 'add_collateral', 'fallback should add collateral for low CR');
+  assert.strictEqual(plan.collateralDelta, 200, 'percentage collateral ceiling should use the supplied total reference');
+}
+
 function testCompatibilityPlanner() {
   const plan = planCrAdjustment(250, 100, 2, 2.2);
   assert(plan, 'compatibility planner should return a plan');
@@ -100,6 +141,9 @@ testDebtFirstPlanner();
 testDebtCeilingOnIncrease();
 testCollateralCapPercentage();
 testCollateralFallbackPlanner();
+testCollateralFallbackPlannerClamped();
+testCollateralFallbackPlannerAtCeiling();
+testCollateralFallbackPlannerUsesReferenceAmount();
 testCompatibilityPlanner();
 
 console.log('cr planner tests passed');

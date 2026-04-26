@@ -164,10 +164,6 @@ function validateOpConstraints(opName, constraints) {
             errors.push('allowedDebtAssets must be an array of strings');
         if (constraints.allowedCollateralAssets !== undefined && !isStringArray(constraints.allowedCollateralAssets))
             errors.push('allowedCollateralAssets must be an array of strings');
-        if (constraints.maxBorrowAmount !== undefined && !isPositiveInt(constraints.maxBorrowAmount))
-            errors.push('maxBorrowAmount must be a positive integer');
-        if (constraints.maxCollateralAmount !== undefined && !isPositiveInt(constraints.maxCollateralAmount))
-            errors.push('maxCollateralAmount must be a positive integer');
         if (constraints.maxFeeRate !== undefined && !isPositiveInt(constraints.maxFeeRate))
             errors.push('maxFeeRate must be a positive integer');
         if (constraints.minDurationSeconds !== undefined && !isPositiveInt(constraints.minDurationSeconds))
@@ -591,26 +587,6 @@ function evaluateOpConstraints(opName, opData, constraints) {
                 return {
                     allow: false,
                     reason: `credit_offer_accept: collateral asset "${assetId}" not in allowedCollateralAssets`,
-                    policyId: 'opParams',
-                };
-            }
-        }
-        if (constraints.maxBorrowAmount != null) {
-            const amt = d.borrow_amount && d.borrow_amount.amount;
-            if (typeof amt === 'number' && amt > constraints.maxBorrowAmount) {
-                return {
-                    allow: false,
-                    reason: `credit_offer_accept: borrow amount ${amt} exceeds maxBorrowAmount ${constraints.maxBorrowAmount}`,
-                    policyId: 'opParams',
-                };
-            }
-        }
-        if (constraints.maxCollateralAmount != null) {
-            const amt = d.collateral && d.collateral.amount;
-            if (typeof amt === 'number' && amt > constraints.maxCollateralAmount) {
-                return {
-                    allow: false,
-                    reason: `credit_offer_accept: collateral amount ${amt} exceeds maxCollateralAmount ${constraints.maxCollateralAmount}`,
                     policyId: 'opParams',
                 };
             }

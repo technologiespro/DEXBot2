@@ -485,17 +485,33 @@ class CreditRuntime {
         const maxBorrowAmountValue = positiveOrNull(policy?.maxBorrowAmount);
         if (maxBorrowAmountValue === null) return;
         const borrowFloat = blockchainToFloat(borrowInt, debtAsset.precision);
-        if (Number.isFinite(borrowFloat) && borrowFloat > maxBorrowAmountValue) {
-            throw new Error(`borrowAmount ${borrowFloat} exceeds maxBorrowAmount ${maxBorrowAmountValue}`);
+        if (!Number.isFinite(borrowFloat)) return;
+        const currentTotal = this._getCreditDebtForAsset(debtAsset);
+        if (currentTotal + borrowFloat > maxBorrowAmountValue) {
+            throw new Error(`borrowAmount ${borrowFloat} would exceed maxBorrowAmount ${maxBorrowAmountValue} (current total ${currentTotal})`);
         }
     }
 
-    _getDebtCollateralReferenceAmount(assetId) {
-        const snapshot = this.state?.debtSnapshot?.assets || {};
-        const bucket = snapshot[String(assetId)] || null;
-        if (!bucket) return null;
-        const committed = toFiniteNumber(bucket.mpaCollateral, 0) + toFiniteNumber(bucket.creditCollateral, 0);
-        return Number.isFinite(committed) ? committed : null;
+    _getCreditDebtForAsset(asset) {
+        const assetId = asset?.id || asset;
+        const deals = Array.isArray(this.state?.creditDeals) ? this.state.creditDeals : [];
+        return deals.reduce((sum, deal) => {
+            if (String(deal?.debtAssetId) === String(assetId)) {
+                return sum + (blockchainAmountToFloat(deal?.debtAmount, asset) || 0);
+            }
+            return sum;
+        }, 0);
+    }
+
+    _getCreditCollateralForAsset(asset) {
+        const assetId = asset?.id || asset;
+        const deals = Array.isArray(this.state?.creditDeals) ? this.state.creditDeals : [];
+        return deals.reduce((sum, deal) => {
+            if (String(deal?.collateralAssetId) === String(assetId)) {
+                return sum + (blockchainAmountToFloat(deal?.collateralAmount, asset) || 0);
+            }
+            return sum;
+        }, 0);
     }
 
     async _getCollateralPercentageBase(accountId, assetId) {
@@ -546,9 +562,11 @@ class CreditRuntime {
             limitFloat = resolveConfigValue(maxCollateralAmountValue, referenceAmount);
         }
         if (!Number.isFinite(limitFloat) || limitFloat < 0) return;
-        if (Number.isFinite(collateralInt) && blockchainToFloat(collateralInt, collateralAsset.precision) > limitFloat) {
-            const collateralFloat = blockchainToFloat(collateralInt, collateralAsset.precision);
-            throw new Error(`collateralAmount ${collateralFloat} exceeds maxCollateralAmount ${limitFloat}`);
+        const collateralFloat = blockchainToFloat(collateralInt, collateralAsset.precision);
+        if (!Number.isFinite(collateralFloat)) return;
+        const currentTotal = this._getCreditCollateralForAsset(collateralAsset);
+        if (currentTotal + collateralFloat > limitFloat) {
+            throw new Error(`collateralAmount ${collateralFloat} would exceed maxCollateralAmount ${limitFloat} (current total ${currentTotal})`);
         }
     }
 
@@ -655,12 +673,12 @@ class CreditRuntime {
             return collateralAmountFloat * valuePerShare;
         }
 
-        const baseAmount = toFiniteNumber(collateralPrice?.base?.amount, null);
-        const quoteAmount = toFiniteNumber(collateralPrice?.quote?.amount, null);
-        if (!Number.isFinite(baseAmount) || !Number.isFinite(quoteAmount) || baseAmount <= 0 || quoteAmount <= 0) {
+        const baseAmountFloat = blockchainAmountToFloat(collateralPrice?.base, collateralAsset);
+        const quoteAmountFloat = blockchainAmountToFloat(collateralPrice?.quote, debtAsset);
+        if (!Number.isFinite(baseAmountFloat) || !Number.isFinite(quoteAmountFloat) || baseAmountFloat <= 0 || quoteAmountFloat <= 0) {
             return null;
         }
-        return (collateralAmountFloat * quoteAmount) / baseAmount;
+        return (collateralAmountFloat * quoteAmountFloat) / baseAmountFloat;
     }
 
     async _fetchBorrowerDeals() {
@@ -685,7 +703,7 @@ class CreditRuntime {
         return Array.isArray(offers) ? offers.map(parseCreditOfferSummary).filter(Boolean) : [];
     }
 
-    _buildDebtSnapshot() {
+    async _buildDebtSnapshot() {
         const snapshot = {
             assets: {},
             mpaCallOrders: Array.isArray(this.state.mpaCallOrders) ? this.state.mpaCallOrders : [],
@@ -712,17 +730,22 @@ class CreditRuntime {
         };
 
         for (const order of snapshot.mpaCallOrders) {
-            bump(order?.debtAssetId, 'mpaDebt', order?.debtAmount || 0);
-            bump(order?.collateralAssetId, 'mpaCollateral', order?.collateralAmount || 0);
+            const debtAsset = order?.debtAssetId ? await this._resolveAsset(order.debtAssetId) : null;
+            const collateralAsset = order?.collateralAssetId ? await this._resolveAsset(order.collateralAssetId) : null;
+            bump(order?.debtAssetId, 'mpaDebt', blockchainAmountToFloat(order?.debtAmount, debtAsset) || 0);
+            bump(order?.collateralAssetId, 'mpaCollateral', blockchainAmountToFloat(order?.collateralAmount, collateralAsset) || 0);
         }
 
         for (const deal of snapshot.creditDeals) {
-            bump(deal?.debtAssetId, 'creditDebt', deal?.debtAmount || 0);
-            bump(deal?.collateralAssetId, 'creditCollateral', deal?.collateralAmount || 0);
+            const debtAsset = deal?.debtAssetId ? await this._resolveAsset(deal.debtAssetId) : null;
+            const collateralAsset = deal?.collateralAssetId ? await this._resolveAsset(deal.collateralAssetId) : null;
+            bump(deal?.debtAssetId, 'creditDebt', blockchainAmountToFloat(deal?.debtAmount, debtAsset) || 0);
+            bump(deal?.collateralAssetId, 'creditCollateral', blockchainAmountToFloat(deal?.collateralAmount, collateralAsset) || 0);
         }
 
         for (const offer of snapshot.ownedCreditOffers) {
-            bump(offer?.assetType, 'offeredBalance', offer?.currentBalance || 0);
+            const asset = offer?.assetType ? await this._resolveAsset(offer.assetType) : null;
+            bump(offer?.assetType, 'offeredBalance', blockchainAmountToFloat(offer?.currentBalance, asset) || 0);
         }
 
         for (const entry of Object.values(snapshot.assets)) {
@@ -898,7 +921,7 @@ class CreditRuntime {
         await this.loadState();
         await this.refreshMpaState();
         await this.refreshCreditState();
-        this.state.debtSnapshot = this._buildDebtSnapshot();
+        this.state.debtSnapshot = await this._buildDebtSnapshot();
         const accountRef = getAccountRef(this.bot);
         if (accountRef && this.state.currentCollateralAssetId) {
             this.state.currentCollateralFundsTotal = await this._getCollateralPercentageBase(accountRef, this.state.currentCollateralAssetId);
@@ -1622,6 +1645,22 @@ class CreditRuntime {
             this.warn(`credit runtime: watchdog error: ${err.message}`);
             return { skipped: true, reason: err.message };
         }
+    }
+
+    /**
+     * Get total collateral (MPA + credit deals) per asset from the debt snapshot.
+     * @param {Array<string>} assetIds - Asset IDs to look up
+     * @returns {Object} mapping assetId -> total collateral float
+     */
+    getCollateralOffsets(assetIds) {
+        const snapshot = this.state?.debtSnapshot?.assets || {};
+        const result = {};
+        for (const assetId of assetIds) {
+            const key = String(assetId);
+            const entry = snapshot[key];
+            result[key] = toFiniteNumber(entry?.totalCollateral, 0);
+        }
+        return result;
     }
 
     getStateSnapshot() {
