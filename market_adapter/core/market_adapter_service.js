@@ -164,6 +164,7 @@ class MarketAdapterService {
         const loadCandles = async () => {
             let nextCandles = existingCandles;
             let sourceLabel = 'native-incremental';
+            let kibanaBootstrapEmpty = false;
 
             if (needBootstrap) {
                 const lookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
@@ -183,6 +184,7 @@ class MarketAdapterService {
                     nextCandles = kibanaCandles;
                     sourceLabel = 'kibana-bootstrap';
                 } else {
+                    kibanaBootstrapEmpty = true;
                     const sinceMs = Date.now() - (lookbackHours * 3600 * 1000);
                     const trades = await deps.withRetries(
                         () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
@@ -226,6 +228,7 @@ class MarketAdapterService {
             }
 
             let kibanaGapRepairTimestamps = [];
+            let kibanaGapRepairAttempted = false;
             let gapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
                 ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
                 : { gapCount: 0, missingTimestamps: [] };
@@ -233,6 +236,7 @@ class MarketAdapterService {
             if (gapAnalysis.gapCount > 0 && deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function') {
                 const timeRange = this.buildGapRepairTimeRange(gapAnalysis.missingTimestamps, cfg.intervalSeconds, cfg.nativeBackfillHours);
                 if (timeRange) {
+                    kibanaGapRepairAttempted = true;
                     try {
                         const kibanaGapCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
                             intervalSeconds: cfg.intervalSeconds,
@@ -254,6 +258,35 @@ class MarketAdapterService {
                     : { gapCount: 0, missingTimestamps: [] };
             }
 
+            // ── Historical backfill: if candle count is still insufficient for AMA warmup,
+            //    fetch older history from Kibana using a targeted timeRange. This handles
+            //    cases where native bootstrap fell short or the file was truncated.
+            const candleShortfall = rawKeepCount - nextCandles.length;
+            let kibanaBackfillCount = 0;
+            if (!kibanaBootstrapEmpty && !kibanaGapRepairAttempted && candleShortfall > 0 && nextCandles.length > 0 && deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function') {
+                const oldestTs = nextCandles[0][0];
+                const shortfallMs = candleShortfall * cfg.intervalSeconds * 1000;
+                const bufferMs = 24 * 3600 * 1000; // 24h buffer
+                const backfillStartMs = Math.max(0, oldestTs - shortfallMs - bufferMs);
+                const backfillEndMs = oldestTs + cfg.intervalSeconds * 1000;
+                try {
+                    const historicalCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
+                        intervalSeconds: cfg.intervalSeconds,
+                        consolidateByTimestamp: true,
+                        apiKey: null,
+                        timeRange: {
+                            gte: new Date(backfillStartMs).toISOString(),
+                            lte: new Date(backfillEndMs).toISOString(),
+                        },
+                    }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana historical backfill failed');
+                    if (Array.isArray(historicalCandles) && historicalCandles.length > 0) {
+                        nextCandles = deps.mergeCandles(nextCandles, historicalCandles);
+                        kibanaBackfillCount = historicalCandles.length;
+                        sourceLabel = `${sourceLabel}+kibana-backfill`;
+                    }
+                } catch (_) {}
+            }
+
             nextCandles = deps.pruneCandles(nextCandles, rawKeepCount);
             const retainedTimestamps = new Set(nextCandles.map((c) => c[0]));
             const kibanaGapRepairCount = kibanaGapRepairTimestamps.filter((ts) => retainedTimestamps.has(ts)).length;
@@ -264,6 +297,7 @@ class MarketAdapterService {
                 nextCandles,
                 sourceLabel,
                 kibanaGapRepairCount,
+                kibanaBackfillCount,
                 unresolvedGapCount: retainedGapAnalysis.gapCount,
             };
         };
@@ -281,12 +315,14 @@ class MarketAdapterService {
         let nextCandles = existingCandles;
         let sourceLabel = 'native-incremental';
         let kibanaGapRepairCount = 0;
+        let kibanaBackfillCount = 0;
         let unresolvedGapCount = 0;
 
         const loadResult = await loadCandles();
         nextCandles = loadResult.nextCandles;
         sourceLabel = loadResult.sourceLabel;
         kibanaGapRepairCount = loadResult.kibanaGapRepairCount;
+        kibanaBackfillCount = loadResult.kibanaBackfillCount || 0;
         unresolvedGapCount = loadResult.unresolvedGapCount;
 
         const nowMs = this.getNowMs();
@@ -318,6 +354,7 @@ class MarketAdapterService {
                 lastClosedCandleTs,
                 rawLastCandleTs,
                 kibanaGapRepairCount,
+                kibanaBackfillCount,
                 unresolvedGapCount,
                 format: '[timestamp_ms, open, high, low, close, volume_A]',
             },
@@ -340,6 +377,7 @@ class MarketAdapterService {
                 candleCount: nextCandles.length,
                 analysisCandleCount: closedCandles.length,
                 kibanaGapRepairCount,
+                kibanaBackfillCount,
                 unresolvedGapCount,
                 lastCandleTs: rawLastCandleTs,
                 rawLastCandleTs,
@@ -358,6 +396,7 @@ class MarketAdapterService {
                 candleCount: nextCandles.length,
                 analysisCandleCount: closedCandles.length,
                 kibanaGapRepairCount,
+                kibanaBackfillCount,
                 unresolvedGapCount,
                 amaPrice: null,
                 deltaPercent: null,
@@ -395,10 +434,81 @@ class MarketAdapterService {
         // 1. AMA series and closes — used for price reference and signal computation
         const analysisCandles = closedCandles;
         const closes = analysisCandles.map((c) => Number(c[4])).filter((v) => Number.isFinite(v) && v > 0);
+
+        // ── AMA warmup guard ──────────────────────────────────────────────────
+        // calculateAMA echoes raw close prices until history.length > erPeriod.
+        // If we don't have enough candles for the full warmup, the "AMA" is just
+        // the last raw price — useless for grid centering. Abort analysis but
+        // still save candles so the next cycle can try again after backfill.
+        const amaWarmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars);
+        if (closes.length < amaWarmupBars) {
+            const triggerSuppressedReason = 'ama_warmup_insufficient';
+            const { staleData, staleAgeHours } = deps.computeCandleStaleness(lastClosedCandleTs, cfg.maxStaleHours);
+            state.bots[bot.botKey] = {
+                ...botState,
+                botName: bot.name,
+                botKey: bot.botKey,
+                poolId: ctx.poolId,
+                candleFile: deps.path.relative(deps.root, filePath),
+                candleCount: nextCandles.length,
+                analysisCandleCount: closedCandles.length,
+                kibanaGapRepairCount,
+                kibanaBackfillCount,
+                unresolvedGapCount,
+                lastCandleTs: rawLastCandleTs,
+                rawLastCandleTs,
+                lastClosedCandleTs: consumedClosedCandleTs,
+                lastCycleSource: sourceLabel,
+                lastCycleAt: nowIso,
+                staleData,
+                staleAgeHours,
+                pendingClosedCandle: false,
+                lastTriggerSuppressedReason: triggerSuppressedReason,
+            };
+            return {
+                ok: true,
+                dryRunMessages,
+                source: sourceLabel,
+                candleCount: nextCandles.length,
+                analysisCandleCount: closedCandles.length,
+                kibanaGapRepairCount,
+                kibanaBackfillCount,
+                unresolvedGapCount,
+                amaPrice: null,
+                deltaPercent: null,
+                thresholdPercent: botThreshold,
+                referencePrice: null,
+                amaComparison: [],
+                triggered: false,
+                triggerPath: null,
+                staleData,
+                staleAgeHours,
+                triggerCallbackError: null,
+                triggerSuppressedReason,
+                weights: null,
+                collateralRecommendation: null,
+                amaSlope: null,
+                poolId: ctx.poolId,
+                candleFile: deps.path.relative(deps.root, filePath),
+                lastCandleTs: rawLastCandleTs,
+                rawLastCandleTs,
+                lastClosedCandleTs: consumedClosedCandleTs,
+                centerPrice: null,
+                amaConfig: {
+                    erPeriod: botAma.erPeriod,
+                    fastPeriod: botAma.fastPeriod,
+                    slowPeriod: botAma.slowPeriod,
+                },
+                atr: null,
+                weightVariance: null,
+                pendingClosedCandle: false,
+            };
+        }
+
         const amaValues = calculateAMA(closes, botAma);
 
         // amaPrice is the last value of the full AMA series
-        const amaPrice = amaValues.length > 0 ? amaValues[amaValues.length - 1] : null;
+        const amaPrice = amaValues[amaValues.length - 1];
         const lastCandle = latestClosedCandle || [0, 0, 0, 0, 0];
 
         // 2. ATR — used only for the symmetric volatility shift. The asymmetrical
@@ -440,7 +550,6 @@ class MarketAdapterService {
             ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
         const mo = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
         const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
-        const amaWarmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars);
 
         // Compute separate clip thresholds for AMA (slopes) and Kalman (velocities)
         let amaClipThreshold = Infinity;
@@ -1007,6 +1116,7 @@ class MarketAdapterService {
             candleCount: nextCandles.length,
             analysisCandleCount: analysisCandles.length,
             kibanaGapRepairCount,
+            kibanaBackfillCount,
             unresolvedGapCount,
             lastCandleTs: rawLastCandleTs,
             rawLastCandleTs,
@@ -1047,6 +1157,7 @@ class MarketAdapterService {
             candleCount: nextCandles.length,
             analysisCandleCount: analysisCandles.length,
             kibanaGapRepairCount,
+            kibanaBackfillCount,
             unresolvedGapCount,
             amaPrice,
             previousCenterPrice,

@@ -352,7 +352,7 @@ async function testTriggerHookCalledOnThreshold() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: {
-            getLpCandlesForPool: async () => generateCandles(30, 105),
+            getLpCandlesForPool: async () => generateCandles(80, 105),
         },
         fetchNativeTradesSince: async () => [],
         tradesToCandles: () => [],
@@ -406,6 +406,155 @@ async function testTriggerHookCalledOnThreshold() {
     assert.strictEqual(result.ok, true, 'processBot should succeed');
     assert.strictEqual(result.triggered, true, 'trigger should fire when delta exceeds threshold');
     assert.strictEqual(triggerHookCalls, 1, 'onTrigger hook should be called exactly once');
+}
+
+async function testAmaWarmupInsufficientSuppressesRawCloseRecenter() {
+    let triggerWrites = 0;
+    let dynamicGridWrites = 0;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateCandles(30, 105) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 0.5,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-warmup.trigger';
+        },
+        writeBotDynamicGrid: () => {
+            dynamicGridWrites += 1;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-warmup',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+    };
+
+    const state = { bots: { 'xrp-bts-warmup': { centerPrice: 100, amaCenterPrice: 100 } } };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should still complete during AMA warmup');
+    assert.strictEqual(result.triggered, false, 'raw close price must not trigger recenter during warmup');
+    assert.strictEqual(result.amaPrice, null, 'AMA price should be unavailable during insufficient warmup');
+    assert.strictEqual(result.triggerSuppressedReason, 'ama_warmup_insufficient', 'warmup suppression reason should be reported');
+    assert.strictEqual(triggerWrites, 0, 'warmup suppression must not write a trigger');
+    assert.strictEqual(dynamicGridWrites, 0, 'warmup suppression must not persist a raw-close center');
+    assert.strictEqual(state.bots['xrp-bts-warmup'].centerPrice, 100, 'existing center should be preserved');
+}
+
+async function testKibanaBackfillFillsHistoricalShortfall() {
+    let kibanaCalls = 0;
+    const backfillCandles = [];
+    const baseTs = 1700000000000;
+    for (let i = 0; i < 54; i++) {
+        backfillCandles.push([baseTs - (54 - i) * 3600000, 100, 100, 100, 100, 1]);
+    }
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateCandles(60, 100) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 0.5,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async (poolId, assetA, assetB, options) => {
+                kibanaCalls += 1;
+                if (options.timeRange) {
+                    return backfillCandles;
+                }
+                return [];
+            },
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => {
+            const map = new Map();
+            [...existing, ...incoming].forEach(c => map.set(c[0], c));
+            return Array.from(map.values()).sort((a, b) => a[0] - b[0]);
+        },
+        pruneCandles: (candles, keepCount) => {
+            if (candles.length <= keepCount) return candles;
+            return candles.slice(candles.length - keepCount);
+        },
+        detectMissingCandleTimestamps: () => ({ gapCount: 0, missingTimestamps: [] }),
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-backfill.trigger',
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-backfill',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+    };
+
+    const state = { bots: {} };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should complete with backfill');
+    assert.strictEqual(result.kibanaBackfillCount, 54, 'backfill should report all candles returned by Kibana');
+    assert.strictEqual(result.candleCount, 81, 'total candles should equal rawKeepCount after prune');
+    assert.ok(result.source.includes('kibana-backfill'), 'source label should include backfill marker');
+    assert.strictEqual(kibanaCalls, 1, 'kibana should be called exactly once for backfill');
 }
 
 async function testBootstrapFallsBackWhenKibanaIsEmpty() {
@@ -493,7 +642,7 @@ async function testAmaGridPriceIsCaseInsensitive() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: generateCandles(30, 101),
+            candles: generateCandles(80, 101),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -570,7 +719,7 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: generateCandles(30, 101),
+            candles: generateCandles(80, 101),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -647,7 +796,7 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: generateCandles(30, 101),
+            candles: generateCandles(80, 101),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -733,10 +882,7 @@ async function testCenterEqualsAmaTriggeredByAmaDelta() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: [
-                [1700000000000, 100, 100, 100, 100, 1],
-                [1700003600000, 100, 100, 100, 100, 1],
-            ],
+            candles: generateCandles(80, 100),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -823,10 +969,7 @@ async function testNoTriggerWhenCenterMatchesAma() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: [
-                [1700000000000, 100, 100, 100, 100, 1],
-                [1700003600000, 100, 100, 100, 100, 1],
-            ],
+            candles: generateCandles(80, 100),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -913,7 +1056,7 @@ async function testCenterClampedByBotBounds() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: generateCandles(30, 110),
+            candles: generateCandles(80, 110),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -2483,6 +2626,8 @@ async function testDynamicWeightInvalidAtrPeriodAndClampAreSanitized() {
 
 async function run() {
     await testTriggerHookCalledOnThreshold();
+    await testAmaWarmupInsufficientSuppressesRawCloseRecenter();
+    await testKibanaBackfillFillsHistoricalShortfall();
     await testIdOnlyBotIsNotRejected();
     await testBootstrapFallsBackWhenKibanaIsEmpty();
     await testAmaGridPriceIsCaseInsensitive();

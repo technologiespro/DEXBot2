@@ -49,6 +49,9 @@ const KALMAN_CONFIG = {
     qModal: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_MODAL_DEFAULT,
 };
 
+// Regime analyzers configuration (Hurst + Permutation Entropy)
+const { HURST_CONFIG, PE_CONFIG } = MARKET_ADAPTER;
+
 
 function parseArgs() {
     const args = process.argv.slice(2);

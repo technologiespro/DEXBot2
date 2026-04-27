@@ -553,7 +553,7 @@ function applyRuntimeDefaultsFromGeneralSettings(cfg, provided = {}, settingsOve
 }
 
 const Logger = require('../modules/logger');
-const marketAdapterLogFile = path.join(PROFILES_DIR, 'market_adapter.log');
+const marketAdapterLogFile = path.join(PROFILES_DIR, 'logs', 'market_adapter.log');
 const logger = new Logger('MarketAdapter', { quiet: DEFAULTS.quiet, logFile: marketAdapterLogFile });
 
 function log(cfg, ...args) {
@@ -897,13 +897,15 @@ async function runOnce(cfg, state, contextCache) {
 
             const staleText = r.staleData ? ` STALE(${Number.isFinite(r.staleAgeHours) ? r.staleAgeHours.toFixed(2) : 'n/a'}h)` : '';
             const patchText = Number.isFinite(r.kibanaGapRepairCount) && r.kibanaGapRepairCount > 0 ? ` KIBANA_PATCH(${r.kibanaGapRepairCount})` : '';
+            const backfillText = Number.isFinite(r.kibanaBackfillCount) && r.kibanaBackfillCount > 0 ? ` BACKFILL(${r.kibanaBackfillCount})` : '';
             const gapText = Number.isFinite(r.unresolvedGapCount) && r.unresolvedGapCount > 0 ? ` GAPS(${r.unresolvedGapCount})` : '';
             const trigText = r.triggered ? ` TRIGGERED -> ${r.triggerPath ? path.relative(ROOT, r.triggerPath) : '[suppressed, dry-run]'}` : '';
             const pendingText = r.pendingClosedCandle ? ' WAITING_FOR_CLOSED_CANDLE' : '';
             const weightText = r.weights ? ` weights[buy=${r.weights.buy}, sell=${r.weights.sell}]` : '';
             const trendText = r.amaSlope?.trend ? ` trend=${r.amaSlope.trend}` : '';
+            const warmupText = r.triggerSuppressedReason === 'ama_warmup_insufficient' ? ` WARMUP_INSUFFICIENT(${r.candleCount})` : '';
 
-            log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText} (prevCenter=${prevCenterText}, delta=${deltaText}), threshold=${thresholdText}${offText}${amaOffText}${regimeText}${staleText}${patchText}${gapText}${trigText}${pendingText}${trendText}${weightText}`);
+            log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText} (prevCenter=${prevCenterText}, delta=${deltaText}), threshold=${thresholdText}${offText}${amaOffText}${regimeText}${staleText}${patchText}${backfillText}${gapText}${trigText}${pendingText}${warmupText}${trendText}${weightText}`);
             if (Array.isArray(r.dryRunMessages)) {
                 r.dryRunMessages.forEach(msg => log(cfg, `  ${msg}`));
             }
@@ -953,6 +955,8 @@ async function runOnce(cfg, state, contextCache) {
         staleBots: results.filter((r) => r.ok && r.staleData).length,
         kibanaPatchedBots: results.filter((r) => r.ok && Number(r.kibanaGapRepairCount) > 0).length,
         kibanaPatchedCandles: results.reduce((sum, r) => sum + (r.ok && Number.isFinite(r.kibanaGapRepairCount) ? r.kibanaGapRepairCount : 0), 0),
+        kibanaBackfilledBots: results.filter((r) => r.ok && Number(r.kibanaBackfillCount) > 0).length,
+        kibanaBackfilledCandles: results.reduce((sum, r) => sum + (r.ok && Number.isFinite(r.kibanaBackfillCount) ? r.kibanaBackfillCount : 0), 0),
         unresolvedGapBots: results.filter((r) => r.ok && Number(r.unresolvedGapCount) > 0).length,
         unresolvedGapCandles: results.reduce((sum, r) => sum + (r.ok && Number.isFinite(r.unresolvedGapCount) ? r.unresolvedGapCount : 0), 0),
     };
