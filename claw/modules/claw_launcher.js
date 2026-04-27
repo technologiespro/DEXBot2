@@ -197,7 +197,7 @@ async function launcherPm2Start(botName, options = {}) {
   }
 
   // Then check if daemon is ready
-  if (!chainKeys.isDaemonReady()) {
+  if (!(await chainKeys.isDaemonResponsive())) {
     throw new Error(
       'Credential daemon is not running. Start it first with: node pm2 or node unlock-start'
     );

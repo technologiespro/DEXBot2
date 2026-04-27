@@ -83,6 +83,7 @@ function installStubs() {
         authenticate: async () => 'test-password',
         getPrivateKey: () => 'private-key',
         isDaemonReady: () => false,
+        isDaemonResponsive: async () => false,
         isMasterPasswordFailure: () => false,
     });
     setCachedModule(gracefulShutdownPath, {

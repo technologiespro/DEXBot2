@@ -116,7 +116,7 @@ function loadBotConfig(name) {
  */
 async function getSigningSecretForAccount(accountName) {
     // Try daemon first
-    if (chainKeys.isDaemonReady()) {
+    if (await chainKeys.isDaemonResponsive()) {
         try {
             const sessionId = await chainKeys.probeAccountInDaemon(accountName);
             const botHmacSecret = credentialPolicy.loadBotHmacSecret(

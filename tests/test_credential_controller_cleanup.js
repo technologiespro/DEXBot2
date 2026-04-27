@@ -25,6 +25,7 @@ function installStubs() {
     setCachedModule(chainKeysPath, {
         authenticate: async () => 'test-secret',
         isDaemonReady: () => false,
+        isDaemonResponsive: async () => false,
         waitForDaemon: async () => {},
     });
 

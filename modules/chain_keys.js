@@ -83,6 +83,7 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
+const net = require('net');
 const path = require('path');
 const { readInput, readPassword } = require('./order/utils/system');
 const { TIMING } = require('./constants');
@@ -875,6 +876,68 @@ function isDaemonReady(options = {}) {
 }
 
 /**
+ * Check if dexbot-cred daemon is actually responsive by opening a socket
+ * connection and waiting for any reply. This catches stale socket/ready
+ * files left behind by a crashed daemon.
+ * @param {Object} options - Optional socket/ready-file path overrides
+ * @param {number} timeout - Probe timeout in milliseconds (default 2000)
+ * @returns {Promise<boolean>} True if the daemon accepts connections and replies
+ */
+function isDaemonResponsive(options = {}, timeout = 2000) {
+    return new Promise((resolve) => {
+        if (!isDaemonReady(options)) {
+            return resolve(false);
+        }
+
+        const socketPath = getCredentialSocketPath(options);
+        const socket = net.createConnection(socketPath);
+        let settled = false;
+        let responseBuffer = '';
+
+        const timer = setTimeout(() => {
+            if (!settled) {
+                settled = true;
+                socket.destroy();
+                resolve(false);
+            }
+        }, timeout);
+
+        socket.on('connect', () => {
+            // Send a minimal request that forces the daemon to reply.
+            // Missing fields trigger an error response, which is enough
+            // to prove the daemon is alive and processing.
+            socket.write('{}\n');
+        });
+
+        socket.on('data', (data) => {
+            responseBuffer += data.toString();
+            if (!settled && responseBuffer.trim().length > 0) {
+                settled = true;
+                clearTimeout(timer);
+                socket.end();
+                resolve(true);
+            }
+        });
+
+        socket.on('error', () => {
+            if (!settled) {
+                settled = true;
+                clearTimeout(timer);
+                resolve(false);
+            }
+        });
+
+        socket.on('end', () => {
+            if (!settled) {
+                settled = true;
+                clearTimeout(timer);
+                resolve(false);
+            }
+        });
+    });
+}
+
+/**
  * Wait for dexbot-cred daemon to be ready
  * @param {number} maxWaitMs - Maximum time to wait in milliseconds (default 60000)
  * @returns {Promise<void>} Resolves when daemon is ready
@@ -1041,6 +1104,7 @@ module.exports = {
     isMasterPasswordFailure,
     MasterPasswordError,
     isDaemonReady,
+    isDaemonResponsive,
     waitForDaemon,
     getPrivateKeyFromDaemon,
     probeAccountInDaemon,

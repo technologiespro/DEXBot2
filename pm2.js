@@ -329,7 +329,7 @@ function cleanupStaleCredentialDaemonFiles() {
 
 async function ensureCredentialDaemonPM2({ forceRefresh = false } = {}) {
     ensureCredentialRuntimeDirSync({ root: ROOT, socketPath: CREDENTIAL_SOCKET_PATH, readyFilePath: CREDENTIAL_READY_FILE });
-    const daemonReady = chainKeys.isDaemonReady({
+    const daemonReady = await chainKeys.isDaemonResponsive({
         socketPath: CREDENTIAL_SOCKET_PATH,
         readyFilePath: CREDENTIAL_READY_FILE,
     });

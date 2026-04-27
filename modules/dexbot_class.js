@@ -1561,7 +1561,7 @@ class DEXBot {
 
                 if (vaultSecret) {
                     privateKey = chainKeys.getPrivateKey(this.config.preferredAccount, vaultSecret);
-                } else if (chainKeys.isDaemonReady()) {
+                } else if (await chainKeys.isDaemonResponsive()) {
                     try {
                         const sessionId = await chainKeys.probeAccountInDaemon(this.config.preferredAccount);
                         const botHmacSecret = credentialPolicy.loadBotHmacSecret(

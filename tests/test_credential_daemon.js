@@ -41,9 +41,9 @@ function loadCredentialSecretWithStubbedChainKeys(stubbedChainKeys) {
 }
 
 async function testWaitsForExistingDaemon() {
-    const originalIsDaemonReady = chainKeys.isDaemonReady;
+    const originalIsDaemonResponsive = chainKeys.isDaemonResponsive;
     let ready = true;
-    chainKeys.isDaemonReady = () => ready;
+    chainKeys.isDaemonResponsive = async () => ready;
 
     try {
         const controller = createCredentialDaemonController({ pollIntervalMs: 10 });
@@ -59,7 +59,7 @@ async function testWaitsForExistingDaemon() {
         assert.strictEqual(exitCode, 0, 'waitForManagedDaemon should resolve cleanly for an existing daemon');
         assert.ok(elapsed >= 20, `waitForManagedDaemon should wait for daemon shutdown, elapsed=${elapsed}ms`);
     } finally {
-        chainKeys.isDaemonReady = originalIsDaemonReady;
+        chainKeys.isDaemonResponsive = originalIsDaemonResponsive;
     }
 }
 

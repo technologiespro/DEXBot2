@@ -30,12 +30,12 @@ function createCredentialDaemonController({
     let daemonProcess = null;
     let daemonExitPromise = null;
 
-    function isDaemonReady() {
-        return chainKeys.isDaemonReady({ socketPath, readyFilePath });
+    async function isDaemonReady() {
+        return chainKeys.isDaemonResponsive({ socketPath, readyFilePath });
     }
 
-    function removeStaleDaemonFiles() {
-        if (isDaemonReady()) return;
+    async function removeStaleDaemonFiles() {
+        if (await isDaemonReady()) return;
         try {
             if (fs.existsSync(socketPath)) {
                 assertPrivatePathSecurity(socketPath, { expectedType: 'socket', requiredMode: 0o600 });
@@ -63,11 +63,11 @@ function createCredentialDaemonController({
     }
 
     async function ensureCredentialDaemon() {
-        if (isDaemonReady()) {
+        if (await isDaemonReady()) {
             return false;
         }
 
-        removeStaleDaemonFiles();
+        await removeStaleDaemonFiles();
         ensureCredentialRuntimeDirSync({ socketPath, readyFilePath, root });
 
         const vaultSecret = await chainKeys.authenticate();
@@ -110,11 +110,11 @@ function createCredentialDaemonController({
             return daemonExitPromise || waitForExit(daemonProcess);
         }
 
-        if (!isDaemonReady()) {
+        if (!(await isDaemonReady())) {
             return 0;
         }
 
-        while (isDaemonReady()) {
+        while (await isDaemonReady()) {
             await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
         }
 

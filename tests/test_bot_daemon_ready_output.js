@@ -103,6 +103,7 @@ function installStubs() {
             state.daemonProbeCalls += 1;
         },
         isDaemonReady: () => true,
+        isDaemonResponsive: async () => true,
         isMasterPasswordFailure: () => false,
     });
     setCachedModule(gracefulShutdownPath, {

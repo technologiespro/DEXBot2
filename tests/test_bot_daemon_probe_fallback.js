@@ -103,6 +103,7 @@ function installStubs() {
             throw new Error('bot should not create a daemon signing token after a failed probe');
         },
         isDaemonReady: () => true,
+        isDaemonResponsive: async () => true,
         isMasterPasswordFailure: () => false,
     });
     setCachedModule(gracefulShutdownPath, {

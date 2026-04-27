@@ -361,7 +361,7 @@ async function runBotInstances(botEntries, { forceDryRun = false, sourceName = '
         const needMaster = prepared.some(b => b.active && b.preferredAccount);
         let masterPassword = null;
         if (needMaster) {
-            const daemonReady = chainKeys.isDaemonReady();
+            const daemonReady = await chainKeys.isDaemonResponsive();
 
             try {
                 await waitForConnected();

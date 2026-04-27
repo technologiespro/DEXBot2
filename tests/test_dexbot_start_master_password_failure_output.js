@@ -95,6 +95,7 @@ function installStubs() {
     setCachedModule(chainKeysPath, {
         authenticate: async () => 'test-password',
         isDaemonReady: () => false,
+        isDaemonResponsive: async () => false,
         isMasterPasswordFailure: (err) => !!(err && (err.code === 'MASTER_PASSWORD_FAILED' || err.name === 'MasterPasswordError')),
     });
     setCachedModule(gracefulShutdownPath, {
