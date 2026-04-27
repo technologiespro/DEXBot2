@@ -109,7 +109,7 @@ const {
     extractBatchOperationResults,
     buildFillKey
 } = require('./order/utils/order');
-const { validateOrderSize } = require('./order/utils/math');
+const { validateOrderSize, calculateRotationOrderSizes } = require('./order/utils/math');
 const {
     ProcessedFillStore,
     PROCESSED_FILL_PERSISTENCE_MODES
@@ -731,6 +731,7 @@ class DEXBot {
 
                     // STEP 2: Spread check AFTER fills are processed
                     await this.manager.recalculateFunds();
+                    this._refreshDynamicWeightDistribution('post-reset spread check');
                     const spreadResult = await this.manager.checkSpreadCondition(
                         BitShares,
                         this.updateOrdersOnChainPlan.bind(this)
@@ -1435,7 +1436,10 @@ class DEXBot {
 
         if (validFills.length === 0) return;
 
-        // 2. Process fills with simple rotation (use pre-calculated sizes)
+        // Refresh dynamic weights so rotation orders use live weight distribution
+        this._refreshDynamicWeightDistribution('bootstrap fill');
+
+        // 2. Process fills with simple rotation (use fresh weights for sizing)
         try {
             this._log(`[BOOTSTRAP] Processing ${validFills.length} fill(s) with simple rotation`, 'info');
 
@@ -1492,8 +1496,16 @@ class DEXBot {
 
                 const targetSlot = emptySlotsOpposite[0];
 
-                // Use the pre-calculated size from the grid
-                const rotationSize = targetSlot.size;
+                // Recalculate size using fresh dynamic weights (same logic as normal path)
+                const oppositeSide = oppositeType === ORDER_TYPES.BUY ? 'buy' : 'sell';
+                const ctx = await Grid._getSizingContext(this.manager, oppositeSide);
+                const allOppositeSlots = allOrders
+                    .filter(o => o.type === oppositeType)
+                    .sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
+                const targetIdx = allOppositeSlots.findIndex(s => s.id === targetSlot.id);
+                const rotationSize = (ctx && ctx.budget > 0 && targetIdx >= 0)
+                    ? calculateRotationOrderSizes(ctx.budget, 0, allOppositeSlots.length, oppositeType, this.manager.config, 0, ctx.precision)[targetIdx]
+                    : targetSlot.size;
 
                 this._log(`[BOOTSTRAP] Rotating ${surplusOrder.id} → ${targetSlot.id} (${oppositeType} ${Format.formatAmount8(rotationSize)})`, 'info');
 
@@ -1504,7 +1516,7 @@ class DEXBot {
                     { skipAccounting: false, fee: 0 }
                 );
 
-                // Create rotation order with pre-calculated size
+                // Create rotation order with weight-adjusted size
                 ordersToPlace.push({
                     id: targetSlot.id,
                     type: oppositeType,

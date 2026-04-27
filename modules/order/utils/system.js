@@ -432,7 +432,8 @@ async function deriveLiquidityPoolTokenValue(BitShares, shareAssetRef, denominat
  * and is updated every market adapter cycle. It contains the AMA-derived center
  * price and, for dynamic-weight-whitelisted bots, any computed effective weight offsets.
  * Called by initializeGrid() when manager.config.gridPrice uses an AMA keyword,
- * and by performGridResync() to apply dynamic weights on grid reset.
+ * by performGridResync(), and by refreshDynamicWeightDistribution() before every
+ * rebalance so new orders use live weights — not only on grid reset.
  * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
  * @returns {Object|null} Snapshot with center and optional dynamicWeights fields, or null if invalid
  */

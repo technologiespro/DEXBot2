@@ -687,6 +687,10 @@ async function executeMaintenanceLogic(context) {
 
     const pipelineStatus = this.manager.isPipelineEmpty(this._getPipelineSignals());
     if (pipelineStatus.isEmpty) {
+        // Refresh live dynamic weights before any structural checks that may create or
+        // resize orders (dust detection, divergence correction, spread correction).
+        refreshDynamicWeightDistribution.call(this, context);
+
         const healthResult = await this.manager.checkGridHealth(this.updateOrdersOnChainPlan.bind(this));
         if (await this._abortFlowIfIllegalState(`${context} health check`)) return;
         const dustCancelResult = await this._cancelDustOrders({
@@ -737,7 +741,6 @@ async function executeMaintenanceLogic(context) {
             this._warn(`Error running divergence check during ${context}: ${err.message}`);
         }
 
-        refreshDynamicWeightDistribution.call(this, `${context} spread check`);
         const spreadResult = await this.manager.checkSpreadCondition(BitShares, this.updateOrdersOnChainPlan.bind(this));
         if (await this._abortFlowIfIllegalState(`${context} spread check`)) return;
         if (spreadResult && spreadResult.ordersPlaced > 0) {

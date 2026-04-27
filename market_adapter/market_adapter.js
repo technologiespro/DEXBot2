@@ -767,14 +767,15 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
 
 /**
  * Atomically write the dynamic grid snapshot for a bot to profiles/orders/<botKey>.dynamicgrid.json.
- * Contains AMA-derived center price and any computed effective weight offsets
- * that will be applied on the next grid reset.
+ * Contains AMA-derived center price and any computed effective weight offsets.
+ * The bot reads this snapshot before every rebalance (fills, spread checks, divergence
+ * corrections, etc.) — not only on grid reset — so fresh weights are applied to new orders.
  * Uses write-then-rename to prevent partial reads by the dexbot process.
  * @param {string} botKey      - Bot key (e.g. "iob-xrp-bts-0")
  * @param {number} centerPrice - Current AMA-derived center price (B/A format)
  * @param {Object} options
  * @param {number} [options.amaCenterPrice]   - Raw AMA center price before any downstream handling
- * @param {Object} [options.dynamicWeights]   - Computed weight offsets for the next grid reset
+ * @param {Object} [options.dynamicWeights]   - Computed weight offsets for live order sizing
  */
 function writeBotDynamicGrid(botKey, centerPrice, options = {}) {
     try {

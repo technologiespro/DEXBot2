@@ -920,9 +920,11 @@ class MarketAdapterService {
                 },
             };
 
-            // Payload written to dynamicgrid.json — bot reads this at grid reset.
-            // When belowMinOutputThreshold, effectiveWeights equal baseWeights so the bot
-            // applies no dynamic offset and isReady is set to false to prevent stale application.
+            // Payload written to dynamicgrid.json — bot re-reads this before every rebalance
+            // (fill processing, spread correction, divergence correction, etc.) so new orders
+            // always use the latest live weights. When belowMinOutputThreshold, effectiveWeights
+            // equal baseWeights so the bot applies no dynamic offset and isReady is set to false
+            // to prevent stale application.
             dynamicWeightsPayload = {
                 effectiveWeights: { sell: effectiveSell, buy: effectiveBuy },
                 baseWeights:      { sell: staticSell,    buy: staticBuy },
