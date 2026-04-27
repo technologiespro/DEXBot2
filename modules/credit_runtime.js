@@ -224,6 +224,8 @@ class CreditRuntime {
         this.statePath = path.join(this.stateDir, `${this.botKey}.json`);
         this._assetCache = new Map();
         this._objectCache = new Map();
+        this._fullAccountCache = null;
+        this._borrowerDealsCache = null;
         this.state = this._createDefaultState();
         this._loaded = false;
     }
@@ -232,31 +234,19 @@ class CreditRuntime {
         return {
             botKey: this.botKey,
             updatedAt: null,
-            activeCallOrderId: null,
             mpaCallOrders: [],
             activeDealIds: [],
             activeOfferIds: [],
             ownedCreditOffers: [],
-            mpaSelectionConflict: null,
-            debtAssetId: null,
-            currentCollateralAssetId: null,
-            currentDebtAmount: 0,
-            currentCollateralAmount: 0,
-            currentCollateralFundsTotal: null,
-            currentCollateralRatio: null,
-            targetCollateralRatio: null,
-            minCollateralRatio: null,
-            maxCollateralRatio: null,
-            feedPrice: null,
             creditDeals: [],
             debtSnapshot: null,
             lastBorrowRequest: null,
-            lastMpaAction: null,
             lastRepayAt: null,
             lastGridResetAt: null,
             lastCrAdjustment: null,
             reborrowPending: false,
             pendingReborrows: [],
+            positions: {}, // debtAssetId -> positionState
         };
     }
 
@@ -267,7 +257,30 @@ class CreditRuntime {
     }
 
     isEnabled() {
-        return !!this.debtPolicy;
+        const dp = this.debtPolicy;
+        if (!dp) return false;
+        return typeof dp.collateralAsset === 'string' && dp.collateralAsset.length > 0
+            && Array.isArray(dp.lending) && dp.lending.length > 0;
+    }
+
+    _findLendingItemByType(type) {
+        const dp = this.debtPolicy;
+        if (!Array.isArray(dp?.lending)) return null;
+        return dp.lending.find((item) => item.type === type) || null;
+    }
+
+    async _findLendingItemForAsset(assetId) {
+        if (!assetId || !this.debtPolicy?.lending) return null;
+        for (const item of this.debtPolicy.lending) {
+            let cached = this._assetCache.get(String(item.asset));
+            if (!cached && item.asset) {
+                cached = await this._resolveAsset(item.asset);
+            }
+            if (cached && String(cached.id) === String(assetId)) {
+                return item;
+            }
+        }
+        return null;
     }
 
     _stateWithDefaults(state = {}) {
@@ -280,6 +293,7 @@ class CreditRuntime {
         merged.pendingReborrows = Array.isArray(merged.pendingReborrows) ? merged.pendingReborrows : [];
         merged.reborrowPending = merged.pendingReborrows.length > 0 || !!merged.reborrowPending;
         merged.botKey = merged.botKey || this.botKey;
+        merged.positions = merged.positions && typeof merged.positions === 'object' ? merged.positions : {};
         return merged;
     }
 
@@ -348,10 +362,14 @@ class CreditRuntime {
     }
 
     async _getFullAccount(accountRef) {
-        const ref = accountRef || getAccountRef(this.bot);
-        if (!ref) return null;
-        const resolved = await this._dbCall('get_full_accounts', [[ref], false]);
-        return parseFullAccount(resolved);
+        if (!accountRef) return null;
+        if (this._fullAccountCache && this._fullAccountCache.ref === String(accountRef)) {
+            return this._fullAccountCache.account;
+        }
+        const accounts = await this._dbCall('get_full_accounts', [[accountRef], false]);
+        const account = parseFullAccount(accounts);
+        this._fullAccountCache = { ref: String(accountRef), account: account || null };
+        return account || null;
     }
 
     async _resolveAsset(assetRef) {
@@ -472,6 +490,69 @@ class CreditRuntime {
         return intValue;
     }
 
+    _resolveLendingPolicyForOffer(offer) {
+        const offerDebtAssetId = offer?.asset_type || null;
+        if (!offerDebtAssetId || !this.debtPolicy?.lending) return null;
+        for (const item of this.debtPolicy.lending) {
+            if (item.type !== 'creditOffer') continue;
+            const cached = this._assetCache.get(String(item.asset));
+            if (cached && String(cached.id) === String(offerDebtAssetId)) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    async _calculateCollateralDistribution() {
+        const dp = this.debtPolicy;
+        if (!dp || !dp.collateralAsset || !Array.isArray(dp.lending)) return;
+
+        const accountRef = getAccountRef(this.bot);
+        const collateralAsset = await this._resolveAsset(dp.collateralAsset);
+        if (!collateralAsset || !accountRef) return;
+
+        const totalCollateralAvailable = await this._getCollateralPercentageBase(accountRef, collateralAsset.id);
+        const totalMaxCollateral = resolveConfigValue(dp.maxCollateralAmount ?? '100%', totalCollateralAvailable);
+        const C_total = Math.min(totalCollateralAvailable, totalMaxCollateral);
+
+        const weightEntries = dp.lending.map((item) => {
+            const ratio = item.ratio ?? 1;
+            let targetCr = 1.0;
+            if (item.type === 'mpa') {
+                targetCr = resolveTargetCollateralRatio(item) || 2.0;
+            } else if (item.type === 'creditOffer') {
+                targetCr = toFiniteNumber(item.maxCollateralRatio, 2.0);
+            }
+            return { item, weight: ratio * targetCr };
+        });
+
+        const totalWeight = weightEntries.reduce((sum, e) => sum + e.weight, 0);
+        if (totalWeight === 0) return;
+
+        const resolved = await Promise.all(
+            weightEntries.map(async ({ item, weight }) => {
+                const resolvedAsset = await this._resolveAsset(item.asset);
+                const assetId = resolvedAsset?.id ? String(resolvedAsset.id) : null;
+                return { weight, assetId };
+            })
+        );
+
+        const validAssetIds = new Set();
+        for (const { weight, assetId } of resolved) {
+            if (!assetId) continue;
+            validAssetIds.add(assetId);
+            const C_i = (C_total * weight) / totalWeight;
+            if (!this.state.positions[assetId]) this.state.positions[assetId] = {};
+            this.state.positions[assetId].assignedCollateralBudget = C_i;
+        }
+
+        for (const key of Object.keys(this.state.positions)) {
+            if (!validAssetIds.has(key)) {
+                delete this.state.positions[key];
+            }
+        }
+    }
+
     _calculateBorrowAmountFromCollateral(collateralAmountInt, collateralPrice) {
         const baseAmount = toFiniteNumber(collateralPrice?.base?.amount, null);
         const quoteAmount = toFiniteNumber(collateralPrice?.quote?.amount, null);
@@ -570,34 +651,6 @@ class CreditRuntime {
         }
     }
 
-    _validateMpaPolicy(policy, debtAssetId, collateralAssetId) {
-        if (!policy || typeof policy !== 'object') return { allow: false, reason: 'MPA policy missing' };
-
-        const allowedDebtAssets = this._normalizePolicyList(policy.allowedDebtAssets);
-        const allowedCollateralAssets = this._normalizePolicyList(policy.allowedCollateralAssets);
-        const maxBorrowAmount = positiveOrNull(policy.maxBorrowAmount);
-        const maxCollateralAmount = positiveOrPercentOrNull(policy.maxCollateralAmount);
-        const minCr = positiveOrNull(policy.minCollateralRatio);
-        const maxCr = positiveOrNull(policy.maxCollateralRatio);
-
-        if (allowedDebtAssets.length > 0 && debtAssetId && !allowedDebtAssets.includes(String(debtAssetId))) {
-            return { allow: false, reason: `debt asset ${debtAssetId} is not allowed` };
-        }
-        if (allowedCollateralAssets.length > 0 && collateralAssetId && !allowedCollateralAssets.includes(String(collateralAssetId))) {
-            return { allow: false, reason: `collateral asset ${collateralAssetId} is not allowed` };
-        }
-        if (policy.maxBorrowAmount != null && maxBorrowAmount === null) {
-            return { allow: false, reason: 'maxBorrowAmount must be positive' };
-        }
-        if (policy.maxCollateralAmount != null && maxCollateralAmount === null) {
-            return { allow: false, reason: 'maxCollateralAmount must be positive or percentage' };
-        }
-        if (minCr !== null && maxCr !== null && minCr > maxCr) {
-            return { allow: false, reason: 'minCollateralRatio cannot exceed maxCollateralRatio' };
-        }
-        return { allow: true, reason: null };
-    }
-
     _calculateDailyFeeRate(offer) {
         const feeRate = toFiniteNumber(offer?.fee_rate, 0) || 0;
         const maxDurationSeconds = toFiniteNumber(offer?.max_duration_seconds, 0) || 0;
@@ -682,14 +735,15 @@ class CreditRuntime {
     }
 
     async _fetchBorrowerDeals() {
+        if (this._borrowerDealsCache) return this._borrowerDealsCache;
         const accountRef = getAccountRef(this.bot);
-        if (!accountRef) {
-            return [];
-        }
-
-        const accountId = await this._resolveAccountId(accountRef) || accountRef;
-        const deals = await this._dbCall('get_credit_deals_by_borrower', [accountId]);
-        return Array.isArray(deals) ? deals.map(parseDealSummary).filter(Boolean) : [];
+        if (!accountRef) return [];
+        const accountId = await this._resolveAccountId(accountRef);
+        if (!accountId) return [];
+        const dealObjects = await this._dbCall('get_credit_deals_by_borrower', [accountId]);
+        const normalized = Array.isArray(dealObjects) ? dealObjects.map(parseDealSummary).filter(Boolean) : [];
+        this._borrowerDealsCache = normalized;
+        return normalized;
     }
 
     async _fetchOwnedCreditOffers() {
@@ -756,11 +810,10 @@ class CreditRuntime {
         return snapshot;
     }
 
-    async refreshMpaState() {
+    async refreshMpaState(lendingItem) {
         await this.loadState();
-        const policy = this.debtPolicy?.mpa;
-        if (!policy) {
-            return null;
+        if (!lendingItem || typeof lendingItem !== 'object') {
+            throw new Error('refreshMpaState requires a lendingItem');
         }
 
         const accountRef = getAccountRef(this.bot);
@@ -768,69 +821,54 @@ class CreditRuntime {
             return null;
         }
 
+        const debtAsset = await this._resolveAsset(lendingItem.asset);
+        if (!debtAsset || !debtAsset.id) {
+            return null;
+        }
+        const assetId = String(debtAsset.id);
+
         const account = await this._getFullAccount(accountRef);
         const callOrders = parseCallOrders(account).map(parseCallOrderSummary).filter(Boolean);
         this.state.mpaCallOrders = callOrders;
-        if (callOrders.length === 0) {
-            this.state.activeCallOrderId = null;
-            this.state.mpaSelectionConflict = null;
-            this.state.debtAssetId = null;
-            this.state.currentCollateralAssetId = null;
-            this.state.currentDebtAmount = 0;
-            this.state.currentCollateralAmount = 0;
-            this.state.currentCollateralFundsTotal = null;
-            this.state.currentCollateralRatio = null;
-            this.state.feedPrice = null;
-            return this.state;
-        }
 
-        const allowedDebtAssets = this._normalizePolicyList(policy.allowedDebtAssets);
-        let candidateOrders = callOrders;
-        if (allowedDebtAssets.length > 0) {
-            candidateOrders = callOrders.filter((entry) => allowedDebtAssets.includes(String(entry?.call_price?.quote?.asset_id)));
-        }
+        const candidateOrders = callOrders.filter((entry) =>
+            String(entry?.call_price?.quote?.asset_id) === assetId
+        );
+
+        const createEmptyState = (reason) => {
+            const empty = {
+                activeCallOrderId: null,
+                mpaSelectionConflict: reason || null,
+                debtAssetId: assetId,
+                currentCollateralAssetId: null,
+                currentDebtAmount: 0,
+                currentCollateralAmount: 0,
+                currentCollateralFundsTotal: null,
+                currentCollateralRatio: null,
+                feedPrice: null,
+                targetCollateralRatio: resolveTargetCollateralRatio(lendingItem),
+                minCollateralRatio: positiveOrNull(lendingItem.minCollateralRatio),
+                maxCollateralRatio: positiveOrNull(lendingItem.maxCollateralRatio),
+            };
+            if (!this.state.positions[assetId]) this.state.positions[assetId] = {};
+            Object.assign(this.state.positions[assetId], empty);
+            return empty;
+        };
+
         if (candidateOrders.length === 0) {
-            const reason = allowedDebtAssets.length > 0
-                ? `no MPA position matches allowedDebtAssets for ${this.botKey}`
-                : `no MPA position found for ${this.botKey}`;
-            this.state.activeCallOrderId = null;
-            this.state.mpaSelectionConflict = reason;
-            this.state.debtAssetId = null;
-            this.state.currentCollateralAssetId = null;
-            this.state.currentDebtAmount = 0;
-            this.state.currentCollateralAmount = 0;
-            this.state.currentCollateralFundsTotal = null;
-            this.state.currentCollateralRatio = null;
-            this.state.feedPrice = null;
-            this.state.targetCollateralRatio = resolveTargetCollateralRatio(policy);
-            this.state.minCollateralRatio = positiveOrNull(policy.minCollateralRatio);
-            this.state.maxCollateralRatio = positiveOrNull(policy.maxCollateralRatio);
-            return this.state;
+            return createEmptyState('no matching MPA position');
         }
-        if (candidateOrders.length > 1) {
-            const reason = `multiple matching MPA positions found for ${this.botKey}`;
-            this.warn(`credit runtime: ${reason}; refusing to select one automatically`);
-            this.state.activeCallOrderId = null;
-            this.state.mpaSelectionConflict = reason;
-            this.state.debtAssetId = null;
-            this.state.currentCollateralAssetId = null;
-            this.state.currentDebtAmount = 0;
-            this.state.currentCollateralAmount = 0;
-            this.state.currentCollateralFundsTotal = null;
-            this.state.currentCollateralRatio = null;
-            this.state.feedPrice = null;
-            this.state.targetCollateralRatio = resolveTargetCollateralRatio(policy);
-            this.state.minCollateralRatio = positiveOrNull(policy.minCollateralRatio);
-            this.state.maxCollateralRatio = positiveOrNull(policy.maxCollateralRatio);
-            return this.state;
-        }
-        const callOrder = candidateOrders[0] || null;
 
-        const debtAssetId = callOrder?.call_price?.quote?.asset_id || null;
+        if (candidateOrders.length > 1) {
+            const reason = `multiple matching MPA positions found for ${assetId} in ${this.botKey}`;
+            this.warn(`credit runtime: ${reason}; refusing to select one automatically`);
+            return createEmptyState(reason);
+        }
+
+        const callOrder = candidateOrders[0];
         const collateralAssetId = callOrder?.call_price?.base?.asset_id || null;
-        const debtAsset = debtAssetId ? await this._resolveAsset(debtAssetId) : null;
         const collateralAsset = collateralAssetId ? await this._resolveAsset(collateralAssetId) : null;
-        const bitassetData = debtAssetId ? await this._resolveBitassetData(debtAssetId) : null;
+        const bitassetData = await this._resolveBitassetData(assetId);
 
         const debtAmount = blockchainAmountToFloat(callOrder?.debt, debtAsset) || 0;
         const collateralAmount = blockchainAmountToFloat(callOrder?.collateral, collateralAsset) || 0;
@@ -841,33 +879,39 @@ class CreditRuntime {
         const currentCollateralRatio = debtAmount > 0 && feedPrice > 0
             ? collateralAmount / (debtAmount * feedPrice)
             : null;
-        const targetCollateralRatio = resolveTargetCollateralRatio(policy);
-        const minCollateralRatio = positiveOrNull(policy.minCollateralRatio);
-        const maxCollateralRatio = positiveOrNull(policy.maxCollateralRatio);
 
-        this.state.activeCallOrderId = callOrder.id || null;
-        this.state.debtAssetId = debtAssetId;
-        this.state.currentCollateralAssetId = collateralAssetId;
-        this.state.currentDebtAmount = debtAmount;
-        this.state.currentCollateralAmount = collateralAmount;
-        this.state.currentCollateralFundsTotal = currentCollateralFundsTotal;
-        this.state.currentCollateralRatio = currentCollateralRatio;
-        this.state.feedPrice = feedPrice;
-        this.state.targetCollateralRatio = targetCollateralRatio;
-        this.state.minCollateralRatio = minCollateralRatio;
-        this.state.maxCollateralRatio = maxCollateralRatio;
-        this.state.mpaSelectionConflict = null;
-        this.state.lastMpaAction = this.state.lastMpaAction || null;
+        const posState = {
+            activeCallOrderId: callOrder.id || null,
+            debtAssetId: assetId,
+            currentCollateralAssetId: collateralAssetId,
+            currentDebtAmount: debtAmount,
+            currentCollateralAmount: collateralAmount,
+            currentCollateralFundsTotal,
+            currentCollateralRatio,
+            feedPrice,
+            targetCollateralRatio: resolveTargetCollateralRatio(lendingItem),
+            minCollateralRatio: positiveOrNull(lendingItem.minCollateralRatio),
+            maxCollateralRatio: positiveOrNull(lendingItem.maxCollateralRatio),
+            mpaSelectionConflict: null,
+        };
 
-        return this.state;
+        if (!this.state.positions[assetId]) this.state.positions[assetId] = {};
+        Object.assign(this.state.positions[assetId], posState);
+
+        return posState;
     }
 
-    async refreshCreditState(options = {}) {
+    async refreshCreditState(options = {}, lendingItem) {
         await this.loadState();
-        const policy = this.debtPolicy?.creditOffer;
-        if (!policy) {
+        if (!lendingItem || typeof lendingItem !== 'object') {
+            throw new Error('refreshCreditState requires a lendingItem');
+        }
+
+        const debtAsset = await this._resolveAsset(lendingItem.asset);
+        if (!debtAsset || !debtAsset.id) {
             return null;
         }
+        const assetId = String(debtAsset.id);
 
         const normalizedDeals = Array.isArray(options.deals)
             ? options.deals.map(parseDealSummary).filter(Boolean)
@@ -893,8 +937,11 @@ class CreditRuntime {
 
         const activeDeals = [];
         for (const deal of normalizedDeals) {
+            if (String(deal.debtAssetId) !== assetId) {
+                continue;
+            }
             const offer = deal.offerId ? trackedOffers.get(String(deal.offerId)) : null;
-            const validation = this._validateCreditPolicy(policy, offer, deal);
+            const validation = this._validateCreditPolicy(lendingItem, offer, deal);
             if (!validation.allow) {
                 continue;
             }
@@ -907,9 +954,33 @@ class CreditRuntime {
             });
         }
 
-        this.state.activeDealIds = activeDeals.map((deal) => deal.id).filter(Boolean);
-        this.state.activeOfferIds = Array.from(new Set(activeDeals.map((deal) => deal.offerId).filter(Boolean)));
-        this.state.creditDeals = activeDeals;
+        const activeDealIds = activeDeals.map((deal) => deal.id).filter(Boolean);
+        const activeOfferIds = Array.from(new Set(activeDeals.map((deal) => deal.offerId).filter(Boolean)));
+
+        if (!this.state.positions[assetId]) this.state.positions[assetId] = {};
+        this.state.positions[assetId].creditDeals = activeDeals;
+        this.state.positions[assetId].activeDealIds = activeDealIds;
+        this.state.positions[assetId].activeOfferIds = activeOfferIds;
+
+        // Rebuild global tracking arrays from all positions
+        const allActiveDealIds = [];
+        const allActiveOfferIds = [];
+        const allCreditDeals = [];
+        for (const pos of Object.values(this.state.positions)) {
+            if (Array.isArray(pos.activeDealIds)) {
+                allActiveDealIds.push(...pos.activeDealIds);
+            }
+            if (Array.isArray(pos.activeOfferIds)) {
+                allActiveOfferIds.push(...pos.activeOfferIds);
+            }
+            if (Array.isArray(pos.creditDeals)) {
+                allCreditDeals.push(...pos.creditDeals);
+            }
+        }
+        this.state.activeDealIds = allActiveDealIds;
+        this.state.activeOfferIds = allActiveOfferIds;
+        this.state.creditDeals = allCreditDeals;
+
         this.state.ownedCreditOffers = ownedCreditOffers;
         this.state.lastBorrowRequest = this.state.lastBorrowRequest || null;
         this.state.reborrowPending = Array.isArray(this.state.pendingReborrows) && this.state.pendingReborrows.length > 0;
@@ -918,33 +989,54 @@ class CreditRuntime {
     }
 
     async refreshState() {
+        this._fullAccountCache = null;
+        this._borrowerDealsCache = null;
         await this.loadState();
-        await this.refreshMpaState();
-        await this.refreshCreditState();
-        this.state.debtSnapshot = await this._buildDebtSnapshot();
-        const accountRef = getAccountRef(this.bot);
-        if (accountRef && this.state.currentCollateralAssetId) {
-            this.state.currentCollateralFundsTotal = await this._getCollateralPercentageBase(accountRef, this.state.currentCollateralAssetId);
+        const dp = this.debtPolicy;
+        if (!dp || !Array.isArray(dp.lending)) {
+            return this.persistState('refresh');
         }
+
+        const allDeals = await this._fetchBorrowerDeals();
+
+        for (const item of dp.lending) {
+            if (item.type === 'mpa') {
+                await this.refreshMpaState(item);
+            } else if (item.type === 'creditOffer') {
+                await this.refreshCreditState({ deals: allDeals }, item);
+            }
+        }
+        await this._calculateCollateralDistribution();
+
+        this.state.debtSnapshot = await this._buildDebtSnapshot();
+        this._fullAccountCache = null;
+        this._borrowerDealsCache = null;
         return this.persistState('refresh');
     }
 
-    _buildMpaPlanFromState() {
-        const policy = this.debtPolicy?.mpa;
-        if (!policy) return null;
-        if (this.state.mpaSelectionConflict) {
-            return { blocked: true, reason: this.state.mpaSelectionConflict };
+    _buildMpaPlanFromState(lendingItem, assetId) {
+        if (!lendingItem || typeof lendingItem !== 'object') {
+            throw new Error('_buildMpaPlanFromState requires a lendingItem');
+        }
+        if (!assetId) {
+            throw new Error('_buildMpaPlanFromState requires an assetId');
+        }
+        const posState = this.state.positions[assetId];
+        if (!posState) return null;
+
+        if (posState.mpaSelectionConflict) {
+            return { blocked: true, reason: posState.mpaSelectionConflict };
         }
         const plan = buildDebtFirstCrPlan({
-            currentCollateralAmount: this.state.currentCollateralAmount,
-            currentDebtAmount: this.state.currentDebtAmount,
-            feedPrice: this.state.feedPrice,
-            minCollateralRatio: policy.minCollateralRatio,
-            maxCollateralRatio: policy.maxCollateralRatio,
-            targetCollateralRatio: policy.targetCollateralRatio,
-            maxBorrowAmount: policy.maxBorrowAmount,
-            maxCollateralAmount: policy.maxCollateralAmount,
-            collateralLimitReferenceAmount: this.state.currentCollateralFundsTotal,
+            currentCollateralAmount: posState.currentCollateralAmount,
+            currentDebtAmount: posState.currentDebtAmount,
+            feedPrice: posState.feedPrice,
+            minCollateralRatio: lendingItem.minCollateralRatio,
+            maxCollateralRatio: lendingItem.maxCollateralRatio,
+            targetCollateralRatio: lendingItem.targetCollateralRatio,
+            maxBorrowAmount: lendingItem.maxBorrowAmount,
+            maxCollateralAmount: posState.assignedCollateralBudget ?? lendingItem.maxCollateralAmount,
+            collateralLimitReferenceAmount: posState.currentCollateralFundsTotal,
         });
 
         if (!plan) return null;
@@ -952,12 +1044,20 @@ class CreditRuntime {
         return plan;
     }
 
-    async buildMpaUpdateOperation(plan, options = {}) {
-        const policy = this.debtPolicy?.mpa;
+    async buildMpaUpdateOperation(plan, options = {}, assetId) {
+        if (!assetId) {
+            throw new Error('buildMpaUpdateOperation requires an assetId');
+        }
+        const dp = this.debtPolicy;
+        const policy = dp?.lending?.find((item) => String(this._assetCache.get(String(item.asset))?.id) === assetId);
+
         if (!policy || !plan) return null;
         if (plan.blocked) {
             throw new Error(plan.reason || 'MPA plan blocked');
         }
+
+        const posState = this.state.positions[assetId];
+        if (!posState) return null;
 
         const leg = options.leg || 'debt';
 
@@ -966,9 +1066,9 @@ class CreditRuntime {
             throw new Error('Unable to resolve account for MPA update');
         }
 
-        const debtAsset = this.state.debtAssetId ? await this._resolveAsset(this.state.debtAssetId) : null;
+        const debtAsset = posState.debtAssetId ? await this._resolveAsset(posState.debtAssetId) : null;
         const account = await this._getFullAccount(getAccountRef(this.bot));
-        const currentCallOrder = parseCallOrders(account).find((entry) => entry.id === this.state.activeCallOrderId) || null;
+        const currentCallOrder = parseCallOrders(account).find((entry) => entry.id === posState.activeCallOrderId) || null;
         const collateralAssetId = currentCallOrder?.call_price?.base?.asset_id || null;
         const collateralAsset = collateralAssetId ? await this._resolveAsset(collateralAssetId) : null;
 
@@ -1001,8 +1101,26 @@ class CreditRuntime {
         };
     }
 
-    async buildCreditOfferAcceptOperation({ offer, borrowAmount, collateralAmount, autoRepay = false }) {
-        const policy = this.debtPolicy?.creditOffer;
+    async buildCreditOfferAcceptOperation({ offer, borrowAmount, collateralAmount, autoRepay = false, specificPolicy = null }) {
+        let policy = specificPolicy;
+        if (!policy) {
+            const dp = this.debtPolicy;
+            const offerObj = typeof offer === 'object' ? offer : null;
+            const offerDebtAssetId = offerObj?.asset_type || null;
+            if (dp?.lending && offerDebtAssetId) {
+                for (const item of dp.lending) {
+                    if (item.type !== 'creditOffer') continue;
+                    let cached = this._assetCache.get(String(item.asset));
+                    if (!cached && item.asset) {
+                        cached = await this._resolveAsset(item.asset);
+                    }
+                    if (cached && String(cached.id) === String(offerDebtAssetId)) {
+                        policy = item;
+                        break;
+                    }
+                }
+            }
+        }
         if (!policy) {
             throw new Error('creditOffer policy missing');
         }
@@ -1162,7 +1280,7 @@ class CreditRuntime {
             offerId: String(offerId),
             borrowAmount: borrowInt,
             collateralAmount: requiredCollateralInt,
-            autoReborrow: !!this.debtPolicy?.creditOffer?.autoReborrow,
+            autoReborrow: !!policy?.autoReborrow,
             requestedAt: new Date().toISOString()
         };
 
@@ -1187,11 +1305,6 @@ class CreditRuntime {
     }
 
     async buildCreditDealRepayOperation(deal, repayAmount) {
-        const policy = this.debtPolicy?.creditOffer;
-        if (!policy) {
-            throw new Error('creditOffer policy missing');
-        }
-
         const dealSummary = typeof deal === 'object' ? parseDealSummary(deal) : null;
         if (!dealSummary) {
             throw new Error('credit deal is required');
@@ -1234,11 +1347,6 @@ class CreditRuntime {
         const dealSummary = typeof deal === 'object' ? parseDealSummary(deal) : null;
         if (!dealSummary) {
             throw new Error('credit deal is required');
-        }
-
-        const policy = this.debtPolicy?.creditOffer;
-        if (!policy) {
-            throw new Error('creditOffer policy missing');
         }
 
         const accountId = await this._resolveAccountId(getAccountRef(this.bot));
@@ -1287,7 +1395,7 @@ class CreditRuntime {
             autoRepay,
         });
         const result = await this.executeOperations([acceptOp], reason);
-        await this.refreshCreditState();
+        await this.refreshState();
         await this.persistState(reason);
         return result;
     }
@@ -1300,7 +1408,8 @@ class CreditRuntime {
 
         const repayOp = await this.buildCreditDealRepayOperation(dealSummary, repayAmount);
         const operations = [repayOp];
-        const shouldAutoReborrow = options.autoReborrow !== false && !!this.debtPolicy?.creditOffer?.autoReborrow;
+        const reborrowPolicy = options.specificPolicy || await this._findLendingItemForAsset(dealSummary.debtAssetId) || {};
+        const shouldAutoReborrow = options.autoReborrow !== false && !!reborrowPolicy.autoReborrow;
         let deferredReborrowRequest = null;
         let inlineReborrowPlanned = false;
 
@@ -1311,10 +1420,10 @@ class CreditRuntime {
             const reborrowCollateralAmount = options.collateralAmount !== undefined
                 ? options.collateralAmount
                 : null;
-            const policyHasAutoRepay = Object.prototype.hasOwnProperty.call(this.debtPolicy?.creditOffer || {}, 'autoRepay');
+            const policyHasAutoRepay = Object.prototype.hasOwnProperty.call(reborrowPolicy, 'autoRepay');
             const autoRepaySetting = options.autoRepay !== undefined
                 ? options.autoRepay
-                : (policyHasAutoRepay ? this.debtPolicy.creditOffer.autoRepay : (dealSummary.autoRepay ?? false));
+                : (policyHasAutoRepay ? reborrowPolicy.autoRepay : (dealSummary.autoRepay ?? false));
             const offer = await this._getOfferById(dealSummary.offerId);
             if (offer) {
                 try {
@@ -1323,6 +1432,7 @@ class CreditRuntime {
                         borrowAmount: reborrowAmount,
                         collateralAmount: reborrowCollateralAmount,
                         autoRepay: autoRepaySetting,
+                        specificPolicy: options.specificPolicy,
                     });
                     operations.push(acceptOp);
                     inlineReborrowPlanned = true;
@@ -1333,6 +1443,7 @@ class CreditRuntime {
                         borrowAmount: reborrowAmount,
                         collateralAmount: reborrowCollateralAmount,
                         autoRepay: autoRepaySetting,
+                        specificPolicy: options.specificPolicy,
                         requestedAt: new Date().toISOString(),
                         reason: err.message,
                     };
@@ -1344,6 +1455,7 @@ class CreditRuntime {
                     borrowAmount: reborrowAmount,
                     collateralAmount: reborrowCollateralAmount,
                     autoRepay: autoRepaySetting,
+                    specificPolicy: options.specificPolicy,
                     requestedAt: new Date().toISOString(),
                     reason: 'offer unavailable',
                 };
@@ -1354,7 +1466,7 @@ class CreditRuntime {
         this.state.lastRepayAt = new Date().toISOString();
         const onChainDeals = await this._fetchBorrowerDeals();
         const sourceDealStillActive = onChainDeals.some((entry) => String(entry?.id) === String(dealSummary.id));
-        await this.refreshCreditState({ deals: onChainDeals });
+        await this.refreshState();
         if (shouldAutoReborrow && !inlineReborrowPlanned && !sourceDealStillActive) {
             const reborrowOffer = await this._getOfferById(dealSummary.offerId);
             const reborrowRequest = deferredReborrowRequest || {
@@ -1366,9 +1478,10 @@ class CreditRuntime {
                 collateralAmount: options.collateralAmount !== undefined ? options.collateralAmount : null,
                 autoRepay: options.autoRepay !== undefined
                     ? options.autoRepay
-                    : (Object.prototype.hasOwnProperty.call(this.debtPolicy?.creditOffer || {}, 'autoRepay')
-                        ? this.debtPolicy.creditOffer.autoRepay
+                    : (Object.prototype.hasOwnProperty.call(reborrowPolicy, 'autoRepay')
+                        ? reborrowPolicy.autoRepay
                         : (dealSummary.autoRepay ?? false)),
+                specificPolicy: options.specificPolicy,
                 requestedAt: new Date().toISOString(),
                 reason: deferredReborrowRequest?.reason || null,
             };
@@ -1379,9 +1492,10 @@ class CreditRuntime {
                         borrowAmount: reborrowRequest.borrowAmount,
                         collateralAmount: reborrowRequest.collateralAmount,
                         autoRepay: reborrowRequest.autoRepay,
+                        specificPolicy: reborrowRequest.specificPolicy,
                     });
                     await this.executeOperations([acceptOp], 'credit reborrow');
-                    await this.refreshCreditState();
+                    await this.refreshState();
                     deferredReborrowRequest = null;
                 } catch (err) {
                     this.queueReborrow({
@@ -1411,6 +1525,7 @@ class CreditRuntime {
             borrowAmount: request.borrowAmount ?? null,
             collateralAmount: request.collateralAmount ?? null,
             autoRepay: request.autoRepay ?? false,
+            specificPolicy: request.specificPolicy || null,
             requestedAt: request.requestedAt || new Date().toISOString(),
             reason: request.reason || null,
         });
@@ -1445,9 +1560,6 @@ class CreditRuntime {
     }
 
     async processPendingReborrows() {
-        if (!this.debtPolicy?.creditOffer?.autoReborrow) {
-            return { processed: 0, remaining: Array.isArray(this.state.pendingReborrows) ? this.state.pendingReborrows.length : 0, skipped: true };
-        }
         if (!Array.isArray(this.state.pendingReborrows) || this.state.pendingReborrows.length === 0) {
             return { processed: 0, remaining: 0 };
         }
@@ -1461,14 +1573,22 @@ class CreditRuntime {
             if (!request?.offerId || (request.borrowAmount == null && request.collateralAmount == null)) {
                 continue;
             }
-            if (request.sourceDealId && activeDealIds.has(String(request.sourceDealId))) {
-                nextQueue.push({ ...request, reason: 'source deal still active on-chain' });
-                continue;
-            }
 
             const offer = await this._getOfferById(request.offerId);
             if (!offer || offer.enabled === false) {
                 nextQueue.push(request);
+                continue;
+            }
+
+            // Resolve policy: prefer request.specificPolicy, fall back to current debtPolicy lending item
+            const requestPolicy = request.specificPolicy || this._resolveLendingPolicyForOffer(offer);
+            if (!requestPolicy || !requestPolicy.autoReborrow) {
+                this.warn(`credit runtime: dropping pending reborrow for offer ${request.offerId}; autoReborrow disabled or policy missing`);
+                continue;
+            }
+
+            if (request.sourceDealId && activeDealIds.has(String(request.sourceDealId))) {
+                nextQueue.push({ ...request, reason: 'source deal still active on-chain' });
                 continue;
             }
 
@@ -1478,6 +1598,7 @@ class CreditRuntime {
                     borrowAmount: request.borrowAmount ?? null,
                     collateralAmount: request.collateralAmount || null,
                     autoRepay: request.autoRepay ?? false,
+                    specificPolicy: request.specificPolicy || requestPolicy,
                 });
                 await this.executeOperations([acceptOp], 'credit reborrow');
                 processed++;
@@ -1488,14 +1609,21 @@ class CreditRuntime {
 
         this.state.pendingReborrows = nextQueue;
         this.state.reborrowPending = nextQueue.length > 0;
-        await this.refreshCreditState();
+        await this.refreshState();
         await this.persistState('pending reborrows');
 
         return { processed, remaining: nextQueue.length };
     }
 
-    async _runMpaMaintenance(context, options) {
-        const plan = this._buildMpaPlanFromState();
+    async _runMpaMaintenance(context, options, lendingItem, assetId) {
+        if (!lendingItem || typeof lendingItem !== 'object') {
+            throw new Error('_runMpaMaintenance requires a lendingItem');
+        }
+        if (!assetId) {
+            throw new Error('_runMpaMaintenance requires an assetId');
+        }
+
+        const plan = this._buildMpaPlanFromState(lendingItem, assetId);
         if (plan?.blocked) {
             return { blocked: true, reason: plan.reason };
         }
@@ -1506,30 +1634,33 @@ class CreditRuntime {
         const executed = [];
         let result = null;
 
-        const debtOp = await this.buildMpaUpdateOperation(plan, { leg: 'debt' });
+        const debtOp = await this.buildMpaUpdateOperation(plan, { leg: 'debt' }, assetId);
         if (debtOp) {
             result = await this.executeOperations([debtOp], `mpa maintenance:${context} debt`);
             executed.push({ leg: 'debt', operation: debtOp, result });
-            await this.refreshMpaState();
+            await this.refreshMpaState(lendingItem);
         }
 
-        const fallbackPlan = this._buildMpaPlanFromState();
+        const fallbackPlan = this._buildMpaPlanFromState(lendingItem, assetId);
         if (fallbackPlan && !fallbackPlan.blocked) {
-            const collateralOp = await this.buildMpaUpdateOperation(fallbackPlan, { leg: 'collateral' });
+            const collateralOp = await this.buildMpaUpdateOperation(fallbackPlan, { leg: 'collateral' }, assetId);
             if (collateralOp) {
                 result = await this.executeOperations([collateralOp], `mpa maintenance:${context} collateral`);
                 executed.push({ leg: 'collateral', operation: collateralOp, result });
-                await this.refreshMpaState();
+                await this.refreshMpaState(lendingItem);
             }
         }
 
         if (executed.length > 0) {
-            this.state.lastMpaAction = {
+            const lastAction = {
                 context,
                 plan,
                 executedAt: new Date().toISOString(),
                 executed,
             };
+            if (!this.state.positions[assetId]) this.state.positions[assetId] = {};
+            this.state.positions[assetId].lastMpaAction = lastAction;
+
             this.state.lastCrAdjustment = {
                 context,
                 plan,
@@ -1553,28 +1684,47 @@ class CreditRuntime {
         return null;
     }
 
-    async _runCreditMaintenance() {
+    async _runCreditMaintenance(lendingItem, assetId) {
+        if (!lendingItem || typeof lendingItem !== 'object') {
+            throw new Error('_runCreditMaintenance requires a lendingItem');
+        }
+        if (!assetId) {
+            throw new Error('_runCreditMaintenance requires an assetId');
+        }
+
         // Phase 1: Proactively repay deals nearing expiration before processing reborrows
         const expiryThresholdHours = this.bot?.config?.TIMING?.CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS ?? 12;
         const expiryThresholdMs = expiryThresholdHours * 60 * 60 * 1000;
-        const dealsSnapshot = Array.isArray(this.state.creditDeals) ? [...this.state.creditDeals] : [];
-        for (const deal of dealsSnapshot) {
+
+        const posState = this.state.positions[assetId];
+        if (!posState) return null;
+
+        const activeDealIds = new Set((posState.creditDeals || []).map((d) => String(d?.id)).filter(Boolean));
+
+        for (const deal of (posState.creditDeals || [])) {
+            if (!activeDealIds.has(String(deal?.id))) continue;
             if (!deal.latestRepayTime) continue;
             const timeLeft = new Date(deal.latestRepayTime) - Date.now();
             if (timeLeft < expiryThresholdMs) {
                 try {
                     this.warn(`credit runtime: deal ${deal.id} expires in ${Math.round(timeLeft / 60000)}m; proactively repaying and reborrowing`);
-                    await this.repayCreditDeal(deal, deal.debtAmount, { autoReborrow: true });
+                    await this.repayCreditDeal(deal, deal.debtAmount, {
+                        autoReborrow: true,
+                        collateralAmount: posState.assignedCollateralBudget,
+                        specificPolicy: lendingItem,
+                    });
+                    activeDealIds.delete(String(deal.id));
                 } catch (err) {
                     this.warn(`credit runtime: proactive repay/reborrow for deal ${deal.id} failed: ${err.message}`);
                 }
             }
         }
 
-        // Phase 3: Ensure auto_repay matches policy on existing deals
-        const policyAutoRepay = resolveAutoRepayValue(this.debtPolicy.creditOffer?.autoRepay);
+        // Phase 2: Ensure auto_repay matches policy on existing deals
+        const policyAutoRepay = resolveAutoRepayValue(lendingItem?.autoRepay);
         if (policyAutoRepay > 0) {
-            for (const deal of this.state.creditDeals) {
+            const currentDeals = posState.creditDeals || [];
+            for (const deal of currentDeals) {
                 if (resolveAutoRepayValue(deal.autoRepay) !== policyAutoRepay) {
                     try {
                         this.log(`credit runtime: updating auto_repay on deal ${deal.id} to ${policyAutoRepay}`);
@@ -1587,7 +1737,7 @@ class CreditRuntime {
             }
         }
 
-        return this.processPendingReborrows();
+        return null;
     }
 
     async runMaintenance(context = 'periodic', options = {}) {
@@ -1595,25 +1745,32 @@ class CreditRuntime {
             return { skipped: true, reason: 'debt policy disabled' };
         }
 
-        await this.loadState();
         await this.refreshState();
 
         const results = {
             context,
-            mpa: null,
-            credit: null,
+            mpa: [],
+            credit: [],
         };
 
-        if (this.debtPolicy?.mpa) {
-            results.mpa = await this._runMpaMaintenance(context, options);
+        const dp = this.debtPolicy;
+        for (const item of dp.lending) {
+            const resolvedAsset = await this._resolveAsset(item.asset);
+            const assetId = resolvedAsset?.id ? String(resolvedAsset.id) : null;
+            if (!assetId) {
+                this.warn(`credit runtime: unable to resolve asset "${item.asset}" for lending item; skipping`);
+                continue;
+            }
+            if (item.type === 'mpa') {
+                results.mpa.push(await this._runMpaMaintenance(context, options, item, assetId));
+            } else if (item.type === 'creditOffer') {
+                results.credit.push(await this._runCreditMaintenance(item, assetId));
+            }
         }
 
-        if (this.debtPolicy?.creditOffer) {
-            results.credit = await this._runCreditMaintenance();
-        }
-
+        const reborrowResult = await this.processPendingReborrows();
         await this.persistState(context);
-        return results;
+        return { ...results, reborrows: reborrowResult };
     }
 
     async runCreditWatchdog() {
@@ -1621,24 +1778,32 @@ class CreditRuntime {
             return { skipped: true, reason: 'debt policy disabled' };
         }
         try {
-            await this.loadState();
             await this.refreshState();
 
-            let mpaResult = null;
-            let creditResult = null;
+            const mpaResults = [];
+            const creditResults = [];
 
-            if (this.debtPolicy?.mpa) {
-                mpaResult = await this._runMpaMaintenance('watchdog', {});
+            const dp = this.debtPolicy;
+            for (const item of dp.lending) {
+                const resolvedAsset = await this._resolveAsset(item.asset);
+                const assetId = resolvedAsset?.id ? String(resolvedAsset.id) : null;
+                if (!assetId) {
+                    this.warn(`credit runtime: unable to resolve asset "${item.asset}" for lending item; skipping`);
+                    continue;
+                }
+                if (item.type === 'mpa') {
+                    mpaResults.push(await this._runMpaMaintenance('watchdog', {}, item, assetId));
+                } else if (item.type === 'creditOffer') {
+                    creditResults.push(await this._runCreditMaintenance(item, assetId));
+                }
             }
 
-            if (this.debtPolicy?.creditOffer) {
-                creditResult = await this._runCreditMaintenance();
-            }
-
+            const reborrowResult = await this.processPendingReborrows();
             await this.persistState('watchdog');
             return {
-                mpa: mpaResult,
-                credit: creditResult,
+                mpa: mpaResults,
+                credit: creditResults,
+                reborrows: reborrowResult,
                 remainingDeals: Array.isArray(this.state.creditDeals) ? this.state.creditDeals.length : 0,
             };
         } catch (err) {

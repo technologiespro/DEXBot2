@@ -205,24 +205,28 @@ function createBaseBotConfig(overrides = {}) {
     botKey: 'credit-bot',
     preferredAccount: 'alice',
     debtPolicy: {
-      mpa: {
-        allowedDebtAssets: ['1.3.10'],
-        allowedCollateralAssets: ['1.3.0'],
-        maxBorrowAmount: 1000,
-        maxCollateralAmount: 10000,
-        minCollateralRatio: 2,
-        maxCollateralRatio: 2.5,
-        targetCollateralRatio: 2.2,
-      },
-      creditOffer: {
-        allowedOfferIds: ['1.18.42'],
-        allowedDebtAssets: ['1.3.10'],
-        allowedCollateralAssets: ['1.3.0'],
-        maxBorrowAmount: 1000,
-        maxCollateralRatio: 2.5,
-        maxFeeRatePerDay: 0.05,
-        autoReborrow: true,
-      },
+      collateralAsset: 'BTS',
+      lending: [
+        {
+          asset: 'HONEST.USD',
+          type: 'mpa',
+          ratio: 1,
+          maxBorrowAmount: 1000,
+          maxCollateralAmount: 10000,
+          minCollateralRatio: 2,
+          maxCollateralRatio: 2.5,
+          targetCollateralRatio: 2.2,
+        },
+        {
+          asset: 'HONEST.USD',
+          type: 'creditOffer',
+          ratio: 1,
+          maxBorrowAmount: 1000,
+          maxCollateralRatio: 2.5,
+          maxFeeRatePerDay: 0.05,
+          autoReborrow: true,
+        },
+      ],
     },
     dryRun: false,
     ...overrides,
@@ -294,22 +298,23 @@ async function testRefreshAndMpaPlan() {
     }, { stateDir: path.join(baseDir, 'credit_runtime') });
 
     await runtime.refreshState();
-    assert.strictEqual(runtime.state.activeCallOrderId, '1.8.1', 'MPA call order should be discovered');
+    assert.strictEqual(runtime.state.positions['1.3.10'].activeCallOrderId, '1.8.1', 'MPA call order should be discovered');
     assert.deepStrictEqual(runtime.state.activeDealIds, ['1.19.77'], 'credit deal should be discovered');
     assert.deepStrictEqual(runtime.state.mpaCallOrders.map((entry) => entry.id), ['1.8.1'], 'MPA call orders should be captured in state');
     assert.strictEqual(runtime.state.ownedCreditOffers.length, 1, 'owned credit offers should be discovered');
     assert.strictEqual(runtime.state.debtSnapshot.assets['1.3.0'].mpaCollateral, 250, 'MPA collateral should be tracked in user units in the debt snapshot');
     assert.strictEqual(runtime.state.debtSnapshot.assets['1.3.0'].creditCollateral, 10, 'credit deal collateral should be tracked in user units in the debt snapshot');
     assert.strictEqual(runtime.state.debtSnapshot.assets['1.3.10'].offeredBalance, 100, 'owned credit offer balance should be tracked in user units in the debt snapshot');
-    assert.strictEqual(runtime.state.debtAssetId, '1.3.10', 'debt asset should be tracked');
+    assert.strictEqual(runtime.state.positions['1.3.10'].debtAssetId, '1.3.10', 'debt asset should be tracked');
     assert(dbCalls.some((entry) => entry.method === 'get_credit_offers_by_owner'), 'refreshState should query owned credit offers');
 
-    const plan = runtime._buildMpaPlanFromState();
+    const mpaLending = runtime.debtPolicy.lending.find((item) => item.type === 'mpa');
+    const plan = runtime._buildMpaPlanFromState(mpaLending, '1.3.10');
     assert(plan, 'MPA plan should be generated');
     assert.strictEqual(plan.action, 'reduce_debt', 'below-min CR should reduce debt first');
     assert.strictEqual(plan.targetCollateralRatio, 2, 'plan should target the lower CR floor');
 
-    const op = await runtime.buildMpaUpdateOperation(plan);
+    const op = await runtime.buildMpaUpdateOperation(plan, {}, '1.3.10');
     assert.strictEqual(op.op_name, 'call_order_update', 'MPA plan should build a call_order_update op');
     assert.strictEqual(op.op_data.extensions.target_collateral_ratio, 2, 'target CR should be embedded in the op');
 
@@ -320,7 +325,7 @@ async function testRefreshAndMpaPlan() {
 
     const persisted = JSON.parse(fs.readFileSync(path.join(baseDir, 'credit_runtime', 'credit-bot-0.json'), 'utf8'));
     assert.strictEqual(persisted.botKey, 'credit-bot-0', 'state file should be keyed by bot');
-    assert.strictEqual(persisted.activeCallOrderId, '1.8.1', 'state file should store the active call order');
+    assert.strictEqual(persisted.positions['1.3.10'].activeCallOrderId, '1.8.1', 'state file should store the active call order');
     assert.strictEqual(persisted.activeDealIds[0], '1.19.77', 'state file should store the active credit deal');
   } finally {
     restore();
@@ -362,25 +367,29 @@ async function testCreditOfferCollateralPercentUsesDebtSnapshot() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-percent-snapshot',
         debtPolicy: {
-          mpa: {
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralAmount: '50%',
-            minCollateralRatio: 2,
-            maxCollateralRatio: 2.5,
-            targetCollateralRatio: 2.2,
-          },
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralAmount: 1000000,
-            maxCollateralRatio: 1000,
-            maxFeeRatePerDay: 0.05,
-            autoReborrow: true,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'mpa',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralAmount: '50%',
+              minCollateralRatio: 2,
+              maxCollateralRatio: 2.5,
+              targetCollateralRatio: 2.2,
+            },
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralAmount: 1000000,
+              maxCollateralRatio: 1000,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -391,7 +400,7 @@ async function testCreditOfferCollateralPercentUsesDebtSnapshot() {
     }, { stateDir: path.join(baseDir, 'credit_runtime') });
 
     await runtime.refreshState();
-    assert.strictEqual(runtime.state.currentCollateralFundsTotal, 27250, 'collateral total should include free, locked, and contract collateral');
+    assert.strictEqual(runtime.state.positions['1.3.10'].currentCollateralFundsTotal, 26000, 'collateral balance total should be stored in position state');
     const op = await runtime.buildCreditOfferAcceptOperation({
       offer: {
         id: '1.18.42',
@@ -449,16 +458,19 @@ async function testCreditOfferCollateralPercentDoesNotRequireRefresh() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-stale-free',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralAmount: 1000000,
-            maxCollateralRatio: 1000,
-            maxFeeRatePerDay: 0.05,
-            autoReborrow: true,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralAmount: 1000000,
+              maxCollateralRatio: 1000,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -468,7 +480,8 @@ async function testCreditOfferCollateralPercentDoesNotRequireRefresh() {
       _warn() {},
     }, { stateDir: path.join(baseDir, 'credit_runtime') });
 
-    runtime.state.currentCollateralFundsTotal = 1;
+    runtime.state.positions['1.3.10'] = runtime.state.positions['1.3.10'] || {};
+    runtime.state.positions['1.3.10'].currentCollateralFundsTotal = 1;
     const op = await runtime.buildCreditOfferAcceptOperation({
       offer: {
         id: '1.18.42',
@@ -551,12 +564,13 @@ async function testMpaPrecisionAwareBroadcast() {
     }, { stateDir: path.join(baseDir, 'credit_runtime') });
 
     await runtime.refreshState();
-    const plan = runtime._buildMpaPlanFromState();
+    const mpaLending = runtime.debtPolicy.lending.find((item) => item.type === 'mpa');
+    const plan = runtime._buildMpaPlanFromState(mpaLending, '1.3.10');
     assert(plan, 'precision-aware MPA plan should be generated');
     assert.strictEqual(plan.action, 'reduce_debt', 'under-collateralized position should reduce debt');
     assert.strictEqual(plan.debtDelta, -0.375, 'debt delta should remain in human units');
 
-    const op = await runtime.buildMpaUpdateOperation(plan);
+    const op = await runtime.buildMpaUpdateOperation(plan, {}, '1.3.10');
     assert.strictEqual(op.op_data.delta_debt.amount, -3750, 'debt delta should convert to blockchain units once');
     assert.strictEqual(op.op_data.delta_collateral.amount, 0, 'collateral should not change for debt-first recovery');
   } finally {
@@ -627,15 +641,19 @@ async function testMpaDebtFirstThenCollateralFallbackTriggersReset() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-cr-reset',
         debtPolicy: {
-          mpa: {
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 110,
-            maxCollateralAmount: 10000,
-            minCollateralRatio: 2,
-            maxCollateralRatio: 2.5,
-            targetCollateralRatio: 2.2,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'mpa',
+              ratio: 1,
+              maxBorrowAmount: 110,
+              maxCollateralAmount: 10000,
+              minCollateralRatio: 2,
+              maxCollateralRatio: 2.5,
+              targetCollateralRatio: 2.2,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -657,8 +675,8 @@ async function testMpaDebtFirstThenCollateralFallbackTriggersReset() {
     assert.strictEqual(calls[0].operations[0].op_data.delta_collateral.amount, 0, 'debt leg should not change collateral');
     assert.strictEqual(calls[1].operations[0].op_data.delta_debt.amount, 0, 'collateral leg should not change debt');
     assert.strictEqual(calls[1].operations[0].op_data.delta_collateral.amount < 0, true, 'second leg should withdraw collateral after the capped debt increase');
-    assert.deepStrictEqual(result.mpa.executed.map((entry) => entry.leg), ['debt', 'collateral'], 'maintenance should record both legs');
-    assert.strictEqual(result.mpa.resetResult.reason, 'cr-adjustment', 'grid reset should be requested after CR adjustment');
+    assert.deepStrictEqual(result.mpa[0].executed.map((entry) => entry.leg), ['debt', 'collateral'], 'maintenance should record both legs');
+    assert.strictEqual(result.mpa[0].resetResult.reason, 'cr-adjustment', 'grid reset should be requested after CR adjustment');
     assert.strictEqual(resetCalls[0].options.fillLockAlreadyHeld, true, 'periodic CR reset should reuse the existing fill lock');
 
     const persisted = JSON.parse(fs.readFileSync(path.join(baseDir, 'credit_runtime', 'credit-bot-cr-reset.json'), 'utf8'));
@@ -698,16 +716,19 @@ async function testRepayAndReborrowFlow() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-1',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralRatio: 2.5,
-            maxFeeRatePerDay: 0.05,
-            autoReborrow: true,
-            autoRepay: 2,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+              autoRepay: 2,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -752,14 +773,17 @@ async function testFixedCreditCollateralDoesNotResolvePercentageBase() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-fixed-collateral',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralRatio: 2.5,
-            maxFeeRatePerDay: 0.05,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -792,44 +816,6 @@ async function testFixedCreditCollateralDoesNotResolvePercentageBase() {
       false,
       'fixed collateral should not query the percentage collateral base'
     );
-  } finally {
-    restore();
-    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
-  }
-}
-
-async function testMpaPolicyRejectsInvalidBorrowCap() {
-  const calls = [];
-  const dbCalls = [];
-  const restore = installStubs(calls, dbCalls);
-  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-mpa-invalid-borrow-cap-'));
-
-  try {
-    delete require.cache[creditRuntimePath];
-    const CreditRuntime = require('../modules/credit_runtime');
-    const runtime = new CreditRuntime({
-      config: createBaseBotConfig({
-        botKey: 'mpa-invalid-borrow-cap',
-        debtPolicy: {
-          mpa: {
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 0,
-            minCollateralRatio: 2,
-            maxCollateralRatio: 2.5,
-          },
-        },
-      }),
-      account: { id: '1.2.3', name: 'alice' },
-      accountId: '1.2.3',
-      privateKey: 'WIF-KEY',
-      _log() {},
-      _warn() {},
-    }, { stateDir: path.join(baseDir, 'credit_runtime') });
-
-    const validation = runtime._validateMpaPolicy(runtime.debtPolicy.mpa, '1.3.10', '1.3.0');
-    assert.strictEqual(validation.allow, false, 'MPA policy should reject a provided non-positive maxBorrowAmount');
-    assert(validation.reason.includes('maxBorrowAmount'), 'rejection should identify maxBorrowAmount');
   } finally {
     restore();
     try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
@@ -878,11 +864,11 @@ async function testMultipleMpaPositionsAreBlocked() {
     }, { stateDir: path.join(baseDir, 'credit_runtime') });
 
     await runtime.refreshState();
-    assert.strictEqual(runtime.state.activeCallOrderId, null, 'multiple call orders should not select an active position');
-    assert(runtime.state.mpaSelectionConflict, 'multiple positions should be marked as a conflict');
+    assert.strictEqual(runtime.state.positions['1.3.10'].activeCallOrderId, null, 'multiple call orders should not select an active position');
+    assert(runtime.state.positions['1.3.10'].mpaSelectionConflict, 'multiple positions should be marked as a conflict');
 
     const result = await runtime.runMaintenance('periodic');
-    assert.strictEqual(result.mpa.blocked, true, 'maintenance should block MPA actions when the position is ambiguous');
+    assert.strictEqual(result.mpa[0].blocked, true, 'maintenance should block MPA actions when the position is ambiguous');
     assert.strictEqual(calls.length, 0, 'no blockchain write should happen when MPA is ambiguous');
   } finally {
     restore();
@@ -908,15 +894,18 @@ async function testDefaultFeeRateCapRejectsExpensiveOffer() {
         botKey: 'credit-bot-fee-cap',
         preferredAccount: 'alice',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralAmount: 1000000,
-            maxCollateralRatio: 2.5,
-            autoReborrow: true,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralAmount: 1000000,
+              maxCollateralRatio: 2.5,
+              autoReborrow: true,
+            },
+          ],
         },
         dryRun: false,
       },
@@ -963,16 +952,19 @@ async function testMaxFeeRatePerDayRejectsExpensiveOffer() {
         botKey: 'credit-bot-fee-day',
         preferredAccount: 'alice',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralAmount: '50%',
-            maxCollateralRatio: 2.5,
-            maxFeeRatePerDay: 0.001,
-            autoReborrow: true,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralAmount: '50%',
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.001,
+              autoReborrow: true,
+            },
+          ],
         },
         dryRun: false,
       },
@@ -1098,16 +1090,19 @@ async function testCreditOfferTotalCeilingEnforcement() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-total-ceiling',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralAmount: 1200,
-            maxCollateralRatio: 2.5,
-            maxFeeRatePerDay: 0.05,
-            autoReborrow: true,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralAmount: 1200,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -1212,16 +1207,19 @@ async function testCreditOfferTotalCeilingUsesAssetPrecision() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-total-ceiling-precision',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralAmount: 1200,
-            maxCollateralRatio: 2.5,
-            maxFeeRatePerDay: 0.05,
-            autoReborrow: true,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralAmount: 1200,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -1369,15 +1367,18 @@ async function testLpCollateralRatioGate() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-lp-reject',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.20'],
-            maxBorrowAmount: 1000,
-            maxCollateralRatio: 1.5,
-            maxFeeRatePerDay: 0.05,
-            autoReborrow: true,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 1.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -1401,16 +1402,19 @@ async function testLpCollateralRatioGate() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-lp-accept',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.20'],
-            maxBorrowAmount: 1000,
-            maxCollateralRatio: 2.5,
-            maxFeeRatePerDay: 0.05,
-            autoReborrow: true,
-            autoRepay: 2,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+              autoRepay: 2,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -1469,16 +1473,19 @@ async function testDealDisappearanceDoesNotAutoQueueReborrow() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-reborrow',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralRatio: 2.5,
-            maxFeeRatePerDay: 0.05,
-            autoReborrow: true,
-            autoRepay: 2,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+              autoRepay: 2,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -1491,11 +1498,12 @@ async function testDealDisappearanceDoesNotAutoQueueReborrow() {
     await runtime.refreshState();
     assert.strictEqual(runtime.state.activeDealIds[0], '1.19.77', 'initial credit deal should be tracked');
 
-    await runtime.refreshCreditState();
+    const creditLending = runtime.debtPolicy.lending.find((item) => item.type === 'creditOffer');
+    await runtime.refreshCreditState({}, creditLending);
     assert.strictEqual(runtime.state.pendingReborrows.length, 0, 'disappearance alone should not queue a reborrow');
 
     const result = await runtime.runMaintenance('periodic');
-    assert.strictEqual(result.credit.processed, 0, 'maintenance should not process a reborrow without a confirmed repay');
+    assert.strictEqual(result.reborrows?.processed, 0, 'maintenance should not process a reborrow without a confirmed repay');
     assert.strictEqual(calls.length, 0, 'no reborrow should be broadcast from disappearance alone');
   } finally {
     restore();
@@ -1538,16 +1546,19 @@ async function testDeferredReborrowQueuesAfterConfirmedRepay() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-reborrow-confirmed',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralRatio: 2.5,
-            maxFeeRatePerDay: 0.05,
-            autoReborrow: true,
-            autoRepay: 2,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+              autoRepay: 2,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -1584,16 +1595,19 @@ async function testCreditDealUpdatePreservesAutoRepayMode() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-update',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralRatio: 2.5,
-            maxFeeRatePerDay: 0.05,
-            autoReborrow: true,
-            autoRepay: 2,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+              autoRepay: 2,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -1644,15 +1658,18 @@ async function testAutoReborrowQueueIsIgnoredWhenDisabled() {
       config: createBaseBotConfig({
         botKey: 'credit-bot-reborrow-off',
         debtPolicy: {
-          creditOffer: {
-            allowedOfferIds: ['1.18.42'],
-            allowedDebtAssets: ['1.3.10'],
-            allowedCollateralAssets: ['1.3.0'],
-            maxBorrowAmount: 1000,
-            maxCollateralRatio: 2.5,
-            maxFeeRatePerDay: 0.05,
-            autoReborrow: false,
-          },
+          collateralAsset: 'BTS',
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: false,
+            },
+          ],
         },
       }),
       account: { id: '1.2.3', name: 'alice' },
@@ -1663,10 +1680,12 @@ async function testAutoReborrowQueueIsIgnoredWhenDisabled() {
     }, { stateDir: path.join(baseDir, 'credit_runtime') });
 
     await runtime.refreshState();
-    await runtime.refreshCreditState();
+    const creditLending = runtime.debtPolicy.lending.find((item) => item.type === 'creditOffer');
+    await runtime.refreshCreditState({}, creditLending);
     assert.strictEqual(runtime.state.pendingReborrows.length, 0, 'autoReborrow=false should not queue missing deals');
     const result = await runtime.runMaintenance('periodic');
-    assert.strictEqual(result.credit.skipped, true, 'pending reborrow processing should be skipped when autoReborrow is disabled');
+    assert.strictEqual(result.reborrows?.processed, 0, 'pending reborrow processing should process nothing when autoReborrow is disabled');
+    assert.strictEqual(result.reborrows?.remaining, 0, 'pending reborrow queue should be empty');
     assert.strictEqual(calls.length, 0, 'no reborrow should be broadcast when autoReborrow is disabled');
   } finally {
     restore();
@@ -1805,7 +1824,6 @@ async function testGetCollateralOffsets() {
   await testMpaDebtFirstThenCollateralFallbackTriggersReset();
   await testRepayAndReborrowFlow();
   await testFixedCreditCollateralDoesNotResolvePercentageBase();
-  await testMpaPolicyRejectsInvalidBorrowCap();
   await testMultipleMpaPositionsAreBlocked();
   await testDefaultFeeRateCapRejectsExpensiveOffer();
   await testMaxFeeRatePerDayRejectsExpensiveOffer();

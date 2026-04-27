@@ -151,7 +151,7 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 
 | Term | Meaning |
 |------|---------|
-| **Debt Policy** | Per-bot configuration block (`debtPolicy.mpa` / `debtPolicy.creditOffer`) governing borrowing behavior |
+| **Debt Policy** | Per-bot configuration block (`debtPolicy.collateralAsset` + `debtPolicy.lending` array) governing borrowing behavior |
 | **MPA Borrow** | Market-pegged asset call-order update (debt-first CR planning) |
 | **Credit Offer** | On-chain peer-to-peer lending offer acceptance and repayment |
 | **Auto-Reborrow** | Bot-side flag allowing a new credit offer accept after successful repay |

@@ -88,55 +88,110 @@ function validateBotEntry(b, i, src) {
         if (typeof b.debtPolicy !== 'object' || b.debtPolicy === null) {
             problems.push("'debtPolicy' must be an object");
         } else {
-            if ('mpa' in b.debtPolicy && (typeof b.debtPolicy.mpa !== 'object' || b.debtPolicy.mpa === null)) {
-                problems.push("debtPolicy.mpa must be an object");
-            } else if ('mpa' in b.debtPolicy) {
-                const mpa = b.debtPolicy.mpa;
-                if ('maxBorrowAmount' in mpa) {
-                    if (!isPositiveNumber(mpa.maxBorrowAmount)) {
-                        problems.push("debtPolicy.mpa.maxBorrowAmount must be a positive number");
-                    }
-                }
-                if ('maxCollateralAmount' in mpa) {
-                    if (!isPositiveNumberOrPercent(mpa.maxCollateralAmount)) {
-                        problems.push("debtPolicy.mpa.maxCollateralAmount must be a positive number or percentage");
-                    }
-                }
+            const dp = b.debtPolicy;
+
+            // New format: collateralAsset + lending array is required
+            if (typeof dp.collateralAsset !== 'string' || dp.collateralAsset.trim() === '') {
+                problems.push("debtPolicy.collateralAsset must be a non-empty string");
             }
-            if ('creditOffer' in b.debtPolicy && (typeof b.debtPolicy.creditOffer !== 'object' || b.debtPolicy.creditOffer === null)) {
-                problems.push("debtPolicy.creditOffer must be an object");
-            } else if ('creditOffer' in b.debtPolicy) {
-                const creditOffer = b.debtPolicy.creditOffer;
-                if ('maxBorrowAmount' in creditOffer) {
-                    if (!isPositiveNumber(creditOffer.maxBorrowAmount)) {
-                        problems.push("debtPolicy.creditOffer.maxBorrowAmount must be a positive number");
+            if (!Array.isArray(dp.lending) || dp.lending.length === 0) {
+                problems.push("debtPolicy.lending must be a non-empty array");
+            } else {
+                dp.lending.forEach((item, idx) => {
+                    if (typeof item !== 'object' || item === null) {
+                        problems.push(`debtPolicy.lending[${idx}] must be an object`);
+                        return;
                     }
-                }
-                if ('maxCollateralAmount' in creditOffer) {
-                    if (!isPositiveNumberOrPercent(creditOffer.maxCollateralAmount)) {
-                        problems.push("debtPolicy.creditOffer.maxCollateralAmount must be a positive number or percentage");
+                    if (!item.asset || typeof item.asset !== 'string') {
+                        problems.push(`debtPolicy.lending[${idx}].asset must be a non-empty string`);
                     }
-                }
-                if ('maxFeeRatePerDay' in creditOffer) {
-                    const feeRatePerDay = Number(creditOffer.maxFeeRatePerDay);
-                    if (!Number.isFinite(feeRatePerDay) || feeRatePerDay < 0) {
-                        problems.push("debtPolicy.creditOffer.maxFeeRatePerDay must be a non-negative number");
+                    if (!['mpa', 'creditOffer'].includes(item.type)) {
+                        problems.push(`debtPolicy.lending[${idx}].type must be 'mpa' or 'creditOffer'`);
                     }
-                }
-                if (!('maxCollateralRatio' in creditOffer)) {
-                    problems.push("debtPolicy.creditOffer.maxCollateralRatio is required");
-                } else {
-                    const maxCollateralRatio = Number(creditOffer.maxCollateralRatio);
-                    if (!Number.isFinite(maxCollateralRatio) || maxCollateralRatio <= 0) {
-                        problems.push("debtPolicy.creditOffer.maxCollateralRatio must be a positive number");
+
+                    // ratio: optional, non-negative number, defaults to 1
+                    if (item.ratio !== undefined) {
+                        if (!Number.isFinite(item.ratio) || item.ratio < 0) {
+                            problems.push(`debtPolicy.lending[${idx}].ratio must be a non-negative number`);
+                        }
                     }
-                }
-                if ('autoRepay' in creditOffer) {
-                    const autoRepay = Number(creditOffer.autoRepay);
-                    if (![0, 1, 2].includes(autoRepay)) {
-                        problems.push("debtPolicy.creditOffer.autoRepay must be 0, 1, or 2");
+
+                    // maxBorrowAmount: optional, must be a fixed positive number (no percentage)
+                    if ('maxBorrowAmount' in item) {
+                        if (!isPositiveNumber(item.maxBorrowAmount)) {
+                            problems.push(`debtPolicy.lending[${idx}].maxBorrowAmount must be a positive number (fixed amount, not percentage)`);
+                        }
                     }
-                }
+
+                    // maxCollateralAmount: optional, positive number or percentage
+                    if ('maxCollateralAmount' in item && !isPositiveNumberOrPercent(item.maxCollateralAmount)) {
+                        problems.push(`debtPolicy.lending[${idx}].maxCollateralAmount must be a positive number or percentage`);
+                    }
+
+                    if (item.type === 'mpa') {
+                        // MPA-specific validation (maxCollateralRatio is optional for MPA)
+                        if ('targetCollateralRatio' in item) {
+                            const tcr = Number(item.targetCollateralRatio);
+                            if (!Number.isFinite(tcr) || tcr <= 0) {
+                                problems.push(`debtPolicy.lending[${idx}].targetCollateralRatio must be a positive number`);
+                            }
+                        }
+                        if ('minCollateralRatio' in item) {
+                            const mcr = Number(item.minCollateralRatio);
+                            if (!Number.isFinite(mcr) || mcr <= 0) {
+                                problems.push(`debtPolicy.lending[${idx}].minCollateralRatio must be a positive number`);
+                            }
+                        }
+                        if ('maxCollateralRatio' in item) {
+                            const mxcr = Number(item.maxCollateralRatio);
+                            if (!Number.isFinite(mxcr) || mxcr <= 0) {
+                                problems.push(`debtPolicy.lending[${idx}].maxCollateralRatio must be a positive number`);
+                            }
+                        }
+                        if ('minCollateralRatio' in item && 'maxCollateralRatio' in item) {
+                            if (Number(item.minCollateralRatio) > Number(item.maxCollateralRatio)) {
+                                problems.push(`debtPolicy.lending[${idx}].minCollateralRatio cannot exceed maxCollateralRatio`);
+                            }
+                        }
+                    } else if (item.type === 'creditOffer') {
+                        // Credit offer-specific validation (maxCollateralRatio is required)
+                        if (!('maxCollateralRatio' in item)) {
+                            problems.push(`debtPolicy.lending[${idx}].maxCollateralRatio is required for creditOffer`);
+                        } else {
+                            const mxcr = Number(item.maxCollateralRatio);
+                            if (!Number.isFinite(mxcr) || mxcr <= 0) {
+                                problems.push(`debtPolicy.lending[${idx}].maxCollateralRatio must be a positive number`);
+                            }
+                        }
+                        if ('maxFeeRatePerDay' in item) {
+                            const fr = Number(item.maxFeeRatePerDay);
+                            if (!Number.isFinite(fr) || fr < 0) {
+                                problems.push(`debtPolicy.lending[${idx}].maxFeeRatePerDay must be a non-negative number`);
+                            }
+                        }
+                        if ('autoRepay' in item) {
+                            const ar = Number(item.autoRepay);
+                            if (![0, 1, 2].includes(ar)) {
+                                problems.push(`debtPolicy.lending[${idx}].autoRepay must be 0, 1, or 2`);
+                            }
+                        }
+                        if ('allowedOfferIds' in item) {
+                            if (!Array.isArray(item.allowedOfferIds)) {
+                                problems.push(`debtPolicy.lending[${idx}].allowedOfferIds must be an array`);
+                            }
+                        }
+                        if ('allowedCollateralAssets' in item) {
+                            if (!Array.isArray(item.allowedCollateralAssets)) {
+                                problems.push(`debtPolicy.lending[${idx}].allowedCollateralAssets must be an array`);
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Global maxCollateralAmount: optional, caps total collateral across all lending items
+            if ('maxCollateralAmount' in dp && !isPositiveNumberOrPercent(dp.maxCollateralAmount)) {
+                problems.push("debtPolicy.maxCollateralAmount must be a positive number or percentage");
             }
         }
     }

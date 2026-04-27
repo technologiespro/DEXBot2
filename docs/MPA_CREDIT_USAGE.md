@@ -1,13 +1,8 @@
 # MPA and Credit Usage
 
-DEXBot2 supports native BitShares debt workflows through the bot-level `debtPolicy` config block:
+DEXBot2 supports native BitShares debt workflows through the bot-level `debtPolicy` config block. All debt workflows now use a unified **collateral-first** configuration that maps one collateral asset to one or more debt assets.
 
-- MPA call-order maintenance through `debtPolicy.mpa`
-- Credit offer accept, repay, renewal, and auto-reborrow through `debtPolicy.creditOffer`
-
-The runtime is implemented in `modules/credit_runtime.js`. It is started automatically for any bot that has a `debtPolicy` block.
-
-## Configuration
+## Configuration Format
 
 Add `debtPolicy` to a bot entry in `profiles/bots.json`.
 
@@ -19,30 +14,125 @@ Add `debtPolicy` to a bot entry in `profiles/bots.json`.
   "assetB": "HONEST.USD",
   "active": true,
   "debtPolicy": {
-    "mpa": {
-      "allowedDebtAssets": ["HONEST.USD"],
-      "allowedCollateralAssets": ["BTS"],
-      "maxBorrowAmount": 1000,
-      "maxCollateralAmount": 25000,
-      "minCollateralRatio": 2.0,
-      "maxCollateralRatio": 2.5,
-      "targetCollateralRatio": 2.2
-    },
-    "creditOffer": {
-      "allowedOfferIds": ["1.18.42"],
-      "allowedDebtAssets": ["HONEST.USD"],
-      "allowedCollateralAssets": ["BTS", "HONEST.LP"],
-      "maxBorrowAmount": 1000,
-      "maxFeeRate": 30000,
-      "maxCollateralRatio": 2.5,
-      "autoReborrow": true,
-      "autoRepay": 2
-    }
+    "collateralAsset": "BTS",
+    "maxCollateralAmount": "80%",
+    "lending": [
+      {
+        "asset": "HONEST.USD",
+        "type": "mpa",
+        "ratio": 1,
+        "maxBorrowAmount": 1000,
+        "maxCollateralAmount": 5000,
+        "minCollateralRatio": 2.0,
+        "maxCollateralRatio": 2.5,
+        "targetCollateralRatio": 2.2
+      },
+      {
+        "asset": "HONEST.CNY",
+        "type": "creditOffer",
+        "ratio": 1,
+        "maxBorrowAmount": 1000,
+        "maxCollateralRatio": 2.5,
+        "maxFeeRatePerDay": 0.05,
+        "autoReborrow": true,
+        "autoRepay": 2
+      }
+    ]
   }
 }
 ```
 
-There is no separate enable switch. If `debtPolicy` is present, the credit runtime loads for that bot.
+### Required Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `collateralAsset` | `string` | The asset used as collateral across all lending items (e.g. `"BTS"`). |
+| `lending` | `array` | Non-empty array of lending items. Each item maps a debt asset to a debt type. |
+
+### Lending Item Fields
+
+Every item in `lending` must have:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `asset` | `string` | Yes | The debt asset symbol or ID (e.g. `"HONEST.USD"`). |
+| `type` | `string` | Yes | Either `"mpa"` (BitShares MPA call order) or `"creditOffer"` (credit offer deal). |
+| `ratio` | `number` | No | Output weight for this asset. Defaults to `1`. See **Collateral Distribution** below. |
+
+#### MPA-Specific Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `targetCollateralRatio` | `number` | No | Preferred operating CR. If omitted, midpoint of min/max is used. |
+| `minCollateralRatio` | `number` | No | Hard minimum CR floor. If CR drops below this, debt is reduced first. |
+| `maxCollateralRatio` | `number` | No | Hard maximum CR ceiling. If CR rises above this, debt is increased first. |
+| `maxBorrowAmount` | `number` | No | **Fixed** total debt ceiling. The planner will not increase total debt above this. Must be a positive number (not a percentage). |
+| `maxCollateralAmount` | `number \| string` | No | Total collateral ceiling for this MPA position. May be an absolute amount or a percentage. |
+
+#### Credit-Offer-Specific Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `maxCollateralRatio` | `number` | **Yes** | Maximum effective collateral ratio allowed when accepting a credit offer. |
+| `maxBorrowAmount` | `number` | No | **Fixed** total debt ceiling across all active credit deals for this asset. Must be a positive number (not a percentage). |
+| `maxCollateralAmount` | `number \| string` | No | Total collateral ceiling for credit deals. May be absolute or percentage. |
+| `maxFeeRatePerDay` | `number` | No | Maximum acceptable daily fee rate. Defaults to `1/3000` (~0.033% per day). |
+| `autoReborrow` | `boolean` | No | If `true`, the bot reborrows from the same offer after repayment. |
+| `autoRepay` | `number` | No | On-chain credit deal auto-repay mode: `0`, `1`, or `2`. |
+| `allowedOfferIds` | `string[]` | No | Whitelist of credit offer object IDs the bot may accept. |
+| `allowedCollateralAssets` | `string[]` | No | Whitelist of collateral assets for credit offers. |
+
+### Global Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `maxCollateralAmount` | `number \| string` | **Global** collateral cap across all lending items. Resolved against the full collateral base (on-chain balance + committed collateral). May be absolute or percentage (e.g. `"80%"`). |
+
+There is no separate enable switch. If `debtPolicy.collateralAsset` and `debtPolicy.lending` are present and valid, the credit runtime loads for that bot.
+
+## Collateral Distribution
+
+The runtime splits the total available collateral across all `lending` items using a **weight-based** allocation:
+
+```
+weight_i = ratio_i * targetCR_i
+C_total  = min(availableCollateral, globalMaxCollateral)
+C_i      = C_total * weight_i / sum(all weights)
+```
+
+- For **MPA** items, `targetCR_i` is `targetCollateralRatio` (or `2.0` if not set).
+- For **creditOffer** items, `targetCR_i` is `maxCollateralRatio` (or `2.0` if not set).
+- `ratio` is the user's output proportion. A `ratio` of `1` is the default. If you set `ratio: 0.8`, only 80 % of the proportional collateral is used to generate output; the remaining 20 % stays as a safety reserve for low-CR coverage.
+
+### Examples
+
+**Two assets, equal ratio:**
+```json
+"lending": [
+  { "asset": "USD", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 },
+  { "asset": "CNY", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 }
+]
+```
+Both weights are `1 * 2.0 = 2.0`. Collateral is split **50:50**.
+
+**Two assets, 80 % output on USD:**
+```json
+"lending": [
+  { "asset": "USD", "type": "mpa", "ratio": 0.8, "targetCollateralRatio": 2.0 },
+  { "asset": "CNY", "type": "mpa", "ratio": 1,   "targetCollateralRatio": 2.0 }
+]
+```
+USD weight = `0.8 * 2.0 = 1.6`, CNY weight = `1.0 * 2.0 = 2.0`. USD receives a proportionally smaller share, leaving more collateral unallocated for safety.
+
+**Three assets, equal ratio:**
+```json
+"lending": [
+  { "asset": "USD", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 },
+  { "asset": "CNY", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 },
+  { "asset": "EUR", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 }
+]
+```
+All weights are equal. Collateral is split **1/3 : 1/3 : 1/3**.
 
 ## Runtime Timing
 
@@ -64,73 +154,56 @@ Timing defaults live in `modules/constants.js`:
 
 Set `CREDIT_DEAL_CHECK_INTERVAL_MIN` to `0` or a negative value to disable the watchdog.
 
-## MPA Policy
+## MPA Maintenance
 
-`debtPolicy.mpa` controls BitShares call-order maintenance.
+The MPA planner reads the live call order for each `type: "mpa"` lending item before making changes:
 
-| Field | Meaning |
-| --- | --- |
-| `allowedDebtAssets` | MPA assets the bot may borrow. |
-| `allowedCollateralAssets` | Collateral assets the bot may use. For HONEST MPAs this is usually `BTS`. |
-| `maxBorrowAmount` | Maximum total debt allowed. The planner will not increase the call order's total debt above this ceiling. Fixed number only. |
-| `maxCollateralAmount` | Maximum total collateral allowed for the MPA call order. May be an absolute amount or a percentage of the current collateral amount. |
-| `minCollateralRatio` | Hard minimum CR floor. |
-| `maxCollateralRatio` | Hard maximum CR ceiling. |
-| `targetCollateralRatio` | Preferred operating CR inside the min/max band. |
-
-The MPA planner reads the live call order before making changes:
-
-- If CR is below `minCollateralRatio`, it reduces debt first, then adds collateral if needed.
-- If CR is above `maxCollateralRatio`, it increases debt first, then withdraws collateral if allowed.
+- If CR is below `minCollateralRatio`, it **reduces debt first**, then adds collateral if needed.
+- If CR is above `maxCollateralRatio`, it **increases debt first**, then withdraws collateral if allowed.
 - If `targetCollateralRatio` is not set, the runtime uses the midpoint of the min/max band.
 - After any successful CR adjustment, the bot requests a grid reset so order sizing reflects the new capital base.
 - The `maxBorrowAmount` ceiling only prevents additional debt from going above the configured total; it does not block debt reduction.
+- `maxBorrowAmount` must be a **fixed positive number** (percentages are not allowed).
 
 The runtime does not create arbitrary debt outside the configured asset and CR limits.
 
-## Credit Offer Policy
+## Credit Offer Maintenance
 
-`debtPolicy.creditOffer` controls BitShares credit-offer usage.
+For each `type: "creditOffer"` lending item, the runtime:
 
-| Field | Meaning |
-| --- | --- |
-| `allowedOfferIds` | Credit offer object ids the bot may accept. |
-| `allowedDebtAssets` | Assets the bot may borrow from credit offers. |
-| `allowedCollateralAssets` | Assets the bot may post as credit collateral. |
-| `maxBorrowAmount` | Maximum total borrowed amount allowed across all active credit deals. Optional. Fixed number only. |
-| `maxCollateralAmount` | Maximum total collateral amount allowed across all active credit deals. Optional. May be an absolute amount or a percentage of the full collateral base. |
-| `maxFeeRatePerDay` | Maximum acceptable **daily** fee rate. The bot calculates this from the offer's flat `fee_rate` and `max_duration_seconds`. Example: `0.001` = 0.1% per day. Defaults to `1/3000` (~0.033% per day, or ~1% per month). |
-| `maxCollateralRatio` | Maximum effective collateral ratio allowed for the accept operation. |
-| `autoReborrow` | Bot-side rule to reborrow after a confirmed repay. |
-| `autoRepay` | On-chain credit deal auto-repay mode: `0`, `1`, or `2`. |
+- Discovers active credit deals on-chain.
+- Validates deals against the per-item policy (`maxCollateralRatio`, `maxFeeRatePerDay`, `allowedOfferIds`, etc.).
+- Proactively repays deals nearing expiration (within `CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS`).
+- Reborrows from the same offer when `autoReborrow` is enabled, using the **full assigned collateral budget**.
+- Ensures `auto_repay` on-chain matches the policy's `autoRepay` setting.
 
-Either amount cap may be omitted. `maxBorrowAmount` must be numeric. `maxCollateralAmount` can be numeric or percentage, and the runtime resolves percentage caps against the full collateral base for the asset, including on-chain balance, limit orders, MPA collateral, and credit-deal collateral.
-
-**Amount cap semantics**
+### Amount Cap Semantics
 
 | Policy | Field | Scope |
-| --- | --- | --- |
-| `mpa` | `maxBorrowAmount` | **Total debt ceiling** — the planner will not let the call order's total debt exceed this value. |
-| `mpa` | `maxCollateralAmount` | **Total collateral ceiling** — the planner will not let the call order's total collateral exceed this value. Withdrawals are still allowed. |
-| `creditOffer` | `maxBorrowAmount` | **Total debt ceiling** — the runtime will not accept a deal that would push the total credit debt for the asset above this value. |
-| `creditOffer` | `maxCollateralAmount` | **Total collateral ceiling** — the runtime will not accept a deal that would push the total credit collateral for the asset above this value. |
+|--------|-------|-------|
+| MPA | `maxBorrowAmount` | **Total debt ceiling** — the planner will not let the call order's total debt exceed this value. |
+| MPA | `maxCollateralAmount` | **Total collateral ceiling** — the planner will not let the call order's total collateral exceed this value. Withdrawals are still allowed. |
+| Credit | `maxBorrowAmount` | **Total debt ceiling** — the runtime will not accept a deal that would push total credit debt for the asset above this value. |
+| Credit | `maxCollateralAmount` | **Total collateral ceiling** — the runtime will not accept a deal that would push total credit collateral for the asset above this value. |
 
-Important distinction:
+`maxBorrowAmount` is always a **fixed number** (no percentages). `maxCollateralAmount` may be a fixed number or a percentage.
 
-- `autoReborrow` is a DEXBot2 behavior. After a successful repay, the bot may accept the same offer again if policy and offer state still pass validation.
-- `autoRepay` maps to the BitShares credit deal `auto_repay` mode. It is not the same thing as `autoReborrow`.
-
-## Credit Deal Renewal
+### Credit Deal Renewal
 
 The watchdog checks active credit deals discovered on-chain.
 
 When a deal's `latest_repay_time` is within `CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS`, the runtime attempts to:
 
 1. Repay the deal.
-2. Reborrow from the same offer when `autoReborrow` is enabled.
+2. Reborrow from the same offer when `autoReborrow` is enabled, using the full `assignedCollateralBudget` for that asset.
 3. Preserve configured `autoRepay` intent for the resulting deal update flow.
 
 If inline reborrow cannot be built safely, the runtime stores a deferred reborrow request in `profiles/credit_runtime/<botKey>.json` and retries later after refreshing chain state.
+
+### Important Distinction
+
+- `autoReborrow` is a **DEXBot2 behavior**. After a successful repay, the bot may accept the same offer again if policy and offer state still pass validation.
+- `autoRepay` maps to the **BitShares credit deal** `auto_repay` mode. It is not the same thing as `autoReborrow`.
 
 ## LP-Backed Credit Collateral
 
@@ -140,7 +213,7 @@ Credit offers may accept liquidity-pool share assets as collateral. Before accep
 2. Reads pool balances and share supply.
 3. Computes the collateral value from the underlying reserves.
 4. Converts that value into the debt asset denomination.
-5. Rejects the borrow if the effective ratio exceeds `creditOffer.maxCollateralRatio`.
+5. Rejects the borrow if the effective ratio exceeds the lending item's `maxCollateralRatio`.
 
 If pool lookup, supply lookup, or valuation cannot be resolved, the runtime fails closed and does not sign the borrow.
 
@@ -154,14 +227,16 @@ profiles/credit_runtime/<botKey>.json
 
 The file tracks discovered chain state and pending work, including:
 
-- active MPA call-order state
-- active credit deal ids
-- active offer ids
-- current debt and collateral amounts
+- `positions` — per-asset state map (debtAssetId -> positionState)
+- active MPA call-order state per position
+- active credit deal IDs per position
+- current debt and collateral amounts per position
+- `assignedCollateralBudget` per position
 - pending reborrow requests
-- last MPA action
+- last MPA action per position
 - last grid reset request
 - last repay timestamp
+- debt snapshot across all assets
 
 Treat this file as runtime state, not primary configuration. The source of truth for enabled policy is still `profiles/bots.json`.
 
@@ -169,7 +244,7 @@ Treat this file as runtime state, not primary configuration. The source of truth
 
 - Keep `debtPolicy` narrow. Only list assets and offers the bot is allowed to use.
 - Use conservative CR bands. `minCollateralRatio` is a hard safety floor, not a target.
-- Keep `maxFeeRate` explicit for credit offers.
+- Keep `maxFeeRatePerDay` explicit for credit offers.
 - Do not confuse credit-offer collateral ratio with MPA call-order CR. They are validated in separate paths.
 - After editing `profiles/bots.json`, restart or reload the bot so the runtime picks up the new policy.
 - Review `profiles/credit_runtime/<botKey>.json` when diagnosing pending reborrow or renewal behavior.
@@ -181,4 +256,4 @@ Treat this file as runtime state, not primary configuration. The source of truth
 - `modules/bot_settings.js`: `debtPolicy` validation
 - `modules/credential_policy.js`: signing constraints for credit and call-order operations
 - `tests/test_credit_runtime.js`: credit runtime behavior coverage
-- `tests/test_dexbot_credit_wiring.js`: watchdog and runtime wiring coverage
+- `tests/test_multi_asset_distribution.js`: collateral distribution and multi-asset state coverage

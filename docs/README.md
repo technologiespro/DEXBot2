@@ -90,7 +90,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 
 ### 💳 [MPA and Credit Usage](MPA_CREDIT_USAGE.md)
 *User-facing MPA and credit offer workflow guide.*
-- **Debt Policy**: Per-bot `debtPolicy.mpa` and `debtPolicy.creditOffer` configuration
+- **Debt Policy**: Per-bot `debtPolicy.collateralAsset` and `debtPolicy.lending` configuration
 - **MPA Borrowing**: Call-order updates with debt-first CR planning
 - **Credit Offers**: Accept/repay with auto-reborrow and LP-backed collateral valuation
 - **Watchdog Timing**: Dedicated credit deal renewal interval and expiry threshold settings
