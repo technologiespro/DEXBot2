@@ -213,6 +213,20 @@ try {
     run('npm install --prefer-offline');
 
     /**
+     * STEP 8b: Regenerate Ecosystem Config
+     * Ensures profiles/ecosystem.config.js reflects the current bots.json
+     * state, including service apps like dexbot-adapter and dexbot-update.
+     */
+    log('Regenerating PM2 ecosystem config...');
+    try {
+        const { generateEcosystemConfig } = require('../pm2');
+        generateEcosystemConfig({ clawOnly: false, exitOnError: false });
+        log('Ecosystem config regenerated successfully.');
+    } catch (err) {
+        log(`Warning: Ecosystem config regeneration failed (${err.message}). Continuing with existing config.`);
+    }
+
+    /**
      * STEP 9: Reload Active PM2 Processes
      * Intelligently reloads only the bots that were active before update
      * This approach:
@@ -271,20 +285,46 @@ try {
                  */
                 const botsToReload = activeInConfig.filter(name => runningProcesses.includes(name));
 
-                if (botsToReload.length > 0) {
-                    log(`Active bots detected: ${botsToReload.join(', ')}`);
-                    // Reload each bot individually to pick up code changes
-                    for (const name of botsToReload) {
+                /**
+                 * Also reload service apps that are part of the ecosystem
+                 * (e.g., dexbot-adapter) if they are currently running.
+                 */
+                const serviceAppsToReload = ['dexbot-adapter'];
+                const servicesToReload = serviceAppsToReload.filter(name => runningProcesses.includes(name));
+                const allToReload = [...botsToReload, ...servicesToReload];
+
+                if (allToReload.length > 0) {
+                    log(`Active processes detected: ${allToReload.join(', ')}`);
+                    // Reload each process individually to pick up code changes
+                    for (const name of allToReload) {
                         try {
                             run(`pm2 reload "${name}"`);
                         } catch (e) {
                             // Individual reload failed - log warning but continue
-                            log(`Warning: Failed to reload bot "${name}" (it might not be running).`);
+                            log(`Warning: Failed to reload process "${name}" (it might not be running).`);
                         }
                     }
                 } else {
                     // Config has active bots but none are running
-                    log('No active bots currently running in PM2. Skipping reload.');
+                    log('No active processes currently running in PM2. Skipping reload.');
+                }
+
+                /**
+                 * Start newly-added service apps that are not yet running.
+                 * Regenerating ecosystem.config.js may introduce apps (e.g.
+                 * dexbot-adapter) that were not present in the previous config.
+                 * Individual reloads only touch existing processes; starting from
+                 * the ecosystem file materializes missing apps.
+                 */
+                const activeBots = (config.bots || []).filter(b => b.active !== false);
+                const { needsMarketAdapter } = require('../pm2');
+                if (needsMarketAdapter(activeBots) && !runningProcesses.includes('dexbot-adapter')) {
+                    log('dexbot-adapter is required by an AMA-grid bot but not running. Starting from ecosystem...');
+                    try {
+                        run('pm2 start profiles/ecosystem.config.js --only dexbot-adapter');
+                    } catch (e) {
+                        log('Warning: Failed to start dexbot-adapter from ecosystem config.');
+                    }
                 }
             } else {
                 // Config exists but has no active bots
