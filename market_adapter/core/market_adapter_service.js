@@ -145,7 +145,19 @@ class MarketAdapterService {
         const lookbackBars = cfg.amaSlope?.lookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
         const filePath = deps.candleFileForBot(bot.botKey, cfg.intervalSeconds);
         const existing = deps.loadJson(filePath, null);
-        const existingCandles = Array.isArray(existing?.candles) ? existing.candles : [];
+        let existingCandles = Array.isArray(existing?.candles) ? existing.candles : [];
+
+        // Prune stale trailing candles from a previous run before any processing.
+        // Prevents gap-fill from carrying a frozen price forward indefinitely.
+        if (existingCandles.length > 0 && typeof deps.pruneStaleTail === 'function') {
+            const staleThreshold = Number.isFinite(cfg.staleTailThreshold)
+                ? cfg.staleTailThreshold
+                : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
+            const pruned = deps.pruneStaleTail(existingCandles, staleThreshold);
+            if (pruned.length < existingCandles.length) {
+                existingCandles = pruned;
+            }
+        }
 
         const needBootstrap = existingCandles.length === 0;
         const analysisKeepCount = Math.max(
@@ -224,6 +236,15 @@ class MarketAdapterService {
                 const maxNativeGapFill = Number.isFinite(cfg.maxNativeGapFillCandles) ? cfg.maxNativeGapFillCandles : 3;
                 if (gapBuckets <= maxNativeGapFill) {
                     nextCandles = this.fillNativeIncrementalClosedGaps(nextCandles, lastTs, cfg.intervalSeconds);
+                }
+
+                // After incremental merge, prune any stale tail that may have been
+                // carried forward when the pool had no activity.
+                if (typeof deps.pruneStaleTail === 'function') {
+                    const staleThreshold = Number.isFinite(cfg.staleTailThreshold)
+                        ? cfg.staleTailThreshold
+                        : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
+                    nextCandles = deps.pruneStaleTail(nextCandles, staleThreshold);
                 }
             }
 

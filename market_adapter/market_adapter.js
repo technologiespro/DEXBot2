@@ -71,7 +71,7 @@ const {
 } = require('../modules/market_adapter_whitelist');
 const kibanaSource = require('./inputs/kibana_source');
 const { normalizePoolId } = kibanaSource;
-const { tradesToCandles, detectMissingCandleTimestamps, fillCandleGaps, mergeCandles } = require('./candle_utils');
+const { tradesToCandles, detectMissingCandleTimestamps, fillCandleGaps, pruneStaleTail, mergeCandles } = require('./candle_utils');
 const { toIntervalLabel } = require('./interval_utils');
 const { resolveAsset, findPoolByAssets, resolveBotContext } = require('./utils/chain');
 const { acquireFileLockSync, releaseFileLockSync } = require('./utils/file_lock');
@@ -819,6 +819,7 @@ const adapterService = new MarketAdapterService({
     tradesToCandles,
     detectMissingCandleTimestamps,
     fillCandleGaps,
+    pruneStaleTail,
     mergeCandles,
     pruneCandles,
     calcAmaPrice,

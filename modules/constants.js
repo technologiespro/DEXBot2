@@ -723,6 +723,12 @@ let MARKET_ADAPTER = {
     // Overridable per market pair or per bot via market_adapter_settings.json.
     DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT: 10.0,
 
+    // STALE_TAIL_THRESHOLD_CANDLES: Number of consecutive candles with an identical close
+    // price that triggers pruning of the trailing tail. Prevents gap-filled synthetic candles
+    // from carrying a frozen price forward indefinitely when the pool has no activity.
+    // At 1h intervals, 24 = 24 hours. Overridable via cfg.staleTailThreshold.
+    STALE_TAIL_THRESHOLD_CANDLES: 24,
+
     // HURST_CONFIG: Standard window and scales for Hurst exponent calculation.
     HURST_CONFIG: {
         window: 256,
