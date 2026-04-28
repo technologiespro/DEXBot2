@@ -259,8 +259,14 @@ class CreditRuntime {
     isEnabled() {
         const dp = this.debtPolicy;
         if (!dp) return false;
-        return typeof dp.collateralAsset === 'string' && dp.collateralAsset.length > 0
-            && Array.isArray(dp.lending) && dp.lending.length > 0;
+        if (!Array.isArray(dp.lending) || dp.lending.length === 0) return false;
+        return dp.lending.every((item) =>
+            typeof item.collateralAsset === 'string' && item.collateralAsset.length > 0
+        );
+    }
+
+    _positionKey(debtAssetId, collateralAssetId) {
+        return `${debtAssetId}:${collateralAssetId}`;
     }
 
     _findLendingItemByType(type) {
@@ -503,47 +509,156 @@ class CreditRuntime {
         return null;
     }
 
+    async _resolveMpaFeedPrice(debtAssetId, collateralAssetId) {
+        if (!debtAssetId || !collateralAssetId) return null;
+
+        const posKey = this._positionKey(debtAssetId, collateralAssetId);
+        const cached = this.state.positions[posKey]?.mpaFeedPrice;
+        if (cached !== undefined && cached !== null && cached > 0) return cached;
+
+        const bitassetData = await this._resolveBitassetData(debtAssetId);
+        const debtAsset = await this._resolveAsset(debtAssetId);
+        const collateralAsset = await this._resolveAsset(collateralAssetId);
+        if (!debtAsset || !collateralAsset) return null;
+
+        const feedPrice = this._computeBtsPerDebt(bitassetData?.current_feed?.settlement_price, debtAsset, collateralAsset);
+        if (!Number.isFinite(feedPrice) || feedPrice <= 0) return null;
+
+        if (!this.state.positions[posKey]) this.state.positions[posKey] = {};
+        this.state.positions[posKey].mpaFeedPrice = feedPrice;
+        return feedPrice;
+    }
+
+    async _resolveCreditConversionRate(lendingItem, debtAssetId, collateralAssetId) {
+        if (!debtAssetId || !collateralAssetId) return null;
+
+        const posKey = this._positionKey(debtAssetId, collateralAssetId);
+        const cached = this.state.positions[posKey]?.creditConversionRate;
+        if (cached !== undefined && cached !== null) return cached;
+
+        const offerIds = new Set();
+
+        const deals = Array.isArray(this.state.positions[posKey]?.creditDeals)
+            ? this.state.positions[posKey].creditDeals
+            : [];
+        for (const deal of deals) {
+            if (deal?.offerId) offerIds.add(String(deal.offerId));
+        }
+
+        const allowedOfferIds = this._normalizePolicyList(lendingItem?.allowedOfferIds);
+        for (const id of allowedOfferIds) {
+            if (id) offerIds.add(String(id));
+        }
+
+        if (offerIds.size === 0) return null;
+
+        const debtAsset = await this._resolveAsset(debtAssetId);
+        const collateralAsset = await this._resolveAsset(collateralAssetId);
+
+        const offerObjects = await this._dbCall('get_objects', [Array.from(offerIds)]);
+        if (!Array.isArray(offerObjects)) return null;
+
+        for (const offer of offerObjects) {
+            if (!offer || String(offer.asset_type) !== String(debtAssetId)) continue;
+            if (offer.enabled === false) continue;
+
+            const collateralMap = normalizeCollateralMap(offer?.acceptable_collateral);
+            const price = collateralMap.get(String(collateralAssetId));
+            if (!price) continue;
+
+            const baseAmount = blockchainAmountToFloat(price?.base, collateralAsset);
+            const quoteAmount = blockchainAmountToFloat(price?.quote, debtAsset);
+            if (!Number.isFinite(baseAmount) || !Number.isFinite(quoteAmount) || baseAmount <= 0) continue;
+
+            const rate = quoteAmount / baseAmount;
+            if (!Number.isFinite(rate) || rate <= 0) continue;
+
+            if (!this.state.positions[posKey]) this.state.positions[posKey] = {};
+            this.state.positions[posKey].creditConversionRate = rate;
+            return rate;
+        }
+
+        return null;
+    }
+
     async _calculateCollateralDistribution() {
         const dp = this.debtPolicy;
-        if (!dp || !dp.collateralAsset || !Array.isArray(dp.lending)) return;
+        if (!dp || !Array.isArray(dp.lending)) return;
 
         const accountRef = getAccountRef(this.bot);
-        const collateralAsset = await this._resolveAsset(dp.collateralAsset);
-        if (!collateralAsset || !accountRef) return;
+        if (!accountRef) return;
 
-        const totalCollateralAvailable = await this._getCollateralPercentageBase(accountRef, collateralAsset.id);
-        const totalMaxCollateral = resolveConfigValue(dp.maxCollateralAmount ?? '100%', totalCollateralAvailable);
-        const C_total = Math.min(totalCollateralAvailable, totalMaxCollateral);
-
-        const weightEntries = dp.lending.map((item) => {
-            const ratio = item.ratio ?? 1;
-            let targetCr = 1.0;
-            if (item.type === 'mpa') {
-                targetCr = resolveTargetCollateralRatio(item) || 2.0;
-            } else if (item.type === 'creditOffer') {
-                targetCr = toFiniteNumber(item.maxCollateralRatio, 2.0);
-            }
-            return { item, weight: ratio * targetCr };
-        });
-
-        const totalWeight = weightEntries.reduce((sum, e) => sum + e.weight, 0);
-        if (totalWeight === 0) return;
-
-        const resolved = await Promise.all(
-            weightEntries.map(async ({ item, weight }) => {
-                const resolvedAsset = await this._resolveAsset(item.asset);
-                const assetId = resolvedAsset?.id ? String(resolvedAsset.id) : null;
-                return { weight, assetId };
-            })
-        );
+        // Group lending items by their collateral asset
+        const groups = new Map();
+        for (const item of dp.lending) {
+            const ref = item.collateralAsset;
+            if (!ref) continue;
+            if (!groups.has(ref)) groups.set(ref, []);
+            groups.get(ref).push(item);
+        }
 
         const validAssetIds = new Set();
-        for (const { weight, assetId } of resolved) {
-            if (!assetId) continue;
-            validAssetIds.add(assetId);
-            const C_i = (C_total * weight) / totalWeight;
-            if (!this.state.positions[assetId]) this.state.positions[assetId] = {};
-            this.state.positions[assetId].assignedCollateralBudget = C_i;
+
+        for (const [collateralRef, items] of groups) {
+            const collateralAsset = await this._resolveAsset(collateralRef);
+            if (!collateralAsset) continue;
+
+            const totalCollateralAvailable = await this._getCollateralPercentageBase(accountRef, collateralAsset.id);
+            const totalMaxCollateral = resolveConfigValue(dp.maxCollateralAmount ?? '100%', totalCollateralAvailable);
+            const C_total = Math.min(totalCollateralAvailable, totalMaxCollateral);
+
+            const weightEntries = await Promise.all(
+                items.map(async (item) => {
+                    const ratio = item.ratio ?? 1;
+                    const resolvedAsset = await this._resolveAsset(item.asset);
+                    const assetId = resolvedAsset?.id ? String(resolvedAsset.id) : null;
+
+                    let targetCr = 1.0;
+                    let weight = ratio * targetCr;
+
+                    if (item.type === 'mpa') {
+                        targetCr = resolveTargetCollateralRatio(item) || 2.0;
+                        const feedPrice = assetId
+                            ? await this._resolveMpaFeedPrice(assetId, collateralAsset.id)
+                            : null;
+                        if (feedPrice !== null && feedPrice > 0) {
+                            weight = ratio * feedPrice * targetCr;
+                        } else {
+                            weight = ratio * targetCr;
+                            if (assetId) {
+                                this.warn(`credit runtime: unable to discover MPA feed price for ${item.asset}; using collateral-first fallback`);
+                            }
+                        }
+                    } else if (item.type === 'creditOffer') {
+                        targetCr = toFiniteNumber(item.maxCollateralRatio, 2.0);
+                        const conversionRate = assetId
+                            ? await this._resolveCreditConversionRate(item, assetId, collateralAsset.id)
+                            : null;
+                        if (conversionRate !== null && conversionRate > 0) {
+                            weight = (ratio * targetCr) / conversionRate;
+                        } else {
+                            weight = ratio * targetCr;
+                            if (assetId) {
+                                this.warn(`credit runtime: unable to discover credit offer price for ${item.asset}; using collateral-first fallback`);
+                            }
+                        }
+                    }
+
+                    return { item, weight, assetId };
+                })
+            );
+
+            const totalWeight = weightEntries.reduce((sum, e) => sum + e.weight, 0);
+            if (totalWeight === 0) continue;
+
+            for (const { weight, assetId } of weightEntries) {
+                if (!assetId || !collateralAsset.id) continue;
+                const posKey = this._positionKey(assetId, collateralAsset.id);
+                validAssetIds.add(posKey);
+                const C_i = (C_total * weight) / totalWeight;
+                if (!this.state.positions[posKey]) this.state.positions[posKey] = {};
+                this.state.positions[posKey].assignedCollateralBudget = C_i;
+            }
         }
 
         for (const key of Object.keys(this.state.positions)) {
@@ -668,8 +783,6 @@ class CreditRuntime {
     _validateCreditPolicy(policy, offer, deal = null) {
         if (!policy || typeof policy !== 'object') return { allow: false, reason: 'creditOffer policy missing' };
         const allowedOfferIds = this._normalizePolicyList(policy.allowedOfferIds);
-        const allowedDebtAssets = this._normalizePolicyList(policy.allowedDebtAssets);
-        const allowedCollateralAssets = this._normalizePolicyList(policy.allowedCollateralAssets);
         const maxFeeRatePerDay = positiveOrNull(policy.maxFeeRatePerDay) ?? this._getDefaultMaxFeeRatePerDay();
         const maxBorrowAmount = positiveOrNull(policy.maxBorrowAmount);
         const maxCollateralAmount = positiveOrPercentOrNull(policy.maxCollateralAmount);
@@ -688,19 +801,10 @@ class CreditRuntime {
         if (allowedOfferIds.length > 0 && offer?.id && !allowedOfferIds.includes(String(offer.id))) {
             return { allow: false, reason: `offer ${offer.id} is not allowed` };
         }
-        if (allowedDebtAssets.length > 0 && offer?.asset_type && !allowedDebtAssets.includes(String(offer.asset_type))) {
-            return { allow: false, reason: `debt asset ${offer.asset_type} is not allowed` };
-        }
 
         if (deal) {
             if (allowedOfferIds.length > 0 && deal.offerId && !allowedOfferIds.includes(String(deal.offerId))) {
                 return { allow: false, reason: `deal offer ${deal.offerId} is not allowed` };
-            }
-            if (allowedDebtAssets.length > 0 && deal.debtAssetId && !allowedDebtAssets.includes(String(deal.debtAssetId))) {
-                return { allow: false, reason: `deal debt asset ${deal.debtAssetId} is not allowed` };
-            }
-            if (allowedCollateralAssets.length > 0 && deal.collateralAssetId && !allowedCollateralAssets.includes(String(deal.collateralAssetId))) {
-                return { allow: false, reason: `deal collateral asset ${deal.collateralAssetId} is not allowed` };
             }
         }
 
@@ -831,6 +935,10 @@ class CreditRuntime {
         const callOrders = parseCallOrders(account).map(parseCallOrderSummary).filter(Boolean);
         this.state.mpaCallOrders = callOrders;
 
+        const configuredCollateralAsset = await this._resolveAsset(lendingItem.collateralAsset);
+        const configuredCollateralAssetId = configuredCollateralAsset?.id ? String(configuredCollateralAsset.id) : null;
+        const posKey = configuredCollateralAssetId ? this._positionKey(assetId, configuredCollateralAssetId) : assetId;
+
         const candidateOrders = callOrders.filter((entry) =>
             String(entry?.call_price?.quote?.asset_id) === assetId
         );
@@ -850,8 +958,8 @@ class CreditRuntime {
                 minCollateralRatio: positiveOrNull(lendingItem.minCollateralRatio),
                 maxCollateralRatio: positiveOrNull(lendingItem.maxCollateralRatio),
             };
-            if (!this.state.positions[assetId]) this.state.positions[assetId] = {};
-            Object.assign(this.state.positions[assetId], empty);
+            if (!this.state.positions[posKey]) this.state.positions[posKey] = {};
+            Object.assign(this.state.positions[posKey], empty);
             return empty;
         };
 
@@ -866,16 +974,25 @@ class CreditRuntime {
         }
 
         const callOrder = candidateOrders[0];
-        const collateralAssetId = callOrder?.call_price?.base?.asset_id || null;
-        const collateralAsset = collateralAssetId ? await this._resolveAsset(collateralAssetId) : null;
+        const callOrderCollateralAssetId = callOrder?.call_price?.base?.asset_id || null;
+        const collateralAsset = callOrderCollateralAssetId ? await this._resolveAsset(callOrderCollateralAssetId) : null;
+
+        if (configuredCollateralAssetId && callOrderCollateralAssetId && String(callOrderCollateralAssetId) !== String(configuredCollateralAssetId)) {
+            return createEmptyState(`call order collateral ${callOrderCollateralAssetId} does not match configured collateral ${configuredCollateralAssetId}`);
+        }
+
         const bitassetData = await this._resolveBitassetData(assetId);
 
         const debtAmount = blockchainAmountToFloat(callOrder?.debt, debtAsset) || 0;
         const collateralAmount = blockchainAmountToFloat(callOrder?.collateral, collateralAsset) || 0;
-        const collateralBalances = collateralAssetId ? await chainOrders.getOnChainAssetBalances(accountRef, [collateralAssetId]) : {};
-        const collateralBalance = collateralAssetId ? (collateralBalances?.[String(collateralAssetId)] || collateralBalances?.[String(collateralAsset?.symbol)] || null) : null;
+        const collateralBalances = callOrderCollateralAssetId ? await chainOrders.getOnChainAssetBalances(accountRef, [callOrderCollateralAssetId]) : {};
+        const collateralBalance = callOrderCollateralAssetId ? (collateralBalances?.[String(callOrderCollateralAssetId)] || collateralBalances?.[String(collateralAsset?.symbol)] || null) : null;
         const currentCollateralFundsTotal = toFiniteNumber(collateralBalance?.total, null);
         const feedPrice = this._computeBtsPerDebt(bitassetData?.current_feed?.settlement_price, debtAsset, collateralAsset);
+        if (Number.isFinite(feedPrice) && feedPrice > 0) {
+            if (!this.state.positions[posKey]) this.state.positions[posKey] = {};
+            this.state.positions[posKey].mpaFeedPrice = feedPrice;
+        }
         const currentCollateralRatio = debtAmount > 0 && feedPrice > 0
             ? collateralAmount / (debtAmount * feedPrice)
             : null;
@@ -883,7 +1000,7 @@ class CreditRuntime {
         const posState = {
             activeCallOrderId: callOrder.id || null,
             debtAssetId: assetId,
-            currentCollateralAssetId: collateralAssetId,
+            currentCollateralAssetId: callOrderCollateralAssetId,
             currentDebtAmount: debtAmount,
             currentCollateralAmount: collateralAmount,
             currentCollateralFundsTotal,
@@ -895,8 +1012,8 @@ class CreditRuntime {
             mpaSelectionConflict: null,
         };
 
-        if (!this.state.positions[assetId]) this.state.positions[assetId] = {};
-        Object.assign(this.state.positions[assetId], posState);
+        if (!this.state.positions[posKey]) this.state.positions[posKey] = {};
+        Object.assign(this.state.positions[posKey], posState);
 
         return posState;
     }
@@ -935,9 +1052,38 @@ class CreditRuntime {
             }
         }
 
+        const expectedCollateralAssetObj = await this._resolveAsset(lendingItem.collateralAsset);
+        const expectedCollateralId = expectedCollateralAssetObj?.id ? String(expectedCollateralAssetObj.id) : null;
+        const posKey = expectedCollateralId ? this._positionKey(assetId, expectedCollateralId) : assetId;
+
+        // Cache conversion rate from discovered offers to avoid duplicate fetches in distribution.
+        // We cache the first matching enabled offer's rate. In practice, all offers for the same
+        // debt+collateral asset pair should have the same conversion rate.
+        if (expectedCollateralId) {
+            for (const offer of trackedOffers.values()) {
+                if (String(offer?.asset_type) !== assetId) continue;
+                const collateralMap = normalizeCollateralMap(offer?.acceptable_collateral);
+                const price = collateralMap.get(expectedCollateralId);
+                if (!price) continue;
+                const debtAssetResolved = await this._resolveAsset(assetId);
+                const collateralAssetResolved = await this._resolveAsset(expectedCollateralId);
+                const baseAmount = blockchainAmountToFloat(price?.base, collateralAssetResolved);
+                const quoteAmount = blockchainAmountToFloat(price?.quote, debtAssetResolved);
+                if (!Number.isFinite(baseAmount) || !Number.isFinite(quoteAmount) || baseAmount <= 0) continue;
+                const rate = quoteAmount / baseAmount;
+                if (!Number.isFinite(rate) || rate <= 0) continue;
+                if (!this.state.positions[posKey]) this.state.positions[posKey] = {};
+                this.state.positions[posKey].creditConversionRate = rate;
+                break;
+            }
+        }
+
         const activeDeals = [];
         for (const deal of normalizedDeals) {
             if (String(deal.debtAssetId) !== assetId) {
+                continue;
+            }
+            if (expectedCollateralId && deal.collateralAssetId && String(deal.collateralAssetId) !== expectedCollateralId) {
                 continue;
             }
             const offer = deal.offerId ? trackedOffers.get(String(deal.offerId)) : null;
@@ -957,10 +1103,10 @@ class CreditRuntime {
         const activeDealIds = activeDeals.map((deal) => deal.id).filter(Boolean);
         const activeOfferIds = Array.from(new Set(activeDeals.map((deal) => deal.offerId).filter(Boolean)));
 
-        if (!this.state.positions[assetId]) this.state.positions[assetId] = {};
-        this.state.positions[assetId].creditDeals = activeDeals;
-        this.state.positions[assetId].activeDealIds = activeDealIds;
-        this.state.positions[assetId].activeOfferIds = activeOfferIds;
+        if (!this.state.positions[posKey]) this.state.positions[posKey] = {};
+        this.state.positions[posKey].creditDeals = activeDeals;
+        this.state.positions[posKey].activeDealIds = activeDealIds;
+        this.state.positions[posKey].activeOfferIds = activeOfferIds;
 
         // Rebuild global tracking arrays from all positions
         const allActiveDealIds = [];
@@ -1014,14 +1160,17 @@ class CreditRuntime {
         return this.persistState('refresh');
     }
 
-    _buildMpaPlanFromState(lendingItem, assetId) {
+    async _buildMpaPlanFromState(lendingItem, assetId) {
         if (!lendingItem || typeof lendingItem !== 'object') {
             throw new Error('_buildMpaPlanFromState requires a lendingItem');
         }
         if (!assetId) {
             throw new Error('_buildMpaPlanFromState requires an assetId');
         }
-        const posState = this.state.positions[assetId];
+        const collateralAsset = await this._resolveAsset(lendingItem.collateralAsset);
+        const collateralAssetId = collateralAsset?.id;
+        const posKey = collateralAssetId ? this._positionKey(assetId, collateralAssetId) : assetId;
+        const posState = this.state.positions[posKey];
         if (!posState) return null;
 
         if (posState.mpaSelectionConflict) {
@@ -1044,19 +1193,24 @@ class CreditRuntime {
         return plan;
     }
 
-    async buildMpaUpdateOperation(plan, options = {}, assetId) {
+    async buildMpaUpdateOperation(plan, options = {}, lendingItem, assetId) {
+        if (!lendingItem || typeof lendingItem !== 'object') {
+            throw new Error('buildMpaUpdateOperation requires a lendingItem');
+        }
         if (!assetId) {
             throw new Error('buildMpaUpdateOperation requires an assetId');
         }
-        const dp = this.debtPolicy;
-        const policy = dp?.lending?.find((item) => String(this._assetCache.get(String(item.asset))?.id) === assetId);
+        const policy = lendingItem;
 
         if (!policy || !plan) return null;
         if (plan.blocked) {
             throw new Error(plan.reason || 'MPA plan blocked');
         }
 
-        const posState = this.state.positions[assetId];
+        const collateralAsset = await this._resolveAsset(lendingItem.collateralAsset);
+        const collateralAssetId = collateralAsset?.id;
+        const posKey = collateralAssetId ? this._positionKey(assetId, collateralAssetId) : assetId;
+        const posState = this.state.positions[posKey];
         if (!posState) return null;
 
         const leg = options.leg || 'debt';
@@ -1069,17 +1223,17 @@ class CreditRuntime {
         const debtAsset = posState.debtAssetId ? await this._resolveAsset(posState.debtAssetId) : null;
         const account = await this._getFullAccount(getAccountRef(this.bot));
         const currentCallOrder = parseCallOrders(account).find((entry) => entry.id === posState.activeCallOrderId) || null;
-        const collateralAssetId = currentCallOrder?.call_price?.base?.asset_id || null;
-        const collateralAsset = collateralAssetId ? await this._resolveAsset(collateralAssetId) : null;
+        const callOrderCollateralAssetId = currentCallOrder?.call_price?.base?.asset_id || null;
+        const callOrderCollateralAsset = callOrderCollateralAssetId ? await this._resolveAsset(callOrderCollateralAssetId) : null;
 
-        if (!debtAsset || !collateralAsset) {
+        if (!debtAsset || !callOrderCollateralAsset) {
             throw new Error('Unable to resolve MPA asset metadata');
         }
 
         const debtDelta = leg === 'collateral' ? 0 : plan.debtDelta;
         const collateralDelta = leg === 'debt' ? 0 : plan.collateralDelta;
         const debtInt = floatToBlockchainInt(debtDelta, debtAsset.precision);
-        const collateralInt = floatToBlockchainInt(collateralDelta, collateralAsset.precision);
+        const collateralInt = floatToBlockchainInt(collateralDelta, callOrderCollateralAsset.precision);
         if (debtInt === 0 && collateralInt === 0) {
             return null;
         }
@@ -1094,7 +1248,7 @@ class CreditRuntime {
             op_data: {
                 fee: { amount: 0, asset_id: ZERO_ASSET_ID },
                 funding_account: accountId,
-                delta_collateral: toAmountObject(collateralInt, collateralAsset.id),
+                delta_collateral: toAmountObject(collateralInt, callOrderCollateralAsset.id),
                 delta_debt: toAmountObject(debtInt, debtAsset.id),
                 extensions,
             }
@@ -1233,9 +1387,12 @@ class CreditRuntime {
 
         const minDurationSeconds = positiveOrNull(policy.minDurationSeconds);
         const minDuration = minDurationSeconds !== null ? minDurationSeconds : 0;
-        const maxCollateralAssets = this._normalizePolicyList(policy.allowedCollateralAssets);
-        if (maxCollateralAssets.length > 0 && collateralAsset?.id && !maxCollateralAssets.includes(String(collateralAsset.id))) {
-            throw new Error(`collateral asset ${collateralAsset.id} is not allowed`);
+        const policyCollateralAssetRef = policy.collateralAsset;
+        if (policyCollateralAssetRef && collateralAsset?.id) {
+            const policyCollateralAsset = await this._resolveAsset(policyCollateralAssetRef);
+            if (policyCollateralAsset?.id && String(collateralAsset.id) !== String(policyCollateralAsset.id)) {
+                throw new Error(`collateral asset ${collateralAsset.id} does not match policy.collateralAsset`);
+            }
         }
 
         const maxCollateralRatioValue = positiveOrNull(policy.maxCollateralRatio);
@@ -1623,7 +1780,7 @@ class CreditRuntime {
             throw new Error('_runMpaMaintenance requires an assetId');
         }
 
-        const plan = this._buildMpaPlanFromState(lendingItem, assetId);
+        const plan = await this._buildMpaPlanFromState(lendingItem, assetId);
         if (plan?.blocked) {
             return { blocked: true, reason: plan.reason };
         }
@@ -1634,16 +1791,16 @@ class CreditRuntime {
         const executed = [];
         let result = null;
 
-        const debtOp = await this.buildMpaUpdateOperation(plan, { leg: 'debt' }, assetId);
+        const debtOp = await this.buildMpaUpdateOperation(plan, { leg: 'debt' }, lendingItem, assetId);
         if (debtOp) {
             result = await this.executeOperations([debtOp], `mpa maintenance:${context} debt`);
             executed.push({ leg: 'debt', operation: debtOp, result });
             await this.refreshMpaState(lendingItem);
         }
 
-        const fallbackPlan = this._buildMpaPlanFromState(lendingItem, assetId);
+        const fallbackPlan = await this._buildMpaPlanFromState(lendingItem, assetId);
         if (fallbackPlan && !fallbackPlan.blocked) {
-            const collateralOp = await this.buildMpaUpdateOperation(fallbackPlan, { leg: 'collateral' }, assetId);
+            const collateralOp = await this.buildMpaUpdateOperation(fallbackPlan, { leg: 'collateral' }, lendingItem, assetId);
             if (collateralOp) {
                 result = await this.executeOperations([collateralOp], `mpa maintenance:${context} collateral`);
                 executed.push({ leg: 'collateral', operation: collateralOp, result });
@@ -1658,8 +1815,11 @@ class CreditRuntime {
                 executedAt: new Date().toISOString(),
                 executed,
             };
-            if (!this.state.positions[assetId]) this.state.positions[assetId] = {};
-            this.state.positions[assetId].lastMpaAction = lastAction;
+            const configuredCollateralAsset = await this._resolveAsset(lendingItem.collateralAsset);
+            const configuredCollateralAssetId = configuredCollateralAsset?.id;
+            const posKey = configuredCollateralAssetId ? this._positionKey(assetId, configuredCollateralAssetId) : assetId;
+            if (!this.state.positions[posKey]) this.state.positions[posKey] = {};
+            this.state.positions[posKey].lastMpaAction = lastAction;
 
             this.state.lastCrAdjustment = {
                 context,
@@ -1692,11 +1852,15 @@ class CreditRuntime {
             throw new Error('_runCreditMaintenance requires an assetId');
         }
 
+        const configuredCollateralAsset = await this._resolveAsset(lendingItem.collateralAsset);
+        const configuredCollateralAssetId = configuredCollateralAsset?.id;
+        const posKey = configuredCollateralAssetId ? this._positionKey(assetId, configuredCollateralAssetId) : assetId;
+
         // Phase 1: Proactively repay deals nearing expiration before processing reborrows
         const expiryThresholdHours = this.bot?.config?.TIMING?.CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS ?? 12;
         const expiryThresholdMs = expiryThresholdHours * 60 * 60 * 1000;
 
-        const posState = this.state.positions[assetId];
+        const posState = this.state.positions[posKey];
         if (!posState) return null;
 
         const activeDealIds = new Set((posState.creditDeals || []).map((d) => String(d?.id)).filter(Boolean));

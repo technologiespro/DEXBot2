@@ -90,10 +90,6 @@ function validateBotEntry(b, i, src) {
         } else {
             const dp = b.debtPolicy;
 
-            // New format: collateralAsset + lending array is required
-            if (typeof dp.collateralAsset !== 'string' || dp.collateralAsset.trim() === '') {
-                problems.push("debtPolicy.collateralAsset must be a non-empty string");
-            }
             if (!Array.isArray(dp.lending) || dp.lending.length === 0) {
                 problems.push("debtPolicy.lending must be a non-empty array");
             } else {
@@ -101,6 +97,9 @@ function validateBotEntry(b, i, src) {
                     if (typeof item !== 'object' || item === null) {
                         problems.push(`debtPolicy.lending[${idx}] must be an object`);
                         return;
+                    }
+                    if (!item.collateralAsset || typeof item.collateralAsset !== 'string') {
+                        problems.push(`debtPolicy.lending[${idx}].collateralAsset must be a non-empty string`);
                     }
                     if (!item.asset || typeof item.asset !== 'string') {
                         problems.push(`debtPolicy.lending[${idx}].asset must be a non-empty string`);
@@ -178,11 +177,6 @@ function validateBotEntry(b, i, src) {
                         if ('allowedOfferIds' in item) {
                             if (!Array.isArray(item.allowedOfferIds)) {
                                 problems.push(`debtPolicy.lending[${idx}].allowedOfferIds must be an array`);
-                            }
-                        }
-                        if ('allowedCollateralAssets' in item) {
-                            if (!Array.isArray(item.allowedCollateralAssets)) {
-                                problems.push(`debtPolicy.lending[${idx}].allowedCollateralAssets must be an array`);
                             }
                         }
                     }

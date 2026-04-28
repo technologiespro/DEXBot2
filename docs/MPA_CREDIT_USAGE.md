@@ -1,6 +1,6 @@
 # MPA and Credit Usage
 
-DEXBot2 supports native BitShares debt workflows through the bot-level `debtPolicy` config block. All debt workflows now use a unified **collateral-first** configuration that maps one collateral asset to one or more debt assets.
+DEXBot2 supports native BitShares debt workflows through the bot-level `debtPolicy` config block. Each lending item declares its own collateral asset, and the runtime groups items by collateral to compute independent distributions.
 
 ## Configuration Format
 
@@ -14,11 +14,11 @@ Add `debtPolicy` to a bot entry in `profiles/bots.json`.
   "assetB": "HONEST.USD",
   "active": true,
   "debtPolicy": {
-    "collateralAsset": "BTS",
     "maxCollateralAmount": "80%",
     "lending": [
       {
         "asset": "HONEST.USD",
+        "collateralAsset": "BTS",
         "type": "mpa",
         "ratio": 1,
         "maxBorrowAmount": 1000,
@@ -29,6 +29,7 @@ Add `debtPolicy` to a bot entry in `profiles/bots.json`.
       },
       {
         "asset": "HONEST.CNY",
+        "collateralAsset": "BTS",
         "type": "creditOffer",
         "ratio": 1,
         "maxBorrowAmount": 1000,
@@ -46,8 +47,7 @@ Add `debtPolicy` to a bot entry in `profiles/bots.json`.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `collateralAsset` | `string` | The asset used as collateral across all lending items (e.g. `"BTS"`). |
-| `lending` | `array` | Non-empty array of lending items. Each item maps a debt asset to a debt type. |
+| `lending` | `array` | Non-empty array of lending items. Each item maps a debt asset to a debt type and collateral asset. |
 
 ### Lending Item Fields
 
@@ -56,6 +56,7 @@ Every item in `lending` must have:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `asset` | `string` | Yes | The debt asset symbol or ID (e.g. `"HONEST.USD"`). |
+| `collateralAsset` | `string` | Yes | The collateral asset for this item (e.g. `"BTS"`). Multiple items may share the same collateral asset. |
 | `type` | `string` | Yes | Either `"mpa"` (BitShares MPA call order) or `"creditOffer"` (credit offer deal). |
 | `ratio` | `number` | No | Output weight for this asset. Defaults to `1`. See **Collateral Distribution** below. |
 
@@ -80,7 +81,6 @@ Every item in `lending` must have:
 | `autoReborrow` | `boolean` | No | If `true`, the bot reborrows from the same offer after repayment. |
 | `autoRepay` | `number` | No | On-chain credit deal auto-repay mode: `0`, `1`, or `2`. |
 | `allowedOfferIds` | `string[]` | No | Whitelist of credit offer object IDs the bot may accept. |
-| `allowedCollateralAssets` | `string[]` | No | Whitelist of collateral assets for credit offers. |
 
 ### Global Fields
 
@@ -88,21 +88,25 @@ Every item in `lending` must have:
 |-------|------|-------------|
 | `maxCollateralAmount` | `number \| string` | **Global** collateral cap across all lending items. Resolved against the full collateral base (on-chain balance + committed collateral). May be absolute or percentage (e.g. `"80%"`). |
 
-There is no separate enable switch. If `debtPolicy.collateralAsset` and `debtPolicy.lending` are present and valid, the credit runtime loads for that bot.
+There is no separate enable switch. If `debtPolicy.lending` is present, non-empty, and every item has a valid `collateralAsset`, the credit runtime loads for that bot.
 
 ## Collateral Distribution
 
-The runtime splits the total available collateral across all `lending` items using a **weight-based** allocation:
+The runtime calculates the required collateral for each `lending` item **backwards from the desired debt output ratio**. The `ratio` field controls the proportion of debt value (not collateral) each item receives.
+
+### Formulas
 
 ```
-weight_i = ratio_i * targetCR_i
-C_total  = min(availableCollateral, globalMaxCollateral)
-C_i      = C_total * weight_i / sum(all weights)
+MPA weight_i    = ratio_i * feedPrice_i * targetCR_i
+Credit weight_i = (ratio_i * maxCR_i) / conversionRate_i
+C_total         = min(availableCollateral, globalMaxCollateral)
+C_i             = C_total * weight_i / sum(all weights)
 ```
 
-- For **MPA** items, `targetCR_i` is `targetCollateralRatio` (or `2.0` if not set).
-- For **creditOffer** items, `targetCR_i` is `maxCollateralRatio` (or `2.0` if not set).
-- `ratio` is the user's output proportion. A `ratio` of `1` is the default. If you set `ratio: 0.8`, only 80 % of the proportional collateral is used to generate output; the remaining 20 % stays as a safety reserve for low-CR coverage.
+- **MPA**: `feedPrice_i` is the current settlement feed price (collateral per debt asset). The runtime discovers it from the chain and caches it per position.
+- **Credit**: `conversionRate_i` is the offer's `acceptable_collateral` price (debt asset per collateral unit). The runtime discovers it from existing deals or `allowedOfferIds`.
+- **Fallback**: If the price cannot be discovered, the runtime falls back to `weight = ratio * targetCR` and logs a warning.
+- `ratio` is the user's output proportion. A `ratio` of `1` is the default. Equal ratios produce **equal economic debt value** across all lending items, regardless of price or CR differences.
 
 ### Examples
 

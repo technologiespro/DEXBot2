@@ -8,9 +8,9 @@ function testNormalizeBotDraftSeedsDefaults() {
   const draft = normalizeBotDraft({
     name: 'test-bot',
     debtPolicy: {
-      collateralAsset: 'BTS',
       lending: [
-        { asset: 'HONEST.USD', type: 'creditOffer', maxFeeRatePerDay: 0.001, maxCollateralRatio: 2.5 },
+        { asset: 'HONEST.USD',
+                    collateralAsset: 'BTS', type: 'creditOffer', maxFeeRatePerDay: 0.001, maxCollateralRatio: 2.5 },
       ],
     },
   });

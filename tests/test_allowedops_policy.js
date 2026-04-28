@@ -475,8 +475,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
         allowedOps: {
             credit_offer_accept: {
                 allowedOfferIds: ['1.18.42'],
-                allowedDebtAssets: ['1.3.0'],
-                allowedCollateralAssets: ['1.3.861', '1.3.862'],
+                collateralAsset: '1.3.861',
                 maxFeeRate: 30000,
                 minDurationSeconds: 3600,
             },
@@ -553,7 +552,6 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
         allowedOps: {
             credit_deal_repay: {
                 allowedDealIds: ['1.19.77'],
-                allowedDebtAssets: ['1.3.0'],
                 maxRepayAmount: 800,
                 maxCreditFee: 50,
             },

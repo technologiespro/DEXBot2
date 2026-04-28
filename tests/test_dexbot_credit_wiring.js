@@ -104,8 +104,6 @@ async function main() {
       incrementPercent: 0.5,
       debtPolicy: {
         mpa: {
-          allowedDebtAssets: ['1.3.10'],
-          allowedCollateralAssets: ['1.3.0'],
           maxBorrowAmount: 1000,
           maxCollateralAmount: 10000,
           minCollateralRatio: 2,

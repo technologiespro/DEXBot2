@@ -12,7 +12,8 @@ const {
 
 const raw = {
     bots: [
-        { name: 'A', active: false, debtPolicy: { collateralAsset: 'BTS', lending: [{ asset: 'USD', type: 'mpa', maxCollateralRatio: 2.0 }] } },
+        { name: 'A', active: false, debtPolicy: { lending: [{ asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', maxCollateralRatio: 2.0 }] } },
         { name: 'B', assetA: 'BTS', assetB: 'USD' },
     ],
 };
@@ -68,7 +69,6 @@ const missingLending = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
     },
 };
 
@@ -85,10 +85,10 @@ const invalidCreditOfferRatio = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
         lending: [
             {
                 asset: 'USD',
+                    collateralAsset: 'BTS',
                 type: 'creditOffer',
                 maxBorrowAmount: 1000,
                 maxCollateralAmount: 25000,
@@ -111,10 +111,10 @@ const validCreditOffer = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
         lending: [
             {
                 asset: 'USD',
+                    collateralAsset: 'BTS',
                 type: 'creditOffer',
                 ratio: 1,
                 maxBorrowAmount: 1000,
@@ -141,10 +141,10 @@ const invalidCreditOfferBorrowCap = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
         lending: [
             {
                 asset: 'USD',
+                    collateralAsset: 'BTS',
                 type: 'creditOffer',
                 maxBorrowAmount: 0,
                 maxCollateralRatio: 2.5,
@@ -166,10 +166,10 @@ const invalidCreditOfferBorrowPercent = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
         lending: [
             {
                 asset: 'USD',
+                    collateralAsset: 'BTS',
                 type: 'creditOffer',
                 maxBorrowAmount: '25%',
                 maxCollateralRatio: 2.5,
@@ -191,10 +191,10 @@ const invalidCreditOfferPerDay = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
         lending: [
             {
                 asset: 'USD',
+                    collateralAsset: 'BTS',
                 type: 'creditOffer',
                 maxFeeRatePerDay: -0.001,
                 maxCollateralRatio: 2.5,
@@ -216,10 +216,10 @@ const invalidMpaBorrowCap = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
         lending: [
             {
                 asset: 'USD',
+                    collateralAsset: 'BTS',
                 type: 'mpa',
                 maxBorrowAmount: 0,
                 maxCollateralRatio: 2.5,
@@ -241,10 +241,10 @@ const invalidMpaCrRange = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
         lending: [
             {
                 asset: 'USD',
+                    collateralAsset: 'BTS',
                 type: 'mpa',
                 minCollateralRatio: 3.0,
                 maxCollateralRatio: 2.0,
@@ -266,11 +266,11 @@ const validMpa = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
         maxCollateralAmount: 10000,
         lending: [
             {
                 asset: 'USD',
+                    collateralAsset: 'BTS',
                 type: 'mpa',
                 ratio: 1,
                 maxBorrowAmount: 1000,
@@ -297,9 +297,9 @@ const invalidType = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
         lending: [
-            { asset: 'USD', type: 'invalid', maxCollateralRatio: 2.0 },
+            { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'invalid', maxCollateralRatio: 2.0 },
         ],
     },
 };
@@ -317,9 +317,9 @@ const negativeRatio = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
         lending: [
-            { asset: 'USD', type: 'mpa', ratio: -1, maxCollateralRatio: 2.0 },
+            { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: -1, maxCollateralRatio: 2.0 },
         ],
     },
 };
@@ -337,10 +337,10 @@ const globalMaxCollateralPercent = {
     activeOrders: { sell: 20, buy: 20 },
     botFunds: { sell: '100%', buy: '100%' },
     debtPolicy: {
-        collateralAsset: 'BTS',
         maxCollateralAmount: '80%',
         lending: [
-            { asset: 'USD', type: 'mpa', maxCollateralRatio: 2.0 },
+            { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', maxCollateralRatio: 2.0 },
         ],
     },
 };

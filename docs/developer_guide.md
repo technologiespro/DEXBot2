@@ -151,7 +151,7 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 
 | Term | Meaning |
 |------|---------|
-| **Debt Policy** | Per-bot configuration block (`debtPolicy.collateralAsset` + `debtPolicy.lending` array) governing borrowing behavior |
+| **Debt Policy** | Per-bot configuration block (`debtPolicy.lending` array) governing borrowing behavior. Each item declares its own `collateralAsset`. |
 | **MPA Borrow** | Market-pegged asset call-order update (debt-first CR planning) |
 | **Credit Offer** | On-chain peer-to-peer lending offer acceptance and repayment |
 | **Auto-Reborrow** | Bot-side flag allowing a new credit offer accept after successful repay |
@@ -1109,8 +1109,6 @@ Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
   "name": "credit-bot-1",
   "debtPolicy": {
     "mpa": {
-      "allowedDebtAssets": ["HONEST.USD"],
-      "allowedCollateralAssets": ["BTS"],
       "maxBorrowAmount": 1000,
       "maxCollateralAmount": 25000,
       "minCollateralRatio": 2.0,
@@ -1119,8 +1117,6 @@ Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
     },
     "creditOffer": {
       "allowedOfferIds": ["1.18.42"],
-      "allowedDebtAssets": ["HONEST.USD"],
-      "allowedCollateralAssets": ["BTS", "HONEST.LP"],
       "maxBorrowAmount": 1000,
       "maxCollateralAmount": 25000,
       "maxFeeRate": 30000,

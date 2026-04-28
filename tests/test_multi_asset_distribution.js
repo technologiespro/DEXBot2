@@ -28,11 +28,12 @@ async function testCollateralDistribution() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 maxCollateralAmount: 10000,
                 lending: [
-                    { asset: 'USD', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
-                    { asset: 'CNY', type: 'mpa', ratio: 1, targetCollateralRatio: 3.0 }
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
+                    { asset: 'CNY',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 3.0 }
                 ]
             }
         },
@@ -53,8 +54,8 @@ async function testCollateralDistribution() {
 
     await runtime._calculateCollateralDistribution();
 
-    const usdBudget = runtime.state.positions['1.3.1'].assignedCollateralBudget;
-    const cnyBudget = runtime.state.positions['1.3.2'].assignedCollateralBudget;
+    const usdBudget = runtime.state.positions['1.3.1:1.3.0'].assignedCollateralBudget;
+    const cnyBudget = runtime.state.positions['1.3.2:1.3.0'].assignedCollateralBudget;
 
     console.log(`USD Budget: ${usdBudget}, CNY Budget: ${cnyBudget}`);
 
@@ -75,11 +76,12 @@ async function testCollateralDistributionWithCredit() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 maxCollateralAmount: 10000,
                 lending: [
-                    { asset: 'USD', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
-                    { asset: 'CNY', type: 'creditOffer', ratio: 2, maxCollateralRatio: 2.0 }
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
+                    { asset: 'CNY',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 2, maxCollateralRatio: 2.0 }
                 ]
             }
         },
@@ -100,8 +102,8 @@ async function testCollateralDistributionWithCredit() {
 
     await runtime._calculateCollateralDistribution();
 
-    const usdBudget = runtime.state.positions['1.3.1'].assignedCollateralBudget;
-    const cnyBudget = runtime.state.positions['1.3.2'].assignedCollateralBudget;
+    const usdBudget = runtime.state.positions['1.3.1:1.3.0'].assignedCollateralBudget;
+    const cnyBudget = runtime.state.positions['1.3.2:1.3.0'].assignedCollateralBudget;
 
     console.log(`USD Budget: ${usdBudget}, CNY Budget: ${cnyBudget}`);
 
@@ -122,11 +124,12 @@ async function testRefreshStateMulti() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 maxCollateralAmount: 10000,
                 lending: [
-                    { asset: 'USD', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
-                    { asset: 'CNY', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 }
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
+                    { asset: 'CNY',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 }
                 ]
             }
         },
@@ -151,13 +154,23 @@ async function testRefreshStateMulti() {
         ]
     });
     runtime._fetchBorrowerDeals = async () => [];
-    runtime._resolveBitassetData = async () => ({ current_feed: { settlement_price: { base: { amount: 10, asset_id: '1.3.0' }, quote: { amount: 1, asset_id: '1.3.1' } } } });
+    runtime._resolveBitassetData = async (ref) => {
+        const assetId = typeof ref === 'object' ? ref?.id : ref;
+        return {
+            current_feed: {
+                settlement_price: {
+                    base: { amount: 10, asset_id: '1.3.0' },
+                    quote: { amount: 1, asset_id: assetId || '1.3.1' }
+                }
+            }
+        };
+    };
     runtime.persistState = async () => {};
 
     await runtime.refreshState();
 
-    const usdPos = runtime.state.positions['1.3.1'];
-    const cnyPos = runtime.state.positions['1.3.2'];
+    const usdPos = runtime.state.positions['1.3.1:1.3.0'];
+    const cnyPos = runtime.state.positions['1.3.2:1.3.0'];
 
     assert.ok(usdPos, 'USD position should exist');
     assert.ok(cnyPos, 'CNY position should exist');
@@ -175,8 +188,8 @@ async function testIsEnabledNewFormat() {
     const enabledBot = {
         config: {
             debtPolicy: {
-                collateralAsset: 'BTS',
-                lending: [{ asset: 'USD', type: 'mpa' }]
+                lending: [{ asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa' }]
             }
         }
     };
@@ -228,9 +241,9 @@ async function testStatePersistenceWithPositions() {
             botKey: 'persist-test',
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 lending: [
-                    { asset: 'USD', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 }
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 }
                 ]
             }
         },
@@ -254,13 +267,13 @@ async function testStatePersistenceWithPositions() {
 
     const persisted = JSON.parse(fs.readFileSync(statePath, 'utf8'));
     assert.ok(persisted.positions, 'persisted state should contain positions');
-    assert.ok(persisted.positions['1.3.1'], 'USD position should be persisted');
-    assert.strictEqual(persisted.positions['1.3.1'].assignedCollateralBudget, 10000);
+    assert.ok(persisted.positions['1.3.1:1.3.0'], 'USD position should be persisted');
+    assert.strictEqual(persisted.positions['1.3.1:1.3.0'].assignedCollateralBudget, 10000);
 
     // Load back and verify
     const runtime2 = new CreditRuntime(bot, { stateDir: baseDir });
     await runtime2.loadState();
-    assert.strictEqual(runtime2.state.positions['1.3.1'].assignedCollateralBudget, 10000, 'loaded state should restore positions');
+    assert.strictEqual(runtime2.state.positions['1.3.1:1.3.0'].assignedCollateralBudget, 10000, 'loaded state should restore positions');
 
     try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { /* ignore */ }
     console.log('Test passed!');
@@ -273,12 +286,14 @@ async function testThreeAssetEqualSplit() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 maxCollateralAmount: 9000,
                 lending: [
-                    { asset: 'USD', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
-                    { asset: 'CNY', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
-                    { asset: 'EUR', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 }
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
+                    { asset: 'CNY',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
+                    { asset: 'EUR',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 }
                 ]
             }
         },
@@ -298,9 +313,9 @@ async function testThreeAssetEqualSplit() {
 
     await runtime._calculateCollateralDistribution();
 
-    const usd = runtime.state.positions['1.3.1']?.assignedCollateralBudget;
-    const cny = runtime.state.positions['1.3.2']?.assignedCollateralBudget;
-    const eur = runtime.state.positions['1.3.3']?.assignedCollateralBudget;
+    const usd = runtime.state.positions['1.3.1:1.3.0']?.assignedCollateralBudget;
+    const cny = runtime.state.positions['1.3.2:1.3.0']?.assignedCollateralBudget;
+    const eur = runtime.state.positions['1.3.3:1.3.0']?.assignedCollateralBudget;
 
     // All weights equal (1 * 2.0) => each gets 1/3 of C_total = 9000
     assert.strictEqual(usd, 3000, 'USD should get one third');
@@ -317,11 +332,12 @@ async function testMaxCollateralCap() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 maxCollateralAmount: 5000,
                 lending: [
-                    { asset: 'USD', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
-                    { asset: 'CNY', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 }
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
+                    { asset: 'CNY',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 }
                 ]
             }
         },
@@ -340,8 +356,8 @@ async function testMaxCollateralCap() {
 
     await runtime._calculateCollateralDistribution();
 
-    const usd = runtime.state.positions['1.3.1']?.assignedCollateralBudget;
-    const cny = runtime.state.positions['1.3.2']?.assignedCollateralBudget;
+    const usd = runtime.state.positions['1.3.1:1.3.0']?.assignedCollateralBudget;
+    const cny = runtime.state.positions['1.3.2:1.3.0']?.assignedCollateralBudget;
 
     // C_total should be capped at 5000, not 20000
     assert.strictEqual(usd, 2500);
@@ -357,9 +373,9 @@ async function testBuildMpaPlanUsesAssignedBudget() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 lending: [
-                    { asset: 'USD', type: 'mpa', ratio: 1, targetCollateralRatio: 2.2, maxCollateralAmount: 9999, maxBorrowAmount: 110, minCollateralRatio: 2.0, maxCollateralRatio: 2.5 }
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.2, maxCollateralAmount: 9999, maxBorrowAmount: 110, minCollateralRatio: 2.0, maxCollateralRatio: 2.5 }
                 ]
             }
         },
@@ -368,7 +384,12 @@ async function testBuildMpaPlanUsesAssignedBudget() {
     };
 
     const runtime = new CreditRuntime(bot);
-    runtime.state.positions['1.3.1'] = {
+    runtime._resolveAsset = async (ref) => {
+        if (ref === 'BTS' || ref === '1.3.0') return { id: '1.3.0', symbol: 'BTS', precision: 5 };
+        if (ref === 'USD' || ref === '1.3.1') return { id: '1.3.1', symbol: 'USD', precision: 5 };
+        return { id: '1.3.99', symbol: ref, precision: 5 };
+    };
+    runtime.state.positions['1.3.1:1.3.0'] = {
         currentCollateralAmount: 600,
         currentDebtAmount: 100,
         feedPrice: 2.0,
@@ -378,7 +399,7 @@ async function testBuildMpaPlanUsesAssignedBudget() {
     };
 
     const usdPolicy = bot.config.debtPolicy.lending[0];
-    const plan = runtime._buildMpaPlanFromState(usdPolicy, '1.3.1');
+    const plan = await runtime._buildMpaPlanFromState(usdPolicy, '1.3.1');
     assert.ok(plan, 'plan should be generated');
     // CR = 600/(100*2) = 3.0 > maxCr 2.5 → increase debt (capped by maxBorrowAmount)
     assert.strictEqual(plan.action, 'increase_debt', 'should want to increase debt');
@@ -397,9 +418,9 @@ async function testBuildMpaPlanFallsBackToPolicyMaxCollateral() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 lending: [
-                    { asset: 'USD', type: 'mpa', maxCollateralAmount: 500, targetCollateralRatio: 2.0, maxBorrowAmount: 55 }
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', maxCollateralAmount: 500, targetCollateralRatio: 2.0, maxBorrowAmount: 55 }
                 ]
             }
         },
@@ -408,7 +429,12 @@ async function testBuildMpaPlanFallsBackToPolicyMaxCollateral() {
     };
 
     const runtime = new CreditRuntime(bot);
-    runtime.state.positions['1.3.1'] = {
+    runtime._resolveAsset = async (ref) => {
+        if (ref === 'BTS' || ref === '1.3.0') return { id: '1.3.0', symbol: 'BTS', precision: 5 };
+        if (ref === 'USD' || ref === '1.3.1') return { id: '1.3.1', symbol: 'USD', precision: 5 };
+        return { id: '1.3.99', symbol: ref, precision: 5 };
+    };
+    runtime.state.positions['1.3.1:1.3.0'] = {
         currentCollateralAmount: 150,
         currentDebtAmount: 50,
         feedPrice: 1.0,
@@ -417,7 +443,7 @@ async function testBuildMpaPlanFallsBackToPolicyMaxCollateral() {
     };
 
     const lendingItem = bot.config.debtPolicy.lending[0];
-    const plan = runtime._buildMpaPlanFromState(lendingItem, '1.3.1');
+    const plan = await runtime._buildMpaPlanFromState(lendingItem, '1.3.1');
     assert.ok(plan, 'plan should be generated');
     assert.strictEqual(plan.action, 'increase_debt');
     assert.ok(plan.collateralDelta < 0, 'collateral should be withdrawn when debt increase is capped');
@@ -432,9 +458,9 @@ async function testBackwardCompatibilityFlatMpa() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 lending: [
-                    { asset: 'USD', type: 'mpa', targetCollateralRatio: 2.0, maxCollateralAmount: 1000 }
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', targetCollateralRatio: 2.0, maxCollateralAmount: 1000 }
                 ]
             }
         },
@@ -453,13 +479,23 @@ async function testBackwardCompatibilityFlatMpa() {
             { id: '1.18.1', call_price: { base: { asset_id: '1.3.0' }, quote: { asset_id: '1.3.1' } }, debt: { amount: 100000, asset_id: '1.3.1' }, collateral: { amount: 250000, asset_id: '1.3.0' } }
         ]
     });
-    runtime._resolveBitassetData = async () => ({ current_feed: { settlement_price: { base: { amount: 10, asset_id: '1.3.0' }, quote: { amount: 1, asset_id: '1.3.1' } } } });
+    runtime._resolveBitassetData = async (ref) => {
+        const assetId = typeof ref === 'object' ? ref?.id : ref;
+        return {
+            current_feed: {
+                settlement_price: {
+                    base: { amount: 10, asset_id: '1.3.0' },
+                    quote: { amount: 1, asset_id: assetId || '1.3.1' }
+                }
+            }
+        };
+    };
     runtime.persistState = async () => {};
 
     const lendingItem = bot.config.debtPolicy.lending[0];
     await runtime.refreshMpaState(lendingItem);
 
-    const pos = runtime.state.positions['1.3.1'];
+    const pos = runtime.state.positions['1.3.1:1.3.0'];
     assert.ok(pos, 'position should exist');
     assert.strictEqual(pos.activeCallOrderId, '1.18.1', 'position activeCallOrderId should be populated');
     assert.strictEqual(pos.debtAssetId, '1.3.1');
@@ -475,10 +511,11 @@ async function testRunMaintenanceIteratesLending() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 lending: [
-                    { asset: 'USD', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
-                    { asset: 'CNY', type: 'creditOffer', ratio: 1, maxCollateralRatio: 2.0 }
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
+                    { asset: 'CNY',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 1, maxCollateralRatio: 2.0 }
                 ]
             }
         },
@@ -526,9 +563,9 @@ async function testCreditMaintenanceUsesAssignedBudget() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 lending: [
-                    { asset: 'CNY', type: 'creditOffer', ratio: 1, maxCollateralRatio: 2.0, autoReborrow: true }
+                    { asset: 'CNY',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 1, maxCollateralRatio: 2.0, autoReborrow: true }
                 ]
             }
         },
@@ -537,7 +574,12 @@ async function testCreditMaintenanceUsesAssignedBudget() {
     };
 
     const runtime = new CreditRuntime(bot);
-    runtime.state.positions['1.3.2'] = {
+    runtime._resolveAsset = async (ref) => {
+        if (ref === 'BTS' || ref === '1.3.0') return { id: '1.3.0', symbol: 'BTS', precision: 5 };
+        if (ref === 'CNY' || ref === '1.3.2') return { id: '1.3.2', symbol: 'CNY', precision: 5 };
+        return { id: '1.3.99', symbol: ref, precision: 5 };
+    };
+    runtime.state.positions['1.3.2:1.3.0'] = {
         assignedCollateralBudget: 5000,
         creditDeals: [{
             id: '1.19.1',
@@ -582,9 +624,9 @@ async function testCreditAcceptUsesSpecificPolicy() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 lending: [
-                    { asset: 'USD', type: 'creditOffer', ratio: 1, maxCollateralRatio: 5.0, maxFeeRatePerDay: 0.05, autoReborrow: true }
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 1, maxCollateralRatio: 5.0, maxFeeRatePerDay: 0.05, autoReborrow: true }
                 ]
             }
         },
@@ -613,11 +655,11 @@ async function testCreditAcceptUsesSpecificPolicy() {
 
     const strictPolicy = { ...bot.config.debtPolicy.lending[0], maxCollateralRatio: 1.5 };
 
-    // With specificPolicy maxCollateralRatio=1.5, borrowAmount=100 and collateralValue=200 gives CR=2.0 > 1.5 → should reject
+    // With specificPolicy maxCollateralRatio=1.5, borrowAmount=50 and collateralValue=200 gives CR=2.0 > 1.5 → should reject
     try {
         await runtime.buildCreditOfferAcceptOperation({
             offer,
-            borrowAmount: 100,
+            borrowAmount: 50,
             collateralAmount: 200,
             specificPolicy: strictPolicy,
         });
@@ -629,7 +671,7 @@ async function testCreditAcceptUsesSpecificPolicy() {
     // Without specificPolicy, looked-up lending policy maxCollateralRatio=5.0 should allow the operation
     const op = await runtime.buildCreditOfferAcceptOperation({
         offer,
-        borrowAmount: 100,
+        borrowAmount: 50,
         collateralAmount: 200,
     });
     assert.strictEqual(op.op_name, 'credit_offer_accept', 'looked-up lending policy should allow the operation');
@@ -644,9 +686,9 @@ async function testCreditMaintenancePassesSpecificPolicy() {
         config: {
             preferredAccount: 'my-account',
             debtPolicy: {
-                collateralAsset: 'BTS',
                 lending: [
-                    { asset: 'EUR', type: 'creditOffer', ratio: 1, maxCollateralRatio: 2.0, autoReborrow: true }
+                    { asset: 'EUR',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 1, maxCollateralRatio: 2.0, autoReborrow: true }
                 ]
             }
         },
@@ -655,7 +697,12 @@ async function testCreditMaintenancePassesSpecificPolicy() {
     };
 
     const runtime = new CreditRuntime(bot);
-    runtime.state.positions['1.3.3'] = {
+    runtime._resolveAsset = async (ref) => {
+        if (ref === 'BTS' || ref === '1.3.0') return { id: '1.3.0', symbol: 'BTS', precision: 5 };
+        if (ref === 'EUR' || ref === '1.3.3') return { id: '1.3.3', symbol: 'EUR', precision: 5 };
+        return { id: '1.3.99', symbol: ref, precision: 5 };
+    };
+    runtime.state.positions['1.3.3:1.3.0'] = {
         assignedCollateralBudget: 3000,
         creditDeals: [{
             id: '1.19.3',
@@ -694,6 +741,151 @@ async function testCreditMaintenancePassesSpecificPolicy() {
     console.log('Test passed!');
 }
 
+async function testMpaDistributionWithDifferentFeedPrices() {
+    console.log('Testing MPA distribution with different feed prices...');
+
+    const bot = {
+        config: {
+            preferredAccount: 'my-account',
+            debtPolicy: {
+                maxCollateralAmount: 10000,
+                lending: [
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 },
+                    { asset: 'CNY',
+                    collateralAsset: 'BTS', type: 'mpa', ratio: 1, targetCollateralRatio: 2.0 }
+                ]
+            }
+        },
+        _log: () => {},
+        _warn: () => {}
+    };
+
+    const runtime = new CreditRuntime(bot);
+
+    runtime._resolveAsset = async (ref) => {
+        if (ref === 'BTS' || ref === '1.3.0') return { id: '1.3.0', symbol: 'BTS', precision: 5 };
+        if (ref === 'USD' || ref === '1.3.1') return { id: '1.3.1', symbol: 'USD', precision: 5 };
+        if (ref === 'CNY' || ref === '1.3.2') return { id: '1.3.2', symbol: 'CNY', precision: 5 };
+        return { id: '1.3.99', symbol: ref, precision: 5 };
+    };
+
+    runtime._resolveMpaFeedPrice = async (debtAssetId, collateralAssetId) => {
+        if (debtAssetId === '1.3.1') return 0.5;
+        if (debtAssetId === '1.3.2') return 0.05;
+        return null;
+    };
+
+    runtime._getCollateralPercentageBase = async () => 20000;
+
+    await runtime._calculateCollateralDistribution();
+
+    const usdBudget = runtime.state.positions['1.3.1:1.3.0'].assignedCollateralBudget;
+    const cnyBudget = runtime.state.positions['1.3.2:1.3.0'].assignedCollateralBudget;
+
+    // weight_USD = 1 * 0.5 * 2.0 = 1.0
+    // weight_CNY = 1 * 0.05 * 2.0 = 0.1
+    // totalWeight = 1.1
+    // C_total = 10000
+    // C_USD = 10000 * 1.0 / 1.1 = 9090.909...
+    // C_CNY = 10000 * 0.1 / 1.1 = 909.090...
+    const expectedUsdBudget = 10000 * 1.0 / 1.1;
+    const expectedCnyBudget = 10000 * 0.1 / 1.1;
+
+    console.log(`USD Budget: ${usdBudget}, CNY Budget: ${cnyBudget}`);
+
+    assert.ok(Math.abs(usdBudget - expectedUsdBudget) < 0.0001, `USD budget ${usdBudget} should be ~${expectedUsdBudget}`);
+    assert.ok(Math.abs(cnyBudget - expectedCnyBudget) < 0.0001, `CNY budget ${cnyBudget} should be ~${expectedCnyBudget}`);
+
+    console.log('Test passed!');
+}
+
+async function testCreditDistributionWithDiscoveredPrice() {
+    console.log('Testing credit distribution with discovered offer prices...');
+
+    const bot = {
+        config: {
+            preferredAccount: 'my-account',
+            debtPolicy: {
+                maxCollateralAmount: 10000,
+                lending: [
+                    { asset: 'USD',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 1, maxCollateralRatio: 2.0, allowedOfferIds: ['1.18.1'] },
+                    { asset: 'CNY',
+                    collateralAsset: 'BTS', type: 'creditOffer', ratio: 1, maxCollateralRatio: 2.0, allowedOfferIds: ['1.18.2'] }
+                ]
+            }
+        },
+        _log: () => {},
+        _warn: () => {}
+    };
+
+    const runtime = new CreditRuntime(bot);
+
+    runtime._resolveAsset = async (ref) => {
+        if (ref === 'BTS' || ref === '1.3.0') return { id: '1.3.0', symbol: 'BTS', precision: 5 };
+        if (ref === 'USD' || ref === '1.3.1') return { id: '1.3.1', symbol: 'USD', precision: 5 };
+        if (ref === 'CNY' || ref === '1.3.2') return { id: '1.3.2', symbol: 'CNY', precision: 5 };
+        return { id: '1.3.99', symbol: ref, precision: 5 };
+    };
+
+    runtime._dbCall = async (method, args) => {
+        if (method === 'get_objects') {
+            return args[0].map((id) => {
+                if (id === '1.18.1') {
+                    // USD offer: 2 BTS = 1 USD  → conversionRate = 0.5 USD/BTS
+                    return {
+                        id: '1.18.1',
+        asset_type: '1.3.1',
+                        enabled: true,
+                        acceptable_collateral: {
+                            '1.3.0': { base: { amount: 200000, asset_id: '1.3.0' }, quote: { amount: 100000, asset_id: '1.3.1' } }
+                        }
+                    };
+                }
+                if (id === '1.18.2') {
+                    // CNY offer: 1 BTS = 20 CNY → conversionRate = 20 CNY/BTS
+                    return {
+                        id: '1.18.2',
+                        asset_type: '1.3.2',
+                        enabled: true,
+                        acceptable_collateral: {
+                            '1.3.0': { base: { amount: 100000, asset_id: '1.3.0' }, quote: { amount: 2000000, asset_id: '1.3.2' } }
+                        }
+                    };
+                }
+                return { id, type: 'object' };
+            });
+        }
+        return [];
+    };
+
+    runtime._getCollateralPercentageBase = async () => 20000;
+
+    await runtime._calculateCollateralDistribution();
+
+    const usdBudget = runtime.state.positions['1.3.1:1.3.0'].assignedCollateralBudget;
+    const cnyBudget = runtime.state.positions['1.3.2:1.3.0'].assignedCollateralBudget;
+
+    // conversionRate_USD = 100000/200000 = 0.5
+    // conversionRate_CNY = 2000000/100000 = 20
+    // weight_USD = (1 * 2.0) / 0.5 = 4.0
+    // weight_CNY = (1 * 2.0) / 20 = 0.1
+    // totalWeight = 4.1
+    // C_total = 10000
+    // C_USD = 10000 * 4.0 / 4.1 = 9756.09756...
+    // C_CNY = 10000 * 0.1 / 4.1 = 243.90243...
+    const expectedUsdBudget = 10000 * 4.0 / 4.1;
+    const expectedCnyBudget = 10000 * 0.1 / 4.1;
+
+    console.log(`USD Budget: ${usdBudget}, CNY Budget: ${cnyBudget}`);
+
+    assert.ok(Math.abs(usdBudget - expectedUsdBudget) < 0.0001, `USD budget ${usdBudget} should be ~${expectedUsdBudget}`);
+    assert.ok(Math.abs(cnyBudget - expectedCnyBudget) < 0.0001, `CNY budget ${cnyBudget} should be ~${expectedCnyBudget}`);
+
+    console.log('Test passed!');
+}
+
 async function runTests() {
     try {
         await testCollateralDistribution();
@@ -711,6 +903,8 @@ async function runTests() {
         await testCreditMaintenanceUsesAssignedBudget();
         await testCreditAcceptUsesSpecificPolicy();
         await testCreditMaintenancePassesSpecificPolicy();
+        await testMpaDistributionWithDifferentFeedPrices();
+        await testCreditDistributionWithDiscoveredPrice();
         process.exit(0);
     } catch (err) {
         console.error('Test failed:', err);

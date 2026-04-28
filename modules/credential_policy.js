@@ -13,6 +13,8 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { isPositiveInt } = require('./order/utils/math');
 
+const BOTS_JSON_PATH = path.join(__dirname, '..', 'profiles', 'bots.json');
+
 const POLICY_DENIED_PREFIX = 'POLICY_DENIED: ';
 const EXECUTABLE_TIMEOUT_MS = 5000;
 
@@ -144,6 +146,10 @@ function validateOpConstraints(opName, constraints) {
     if (opName === 'call_order_update') {
         if (constraints.allowedAssets !== undefined && !isStringArray(constraints.allowedAssets))
             errors.push('allowedAssets must be an array of strings');
+        if (constraints.collateralAsset !== undefined && typeof constraints.collateralAsset !== 'string')
+            errors.push('collateralAsset must be a string');
+        if (constraints.allowedCollateralAssets !== undefined && !isStringArray(constraints.allowedCollateralAssets))
+            errors.push('allowedCollateralAssets must be an array of strings');
         if (constraints.maxDeltaCollateral !== undefined && !isPositiveInt(constraints.maxDeltaCollateral))
             errors.push('maxDeltaCollateral must be a positive integer');
         if (constraints.maxDeltaDebt !== undefined && !isPositiveInt(constraints.maxDeltaDebt))
@@ -160,10 +166,12 @@ function validateOpConstraints(opName, constraints) {
     if (opName === 'credit_offer_accept') {
         if (constraints.allowedOfferIds !== undefined && !isStringArray(constraints.allowedOfferIds))
             errors.push('allowedOfferIds must be an array of strings');
-        if (constraints.allowedDebtAssets !== undefined && !isStringArray(constraints.allowedDebtAssets))
-            errors.push('allowedDebtAssets must be an array of strings');
+        if (constraints.collateralAsset !== undefined && typeof constraints.collateralAsset !== 'string')
+            errors.push('collateralAsset must be a string');
         if (constraints.allowedCollateralAssets !== undefined && !isStringArray(constraints.allowedCollateralAssets))
             errors.push('allowedCollateralAssets must be an array of strings');
+        if (constraints.allowedDebtAssets !== undefined && !isStringArray(constraints.allowedDebtAssets))
+            errors.push('allowedDebtAssets must be an array of strings');
         if (constraints.maxFeeRate !== undefined && !isPositiveInt(constraints.maxFeeRate))
             errors.push('maxFeeRate must be a positive integer');
         if (constraints.minDurationSeconds !== undefined && !isPositiveInt(constraints.minDurationSeconds))
@@ -174,8 +182,6 @@ function validateOpConstraints(opName, constraints) {
     if (opName === 'credit_deal_repay') {
         if (constraints.allowedDealIds !== undefined && !isStringArray(constraints.allowedDealIds))
             errors.push('allowedDealIds must be an array of strings');
-        if (constraints.allowedDebtAssets !== undefined && !isStringArray(constraints.allowedDebtAssets))
-            errors.push('allowedDebtAssets must be an array of strings');
         if (constraints.maxRepayAmount !== undefined && !isPositiveInt(constraints.maxRepayAmount))
             errors.push('maxRepayAmount must be a positive integer');
         if (constraints.maxCreditFee !== undefined && !isPositiveInt(constraints.maxCreditFee))
@@ -329,12 +335,97 @@ function validatePolicyObject(policy) {
 }
 
 /**
+ * Derive debt-policy constraints from profiles/bots.json for an account.
+ * Scans all bots using `accountName` as preferredAccount and extracts
+ * collateralAsset / asset mappings from debtPolicy.lending[].
+ *
+ * Returns { call_order_update?, credit_offer_accept?, credit_deal_repay? }
+ * where each op constraint may contain:
+ *   - collateralAsset (string) — if all lending items for that op type share one collateral
+ *   - allowedCollateralAssets (string[]) — if multiple collaterals are used
+ *   - allowedDebtAssets (string[]) — debt assets used in credit lending items
+ */
+function deriveDebtPolicyConstraints(accountName) {
+    if (!accountName) return {};
+    try {
+        if (!fs.existsSync(BOTS_JSON_PATH)) return {};
+        const raw = fs.readFileSync(BOTS_JSON_PATH, 'utf8');
+        const bots = JSON.parse(raw);
+        if (!Array.isArray(bots)) return {};
+
+        const mpaCollaterals = new Set();
+        const creditCollaterals = new Set();
+        const creditDebtAssets = new Set();
+
+        for (const bot of bots) {
+            if (!bot || !bot.active) continue;
+            const pref = bot.preferredAccount || bot.account;
+            if (pref !== accountName) continue;
+            const dp = bot.debtPolicy;
+            if (!dp || !Array.isArray(dp.lending)) continue;
+
+            for (const item of dp.lending) {
+                if (!item || !item.asset || !item.collateralAsset) continue;
+                if (item.type === 'mpa') {
+                    mpaCollaterals.add(item.collateralAsset);
+                } else if (item.type === 'creditOffer') {
+                    creditCollaterals.add(item.collateralAsset);
+                    creditDebtAssets.add(item.asset);
+                }
+            }
+        }
+
+        const constraints = {};
+
+        if (mpaCollaterals.size > 0) {
+            constraints.call_order_update = {};
+            if (mpaCollaterals.size === 1) {
+                constraints.call_order_update.collateralAsset = Array.from(mpaCollaterals)[0];
+            } else {
+                constraints.call_order_update.allowedCollateralAssets = Array.from(mpaCollaterals);
+            }
+        }
+
+        if (creditCollaterals.size > 0 || creditDebtAssets.size > 0) {
+            constraints.credit_offer_accept = {};
+            if (creditCollaterals.size === 1) {
+                constraints.credit_offer_accept.collateralAsset = Array.from(creditCollaterals)[0];
+            } else if (creditCollaterals.size > 1) {
+                constraints.credit_offer_accept.allowedCollateralAssets = Array.from(creditCollaterals);
+            }
+            if (creditDebtAssets.size > 0) {
+                constraints.credit_offer_accept.allowedDebtAssets = Array.from(creditDebtAssets);
+            }
+        }
+
+        if (creditDebtAssets.size > 0) {
+            constraints.credit_deal_repay = {
+                allowedDebtAssets: Array.from(creditDebtAssets),
+            };
+        }
+
+        return constraints;
+    } catch {
+        return {};
+    }
+}
+
+/**
  * Resolve the effective policy for an account by merging layers:
- * builtin default → config.default → config.accounts[accountName]
+ * builtin default → auto-derived debt constraints → config.default → config.accounts[accountName]
  */
 function resolveAccountPolicy(config, accountName) {
     // Start with builtin
     let policy = JSON.parse(JSON.stringify(BUILTIN_DEFAULT_POLICY));
+
+    // Layer auto-derived debt constraints from bots.json
+    const debtConstraints = deriveDebtPolicyConstraints(accountName);
+    if (Object.keys(debtConstraints).length > 0) {
+        policy.allowedOps = { ...policy.allowedOps };
+        for (const [opName, constraints] of Object.entries(debtConstraints)) {
+            policy.allowedOps[opName] = { ...policy.allowedOps[opName], ...constraints };
+        }
+    }
 
     // Layer on config.default
     if (config && config.default) {
@@ -516,6 +607,26 @@ function evaluateOpConstraints(opName, opData, constraints) {
                 };
             }
         }
+        if (constraints.collateralAsset) {
+            const collId = d.delta_collateral && d.delta_collateral.asset_id;
+            if (collId && String(collId) !== String(constraints.collateralAsset)) {
+                return {
+                    allow: false,
+                    reason: `call_order_update: collateral asset "${collId}" does not match collateralAsset`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.allowedCollateralAssets) {
+            const collId = d.delta_collateral && d.delta_collateral.asset_id;
+            if (collId && !constraints.allowedCollateralAssets.includes(String(collId))) {
+                return {
+                    allow: false,
+                    reason: `call_order_update: collateral asset "${collId}" not in allowedCollateralAssets`,
+                    policyId: 'opParams',
+                };
+            }
+        }
         // maxDeltaCollateral
         if (constraints.maxDeltaCollateral != null) {
             const amt = d.delta_collateral && d.delta_collateral.amount;
@@ -571,22 +682,32 @@ function evaluateOpConstraints(opName, opData, constraints) {
                 };
             }
         }
-        if (constraints.allowedDebtAssets) {
-            const assetId = d.borrow_amount && d.borrow_amount.asset_id;
-            if (assetId && !constraints.allowedDebtAssets.includes(assetId)) {
+        if (constraints.collateralAsset) {
+            const assetId = d.collateral && d.collateral.asset_id;
+            if (assetId && String(assetId) !== String(constraints.collateralAsset)) {
                 return {
                     allow: false,
-                    reason: `credit_offer_accept: debt asset "${assetId}" not in allowedDebtAssets`,
+                    reason: `credit_offer_accept: collateral asset "${assetId}" does not match collateralAsset`,
                     policyId: 'opParams',
                 };
             }
         }
         if (constraints.allowedCollateralAssets) {
             const assetId = d.collateral && d.collateral.asset_id;
-            if (assetId && !constraints.allowedCollateralAssets.includes(assetId)) {
+            if (assetId && !constraints.allowedCollateralAssets.includes(String(assetId))) {
                 return {
                     allow: false,
                     reason: `credit_offer_accept: collateral asset "${assetId}" not in allowedCollateralAssets`,
+                    policyId: 'opParams',
+                };
+            }
+        }
+        if (constraints.allowedDebtAssets) {
+            const assetId = d.borrow_amount && d.borrow_amount.asset_id;
+            if (assetId && !constraints.allowedDebtAssets.includes(String(assetId))) {
+                return {
+                    allow: false,
+                    reason: `credit_offer_accept: debt asset "${assetId}" not in allowedDebtAssets`,
                     policyId: 'opParams',
                 };
             }
@@ -626,7 +747,7 @@ function evaluateOpConstraints(opName, opData, constraints) {
         }
         if (constraints.allowedDebtAssets) {
             const assetId = d.repay_amount && d.repay_amount.asset_id;
-            if (assetId && !constraints.allowedDebtAssets.includes(assetId)) {
+            if (assetId && !constraints.allowedDebtAssets.includes(String(assetId))) {
                 return {
                     allow: false,
                     reason: `credit_deal_repay: debt asset "${assetId}" not in allowedDebtAssets`,
@@ -1058,6 +1179,7 @@ module.exports = {
     BUILTIN_DEFAULT_POLICY,
     loadPolicyConfig,
     validatePolicyConfig,
+    deriveDebtPolicyConstraints,
     resolveAccountPolicy,
     buildPolicyContext,
     evaluatePolicy,
