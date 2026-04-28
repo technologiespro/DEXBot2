@@ -35,6 +35,7 @@ market_adapter/**/*.json
 
 # Test temporary files
 tests/tmp/
+tmp/
 
 # Generated files
 opencode.json
@@ -49,7 +50,6 @@ dashboard/target/
 # Market adapter runtime/user-specific artifacts
 market_adapter/data/
 market_adapter/state/
-market_adapter/inputs/data/
 
 # Claw runtime/user-specific artifacts
 claw/data/
