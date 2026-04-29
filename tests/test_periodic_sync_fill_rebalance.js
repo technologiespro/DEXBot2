@@ -1,6 +1,8 @@
 const assert = require('assert');
+const fs = require('fs');
 const DEXBot = require('../modules/dexbot_class');
 const chainOrders = require('../modules/chain_orders');
+const maintenanceRuntime = require('../modules/dexbot_maintenance_runtime');
 const { withDynamicWeightFiles } = require('./helpers/dynamic_weight_files');
 
 class MockAsyncLock {
@@ -32,6 +34,9 @@ async function runTests() {
     const originalSetInterval = global.setInterval;
     const originalClearInterval = global.clearInterval;
     const originalReadOpenOrders = chainOrders.readOpenOrders;
+    const originalSyncMarketAdapterOnPeriodicConfigCheck = maintenanceRuntime.syncMarketAdapterOnPeriodicConfigCheck;
+    const originalExistsSync = fs.existsSync;
+    const originalReadFileSync = fs.readFileSync;
 
     let capturedCallback = null;
 
@@ -40,6 +45,36 @@ async function runTests() {
         return { timer: 'mock-periodic' };
     };
     global.clearInterval = () => { };
+    fs.existsSync = (filePath) => {
+        if (String(filePath).endsWith('/profiles/bots.json')) {
+            return true;
+        }
+        return originalExistsSync(filePath);
+    };
+    fs.readFileSync = (filePath, encoding) => {
+        if (String(filePath).endsWith('/profiles/bots.json')) {
+            return JSON.stringify({
+                bots: [
+                    {
+                        name: 'test_periodic_sync_fill_rebalance',
+                        active: true,
+                        gridPrice: 'book',
+                        assetA: 'XRP',
+                        assetB: 'BTS',
+                    },
+                ],
+            });
+        }
+        return originalReadFileSync(filePath, encoding);
+    };
+    maintenanceRuntime.syncMarketAdapterOnPeriodicConfigCheck = async () => ({
+        changed: false,
+        required: false,
+        running: false,
+        started: false,
+        stopped: false,
+        mode: 'test',
+    });
     const weightFiles = withDynamicWeightFiles('test_periodic_sync_fill_rebalance');
 
     try {
@@ -148,7 +183,10 @@ async function runTests() {
         weightFiles.cleanup();
         global.setInterval = originalSetInterval;
         global.clearInterval = originalClearInterval;
+        fs.existsSync = originalExistsSync;
+        fs.readFileSync = originalReadFileSync;
         chainOrders.readOpenOrders = originalReadOpenOrders;
+        maintenanceRuntime.syncMarketAdapterOnPeriodicConfigCheck = originalSyncMarketAdapterOnPeriodicConfigCheck;
     }
 }
 

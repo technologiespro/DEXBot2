@@ -2894,6 +2894,10 @@ class DEXBot {
         return DexbotMaintenanceRuntime.stopBlockchainFetchInterval.call(this);
     }
 
+    async _releaseMarketAdapterRuntime(context = 'shutdown') {
+        return DexbotMaintenanceRuntime.releaseMarketAdapterRuntime.call(this, this.config?.botKey || this.config?.name, context);
+    }
+
     _getCreditRuntime() {
         if (!this.config || !this.config.debtPolicy) {
             return null;
@@ -3182,6 +3186,12 @@ class DEXBot {
             await this._stopOpenOrdersSyncLoop();
         } catch (err) {
             this._warn(`Error while stopping open-orders sync loop: ${err.message}`);
+        }
+
+        try {
+            await this._releaseMarketAdapterRuntime('shutdown');
+        } catch (err) {
+            this._warn(`Error while releasing market adapter runtime: ${err.message}`);
         }
 
         // Wait for current fill processing to complete

@@ -7,6 +7,8 @@ const chainOrders = require('./chain_orders');
 const Grid = require('./order/grid');
 const { ORDER_STATES, TIMING, MAINTENANCE, GRID_LIMITS } = require('./constants');
 const { retryPersistenceIfNeeded, applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
+const { isPm2Runtime } = require('./order/logger');
+const { getSharedMarketAdapterRuntime } = require('./launcher/market_adapter_runtime');
 const {
     resetMarketAdapterWhitelistCache,
     isBotDynamicWeightWhitelisted,
@@ -19,6 +21,7 @@ const { cloneWeightDistribution } = require('./order/utils/math');
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
 const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
 const LOGS_DIR = path.join(PROFILES_DIR, 'logs');
+const ROOT = path.join(__dirname, '..');
 const MARKET_ADAPTER_APP_NAME = 'dexbot-adapter';
 const MARKET_ADAPTER_SCRIPT = path.join(__dirname, '..', 'market_adapter', 'market_adapter.js');
 const MARKET_ADAPTER_ERROR_FILE = path.join(LOGS_DIR, 'dexbot-adapter-error.log');
@@ -26,6 +29,29 @@ const MARKET_ADAPTER_OUT_FILE = path.join(LOGS_DIR, 'dexbot-adapter.log');
 function usesAmaGridPrice(bot) {
     const gridPrice = String(bot?.gridPrice || '').trim().toLowerCase();
     return /^ama(?:[1-4])?$/.test(gridPrice);
+}
+
+function findSnapshotBotForRuntimeConfig(snapshot, config) {
+    if (!snapshot || !Array.isArray(snapshot.activeBots) || !config) {
+        return null;
+    }
+
+    const botKey = config.botKey ? String(config.botKey) : null;
+    const name = config.name ? String(config.name) : null;
+    return snapshot.activeBots.find((bot) => {
+        if (!bot) return false;
+        if (botKey && String(bot.botKey || '') === botKey) return true;
+        if (name && String(bot.name || '') === name) return true;
+        return false;
+    }) || null;
+}
+
+function runtimeConfigNeedsMarketAdapter(snapshot, config) {
+    const snapshotBot = findSnapshotBotForRuntimeConfig(snapshot, config);
+    if (snapshotBot) {
+        return usesAmaGridPrice(snapshotBot);
+    }
+    return usesAmaGridPrice(config);
 }
 
 function loadBotsConfigSnapshot() {
@@ -160,6 +186,41 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             this._log(`Detected bots.json changes during ${context}; re-evaluating market adapter requirements.`);
         }
 
+        if (!isPm2Runtime()) {
+            const runtime = getSharedMarketAdapterRuntime({ root: ROOT });
+            const botId = String(this.config?.botKey || this.config?.name || this.config?.preferredAccount || this.config?.assetA || 'dexbot');
+            const botNeedsMarketAdapter = !!snapshot.exists && runtimeConfigNeedsMarketAdapter(snapshot, this.config);
+            const required = !!snapshot.needsMarketAdapter || botNeedsMarketAdapter;
+            const result = await runtime.syncBot(botId, botNeedsMarketAdapter);
+
+            if (!snapshot.exists || !required) {
+                if (result?.stopped) {
+                    this._log(`Stopped ${MARKET_ADAPTER_APP_NAME} because no AMA grid bots are active.`, 'info');
+                }
+                return {
+                    changed,
+                    required: false,
+                    running: !!result?.running,
+                    started: false,
+                    stopped: !!result?.stopped,
+                    mode: 'direct',
+                };
+            }
+
+            if (result?.started) {
+                this._log(`Started ${MARKET_ADAPTER_APP_NAME} because AMA grid pricing is active.`, 'info');
+            }
+
+            return {
+                changed,
+                required,
+                running: !!result?.running,
+                started: !!result?.started,
+                stopped: false,
+                mode: 'direct',
+            };
+        }
+
         const getPm2ProcessNamesFn = typeof this._getPm2ProcessNames === 'function'
             ? this._getPm2ProcessNames.bind(this)
             : getPm2ProcessNames;
@@ -188,6 +249,7 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
                     running: false,
                     started: false,
                     stopped: false,
+                    mode: 'pm2',
                 };
             }
 
@@ -199,6 +261,7 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
                 running: false,
                 started: false,
                 stopped: true,
+                mode: 'pm2',
             };
         }
 
@@ -208,6 +271,8 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
                 required: true,
                 running: true,
                 started: false,
+                stopped: false,
+                mode: 'pm2',
             };
         }
 
@@ -219,6 +284,8 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             required: true,
             running: false,
             started: true,
+            stopped: false,
+            mode: 'pm2',
         };
     } catch (err) {
         this._warn(`Market adapter watchdog failed during ${context}: ${err.message}`);
@@ -227,6 +294,7 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             required: false,
             running: false,
             started: false,
+            stopped: false,
             error: err.message,
         };
     } finally {
@@ -576,6 +644,25 @@ function stopBlockchainFetchInterval() {
         this._blockchainFetchInterval = null;
         this._log('Stopped periodic blockchain fetch interval');
     }
+}
+
+async function releaseMarketAdapterRuntime(botId, context = 'shutdown') {
+    if (isPm2Runtime()) {
+        return { released: false, mode: 'pm2' };
+    }
+
+    if (!botId) {
+        return { released: false, mode: 'direct', reason: 'missing-bot-id' };
+    }
+
+    const runtime = getSharedMarketAdapterRuntime({ root: ROOT });
+    const result = await runtime.releaseBot(botId);
+    return {
+        released: true,
+        context,
+        mode: 'direct',
+        ...result,
+    };
 }
 
 function getPendingDustDelayMs(ctx) {
@@ -988,5 +1075,9 @@ module.exports = {
     seedDustTimersFromPartialUpdates,
     runGridMaintenance,
     stopMarketAdapterPm2,
+    releaseMarketAdapterRuntime,
     syncMarketAdapterOnPeriodicConfigCheck,
+    findSnapshotBotForRuntimeConfig,
+    runtimeConfigNeedsMarketAdapter,
+    usesAmaGridPrice,
 };

@@ -13,6 +13,7 @@ const systemPath = require.resolve('../modules/order/utils/system');
 const formatPath = require.resolve('../modules/order/format');
 const orderUtilsPath = require.resolve('../modules/order/utils/order');
 const accountBotsPath = require.resolve('../modules/account_bots');
+const marketAdapterRuntimePath = require.resolve('../modules/launcher/market_adapter_runtime');
 
 const originals = new Map([
     [runtimePath, require.cache[runtimePath]],
@@ -24,12 +25,13 @@ const originals = new Map([
     [formatPath, require.cache[formatPath]],
     [orderUtilsPath, require.cache[orderUtilsPath]],
     [accountBotsPath, require.cache[accountBotsPath]],
+    [marketAdapterRuntimePath, require.cache[marketAdapterRuntimePath]],
 ]);
 
 const originalExistsSync = fs.existsSync;
 const originalReadFileSync = fs.readFileSync;
 
-function loadRuntimeWithStubs() {
+function loadRuntimeWithStubs({ marketAdapterRuntimeStub } = {}) {
     delete require.cache[runtimePath];
 
     setCachedModule(bitsharesClientPath, { BitShares: {} });
@@ -56,6 +58,12 @@ function loadRuntimeWithStubs() {
         virtualizeOrder: (order) => order,
     });
     setCachedModule(accountBotsPath, {});
+    setCachedModule(marketAdapterRuntimePath, marketAdapterRuntimeStub || {
+        getSharedMarketAdapterRuntime: () => ({
+            syncBot: async () => ({ running: false, started: false, stopped: false }),
+            releaseBot: async () => ({ running: false, stopped: false }),
+        }),
+    });
 
     return require(runtimePath);
 }
@@ -86,6 +94,7 @@ async function testSnapshotReaderDetectsAMAConfig() {
 }
 
 async function testWatchdogStartsAdapterWhenMissing() {
+    process.env.pm_exec_path = '/usr/bin/pm2';
     const { syncMarketAdapterOnPeriodicConfigCheck } = loadRuntimeWithStubs();
     let started = false;
     let queried = false;
@@ -124,6 +133,7 @@ async function testWatchdogStartsAdapterWhenMissing() {
 }
 
 async function testWatchdogSkipsLaunchWhenAdapterNotNeeded() {
+    process.env.pm_exec_path = '/usr/bin/pm2';
     const { syncMarketAdapterOnPeriodicConfigCheck } = loadRuntimeWithStubs();
     let queried = false;
     let started = false;
@@ -162,6 +172,7 @@ async function testWatchdogSkipsLaunchWhenAdapterNotNeeded() {
 }
 
 async function testWatchdogLeavesAdapterStoppedWhenAlreadyAbsent() {
+    process.env.pm_exec_path = '/usr/bin/pm2';
     const { syncMarketAdapterOnPeriodicConfigCheck } = loadRuntimeWithStubs();
     let stopped = false;
 
@@ -188,7 +199,209 @@ async function testWatchdogLeavesAdapterStoppedWhenAlreadyAbsent() {
     assert.strictEqual(stopped, false, 'stop should not be attempted when the adapter is already absent');
 }
 
+async function testWatchdogUsesDirectRuntimeWithoutPm2() {
+    delete process.env.pm_exec_path;
+
+    const syncCalls = [];
+    const releaseCalls = [];
+    const fakeRuntime = {
+        syncBot: async (botId, shouldRun) => {
+            syncCalls.push({ botId, shouldRun });
+            return shouldRun
+                ? { running: true, owned: true, started: true }
+                : { running: false, owned: false, stopped: true };
+        },
+        releaseBot: async (botId) => {
+            releaseCalls.push(botId);
+            return { running: false, stopped: true };
+        },
+    };
+
+    const { syncMarketAdapterOnPeriodicConfigCheck } = loadRuntimeWithStubs({
+        marketAdapterRuntimeStub: {
+            getSharedMarketAdapterRuntime: () => fakeRuntime,
+        },
+    });
+
+    const logs = [];
+    const self = {
+        _marketAdapterWatchdogFingerprint: null,
+        config: {
+            botKey: 'xrp-bts-0',
+            name: 'XRP-BTS',
+            gridPrice: 'ama',
+        },
+        _loadBotsConfigSnapshot: async () => ({
+            exists: true,
+            fingerprint: 'fingerprint-2',
+            activeBots: [{ name: 'AMA Bot', active: true, gridPrice: 'ama' }],
+            needsMarketAdapter: true,
+        }),
+        _log: (msg) => logs.push(msg),
+        _warn: (msg) => logs.push(`WARN:${msg}`),
+    };
+
+    const result = await syncMarketAdapterOnPeriodicConfigCheck.call(self, 'unit-test');
+
+    assert.deepStrictEqual(syncCalls, [
+        { botId: 'xrp-bts-0', shouldRun: true },
+    ], 'direct runtime should be used when PM2 is not active');
+    assert.strictEqual(result.mode, 'direct', 'watchdog should report direct mode');
+    assert.strictEqual(result.started, true, 'direct runtime should start the adapter when needed');
+    assert.strictEqual(releaseCalls.length, 0, 'direct runtime should not release during AMA startup');
+    assert.ok(
+        logs.some((msg) => String(msg).includes('Started dexbot-adapter')),
+        'direct runtime should log the adapter start'
+    );
+}
+
+async function testWatchdogDoesNotRegisterNonAmaBotInDirectRuntime() {
+    delete process.env.pm_exec_path;
+
+    const syncCalls = [];
+    const fakeRuntime = {
+        syncBot: async (botId, shouldRun) => {
+            syncCalls.push({ botId, shouldRun });
+            return { running: true, owned: true, started: false, stopped: false };
+        },
+        releaseBot: async () => ({ running: true, stopped: false }),
+    };
+
+    const { syncMarketAdapterOnPeriodicConfigCheck } = loadRuntimeWithStubs({
+        marketAdapterRuntimeStub: {
+            getSharedMarketAdapterRuntime: () => fakeRuntime,
+        },
+    });
+
+    const self = {
+        _marketAdapterWatchdogFingerprint: null,
+        config: {
+            botKey: 'book-bot-0',
+            name: 'Book Bot',
+            gridPrice: 'book',
+        },
+        _loadBotsConfigSnapshot: async () => ({
+            exists: true,
+            fingerprint: 'fingerprint-ama-elsewhere',
+            activeBots: [
+                { name: 'AMA Bot', active: true, gridPrice: 'ama' },
+                { name: 'Book Bot', active: true, gridPrice: 'book' },
+            ],
+            needsMarketAdapter: true,
+        }),
+        _log: () => {},
+        _warn: () => {},
+    };
+
+    const result = await syncMarketAdapterOnPeriodicConfigCheck.call(self, 'unit-test');
+
+    assert.deepStrictEqual(syncCalls, [
+        { botId: 'book-bot-0', shouldRun: false },
+    ], 'non-AMA direct bot should not be registered as requiring the adapter');
+    assert.strictEqual(result.mode, 'direct', 'watchdog should report direct mode');
+    assert.strictEqual(result.required, true, 'global snapshot can still require the adapter for another AMA bot');
+    assert.strictEqual(result.started, false, 'non-AMA bot should not start the adapter');
+}
+
+async function testWatchdogUsesSnapshotEntryWhenRuntimeConfigIsStale() {
+    delete process.env.pm_exec_path;
+
+    const syncCalls = [];
+    const fakeRuntime = {
+        syncBot: async (botId, shouldRun) => {
+            syncCalls.push({ botId, shouldRun });
+            return { running: false, owned: false, started: false, stopped: true };
+        },
+        releaseBot: async () => ({ running: false, stopped: false }),
+    };
+
+    const { syncMarketAdapterOnPeriodicConfigCheck } = loadRuntimeWithStubs({
+        marketAdapterRuntimeStub: {
+            getSharedMarketAdapterRuntime: () => fakeRuntime,
+        },
+    });
+
+    const self = {
+        _marketAdapterWatchdogFingerprint: null,
+        config: {
+            botKey: 'xrp-bts-0',
+            name: 'XRP-BTS',
+            gridPrice: 'ama',
+        },
+        _loadBotsConfigSnapshot: async () => ({
+            exists: true,
+            fingerprint: 'fingerprint-runtime-stale',
+            activeBots: [{ botKey: 'xrp-bts-0', name: 'XRP-BTS', active: true, gridPrice: 'book' }],
+            needsMarketAdapter: false,
+        }),
+        _log: () => {},
+        _warn: () => {},
+    };
+
+    const result = await syncMarketAdapterOnPeriodicConfigCheck.call(self, 'unit-test');
+
+    assert.deepStrictEqual(syncCalls, [
+        { botId: 'xrp-bts-0', shouldRun: false },
+    ], 'live snapshot entry should override stale runtime AMA config');
+    assert.strictEqual(result.required, false, 'adapter should no longer be required after current bot leaves AMA pricing');
+    assert.strictEqual(result.stopped, true, 'direct runtime should stop after current bot leaves AMA pricing');
+}
+
+async function testWatchdogReleasesDirectRuntimeWithoutPm2() {
+    delete process.env.pm_exec_path;
+
+    const syncCalls = [];
+    const releaseCalls = [];
+    const fakeRuntime = {
+        syncBot: async (botId, shouldRun) => {
+            syncCalls.push({ botId, shouldRun });
+            return { running: false, owned: false, stopped: !shouldRun };
+        },
+        releaseBot: async (botId) => {
+            releaseCalls.push(botId);
+            return { running: false, stopped: true };
+        },
+    };
+
+    const { syncMarketAdapterOnPeriodicConfigCheck } = loadRuntimeWithStubs({
+        marketAdapterRuntimeStub: {
+            getSharedMarketAdapterRuntime: () => fakeRuntime,
+        },
+    });
+
+    const logs = [];
+    const self = {
+        _marketAdapterWatchdogFingerprint: 'old-fingerprint',
+        config: {
+            botKey: 'xrp-bts-0',
+            name: 'XRP-BTS',
+        },
+        _loadBotsConfigSnapshot: async () => ({
+            exists: true,
+            fingerprint: 'fingerprint-3',
+            activeBots: [{ name: 'Book Bot', active: true, gridPrice: 'book' }],
+            needsMarketAdapter: false,
+        }),
+        _log: (msg) => logs.push(msg),
+        _warn: (msg) => logs.push(`WARN:${msg}`),
+    };
+
+    const result = await syncMarketAdapterOnPeriodicConfigCheck.call(self, 'unit-test');
+
+    assert.deepStrictEqual(syncCalls, [
+        { botId: 'xrp-bts-0', shouldRun: false },
+    ], 'direct runtime should receive the no-AMA stop request');
+    assert.strictEqual(result.mode, 'direct', 'watchdog should report direct mode');
+    assert.strictEqual(result.stopped, true, 'direct runtime should stop the adapter when AMA is disabled');
+    assert.ok(
+        logs.some((msg) => String(msg).includes('Stopped dexbot-adapter')),
+        'direct runtime should log the adapter stop'
+    );
+    assert.strictEqual(releaseCalls.length, 0, 'syncBot should handle the direct stop path');
+}
+
 async function testSetupBlockchainFetchIntervalRunsWatchdogBeforeDisabledReturn() {
+    delete process.env.pm_exec_path;
     const { setupBlockchainFetchInterval } = loadRuntimeWithStubs();
     let snapshotChecks = 0;
     const logs = [];
@@ -232,9 +445,14 @@ async function main() {
         await testWatchdogStartsAdapterWhenMissing();
         await testWatchdogSkipsLaunchWhenAdapterNotNeeded();
         await testWatchdogLeavesAdapterStoppedWhenAlreadyAbsent();
+        await testWatchdogUsesDirectRuntimeWithoutPm2();
+        await testWatchdogDoesNotRegisterNonAmaBotInDirectRuntime();
+        await testWatchdogUsesSnapshotEntryWhenRuntimeConfigIsStale();
+        await testWatchdogReleasesDirectRuntimeWithoutPm2();
         await testSetupBlockchainFetchIntervalRunsWatchdogBeforeDisabledReturn();
         console.log('dexbot maintenance runtime market adapter watchdog tests passed');
     } finally {
+        delete process.env.pm_exec_path;
         fs.existsSync = originalExistsSync;
         fs.readFileSync = originalReadFileSync;
         for (const [modulePath, original] of originals.entries()) {

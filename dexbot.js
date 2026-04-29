@@ -409,6 +409,7 @@ async function runBotInstances(botEntries, { forceDryRun = false, sourceName = '
 
             try {
                 const bot = new DEXBot(entry);
+                registerCleanup(`Bot: ${entry.name || entry.botKey || instances.length + 1}`, () => bot.shutdown());
                 await bot.start(masterPassword);
                 instances.push(bot);
             } catch (err) {
