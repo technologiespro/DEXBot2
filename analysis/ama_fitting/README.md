@@ -1,7 +1,8 @@
 # AMA Fitting
 
-Tooling to fit AMA parameters (ER, Fast, Slow) against real LP pool candle data
-and export the results into `profiles/market_profiles.json` for the market adapter.
+Tooling to fit AMA parameters (ER, Fast, Slow) against real LP pool candle data.
+The optimizer writes result JSON by default and can explicitly export the chosen
+parameters into `profiles/market_profiles.json` for the market adapter.
 
 ---
 
@@ -10,7 +11,7 @@ and export the results into `profiles/market_profiles.json` for the market adapt
 ```
 1. fetch_lp_candles.js   →   market_adapter/data/<pool>_1h.json
 2. optimizer_high_resolution.js   →   optimization_results_*.json
-                                  →   profiles/market_profiles.json  (auto-updated)
+                                  →   profiles/market_profiles.json  (only with --write-profiles)
 3. scripts/generate_lp_chart.js   →   market chart + comparison chart  (visual review)
    - LP chart: `npm run lp:chart -- --data <lp-export.json>`
    - Local LP comparison alias: `npm run ama:chart:lp-local -- --data <lp-export.json>`
@@ -63,14 +64,23 @@ Output: `market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json`
 
 `optimizer_high_resolution.js` runs a parallel geometric grid search over
 ER × Fast × Slow combinations. Produces four AMA winners (AMA1–AMA4) using
-different distance-cap quantiles, writes results to a JSON file, and
-**auto-updates `profiles/market_profiles.json`** with the winning parameters.
-Because it updates `profiles/market_profiles.json`, `--data` is required.
+different distance-cap quantiles and writes results to a JSON file.
+
+By default this does **not** update runtime market-adapter profiles. Add
+`--write-profiles` when you intentionally want the fitted parameters exported
+to `profiles/market_profiles.json`.
 
 **Run on the fetched LP data:**
 ```bash
 node analysis/ama_fitting/optimizer_high_resolution.js \
   --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json
+```
+
+**Export winners to the market adapter profile file:**
+```bash
+node analysis/ama_fitting/optimizer_high_resolution.js \
+  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json \
+  --write-profiles
 ```
 
 **Default search ranges:**
@@ -126,7 +136,7 @@ preserving reasonable inventory turnover.
 
 **Outputs:**
 - `analysis/ama_fitting/optimization_results_<datafile>.json` — full results
-- `profiles/market_profiles.json` — updated with new AMA parameters per pair
+- `profiles/market_profiles.json` — updated with new AMA parameters per pair only when `--write-profiles` is used
 
 **Boundary check:** If a winner lands on the edge of the search range, the
 optimizer warns you. Widen the affected range and re-run.
@@ -163,10 +173,11 @@ Open the generated HTML in a browser to compare all four AMA overlays against th
 
 ## How market_profiles.json is used
 
-After the optimizer runs, `profiles/market_profiles.json` is updated with the
-new AMA1–AMA4 parameters for the pair. The market adapter reads this file at
-startup and uses the pair-matched profile instead of the built-in constants
-defaults. No restart required — takes effect on the next market adapter cycle.
+When the optimizer is run with `--write-profiles`, `profiles/market_profiles.json`
+is updated with the new AMA1–AMA4 parameters for the pair. The market adapter
+reads this file at startup and uses the pair-matched profile instead of the
+built-in constants defaults. No restart required — takes effect on the next
+market adapter cycle.
 
 ---
 

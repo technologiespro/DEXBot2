@@ -29,6 +29,7 @@ const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_p
  *
  * Usage:
  *   node optimizer_high_resolution.js --data ../../market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_4h.json
+ *   node optimizer_high_resolution.js --data ../../market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json --write-profiles
  *   node optimizer_high_resolution.js --data ../../market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json --erMax 400 --fastMax 20 --slowMax 200
  *
  */
@@ -115,14 +116,15 @@ function buildDimension(label, cfg) {
     };
 }
 
-function parseArgs() {
-    const args = process.argv.slice(2);
+function parseArgs(argv = process.argv.slice(2)) {
+    const args = Array.isArray(argv) ? argv : [];
     const out = {
         dataFile: null,
         er: { ...DEFAULT_SEARCH.er },
         fast: { ...DEFAULT_SEARCH.fast },
         slow: { ...DEFAULT_SEARCH.slow },
         workers: null,
+        writeProfiles: false,
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -147,6 +149,7 @@ function parseArgs() {
             case '--ama3Cap': out.ama3Cap = Number(v); i++; break;
             case '--ama4Cap': out.ama4Cap = Number(v); i++; break;
             case '--workers': out.workers = Number(v); i++; break;
+            case '--write-profiles': out.writeProfiles = true; break;
         }
     }
 
@@ -475,7 +478,7 @@ async function run() {
     // Load data
     let candles, dataLabel, dataMeta = null;
     if (!dataFile) {
-        throw new Error('Optimizer requires --data <lp_pool_*.json> because it updates profiles/market_profiles.json.');
+        throw new Error('Optimizer requires --data <lp_pool_*.json>. Use --write-profiles to also update profiles/market_profiles.json.');
     }
     const loaded = loadLpDataFile(path.resolve(dataFile));
     candles   = loaded.candleObjects;
@@ -670,7 +673,7 @@ async function run() {
         },
     }, null, 2));
 
-    if (dataFile && ama1 && ama2 && ama3 && ama4) {
+    if (args.writeProfiles && dataFile && ama1 && ama2 && ama3 && ama4) {
         updateAmaProfilesFile({
             dataFile,
             meta: dataMeta,
@@ -681,7 +684,11 @@ async function run() {
 
     console.log(`================================================================================`);
     console.log(`  Saved: ${outName}\n`);
-    if (dataFile) console.log(`  Updated: ${path.relative(process.cwd(), AMA_PROFILES_FILE)}\n`);
+    if (args.writeProfiles && dataFile) {
+        console.log(`  Updated: ${path.relative(process.cwd(), AMA_PROFILES_FILE)}\n`);
+    } else {
+        console.log(`  Profiles unchanged. Add --write-profiles to update ${path.relative(process.cwd(), AMA_PROFILES_FILE)}.\n`);
+    }
 }
 
 if (!isMainThread) {
@@ -693,9 +700,14 @@ if (!isMainThread) {
     } else {
         throw new Error('Unknown worker task type');
     }
-} else {
+} else if (require.main === module) {
     run().catch((err) => {
         console.error('Fatal:', err);
         process.exit(1);
     });
 }
+
+module.exports = {
+    parseArgs,
+    updateAmaProfilesFile,
+};
