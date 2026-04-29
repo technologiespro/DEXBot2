@@ -52,12 +52,15 @@ const { TIMING, NODE_MANAGEMENT } = require('./constants');
 const NodeManager = require('./node_manager');
 const { readGeneralSettings } = require('./general_settings');
 const { sleep } = require('./order/utils/system');
+const eventModule = require('btsdex/lib/event');
+const EventClass = eventModule && (eventModule.default || eventModule);
 
 // Shared connection state for the process. Modules should use waitForConnected()
 // to ensure the shared BitShares client is connected before making DB calls.
 let connected = false;
 let suppressConnectionLog = false;
 const connectedCallbacks = new Set();
+let lastConnectionError = null;
 
 // Node Manager for multi-node support
 let nodeManager = null;
@@ -86,8 +89,33 @@ function setSuppressConnectionLog(suppress) {
 }
 
 try {
+    if (EventClass?.connected && typeof EventClass.connected.subFunc === 'function') {
+        const originalConnect = EventClass.connected.subFunc.bind(EventClass.connected);
+        EventClass.connected.subFunc = (...args) => {
+            try {
+                const promise = originalConnect(...args);
+                if (promise && typeof promise.catch === 'function') {
+                    promise.catch((err) => {
+                        lastConnectionError = err;
+                        if (!suppressConnectionLog) {
+                            console.warn('[BitShares] Connection failed:', err?.message || err);
+                        }
+                    });
+                }
+                return promise;
+            } catch (err) {
+                lastConnectionError = err;
+                if (!suppressConnectionLog) {
+                    console.warn('[BitShares] Connection failed:', err?.message || err);
+                }
+                throw err;
+            }
+        };
+    }
+
     BitSharesLib.subscribe('connected', () => {
         connected = true;
+        lastConnectionError = null;
         if (!suppressConnectionLog) {
             console.log('modules/bitshares_client: BitShares connected');
         }
@@ -118,6 +146,7 @@ try {
             }
         }
     });
+
 } catch (e) {
     // Some environments may not have subscribe available at require time; that's okay
 }
@@ -131,8 +160,14 @@ try {
 async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS) {
     const start = Date.now();
     while (!connected) {
+        if (lastConnectionError) {
+            throw new Error(`BitShares connection failed: ${lastConnectionError.message || lastConnectionError}`);
+        }
         if (Date.now() - start > timeoutMs) {
-            throw new Error(`Timed out waiting for BitShares connection after ${timeoutMs}ms`);
+            const suffix = lastConnectionError?.message
+                ? ` Last error: ${lastConnectionError.message}`
+                : '';
+            throw new Error(`Timed out waiting for BitShares connection after ${timeoutMs}ms.${suffix}`);
         }
         await sleep(TIMING.CHECK_INTERVAL_MS);
     }
@@ -158,5 +193,6 @@ module.exports = {
     getNodeManager: () => nodeManager,
     getNodeStats: () => nodeManager?.getStats(),
     getNodeSummary: () => nodeManager?.getSummary(),
+    getConnectionError: () => lastConnectionError,
     _internal: { get connected() { return connected; } }
 };

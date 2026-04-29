@@ -996,6 +996,12 @@ async function runOnce(cfg, state, contextCache) {
             const dynText = isOneHourResult ? ` dyn[whitelist=${r.dynamicWeightWhitelisted ? 'yes' : 'no'},base=${r.hasExplicitBaseWeights ? 'yes' : 'no'},ready=${r.dynamicWeightReady ? 'yes' : 'no'},applied=${r.dynamicWeightApplied ? 'yes' : 'no'}${r.dynamicWeightProfile ? `,profile=${r.dynamicWeightProfile}` : ''}]` : '';
 
             log(cfg, `${r.source}, candles=${r.candleCount}${analysisText}${closedTsText}${rawTsText}${closeText}, ama=${amaText} (prevCenter=${prevCenterText}, delta=${deltaText}), threshold=${thresholdText}${offText}${amaOffText}${regimeText}${staleText}${patchText}${backfillText}${gapText}${trigText}${pendingText}${warmupText}${trendText}${weightText}${dynText}${nativeText}`);
+            if (r.triggerSuppressedReason === 'waiting_for_new_closed_candle') {
+                log(cfg, '  No write pass: the latest 1h candle has not closed yet, so the adapter kept the snapshot unchanged.');
+            }
+            if (r.triggerSuppressedReason === 'ama_warmup_insufficient') {
+                log(cfg, '  No write pass: AMA warmup history is still insufficient for a valid grid-centering write.');
+            }
             if (Array.isArray(r.dryRunMessages)) {
                 r.dryRunMessages.forEach(msg => log(cfg, `  ${msg}`));
             }

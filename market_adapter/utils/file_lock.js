@@ -23,6 +23,16 @@ function isProcessAlive(pid) {
     }
 }
 
+function isLikelyMarketAdapterProcess(pid) {
+    if (!isProcessAlive(pid)) return false;
+    try {
+        const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ');
+        return cmdline.includes('node') && cmdline.includes('market_adapter/market_adapter.js');
+    } catch (_) {
+        return false;
+    }
+}
+
 function acquireFileLockSync(lockPath, opts = {}) {
     const staleMs = Number.isFinite(opts.staleMs) && opts.staleMs > 0 ? opts.staleMs : (6 * 3600 * 1000);
     const now = Date.now();
@@ -49,14 +59,15 @@ function acquireFileLockSync(lockPath, opts = {}) {
 
             const info = loadLockInfo(lockPath);
             let stale = false;
+            let stat = null;
             try {
-                const stat = fs.statSync(lockPath);
+                stat = fs.statSync(lockPath);
                 stale = (now - stat.mtimeMs) > staleMs;
             } catch (_) {
                 stale = true;
             }
 
-            const alive = isProcessAlive(Number(info.pid));
+            const alive = isLikelyMarketAdapterProcess(Number(info.pid));
             if (stale || !alive) {
                 try { fs.unlinkSync(lockPath); } catch (_) {}
                 continue;
