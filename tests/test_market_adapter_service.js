@@ -76,7 +76,7 @@ function latchConfirmedSeries(appliedSeries, preGainSeries, confirmBars) {
     const echoedAppliedSeries = new Array(appliedSeries.length).fill(0);
     const echoedPreGainSeries = new Array(preGainSeries.length).fill(0);
 
-    if (confirmBars === 0) {
+    if (confirmBars <= 1) {
         for (let i = 0; i < appliedSeries.length; i++) {
             echoedAppliedSeries[i] = appliedSeries[i];
             echoedPreGainSeries[i] = preGainSeries[i];
@@ -85,7 +85,7 @@ function latchConfirmedSeries(appliedSeries, preGainSeries, confirmBars) {
     }
 
     let latchedSign = 0;
-    let pendingSign = 0;
+    let pendingSign = null;
     let pendingCount = 0;
     let latchedApplied = 0;
     let latchedPreGain = 0;
@@ -93,19 +93,8 @@ function latchConfirmedSeries(appliedSeries, preGainSeries, confirmBars) {
     for (let i = 0; i < appliedSeries.length; i++) {
         const raw = appliedSeries[i];
         const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
-        if (sign === 0) {
-            echoedAppliedSeries[i] = latchedApplied;
-            echoedPreGainSeries[i] = latchedPreGain;
-            continue;
-        }
-        if (latchedSign === 0) {
-            latchedSign = sign;
-            pendingSign = 0;
-            pendingCount = 0;
-            latchedApplied = raw;
-            latchedPreGain = preGainSeries[i];
-        } else if (sign === latchedSign) {
-            pendingSign = 0;
+        if (sign === latchedSign) {
+            pendingSign = null;
             pendingCount = 0;
             latchedApplied = raw;
             latchedPreGain = preGainSeries[i];
@@ -118,7 +107,7 @@ function latchConfirmedSeries(appliedSeries, preGainSeries, confirmBars) {
             }
             if (pendingCount >= confirmBars) {
                 latchedSign = sign;
-                pendingSign = 0;
+                pendingSign = null;
                 pendingCount = 0;
                 latchedApplied = raw;
                 latchedPreGain = preGainSeries[i];
@@ -2990,6 +2979,90 @@ async function testDynamicWeightInvalidAtrPeriodAndClampAreSanitized() {
     assert.ok(result.weights.meta.volatilityPenalty < 0, 'sanitized volatility penalty should remain downward-only');
 }
 
+async function testWeightOnlyUpdateInDryRunUpdatesState() {
+    let dynamicGridWrites = 0;
+    const closedTs = Date.parse('2026-01-01T12:00:00Z');
+    const hour = 3600000;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 1, slowPeriod: 1 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_dry_run.json`),
+        loadJson: () => ({
+            candles: [
+                [closedTs - 2 * hour, 100, 100, 100, 100, 1],
+                [closedTs - 1 * hour, 100, 100, 100, 100, 1],
+                [closedTs, 100, 100, 100, 100, 1],
+            ],
+        }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 1,
+        calculateBotThreshold: () => 10,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 0.1 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => existing,
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeBotDynamicGrid: () => {
+            dynamicGridWrites += 1;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        getNowMs: () => closedTs + hour + 60 * 1000,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dry-run',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.5, buy: 0.5 },
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-dry-run': {
+                centerPrice: 100,
+                amaCenterPrice: 100,
+                lastClosedCandleTs: closedTs - hour,
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        amaSlope: {
+            lookbackBars: 0,
+            maxSlopePct: 1,
+            neutralZonePct: 0
+        }
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), { isDryRun: true });
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.strictEqual(dynamicGridWrites, 0, 'writeBotDynamicGrid should not be called in dry run');
+    assert.ok(state.bots['xrp-bts-dry-run'].effectiveWeights, 'state should be updated with effective weights even in dry run');
+}
+
 async function run() {
     await testTriggerHookCalledOnThreshold();
     await testAmaWarmupInsufficientSuppressesRawCloseRecenter();
@@ -3025,6 +3098,7 @@ async function run() {
     await testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState();
     await testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData();
     await testDynamicWeightInvalidAtrPeriodAndClampAreSanitized();
+    await testWeightOnlyUpdateInDryRunUpdatesState();
 }
 
 run()

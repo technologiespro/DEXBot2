@@ -125,6 +125,23 @@ const DEFAULTS = {
         maxSlopePct: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT,
     },
     atrPeriod: MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT,
+    maxSlopeOffset: MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP,
+    maxVolatilityOffset: MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP,
+    volatilityExponent: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
+    volatilityScaleX: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
+    volatilityThreshold: MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD,
+    clipPercentile: MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE,
+    regimeSensitivity: MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY,
+    alpha: MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA,
+    dw: MARKET_ADAPTER.DYNAMIC_WEIGHT_DW,
+    gain: MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN,
+    kalmanSmoothPct: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT,
+    kalmanDispScaleMult: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT,
+    kalmanDispThresholdMult: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT,
+    kalmanSmoothSpanPct: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT,
+    signalConfirmBars: MARKET_ADAPTER.DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT,
+    dispScaleMinPct: MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT,
+    minOutputThreshold: MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD,
 };
 
 // Cycle-scoped caches — reset once per runOnce() so each cycle reads files fresh
@@ -165,36 +182,46 @@ function findPairForBot(bot, pairs) {
 
 function applyAmaSlopeOverrides(target, overrides) {
     if (!overrides || typeof overrides !== 'object') return target;
-    if (overrides.neutralZonePct != null) {
-        target.amaSlope = { ...target.amaSlope, neutralZonePct: overrides.neutralZonePct };
+    target.amaSlope = { ...(target.amaSlope || {}) };
+    // Support nested object: { amaSlope: { ... } }
+    if (overrides.amaSlope && typeof overrides.amaSlope === 'object') {
+        target.amaSlope = { ...target.amaSlope, ...overrides.amaSlope };
     }
-    if (overrides.amaMaxSlopePct != null) {
-        target.amaSlope = { ...target.amaSlope, maxSlopePct: overrides.amaMaxSlopePct };
-    }
-    if (overrides.lookbackBars != null) {
-        target.amaSlope = { ...target.amaSlope, lookbackBars: overrides.lookbackBars };
-    }
+    // Support top-level keys for backwards compatibility or flatter overrides
+    if (overrides.neutralZonePct != null) target.amaSlope.neutralZonePct = overrides.neutralZonePct;
+    if (overrides.amaMaxSlopePct != null) target.amaSlope.maxSlopePct = overrides.amaMaxSlopePct;
+    if (overrides.lookbackBars != null) target.amaSlope.lookbackBars = overrides.lookbackBars;
     return target;
 }
 
 function applyKalmanSlopeOverrides(target, overrides) {
     if (!overrides || typeof overrides !== 'object') return target;
-    if (overrides.maxSlopePct != null) {
-        target.kalmanSlope = { ...target.kalmanSlope, maxSlopePct: overrides.maxSlopePct };
+    target.kalmanSlope = { ...(target.kalmanSlope || {}) };
+    // Support nested object: { kalmanSlope: { ... } }
+    if (overrides.kalmanSlope && typeof overrides.kalmanSlope === 'object') {
+        target.kalmanSlope = { ...target.kalmanSlope, ...overrides.kalmanSlope };
     }
+    // Support top-level keys
+    if (overrides.kalmanMaxSlopePct != null) target.kalmanSlope.maxSlopePct = overrides.kalmanMaxSlopePct;
     return target;
 }
 
 function applyMarketAdapterOverrides(target, overrides, opts = {}) {
     if (!overrides || typeof overrides !== 'object') return target;
+
+    // Trigger settings
     if (overrides.deltaThresholdPercent != null) target.deltaThresholdPercent = overrides.deltaThresholdPercent;
     if (opts.includeDefaultAmaKey && overrides.defaultAmaKey) target.defaultAmaKey = overrides.defaultAmaKey;
+
+    // Runtime settings
     if (overrides.pollSeconds != null) target.pollSeconds = overrides.pollSeconds;
     if (overrides.bootstrapLookbackHours != null) target.bootstrapLookbackHours = overrides.bootstrapLookbackHours;
     if (overrides.nativeBackfillHours != null) target.nativeBackfillHours = overrides.nativeBackfillHours;
     if (overrides.maxStaleHours != null) target.maxStaleHours = overrides.maxStaleHours;
     if (overrides.sourceRetries != null) target.sourceRetries = overrides.sourceRetries;
     if (overrides.retryDelayMs != null) target.retryDelayMs = overrides.retryDelayMs;
+
+    // Dynamic weight - core bounds and gates
     if (overrides.maxSlopeOffset != null) target.maxSlopeOffset = overrides.maxSlopeOffset;
     if (overrides.maxVolatilityOffset != null) {
         target.maxVolatilityOffset = normalizeMaxVolatilityOffset(overrides.maxVolatilityOffset);
@@ -202,16 +229,22 @@ function applyMarketAdapterOverrides(target, overrides, opts = {}) {
     if (overrides.atrPeriod != null) target.atrPeriod = normalizeAtrPeriod(overrides.atrPeriod);
     if (overrides.absoluteThreshold != null) target.absoluteThreshold = overrides.absoluteThreshold;
     if (overrides.minOutputThreshold != null) target.minOutputThreshold = overrides.minOutputThreshold;
+
+    // Volatility penalty tuning
     if (overrides.volatilityExponent != null) target.volatilityExponent = overrides.volatilityExponent;
     if (overrides.volatilityScaleX != null) target.volatilityScaleX = overrides.volatilityScaleX;
     if (overrides.volatilityThreshold != null) {
         target.volatilityThreshold = normalizeVolatilityThreshold(overrides.volatilityThreshold);
     }
+
+    // Regime and outlier filtering
     if (overrides.clipPercentile != null) target.clipPercentile = overrides.clipPercentile;
     if (overrides.regimeSensitivity != null) target.regimeSensitivity = overrides.regimeSensitivity;
     if (overrides.hurstZoneBand != null) target.hurstZoneBand = overrides.hurstZoneBand;
     if (overrides.peNodes) target.peNodes = overrides.peNodes;
     if (overrides.regimeTable) target.regimeTable = overrides.regimeTable;
+
+    // Kalman / Blend tuning
     if (overrides.alpha != null) target.alpha = overrides.alpha;
     if (overrides.dw != null) target.dw = overrides.dw;
     if (overrides.gain != null) target.gain = overrides.gain;
@@ -222,9 +255,11 @@ function applyMarketAdapterOverrides(target, overrides, opts = {}) {
     if (overrides.signalConfirmBars != null) target.signalConfirmBars = overrides.signalConfirmBars;
     if (overrides.dispScaleMinPct != null) target.dispScaleMinPct = overrides.dispScaleMinPct;
     if (overrides.kalman) target.kalman = overrides.kalman;
-    if (overrides.kalmanMaxSlopePct != null) target.kalmanSlope = { ...target.kalmanSlope, maxSlopePct: overrides.kalmanMaxSlopePct };
-    applyKalmanSlopeOverrides(target, overrides.kalmanSlope);
+
+    // Slope sub-objects
     applyAmaSlopeOverrides(target, overrides);
+    applyKalmanSlopeOverrides(target, overrides);
+
     return target;
 }
 
@@ -232,16 +267,18 @@ function resolveBotCfg(bot, globalCfg) {
     const settings = loadMarketAdapterSettings();
     if (!settings) return globalCfg;
 
-    let merged = { ...globalCfg };
+    let merged = {
+        ...globalCfg,
+        amaSlope: { ...(globalCfg.amaSlope || {}) },
+        kalmanSlope: { ...(globalCfg.kalmanSlope || {}) },
+        kalman: globalCfg.kalman && typeof globalCfg.kalman === 'object'
+            ? { ...globalCfg.kalman }
+            : globalCfg.kalman,
+    };
 
-    // Apply global amaSlope overrides from settings file
+    // Apply global overrides from settings file
     const globals = settings.globals || {};
-    if (globals.amaSlope && typeof globals.amaSlope === 'object') {
-        merged.amaSlope = { ...merged.amaSlope, ...globals.amaSlope };
-    }
-    if (globals.kalmanSlope && typeof globals.kalmanSlope === 'object') {
-        merged.kalmanSlope = { ...merged.kalmanSlope, ...globals.kalmanSlope };
-    }
+    applyMarketAdapterOverrides(merged, globals);
 
     // Pair-level overrides
     const pair = findPairForBot(bot, settings.pairs);

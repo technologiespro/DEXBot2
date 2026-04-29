@@ -207,6 +207,63 @@ function testResolveBotCfgSanitizesAtrPeriodAndVolatilityClampOverrides() {
     );
 }
 
+function testResolveBotCfgDoesNotLeakNestedTopLevelOverridesAcrossBots() {
+    const settingsJson = {
+        pairs: [
+            {
+                key: '1.3.1|1.3.0',
+                assetASymbol: 'IOB.XRP',
+                assetBSymbol: 'BTS',
+                marketAdapterSettings: {
+                    amaMaxSlopePct: 1.23,
+                    neutralZonePct: 0.12,
+                    kalmanMaxSlopePct: 1.24,
+                },
+            },
+        ],
+    };
+
+    installMarketAdapterStubs(settingsJson);
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+    const { MARKET_ADAPTER } = require('../modules/constants');
+    const globalCfg = { ...DEFAULTS };
+
+    const matched = resolveBotCfg({
+        name: 'XRP-BTS',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        assetAId: '1.3.1',
+        assetBId: '1.3.0',
+    }, globalCfg);
+
+    const unmatched = resolveBotCfg({
+        name: 'OTHER-BTS',
+        assetA: 'OTHER',
+        assetB: 'BTS',
+        assetAId: '1.3.999',
+        assetBId: '1.3.0',
+    }, globalCfg);
+
+    assert.strictEqual(matched.amaSlope.maxSlopePct, 1.23, 'matched pair should receive AMA override');
+    assert.strictEqual(matched.amaSlope.neutralZonePct, 0.12, 'matched pair should receive neutral-zone override');
+    assert.strictEqual(matched.kalmanSlope.maxSlopePct, 1.24, 'matched pair should receive Kalman override');
+    assert.strictEqual(
+        unmatched.amaSlope.maxSlopePct,
+        MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
+        'unmatched bot should keep default AMA max slope'
+    );
+    assert.strictEqual(
+        unmatched.amaSlope.neutralZonePct,
+        MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT,
+        'unmatched bot should keep default neutral zone'
+    );
+    assert.strictEqual(
+        unmatched.kalmanSlope.maxSlopePct,
+        MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT,
+        'unmatched bot should keep default Kalman max slope'
+    );
+}
+
 async function main() {
     try {
         testResolveBotCfgWiresMissingPairAndBotOverrides();
@@ -219,6 +276,9 @@ async function main() {
         restoreMarketAdapterStubs();
 
         testResolveBotCfgSanitizesAtrPeriodAndVolatilityClampOverrides();
+        restoreMarketAdapterStubs();
+
+        testResolveBotCfgDoesNotLeakNestedTopLevelOverridesAcrossBots();
         console.log('dynamic weight override wiring tests passed');
     } finally {
         restoreMarketAdapterStubs();

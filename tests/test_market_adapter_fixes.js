@@ -130,33 +130,18 @@ async function testSignalConfirmationInitialLatch() {
     // Mocking a simplified version of the logic we fixed:
     function simplifiedLatch(combinedOffSeries, confirmBars) {
         const echoedOffSeries = new Array(combinedOffSeries.length).fill(0);
+        if (confirmBars <= 1) return combinedOffSeries.slice();
+
         let latchedSign = 0;
-        let pendingSign = 0;
+        let pendingSign = null;
         let pendingCount = 0;
         let latchedOff = 0;
 
         for (let i = 0; i < combinedOffSeries.length; i++) {
             const raw = combinedOffSeries[i];
             const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
-            if (sign === 0) {
-                echoedOffSeries[i] = latchedOff;
-                continue;
-            }
-            if (latchedSign === 0) {
-                if (pendingSign !== sign) {
-                    pendingSign = sign;
-                    pendingCount = 1;
-                } else {
-                    pendingCount++;
-                }
-                if (pendingCount >= confirmBars) {
-                    latchedSign = sign;
-                    pendingSign = 0;
-                    pendingCount = 0;
-                    latchedOff = raw;
-                }
-            } else if (sign === latchedSign) {
-                pendingSign = 0;
+            if (sign === latchedSign) {
+                pendingSign = null;
                 pendingCount = 0;
                 latchedOff = raw;
             } else {
@@ -168,7 +153,7 @@ async function testSignalConfirmationInitialLatch() {
                 }
                 if (pendingCount >= confirmBars) {
                     latchedSign = sign;
-                    pendingSign = 0;
+                    pendingSign = null;
                     pendingCount = 0;
                     latchedOff = raw;
                 }
@@ -185,6 +170,11 @@ async function testSignalConfirmationInitialLatch() {
     assert.strictEqual(confirmed[1], 0, 'Second bar should be 0 (unconfirmed)');
     assert.strictEqual(confirmed[2], 0.5, 'Third bar should be confirmed');
     assert.strictEqual(confirmed[3], 0.5, 'Fourth bar remains confirmed');
+
+    const neutralConfirmed = simplifiedLatch([0.5, 0.5, 0.5, 0, 0, 0], 3);
+    assert.strictEqual(neutralConfirmed[3], 0.5, 'First neutral bar should keep prior latch');
+    assert.strictEqual(neutralConfirmed[4], 0.5, 'Second neutral bar should keep prior latch');
+    assert.strictEqual(neutralConfirmed[5], 0, 'Third neutral bar should confirm neutral');
 }
 
 async function runAll() {
