@@ -462,6 +462,14 @@ Dry-run output is visible in the log with `[DRY RUN]` tags and `[suppressed, dry
 `dynamicWeight` controls whether live dynamic weights are written into the snapshot and applied by the bot runtime.
 If the file is missing, all bots run in dry-run mode for live AMA writes and dynamic weights stay static.
 
+To regenerate this file from the current bot config, use:
+
+```bash
+npm run market-adapter:whitelist
+# or disable dynamic weights in the generated file
+node scripts/generate_market_adapter_whitelist.js --no-dynamic-weight
+```
+
 ### Automated Execution (PM2)
 
 ```javascript

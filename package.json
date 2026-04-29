@@ -19,6 +19,7 @@
     "pdev": "bash scripts/pdev.sh",
     "ptest": "bash scripts/ptest.sh",
     "lp:chart": "node scripts/generate_lp_chart.js",
+    "market-adapter:whitelist": "node scripts/generate_market_adapter_whitelist.js",
     "analysis:tradingview": "node analysis/tradingview/analyze_tradingview.js",
     "ama:chart:lp-local": "node analysis/ama_fitting/generate_unified_comparison_chart.js",
     "analysis:derivatives": "node analysis/analyze_derivatives.js",

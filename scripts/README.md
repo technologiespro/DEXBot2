@@ -63,6 +63,20 @@ bash scripts/clear-all.sh
 node scripts/validate_bots.js
 ```
 
+### Market Adapter Whitelist Generation
+**File:** `generate_market_adapter_whitelist.js`
+**Purpose:** Generate `profiles/market_adapter_whitelist.json` from bots whose `gridPrice` uses AMA mode.
+```bash
+# Rewrite the whitelist from profiles/bots.json
+npm run market-adapter:whitelist
+
+# Rewrite the whitelist with dynamicWeight disabled for AMA bots
+node scripts/generate_market_adapter_whitelist.js --no-dynamic-weight
+
+# Print the generated JSON without writing it
+node scripts/generate_market_adapter_whitelist.js --dry-run
+```
+
 ### Grid Divergence Audit
 **File:** `divergence-calc.js`
 **Purpose:** Measure the "drift" between in-memory grid and disk state using RMS divergence metric.
