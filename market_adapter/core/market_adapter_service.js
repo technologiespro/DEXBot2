@@ -743,12 +743,11 @@ class MarketAdapterService {
         const isDynamic = isDynamicWeightWhitelisted && hasExplicitBaseWeights;
 
         const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
-        const amaSlopeCfg = cfg.amaSlope || {};
-        const kalmanSlopeCfg = cfg.kalmanSlope || {};
-
-        const nz = amaSlopeCfg.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
-        const amaMaxS = amaSlopeCfg.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
-        const kalMaxS = kalmanSlopeCfg.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
+        const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
+        const amaMaxS = cfg.amaSlope?.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
+        const kalMaxS = cfg.kalmanSlope?.maxSlopePct
+            ?? cfg.kalmanMaxSlopePct
+            ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
         const mo = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
         const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
 
@@ -772,14 +771,14 @@ class MarketAdapterService {
         }
 
         const slopeCfg = {
-            ...amaSlopeCfg,
+            ...(cfg.amaSlope || {}),
             erPeriod:              botAma.erPeriod,
             slowPeriod:            botAma.slowPeriod,
-            maxSlopeOffset:        mo,
+            maxSlopeOffset:        cfg.maxSlopeOffset,
             maxVolatilityOffset:   volatilityClamp,
-            volatilityExponent:    cfg.volatilityExponent,
-            volatilityScaleX:      cfg.volatilityScaleX,
-            volatilityThreshold:   cfg.volatilityThreshold,
+            volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
+            volatilityScaleX:      cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
+            volatilityThreshold:   normalizeVolatilityThreshold(cfg.volatilityThreshold),
             neutralZonePct:        nz,
             clipPercentile,
             clipThreshold:         amaClipThreshold,
@@ -795,14 +794,12 @@ class MarketAdapterService {
             // symmetricDelta still uses weightVariance from the ATR/price ratio.
             slopeResult = computeAmaSlopeWeights(amaValues, weightVariance, slopeCfg);
 
-            const kalmanCfg = cfg.kalman || {};
-
             // Kalman filter computation - collect per-bar results in single pass
             const kalman = new KalmanTrendAnalyzer({
-                rNoise: kalmanCfg.rNoise ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_R_NOISE_DEFAULT,
-                qTactical: kalmanCfg.qTactical ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_TACTICAL_DEFAULT,
-                qModal: kalmanCfg.qModal ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_MODAL_DEFAULT,
-                warmupBars: kalmanCfg.warmupBars ?? 20,
+                rNoise: cfg.kalman?.rNoise ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_R_NOISE_DEFAULT,
+                qTactical: cfg.kalman?.qTactical ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_TACTICAL_DEFAULT,
+                qModal: cfg.kalman?.qModal ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_MODAL_DEFAULT,
+                warmupBars: cfg.kalman?.warmupBars ?? 20,
             });
 
             const kalmanHistory = [];
@@ -849,8 +846,9 @@ class MarketAdapterService {
             const kalmanDispThresholdMult = cfg.kalmanDispThresholdMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT;
             const kalmanSmoothSpanPct = cfg.kalmanSmoothSpanPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT;
             const signalConfirmBars = cfg.signalConfirmBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT;
-            const minOutputThreshold = cfg.minOutputThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD;
-            const dispScaleMinPct  = cfg.dispScaleMinPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
+            const minOutputThreshold = cfg.minOutputThreshold
+                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD;
+            const dispScaleMinPct  = cfg.dispScaleMinPct  ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
             const hasDirectionalOffset = mo > 0;
             const useAmaBlend = hasDirectionalOffset && alpha !== 0;
             const useKalmanBlend = hasDirectionalOffset && alpha !== 1;
@@ -930,7 +928,7 @@ class MarketAdapterService {
             // 1. Normalize AMA/Kalman rails by the runtime clamp so alpha only changes the blend ratio.
             // 2. Decide regime/dead-band in pre-gain space so gain cannot reshape the signal.
             // 3. Apply gain as the final scale factor, then clamp to the runtime offset cap.
-            const offsetClamp = mo;
+            const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
             const channelNorm = Math.max(Math.abs(offsetClamp), 1e-9);
             const outputThreshold = minOutputThreshold;
             const outputThresholdIsZero = zeroOutputThreshold;
@@ -963,38 +961,33 @@ class MarketAdapterService {
             const confirmBars = Math.max(0, Math.min(5, Math.round(signalConfirmBars)));
             let echoedOffSeries = new Array(closes.length).fill(0);
             let echoedGatedOffSeries = new Array(closes.length).fill(0);
-            if (confirmBars <= 1) {
+            if (confirmBars === 0) {
                 echoedOffSeries = combinedOffSeries;
                 echoedGatedOffSeries = gatedOffSeries;
             } else {
                 let latchedSign = 0;
-                let pendingSign = null;
+                let pendingSign = 0;
                 let pendingCount = 0;
                 let latchedOff = 0;
                 let latchedGatedOff = 0;
                 for (let i = 0; i < closes.length; i++) {
                     const raw = combinedOffSeries[i];
                     const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
-
                     if (sign === latchedSign) {
-                        // Current signal matches latched state; reset any pending counter-signal
-                        pendingSign = null;
+                        pendingSign = 0;
                         pendingCount = 0;
                         latchedOff = raw;
                         latchedGatedOff = gatedOffSeries[i];
                     } else {
-                        // Potential state change detected
                         if (pendingSign !== sign) {
                             pendingSign = sign;
                             pendingCount = 1;
                         } else {
                             pendingCount++;
                         }
-
                         if (pendingCount >= confirmBars) {
-                            // Confirmed state change
                             latchedSign = sign;
-                            pendingSign = null;
+                            pendingSign = 0;
                             pendingCount = 0;
                             latchedOff = raw;
                             latchedGatedOff = gatedOffSeries[i];
@@ -1275,19 +1268,13 @@ class MarketAdapterService {
 
         // Weight-only update path: persist fresh weights to dynamicgrid.json without a grid reset.
         // The bot will pick these up on the next recalculation cycle after fills or config reload.
-        if (!snapshotPersistedThisCycle && !triggered && !staleData && isDynamicWeightWhitelisted
-                && dynamicWeightsPayload && persistedCenterPrice > 0) {
-
-            let dynamicWeightsPersisted = true;
-            if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
-                dynamicWeightsPersisted = deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
-                    amaCenterPrice: amaPrice,
-                    dynamicWeights: dynamicWeightsPayload,
-                }) !== false;
-            } else if (isDryRun) {
-                dryRunMessages.push(`[DRY RUN] Would update dynamic weights for ${bot.botKey} (center: ${persistedCenterPrice})`);
-            }
-
+        if (!snapshotPersistedThisCycle && !triggered && !isDryRun && !staleData && isDynamicWeightWhitelisted
+                && dynamicWeightsPayload && persistedCenterPrice > 0
+                && typeof deps.writeBotDynamicGrid === 'function') {
+            const dynamicWeightsPersisted = deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
+                amaCenterPrice: amaPrice,
+                dynamicWeights: dynamicWeightsPayload,
+            }) !== false;
             if (dynamicWeightsPersisted) {
                 botState.amaCenterPrice = amaPrice;
                 botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
@@ -1345,7 +1332,13 @@ class MarketAdapterService {
             atr,
             weightVariance,
             amaSlope,
-            effectiveWeights:         botState.effectiveWeights || null,
+            effectiveWeights:         ((snapshotPersistedThisCycle || isDryRun) && dynamicWeightsPayload?.effectiveWeights)
+                ? dynamicWeightsPayload.effectiveWeights
+                : (botState.effectiveWeights || null),
+            dynamicWeightWhitelisted: isDynamicWeightWhitelisted,
+            dynamicWeightReady:       dynamicWeightsPayload?.isReady ?? false,
+            dynamicWeightProfile:     weights?.profile || null,
+            hasExplicitBaseWeights,
             pendingClosedCandle: false,
         };
 
@@ -1353,6 +1346,7 @@ class MarketAdapterService {
             ok: true,
             dryRunMessages,
             source: sourceLabel,
+            intervalSeconds: cfg.intervalSeconds,
             candleCount: nextCandles.length,
             analysisCandleCount: analysisCandles.length,
             kibanaGapRepairCount,
@@ -1377,11 +1371,16 @@ class MarketAdapterService {
             weights,
             collateralRecommendation,
             amaSlope,
+            dynamicWeightWhitelisted: isDynamicWeightWhitelisted,
+            dynamicWeightReady: dynamicWeightsPayload?.isReady ?? false,
+            dynamicWeightProfile: weights?.profile || null,
+            hasExplicitBaseWeights,
             poolId: ctx.poolId,
             candleFile: deps.path.relative(deps.root, filePath),
             lastCandleTs: rawLastCandleTs,
             rawLastCandleTs,
             lastClosedCandleTs: consumedClosedCandleTs,
+            lastClosedCandleClose: Number(latestClosedCandle?.[4]),
             centerPrice,
             amaConfig: {
                 erPeriod: botAma.erPeriod,

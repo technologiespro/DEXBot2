@@ -1,9 +1,9 @@
 #!/bin/bash
-# Clear market adapter data and state files.
+# Clear market adapter data, state files, and runtime log.
 #
 # Removes all persisted candle data and state files from market_adapter/data/
-# and market_adapter/state/. The market adapter will bootstrap fresh from Kibana
-# and regenerate state on next run.
+# and market_adapter/state/, plus profiles/logs/market_adapter.log. The market
+# adapter will bootstrap fresh from Kibana and regenerate state on next run.
 #
 # Usage: ./scripts/clear-market-adapter.sh or bash scripts/clear-market-adapter.sh
 
@@ -21,6 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DATA_DIR="${PROJECT_ROOT}/market_adapter/data"
 STATE_DIR="${PROJECT_ROOT}/market_adapter/state"
+MARKET_ADAPTER_LOG="${PROJECT_ROOT}/profiles/logs/market_adapter.log"
 
 # Functions
 log_info() {
@@ -44,14 +45,17 @@ log_info "DEXBot2 Clear Market Adapter Script"
 log_info "=========================================="
 log_info "Data directory:  $DATA_DIR"
 log_info "State directory: $STATE_DIR"
+log_info "Log file:        $MARKET_ADAPTER_LOG"
 log_info ""
 log_warning "WARNING: This will delete all persisted candle data and state files!"
+log_warning "This also deletes the market adapter runtime log."
 log_warning "The market adapter will bootstrap fresh from Kibana on next run."
 log_info ""
 
 # Count files
 DATA_COUNT=0
 STATE_COUNT=0
+LOG_COUNT=0
 
 if [ -d "$DATA_DIR" ]; then
     DATA_COUNT=$(find "$DATA_DIR" -type f 2>/dev/null | wc -l)
@@ -65,14 +69,18 @@ else
     log_warning "State directory does not exist: $STATE_DIR"
 fi
 
-TOTAL_COUNT=$((DATA_COUNT + STATE_COUNT))
+if [ -f "$MARKET_ADAPTER_LOG" ]; then
+    LOG_COUNT=1
+fi
+
+TOTAL_COUNT=$((DATA_COUNT + STATE_COUNT + LOG_COUNT))
 
 if [ "$TOTAL_COUNT" -eq 0 ]; then
     log_info "No files found to delete."
     exit 0
 fi
 
-log_info "Found $DATA_COUNT data file(s) and $STATE_COUNT state file(s) to delete"
+log_info "Found $DATA_COUNT data file(s), $STATE_COUNT state file(s), and $LOG_COUNT log file(s) to delete"
 log_info ""
 
 # Show what will be deleted
@@ -91,6 +99,13 @@ if [ "$STATE_COUNT" -gt 0 ]; then
         SIZE=$(du -h "$file" | cut -f1)
         echo -e "${BLUE}  -${NC} $(realpath --relative-to="$PROJECT_ROOT" "$file") ($SIZE)"
     done
+    log_info ""
+fi
+
+if [ "$LOG_COUNT" -gt 0 ]; then
+    log_info "Log files to be deleted:"
+    SIZE=$(du -h "$MARKET_ADAPTER_LOG" | cut -f1)
+    echo -e "${BLUE}  -${NC} $(realpath --relative-to="$PROJECT_ROOT" "$MARKET_ADAPTER_LOG") ($SIZE)"
     log_info ""
 fi
 
@@ -116,9 +131,15 @@ if [ "$STATE_COUNT" -gt 0 ]; then
     find "$STATE_DIR" -type f 2>/dev/null -delete
 fi
 
+if [ "$LOG_COUNT" -gt 0 ]; then
+    log_info "Deleting market adapter log..."
+    rm -f "$MARKET_ADAPTER_LOG"
+fi
+
 # Re-count to confirm
 REMAINING_DATA=0
 REMAINING_STATE=0
+REMAINING_LOG=0
 
 if [ -d "$DATA_DIR" ]; then
     REMAINING_DATA=$(find "$DATA_DIR" -type f 2>/dev/null | wc -l)
@@ -128,17 +149,21 @@ if [ -d "$STATE_DIR" ]; then
     REMAINING_STATE=$(find "$STATE_DIR" -type f 2>/dev/null | wc -l)
 fi
 
+if [ -f "$MARKET_ADAPTER_LOG" ]; then
+    REMAINING_LOG=1
+fi
+
 log_info "=========================================="
-if [ "$REMAINING_DATA" -eq 0 ] && [ "$REMAINING_STATE" -eq 0 ]; then
+if [ "$REMAINING_DATA" -eq 0 ] && [ "$REMAINING_STATE" -eq 0 ] && [ "$REMAINING_LOG" -eq 0 ]; then
     log_success "All market adapter files cleared!"
-    log_info "Total deleted: $TOTAL_COUNT (data: $DATA_COUNT, state: $STATE_COUNT)"
+    log_info "Total deleted: $TOTAL_COUNT (data: $DATA_COUNT, state: $STATE_COUNT, log: $LOG_COUNT)"
     log_info ""
     log_info "Next steps:"
     log_info "- The market adapter will bootstrap fresh candle data from Kibana on next run"
     log_info "- All bot center prices and AMA state will be recomputed"
     log_info "- Start market adapter: node market_adapter/market_adapter.js"
 else
-    log_warning "Cleanup incomplete. Remaining data files: $REMAINING_DATA, remaining state files: $REMAINING_STATE"
+    log_warning "Cleanup incomplete. Remaining data files: $REMAINING_DATA, remaining state files: $REMAINING_STATE, remaining logs: $REMAINING_LOG"
 fi
 log_info "=========================================="
 

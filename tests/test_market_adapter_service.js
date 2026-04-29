@@ -63,6 +63,21 @@ function generateTrendShiftCandles(count, start = 100) {
     return candles;
 }
 
+function generateUpThenFlatCandles(upCount, flatCount, start = 100, step = 1) {
+    const candles = [];
+    const baseTs = 1700000000000;
+    let price = start;
+    for (let i = 0; i < upCount; i++) {
+        price = start + i * step;
+        candles.push([baseTs + i * 3600000, price, price, price, price, 1]);
+    }
+    for (let i = 0; i < flatCount; i++) {
+        const index = upCount + i;
+        candles.push([baseTs + index * 3600000, price, price, price, price, 1]);
+    }
+    return candles;
+}
+
 function roundTo(value, decimals) {
     const factor = 10 ** decimals;
     return Math.round(value * factor) / factor;
@@ -76,7 +91,7 @@ function latchConfirmedSeries(appliedSeries, preGainSeries, confirmBars) {
     const echoedAppliedSeries = new Array(appliedSeries.length).fill(0);
     const echoedPreGainSeries = new Array(preGainSeries.length).fill(0);
 
-    if (confirmBars <= 1) {
+    if (confirmBars === 0) {
         for (let i = 0; i < appliedSeries.length; i++) {
             echoedAppliedSeries[i] = appliedSeries[i];
             echoedPreGainSeries[i] = preGainSeries[i];
@@ -85,7 +100,7 @@ function latchConfirmedSeries(appliedSeries, preGainSeries, confirmBars) {
     }
 
     let latchedSign = 0;
-    let pendingSign = null;
+    let pendingSign = 0;
     let pendingCount = 0;
     let latchedApplied = 0;
     let latchedPreGain = 0;
@@ -94,7 +109,7 @@ function latchConfirmedSeries(appliedSeries, preGainSeries, confirmBars) {
         const raw = appliedSeries[i];
         const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
         if (sign === latchedSign) {
-            pendingSign = null;
+            pendingSign = 0;
             pendingCount = 0;
             latchedApplied = raw;
             latchedPreGain = preGainSeries[i];
@@ -107,7 +122,7 @@ function latchConfirmedSeries(appliedSeries, preGainSeries, confirmBars) {
             }
             if (pendingCount >= confirmBars) {
                 latchedSign = sign;
-                pendingSign = null;
+                pendingSign = 0;
                 pendingCount = 0;
                 latchedApplied = raw;
                 latchedPreGain = preGainSeries[i];
@@ -2298,6 +2313,85 @@ async function testDynamicWeightGainScalesOutputLinearly() {
         'different gain values should produce different effective weights when the signal survives gating');
 }
 
+async function testDynamicWeightSignalConfirmBarsCanLatchFlatState() {
+    let writtenPayload = null;
+    const candles = generateUpThenFlatCandles(90, 8, 100, 1);
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 1, slowPeriod: 1 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 1,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (series) => series,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-confirm-flat.trigger',
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
+            writtenPayload = payload;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-confirm-flat',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        alpha: 1,
+        gain: 1,
+        minOutputThreshold: 0,
+        signalConfirmBars: 2,
+        regimeSensitivity: 0,
+        maxSlopeOffset: 0.5,
+        maxVolatilityOffset: 0,
+        amaSlope: {
+            lookbackBars: 1,
+            maxSlopePct: 1,
+            neutralZonePct: 0,
+        },
+    };
+
+    const state = { bots: { 'xrp-bts-dw-confirm-flat': { centerPrice: 100 } } };
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.ok(writtenPayload?.dynamicWeights, 'dynamic weights should be persisted');
+    assert.strictEqual(writtenPayload.dynamicWeights.rawFinalOffset, 0, 'raw final signal should be flat');
+    assert.strictEqual(writtenPayload.dynamicWeights.finalOffset, 0, 'confirmed final signal should latch back to flat');
+    assert.strictEqual(result.weights.meta.trendOffset, 0, 'stale positive trend offset should not survive confirmed flat bars');
+    assert.deepStrictEqual(writtenPayload.dynamicWeights.effectiveWeights, { sell: 0.6, buy: 0.4 },
+        'flat confirmed state should restore static weights');
+}
+
 async function testDynamicWeightChartParityMatchesLiveService() {
     let writtenPayload = null;
 
@@ -3090,6 +3184,7 @@ async function run() {
     await testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights();
     await testDynamicWeightMinOutputThresholdZeroDisablesGate();
     await testDynamicWeightGainScalesOutputLinearly();
+    await testDynamicWeightSignalConfirmBarsCanLatchFlatState();
     await testDynamicWeightChartParityMatchesLiveService();
     await testDynamicWeightVolatilityOnlyPathRemainsReady();
     await testDynamicWeightVolatilityOverridesFlowIntoService();

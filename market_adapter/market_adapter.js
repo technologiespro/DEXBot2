@@ -97,23 +97,24 @@ function getBitsharesClient() {
 
 const LP_OP_TYPE = 63;
 const API_MAX_PAGE = 101;
+const RUNTIME_DEFAULTS = MARKET_ADAPTER.RUNTIME_DEFAULTS;
 
 const DEFAULTS = {
-    pollSeconds: 3600,
+    pollSeconds: RUNTIME_DEFAULTS.pollSeconds,
     deltaThresholdPercent: MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT,
     absoluteThreshold: MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT,
-    intervalSeconds: 3600,
-    bootstrapLookbackHours: 720,
-    nativeBackfillHours: 6,
-    maxStaleHours: 6,
-    sourceRetries: 3,
-    retryDelayMs: 800,
+    intervalSeconds: RUNTIME_DEFAULTS.intervalSeconds,
+    bootstrapLookbackHours: RUNTIME_DEFAULTS.bootstrapLookbackHours,
+    nativeBackfillHours: RUNTIME_DEFAULTS.nativeBackfillHours,
+    maxStaleHours: RUNTIME_DEFAULTS.maxStaleHours,
+    sourceRetries: RUNTIME_DEFAULTS.sourceRetries,
+    retryDelayMs: RUNTIME_DEFAULTS.retryDelayMs,
     metricsJson: false,
     quiet: false,
     dryRun: false,
     whitelistAll: false,
-    maxPages: 80,
-    pageLimit: 100,
+    maxPages: RUNTIME_DEFAULTS.maxPages,
+    pageLimit: RUNTIME_DEFAULTS.pageLimit,
     once: false,
     maxNativeGapFillCandles: MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES,
     amaSlope: {
@@ -125,23 +126,6 @@ const DEFAULTS = {
         maxSlopePct: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT,
     },
     atrPeriod: MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT,
-    maxSlopeOffset: MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP,
-    maxVolatilityOffset: MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP,
-    volatilityExponent: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
-    volatilityScaleX: MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
-    volatilityThreshold: MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_THRESHOLD,
-    clipPercentile: MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE,
-    regimeSensitivity: MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY,
-    alpha: MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA,
-    dw: MARKET_ADAPTER.DYNAMIC_WEIGHT_DW,
-    gain: MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN,
-    kalmanSmoothPct: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT,
-    kalmanDispScaleMult: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT,
-    kalmanDispThresholdMult: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT,
-    kalmanSmoothSpanPct: MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT,
-    signalConfirmBars: MARKET_ADAPTER.DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT,
-    dispScaleMinPct: MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT,
-    minOutputThreshold: MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD,
 };
 
 // Cycle-scoped caches — reset once per runOnce() so each cycle reads files fresh
@@ -180,86 +164,75 @@ function findPairForBot(bot, pairs) {
     }) || null;
 }
 
+function assignPresent(target, source, keys) {
+    for (const key of keys) {
+        if (source?.[key] != null) target[key] = source[key];
+    }
+    return target;
+}
+
 function applyAmaSlopeOverrides(target, overrides) {
     if (!overrides || typeof overrides !== 'object') return target;
     target.amaSlope = { ...(target.amaSlope || {}) };
-    // Support nested object: { amaSlope: { ... } }
     if (overrides.amaSlope && typeof overrides.amaSlope === 'object') {
         target.amaSlope = { ...target.amaSlope, ...overrides.amaSlope };
     }
-    // Support top-level keys for backwards compatibility or flatter overrides
-    if (overrides.neutralZonePct != null) target.amaSlope.neutralZonePct = overrides.neutralZonePct;
+    assignPresent(target.amaSlope, overrides, ['neutralZonePct', 'lookbackBars']);
     if (overrides.amaMaxSlopePct != null) target.amaSlope.maxSlopePct = overrides.amaMaxSlopePct;
-    if (overrides.lookbackBars != null) target.amaSlope.lookbackBars = overrides.lookbackBars;
     return target;
 }
 
 function applyKalmanSlopeOverrides(target, overrides) {
     if (!overrides || typeof overrides !== 'object') return target;
     target.kalmanSlope = { ...(target.kalmanSlope || {}) };
-    // Support nested object: { kalmanSlope: { ... } }
     if (overrides.kalmanSlope && typeof overrides.kalmanSlope === 'object') {
         target.kalmanSlope = { ...target.kalmanSlope, ...overrides.kalmanSlope };
     }
-    // Support top-level keys
     if (overrides.kalmanMaxSlopePct != null) target.kalmanSlope.maxSlopePct = overrides.kalmanMaxSlopePct;
     return target;
 }
 
 function applyMarketAdapterOverrides(target, overrides, opts = {}) {
     if (!overrides || typeof overrides !== 'object') return target;
-
-    // Trigger settings
-    if (overrides.deltaThresholdPercent != null) target.deltaThresholdPercent = overrides.deltaThresholdPercent;
     if (opts.includeDefaultAmaKey && overrides.defaultAmaKey) target.defaultAmaKey = overrides.defaultAmaKey;
-
-    // Runtime settings
-    if (overrides.pollSeconds != null) target.pollSeconds = overrides.pollSeconds;
-    if (overrides.bootstrapLookbackHours != null) target.bootstrapLookbackHours = overrides.bootstrapLookbackHours;
-    if (overrides.nativeBackfillHours != null) target.nativeBackfillHours = overrides.nativeBackfillHours;
-    if (overrides.maxStaleHours != null) target.maxStaleHours = overrides.maxStaleHours;
-    if (overrides.sourceRetries != null) target.sourceRetries = overrides.sourceRetries;
-    if (overrides.retryDelayMs != null) target.retryDelayMs = overrides.retryDelayMs;
-
-    // Dynamic weight - core bounds and gates
-    if (overrides.maxSlopeOffset != null) target.maxSlopeOffset = overrides.maxSlopeOffset;
+    assignPresent(target, overrides, [
+        'deltaThresholdPercent',
+        'pollSeconds',
+        'bootstrapLookbackHours',
+        'nativeBackfillHours',
+        'maxStaleHours',
+        'sourceRetries',
+        'retryDelayMs',
+        'maxSlopeOffset',
+        'absoluteThreshold',
+        'minOutputThreshold',
+        'volatilityExponent',
+        'volatilityScaleX',
+        'clipPercentile',
+        'regimeSensitivity',
+        'hurstZoneBand',
+        'alpha',
+        'dw',
+        'gain',
+        'kalmanSmoothPct',
+        'kalmanDispScaleMult',
+        'kalmanDispThresholdMult',
+        'kalmanSmoothSpanPct',
+        'signalConfirmBars',
+        'dispScaleMinPct',
+    ]);
     if (overrides.maxVolatilityOffset != null) {
         target.maxVolatilityOffset = normalizeMaxVolatilityOffset(overrides.maxVolatilityOffset);
     }
     if (overrides.atrPeriod != null) target.atrPeriod = normalizeAtrPeriod(overrides.atrPeriod);
-    if (overrides.absoluteThreshold != null) target.absoluteThreshold = overrides.absoluteThreshold;
-    if (overrides.minOutputThreshold != null) target.minOutputThreshold = overrides.minOutputThreshold;
-
-    // Volatility penalty tuning
-    if (overrides.volatilityExponent != null) target.volatilityExponent = overrides.volatilityExponent;
-    if (overrides.volatilityScaleX != null) target.volatilityScaleX = overrides.volatilityScaleX;
     if (overrides.volatilityThreshold != null) {
         target.volatilityThreshold = normalizeVolatilityThreshold(overrides.volatilityThreshold);
     }
-
-    // Regime and outlier filtering
-    if (overrides.clipPercentile != null) target.clipPercentile = overrides.clipPercentile;
-    if (overrides.regimeSensitivity != null) target.regimeSensitivity = overrides.regimeSensitivity;
-    if (overrides.hurstZoneBand != null) target.hurstZoneBand = overrides.hurstZoneBand;
     if (overrides.peNodes) target.peNodes = overrides.peNodes;
     if (overrides.regimeTable) target.regimeTable = overrides.regimeTable;
-
-    // Kalman / Blend tuning
-    if (overrides.alpha != null) target.alpha = overrides.alpha;
-    if (overrides.dw != null) target.dw = overrides.dw;
-    if (overrides.gain != null) target.gain = overrides.gain;
-    if (overrides.kalmanSmoothPct != null) target.kalmanSmoothPct = overrides.kalmanSmoothPct;
-    if (overrides.kalmanDispScaleMult != null) target.kalmanDispScaleMult = overrides.kalmanDispScaleMult;
-    if (overrides.kalmanDispThresholdMult != null) target.kalmanDispThresholdMult = overrides.kalmanDispThresholdMult;
-    if (overrides.kalmanSmoothSpanPct != null) target.kalmanSmoothSpanPct = overrides.kalmanSmoothSpanPct;
-    if (overrides.signalConfirmBars != null) target.signalConfirmBars = overrides.signalConfirmBars;
-    if (overrides.dispScaleMinPct != null) target.dispScaleMinPct = overrides.dispScaleMinPct;
     if (overrides.kalman) target.kalman = overrides.kalman;
-
-    // Slope sub-objects
-    applyAmaSlopeOverrides(target, overrides);
     applyKalmanSlopeOverrides(target, overrides);
-
+    applyAmaSlopeOverrides(target, overrides);
     return target;
 }
 
@@ -276,9 +249,7 @@ function resolveBotCfg(bot, globalCfg) {
             : globalCfg.kalman,
     };
 
-    // Apply global overrides from settings file
-    const globals = settings.globals || {};
-    applyMarketAdapterOverrides(merged, globals);
+    applyMarketAdapterOverrides(merged, settings.globals || {});
 
     // Pair-level overrides
     const pair = findPairForBot(bot, settings.pairs);
@@ -352,7 +323,7 @@ function findAmaProfileForBot(bot, ctx = null) {
     });
     if (matches.length === 0) return null;
 
-    const oneHour = matches.filter((p) => Number(p?.intervalSeconds) === 3600);
+    const oneHour = matches.filter((p) => Number(p?.intervalSeconds) === RUNTIME_DEFAULTS.intervalSeconds);
     const candidates = oneHour.length > 0 ? oneHour : matches;
     return [...candidates].sort((a, b) => {
         const aTs = Date.parse(String(a?.updatedAt || 0)) || 0;
@@ -525,23 +496,23 @@ function printHelp() {
     console.log('Market adapter (standalone): Kibana bootstrap + native incremental updates');
     console.log('');
     console.log('Usage:');
-    console.log('  node market_adapter/market_adapter.js [--once] [--pollSeconds 3600]');
+    console.log(`  node market_adapter/market_adapter.js [--once] [--pollSeconds ${RUNTIME_DEFAULTS.pollSeconds}]`);
     console.log('');
     console.log('Options:');
     console.log('  --once                 Run one cycle and exit');
-    console.log('  --pollSeconds <n>      Loop interval seconds (default 3600, wall-clock aligned)');
+    console.log(`  --pollSeconds <n>      Loop interval seconds (default ${RUNTIME_DEFAULTS.pollSeconds}, wall-clock aligned)`);
     console.log('  --deltaPercent <n>     Trigger threshold percent (default: general.settings MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT or 2.5)');
-    console.log('  --bootstrapHours <n>   Kibana bootstrap lookback hours (default 720)');
-    console.log('  --nativeBackfillHours  Native incremental lookback hours (default 6)');
-    console.log('  --maxStaleHours <n>    Max accepted candle staleness before trigger suppression (default 6)');
-    console.log('  --sourceRetries <n>    Retries for source fetch calls (default 3)');
-    console.log('  --retryDelayMs <n>     Base retry delay in milliseconds (default 800)');
+    console.log(`  --bootstrapHours <n>   Kibana bootstrap lookback hours (default ${RUNTIME_DEFAULTS.bootstrapLookbackHours})`);
+    console.log(`  --nativeBackfillHours  Native incremental lookback hours (default ${RUNTIME_DEFAULTS.nativeBackfillHours})`);
+    console.log(`  --maxStaleHours <n>    Max accepted candle staleness before trigger suppression (default ${RUNTIME_DEFAULTS.maxStaleHours})`);
+    console.log(`  --sourceRetries <n>    Retries for source fetch calls (default ${RUNTIME_DEFAULTS.sourceRetries})`);
+    console.log(`  --retryDelayMs <n>     Base retry delay in milliseconds (default ${RUNTIME_DEFAULTS.retryDelayMs})`);
     console.log('  --metricsJson          Emit per-cycle metrics as one JSON line');
     console.log('  --quiet                Suppress per-bot logs (state still written)');
     console.log('  --dryRun               Enable dry run mode for non-whitelisted bots');
     console.log('  --whitelist-all        Disable dry run mode for all bots');
-    console.log('  --maxPages <n>         Max native history pages per cycle (default 80)');
-    console.log('  --pageLimit <n>        Native page size (max 101, default 100)');
+    console.log(`  --maxPages <n>         Max native history pages per cycle (default ${RUNTIME_DEFAULTS.maxPages})`);
+    console.log(`  --pageLimit <n>        Native page size (max ${API_MAX_PAGE}, default ${RUNTIME_DEFAULTS.pageLimit})`);
 }
 
 function validateConfig(input) {
@@ -643,13 +614,18 @@ function parseChainTimeToMs(timeStr) {
     return Date.parse(s.endsWith('Z') ? s : `${s}Z`);
 }
 
-function candleFileForBot(botKey, intervalSeconds = 3600) {
-    const label = intervalSeconds === 3600 ? '1h' : toIntervalLabel(intervalSeconds);
+function candleFileForBot(botKey, intervalSeconds = RUNTIME_DEFAULTS.intervalSeconds) {
+    const label = intervalSeconds === RUNTIME_DEFAULTS.intervalSeconds
+        ? RUNTIME_DEFAULTS.intervalLabel
+        : toIntervalLabel(intervalSeconds);
     return path.join(DATA_DIR, `market_adapter_${botKey}_${label}.json`);
 }
 
 function requiredCandlesForAma(ama = DEFAULT_AMA) {
-    return Math.max(ama.erPeriod + ama.slowPeriod + 20, 80);
+    return Math.max(
+        ama.erPeriod + ama.slowPeriod + RUNTIME_DEFAULTS.amaWarmupPaddingCandles,
+        RUNTIME_DEFAULTS.minRequiredCandles
+    );
 }
 
 function calculateBotThreshold(cfg) {
@@ -1011,10 +987,30 @@ async function runOnce(cfg, state, contextCache) {
             const weightText = r.weights ? ` weights[buy=${r.weights.buy}, sell=${r.weights.sell}]` : '';
             const trendText = r.amaSlope?.trend ? ` trend=${r.amaSlope.trend}` : '';
             const warmupText = r.triggerSuppressedReason === 'ama_warmup_insufficient' ? ` WARMUP_INSUFFICIENT(${r.candleCount})` : '';
+            const isOneHourResult = Number(r.intervalSeconds) === RUNTIME_DEFAULTS.intervalSeconds;
+            const closedTsText = isOneHourResult && Number.isFinite(r.lastClosedCandleTs) ? ` closed=${new Date(r.lastClosedCandleTs).toISOString()}` : '';
+            const rawTsText = isOneHourResult && Number.isFinite(r.rawLastCandleTs) ? ` rawLast=${new Date(r.rawLastCandleTs).toISOString()}` : '';
+            const closeText = isOneHourResult && Number.isFinite(r.lastClosedCandleClose) ? ` close=${r.lastClosedCandleClose.toFixed(8)}` : '';
+            const analysisText = isOneHourResult && Number.isFinite(r.analysisCandleCount) ? ` analysis=${r.analysisCandleCount}` : '';
+            const nativeText = isOneHourResult && Number.isFinite(r.nativePagesFetched) ? ` nativePages=${r.nativePagesFetched}` : '';
+            const dynText = isOneHourResult ? ` dyn[whitelist=${r.dynamicWeightWhitelisted ? 'yes' : 'no'},base=${r.hasExplicitBaseWeights ? 'yes' : 'no'},ready=${r.dynamicWeightReady ? 'yes' : 'no'}${r.dynamicWeightProfile ? `,profile=${r.dynamicWeightProfile}` : ''}]` : '';
 
-            log(cfg, `${r.source}, candles=${r.candleCount}, ama=${amaText} (prevCenter=${prevCenterText}, delta=${deltaText}), threshold=${thresholdText}${offText}${amaOffText}${regimeText}${staleText}${patchText}${backfillText}${gapText}${trigText}${pendingText}${warmupText}${trendText}${weightText}`);
+            log(cfg, `${r.source}, candles=${r.candleCount}${analysisText}${closedTsText}${rawTsText}${closeText}, ama=${amaText} (prevCenter=${prevCenterText}, delta=${deltaText}), threshold=${thresholdText}${offText}${amaOffText}${regimeText}${staleText}${patchText}${backfillText}${gapText}${trigText}${pendingText}${warmupText}${trendText}${weightText}${dynText}${nativeText}`);
             if (Array.isArray(r.dryRunMessages)) {
                 r.dryRunMessages.forEach(msg => log(cfg, `  ${msg}`));
+            }
+            if (isOneHourResult && r.weights?.meta) {
+                const m = r.weights.meta;
+                const parts = [
+                    `trendOffset=${Number.isFinite(m.trendOffset) ? m.trendOffset.toFixed(3) : 'n/a'}`,
+                    `volPenalty=${Number.isFinite(m.volatilityPenalty) ? m.volatilityPenalty.toFixed(3) : 'n/a'}`,
+                    `rawOff=${Number.isFinite(m.rawFinalOffset) ? m.rawFinalOffset.toFixed(3) : 'n/a'}`,
+                    `finalOff=${Number.isFinite(m.finalOffset) ? m.finalOffset.toFixed(3) : 'n/a'}`,
+                    `slopePct=${Number.isFinite(m.slopePct) ? m.slopePct.toFixed(4) : 'n/a'}`,
+                    `belowMin=${m.belowMinOutputThreshold ? 'yes' : 'no'}`,
+                    `kalmanReady=${m.kalmanReady ? 'yes' : 'no'}`,
+                ];
+                log(cfg, `  Dynamic weights: ${parts.join(' | ')}`);
             }
             if (Array.isArray(r.amaComparison) && r.amaComparison.length > 0) {
                 const parts = r.amaComparison.map((a) => {

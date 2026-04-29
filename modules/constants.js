@@ -584,6 +584,24 @@ let PIPELINE_TIMING = {
 // Controls price tracking and grid recalculation triggers.
 // See: market_adapter/market_adapter.js, modules/account_bots.js
 let MARKET_ADAPTER = {
+    // Default candle/runtime cadence for the standalone market adapter.
+    // Keep these centralized so the adapter, logs, and tests do not drift from
+    // the production 1h candle workflow.
+    RUNTIME_DEFAULTS: {
+        intervalSeconds: 3600,
+        intervalLabel: '1h',
+        pollSeconds: 3600,
+        bootstrapLookbackHours: 720,
+        nativeBackfillHours: 6,
+        maxStaleHours: 6,
+        sourceRetries: 3,
+        retryDelayMs: 800,
+        maxPages: 80,
+        pageLimit: 100,
+        amaWarmupPaddingCandles: 20,
+        minRequiredCandles: 80,
+    },
+
     // AMA_DELTA_THRESHOLD_PERCENT: Percentage change in AMA center price that triggers a grid reset.
     //   - When AMA price moves ±AMA_DELTA_THRESHOLD_PERCENT from the last recorded center,
     //     a recalculate.<botKey>.trigger file is written to signal grid regeneration.
@@ -1028,6 +1046,7 @@ Object.freeze(PIPELINE_TIMING);
 Object.freeze(UPDATER);
 Object.freeze(COW_PERFORMANCE);
 Object.freeze(LOGGING_CONFIG);
+Object.freeze(MARKET_ADAPTER.RUNTIME_DEFAULTS);
 Object.freeze(MARKET_ADAPTER.AMAS.AMA1);
 Object.freeze(MARKET_ADAPTER.AMAS.AMA2);
 Object.freeze(MARKET_ADAPTER.AMAS.AMA3);

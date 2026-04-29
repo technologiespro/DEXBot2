@@ -29,9 +29,9 @@ bash scripts/create-bot-symlinks.sh
 
 ### Wipe Logs
 **File:** `clear-logs.sh`
-**Purpose:** Delete all bot `.log` files.
+**Purpose:** Delete all bot `.log` files, including `profiles/logs/market_adapter.log`.
 ```bash
-# IRREVERSIBLE: Deletes all files in profiles/logs/*.log
+# IRREVERSIBLE: Deletes all files in profiles/logs/*.log, including market_adapter.log
 bash scripts/clear-logs.sh
 ```
 
@@ -47,7 +47,7 @@ bash scripts/clear-orders.sh
 **File:** `clear-all.sh`
 **Purpose:** Delete order state files and `.log` files in one confirmed operation.
 ```bash
-# IRREVERSIBLE: Deletes profiles/orders/* and profiles/logs/*.log
+# IRREVERSIBLE: Deletes profiles/orders/* and profiles/logs/*.log, including market_adapter.log
 bash scripts/clear-all.sh
 ```
 
