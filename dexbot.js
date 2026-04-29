@@ -152,7 +152,7 @@ function printCLIExamples() {
         console.log(`   ${example.command}`);
         if (example.notes) console.log(`   ${example.notes}`);
     });
-    console.log(`Read the README “CLI usage” section for more details (file: ${PROFILES_BOTS_FILE}).`);
+    console.log(`Read the README "CLI usage" section for more details (file: ${PROFILES_BOTS_FILE}).`);
 }
 
 if (cliArgs.some(arg => CLI_HELP_FLAGS.includes(arg))) {

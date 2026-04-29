@@ -109,6 +109,7 @@ class Logger {
      */
     _writeToFile(text) {
         if (!this.logFile) return;
+        if (isPm2LoggingEnabled()) return;
         const plainText = text.replace(/\x1b\[[0-9;]*m/g, '');
         try {
             // Ensure directory exists
@@ -139,7 +140,13 @@ class Logger {
             const output = `${color}${timestampPart}[${level.toUpperCase()}] [${this.category}] ${message}${this.colors.reset}`;
 
             if (!this.quiet) {
-                console.log(output);
+                if (level === 'error') {
+                    console.error(output);
+                } else if (level === 'warn') {
+                    console.warn(output);
+                } else {
+                    console.log(output);
+                }
             }
             this._writeToFile(output);
         }
@@ -509,4 +516,30 @@ class Logger {
     }
 }
 
+function isPm2Runtime() {
+    return !!process.env.pm_exec_path;
+}
+
+function isPm2LoggingEnabled() {
+    return !!(process.env.pm_out_log_path || process.env.pm_err_log_path);
+}
+
+function createPm2AwareLogger(category, options = {}) {
+    const nextOptions = { ...options };
+    if (
+        nextOptions.quiet == null &&
+        nextOptions.quietUnderPm2 === true &&
+        isPm2Runtime() &&
+        isPm2LoggingEnabled()
+    ) {
+        nextOptions.quiet = true;
+    }
+    delete nextOptions.quietUnderPm2;
+    return new Logger(category, nextOptions);
+}
+
 module.exports = Logger;
+module.exports.Logger = Logger;
+module.exports.isPm2Runtime = isPm2Runtime;
+module.exports.isPm2LoggingEnabled = isPm2LoggingEnabled;
+module.exports.createPm2AwareLogger = createPm2AwareLogger;

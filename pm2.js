@@ -346,7 +346,7 @@ async function ensureCredentialDaemonPM2({ forceRefresh = false } = {}) {
     try {
         const vaultSecret = await chainKeys.authenticate();
         bootstrap = await createPasswordBootstrapServer({ secret: vaultSecret });
-        console.log('✓ Authentication successful\n');
+        console.log('✓ Authentication successful');
         await startManagedRuntimePM2({ apps: [], bootstrap });
         return true;
     } catch (error) {

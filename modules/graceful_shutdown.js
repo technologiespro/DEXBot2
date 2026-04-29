@@ -60,6 +60,8 @@
 
 let cleanupHandlers = [];
 let shutdownInProgress = false;
+const Logger = require('./logger');
+const shutdownLogger = new Logger('Shutdown');
 
 /**
  * Register a cleanup function to be called on graceful shutdown
@@ -84,25 +86,25 @@ async function executeCleanup() {
     }
     shutdownInProgress = true;
 
-    console.log('\n[Shutdown] Cleaning up resources...');
+    shutdownLogger.info('Cleaning up resources...');
 
     // Execute handlers in LIFO order (last registered = first cleaned up)
     for (let i = cleanupHandlers.length - 1; i >= 0; i--) {
         const { name, handler } = cleanupHandlers[i];
         try {
-            console.log(`[Shutdown] Cleaning up: ${name}`);
+            shutdownLogger.info(`Cleaning up: ${name}`);
             const result = handler();
             // Handle both async and sync handlers
             if (result && typeof result.then === 'function') {
                 await result;
             }
-            console.log(`[Shutdown] ✓ ${name}`);
+            shutdownLogger.info(`✓ ${name}`);
         } catch (err) {
-            console.error(`[Shutdown] ✗ Error cleaning up ${name}:`, err.message || err);
+            shutdownLogger.error(`✗ Error cleaning up ${name}: ${err.message || err}`);
         }
     }
 
-    console.log('[Shutdown] Cleanup complete');
+    shutdownLogger.info('Cleanup complete');
 }
 
 /**
@@ -114,7 +116,7 @@ function setupGracefulShutdown() {
     
     signals.forEach(signal => {
         process.on(signal, async () => {
-            console.log(`\n[Shutdown] Received ${signal}, initiating graceful shutdown...`);
+            shutdownLogger.info(`Received ${signal}, initiating graceful shutdown...`);
             await executeCleanup();
             process.exit(0);
         });
@@ -122,14 +124,14 @@ function setupGracefulShutdown() {
 
     // Also handle uncaught exceptions
     process.on('uncaughtException', async (err) => {
-        console.error('[Shutdown] Uncaught exception:', err);
+        shutdownLogger.error(`Uncaught exception: ${err?.stack || err}`);
         await executeCleanup();
         process.exit(1);
     });
 
     // Handle unhandled rejections
     process.on('unhandledRejection', async (reason, promise) => {
-        console.error('[Shutdown] Unhandled rejection at:', promise, 'reason:', reason);
+        shutdownLogger.error(`Unhandled rejection at: ${promise} reason: ${reason?.stack || reason}`);
         await executeCleanup();
         process.exit(1);
     });

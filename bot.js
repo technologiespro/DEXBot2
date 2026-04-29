@@ -48,6 +48,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { createPm2AwareLogger } = require('./modules/logger');
 const DEXBot = require('./modules/dexbot_class');
 const { normalizeBotEntry } = require('./modules/dexbot_class');
 const { loadSettingsFile, resolveRawBotEntries, selectBotEntry } = require('./modules/bot_settings');
@@ -59,6 +60,7 @@ const credentialPolicy = require('./modules/credential_policy');
 setupGracefulShutdown();
 
 const PROFILES_BOTS_FILE = path.join(__dirname, 'profiles', 'bots.json');
+const launcherLogger = createPm2AwareLogger('bot.js');
 
 // Get bot name from args or environment
 // Support both direct names (node bot.js botname) and flag format (node bot.js --botname)
@@ -72,8 +74,8 @@ const botNameEnv = process.env.BOT_NAME || process.env.PREFERRED_ACCOUNT;
 const botName = botNameArg || botNameEnv;
 
 if (!botName) {
-    console.error('[bot.js] No bot name provided. Usage: node bot.js <bot-name>');
-    console.error('[bot.js] Or set BOT_NAME or PREFERRED_ACCOUNT environment variable');
+    launcherLogger.error('No bot name provided. Usage: node bot.js <bot-name>');
+    launcherLogger.error('Or set BOT_NAME or PREFERRED_ACCOUNT environment variable');
     process.exit(1);
 }
 
@@ -85,7 +87,7 @@ if (!botName) {
  */
 function loadBotConfig(name) {
     if (!fs.existsSync(PROFILES_BOTS_FILE)) {
-        console.error('[bot.js] profiles/bots.json not found. Run: dexbot bots');
+        launcherLogger.error('profiles/bots.json not found. Run: dexbot bots');
         process.exit(1);
     }
 
@@ -95,14 +97,14 @@ function loadBotConfig(name) {
 
         if (!botEntry) {
             const bots = resolveRawBotEntries(config);
-            console.error(`[bot.js] Bot '${name}' not found in profiles/bots.json`);
-            console.error(`[bot.js] Available bots: ${bots.map(b => b.name).join(', ') || 'none'}`);
+            launcherLogger.error(`Bot '${name}' not found in profiles/bots.json`);
+            launcherLogger.error(`Available bots: ${bots.map(b => b.name).join(', ') || 'none'}`);
             process.exit(1);
         }
 
         return botEntry;
     } catch (err) {
-        console.error(`[bot.js] Error loading bot config:`, err.message);
+        launcherLogger.error(`Error loading bot config: ${err.message}`);
         process.exit(1);
     }
 }
@@ -200,13 +202,13 @@ async function getSigningSecretForAccount(accountName) {
               try {
                   await bot.shutdown();
               } catch (shutdownErr) {
-                  console.error('[bot.js] Error during cleanup:', shutdownErr.message);
+                  launcherLogger.error(`Error during cleanup: ${shutdownErr.message}`);
               }
               throw err;
           }
 
      } catch (err) {
-         console.error('[bot.js] Failed to start bot:', err.message);
+         launcherLogger.error(`Failed to start bot: ${err.message}`);
          process.exit(1);
      }
 })();

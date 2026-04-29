@@ -22,6 +22,10 @@ assert.strictEqual(usesAmaGridPrice({ gridPrice: 'book' }), false, 'book should 
 assert.strictEqual(usesAmaGridPrice({ gridPrice: '  AMA4  ' }), true, 'ama4 matching should be case-insensitive');
 assert.strictEqual(needsMarketAdapter([{ gridPrice: 'book' }, { gridPrice: null }]), false, 'non-AMA bots should not require the market adapter');
 assert.strictEqual(needsMarketAdapter([{ gridPrice: 'book' }, { gridPrice: 'ama2' }]), true, 'any AMA bot should require the market adapter');
+const adapterApp = buildEcosystemApps([{ name: 'AMA-BOT', gridPrice: 'ama' }], { includeUpdater: false })
+    .find((app) => app.name === 'dexbot-adapter');
+assert.ok(adapterApp, 'AMA bots should include the market adapter service');
+assert.strictEqual(adapterApp.args, undefined, 'PM2 ecosystem should keep market adapter logging enabled by default');
 
 assert.strictEqual(
     countManagedBots([

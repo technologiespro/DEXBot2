@@ -1,5 +1,7 @@
 const fs = require('fs');
 const path = require('path');
+const Logger = require('./logger');
+const runtimeLogger = new Logger('credential-runtime');
 
 const DEFAULT_RUNTIME_DIR_NAME = 'dexbot2';
 const DEFAULT_SOCKET_BASENAME = 'dexbot-cred-daemon.sock';
@@ -7,7 +9,7 @@ const DEFAULT_READY_BASENAME = 'dexbot-cred-daemon.ready';
 
 function debugLog(message, err = null) {
     const suffix = err && err.message ? `: ${err.message}` : '';
-    console.error(`[credential-runtime][debug] ${message}${suffix}`);
+    runtimeLogger.error(`[credential-runtime][debug] ${message}${suffix}`);
 }
 
 function getDexbotRoot() {

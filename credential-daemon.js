@@ -81,6 +81,8 @@ const {
 } = require('./modules/credential_session_cache');
 const { fetchBootstrapPassword } = require('./modules/launcher/credential_bootstrap');
 const { normalizeBootstrapCredential } = require('./modules/launcher/credential_secret');
+const Logger = require('./modules/logger');
+const daemonLogger = new Logger('credential-daemon');
 
 // Platform check - Unix sockets require Unix-like systems or Windows 10+
 const platform = os.platform();
@@ -88,8 +90,8 @@ if (platform === 'win32') {
     const release = os.release();
     const majorVersion = parseInt(release.split('.')[0], 10);
     if (majorVersion < 10) {
-        console.error('❌ Credential daemon requires Windows 10 or later');
-        console.error('   On older Windows, use: node bot.js <bot-name> with interactive prompt');
+        daemonLogger.error('Credential daemon requires Windows 10 or later');
+        daemonLogger.error('On older Windows, use: node bot.js <bot-name> with interactive prompt');
         process.exit(1);
     }
 }
@@ -110,7 +112,7 @@ let auditLogPath = null;
 
 function debugLog(message, err = null) {
     const suffix = err && err.message ? `: ${err.message}` : '';
-    console.error(`[credential-daemon][debug] ${message}${suffix}`);
+    daemonLogger.error(`[credential-daemon][debug] ${message}${suffix}`);
 }
 
 /**
@@ -313,7 +315,7 @@ async function initialize() {
         });
 
         server.on('error', (error) => {
-            console.error('❌ Server error:', error.message);
+            daemonLogger.error(`Server error: ${error.message}`);
             process.exit(1);
         });
 
@@ -322,7 +324,7 @@ async function initialize() {
         process.on('SIGTERM', shutdown);
 
     } catch (error) {
-        console.error('❌', error.message);
+        daemonLogger.error(error.message);
         process.exit(1);
     }
 }
@@ -651,6 +653,6 @@ function shutdown() {
 
 // Start daemon
 initialize().catch(error => {
-    console.error('❌', error.message);
+    daemonLogger.error(error.message);
     process.exit(1);
 });

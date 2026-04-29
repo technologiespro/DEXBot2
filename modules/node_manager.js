@@ -41,6 +41,7 @@
  */
 
 const WebSocket = require('isomorphic-ws');
+const Logger = require('./logger');
 
 /**
  * NodeManager - Manages health checking and selection of BitShares nodes
@@ -59,6 +60,7 @@ const WebSocket = require('isomorphic-ws');
  */
 class NodeManager {
     constructor(config = {}) {
+        this.logger = new Logger('NodeManager');
         this.config = {
             list: config.list || [],
             healthCheck: {
@@ -111,22 +113,22 @@ class NodeManager {
      */
     start() {
         if (this.monitoringActive) {
-            console.warn('[NodeManager] Monitoring already active, ignoring duplicate start()');
+            this.logger.warn('Monitoring already active, ignoring duplicate start()');
             return;
         }
 
         this.monitoringActive = true;
-        console.log(`[NodeManager] Started monitoring ${this.config.list.length} nodes (interval: ${this.config.healthCheck.intervalMs}ms)`);
+        this.logger.info(`Started monitoring ${this.config.list.length} nodes (interval: ${this.config.healthCheck.intervalMs}ms)`);
 
         // Initial check immediately
         this.checkAllNodes().catch(err => {
-            console.warn('[NodeManager] Initial health check failed:', err.message);
+            this.logger.warn(`Initial health check failed: ${err.message}`);
         });
 
         // Schedule periodic checks
         this.checkIntervalId = setInterval(() => {
             this.checkAllNodes().catch(err => {
-                console.warn('[NodeManager] Health check cycle failed:', err.message);
+                this.logger.warn(`Health check cycle failed: ${err.message}`);
             });
         }, this.config.healthCheck.intervalMs);
     }
@@ -142,7 +144,7 @@ class NodeManager {
             clearInterval(this.checkIntervalId);
             this.checkIntervalId = null;
         }
-        console.log('[NodeManager] Stopped monitoring');
+        this.logger.info('Stopped monitoring');
     }
 
     /**
@@ -153,7 +155,7 @@ class NodeManager {
         const promises = Array.from(this.nodeStats.keys()).map(nodeUrl => {
             return this.checkNode(nodeUrl).catch(err => {
                 // Don't throw, just log - one node failure shouldn't crash the check cycle
-                console.debug(`[NodeManager] Check failed for ${nodeUrl}: ${err.message}`);
+                this.logger.debug(`Check failed for ${nodeUrl}: ${err.message}`);
             });
         });
 
@@ -175,7 +177,7 @@ class NodeManager {
     async checkNode(nodeUrl) {
         const stats = this.nodeStats.get(nodeUrl);
         if (!stats) {
-            console.warn(`[NodeManager] Node ${nodeUrl} not in configured list`);
+            this.logger.warn(`Node ${nodeUrl} not in configured list`);
             return { status: 'unknown', latency: null, error: 'Not configured' };
         }
 
@@ -209,9 +211,9 @@ class NodeManager {
                 stats.chainId = result;
 
                 if (status === 'healthy') {
-                    console.debug(`[NodeManager] ✓ ${nodeUrl.substring(0, 40)}... (${latencyMs}ms)`);
+                    this.logger.debug(`✓ ${nodeUrl.substring(0, 40)}... (${latencyMs}ms)`);
                 } else {
-                    console.debug(`[NodeManager] ⚠ ${nodeUrl.substring(0, 40)}... SLOW (${latencyMs}ms)`);
+                    this.logger.debug(`⚠ ${nodeUrl.substring(0, 40)}... SLOW (${latencyMs}ms)`);
                 }
 
                 return { status, latency: latencyMs, error: null };
@@ -227,10 +229,10 @@ class NodeManager {
             // Check if should be blacklisted
             if (stats.failureCount >= this.config.healthCheck.blacklistThreshold) {
                 stats.status = 'blacklisted';
-                console.warn(`[NodeManager] ✗ ${nodeUrl.substring(0, 40)}... BLACKLISTED (${err.message})`);
+                this.logger.warn(`✗ ${nodeUrl.substring(0, 40)}... BLACKLISTED (${err.message})`);
             } else {
                 stats.status = 'failed';
-                console.debug(`[NodeManager] ✗ ${nodeUrl.substring(0, 40)}... FAILED attempt ${stats.failureCount} (${err.message})`);
+                this.logger.debug(`✗ ${nodeUrl.substring(0, 40)}... FAILED attempt ${stats.failureCount} (${err.message})`);
             }
 
             return { status: stats.status, latency: null, error: err.message };
@@ -374,7 +376,7 @@ class NodeManager {
         if (stats) {
             stats.status = 'blacklisted';
             stats.failureCount = this.config.healthCheck.blacklistThreshold;
-            console.warn(`[NodeManager] Manually blacklisted: ${nodeUrl}`);
+            this.logger.warn(`Manually blacklisted: ${nodeUrl}`);
         }
     }
 
@@ -389,7 +391,7 @@ class NodeManager {
             stats.failureCount = 0;
             stats.latencyMs = null;
             stats.lastErrorMessage = null;
-            console.log(`[NodeManager] Reset node: ${nodeUrl}`);
+            this.logger.info(`Reset node: ${nodeUrl}`);
         }
     }
 
@@ -404,7 +406,7 @@ class NodeManager {
             stats.lastErrorMessage = null;
             stats.chainId = null;
         }
-        console.log('[NodeManager] Reset all nodes');
+        this.logger.info('Reset all nodes');
     }
 
     /**

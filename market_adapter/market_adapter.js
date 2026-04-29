@@ -492,29 +492,6 @@ function parseArgs() {
     return validateConfig(merged);
 }
 
-function printHelp() {
-    console.log('Market adapter (standalone): Kibana bootstrap + native incremental updates');
-    console.log('');
-    console.log('Usage:');
-    console.log(`  node market_adapter/market_adapter.js [--once] [--pollSeconds ${RUNTIME_DEFAULTS.pollSeconds}]`);
-    console.log('');
-    console.log('Options:');
-    console.log('  --once                 Run one cycle and exit');
-    console.log(`  --pollSeconds <n>      Loop interval seconds (default ${RUNTIME_DEFAULTS.pollSeconds}, wall-clock aligned)`);
-    console.log('  --deltaPercent <n>     Trigger threshold percent (default: general.settings MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT or 2.5)');
-    console.log(`  --bootstrapHours <n>   Kibana bootstrap lookback hours (default ${RUNTIME_DEFAULTS.bootstrapLookbackHours})`);
-    console.log(`  --nativeBackfillHours  Native incremental lookback hours (default ${RUNTIME_DEFAULTS.nativeBackfillHours})`);
-    console.log(`  --maxStaleHours <n>    Max accepted candle staleness before trigger suppression (default ${RUNTIME_DEFAULTS.maxStaleHours})`);
-    console.log(`  --sourceRetries <n>    Retries for source fetch calls (default ${RUNTIME_DEFAULTS.sourceRetries})`);
-    console.log(`  --retryDelayMs <n>     Base retry delay in milliseconds (default ${RUNTIME_DEFAULTS.retryDelayMs})`);
-    console.log('  --metricsJson          Emit per-cycle metrics as one JSON line');
-    console.log('  --quiet                Suppress per-bot logs (state still written)');
-    console.log('  --dryRun               Enable dry run mode for non-whitelisted bots');
-    console.log('  --whitelist-all        Disable dry run mode for all bots');
-    console.log(`  --maxPages <n>         Max native history pages per cycle (default ${RUNTIME_DEFAULTS.maxPages})`);
-    console.log(`  --pageLimit <n>        Native page size (max ${API_MAX_PAGE}, default ${RUNTIME_DEFAULTS.pageLimit})`);
-}
-
 function validateConfig(input) {
     const cfg = { ...DEFAULTS, ...input };
 
@@ -560,9 +537,9 @@ function applyRuntimeDefaultsFromGeneralSettings(cfg, provided = {}, settingsOve
     return out;
 }
 
-const Logger = require('../modules/logger');
+const { createPm2AwareLogger } = require('../modules/logger');
 const marketAdapterLogFile = path.join(PROFILES_DIR, 'logs', 'market_adapter.log');
-const logger = new Logger('MarketAdapter', { quiet: DEFAULTS.quiet, logFile: marketAdapterLogFile });
+const logger = createPm2AwareLogger('MarketAdapter', { quiet: DEFAULTS.quiet, logFile: marketAdapterLogFile });
 
 function log(cfg, ...args) {
     logger.quiet = !!cfg?.quiet;
@@ -572,6 +549,29 @@ function log(cfg, ...args) {
 function write(cfg, text) {
     logger.quiet = !!cfg?.quiet;
     logger.raw(text);
+}
+
+function printHelp() {
+    logger.raw('Market adapter (standalone): Kibana bootstrap + native incremental updates\n');
+    logger.raw('\n');
+    logger.raw('Usage:\n');
+    logger.raw(`  node market_adapter/market_adapter.js [--once] [--pollSeconds ${RUNTIME_DEFAULTS.pollSeconds}]\n`);
+    logger.raw('\n');
+    logger.raw('Options:\n');
+    logger.raw('  --once                 Run one cycle and exit\n');
+    logger.raw(`  --pollSeconds <n>      Loop interval seconds (default ${RUNTIME_DEFAULTS.pollSeconds}, wall-clock aligned)\n`);
+    logger.raw('  --deltaPercent <n>     Trigger threshold percent (default: general.settings MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT or 2.5)\n');
+    logger.raw(`  --bootstrapHours <n>   Kibana bootstrap lookback hours (default ${RUNTIME_DEFAULTS.bootstrapLookbackHours})\n`);
+    logger.raw(`  --nativeBackfillHours  Native incremental lookback hours (default ${RUNTIME_DEFAULTS.nativeBackfillHours})\n`);
+    logger.raw(`  --maxStaleHours <n>    Max accepted candle staleness before trigger suppression (default ${RUNTIME_DEFAULTS.maxStaleHours})\n`);
+    logger.raw(`  --sourceRetries <n>    Retries for source fetch calls (default ${RUNTIME_DEFAULTS.sourceRetries})\n`);
+    logger.raw(`  --retryDelayMs <n>     Base retry delay in milliseconds (default ${RUNTIME_DEFAULTS.retryDelayMs})\n`);
+    logger.raw('  --metricsJson          Emit per-cycle metrics as one JSON line\n');
+    logger.raw('  --quiet                Suppress per-bot logs (state still written)\n');
+    logger.raw('  --dryRun               Enable dry run mode for non-whitelisted bots\n');
+    logger.raw('  --whitelist-all        Disable dry run mode for all bots\n');
+    logger.raw(`  --maxPages <n>         Max native history pages per cycle (default ${RUNTIME_DEFAULTS.maxPages})\n`);
+    logger.raw(`  --pageLimit <n>        Native page size (max ${API_MAX_PAGE}, default ${RUNTIME_DEFAULTS.pageLimit})\n`);
 }
 
 function loadActiveBots() {
@@ -878,7 +878,7 @@ function writeBotDynamicGrid(botKey, centerPrice, options = {}) {
         fs.renameSync(tmpPath, filePath);
         return true;
     } catch (err) {
-        console.warn(`[writeBotDynamicGrid] Failed to write dynamic grid for ${botKey}: ${err.message}`);
+        logger.warn(`[writeBotDynamicGrid] Failed to write dynamic grid for ${botKey}: ${err.message}`);
         return false;
     }
 }
@@ -1168,7 +1168,7 @@ if (require.main === module) {
     main()
         .then((exitCode) => process.exit(Number.isInteger(exitCode) ? exitCode : 0))
         .catch((err) => {
-            console.error(`Fatal: ${err.message}`);
+            logger.error(`Fatal: ${err.message}`);
             process.exit(1);
         });
 }

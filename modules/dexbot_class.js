@@ -274,6 +274,11 @@ class DEXBot {
         }
 
         const line = this.logPrefix ? `${this.logPrefix} ${msg}` : msg;
+        const logger = this.manager?.logger;
+        if (logger && typeof logger.log === 'function') {
+            logger.log(line, level);
+            return;
+        }
         if (level === 'error') {
             console.error(line);
             return;
@@ -288,8 +293,14 @@ class DEXBot {
      * @private
      */
     _warn(msg) {
+        const line = this.logPrefix ? `${this.logPrefix} ${msg}` : msg;
+        const logger = this.manager?.logger;
+        if (logger && typeof logger.log === 'function') {
+            logger.log(line, 'warn');
+            return;
+        }
         if (this.logPrefix) {
-            console.warn(`${this.logPrefix} ${msg}`);
+            console.warn(line);
         } else {
             console.warn(msg);
         }
@@ -1059,11 +1070,20 @@ class DEXBot {
                             // Log info
                             const paysAmount = fillOp.pays ? fillOp.pays.amount : '?';
                             const receivesAmount = fillOp.receives ? fillOp.receives.amount : '?';
-                            console.log(`\n===== FILL DETECTED =====`);
-                            console.log(`Order ID: ${fillOp.order_id}`);
-                            console.log(`Pays: ${paysAmount}, Receives: ${receivesAmount}`);
-                            console.log(`Block: ${fill.block_num} (History ID: ${fill.id || 'N/A'})`);
-                            console.log(`=========================\n`);
+                            const fillLogger = this.manager?.logger;
+                            if (fillLogger && typeof fillLogger.log === 'function') {
+                                fillLogger.log(`\n===== FILL DETECTED =====`, 'info');
+                                fillLogger.log(`Order ID: ${fillOp.order_id}`, 'info');
+                                fillLogger.log(`Pays: ${paysAmount}, Receives: ${receivesAmount}`, 'info');
+                                fillLogger.log(`Block: ${fill.block_num} (History ID: ${fill.id || 'N/A'})`, 'info');
+                                fillLogger.log(`=========================\n`, 'info');
+                            } else {
+                                console.log(`\n===== FILL DETECTED =====`);
+                                console.log(`Order ID: ${fillOp.order_id}`);
+                                console.log(`Pays: ${paysAmount}, Receives: ${receivesAmount}`);
+                                console.log(`Block: ${fill.block_num} (History ID: ${fill.id || 'N/A'})`);
+                                console.log(`=========================\n`);
+                            }
                         }
                     }
 
@@ -1327,9 +1347,10 @@ class DEXBot {
             });
         } catch (err) {
             this._log(`Error processing fills: ${err.message}`);
-            if (this.manager && this.manager.logger) {
-                this.manager.logger.log(`Error processing fills: ${err.message}`, 'error');
-                if (err.stack) this.manager.logger.log(err.stack, 'error');
+            const logger = this.manager?.logger;
+            if (logger && typeof logger.log === 'function') {
+                logger.log(`Error processing fills: ${err.message}`, 'error');
+                if (err.stack) logger.log(err.stack, 'error');
             } else {
                 console.error('CRITICAL: Error processing fills (logger unavailable):', err);
             }
