@@ -117,6 +117,7 @@ const DEFAULTS = {
     pageLimit: RUNTIME_DEFAULTS.pageLimit,
     once: false,
     maxNativeGapFillCandles: MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES,
+    staleTailThreshold: MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES,
     amaSlope: {
         lookbackBars:  MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
         maxSlopePct:   MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
@@ -177,8 +178,6 @@ function applyAmaSlopeOverrides(target, overrides) {
     if (overrides.amaSlope && typeof overrides.amaSlope === 'object') {
         target.amaSlope = { ...target.amaSlope, ...overrides.amaSlope };
     }
-    assignPresent(target.amaSlope, overrides, ['neutralZonePct', 'lookbackBars']);
-    if (overrides.amaMaxSlopePct != null) target.amaSlope.maxSlopePct = overrides.amaMaxSlopePct;
     return target;
 }
 
@@ -188,7 +187,6 @@ function applyKalmanSlopeOverrides(target, overrides) {
     if (overrides.kalmanSlope && typeof overrides.kalmanSlope === 'object') {
         target.kalmanSlope = { ...target.kalmanSlope, ...overrides.kalmanSlope };
     }
-    if (overrides.kalmanMaxSlopePct != null) target.kalmanSlope.maxSlopePct = overrides.kalmanMaxSlopePct;
     return target;
 }
 
@@ -204,6 +202,7 @@ function applyMarketAdapterOverrides(target, overrides, opts = {}) {
         'sourceRetries',
         'retryDelayMs',
         'maxSlopeOffset',
+        'staleTailThreshold',
         'absoluteThreshold',
         'minOutputThreshold',
         'volatilityExponent',

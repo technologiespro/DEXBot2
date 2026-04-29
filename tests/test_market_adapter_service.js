@@ -4,7 +4,7 @@ const path = require('path');
 console.log('Running market adapter service tests');
 
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
-const { detectMissingCandleTimestamps, fillCandleGaps, mergeCandles } = require('../market_adapter/candle_utils');
+const { detectMissingCandleTimestamps, fillCandleGaps, mergeCandles, pruneStaleTail } = require('../market_adapter/candle_utils');
 const { calculateATR } = require('../market_adapter/core/strategies/atr/calculator');
 const { computeAmaSlopeWeights } = require('../market_adapter/core/strategies/ama_slope_model');
 const { normalizeAtrPeriod, normalizeMaxVolatilityOffset, normalizeVolatilityThreshold } = require('../market_adapter/core/config_normalizers');
@@ -148,11 +148,9 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
 
     const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
     const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
-    const amaMaxSlopePct = cfg.amaSlope?.maxSlopePct
-        ?? cfg.amaMaxSlopePct
+    const amaSlopeMaxPct = cfg.amaSlope?.maxSlopePct
         ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
-    const kalmanMaxSlopePct = cfg.kalmanSlope?.maxSlopePct
-        ?? cfg.kalmanMaxSlopePct
+    const kalmanSlopeMaxPct = cfg.kalmanSlope?.maxSlopePct
         ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
     const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
     const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
@@ -252,7 +250,7 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
         }
         const slopePct = (last - past) / past * 100;
         const clippedSlopePct = clamp(slopePct, -amaClipThreshold, amaClipThreshold);
-        amaOffsets.push(Math.abs(clippedSlopePct) < nz ? 0 : clamp((clippedSlopePct / amaMaxSlopePct) * offsetClamp, -offsetClamp, offsetClamp));
+        amaOffsets.push(Math.abs(clippedSlopePct) < nz ? 0 : clamp((clippedSlopePct / amaSlopeMaxPct) * offsetClamp, -offsetClamp, offsetClamp));
     }
 
     const kalmanOffsets = [];
@@ -278,7 +276,7 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
             (Math.abs(clippedVelocityPct) * Math.abs(point.displacementPct) + 1e-10)
         );
         const composite = clippedVelocityPct * (1 - dw + dw * dispConf * momAlign);
-        kalmanOffsets.push(clamp((composite / kalmanMaxSlopePct) * offsetClamp, -offsetClamp, offsetClamp));
+        kalmanOffsets.push(clamp((composite / kalmanSlopeMaxPct) * offsetClamp, -offsetClamp, offsetClamp));
     }
 
     return {
@@ -1553,6 +1551,82 @@ async function testNativeIncrementalDoesNotFillNoTradeGapsPastStaleTailThreshold
         'no-trade gaps beyond the stale-tail threshold should not be synthesized by native incremental fill'
     );
     assert.strictEqual(result.staleData, true, 'long no-trade runs should surface as stale data');
+}
+
+async function testStaleTailThresholdCanBeOverriddenPerConfig() {
+    let savedPayload = null;
+    const baseTs = Date.parse('2026-04-28T00:00:00Z');
+    const hour = 3600000;
+    const nowMs = baseTs + (3 * hour) + 1;
+
+    const service = new MarketAdapterService({
+        getNowMs: () => nowMs,
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 2 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [baseTs, 100, 100, 100, 100, 1],
+                [baseTs + hour, 100, 100, 100, 100, 0],
+                [baseTs + (2 * hour), 100, 100, 100, 100, 0],
+            ],
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        requiredCandlesForAma: () => 2,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        fillCandleGaps,
+        detectMissingCandleTimestamps,
+        mergeCandles,
+        pruneCandles: (candles) => candles,
+        pruneStaleTail,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-stale-tail.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-stale-tail',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    const state = { bots: {} };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 24,
+        staleTailThreshold: 2,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed with a custom stale-tail threshold');
+    assert.deepStrictEqual(
+        savedPayload.candles,
+        [[baseTs, 100, 100, 100, 100, 1]],
+        'custom staleTailThreshold should prune the trailing zero-volume flat tail'
+    );
 }
 
 async function testNativeIncrementalUsesTradeSequenceOverlap() {
@@ -3315,6 +3389,7 @@ async function run() {
     await testRemainingGapsAreReportedWhenKibanaHasNoPatchData();
     await testNativeIncrementalFillsNoTradeGapsUpToStaleTailThreshold();
     await testNativeIncrementalDoesNotFillNoTradeGapsPastStaleTailThreshold();
+    await testStaleTailThresholdCanBeOverriddenPerConfig();
     await testNativeIncrementalUsesTradeSequenceOverlap();
     await testTimeBasedNativeIncrementalDoesNotReaggregateExistingBuckets();
     await testClosedCandleGateSkipsCurrentPartialHour();

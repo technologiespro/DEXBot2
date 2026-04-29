@@ -55,7 +55,9 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
                     dispScaleMinPct: 0.25,
                     hurstZoneBand: 0.08,
                     peNodes: [0.58, 0.70, 0.82],
-                    amaMaxSlopePct: 1.2,
+                    amaSlope: {
+                        maxSlopePct: 1.2,
+                    },
                     kalmanSlope: {
                         maxSlopePct: 1.2,
                     },
@@ -66,8 +68,12 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
                         dispScaleMinPct: 0.35,
                         hurstZoneBand: 0.09,
                         peNodes: [0.57, 0.69, 0.81],
-                        amaMaxSlopePct: 1.6,
-                        kalmanMaxSlopePct: 1.6,
+                        amaSlope: {
+                            maxSlopePct: 1.6,
+                        },
+                        kalmanSlope: {
+                            maxSlopePct: 1.6,
+                        },
                     },
                 },
             },
@@ -108,7 +114,9 @@ function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
                     dispScaleMinPct: 0.2,
                     hurstZoneBand: 0.07,
                     peNodes: [0.59, 0.71, 0.83],
-                    amaMaxSlopePct: 1.15,
+                    amaSlope: {
+                        maxSlopePct: 1.15,
+                    },
                     kalmanSlope: {
                         maxSlopePct: 1.15,
                     },
@@ -215,9 +223,13 @@ function testResolveBotCfgDoesNotLeakNestedTopLevelOverridesAcrossBots() {
                 assetASymbol: 'IOB.XRP',
                 assetBSymbol: 'BTS',
                 marketAdapterSettings: {
-                    amaMaxSlopePct: 1.23,
-                    neutralZonePct: 0.12,
-                    kalmanMaxSlopePct: 1.24,
+                    amaSlope: {
+                        maxSlopePct: 1.23,
+                        neutralZonePct: 0.12,
+                    },
+                    kalmanSlope: {
+                        maxSlopePct: 1.24,
+                    },
                 },
             },
         ],

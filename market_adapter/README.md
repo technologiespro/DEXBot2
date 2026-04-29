@@ -345,7 +345,9 @@ The main runtime knobs are:
 - `alpha` - AMA vs Kalman blend
 - `dw` - Kalman displacement weighting (default 0.5)
 - `gain` - output amplitude (default 1.0, research knob range 0.5-2.0)
-- `amaMaxSlopePct` - AMA slope saturation (default 0.75, research knob `amaS%`)
+- `amaSlope.lookbackBars` - AMA slope lookback (default 9)
+- `amaSlope.neutralZonePct` - dead-band around flat AMA slope
+- `amaSlope.maxSlopePct` - AMA slope saturation (default 0.75, research knob `amaS%`)
 - `minOutputThreshold` - minimum pre-gain blended trend output required before the directional shift applies (default 0, research knob `th%`)
 - `maxSlopeOffset` - cap for the asymmetric trend offset
 - `maxVolatilityOffset` - cap for the symmetric ATR penalty
@@ -357,12 +359,13 @@ The main runtime knobs are:
 - `kalmanSmoothPct` - raw-vs-smoothed Kalman blend (0-200; 100 = normal adaptive smoothing)
 - `kalmanDispScaleMult` - displacement scale multiplier (default 1.8)
 - `kalmanDispThresholdMult` - displacement threshold multiplier
-- `lookbackBars` - AMA slope lookback (default 9)
-- `kalmanMaxSlopePct` - Kalman composite saturation (default 0.75, research knob `kalS%`, range 0.05-1.5)
+- `kalmanSlope.maxSlopePct` - Kalman composite saturation (default 0.75, research knob `kalS%`, range 0.05-1.5)
 - `kalmanSmoothSpanPct` - adaptive EMA span ratio
 - `signalConfirmBars` - output/signal latch confirmation bars
 
-These values can be overridden in `profiles/market_adapter_settings.json` at the pair or bot level.
+These values can be overridden in `profiles/market_adapter_settings.json` at the pair or bot level by setting nested `amaSlope` and `kalmanSlope` objects directly.
+The stale-tail pruning threshold is also configurable there via `staleTailThreshold`
+and defaults to 24 closed 1h candles.
 
 ---
 

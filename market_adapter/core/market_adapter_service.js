@@ -748,7 +748,6 @@ class MarketAdapterService {
         const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
         const amaMaxS = cfg.amaSlope?.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
         const kalMaxS = cfg.kalmanSlope?.maxSlopePct
-            ?? cfg.kalmanMaxSlopePct
             ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
         const mo = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
         const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
@@ -1029,8 +1028,12 @@ class MarketAdapterService {
                 gain,
                 atrPeriod,
                 maxSlopeOffset: mo,
-                amaMaxSlopePct: amaMaxS,
-                kalmanMaxSlopePct: kalMaxS,
+                amaSlope: {
+                    maxSlopePct: amaMaxS,
+                },
+                kalmanSlope: {
+                    maxSlopePct: kalMaxS,
+                },
                 maxVolatilityOffset: volatilityClamp,
                 kalmanSmoothPct,
                 kalmanDispScaleMult,
@@ -1082,8 +1085,12 @@ class MarketAdapterService {
                     gain,
                     atrPeriod,
                     maxSlopeOffset: mo,
-                    amaMaxSlopePct: amaMaxS,
-                    kalmanMaxSlopePct: kalMaxS,
+                    amaSlope: {
+                        maxSlopePct: amaMaxS,
+                    },
+                    kalmanSlope: {
+                        maxSlopePct: kalMaxS,
+                    },
                     maxVolatilityOffset: volatilityClamp,
                     kalmanSmoothPct,
                     kalmanDispScaleMult,
@@ -1119,8 +1126,12 @@ class MarketAdapterService {
                 gain,
                 atrPeriod,
                 maxSlopeOffset: mo,
-                amaMaxSlopePct: amaMaxS,
-                kalmanMaxSlopePct: kalMaxS,
+                amaSlope: {
+                    maxSlopePct: amaMaxS,
+                },
+                kalmanSlope: {
+                    maxSlopePct: kalMaxS,
+                },
                 maxVolatilityOffset: volatilityClamp,
                 kalmanSmoothPct,
                 kalmanDispScaleMult,
