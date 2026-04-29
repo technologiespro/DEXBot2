@@ -737,10 +737,12 @@ class MarketAdapterService {
             && deps.isBotDynamicWeightWhitelisted(bot.botKey));
         const hasExplicitBaseWeights = Number.isFinite(bot.weightDistribution?.sell)
             && Number.isFinite(bot.weightDistribution?.buy);
-        if (isDynamicWeightWhitelisted && !hasExplicitBaseWeights) {
+        const isAmaGridBot = /^ama(?:[1-4])?$/i.test(String(bot?.gridPrice || '').trim());
+        const shouldComputeDynamicWeights = isAmaGridBot && hasExplicitBaseWeights;
+        const canApplyDynamicWeights = isDynamicWeightWhitelisted && shouldComputeDynamicWeights;
+        if (!hasExplicitBaseWeights && isAmaGridBot) {
             warn(`[market_adapter] ${bot.botKey} is missing explicit weightDistribution; skipping dynamic volatility weights for this cycle.`);
         }
-        const isDynamic = isDynamicWeightWhitelisted && hasExplicitBaseWeights;
 
         const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
         const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
@@ -789,7 +791,7 @@ class MarketAdapterService {
         let weights = null;
         let dynamicWeightsPayload = null;
 
-        if (isDynamic) {
+        if (shouldComputeDynamicWeights) {
             // AMA slope computation (final state). The trend branch stays ATR-free;
             // symmetricDelta still uses weightVariance from the ATR/price ratio.
             slopeResult = computeAmaSlopeWeights(amaValues, weightVariance, slopeCfg);
@@ -1148,7 +1150,7 @@ class MarketAdapterService {
         }
 
         // 4. Advisory collateral-ratio hint only; execution is owned by the debt runtime.
-        const collateralRecommendation = isDynamic ? adjustCollateralRatio(slopeResult, 1.5, 2.0) : null;
+        const collateralRecommendation = shouldComputeDynamicWeights ? adjustCollateralRatio(slopeResult, 1.5, 2.0) : null;
 
         const amaComparison = deps.calcAmaComparison(analysisCandles, bot, ctx);
         const closedCandleTs = lastCandle[0] || null;
@@ -1177,7 +1179,7 @@ class MarketAdapterService {
                 if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
                     amaCenterPersisted = deps.writeBotDynamicGrid(bot.botKey, bootstrapCenterPrice, {
                         amaCenterPrice: amaPrice,
-                        ...(isDynamicWeightWhitelisted && dynamicWeightsPayload
+                        ...(canApplyDynamicWeights && dynamicWeightsPayload
                             ? { dynamicWeights: dynamicWeightsPayload }
                             : {}),
                     }) !== false;
@@ -1202,7 +1204,7 @@ class MarketAdapterService {
                         amaCenterPersisted = deps.writeBotDynamicGrid(bot.botKey, centerPrice, {
                             amaCenterPrice: amaPrice,
                             previousCenterPrice,
-                            ...(isDynamicWeightWhitelisted && dynamicWeightsPayload
+                            ...(canApplyDynamicWeights && dynamicWeightsPayload
                                 ? { dynamicWeights: dynamicWeightsPayload }
                                 : {}),
                         }) !== false;
@@ -1233,7 +1235,7 @@ class MarketAdapterService {
                         botState.lastGridResetAt = nowIso;
                         botState.triggerCount = Number(botState.triggerCount || 0) + 1;
                         // Grid reset only syncs live weights when the dynamic-weight whitelist permits it.
-                        if (isDynamicWeightWhitelisted && dynamicWeightsPayload) {
+                        if (canApplyDynamicWeights && dynamicWeightsPayload) {
                             botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
                         }
                         triggered = true;
@@ -1268,7 +1270,7 @@ class MarketAdapterService {
 
         // Weight-only update path: persist fresh weights to dynamicgrid.json without a grid reset.
         // The bot will pick these up on the next recalculation cycle after fills or config reload.
-        if (!snapshotPersistedThisCycle && !triggered && !isDryRun && !staleData && isDynamicWeightWhitelisted
+        if (!snapshotPersistedThisCycle && !triggered && !isDryRun && !staleData && canApplyDynamicWeights
                 && dynamicWeightsPayload && persistedCenterPrice > 0
                 && typeof deps.writeBotDynamicGrid === 'function') {
             const dynamicWeightsPersisted = deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
@@ -1332,12 +1334,13 @@ class MarketAdapterService {
             atr,
             weightVariance,
             amaSlope,
-            effectiveWeights:         ((snapshotPersistedThisCycle || isDryRun) && dynamicWeightsPayload?.effectiveWeights)
+            effectiveWeights:         (canApplyDynamicWeights && (snapshotPersistedThisCycle || isDryRun) && dynamicWeightsPayload?.effectiveWeights)
                 ? dynamicWeightsPayload.effectiveWeights
                 : (botState.effectiveWeights || null),
             dynamicWeightWhitelisted: isDynamicWeightWhitelisted,
             dynamicWeightReady:       dynamicWeightsPayload?.isReady ?? false,
             dynamicWeightProfile:     weights?.profile || null,
+            dynamicWeightApplied:     snapshotPersistedThisCycle && canApplyDynamicWeights,
             hasExplicitBaseWeights,
             pendingClosedCandle: false,
         };
@@ -1374,6 +1377,7 @@ class MarketAdapterService {
             dynamicWeightWhitelisted: isDynamicWeightWhitelisted,
             dynamicWeightReady: dynamicWeightsPayload?.isReady ?? false,
             dynamicWeightProfile: weights?.profile || null,
+            dynamicWeightApplied: snapshotPersistedThisCycle && canApplyDynamicWeights,
             hasExplicitBaseWeights,
             poolId: ctx.poolId,
             candleFile: deps.path.relative(deps.root, filePath),

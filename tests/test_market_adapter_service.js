@@ -3073,6 +3073,146 @@ async function testDynamicWeightInvalidAtrPeriodAndClampAreSanitized() {
     assert.ok(result.weights.meta.volatilityPenalty < 0, 'sanitized volatility penalty should remain downward-only');
 }
 
+async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
+    let dynamicGridWrites = 0;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateTrendingCandles(1000, 100, 0.5) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 1000,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-diagnostic.trigger',
+        writeBotDynamicGrid: () => {
+            dynamicGridWrites += 1;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-diagnostic',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = { bots: { 'xrp-bts-dw-diagnostic': { centerPrice: 100 } } };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        minOutputThreshold: 0,
+        regimeSensitivity: 0,
+        signalConfirmBars: 0,
+        maxVolatilityOffset: 0,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.strictEqual(dynamicGridWrites, 0, 'non-whitelisted AMA bots should not persist dynamic grids');
+    assert.strictEqual(result.dynamicWeightWhitelisted, false, 'whitelist flag should remain false');
+    assert.strictEqual(result.dynamicWeightReady, true, 'diagnostic dynamic weights should still be computed');
+    assert.strictEqual(result.dynamicWeightApplied, false, 'diagnostic weights should not be reported as applied');
+    assert.ok(result.weights, 'diagnostic weights should be returned for logging');
+    assert.ok(result.amaSlope, 'diagnostic amaSlope should be returned for logging');
+    assert.strictEqual(result.weights.meta.source, 'dynamic_weight', 'diagnostic weights should come from the dynamic-weight path');
+    assert.strictEqual(state.bots['xrp-bts-dw-diagnostic'].effectiveWeights, null, 'non-whitelisted diagnostics should not update live effective weights');
+}
+
+async function testDynamicWeightDiagnosticsDoNotLeakIntoBootstrapState() {
+    let dynamicGridWrites = 0;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateTrendingCandles(1000, 100, 0.5) }),
+        saveJson: () => {},
+        requiredCandlesForAma: () => 80,
+        calculateBotThreshold: () => 1000,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-bootstrap-diagnostic.trigger',
+        writeBotDynamicGrid: () => {
+            dynamicGridWrites += 1;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-bootstrap-diagnostic',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = { bots: { 'xrp-bts-dw-bootstrap-diagnostic': {} } };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        minOutputThreshold: 0,
+        regimeSensitivity: 0,
+        signalConfirmBars: 0,
+        maxVolatilityOffset: 0,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.strictEqual(dynamicGridWrites, 1, 'bootstrap should still persist the AMA center snapshot');
+    assert.strictEqual(result.dynamicWeightReady, true, 'diagnostic dynamic weights should still be computed');
+    assert.strictEqual(result.dynamicWeightApplied, false, 'bootstrap diagnostics should not be reported as applied');
+    assert.strictEqual(state.bots['xrp-bts-dw-bootstrap-diagnostic'].effectiveWeights, null, 'non-whitelisted bootstrap diagnostics should not update live effective weights');
+}
+
 async function testWeightOnlyUpdateInDryRunUpdatesState() {
     let dynamicGridWrites = 0;
     const closedTs = Date.parse('2026-01-01T12:00:00Z');
@@ -3193,6 +3333,8 @@ async function run() {
     await testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState();
     await testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData();
     await testDynamicWeightInvalidAtrPeriodAndClampAreSanitized();
+    await testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots();
+    await testDynamicWeightDiagnosticsDoNotLeakIntoBootstrapState();
     await testWeightOnlyUpdateInDryRunUpdatesState();
 }
 
