@@ -649,7 +649,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             }
             const confirmBars = Math.max(0, Math.min(5, currentSignalConfirmBars));
             let latchedSign = 0;
-            let pendingSign = null;
+            let pendingSign = 0;
             let pendingCount = 0;
             let latchedOff = 0;
             for (let i = 0; i < data.dates.length; i++) {
@@ -659,12 +659,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     echoCombinedSell[i] = null;
                     echoCombinedBuy[i] = null;
                     latchedSign = 0;
-                    pendingSign = null;
+                    pendingSign = 0;
                     pendingCount = 0;
                     latchedOff = 0;
                     continue;
                 }
-                if (confirmBars <= 1) {
+                if (confirmBars === 0) {
                     echoCombinedOff[i] = raw;
                     echoCombinedSell[i] = combinedSell[i];
                     echoCombinedBuy[i] = combinedBuy[i];
@@ -672,7 +672,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 }
                 const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
                 if (sign === latchedSign) {
-                    pendingSign = null;
+                    pendingSign = 0;
                     pendingCount = 0;
                     latchedOff = raw;
                 } else {
@@ -684,7 +684,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     }
                     if (pendingCount >= confirmBars) {
                         latchedSign = sign;
-                        pendingSign = null;
+                        pendingSign = 0;
                         pendingCount = 0;
                         latchedOff = raw;
                     }

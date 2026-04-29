@@ -272,7 +272,7 @@ echoOff  = hold(rawOff direction, cf)
 Behavior:
 - `cf = 0` disables output echo and shows the raw output directly
 - `cf > 0` holds the last output direction/value until the opposite output is confirmed
-- neutral output bars keep the current echoed output state
+- neutral output bars are treated as a confirmable flat state, so sustained flat output clears the echoed offset
 
 ### Regime Multiplier
 ```

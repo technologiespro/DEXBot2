@@ -130,10 +130,10 @@ async function testSignalConfirmationInitialLatch() {
     // Mocking a simplified version of the logic we fixed:
     function simplifiedLatch(combinedOffSeries, confirmBars) {
         const echoedOffSeries = new Array(combinedOffSeries.length).fill(0);
-        if (confirmBars <= 1) return combinedOffSeries.slice();
+        if (confirmBars === 0) return combinedOffSeries.slice();
 
         let latchedSign = 0;
-        let pendingSign = null;
+        let pendingSign = 0;
         let pendingCount = 0;
         let latchedOff = 0;
 
@@ -141,7 +141,7 @@ async function testSignalConfirmationInitialLatch() {
             const raw = combinedOffSeries[i];
             const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
             if (sign === latchedSign) {
-                pendingSign = null;
+                pendingSign = 0;
                 pendingCount = 0;
                 latchedOff = raw;
             } else {
@@ -153,7 +153,7 @@ async function testSignalConfirmationInitialLatch() {
                 }
                 if (pendingCount >= confirmBars) {
                     latchedSign = sign;
-                    pendingSign = null;
+                    pendingSign = 0;
                     pendingCount = 0;
                     latchedOff = raw;
                 }
