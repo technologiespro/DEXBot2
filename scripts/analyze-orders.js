@@ -16,6 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const { formatPrice6, formatPrice4 } = require('../modules/order/format');
+const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 
 const ORDERS_DIR = path.join(__dirname, '../profiles/orders');
 const BOTS_CONFIG = path.join(__dirname, '../profiles/bots.json');
@@ -52,6 +53,46 @@ const HEADER_WIDTH = 11 + BAR_WIDTH;
  */
 function readJSON(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function sanitizeKey(source) {
+  if (!source) return 'bot';
+  return String(source)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'bot';
+}
+
+function createBotKey(bot, index) {
+  const identifier = bot && bot.name
+    ? bot.name
+    : bot && bot.assetA && bot.assetB
+      ? `${bot.assetA}/${bot.assetB}`
+      : bot && bot.assetAId && bot.assetBId
+        ? `${bot.assetAId}/${bot.assetBId}`
+        : `bot-${index}`;
+  return `${sanitizeKey(identifier)}-${index}`;
+}
+
+function hasBotsObject(data) {
+  return Boolean(data && data.bots && typeof data.bots === 'object' && !Array.isArray(data.bots));
+}
+
+function isRealGridOrder(order) {
+  if (!order || typeof order !== 'object') return false;
+  const hasRealState = order.state === ORDER_STATES.ACTIVE || order.state === ORDER_STATES.PARTIAL;
+  const hasRealType = order.type === ORDER_TYPES.BUY || order.type === ORDER_TYPES.SELL;
+  const hasOrderId = typeof order.orderId === 'string' && order.orderId.trim().length > 0;
+  return hasRealState
+    && hasRealType
+    && hasOrderId
+    && Number(order.price) > 0
+    && Number(order.size) > 0;
+}
+
+function getRealGridOrders(botData) {
+  return Array.isArray(botData?.grid) ? botData.grid.filter(isRealGridOrder) : [];
 }
 
 /**
@@ -128,22 +169,74 @@ function padStringCentered(str, width) {
 
 // Load bot configurations
 const botsConfig = readJSON(BOTS_CONFIG).bots;
-function getBotConfig(name, assetA, assetB) {
-  return botsConfig.find(b => b.name === name || (b.assetA === assetA && b.assetB === assetB));
+
+function getConfiguredBotConfig(botKey, botData) {
+  const meta = botData?.meta || {};
+  return botsConfig.find((bot, index) => {
+    if (!bot) return false;
+    return createBotKey(bot, index) === botKey || (meta.name && bot.name === meta.name);
+  }) || null;
+}
+
+function getOrderFileCandidate(fileName) {
+  const filePath = path.join(ORDERS_DIR, fileName);
+  if (!fileName.endsWith('.json')) {
+    return { include: false, reason: 'not a JSON file', report: false };
+  }
+  if (fileName.endsWith('.dynamicgrid.json')) {
+    return { include: false, reason: 'dynamic grid snapshot', report: false };
+  }
+
+  let data;
+  try {
+    data = readJSON(filePath);
+  } catch (error) {
+    return { include: false, reason: `invalid JSON: ${error.message}`, report: true, name: fileName };
+  }
+
+  if (!hasBotsObject(data)) {
+    return { include: false, reason: 'missing bots object', report: true, name: fileName };
+  }
+
+  const botKeys = Object.keys(data.bots);
+  if (botKeys.length === 0) {
+    return { include: false, reason: 'empty bots object', report: true, name: fileName };
+  }
+
+  const botKey = botKeys[0];
+  const botData = data.bots[botKey];
+  if (!botData || typeof botData !== 'object' || !botData.meta || !Array.isArray(botData.grid)) {
+    return { include: false, reason: 'not a persisted order grid', report: true, name: fileName };
+  }
+
+  const config = getConfiguredBotConfig(botKey, botData);
+  if (!config) {
+    return { include: false, reason: 'no matching bot config', report: true, name: fileName };
+  }
+
+  const realOrders = getRealGridOrders(botData);
+  if (realOrders.length === 0) {
+    return { include: false, reason: 'no real on-chain orders', report: true, name: fileName };
+  }
+
+  return { include: true, name: fileName, path: filePath, botKey, config };
 }
 
 // Get all order files sorted by modified date
 function getOrderFiles() {
-  const files = fs.readdirSync(ORDERS_DIR)
-    .filter(f => f.endsWith('.json'))
+  const candidates = fs.readdirSync(ORDERS_DIR).map(getOrderFileCandidate);
+  const files = candidates
+    .filter(candidate => candidate.include)
     .map(f => ({
-      name: f,
-      path: path.join(ORDERS_DIR, f),
-      mtime: getModifiedTime(path.join(ORDERS_DIR, f))
+      ...f,
+      mtime: getModifiedTime(f.path)
     }))
     .sort((a, b) => b.mtime - a.mtime);
 
-  return files;
+  return {
+    files,
+    skippedCandidates: candidates.filter(candidate => !candidate.include && candidate.report)
+  };
 }
 
 /**
@@ -169,7 +262,6 @@ function getOrderFiles() {
 function analyzeOrder(botData, config) {
   const meta = botData.meta;
   const grid = botData.grid;
-  const boundaryIdx = botData.boundaryIdx;
 
   // Extract asset pair: prioritize assets object from order data, fall back to meta
   let assetA = meta.assetA;
@@ -188,14 +280,15 @@ function analyzeOrder(botData, config) {
    * The grid contains buy slots (prices below market), sell slots (above market),
    * and optional spread slots. Separation enables independent analysis.
    */
-  const buySlots = grid.filter((s, i) => i <= boundaryIdx && s.type === 'buy');
-  const sellSlots = grid.filter((s, i) => i > boundaryIdx && s.type === 'sell');
-  const spreadSlots = grid.filter(s => s.type === 'spread');
+  const boundaryIdx = botData.boundaryIdx;
+  const buySlots = grid.filter((s, i) => i <= boundaryIdx && s.type === ORDER_TYPES.BUY);
+  const sellSlots = grid.filter((s, i) => i > boundaryIdx && s.type === ORDER_TYPES.SELL);
+  const spreadSlots = grid.filter(s => s.type === ORDER_TYPES.SPREAD);
 
-  const activeBuySlots = buySlots.filter(s => s.state === 'active');
-  const virtualBuySlots = buySlots.filter(s => s.state === 'virtual');
-  const activeSellSlots = sellSlots.filter(s => s.state === 'active');
-  const virtualSellSlots = sellSlots.filter(s => s.state === 'virtual');
+  const activeBuySlots = buySlots.filter(s => s.state === ORDER_STATES.ACTIVE);
+  const virtualBuySlots = buySlots.filter(s => s.state === ORDER_STATES.VIRTUAL);
+  const activeSellSlots = sellSlots.filter(s => s.state === ORDER_STATES.ACTIVE);
+  const virtualSellSlots = sellSlots.filter(s => s.state === ORDER_STATES.VIRTUAL);
 
   /**
    * Best Prices Identification
@@ -204,7 +297,7 @@ function analyzeOrder(botData, config) {
    * The spread between these is the "real" spread of the grid
    */
   const bestBuySlot = grid[boundaryIdx];
-  const bestSellSlot = grid.slice(boundaryIdx + 1).find(s => s.type === 'sell');
+  const bestSellSlot = grid.slice(boundaryIdx + 1).find(s => s.type === ORDER_TYPES.SELL);
 
   /**
    * Real Spread Calculation
@@ -286,7 +379,9 @@ function analyzeOrder(botData, config) {
       activeBuy: activeBuySlots.length,
       virtualBuy: virtualBuySlots.length,
       activeSell: activeSellSlots.length,
-      virtualSell: virtualSellSlots.length
+      virtualSell: virtualSellSlots.length,
+      partialBuy: buySlots.filter(s => s.state === ORDER_STATES.PARTIAL).length,
+      partialSell: sellSlots.filter(s => s.state === ORDER_STATES.PARTIAL).length
     },
     // Slot data for weight visualization
     slotData: {
@@ -483,9 +578,31 @@ function createDistributionBar(counts) {
   // Adjust to ensure total is exactly barWidth
   const sum = activeBuyWidth + virtualBuyWidth + spreadWidth + activeSellWidth + virtualSellWidth;
   if (sum !== barWidth) {
-    const diff = barWidth - sum;
-    // Adjust virtual sell as it's the last one
-    virtualSellWidth += diff;
+    let diff = barWidth - sum;
+    const sections = [
+      { name: 'activeBuyWidth', get: () => activeBuyWidth, set: v => { activeBuyWidth = v; } },
+      { name: 'virtualBuyWidth', get: () => virtualBuyWidth, set: v => { virtualBuyWidth = v; } },
+      { name: 'spreadWidth', get: () => spreadWidth, set: v => { spreadWidth = v; } },
+      { name: 'activeSellWidth', get: () => activeSellWidth, set: v => { activeSellWidth = v; } },
+      { name: 'virtualSellWidth', get: () => virtualSellWidth, set: v => { virtualSellWidth = v; } }
+    ];
+
+    while (diff > 0) {
+      const target = sections
+        .slice()
+        .sort((a, b) => b.get() - a.get())[0];
+      target.set(target.get() + 1);
+      diff--;
+    }
+
+    while (diff < 0) {
+      const target = sections
+        .filter(section => section.get() > 0)
+        .sort((a, b) => b.get() - a.get())[0];
+      if (!target) break;
+      target.set(target.get() - 1);
+      diff++;
+    }
   }
 
   const buyBar = colors.buy + '█'.repeat(virtualBuyWidth) + colors.buyDark + '█'.repeat(activeBuyWidth) + colors.reset;
@@ -597,9 +714,9 @@ function createWeightSide(orders, activeColor, virtualColor, sideWidth) {
     const ratio = avgSize / maxSize;
     const blockHeight = Math.max(1, Math.round(ratio * 8));
 
-    // Determine color based on whether any order in group is active
-    const hasActive = groupOrders.some(o => o.state === 'active');
-    const color = hasActive ? activeColor : virtualColor;
+    // ACTIVE and PARTIAL slots are both real on-chain orders in this analysis.
+    const hasLiveOrder = groupOrders.some(o => o.state === ORDER_STATES.ACTIVE || o.state === ORDER_STATES.PARTIAL);
+    const color = hasLiveOrder ? activeColor : virtualColor;
 
     compressedWeights.push(color + partialBlocks[blockHeight] + colors.reset);
   }
@@ -894,6 +1011,13 @@ function formatAnalysis(analysis) {
   const sellValueStr = `${analysis.funds.sell.xrp.toFixed(4)} ${aSymbol}`;
   const buyEquivStr = `≈ ${analysis.funds.buy.xrp.toFixed(4)} ${aSymbol}`;
   const sellEquivStr = `≈ ${formatCurrency(analysis.funds.sell.bts)} ${bSymbol}`;
+  const partialParts = [];
+  if (analysis.slots.partialBuy > 0) {
+    partialParts.push(`${analysis.slots.partialBuy} buy`);
+  }
+  if (analysis.slots.partialSell > 0) {
+    partialParts.push(`${analysis.slots.partialSell} sell`);
+  }
 
   // Right column width is the maximum of sell value or sell equivalent
   const rightColWidth = Math.max(sellValueStr.length, sellEquivStr.length);
@@ -919,6 +1043,9 @@ function formatAnalysis(analysis) {
 
   lines.push(`${prefix1}${colors.buy}${buyValueStr}${colors.reset}${' '.repeat(spacing1)}${colors.sell}${sellValueRight}${colors.reset}`);
   lines.push(`${prefix2}${buyEquivStr}${' '.repeat(spacing2)}${sellEquivRight}`);
+  if (partialParts.length > 0) {
+    lines.push(`${prefix2}${colors.gray}Partial orders: ${partialParts.join(' | ')}${colors.reset}`);
+  }
 
 
   return lines.join('\n');
@@ -951,10 +1078,10 @@ function main() {
   console.log(`${colors.cyan}${'='.repeat(HEADER_WIDTH)}${colors.reset}`);
 
   // Get all order files sorted by modification time (newest first)
-  const files = getOrderFiles();
+  const { files, skippedCandidates } = getOrderFiles();
 
-  // Handle empty directory case
-  if (files.length === 0) {
+  // Handle fully empty directory case. If files were skipped, report why below.
+  if (files.length === 0 && skippedCandidates.length === 0) {
     console.log('No order files found in profiles/orders/');
     process.exit(0);
   }
@@ -972,23 +1099,21 @@ function main() {
       // Parse order file JSON
       const orderData = readJSON(file.path);
       // Extract bot data (typically only one bot per file)
-      const botKey = Object.keys(orderData.bots)[0];
+      const botKeys = Object.keys(orderData.bots);
+      if (botKeys.length === 0) {
+        throw new Error('Empty bots object');
+      }
+      const botKey = botKeys[0];
       const botData = orderData.bots[botKey];
-
-      // Extract assets from order data (fallback if metadata is null)
-      let assetA = botData.meta.assetA;
-      let assetB = botData.meta.assetB;
-
-      if (!assetA && botData.assets && botData.assets.assetA) {
-        assetA = botData.assets.assetA.symbol;
-      }
-      if (!assetB && botData.assets && botData.assets.assetB) {
-        assetB = botData.assets.assetB.symbol;
+      if (!botData) {
+        throw new Error(`Missing bot entry for ${botKey}`);
       }
 
-      // Find matching configuration for this bot
-      // Uses bot name or asset pair to find config
-      const config = getBotConfig(botData.meta.name, assetA, assetB);
+      // Candidate validation already required a configured bot entry.
+      const config = file.config || getConfiguredBotConfig(botKey, botData);
+      if (!config) {
+        throw new Error(`Missing configured bot entry for ${botKey}`);
+      }
 
       // Analyze the order grid
       const analysis = analyzeOrder(botData, config);
@@ -1010,6 +1135,15 @@ function main() {
       skipped++;
     }
   });
+
+  if (skippedCandidates.length > 0) {
+    console.log('');
+    console.log(`${colors.cyan}${'='.repeat(HEADER_WIDTH)}${colors.reset}`);
+    skippedCandidates.forEach(candidate => {
+      console.log(`${colors.gray}Skipped ${candidate.name}: ${candidate.reason}${colors.reset}`);
+      skipped++;
+    });
+  }
 
   // Summary line
   console.log(`${colors.cyan}${'='.repeat(HEADER_WIDTH)}${colors.reset}`);
