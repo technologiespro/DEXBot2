@@ -1,24 +1,29 @@
 'use strict';
 
-const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('./kibana_client');
-const { fillCandleGaps } = require('../candle_utils');
-const { consolidateCandlesByTimestamp } = require('./consolidate_candles');
+const { kibanaSearch, DEFAULT_CONFIG: BASE_CONFIG } = require('./kibana_client');
+const { fillCandleGaps, tradesToCandles } = require('../candle_utils');
 
 const DEFAULT_CONFIG = {
     ...BASE_CONFIG,
     intervalSeconds: 3600,
     lookbackHours: 500,
     consolidateByTimestamp: true,
+    fillGapsToRequestedRange: true,
+    kibanaPageSize: 10000,
 };
 
-function buildDirectionalQuery({ opType, soldAssetField, receivedAssetField, soldAmountField, receivedAmountField, poolField, soldAssetId, receivedAssetId, lookbackHours, intervalSeconds, poolId, timeRange }) {
+function sourceField(field) {
+    return String(field || '').replace(/\.keyword$/, '');
+}
+
+function buildDirectionalDocumentQuery({ opType, soldAssetField, receivedAssetField, poolField, soldAssetId, receivedAssetId, lookbackHours, poolId, timeRange, size, searchAfter = null }) {
     const rangeValue = timeRange
         ? { gte: timeRange.gte, lte: timeRange.lte }
         : { gte: `now-${lookbackHours}h`, lte: 'now' };
 
     const filters = [
-        { term: { operation_type: opType } },
         { term: { [soldAssetField]: soldAssetId } },
+        { term: { operation_type: opType } },
         { range: { 'block_data.block_time': rangeValue } },
     ];
 
@@ -30,94 +35,228 @@ function buildDirectionalQuery({ opType, soldAssetField, receivedAssetField, sol
         filters.push({ term: { [poolField]: poolId } });
     }
 
-    return {
-        size: 0,
+    const query = {
+        size,
+        track_total_hits: true,
+        _source: true,
         query: { bool: { filter: filters } },
-        aggs: {
-            by_time: {
-                date_histogram: {
-                    field: 'block_data.block_time',
-                    fixed_interval: toFixedInterval(intervalSeconds),
-                    min_doc_count: 1,
-                },
-                aggs: {
-                    sum_sold: { sum: { field: soldAmountField } },
-                    sum_received: { sum: { field: receivedAmountField } },
-                },
-            },
+        sort: [
+            { 'block_data.block_time': { order: 'asc' } },
+            { operation_id_num: { order: 'asc' } },
+        ],
+    };
+
+    if (Array.isArray(searchAfter)) query.search_after = searchAfter;
+    return query;
+}
+
+function getByPath(obj, path) {
+    const parts = sourceField(path).split('.').filter(Boolean);
+    let cur = obj;
+    for (const part of parts) {
+        if (cur == null) return undefined;
+        cur = cur[part];
+    }
+    return cur;
+}
+
+function numericAmount(value) {
+    if (Array.isArray(value)) {
+        const first = value.find((entry) => entry && entry.amount != null);
+        return numericAmount(first);
+    }
+    if (value && typeof value === 'object' && value.amount != null) return Number(value.amount);
+    return Number(value);
+}
+
+function amountForAsset(source, amountField, assetId) {
+    const direct = getByPath(source, amountField);
+    if (!Array.isArray(direct)) {
+        const n = numericAmount(direct);
+        if (Number.isFinite(n)) return n;
+    }
+
+    const arrayPath = sourceField(amountField).replace(/\.amount$/, '');
+    const entries = getByPath(source, arrayPath);
+    if (Array.isArray(entries)) {
+        const matched = entries.find((entry) => String(entry?.asset_id || '') === String(assetId || ''));
+        const n = numericAmount(matched || entries[0]);
+        if (Number.isFinite(n)) return n;
+    }
+
+    return Number.NaN;
+}
+
+function parseOperationIdOrder(value) {
+    const raw = String(value || '');
+    const m = raw.match(/(\d+)$/);
+    return m ? Number(m[1]) : Number.NaN;
+}
+
+function hitSortKey(hit) {
+    const sort = Array.isArray(hit?.sort) ? hit.sort : [];
+    return sort.map((v) => String(v)).join('|') || String(hit?._id || '');
+}
+
+function hitSequence(source, operationIdField) {
+    const candidates = [
+        getByPath(source, 'operation_id_num'),
+        getByPath(source, 'account_history.operation_id'),
+        getByPath(source, operationIdField),
+        getByPath(source, 'account_history.sequence'),
+    ];
+
+    for (const value of candidates) {
+        const n = typeof value === 'number' ? value : parseOperationIdOrder(value);
+        if (Number.isFinite(n)) return n;
+    }
+    return Number.NaN;
+}
+
+function hitToTrade(hit, { soldAsset, receivedAsset, soldAmountField, receivedAmountField, operationIdField = 'account_history.operation_id' }) {
+    const source = hit?._source || {};
+    const tsMs = Date.parse(String(getByPath(source, 'block_data.block_time') || ''));
+    if (!Number.isFinite(tsMs)) return null;
+
+    const soldAmount = amountForAsset(source, soldAmountField, soldAsset.id);
+    const receivedAmount = amountForAsset(source, receivedAmountField, receivedAsset.id);
+    if (!Number.isFinite(soldAmount) || soldAmount <= 0 || !Number.isFinite(receivedAmount) || receivedAmount <= 0) {
+        return null;
+    }
+
+    return {
+        tsMs,
+        sequence: hitSequence(source, operationIdField),
+        kibanaSortKey: hitSortKey(hit),
+        sell: {
+            amount: soldAmount,
+            asset_id: soldAsset.id,
+        },
+        received: {
+            amount: receivedAmount,
+            asset_id: receivedAsset.id,
         },
     };
 }
 
-function bucketsToCandles(buckets, soldPrecision, receivedPrecision) {
-    const soldScale = Math.pow(10, soldPrecision);
-    const recvScale = Math.pow(10, receivedPrecision);
+async function fetchDirectionalTradeDocs({ search, cfg, opType, fieldMap, soldAsset, receivedAsset, lookbackHours, poolId, timeRange }) {
+    const size = Math.min(Math.max(1, Number(cfg.kibanaPageSize) || 10000), 10000);
+    const trades = [];
+    let searchAfter = null;
 
-    return buckets
-        .filter((b) => b.sum_sold.value > 0 && b.sum_received.value > 0)
-        .map((b) => {
-            const soldAmt = b.sum_sold.value / soldScale;
-            const recvAmt = b.sum_received.value / recvScale;
-            const vwap = recvAmt / soldAmt;
-            return [b.key, vwap, vwap, vwap, vwap, soldAmt];
+    while (true) {
+        const query = buildDirectionalDocumentQuery({
+            opType,
+            soldAssetField: fieldMap.soldAssetField,
+            receivedAssetField: fieldMap.receivedAssetField,
+            poolField: fieldMap.poolField,
+            soldAssetId: soldAsset.id,
+            receivedAssetId: receivedAsset.id,
+            lookbackHours,
+            poolId,
+            timeRange,
+            size,
+            searchAfter,
         });
+
+        const result = await search(cfg, query);
+        const hits = result?.hits?.hits || [];
+        if (!Array.isArray(hits) || hits.length === 0) break;
+
+        for (const hit of hits) {
+            const trade = hitToTrade(hit, {
+                soldAsset,
+                receivedAsset,
+                soldAmountField: fieldMap.soldAmountField,
+                receivedAmountField: fieldMap.receivedAmountField,
+                operationIdField: fieldMap.operationIdField,
+            });
+            if (trade) trades.push(trade);
+        }
+
+        if (hits.length < size) break;
+        const lastSort = hits[hits.length - 1]?.sort;
+        if (!Array.isArray(lastSort)) {
+            throw new Error('Kibana document pagination requires sort values on hits');
+        }
+        searchAfter = lastSort;
+    }
+
+    return trades;
+}
+
+function resolveRequestedFillRange(cfg, nowMs = Date.now()) {
+    const bucketMs = Number(cfg.intervalSeconds) * 1000;
+    if (!Number.isFinite(bucketMs) || bucketMs <= 0) return { startTs: null, endTs: null };
+
+    if (cfg.timeRange) {
+        const gteMs = Date.parse(String(cfg.timeRange.gte || ''));
+        const lteMs = Date.parse(String(cfg.timeRange.lte || ''));
+        return {
+            startTs: Number.isFinite(gteMs) ? Math.floor(gteMs / bucketMs) * bucketMs : null,
+            endTs: Number.isFinite(lteMs) ? Math.floor(lteMs / bucketMs) * bucketMs : null,
+        };
+    }
+
+    const lookbackHours = Number(cfg.lookbackHours);
+    return {
+        startTs: Number.isFinite(lookbackHours) && lookbackHours > 0
+            ? Math.floor((nowMs - (lookbackHours * 3600 * 1000)) / bucketMs) * bucketMs
+            : null,
+        endTs: Math.floor(nowMs / bucketMs) * bucketMs,
+    };
 }
 
 async function fetchKibanaCandles({ opType, fieldMap, assetA, assetB, config = {}, poolId = null }) {
     const cfg = { ...DEFAULT_CONFIG, ...config };
+    const search = typeof cfg.kibanaSearch === 'function' ? cfg.kibanaSearch : kibanaSearch;
 
-    const queryAtoB = buildDirectionalQuery({
-        opType,
-        ...fieldMap,
-        soldAssetId: assetA.id,
-        receivedAssetId: assetB.id,
-        lookbackHours: cfg.lookbackHours,
-        intervalSeconds: cfg.intervalSeconds,
-        poolId,
-        timeRange: cfg.timeRange ?? null,
-    });
-
-    const queryBtoA = buildDirectionalQuery({
-        opType,
-        ...fieldMap,
-        soldAssetId: assetB.id,
-        receivedAssetId: assetA.id,
-        lookbackHours: cfg.lookbackHours,
-        intervalSeconds: cfg.intervalSeconds,
-        poolId,
-        timeRange: cfg.timeRange ?? null,
-    });
-
-    const [resultAtoB, resultBtoA] = await Promise.all([
-        kibanaSearch(cfg, queryAtoB),
-        kibanaSearch(cfg, queryBtoA),
+    const [tradesAtoB, tradesBtoA] = await Promise.all([
+        fetchDirectionalTradeDocs({
+            search,
+            cfg,
+            opType,
+            fieldMap,
+            soldAsset: assetA,
+            receivedAsset: assetB,
+            lookbackHours: cfg.lookbackHours,
+            poolId,
+            timeRange: cfg.timeRange ?? null,
+        }),
+        fetchDirectionalTradeDocs({
+            search,
+            cfg,
+            opType,
+            fieldMap,
+            soldAsset: assetB,
+            receivedAsset: assetA,
+            lookbackHours: cfg.lookbackHours,
+            poolId,
+            timeRange: cfg.timeRange ?? null,
+        }),
     ]);
 
-    const candlesAtoB = bucketsToCandles(
-        resultAtoB.aggregations?.by_time?.buckets ?? [],
-        assetA.precision, assetB.precision
-    );
-
-    const candlesBtoARaw = bucketsToCandles(
-        resultBtoA.aggregations?.by_time?.buckets ?? [],
-        assetB.precision, assetA.precision
-    );
-
-    const candlesBtoA = candlesBtoARaw.map(([ts, o, h, l, c, volB]) => {
-        const invO = 1 / o;
-        const invH = 1 / l;
-        const invL = 1 / h;
-        const invC = 1 / c;
-        const volA = invC > 0 ? (volB / invC) : 0;
-        return [ts, invO, invH, invL, invC, volA];
+    const allTrades = [...tradesAtoB, ...tradesBtoA].sort((a, b) => {
+        const tsDelta = a.tsMs - b.tsMs;
+        if (tsDelta !== 0) return tsDelta;
+        const aSeq = Number(a.sequence);
+        const bSeq = Number(b.sequence);
+        if (Number.isFinite(aSeq) && Number.isFinite(bSeq) && aSeq !== bSeq) return aSeq - bSeq;
+        return String(a.kibanaSortKey || '').localeCompare(String(b.kibanaSortKey || ''));
     });
 
-    const merged = [...candlesAtoB, ...candlesBtoA].sort((a, b) => a[0] - b[0]);
-    const consolidated = cfg.consolidateByTimestamp ? consolidateCandlesByTimestamp(merged) : merged;
+    const consolidated = tradesToCandles(allTrades, assetA, assetB, cfg.intervalSeconds);
 
-    const nowMs = Date.now();
-    const startTs = nowMs - (cfg.lookbackHours * 3600 * 1000);
-    return fillCandleGaps(consolidated, cfg.intervalSeconds, startTs, nowMs);
+    if (cfg.fillGaps === false) {
+        return consolidated;
+    }
+
+    if (cfg.fillGapsToRequestedRange === false) {
+        return fillCandleGaps(consolidated, cfg.intervalSeconds);
+    }
+
+    const { startTs, endTs } = resolveRequestedFillRange(cfg);
+    return fillCandleGaps(consolidated, cfg.intervalSeconds, startTs, endTs);
 }
 
 async function fetchKibanaClosePrices(params) {
@@ -126,8 +265,8 @@ async function fetchKibanaClosePrices(params) {
 }
 
 module.exports = {
-    buildDirectionalQuery,
-    bucketsToCandles,
+    buildDirectionalDocumentQuery,
+    resolveRequestedFillRange,
     fetchKibanaCandles,
     fetchKibanaClosePrices,
     DEFAULT_CONFIG,

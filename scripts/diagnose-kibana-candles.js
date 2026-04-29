@@ -37,8 +37,8 @@ async function main() {
     // Show first and last
     const first = candles[0];
     const last = candles[candles.length - 1];
-    console.log(`\nFirst candle: ${new Date(first[0]).toISOString()} close=${first[4]} vol=${first[5]}`);
-    console.log(`Last candle:  ${new Date(last[0]).toISOString()} close=${last[4]} vol=${last[5]}`);
+    console.log(`\nFirst candle: ${new Date(first[0]).toISOString()} O=${first[1]} H=${first[2]} L=${first[3]} C=${first[4]} vol=${first[5]}`);
+    console.log(`Last candle:  ${new Date(last[0]).toISOString()} O=${last[1]} H=${last[2]} L=${last[3]} C=${last[4]} vol=${last[5]}`);
 
     // Find runs of identical prices
     let maxRun = 0;
@@ -61,12 +61,22 @@ async function main() {
     const withVolume = candles.filter(c => c[5] > 0);
     console.log(`Candles with volume > 0: ${withVolume.length}`);
 
+    const trueOhlc = candles.filter(c => c[5] > 0 && (c[1] !== c[2] || c[1] !== c[3] || c[1] !== c[4]));
+    console.log(`Candles with non-flat OHLC: ${trueOhlc.length}`);
+
     // Show a few recent candles
     console.log('\nLast 10 candles:');
     candles.slice(-10).forEach((c, i) => {
         const idx = candles.length - 10 + i;
-        console.log(`  [${idx}] ${new Date(c[0]).toISOString()} close=${c[4].toFixed(6)} vol=${c[5].toFixed(2)}`);
+        console.log(`  [${idx}] ${new Date(c[0]).toISOString()} O=${c[1].toFixed(6)} H=${c[2].toFixed(6)} L=${c[3].toFixed(6)} C=${c[4].toFixed(6)} vol=${c[5].toFixed(2)}`);
     });
+
+    if (trueOhlc.length > 0) {
+        console.log('\nRecent non-flat OHLC candles:');
+        trueOhlc.slice(-10).forEach((c) => {
+            console.log(`  ${new Date(c[0]).toISOString()} O=${c[1].toFixed(6)} H=${c[2].toFixed(6)} L=${c[3].toFixed(6)} C=${c[4].toFixed(6)} vol=${c[5].toFixed(2)}`);
+        });
+    }
 
     // Show where price changes happened
     console.log('\nPrice changes (first 20):');

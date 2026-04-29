@@ -31,7 +31,7 @@
 const fs   = require('fs');
 const path = require('path');
 const kibanaSource = require('./kibana_source');
-const { toIntervalLabel, fillCandleGaps } = require('../candle_utils');
+const { toIntervalLabel } = require('../candle_utils');
 const { parseJsonWithComments } = require('../../modules/order/utils/system');
 const { resolveAsset, findPoolByAssets } = require('../utils/chain');
 
@@ -239,25 +239,23 @@ async function run() {
 
     console.log(`\n[${stepProbe}/4] Probing data availability (last 48h)...`);
     try {
-        const bucketsA = await kibanaSource.getRawBuckets(fullPoolId, assetA.id, {
-            ...config, lookbackHours: Math.min(config.lookbackHours, 48),
+        const probeCandles = await kibanaSource.getLpCandlesForPool(fullPoolId, assetA, assetB, {
+            ...config,
+            lookbackHours: Math.min(config.lookbackHours, 48),
+            fillGaps: false,
+            fillGapsToRequestedRange: false,
         });
-        const bucketsB = await kibanaSource.getRawBuckets(fullPoolId, assetB.id, {
-            ...config, lookbackHours: Math.min(config.lookbackHours, 48),
-        });
-        console.log(`  A→B swaps in 48h: ${bucketsA.length} buckets`);
-        console.log(`  B→A swaps in 48h: ${bucketsB.length} buckets`);
+        const volumeCandles = probeCandles.filter((c) => Number(c[5] || 0) > 0);
+        const nonFlatCandles = volumeCandles.filter((c) => c[1] !== c[2] || c[1] !== c[3] || c[1] !== c[4]);
 
-        const sample = bucketsA[0] ?? bucketsB[0];
+        console.log(`  Candles with trades in 48h: ${volumeCandles.length}`);
+        console.log(`  Non-flat OHLC candles:     ${nonFlatCandles.length}`);
+
+        const sample = volumeCandles[0];
         if (sample) {
-            console.log(`  Sample bucket: key=${new Date(sample.key).toISOString()}`);
-            if ((sample.sum_received?.value ?? 0) === 0) {
-                console.warn('\n  WARNING: sum_received = 0');
-                console.warn('  The field "operation_result_object.data_object.received.amount" may not be');
-                console.warn('  populated for this pool. Candles will be empty.');
-            }
+            console.log(`  Sample candle: ${new Date(sample[0]).toISOString()} O=${sample[1]} H=${sample[2]} L=${sample[3]} C=${sample[4]} vol=${sample[5]}`);
         } else {
-            console.warn('  No buckets in last 48h — pool may be low-activity. Proceeding with full lookback.');
+            console.warn('  No trade candles in last 48h — pool may be low-activity. Proceeding with full lookback.');
         }
     } catch (err) {
         console.error(`  Probe failed: ${err.message}`);
@@ -273,7 +271,6 @@ async function run() {
 
         if (candles.length === 0) {
             console.error('  No candles returned.');
-            console.error('  If sum_received was 0 above, the operation_result field is not indexed.');
             process.exit(1);
         }
 
@@ -318,9 +315,9 @@ async function run() {
             candleCount:     candles.length,
             priceUnit:       `${assetB.symbol} per ${assetA.symbol}`,
             // Candle format: [timestamp_ms, open, high, low, close, volume_in_assetA]
-            // Directional buckets are merged and consolidated by timestamp.
-            // If both swap directions exist in the same interval, OHLC is aggregated
-            // and volume is expressed in assetA units.
+            // Raw Kibana LP exchange documents are ordered and converted to true OHLC.
+            // If both swap directions exist in the same interval, they share one
+            // B-per-A candle and volume is expressed in assetA units.
             // Actual received used (operation_result_object), not min_to_receive.
             format:          '[timestamp_ms, open, high, low, close, volume_A]',
         },

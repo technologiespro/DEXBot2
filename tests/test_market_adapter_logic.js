@@ -15,7 +15,7 @@ const {
     usesAmaGridPrice,
     applyRuntimeDefaultsFromGeneralSettings,
 } = require('../market_adapter/market_adapter');
-const { detectMissingCandleTimestamps, fillCandleGaps } = require('../market_adapter/candle_utils');
+const { detectMissingCandleTimestamps, fillCandleGaps, pruneStaleTail, tradesToCandles } = require('../market_adapter/candle_utils');
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
 
 const MARKET_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'market_profiles.json');
@@ -84,6 +84,62 @@ assert.strictEqual(
 }
 
 // Native incremental gap fill behavior
+{
+    const base = 1700000000000;
+    const hour = 3600000;
+    const candles = [
+        [base, 100, 100, 100, 100, 1],
+        [base + hour, 100, 100, 100, 100, 0],
+        [base + (2 * hour), 100, 100, 100, 100, 0],
+    ];
+    assert.deepStrictEqual(
+        pruneStaleTail(candles, 2),
+        [[base, 100, 100, 100, 100, 1]],
+        'stale-tail pruning should remove zero-volume flat synthetic tail candles'
+    );
+}
+
+{
+    const base = 1700000000000;
+    const hour = 3600000;
+    const candles = [
+        [base, 100, 100, 100, 100, 1],
+        [base + hour, 100, 100, 100, 100, 2],
+        [base + (2 * hour), 100, 100, 100, 100, 3],
+    ];
+    assert.deepStrictEqual(
+        pruneStaleTail(candles, 2),
+        candles,
+        'stale-tail pruning must not remove real same-price traded candles'
+    );
+}
+
+{
+    const ts = 1700000000000;
+    const assetA = { id: '1.3.1', precision: 0 };
+    const assetB = { id: '1.3.2', precision: 0 };
+    const candles = tradesToCandles([
+        {
+            tsMs: ts,
+            sequence: 12,
+            sell: { amount: 10, asset_id: assetA.id },
+            received: { amount: 30, asset_id: assetB.id },
+        },
+        {
+            tsMs: ts,
+            sequence: 11,
+            sell: { amount: 10, asset_id: assetA.id },
+            received: { amount: 20, asset_id: assetB.id },
+        },
+    ], assetA, assetB, 3600);
+
+    assert.deepStrictEqual(
+        candles,
+        [[Math.floor(ts / 3600000) * 3600000, 2, 3, 2, 3, 20]],
+        'same-timestamp trades should be ordered by native sequence so OHLC close is the latest trade'
+    );
+}
+
 {
     const hour = 3600 * 1000;
     const base = 1700002800000;

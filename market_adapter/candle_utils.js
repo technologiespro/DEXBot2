@@ -38,7 +38,14 @@ function tradeToBPerA(trade, assetA, assetB) {
 
 function tradesToCandles(trades, assetA, assetB, intervalSeconds = 3600) {
     const bucketMs = intervalSeconds * 1000;
-    const sorted = trades.slice().sort((a, b) => a.tsMs - b.tsMs);
+    const sorted = trades.slice().sort((a, b) => {
+        const tsDelta = a.tsMs - b.tsMs;
+        if (tsDelta !== 0) return tsDelta;
+        const aSeq = Number(a.sequence);
+        const bSeq = Number(b.sequence);
+        if (Number.isFinite(aSeq) && Number.isFinite(bSeq)) return aSeq - bSeq;
+        return 0;
+    });
     const map = new Map();
 
     for (const t of sorted) {
@@ -166,10 +173,10 @@ function fillCandleGaps(candles, intervalSeconds, startTs = null, endTs = null) 
 }
 
 /**
- * Prune trailing candles that appear stale — i.e. the close price has not
- * changed for `threshold` consecutive candles. This prevents gap-fill
+ * Prune trailing candles that appear stale — i.e. zero-volume candles carrying
+ * the same close for `threshold` consecutive buckets. This prevents gap-fill
  * (or a previous run) from carrying a frozen price forward indefinitely
- * when the pool has no activity.
+ * without deleting real same-price trades.
  *
  * @param {Array}  candles   - [[ts, o, h, l, c, v], ...]
  * @param {number} threshold - min consecutive identical closes to prune
@@ -186,9 +193,11 @@ function pruneStaleTail(candles, threshold) {
     if (sorted.length < threshold) return sorted;
 
     const lastClose = sorted[sorted.length - 1][4];
+    if (Number(sorted[sorted.length - 1][5] || 0) !== 0) return sorted;
+
     let runLength = 1;
     for (let i = sorted.length - 2; i >= 0; i--) {
-        if (sorted[i][4] === lastClose) {
+        if (sorted[i][4] === lastClose && Number(sorted[i][5] || 0) === 0) {
             runLength++;
         } else {
             break;

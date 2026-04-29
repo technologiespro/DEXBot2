@@ -13,12 +13,11 @@
  *   Field: operation_history.operation_result_object         → actual amounts received (not min)
  *          .data_object.received.amount / .asset_id
  *
- * Price per bucket = sum(actual_received) / sum(sold)  — both precision-adjusted.
- * We query both swap directions (A→B and B→A), invert one side, merge into
- * a unified series expressed as "B per A".
+ * Price per document = actual_received / sold — both precision-adjusted.
+ * We query both swap directions (A→B and B→A), convert both into a unified
+ * "B per A" trade stream, then build true OHLC candles from document order.
  *
  * Output: [[timestamp_ms, open, high, low, close, volume_A], ...]
- * open=high=low=close=VWAP (bucket aggregation, not tick-level).
  * Compatible with calculateAMA() close-price input.
  *
  * Auth:
@@ -29,10 +28,8 @@
 
 'use strict';
 
-const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('../core/kibana_client');
-const { fillCandleGaps } = require('../candle_utils');
-const { consolidateCandlesByTimestamp } = require('../core/consolidate_candles');
-const { bucketsToCandles, fetchKibanaCandles, fetchKibanaClosePrices } = require('../core/kibana_candles');
+const { kibanaSearch, DEFAULT_CONFIG: BASE_CONFIG } = require('../core/kibana_client');
+const { fetchKibanaCandles, fetchKibanaClosePrices } = require('../core/kibana_candles');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -57,76 +54,6 @@ function normalizePoolId(id) {
     if (id == null) return null;
     const s = String(id).trim();
     return s.startsWith('1.19.') ? s : `1.19.${s}`;
-}
-
-// ─── Query Builder ────────────────────────────────────────────────────────────
-
-/**
- * Build the ES aggregation query for LP swaps in one direction.
- *
- * Filters (all required):
- *   operation_type = 63
- *   amount_to_sell.asset_id = soldAssetId   ← direction selector
- *   block_data.block_time in [now-lookbackHours, now]
- *
- * Optional filter:
- *   pool.keyword = poolId                   ← scope to a specific LP pool
- *
- * Aggregation:
- *   date_histogram → per bucket:
- *     sum_sold     = Σ amount_to_sell.amount              (integer, divide by soldPrecision)
- *     sum_received = Σ operation_result_object.received   (actual received, not min requested)
- *
- * Using operation_result_object.data_object.received.amount instead of
- * min_to_receive.amount gives the true executed amount from the pool formula,
- * not the user's minimum threshold.
- *
- * @param {string}      soldAssetId
- * @param {number}      lookbackHours
- * @param {number}      intervalSeconds
- * @param {string|null} poolId          - full pool ID e.g. '1.19.133', or null for any pool
- */
-function buildQuery(soldAssetId, lookbackHours, intervalSeconds, poolId = null, timeRange = null, receivedAssetId = null) {
-    const rangeValue = timeRange
-        ? { gte: timeRange.gte, lte: timeRange.lte }
-        : { gte: `now-${lookbackHours}h`, lte: 'now' };
-
-    const filters = [
-        { term:  { operation_type: OP_TYPE_LP } },
-        { term:  { 'operation_history.op_object.amount_to_sell.asset_id.keyword': soldAssetId } },
-        { range: { 'block_data.block_time': rangeValue } },
-    ];
-
-    if (poolId) {
-        filters.push({ term: { 'operation_history.op_object.pool.keyword': poolId } });
-    }
-
-    if (receivedAssetId) {
-        filters.push({ term: { 'operation_history.op_object.min_to_receive.asset_id.keyword': receivedAssetId } });
-    }
-
-    return {
-        size: 0,
-        query: { bool: { filter: filters } },
-        aggs: {
-            by_time: {
-                date_histogram: {
-                    field:          'block_data.block_time',
-                    fixed_interval: toFixedInterval(intervalSeconds),
-                    min_doc_count:  1,
-                },
-                aggs: {
-                    sum_sold: {
-                        sum: { field: 'operation_history.op_object.amount_to_sell.amount' },
-                    },
-                    // Actual received from operation result — more accurate than min_to_receive
-                    sum_received: {
-                        sum: { field: 'operation_history.operation_result_object.data_object.received.amount' },
-                    },
-                },
-            },
-        },
-    };
 }
 
 /**
@@ -156,8 +83,6 @@ function buildDiscoveryQuery(poolId, lookbackHours) {
     };
 }
 
-// ─── Bucket → Candle ──────────────────────────────────────────────────────────
-
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -175,23 +100,6 @@ async function discoverPoolAssets(poolId, config = {}) {
     const result   = await kibanaSearch(cfg, query);
     const buckets  = result.aggregations?.sold_assets?.buckets ?? [];
     return buckets.map((b) => b.key);
-}
-
-/**
- * Fetch candles for one swap direction in a specific pool.
- *
- * @param {string}  poolId           - full pool ID e.g. '1.19.133'
- * @param {string}  soldAssetId
- * @param {number}  soldPrecision
- * @param {number}  receivedPrecision
- * @param {Object}  config
- */
-async function getLpCandles(poolId, soldAssetId, soldPrecision, receivedPrecision, config = {}, receivedAssetId = null) {
-    const cfg     = { ...DEFAULT_CONFIG, ...config };
-    const query   = buildQuery(soldAssetId, cfg.lookbackHours, cfg.intervalSeconds, poolId, cfg.timeRange ?? null, receivedAssetId);
-    const result  = await kibanaSearch(cfg, query);
-    const buckets = result.aggregations?.by_time?.buckets ?? [];
-    return bucketsToCandles(buckets, soldPrecision, receivedPrecision);
 }
 
 const LP_FIELD_MAP = {
@@ -248,31 +156,13 @@ async function getLpClosePricesForPool(poolId, assetA, assetB, config = {}) {
     });
 }
 
-/**
- * Diagnostic: raw ES buckets for one direction in one pool.
- * Useful for verifying field values before building price logic.
- *
- * @param {string|number} poolId
- * @param {string}        soldAssetId
- * @param {Object}        [config]
- */
-async function getRawBuckets(poolId, soldAssetId, config = {}) {
-    const cfg    = { ...DEFAULT_CONFIG, ...config };
-    const fullId = normalizePoolId(poolId);
-    const query  = buildQuery(soldAssetId, cfg.lookbackHours, cfg.intervalSeconds, fullId);
-    const result = await kibanaSearch(cfg, query);
-    return result.aggregations?.by_time?.buckets ?? [];
-}
-
 module.exports = {
     // Pool-centric API (preferred)
     discoverPoolAssets,
     getLpCandlesForPool,
     getLpClosePricesForPool,
-    getRawBuckets,
 
     // Low-level (testing / custom queries)
     kibanaSearch,
-    buildQuery,
     normalizePoolId,
 };

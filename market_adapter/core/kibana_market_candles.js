@@ -28,10 +28,8 @@
 
 'use strict';
 
-const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('./kibana_client');
-const { fillCandleGaps } = require('../candle_utils');
-const { consolidateCandlesByTimestamp } = require('./consolidate_candles');
-const { bucketsToCandles, fetchKibanaCandles, fetchKibanaClosePrices } = require('./kibana_candles');
+const { toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('./kibana_client');
+const { fetchKibanaCandles, fetchKibanaClosePrices } = require('./kibana_candles');
 
 const OP_FILL_ORDER = 4;
 
@@ -104,6 +102,20 @@ function buildFillCandleQuery(soldAssetId, receivedAssetId, lookbackHours, inter
 }
 
 // ─── Bucket → Candle ─────────────────────────────────────────────────────────
+
+function bucketsToCandles(buckets, soldPrecision, receivedPrecision) {
+  const soldScale = Math.pow(10, soldPrecision);
+  const recvScale = Math.pow(10, receivedPrecision);
+
+  return buckets
+    .filter((b) => b.sum_sold.value > 0 && b.sum_received.value > 0)
+    .map((b) => {
+      const soldAmt = b.sum_sold.value / soldScale;
+      const recvAmt = b.sum_received.value / recvScale;
+      const vwap = recvAmt / soldAmt;
+      return [b.key, vwap, vwap, vwap, vwap, soldAmt];
+    });
+}
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 

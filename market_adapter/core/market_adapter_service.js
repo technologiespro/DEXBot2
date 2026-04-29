@@ -76,6 +76,21 @@ class MarketAdapterService {
         };
     }
 
+    getGapRepairMaxHours(cfg) {
+        const intervalSeconds = Number(cfg?.intervalSeconds);
+        const intervalHours = Number.isFinite(intervalSeconds) && intervalSeconds > 0
+            ? intervalSeconds / 3600
+            : 1;
+        const maxCandles = Number.isFinite(cfg?.maxNativeGapFillCandles)
+            ? cfg.maxNativeGapFillCandles
+            : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
+
+        // Include the candle before and after the missing run so Kibana repair
+        // does not truncate a valid threshold-sized gap while still respecting
+        // the configured suspicious-gap threshold.
+        return Math.max(1, (maxCandles + 2) * intervalHours);
+    }
+
     fillNativeIncrementalClosedGaps(candles, previousLastTs, intervalSeconds, nowMs = this.getNowMs()) {
         const deps = this.deps;
         if (typeof deps.fillCandleGaps !== 'function') return candles;
@@ -98,6 +113,72 @@ class MarketAdapterService {
 
         const filledTail = deps.fillCandleGaps(tailCandles, intervalSeconds, startTs, latestClosedBucketTs);
         return deps.mergeCandles(candles, filledTail);
+    }
+
+    buildIncrementalCandleCollision(existing, incoming) {
+        const existingVol = Number(existing?.[5] || 0);
+        const incomingVol = Number(incoming?.[5] || 0);
+        if (existingVol <= 0 && incomingVol > 0) return incoming;
+        if (incomingVol <= 0) return existing;
+        return [
+            existing[0],
+            existing[1],
+            Math.max(existing[2], incoming[2]),
+            Math.min(existing[3], incoming[3]),
+            incoming[4],
+            existingVol + incomingVol,
+        ];
+    }
+
+    getNativeRecentTradeSequences(trades, limit = 8) {
+        const seen = new Set();
+        return (Array.isArray(trades) ? trades : [])
+            .filter((t) => Number.isFinite(Number(t?.sequence)))
+            .sort((a, b) => {
+                const at = Number(a.tsMs || 0);
+                const bt = Number(b.tsMs || 0);
+                if (bt !== at) return bt - at;
+                return Number(b.sequence) - Number(a.sequence);
+            })
+            .map((t) => Number(t.sequence))
+            .filter((seq) => {
+                const key = String(seq);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .slice(0, limit);
+    }
+
+    filterTimeBasedNativeNewTrades(trades, knownSequences, nativeLastTradeTs, lastCandleTs, intervalSeconds) {
+        const seqSet = knownSequences instanceof Set
+            ? knownSequences
+            : new Set((Array.isArray(knownSequences) ? knownSequences : []).map((seq) => String(seq)));
+        const seqNumbers = [...seqSet]
+            .map((seq) => Number(seq))
+            .filter(Number.isFinite);
+        const maxKnownSeq = seqNumbers.length > 0 ? Math.max(...seqNumbers) : null;
+        const lastTradeTs = Number(nativeLastTradeTs);
+        const lastTs = Number(lastCandleTs);
+        const bucketMs = Number(intervalSeconds) * 1000;
+
+        return (Array.isArray(trades) ? trades : []).filter((trade) => {
+            const seq = Number(trade?.sequence);
+            const seqKey = Number.isFinite(seq) ? String(seq) : null;
+            if (seqKey && seqSet.has(seqKey)) return false;
+            if (Number.isFinite(seq) && Number.isFinite(maxKnownSeq)) return seq > maxKnownSeq;
+
+            const tsMs = Number(trade?.tsMs);
+            if (!Number.isFinite(tsMs)) return true;
+            if (Number.isFinite(lastTradeTs) && lastTradeTs > 0) return tsMs > lastTradeTs;
+
+            if (Number.isFinite(bucketMs) && bucketMs > 0 && Number.isFinite(lastTs) && lastTs > 0) {
+                const tradeBucketTs = Math.floor(tsMs / bucketMs) * bucketMs;
+                return tradeBucketTs > lastTs;
+            }
+
+            return true;
+        });
     }
 
     clampGridPriceToBounds(centerPrice, referencePrice, bot) {
@@ -145,6 +226,7 @@ class MarketAdapterService {
         const lookbackBars = cfg.amaSlope?.lookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
         const filePath = deps.candleFileForBot(bot.botKey, cfg.intervalSeconds);
         const existing = deps.loadJson(filePath, null);
+        const existingMeta = existing?.meta && typeof existing.meta === 'object' ? existing.meta : {};
         let existingCandles = Array.isArray(existing?.candles) ? existing.candles : [];
 
         // Prune stale trailing candles from a previous run before any processing.
@@ -177,6 +259,14 @@ class MarketAdapterService {
             let nextCandles = existingCandles;
             let sourceLabel = 'native-incremental';
             let kibanaBootstrapEmpty = false;
+            let nativeRecentTradeSequences = Array.isArray(existingMeta.nativeRecentTradeSequences)
+                ? existingMeta.nativeRecentTradeSequences.slice()
+                : [];
+            let nativeLastTradeTs = Number.isFinite(existingMeta.nativeLastTradeTs)
+                ? existingMeta.nativeLastTradeTs
+                : null;
+            let nativeOverlapCount = null;
+            let nativePagesFetched = null;
 
             if (needBootstrap) {
                 const lookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
@@ -186,6 +276,7 @@ class MarketAdapterService {
                         intervalSeconds: cfg.intervalSeconds,
                         lookbackHours,
                         consolidateByTimestamp: true,
+                        fillGapsToRequestedRange: false,
                         apiKey: null,
                     }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana bootstrap failed');
                 } catch (_) {
@@ -204,6 +295,11 @@ class MarketAdapterService {
                         cfg.retryDelayMs,
                         'native bootstrap failed'
                     );
+                    if (trades.length > 0) {
+                        nativeRecentTradeSequences = this.getNativeRecentTradeSequences(trades);
+                        const latestTradeTs = Math.max(...trades.map((t) => Number(t?.tsMs)).filter(Number.isFinite));
+                        if (Number.isFinite(latestTradeTs)) nativeLastTradeTs = latestTradeTs;
+                    }
                     nextCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
                     // Fill internal gaps within the fetched bootstrap range so AMA has a continuous series.
                     if (nextCandles.length > 0 && typeof deps.fillCandleGaps === 'function') {
@@ -215,25 +311,70 @@ class MarketAdapterService {
                 }
             } else {
                 const lastTs = existingCandles[existingCandles.length - 1]?.[0] || 0;
-                const sinceMs = lastTs - (cfg.nativeBackfillHours * 3600 * 1000);
-                const trades = await deps.withRetries(
-                    () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
-                    cfg.sourceRetries,
-                    cfg.retryDelayMs,
-                    'native incremental fetch failed'
-                );
-                const incomingCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
-                nextCandles = deps.mergeCandles(existingCandles, incomingCandles);
+                const knownSequences = new Set(nativeRecentTradeSequences.map((seq) => String(seq)));
+                let fetchedTrades = [];
+                let newTrades = [];
 
-                // Only auto-fill small gaps from native incremental fetch. Large gaps usually
-                // mean fetchNativeTradesSince exhausted maxPages before reaching the prior tail,
-                // so we leave them visible for Kibana repair instead of carrying stale prices.
+                if (knownSequences.size >= 2 && typeof deps.fetchNativeTradesUntilOverlap === 'function') {
+                    const overlapResult = await deps.withRetries(
+                        () => deps.fetchNativeTradesUntilOverlap(ctx.poolId, nativeRecentTradeSequences, 2, cfg.pageLimit, cfg.maxPages),
+                        cfg.sourceRetries,
+                        cfg.retryDelayMs,
+                        'native incremental overlap fetch failed'
+                    );
+                    fetchedTrades = Array.isArray(overlapResult?.trades) ? overlapResult.trades : [];
+                    nativeOverlapCount = Number(overlapResult?.overlapCount || 0);
+                    nativePagesFetched = Number(overlapResult?.pages || 0);
+                    sourceLabel = 'native-incremental-overlap';
+                    newTrades = fetchedTrades.filter((trade) => {
+                        if (!Number.isFinite(Number(trade?.sequence))) return true;
+                        return !knownSequences.has(String(trade.sequence));
+                    });
+                } else {
+                    const sinceMs = lastTs - (cfg.nativeBackfillHours * 3600 * 1000);
+                    fetchedTrades = await deps.withRetries(
+                        () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
+                        cfg.sourceRetries,
+                        cfg.retryDelayMs,
+                        'native incremental fetch failed'
+                    );
+                    newTrades = this.filterTimeBasedNativeNewTrades(
+                        fetchedTrades,
+                        knownSequences,
+                        nativeLastTradeTs,
+                        lastTs,
+                        cfg.intervalSeconds
+                    );
+                }
+
+                if (fetchedTrades.length > 0) {
+                    nativeRecentTradeSequences = this.getNativeRecentTradeSequences(fetchedTrades);
+                    const latestTradeTs = Math.max(...fetchedTrades.map((t) => Number(t?.tsMs)).filter(Number.isFinite));
+                    if (Number.isFinite(latestTradeTs)) nativeLastTradeTs = latestTradeTs;
+                }
+
+                const incomingCandles = deps.tradesToCandles(newTrades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
+                nextCandles = deps.mergeCandles(existingCandles, incomingCandles, {
+                    onCollision: (existingCandle, incomingCandle) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
+                });
+
+                // Fill bounded no-trade gaps from native incremental fetch. Ordinary LP
+                // inactivity should remain a continuous flat 1h series; very large gaps stay
+                // visible for Kibana repair/stale-tail handling instead of carrying stale prices.
                 const bucketMs = Number(cfg.intervalSeconds) * 1000;
+                const nowMs = this.getNowMs();
+                const currentBucketStartMs = Math.floor(Number(nowMs) / bucketMs) * bucketMs;
+                const latestClosedBucketTs = currentBucketStartMs - bucketMs;
                 const earliestIncomingTs = incomingCandles.length > 0 ? incomingCandles[0][0] : null;
-                const gapBuckets = Number.isFinite(earliestIncomingTs) && earliestIncomingTs > lastTs
-                    ? Math.round((earliestIncomingTs - lastTs) / bucketMs) - 1
+                const gapEndTs = Number.isFinite(earliestIncomingTs) && earliestIncomingTs > lastTs
+                    ? earliestIncomingTs
+                    : latestClosedBucketTs + bucketMs;
+                const gapBuckets = Number.isFinite(gapEndTs) && gapEndTs > lastTs
+                    ? Math.round((gapEndTs - lastTs) / bucketMs) - 1
                     : 0;
-                const maxNativeGapFill = Number.isFinite(cfg.maxNativeGapFillCandles) ? cfg.maxNativeGapFillCandles : 3;
+                const maxNativeGapFill = Number.isFinite(cfg.maxNativeGapFillCandles)
+                    ? cfg.maxNativeGapFillCandles
+                    : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
                 if (gapBuckets <= maxNativeGapFill) {
                     nextCandles = this.fillNativeIncrementalClosedGaps(nextCandles, lastTs, cfg.intervalSeconds);
                 }
@@ -255,13 +396,18 @@ class MarketAdapterService {
                 : { gapCount: 0, missingTimestamps: [] };
 
             if (gapAnalysis.gapCount > 0 && deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function') {
-                const timeRange = this.buildGapRepairTimeRange(gapAnalysis.missingTimestamps, cfg.intervalSeconds, cfg.nativeBackfillHours);
+                const timeRange = this.buildGapRepairTimeRange(
+                    gapAnalysis.missingTimestamps,
+                    cfg.intervalSeconds,
+                    this.getGapRepairMaxHours(cfg)
+                );
                 if (timeRange) {
                     kibanaGapRepairAttempted = true;
                     try {
                         const kibanaGapCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
                             intervalSeconds: cfg.intervalSeconds,
                             consolidateByTimestamp: true,
+                            fillGapsToRequestedRange: false,
                             apiKey: null,
                             timeRange,
                         }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana gap repair failed');
@@ -294,6 +440,7 @@ class MarketAdapterService {
                     const historicalCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
                         intervalSeconds: cfg.intervalSeconds,
                         consolidateByTimestamp: true,
+                        fillGapsToRequestedRange: false,
                         apiKey: null,
                         timeRange: {
                             gte: new Date(backfillStartMs).toISOString(),
@@ -320,6 +467,10 @@ class MarketAdapterService {
                 kibanaGapRepairCount,
                 kibanaBackfillCount,
                 unresolvedGapCount: retainedGapAnalysis.gapCount,
+                nativeRecentTradeSequences,
+                nativeLastTradeTs,
+                nativeOverlapCount,
+                nativePagesFetched,
             };
         };
 
@@ -338,6 +489,10 @@ class MarketAdapterService {
         let kibanaGapRepairCount = 0;
         let kibanaBackfillCount = 0;
         let unresolvedGapCount = 0;
+        let nativeRecentTradeSequences = [];
+        let nativeLastTradeTs = null;
+        let nativeOverlapCount = null;
+        let nativePagesFetched = null;
 
         const loadResult = await loadCandles();
         nextCandles = loadResult.nextCandles;
@@ -345,6 +500,10 @@ class MarketAdapterService {
         kibanaGapRepairCount = loadResult.kibanaGapRepairCount;
         kibanaBackfillCount = loadResult.kibanaBackfillCount || 0;
         unresolvedGapCount = loadResult.unresolvedGapCount;
+        nativeRecentTradeSequences = Array.isArray(loadResult.nativeRecentTradeSequences) ? loadResult.nativeRecentTradeSequences : [];
+        nativeLastTradeTs = Number.isFinite(loadResult.nativeLastTradeTs) ? loadResult.nativeLastTradeTs : null;
+        nativeOverlapCount = Number.isFinite(loadResult.nativeOverlapCount) ? loadResult.nativeOverlapCount : null;
+        nativePagesFetched = Number.isFinite(loadResult.nativePagesFetched) ? loadResult.nativePagesFetched : null;
 
         const nowMs = this.getNowMs();
         ({ closedCandles, currentBucketStartMs } = this.selectClosedCandles(nextCandles, cfg.intervalSeconds, nowMs));
@@ -377,6 +536,10 @@ class MarketAdapterService {
                 kibanaGapRepairCount,
                 kibanaBackfillCount,
                 unresolvedGapCount,
+                nativeRecentTradeSequences,
+                nativeLastTradeTs,
+                nativeOverlapCount,
+                nativePagesFetched,
                 format: '[timestamp_ms, open, high, low, close, volume_A]',
             },
             candles: nextCandles,
@@ -400,6 +563,10 @@ class MarketAdapterService {
                 kibanaGapRepairCount,
                 kibanaBackfillCount,
                 unresolvedGapCount,
+                nativeRecentTradeSequences,
+                nativeLastTradeTs,
+                nativeOverlapCount,
+                nativePagesFetched,
                 lastCandleTs: rawLastCandleTs,
                 rawLastCandleTs,
                 lastClosedCandleTs: consumedClosedCandleTs,
@@ -419,6 +586,10 @@ class MarketAdapterService {
                 kibanaGapRepairCount,
                 kibanaBackfillCount,
                 unresolvedGapCount,
+                nativeRecentTradeSequences,
+                nativeLastTradeTs,
+                nativeOverlapCount,
+                nativePagesFetched,
                 amaPrice: null,
                 deltaPercent: null,
                 thresholdPercent: botThreshold,
@@ -476,6 +647,10 @@ class MarketAdapterService {
                 kibanaGapRepairCount,
                 kibanaBackfillCount,
                 unresolvedGapCount,
+                nativeRecentTradeSequences,
+                nativeLastTradeTs,
+                nativeOverlapCount,
+                nativePagesFetched,
                 lastCandleTs: rawLastCandleTs,
                 rawLastCandleTs,
                 lastClosedCandleTs: consumedClosedCandleTs,
@@ -495,6 +670,10 @@ class MarketAdapterService {
                 kibanaGapRepairCount,
                 kibanaBackfillCount,
                 unresolvedGapCount,
+                nativeRecentTradeSequences,
+                nativeLastTradeTs,
+                nativeOverlapCount,
+                nativePagesFetched,
                 amaPrice: null,
                 deltaPercent: null,
                 thresholdPercent: botThreshold,
@@ -1141,6 +1320,10 @@ class MarketAdapterService {
             kibanaGapRepairCount,
             kibanaBackfillCount,
             unresolvedGapCount,
+            nativeRecentTradeSequences,
+            nativeLastTradeTs,
+            nativeOverlapCount,
+            nativePagesFetched,
             lastCandleTs: rawLastCandleTs,
             rawLastCandleTs,
             lastClosedCandleTs: consumedClosedCandleTs,
@@ -1182,6 +1365,10 @@ class MarketAdapterService {
             kibanaGapRepairCount,
             kibanaBackfillCount,
             unresolvedGapCount,
+            nativeRecentTradeSequences,
+            nativeLastTradeTs,
+            nativeOverlapCount,
+            nativePagesFetched,
             amaPrice,
             previousCenterPrice,
             deltaPercent,

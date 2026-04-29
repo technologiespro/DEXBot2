@@ -4,7 +4,7 @@
 /**
  * Diagnostic: Inspect raw BitShares pool history API responses for pool 1.19.133.
  *
- * Usage: node scripts/diagnose-pool-history.js [--pool <id>] [--limit <n>]
+ * Usage: node scripts/diagnose-pool-history.js [--pool <id>] [--limit <n>] [--hours <n>] [--maxPages <n>]
  */
 
 const { BitShares, waitForConnected } = require('../modules/bitshares_client');
@@ -17,10 +17,107 @@ const LIMIT = process.argv.includes('--limit')
     ? Number(process.argv[process.argv.indexOf('--limit') + 1])
     : 10;
 
+const HOURS = process.argv.includes('--hours')
+    ? Number(process.argv[process.argv.indexOf('--hours') + 1])
+    : 24;
+
+const MAX_PAGES = process.argv.includes('--maxPages')
+    ? Number(process.argv[process.argv.indexOf('--maxPages') + 1])
+    : 20;
+
 const LP_OP_TYPE = 63;
 
 function fmt(obj) {
     try { return JSON.stringify(obj); } catch (_) { return String(obj); }
+}
+
+function parseChainTimeToMs(timeStr) {
+    if (!timeStr) return Number.NaN;
+    const s = String(timeStr);
+    return Date.parse(s.endsWith('Z') ? s : `${s}Z`);
+}
+
+function extractReceived(row) {
+    const resultPayload = Array.isArray(row?.op?.result) ? row.op.result[1] : null;
+    return Array.isArray(resultPayload?.received)
+        ? resultPayload.received[0]
+        : (resultPayload?.received || null);
+}
+
+function rowHasTradePayload(row) {
+    const opPayload = Array.isArray(row?.op?.op) ? row.op.op[1] : null;
+    return !!(opPayload?.amount_to_sell && extractReceived(row));
+}
+
+async function collectRecentPoolHistory(poolId, sinceMs, limit, maxPages) {
+    const rows = [];
+    const seenSequences = new Set();
+    let pages = 0;
+    let startSeq = null;
+    let hitOld = false;
+
+    while (pages < maxPages) {
+        const page = startSeq == null
+            ? await BitShares.history.get_liquidity_pool_history(poolId, null, null, limit, LP_OP_TYPE)
+            : await BitShares.history.get_liquidity_pool_history_by_sequence(poolId, startSeq, null, limit, LP_OP_TYPE);
+
+        if (!Array.isArray(page) || page.length === 0) break;
+        pages++;
+
+        for (const row of page) {
+            const seq = Number(row?.sequence);
+            if (Number.isFinite(seq)) {
+                if (seenSequences.has(seq)) continue;
+                seenSequences.add(seq);
+            }
+
+            const tsMs = parseChainTimeToMs(row?.time || row?.op?.block_time);
+            if (!Number.isFinite(tsMs)) continue;
+            if (tsMs < sinceMs) {
+                hitOld = true;
+                break;
+            }
+            rows.push(row);
+        }
+
+        const last = page[page.length - 1];
+        const lastSeq = Number(last?.sequence);
+        if (!Number.isFinite(lastSeq) || lastSeq <= 1 || hitOld) break;
+        startSeq = lastSeq - 1;
+    }
+
+    rows.sort((a, b) => parseChainTimeToMs(a.time) - parseChainTimeToMs(b.time));
+    return { rows, pages, hitOld, exhausted: pages >= maxPages && !hitOld };
+}
+
+function summarizeRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return {
+            count: 0,
+            validTrades: 0,
+            firstTime: null,
+            lastTime: null,
+            byHour: [],
+        };
+    }
+
+    const byHourMap = new Map();
+    let validTrades = 0;
+    for (const row of rows) {
+        if (rowHasTradePayload(row)) validTrades++;
+        const tsMs = parseChainTimeToMs(row?.time || row?.op?.block_time);
+        if (!Number.isFinite(tsMs)) continue;
+        const hour = new Date(Math.floor(tsMs / 3600000) * 3600000).toISOString();
+        byHourMap.set(hour, (byHourMap.get(hour) || 0) + 1);
+    }
+
+    return {
+        count: rows.length,
+        validTrades,
+        firstTime: rows[0]?.time || null,
+        lastTime: rows[rows.length - 1]?.time || null,
+        byHour: [...byHourMap.entries()],
+    };
 }
 
 function inspectRow(row, index) {
@@ -59,6 +156,7 @@ async function main() {
     console.log('══════════════════════════════════════════════');
     console.log(` Pool History Diagnostic — pool ${POOL_ID}`);
     console.log(` Limit: ${LIMIT} rows per call`);
+    console.log(` Paged summary window: last ${HOURS}h, maxPages=${MAX_PAGES}`);
     console.log('══════════════════════════════════════════════');
 
     const start = Date.now();
@@ -177,9 +275,34 @@ async function main() {
         console.log(`ERROR: ${err.message}`);
     }
 
+    // ── Test 7: Paged recent summary ──────────────────────────────
+    console.log(`\n\n═══ TEST 7: Paged LP history summary, last ${HOURS}h ═══`);
+    try {
+        const sinceMs = Date.now() - (HOURS * 3600 * 1000);
+        const collected = await collectRecentPoolHistory(POOL_ID, sinceMs, Math.min(101, LIMIT), MAX_PAGES);
+        const summary = summarizeRows(collected.rows);
+        console.log(`  Pages fetched:     ${collected.pages}`);
+        console.log(`  Reached ${HOURS}h boundary: ${collected.hitOld ? 'yes' : 'no'}`);
+        console.log(`  Exhausted maxPages: ${collected.exhausted ? 'yes' : 'no'}`);
+        console.log(`  Rows/trades:       ${summary.count}`);
+        console.log(`  Valid trade rows:  ${summary.validTrades}`);
+        console.log(`  Timeframe:         ${summary.firstTime || 'n/a'} → ${summary.lastTime || 'n/a'}`);
+        if (summary.byHour.length > 0) {
+            console.log('  Trades by hour:');
+            for (const [hour, count] of summary.byHour.slice(-Math.min(summary.byHour.length, 30))) {
+                console.log(`    ${hour}: ${count}`);
+            }
+        }
+    } catch (err) {
+        console.log(`ERROR: ${err.message}`);
+    }
+
     console.log('\n══════════════════════════════════════════════');
     console.log('Diagnostic complete.');
     console.log('══════════════════════════════════════════════');
+    if (typeof BitShares.disconnect === 'function') {
+        BitShares.disconnect();
+    }
 }
 
 main().catch(err => {

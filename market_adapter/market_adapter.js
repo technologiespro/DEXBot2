@@ -115,7 +115,7 @@ const DEFAULTS = {
     maxPages: 80,
     pageLimit: 100,
     once: false,
-    maxNativeGapFillCandles: 3,
+    maxNativeGapFillCandles: MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES,
     amaSlope: {
         lookbackBars:  MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
         maxSlopePct:   MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT,
@@ -693,6 +693,7 @@ async function fetchNativeTradesSince(poolId, sinceMs, pageLimit, maxPages) {
     const seenSequences = new Set();
     let pages = 0;
     let startSeq = null;
+    let hitOld = false;
 
     while (pages < maxPages) {
         let page;
@@ -705,7 +706,6 @@ async function fetchNativeTradesSince(poolId, sinceMs, pageLimit, maxPages) {
         if (!Array.isArray(page) || page.length === 0) break;
 
         pages++;
-        let hitOld = false;
 
         for (const row of page) {
             const seq = Number(row?.sequence);
@@ -721,19 +721,9 @@ async function fetchNativeTradesSince(poolId, sinceMs, pageLimit, maxPages) {
                 break;
             }
 
-            const opPayload = Array.isArray(row?.op?.op) ? row.op.op[1] : null;
-            const resultPayload = Array.isArray(row?.op?.result) ? row.op.result[1] : null;
-            const received = Array.isArray(resultPayload?.received)
-                ? resultPayload.received[0]
-                : (resultPayload?.received || null);
-
-            if (!opPayload?.amount_to_sell || !received) continue;
-
-            trades.push({
-                tsMs,
-                sell: opPayload.amount_to_sell,
-                received,
-            });
+            const trade = nativeHistoryRowToTrade(row);
+            if (!trade) continue;
+            trades.push(trade);
         }
 
         const last = page[page.length - 1];
@@ -744,10 +734,87 @@ async function fetchNativeTradesSince(poolId, sinceMs, pageLimit, maxPages) {
     }
 
     if (pages >= maxPages && !hitOld) {
-        console.warn(`[market_adapter] fetchNativeTradesSince exhausted maxPages (${maxPages}) before reaching sinceMs; data may be incomplete`);
+        throw new Error(`fetchNativeTradesSince exhausted maxPages (${maxPages}) before reaching sinceMs; native history is incomplete`);
     }
 
     return trades;
+}
+
+function nativeHistoryRowToTrade(row) {
+    const tsMs = parseChainTimeToMs(row?.time || row?.op?.block_time);
+    if (!Number.isFinite(tsMs)) return null;
+    const opPayload = Array.isArray(row?.op?.op) ? row.op.op[1] : null;
+    const resultPayload = Array.isArray(row?.op?.result) ? row.op.result[1] : null;
+    const received = Array.isArray(resultPayload?.received)
+        ? resultPayload.received[0]
+        : (resultPayload?.received || null);
+
+    if (!opPayload?.amount_to_sell || !received) return null;
+
+    const sequence = Number(row?.sequence);
+    return {
+        tsMs,
+        sequence: Number.isFinite(sequence) ? sequence : null,
+        sell: opPayload.amount_to_sell,
+        received,
+    };
+}
+
+async function fetchNativeTradesUntilOverlap(poolId, overlapSequences, minOverlap, pageLimit, maxPages) {
+    const { BitShares } = getBitsharesClient();
+    const overlapSet = new Set((Array.isArray(overlapSequences) ? overlapSequences : [])
+        .map((v) => String(v))
+        .filter((v) => v !== ''));
+    const trades = [];
+    const seenSequences = new Set();
+    let pages = 0;
+    let startSeq = null;
+    let overlapCount = 0;
+
+    if (overlapSet.size === 0) {
+        throw new Error('fetchNativeTradesUntilOverlap requires at least one overlap sequence');
+    }
+
+    while (pages < maxPages) {
+        const page = startSeq == null
+            ? await BitShares.history.get_liquidity_pool_history(poolId, null, null, pageLimit, LP_OP_TYPE)
+            : await BitShares.history.get_liquidity_pool_history_by_sequence(poolId, startSeq, null, pageLimit, LP_OP_TYPE);
+
+        if (!Array.isArray(page) || page.length === 0) break;
+        pages++;
+
+        for (const row of page) {
+            const seq = Number(row?.sequence);
+            const seqKey = Number.isFinite(seq) ? String(seq) : null;
+            if (seqKey) {
+                if (seenSequences.has(seqKey)) continue;
+                seenSequences.add(seqKey);
+            }
+
+            const trade = nativeHistoryRowToTrade(row);
+            if (!trade) continue;
+            trades.push(trade);
+
+            if (seqKey && overlapSet.has(seqKey)) {
+                overlapCount++;
+                if (overlapCount >= minOverlap) {
+                    return {
+                        trades,
+                        pages,
+                        overlapCount,
+                        reachedOverlap: true,
+                    };
+                }
+            }
+        }
+
+        const last = page[page.length - 1];
+        const lastSeq = Number(last?.sequence);
+        if (!Number.isFinite(lastSeq) || lastSeq <= 1) break;
+        startSeq = lastSeq - 1;
+    }
+
+    throw new Error(`fetchNativeTradesUntilOverlap exhausted maxPages (${maxPages}) before finding ${minOverlap} overlap trades`);
 }
 
 function writeGridResetTrigger(bot, payload) {
@@ -816,6 +883,7 @@ const adapterService = new MarketAdapterService({
     withRetries,
     kibanaSource,
     fetchNativeTradesSince,
+    fetchNativeTradesUntilOverlap,
     tradesToCandles,
     detectMissingCandleTimestamps,
     fillCandleGaps,

@@ -4,7 +4,7 @@ const path = require('path');
 console.log('Running market adapter service tests');
 
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
-const { detectMissingCandleTimestamps } = require('../market_adapter/candle_utils');
+const { detectMissingCandleTimestamps, fillCandleGaps, mergeCandles } = require('../market_adapter/candle_utils');
 const { calculateATR } = require('../market_adapter/core/strategies/atr/calculator');
 const { computeAmaSlopeWeights } = require('../market_adapter/core/strategies/ama_slope_model');
 const { normalizeAtrPeriod, normalizeMaxVolatilityOffset, normalizeVolatilityThreshold } = require('../market_adapter/core/config_normalizers');
@@ -1305,6 +1305,30 @@ async function testKibanaGapRepairPatchesMissingCandles() {
     );
 }
 
+function testGapRepairRangeUsesSuspiciousGapThresholdInsteadOfNativeBackfillWindow() {
+    const service = new MarketAdapterService({});
+    const baseTs = Date.parse('2026-04-28T00:00:00Z');
+    const hour = 3600000;
+    const missingTimestamps = Array.from({ length: 12 }, (_, i) => baseTs + ((i + 1) * hour));
+
+    const maxHours = service.getGapRepairMaxHours({
+        intervalSeconds: 3600,
+        nativeBackfillHours: 6,
+        maxNativeGapFillCandles: MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES,
+    });
+    const range = service.buildGapRepairTimeRange(missingTimestamps, 3600, maxHours);
+
+    assert.strictEqual(maxHours, 26, 'gap repair should be capped by the suspicious-gap threshold plus context, not nativeBackfillHours');
+    assert.deepStrictEqual(
+        range,
+        {
+            gte: new Date(baseTs).toISOString(),
+            lte: new Date(baseTs + (14 * hour) - 1).toISOString(),
+        },
+        'a 12-hour repair range should not be truncated to the 6h native backfill window'
+    );
+}
+
 async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
     let savedPayload = null;
 
@@ -1372,6 +1396,348 @@ async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
     assert.strictEqual(result.unresolvedGapCount, 1, 'remaining gaps should be exposed in the result');
     assert.strictEqual(state.bots['xrp-bts-0'].unresolvedGapCount, 1, 'state should retain unresolved gap count');
     assert.strictEqual(savedPayload.meta.unresolvedGapCount, 1, 'saved payload should retain unresolved gap count');
+}
+
+async function testNativeIncrementalFillsNoTradeGapsUpToStaleTailThreshold() {
+    let savedPayload = null;
+    const baseTs = Date.parse('2026-04-28T00:00:00Z');
+    const hour = 3600000;
+    const nowMs = baseTs + (14 * hour) + 1;
+
+    const service = new MarketAdapterService({
+        getNowMs: () => nowMs,
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 2 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [baseTs, 100, 100, 100, 100, 1],
+            ],
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        requiredCandlesForAma: () => 2,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [{ tsMs: baseTs + (13 * hour) }],
+        tradesToCandles: () => [
+            [baseTs + (13 * hour), 113, 113, 113, 113, 2],
+        ],
+        fillCandleGaps,
+        detectMissingCandleTimestamps,
+        mergeCandles,
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-native-gap.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-native-gap',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    const state = { bots: {} };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 24,
+        maxNativeGapFillCandles: MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should complete after bounded native no-trade fill');
+    assert.deepStrictEqual(
+        savedPayload.candles.map((c) => c[0]),
+        Array.from({ length: 14 }, (_, i) => baseTs + (i * hour)),
+        'a 12-hour no-trade gap before the next trade should be kept as continuous hourly candles'
+    );
+    assert.strictEqual(savedPayload.candles[1][4], 100, 'filled no-trade candles should carry the previous close');
+    assert.strictEqual(savedPayload.candles[12][4], 100, 'all no-trade candles before the new trade should stay flat');
+    assert.strictEqual(savedPayload.candles[13][4], 113, 'the new trade candle should remain the real incoming candle');
+    assert.strictEqual(result.unresolvedGapCount, 0, 'bounded no-trade gaps should not be reported as unresolved');
+}
+
+async function testNativeIncrementalDoesNotFillNoTradeGapsPastStaleTailThreshold() {
+    let savedPayload = null;
+    const baseTs = Date.parse('2026-04-28T00:00:00Z');
+    const hour = 3600000;
+    const nowMs = baseTs + (31 * hour) + 1;
+
+    const service = new MarketAdapterService({
+        getNowMs: () => nowMs,
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 2 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [baseTs, 100, 100, 100, 100, 1],
+            ],
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        requiredCandlesForAma: () => 2,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: true, staleAgeHours: 30.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        fillCandleGaps,
+        detectMissingCandleTimestamps,
+        mergeCandles,
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-native-long-gap.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-native-long-gap',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    const state = { bots: {} };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 24,
+        maxNativeGapFillCandles: MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should complete when long no-trade gaps are left unfilled');
+    assert.deepStrictEqual(
+        savedPayload.candles,
+        [[baseTs, 100, 100, 100, 100, 1]],
+        'no-trade gaps beyond the stale-tail threshold should not be synthesized by native incremental fill'
+    );
+    assert.strictEqual(result.staleData, true, 'long no-trade runs should surface as stale data');
+}
+
+async function testNativeIncrementalUsesTradeSequenceOverlap() {
+    let savedPayload = null;
+    let tradesToCandlesInput = null;
+    const baseTs = Date.parse('2026-04-28T00:00:00Z');
+    const hour = 3600000;
+
+    const service = new MarketAdapterService({
+        getNowMs: () => baseTs + (2 * hour) + 1,
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 2 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            meta: {
+                nativeRecentTradeSequences: [100, 99],
+                nativeLastTradeTs: baseTs + 1000,
+            },
+            candles: [
+                [baseTs, 100, 110, 90, 100, 10],
+            ],
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        requiredCandlesForAma: () => 2,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => {
+            throw new Error('time-based native fetch should not run when sequence overlap metadata exists');
+        },
+        fetchNativeTradesUntilOverlap: async (_poolId, overlapSequences, minOverlap) => {
+            assert.deepStrictEqual(overlapSequences, [100, 99], 'stored native sequence watermark should drive overlap fetch');
+            assert.strictEqual(minOverlap, 2, 'incremental fetch should require two overlapping trades');
+            return {
+                pages: 1,
+                overlapCount: 2,
+                trades: [
+                    { tsMs: baseTs + 3000, sequence: 102 },
+                    { tsMs: baseTs + 2000, sequence: 101 },
+                    { tsMs: baseTs + 1000, sequence: 100 },
+                    { tsMs: baseTs + 500, sequence: 99 },
+                ],
+            };
+        },
+        tradesToCandles: (trades) => {
+            tradesToCandlesInput = trades;
+            return [
+                [baseTs, 108, 120, 105, 115, 2],
+            ];
+        },
+        fillCandleGaps,
+        detectMissingCandleTimestamps,
+        mergeCandles,
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-native-overlap.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-native-overlap',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    const result = await service.processBot(bot, { bots: {} }, {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 24,
+        maxNativeGapFillCandles: MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES,
+    }, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should complete with sequence-overlap native fetch');
+    assert.deepStrictEqual(
+        tradesToCandlesInput.map((t) => t.sequence),
+        [102, 101],
+        'overlapping native trades must validate continuity but must not be re-aggregated'
+    );
+    assert.deepStrictEqual(
+        savedPayload.candles[0],
+        [baseTs, 100, 120, 90, 115, 12],
+        'new trades in an existing bucket should merge into the saved candle instead of replacing it with a partial candle'
+    );
+    assert.deepStrictEqual(savedPayload.meta.nativeRecentTradeSequences, [102, 101, 100, 99], 'native sequence watermark should advance from fetched rows');
+    assert.strictEqual(savedPayload.meta.nativeOverlapCount, 2, 'saved metadata should expose overlap count');
+    assert.strictEqual(savedPayload.meta.nativePagesFetched, 1, 'saved metadata should expose native page count');
+}
+
+async function testTimeBasedNativeIncrementalDoesNotReaggregateExistingBuckets() {
+    let savedPayload = null;
+    let tradesToCandlesInput = null;
+    const baseTs = Date.parse('2026-04-28T00:00:00Z');
+    const hour = 3600000;
+
+    const service = new MarketAdapterService({
+        getNowMs: () => baseTs + (2 * hour) + 1,
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 2 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [baseTs, 100, 110, 90, 105, 3],
+            ],
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        requiredCandlesForAma: () => 2,
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => [
+            { tsMs: baseTs + 3000, sequence: null },
+            { tsMs: baseTs + hour + 1000, sequence: null },
+        ],
+        tradesToCandles: (trades) => {
+            tradesToCandlesInput = trades;
+            return [
+                [baseTs + hour, 120, 120, 120, 120, 2],
+            ];
+        },
+        fillCandleGaps,
+        detectMissingCandleTimestamps,
+        mergeCandles,
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-native-time-window.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-native-time-window',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    const result = await service.processBot(bot, { bots: {} }, {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 24,
+        maxNativeGapFillCandles: MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES,
+    }, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should complete with time-based native fallback');
+    assert.deepStrictEqual(
+        tradesToCandlesInput.map((t) => t.tsMs),
+        [baseTs + hour + 1000],
+        'time-based native fallback should not re-aggregate trades from existing candle buckets'
+    );
+    assert.deepStrictEqual(
+        savedPayload.candles,
+        [
+            [baseTs, 100, 110, 90, 105, 3],
+            [baseTs + hour, 120, 120, 120, 120, 2],
+        ],
+        'existing candle OHLCV should remain unchanged when fallback fetch overlaps its bucket'
+    );
 }
 
 async function testClosedCandleGateSkipsCurrentPartialHour() {
@@ -2638,7 +3004,12 @@ async function run() {
     await testCenterClampedByBotBounds();
     await testContextCacheInvalidatesOnPoolChange();
     await testKibanaGapRepairPatchesMissingCandles();
+    testGapRepairRangeUsesSuspiciousGapThresholdInsteadOfNativeBackfillWindow();
     await testRemainingGapsAreReportedWhenKibanaHasNoPatchData();
+    await testNativeIncrementalFillsNoTradeGapsUpToStaleTailThreshold();
+    await testNativeIncrementalDoesNotFillNoTradeGapsPastStaleTailThreshold();
+    await testNativeIncrementalUsesTradeSequenceOverlap();
+    await testTimeBasedNativeIncrementalDoesNotReaggregateExistingBuckets();
     await testClosedCandleGateSkipsCurrentPartialHour();
     await testClosedCandleGateSurfacesStaleData();
     await testClosedCandlePruningRetainsFullDynamicWeightWarmup();
