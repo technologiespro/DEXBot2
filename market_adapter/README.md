@@ -1,8 +1,8 @@
 # Market Adapter
 
 The market adapter keeps AMA-priced bots centered on the current market. It
-updates LP candles, calculates the AMA center price, and writes a recalc
-trigger when the center moves far enough.
+updates LP candles, calculates the AMA center price, writes dynamic-weight
+snapshots, and emits a recalc trigger when the center moves far enough.
 
 DEXBot2 launches and stops the adapter automatically for active AMA bots.
 
