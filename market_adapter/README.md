@@ -42,26 +42,8 @@ when AMA-priced bots are active.
 
 ## AMA Profiles and Price Bounds
 
-The optimizer's active AMA presets are:
-
-| AMA preset | AMA fit cap |
-|------------|------------:|
-| AMA1 | 25% |
-| AMA2 | 30% |
-| AMA3 | 35% |
-| AMA4 | 40% |
-
-For inventory management, choose a bound multiplier larger than the AMA fit
-cap so the bot has room to absorb normal noise without making the book
-unnecessarily wide.
-
-The multiplier notation is symmetric around the grid center in ratio terms:
-`minPrice: "1.40x"` means `center / 1.40`, and `maxPrice: "1.40x"` means
-`center * 1.40`.
-
-- Suggested: `+5%` to `+10%` above the AMA fit cap
-- Wide: `+15%`
-- Excessive: `+20%+`
+Choose a bound multiplier larger than the AMA fit cap so the bot has room to
+absorb normal noise without making the book unnecessarily wide.
 
 | AMA preset | AMA fit cap | Suggested bound multiplier | Wide | Excessive |
 |------------|------------:|---------------------------:|-----:|----------:|
@@ -69,6 +51,10 @@ The multiplier notation is symmetric around the grid center in ratio terms:
 | AMA2 | 30% | 1.35x to 1.40x | 1.45x | 1.50x+ |
 | AMA3 | 35% | 1.40x to 1.45x | 1.50x | 1.55x+ |
 | AMA4 | 40% | 1.45x to 1.50x | 1.55x | 1.60x+ |
+
+The multiplier notation is symmetric around the grid center in ratio terms:
+`minPrice: "1.40x"` means `center / 1.40`, and `maxPrice: "1.40x"` means
+`center * 1.40`.
 
 Use the selected multiplier for both bounds.
 
