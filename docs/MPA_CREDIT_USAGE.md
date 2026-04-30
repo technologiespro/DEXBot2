@@ -2,6 +2,8 @@
 
 DEXBot2 supports native BitShares debt workflows through the bot-level `debtPolicy` config block. Each lending item declares its own collateral asset, and the runtime groups items by collateral to compute independent distributions.
 
+For the related AMA/grid side of the bot runtime, see [Market Adapter](../market_adapter/README.md).
+
 ## Configuration Format
 
 Add `debtPolicy` to a bot entry in `profiles/bots.json`.
@@ -258,6 +260,7 @@ Treat this file as runtime state, not primary configuration. The source of truth
 - `modules/credit_runtime.js`: debt workflow executor
 - `modules/dexbot_class.js`: runtime startup and watchdog lifecycle
 - `modules/bot_settings.js`: `debtPolicy` validation
+- `market_adapter/README.md`: AMA pricing, grid triggers, and dynamic-weight runtime
 - `modules/credential_policy.js`: signing constraints for credit and call-order operations
 - `tests/test_credit_runtime.js`: credit runtime behavior coverage
 - `tests/test_multi_asset_distribution.js`: collateral distribution and multi-asset state coverage

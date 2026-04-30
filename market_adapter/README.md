@@ -212,6 +212,9 @@ fresh LP candles per bot, computes the AMA-based market center, evaluates trend
 and volatility signals, writes dynamic weight snapshots, and emits recalc
 triggers when the grid should be rebuilt.
 
+For the similar bot-scoped debt workflow and collateral advisory path, see
+[MPA and Credit Usage](../docs/MPA_CREDIT_USAGE.md).
+
 The adapter runs independently from `dexbot.js`. It does not place orders,
 manage bot lifecycle, or edit bot configuration. Order execution and grid
 rebuilds stay owned by the bot runtime.

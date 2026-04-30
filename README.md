@@ -198,16 +198,27 @@ Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local boo
 
 ## 📚 Documentation
 
-For architecture, fund accounting, rotation mechanics, and development guides, see the **[docs/](docs/)** folder:
+### User-Facing Workflows
 
-- **[CREDENTIAL_SECURITY.md](docs/CREDENTIAL_SECURITY.md)** - Credential security model: key derivation, daemon-backed signing, session cache, runtime file hardening
-- **[FUND_MOVEMENT_AND_ACCOUNTING.md](docs/FUND_MOVEMENT_AND_ACCOUNTING.md)** - Fund accounting, grid topology, rotation mechanics
-- **[architecture.md](docs/architecture.md)** - System design, fill processing pipeline, testing strategy
-- **[COPY_ON_WRITE_MASTER_PLAN.md](docs/COPY_ON_WRITE_MASTER_PLAN.md)** - Copy-on-Write grid architecture
-- **[developer_guide.md](docs/developer_guide.md)** - Development guide, environment variables, examples, glossary
-- **[LOGGING.md](docs/LOGGING.md)** - Logging system documentation
-- **[WORKFLOW.md](docs/WORKFLOW.md)** - Project workflow and contribution guide
-- **[claw/](claw/)** - Claw integration layer: BitShares bridge, position management, launcher ops, and multi-runtime skill definitions ([README](claw/README.md), [API boundary](claw/docs/AI_BOT_LIBRARY_API.md))
+- **[Market Adapter README](market_adapter/README.md)** - AMA pricing, grid triggers, dynamic weights, and collateral advisory signals
+- **[MPA and Credit Usage](docs/MPA_CREDIT_USAGE.md)** - Bot-scoped debt policy, MPA borrowing, and credit offer workflows
+- **[Claw README](claw/README.md)** - Bridge setup, launcher commands, short MPA workflow, and example commands
+
+### Operational & Security
+
+- **[Credential Security](docs/CREDENTIAL_SECURITY.md)** - Key handling, daemon-backed signing, and runtime file hardening
+- **[Grid Recalculation](market_adapter/GRID_RECALCULATION.md)** - AMA delta threshold, grid reset triggers, and runtime recalc behavior
+- **[Fund Movement & Accounting](docs/FUND_MOVEMENT_AND_ACCOUNTING.md)** - Fund accounting, grid topology, and rotation mechanics
+
+### Reference Docs
+
+- **[Docs Index](docs/README.md)** - Main documentation hub
+- **[Claw API Boundary](claw/docs/AI_BOT_LIBRARY_API.md)** - Responsibility split between the AI layer and the DEXBot2 execution layer
+- **[Architecture](docs/architecture.md)** - System design, fill processing pipeline, and testing strategy
+- **[Developer Guide](docs/developer_guide.md)** - Development guide, environment variables, examples, and glossary
+- **[Copy-on-Write Plan](docs/COPY_ON_WRITE_MASTER_PLAN.md)** - Copy-on-Write grid architecture
+- **[Logging](docs/LOGGING.md)** - Logging system documentation
+- **[Workflow](docs/WORKFLOW.md)** - Project workflow and contribution guide
 
 ## 🤝 Contributing
 
