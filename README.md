@@ -205,12 +205,14 @@ Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local boo
 - **[Market Adapter README](market_adapter/README.md)** - AMA pricing, grid triggers, dynamic weights, and collateral advisory signals
 - **[MPA and Credit Usage](docs/MPA_CREDIT_USAGE.md)** - Bot-scoped debt policy, MPA borrowing, and credit offer workflows
 - **[Claw README](claw/README.md)** - Bridge setup, launcher commands, short MPA workflow, and example commands
+- **[Analysis](analysis/README.md)** - Research runners, chart generators, and tuning helpers for AMA fitting, trend detection, bot fitting, and TradingView exports
 
 ### Operational & Security
 
 - **[Credential Security](docs/CREDENTIAL_SECURITY.md)** - Key handling, daemon-backed signing, and runtime file hardening
 - **[Grid Recalculation](market_adapter/GRID_RECALCULATION.md)** - AMA delta threshold, grid reset triggers, and runtime recalc behavior
-- **[Fund Movement & Accounting](docs/FUND_MOVEMENT_AND_ACCOUNTING.md)** - Fund accounting, grid topology, and rotation mechanics
+- **[Logging](docs/LOGGING.md)** - Logging system documentation
+- **[Docker](docs/docker.md)** - Container build, release images, and secure startup
 
 ### Reference Docs
 
@@ -219,9 +221,8 @@ Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local boo
 - **[Architecture](docs/architecture.md)** - System design, fill processing pipeline, and testing strategy
 - **[Developer Guide](docs/developer_guide.md)** - Development guide, environment variables, examples, and glossary
 - **[Copy-on-Write Plan](docs/COPY_ON_WRITE_MASTER_PLAN.md)** - Copy-on-Write grid architecture
+- **[Fund Movement & Accounting](docs/FUND_MOVEMENT_AND_ACCOUNTING.md)** - Fund accounting, grid topology, and rotation mechanics
 - **[Evolution Report](docs/EVOLUTION.md)** - Project timeline, architecture phases, and release history
-- **[Logging](docs/LOGGING.md)** - Logging system documentation
-- **[Docker](docs/docker.md)** - Container build, release images, and secure startup
 - **[Workflow](docs/WORKFLOW.md)** - Project workflow and contribution guide
 
 ## 🤝 Contributing

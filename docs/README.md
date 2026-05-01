@@ -22,7 +22,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Credit Offers**: Accept/repay with auto-reborrow and LP-backed collateral valuation
 - **Watchdog Timing**: Dedicated credit deal renewal interval and expiry threshold settings
 
-### 📈 [Trend](../analysis/README.md)
+### 📈 [Analysis](../analysis/README.md)
 *Research runners, chart generators, and tuning helpers.*
 - **Trend Detection**: SMA, MACD, RSI, Hurst, Kalman, and regime analysis tools
 - **AMA Fitting**: Parameter fitting, comparison charts, and LP data workflows
