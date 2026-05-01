@@ -262,7 +262,7 @@ This patch closes several post-patch.23 correctness gaps discovered in productio
 
 ### Documentation
 
-- **COW Invariant/Evolution Docs Added** (`docs/COW_INVARIANTS.md`, `docs/COW_EVOLUTION_REPORT.md`, `docs/WORKFLOW.md`) - commit b76df19
+- **COW Invariant Docs Added** (`docs/COW_INVARIANTS.md`, `docs/WORKFLOW.md`) - commit b76df19
   - Added explicit invariant contracts and promotion-review references for safer patch promotion audits.
 
 ### Testing
@@ -360,9 +360,8 @@ This patch aligns BTS fee handling with the operation-fee lifecycle, hardens COW
 - **TOC Header Errors in 6 Module Files** (`modules/bots_file_lock.js`, `modules/graceful_shutdown.js`, `modules/order/async_lock.js`, `modules/order/format.js`, `modules/order/startup_reconcile.js`, `modules/order/sync_engine.js`) - commit 32be4dd
   - Fixed inaccurate section counts and added missing function entries across all affected modules.
 
-- **Project Evolution and Roadmap Documentation** (`docs/EVOLUTION.md`, `docs/IMPROVEMENT_ROADMAP.md`) - commit 2ec1ae3
+- **Project Evolution Documentation** (`docs/EVOLUTION.md`) - commit 2ec1ae3
   - Added comprehensive 499-line EVOLUTION.md documenting project history and architectural decisions.
-  - Added 486-line IMPROVEMENT_ROADMAP.md with future enhancement planning.
 
 - **AGENTS.md Cleanup** - commit c47acd6
   - Removed obsolete "Recent Updates" section.

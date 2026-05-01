@@ -6,7 +6,59 @@ This directory contains the comprehensive technical documentation for the DEXBot
 
 ---
 
-## 🛠️ Core System Documentation
+## 📘 User-Facing Workflows
+
+### 📡 [Market Adapter](../market_adapter/README.md)
+*Live AMA pricing, dynamic weights, and recalc trigger orchestration.*
+- **Quick Start**: Enable AMA, generate the whitelist, and start DEXBot2
+- **Settings**: Global, pair, and bot-specific adapter overrides
+- **Dynamic Weights**: How adapter signals write live weight snapshots
+- **Troubleshooting**: Common adapter startup and trigger issues
+
+### 💳 [MPA and Credit Usage](MPA_CREDIT_USAGE.md)
+*User-facing MPA and credit offer workflow guide.*
+- **Debt Policy**: Per-bot `debtPolicy.lending` configuration where each item declares its own `collateralAsset`
+- **MPA Borrowing**: Call-order updates with debt-first CR planning
+- **Credit Offers**: Accept/repay with auto-reborrow and LP-backed collateral valuation
+- **Watchdog Timing**: Dedicated credit deal renewal interval and expiry threshold settings
+
+### 🦀 [Claw README](../claw/README.md)
+*Bridge between DEXBot2 and external runtimes.*
+- **Purpose**: Exposes BitShares capabilities and DEXBot2 infrastructure through JSON/CLI bridges, MCP, and runtime-native skill packaging for OpenClaw, Hermes, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw.
+- **API Boundary**: Responsibility split between the AI decision layer and the DEXBot2 execution substrate ([AI_BOT_LIBRARY_API.md](../claw/docs/AI_BOT_LIBRARY_API.md))
+- **Tuning Reference**: Practical grid-tuning baselines ([DEXBOT2_TUNING_CHEAT_SHEET.md](../claw/docs/DEXBOT2_TUNING_CHEAT_SHEET.md))
+- **Position Management**: Health monitoring, margin planner, and dynamic weight policy
+- **Skills**: Presentation-only, concept-reference, and launcher-orchestration skill packs for bitshares-guide, margin-trading, launcher-ops, and shared references
+
+## 🔐 Operational & Security
+
+### 🔐 [Credential Security](CREDENTIAL_SECURITY.md)
+*How private keys are protected at rest, in transit, and in RAM.*
+- **Vault v2**: scrypt (N=2¹⁷) key derivation, per-record HKDF isolation, AES-256-GCM encryption
+- **Daemon-backed signing**: primary bot flow uses signing tokens; compatibility clients can still request raw keys
+- **Session cache**: encrypted HKDF re-encryption with a random salt that is never persisted
+- **Runtime hardening**: lstat + owner/mode/type checks on all sockets and ready files; bootstrap socket destroyed after first use
+
+### 📊 [Grid Recalculation](../market_adapter/GRID_RECALCULATION.md)
+*When and why the grid resets.*
+- **Three Independent Triggers**: AMA Delta (market move), RMS Divergence (state drift), and Regeneration (fund accumulation)
+- **Configuration**: Per-trigger thresholds and their defaults
+- **AMA Delta**: How the market adapter's price signal drives grid repositioning
+
+### 📝 [Logging System](LOGGING.md)
+*Observability and debugging.*
+- **Severity Levels**: Guidelines on using `info`, `warn`, `error`, and `debug`.
+- **Log Rotation**: Configuration for managing log file sizes and retention.
+- **Performance**: How the logging system minimizes overhead during high-frequency events.
+- **Batch Processing Logs**: Fill batching, recovery retry, and orphan-fill deduplication messages.
+
+### 🐳 [Docker](docker.md)
+*Container build, release images, and secure startup.*
+- **Build Flow**: Docker-based packaging for the bot runtime
+- **Release Images**: Container release and startup guidance
+- **Security**: Notes on secure container launch behavior
+
+## 📚 Reference Docs
 
 ### 🏛️ [Architecture](architecture.md)
 *The blueprint of the system.*
@@ -52,9 +104,17 @@ This directory contains the comprehensive technical documentation for the DEXBot
 *Release notes and documentation history.*
 - **Scope**: Versioned notes for patch releases and the current unreleased documentation refresh
 
----
+### 🧩 [Copy-on-Write Master Plan](COPY_ON_WRITE_MASTER_PLAN.md)
+*COW design, phases, and state machine details.*
+- **Architecture**: Master-grid projection model and rebalance flow
+- **Lifecycle**: Implementation phases, commit boundaries, and test coverage
+- **Safety**: Invariants and guardrails for concurrent updates
 
-## 🔬 Specialized Technical References
+### 🔒 [COW Invariants](COW_INVARIANTS.md)
+*Stable theory contract for COW pipeline.*
+- **Non-negotiable invariants**: Master immutability, commit atomicity, projection rules, accounting separation
+- **Test mapping**: Links each invariant to regression tests
+- **Review checklist**: Quick-use verification for COW/accounting changes
 
 ### 💰 [Fund Movement & Accounting](FUND_MOVEMENT_AND_ACCOUNTING.md)
 *The most critical part of the bot: safe capital management.*
@@ -68,67 +128,22 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Mixed Order Fund Validation**: Separate validation for BUY vs SELL order fund checks
 - **Fee Management**: Detailed logic for BTS fee reservations and market fee deductions.
 
-### 📊 [Grid Recalculation](../market_adapter/GRID_RECALCULATION.md)
-*When and why the grid resets.*
-- **Three Independent Triggers**: AMA Delta (market move), RMS Divergence (state drift), and Regeneration (fund accumulation)
-- **Configuration**: Per-trigger thresholds and their defaults
-- **AMA Delta**: How the market adapter's price signal drives grid repositioning
+## 🔬 Analysis & Research
 
-### 📝 [Logging System](LOGGING.md)
-*Observability and debugging.*
-- **Severity Levels**: Guidelines on using `info`, `warn`, `error`, and `debug`.
-- **Log Rotation**: Configuration for managing log file sizes and retention.
-- **Performance**: How the logging system minimizes overhead during high-frequency events.
-- **Batch Processing Logs**: Fill batching, recovery retry, and orphan-fill deduplication messages.
+### 📊 [Analysis](../analysis/README.md)
+*Research runners, chart generators, and tuning helpers.*
+- **Trend Detection**: SMA, MACD, RSI, Hurst, Kalman, and regime analysis tools
+- **AMA Fitting**: Parameter fitting, comparison charts, and LP data workflows
+- **Bot Fitting**: Grid parameter sweep backtests for AMA winners
+- **TradingView Exports**: Chart export utilities for visual analysis
 
-### 🔐 [Credential Security](CREDENTIAL_SECURITY.md)
-*How private keys are protected at rest, in transit, and in RAM.*
-- **Vault v2**: scrypt (N=2¹⁷) key derivation, per-record HKDF isolation, AES-256-GCM encryption
-- **Daemon-backed signing**: primary bot flow uses signing tokens; compatibility clients can still request raw keys
-- **Session cache**: encrypted HKDF re-encryption with a random salt that is never persisted
-- **Runtime hardening**: lstat + owner/mode/type checks on all sockets and ready files; bootstrap socket destroyed after first use
+## 🦀 Claw Integration Layer
 
-### 🧪 [Test Suite Updates](../tests/TEST_UPDATES_SUMMARY.md)
-*Reliability and regression testing.*
-- **Recent Fixes**: Summary of test coverage added for the most recent critical bugfixes.
-- **Integration Scenarios**: Documentation of complex multi-fill and partial-fill test cases.
-- **Fill Batching Tests**: Regression tests for fixed-cap batching and recovery retry system.
-- **Signal Tests**: Dynamic weight, derivative trap, and momentum gate coverage.
-- **Credit/Debt Tests**: CR planner, credit runtime, and MPA wiring validation.
-- **Verification**: How to use the test suite to validate grid stability.
-
-### 💳 [MPA and Credit Usage](MPA_CREDIT_USAGE.md)
-*User-facing MPA and credit offer workflow guide.*
-- **Debt Policy**: Per-bot `debtPolicy.lending` configuration where each item declares its own `collateralAsset`
-- **MPA Borrowing**: Call-order updates with debt-first CR planning
-- **Credit Offers**: Accept/repay with auto-reborrow and LP-backed collateral valuation
-- **Watchdog Timing**: Dedicated credit deal renewal interval and expiry threshold settings
-
-### 📈 [Improvement Roadmap](IMPROVEMENT_ROADMAP.md)
-*Prioritized backlog and architectural recommendations.*
-- **Historical Bug Patterns**: Race conditions, precision errors, state inconsistency
-- **Short-Term**: Property-based testing, integration stress tests
-- **Medium-Term**: Event sourcing, schema validation
-- **Long-Term**: Chaos engineering, formal verification, observability infrastructure
-
-### 🐄 [COW Evolution Report](COW_EVOLUTION_REPORT.md)
-*Copy-on-Write implementation timeline.*
-- **28 COW-specific commits** over 7 days (Feb 14–21, 2026)
-- **Phases**: Initial implementation, deadlock fixes, state centralization, atomic boundary shifts, invariant sealing
-- **Test Coverage**: Core mechanics, commit guards, concurrent fills, divergence correction
-
-### 🔒 [COW Invariants](COW_INVARIANTS.md)
-*Stable theory contract for COW pipeline.*
-- **Non-negotiable invariants**: Master immutability, commit atomicity, projection rules, accounting separation
-- **Test mapping**: Links each invariant to regression tests
-- **Review checklist**: Quick-use verification for COW/accounting changes
-
-### 🗑️ [Fallback Removal Summary](FALLBACK_REMOVAL_SUMMARY.md)
-*Systematic removal of permissive fallback mechanisms.*
-- **Precision fallbacks**: Strict asset precision validation at startup
-- **Price derivation**: Explicit mode semantics (`pool`, `book`, `auto`)
-- **Orphan matching**: Strict grid-to-chain matching only (no lax tolerance)
-- **Impact**: More predictable failures and clearer configuration requirements
+### [Claw API Boundary](../claw/docs/AI_BOT_LIBRARY_API.md)
+*Responsibility split between the AI layer and the DEXBot2 execution layer.*
+- **Boundary**: What belongs in the AI layer vs the runtime substrate
+- **Integration**: Bridge and skill packaging contracts for external runtimes
+- **Reference**: Complements [claw/README.md](../claw/README.md)
 
 ---
 
@@ -136,7 +151,6 @@ This directory contains the comprehensive technical documentation for the DEXBot
 
 While these docs explain the *why*, the *how* lives in the code. Key source modules:
 
-**Core Modules:**
 - **`modules/dexbot_class.js`**: Bot initialization, account setup, lifecycle orchestration, credit runtime startup, and shared runtime wiring
 - **`modules/dexbot_fill_runtime.js`**: Fill processing, replay-safe accounting, and fill queue handling
 - **`modules/dexbot_maintenance_runtime.js`**: Open-orders sync loop, blockchain fetch loop, grid maintenance, trigger handling, and market adapter watchdog
@@ -149,23 +163,9 @@ While these docs explain the *why*, the *how* lives in the code. Key source modu
 - **`modules/order/sync_engine.js`**: Blockchain synchronization, fill detection, order reconciliation
 - **`modules/credit_runtime.js`**: Bot-scoped debt workflow executor (MPA and credit offer accept/repay/reborrow)
 - **`modules/cr_planner.js`**: Shared collateral-ratio math layer for debt-first planning
-
-**Utilities & Support:**
 - **`modules/order/utils/math.js`**: Precision conversions, RMS divergence calculation, fund allocation math
 - **`modules/order/utils/order.js`**: Order state predicates, grid indexing, reconciliation helpers, delta building, index utilities
 - **`modules/order/utils/validate.js`**: Order validation, grid reconciliation, COW action building
 - **`modules/order/utils/system.js`**: System utilities, price derivation, fill deduplication
 - **`modules/order/startup_reconcile.js`**: Startup grid reconciliation and offline fill detection
 - **`modules/credential_policy.js`**: Signing policy validation and operation allowlists
-
----
-
-## 🦀 Claw Integration Layer
-
-### [claw/README.md](../claw/README.md)
-*Bridge between DEXBot2 and external runtimes.*
-- **Purpose**: Exposes BitShares capabilities and DEXBot2 infrastructure through JSON/CLI bridges, MCP, and runtime-native skill packaging for OpenClaw, Hermes, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw.
-- **API Boundary**: Responsibility split between the AI decision layer and the DEXBot2 execution substrate ([AI_BOT_LIBRARY_API.md](../claw/docs/AI_BOT_LIBRARY_API.md))
-- **Tuning Reference**: Practical grid-tuning baselines ([DEXBOT2_TUNING_CHEAT_SHEET.md](../claw/docs/DEXBOT2_TUNING_CHEAT_SHEET.md))
-- **Position Management**: Health monitoring, margin planner, and dynamic weight policy
-- **Skills**: Presentation-only, concept-reference, and launcher-orchestration skill packs for bitshares-guide, margin-trading, launcher-ops, and shared references

@@ -628,7 +628,6 @@ Where:
 | `docs/FUND_MOVEMENT_AND_ACCOUNTING.md` | 30 KB | Fund tracking model, invariants |
 | `docs/developer_guide.md` | 56 KB | Developer quick start, glossary, examples |
 | `docs/EVOLUTION.md` | 18 KB | Project history, 3-phase development |
-| `docs/IMPROVEMENT_ROADMAP.md` | 13 KB | Historical bugs, recommended improvements |
 | `docs/LOGGING.md` | 21 KB | Logging categories and configuration |
 | `docs/WORKFLOW.md` | 7 KB | Branch strategy, commit standards |
 | `docs/TEST_UPDATES_SUMMARY.md` | 14 KB | Test suite coverage and improvements |

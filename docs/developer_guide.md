@@ -1524,7 +1524,6 @@ console.log('Locked?', manager.isOrderLocked(order.id));
 - [Fund Movement Logic](FUND_MOVEMENT_AND_ACCOUNTING.md) - Algorithms and formulas
 - [Market Adapter](../market_adapter/README.md) - Signal pipeline and AMA integration
 - [MPA and Credit Usage](MPA_CREDIT_USAGE.md) - MPA and credit offer workflows
-- [Improvement Roadmap](IMPROVEMENT_ROADMAP.md) - Prioritized improvement backlog
 - [README](../README.md) - User documentation
 - [WORKFLOW](WORKFLOW.md) - Git branch workflow
 
