@@ -6,7 +6,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 
 ---
 
-## 📘 User-Facing Workflows
+## User-Facing Workflows
 
 ### 📡 [Market Adapter](../market_adapter/README.md)
 *Live AMA pricing, dynamic weights, and recalc trigger orchestration.*
@@ -22,6 +22,13 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Credit Offers**: Accept/repay with auto-reborrow and LP-backed collateral valuation
 - **Watchdog Timing**: Dedicated credit deal renewal interval and expiry threshold settings
 
+### 📈 [Trend](../analysis/README.md)
+*Research runners, chart generators, and tuning helpers.*
+- **Trend Detection**: SMA, MACD, RSI, Hurst, Kalman, and regime analysis tools
+- **AMA Fitting**: Parameter fitting, comparison charts, and LP data workflows
+- **Bot Fitting**: Grid parameter sweep backtests for AMA winners
+- **TradingView Exports**: Chart export utilities for visual analysis
+
 ### 🦀 [Claw README](../claw/README.md)
 *Bridge between DEXBot2 and external runtimes.*
 - **Purpose**: Exposes BitShares capabilities and DEXBot2 infrastructure through JSON/CLI bridges, MCP, and runtime-native skill packaging for OpenClaw, Hermes, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw.
@@ -30,7 +37,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Position Management**: Health monitoring, margin planner, and dynamic weight policy
 - **Skills**: Presentation-only, concept-reference, and launcher-orchestration skill packs for bitshares-guide, margin-trading, launcher-ops, and shared references
 
-## 🔐 Operational & Security
+## Operational & Security
 
 ### 🔐 [Credential Security](CREDENTIAL_SECURITY.md)
 *How private keys are protected at rest, in transit, and in RAM.*
@@ -58,7 +65,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Release Images**: Container release and startup guidance
 - **Security**: Notes on secure container launch behavior
 
-## 📚 Reference Docs
+## Reference Docs
 
 ### 🏛️ [Architecture](architecture.md)
 *The blueprint of the system.*
@@ -128,26 +135,9 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Mixed Order Fund Validation**: Separate validation for BUY vs SELL order fund checks
 - **Fee Management**: Detailed logic for BTS fee reservations and market fee deductions.
 
-## 🔬 Analysis & Research
-
-### 📊 [Analysis](../analysis/README.md)
-*Research runners, chart generators, and tuning helpers.*
-- **Trend Detection**: SMA, MACD, RSI, Hurst, Kalman, and regime analysis tools
-- **AMA Fitting**: Parameter fitting, comparison charts, and LP data workflows
-- **Bot Fitting**: Grid parameter sweep backtests for AMA winners
-- **TradingView Exports**: Chart export utilities for visual analysis
-
-## 🦀 Claw Integration Layer
-
-### [Claw API Boundary](../claw/docs/AI_BOT_LIBRARY_API.md)
-*Responsibility split between the AI layer and the DEXBot2 execution layer.*
-- **Boundary**: What belongs in the AI layer vs the runtime substrate
-- **Integration**: Bridge and skill packaging contracts for external runtimes
-- **Reference**: Complements [claw/README.md](../claw/README.md)
-
 ---
 
-## 📂 Source Code Map
+## Source Code Map
 
 While these docs explain the *why*, the *how* lives in the code. Key source modules:
 
