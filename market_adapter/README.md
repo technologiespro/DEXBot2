@@ -1,8 +1,8 @@
 # Market Adapter
 
 The market adapter keeps AMA-priced bots centered on the current market. It
-updates LP candles, calculates the AMA center price, writes dynamic-weight
-snapshots, and emits a recalc trigger when the center moves far enough.
+updates LP candles, calculates the AMA center price, applies optional dynamic
+weights, and emits a recalc trigger when the center moves far enough.
 
 DEXBot2 launches and stops the adapter automatically for active AMA bots.
 
@@ -10,24 +10,21 @@ DEXBot2 launches and stops the adapter automatically for active AMA bots.
 
 ### 1. Enable AMA on a Bot
 
-Set the bot's `gridPrice` to `ama` in `profiles/bots.json` or through
-`node dexbot bots`.
-
-Valid values are `ama`, `ama1`, `ama2`, `ama3`, and `ama4`.
-
-`ama` uses the pair's default AMA profile from `profiles/market_profiles.json`
-and is the recommended normal setting.
+Set the bot's `gridPrice` to `ama` in `profiles/bots.json` or through the
+`node dexbot bots` menu. Valid values are `ama`, `ama1`, `ama2`, `ama3`, and
+`ama4`; `ama` is the recommended normal setting.
 
 ### 2. Generate the Whitelist
 
-Generate the whitelist from the AMA-enabled bots to allow live AMA grid writes
-and recalc triggers:
+Generate the whitelist from the AMA-enabled bots so the adapter can write live
+AMA grid snapshots and recalc triggers:
 
 ```bash
 npm run market-adapter:whitelist
 ```
 
-This writes `profiles/market_adapter_whitelist.json` for the currently AMA-enabled bots.
+This writes `profiles/market_adapter_whitelist.json` for the currently
+AMA-enabled bots.
 
 To whitelist AMA pricing but keep dynamic weights disabled:
 
@@ -41,6 +38,11 @@ Start DEXBot2. The bot runtime will launch and stop the adapter automatically
 when AMA-priced bots are active.
 
 ## AMA Profiles and Price Bounds
+
+`gridPrice: "ama"` uses the pair's `defaultAma` from
+`profiles/market_profiles.json`. `gridPrice: "ama1"` through
+`gridPrice: "ama4"` force a specific preset. If no pair profile matches, the
+bot's `ama` block is used as the fallback.
 
 Choose a bound multiplier larger than the AMA fit cap so the bot has room to
 absorb normal noise without making the book unnecessarily wide.
@@ -57,66 +59,6 @@ The multiplier notation is symmetric around the grid center in ratio terms:
 `center * 1.40`.
 
 Use the selected multiplier for both bounds.
-
-## What the Adapter Writes
-
-For each whitelisted AMA bot, the adapter may write:
-
-| File | Purpose |
-|------|---------|
-| `profiles/orders/<botKey>.dynamicgrid.json` | Persisted AMA center snapshot and optional dynamic weights used by the bot runtime |
-| `profiles/recalculate.<botKey>.trigger` | Signal for `dexbot.js` to rebuild the grid |
-| `market_adapter/state/market_adapter_state.json` | Full runtime state and diagnostics |
-| `market_adapter/state/market_adapter_centers.json` | Lightweight center-price snapshot |
-
-`dexbot.js` consumes the recalc trigger and handles the grid rebuild. The market
-adapter does not place orders, start bots, stop bots, or edit `profiles/bots.json`.
-
-### Dynamic Grid Snapshot
-
-`profiles/orders/<botKey>.dynamicgrid.json` is the live snapshot that the bot
-runtime reloads on selected rebalance and maintenance paths. It is written with
-the current AMA-derived center and, when enabled, the live dynamic-weight
-payload.
-
-Typical fields:
-
-```json
-{
-  "centerPrice": 1294.6,
-  "amaCenterPrice": 1294.6,
-  "updatedAt": "2026-03-01T00:00:00.000Z",
-  "source": "market_adapter/market_adapter.js",
-  "dynamicWeights": {
-    "effectiveWeights": { "sell": 0.45, "buy": 0.55 },
-    "baseWeights": { "sell": 0.5, "buy": 0.5 },
-    "isReady": true
-  }
-}
-```
-
-- `centerPrice` is the persisted grid baseline used for future delta checks.
-- `amaCenterPrice` is the raw AMA output before downstream handling.
-- `dynamicWeights` is present only when live dynamic weights were computed and
-  the bot is allowed to consume them.
-- The runtime applies `dynamicWeights` only when the bot is whitelisted for
-  `dynamicWeight` and the snapshot reports `isReady: true`.
-- The bot reads this snapshot before fill processing and other selected
-  structural maintenance so new orders use the latest accepted center and
-  weights.
-
-## Dry-Run Safety
-
-Bots that are not AMA-whitelisted are processed in dry-run mode. Their candles
-and state are computed, but live grid files and recalc triggers are suppressed.
-
-| Invocation | Behavior |
-|---|---|
-| `node market_adapter/market_adapter.js` | Whitelisted bots write live files; others dry-run |
-| `node market_adapter/market_adapter.js --dryRun` | All bots dry-run |
-| `node market_adapter/market_adapter.js --whitelist-all` | All AMA bots write live files |
-
-Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 
 ## Trigger Threshold
 
@@ -138,19 +80,12 @@ general settings menu.
 
 ## Settings and Overrides
 
-Use this order when you want to change market-adapter behavior:
+Market-adapter settings resolve in this order:
 
 1. Built-in defaults in `modules/constants.js`
 2. Global overrides in `profiles/general.settings.json` or `node dexbot bots`
 3. Pair-specific overrides in `profiles/market_profiles.json`
 4. Bot-specific overrides in `profiles/market_adapter_settings.json`
-
-For AMA selection, the bot config in `profiles/bots.json` decides which preset
-to use:
-
-- `gridPrice: "ama"` uses the pair's `defaultAma`
-- `gridPrice: "ama1"` through `gridPrice: "ama4"` force that exact preset
-- If no pair profile matches, the bot's `ama` block becomes the fallback
 
 `profiles/market_adapter_settings.json` has its own override layers:
 
@@ -158,28 +93,33 @@ to use:
 - `pairs[].marketAdapterSettings` overrides one market pair
 - `pairs[].botOverrides[<botName>]` overrides one bot inside that pair
 
+## Dry-Run Safety
+
+Bots that are not AMA-whitelisted are processed in dry-run mode. Their candles
+and state are computed, but live grid files and recalc triggers are suppressed.
+
+| Invocation | Behavior |
+|---|---|
+| `node market_adapter/market_adapter.js` | Whitelisted bots write live files; others dry-run |
+| `node market_adapter/market_adapter.js --dryRun` | All bots dry-run |
+| `node market_adapter/market_adapter.js --whitelist-all` | All AMA bots write live files |
+
+Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
+
 ## Dynamic Weights
 
-Dynamic weights are controlled separately from AMA pricing:
-
-`ama` allows live AMA grid files and recalc triggers.
-`dynamicWeight` allows the adapter's buy/sell weights to be written and applied
-by the bot runtime.
+Dynamic weights are controlled separately from AMA pricing. `ama` allows live
+AMA grid files and recalc triggers. `dynamicWeight` allows the adapter's
+buy/sell weights to be written and applied by the bot runtime.
 
 Dynamic weights start from the bot's configured `weightDistribution`. These
 configured values are the static baseline.
 
-On each closed-candle cycle, the adapter adds two live components:
+On each closed-candle cycle, the adapter adds an asymmetric trend offset and a
+symmetric volatility penalty:
 
-- Asymmetric trend offset: moves weight from one side to the other.
-- Symmetric volatility penalty: reduces both sides during volatile conditions.
-
-The result is:
-
-```text
-effectiveSell = staticSell + trendOffset + volatilityPenalty
-effectiveBuy  = staticBuy  - trendOffset + volatilityPenalty
-```
+- `effectiveSell = staticSell + trendOffset + volatilityPenalty`
+- `effectiveBuy = staticBuy - trendOffset + volatilityPenalty`
 
 A positive `trendOffset` shifts weight toward sell and away from buy. A
 negative `trendOffset` shifts weight toward buy and away from sell.
@@ -338,6 +278,54 @@ Per cycle, per processed bot, the adapter can produce:
 | `market_adapter/state/market_adapter_state.json` | Full runtime state and diagnostics |
 | `market_adapter/state/market_adapter_centers.json` | Lightweight center-price snapshot |
 
+### What the Adapter Writes
+
+For each whitelisted AMA bot, the adapter may write:
+
+| File | Purpose |
+|------|---------|
+| `profiles/orders/<botKey>.dynamicgrid.json` | Persisted AMA center snapshot and optional dynamic weights used by the bot runtime |
+| `profiles/recalculate.<botKey>.trigger` | Signal for `dexbot.js` to rebuild the grid |
+| `market_adapter/state/market_adapter_state.json` | Full runtime state and diagnostics |
+| `market_adapter/state/market_adapter_centers.json` | Lightweight center-price snapshot |
+
+`dexbot.js` consumes the recalc trigger and handles the grid rebuild. The market
+adapter does not place orders, start bots, stop bots, or edit
+`profiles/bots.json`.
+
+### Dynamic Grid Snapshot
+
+`profiles/orders/<botKey>.dynamicgrid.json` is the live snapshot that the bot
+runtime reloads on selected rebalance and maintenance paths. It is written with
+the current AMA-derived center and, when enabled, the live dynamic-weight
+payload.
+
+Typical fields:
+
+```json
+{
+  "centerPrice": 1294.6,
+  "amaCenterPrice": 1294.6,
+  "updatedAt": "2026-03-01T00:00:00.000Z",
+  "source": "market_adapter/market_adapter.js",
+  "dynamicWeights": {
+    "effectiveWeights": { "sell": 0.45, "buy": 0.55 },
+    "baseWeights": { "sell": 0.5, "buy": 0.5 },
+    "isReady": true
+  }
+}
+```
+
+- `centerPrice` is the persisted grid baseline used for future delta checks.
+- `amaCenterPrice` is the raw AMA output before downstream handling.
+- `dynamicWeights` is present only when live dynamic weights were computed and
+  the bot is allowed to consume them.
+- The runtime applies `dynamicWeights` only when the bot is whitelisted for
+  `dynamicWeight` and the snapshot reports `isReady: true`.
+- The bot reads this snapshot before fill processing and other selected
+  structural maintenance so new orders use the latest accepted center and
+  weights.
+
 ### Module Map
 
 ```text
@@ -365,15 +353,6 @@ market_adapter/
 |-- data/                          runtime candle caches and exports
 `-- state/                         runtime state, centers, and lock file
 ```
-
-### AMA Resolution
-
-`gridPrice` selects the AMA profile: `ama` uses the pair's default profile
-`defaultAma` value, usually `AMA3`, while `ama1` through `ama4` force the
-corresponding AMA profile.
-
-Pair profiles live in `profiles/market_profiles.json`. If no pair-specific
-profile is available, built-in defaults are used.
 
 ### Whitelist Semantics
 
@@ -509,8 +488,3 @@ Important fields in `market_adapter/state/market_adapter_state.json`:
 | `weights` | Current dynamic buy/sell weights |
 | `collateralRecommendation` | Advisory collateral-ratio hint |
 
-Typical log line:
-
-```text
-[XRP-BTS] native, candles=720, ama=1294.60000, delta=1.10%, threshold=1.00% TRIGGERED -> profiles/recalculate.xrp-bts-0.trigger trend=UP weights[buy=0.55, sell=0.45]
-```
