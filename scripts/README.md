@@ -51,6 +51,15 @@ bash scripts/clear-orders.sh
 bash scripts/clear-all.sh
 ```
 
+### Wipe Settings
+**File:** `clean-settings.sh`
+**Purpose:** Delete the three settings files and restore built-in defaults on next run.
+```bash
+# IRREVERSIBLE: Deletes profiles/general.settings.json, profiles/market_profiles.json,
+# and profiles/market_adapter_settings.json
+bash scripts/clean-settings.sh
+```
+
 ---
 
 ## 📊 DIAGNOSTICS & VALIDATION

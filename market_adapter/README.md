@@ -100,6 +100,31 @@ Configure the default threshold in `profiles/general.settings.json`:
 }
 ```
 
+You can also adjust this global setting from `node dexbot bots` in the
+general settings menu.
+
+## Settings and Overrides
+
+Use this order when you want to change market-adapter behavior:
+
+1. Built-in defaults in `modules/constants.js`
+2. Global overrides in `profiles/general.settings.json` or `node dexbot bots`
+3. Pair-specific overrides in `profiles/market_profiles.json`
+4. Bot-specific overrides in `profiles/market_adapter_settings.json`
+
+For AMA selection, the bot config in `profiles/bots.json` decides which preset
+to use:
+
+- `gridPrice: "ama"` uses the pair's `defaultAma`
+- `gridPrice: "ama1"` through `gridPrice: "ama4"` force that exact preset
+- If no pair profile matches, the bot's `ama` block becomes the fallback
+
+`profiles/market_adapter_settings.json` has its own override layers:
+
+- `globals` applies to every market and bot
+- `pairs[].marketAdapterSettings` overrides one market pair
+- `pairs[].botOverrides[<botName>]` overrides one bot inside that pair
+
 ## Dynamic Weights
 
 Dynamic weights are controlled separately from AMA pricing:

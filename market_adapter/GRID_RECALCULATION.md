@@ -9,7 +9,7 @@ The AMA center baseline supports the AMA trigger, but is not a separate trigger 
 
 | Mechanism | Trigger | Config | Location | Scope |
 |-----------|---------|--------|----------|-------|
-| **AMA Delta** | Market price moved significantly | `AMA_DELTA_THRESHOLD_PERCENT` | `general.settings.json` | Global (all bots) |
+| **AMA Delta** | Market price moved significantly | `AMA_DELTA_THRESHOLD_PERCENT` | `general.settings.json` | Global default; pair/bot overrides in `market_adapter_settings.json` |
 | **RMS Divergence** | Grid state diverged from blockchain | `RMS_PERCENTAGE` | `general.settings.json` | Global (all bots) |
 | **Regeneration** | Available funds exceed threshold | `GRID_REGENERATION_PERCENTAGE` | `constants.js` | Per-side (BUY/SELL) |
 
@@ -45,10 +45,16 @@ Monitors the Adaptive Moving Average (AMA) of market prices. When the AMA center
 }
 ```
 
+For a narrower override, set `deltaThresholdPercent` in
+`profiles/market_adapter_settings.json` under either:
+
+- `pairs[].marketAdapterSettings` for one market pair
+- `pairs[].botOverrides[<botName>]` for one bot in that pair
+
 **Parameters:**
 - `AMA_DELTA_THRESHOLD_PERCENT`: Percentage change in AMA center that triggers grid reset
   - Default: `2.5%`
-  - Range: `0.1` to `50.0` (configurable via CLI and bot editor)
+  - Range: `0.1` to `50.0` (configurable via CLI and `node dexbot bots` general settings)
   - Example: If set to `1`, grid recalculates when AMA center moves ±1% from last center
 
 ### CLI Override
@@ -69,6 +75,12 @@ node market_adapter/market_adapter.js --deltaPercent 2
   }
 }
 ```
+
+**How this interacts with market profiles:**
+- `profiles/market_profiles.json` wins first for matched markets
+- `gridPrice: "ama"` uses the pair's `defaultAma`
+- `gridPrice: "ama1"` through `gridPrice: "ama4"` force that exact preset
+- If no pair profile matches, the bot's `ama` block is used as the fallback
 
 **AMA Parameters:**
 - `enabled`: Whether to track AMA and trigger grid resets (true/false)
@@ -100,6 +112,11 @@ node market_adapter/market_adapter.js --deltaPercent 2
 - Grid recalculates too frequently (excessive churn)
 - Market is choppy/sideways
 - You want fewer but larger recalculations
+
+To change the threshold for every bot, edit `profiles/general.settings.json`
+or use the `node dexbot bots` general settings menu. To change the AMA preset
+used by a specific market, edit `profiles/market_profiles.json`. To change the
+fallback bot-level AMA settings, edit the bot entry in `profiles/bots.json`.
 
 **Decrease threshold (e.g., 1% → 0.5%) if:**
 - Grid reacts too slowly to market moves
