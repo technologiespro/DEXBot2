@@ -438,7 +438,6 @@ class OrderManager {
         };
 
         this.resetFunds();
-        this.collateralOffsets = { buy: 0, sell: 0 };
         this.targetSpreadCount = 0;
         this.currentSpreadCount = 0;
         this.outOfSpread = 0;
@@ -669,16 +668,6 @@ class OrderManager {
 
         if (shouldCapBuy) this.funds.available.buy = Math.min(this.funds.available.buy, Math.max(0, allocatedBuy));
         if (shouldCapSell) this.funds.available.sell = Math.min(this.funds.available.sell, Math.max(0, allocatedSell));
-    }
-
-    setCollateralOffsets({ buy = 0, sell = 0 } = {}) {
-        this.collateralOffsets = {
-            buy: toFiniteNumber(buy, 0),
-            sell: toFiniteNumber(sell, 0)
-        };
-        if (typeof this.applyBotFundsAllocation === 'function') {
-            this.applyBotFundsAllocation();
-        }
     }
 
     async recalculateFunds() {

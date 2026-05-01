@@ -103,17 +103,20 @@ async function main() {
       maxPrice: '3x',
       incrementPercent: 0.5,
       debtPolicy: {
-        mpa: {
+        lending: [{
+          asset: 'HONEST.USD',
+          collateralAsset: 'BTS',
+          type: 'mpa',
           maxBorrowAmount: 1000,
           maxCollateralAmount: 10000,
           minCollateralRatio: 2,
           maxCollateralRatio: 2.5,
-        },
+        }],
       },
     }, { logPrefix: '[test]' });
 
     const runtime = bot._getCreditRuntime();
-    assert(runtime, 'credit runtime should be created when debtPolicy exists');
+    assert(runtime, 'credit runtime should be created when supported debtPolicy.lending exists');
 
     await bot._setupCreditRuntime();
     assert.strictEqual(runtime.loadStateCalls, 1, 'startup wiring should load runtime state');
@@ -126,6 +129,21 @@ async function main() {
     bot._setupCreditWatchdogInterval();
     assert.ok(bot._creditWatchdogInterval, 'credit watchdog interval should be created');
     assert.strictEqual(runtime.runCreditWatchdogCalls, 0, 'watchdog should not fire immediately');
+
+    const legacyBot = new DEXBot({
+      name: 'legacy-credit-bot',
+      active: true,
+      dryRun: false,
+      preferredAccount: 'alice',
+      assetA: 'BTS',
+      assetB: 'HONEST.USD',
+      startPrice: 'pool',
+      minPrice: '3x',
+      maxPrice: '3x',
+      incrementPercent: 0.5,
+      debtPolicy: { mpa: { targetCollateralRatio: 2 } },
+    }, { logPrefix: '[test-legacy]' });
+    assert.strictEqual(legacyBot._getCreditRuntime(), null, 'legacy flat debtPolicy should not create a no-op credit runtime');
   } finally {
     bot._stopCreditWatchdogInterval();
     restore();

@@ -581,6 +581,314 @@ async function testMpaPrecisionAwareBroadcast() {
   }
 }
 
+async function testMpaDebtFailureFallsBackToCollateral() {
+  const calls = [];
+  const dbCalls = [];
+  const callOrders = [
+    {
+      id: '1.8.10',
+      borrower: '1.2.3',
+      debt: { amount: 10000, asset_id: '1.3.10' },
+      collateral: { amount: 25000, asset_id: '1.3.0' },
+      call_price: {
+        base: { amount: 200, asset_id: '1.3.0' },
+        quote: { amount: 100, asset_id: '1.3.10' },
+      },
+    },
+  ];
+  const restore = installStubs(calls, dbCalls, {
+    assetsById: {
+      '1.3.10': {
+        id: '1.3.10',
+        symbol: 'HONEST.USD',
+        precision: 2,
+        bitasset_data_id: '2.4.1',
+      },
+      '1.3.0': {
+        id: '1.3.0',
+        symbol: 'BTS',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+    },
+    bitassetObjects: {
+      '2.4.1': {
+        id: '2.4.1',
+        current_feed: {
+          settlement_price: {
+            base: { amount: 200, asset_id: '1.3.0' },
+            quote: { amount: 100, asset_id: '1.3.10' },
+          },
+        },
+      },
+    },
+    callOrders,
+    onExecuteBatch: async ({ operations }) => {
+      const op = operations[0];
+      if (op.op_name !== 'call_order_update') return;
+      const debtDelta = Number(op.op_data?.delta_debt?.amount || 0);
+      const collateralDelta = Number(op.op_data?.delta_collateral?.amount || 0);
+      if (debtDelta < 0) {
+        throw new Error('insufficient MPA balance');
+      }
+      callOrders[0].debt.amount += debtDelta;
+      callOrders[0].collateral.amount += collateralDelta;
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-mpa-fallback-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-mpa-fallback',
+        debtPolicy: {
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              collateralAsset: 'BTS',
+              type: 'mpa',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralAmount: 10000,
+              minCollateralRatio: 2,
+              maxCollateralRatio: 2.5,
+              targetCollateralRatio: 2.2,
+            },
+          ],
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    const result = await runtime.runMaintenance('periodic');
+
+    assert.strictEqual(calls.length, 2, 'runtime should try the debt leg and then a collateral fallback');
+    assert.strictEqual(calls[0].operations[0].op_data.delta_debt.amount < 0, true, 'first leg should try to reduce debt');
+    assert.strictEqual(calls[1].operations[0].op_data.delta_debt.amount, 0, 'fallback should not change debt');
+    assert.strictEqual(calls[1].operations[0].op_data.delta_collateral.amount > 0, true, 'fallback should add collateral');
+    assert.strictEqual(result.mpa[0].executed[0].leg, 'collateral-fallback', 'result should record collateral fallback execution');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testMpaDebtFailureDoesNotFallbackOnAmbiguousError() {
+  const calls = [];
+  const dbCalls = [];
+  const callOrders = [
+    {
+      id: '1.8.11',
+      borrower: '1.2.3',
+      debt: { amount: 10000, asset_id: '1.3.10' },
+      collateral: { amount: 25000, asset_id: '1.3.0' },
+      call_price: {
+        base: { amount: 200, asset_id: '1.3.0' },
+        quote: { amount: 100, asset_id: '1.3.10' },
+      },
+    },
+  ];
+  const restore = installStubs(calls, dbCalls, {
+    assetsById: {
+      '1.3.10': {
+        id: '1.3.10',
+        symbol: 'HONEST.USD',
+        precision: 2,
+        bitasset_data_id: '2.4.1',
+      },
+      '1.3.0': {
+        id: '1.3.0',
+        symbol: 'BTS',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+    },
+    bitassetObjects: {
+      '2.4.1': {
+        id: '2.4.1',
+        current_feed: {
+          settlement_price: {
+            base: { amount: 200, asset_id: '1.3.0' },
+            quote: { amount: 100, asset_id: '1.3.10' },
+          },
+        },
+      },
+    },
+    callOrders,
+    onExecuteBatch: async ({ operations }) => {
+      const op = operations[0];
+      if (op.op_name === 'call_order_update' && Number(op.op_data?.delta_debt?.amount || 0) < 0) {
+        throw new Error('node broadcast timeout');
+      }
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-mpa-no-fallback-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({ botKey: 'credit-bot-mpa-no-fallback' }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    await assert.rejects(
+      () => runtime.runMaintenance('periodic'),
+      /node broadcast timeout/,
+      'ambiguous debt-leg failures should surface without collateral fallback'
+    );
+
+    assert.strictEqual(calls.length, 1, 'runtime should not broadcast collateral fallback after ambiguous failure');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testMpaDebtFallbackRespectsAssignedCollateralBudget() {
+  const calls = [];
+  const dbCalls = [];
+  const callOrders = [
+    {
+      id: '1.8.12',
+      borrower: '1.2.3',
+      debt: { amount: 10000, asset_id: '1.3.10' },
+      collateral: { amount: 25000, asset_id: '1.3.0' },
+      call_price: {
+        base: { amount: 200, asset_id: '1.3.0' },
+        quote: { amount: 100, asset_id: '1.3.10' },
+      },
+    },
+  ];
+  const restore = installStubs(calls, dbCalls, {
+    assetsById: {
+      '1.3.10': {
+        id: '1.3.10',
+        symbol: 'HONEST.USD',
+        precision: 2,
+        bitasset_data_id: '2.4.1',
+      },
+      '1.3.11': {
+        id: '1.3.11',
+        symbol: 'HONEST.CNY',
+        precision: 2,
+        bitasset_data_id: '2.4.2',
+      },
+      '1.3.0': {
+        id: '1.3.0',
+        symbol: 'BTS',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+    },
+    bitassetObjects: {
+      '2.4.1': {
+        id: '2.4.1',
+        current_feed: {
+          settlement_price: {
+            base: { amount: 200, asset_id: '1.3.0' },
+            quote: { amount: 100, asset_id: '1.3.10' },
+          },
+        },
+      },
+      '2.4.2': {
+        id: '2.4.2',
+        current_feed: {
+          settlement_price: {
+            base: { amount: 100, asset_id: '1.3.0' },
+            quote: { amount: 100, asset_id: '1.3.11' },
+          },
+        },
+      },
+    },
+    assetBalances: {
+      '1.3.0': { free: 1000, locked: 0, total: 1000 },
+    },
+    callOrders,
+    onExecuteBatch: async ({ operations }) => {
+      const op = operations[0];
+      if (op.op_name !== 'call_order_update') return;
+      const debtDelta = Number(op.op_data?.delta_debt?.amount || 0);
+      const collateralDelta = Number(op.op_data?.delta_collateral?.amount || 0);
+      if (debtDelta < 0) {
+        throw new Error('insufficient MPA balance');
+      }
+      callOrders[0].debt.amount += debtDelta;
+      callOrders[0].collateral.amount += collateralDelta;
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-mpa-budget-fallback-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-mpa-budget-fallback',
+        debtPolicy: {
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              collateralAsset: 'BTS',
+              type: 'mpa',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralAmount: 10000,
+              minCollateralRatio: 2,
+              maxCollateralRatio: 2.5,
+              targetCollateralRatio: 2.2,
+            },
+            {
+              asset: 'HONEST.CNY',
+              collateralAsset: 'BTS',
+              type: 'creditOffer',
+              ratio: 5,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+            },
+          ],
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    const assignedBudget = runtime.state.positions['1.3.10:1.3.0'].assignedCollateralBudget;
+    assert(assignedBudget > 250 && assignedBudget < 440, 'test fixture should assign a partial MPA collateral budget');
+
+    await runtime.runMaintenance('periodic');
+
+    assert.strictEqual(calls.length, 2, 'runtime should try debt leg and budget-capped collateral fallback');
+    const fallbackCollateralInt = calls[1].operations[0].op_data.delta_collateral.amount;
+    assert(fallbackCollateralInt > 0, 'fallback should still add collateral');
+    assert(fallbackCollateralInt < 19000, 'fallback collateral should be capped below the full target delta');
+    assert(
+      fallbackCollateralInt <= Math.round((assignedBudget - 250) * 100),
+      'fallback collateral must not exceed assigned collateral budget remaining'
+    );
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
 async function testMpaDebtFirstThenCollateralFallbackTriggersReset() {
   const calls = [];
   const dbCalls = [];
@@ -1823,6 +2131,9 @@ async function testGetCollateralOffsets() {
   await testCreditOfferCollateralPercentUsesDebtSnapshot();
   await testCreditOfferCollateralPercentDoesNotRequireRefresh();
   await testMpaPrecisionAwareBroadcast();
+  await testMpaDebtFailureFallsBackToCollateral();
+  await testMpaDebtFailureDoesNotFallbackOnAmbiguousError();
+  await testMpaDebtFallbackRespectsAssignedCollateralBudget();
   await testMpaDebtFirstThenCollateralFallbackTriggersReset();
   await testRepayAndReborrowFlow();
   await testFixedCreditCollateralDoesNotResolvePercentageBase();

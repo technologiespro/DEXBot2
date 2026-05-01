@@ -12,6 +12,7 @@ const {
   getBitassetData,
   getFullAccount
 } = require('./chain_queries');
+const { requireBtsBackedMpa } = require('./mpa_utils');
 const { listenForFills } = require('./chain_actions');
 const { writeJsonFileAtomic } = require('./dexbot_profiles');
 const { loadDexbotOrderUtils } = require('./dexbot_bridge');
@@ -293,29 +294,6 @@ function computeBtsPerMpaFromSettlement(settlementPrice, mpaAsset, backingAsset)
   return null;
 }
 
-async function requireBtsBackedMpa(mpaSymbolOrId) {
-  const mpaAsset = await getAsset(mpaSymbolOrId);
-  if (!mpaAsset) {
-    throw new Error(`Asset not found: ${mpaSymbolOrId}`);
-  }
-  if (!mpaAsset.bitasset_data_id) {
-    throw new Error(`${mpaSymbolOrId} is not a market-issued asset`);
-  }
-
-  const backingAsset = await getBackingAsset(mpaAsset.id);
-  if (!backingAsset) {
-    throw new Error(`Could not resolve backing asset for ${mpaSymbolOrId}`);
-  }
-  if (backingAsset.symbol !== 'BTS') {
-    throw new Error(`${mpaAsset.symbol} is backed by ${backingAsset.symbol}, not BTS`);
-  }
-
-  return {
-    backingAsset,
-    mpaAsset
-  };
-}
-
 function normalizeCallPosition(callOrder, mpaAsset, backingAsset, bitassetData) {
   if (!callOrder) {
     return {
@@ -410,8 +388,7 @@ class PositionManager {
     const sellPriceInBts = requirePositiveNumber(options.sellPriceInBts, 'sellPriceInBts');
     const targetCollateralRatio = options.targetCollateralRatio ?? null;
     const timestamp = nowIso();
-    const { mpaAsset } = await requireBtsBackedMpa(mpaInput);
-    const backingAsset = await getBackingAsset(mpaAsset.id);
+    const { backingAsset, mpaAsset } = await requireBtsBackedMpa(mpaInput);
 
     const position = {
       accountName,

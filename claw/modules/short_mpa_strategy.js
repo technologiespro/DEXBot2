@@ -4,11 +4,8 @@ const {
   repayMpaDebt
 } = require('./chain_actions');
 const {
-  getAsset,
-  getBackingAsset
-} = require('./chain_queries');
-
-const CORE_SYMBOL = 'BTS';
+  requireBtsBackedMpa
+} = require('./mpa_utils');
 
 function requirePositiveNumber(value, fieldName) {
   const numericValue = Number(value);
@@ -26,29 +23,6 @@ function requireNonNegativeNumber(value, fieldName) {
   }
 
   return numericValue;
-}
-
-async function requireBtsBackedMpa(mpaAsset) {
-  const asset = await getAsset(mpaAsset);
-  if (!asset) {
-    throw new Error(`Asset not found: ${mpaAsset}`);
-  }
-  if (!asset.bitasset_data_id) {
-    throw new Error(`${mpaAsset} is not a market-issued asset`);
-  }
-
-  const backingAsset = await getBackingAsset(asset.id);
-  if (!backingAsset) {
-    throw new Error(`Could not resolve backing asset for ${mpaAsset}`);
-  }
-  if (backingAsset.symbol !== CORE_SYMBOL) {
-    throw new Error(`${mpaAsset} is backed by ${backingAsset.symbol}, not ${CORE_SYMBOL}`);
-  }
-
-  return {
-    backingAsset,
-    mpaMeta: asset
-  };
 }
 
 function resolveAccountName(options = {}, { required = true } = {}) {
@@ -76,7 +50,7 @@ async function buildOpenShortPlan(options = {}) {
   const debtAmount = requirePositiveNumber(options.debtAmount, 'debtAmount');
   const collateralAmount = requirePositiveNumber(options.collateralAmount, 'collateralAmount');
   const sellPriceInBts = requirePositiveNumber(options.sellPriceInBts, 'sellPriceInBts');
-  const { mpaMeta, backingAsset } = await requireBtsBackedMpa(options.mpaAsset);
+  const { mpaAsset, backingAsset } = await requireBtsBackedMpa(options.mpaAsset);
 
   return {
     accountName,
@@ -85,13 +59,13 @@ async function buildOpenShortPlan(options = {}) {
     collateralAmount,
     debtAmount,
     expectedBtsProceeds: debtAmount * sellPriceInBts,
-    market: `${mpaMeta.symbol}/${backingAsset.symbol}`,
-    mpaAsset: mpaMeta.symbol,
+    market: `${mpaAsset.symbol}/${backingAsset.symbol}`,
+    mpaAsset: mpaAsset.symbol,
     sellOrder: {
       amountToSell: debtAmount,
       minToReceive: debtAmount * sellPriceInBts,
       receiveAsset: backingAsset.symbol,
-      sellAsset: mpaMeta.symbol
+      sellAsset: mpaAsset.symbol
     },
     targetCollateralRatio: options.targetCollateralRatio ?? null
   };
@@ -131,20 +105,20 @@ async function buildTakeProfitPlan(options = {}) {
   const accountName = resolveAccountName(options, { required: false });
   const amountToCover = requirePositiveNumber(options.amountToCover, 'amountToCover');
   const buyPriceInBts = requirePositiveNumber(options.buyPriceInBts, 'buyPriceInBts');
-  const { mpaMeta, backingAsset } = await requireBtsBackedMpa(options.mpaAsset);
+  const { mpaAsset, backingAsset } = await requireBtsBackedMpa(options.mpaAsset);
 
   return {
     accountName,
     action: 'place-take-profit',
     amountToCover,
     buyPriceInBts,
-    market: `${mpaMeta.symbol}/${backingAsset.symbol}`,
+    market: `${mpaAsset.symbol}/${backingAsset.symbol}`,
     maxBtsToSpend: amountToCover * buyPriceInBts,
-    mpaAsset: mpaMeta.symbol,
+    mpaAsset: mpaAsset.symbol,
     rebuyOrder: {
       amountToSell: amountToCover * buyPriceInBts,
       minToReceive: amountToCover,
-      receiveAsset: mpaMeta.symbol,
+      receiveAsset: mpaAsset.symbol,
       sellAsset: backingAsset.symbol
     }
   };
@@ -177,14 +151,14 @@ async function buildCloseShortPlan(options = {}) {
   const releaseCollateralDelta = options.releaseCollateralDelta === undefined
     ? 0
     : requireNonNegativeNumber(options.releaseCollateralDelta, 'releaseCollateralDelta');
-  const { mpaMeta, backingAsset } = await requireBtsBackedMpa(options.mpaAsset);
+  const { mpaAsset, backingAsset } = await requireBtsBackedMpa(options.mpaAsset);
 
   return {
     accountName,
     action: 'close-short',
     collateralAsset: backingAsset.symbol,
-    market: `${mpaMeta.symbol}/${backingAsset.symbol}`,
-    mpaAsset: mpaMeta.symbol,
+    market: `${mpaAsset.symbol}/${backingAsset.symbol}`,
+    mpaAsset: mpaAsset.symbol,
     releaseCollateralDelta,
     repayAmount: amountToRepay,
     targetCollateralRatio: options.targetCollateralRatio ?? null

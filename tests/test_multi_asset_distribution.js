@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { setCachedModule } = require('./helpers/module_cache_stub');
 
 // Mock dependencies
 const BitSharesMock = {
@@ -18,6 +19,30 @@ const BitSharesMock = {
 };
 
 global.BitShares = BitSharesMock;
+
+setCachedModule(path.resolve(__dirname, '../modules/bitshares_client.js'), {
+    BitShares: BitSharesMock,
+    waitForConnected: async () => {},
+    createAccountClient: () => ({}),
+    setSuppressConnectionLog() {},
+    getNodeManager: () => null,
+    getNodeStats: () => null,
+    getNodeSummary: () => null,
+    _internal: { connected: true },
+});
+
+setCachedModule(path.resolve(__dirname, '../modules/chain_orders.js'), {
+    resolveAccountId: async (accountRef) => accountRef || '1.2.0',
+    resolveAccountName: async (accountRef) => accountRef || 'account',
+    getOnChainAssetBalances: async (accountRef, assets) => {
+        const out = {};
+        for (const asset of assets || []) {
+            out[String(asset)] = { free: 0, locked: 0, total: 0 };
+        }
+        return out;
+    },
+    executeBatch: async () => ({ tx_id: 'noop', operation_results: [] }),
+});
 
 const CreditRuntime = require('../modules/credit_runtime');
 
@@ -595,8 +620,10 @@ async function testCreditMaintenanceUsesAssignedBudget() {
         activeDealIds: ['1.19.1'],
     };
 
+    let capturedAmount = null;
     let capturedCollateralAmount = null;
     runtime.repayCreditDeal = async (deal, amount, options) => {
+        capturedAmount = amount;
         capturedCollateralAmount = options.collateralAmount;
         return { tx_id: 'tx-test' };
     };
@@ -612,6 +639,7 @@ async function testCreditMaintenanceUsesAssignedBudget() {
     const specificPolicy = bot.config.debtPolicy.lending[0];
     await runtime._runCreditMaintenance(specificPolicy, '1.3.2');
 
+    assert.strictEqual(capturedAmount, 0.001, 'reborrow renewal should pass repay amount in user units');
     assert.strictEqual(capturedCollateralAmount, 5000, 'reborrow should receive the full assignedCollateralBudget');
 
     console.log('Test passed!');

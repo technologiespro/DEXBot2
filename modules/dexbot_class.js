@@ -2899,7 +2899,12 @@ class DEXBot {
     }
 
     _getCreditRuntime() {
-        if (!this.config || !this.config.debtPolicy) {
+        const lending = this.config?.debtPolicy?.lending;
+        const enabledPolicy = Array.isArray(lending)
+            && lending.length > 0
+            && lending.every((item) => typeof item?.collateralAsset === 'string' && item.collateralAsset.length > 0);
+        if (!enabledPolicy) {
+            this._creditRuntime = null;
             return null;
         }
         if (!this._creditRuntime) {
@@ -2919,27 +2924,11 @@ class DEXBot {
         return runtime;
     }
 
-    async _syncCreditCollateralToManager() {
-        if (!this.manager || !this._creditRuntime) return;
-        try {
-            const assetAId = this.manager.assets?.assetA?.id;
-            const assetBId = this.manager.assets?.assetB?.id;
-            if (!assetAId || !assetBId) return;
-            const offsets = this._creditRuntime.getCollateralOffsets([assetAId, assetBId]);
-            const sellOffset = offsets[String(assetAId)] || 0;
-            const buyOffset = offsets[String(assetBId)] || 0;
-            this.manager.setCollateralOffsets({ buy: buyOffset, sell: sellOffset });
-        } catch (err) {
-            this._warn(`Failed to sync credit collateral offsets: ${err.message}`);
-        }
-    }
-
     async _refreshAndSyncCreditRuntime() {
         const runtime = this._getCreditRuntime();
         if (!runtime) return;
         try {
             await runtime.refreshState();
-            await this._syncCreditCollateralToManager();
         } catch (err) {
             this._warn(`Credit runtime refresh/sync failed: ${err.message}`);
         }
@@ -2971,7 +2960,6 @@ class DEXBot {
         this._creditWatchdogInterval = setInterval(async () => {
             try {
                 await runtime.runCreditWatchdog();
-                await this._syncCreditCollateralToManager();
             } catch (err) {
                 this._warn(`Credit watchdog error: ${err.message}`);
             }

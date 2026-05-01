@@ -8,7 +8,7 @@ const { blockchainToFloat, floatToBlockchainInt, resolveConfigValue } = require(
 const { deriveLiquidityPoolTokenValue } = require('./order/utils/system');
 const { toFiniteNumber } = require('./order/format');
 const { createBotKey } = require('./account_orders');
-const { buildDebtFirstCrPlan, resolveTargetCollateralRatio } = require('./cr_planner');
+const { buildCollateralFallbackPlan, buildDebtFirstCrPlan, resolveTargetCollateralRatio } = require('./cr_planner');
 
 const CREDIT_FEE_RATE_DENOM = 1_000_000;
 const ZERO_ASSET_ID = '1.3.0';
@@ -89,6 +89,16 @@ function blockchainAmountToFloat(value, asset) {
         return null;
     }
     return blockchainToFloat(amount, precision);
+}
+
+function isDeterministicMpaDebtBalanceError(err, plan) {
+    const debtDelta = toFiniteNumber(plan?.debtDelta, 0);
+    if (!Number.isFinite(debtDelta) || debtDelta >= 0) {
+        return false;
+    }
+    const message = String(err?.message || err || '').toLowerCase();
+    return message.includes('insufficient')
+        && (message.includes('balance') || message.includes('fund') || message.includes('mpa'));
 }
 
 function normalizeCollateralMap(acceptableCollateral) {
@@ -1793,9 +1803,39 @@ class CreditRuntime {
 
         const debtOp = await this.buildMpaUpdateOperation(plan, { leg: 'debt' }, lendingItem, assetId);
         if (debtOp) {
-            result = await this.executeOperations([debtOp], `mpa maintenance:${context} debt`);
-            executed.push({ leg: 'debt', operation: debtOp, result });
-            await this.refreshMpaState(lendingItem);
+            try {
+                result = await this.executeOperations([debtOp], `mpa maintenance:${context} debt`);
+                executed.push({ leg: 'debt', operation: debtOp, result });
+                await this.refreshMpaState(lendingItem);
+            } catch (err) {
+                if (!isDeterministicMpaDebtBalanceError(err, plan)) {
+                    throw err;
+                }
+                this.warn(`credit runtime: MPA debt leg failed; attempting collateral fallback: ${err.message}`);
+                await this.refreshMpaState(lendingItem);
+                const configuredCollateralAsset = await this._resolveAsset(lendingItem.collateralAsset);
+                const configuredCollateralAssetId = configuredCollateralAsset?.id;
+                const posKey = configuredCollateralAssetId ? this._positionKey(assetId, configuredCollateralAssetId) : assetId;
+                const posState = this.state.positions[posKey];
+                const collateralPlan = buildCollateralFallbackPlan({
+                    currentCollateralAmount: posState?.currentCollateralAmount,
+                    currentDebtAmount: posState?.currentDebtAmount,
+                    feedPrice: posState?.feedPrice,
+                    targetCollateralRatio: plan.targetCollateralRatio,
+                    maxCollateralAmount: posState?.assignedCollateralBudget ?? lendingItem.maxCollateralAmount,
+                    collateralLimitReferenceAmount: posState?.currentCollateralFundsTotal,
+                });
+                if (!collateralPlan) {
+                    throw err;
+                }
+                const fallbackOp = await this.buildMpaUpdateOperation(collateralPlan, { leg: 'collateral' }, lendingItem, assetId);
+                if (!fallbackOp) {
+                    throw err;
+                }
+                result = await this.executeOperations([fallbackOp], `mpa maintenance:${context} collateral fallback`);
+                executed.push({ leg: 'collateral-fallback', operation: fallbackOp, result, debtError: err.message });
+                await this.refreshMpaState(lendingItem);
+            }
         }
 
         const fallbackPlan = await this._buildMpaPlanFromState(lendingItem, assetId);
@@ -1872,7 +1912,12 @@ class CreditRuntime {
             if (timeLeft < expiryThresholdMs) {
                 try {
                     this.warn(`credit runtime: deal ${deal.id} expires in ${Math.round(timeLeft / 60000)}m; proactively repaying and reborrowing`);
-                    await this.repayCreditDeal(deal, deal.debtAmount, {
+                    const debtAsset = await this._resolveAsset(deal.debtAssetId);
+                    const repayAmount = blockchainAmountToFloat(deal.debtAmount, debtAsset);
+                    if (!Number.isFinite(repayAmount) || repayAmount <= 0) {
+                        throw new Error(`unable to convert deal ${deal.id} debt amount for repay`);
+                    }
+                    await this.repayCreditDeal(deal, repayAmount, {
                         autoReborrow: true,
                         collateralAmount: posState.assignedCollateralBudget,
                         specificPolicy: lendingItem,

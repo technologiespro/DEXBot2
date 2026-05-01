@@ -1108,31 +1108,39 @@ Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
 {
   "name": "credit-bot-1",
   "debtPolicy": {
-    "mpa": {
-      "maxBorrowAmount": 1000,
-      "maxCollateralAmount": 25000,
-      "minCollateralRatio": 2.0,
-      "maxCollateralRatio": 2.5,
-      "targetCollateralRatio": 2.2
-    },
-    "creditOffer": {
-      "allowedOfferIds": ["1.18.42"],
-      "maxBorrowAmount": 1000,
-      "maxCollateralAmount": 25000,
-      "maxFeeRate": 30000,
-      "maxCollateralRatio": 2.5,
-      "autoReborrow": true,
-      "autoRepay": 2
-    }
+    "lending": [
+      {
+        "asset": "HONEST.USD",
+        "collateralAsset": "BTS",
+        "type": "mpa",
+        "maxBorrowAmount": 1000,
+        "maxCollateralAmount": 25000,
+        "minCollateralRatio": 2.0,
+        "maxCollateralRatio": 2.5,
+        "targetCollateralRatio": 2.2
+      },
+      {
+        "asset": "HONEST.CNY",
+        "collateralAsset": "BTS",
+        "type": "creditOffer",
+        "allowedOfferIds": ["1.18.42"],
+        "maxBorrowAmount": 1000,
+        "maxCollateralAmount": 25000,
+        "maxFeeRatePerDay": 0.001,
+        "maxCollateralRatio": 2.5,
+        "autoReborrow": true,
+        "autoRepay": 2
+      }
+    ]
   }
 }
 ```
 
 ### Key Rules
-- No separate runtime switch — active when `debtPolicy` is present in bot config
+- No separate runtime switch — active when `debtPolicy.lending` is present, non-empty, and each item declares `collateralAsset`
 - Credit and MPA checks run from the dedicated credit watchdog interval
 - Every successful CR adjustment triggers a grid rebuild via `requestGridReset()`
-- Signing policy enforces `maxFeeRate`, CR ceilings, and allowed assets before broadcasting
+- Runtime policy enforces `maxFeeRatePerDay`, CR ceilings, and allowed assets before broadcasting
 - Full usage details live in [MPA and Credit Usage](MPA_CREDIT_USAGE.md)
 
 ---

@@ -115,8 +115,8 @@ C_i             = C_total * weight_i / sum(all weights)
 **Two assets, equal ratio:**
 ```json
 "lending": [
-  { "asset": "USD", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 },
-  { "asset": "CNY", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 }
+  { "asset": "USD", "collateralAsset": "BTS", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 },
+  { "asset": "CNY", "collateralAsset": "BTS", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 }
 ]
 ```
 Both weights are `1 * 2.0 = 2.0`. Collateral is split **50:50**.
@@ -124,18 +124,18 @@ Both weights are `1 * 2.0 = 2.0`. Collateral is split **50:50**.
 **Two assets, 80 % output on USD:**
 ```json
 "lending": [
-  { "asset": "USD", "type": "mpa", "ratio": 0.8, "targetCollateralRatio": 2.0 },
-  { "asset": "CNY", "type": "mpa", "ratio": 1,   "targetCollateralRatio": 2.0 }
+  { "asset": "USD", "collateralAsset": "BTS", "type": "mpa", "ratio": 0.8, "targetCollateralRatio": 2.0 },
+  { "asset": "CNY", "collateralAsset": "BTS", "type": "mpa", "ratio": 1,   "targetCollateralRatio": 2.0 }
 ]
 ```
-USD weight = `0.8 * 2.0 = 1.6`, CNY weight = `1.0 * 2.0 = 2.0`. USD receives a proportionally smaller share, leaving more collateral unallocated for safety.
+USD weight = `0.8 * 2.0 = 1.6`, CNY weight = `1.0 * 2.0 = 2.0`. USD receives a proportionally smaller share of the configured collateral pool, and CNY receives the remaining larger share.
 
 **Three assets, equal ratio:**
 ```json
 "lending": [
-  { "asset": "USD", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 },
-  { "asset": "CNY", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 },
-  { "asset": "EUR", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 }
+  { "asset": "USD", "collateralAsset": "BTS", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 },
+  { "asset": "CNY", "collateralAsset": "BTS", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 },
+  { "asset": "EUR", "collateralAsset": "BTS", "type": "mpa", "ratio": 1, "targetCollateralRatio": 2.0 }
 ]
 ```
 All weights are equal. Collateral is split **1/3 : 1/3 : 1/3**.
@@ -166,6 +166,7 @@ The MPA planner reads the live call order for each `type: "mpa"` lending item be
 
 - If CR is below `minCollateralRatio`, it **reduces debt first**, then adds collateral if needed.
 - If CR is above `maxCollateralRatio`, it **increases debt first**, then withdraws collateral if allowed.
+- If the debt-first leg fails, for example because the account lacks free MPA to repay debt, the runtime attempts a collateral-only fallback against the lending item's own `maxCollateralAmount`.
 - If `targetCollateralRatio` is not set, the runtime uses the midpoint of the min/max band.
 - After any successful CR adjustment, the bot requests a grid reset so order sizing reflects the new capital base.
 - The `maxBorrowAmount` ceiling only prevents additional debt from going above the configured total; it does not block debt reduction.
@@ -202,7 +203,7 @@ When a deal's `latest_repay_time` is within `CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS`
 
 1. Repay the deal.
 2. Reborrow from the same offer when `autoReborrow` is enabled, using the full `assignedCollateralBudget` for that asset.
-3. Preserve configured `autoRepay` intent for the resulting deal update flow.
+3. Preserve configured `autoRepay` intent on the resulting credit-offer accept operation.
 
 If inline reborrow cannot be built safely, the runtime stores a deferred reborrow request in `profiles/credit_runtime/<botKey>.json` and retries later after refreshing chain state.
 
@@ -233,7 +234,7 @@ profiles/credit_runtime/<botKey>.json
 
 The file tracks discovered chain state and pending work, including:
 
-- `positions` — per-asset state map (debtAssetId -> positionState)
+- `positions` — per-position state map keyed as `debtAssetId:collateralAssetId`
 - active MPA call-order state per position
 - active credit deal IDs per position
 - current debt and collateral amounts per position

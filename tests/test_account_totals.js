@@ -60,18 +60,13 @@ const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
     mgr5._updateOrder({ id: 'invalid-type', type: 'broken', state: ORDER_STATES.VIRTUAL, size: 1 }, 'test-invalid-type');
     assert.strictEqual(mgr5.orders.has('invalid-type'), false, 'invalid type update must be rejected');
 
-    // Test: collateral offsets are stored but do NOT affect botFunds percentage resolution
+    // Test: debt collateral is not part of botFunds percentage resolution
     const mgr6 = new OrderManager({ botFunds: { buy: '50%', sell: '50%' }, activeOrders: { buy: 1, sell: 1 } });
     await mgr6.setAccountTotals({ buy: 100, sell: 100, buyFree: 100, sellFree: 100 });
     assert.strictEqual(mgr6.funds.allocated.buy, 50, 'without collateral offset, 50% of 100 should allocate 50');
     assert.strictEqual(mgr6.funds.allocated.sell, 50, 'without collateral offset, 50% of 100 should allocate 50');
 
-    mgr6.setCollateralOffsets({ buy: 100, sell: 100 });
-    // botFunds percentages should still be based on liquid capital only (free + locked orders)
-    assert.strictEqual(mgr6.funds.allocated.buy, 50, 'collateral offset must NOT inflate botFunds percentage base');
-    assert.strictEqual(mgr6.funds.allocated.sell, 50, 'collateral offset must NOT inflate botFunds percentage base');
-
-    // Test: getChainFundsSnapshot does NOT include collateral offsets in chainTotal
+    // Test: getChainFundsSnapshot reflects only liquid capital
     const snap = mgr6.getChainFundsSnapshot();
     assert.strictEqual(snap.chainTotalBuy, 100, 'chainTotalBuy should reflect liquid capital only');
     assert.strictEqual(snap.chainTotalSell, 100, 'chainTotalSell should reflect liquid capital only');

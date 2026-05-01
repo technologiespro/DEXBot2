@@ -1326,7 +1326,7 @@ Native DEXBot2 support for MPA borrowing and credit offer workflows via `modules
 
 ### Runtime Rules
 - Evaluates on the dedicated credit watchdog interval
-- No separate enable switch — active when `debtPolicy` is present in bot config
+- No separate enable switch — active when `debtPolicy.lending` is present, non-empty, and every item declares `collateralAsset`
 - Claw can read the same bot policy without redefining rules
 
 ---
