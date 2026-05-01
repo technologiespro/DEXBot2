@@ -64,13 +64,46 @@ For each whitelisted AMA bot, the adapter may write:
 
 | File | Purpose |
 |------|---------|
-| `profiles/orders/<botKey>.dynamicgrid.json` | Current AMA center and dynamic weight snapshot |
+| `profiles/orders/<botKey>.dynamicgrid.json` | Persisted AMA center snapshot and optional dynamic weights used by the bot runtime |
 | `profiles/recalculate.<botKey>.trigger` | Signal for `dexbot.js` to rebuild the grid |
 | `market_adapter/state/market_adapter_state.json` | Full runtime state and diagnostics |
 | `market_adapter/state/market_adapter_centers.json` | Lightweight center-price snapshot |
 
 `dexbot.js` consumes the recalc trigger and handles the grid rebuild. The market
 adapter does not place orders, start bots, stop bots, or edit `profiles/bots.json`.
+
+### Dynamic Grid Snapshot
+
+`profiles/orders/<botKey>.dynamicgrid.json` is the live snapshot that the bot
+runtime reloads on selected rebalance and maintenance paths. It is written with
+the current AMA-derived center and, when enabled, the live dynamic-weight
+payload.
+
+Typical fields:
+
+```json
+{
+  "centerPrice": 1294.6,
+  "amaCenterPrice": 1294.6,
+  "updatedAt": "2026-03-01T00:00:00.000Z",
+  "source": "market_adapter/market_adapter.js",
+  "dynamicWeights": {
+    "effectiveWeights": { "sell": 0.45, "buy": 0.55 },
+    "baseWeights": { "sell": 0.5, "buy": 0.5 },
+    "isReady": true
+  }
+}
+```
+
+- `centerPrice` is the persisted grid baseline used for future delta checks.
+- `amaCenterPrice` is the raw AMA output before downstream handling.
+- `dynamicWeights` is present only when live dynamic weights were computed and
+  the bot is allowed to consume them.
+- The runtime applies `dynamicWeights` only when the bot is whitelisted for
+  `dynamicWeight` and the snapshot reports `isReady: true`.
+- The bot reads this snapshot before fill processing and other selected
+  structural maintenance so new orders use the latest accepted center and
+  weights.
 
 ## Dry-Run Safety
 
@@ -357,14 +390,20 @@ profile is available, built-in defaults are used.
 }
 ```
 
-- `ama: true` allows `dynamicgrid.json` and recalc trigger writes.
-- `dynamicWeight: true` allows dynamic weights to be applied by the bot runtime.
+- `ama: true` allows live `dynamicgrid.json` and recalc trigger writes.
+- `dynamicWeight: true` allows dynamic weights to be applied by the bot runtime,
+  but only when the snapshot is also marked ready.
 - Missing whitelist file means all live AMA writes are suppressed.
 - Missing bot entry means that bot runs in dry-run mode.
 
 ### Trigger Files
 
-When the threshold is exceeded, the adapter writes a trigger like:
+When the threshold is exceeded, the adapter writes a trigger file under
+`profiles/` at the repo root:
+
+- `profiles/recalculate.<botKey>.trigger`
+
+The file contains a trigger payload like:
 
 ```json
 {
@@ -383,7 +422,9 @@ When the threshold is exceeded, the adapter writes a trigger like:
 ```
 
 `dexbot.js` watches for this file and rebuilds the affected grid from current
-runtime state.
+runtime state. The trigger is separate from `dynamicgrid.json`: the trigger
+requests a rebuild, while the snapshot carries the center and live weight state
+that the runtime can reload.
 
 ### Dynamic Weight Model
 
