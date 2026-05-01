@@ -48,7 +48,27 @@ const { setNotifyStatusCallback } = require('btsdex-api');
 
 let patched = false;
 let resubscribePatchApplied = false;
+let statusCallbackFanoutApplied = false;
 const verboseReconnectLogging = process.env.BTSDEX_EVENT_PATCH_VERBOSE === '1';
+const statusCallbacks = new Set();
+
+function addStatusCallback(callback) {
+    if (typeof callback !== 'function') return () => {};
+    statusCallbacks.add(callback);
+    return () => statusCallbacks.delete(callback);
+}
+
+function notifyStatusCallbacks(status) {
+    let handled = false;
+    for (const callback of Array.from(statusCallbacks)) {
+        try {
+            handled = callback(status) === true || handled;
+        } catch (err) {
+            console.error('[btsdex_event_patch] status callback failed:', err.message || err);
+        }
+    }
+    return handled;
+}
 
 try {
     const eventModule = require('btsdex/lib/event');
@@ -144,7 +164,7 @@ try {
     // detect "open" after initial connect and call resubscribe ourselves.
     if (EventClass && typeof setNotifyStatusCallback === 'function') {
         let isInitialConnect = true;
-        setNotifyStatusCallback((status) => {
+        addStatusCallback((status) => {
             if (status === 'open') {
                 if (isInitialConnect) {
                     // First connect: btsdex itself handles subscribeBlock/subscribeAccount
@@ -166,8 +186,13 @@ try {
         });
         resubscribePatchApplied = true;
     }
+
+    if (typeof setNotifyStatusCallback === 'function') {
+        setNotifyStatusCallback(notifyStatusCallbacks);
+        statusCallbackFanoutApplied = true;
+    }
 } catch (err) {
     console.warn('event patch: btsdex event not available', err.message || err);
 }
 
-module.exports = { patched, resubscribePatchApplied };
+module.exports = { patched, resubscribePatchApplied, statusCallbackFanoutApplied, addStatusCallback };

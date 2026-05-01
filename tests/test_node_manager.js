@@ -83,6 +83,30 @@ console.log('Testing NodeManager...\n');
 }
 
 // ============================================================================
+// Test 4b: Preferred Node Selection
+// ============================================================================
+{
+    console.log('Test 4b: Preferred healthy node selection');
+    const nm = new NodeManager({
+        list: ['fast', 'preferred', 'slow'],
+        selection: { preferredNode: 'preferred' },
+    });
+
+    nm.nodeStats.get('fast').status = 'healthy';
+    nm.nodeStats.get('fast').latencyMs = 50;
+    nm.nodeStats.get('preferred').status = 'healthy';
+    nm.nodeStats.get('preferred').latencyMs = 500;
+    nm.nodeStats.get('slow').status = 'healthy';
+    nm.nodeStats.get('slow').latencyMs = 1000;
+
+    assert.strictEqual(nm.getBestNode(), 'preferred', 'Healthy preferred node should win over lower latency nodes');
+
+    nm.nodeStats.get('preferred').status = 'slow';
+    assert.strictEqual(nm.getBestNode(), 'fast', 'Slow preferred node should not override healthy nodes');
+    console.log('✓ Preferred healthy node selection test passed\n');
+}
+
+// ============================================================================
 // Test 5: No Healthy Nodes
 // ============================================================================
 {

@@ -482,6 +482,15 @@ let MAINTENANCE = {
 
 // Node management and health checking configuration
 let NODE_MANAGEMENT = {
+    // Whether node failover is enabled when no explicit setting is present.
+    DEFAULT_ENABLED: true,
+
+    // Startup retry/backoff for transient BitShares connection failures.
+    STARTUP_RETRY_INITIAL_DELAY_MS: 500,
+    STARTUP_RETRY_MAX_DELAY_MS: 5000,
+    STARTUP_REFRESH_INTERVAL_MS: 30000,
+    STARTUP_CONNECT_TIMEOUT_MS: 5000,
+
     // Default node list (used if no config file)
     DEFAULT_NODES: [
         'wss://dex.iobanker.com/ws',

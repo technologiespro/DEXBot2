@@ -83,6 +83,7 @@ class NodeManager {
         // Control flags
         this.monitoringActive = false;
         this.checkIntervalId = null;
+        this.checkAllNodesPromise = null;
 
         // Expected chain ID (BitShares mainnet)
         this.expectedChainId = '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8';
@@ -131,6 +132,9 @@ class NodeManager {
                 this.logger.warn(`Health check cycle failed: ${err.message}`);
             });
         }, this.config.healthCheck.intervalMs);
+        if (typeof this.checkIntervalId.unref === 'function') {
+            this.checkIntervalId.unref();
+        }
     }
 
     /**
@@ -152,14 +156,26 @@ class NodeManager {
      * @returns {Promise<void>}
      */
     async checkAllNodes() {
-        const promises = Array.from(this.nodeStats.keys()).map(nodeUrl => {
-            return this.checkNode(nodeUrl).catch(err => {
-                // Don't throw, just log - one node failure shouldn't crash the check cycle
-                this.logger.debug(`Check failed for ${nodeUrl}: ${err.message}`);
-            });
-        });
+        if (this.checkAllNodesPromise) {
+            return this.checkAllNodesPromise;
+        }
 
-        await Promise.all(promises);
+        this.checkAllNodesPromise = (async () => {
+            const promises = Array.from(this.nodeStats.keys()).map(nodeUrl => {
+                return this.checkNode(nodeUrl).catch(err => {
+                    // Don't throw, just log - one node failure shouldn't crash the check cycle
+                    this.logger.debug(`Check failed for ${nodeUrl}: ${err.message}`);
+                });
+            });
+
+            await Promise.all(promises);
+        })();
+
+        try {
+            return await this.checkAllNodesPromise;
+        } finally {
+            this.checkAllNodesPromise = null;
+        }
     }
 
     /**
@@ -181,7 +197,6 @@ class NodeManager {
             return { status: 'unknown', latency: null, error: 'Not configured' };
         }
 
-        const startTime = Date.now();
         const timeoutMs = this.config.healthCheck.timeoutMs;
 
         try {
@@ -191,7 +206,7 @@ class NodeManager {
             try {
                 // Measure RPC latency
                 const rpcStart = Date.now();
-                const result = await this.rpcCall(ws, 'get_chain_id', [], timeoutMs);
+                const result = await this.getChainId(ws, timeoutMs);
                 const latencyMs = Date.now() - rpcStart;
 
                 // Validate chain ID
@@ -248,32 +263,58 @@ class NodeManager {
      */
     connectWithTimeout(nodeUrl, timeoutMs) {
         return new Promise((resolve, reject) => {
+            let settled = false;
+            let ws = null;
+            const settle = (method, value) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                method(value);
+            };
             const timeout = setTimeout(() => {
-                reject(new Error(`Connection timeout after ${timeoutMs}ms`));
+                if (ws) {
+                    try {
+                        if (typeof ws.terminate === 'function') {
+                            ws.terminate();
+                        } else {
+                            ws.close();
+                        }
+                    } catch (_) {}
+                }
+                settle(reject, new Error(`Connection timeout after ${timeoutMs}ms`));
             }, timeoutMs);
 
             try {
-                const ws = new WebSocket(nodeUrl);
+                ws = new WebSocket(nodeUrl);
 
                 ws.onopen = () => {
-                    clearTimeout(timeout);
-                    resolve(ws);
+                    settle(resolve, ws);
                 };
 
                 ws.onerror = (err) => {
-                    clearTimeout(timeout);
-                    reject(new Error(`WebSocket error: ${err.message || 'Unknown'}`));
+                    settle(reject, new Error(`WebSocket error: ${err.message || 'Unknown'}`));
                 };
 
                 ws.onclose = () => {
-                    clearTimeout(timeout);
-                    reject(new Error('WebSocket closed unexpectedly'));
+                    settle(reject, new Error('WebSocket closed unexpectedly'));
                 };
             } catch (err) {
-                clearTimeout(timeout);
-                reject(err);
+                settle(reject, err);
             }
         });
+    }
+
+    /**
+     * Query the BitShares chain ID using the Graphene WebSocket RPC protocol.
+     * @private
+     * @param {WebSocket} ws - Connected WebSocket
+     * @param {number} timeoutMs - RPC timeout
+     * @returns {Promise<string>} Chain ID
+     */
+    async getChainId(ws, timeoutMs) {
+        await this.rpcCall(ws, 'call', [1, 'login', ['', '']], timeoutMs);
+        const databaseApiId = await this.rpcCall(ws, 'call', [1, 'database', []], timeoutMs);
+        return this.rpcCall(ws, 'call', [databaseApiId, 'get_chain_id', []], timeoutMs);
     }
 
     /**
@@ -344,9 +385,15 @@ class NodeManager {
      * @returns {string[]} Array of node URLs
      */
     getHealthyNodes() {
+        const preferredNode = this.config.selection.preferredNode;
         const healthy = Array.from(this.nodeStats.values())
             .filter(stat => stat.status === 'healthy' || stat.status === 'slow')
             .sort((a, b) => {
+                if (preferredNode) {
+                    const aPreferred = a.url === preferredNode && a.status === 'healthy';
+                    const bPreferred = b.url === preferredNode && b.status === 'healthy';
+                    if (aPreferred !== bPreferred) return aPreferred ? -1 : 1;
+                }
                 // Healthy nodes first, then by latency
                 if (a.status !== b.status) {
                     return a.status === 'healthy' ? -1 : 1;

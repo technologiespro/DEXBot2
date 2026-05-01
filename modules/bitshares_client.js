@@ -47,7 +47,8 @@
  */
 
 const BitSharesLib = require('btsdex');
-require('./btsdex_event_patch');
+const BitSharesApi = require('btsdex-api');
+const btsdexEventPatch = require('./btsdex_event_patch');
 const { TIMING, NODE_MANAGEMENT } = require('./constants');
 const NodeManager = require('./node_manager');
 const { readGeneralSettings } = require('./general_settings');
@@ -65,6 +66,9 @@ let lastConnectionError = null;
 // Node Manager for multi-node support
 let nodeManager = null;
 let nodeConfig = null;
+let startupNodeRefreshPromise = null;
+let failoverAssessmentPromise = null;
+let reconnectInProgress = false;
 
 // Load node configuration from settings file
 const settings = readGeneralSettings({
@@ -74,9 +78,20 @@ const settings = readGeneralSettings({
     }
 });
 
-if (settings?.NODES?.enabled && settings.NODES?.list?.length > 0) {
-    nodeConfig = settings.NODES;
+const nodeSettings = settings?.NODES;
+const configuredNodes = Array.isArray(nodeSettings?.list)
+    ? nodeSettings.list.filter((node) => typeof node === 'string' && node.trim())
+    : [];
+const nodeManagerEnabled = nodeSettings?.enabled ?? NODE_MANAGEMENT.DEFAULT_ENABLED;
+
+if (nodeManagerEnabled) {
+    nodeConfig = {
+        ...nodeSettings,
+        enabled: nodeManagerEnabled,
+        list: configuredNodes.length > 0 ? configuredNodes : NODE_MANAGEMENT.DEFAULT_NODES,
+    };
     nodeManager = new NodeManager(nodeConfig);
+    BitSharesLib.node = Array.isArray(nodeConfig.list) ? nodeConfig.list.slice() : nodeConfig.list;
     console.log(`[NodeManager] Loaded config for ${nodeConfig.list.length} nodes`);
 }
 
@@ -86,6 +101,93 @@ if (settings?.NODES?.enabled && settings.NODES?.list?.length > 0) {
  */
 function setSuppressConnectionLog(suppress) {
     suppressConnectionLog = suppress;
+}
+
+async function restartBitsharesConnection(serverList, reason = 'startup') {
+    const servers = Array.isArray(serverList)
+        ? serverList.filter((server) => typeof server === 'string' && server.trim())
+        : [];
+    if (servers.length === 0) {
+        return false;
+    }
+
+    try {
+        reconnectInProgress = true;
+        connected = false;
+        try {
+            await BitSharesLib.disconnect();
+        } catch (_) {
+            // Fall through to the direct API disconnect below.
+        }
+        try {
+            await BitSharesApi.disconnect().catch(() => {});
+        } catch (_) {}
+        BitSharesLib.autoreconnect = true;
+        BitSharesLib.connectPromise = undefined;
+        BitSharesLib.node = servers.slice();
+        await BitSharesLib.connect(servers, true);
+        if (!suppressConnectionLog) {
+            console.log(`[NodeManager] ${reason}: reconnect requested across ${servers.length} node(s)`);
+        }
+        return true;
+    } catch (err) {
+        lastConnectionError = err;
+        if (!suppressConnectionLog) {
+            console.warn(`[NodeManager] ${reason}: reconnect request failed: ${err.message || err}`);
+        }
+        return false;
+    } finally {
+        reconnectInProgress = false;
+    }
+}
+
+async function assessFailover(reason = 'status change') {
+    if (!nodeManager || nodeConfig?.healthCheck?.enabled === false) {
+        return false;
+    }
+    if (reconnectInProgress) {
+        return false;
+    }
+    if (failoverAssessmentPromise) {
+        return failoverAssessmentPromise;
+    }
+
+    failoverAssessmentPromise = (async () => {
+        console.warn(`[NodeManager] ${reason}, triggering failover assessment`);
+        try {
+            await nodeManager.checkAllNodes();
+            const healthyNodes = nodeManager.getHealthyNodes();
+            const fallbackNodes = Array.isArray(nodeConfig.list) && nodeConfig.list.length > 0
+                ? nodeConfig.list
+                : NODE_MANAGEMENT.DEFAULT_NODES;
+            const nextNodes = healthyNodes.length > 0 ? healthyNodes : fallbackNodes;
+            return restartBitsharesConnection(nextNodes, reason);
+        } catch (err) {
+            console.warn('[NodeManager] Failover assessment error:', err.message);
+            return false;
+        }
+    })();
+
+    try {
+        return await failoverAssessmentPromise;
+    } finally {
+        failoverAssessmentPromise = null;
+    }
+}
+
+function handleConnectionStatus(status) {
+    const canHandleFailover = nodeManager && nodeConfig?.healthCheck?.enabled !== false;
+
+    if (status === 'closed' || status === 'closing') {
+        connected = false;
+        lastConnectionError = null;
+    }
+    if (status === 'closed' && canHandleFailover && !reconnectInProgress) {
+        assessFailover('Connection closed').catch(() => {});
+        // NodeManager owns reconnect selection; suppress btsdex-api's parallel auto-reconnect.
+        return true;
+    }
+    return false;
 }
 
 try {
@@ -116,6 +218,9 @@ try {
     BitSharesLib.subscribe('connected', () => {
         connected = true;
         lastConnectionError = null;
+        if (nodeManager && nodeConfig?.healthCheck?.enabled !== false && !nodeManager.monitoringActive) {
+            nodeManager.start();
+        }
         if (!suppressConnectionLog) {
             console.log('modules/bitshares_client: BitShares connected');
         }
@@ -124,28 +229,11 @@ try {
         }
     });
 
-    // Handle disconnections for failover
-    BitSharesLib.subscribe('disconnected', async () => {
-        if (nodeManager && nodeConfig?.healthCheck?.enabled) {
-            console.warn('[NodeManager] Disconnected, triggering failover assessment');
-            try {
-                // Run immediate health check
-                await nodeManager.checkAllNodes();
-
-                // Get healthy nodes
-                const healthyNodes = nodeManager.getHealthyNodes();
-                if (healthyNodes.length > 0) {
-                    const btsdexApi = BitSharesLib._api;
-                    if (btsdexApi?.connection?.setServers) {
-                        btsdexApi.connection.setServers(healthyNodes);
-                        console.log(`[NodeManager] Updated server list for failover: ${healthyNodes.length} healthy nodes`);
-                    }
-                }
-            } catch (err) {
-                console.warn('[NodeManager] Failover assessment error:', err.message);
-            }
-        }
-    });
+    if (typeof btsdexEventPatch.addStatusCallback === 'function') {
+        btsdexEventPatch.addStatusCallback(handleConnectionStatus);
+    } else if (typeof BitSharesApi.setNotifyStatusCallback === 'function') {
+        BitSharesApi.setNotifyStatusCallback(handleConnectionStatus);
+    }
 
 } catch (e) {
     // Some environments may not have subscribe available at require time; that's okay
@@ -153,24 +241,110 @@ try {
 
 /**
  * Wait for the shared BitShares client to establish a connection.
- * Polls connection state until connected or timeout.
+ * Polls connection state until connected or timeout, refreshing node health
+ * and rotating server lists during startup if node management is enabled.
  * @param {number} timeoutMs - Maximum wait time in milliseconds (default: 30000)
+ * @param {Object} [options={}] - Startup retry options
+ * @param {number} [options.retryDelayMs] - Initial backoff delay
+ * @param {number} [options.maxRetryDelayMs] - Maximum backoff delay
+ * @param {number} [options.refreshNodesEveryMs] - How often to refresh node health
  * @throws {Error} If connection times out
  */
-async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS) {
-    const start = Date.now();
-    while (!connected) {
-        if (lastConnectionError) {
-            throw new Error(`BitShares connection failed: ${lastConnectionError.message || lastConnectionError}`);
-        }
-        if (Date.now() - start > timeoutMs) {
-            const suffix = lastConnectionError?.message
-                ? ` Last error: ${lastConnectionError.message}`
-                : '';
-            throw new Error(`Timed out waiting for BitShares connection after ${timeoutMs}ms.${suffix}`);
-        }
-        await sleep(TIMING.CHECK_INTERVAL_MS);
+async function refreshStartupNodeServers(reason = 'startup') {
+    if (!nodeManager || !nodeConfig?.list?.length) {
+        return Array.isArray(nodeConfig?.list) ? nodeConfig.list : [];
     }
+
+    if (startupNodeRefreshPromise) {
+        return startupNodeRefreshPromise;
+    }
+
+    startupNodeRefreshPromise = (async () => {
+        try {
+            if (nodeConfig.healthCheck?.enabled === false) {
+                const fallbackNodes = Array.isArray(nodeConfig.list) && nodeConfig.list.length > 0
+                    ? nodeConfig.list
+                    : NODE_MANAGEMENT.DEFAULT_NODES;
+                await restartBitsharesConnection(fallbackNodes, `Startup ${reason}`);
+                if (!suppressConnectionLog) {
+                    console.log(`[NodeManager] Startup ${reason}: using ${fallbackNodes.length} configured node(s) without health probing`);
+                }
+                return fallbackNodes;
+            }
+
+            await nodeManager.checkAllNodes();
+            const healthyNodes = nodeManager.getHealthyNodes();
+            const fallbackNodes = Array.isArray(nodeConfig.list) && nodeConfig.list.length > 0
+                ? nodeConfig.list
+                : NODE_MANAGEMENT.DEFAULT_NODES;
+            const nextNodes = healthyNodes.length > 0 ? healthyNodes : fallbackNodes;
+            await restartBitsharesConnection(nextNodes, `Startup ${reason}`);
+            if (!suppressConnectionLog) {
+                console.log(`[NodeManager] Startup ${reason}: using ${nextNodes.length} node(s)`);
+            }
+            return nextNodes;
+        } catch (err) {
+            if (!suppressConnectionLog) {
+                console.warn(`[NodeManager] Startup ${reason} node refresh failed: ${err.message}`);
+            }
+            return Array.isArray(nodeConfig.list) && nodeConfig.list.length > 0
+                ? nodeConfig.list
+                : NODE_MANAGEMENT.DEFAULT_NODES;
+        }
+    })();
+
+    try {
+        return await startupNodeRefreshPromise;
+    } finally {
+        startupNodeRefreshPromise = null;
+    }
+}
+
+async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS, options = {}) {
+    const start = Date.now();
+    const initialDelayMs = Number.isFinite(options.retryDelayMs)
+        ? Math.max(0, options.retryDelayMs)
+        : NODE_MANAGEMENT.STARTUP_RETRY_INITIAL_DELAY_MS;
+    const maxDelayMs = Number.isFinite(options.maxRetryDelayMs)
+        ? Math.max(initialDelayMs, options.maxRetryDelayMs)
+        : NODE_MANAGEMENT.STARTUP_RETRY_MAX_DELAY_MS;
+    const refreshNodesEveryMs = Number.isFinite(options.refreshNodesEveryMs)
+        ? Math.max(0, options.refreshNodesEveryMs)
+        : NODE_MANAGEMENT.STARTUP_REFRESH_INTERVAL_MS;
+    let retryDelayMs = initialDelayMs;
+    let nextNodeRefreshAt = 0;
+
+    while (!connected) {
+        const elapsedMs = Date.now() - start;
+        if (elapsedMs >= timeoutMs) {
+            break;
+        }
+
+        if (nodeManagerEnabled && Date.now() >= nextNodeRefreshAt) {
+            await refreshStartupNodeServers(elapsedMs === 0 ? 'initial' : 'retry');
+            nextNodeRefreshAt = Date.now() + refreshNodesEveryMs;
+        }
+
+        if (connected) {
+            break;
+        }
+
+        const remainingMs = timeoutMs - (Date.now() - start);
+        const sleepMs = Math.min(retryDelayMs, Math.max(0, remainingMs));
+        if (sleepMs > 0) {
+            await sleep(sleepMs);
+        }
+        retryDelayMs = Math.min(maxDelayMs, retryDelayMs > 0 ? retryDelayMs * 2 : maxDelayMs);
+    }
+
+    if (!connected) {
+        const suffix = lastConnectionError?.message
+            ? ` Last error: ${lastConnectionError.message}`
+            : '';
+        throw new Error(`Timed out waiting for BitShares connection after ${timeoutMs}ms.${suffix}`);
+    }
+
+    return true;
 }
 
 /**
@@ -194,5 +368,7 @@ module.exports = {
     getNodeStats: () => nodeManager?.getStats(),
     getNodeSummary: () => nodeManager?.getSummary(),
     getConnectionError: () => lastConnectionError,
+    _refreshStartupNodeServers: refreshStartupNodeServers,
+    _assessFailover: assessFailover,
     _internal: { get connected() { return connected; } }
 };

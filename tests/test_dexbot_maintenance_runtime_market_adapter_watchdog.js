@@ -69,7 +69,7 @@ function loadRuntimeWithStubs({ marketAdapterRuntimeStub } = {}) {
 }
 
 async function testSnapshotReaderDetectsAMAConfig() {
-    const botsFile = '/home/alex/BTS/Git/DEXBot2/profiles/bots.json';
+    const botsFile = require('path').join(__dirname, '..', 'profiles', 'bots.json');
 
     fs.existsSync = (filePath) => String(filePath) === botsFile;
     fs.readFileSync = (filePath, encoding) => {
