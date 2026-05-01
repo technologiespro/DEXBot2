@@ -6,6 +6,7 @@ installBitsharesClientStub(bitsharesClientPath);
 
 const DEXBot = require('../modules/dexbot_class');
 const chainOrders = require('../modules/chain_orders');
+const chainKeys = require('../modules/chain_keys');
 const { OrderManager } = require('../modules/order/manager');
 const { WorkingGrid } = require('../modules/order/working_grid');
 const { ORDER_TYPES, ORDER_STATES, COW_ACTIONS } = require('../modules/constants');
@@ -541,6 +542,69 @@ async function testNoPostBatchCacheDeductionForSizeUpdates() {
     console.log('✓ COW-COMMIT-007 passed');
 }
 
+async function testCredentialDaemonPreflightBlocksBroadcast() {
+    console.log('\n[COW-COMMIT-008] credential daemon preflight blocks write broadcast...');
+
+    const masterOrders = new Map([
+        ['slot-new', {
+            id: 'slot-new',
+            type: ORDER_TYPES.BUY,
+            state: ORDER_STATES.VIRTUAL,
+            price: 1,
+            size: 10,
+            orderId: null
+        }]
+    ]);
+    const { bot, manager } = createCowExecutionFixture(masterOrders);
+    bot.privateKey = chainKeys.createDaemonSigningToken('bbot9', {
+        socketPath: '/tmp/missing-dexbot-cred.sock'
+    });
+
+    const workingGrid = new WorkingGrid(manager.orders, { baseVersion: 0 });
+    const order = {
+        id: 'slot-new',
+        type: ORDER_TYPES.BUY,
+        state: ORDER_STATES.VIRTUAL,
+        price: 1,
+        size: 10
+    };
+    workingGrid.set('slot-new', order);
+
+    const originalBuildCreate = chainOrders.buildCreateOrderOp;
+    const originalProbe = chainKeys.probeAccountInDaemon;
+    let executeCalls = 0;
+
+    chainOrders.buildCreateOrderOp = async () => ({
+        op: { op_name: 'limit_order_create', op_data: {} },
+        finalInts: null
+    });
+    chainKeys.probeAccountInDaemon = async () => {
+        throw new Error('Daemon connection failed: ENOENT');
+    };
+    bot._executeOperationsWithStrategy = async () => {
+        executeCalls += 1;
+        return { result: { success: true, operation_results: [] }, opContexts: [] };
+    };
+
+    try {
+        await assert.rejects(
+            () => bot._updateOrdersOnChainBatchCOW({
+                workingGrid,
+                workingIndexes: workingGrid.getIndexes(),
+                workingBoundary: 0,
+                actions: [{ type: COW_ACTIONS.CREATE, id: 'slot-new', order }]
+            }),
+            /Credential daemon unavailable/
+        );
+    } finally {
+        chainOrders.buildCreateOrderOp = originalBuildCreate;
+        chainKeys.probeAccountInDaemon = originalProbe;
+    }
+
+    assert.strictEqual(executeCalls, 0, 'Credential outage must abort before broadcast execution');
+    console.log('✓ COW-COMMIT-008 passed');
+}
+
 async function run() {
     console.log('Running COW commit guard regression tests...');
     await testRejectsVersionMismatchWithoutCommit();
@@ -550,6 +614,7 @@ async function run() {
     await testNoPostBatchCacheDeductionForCreates();
     await testNoPostBatchCacheDeductionForMixedCreates();
     await testNoPostBatchCacheDeductionForSizeUpdates();
+    await testCredentialDaemonPreflightBlocksBroadcast();
     console.log('\n✓ All COW commit guard regression tests passed');
 }
 

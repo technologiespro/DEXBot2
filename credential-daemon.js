@@ -104,6 +104,7 @@ let vaultSecret = null;
 let sessionSecret = null;
 let sessionAccountKeys = new Map();
 let server = null;
+let daemonShuttingDown = false;
 
 // Policy layer and session management
 let policyConfig = null;
@@ -113,6 +114,35 @@ let auditLogPath = null;
 function debugLog(message, err = null) {
     const suffix = err && err.message ? `: ${err.message}` : '';
     daemonLogger.error(`[credential-daemon][debug] ${message}${suffix}`);
+}
+
+function formatFatalReason(reason) {
+    if (!reason) return 'unknown';
+    if (reason instanceof Error) return reason.stack || reason.message;
+    if (typeof reason === 'object') {
+        try {
+            return JSON.stringify(reason);
+        } catch (_) {
+            return String(reason);
+        }
+    }
+    return String(reason);
+}
+
+function registerProcessDiagnostics() {
+    process.on('uncaughtException', (err) => {
+        daemonLogger.error(`[credential-daemon] Uncaught exception: ${formatFatalReason(err)}`);
+        shutdown(1, 'uncaughtException');
+    });
+
+    process.on('unhandledRejection', (reason) => {
+        daemonLogger.error(`[credential-daemon] Unhandled rejection: ${formatFatalReason(reason)}`);
+        shutdown(1, 'unhandledRejection');
+    });
+
+    process.on('exit', (code) => {
+        daemonLogger.log?.(`[credential-daemon] Process exiting with code ${code}`);
+    });
 }
 
 /**
@@ -154,6 +184,7 @@ async function resolveVaultSecret() {
     const envSecret = process.env.DAEMON_PASSWORD;
     if (envSecret) {
         delete process.env.DAEMON_PASSWORD;
+        daemonLogger.log?.('[credential-daemon] Resolving vault secret from direct daemon environment');
         return normalizeBootstrapCredential(envSecret);
     }
 
@@ -161,11 +192,21 @@ async function resolveVaultSecret() {
     delete process.env.DEXBOT_CRED_BOOTSTRAP_SOCKET;
 
     if (bootstrapSocket) {
-        return normalizeBootstrapCredential(await fetchBootstrapPassword({
-            socketPath: bootstrapSocket,
-        }));
+        daemonLogger.log?.(`[credential-daemon] Resolving vault secret from one-shot bootstrap socket: ${bootstrapSocket}`);
+        try {
+            const secret = await fetchBootstrapPassword({ socketPath: bootstrapSocket });
+            daemonLogger.log?.('[credential-daemon] Bootstrap secret transfer completed');
+            return normalizeBootstrapCredential(secret);
+        } catch (err) {
+            daemonLogger.error(
+                `[credential-daemon] Bootstrap secret transfer failed: ${err.message}. ` +
+                'Restart with `node pm2` or `node pm2 restart dexbot-cred` to create a fresh bootstrap socket.'
+            );
+            throw err;
+        }
     }
 
+    daemonLogger.log?.('[credential-daemon] Resolving vault secret from interactive authentication');
     return chainKeys.authenticate();
 }
 
@@ -286,6 +327,8 @@ async function initialize() {
         });
 
         ensureCredentialRuntimeDirSync({ root: __dirname, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });
+        daemonLogger.log?.(`[credential-daemon] Runtime socket path: ${SOCKET_PATH}`);
+        daemonLogger.log?.(`[credential-daemon] Ready file path: ${READY_FILE}`);
 
         // Clean up old socket if it exists
         try {
@@ -309,6 +352,7 @@ async function initialize() {
                 fs.writeFileSync(READY_FILE, Date.now().toString());
                 fs.chmodSync(READY_FILE, 0o600);
                 assertPrivatePathSecurity(READY_FILE, { expectedType: 'file', requiredMode: 0o600 });
+                daemonLogger.log?.(`[credential-daemon] Ready: listening on ${SOCKET_PATH}`);
             } catch (err) {
                 debugLog(`Unable to update ready file permissions ${READY_FILE}`, err);
             }
@@ -320,12 +364,12 @@ async function initialize() {
         });
 
         // Handle graceful shutdown
-        process.on('SIGINT', shutdown);
-        process.on('SIGTERM', shutdown);
+        process.on('SIGINT', () => shutdown(0, 'SIGINT'));
+        process.on('SIGTERM', () => shutdown(0, 'SIGTERM'));
 
     } catch (error) {
-        daemonLogger.error(error.message);
-        process.exit(1);
+        daemonLogger.error(`[credential-daemon] Startup failed: ${error.stack || error.message}`);
+        shutdown(1, 'startup failure');
     }
 }
 
@@ -622,7 +666,11 @@ function sendError(socket, message) {
  * Gracefully shutdown daemon.
  * Clears the derived vault secret from memory and closes server.
  */
-function shutdown() {
+function shutdown(exitCode = 0, reason = 'shutdown') {
+    if (daemonShuttingDown) return;
+    daemonShuttingDown = true;
+    daemonLogger.log?.(`[credential-daemon] Shutdown requested (${reason}, exitCode=${exitCode})`);
+
     // Clear derived vault secret from memory
     if (vaultSecret) {
         if (Buffer.isBuffer(vaultSecret)) vaultSecret.fill(0);
@@ -641,18 +689,33 @@ function shutdown() {
         sessionAccountKeys.clear();
     }
 
+    const forceExitTimer = setTimeout(() => {
+        daemonLogger.error(`[credential-daemon] Forced exit after shutdown timeout (${reason}, exitCode=${exitCode})`);
+        process.exit(exitCode);
+    }, 5000);
+    if (typeof forceExitTimer.unref === 'function') {
+        forceExitTimer.unref();
+    }
+
     // Close server
     if (server) {
-        server.close(() => {
-            process.exit(0);
+        server.close((err) => {
+            clearTimeout(forceExitTimer);
+            if (err) {
+                daemonLogger.error(`[credential-daemon] Server close failed: ${err.message}`);
+            }
+            daemonLogger.log?.('[credential-daemon] Server closed');
+            process.exit(exitCode);
         });
     } else {
-        process.exit(0);
+        clearTimeout(forceExitTimer);
+        process.exit(exitCode);
     }
 }
 
 // Start daemon
+registerProcessDiagnostics();
 initialize().catch(error => {
-    daemonLogger.error(error.message);
-    process.exit(1);
+    daemonLogger.error(`[credential-daemon] Startup failed: ${error.stack || error.message}`);
+    shutdown(1, 'startup failure');
 });

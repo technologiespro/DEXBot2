@@ -173,6 +173,10 @@ class DEXBot {
 
         this._incomingFillQueue = [];
         this.logPrefix = options.logPrefix || '';
+        this._credentialDaemonWatchdogInterval = null;
+        this._credentialDaemonDown = false;
+        this._credentialRecoveryNeeded = false;
+        this._credentialRecoveryInFlight = false;
 
         // Track order IDs whose grid slots were already freed by stale-order batch cleanup.
         // When a batch fails because an order no longer exists on-chain (filled between our
@@ -356,6 +360,9 @@ class DEXBot {
             await this.manager.fetchAccountTotals(this.accountId);
             const openOrders = await chainOrders.readOpenOrders(this.accountId);
             await this.manager.syncFromOpenOrders(openOrders, { skipAccounting: false });
+            if (typeof this.manager.persistGrid === 'function') {
+                await this.manager.persistGrid();
+            }
         } finally {
             this._recoverySyncInFlight = false;
         }
@@ -568,6 +575,14 @@ class DEXBot {
         return DexbotFillRuntime.flushProcessedFillPersistence.call(this, reason, options);
     }
 
+    async _flushProcessedFillPersistenceForKeys(fillKeys, reason = 'manual-selected', options = {}) {
+        return DexbotFillRuntime.flushProcessedFillPersistenceForKeys.call(this, fillKeys, reason, options);
+    }
+
+    _discardPendingProcessedFillPersistence(fillKeys) {
+        return DexbotFillRuntime.discardPendingProcessedFillPersistence.call(this, fillKeys);
+    }
+
     _buildOrphanFillFallbackKey(fill) {
         return DexbotFillRuntime.buildOrphanFillFallbackKey.call(this, fill);
     }
@@ -759,6 +774,7 @@ class DEXBot {
                 await this._refreshAndSyncCreditRuntime();
                 this._setupBlockchainFetchInterval();
                 this._setupCreditWatchdogInterval();
+                this._setupCredentialDaemonWatchdogInterval();
 
                 if (this._isOpenOrdersSyncLoopEnabled()) {
                     this._startOpenOrdersSyncLoop();
@@ -904,6 +920,7 @@ class DEXBot {
             await this._refreshAndSyncCreditRuntime();
             this._setupBlockchainFetchInterval();
             this._setupCreditWatchdogInterval();
+            this._setupCredentialDaemonWatchdogInterval();
 
             if (this._isOpenOrdersSyncLoopEnabled()) {
                 this._startOpenOrdersSyncLoop();
@@ -958,6 +975,7 @@ class DEXBot {
             return;
         }
 
+        let pendingFillKeysForCurrentCycle = new Set();
         try {
             // BOOTSTRAP OPTIMIZATION: During bootstrap, prioritize fill processing over grid-wide checks
             // Process fills immediately with side-only rebalancing (no expensive full grid recalculations)
@@ -990,6 +1008,7 @@ class DEXBot {
 
                     const validFills = [];
                     const processedFillKeys = new Set();
+                    pendingFillKeysForCurrentCycle = new Set();
                     let requiresOpenOrdersSync = false;
 
                     // 2. Filter and Deduplicate (Standard Logic)
@@ -1113,8 +1132,14 @@ class DEXBot {
                             this.manager.logger.log(`Syncing ${fillsToSync.length} fill(s) (history mode)`, 'info');
                             for (const fill of fillsToSync) {
                                 const resultHistory = await this.manager.syncFromFillHistory(fill, {
-                                    persistenceMode: PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
+                                    persistenceMode: PROCESSED_FILL_PERSISTENCE_MODES.MANUAL
                                 });
+                                const fillKey = buildFillKey({
+                                    orderId: fill?.op?.[1]?.order_id,
+                                    blockNum: fill?.block_num,
+                                    historyId: fill?.id
+                                });
+                                if (fillKey) pendingFillKeysForCurrentCycle.add(fillKey);
                                 await this._seedDustTimersFromPartialUpdates(resultHistory.updatedOrders, Date.now());
                                 if (resultHistory.filledOrders) resolvedOrders.push(...resultHistory.filledOrders);
                                 if (resultHistory.requiresOpenOrdersSync) requiresOpenOrdersSync = true;
@@ -1141,7 +1166,6 @@ class DEXBot {
                     this.manager.pauseFundRecalc();
                     try {
                         allFilledOrders = await processValidFills(validFills);
-                        await this._flushProcessedFillPersistence('fill-batch');
 
                         // 4. Handle Price Corrections
                         if (ordersNeedingCorrection.length > 0) {
@@ -1233,11 +1257,33 @@ class DEXBot {
                                     anyRotations = true;
                                     this.manager.logger.logFundsStatus(this.manager, `AFTER rotation completed for fill set [${batchIds}]`);
                                 }
+                                const batchFillKeys = new Set(fillBatch.map(filledOrder => buildFillKey({
+                                    orderId: filledOrder?.orderId,
+                                    blockNum: filledOrder?.blockNum,
+                                    historyId: filledOrder?.historyId
+                                })).filter(Boolean));
+                                await this._flushProcessedFillPersistenceForKeys(batchFillKeys, `fill set [${batchIds}]`);
                                 await this.manager.persistGrid();
                             }
                          } finally {
                              await this.manager.resumeFundRecalc();
                          }
+
+                        if (abortedFillCycle && pendingFillKeysForCurrentCycle.size > 0) {
+                            await this._flushProcessedFillPersistenceForKeys(
+                                pendingFillKeysForCurrentCycle,
+                                'fill-batch-aborted-after-verified-sync'
+                            );
+                            this.manager.logger.log(
+                                `[FILL-DEDUP] Persisted verified fill keys after aborted fill cycle; grid persistence remains guarded separately.`,
+                                'warn'
+                            );
+                        } else if (pendingFillKeysForCurrentCycle.size > 0) {
+                            await this._flushProcessedFillPersistenceForKeys(
+                                pendingFillKeysForCurrentCycle,
+                                'fill-batch-committed'
+                            );
+                        }
 
                         // 6. Rebalance Recovery Loop (Sequential Extensions)
                         // DISABLED FOR SEQUENTIAL: Each sequential fill already triggers a full rebalance with proper
@@ -1296,6 +1342,11 @@ class DEXBot {
                         if (shouldRunPostFillChecks && !abortedFillCycle) {
                             await this._runGridMaintenance('post-fill', { fillLockAlreadyHeld: true });
                         }
+                    } else if (pendingFillKeysForCurrentCycle.size > 0) {
+                        await this._flushProcessedFillPersistenceForKeys(
+                            pendingFillKeysForCurrentCycle,
+                            'fill-batch-no-rotations'
+                        );
                     }
 
                     await retryPersistenceIfNeeded(this.manager);
@@ -1346,6 +1397,42 @@ class DEXBot {
                 this._markGridActivity('fill processing end');
             });
         } catch (err) {
+            const isCredentialOutage = this._isCredentialDaemonError(err);
+            if (pendingFillKeysForCurrentCycle.size > 0) {
+                const flushReason = isCredentialOutage
+                    ? 'credential-outage-verified-fills'
+                    : 'fill-cycle-error-verified-fills';
+
+                if (isCredentialOutage) {
+                    this._credentialRecoveryNeeded = true;
+                    this._suspendGridPersistenceForCredentialOutage(`credential outage during fill processing: ${err.message}`);
+                }
+
+                try {
+                    await this._flushProcessedFillPersistenceForKeys(
+                        pendingFillKeysForCurrentCycle,
+                        flushReason,
+                        { throwOnError: true }
+                    );
+                    const credentialSuffix = isCredentialOutage
+                        ? '; grid persistence is suspended until recovery'
+                        : '';
+                    this.manager?.logger?.log?.(
+                        `[FILL-DEDUP] Persisted ${pendingFillKeysForCurrentCycle.size} verified processed-fill write(s) after fill cycle error${credentialSuffix}.`,
+                        isCredentialOutage ? 'warn' : 'info'
+                    );
+                } catch (flushErr) {
+                    this.manager?.logger?.log?.(
+                        `[FILL-DEDUP] Failed to persist verified fill keys during fill error handling: ${flushErr.message}`,
+                        'warn'
+                    );
+                }
+            }
+
+            if (isCredentialOutage && pendingFillKeysForCurrentCycle.size === 0) {
+                this._credentialRecoveryNeeded = true;
+                this._suspendGridPersistenceForCredentialOutage(`credential outage during fill processing: ${err.message}`);
+            }
             this._log(`Error processing fills: ${err.message}`);
             const logger = this.manager?.logger;
             if (logger && typeof logger.log === 'function') {
@@ -1970,6 +2057,147 @@ class DEXBot {
         return await this.updateOrdersOnChainBatch(rebalanceResult);
     }
 
+    _isCredentialDaemonWriteRequired() {
+        return chainKeys.isDaemonSigningToken(this.privateKey);
+    }
+
+    _suspendGridPersistenceForCredentialOutage(reason) {
+        if (typeof this.manager?.suspendGridPersistence === 'function') {
+            this.manager.suspendGridPersistence(reason);
+        }
+    }
+
+    _resumeGridPersistenceAfterCredentialRecovery(reason) {
+        if (typeof this.manager?.resumeGridPersistence === 'function') {
+            this.manager.resumeGridPersistence(reason);
+        }
+    }
+
+    async _ensureCredentialDaemonWritable(contextLabel = 'write batch') {
+        if (!this._isCredentialDaemonWriteRequired()) {
+            return;
+        }
+
+        const token = this.privateKey;
+        try {
+            await chainKeys.probeAccountInDaemon(
+                token.accountName,
+                Math.min(5000, TIMING.DAEMON_STARTUP_TIMEOUT_MS || 5000),
+                { socketPath: token.socketPath }
+            );
+        } catch (err) {
+            const message = `Credential daemon unavailable before ${contextLabel}: ${err.message}`;
+            this._credentialDaemonDown = true;
+            this._credentialRecoveryNeeded = true;
+            this._suspendGridPersistenceForCredentialOutage(message);
+            this.manager?.logger?.log?.(`[CREDENTIAL] ${message}. Write operations paused; re-unlock with node pm2.`, 'error');
+            const wrapped = new Error(message);
+            wrapped.code = 'CREDENTIAL_DAEMON_UNAVAILABLE';
+            wrapped.cause = err;
+            throw wrapped;
+        }
+    }
+
+    _isCredentialDaemonError(err) {
+        if (!err) return false;
+        if (err.code === 'CREDENTIAL_DAEMON_UNAVAILABLE') return true;
+        const message = String(err.message || '');
+        return /Credential daemon|Daemon connection failed|daemon .*unavailable|dexbot-cred-daemon\.sock|ECONNREFUSED|ENOENT/.test(message);
+    }
+
+    async _runCredentialRecoveryAfterDaemonRestored() {
+        if (this._credentialRecoveryInFlight || !this._credentialRecoveryNeeded || this._shuttingDown) {
+            return;
+        }
+
+        this._credentialRecoveryInFlight = true;
+        try {
+            this.manager?.logger?.log?.(
+                '[CREDENTIAL] Credential daemon restored; reconciling chain state before resuming write batches.',
+                'info'
+            );
+            this._resumeGridPersistenceAfterCredentialRecovery('credential recovery started');
+            const runRecovery = async () => {
+                await this._triggerStateRecoverySync('credential daemon restored');
+                await this._runGridMaintenance('credential-recovery', { fillLockAlreadyHeld: true });
+            };
+            if (this.manager?._fillProcessingLock) {
+                await this.manager._fillProcessingLock.acquire(runRecovery);
+            } else {
+                await runRecovery();
+            }
+            this._credentialRecoveryNeeded = false;
+            this.manager?.logger?.log?.('[CREDENTIAL] Credential recovery sync complete.', 'info');
+        } catch (err) {
+            this._credentialRecoveryNeeded = true;
+            this._suspendGridPersistenceForCredentialOutage(`credential recovery failed: ${err.message}`);
+            this.manager?.logger?.log?.(
+                `[CREDENTIAL] Credential recovery sync failed: ${err.message}. Writes remain guarded by preflight.`,
+                'error'
+            );
+        } finally {
+            this._credentialRecoveryInFlight = false;
+        }
+    }
+
+    _setupCredentialDaemonWatchdogInterval() {
+        if (this._credentialDaemonWatchdogInterval) {
+            clearInterval(this._credentialDaemonWatchdogInterval);
+            this._credentialDaemonWatchdogInterval = null;
+        }
+
+        if (!this._isCredentialDaemonWriteRequired()) {
+            this._credentialDaemonDown = false;
+            return;
+        }
+
+        const intervalMs = Math.max(30_000, Number(TIMING.CREDENTIAL_DAEMON_WATCHDOG_MS) || 60_000);
+        const probe = async () => {
+            if (this._shuttingDown || !this._isCredentialDaemonWriteRequired()) return;
+            const token = this.privateKey;
+            try {
+                await chainKeys.probeAccountInDaemon(
+                    token.accountName,
+                    2000,
+                    { socketPath: token.socketPath }
+                );
+                if (this._credentialDaemonDown) {
+                    this.manager?.logger?.log?.('[CREDENTIAL] Credential daemon responsive again.', 'info');
+                }
+                this._credentialDaemonDown = false;
+                await this._runCredentialRecoveryAfterDaemonRestored();
+            } catch (err) {
+                if (!this._credentialDaemonDown) {
+                    this.manager?.logger?.log?.(
+                        `[CREDENTIAL] Credential daemon watchdog failed: ${err.message}. ` +
+                        'Write operations will remain paused until re-unlocked with node pm2.',
+                        'error'
+                    );
+                }
+                this._credentialDaemonDown = true;
+                this._suspendGridPersistenceForCredentialOutage(`credential daemon watchdog failed: ${err.message}`);
+            }
+        };
+
+        this._credentialDaemonWatchdogInterval = setInterval(() => {
+            probe().catch(err => {
+                this.manager?.logger?.log?.(`[CREDENTIAL] Credential daemon watchdog error: ${err.message}`, 'warn');
+            });
+        }, intervalMs);
+        if (typeof this._credentialDaemonWatchdogInterval.unref === 'function') {
+            this._credentialDaemonWatchdogInterval.unref();
+        }
+        void probe();
+        this._log(`Credential daemon watchdog started (${Math.round(intervalMs / 1000)}s interval)`);
+    }
+
+    _stopCredentialDaemonWatchdogInterval() {
+        if (this._credentialDaemonWatchdogInterval) {
+            clearInterval(this._credentialDaemonWatchdogInterval);
+            this._credentialDaemonWatchdogInterval = null;
+        }
+    }
+
     /**
      * Executes a batch of order operations on the blockchain using COW pattern.
      * Master grid is only updated after successful blockchain confirmation.
@@ -2421,6 +2649,8 @@ class DEXBot {
                 this.manager._setRebalanceState(REBALANCE_STATES.NORMAL);
                 return { executed: false, hadRotation: false };
             }
+
+            await this._ensureCredentialDaemonWritable('COW batch broadcast');
 
             // Execute batch
             this.manager.logger.log(`[COW] Broadcasting batch with ${operations.length} operations...`, 'info');
@@ -3141,6 +3371,7 @@ class DEXBot {
 
         this._clearDustMaintenanceTimer();
         this._stopCreditWatchdogInterval();
+        this._stopCredentialDaemonWatchdogInterval();
 
         if (this._creditRuntime) {
             try {

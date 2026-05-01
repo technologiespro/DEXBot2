@@ -4,7 +4,10 @@ const DEXBot = require('../modules/dexbot_class');
 const { OrderManager } = require('../modules/order');
 const { ORDER_STATES, ORDER_TYPES, TIMING } = require('../modules/constants');
 const { buildFillKey } = require('../modules/order/utils/order');
-const { PROCESSED_FILL_PERSISTENCE_MODES } = require('../modules/order/processed_fill_store');
+const {
+    ProcessedFillStore,
+    PROCESSED_FILL_PERSISTENCE_MODES
+} = require('../modules/order/processed_fill_store');
 
 async function createBotFixture(botKey, options = {}) {
     const persistedFills = [];
@@ -19,6 +22,9 @@ async function createBotFixture(botKey, options = {}) {
     });
 
     bot.accountOrders = {
+        loadProcessedFills() {
+            return new Map();
+        },
         async updateProcessedFillsBatch(savedBotKey, fills) {
             const entries = fills instanceof Map ? Array.from(fills.entries()) : fills;
             if (options.failProcessedFillWrites) {
@@ -191,6 +197,46 @@ async function runTests() {
         assert.strictEqual(bot._pendingProcessedFillWrites.size, 0, 'Deferred batch flush should drain pending writes');
     }
 
+    console.log(' - Testing selected fill flush waits for an already in-flight batch...');
+    {
+        let releaseFlush;
+        let flushStarted;
+        const flushStartedPromise = new Promise(resolve => { flushStarted = resolve; });
+        const releaseFlushPromise = new Promise(resolve => { releaseFlush = resolve; });
+        const store = new ProcessedFillStore({ batchMs: 60000, batchSize: 100 });
+        store.configure({
+            botKey: 'test_fill_replay_selected_barrier',
+            accountOrders: {
+                async updateProcessedFillsBatch() {
+                    flushStarted();
+                    await releaseFlushPromise;
+                }
+            }
+        });
+
+        await store.persist('1.7.424242:777:1.11.7920', Date.now(), {
+            mode: PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
+        });
+        const firstFlush = store.flush('slow-test-flush');
+        await flushStartedPromise;
+
+        let selectedFlushResolved = false;
+        const selectedFlush = store.flushKeys(
+            new Set(['1.7.424242:777:1.11.7920']),
+            'selected-barrier'
+        ).then(() => {
+            selectedFlushResolved = true;
+        });
+
+        await Promise.resolve();
+        assert.strictEqual(selectedFlushResolved, false, 'Selected flush should wait for the in-flight batch containing the key');
+
+        releaseFlush();
+        await firstFlush;
+        await selectedFlush;
+        assert.strictEqual(selectedFlushResolved, true, 'Selected flush should resolve after the in-flight batch completes');
+    }
+
     console.log(' - Testing OrderManager wrapper forwards fill sync options...');
     {
         const { bot } = await createBotFixture('test_fill_replay_wrapper_forwarding');
@@ -212,6 +258,112 @@ async function runTests() {
             PROCESSED_FILL_PERSISTENCE_MODES.BATCHED,
             'Manager wrapper should forward the fill sync persistence mode'
         );
+    }
+
+    console.log(' - Testing non-credential fill-cycle errors persist verified fills...');
+    {
+        const { bot, persistedFills } = await createBotFixture('test_fill_replay_generic_error');
+        await bot.manager._updateOrder({
+            id: 'slot-generic-error',
+            orderId: '1.7.424242',
+            state: ORDER_STATES.ACTIVE,
+            type: ORDER_TYPES.BUY,
+            size: 1,
+            price: 1,
+            baseAmount: 1,
+            quoteAmount: 1,
+            rawOnChain: { for_sale: '100000' }
+        });
+
+        const fill = buildFill('1.11.7921');
+        const fillKey = buildFillKey(fill);
+        bot.manager.processFilledOrders = async () => {
+            return { actions: [{ type: 'generic-error-test' }] };
+        };
+        bot._executeBatchIfNeeded = async () => {
+            throw new Error('generic post-accounting failure');
+        };
+
+        bot._incomingFillQueue.push(fill);
+        await bot._consumeFillQueue({
+            getFillProcessingMode: () => 'history'
+        });
+
+        assert.strictEqual(persistedFills.length, 1, 'Generic fill-cycle errors should durably record verified processed fills');
+        assert.strictEqual(persistedFills[0].fillKey, fillKey, 'Persisted fill key should match the verified chain fill');
+        assert.strictEqual(bot._pendingProcessedFillWrites.size, 0, 'Generic error flush should drain pending processed-fill writes');
+        assert.strictEqual(bot.manager._gridPersistenceSuspendedReason, null, 'Generic errors should not suspend grid persistence as a credential outage');
+    }
+
+    console.log(' - Testing credential outage persists verified fills while guarding grid persistence...');
+    {
+        const { bot, persistedFills } = await createBotFixture('test_fill_replay_credential_outage');
+        await bot.manager._updateOrder({
+            id: 'slot-credential-outage',
+            orderId: '1.7.424242',
+            state: ORDER_STATES.ACTIVE,
+            type: ORDER_TYPES.BUY,
+            size: 1,
+            price: 1,
+            baseAmount: 1,
+            quoteAmount: 1,
+            rawOnChain: { for_sale: '100000' }
+        });
+
+        const fill = buildFill('1.11.793');
+        const fillKey = buildFillKey(fill);
+        let processFilledOrdersCalls = 0;
+        let recoverySyncCalls = 0;
+        let recoveryMaintenanceCalls = 0;
+        let persistAttemptsWhileSuspended = 0;
+        const originalPersistGrid = bot.manager.persistGrid.bind(bot.manager);
+
+        bot.manager.processFilledOrders = async (filledOrders) => {
+            processFilledOrdersCalls += 1;
+            assert.strictEqual(filledOrders.length, 1, 'Credential outage scenario should reach fill rebalance planning');
+            return { actions: [{ type: 'credential-outage-test' }] };
+        };
+        bot.manager.persistGrid = async () => {
+            const result = await originalPersistGrid();
+            if (result?.suspended) {
+                persistAttemptsWhileSuspended += 1;
+            }
+            return result;
+        };
+        bot._executeBatchIfNeeded = async () => {
+            const err = new Error('Credential daemon unavailable before COW batch broadcast: ENOENT');
+            err.code = 'CREDENTIAL_DAEMON_UNAVAILABLE';
+            throw err;
+        };
+        bot._triggerStateRecoverySync = async () => {
+            recoverySyncCalls += 1;
+        };
+        bot._runGridMaintenance = async () => {
+            recoveryMaintenanceCalls += 1;
+        };
+
+        bot._incomingFillQueue.push(fill);
+        await bot._consumeFillQueue({
+            getFillProcessingMode: () => 'history'
+        });
+
+        assert.strictEqual(processFilledOrdersCalls, 1, 'Fill should be planned before credential preflight failure');
+        assert.strictEqual(persistedFills.length, 1, 'Credential outage should durably record verified processed fill');
+        assert.strictEqual(persistedFills[0].fillKey, fillKey, 'Persisted fill key should match the verified chain fill');
+        assert.strictEqual(bot._pendingProcessedFillWrites.size, 0, 'Credential outage should drain pending processed-fill writes');
+        assert.strictEqual(bot._credentialRecoveryNeeded, true, 'Credential outage should request recovery after re-unlock');
+        assert.strictEqual(bot._recentlyProcessedFills.has(fillKey), true, 'Current process should still know the fill was applied in memory');
+        assert.strictEqual(bot.manager._gridPersistenceSuspendedReason.includes('credential outage'), true, 'Credential outage should suspend grid persistence');
+
+        await bot.manager.persistGrid();
+        assert.strictEqual(persistAttemptsWhileSuspended, 1, 'Grid persistence should be skipped while credential recovery is pending');
+
+        await bot._runCredentialRecoveryAfterDaemonRestored();
+
+        assert.strictEqual(recoverySyncCalls, 1, 'Recovery should reconcile chain state after daemon restore');
+        assert.strictEqual(recoveryMaintenanceCalls, 1, 'Recovery should run guarded grid maintenance after reconcile');
+        assert.strictEqual(bot._credentialRecoveryNeeded, false, 'Successful recovery should clear the credential recovery flag');
+        assert.strictEqual(bot.manager._gridPersistenceSuspendedReason, null, 'Successful recovery should resume grid persistence');
     }
 
     console.log(' - Testing immediate persistence failure rolls back accounting and tracker state...');

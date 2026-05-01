@@ -1,6 +1,7 @@
 const PROCESSED_FILL_PERSISTENCE_MODES = Object.freeze({
     IMMEDIATE: 'immediate',
-    BATCHED: 'batched'
+    BATCHED: 'batched',
+    MANUAL: 'manual'
 });
 
 function resolveProcessedFillPersistenceMode(options = {}) {
@@ -9,6 +10,9 @@ function resolveProcessedFillPersistenceMode(options = {}) {
     }
     if (options?.persistenceMode === PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE) {
         return PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE;
+    }
+    if (options?.persistenceMode === PROCESSED_FILL_PERSISTENCE_MODES.MANUAL) {
+        return PROCESSED_FILL_PERSISTENCE_MODES.MANUAL;
     }
     return options?.deferPersistence === true
         ? PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
@@ -74,6 +78,10 @@ class ProcessedFillStore {
     async persist(fillKey, timestamp, { mode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE } = {}) {
         if (!this._accountOrders || !this._botKey || !fillKey) return;
 
+        if (mode === PROCESSED_FILL_PERSISTENCE_MODES.MANUAL) {
+            this._queue(fillKey, timestamp, { schedule: false });
+            return;
+        }
         this._queue(fillKey, timestamp);
         if (mode === PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE) {
             await this.flush('fill-persist', { throwOnError: true });
@@ -130,11 +138,64 @@ class ProcessedFillStore {
         }
     }
 
-    _queue(fillKey, timestamp) {
+    async flushKeys(fillKeys, reason = 'manual-selected', { throwOnError = false } = {}) {
+        const keySet = fillKeys instanceof Set ? fillKeys : new Set(fillKeys || []);
+        if (keySet.size === 0) return;
+
+        if (!this._accountOrders || !this._botKey) {
+            return;
+        }
+
+        const batch = new Map();
+        for (const fillKey of keySet) {
+            if (!fillKey || !this.pendingWrites.has(fillKey)) continue;
+            batch.set(fillKey, this.pendingWrites.get(fillKey));
+            this.pendingWrites.delete(fillKey);
+        }
+
+        if (batch.size === 0) {
+            await this._flushPromise;
+            return;
+        }
+
+        let flushError = null;
+        const flushWork = async () => {
+            try {
+                await this._accountOrders.updateProcessedFillsBatch(this._botKey, batch);
+            } catch (err) {
+                flushError = err;
+                for (const [fillKey, timestamp] of batch) {
+                    const queuedTimestamp = this.pendingWrites.get(fillKey);
+                    if (queuedTimestamp === undefined || timestamp > queuedTimestamp) {
+                        this.pendingWrites.set(fillKey, timestamp);
+                    }
+                }
+                this._warn(`[FILL-DEDUP] Failed to flush ${batch.size} selected processed fill record(s) (${reason}): ${err.message}`);
+                this._schedule();
+            }
+        };
+
+        this._flushPromise = this._flushPromise.then(flushWork, flushWork);
+        await this._flushPromise;
+        if (flushError && throwOnError) {
+            throw flushError;
+        }
+    }
+
+    discardKeys(fillKeys) {
+        const keySet = fillKeys instanceof Set ? fillKeys : new Set(fillKeys || []);
+        for (const fillKey of keySet) {
+            if (fillKey) this.pendingWrites.delete(fillKey);
+        }
+    }
+
+    _queue(fillKey, timestamp, { schedule = true } = {}) {
         const existing = this.pendingWrites.get(fillKey);
         if (existing === undefined || timestamp > existing) {
             this.pendingWrites.set(fillKey, timestamp);
         }
+
+        if (!schedule) return;
 
         if (this.pendingWrites.size >= this._batchSize) {
             void this.flush('batch-size');

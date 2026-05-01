@@ -20,6 +20,15 @@ async function flushProcessedFillPersistence(reason = 'manual', options = {}) {
     await this._processedFillStore.flush(reason, options);
 }
 
+async function flushProcessedFillPersistenceForKeys(fillKeys, reason = 'manual-selected', options = {}) {
+    this._processedFillStore.setShuttingDown(this._shuttingDown);
+    await this._processedFillStore.flushKeys(fillKeys, reason, options);
+}
+
+function discardPendingProcessedFillPersistence(fillKeys) {
+    this._processedFillStore.discardKeys(fillKeys);
+}
+
 function buildOrphanFillFallbackKey(fill) {
     const fillOp = fill?.op?.[1];
     const orderId = fillOp?.order_id;
@@ -135,6 +144,8 @@ function createFillCallback(chainOrders) {
 module.exports = {
     wireProcessedFillTracking,
     flushProcessedFillPersistence,
+    flushProcessedFillPersistenceForKeys,
+    discardPendingProcessedFillPersistence,
     buildOrphanFillFallbackKey,
     applyReplaySafeFillAccounting,
     applyReplaySafeTrackedFillAccounting,

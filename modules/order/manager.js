@@ -464,6 +464,7 @@ class OrderManager {
         this._pipelineBlockedSince = null;
         this._recoveryAttempted = false;
         this._gridVersion = 0;
+        this._gridPersistenceSuspendedReason = null;
 
         this._metrics = {
             fundRecalcCount: 0,
@@ -1382,7 +1383,28 @@ class OrderManager {
         return result;
     }
 
+    suspendGridPersistence(reason = 'suspended') {
+        this._gridPersistenceSuspendedReason = reason;
+    }
+
+    resumeGridPersistence(reason = null) {
+        if (!this._gridPersistenceSuspendedReason) return;
+        this.logger.log(
+            `[PERSISTENCE-GATE] Resuming grid persistence${reason ? ` (${reason})` : ''}`,
+            'info'
+        );
+        this._gridPersistenceSuspendedReason = null;
+    }
+
     async persistGrid() {
+        if (this._gridPersistenceSuspendedReason) {
+            this.logger.log(
+                `[PERSISTENCE-GATE] Skipping grid persistence while suspended: ${this._gridPersistenceSuspendedReason}`,
+                'warn'
+            );
+            return { isValid: true, skipped: true, suspended: true, reason: this._gridPersistenceSuspendedReason };
+        }
+
         const validation = this.validateGridStateForPersistence();
         if (!validation.isValid) {
             this.logger.log(
