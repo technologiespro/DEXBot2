@@ -4,11 +4,15 @@ This directory contains research runners, chart generators, and helper modules u
 
 ## Subareas
 
-- `trend_detection/` - SMA, MACD, RSI, Hurst, Kalman, and regime analysis plus the related research docs
+- `trend_detection/` - SMA, MACD, RSI, Hurst, Kalman, and regime analysis plus the related research docs, including [Dynamic Weight Research](trend_detection/DYNAMIC_WEIGHT_RESEARCH.md)
 - `ama_fitting/` - AMA fitting, synthetic comparison charts, and LP data workflows
 - `bot_fitting/` - Grid parameter sweep backtests for AMA winners
 - `bot_usage/` - DEXBot account discovery and Kibana query helpers
 - `tradingview/` - TradingView-style chart export
+
+## Related Docs
+
+- [Market Adapter README](../market_adapter/README.md) - live AMA pricing, grid triggers, and dynamic weights
 
 ## Main Entry Points
 

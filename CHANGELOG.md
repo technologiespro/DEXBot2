@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-05-01 - Chronological Summary Since 0.6.0-patch.26
+
+This section summarizes the work that landed after `0.6.0-patch.26`, in the order it reached the branch.
+
+### 2026-03-01 to 2026-03-03
+
+- Finished the market-adapter foundation by documenting AMA and grid recalculation semantics, clarifying `gridPrice` and AMA profile behavior, and tightening the README/docs around the new grid graphic.
+- Finalized fixed-cap fill batching and shard-parallel AMA fitting, then tagged `v0.6.0` on March 3 with the merged `gridPrice` price-section behavior and market-adapter trigger wiring.
+- Cleaned up LP charting and analysis helpers so the new adapter flow had a stable export path and consistent documentation.
+
+### 2026-03-06 to 2026-03-24
+
+- Expanded the AMA analysis toolchain with longer histories, date-range fetching, merged candle exports, and log-scaled LP charts.
+- Promoted AMA3 defaults, refreshed adapter analytics, and removed stale references so market-adapter tuning matched the current codebase.
+- Added dust-cancel delay handling and updated the settings, analyzer, and README flows so partial cleanup and startup timing stayed consistent.
+
+### 2026-03-28 to 2026-04-05
+
+- Expanded Claw runtime support with the bridge/runtime split, native BitShares integration, ZeroClaw support, and the direct tuning / reasoning bridge.
+- Hardened fill replay handling and extracted the fill and maintenance runtimes, separating execution from orchestration and making replay-safe processing easier to reason about.
+- Tightened credential-daemon startup and policy enforcement while keeping the launcher and PM2 flow aligned with the new runtime structure.
+
+### 2026-04-09 to 2026-04-16
+
+- Added the derivative analysis engine and then trimmed the live signal stack to the active set: SMA, fastSMA, MACD, RSI, and momentum gating.
+- Moved market-offset control into market-profile policy, aligned the dry-run/write-output split, and added the AMA slope plus ATR dynamic-weight path.
+- Introduced Hurst and Permutation Entropy regime detection, then completed the research-to-production parity work so the live adapter, research charts, and regime gate used the same defaults and clamps.
+- Added the dynamic-weight research chart, volatility chart, and Kalman echo/latching work; also renamed the price mode from `market` to `book` for consistency.
+
+### 2026-04-17 to 2026-04-24
+
+- Added the TradingView/uPlot exporter and finished the debt runtime for MPA and credit workflows, including borrow, repay, and auto-reborrow paths.
+- Hardened dynamic-weight persistence, closed-candle processing, and runtime alignment so the research chart and live adapter stayed in sync.
+- Added LP credit-offer safety checks, consolidated whitelist handling, and deferred grid maintenance while active fills were present.
+- Wrapped up the April hardening pass with market-adapter patch fixes, Claw validation coverage, simplified chart entrypoints, the internal `v0.7` metadata, and the first pass of the docs refresh.
+
+### 2026-04-25 to 2026-05-01
+
+- Expanded credit and MPA collateral policy, unified positive-value helpers, and tightened the runtime’s fee and borrow sizing paths.
+- Simplified market-adapter diagnostics and startup behavior, including direct runtime management, explicit whitelist generation, and stricter latching/logging for adapter state.
+- Reorganized the documentation hub, refreshed the market-adapter README, linked the dynamic-weight research docs, and updated the evolution report so the docs now point to the current codebase.
+- Added the root changelog entry, linked it from the docs index and evolution report, and moved the hero image to `docs/media/DEXBot2.webp` for the README banner.
+
 ## [0.6.0-patch.26] - 2026-02-28 - Documentation Updates: Simplified Architecture & Removed Split/Merge Logic
 
 This patch updates documentation to reflect the simplified design philosophy of DEXBot2: **simplicity, constant spread, minimal blockchain interaction, closed-loop market dynamics, and powerful maintenance tools**. It clarifies that the bot achieves perfect market level and trading pattern handling through elegant mechanisms rather than complex partial-handling logic.

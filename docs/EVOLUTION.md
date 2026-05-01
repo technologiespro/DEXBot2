@@ -5,12 +5,12 @@
 DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7 development cycle.
 
 ### Key Metrics
-- **Total Commits**: 1206
-- **Development Period**: December 2, 2025 - April 2026 (ongoing)
-- **Active Months**: 5 (Dec 2025, Jan 2026, Feb 2026, Mar 2026, Apr 2026)
+- **Total Commits**: 1205
+- **Development Period**: December 2, 2025 - May 1, 2026 (ongoing)
+- **Active Months**: 6 (Dec 2025, Jan 2026, Feb 2026, Mar 2026, Apr 2026, May 2026)
 - **Primary Developer**: froooze - 99.2% of commits
 - **Lines of Code**: ~25,000+ (core modules)
-- **Test Coverage**: 156 test files covering unit, integration, scenario, and regression tests
+- **Test Coverage**: 160 test files covering unit, integration, scenario, and regression tests
 - **Tagged Releases**: 15 tagged releases (v0.1.0 to v0.6.0)
 - **Current Internal Version**: v0.7
 
@@ -137,9 +137,9 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ---
 
-### Phase 5: Signal Intelligence & Debt Runtime (March - April 2026)
-**Duration**: March 4 - April 24, 2026 (ongoing)
-**Commits**: 169 (14.0% of total)
+### Phase 5: Signal Intelligence & Debt Runtime (March - May 2026)
+**Duration**: March 4 - May 1, 2026 (ongoing)
+**Commits**: 170 (14.1% of total)
 **Focus**: Market adapter offset groundwork, Claw/credential hardening, SMA derivative signals, dynamic-weight/Kalman research, regime filtering, credit/debt runtime
 
 #### Key Milestones
@@ -157,6 +157,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 - **Apr 21-22**: Dynamic weight snapshot persistence, warmup/closed-candle alignment, rebalance refresh wiring
 - **Apr 23**: Credit-offer and CR safety hardening — LP credit-offer CR ceiling, safe borrow sizing, shared adapter whitelist
 - **Apr 24**: Market adapter patch hardening, maintenance deferral during active fills, chart entrypoint simplification, Claw validation/tests, v0.7 metadata
+- **May 1**: Market adapter README restructure and docs cross-link refresh for the dynamic-weight research path
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -185,7 +186,7 @@ dexbot.js (entry)
     └── modules/utils.js
 ```
 
-### Current Architecture (April 2026)
+### Current Architecture (May 2026)
 ```
 dexbot.js (entry)
     ├── modules/dexbot_class.js (core bot class - 3,155 lines)
@@ -247,184 +248,33 @@ dexbot.js (entry)
 
 ## Feature Timeline
 
-### December 2025 Features
-- ✅ Grid calculation with exact step multipliers
-- ✅ PARTIAL order state for partial fills
-- ✅ PM2 process management
-- ✅ BTS fee accounting and caching
-- ✅ Grid divergence detection
-- ✅ Automatic grid recalculation
-- ✅ Multi-bot account sharing (botFunds)
-- ✅ Weight distribution validation
-- ✅ Mixed absolute/relative price configuration
-- ✅ Periodic blockchain fetch
-- ✅ Startup grid reconciliation
-
-### January 2026 Features
-- ✅ AMA trend detection system
-- ✅ Blockchain integer-based calculations
-- ✅ Ghost order prevention
-- ✅ Native test suite (Jest migration)
-- ✅ Layer 1 & Layer 2 defenses
-- ✅ Self-healing recovery
-- ✅ Fund-driven boundary sync
-- ✅ Trigger reset stabilization
-- ✅ RMS divergence threshold
-- ✅ Precision fail-fast logic
-- ✅ Block-aware fill batching
-- ✅ Periodic configuration refresh
-- ✅ startPrice as Single Source of Truth
-
-### February 2026 Features
-- ✅ Order analysis script
-- ✅ Pipeline timeout safeguard
-- ✅ Edge-based spread correction
-- ✅ Unified B/A price orientation
-- ✅ Multi-node management
-- ✅ Dashboard scaffolding
-- ✅ Immutable Master Grid
-- ✅ Copy-on-Write architecture
-- ✅ Atomic Service Pattern
-- ✅ State Manager
-- ✅ Atomic boundary shifts
-- ✅ COW Rebalance Engine
-- ✅ COW invariant contract (stable theory)
-- ✅ Spread correction simplification
-- ✅ Doubled-side replacement removal
-- ✅ CacheFunds removal (real-time commitment accounting)
-
-### March 2026 Features
-- ✅ Fixed-cap fill batching finalization (adaptive-tier removed)
-- ✅ Market adapter consolidation (split data sources)
-- ✅ AMA-derived grid center initialization
-- ✅ Shard-parallel cap-based AMA fitting
-- ✅ Grid recalculation documentation
-- ✅ AMA and adapter research tooling (AMA3 defaults, expanded candle history, Kibana date-range/merge tools)
-- ✅ Dust-cancel delay and recovery semantics cleanup
-- ✅ Analyze-orders report layout cleanup
-- ✅ Feed-anchored trend research
-- ✅ AMA grid-price offset state and grid-price reference generalization
-- ✅ Claw runtime expansion (ZeroClaw bridge, native BitShares integration, margin planner, runtime path hardening)
-
-### April 2026 Features
-- ✅ Fill replay hardening and fill/maintenance runtime extraction
-- ✅ Credential daemon strict policy, session hardening, signing cache, and memory safety
-- ✅ Claw runtime bridge expansion (NullClaw, Hermes manifest, launcher command bridge, skill support)
-- ✅ Derivative analysis engine (SMA, fastSMA, MACD, RSI, momentum gate)
-- ✅ Market profile offset policy and dry-run/write-output separation
-- ✅ Dynamic grid groundwork, per-bot offset caps, and live dynamic weight overlay
-- ✅ Dynamic weight research tooling (AMA slope, ATR scaling, Kalman-AMA composite, uPlot charts)
-- ✅ Regime detection (Hurst Exponent, Permutation Entropy)
-- ✅ Dynamic weight production parity (regime gate, percentile clip, weight-only updates)
-- ✅ Credit/debt runtime (MPA borrowing, credit offer accept/repay, auto-reborrow)
-- ✅ Fallback removal (precision strictness, explicit price modes, no orphan lax matching)
-- ✅ Bot auto-tuner with direct tuning bridge
-- ✅ Dynamicgrid snapshots
-- ✅ Shared market adapter whitelist and dynamic weight rebalance refresh wiring
-- ✅ Closed-candle processing, dynamic-weight warmup, and snapshot persistence hardening
-- ✅ Credit-offer safety checks (LP CR ceiling, safe borrow sizing)
-- ✅ Grid maintenance deferral during active fills and dust-cancel windows
-- ✅ Claw validation hardening and test coverage refresh
-- ✅ TradingView uPlot exporter
-- ✅ Volatility research chart, dynamic weight override wiring, and chart parity coverage
-- ✅ Synthetic analysis path removal, chart entrypoint simplification, and research doc reorganization
-- ✅ v0.7 internal version metadata and merge-readiness test-suite stabilization
+### Summary
+- **December 2025**: Core grid lifecycle, fees, PM2, and reconciliation.
+- **January 2026**: AMA signals, precision fixes, recovery, and test migration.
+- **February 2026**: Copy-on-Write, multi-node support, and architecture hardening.
+- **March-May 2026**: Market adapter, dynamic weights, credit/debt runtime, and docs refresh.
 
 ---
 
 ## Version History
 
-### v0.1.x - Alpha Stage (December 10-11, 2025)
-- **v0.1.0**: Initial release with core trading functionality
-- **v0.1.1**: Minimum delta enforcement for price updates
-- **v0.1.2**: Bug fixes and stability improvements
-
-### v0.2.0 - Fee System (December 12, 2025)
-- BTS fee accounting and deduction system
-- Grid reconciliation and fee caching
-- CacheFunds persistence
-
-### v0.3.0 - Grid Management (December 12, 2025)
-- Grid regeneration threshold
-- Order sizing functions
-- Geometric distribution for rotations
-
-### v0.4.x - Stability Improvements (December 13-20, 2025)
-- **v0.4.0**: Fund management changes
-- **v0.4.1**: Bug fixes
-- **v0.4.2**: Comment and documentation fixes
-- **v0.4.3**: Grid edge reconciliation
-- **v0.4.4**: Release documentation
-- **v0.4.5**: Release notes
-- **v0.4.6**: CacheFunds fix and race condition prevention
-
-### v0.5.0 - Stability Milestone (December 20, 2025)
-- Terminology migration (account_* → chain_*)
-- BTS fee settlement fix
-- Rotation synchronization
-- Unified resize accounting
-- Available funds bug fix
-- Accounting stabilization
-- Startup invariant suppression
-- Resync order duplication fix
-
-### v0.5.1+ - Advanced Features (January-February 2026)
-- AMA trend detection
-- Native test suite
-- Precision improvements
-- Copy-on-Write architecture
-- Atomic operations
-
-### v0.6.0 - Market Adapter Release (March 3, 2026)
-v0.6.0 is the last tagged release version. The version boundary should remain anchored to the March 3, 2026 release state.
-
-- gridPrice merge into Price section with AMA keyword support
-- Market adapter signal gates and grid recalculation trigger wiring
-- Market adapter consolidation with split data sources and whitelist fallback removal
-- AMA-derived grid center during initialization
-- Fixed-cap fill batching finalized at a 4-fill cap
-- Shard-parallel cap-based AMA fitting and profile sync
-- Credential daemon signing cache and secure runtime
-- Claw Hermes runtime manifest and skill support
-
-### v0.7 - Internal Development (March-April 2026)
-v0.7 is the active internal version after the v0.6.0 release. It collects the unreleased signal intelligence, strict runtime, and credit/debt work now under development.
-
-- Derivative signal interpretation with SMA, MACD, RSI, fast-SMA commitment, and momentum gates
-- Dynamic weight system with live AMA slope, ATR penalty, Kalman confirmation, and weight-only updates
-- Regime detection using Hurst Exponent and Permutation Entropy filters
-- Market adapter signal pipeline with full weight output, collateral recommendations, and trend/ATR exports
-- Native MPA borrowing and credit-offer runtime workflows, including accept, repay, and auto-reborrow paths
-- Bot auto-tuner and direct tuning bridge for parameter optimization
-- Strict precision and price-derivation modes with fallback/orphan lax matching removed
-- TradingView uPlot exporter, volatility research chart, and synthetic analysis cleanup
+- **v0.1.x-v0.5.x**: Foundation, fee handling, stability, and the COW groundwork.
+- **v0.6.0**: Market adapter release with AMA grid centers and trigger wiring.
+- **v0.7**: Current internal work on signals, dynamic weights, credit/debt, and docs/tooling.
 
 ---
 
 ## Development Statistics
 
-### Commit Distribution by Type
-
-| Type | December | January | February | March | April | Total | Percentage |
-|------|----------|---------|----------|-------|-------|-------|------------|
-| feat | 25 | 61 | 15 | 17 | 39 | 157 | 13.5% |
-| fix | 38 | 169 | 87 | 15 | 53 | 362 | 31.0% |
-| refactor | 15 | 58 | 32 | 9 | 18 | 132 | 11.3% |
-| docs | 43 | 46 | 26 | 11 | 10 | 136 | 11.7% |
-| chore | 16 | 8 | 1 | 3 | 1 | 29 | 2.5% |
-| Other | 264 | 79 | 3 | 2 | 2 | 350 | 30.0% |
-
 ### Monthly Activity
 
-| Month | Commits | Percentage | Avg/Day |
-|-------|---------|------------|---------|
-| December 2025 | 408 | 33.8% | 13.2 |
-| January 2026 | 425 | 35.2% | 13.7 |
-| February 2026 | 186 | 15.4% | 6.6 |
-| March 2026 | 62 | 5.1% | 2.0 |
-| April 2026 | 125 | 10.4% | 5.2 |
-
-*Note: April 2026 figure is partial (through April 24).*
+| Month | Commits |
+|-------|---------|
+| December 2025 | 401 |
+| January 2026 | 421 |
+| February 2026 | 164 |
+| March 2026 | 57 |
+| April 2026 | 158 |
 
 ### Code Metrics
 
@@ -432,13 +282,9 @@ v0.7 is the active internal version after the v0.6.0 release. It collects the un
 1. **modules/dexbot_class.js**: 3,155 lines
 2. **modules/order/grid.js**: 1,833 lines
 3. **modules/order/manager.js**: 1,496 lines
-4. **modules/order/startup_reconcile.js**: 1,317 lines
-5. **modules/account_bots.js**: 1,223 lines
-6. **modules/order/sync_engine.js**: 1,122 lines
-7. **modules/order/utils/order.js**: 1,133 lines
 
 #### Test Coverage
-- **Total Test Files**: 156
+- **Total Test Files**: 160
 - **Test Categories**:
   - Unit tests (logic ported from Jest)
   - Integration tests (fill processing, grid, manager)
@@ -492,19 +338,20 @@ v0.7 is the active internal version after the v0.6.0 release. It collects the un
 - Inline code comments
 - Limited architecture documentation
 
-### Current Documentation (April 2026, v0.7)
-- **README.md**: Comprehensive user guide with icons and sections
-- **docs/architecture.md**: System architecture and module relationships
-- **docs/developer_guide.md**: Developer quick start and glossary
-- **docs/WORKFLOW.md**: Branch workflow and development process
-- **FUND_MOVEMENT_AND_ACCOUNTING.md**: Fund accounting mechanics
-- **CHANGELOG.md**: Detailed version history
-- **AGENTS.md**: AI assistant guidelines
-- **COPY_ON_WRITE_MASTER_PLAN.md**: COW architecture documentation
+### Current Documentation (May 2026, v0.7)
+- **[README.md](../README.md)**: Comprehensive user guide with icons and sections
+- **[architecture.md](architecture.md)**: System architecture and module relationships
+- **[developer_guide.md](developer_guide.md)**: Developer quick start and glossary
+- **[WORKFLOW.md](WORKFLOW.md)**: Branch workflow and development process
+- **[EVOLUTION.md](EVOLUTION.md)**: Project timeline, architecture phases, and release history
+- **[FUND_MOVEMENT_AND_ACCOUNTING.md](FUND_MOVEMENT_AND_ACCOUNTING.md)**: Fund accounting mechanics
+- **[CHANGELOG.md](../CHANGELOG.md)**: Detailed version history
+- **[AGENTS.md](../AGENTS.md)**: AI assistant guidelines
+- **[COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md)**: COW architecture documentation
 - **Inline JSDoc**: Comprehensive function documentation
 
 ### Documentation Statistics
-- **Total Documentation Commits**: 136 (11.7% of total)
+- **Total Documentation Commits**: 137 (11.4% of total)
 - **README Updates**: 50+ commits
 - **JSDoc Coverage**: 80%+ of exported functions
 - **Architecture Docs**: 15+ pages
@@ -575,31 +422,6 @@ v0.7 is the active internal version after the v0.6.0 release. It collects the un
 
 ---
 
-## Future Roadmap
-
-### Short-Term (Next 3 Months)
-- [x] Complete COW architecture migration *(done Feb 2026)*
-- [ ] Enhance dashboard with real-time metrics
-- [ ] Implement additional trading strategies
-- [x] Expand test coverage *(163 test files as of Apr 2026)*
-- [ ] Performance optimization for high-frequency trading
-
-### Medium-Term (3-6 Months)
-- [ ] Multi-exchange support (beyond BitShares)
-- [ ] Advanced order types (stop-loss, take-profit)
-- [ ] Machine learning for parameter optimization
-- [ ] Web-based configuration interface
-- [ ] API for external integrations
-
-### Long-Term (6-12 Months)
-- [ ] Decentralized configuration storage
-- [ ] Community-driven strategy marketplace
-- [ ] Cross-chain arbitrage support
-- [ ] Institutional-grade features
-- [ ] Regulatory compliance framework
-
----
-
 ## Lessons Learned
 
 ### Technical Lessons
@@ -647,18 +469,18 @@ v0.7 is the active internal version after the v0.6.0 release. It collects the un
 DEXBot2 has evolved from a basic trading bot to a sophisticated, production-ready system with:
 
 - **Robust Architecture**: Modular, maintainable, and scalable (~25,000+ lines across 80+ runtime modules)
-- **Comprehensive Testing**: 163 test files covering all critical paths
+- **Comprehensive Testing**: 160 test files covering all critical paths
 - **Production Hardening**: Battle-tested with real funds on mainnet
 - **Advanced Features**: COW architecture, self-healing, multi-node support, AMA market adaptation, dynamic weight regime detection, derivative signals, credit/debt runtime
 - **Excellent Documentation**: Comprehensive guides for users and developers
-- **Active Development**: 1166 commits over 5 months
+- **Active Development**: 1205 commits over 6 months
 
 The project demonstrates strong engineering practices, continuous improvement, and a commitment to quality. The Copy-on-Write architecture, dynamic weight signal pipeline, and native credit/debt runtime represent the current production-grade foundation.
 
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: April 24, 2026
-**Total Commits**: 1166
-**Date Range**: December 2, 2025 - April 2026 (ongoing)
+**Last Updated**: May 1, 2026
+**Total Commits**: 1205
+**Date Range**: December 2, 2025 - May 1, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

@@ -1,16 +1,18 @@
 # DEXBot2
 
-DEXBot2 is an automated market maker for the BitShares decentralized exchange.
+DEXBot2 is a grid-based market maker for the BitShares decentralized exchange.
 
-![Grid Bot Order Distribution](docs/DEXBot2_0.6.0_grid_graphic.svg)
+<p align="center">
+  <img src="docs/media/DEXBot2.webp" alt="DEXBot2 hero banner" width="1200">
+</p>
 
 ## 🚀 Features
 
-- **Smart Grid Trading** — automated geometric order grids that rebalance as the market moves, capturing volatility round the clock
-- **Adaptive Market Signals** — real-time trend detection and dynamic weight adjustments keep your grid aligned with market conditions
-- **Self-Healing & Reliable** — automatic recovery from network issues, batch fill processing, and dust cleanup keep the bot running smoothly 24/7
-- **Bank-Grade Security** — AES-encrypted keys, a hardened credential daemon, and RAM-only password handling protect your funds
-- **Advanced DeFi Workflows** — native margin trading, credit offer management, and multi-bot operation via PM2
+- **Grid Trading** — geometric order grids that rebalance as price moves
+- **Adaptive Signals** — AMA and trend inputs tune grid placement
+- **Credit & MPA** — credit offer and debt workflows
+- **Runtime Safety** — replay-safe fills, sync recovery, and cleanup
+- **Secure Ops** — encrypted keys, a credential daemon, and PM2 control
 
 ## 🔥 Quick Start
 
@@ -217,7 +219,9 @@ Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local boo
 - **[Architecture](docs/architecture.md)** - System design, fill processing pipeline, and testing strategy
 - **[Developer Guide](docs/developer_guide.md)** - Development guide, environment variables, examples, and glossary
 - **[Copy-on-Write Plan](docs/COPY_ON_WRITE_MASTER_PLAN.md)** - Copy-on-Write grid architecture
+- **[Evolution Report](docs/EVOLUTION.md)** - Project timeline, architecture phases, and release history
 - **[Logging](docs/LOGGING.md)** - Logging system documentation
+- **[Docker](docs/docker.md)** - Container build, release images, and secure startup
 - **[Workflow](docs/WORKFLOW.md)** - Project workflow and contribution guide
 
 ## 🤝 Contributing

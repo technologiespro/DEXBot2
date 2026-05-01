@@ -115,6 +115,9 @@ buy/sell weights to be written and applied by the bot runtime.
 Dynamic weights start from the bot's configured `weightDistribution`. These
 configured values are the static baseline.
 
+For the research chart and tuning notes behind this signal path, see
+[Dynamic Weight Research](../analysis/trend_detection/DYNAMIC_WEIGHT_RESEARCH.md).
+
 On each closed-candle cycle, the adapter adds an asymmetric trend offset and a
 symmetric volatility penalty:
 
@@ -487,4 +490,3 @@ Important fields in `market_adapter/state/market_adapter_state.json`:
 | `weightVariance` | Normalized volatility ratio |
 | `weights` | Current dynamic buy/sell weights |
 | `collateralRecommendation` | Advisory collateral-ratio hint |
-

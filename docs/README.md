@@ -43,6 +43,15 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Branching Strategy**: Explanation of the `test` → `dev` → `main` lifecycle.
 - **CI/CD Patterns**: Standards for merging and ensuring code quality across branches.
 
+### 🧭 [Evolution Report](EVOLUTION.md)
+*Project timeline and major architecture phases.*
+- **Coverage**: Historical milestones from the initial December 2025 bootstrap through the current v0.7 work
+- **Focus**: Architecture evolution, release history, test growth, and documentation changes
+
+### 🗒️ [Changelog](../CHANGELOG.md)
+*Release notes and documentation history.*
+- **Scope**: Versioned notes for patch releases and the current unreleased documentation refresh
+
 ---
 
 ## 🔬 Specialized Technical References

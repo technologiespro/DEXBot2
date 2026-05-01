@@ -4,8 +4,12 @@ This folder contains the SMA, MACD, RSI, Hurst, Kalman, and regime analysis code
 
 ## Docs
 
-- `DYNAMIC_WEIGHT_RESEARCH.md` - dynamic weight research notes for the Kalman/Hurst/PE blend
+- [DYNAMIC_WEIGHT_RESEARCH.md](DYNAMIC_WEIGHT_RESEARCH.md) - dynamic weight research notes for the Kalman/Hurst/PE blend
 - `SIGNAL_DOCUMENTATION.md` - derivative signal layer documentation
+
+## Live Counterpart
+
+- [Market Adapter README](../../market_adapter/README.md) - live AMA pricing, dynamic weights, and recalc triggers
 
 ## Modules
 
