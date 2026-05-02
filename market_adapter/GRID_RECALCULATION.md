@@ -102,6 +102,7 @@ node market_adapter/market_adapter.js --deltaPercent 2
 3. Calculates AMA from 1h candlestick closing prices
 4. Tracks the **AMA center price** for each bot
 5. When `|currentAMA - lastRecordedAMA| >= AMA_DELTA_THRESHOLD_PERCENT`:
+   - **Checks if the bot is whitelisted** (non-whitelisted bots only log results)
    - Creates `profiles/recalculate.<botKey>.trigger` file
    - DEXBot's main loop detects the trigger and calls `Grid.recalculateGrid()`
 6. Last recorded center is updated after recalculation

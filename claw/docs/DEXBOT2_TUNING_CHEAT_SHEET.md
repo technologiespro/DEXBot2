@@ -182,6 +182,7 @@ AMA is the recentering mechanism.
 - it is calculated from 1h candle closes
 - it watches how far the adaptive center moves
 - once the move crosses the configured threshold, DEXBot2 triggers a grid recalculation
+- **AMA recently centering requires whitelisting the bot for the market adapter to work live (otherwise it only logs).**
 - `gridPrice: "ama"` tells the rebuilt grid to center itself on that AMA reference
 - `gridPrice: "pool"` or `gridPrice: "book"` centers the rebuilt grid on the live pair price instead
 - `gridPrice: null` falls back to the current `startPrice` reference

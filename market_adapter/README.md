@@ -21,8 +21,9 @@ fetching and run as a fixed-price anchor.
 
 ### 2. Generate the Whitelist
 
-Generate the whitelist from the AMA-enabled bots so the adapter can write live
-AMA grid snapshots and recalc triggers:
+Generate the whitelist from the AMA-enabled bots to enable live grid snapshots
+and recalc triggers. **Without whitelisting, the adapter runs in dry-run
+mode (logging only).**
 
 ```bash
 npm run market-adapter:whitelist
@@ -101,7 +102,8 @@ Market-adapter settings resolve in this order:
 ## Dry-Run Safety
 
 Bots that are not AMA-whitelisted are processed in dry-run mode. Their candles
-and state are computed, but live grid files and recalc triggers are suppressed.
+and state are computed, but live grid files and recalc triggers are suppressed
+(logging only).
 
 | Invocation | Behavior |
 |---|---|
@@ -179,6 +181,7 @@ node market_adapter/ama_signal_runner.js --bot xrp-bts-0 --compact
 
 - Check `lastDeltaPercent` vs `thresholdPercent`.
 - Check `staleData` and `staleAgeHours`.
+- **Confirm the bot is whitelisted.** Non-whitelisted bots only log and do not write triggers.
 - Confirm the bot's whitelist entry has `"ama": true`.
 - Run `node market_adapter/market_adapter.js --once --deltaPercent <lower-value>` for a one-cycle threshold test.
 
