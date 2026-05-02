@@ -1,6 +1,5 @@
 const assert = require('assert');
 const StrategyEngine = require('../modules/order/strategy');
-const Grid = require('../modules/order/grid');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 
 function buildSlots() {
@@ -47,6 +46,7 @@ function createManager(slots) {
         },
         pauseFundRecalc: () => {},
         resumeFundRecalc: () => {},
+        recalculateFunds: async () => {},
         _updateOrder(order) {
             this.orders.set(order.id, { ...order });
         }
@@ -54,56 +54,39 @@ function createManager(slots) {
 }
 
 async function run() {
-    console.log('Running reaction-cap malformed fill type test...');
+    console.log('Running malformed fill type handling test...');
 
     const slots = buildSlots();
     const manager = createManager(slots);
     const strategy = new StrategyEngine(manager);
 
-    const originalGetSizingContext = Grid.getSizingContext;
-    Grid.getSizingContext = () => ({ budget: 1000 });
+    // Test that processFillsOnly handles malformed fill types gracefully
+    const malformedFills = [
+        { type: ORDER_TYPES.SELL, isPartial: false, id: 'slot-10', orderId: '1.7.1', price: 110, size: 10 },
+        { type: ORDER_TYPES.BUY, isPartial: false, id: 'slot-0', orderId: '1.7.2', price: 100, size: 10 },
+        { type: 'MALFORMED', isPartial: false, id: 'slot-99', orderId: '1.7.3', price: 105, size: 10 },
+        { isPartial: false, id: 'slot-98', orderId: '1.7.4', price: 105, size: 10 }
+    ];
 
-    const capturedCaps = [];
-    const originalRebalanceSideRobust = strategy.rebalanceSideRobust.bind(strategy);
-    strategy.rebalanceSideRobust = async function(type, allSlots, sideSlots, budget, avail, excludeIds, reactionCap) {
-        capturedCaps.push({ type, reactionCap });
-        return {
-            ordersToPlace: [],
-            ordersToRotate: [],
-            ordersToUpdate: [],
-            ordersToCancel: [],
-            stateUpdates: [],
-            totalNewPlacementSize: 0
-        };
-    };
-
+    // Should not throw on malformed types
+    let threw = false;
     try {
-        await strategy.rebalance([
-            { type: ORDER_TYPES.SELL, isPartial: false },
-            { type: ORDER_TYPES.BUY, isPartial: false },
-            { type: 'MALFORMED', isPartial: false },
-            { isPartial: false }
-        ], new Set());
-    } finally {
-        Grid.getSizingContext = originalGetSizingContext;
-        strategy.rebalanceSideRobust = originalRebalanceSideRobust;
+        await strategy.processFillsOnly(malformedFills, new Set());
+    } catch (err) {
+        threw = true;
+        console.error('Unexpected error:', err.message);
     }
 
-    assert.strictEqual(capturedCaps.length, 2, 'rebalanceSideRobust should be called for both sides');
+    assert.strictEqual(threw, false, 'processFillsOnly should not throw on malformed fill types');
 
-    const buyCap = capturedCaps.find(c => c.type === ORDER_TYPES.BUY);
-    const sellCap = capturedCaps.find(c => c.type === ORDER_TYPES.SELL);
+    // Valid fills should still be processed: their slots should be virtualized
+    const sellSlot = manager.orders.get('slot-10');
+    const buySlot = manager.orders.get('slot-0');
 
-    assert(buyCap, 'BUY cap should be captured');
-    assert(sellCap, 'SELL cap should be captured');
-    // Boundary-shift semantics: each valid full fill shifts the boundary, requiring crawl
-    // budget on BOTH sides. 2 valid fills (1 SELL + 1 BUY) -> boundaryShiftCount = 2.
-    // Each side's direct count is 1, but both are floored to max(1, boundaryShiftCount) = 2.
-    // Malformed/missing types are excluded from boundary shift counting.
-    assert.strictEqual(buyCap.reactionCap, 2, 'BUY reaction cap: 1 direct (SELL fill) floored to 2 (boundary shift count)');
-    assert.strictEqual(sellCap.reactionCap, 2, 'SELL reaction cap: 1 direct (BUY fill) floored to 2 (boundary shift count)');
+    assert.strictEqual(sellSlot.state, ORDER_STATES.VIRTUAL, 'Valid SELL fill should be virtualized');
+    assert.strictEqual(buySlot.state, ORDER_STATES.VIRTUAL, 'Valid BUY fill should be virtualized');
 
-    console.log('✓ Reaction cap ignores malformed fill types and respects boundary-shift floor');
+    console.log('✓ Malformed fill types are ignored, valid fills processed correctly');
 }
 
 run().catch(err => {

@@ -34,16 +34,15 @@ async function run() {
 
         let captured = null;
 
-        const fakeBot = {
-            manager: {
-                logger: { log: () => {} },
-                orders: new Map(),
-                synchronizeWithChain: async (data, source) => {
-                    captured = { data, source };
-                    return { newOrders: [], ordersNeedingCorrection: [] };
-                },
-                applyGridUpdateBatch: async () => true
-            }
+        const fakeBot = Object.create(DEXBot.prototype);
+        fakeBot.manager = {
+            logger: { log: () => {} },
+            orders: new Map(),
+            synchronizeWithChain: async (data, source) => {
+                captured = { data, source };
+                return { newOrders: [], ordersNeedingCorrection: [] };
+            },
+            applyGridUpdateBatch: async () => true
         };
 
         await DEXBot.prototype._processBatchResults.call(

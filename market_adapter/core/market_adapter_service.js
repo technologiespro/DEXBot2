@@ -7,7 +7,7 @@ const {
     normalizeMaxVolatilityOffset,
     normalizeVolatilityThreshold,
 } = require('./config_normalizers');
-const { normalizeMarketSource, hasNumericStartPrice } = require('../utils/chain');
+const { normalizeMarketSource, hasNumericStartPrice, resolveMarketSourceForBot } = require('../utils/chain');
 const { computeRegimeMultiplier } = require('./strategies/regime_gate');
 const { calculateAMA, getAmaWarmupBars } = require('../../analysis/ama_fitting/ama');
 const { KalmanTrendAnalyzer } = require('../../analysis/trend_detection/kalman_trend_analyzer');
@@ -198,6 +198,88 @@ class MarketAdapterService {
         }
     }
 
+    buildDefaultBotState(bot, overrides = {}) {
+        return {
+            botName: bot.name,
+            botKey: bot.botKey,
+            marketSource: null,
+            priceMode: null,
+            lastCycleSource: null,
+            lastCycleAt: null,
+            pendingClosedCandle: false,
+            lastTriggerSuppressedReason: null,
+            poolId: null,
+            candleFile: null,
+            candleCount: 0,
+            analysisCandleCount: 0,
+            kibanaGapRepairCount: 0,
+            kibanaBackfillCount: 0,
+            unresolvedGapCount: 0,
+            nativeRecentTradeSequences: [],
+            nativeLastTradeTs: null,
+            nativeOverlapCount: null,
+            nativePagesFetched: null,
+            lastCandleTs: null,
+            rawLastCandleTs: null,
+            lastClosedCandleTs: null,
+            centerPrice: null,
+            amaCenterPrice: null,
+            amaConfig: null,
+            atr: null,
+            weightVariance: null,
+            weights: null,
+            effectiveWeights: null,
+            collateralRecommendation: null,
+            amaSlope: null,
+            staleData: false,
+            staleAgeHours: null,
+            ...overrides,
+        };
+    }
+
+    buildDefaultResult(bot, overrides = {}) {
+        return {
+            ok: true,
+            dryRunMessages: [],
+            source: null,
+            marketSource: null,
+            candleCount: 0,
+            analysisCandleCount: 0,
+            kibanaGapRepairCount: 0,
+            kibanaBackfillCount: 0,
+            unresolvedGapCount: 0,
+            nativeRecentTradeSequences: [],
+            nativeLastTradeTs: null,
+            nativeOverlapCount: null,
+            nativePagesFetched: null,
+            amaPrice: null,
+            deltaPercent: null,
+            thresholdPercent: null,
+            referencePrice: null,
+            amaComparison: [],
+            triggered: false,
+            triggerPath: null,
+            staleData: false,
+            staleAgeHours: null,
+            triggerCallbackError: null,
+            triggerSuppressedReason: null,
+            weights: null,
+            collateralRecommendation: null,
+            amaSlope: null,
+            poolId: null,
+            candleFile: null,
+            lastCandleTs: null,
+            rawLastCandleTs: null,
+            lastClosedCandleTs: null,
+            centerPrice: null,
+            amaConfig: null,
+            atr: null,
+            weightVariance: null,
+            pendingClosedCandle: false,
+            ...overrides,
+        };
+    }
+
     async processBot(bot, state, cfg, contextCache, hooks = {}) {
         const deps = this.deps;
         const isDryRun = !!hooks.isDryRun;
@@ -214,82 +296,20 @@ class MarketAdapterService {
                 ? deps.calculateBotThreshold(cfg)
                 : null;
             state.bots = state.bots || {};
-            state.bots[bot.botKey] = {
-                botName: bot.name,
-                botKey: bot.botKey,
+            state.bots[bot.botKey] = this.buildDefaultBotState(bot, {
                 startPrice: bot.startPrice,
-                marketSource: null,
                 priceMode: 'fixed',
                 lastCycleSource: 'fixed-start-price',
                 lastCycleAt: nowIso,
-                pendingClosedCandle: false,
                 lastTriggerSuppressedReason: 'fixed_start_price',
-                poolId: null,
-                candleFile: null,
-                candleCount: 0,
-                analysisCandleCount: 0,
-                kibanaGapRepairCount: 0,
-                kibanaBackfillCount: 0,
-                unresolvedGapCount: 0,
-                nativeRecentTradeSequences: [],
-                nativeLastTradeTs: null,
-                nativeOverlapCount: null,
-                nativePagesFetched: null,
-                lastCandleTs: null,
-                rawLastCandleTs: null,
-                lastClosedCandleTs: null,
-                centerPrice: null,
-                amaCenterPrice: null,
-                amaConfig: null,
-                atr: null,
-                weightVariance: null,
-                weights: null,
-                effectiveWeights: null,
-                collateralRecommendation: null,
-                amaSlope: null,
-                staleData: false,
-                staleAgeHours: null,
-            };
+            });
 
-            return {
-                ok: true,
+            return this.buildDefaultResult(bot, {
                 dryRunMessages,
                 source: 'fixed-start-price',
-                marketSource: null,
-                candleCount: 0,
-                analysisCandleCount: 0,
-                kibanaGapRepairCount: 0,
-                kibanaBackfillCount: 0,
-                unresolvedGapCount: 0,
-                nativeRecentTradeSequences: [],
-                nativeLastTradeTs: null,
-                nativeOverlapCount: null,
-                nativePagesFetched: null,
-                amaPrice: null,
-                deltaPercent: null,
                 thresholdPercent,
-                referencePrice: null,
-                amaComparison: [],
-                triggered: false,
-                triggerPath: null,
-                staleData: false,
-                staleAgeHours: null,
-                triggerCallbackError: null,
                 triggerSuppressedReason: 'fixed_start_price',
-                weights: null,
-                collateralRecommendation: null,
-                amaSlope: null,
-                poolId: null,
-                candleFile: null,
-                lastCandleTs: null,
-                rawLastCandleTs: null,
-                lastClosedCandleTs: null,
-                centerPrice: null,
-                amaConfig: null,
-                atr: null,
-                weightVariance: null,
-                pendingClosedCandle: false,
-            };
+            });
         }
 
         const contextSignature = this.buildBotContextSignature(bot);
@@ -315,7 +335,7 @@ class MarketAdapterService {
         const existingMeta = existing?.meta && typeof existing.meta === 'object' ? existing.meta : {};
         let existingCandles = Array.isArray(existing?.candles) ? existing.candles : [];
         const existingMarketSource = normalizeMarketSource(existingMeta.marketSource);
-        const marketSource = normalizeMarketSource(ctx.marketSource || 'pool') || 'pool';
+        const marketSource = resolveMarketSourceForBot(bot) || 'pool';
         const isBookSource = marketSource === 'book';
 
         // Prune stale trailing candles from a previous run before any processing.
@@ -579,7 +599,11 @@ class MarketAdapterService {
                 ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
                 : { gapCount: 0, missingTimestamps: [] };
 
-            if (gapAnalysis.gapCount > 0 && ((isBookSource && typeof fetchKibanaCandles === 'function') || (deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function'))) {
+            const hasKibanaSource = isBookSource
+                ? deps.kibanaMarketSource && typeof deps.kibanaMarketSource.getMarketCandles === 'function'
+                : deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function';
+
+            if (gapAnalysis.gapCount > 0 && hasKibanaSource) {
                 const timeRange = this.buildGapRepairTimeRange(
                     gapAnalysis.missingTimestamps,
                     cfg.intervalSeconds,
@@ -588,24 +612,13 @@ class MarketAdapterService {
                 if (timeRange) {
                     kibanaGapRepairAttempted = true;
                     try {
-                        const kibanaGapCandles = await deps.withRetries(() => {
-                            if (isBookSource) {
-                                return fetchKibanaCandles({
-                                    intervalSeconds: cfg.intervalSeconds,
-                                    consolidateByTimestamp: true,
-                                    fillGapsToRequestedRange: false,
-                                    apiKey: null,
-                                    timeRange,
-                                });
-                            }
-                            return deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
-                                intervalSeconds: cfg.intervalSeconds,
-                                consolidateByTimestamp: true,
-                                fillGapsToRequestedRange: false,
-                                apiKey: null,
-                                timeRange,
-                            });
-                        }, cfg.sourceRetries, cfg.retryDelayMs, 'kibana gap repair failed');
+                        const kibanaGapCandles = await deps.withRetries(() => fetchKibanaCandles({
+                            intervalSeconds: cfg.intervalSeconds,
+                            consolidateByTimestamp: true,
+                            fillGapsToRequestedRange: false,
+                            apiKey: null,
+                            timeRange,
+                        }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana gap repair failed');
 
                         if (Array.isArray(kibanaGapCandles) && kibanaGapCandles.length > 0) {
                             const beforeTimestamps = new Set(nextCandles.map((c) => c[0]));
@@ -625,37 +638,23 @@ class MarketAdapterService {
             //    cases where native bootstrap fell short or the file was truncated.
             const candleShortfall = rawKeepCount - nextCandles.length;
             let kibanaBackfillCount = 0;
-            if (!kibanaBootstrapEmpty && !kibanaGapRepairAttempted && candleShortfall > 0 && nextCandles.length > 0 && ((isBookSource && typeof fetchKibanaCandles === 'function') || (deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function'))) {
+            if (!kibanaBootstrapEmpty && !kibanaGapRepairAttempted && candleShortfall > 0 && nextCandles.length > 0 && hasKibanaSource) {
                 const oldestTs = nextCandles[0][0];
                 const shortfallMs = candleShortfall * cfg.intervalSeconds * 1000;
                 const bufferMs = 24 * 3600 * 1000; // 24h buffer
                 const backfillStartMs = Math.max(0, oldestTs - shortfallMs - bufferMs);
                 const backfillEndMs = oldestTs + cfg.intervalSeconds * 1000;
                 try {
-                    const historicalCandles = await deps.withRetries(() => {
-                        if (isBookSource) {
-                            return fetchKibanaCandles({
-                                intervalSeconds: cfg.intervalSeconds,
-                                consolidateByTimestamp: true,
-                                fillGapsToRequestedRange: false,
-                                apiKey: null,
-                                timeRange: {
-                                    gte: new Date(backfillStartMs).toISOString(),
-                                    lte: new Date(backfillEndMs).toISOString(),
-                                },
-                            });
-                        }
-                        return deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
-                            intervalSeconds: cfg.intervalSeconds,
-                            consolidateByTimestamp: true,
-                            fillGapsToRequestedRange: false,
-                            apiKey: null,
-                            timeRange: {
-                                gte: new Date(backfillStartMs).toISOString(),
-                                lte: new Date(backfillEndMs).toISOString(),
-                            },
-                        });
-                    }, cfg.sourceRetries, cfg.retryDelayMs, 'kibana historical backfill failed');
+                    const historicalCandles = await deps.withRetries(() => fetchKibanaCandles({
+                        intervalSeconds: cfg.intervalSeconds,
+                        consolidateByTimestamp: true,
+                        fillGapsToRequestedRange: false,
+                        apiKey: null,
+                        timeRange: {
+                            gte: new Date(backfillStartMs).toISOString(),
+                            lte: new Date(backfillEndMs).toISOString(),
+                        },
+                    }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana historical backfill failed');
                     if (Array.isArray(historicalCandles) && historicalCandles.length > 0) {
                         nextCandles = deps.mergeCandles(nextCandles, historicalCandles);
                         kibanaBackfillCount = historicalCandles.length;
@@ -791,8 +790,7 @@ class MarketAdapterService {
                 pendingClosedCandle,
                 lastTriggerSuppressedReason: triggerSuppressedReason,
             };
-            return {
-                ok: true,
+            return this.buildDefaultResult(bot, {
                 dryRunMessages,
                 source: sourceLabel,
                 marketSource,
@@ -805,37 +803,24 @@ class MarketAdapterService {
                 nativeLastTradeTs,
                 nativeOverlapCount,
                 nativePagesFetched,
-                amaPrice: null,
-                deltaPercent: null,
                 thresholdPercent: botThreshold,
-                referencePrice: null,
-                amaComparison: [],
-                triggered: false,
-                triggerPath: null,
                 staleData,
                 staleAgeHours,
-                triggerCallbackError: null,
                 triggerSuppressedReason,
-                weights: null,
-                collateralRecommendation: null,
-                amaSlope: null,
                 poolId: ctx.poolId,
                 candleFile: deps.path.relative(deps.root, filePath),
                 lastCandleTs: rawLastCandleTs,
                 rawLastCandleTs,
                 lastClosedCandleTs: consumedClosedCandleTs,
-                centerPrice: null,
                 amaConfig: {
                     erPeriod: botAma.erPeriod,
                     fastPeriod: botAma.fastPeriod,
                     slowPeriod: botAma.slowPeriod,
                 },
-                atr: null,
-                weightVariance: null,
                 pendingClosedCandle,
-            };
+            });
         }
-        
+
         // ------------------ MARKET ADAPTER STRATEGIES ------------------
 
         // 1. AMA series and closes — used for price reference and signal computation
@@ -877,8 +862,7 @@ class MarketAdapterService {
                 pendingClosedCandle: false,
                 lastTriggerSuppressedReason: triggerSuppressedReason,
             };
-            return {
-                ok: true,
+            return this.buildDefaultResult(bot, {
                 dryRunMessages,
                 source: sourceLabel,
                 marketSource,
@@ -891,35 +875,21 @@ class MarketAdapterService {
                 nativeLastTradeTs,
                 nativeOverlapCount,
                 nativePagesFetched,
-                amaPrice: null,
-                deltaPercent: null,
                 thresholdPercent: botThreshold,
-                referencePrice: null,
-                amaComparison: [],
-                triggered: false,
-                triggerPath: null,
                 staleData,
                 staleAgeHours,
-                triggerCallbackError: null,
                 triggerSuppressedReason,
-                weights: null,
-                collateralRecommendation: null,
-                amaSlope: null,
                 poolId: ctx.poolId,
                 candleFile: deps.path.relative(deps.root, filePath),
                 lastCandleTs: rawLastCandleTs,
                 rawLastCandleTs,
                 lastClosedCandleTs: consumedClosedCandleTs,
-                centerPrice: null,
                 amaConfig: {
                     erPeriod: botAma.erPeriod,
                     fastPeriod: botAma.fastPeriod,
                     slowPeriod: botAma.slowPeriod,
                 },
-                atr: null,
-                weightVariance: null,
-                pendingClosedCandle: false,
-            };
+            });
         }
 
         const amaValues = calculateAMA(closes, botAma);

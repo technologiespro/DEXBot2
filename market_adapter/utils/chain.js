@@ -1,8 +1,17 @@
 'use strict';
 
+let _bitsharesClient = null;
+
 function getBitsharesClient() {
     // lazy require to avoid circular dependencies at module load time
-    return require('../../modules/bitshares_client');
+    if (!_bitsharesClient) {
+        _bitsharesClient = require('../../modules/bitshares_client');
+    }
+    return _bitsharesClient;
+}
+
+function setBitsharesClientForTests(client) {
+    _bitsharesClient = client;
 }
 
 async function resolveAsset(symbol, bitsharesClient = null) {
@@ -115,6 +124,11 @@ function hasNumericStartPrice(raw) {
     return typeof raw === 'number' && Number.isFinite(raw) && raw > 0;
 }
 
+function resolveMarketSourceForBot(bot) {
+    if (hasNumericStartPrice(bot?.startPrice)) return null;
+    return normalizeMarketSource(bot?.startPrice) || 'pool';
+}
+
 function normalizePoolId(id) {
     if (id == null) return null;
     const s = String(id).trim();
@@ -166,5 +180,8 @@ module.exports = {
     findPoolByAssets,
     normalizeMarketSource,
     hasNumericStartPrice,
+    resolveMarketSourceForBot,
     resolveBotContext,
+    getBitsharesClient,
+    setBitsharesClientForTests,
 };

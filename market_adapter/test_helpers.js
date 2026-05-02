@@ -12,13 +12,13 @@ const {
     writeCenterSnapshot,
     sleepUntilAlignedBoundary,
     normalizeMarketSource,
-    resolveMarketSourceForBot,
 } = require('./market_adapter');
 
 const {
     resolveAsset,
     findPoolByAssets,
     resolveBotContext,
+    resolveMarketSourceForBot,
 } = require('./utils/chain');
 
 module.exports = {

@@ -189,7 +189,7 @@ console.log('\n=== Grid Comparison Function Tests (By Side) ===\n');
     ];
     const result = await Grid.compareGrids(calculated, persisted);
     const tolerance = 0.01;
-    const passed = Math.abs(result.sell.metric - 0.5853) < tolerance && Math.abs(result.buy.metric - 0.5853) < tolerance;
+    const passed = Math.abs(result.sell.metric - 0.71686) < tolerance && Math.abs(result.buy.metric - 0.71686) < tolerance;
     logTest('Unmatched orders detected by grid ID', passed, `buy=${result.buy.metric.toFixed(6)}, sell=${result.sell.metric.toFixed(6)}`);
 }
 

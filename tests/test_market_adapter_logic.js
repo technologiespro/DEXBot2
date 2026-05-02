@@ -13,7 +13,6 @@ const {
     resolveAmaForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
     normalizeMarketSource,
-    resolveMarketSourceForBot,
     normalizeNativeMarketHistoryCandles,
     fetchNativeMarketHistorySince,
     usesAmaGridPrice,
@@ -21,6 +20,7 @@ const {
     applyRuntimeDefaultsFromGeneralSettings,
     _setBitsharesClientForTests,
 } = require('../market_adapter/market_adapter');
+const { resolveMarketSourceForBot } = require('../market_adapter/utils/chain');
 const { detectMissingCandleTimestamps, fillCandleGaps, pruneStaleTail, tradesToCandles } = require('../market_adapter/candle_utils');
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
 

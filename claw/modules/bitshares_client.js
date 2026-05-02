@@ -1,5 +1,5 @@
 const BitSharesLib = require('btsdex');
-require('../../modules/btsdex_event_patch');
+const btsdexEventPatch = require('../../modules/btsdex_event_patch');
 const { TIMING } = require('../../modules/constants');
 
 const DEFAULT_TIMEOUT_MS = TIMING.CONNECTION_TIMEOUT_MS;
@@ -9,29 +9,30 @@ let connected = false;
 let suppressConnectionLog = false;
 let connectionListenersAttached = false;
 
+function handleConnectionStatus(status) {
+  if (status === 'open') {
+    connected = true;
+    if (!suppressConnectionLog) {
+      console.log('BitShares shared client connected');
+    }
+  }
+  if (status === 'closed' || status === 'closing') {
+    connected = false;
+    if (!suppressConnectionLog) {
+      console.warn('BitShares shared client disconnected');
+    }
+  }
+}
+
 function attachConnectionListeners() {
   if (connectionListenersAttached) {
     return;
   }
 
-  if (typeof BitSharesLib.subscribe !== 'function') {
-    return;
-  }
-
   try {
-    BitSharesLib.subscribe('connected', () => {
-      connected = true;
-      if (!suppressConnectionLog) {
-        console.log('BitShares shared client connected');
-      }
-    });
-
-    BitSharesLib.subscribe('disconnected', () => {
-      connected = false;
-      if (!suppressConnectionLog) {
-        console.warn('BitShares shared client disconnected');
-      }
-    });
+    if (typeof btsdexEventPatch.addStatusCallback === 'function') {
+      btsdexEventPatch.addStatusCallback(handleConnectionStatus);
+    }
   } catch (_) {
     // Some runtimes may not expose subscription hooks at require time.
   }

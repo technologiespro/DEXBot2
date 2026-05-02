@@ -33,6 +33,11 @@ function createManagerFixture(orders = []) {
         logFundsStatus: () => {}
     };
 
+    manager.assets = {
+        assetA: { id: '1.3.0', precision: 8 },
+        assetB: { id: '1.3.121', precision: 5 }
+    };
+
     // Disable accounting for unit tests
     manager.accountant = {
         updateOptimisticFreeBalance: async () => {},

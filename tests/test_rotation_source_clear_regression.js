@@ -57,7 +57,8 @@ async function run() {
         synchronizeWithChain: async () => ({ newOrders: [], ordersNeedingCorrection: [] })
     };
 
-    const fakeBot = { manager };
+    const fakeBot = Object.create(DEXBot.prototype);
+    fakeBot.manager = manager;
 
     try {
         await DEXBot.prototype._processBatchResults.call(

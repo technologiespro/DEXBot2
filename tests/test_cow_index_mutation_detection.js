@@ -198,7 +198,7 @@ try {
             type: ORDER_TYPES.BUY,
             state: ORDER_STATES.PARTIAL,  // Changed state
             orderId: '12345'
-        }, 'test', true);  // skipAccounting=true
+        }, 'test', { skipAccounting: true });
         
         // Detect mutations
         const mutations = detectMutations(manager, snapshot);

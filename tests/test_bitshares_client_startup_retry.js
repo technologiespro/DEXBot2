@@ -78,15 +78,12 @@ function installStubs(settings = null) {
             if (!shouldConnectSucceed) {
                 throw new Error('connect failed');
             }
-            if (typeof connectedCallback === 'function') {
-                connectedCallback();
+            if (typeof statusCallback === 'function') {
+                statusCallback('open');
             }
             return true;
         },
-        subscribe(event, cb) {
-            if (event === 'connected') {
-                connectedCallback = cb;
-            }
+        subscribe() {
             return undefined;
         },
         disconnect() {

@@ -20,6 +20,35 @@ function createAnalyzer() {
 function advanceEntryBias(analyzer, prevInterpretation, currInterpretation) {
     analyzer._resetEntryBias();
     analyzer.currInterpretation = currInterpretation;
+
+    // Set SMAs so trend alignment matches the current interpretation
+    const isBullish = currInterpretation === 'BULL' || currInterpretation === 'BULL_WEAK';
+    const isBearish = currInterpretation === 'BEAR' || currInterpretation === 'BEAR_WEAK';
+
+    if (isBullish) {
+        analyzer.sma = { values: [1, 2] };
+        analyzer.prevSma = 1;
+        analyzer.currSma = 2;
+        analyzer.fastSma = { values: [1, 2] };
+        analyzer.prevFastSma = 1;
+        analyzer.currFastSma = 2;
+    } else if (isBearish) {
+        analyzer.sma = { values: [2, 1] };
+        analyzer.prevSma = 2;
+        analyzer.currSma = 1;
+        analyzer.fastSma = { values: [2, 1] };
+        analyzer.prevFastSma = 2;
+        analyzer.currFastSma = 1;
+    } else {
+        // NEUTRAL
+        analyzer.sma = { values: [1, 1] };
+        analyzer.prevSma = 1;
+        analyzer.currSma = 1;
+        analyzer.fastSma = { values: [1, 1] };
+        analyzer.prevFastSma = 1;
+        analyzer.currFastSma = 1;
+    }
+
     analyzer._advanceEntryBias(prevInterpretation);
 }
 
@@ -54,14 +83,15 @@ function testBullConfirmsExistingWeakSetup() {
     assert.strictEqual(analyzer.bullEntrySetupConfirmed, true);
 }
 
-function testDirectBullIsMarkedLate() {
+function testDirectBullWithoutWeakSetup() {
     const analyzer = createAnalyzer();
     advanceEntryBias(analyzer, 'NEUTRAL', 'BULL');
 
-    assert.strictEqual(analyzer.entryBias, 'LATE_LONG');
+    // Without a prior BULL_WEAK setup, direct BULL does not produce an entry bias
+    assert.strictEqual(analyzer.entryBias, 'NONE');
     assert.strictEqual(analyzer.isBullWeakEntry, false);
     assert.strictEqual(analyzer.isBullConfirmation, false);
-    assert.strictEqual(analyzer.isLateBullWithoutWeak, true);
+    assert.strictEqual(analyzer.isLateBullWithoutWeak, false);
     assert.strictEqual(analyzer.isBearWeakEntry, false);
     assert.strictEqual(analyzer.isBearConfirmation, false);
     assert.strictEqual(analyzer.isLateBearWithoutWeak, false);
@@ -131,17 +161,18 @@ function testBearConfirmsExistingWeakSetup() {
     assert.strictEqual(analyzer.bearEntrySetupConfirmed, true);
 }
 
-function testDirectBearIsMarkedLate() {
+function testDirectBearWithoutWeakSetup() {
     const analyzer = createAnalyzer();
     advanceEntryBias(analyzer, 'NEUTRAL', 'BEAR');
 
-    assert.strictEqual(analyzer.entryBias, 'LATE_SHORT');
+    // Without a prior BEAR_WEAK setup, direct BEAR does not produce an entry bias
+    assert.strictEqual(analyzer.entryBias, 'NONE');
     assert.strictEqual(analyzer.isBullWeakEntry, false);
     assert.strictEqual(analyzer.isBullConfirmation, false);
     assert.strictEqual(analyzer.isLateBullWithoutWeak, false);
     assert.strictEqual(analyzer.isBearWeakEntry, false);
     assert.strictEqual(analyzer.isBearConfirmation, false);
-    assert.strictEqual(analyzer.isLateBearWithoutWeak, true);
+    assert.strictEqual(analyzer.isLateBearWithoutWeak, false);
 }
 
 function testBearishSetupClearsOnNeutral() {
@@ -181,12 +212,12 @@ function main() {
     console.log('Running test: derivative entry bias');
     testBullWeakStartsEarlyLongSetup();
     testBullConfirmsExistingWeakSetup();
-    testDirectBullIsMarkedLate();
+    testDirectBullWithoutWeakSetup();
     testBullishSetupClearsOnNeutral();
     testBullWeakDoesNotRefireAfterConfirmedBullDowngrade();
     testBearWeakStartsEarlyShortSetup();
     testBearConfirmsExistingWeakSetup();
-    testDirectBearIsMarkedLate();
+    testDirectBearWithoutWeakSetup();
     testBearishSetupClearsOnNeutral();
     testBearWeakDoesNotRefireAfterConfirmedBearDowngrade();
     console.log('✓ derivative entry bias PASSED');

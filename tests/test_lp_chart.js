@@ -87,7 +87,7 @@ function testGenerateMarketLpChartUplot() {
         'market_adapter',
         'data',
         'lp',
-        '1_3_5537_1_3_0',
+        'iob_xrp_bts',
         'lp_pool_133_1h.json',
     );
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot2-lp-uplot-'));

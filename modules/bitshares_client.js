@@ -157,10 +157,7 @@ async function assessFailover(reason = 'status change') {
         try {
             await nodeManager.checkAllNodes();
             const healthyNodes = nodeManager.getHealthyNodes();
-            const fallbackNodes = Array.isArray(nodeConfig.list) && nodeConfig.list.length > 0
-                ? nodeConfig.list
-                : NODE_MANAGEMENT.DEFAULT_NODES;
-            const nextNodes = healthyNodes.length > 0 ? healthyNodes : fallbackNodes;
+            const nextNodes = healthyNodes.length > 0 ? healthyNodes : getConfiguredOrDefaultNodes();
             return restartBitsharesConnection(nextNodes, reason);
         } catch (err) {
             console.warn('[NodeManager] Failover assessment error:', err.message);
@@ -175,8 +172,29 @@ async function assessFailover(reason = 'status change') {
     }
 }
 
+function getConfiguredOrDefaultNodes() {
+    return Array.isArray(nodeConfig?.list) && nodeConfig.list.length > 0
+        ? nodeConfig.list
+        : NODE_MANAGEMENT.DEFAULT_NODES;
+}
+
 function handleConnectionStatus(status) {
     const canHandleFailover = nodeManager && nodeConfig?.healthCheck?.enabled !== false;
+
+    if (status === 'open') {
+        connected = true;
+        lastConnectionError = null;
+        if (nodeManager && nodeConfig?.healthCheck?.enabled !== false && !nodeManager.monitoringActive) {
+            nodeManager.start();
+        }
+        if (!suppressConnectionLog) {
+            console.log('modules/bitshares_client: BitShares connected');
+        }
+        for (const cb of Array.from(connectedCallbacks)) {
+            try { cb(); } catch (e) { console.error('connected callback error', e.message); }
+        }
+        return false;
+    }
 
     if (status === 'closed' || status === 'closing') {
         connected = false;
@@ -215,20 +233,6 @@ try {
         };
     }
 
-    BitSharesLib.subscribe('connected', () => {
-        connected = true;
-        lastConnectionError = null;
-        if (nodeManager && nodeConfig?.healthCheck?.enabled !== false && !nodeManager.monitoringActive) {
-            nodeManager.start();
-        }
-        if (!suppressConnectionLog) {
-            console.log('modules/bitshares_client: BitShares connected');
-        }
-        for (const cb of Array.from(connectedCallbacks)) {
-            try { cb(); } catch (e) { console.error('connected callback error', e.message); }
-        }
-    });
-
     if (typeof btsdexEventPatch.addStatusCallback === 'function') {
         btsdexEventPatch.addStatusCallback(handleConnectionStatus);
     } else if (typeof BitSharesApi.setNotifyStatusCallback === 'function') {
@@ -262,9 +266,7 @@ async function refreshStartupNodeServers(reason = 'startup') {
     startupNodeRefreshPromise = (async () => {
         try {
             if (nodeConfig.healthCheck?.enabled === false) {
-                const fallbackNodes = Array.isArray(nodeConfig.list) && nodeConfig.list.length > 0
-                    ? nodeConfig.list
-                    : NODE_MANAGEMENT.DEFAULT_NODES;
+                const fallbackNodes = getConfiguredOrDefaultNodes();
                 await restartBitsharesConnection(fallbackNodes, `Startup ${reason}`);
                 if (!suppressConnectionLog) {
                     console.log(`[NodeManager] Startup ${reason}: using ${fallbackNodes.length} configured node(s) without health probing`);
@@ -274,10 +276,7 @@ async function refreshStartupNodeServers(reason = 'startup') {
 
             await nodeManager.checkAllNodes();
             const healthyNodes = nodeManager.getHealthyNodes();
-            const fallbackNodes = Array.isArray(nodeConfig.list) && nodeConfig.list.length > 0
-                ? nodeConfig.list
-                : NODE_MANAGEMENT.DEFAULT_NODES;
-            const nextNodes = healthyNodes.length > 0 ? healthyNodes : fallbackNodes;
+            const nextNodes = healthyNodes.length > 0 ? healthyNodes : getConfiguredOrDefaultNodes();
             await restartBitsharesConnection(nextNodes, `Startup ${reason}`);
             if (!suppressConnectionLog) {
                 console.log(`[NodeManager] Startup ${reason}: using ${nextNodes.length} node(s)`);
@@ -287,9 +286,7 @@ async function refreshStartupNodeServers(reason = 'startup') {
             if (!suppressConnectionLog) {
                 console.warn(`[NodeManager] Startup ${reason} node refresh failed: ${err.message}`);
             }
-            return Array.isArray(nodeConfig.list) && nodeConfig.list.length > 0
-                ? nodeConfig.list
-                : NODE_MANAGEMENT.DEFAULT_NODES;
+            return getConfiguredOrDefaultNodes();
         }
     })();
 

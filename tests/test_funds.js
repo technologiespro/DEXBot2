@@ -8,6 +8,12 @@ const BitShares = require('btsdex');
 
 const ACCOUNT_NAME = 'hanzac-si';
 
+if (!process.env.RUN_LIVE_BITSHARES_TESTS) {
+    console.log('Skipping live funds test.');
+    console.log('Set RUN_LIVE_BITSHARES_TESTS=1 to run it explicitly.');
+    process.exit(0);
+}
+
 const assetPrecisions = {};
 
 function blockchainToFloat(amount, precision) {
@@ -48,8 +54,14 @@ async function getAssetSymbol(assetId) {
 // Build and print a table and a small ASCII stacked-bar chart for top N assets
 async function main() {
     console.log('Connecting to BitShares...');
-    await BitShares.connect();
-    console.log('Connected!\n');
+    try {
+        await BitShares.connect();
+        console.log('Connected!\n');
+    } catch (err) {
+        console.log('⚠️  Skipping live funds test: could not connect to BitShares');
+        console.log('   Error:', err && err.message ? err.message : err);
+        process.exit(0);
+    }
 
     const account = await BitShares.accounts[ACCOUNT_NAME];
     if (!account) {
