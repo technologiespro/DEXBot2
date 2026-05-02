@@ -46,7 +46,7 @@ function withDynamicWeightFiles(botKey) {
     );
 
     return {
-        writeSnapshot({ isReady, effectiveWeights, centerPrice = 100 }) {
+        writeSnapshot({ isReady, effectiveWeights, baseWeights = { sell: 0.6, buy: 0.4 }, centerPrice = 100 }) {
             fs.writeFileSync(
                 snapshotFile,
                 JSON.stringify({
@@ -57,6 +57,7 @@ function withDynamicWeightFiles(botKey) {
                         trend: 'NEUTRAL',
                         confidence: 0,
                         effectiveWeights,
+                        baseWeights,
                     },
                 }, null, 2),
                 'utf8'

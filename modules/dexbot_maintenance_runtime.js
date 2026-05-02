@@ -329,8 +329,21 @@ function refreshDynamicWeightDistribution(context = 'runtime') {
         const dw = snapshot?.dynamicWeights;
         const liveWeights = cloneWeightDistribution(dw?.effectiveWeights);
         if (dw?.isReady && liveWeights) {
-            nextWeights = liveWeights;
-            source = 'dynamic';
+            const snapshotBase = cloneWeightDistribution(dw?.baseWeights);
+            const baseChanged = !snapshotBase
+                || snapshotBase.sell !== baseWeights.sell
+                || snapshotBase.buy !== baseWeights.buy;
+            if (baseChanged) {
+                this._log(
+                    `Skipping stale dynamic weights (${context}): ` +
+                    `snapshot base (sell=${snapshotBase?.sell}, buy=${snapshotBase?.buy}) ` +
+                    `!= config (sell=${baseWeights.sell}, buy=${baseWeights.buy})`,
+                    'warn'
+                );
+            } else {
+                nextWeights = liveWeights;
+                source = 'dynamic';
+            }
         }
     }
 

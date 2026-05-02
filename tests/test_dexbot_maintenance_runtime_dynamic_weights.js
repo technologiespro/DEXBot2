@@ -106,10 +106,13 @@ async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
         loadAmaCenterSnapshot: () => ({
             centerPrice: 100,
             dynamicWeights: {
-                isReady: dynamicWeightSnapshotMode === 'live',
+                isReady: dynamicWeightSnapshotMode !== 'stale',
                 trend: 'NEUTRAL',
                 confidence: 0,
                 effectiveWeights: { sell: 0.42, buy: 0.22 },
+                baseWeights: dynamicWeightSnapshotMode === 'base-changed'
+                    ? { sell: 0.8, buy: 0.2 }
+                    : { sell: 0.6, buy: 0.4 },
             },
         }),
         parseJsonWithComments: (text) => JSON.parse(text),
@@ -342,11 +345,70 @@ async function testManualTriggerResetRefreshesCenterPrice() {
     }
 }
 
+function testRefreshDynamicWeightDistributionRejectsStaleBaseWeights() {
+    const { refreshDynamicWeightDistribution } = require(runtimePath);
+
+    const prevExistsSync = fs.existsSync;
+    const prevReadFileSync = fs.readFileSync;
+
+    fs.existsSync = (filePath) => {
+        const text = String(filePath);
+        if (text.endsWith('/profiles/market_adapter_whitelist.json')) return true;
+        return originalExistsSync(filePath);
+    };
+    fs.readFileSync = (filePath, encoding) => {
+        const text = String(filePath);
+        if (text.endsWith('/profiles/market_adapter_whitelist.json')) {
+            return JSON.stringify({
+                whitelist: {
+                    'volatility-bot-0': { ama: true, dynamicWeight: true },
+                },
+            });
+        }
+        return originalReadFileSync(filePath, encoding);
+    };
+
+    dynamicWeightSnapshotMode = 'base-changed';
+    const logs = [];
+    const self = {
+        config: {
+            name: 'Volatility Bot',
+            botKey: 'volatility-bot-0',
+            weightDistribution: { sell: 0.6, buy: 0.4 },
+        },
+        _baseWeightDistribution: { sell: 0.6, buy: 0.4 },
+        manager: {
+            config: {
+                weightDistribution: { sell: 0.6, buy: 0.4 },
+            },
+        },
+        _log: (msg) => logs.push(msg),
+    };
+
+    const result = refreshDynamicWeightDistribution.call(self, 'unit-test-base-mismatch');
+    assert.strictEqual(result.applied, false, 'stale base weights should cause fallback to static');
+    assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.6, buy: 0.4 });
+    assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.6, buy: 0.4 });
+    assert.ok(
+        logs.some((msg) => String(msg).includes('Skipping stale dynamic weights')),
+        'should log a warning about stale dynamic weights'
+    );
+    assert.ok(
+        logs.some((msg) => String(msg).includes('snapshot base (sell=0.8, buy=0.2) != config (sell=0.6, buy=0.4)')),
+        'should log the mismatched base vs config values'
+    );
+
+    fs.existsSync = prevExistsSync;
+    fs.readFileSync = prevReadFileSync;
+    dynamicWeightSnapshotMode = 'live';
+}
+
 async function main() {
     try {
         await testPerformGridResyncAppliesVolatilityOnlyDynamicWeights();
         testRefreshDynamicWeightDistributionAppliesAndFallsBack();
         testRefreshDynamicWeightDistributionReloadsWhitelistFlags();
+        testRefreshDynamicWeightDistributionRejectsStaleBaseWeights();
         await testManualTriggerResetRefreshesCenterPrice();
         console.log('dexbot maintenance runtime dynamic weight tests passed');
     } finally {
