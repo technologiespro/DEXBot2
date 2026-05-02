@@ -354,9 +354,72 @@ function refreshDynamicWeightDistribution(context = 'runtime') {
     };
 }
 
-function performGridResync() {
+function readTriggerMetadata(triggerFile) {
+    try {
+        const raw = fs.readFileSync(triggerFile, 'utf8').trim();
+        if (!raw) {
+            // An empty trigger is the legacy/manual CLI reset signal.
+            return { isManual: true, payload: null };
+        }
+
+        const payload = JSON.parse(raw);
+        const source = String(payload?.source || '').trim();
+        return {
+            isManual: source !== 'market_adapter/market_adapter.js',
+            payload,
+        };
+    } catch (_) {
+        return { isManual: true, payload: null };
+    }
+}
+
+function refreshAmaCenterSnapshotForManualReset(botKey) {
+    if (!botKey) return false;
+
+    // Manual resets should advance the persisted center baseline to the latest
+    // AMA output before the grid is rebuilt. The raw AMA value remains intact
+    // in amaCenterPrice for diagnostics.
+    const snapshotPath = path.join(PROFILES_DIR, 'orders', `${botKey}.dynamicgrid.json`);
+    let snapshotRaw;
+    try {
+        snapshotRaw = fs.readFileSync(snapshotPath, 'utf8');
+    } catch (_) {
+        return false;
+    }
+
+    let snapshot;
+    try {
+        snapshot = JSON.parse(snapshotRaw);
+    } catch (_) {
+        return false;
+    }
+
+    const amaCenterPrice = Number(snapshot?.amaCenterPrice);
+    if (!Number.isFinite(amaCenterPrice) || amaCenterPrice <= 0) {
+        return false;
+    }
+
+    const currentCenterPrice = Number(snapshot?.centerPrice);
+    if (Number.isFinite(currentCenterPrice) && currentCenterPrice === amaCenterPrice) {
+        return true;
+    }
+
+    const updatedSnapshot = {
+        ...snapshot,
+        centerPrice: amaCenterPrice,
+        updatedAt: new Date().toISOString(),
+    };
+
+    const tmpPath = `${snapshotPath}.tmp`;
+    fs.writeFileSync(tmpPath, `${JSON.stringify(updatedSnapshot, null, 2)}\n`, 'utf8');
+    fs.renameSync(tmpPath, snapshotPath);
+    return true;
+}
+
+function performGridResync(options = {}) {
     const self = this;
     let success = false;
+    const refreshCenterPrice = !!options.refreshCenterPrice;
     const dustDelayMs = getPendingDustDelayMs(self);
     const idleDelayMs = getMaintenanceIdleDelayMs(self);
     if (dustDelayMs !== null || idleDelayMs > 0) {
@@ -367,7 +430,7 @@ function performGridResync() {
             'info'
         );
         self._scheduleDustMaintenanceCheck?.();
-        scheduleDeferredGridResync(self);
+        scheduleDeferredGridResync(self, options);
         return Promise.resolve(false);
     }
 
@@ -395,6 +458,14 @@ function performGridResync() {
                 }
             } catch (e) {
                 self._warn(`Failed to reload config during resync (using current settings): ${e.message}`);
+            }
+
+            if (refreshCenterPrice) {
+                if (refreshAmaCenterSnapshotForManualReset(self.config?.botKey)) {
+                    self._log('Refreshed AMA center snapshot for manual grid reset.', 'info');
+                } else {
+                    self._warn('Manual grid reset requested but AMA center snapshot could not be refreshed.');
+                }
             }
 
             const readFn = () => chainOrders.readOpenOrders(self.accountId);
@@ -430,10 +501,13 @@ async function handlePendingTriggerReset() {
     }
 
     this._log('Pending trigger file detected. Processing reset before startup...');
+    const triggerInfo = readTriggerMetadata(this.triggerFile);
 
     let resetSucceeded = false;
     await this.manager._fillProcessingLock.acquire(async () => {
-        resetSucceeded = await this._performGridResync();
+        resetSucceeded = await this._performGridResync({
+            refreshCenterPrice: triggerInfo.isManual,
+        });
     });
 
     if (!resetSucceeded) {
@@ -464,8 +538,11 @@ async function setupTriggerFileDetection() {
                         if (this._triggerDebounceTimer) clearTimeout(this._triggerDebounceTimer);
                         this._triggerDebounceTimer = setTimeout(() => {
                             this._triggerDebounceTimer = null;
+                            const triggerInfo = readTriggerMetadata(this.triggerFile);
                             this.manager._fillProcessingLock.acquire(async () => {
-                                const ok = await this._performGridResync();
+                                const ok = await this._performGridResync({
+                                    refreshCenterPrice: triggerInfo.isManual,
+                                });
                                 if (!ok) {
                                     this._warn('Runtime trigger reset failed; retaining existing grid state.');
                                 }
@@ -721,7 +798,7 @@ function scheduleMaintenanceAfterIdle(ctx, context, options = {}) {
     }, delayMs);
 }
 
-function scheduleDeferredGridResync(ctx) {
+function scheduleDeferredGridResync(ctx, options = {}) {
     if (
         !ctx ||
         ctx._shuttingDown ||
@@ -749,7 +826,7 @@ function scheduleDeferredGridResync(ctx) {
         if (triggerFileWasPresent && !fs.existsSync(ctx.triggerFile)) return;
 
         ctx.manager._fillProcessingLock.acquire(async () => {
-            const ok = await ctx._performGridResync();
+            const ok = await ctx._performGridResync(options);
             if (!ok && !ctx._shuttingDown) {
                 ctx._warn('Deferred trigger reset still blocked or failed; retaining existing grid state.');
             }

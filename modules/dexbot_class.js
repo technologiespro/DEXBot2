@@ -3210,13 +3210,19 @@ class DEXBot {
         }
 
         const message = reason ? `[CR-RESET] ${reason}` : '[CR-RESET] grid reset requested';
+        // Manual/programmatic resets should advance the persisted center baseline
+        // before rebuilding the grid, unless a caller explicitly disables it.
         this._log(`${message}; rebuilding grid from fresh on-chain state`, 'info');
+        const resetOptions = {
+            ...options,
+            refreshCenterPrice: options.refreshCenterPrice !== false,
+        };
 
         if (options.fillLockAlreadyHeld || !this.manager._fillProcessingLock) {
-            return this._performGridResync();
+            return this._performGridResync(resetOptions);
         }
 
-        return this.manager._fillProcessingLock.acquire(async () => this._performGridResync());
+        return this.manager._fillProcessingLock.acquire(async () => this._performGridResync(resetOptions));
     }
 
     /**

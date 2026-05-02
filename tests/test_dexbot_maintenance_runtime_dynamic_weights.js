@@ -2,6 +2,7 @@
 
 const assert = require('assert');
 const fs = require('fs');
+const path = require('path');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
 
 console.log('Running dexbot maintenance runtime dynamic weight tests');
@@ -244,11 +245,109 @@ function testRefreshDynamicWeightDistributionReloadsWhitelistFlags() {
     assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.6, buy: 0.4 });
 }
 
+async function testManualTriggerResetRefreshesCenterPrice() {
+    const { handlePendingTriggerReset } = require(runtimePath);
+
+    const botKey = `manual-reset-${Date.now()}`;
+    const triggerFile = `/tmp/${botKey}.trigger`;
+    const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
+
+    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
+    fs.writeFileSync(snapshotFile, JSON.stringify({
+        centerPrice: 100,
+        amaCenterPrice: 123.45,
+        source: 'market_adapter/market_adapter.js',
+        updatedAt: '2026-01-01T00:00:00Z',
+    }, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(triggerFile, '', 'utf8');
+
+    const previousExistsSync = fs.existsSync;
+    const previousReadFileSync = fs.readFileSync;
+    const logs = [];
+
+    fs.existsSync = (filePath) => {
+        const text = String(filePath);
+        if (text === triggerFile) return true;
+        return previousExistsSync(filePath);
+    };
+    fs.readFileSync = (filePath, encoding) => {
+        const text = String(filePath);
+        if (text.endsWith('/profiles/bots.json')) {
+            return JSON.stringify({
+                bots: [
+                    {
+                        name: 'Manual Reset Bot',
+                        weightDistribution: { sell: 0.6, buy: 0.4 },
+                    },
+                ],
+            });
+        }
+        if (text.endsWith('/profiles/market_adapter_whitelist.json')) {
+            return JSON.stringify({
+                whitelist: {
+                    [botKey]: { ama: true, dynamicWeight: true },
+                },
+            });
+        }
+        return previousReadFileSync(filePath, encoding);
+    };
+
+    const self = {
+        config: {
+            name: 'Manual Reset Bot',
+            botKey,
+            botIndex: 0,
+            weightDistribution: { sell: 0.6, buy: 0.4 },
+        },
+        _baseWeightDistribution: { sell: 0.6, buy: 0.4 },
+        manager: {
+            config: {
+                name: 'Manual Reset Bot',
+                botKey,
+                botIndex: 0,
+                weightDistribution: { sell: 0.6, buy: 0.4 },
+            },
+            funds: { btsFeesOwed: 2 },
+            _fillProcessingLock: {
+                acquire: async (fn) => fn(),
+            },
+            startBootstrap: () => {},
+            finishBootstrap: () => {},
+            persistGrid: async () => {},
+        },
+        accountId: '1.2.345',
+        account: { id: '1.2.345' },
+        privateKey: 'test-key',
+        triggerFile,
+        _log: (msg) => logs.push(msg),
+        _warn: (msg) => logs.push(`WARN:${msg}`),
+        _performGridResync: async (options) => require(runtimePath).performGridResync.call(self, options),
+    };
+
+    try {
+        const ok = await handlePendingTriggerReset.call(self);
+        assert.strictEqual(ok, true, 'manual trigger reset should succeed');
+
+        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        assert.strictEqual(updated.centerPrice, 123.45, 'manual reset should refresh centerPrice from amaCenterPrice');
+        assert.ok(
+            logs.some((msg) => String(msg).includes('Refreshed AMA center snapshot for manual grid reset.')),
+            'manual reset should log that the center snapshot was refreshed'
+        );
+    } finally {
+        fs.existsSync = previousExistsSync;
+        fs.readFileSync = previousReadFileSync;
+        originalUnlinkSync(triggerFile);
+        originalUnlinkSync(snapshotFile);
+    }
+}
+
 async function main() {
     try {
         await testPerformGridResyncAppliesVolatilityOnlyDynamicWeights();
         testRefreshDynamicWeightDistributionAppliesAndFallsBack();
         testRefreshDynamicWeightDistributionReloadsWhitelistFlags();
+        await testManualTriggerResetRefreshesCenterPrice();
         console.log('dexbot maintenance runtime dynamic weight tests passed');
     } finally {
         fs.existsSync = originalExistsSync;

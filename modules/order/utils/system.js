@@ -431,6 +431,8 @@ async function deriveLiquidityPoolTokenValue(BitShares, shareAssetRef, denominat
  * The snapshot is stored atomically at profiles/orders/<botKey>.dynamicgrid.json
  * and is updated every market adapter cycle. It contains the AMA-derived center
  * price and, for dynamic-weight-whitelisted bots, any computed effective weight offsets.
+ * On manual resets the bot may rewrite centerPrice to the latest AMA baseline, but
+ * amaCenterPrice remains the raw AMA output for diagnostics and comparison.
  * Called by initializeGrid() when manager.config.gridPrice uses an AMA keyword,
  * by performGridResync(), and by refreshDynamicWeightDistribution() before every
  * rebalance so new orders use live weights — not only on grid reset.

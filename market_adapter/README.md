@@ -331,6 +331,8 @@ Typical fields:
 
 - `centerPrice` is the persisted grid baseline used for future delta checks.
 - `amaCenterPrice` is the raw AMA output before downstream handling.
+- During a manual grid reset, the bot refreshes `centerPrice` from the latest
+  `amaCenterPrice` before rebuilding the grid.
 - `dynamicWeights` is present only when live dynamic weights were computed and
   the bot is allowed to consume them.
 - The runtime applies `dynamicWeights` only when the bot is whitelisted for
