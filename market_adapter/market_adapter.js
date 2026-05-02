@@ -70,10 +70,17 @@ const {
     isBotDynamicWeightWhitelisted,
 } = require('../modules/market_adapter_whitelist');
 const kibanaSource = require('./inputs/kibana_source');
+const kibanaMarketSource = require('./core/kibana_market_candles');
 const { normalizePoolId } = kibanaSource;
 const { tradesToCandles, detectMissingCandleTimestamps, fillCandleGaps, pruneStaleTail, mergeCandles } = require('./candle_utils');
 const { toIntervalLabel } = require('./interval_utils');
-const { resolveAsset, findPoolByAssets, resolveBotContext } = require('./utils/chain');
+const {
+    normalizeMarketSource,
+    hasNumericStartPrice,
+    resolveAsset,
+    findPoolByAssets,
+    resolveBotContext,
+} = require('./utils/chain');
 const { acquireFileLockSync, releaseFileLockSync } = require('./utils/file_lock');
 
 const ROOT = path.join(__dirname, '..');
@@ -93,6 +100,10 @@ function getBitsharesClient() {
         bitsharesClient = require('../modules/bitshares_client');
     }
     return bitsharesClient;
+}
+
+function setBitsharesClientForTests(client) {
+    bitsharesClient = client;
 }
 
 const LP_OP_TYPE = 63;
@@ -283,6 +294,11 @@ function normalizeAssetSymbol(value) {
     return String(value || '').trim().toUpperCase();
 }
 
+function resolveMarketSourceForBot(bot) {
+    if (hasNumericStartPrice(bot?.startPrice)) return null;
+    return normalizeMarketSource(bot?.startPrice) || 'pool';
+}
+
 function normalizeAmaKey(raw) {
     const s = String(raw || '').trim().toLowerCase();
     if (!AMA_KEYWORDS.has(s)) return DEFAULT_AMA_KEY;
@@ -297,6 +313,10 @@ function isAmaKeyword(raw) {
 
 function usesAmaGridPrice(bot) {
     return isAmaKeyword(bot?.gridPrice);
+}
+
+function usesOrderbookMarketSource(bot) {
+    return resolveMarketSourceForBot(bot) === 'book';
 }
 
 function findAmaProfileForBot(bot, ctx = null) {
@@ -829,6 +849,210 @@ async function fetchNativeTradesUntilOverlap(poolId, overlapSequences, minOverla
     throw new Error(`fetchNativeTradesUntilOverlap exhausted maxPages (${maxPages}) before finding ${minOverlap} overlap trades`);
 }
 
+function blockchainToFloat(amount, precision) {
+    const value = Number(amount);
+    if (!Number.isFinite(value)) return Number.NaN;
+    return value / (10 ** Number(precision || 0));
+}
+
+function parseNativeMarketHistoryTimestamp(entry) {
+    const candidates = [
+        entry?.key?.open,
+        entry?.key?.time,
+        entry?.key?.timestamp,
+        entry?.key?.date,
+        entry?.open_time,
+        entry?.time,
+        entry?.timestamp,
+        entry?.block_time,
+    ];
+
+    for (const candidate of candidates) {
+        if (candidate == null) continue;
+        if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
+        const ts = Date.parse(String(candidate));
+        if (Number.isFinite(ts)) return ts;
+    }
+
+    return null;
+}
+
+function resolveNativeMarketHistoryRatio(entry, field, assetA, assetB) {
+    const keyBase = String(entry?.key?.base || '');
+    const keyQuote = String(entry?.key?.quote || '');
+    const baseField = entry?.[`${field}_base`];
+    const quoteField = entry?.[`${field}_quote`];
+    const numericField = Number(entry?.[field]);
+    if (Number.isFinite(numericField)) return numericField;
+
+    if (Number.isFinite(Number(baseField)) && Number.isFinite(Number(quoteField)) && Number(baseField) > 0) {
+        const base = blockchainToFloat(baseField, keyBase === String(assetA?.id) ? assetA?.precision : assetB?.precision);
+        const quote = blockchainToFloat(quoteField, keyQuote === String(assetB?.id) ? assetB?.precision : assetA?.precision);
+        if (!Number.isFinite(base) || !Number.isFinite(quote) || base <= 0 || quote <= 0) {
+            return Number.NaN;
+        }
+        if (keyBase === String(assetA?.id) && keyQuote === String(assetB?.id)) {
+            return quote / base;
+        }
+        if (keyBase === String(assetB?.id) && keyQuote === String(assetA?.id)) {
+            return base / quote;
+        }
+        return Number.NaN;
+    }
+
+    const nested = entry?.[field];
+    if (nested && typeof nested === 'object') {
+        const base = Number(nested.base ?? nested.amount_base ?? nested.base_amount ?? nested.amount);
+        const quote = Number(nested.quote ?? nested.amount_quote ?? nested.quote_amount ?? nested.value);
+        if (!Number.isFinite(base) || !Number.isFinite(quote) || base <= 0 || quote <= 0) {
+            return Number.NaN;
+        }
+        if (keyBase === String(assetA?.id) && keyQuote === String(assetB?.id)) {
+            return quote / base;
+        }
+        if (keyBase === String(assetB?.id) && keyQuote === String(assetA?.id)) {
+            return base / quote;
+        }
+    }
+
+    return Number.NaN;
+}
+
+function resolveNativeMarketHistoryVolume(entry, field, assetA, assetB) {
+    const keyBase = String(entry?.key?.base || '');
+    const keyQuote = String(entry?.key?.quote || '');
+
+    const direct = Number(entry?.[field]);
+    if (Number.isFinite(direct)) {
+        const precision = keyBase === String(assetA?.id) ? assetA?.precision : assetB?.precision;
+        return blockchainToFloat(direct, precision);
+    }
+
+    const nested = entry?.[field];
+    if (nested && typeof nested === 'object') {
+        const amount = Number(nested.amount ?? nested.value ?? nested.base ?? nested.quote);
+        if (Number.isFinite(amount)) {
+            const precision = keyBase === String(assetA?.id) ? assetA?.precision : assetB?.precision;
+            return blockchainToFloat(amount, precision);
+        }
+    }
+
+    return Number.NaN;
+}
+
+function normalizeNativeMarketHistoryCandles(history, assetA, assetB, intervalSeconds) {
+    const source = Array.isArray(history)
+        ? history
+        : Array.isArray(history?.buckets)
+            ? history.buckets
+            : Array.isArray(history?.history)
+                ? history.history
+                : Array.isArray(history?.result)
+                    ? history.result
+                    : [];
+
+    if (!Array.isArray(source) || source.length === 0) return [];
+
+    if (Array.isArray(source[0])) {
+        return source
+            .filter((c) => Array.isArray(c) && Number.isFinite(c[0]))
+            .map((c) => {
+                const ts = Number(c[0]);
+                const open = Number(c[1]);
+                const high = Number(c[2]);
+                const low = Number(c[3]);
+                const close = Number(c[4]);
+                const volume = Number(c[5]);
+                if (![ts, open, high, low, close].every(Number.isFinite)) return null;
+                return [ts, open, high, low, close, Number.isFinite(volume) ? volume : 0];
+            })
+            .filter(Boolean)
+            .sort((a, b) => a[0] - b[0]);
+    }
+
+    const candles = [];
+    for (const entry of source) {
+        if (!entry || typeof entry !== 'object') continue;
+        const tsMs = parseNativeMarketHistoryTimestamp(entry);
+        if (!Number.isFinite(tsMs)) continue;
+
+        const keyBase = String(entry?.key?.base || '');
+        const keyQuote = String(entry?.key?.quote || '');
+        const baseIsAssetA = keyBase === String(assetA?.id) && keyQuote === String(assetB?.id);
+        const baseIsAssetB = keyBase === String(assetB?.id) && keyQuote === String(assetA?.id);
+        if (!baseIsAssetA && !baseIsAssetB) continue;
+
+        const basePrecision = baseIsAssetA ? assetA?.precision : assetB?.precision;
+        const quotePrecision = baseIsAssetA ? assetB?.precision : assetA?.precision;
+        const openBase = Number(entry?.open_base);
+        const openQuote = Number(entry?.open_quote);
+        const highBase = Number(entry?.high_base);
+        const highQuote = Number(entry?.high_quote);
+        const lowBase = Number(entry?.low_base);
+        const lowQuote = Number(entry?.low_quote);
+        const closeBase = Number(entry?.close_base);
+        const closeQuote = Number(entry?.close_quote);
+        const baseVolume = Number(entry?.base_volume);
+        const quoteVolume = Number(entry?.quote_volume);
+
+        const open = resolveNativeMarketHistoryRatio(entry, 'open', assetA, assetB);
+        const resolvedHigh = resolveNativeMarketHistoryRatio(entry, 'high', assetA, assetB);
+        const resolvedLow = resolveNativeMarketHistoryRatio(entry, 'low', assetA, assetB);
+        const high = Math.max(resolvedHigh, resolvedLow);
+        const low = Math.min(resolvedHigh, resolvedLow);
+        const close = resolveNativeMarketHistoryRatio(entry, 'close', assetA, assetB);
+
+        if (![open, high, low, close].every((value) => Number.isFinite(value) && value > 0)) {
+            continue;
+        }
+
+        const volume = baseIsAssetA
+            ? (Number.isFinite(baseVolume) ? blockchainToFloat(baseVolume, basePrecision) : Number.isFinite(quoteVolume) && Number.isFinite(close) && close > 0 ? blockchainToFloat(quoteVolume, quotePrecision) / close : 0)
+            : (Number.isFinite(quoteVolume) ? blockchainToFloat(quoteVolume, quotePrecision) : Number.isFinite(baseVolume) && Number.isFinite(close) && close > 0 ? blockchainToFloat(baseVolume, basePrecision) / close : 0);
+
+        candles.push([tsMs, open, high, low, close, Number.isFinite(volume) ? volume : 0]);
+    }
+
+    return candles.sort((a, b) => a[0] - b[0]);
+}
+
+async function fetchNativeMarketHistorySince(assetA, assetB, sinceMs, untilMs, intervalSeconds, options = {}) {
+    const { BitShares } = getBitsharesClient();
+    if (!BitShares) {
+        throw new Error('BitShares client unavailable');
+    }
+
+    const startDate = new Date(Number.isFinite(sinceMs) ? sinceMs : Date.now());
+    const stopDate = new Date(Number.isFinite(untilMs) ? untilMs : Date.now());
+    let history = null;
+
+    if (typeof BitShares.history?.getMarketHistory === 'function') {
+        history = await BitShares.history.getMarketHistory(
+            assetB.id,
+            assetA.id,
+            intervalSeconds,
+            startDate.toISOString().slice(0, -5),
+            stopDate.toISOString().slice(0, -5)
+        );
+    } else if (typeof BitShares.tradeHistory === 'function') {
+        history = await BitShares.tradeHistory(
+            assetB.symbol || assetB.id,
+            assetA.symbol || assetA.id,
+            startDate,
+            stopDate,
+            intervalSeconds
+        );
+    } else {
+        throw new Error('native market history source unavailable');
+    }
+
+    let candles = normalizeNativeMarketHistoryCandles(history, assetA, assetB, intervalSeconds);
+    if (candles.length > 0 && typeof options.fillCandleGaps === 'function') {
+        candles = options.fillCandleGaps(candles, intervalSeconds);
+    }
+    return candles;
+}
+
 function writeGridResetTrigger(bot, payload) {
     const triggerPath = path.join(PROFILES_DIR, `recalculate.${bot.botKey}.trigger`);
     const content = {
@@ -894,6 +1118,8 @@ const adapterService = new MarketAdapterService({
     computeCandleStaleness,
     withRetries,
     kibanaSource,
+    kibanaMarketSource,
+    fetchNativeMarketHistorySince,
     fetchNativeTradesSince,
     fetchNativeTradesUntilOverlap,
     tradesToCandles,
@@ -1000,6 +1226,9 @@ async function runOnce(cfg, state, contextCache) {
             }
             if (r.triggerSuppressedReason === 'ama_warmup_insufficient') {
                 log(cfg, '  No write pass: AMA warmup history is still insufficient for a valid grid-centering write.');
+            }
+            if (r.triggerSuppressedReason === 'fixed_start_price') {
+                log(cfg, '  No write pass: numeric startPrice disables market adapter fetch.');
             }
             if (Array.isArray(r.dryRunMessages)) {
                 r.dryRunMessages.forEach(msg => log(cfg, `  ${msg}`));
@@ -1186,14 +1415,20 @@ module.exports = {
     calculateBotThreshold,
     calcAmaComparison,
     computeCandleStaleness,
+    normalizeMarketSource,
     sleepUntilAlignedBoundary,
     resolveAmaForBot,
+    resolveMarketSourceForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
     applyRuntimeDefaultsFromGeneralSettings,
     resolveBotCfg,
     usesAmaGridPrice,
+    usesOrderbookMarketSource,
     isBotWhitelisted,
     isBotDynamicWeightWhitelisted,
     _resetCycleCache,
     writeCenterSnapshot,
+    normalizeNativeMarketHistoryCandles,
+    fetchNativeMarketHistorySince,
+    _setBitsharesClientForTests: setBitsharesClientForTests,
 };

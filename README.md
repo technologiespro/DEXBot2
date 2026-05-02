@@ -126,10 +126,10 @@ Configuration options from `node dexbot bots`, stored in `profiles/bots.json`:
 | **`active`** | boolean | `false` to keep config without running |
 | **`dryRun`** | boolean | Simulate orders without broadcasting |
 | **`preferredAccount`** | string | BitShares account name for trading |
-| **`startPrice`** | num \| str | Initial price. `"pool"` (liquidity pool), `"book"` (order book), or numeric `A/B` ratio |
+| **`startPrice`** | num \| str | Initial price. `"pool"` (liquidity pool), `"book"` (order book), or numeric `A/B` ratio. For the market adapter, this also selects the candle source. |
 | **`minPrice`** | num \| str | Lower bound. Number or multiplier (e.g., `"2x"` = `startPrice / 2`) |
 | **`maxPrice`** | num \| str | Upper bound. Number or multiplier (e.g., `"2x"` = `startPrice * 2`) |
-| **`gridPrice`** | num \| str \| null | Reference price for bound calculations. `null` (uses `startPrice`), numeric, or AMA keyword (`"ama"`, `"ama1"`-`"ama4"`) |
+| **`gridPrice`** | num \| str \| null | Grid reference only. `null` falls back to `startPrice`; AMA keywords (`"ama"`, `"ama1"`-`"ama4"`) use the AMA center; numeric values use that fixed value. |
 | **`incrementPercent`** | number | Geometric step between layers (e.g., `0.5` = 0.5%) |
 | **`targetSpreadPercent`** | number | Width of the empty spread zone between buy and sell orders |
 | **`weightDistribution`** | object | Sizing: `{ "sell": 1.0, "buy": 1.0 }`. Range `-1` (super valley) to `2` (super mountain), `0.5` = neutral |

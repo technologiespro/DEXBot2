@@ -11,6 +11,8 @@ const {
     _resetCycleCache,
     writeCenterSnapshot,
     sleepUntilAlignedBoundary,
+    normalizeMarketSource,
+    resolveMarketSourceForBot,
 } = require('./market_adapter');
 
 const {
@@ -23,6 +25,8 @@ module.exports = {
     _resetCycleCache,
     writeCenterSnapshot,
     sleepUntilAlignedBoundary,
+    normalizeMarketSource,
+    resolveMarketSourceForBot,
     resolveAsset,
     findPoolByAssets,
     resolveBotContext,

@@ -410,6 +410,195 @@ async function testTriggerHookCalledOnThreshold() {
     assert.strictEqual(triggerHookCalls, 1, 'onTrigger hook should be called exactly once');
 }
 
+async function testNumericStartPriceSkipsAllMarketFetches() {
+    let resolveCalls = 0;
+    let poolCalls = 0;
+    let bookCalls = 0;
+    let saveCalls = 0;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => {
+            resolveCalls += 1;
+            return {
+                assetA: { id: '1.3.1', precision: 4, symbol: 'AAA' },
+                assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+                poolId: '1.19.133',
+                marketSource: 'pool',
+            };
+        },
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_fixed_1h.json`),
+        loadJson: () => {
+            throw new Error('loadJson should not run for fixed startPrice bots');
+        },
+        saveJson: () => {
+            saveCalls += 1;
+        },
+        calculateBotThreshold: () => 0.75,
+        kibanaSource: {
+            getLpCandlesForPool: async () => {
+                poolCalls += 1;
+                throw new Error('pool fetch should not run for fixed startPrice bots');
+            },
+        },
+        kibanaMarketSource: {
+            getMarketCandles: async () => {
+                bookCalls += 1;
+                throw new Error('orderbook fetch should not run for fixed startPrice bots');
+            },
+        },
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'Fixed',
+        botKey: 'fixed-start-price',
+        assetA: 'AAA',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        startPrice: 1.25,
+    };
+
+    const state = { bots: {} };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should short-circuit successfully');
+    assert.strictEqual(result.source, 'fixed-start-price', 'fixed startPrice should use the fixed-price source label');
+    assert.strictEqual(resolveCalls, 0, 'resolveBotContext should not run for fixed startPrice bots');
+    assert.strictEqual(poolCalls, 0, 'LP fetch should be skipped for fixed startPrice bots');
+    assert.strictEqual(bookCalls, 0, 'orderbook fetch should be skipped for fixed startPrice bots');
+    assert.strictEqual(saveCalls, 0, 'no candle file should be written for fixed startPrice bots');
+    assert.strictEqual(state.bots['fixed-start-price'].priceMode, 'fixed', 'state should record fixed-price mode');
+    assert.strictEqual(state.bots['fixed-start-price'].candleFile, null, 'fixed-price state should clear any previous candle file reference');
+    assert.strictEqual(state.bots['fixed-start-price'].centerPrice, null, 'fixed-price state should clear any previous market center');
+}
+
+async function testOrderbookNativeFetchUsesBitsharesHistory() {
+    let savedPayload = null;
+    let nativeCalls = 0;
+    let kibanaCalls = 0;
+
+    const lastTs = 1700003600000;
+    const nowMs = 1700007200000;
+
+    const service = new MarketAdapterService({
+        getNowMs: () => nowMs,
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: null,
+            marketSource: 'book',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 3 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_book_1h.json`),
+        loadJson: () => ({
+            meta: { marketSource: 'book' },
+            candles: Array.from({ length: 90 }, (_, idx) => {
+                const ts = lastTs - ((89 - idx) * 3600000);
+                const price = idx < 89 ? 0.19 : 0.2;
+                return [ts, price, price, price, price, 8];
+            }),
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        requiredCandlesForAma: () => 2,
+        calculateBotThreshold: () => 0.75,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1 }),
+        withRetries: async (fn) => fn(),
+        fillCandleGaps,
+        fetchNativeMarketHistorySince: async (assetA, assetB, sinceMs, untilMs, intervalSeconds, options) => {
+            nativeCalls += 1;
+            assert.strictEqual(assetA.symbol, 'IOB.XRP', 'native history should query the requested assetA');
+            assert.strictEqual(assetB.symbol, 'BTS', 'native history should query the requested assetB');
+            assert.strictEqual(intervalSeconds, 3600, 'native history should query the 1h bucket');
+            assert.strictEqual(options.fillCandleGaps, fillCandleGaps, 'native history should use the shared gap filler');
+            assert.strictEqual(sinceMs, lastTs - 3600000, 'incremental native fetch should overlap one bucket back');
+            assert.strictEqual(untilMs, nowMs, 'native fetch should cap at the current cycle time');
+            return [
+                [lastTs, 0.2, 0.2, 0.2, 0.2, 18],
+                [lastTs + 3600000, 0.22, 0.22, 0.22, 0.22, 19],
+            ];
+        },
+        kibanaMarketSource: {
+            getMarketCandles: async () => {
+                kibanaCalls += 1;
+                throw new Error('orderbook Kibana fetch should not run when native history is available');
+            },
+        },
+        kibanaSource: {
+            getLpCandlesForPool: async () => {
+                throw new Error('LP fetch should not run for orderbook bots');
+            },
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => {
+            const map = new Map();
+            for (const candle of existing) map.set(candle[0], candle);
+            for (const candle of incoming) map.set(candle[0], candle);
+            return [...map.values()].sort((a, b) => a[0] - b[0]);
+        },
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.book.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'IOB.XRP/BTS',
+        botKey: 'iob-xrp-bts-book',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        startPrice: 'book',
+    };
+
+    const state = {
+        bots: {
+            'iob-xrp-bts-book': {
+                centerPrice: 0.2,
+                amaCenterPrice: 0.2,
+                lastClosedCandleTs: lastTs,
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 1,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed for orderbook bots');
+    assert.strictEqual(nativeCalls, 1, 'orderbook mode should use native BitShares history');
+    assert.strictEqual(kibanaCalls, 0, 'orderbook mode should not hit Kibana when native history returns data');
+    assert.strictEqual(result.source, 'native-book-history', 'orderbook mode should label native history updates');
+    assert.ok(savedPayload?.candles?.length >= 3, 'native merge should retain the prior candle and add new history');
+    assert.strictEqual(savedPayload.meta.marketSource, 'book', 'saved payload should mark the bot as orderbook sourced');
+}
+
 async function testAmaWarmupInsufficientSuppressesRawCloseRecenter() {
     let triggerWrites = 0;
     let dynamicGridWrites = 0;
@@ -3373,6 +3562,8 @@ async function testWeightOnlyUpdateInDryRunUpdatesState() {
 
 async function run() {
     await testTriggerHookCalledOnThreshold();
+    await testNumericStartPriceSkipsAllMarketFetches();
+    await testOrderbookNativeFetchUsesBitsharesHistory();
     await testAmaWarmupInsufficientSuppressesRawCloseRecenter();
     await testKibanaBackfillFillsHistoricalShortfall();
     await testIdOnlyBotIsNotRejected();

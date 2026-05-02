@@ -12,8 +12,14 @@ const {
     computeCandleStaleness,
     resolveAmaForBot,
     resolveDeltaThresholdPercentFromGeneralSettings,
+    normalizeMarketSource,
+    resolveMarketSourceForBot,
+    normalizeNativeMarketHistoryCandles,
+    fetchNativeMarketHistorySince,
     usesAmaGridPrice,
+    usesOrderbookMarketSource,
     applyRuntimeDefaultsFromGeneralSettings,
+    _setBitsharesClientForTests,
 } = require('../market_adapter/market_adapter');
 const { detectMissingCandleTimestamps, fillCandleGaps, pruneStaleTail, tradesToCandles } = require('../market_adapter/candle_utils');
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
@@ -269,6 +275,77 @@ assert.strictEqual(usesAmaGridPrice({ gridPrice: '  AMA4  ' }), true, 'ama4 matc
 assert.strictEqual(usesAmaGridPrice({ gridPrice: 1.2345 }), false, 'numeric gridPrice should not enable market adapter processing');
 assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPrice should not enable market adapter processing');
 
+assert.strictEqual(normalizeMarketSource('pool'), 'pool', 'pool should normalize to pool');
+assert.strictEqual(normalizeMarketSource('book'), 'book', 'book should stay book');
+assert.strictEqual(normalizeMarketSource('orderbook'), 'book', 'orderbook should normalize to book');
+assert.strictEqual(normalizeMarketSource('market'), 'book', 'legacy market should normalize to book');
+assert.strictEqual(normalizeMarketSource('anything-else'), null, 'unknown source should normalize to null');
+
+assert.strictEqual(resolveMarketSourceForBot({ startPrice: 'pool' }), 'pool', 'startPrice=pool should select pool mode');
+assert.strictEqual(resolveMarketSourceForBot({ startPrice: 'book' }), 'book', 'startPrice=book should select orderbook mode');
+assert.strictEqual(resolveMarketSourceForBot({ startPrice: 'orderbook' }), 'book', 'startPrice=orderbook should normalize to book mode');
+assert.strictEqual(
+    resolveMarketSourceForBot({ startPrice: 'book', marketSource: 'pool' }),
+    'book',
+    'marketSource should not override startPrice for the market adapter'
+);
+assert.strictEqual(resolveMarketSourceForBot({ startPrice: 1.2345 }), null, 'numeric startPrice should disable market-source selection');
+assert.strictEqual(usesOrderbookMarketSource({ startPrice: 'book' }), true, 'book startPrice should enable orderbook mode');
+
+{
+    const candles = normalizeNativeMarketHistoryCandles([{
+        key: {
+            base: '1.3.0',
+            quote: '1.3.1',
+            open: '2026-01-01T00:00:00',
+        },
+        open_base: '200000',
+        open_quote: '40000',
+        high_base: '160000',
+        high_quote: '40000',
+        low_base: '320000',
+        low_quote: '40000',
+        close_base: '800000',
+        close_quote: '160000',
+        base_volume: '360000',
+        quote_volume: '180000',
+    }], { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' }, { id: '1.3.0', precision: 5, symbol: 'BTS' }, 3600);
+
+    assert.strictEqual(candles.length, 1, 'native market history should normalize one candle');
+    assert.strictEqual(candles[0][1], 0.5, 'IOB.XRP/BTS open should be normalized to BTS per XRP');
+    assert.strictEqual(candles[0][2], 0.8, 'IOB.XRP/BTS high should remain the larger normalized price');
+    assert.strictEqual(candles[0][3], 0.4, 'IOB.XRP/BTS low should remain the smaller normalized price');
+    assert.strictEqual(candles[0][4], 0.5, 'IOB.XRP/BTS close should be normalized to BTS per XRP');
+    assert.strictEqual(candles[0][5], 18, 'IOB.XRP/BTS volume should be expressed in XRP units');
+}
+
+async function testNativeMarketHistoryDirectOrder() {
+    let callArgs = null;
+    _setBitsharesClientForTests({
+        BitShares: {
+            history: {
+                getMarketHistory: async (...args) => {
+                    callArgs = args;
+                    return [[1704067200000, 0.5, 0.6, 0.4, 0.55, 10]];
+                },
+            },
+        },
+    });
+
+    try {
+        const assetA = { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' };
+        const assetB = { id: '1.3.0', precision: 5, symbol: 'BTS' };
+        const candles = await fetchNativeMarketHistorySince(assetA, assetB, 1704067200000, 1704070800000, 3600);
+
+        assert.strictEqual(candles.length, 1, 'native market history direct path should normalize returned candles');
+        assert.strictEqual(callArgs[0], assetB.id, 'direct getMarketHistory should query quote/assetB first');
+        assert.strictEqual(callArgs[1], assetA.id, 'direct getMarketHistory should query base/assetA second');
+        assert.strictEqual(callArgs[2], 3600, 'direct getMarketHistory should preserve bucket size');
+    } finally {
+        _setBitsharesClientForTests(null);
+    }
+}
+
 // AMA profile override behavior
 {
     const hadOriginal = fs.existsSync(MARKET_PROFILES_FILE);
@@ -353,5 +430,12 @@ assert.strictEqual(usesAmaGridPrice({ gridPrice: null }), false, 'missing gridPr
     }
 }
 
-console.log('market_adapter logic tests passed');
-process.exit(0);
+testNativeMarketHistoryDirectOrder()
+    .then(() => {
+        console.log('market_adapter logic tests passed');
+        process.exit(0);
+    })
+    .catch((err) => {
+        console.error(err);
+        process.exit(1);
+    });

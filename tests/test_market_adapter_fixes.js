@@ -11,6 +11,7 @@ const {
     _resetCycleCache,
     resolveAsset,
     resolveBotContext,
+    resolveMarketSourceForBot,
 } = require('../market_adapter/test_helpers');
 
 const { KalmanTrendAnalyzer } = require('../analysis/trend_detection/kalman_trend_analyzer');
@@ -121,6 +122,44 @@ async function testRobustBotContext() {
     }
 }
 
+async function testMarketSourceResolution() {
+    console.log(' - Testing market source resolution...');
+
+    assert.strictEqual(resolveMarketSourceForBot({ startPrice: 'pool' }), 'pool', 'pool startPrice should map to pool source');
+    assert.strictEqual(resolveMarketSourceForBot({ startPrice: 'book' }), 'book', 'book startPrice should map to book source');
+    assert.strictEqual(resolveMarketSourceForBot({ startPrice: 'orderbook' }), 'book', 'orderbook alias should map to book source');
+    assert.strictEqual(
+        resolveMarketSourceForBot({ startPrice: 'pool', marketSource: 'book' }),
+        'pool',
+        'marketSource should not override startPrice for the market adapter'
+    );
+    assert.strictEqual(resolveMarketSourceForBot({ startPrice: 1.25 }), null, 'numeric startPrice should disable market-source selection');
+
+    const service = new MarketAdapterService({});
+    const poolSignature = service.buildBotContextSignature({
+        assetA: 'BTS',
+        assetB: 'USD',
+        startPrice: 'pool',
+    });
+    const bookSignature = service.buildBotContextSignature({
+        assetA: 'BTS',
+        assetB: 'USD',
+        startPrice: 'book',
+    });
+    assert.notStrictEqual(poolSignature, bookSignature, 'context signature should include price source mode');
+    const bookSignatureWithMarketSource = service.buildBotContextSignature({
+        assetA: 'BTS',
+        assetB: 'USD',
+        startPrice: 'book',
+        marketSource: 'pool',
+    });
+    assert.strictEqual(
+        bookSignature,
+        bookSignatureWithMarketSource,
+        'context signature should ignore marketSource when startPrice already selects the source'
+    );
+}
+
 async function testSignalConfirmationInitialLatch() {
     console.log(' - Testing signal confirmation initial latching...');
 
@@ -183,6 +222,7 @@ async function runAll() {
     await testKalmanRawValues();
     await testRobustAssetResolution();
     await testRobustBotContext();
+    await testMarketSourceResolution();
     await testSignalConfirmationInitialLatch();
     console.log('All Market Adapter Fixes tests passed!');
 }

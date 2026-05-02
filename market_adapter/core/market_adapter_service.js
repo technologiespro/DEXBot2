@@ -7,6 +7,7 @@ const {
     normalizeMaxVolatilityOffset,
     normalizeVolatilityThreshold,
 } = require('./config_normalizers');
+const { normalizeMarketSource, hasNumericStartPrice } = require('../utils/chain');
 const { computeRegimeMultiplier } = require('./strategies/regime_gate');
 const { calculateAMA, getAmaWarmupBars } = require('../../analysis/ama_fitting/ama');
 const { KalmanTrendAnalyzer } = require('../../analysis/trend_detection/kalman_trend_analyzer');
@@ -57,6 +58,7 @@ class MarketAdapterService {
             bot?.assetAPrecision,
             bot?.assetBPrecision,
             bot?.poolId,
+            bot?.startPrice,
         ].map((v) => String(v ?? '')).join('|');
     }
 
@@ -206,6 +208,90 @@ class MarketAdapterService {
             return { ok: false, reason: 'missing asset pair' };
         }
 
+        if (hasNumericStartPrice(bot?.startPrice)) {
+            const nowIso = new Date().toISOString();
+            const thresholdPercent = typeof deps.calculateBotThreshold === 'function'
+                ? deps.calculateBotThreshold(cfg)
+                : null;
+            state.bots = state.bots || {};
+            state.bots[bot.botKey] = {
+                botName: bot.name,
+                botKey: bot.botKey,
+                startPrice: bot.startPrice,
+                marketSource: null,
+                priceMode: 'fixed',
+                lastCycleSource: 'fixed-start-price',
+                lastCycleAt: nowIso,
+                pendingClosedCandle: false,
+                lastTriggerSuppressedReason: 'fixed_start_price',
+                poolId: null,
+                candleFile: null,
+                candleCount: 0,
+                analysisCandleCount: 0,
+                kibanaGapRepairCount: 0,
+                kibanaBackfillCount: 0,
+                unresolvedGapCount: 0,
+                nativeRecentTradeSequences: [],
+                nativeLastTradeTs: null,
+                nativeOverlapCount: null,
+                nativePagesFetched: null,
+                lastCandleTs: null,
+                rawLastCandleTs: null,
+                lastClosedCandleTs: null,
+                centerPrice: null,
+                amaCenterPrice: null,
+                amaConfig: null,
+                atr: null,
+                weightVariance: null,
+                weights: null,
+                effectiveWeights: null,
+                collateralRecommendation: null,
+                amaSlope: null,
+                staleData: false,
+                staleAgeHours: null,
+            };
+
+            return {
+                ok: true,
+                dryRunMessages,
+                source: 'fixed-start-price',
+                marketSource: null,
+                candleCount: 0,
+                analysisCandleCount: 0,
+                kibanaGapRepairCount: 0,
+                kibanaBackfillCount: 0,
+                unresolvedGapCount: 0,
+                nativeRecentTradeSequences: [],
+                nativeLastTradeTs: null,
+                nativeOverlapCount: null,
+                nativePagesFetched: null,
+                amaPrice: null,
+                deltaPercent: null,
+                thresholdPercent,
+                referencePrice: null,
+                amaComparison: [],
+                triggered: false,
+                triggerPath: null,
+                staleData: false,
+                staleAgeHours: null,
+                triggerCallbackError: null,
+                triggerSuppressedReason: 'fixed_start_price',
+                weights: null,
+                collateralRecommendation: null,
+                amaSlope: null,
+                poolId: null,
+                candleFile: null,
+                lastCandleTs: null,
+                rawLastCandleTs: null,
+                lastClosedCandleTs: null,
+                centerPrice: null,
+                amaConfig: null,
+                atr: null,
+                weightVariance: null,
+                pendingClosedCandle: false,
+            };
+        }
+
         const contextSignature = this.buildBotContextSignature(bot);
         const cached = contextCache.get(bot.botKey);
         const cachedCtx = cached && typeof cached === 'object' && cached.ctx ? cached.ctx : cached;
@@ -228,6 +314,9 @@ class MarketAdapterService {
         const existing = deps.loadJson(filePath, null);
         const existingMeta = existing?.meta && typeof existing.meta === 'object' ? existing.meta : {};
         let existingCandles = Array.isArray(existing?.candles) ? existing.candles : [];
+        const existingMarketSource = normalizeMarketSource(existingMeta.marketSource);
+        const marketSource = normalizeMarketSource(ctx.marketSource || 'pool') || 'pool';
+        const isBookSource = marketSource === 'book';
 
         // Prune stale trailing candles from a previous run before any processing.
         // Prevents gap-fill from carrying a frozen price forward indefinitely.
@@ -239,6 +328,16 @@ class MarketAdapterService {
             if (pruned.length < existingCandles.length) {
                 existingCandles = pruned;
             }
+        }
+
+        const hasStoredPoolContext = existingMeta.pool != null && String(existingMeta.pool).trim() !== '';
+        const sourceMismatch = (existingMarketSource && existingMarketSource !== marketSource)
+            || (marketSource === 'book' && hasStoredPoolContext)
+            || (marketSource === 'pool' && existingMarketSource === 'book');
+        if (sourceMismatch) {
+            existingCandles = [];
+            existingMeta.nativeRecentTradeSequences = [];
+            existingMeta.nativeLastTradeTs = null;
         }
 
         const needBootstrap = existingCandles.length === 0;
@@ -255,6 +354,20 @@ class MarketAdapterService {
             throw new Error(`deltaThresholdPercent missing/invalid for bot ${bot.name}`);
         }
 
+        const fetchKibanaCandles = async (options = {}) => {
+            if (isBookSource) {
+                if (!deps.kibanaMarketSource || typeof deps.kibanaMarketSource.getMarketCandles !== 'function') {
+                    throw new Error('orderbook candle source unavailable');
+                }
+                return deps.kibanaMarketSource.getMarketCandles(ctx.assetA, ctx.assetB, options);
+            }
+
+            if (!deps.kibanaSource || typeof deps.kibanaSource.getLpCandlesForPool !== 'function') {
+                throw new Error('liquidity pool candle source unavailable');
+            }
+            return deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, options);
+        };
+
         const loadCandles = async () => {
             let nextCandles = existingCandles;
             let sourceLabel = 'native-incremental';
@@ -268,11 +381,82 @@ class MarketAdapterService {
             let nativeOverlapCount = null;
             let nativePagesFetched = null;
 
-            if (needBootstrap) {
+            if (isBookSource) {
+                nativeRecentTradeSequences = [];
+                nativeLastTradeTs = null;
+                nativeOverlapCount = null;
+                nativePagesFetched = null;
+                const bucketMs = Number(cfg.intervalSeconds) * 1000;
+                const nowMs = this.getNowMs();
+                const nativeLookbackHours = Math.max(
+                    Number(cfg.bootstrapLookbackHours) || 0,
+                    Number(cfg.nativeBackfillHours) || 0,
+                    (analysisKeepCount * Math.max(Number(cfg.intervalSeconds) || 3600, 3600)) / 3600
+                );
+                const nativeStartMs = needBootstrap
+                    ? Math.max(0, nowMs - (nativeLookbackHours * 3600 * 1000))
+                    : Math.max(0, (nextCandles[nextCandles.length - 1]?.[0] || 0) - bucketMs);
+                let nativeCandles = [];
+                try {
+                    if (typeof deps.fetchNativeMarketHistorySince === 'function') {
+                        nativeCandles = await deps.withRetries(() => deps.fetchNativeMarketHistorySince(
+                            ctx.assetA,
+                            ctx.assetB,
+                            nativeStartMs,
+                            nowMs,
+                            cfg.intervalSeconds,
+                            { fillCandleGaps: deps.fillCandleGaps }
+                        ), cfg.sourceRetries, cfg.retryDelayMs, 'native market history fetch failed');
+                    }
+                } catch (err) {
+                    if (nextCandles.length === 0) {
+                        throw err;
+                    }
+                }
+
+                if (Array.isArray(nativeCandles) && nativeCandles.length > 0) {
+                    nextCandles = needBootstrap
+                        ? nativeCandles
+                        : deps.mergeCandles(nextCandles, nativeCandles);
+                    sourceLabel = needBootstrap ? 'native-book-bootstrap' : 'native-book-history';
+                } else if (nextCandles.length === 0) {
+                    const kibanaLookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
+                    try {
+                        const kibanaCandles = await deps.withRetries(() => fetchKibanaCandles({
+                            intervalSeconds: cfg.intervalSeconds,
+                            lookbackHours: kibanaLookbackHours,
+                            consolidateByTimestamp: true,
+                            fillGapsToRequestedRange: false,
+                            apiKey: null,
+                        }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana orderbook bootstrap failed');
+
+                        if (Array.isArray(kibanaCandles) && kibanaCandles.length > 0) {
+                            nextCandles = kibanaCandles;
+                            sourceLabel = 'kibana-book-bootstrap';
+                        } else {
+                            throw new Error('kibana orderbook source returned no candles');
+                        }
+                    } catch (err) {
+                        throw err;
+                    }
+                } else {
+                    sourceLabel = 'cached-book';
+                }
+
+                if (nextCandles.length > 0 && typeof deps.pruneStaleTail === 'function') {
+                    const staleThreshold = Number.isFinite(cfg.staleTailThreshold)
+                        ? cfg.staleTailThreshold
+                        : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
+                    const pruned = deps.pruneStaleTail(nextCandles, staleThreshold);
+                    if (pruned.length < nextCandles.length) {
+                        nextCandles = pruned;
+                    }
+                }
+            } else if (needBootstrap) {
                 const lookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
                 let kibanaCandles = null;
                 try {
-                    kibanaCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
+                    kibanaCandles = await deps.withRetries(() => fetchKibanaCandles({
                         intervalSeconds: cfg.intervalSeconds,
                         lookbackHours,
                         consolidateByTimestamp: true,
@@ -395,7 +579,7 @@ class MarketAdapterService {
                 ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
                 : { gapCount: 0, missingTimestamps: [] };
 
-            if (gapAnalysis.gapCount > 0 && deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function') {
+            if (gapAnalysis.gapCount > 0 && ((isBookSource && typeof fetchKibanaCandles === 'function') || (deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function'))) {
                 const timeRange = this.buildGapRepairTimeRange(
                     gapAnalysis.missingTimestamps,
                     cfg.intervalSeconds,
@@ -404,13 +588,24 @@ class MarketAdapterService {
                 if (timeRange) {
                     kibanaGapRepairAttempted = true;
                     try {
-                        const kibanaGapCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
-                            intervalSeconds: cfg.intervalSeconds,
-                            consolidateByTimestamp: true,
-                            fillGapsToRequestedRange: false,
-                            apiKey: null,
-                            timeRange,
-                        }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana gap repair failed');
+                        const kibanaGapCandles = await deps.withRetries(() => {
+                            if (isBookSource) {
+                                return fetchKibanaCandles({
+                                    intervalSeconds: cfg.intervalSeconds,
+                                    consolidateByTimestamp: true,
+                                    fillGapsToRequestedRange: false,
+                                    apiKey: null,
+                                    timeRange,
+                                });
+                            }
+                            return deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
+                                intervalSeconds: cfg.intervalSeconds,
+                                consolidateByTimestamp: true,
+                                fillGapsToRequestedRange: false,
+                                apiKey: null,
+                                timeRange,
+                            });
+                        }, cfg.sourceRetries, cfg.retryDelayMs, 'kibana gap repair failed');
 
                         if (Array.isArray(kibanaGapCandles) && kibanaGapCandles.length > 0) {
                             const beforeTimestamps = new Set(nextCandles.map((c) => c[0]));
@@ -430,23 +625,37 @@ class MarketAdapterService {
             //    cases where native bootstrap fell short or the file was truncated.
             const candleShortfall = rawKeepCount - nextCandles.length;
             let kibanaBackfillCount = 0;
-            if (!kibanaBootstrapEmpty && !kibanaGapRepairAttempted && candleShortfall > 0 && nextCandles.length > 0 && deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function') {
+            if (!kibanaBootstrapEmpty && !kibanaGapRepairAttempted && candleShortfall > 0 && nextCandles.length > 0 && ((isBookSource && typeof fetchKibanaCandles === 'function') || (deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function'))) {
                 const oldestTs = nextCandles[0][0];
                 const shortfallMs = candleShortfall * cfg.intervalSeconds * 1000;
                 const bufferMs = 24 * 3600 * 1000; // 24h buffer
                 const backfillStartMs = Math.max(0, oldestTs - shortfallMs - bufferMs);
                 const backfillEndMs = oldestTs + cfg.intervalSeconds * 1000;
                 try {
-                    const historicalCandles = await deps.withRetries(() => deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
-                        intervalSeconds: cfg.intervalSeconds,
-                        consolidateByTimestamp: true,
-                        fillGapsToRequestedRange: false,
-                        apiKey: null,
-                        timeRange: {
-                            gte: new Date(backfillStartMs).toISOString(),
-                            lte: new Date(backfillEndMs).toISOString(),
-                        },
-                    }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana historical backfill failed');
+                    const historicalCandles = await deps.withRetries(() => {
+                        if (isBookSource) {
+                            return fetchKibanaCandles({
+                                intervalSeconds: cfg.intervalSeconds,
+                                consolidateByTimestamp: true,
+                                fillGapsToRequestedRange: false,
+                                apiKey: null,
+                                timeRange: {
+                                    gte: new Date(backfillStartMs).toISOString(),
+                                    lte: new Date(backfillEndMs).toISOString(),
+                                },
+                            });
+                        }
+                        return deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, {
+                            intervalSeconds: cfg.intervalSeconds,
+                            consolidateByTimestamp: true,
+                            fillGapsToRequestedRange: false,
+                            apiKey: null,
+                            timeRange: {
+                                gte: new Date(backfillStartMs).toISOString(),
+                                lte: new Date(backfillEndMs).toISOString(),
+                            },
+                        });
+                    }, cfg.sourceRetries, cfg.retryDelayMs, 'kibana historical backfill failed');
                     if (Array.isArray(historicalCandles) && historicalCandles.length > 0) {
                         nextCandles = deps.mergeCandles(nextCandles, historicalCandles);
                         kibanaBackfillCount = historicalCandles.length;
@@ -512,6 +721,9 @@ class MarketAdapterService {
         latestClosedCandle = closedCandles[closedCandles.length - 1] || null;
         lastClosedCandleTs = latestClosedCandle ? latestClosedCandle[0] : null;
         botState = { ...(state.bots[bot.botKey] || {}) };
+        if (sourceMismatch) {
+            botState = {};
+        }
         delete botState.gridPriceOffsetPct;
         delete botState.gridPriceOffsetClampToBounds;
         previousClosedCandleTs = Number(botState.lastClosedCandleTs || 0);
@@ -525,6 +737,7 @@ class MarketAdapterService {
                 updatedAt: nowIso,
                 source: sourceLabel,
                 pool: ctx.poolId,
+                marketSource,
                 assetA: ctx.assetA,
                 assetB: ctx.assetB,
                 intervalSeconds: cfg.intervalSeconds,
@@ -557,6 +770,7 @@ class MarketAdapterService {
                 botName: bot.name,
                 botKey: bot.botKey,
                 poolId: ctx.poolId,
+                marketSource,
                 candleFile: deps.path.relative(deps.root, filePath),
                 candleCount: nextCandles.length,
                 analysisCandleCount: closedCandles.length,
@@ -581,6 +795,7 @@ class MarketAdapterService {
                 ok: true,
                 dryRunMessages,
                 source: sourceLabel,
+                marketSource,
                 candleCount: nextCandles.length,
                 analysisCandleCount: closedCandles.length,
                 kibanaGapRepairCount,
@@ -641,6 +856,7 @@ class MarketAdapterService {
                 botName: bot.name,
                 botKey: bot.botKey,
                 poolId: ctx.poolId,
+                marketSource,
                 candleFile: deps.path.relative(deps.root, filePath),
                 candleCount: nextCandles.length,
                 analysisCandleCount: closedCandles.length,
@@ -665,6 +881,7 @@ class MarketAdapterService {
                 ok: true,
                 dryRunMessages,
                 source: sourceLabel,
+                marketSource,
                 candleCount: nextCandles.length,
                 analysisCandleCount: closedCandles.length,
                 kibanaGapRepairCount,
@@ -1237,6 +1454,7 @@ class MarketAdapterService {
                                 referencePrice,
                                 rawAmaPrice: amaPrice,
                                 poolId: ctx.poolId,
+                                marketSource,
                             });
                         } else {
                             dryRunMessages.push(`[DRY RUN] Would write grid reset trigger for ${bot.botKey}`);
@@ -1265,6 +1483,7 @@ class MarketAdapterService {
                                     referencePrice,
                                     rawAmaPrice: amaPrice,
                                     triggerPath,
+                                    marketSource,
                                 });
                             } catch (err) {
                                 triggerCallbackError = err.message;
@@ -1307,6 +1526,7 @@ class MarketAdapterService {
             botName: bot.name,
             botKey: bot.botKey,
             poolId: ctx.poolId,
+            marketSource,
             candleFile: deps.path.relative(deps.root, filePath),
             candleCount: nextCandles.length,
             analysisCandleCount: analysisCandles.length,
@@ -1360,6 +1580,7 @@ class MarketAdapterService {
             ok: true,
             dryRunMessages,
             source: sourceLabel,
+            marketSource,
             intervalSeconds: cfg.intervalSeconds,
             candleCount: nextCandles.length,
             analysisCandleCount: analysisCandles.length,

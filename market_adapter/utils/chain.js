@@ -104,6 +104,17 @@ async function findPoolByAssets(assetAId, assetBId, options = {}) {
     throw new Error(`No liquidity pool found for ${assetAId}/${assetBId}`);
 }
 
+function normalizeMarketSource(raw) {
+    const value = String(raw || '').trim().toLowerCase();
+    if (value === 'pool') return 'pool';
+    if (value === 'book' || value === 'orderbook' || value === 'market') return 'book';
+    return null;
+}
+
+function hasNumericStartPrice(raw) {
+    return typeof raw === 'number' && Number.isFinite(raw) && raw > 0;
+}
+
 function normalizePoolId(id) {
     if (id == null) return null;
     const s = String(id).trim();
@@ -126,15 +137,34 @@ async function resolveBotContext(bot) {
         ? { id: bot.assetBId, precision: bot.assetBPrecision, symbol: bot.assetB }
         : await resolveAsset(bot.assetB);
 
-    const poolId = bot.poolId
-        ? normalizePoolId(bot.poolId)
-        : normalizePoolId((await findPoolByAssets(assetA.id, assetB.id)).id);
+    if (hasNumericStartPrice(bot.startPrice)) {
+        return {
+            assetA,
+            assetB,
+            poolId: null,
+            marketSource: null,
+            priceMode: 'fixed',
+        };
+    }
 
-    return { assetA, assetB, poolId };
+    // The market adapter source comes from startPrice only. gridPrice/other
+    // settings are intentionally ignored here.
+    const marketSource = normalizeMarketSource(bot.startPrice) || 'pool';
+
+    let poolId = null;
+    if (marketSource === 'pool') {
+        poolId = bot.poolId
+            ? normalizePoolId(bot.poolId)
+            : normalizePoolId((await findPoolByAssets(assetA.id, assetB.id)).id);
+    }
+
+    return { assetA, assetB, poolId, marketSource, priceMode: 'market' };
 }
 
 module.exports = {
     resolveAsset,
     findPoolByAssets,
+    normalizeMarketSource,
+    hasNumericStartPrice,
     resolveBotContext,
 };

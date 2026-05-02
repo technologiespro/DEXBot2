@@ -1,7 +1,8 @@
 # Market Adapter
 
 The market adapter keeps AMA-priced bots centered on the current market. It
-updates LP candles, calculates the AMA center price, applies optional dynamic
+uses `startPrice` to pick the candle source (`pool`, `book`, or fixed), then
+updates candles, calculates the AMA center price, applies optional dynamic
 weights, and emits a recalc trigger when the center moves far enough.
 
 DEXBot2 launches and stops the adapter automatically for active AMA bots.
@@ -13,6 +14,10 @@ DEXBot2 launches and stops the adapter automatically for active AMA bots.
 Set the bot's `gridPrice` to `ama` in `profiles/bots.json` or through the
 `node dexbot bots` menu. Valid values are `ama`, `ama1`, `ama2`, `ama3`, and
 `ama4`; `ama` is the recommended normal setting.
+
+Use `startPrice` to choose the candle source for the adapter: `pool` for LP
+history, `book` for orderbook history, or a numeric value to disable candle
+fetching and run as a fixed-price anchor.
 
 ### 2. Generate the Whitelist
 
@@ -168,6 +173,7 @@ node market_adapter/ama_signal_runner.js --bot xrp-bts-0 --compact
 - Confirm `gridPrice` is `ama`, `ama1`, `ama2`, `ama3`, or `ama4`.
 - Regenerate the whitelist with `npm run market-adapter:whitelist`.
 - Confirm the expected `botKey` exists in `profiles/market_adapter_whitelist.json`.
+- If `startPrice` is numeric, the adapter will not fetch pool/book candles for that bot. Use `startPrice` only for a fixed anchor in that case; `gridPrice` remains a separate grid setting.
 
 ### Trigger is not created
 
@@ -260,14 +266,15 @@ Per cycle, per processed bot, the adapter can produce:
 1. Load active bots from `profiles/bots.json`.
 2. Select bots with `gridPrice` set to `ama`, `ama1`, `ama2`, `ama3`, or `ama4`.
 3. Resolve AMA settings from `profiles/market_profiles.json`.
-4. Sync candle data from Kibana or native BitShares data.
-5. Repair missing candle gaps when possible.
-6. Ignore still-forming 1h candles.
-7. Compute AMA center, trend, ATR, weights, and collateral hint.
-8. Compare the new AMA center to the stored center.
-9. Suppress live writes if the bot is not whitelisted or candle data is stale.
-10. Write `dynamicgrid.json` and a recalc trigger when the threshold is crossed.
-11. Persist state snapshots under `market_adapter/state/`.
+4. Read `startPrice` to choose the candle source: `pool`, `book`, or fixed.
+5. Sync candle data from Kibana or native BitShares data, using the selected source.
+6. Repair missing candle gaps when possible.
+7. Ignore still-forming 1h candles.
+8. Compute AMA center, trend, ATR, weights, and collateral hint.
+9. Compare the new AMA center to the stored center.
+10. Suppress live writes if the bot is not whitelisted or candle data is stale.
+11. Write `dynamicgrid.json` and a recalc trigger when the threshold is crossed.
+12. Persist state snapshots under `market_adapter/state/`.
 
 ### Configuration Files
 
