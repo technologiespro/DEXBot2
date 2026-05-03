@@ -46,7 +46,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Session cache**: encrypted HKDF re-encryption with a random salt that is never persisted
 - **Runtime hardening**: lstat + owner/mode/type checks on all sockets and ready files; bootstrap socket destroyed after first use
 
-### 📊 [Grid Recalculation](../market_adapter/GRID_RECALCULATION.md)
+### 📊 [Grid Recalculation](GRID_RECALCULATION.md)
 *When and why the grid resets.*
 - **Three Independent Triggers**: AMA Delta (market move), RMS Divergence (state drift), and Regeneration (fund accumulation)
 - **Configuration**: Per-trigger thresholds and their defaults
