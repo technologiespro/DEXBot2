@@ -1211,6 +1211,26 @@ async function main() {
         while (true) {
             const started = Date.now();
             log(cfg, `\n[cycle ${new Date(started).toISOString()}]`);
+            
+            // Ensure connection is active before starting the cycle.
+            // waitForConnected checks the module-level `connected` flag, but the flag
+            // can be stale if a close event was missed (e.g. during rapid reconnect
+            // cycling).  Double-check the real WebSocket state and force a reconnect
+            // when the two are out of sync.
+            try {
+                const { waitForConnected, getConnectionStatus, _assessFailover } = getBitsharesClient();
+                await waitForConnected(30000);
+                const wsStatus = getConnectionStatus();
+                if (wsStatus !== 'open') {
+                    logger.warn(`Connection flag was stale (WS state=${wsStatus}); triggering reconnect`);
+                    await _assessFailover('adapter-cycle-start');
+                    await waitForConnected(10000);
+                }
+            } catch (err) {
+                logger.error(`Connection check failed before cycle: ${err.message}`);
+                // Fall through and let runOnce attempt to handle its own retries/failures
+            }
+
             await runOnce(cfg, state, contextCache);
             const sleepMs = sleepUntilAlignedBoundary(cfg.pollSeconds, started, Date.now());
             await sleep(sleepMs);

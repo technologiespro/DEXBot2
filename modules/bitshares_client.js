@@ -356,10 +356,19 @@ function createAccountClient(accountName, privateKey) {
     return new BitSharesLib(accountName, privateKey);
 }
 
+function getConnectionStatus() {
+    try {
+        return BitSharesApi.getStatus();
+    } catch (_) {
+        return 'unknown';
+    }
+}
+
 module.exports = {
     BitShares: BitSharesLib,
     createAccountClient,
     waitForConnected,
+    getConnectionStatus,
     setSuppressConnectionLog,
     getNodeManager: () => nodeManager,
     getNodeStats: () => nodeManager?.getStats(),
@@ -367,5 +376,4 @@ module.exports = {
     getConnectionError: () => lastConnectionError,
     _refreshStartupNodeServers: refreshStartupNodeServers,
     _assessFailover: assessFailover,
-    _internal: { get connected() { return connected; } }
 };
