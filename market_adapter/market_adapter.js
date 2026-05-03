@@ -56,7 +56,7 @@ const path = require('path');
 
 const { parseJsonWithComments, sleep, ensureDir } = require('../modules/order/utils/system');
 const { readGeneralSettings } = require('../modules/general_settings');
-const { MARKET_ADAPTER, TIMING } = require('../modules/constants');
+const { MARKET_ADAPTER } = require('../modules/constants');
 const { createBotKey } = require('../modules/account_orders');
 const { calculateAMA } = require('../analysis/ama_fitting/ama');
 const {
@@ -709,8 +709,7 @@ function calcAmaComparison(candles, bot = null, ctx = null) {
 }
 
 async function fetchNativeTradesSince(poolId, sinceMs, pageLimit, maxPages) {
-    const { BitShares, waitForConnected } = getBitsharesClient();
-    await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
+    const { BitShares } = getBitsharesClient();
     const trades = [];
     const seenSequences = new Set();
     let pages = 0;
@@ -783,8 +782,7 @@ function nativeHistoryRowToTrade(row) {
 }
 
 async function fetchNativeTradesUntilOverlap(poolId, overlapSequences, minOverlap, pageLimit, maxPages) {
-    const { BitShares, waitForConnected } = getBitsharesClient();
-    await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
+    const { BitShares } = getBitsharesClient();
     const overlapSet = new Set((Array.isArray(overlapSequences) ? overlapSequences : [])
         .map((v) => String(v))
         .filter((v) => v !== ''));
@@ -841,8 +839,7 @@ async function fetchNativeTradesUntilOverlap(poolId, overlapSequences, minOverla
 }
 
 async function fetchNativeMarketHistorySince(assetA, assetB, sinceMs, untilMs, intervalSeconds, options = {}) {
-    const { BitShares, waitForConnected } = getBitsharesClient();
-    await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
+    const { BitShares } = getBitsharesClient();
     if (!BitShares) {
         throw new Error('BitShares client unavailable');
     }
@@ -1152,8 +1149,8 @@ async function runOnceForAma(overrides = {}) {
         staleMs: Math.max(2, cfg.pollSeconds) * 1000 * 2,
     });
     try {
-        const { waitForConnected } = getBitsharesClient();
-        await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
+        const { connectClient } = getBitsharesClient();
+        await connectClient();
         const state = loadJson(STATE_FILE, { meta: {}, bots: {} });
         const contextCache = new Map();
         const run = await runOnce(cfg, state, contextCache);
@@ -1198,8 +1195,8 @@ async function main() {
             return 0;
         }
 
-        const { waitForConnected } = getBitsharesClient();
-        await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
+        const { connectClient } = getBitsharesClient();
+        await connectClient();
         log(cfg, 'Connected to BitShares');
 
         const state = loadJson(STATE_FILE, { meta: {}, bots: {} });
@@ -1215,33 +1212,21 @@ async function main() {
             const started = Date.now();
             log(cfg, `\n[cycle ${new Date(started).toISOString()}]`);
             
-            // Connect for this cycle.  The connection is torn down after each poll
-            // so that idle-timeout kills from proxies / load balancers never happen.
-            // Use a cheap reconnect (no full node fleet probe) — the NodeManager
-            // already tracks healthy nodes from its periodic checks.
-            // No waitForConnected gate here: per-call guards inside each native
-            // fetch function handle reconnection at the point of use.
+            // Connect for this cycle using the lightweight WS client (no btsdex).
+            // Tear down after runOnce so the connection never sits idle.
             try {
-                const { reconnectForCycle, _assessFailover } = getBitsharesClient();
-                const ok = await reconnectForCycle();
-                if (!ok) {
-                    logger.warn('Cycle reconnect failed, triggering full failover');
-                    await _assessFailover('adapter-cycle-start');
-                }
+                const { connectClient } = getBitsharesClient();
+                await connectClient();
             } catch (err) {
-                logger.error(`Connection check failed before cycle: ${err.message}`);
+                logger.error(`Connection failed before cycle: ${err.message}`);
                 // Fall through and let runOnce attempt to handle its own retries/failures
             }
 
             await runOnce(cfg, state, contextCache);
 
-            // Tear down the connection so the WebSocket doesn't sit idle for the
-            // full poll interval (~1 h).  Proxies and load balancers routinely kill
-            // connections that haven't seen traffic for minutes, so a fresh
-            // per-cycle connection is far more reliable.
             try {
                 const { disconnectClient } = getBitsharesClient();
-                await disconnectClient();
+                disconnectClient();
             } catch (_) {}
 
             const sleepMs = sleepUntilAlignedBoundary(cfg.pollSeconds, started, Date.now());

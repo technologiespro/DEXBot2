@@ -1,12 +1,11 @@
 'use strict';
 
 let _bitsharesClient = null;
-const { TIMING } = require('../../modules/constants');
 
 function getBitsharesClient() {
     // lazy require to avoid circular dependencies at module load time
     if (!_bitsharesClient) {
-        _bitsharesClient = require('../../modules/bitshares_client');
+        _bitsharesClient = require('./adapter_client');
     }
     return _bitsharesClient;
 }
@@ -20,9 +19,7 @@ async function resolveAsset(symbol, bitsharesClient = null) {
         throw new Error(`Cannot resolve asset: invalid or missing symbol "${symbol}"`);
     }
     const client = bitsharesClient || getBitsharesClient();
-    if (typeof client.waitForConnected === 'function') await client.waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
-    const { BitShares } = client;
-    const results = await BitShares.db.lookup_asset_symbols([symbol]);
+    const results = await client.BitShares.db.lookup_asset_symbols([symbol]);
     const asset = results?.[0];
     if (!asset?.id || typeof asset.precision !== 'number') {
         throw new Error(`Cannot resolve asset "${symbol}": lookup failed`);
@@ -32,7 +29,6 @@ async function resolveAsset(symbol, bitsharesClient = null) {
 
 async function findPoolByAssets(assetAId, assetBId, options = {}) {
     const client = options.bitsharesClient || getBitsharesClient();
-    if (typeof client.waitForConnected === 'function') await client.waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
     const { BitShares } = client;
     const sortBy = options.sortBy || 'totalBalance'; // 'totalBalance' or 'assetABalance'
 
@@ -166,8 +162,6 @@ async function resolveBotContext(bot) {
         };
     }
 
-    // The market adapter source comes from startPrice only. gridPrice/other
-    // settings are intentionally ignored here.
     const marketSource = normalizeMarketSource(bot.startPrice) || 'pool';
 
     let poolId = null;
