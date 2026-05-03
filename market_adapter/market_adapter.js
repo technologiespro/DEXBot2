@@ -1215,22 +1215,18 @@ async function main() {
             const started = Date.now();
             log(cfg, `\n[cycle ${new Date(started).toISOString()}]`);
             
-            // Connect for this cycle.  The connection is intentionally torn down
-            // after each poll so that idle-timeout disconnects from proxies / load
-            // balancers never happen.  The ~1–2 s reconnect overhead per hour is
-            // negligible compared to the reliability win.
-            // 
-            // Double-check the real WebSocket state because the module-level
-            // `connected` flag can be stale when a close event was missed.
+            // Connect for this cycle.  The connection is torn down after each poll
+            // so that idle-timeout kills from proxies / load balancers never happen.
+            // Use a cheap reconnect (no full node fleet probe) — the NodeManager
+            // already tracks healthy nodes from its periodic checks.
             try {
-                const { waitForConnected, getConnectionStatus, _assessFailover } = getBitsharesClient();
-                await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
-                const wsStatus = getConnectionStatus();
-                if (wsStatus !== 'open') {
-                    logger.warn(`Connection flag was stale (WS state=${wsStatus}); triggering reconnect`);
+                const { reconnectForCycle, waitForConnected, _assessFailover } = getBitsharesClient();
+                const ok = await reconnectForCycle();
+                if (!ok) {
+                    logger.warn('Cycle reconnect failed, triggering full failover');
                     await _assessFailover('adapter-cycle-start');
-                    await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
                 }
+                await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
             } catch (err) {
                 logger.error(`Connection check failed before cycle: ${err.message}`);
                 // Fall through and let runOnce attempt to handle its own retries/failures

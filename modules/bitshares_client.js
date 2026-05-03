@@ -62,6 +62,7 @@ let connected = false;
 let suppressConnectionLog = false;
 const connectedCallbacks = new Set();
 let lastConnectionError = null;
+let intentionalDisconnect = false;
 
 // Node Manager for multi-node support
 let nodeManager = null;
@@ -201,6 +202,11 @@ function handleConnectionStatus(status) {
         lastConnectionError = null;
     }
     if (status === 'closed' && canHandleFailover && !reconnectInProgress) {
+        if (intentionalDisconnect) {
+            // Disconnect was deliberate; suppress both NodeManager failover
+            // and btsdex-api's parallel auto-reconnect.
+            return true;
+        }
         assessFailover('Connection closed').catch(() => {});
         // NodeManager owns reconnect selection; suppress btsdex-api's parallel auto-reconnect.
         return true;
@@ -365,13 +371,28 @@ function getConnectionStatus() {
 }
 
 async function disconnectClient() {
+    intentionalDisconnect = true;
     connected = false;
-    try {
-        await BitSharesLib.disconnect();
-    } catch (_) {}
-    try {
-        await BitSharesApi.disconnect();
-    } catch (_) {}
+    try { await BitSharesLib.disconnect(); } catch (_) {}
+    try { await BitSharesApi.disconnect(); } catch (_) {}
+    intentionalDisconnect = false;
+}
+
+/**
+ * Reconnect using the NodeManager's already-known node stats without
+ * running a full checkAllNodes probe.  Prefers healthy/slow/unchecked
+ * nodes from the last periodic health check (every 4 h by default) and
+ * falls back to the configured node list if NodeManager hasn't run yet.
+ * 
+ * This is the intended entry point for the market adapter's per-cycle
+ * connect + disconnect pattern — cheap reconnects, not full fleet probes.
+ */
+async function reconnectForCycle(reason = 'adapter-cycle') {
+    const nodes = nodeManager && nodeConfig?.healthCheck?.enabled !== false
+        ? nodeManager.getHealthyNodes()
+        : [];
+    const effective = nodes.length > 0 ? nodes : getConfiguredOrDefaultNodes();
+    return restartBitsharesConnection(effective, reason);
 }
 
 module.exports = {
@@ -380,6 +401,7 @@ module.exports = {
     waitForConnected,
     getConnectionStatus,
     disconnectClient,
+    reconnectForCycle,
     setSuppressConnectionLog,
     getNodeManager: () => nodeManager,
     getNodeStats: () => nodeManager?.getStats(),
