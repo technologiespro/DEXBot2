@@ -40,8 +40,13 @@
  * ===============================================================================
  */
 
+const fs = require('fs');
+const path = require('path');
 const WebSocket = require('isomorphic-ws');
 const Logger = require('./logger');
+const { NODE_MANAGEMENT } = require('./constants');
+
+const BLACKLIST_STATE_FILE = path.join(__dirname, '..', 'profiles', 'node_blacklist.json');
 
 /**
  * NodeManager - Manages health checking and selection of BitShares nodes
@@ -79,6 +84,7 @@ class NodeManager {
         // Node statistics tracking
         this.nodeStats = new Map();
         this.initializeNodeStats();
+        this.loadBlacklistState();
 
         // Control flags
         this.monitoringActive = false;
@@ -87,6 +93,9 @@ class NodeManager {
 
         // Expected chain ID (BitShares mainnet)
         this.expectedChainId = '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8';
+
+        // Blacklist cooldown: retry blacklisted nodes after 7 days
+        this.BLACKLIST_COOLDOWN_MS = NODE_MANAGEMENT.BLACKLIST_COOLDOWN_MS;
     }
 
     /**
@@ -103,9 +112,58 @@ class NodeManager {
                     failureCount: 0,
                     lastCheckTime: null,
                     lastErrorMessage: null,
-                    chainId: null
+                    chainId: null,
+                    blacklistedAt: null
                 });
             }
+        }
+    }
+
+    /**
+     * Load persisted blacklist state from disk
+     * @private
+     */
+    loadBlacklistState() {
+        try {
+            if (!fs.existsSync(BLACKLIST_STATE_FILE)) return;
+            const raw = fs.readFileSync(BLACKLIST_STATE_FILE, 'utf8');
+            const state = JSON.parse(raw);
+            if (!state || typeof state !== 'object') return;
+            for (const [nodeUrl, entry] of Object.entries(state)) {
+                if (!entry || entry.status !== 'blacklisted') continue;
+                const stats = this.nodeStats.get(nodeUrl);
+                if (!stats) continue;
+                stats.status = 'blacklisted';
+                stats.failureCount = typeof entry.failureCount === 'number' ? entry.failureCount : this.config.healthCheck.blacklistThreshold;
+                stats.blacklistedAt = typeof entry.blacklistedAt === 'number' ? entry.blacklistedAt : Date.now();
+                stats.lastErrorMessage = typeof entry.lastErrorMessage === 'string' ? entry.lastErrorMessage : null;
+                this.logger.debug(`Loaded persisted blacklist: ${nodeUrl}`);
+            }
+        } catch (err) {
+            this.logger.warn(`Failed to load blacklist state: ${err.message}`);
+        }
+    }
+
+    /**
+     * Persist blacklisted nodes to disk
+     * @private
+     */
+    saveBlacklistState() {
+        try {
+            const state = {};
+            for (const stats of this.nodeStats.values()) {
+                if (stats.status === 'blacklisted') {
+                    state[stats.url] = {
+                        status: 'blacklisted',
+                        blacklistedAt: stats.blacklistedAt,
+                        failureCount: stats.failureCount,
+                        lastErrorMessage: stats.lastErrorMessage
+                    };
+                }
+            }
+            fs.writeFileSync(BLACKLIST_STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+        } catch (err) {
+            this.logger.warn(`Failed to save blacklist state: ${err.message}`);
         }
     }
 
@@ -161,12 +219,31 @@ class NodeManager {
         }
 
         this.checkAllNodesPromise = (async () => {
-            const promises = Array.from(this.nodeStats.keys()).map(nodeUrl => {
-                return this.checkNode(nodeUrl).catch(err => {
-                    // Don't throw, just log - one node failure shouldn't crash the check cycle
-                    this.logger.debug(`Check failed for ${nodeUrl}: ${err.message}`);
+            const now = Date.now();
+            const promises = Array.from(this.nodeStats.keys())
+                .filter(nodeUrl => {
+                    const stats = this.nodeStats.get(nodeUrl);
+                    if (stats?.status !== 'blacklisted') return true;
+                    if (!stats.blacklistedAt) return false;
+                    const cooldownRemaining = this.BLACKLIST_COOLDOWN_MS - (now - stats.blacklistedAt);
+                    if (cooldownRemaining > 0) {
+                        const remainingHours = Math.ceil(cooldownRemaining / 3600000);
+                        this.logger.debug(`${nodeUrl.substring(0, 40)}... blacklisted (${remainingHours}h cooldown remaining)`);
+                        return false;
+                    }
+                    stats.status = 'unchecked';
+                    stats.failureCount = 0;
+                    stats.blacklistedAt = null;
+                    this.saveBlacklistState();
+                    this.logger.info(`${nodeUrl.substring(0, 40)}... blacklist cooldown expired, re-enabling`);
+                    return true;
+                })
+                .map(nodeUrl => {
+                    return this.checkNode(nodeUrl).catch(err => {
+                        // Don't throw, just log - one node failure shouldn't crash the check cycle
+                        this.logger.debug(`Check failed for ${nodeUrl}: ${err.message}`);
+                    });
                 });
-            });
 
             await Promise.all(promises);
         })();
@@ -244,6 +321,8 @@ class NodeManager {
             // Check if should be blacklisted
             if (stats.failureCount >= this.config.healthCheck.blacklistThreshold) {
                 stats.status = 'blacklisted';
+                stats.blacklistedAt = Date.now();
+                this.saveBlacklistState();
                 this.logger.warn(`✗ ${nodeUrl.substring(0, 40)}... BLACKLISTED (${err.message})`);
             } else {
                 stats.status = 'failed';
@@ -423,6 +502,8 @@ class NodeManager {
         if (stats) {
             stats.status = 'blacklisted';
             stats.failureCount = this.config.healthCheck.blacklistThreshold;
+            stats.blacklistedAt = Date.now();
+            this.saveBlacklistState();
             this.logger.warn(`Manually blacklisted: ${nodeUrl}`);
         }
     }
@@ -438,6 +519,8 @@ class NodeManager {
             stats.failureCount = 0;
             stats.latencyMs = null;
             stats.lastErrorMessage = null;
+            stats.blacklistedAt = null;
+            this.saveBlacklistState();
             this.logger.info(`Reset node: ${nodeUrl}`);
         }
     }
@@ -452,7 +535,9 @@ class NodeManager {
             stats.latencyMs = null;
             stats.lastErrorMessage = null;
             stats.chainId = null;
+            stats.blacklistedAt = null;
         }
+        this.saveBlacklistState();
         this.logger.info('Reset all nodes');
     }
 

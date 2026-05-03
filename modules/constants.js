@@ -493,21 +493,22 @@ let NODE_MANAGEMENT = {
 
     // Default node list (used if no config file)
     DEFAULT_NODES: [
-        'wss://dex.iobanker.com/ws',
-        'wss://api.bts.mobi/ws',
-        'wss://eu.nodes.bitshares.ws/ws',
+        'wss://btsws.roelandp.nl/ws',
         'wss://cloud.xbts.io/ws',
         'wss://node.xbts.io/ws',
         'wss://public.xbts.io/ws',
-        'wss://btsws.roelandp.nl/ws',
-        'wss://singapore.bitshares.im/ws'
+        'wss://dex.iobanker.com/ws',
+        'wss://api.dex.trading/',
+        'wss://api.bts.mobi/ws',
+        'wss://api.btslebin.com/ws'
     ],
 
     // Health check defaults
-    HEALTH_CHECK_INTERVAL_MS: 60000,    // 1 minute
+    HEALTH_CHECK_INTERVAL_MS: 4 * 60 * 60 * 1000,  // 4 hours
     HEALTH_CHECK_TIMEOUT_MS: 5000,      // 5 seconds per check
     MAX_PING_MS: 3000,                  // Max acceptable latency
     BLACKLIST_THRESHOLD: 3,             // Failures before blacklist
+    BLACKLIST_COOLDOWN_MS: 7 * 24 * 60 * 60 * 1000,  // 7 days before retrying blacklisted nodes
 
     // Expected chain ID (BitShares mainnet)
     EXPECTED_CHAIN_ID: '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8',
