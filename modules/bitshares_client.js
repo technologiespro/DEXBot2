@@ -373,9 +373,12 @@ function getConnectionStatus() {
 async function disconnectClient() {
     intentionalDisconnect = true;
     connected = false;
-    try { await BitSharesLib.disconnect(); } catch (_) {}
-    try { await BitSharesApi.disconnect(); } catch (_) {}
-    intentionalDisconnect = false;
+    try {
+        try { await BitSharesLib.disconnect(); } catch (_) {}
+        try { await BitSharesApi.disconnect(); } catch (_) {}
+    } finally {
+        intentionalDisconnect = false;
+    }
 }
 
 /**

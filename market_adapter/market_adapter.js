@@ -1219,14 +1219,15 @@ async function main() {
             // so that idle-timeout kills from proxies / load balancers never happen.
             // Use a cheap reconnect (no full node fleet probe) — the NodeManager
             // already tracks healthy nodes from its periodic checks.
+            // No waitForConnected gate here: per-call guards inside each native
+            // fetch function handle reconnection at the point of use.
             try {
-                const { reconnectForCycle, waitForConnected, _assessFailover } = getBitsharesClient();
+                const { reconnectForCycle, _assessFailover } = getBitsharesClient();
                 const ok = await reconnectForCycle();
                 if (!ok) {
                     logger.warn('Cycle reconnect failed, triggering full failover');
                     await _assessFailover('adapter-cycle-start');
                 }
-                await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
             } catch (err) {
                 logger.error(`Connection check failed before cycle: ${err.message}`);
                 // Fall through and let runOnce attempt to handle its own retries/failures
