@@ -515,76 +515,87 @@ class MarketAdapterService {
                 }
             } else {
                 const lastTs = existingCandles[existingCandles.length - 1]?.[0] || 0;
-                const knownSequences = new Set(nativeRecentTradeSequences.map((seq) => String(seq)));
-                let fetchedTrades = [];
-                let newTrades = [];
 
-                if (knownSequences.size >= 2 && typeof deps.fetchNativeTradesUntilOverlap === 'function') {
-                    const overlapResult = await deps.withRetries(
-                        () => deps.fetchNativeTradesUntilOverlap(ctx.poolId, nativeRecentTradeSequences, 2, cfg.pageLimit, cfg.maxPages),
-                        cfg.sourceRetries,
-                        cfg.retryDelayMs,
-                        'native incremental overlap fetch failed'
-                    );
-                    fetchedTrades = Array.isArray(overlapResult?.trades) ? overlapResult.trades : [];
-                    nativeOverlapCount = Number(overlapResult?.overlapCount || 0);
-                    nativePagesFetched = Number(overlapResult?.pages || 0);
-                    sourceLabel = 'native-incremental-overlap';
-                    newTrades = fetchedTrades.filter((trade) => {
-                        if (!Number.isFinite(Number(trade?.sequence))) return true;
-                        return !knownSequences.has(String(trade.sequence));
+                try {
+                    const knownSequences = new Set(nativeRecentTradeSequences.map((seq) => String(seq)));
+                    let fetchedTrades = [];
+                    let newTrades = [];
+
+                    if (knownSequences.size >= 2 && typeof deps.fetchNativeTradesUntilOverlap === 'function') {
+                        const overlapResult = await deps.withRetries(
+                            () => deps.fetchNativeTradesUntilOverlap(ctx.poolId, nativeRecentTradeSequences, 2, cfg.pageLimit, cfg.maxPages),
+                            cfg.sourceRetries,
+                            cfg.retryDelayMs,
+                            'native incremental overlap fetch failed'
+                        );
+                        fetchedTrades = Array.isArray(overlapResult?.trades) ? overlapResult.trades : [];
+                        nativeOverlapCount = Number(overlapResult?.overlapCount || 0);
+                        nativePagesFetched = Number(overlapResult?.pages || 0);
+                        sourceLabel = 'native-incremental-overlap';
+                        newTrades = fetchedTrades.filter((trade) => {
+                            if (!Number.isFinite(Number(trade?.sequence))) return true;
+                            return !knownSequences.has(String(trade.sequence));
+                        });
+                    } else {
+                        const sinceMs = lastTs - (cfg.nativeBackfillHours * 3600 * 1000);
+                        fetchedTrades = await deps.withRetries(
+                            () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
+                            cfg.sourceRetries,
+                            cfg.retryDelayMs,
+                            'native incremental fetch failed'
+                        );
+                        newTrades = this.filterTimeBasedNativeNewTrades(
+                            fetchedTrades,
+                            knownSequences,
+                            nativeLastTradeTs,
+                            lastTs,
+                            cfg.intervalSeconds
+                        );
+                    }
+
+                    if (fetchedTrades.length > 0) {
+                        nativeRecentTradeSequences = this.getNativeRecentTradeSequences(fetchedTrades);
+                        const latestTradeTs = Math.max(...fetchedTrades.map((t) => Number(t?.tsMs)).filter(Number.isFinite));
+                        if (Number.isFinite(latestTradeTs)) nativeLastTradeTs = latestTradeTs;
+                    }
+
+                    const incomingCandles = deps.tradesToCandles(newTrades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
+                    nextCandles = deps.mergeCandles(existingCandles, incomingCandles, {
+                        onCollision: (existingCandle, incomingCandle) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
                     });
-                } else {
-                    const sinceMs = lastTs - (cfg.nativeBackfillHours * 3600 * 1000);
-                    fetchedTrades = await deps.withRetries(
-                        () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
-                        cfg.sourceRetries,
-                        cfg.retryDelayMs,
-                        'native incremental fetch failed'
-                    );
-                    newTrades = this.filterTimeBasedNativeNewTrades(
-                        fetchedTrades,
-                        knownSequences,
-                        nativeLastTradeTs,
-                        lastTs,
-                        cfg.intervalSeconds
-                    );
+
+                    // Fill bounded no-trade gaps from native incremental fetch. Ordinary LP
+                    // inactivity should remain a continuous flat 1h series; very large gaps stay
+                    // visible for Kibana repair/stale-tail handling instead of carrying stale prices.
+                    const bucketMs = Number(cfg.intervalSeconds) * 1000;
+                    const nowMs = this.getNowMs();
+                    const currentBucketStartMs = Math.floor(Number(nowMs) / bucketMs) * bucketMs;
+                    const latestClosedBucketTs = currentBucketStartMs - bucketMs;
+                    const earliestIncomingTs = incomingCandles.length > 0 ? incomingCandles[0][0] : null;
+                    const gapEndTs = Number.isFinite(earliestIncomingTs) && earliestIncomingTs > lastTs
+                        ? earliestIncomingTs
+                        : latestClosedBucketTs + bucketMs;
+                    const gapBuckets = Number.isFinite(gapEndTs) && gapEndTs > lastTs
+                        ? Math.round((gapEndTs - lastTs) / bucketMs) - 1
+                        : 0;
+                    const maxNativeGapFill = Number.isFinite(cfg.maxNativeGapFillCandles)
+                        ? cfg.maxNativeGapFillCandles
+                        : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
+                    if (gapBuckets <= maxNativeGapFill) {
+                        nextCandles = this.fillNativeIncrementalClosedGaps(nextCandles, lastTs, cfg.intervalSeconds);
+                    }
+                } catch (err) {
+                    if (typeof deps.logger?.warn === 'function') {
+                        deps.logger.warn(`[market_adapter] Native fetch failed for ${bot.botKey}; continuing with cached candles (${err.message})`);
+                    }
+                    nativePagesFetched = 0;
+                    nativeOverlapCount = null;
+                    sourceLabel = 'cached-native-fetch-err';
+                    nextCandles = existingCandles;
                 }
 
-                if (fetchedTrades.length > 0) {
-                    nativeRecentTradeSequences = this.getNativeRecentTradeSequences(fetchedTrades);
-                    const latestTradeTs = Math.max(...fetchedTrades.map((t) => Number(t?.tsMs)).filter(Number.isFinite));
-                    if (Number.isFinite(latestTradeTs)) nativeLastTradeTs = latestTradeTs;
-                }
-
-                const incomingCandles = deps.tradesToCandles(newTrades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
-                nextCandles = deps.mergeCandles(existingCandles, incomingCandles, {
-                    onCollision: (existingCandle, incomingCandle) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
-                });
-
-                // Fill bounded no-trade gaps from native incremental fetch. Ordinary LP
-                // inactivity should remain a continuous flat 1h series; very large gaps stay
-                // visible for Kibana repair/stale-tail handling instead of carrying stale prices.
-                const bucketMs = Number(cfg.intervalSeconds) * 1000;
-                const nowMs = this.getNowMs();
-                const currentBucketStartMs = Math.floor(Number(nowMs) / bucketMs) * bucketMs;
-                const latestClosedBucketTs = currentBucketStartMs - bucketMs;
-                const earliestIncomingTs = incomingCandles.length > 0 ? incomingCandles[0][0] : null;
-                const gapEndTs = Number.isFinite(earliestIncomingTs) && earliestIncomingTs > lastTs
-                    ? earliestIncomingTs
-                    : latestClosedBucketTs + bucketMs;
-                const gapBuckets = Number.isFinite(gapEndTs) && gapEndTs > lastTs
-                    ? Math.round((gapEndTs - lastTs) / bucketMs) - 1
-                    : 0;
-                const maxNativeGapFill = Number.isFinite(cfg.maxNativeGapFillCandles)
-                    ? cfg.maxNativeGapFillCandles
-                    : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
-                if (gapBuckets <= maxNativeGapFill) {
-                    nextCandles = this.fillNativeIncrementalClosedGaps(nextCandles, lastTs, cfg.intervalSeconds);
-                }
-
-                // After incremental merge, prune any stale tail that may have been
-                // carried forward when the pool had no activity.
+                // After incremental merge (or native fetch failure), prune any stale tail
+                // that may have been carried forward when the pool had no activity.
                 if (typeof deps.pruneStaleTail === 'function') {
                     const staleThreshold = Number.isFinite(cfg.staleTailThreshold)
                         ? cfg.staleTailThreshold

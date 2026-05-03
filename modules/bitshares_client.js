@@ -364,11 +364,22 @@ function getConnectionStatus() {
     }
 }
 
+async function disconnectClient() {
+    connected = false;
+    try {
+        await BitSharesLib.disconnect();
+    } catch (_) {}
+    try {
+        await BitSharesApi.disconnect();
+    } catch (_) {}
+}
+
 module.exports = {
     BitShares: BitSharesLib,
     createAccountClient,
     waitForConnected,
     getConnectionStatus,
+    disconnectClient,
     setSuppressConnectionLog,
     getNodeManager: () => nodeManager,
     getNodeStats: () => nodeManager?.getStats(),
