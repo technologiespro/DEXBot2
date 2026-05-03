@@ -2,107 +2,61 @@
 
 Interactive HTML chart for researching optimal dynamic weight parameters by blending AMA slope and Kalman filter signals, gated by Hurst Exponent and Permutation Entropy regime detection.
 
-## Signal design rationale
+## Overview: What are AMA and Kalman?
 
-### AMA slope
+The DEXBot2 dynamic weight system combines two fundamentally different trend-detection methods, each compensating for the other's weaknesses. This section explains what they are and why they are used together.
 
-The AMA's Efficiency Ratio (`ER = net price change / sum of bar-by-bar changes`) adapts its smoothing speed to market conditions. In a choppy pool `ER ≈ 0` and the AMA barely moves; in a trend `ER ≈ 1` and it tracks price closely. Taking the slope of the AMA therefore produces a signal that is already noise-filtered at the source — a near-zero slope genuinely means sideways, not oscillation that happened to average out. The neutral zone (`neutralZonePct`) dead-bands any remaining micro-slope residuals, which is all the additional filtering needed.
+### AMA — Adaptive Moving Average
 
-### Kalman filter
+A traditional moving average (SMA, EMA) smooths price with a fixed window — it treats every bar equally, whether the market is trending or choppy. That means it's always either too slow (in trends) or too jittery (in chop).
 
-The Kalman filter is a state estimator: it separates true price and velocity from measurement noise via its R and Q parameters rather than smoothing over it. Running two filters at different Q values gives two orthogonal signals:
+An **Adaptive Moving Average** (AMA) — specifically the Kaufman variant (KAMA) — self-adjusts its smoothing speed based on market efficiency. It uses the **Efficiency Ratio (ER)**:
 
-- **Velocity** (tactical filter, high Q): direction and speed of price right now — responsive to inflections without reacting to wicks.
-- **Displacement** (modal filter, very low Q): how far price has moved from the long-run equilibrium ("center of gravity") — captures extension, not just momentum direction.
-
-The chart now also carries an adaptive `velocityFilteredPct` series that low-passes the tactical velocity more aggressively when displacement is close to equilibrium. That keeps the fast reaction in trends, but trims the whipsaw you see in sideways chop.
-
-Velocity and displacement carry different information and are kept in separate chart panels. The `dispWeight` knob only adds displacement confidence when the two signals agree on direction.
-
-### ATR handling
-
-The research runner intentionally sets `atr = 0` and `weightVariance = 0` for the AMA/Kalman chart so the tool isolates the directional signal path. In production, ATR is not part of the Kalman estimator; it is applied later as a separate symmetric volatility penalty in the live adapter.
-
-That split keeps the research chart aligned with the trend-confirmation logic while avoiding any double-counting of volatility in the Kalman branch.
-
-### Symmetric volatility shift
-
-The symmetric penalty is documented and implemented as a separate branch, not as part of the Kalman filter itself.
-
-Variables used by the live and research implementations:
-
-- `weightVariance` = `atr / amaPrice`
-- `volatilityExponent` = power applied to the variance
-- `volatilityScaleX` = penalty multiplier in x-factor units (10x default, 1x–100x in the volatility chart)
-- `volatilityThreshold` = minimum absolute shift before the penalty is allowed through
-- `MAX_SYMMETRIC_SHIFT` / `DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP` = default cap on the downward shift (overrideable in live settings)
-
-Formula:
-
-```text
-rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * volatilityScaleX
-clampedRawDelta   = clamp(rawSymmetricDelta, -MAX_SYMMETRIC_SHIFT, 0)
-symmetricDelta    = |clampedRawDelta| < volatilityThreshold ? 0 : clampedRawDelta
+```
+ER = |Close[t] − Close[t−N]| / Σ |Close[i] − Close[i−1]|
 ```
 
-Live application:
+Think of ER as "how much net progress did price make, divided by how much it zigzagged to get there":
 
-```text
-effectiveSell = clamp(staticSell + trendOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT)
-effectiveBuy  = clamp(staticBuy  - trendOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT)
-```
+| ER value | Market state | AMA behavior |
+|----------|-------------|--------------|
+| **ER ≈ 1** | Trending (efficient) | Moves fast — tracks each bar closely |
+| **ER ≈ 0.5** | Mixed | Moderate smoothing |
+| **ER ≈ 0** | Choppy (noisy) | Barely moves — ignores the noise |
 
-The dedicated volatility research chart in `analysis/analyze_volatility.js` uses the same `weightVariance → symmetricDelta` math, but with no directional trend component.
+**Why it matters**: In a strong trend, the AMA hugs price tightly so the bot can follow. In a sideways chop, the AMA flattens out, so the bot doesn't get whipsawed into bad entries. The AMA is *noise-filtering at the source* — a flat line genuinely means there is no trend, not that up and down bars happened to average out.
 
-### Hurst Exponent
+### Kalman Filter — A State Estimator
 
-Estimates the long-memory property of the price series via Rescaled Range (R/S) analysis over a rolling window of 256 bars with scales `[8, 16, 32, 64]`.
+A moving average (even an adaptive one) is ultimately a *smoothing* tool. It takes noisy data and blurs it. A **Kalman filter** is fundamentally different — it is a **state estimator** that builds an internal model of the underlying system and updates it as new measurements arrive.
 
-| H value | Regime | Meaning |
+The Kalman filter answers: "Given the noisy price I just saw, what do I *actually* believe the true price and velocity are?"
+
+It works by maintaining two internal numbers:
+
+- **R (measurement noise)**: How much random wick/jitter do I expect in each price bar? High R → the filter trusts new measurements less.
+- **Q (process noise)**: How much genuine price change do I expect per bar? High Q → the filter trusts its velocity model less, allowing faster adaptation.
+
+By tuning Q differently, the same algorithm produces two distinct views:
+
+| Filter | Q setting | What it tells you | Analogy |
+|--------|-----------|-------------------|---------|
+| **Tactical** (velocity) | High Q | Direction and speed *right now* — fast to catch inflections, slow to react to wicks | "Which way is the wind blowing this moment?" |
+| **Modal** (displacement) | Very low Q | How far price has drifted from its long-run equilibrium — slow-moving center of gravity | "How far from home are we?" |
+
+**Why it matters**: Because the Kalman filter models *velocity* and *position* as separate states, it can tell the difference between a real trend (both agree) and a random spike (velocity jumps but displacement stays near zero). A moving average can't do this — it just averages everything together.
+
+### Why blend them?
+
+| | AMA | Kalman |
 |---|---|---|
-| H > 0.55 | TRENDING | Returns are persistent — trends continue |
-| H ≈ 0.5 | RANDOM | No memory — random walk |
-| H < 0.45 | MEAN_REVERTING | Returns are anti-persistent — reversals dominate |
+| **Strength** | Simple, robust; ER is intuitive and proven | Models velocity & displacement separately; state-space awareness |
+| **Weakness** | Only sees efficiency, not momentum direction vs. equilibrium | Heavier computation; needs warmup; tuned poorly it overfits |
+| **Best in** | Clean trends where ER is unambiguous | Mixed conditions where separating wicks from real moves matters |
 
-**Algorithm**: for each scale τ, partition the log-return window into non-overlapping chunks of length τ, compute the average R/S (Rescaled Range) per chunk, then OLS-fit `log(avgRS)` vs `log(τ)` — the slope is the Hurst exponent.
+Blending them via the **α** knob (0 = pure Kalman, 1 = pure AMA) lets you dial in the right balance for each market. The goal is to confirm trends from two independent angles before committing weight.
 
-**Role in the tool**: Hurst is one axis of the regime multiplier matrix (see [Regime Multiplier](#regime-multiplier)). Gates the AMA+Kalman blend in production when `regimeSensitivity > 0`.
-
-**Warmup**: requires 256 bars before `isReady = true`.
-
-### Permutation Entropy
-
-Measures market disorder by counting ordinal (rank-order) patterns in a rolling window of 54 bars, with embedding dimension `m=5` and delay `1`.
-
-| Normalized PE | Regime | Meaning |
-|---|---|---|
-| PE < 0.60 | STRUCTURED | Price movement is ordered — signals are trustworthy |
-| 0.60–0.85 | MIXED | Partial structure |
-| PE > 0.85 | NOISE | Maximum disorder — no reliable edge |
-
-**Algorithm**: for each position `i` in the window, extract the rank-order of `[price[i], price[i+1], ..., price[i+m-1]]` as an ordinal pattern key. Compute Shannon entropy over the distribution of all `m! = 120` possible patterns, normalized by `log(m!)` to give PE ∈ [0, 1].
-
-**Role in the tool**: PE is the second axis of the regime multiplier matrix. It complements Hurst — Hurst identifies trend persistence, PE identifies signal quality. Together they gate the applied directional offset.
-
-**Warmup**: requires 58 bars (`window + (m-1) * delay`) before `isReady = true`.
-
-### Regime Multiplier
-
-Hurst and PE are combined into a single regime multiplier via bilinear interpolation over a 3×3 lookup table:
-
-```
-                PE < 0.60     PE 0.725     PE > 0.85
-                (Structured)  (Mixed)      (Noise)
-H > 0.55  →    1.0           0.7          0.3
-H 0.45–0.55 →  0.6           0.4          0.15
-H < 0.45  →    0.3           0.2          0.05
-```
-
-Best case (trending + structured): multiplier = **1.0** (full signal). Unclear situations < 1.0 to dampen signal.
-
-The `regi` (regime sensitivity) knob raises the multiplier to a power: `finalMult = baseMult ^ sensitivity`. At sensitivity = 1.0 (default), the table is used as-is. Higher sensitivity exaggerates regime differences; lower sensitivity flattens them toward 1.0.
-
-**Dampen-only**: the multiplier is clamped to a maximum of 1.0. Regime can only reduce the signal — it never amplifies above what the blended channels and output clamp already allow. This was found to perform better in practice: letting a "good" regime boost the signal over-commits when the signal is already at its natural peak.
+On top of this blend, **Hurst Exponent** and **Permutation Entropy** act as a regime gate — when the market is too random, the entire directional signal is dampened (never amplified), protecting the bot from trading noise.
 
 ## Quick Start
 
@@ -185,6 +139,19 @@ All panels share aligned vertical time grid lines, and the bottom output panel s
 | **kfs** | 20–200% | 100% | Adaptive EMA span ratio |
 | **cf** | 0–5 | 0 | Signal confirmation bars for the latched/raw signal overlay |
 
+**Adaptive EMA (kf, kfs, kdt, kfd)**: When displacement is near equilibrium, the Kalman velocity is low-pass filtered more aggressively — trimming whipsaws in sideways chop while keeping fast reaction in trends. Behavior:
+- `kf = 0` → raw Kalman velocity (no smoothing)
+- `kf = 100` → current adaptive EMA result
+- `kf > 100` → pushes further toward the adaptive signal (up to 200)
+
+**dsp (displacement scale)**: Controls how fast displacement confidence saturates. Smaller values make it saturate faster (less displacement needed for full confidence); larger values require more displacement. The live adapter clamps `dsp` ≥ 1.0 for production stability.
+
+**Latched signal (cf)**: Prevents the output from flip-flopping on every bar. It holds the last direction for `cf` bars before allowing a reversal:
+- `cf = 0` → raw signal (instant flips)
+- `cf = 1` → flips on the first opposite bar
+- `cf = 2–5` → requires that many consecutive opposite bars before changing direction
+- Neutral bars preserve the current latched state without resetting the confirmation count.
+
 ### Slope Calculation
 | Knob | Range | Default | Purpose |
 |------|-------|---------|---------|
@@ -207,6 +174,98 @@ The **copy** button serializes all knob values (α, dw, kf, kfd, dsp, kdt, kfs, 
 
 The **paste** button first checks `localStorage` for parameters from a previous copy in the same browser session. If none found, it prompts for Ctrl+V input. A confirmation popup shows the parsed values before applying them. Click **Apply** to set the knobs, **Cancel** or press **Escape** to dismiss.
 
+## Signal Design Rationale
+
+*The Overview explains what AMA and Kalman are. This section covers why specific design choices were made and how the supporting machinery (regime detection, volatility penalty) fits together.*
+
+### AMA slope
+
+Taking the slope of the AMA produces a signal that is already noise-filtered at the source — a near-zero slope genuinely means sideways, not oscillation that happened to average out. The neutral zone (`nz%` knob) dead-bands any remaining micro-slope residuals, which is all the additional filtering the slope channel needs.
+
+### Kalman filter
+
+Running two Kalman filters at different Q values gives two orthogonal signals — velocity (immediate direction) and displacement (distance from equilibrium). They carry different information and are kept in separate chart panels. The `dw` knob only adds displacement confidence when the two signals agree on direction, avoiding false confirmation from opposing signals.
+
+### ATR and symmetric volatility penalty
+
+**ATR** (Average True Range) measures how wide price bars are — a direct gauge of market volatility. High volatility means wider spreads and more risk of sudden reversals.
+
+The research tool intentionally sets ATR to zero to isolate the directional signal. In production, ATR drives a **symmetric volatility penalty**: when volatility is high, both buy and sell weights are reduced equally, keeping the bot out of turbulent conditions. This penalty is a separate branch from the directional Kalman/AMA signal — the two effects are applied independently and never double-count each other.
+
+**Variables and formula:**
+
+- `weightVariance` = `atr / amaPrice`
+- `volatilityExponent` = power applied to the variance
+- `volatilityScaleX` = penalty multiplier in x-factor units (10× default, 1×–100× in the volatility chart)
+- `volatilityThreshold` = minimum absolute shift before the penalty is allowed through
+- `MAX_SYMMETRIC_SHIFT` = default cap on the downward shift (overrideable in live settings)
+
+```text
+rawSymmetricDelta = -pow(weightVariance, volatilityExponent) * volatilityScaleX
+clampedRawDelta   = clamp(rawSymmetricDelta, -MAX_SYMMETRIC_SHIFT, 0)
+symmetricDelta    = |clampedRawDelta| < volatilityThreshold ? 0 : clampedRawDelta
+```
+
+Applied to weights:
+```text
+effectiveSell = clamp(staticSell + trendOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT)
+effectiveBuy  = clamp(staticBuy  - trendOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT)
+```
+
+The dedicated volatility research chart in `analysis/analyze_volatility.js` uses the same math without any directional component.
+
+### Hurst Exponent
+
+Estimates the long-memory property of the price series via Rescaled Range (R/S) analysis over a rolling window of 256 bars with scales `[8, 16, 32, 64]`.
+
+| H value | Regime | Meaning |
+|---|---|---|
+| H > 0.55 | TRENDING | Returns are persistent — trends continue |
+| H ≈ 0.5 | RANDOM | No memory — random walk |
+| H < 0.45 | MEAN_REVERTING | Returns are anti-persistent — reversals dominate |
+
+**Algorithm**: for each scale τ, partition the log-return window into non-overlapping chunks of length τ, compute the average R/S (Rescaled Range) per chunk, then OLS-fit `log(avgRS)` vs `log(τ)` — the slope is the Hurst exponent.
+
+**Role**: Hurst is one axis of the regime multiplier matrix. Gates the AMA+Kalman blend in production when `regimeSensitivity > 0`.
+
+**Warmup**: requires 256 bars before `isReady = true`.
+
+### Permutation Entropy
+
+Measures market disorder by counting ordinal (rank-order) patterns in a rolling window of 54 bars, with embedding dimension `m=5` and delay `1`.
+
+| Normalized PE | Regime | Meaning |
+|---|---|---|
+| PE < 0.60 | STRUCTURED | Price movement is ordered — signals are trustworthy |
+| 0.60–0.85 | MIXED | Partial structure |
+| PE > 0.85 | NOISE | Maximum disorder — no reliable edge |
+
+**Algorithm**: for each position `i` in the window, extract the rank-order of `[price[i], price[i+1], ..., price[i+m-1]]` as an ordinal pattern key. Compute Shannon entropy over the distribution of all `m! = 120` possible patterns, normalized by `log(m!)` to give PE ∈ [0, 1].
+
+**Role**: PE is the second axis of the regime multiplier matrix. It complements Hurst — Hurst identifies trend persistence, PE identifies signal quality. Together they gate the applied directional offset.
+
+**Warmup**: requires 58 bars (`window + (m-1) * delay`) before `isReady = true`.
+
+### Regime Multiplier
+
+Hurst and PE are combined into a single regime multiplier via bilinear interpolation over a 3×3 lookup table:
+
+```
+                PE < 0.60     PE 0.725     PE > 0.85
+                (Structured)  (Mixed)      (Noise)
+H > 0.55  →    1.0           0.7          0.3
+H 0.45–0.55 →  0.6           0.4          0.15
+H < 0.45  →    0.3           0.2          0.05
+```
+
+Best case (trending + structured): multiplier = **1.0** (full signal). Unclear situations < 1.0 to dampen signal.
+
+The `regi` (regime sensitivity) knob raises the multiplier to a power: `finalMult = baseMult ^ sensitivity`. At sensitivity = 1.0 (default), the table is used as-is. Higher sensitivity exaggerates regime differences; lower sensitivity flattens them toward 1.0.
+
+**Dampen-only**: the multiplier is clamped to a maximum of 1.0. Regime can only reduce the signal — it never amplifies above what the blended channels and output clamp already allow. This was found to perform better in practice: letting a "good" regime boost the signal over-commits when the signal is already at its natural peak.
+
+The lookup table can be customized per-market or per-bot (see [Custom Configuration](#regime-table-custom-configuration)). The default values match the table above.
+
 ## Formulas
 
 ### AMA Offset
@@ -218,61 +277,11 @@ amaOff  = clamp(amaClip / amaS% × outputClamp, ±outputClamp)
 ### Kalman Composite Offset
 ```
 kalClip   = clamp(velocity%, ±clipThreshold)   // percentile-based clip
-dispConf  = min(|displacement%| / md%, 1)      // displacement confidence, 0–1
+dispConf  = min(|displacement%| / dsp, 1)       // displacement confidence, 0–1
 momAlign  = sign(kalClip) == sign(displacement%) ? 1 : 0
 kalComp   = kalClip × (1 − dw + dw × dispConf × momAlign)
 kalOff    = clamp(kalComp / kalS% × outputClamp, ±outputClamp)
 ```
-
-### Adaptive EMA
-```
-smoothingBudget = 0.60
-smoothingFloor   = 0
-smoothingSpan    = smoothingBudget × clamp(kfs / 100, 0.2, 2.0)
-trendConfidence  = clamp(|displacement%| / (kdt × kfd), 0, 1)
-smoothingAlpha   = min(smoothingBudget, smoothingFloor + (smoothingSpan × trendConfidence))
-velocityFiltered = EMA(rawVelocity, smoothingAlpha)
-```
-
-Behavior:
-- `kf = 0` returns the raw Kalman velocity
-- `kf = 100` uses the current adaptive EMA result
-- `kf > 100` pushes further toward the adaptive signal than the base blend alone, up to 200
-
-### dsp (minimum displacement scale)
-```
-dispScale = max(dsp, 1.0)   // live adapter floor; research chart lets you sweep the raw value
-dispConf  = min(|displacement%| / dispScale, 1)
-```
-
-Behavior:
-- Smaller `dsp` values make displacement confidence saturate faster
-- Larger `dsp` values require more displacement before the Kalman branch is treated as fully confident
-- The research chart exposes `dsp` as an interactive knob so you can explore this saturation point directly
-- The live adapter still clamps `dsp` to at least `1.0` for production stability
-
-### Latched Signal
-```
-echoDir = sign(rawSignal) when rawSignal is bullish/bearish else 0
-latchedSignal = hold(echoDir, cf)
-```
-
-Behavior:
-- `cf = 0` disables latching and shows the raw signal directly
-- `cf = 1` flips immediately on the first opposite echo direction
-- higher `cf` requires more consecutive opposite bars before the latched signal changes
-- neutral/equilibrium bars keep the current latched state and do not clear a pending reversal
-
-### Echoed Output
-```
-rawOff   = combined AMA/Kalman output
-echoOff  = hold(rawOff direction, cf)
-```
-
-Behavior:
-- `cf = 0` disables output echo and shows the raw output directly
-- `cf > 0` holds the last output direction/value until the opposite output is confirmed
-- neutral output bars are treated as a confirmable flat state, so sustained flat output clears the echoed offset
 
 ### Regime Multiplier
 ```
@@ -283,7 +292,7 @@ finalMult = min(rawMult, 1.0)                  // dampen-only: regime never ampl
 
 ### Final Weight (clamp-normalized blend + gain)
 
-Each channel is normalized by the configured output clamp before blending, so α stays a pure ratio knob. The dead-band is applied to that pre-gain blended shape first; `gain` then scales the surviving signal linearly at the end, while the clamp guides still show where the runtime cap sits:
+Each channel is normalized by the configured output clamp before blending, so α stays a pure ratio knob. The dead-band is applied to that pre-gain blended shape first; `gain` then scales the surviving signal linearly at the end:
 
 ```
 cap            = configured channel clamp
@@ -345,7 +354,7 @@ Regime is **dampen-only**: the multiplier is capped at 1.0 regardless of sensiti
 
 ### Regime Table (Custom Configuration)
 
-The 3×3 regime multiplier table can be customized per-market or per-bot:
+The 3×3 regime multiplier table can be customized per-market or per-bot (default values match the table in [Regime Multiplier](#regime-multiplier)):
 
 ```json
 {
@@ -358,15 +367,6 @@ The 3×3 regime multiplier table can be customized per-market or per-bot:
   }
 }
 ```
-
-**Default Table:**
-|  | PE<0.60 (Structured) | PE 0.725 (Mixed) | PE>0.85 (Noise) |
-|--|---------------------|------------------|-----------------|
-| **H>0.55** (Trending) | 1.0 | 0.7 | 0.3 |
-| **H 0.45-0.55** (Random) | 0.6 | 0.4 | 0.15 |
-| **H<0.45** (Mean-Rev) | 0.3 | 0.2 | 0.05 |
-
-Best case (trending + structured) = 1.0 (full signal). Unclear situations reduce the offset.
 
 ## Data Pipeline
 
@@ -405,8 +405,10 @@ Candle Data
 | `analysis/analyze_dynamic_weight.js` | Runner: loads data, computes all signals, generates chart |
 | `analysis/trend_detection/dynamic_weight_chart_generator.js` | HTML generator: 4-panel uPlot chart with interactive knobs |
 | `analysis/trend_detection/kalman_trend_analyzer.js` | Kalman filter with tactical/modal state tracking |
+| `analysis/trend_detection/kalman_velocity_smoothing.js` | Adaptive EMA smoothing for Kalman velocity (kf/kfd/kdt/kfs knobs) |
 | `analysis/trend_detection/hurst_analyzer.js` | Hurst Exponent via R/S analysis (rolling 256-bar window) |
 | `analysis/trend_detection/permutation_entropy_analyzer.js` | Permutation Entropy via ordinal pattern counting |
+| `market_adapter/core/strategies/regime_gate.js` | Bilinear regime multiplier (Hurst × PE lookup table) |
 | `modules/constants.js` (`MARKET_ADAPTER.HURST_CONFIG`, `PE_CONFIG`) | Shared Hurst + PE config (window sizes, scales) |
 | `analysis/ama_fitting/ama.js` | Kaufman Adaptive Moving Average |
 | `market_adapter/core/strategies/ama_slope_model.js` | AMA slope weight computation |
@@ -419,7 +421,7 @@ Candle Data
 After the final blended trend offset is computed, if `|finalOff| < minOutputThreshold` the trend component is suppressed and treated as `0`.
 The symmetric volatility penalty is still applied independently. This means the bot can still receive a volatility-only weight adjustment even when the trend signal is below threshold. The payload flag `isReady` is only `false` when neither a trend offset nor a volatility penalty is active.
 
-The research chart now exposes this gate as the `th%` knob, so chart tuning and runtime overrides use the same threshold concept.
+The research chart exposes this gate as the `th%` knob, so chart tuning and runtime overrides use the same threshold concept.
 
 The runtime default is `0`, which disables the gate unless a market or bot override sets a higher threshold.
 
