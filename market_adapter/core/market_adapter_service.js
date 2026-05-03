@@ -474,24 +474,11 @@ class MarketAdapterService {
                 }
             } else if (needBootstrap) {
                 const lookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
-                let kibanaCandles = null;
-                try {
-                    kibanaCandles = await deps.withRetries(() => fetchKibanaCandles({
-                        intervalSeconds: cfg.intervalSeconds,
-                        lookbackHours,
-                        consolidateByTimestamp: true,
-                        fillGapsToRequestedRange: false,
-                        apiKey: null,
-                    }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana bootstrap failed');
-                } catch (_) {
-                    kibanaCandles = null;
-                }
+                const warmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars);
 
-                if (Array.isArray(kibanaCandles) && kibanaCandles.length > 0) {
-                    nextCandles = kibanaCandles;
-                    sourceLabel = 'kibana-bootstrap';
-                } else {
-                    kibanaBootstrapEmpty = true;
+                // ── Step 1: try native bootstrap first ────────────────────────
+                let nativeCandles = [];
+                try {
                     const sinceMs = Date.now() - (lookbackHours * 3600 * 1000);
                     const trades = await deps.withRetries(
                         () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
@@ -504,14 +491,62 @@ class MarketAdapterService {
                         const latestTradeTs = Math.max(...trades.map((t) => Number(t?.tsMs)).filter(Number.isFinite));
                         if (Number.isFinite(latestTradeTs)) nativeLastTradeTs = latestTradeTs;
                     }
-                    nextCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
-                    // Fill internal gaps within the fetched bootstrap range so AMA has a continuous series.
-                    if (nextCandles.length > 0 && typeof deps.fillCandleGaps === 'function') {
-                        const earliestTs = nextCandles[0][0];
-                        const latestTs = nextCandles[nextCandles.length - 1][0];
-                        nextCandles = deps.fillCandleGaps(nextCandles, cfg.intervalSeconds, earliestTs, latestTs);
+                    nativeCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
+                    if (nativeCandles.length > 0 && typeof deps.fillCandleGaps === 'function') {
+                        const eTs = nativeCandles[0][0];
+                        const lTs = nativeCandles[nativeCandles.length - 1][0];
+                        nativeCandles = deps.fillCandleGaps(nativeCandles, cfg.intervalSeconds, eTs, lTs);
                     }
+                } catch (_) {
+                    nativeCandles = [];
+                }
+
+                if (nativeCandles.length >= warmupBars) {
+                    nextCandles = nativeCandles;
                     sourceLabel = 'native-bootstrap';
+                } else {
+                    // ── Step 2: native insufficient → supplement with Kibana ──
+                    let kibanaCandles = null;
+                    try {
+                        kibanaCandles = await deps.withRetries(() => fetchKibanaCandles({
+                            intervalSeconds: cfg.intervalSeconds,
+                            lookbackHours,
+                            consolidateByTimestamp: true,
+                            fillGapsToRequestedRange: false,
+                            apiKey: null,
+                        }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana bootstrap failed');
+                    } catch (_) {
+                        kibanaCandles = null;
+                    }
+
+                    if (Array.isArray(kibanaCandles) && kibanaCandles.length > 0) {
+                        if (nativeCandles.length > 0) {
+                            // Stitch: Kibana older + Native recent (no overlap; native wins)
+                            const nativeOldestTs = nativeCandles[0][0];
+                            const kbnOlder = kibanaCandles.filter(
+                                (c) => Array.isArray(c) && c[0] < nativeOldestTs
+                            );
+                            const stitched = [...kbnOlder, ...nativeCandles]
+                                .sort((a, b) => a[0] - b[0]);
+                            if (stitched.length > 1 && typeof deps.fillCandleGaps === 'function') {
+                                const sTs = stitched[0][0];
+                                const eTs = stitched[stitched.length - 1][0];
+                                nextCandles = deps.fillCandleGaps(stitched, cfg.intervalSeconds, sTs, eTs);
+                            } else {
+                                nextCandles = stitched;
+                            }
+                            sourceLabel = 'kibana+native-bootstrap';
+                        } else {
+                            nextCandles = kibanaCandles;
+                            sourceLabel = 'kibana-bootstrap';
+                        }
+                    } else if (nativeCandles.length > 0) {
+                        kibanaBootstrapEmpty = true;
+                        nextCandles = nativeCandles;
+                        sourceLabel = 'native-bootstrap';
+                    } else {
+                        kibanaBootstrapEmpty = true;
+                    }
                 }
             } else {
                 const lastTs = existingCandles[existingCandles.length - 1]?.[0] || 0;
@@ -520,23 +555,34 @@ class MarketAdapterService {
                     const knownSequences = new Set(nativeRecentTradeSequences.map((seq) => String(seq)));
                     let fetchedTrades = [];
                     let newTrades = [];
+                    let overlapUsed = false;
 
                     if (knownSequences.size >= 2 && typeof deps.fetchNativeTradesUntilOverlap === 'function') {
-                        const overlapResult = await deps.withRetries(
-                            () => deps.fetchNativeTradesUntilOverlap(ctx.poolId, nativeRecentTradeSequences, 2, cfg.pageLimit, cfg.maxPages),
-                            cfg.sourceRetries,
-                            cfg.retryDelayMs,
-                            'native incremental overlap fetch failed'
-                        );
-                        fetchedTrades = Array.isArray(overlapResult?.trades) ? overlapResult.trades : [];
-                        nativeOverlapCount = Number(overlapResult?.overlapCount || 0);
-                        nativePagesFetched = Number(overlapResult?.pages || 0);
-                        sourceLabel = 'native-incremental-overlap';
-                        newTrades = fetchedTrades.filter((trade) => {
-                            if (!Number.isFinite(Number(trade?.sequence))) return true;
-                            return !knownSequences.has(String(trade.sequence));
-                        });
-                    } else {
+                        try {
+                            const overlapResult = await deps.withRetries(
+                                () => deps.fetchNativeTradesUntilOverlap(ctx.poolId, nativeRecentTradeSequences, 2, cfg.pageLimit, cfg.maxPages),
+                                cfg.sourceRetries,
+                                cfg.retryDelayMs,
+                                'native incremental overlap fetch failed'
+                            );
+                            fetchedTrades = Array.isArray(overlapResult?.trades) ? overlapResult.trades : [];
+                            nativeOverlapCount = Number(overlapResult?.overlapCount || 0);
+                            nativePagesFetched = Number(overlapResult?.pages || 0);
+                            sourceLabel = 'native-incremental-overlap';
+                            newTrades = fetchedTrades.filter((trade) => {
+                                if (!Number.isFinite(Number(trade?.sequence))) return true;
+                                return !knownSequences.has(String(trade.sequence));
+                            });
+                            overlapUsed = true;
+                        } catch (overlapErr) {
+                            if (typeof deps.logger?.log === 'function') {
+                                deps.logger.log(`[market_adapter] ${bot.botKey}: overlap fetch exhausted (${overlapErr.message}), falling back to time-based`, 'warn');
+                            }
+                            // Fall through to time-based path below
+                        }
+                    }
+
+                    if (!overlapUsed) {
                         const sinceMs = lastTs - (cfg.nativeBackfillHours * 3600 * 1000);
                         fetchedTrades = await deps.withRetries(
                             () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
@@ -551,6 +597,9 @@ class MarketAdapterService {
                             lastTs,
                             cfg.intervalSeconds
                         );
+                        sourceLabel = 'native-incremental-time';
+                        nativeOverlapCount = null;
+                        nativePagesFetched = null;
                     }
 
                     if (fetchedTrades.length > 0) {

@@ -115,7 +115,8 @@ function hitSequence(source, operationIdField) {
 
 function hitToTrade(hit, { soldAsset, receivedAsset, soldAmountField, receivedAmountField, operationIdField = 'account_history.operation_id' }) {
     const source = hit?._source || {};
-    const tsMs = Date.parse(String(getByPath(source, 'block_data.block_time') || ''));
+    const rawTime = String(getByPath(source, 'block_data.block_time') || '');
+    const tsMs = Date.parse(rawTime.endsWith('Z') ? rawTime : `${rawTime}Z`);
     if (!Number.isFinite(tsMs)) return null;
 
     const soldAmount = amountForAsset(source, soldAmountField, soldAsset.id);
