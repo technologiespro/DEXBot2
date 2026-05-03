@@ -2,7 +2,8 @@
 # Clear market adapter data, state files, and runtime log.
 #
 # Removes all persisted candle data and state files from market_adapter/data/
-# and market_adapter/state/, plus profiles/logs/market_adapter.log. The market
+# and market_adapter/state/, plus profiles/logs/market_adapter.log,
+# dexbot-adapter.log, and dexbot-adapter-error.log. The market
 # adapter will bootstrap fresh from Kibana and regenerate state on next run.
 #
 # Usage: ./scripts/clear-market-adapter.sh or bash scripts/clear-market-adapter.sh
@@ -22,6 +23,8 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DATA_DIR="${PROJECT_ROOT}/market_adapter/data"
 STATE_DIR="${PROJECT_ROOT}/market_adapter/state"
 MARKET_ADAPTER_LOG="${PROJECT_ROOT}/profiles/logs/market_adapter.log"
+ADAPTER_OUT_LOG="${PROJECT_ROOT}/profiles/logs/dexbot-adapter.log"
+ADAPTER_ERR_LOG="${PROJECT_ROOT}/profiles/logs/dexbot-adapter-error.log"
 
 # Functions
 log_info() {
@@ -46,6 +49,8 @@ log_info "=========================================="
 log_info "Data directory:  $DATA_DIR"
 log_info "State directory: $STATE_DIR"
 log_info "Log file:        $MARKET_ADAPTER_LOG"
+log_info "Adapter out log: $ADAPTER_OUT_LOG"
+log_info "Adapter err log: $ADAPTER_ERR_LOG"
 log_info ""
 log_warning "WARNING: This will delete all persisted candle data and state files!"
 log_warning "This also deletes the market adapter runtime log."
@@ -70,7 +75,15 @@ else
 fi
 
 if [ -f "$MARKET_ADAPTER_LOG" ]; then
-    LOG_COUNT=1
+    LOG_COUNT=$((LOG_COUNT + 1))
+fi
+
+if [ -f "$ADAPTER_OUT_LOG" ]; then
+    LOG_COUNT=$((LOG_COUNT + 1))
+fi
+
+if [ -f "$ADAPTER_ERR_LOG" ]; then
+    LOG_COUNT=$((LOG_COUNT + 1))
 fi
 
 TOTAL_COUNT=$((DATA_COUNT + STATE_COUNT + LOG_COUNT))
@@ -104,8 +117,12 @@ fi
 
 if [ "$LOG_COUNT" -gt 0 ]; then
     log_info "Log files to be deleted:"
-    SIZE=$(du -h "$MARKET_ADAPTER_LOG" | cut -f1)
-    echo -e "${BLUE}  -${NC} $(realpath --relative-to="$PROJECT_ROOT" "$MARKET_ADAPTER_LOG") ($SIZE)"
+    for logfile in "$MARKET_ADAPTER_LOG" "$ADAPTER_OUT_LOG" "$ADAPTER_ERR_LOG"; do
+        if [ -f "$logfile" ]; then
+            SIZE=$(du -h "$logfile" | cut -f1)
+            echo -e "${BLUE}  -${NC} $(realpath --relative-to="$PROJECT_ROOT" "$logfile") ($SIZE)"
+        fi
+    done
     log_info ""
 fi
 
@@ -132,8 +149,8 @@ if [ "$STATE_COUNT" -gt 0 ]; then
 fi
 
 if [ "$LOG_COUNT" -gt 0 ]; then
-    log_info "Deleting market adapter log..."
-    rm -f "$MARKET_ADAPTER_LOG"
+    log_info "Deleting market adapter logs..."
+    rm -f "$MARKET_ADAPTER_LOG" "$ADAPTER_OUT_LOG" "$ADAPTER_ERR_LOG"
 fi
 
 # Re-count to confirm
@@ -150,7 +167,15 @@ if [ -d "$STATE_DIR" ]; then
 fi
 
 if [ -f "$MARKET_ADAPTER_LOG" ]; then
-    REMAINING_LOG=1
+    REMAINING_LOG=$((REMAINING_LOG + 1))
+fi
+
+if [ -f "$ADAPTER_OUT_LOG" ]; then
+    REMAINING_LOG=$((REMAINING_LOG + 1))
+fi
+
+if [ -f "$ADAPTER_ERR_LOG" ]; then
+    REMAINING_LOG=$((REMAINING_LOG + 1))
 fi
 
 log_info "=========================================="
