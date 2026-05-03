@@ -4,15 +4,12 @@
 
 DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7 development cycle.
 
-### Key Metrics
-- **Total Commits**: 1205
-- **Development Period**: December 2, 2025 - May 1, 2026 (ongoing)
-- **Active Months**: 6 (Dec 2025, Jan 2026, Feb 2026, Mar 2026, Apr 2026, May 2026)
-- **Primary Developer**: froooze - 99.2% of commits
-- **Lines of Code**: ~25,000+ (core modules)
-- **Test Coverage**: 160 test files covering unit, integration, scenario, and regression tests
-- **Tagged Releases**: 15 tagged releases (v0.1.0 to v0.6.0)
-- **Current Internal Version**: v0.7
+### Key Milestones
+- **Project Inception**: December 2, 2025
+- **Growth Phase**: 1,216 commits over 6 active months
+- **Code Maturity**: Evolution from basic utilities to a ~37,000+ LoC intelligent system
+- **Stability**: Progression from manual testing to a suite of 161 automated test files
+- **Releases**: 15 tagged releases (v0.1.0 to v0.6.0)
 
 ---
 
@@ -138,9 +135,9 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 ---
 
 ### Phase 5: Signal Intelligence & Debt Runtime (March - May 2026)
-**Duration**: March 4 - May 1, 2026 (ongoing)
-**Commits**: 170 (14.1% of total)
-**Focus**: Market adapter offset groundwork, Claw/credential hardening, SMA derivative signals, dynamic-weight/Kalman research, regime filtering, credit/debt runtime
+**Duration**: March 4 - May 3, 2026 (ongoing)
+**Commits**: 181 (14.9% of total)
+**Focus**: Market adapter offset groundwork, Claw/credential hardening, SMA derivative signals, dynamic-weight/Kalman research, regime filtering, credit/debt runtime, and production stabilization
 
 #### Key Milestones
 - **Mar 4-10**: AMA and adapter research tooling — AMA3 defaults, expanded candle history, Kibana date-range/merge tools
@@ -155,9 +152,8 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 - **Apr 17-20**: Dynamic weight runtime alignment — volatility chart, Kalman echo latching, research-to-production parity
 - **Apr 20**: Credit/debt runtime — MPA borrowing, credit offer accept/repay, auto-reborrow
 - **Apr 21-22**: Dynamic weight snapshot persistence, warmup/closed-candle alignment, rebalance refresh wiring
-- **Apr 23**: Credit-offer and CR safety hardening — LP credit-offer CR ceiling, safe borrow sizing, shared adapter whitelist
-- **Apr 24**: Market adapter patch hardening, maintenance deferral during active fills, chart entrypoint simplification, Claw validation/tests, v0.7 metadata
-- **May 1**: Market adapter README restructure and docs cross-link refresh for the dynamic-weight research path
+- **Apr 23-28**: Credit-offer hardening, direct market adapter runtime management, whitelist generator, and documentation hub reorganization
+- **May 1-2**: Market adapter stabilization — fixed-price/orderbook candle modes, test suite repair, node failover hardening, and stale dynamic weight rejection
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -175,74 +171,20 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ## Architecture Evolution
 
-### Initial Architecture (December 2025)
-```
-dexbot.js (entry)
-    ├── modules/bot_instance.js
-    ├── modules/manager.js
-    ├── modules/account_orders.js
-    ├── modules/account_bots.js
-    ├── modules/order_grid.js
-    └── modules/utils.js
-```
+DEXBot2's architecture transitioned from a monolithic utility-based approach to a strictly decoupled, event-driven, and immutable state system.
 
-### Current Architecture (May 2026)
-```
-dexbot.js (entry)
-    ├── modules/dexbot_class.js (core bot class - 3,155 lines)
-    ├── modules/dexbot_fill_runtime.js (fill processing - 142 lines)
-    ├── modules/dexbot_maintenance_runtime.js (maintenance loops - 1,001 lines)
-    ├── modules/constants.js (centralized configuration - 1,022 lines)
-    ├── modules/chain_orders.js (blockchain operations - 1,104 lines)
-    ├── modules/chain_keys.js (authentication - 1,047 lines)
-    ├── modules/account_orders.js (order queries - 682 lines)
-    ├── modules/account_bots.js (bot management - 1,223 lines)
-    ├── modules/node_manager.js (multi-node failover - 455 lines)
-    ├── modules/bitshares_client.js (blockchain client - 162 lines)
-    ├── market_adapter/
-    │   ├── market_adapter.js (AMA calculation & triggers)
-    │   ├── core/market_adapter_service.js (full signal pipeline)
-    │   ├── core/strategies/ama_slope_model.js (slope-based weights)
-    │   ├── core/strategies/collateral_manager.js (CR advisory)
-    │   ├── core/strategies/atr/calculator.js (ATR volatility)
-    │   ├── inputs/kibana_source.js (Kibana price data)
-    │   ├── inputs/fetch_lp_data.js (LP analysis exporter)
-    │   ├── interval_utils.js (shared interval labels)
-    │   ├── candle_utils.js (candle transforms)
-    │   └── lp_chart_runner.js (LP chart orchestration)
-    ├── claw/
-    │   ├── modules/credit_runtime.js (debt workflow executor)
-    │   ├── modules/short_mpa_strategy.js (MPA short strategy)
-    │   └── ... (bridge modules for OpenClaw, Hermes, ZeroClaw, etc.)
-    └── modules/order/
-        ├── manager.js (order lifecycle - 1,496 lines)
-        ├── grid.js (grid calculation - 1,833 lines)
-        ├── strategy.js (trading strategies - 435 lines)
-        ├── accounting.js (fund accounting - 1,018 lines)
-        ├── sync_engine.js (blockchain sync - 1,122 lines)
-        ├── startup_reconcile.js (startup reconciliation - 1,317 lines)
-        ├── working_grid.js (COW wrapper - 238 lines)
-        ├── processed_fill_store.js (fill dedupe persistence - 161 lines)
-        ├── logger.js (logging system - 512 lines)
-        ├── format.js (formatting utilities - 319 lines)
-        ├── export.js (data export - 327 lines)
-        ├── runner.js (order execution - 141 lines)
-        ├── async_lock.js (concurrency control - 200 lines)
-        └── utils/
-            ├── math.js (precision, RMS, fund math - 1,034 lines)
-            ├── order.js (order predicates, helpers - 1,133 lines)
-            ├── system.js (price derivation, fill dedup - 1,045 lines)
-            └── validate.js (COW action building - 1,022 lines)
-```
+### Phase 1-2: The Foundation
+Initially built as a set of loose modules for order and account management, focusing on establishing a reliable link to the BitShares blockchain and basic grid trading logic.
 
-### Key Architectural Improvements
+### Phase 3-4: COW & Market Adaptation
+The introduction of the **Copy-on-Write (COW)** pattern revolutionized the bot's reliability by ensuring that grid modifications are atomic and thread-safe. This phase also saw the birth of the **Market Adapter**, which decoupled market signal intelligence (AMA, Volatility) from the execution logic.
 
-1. **Module Decomposition**: Extracted order subsystem into dedicated module
-2. **Constants Centralization**: All configuration in modules/constants.js
-3. **Separation of Concerns**: Clear boundaries between chain, account, and order management
-4. **Concurrency Control**: AsyncLock pattern for thread-safe operations
-5. **COW Architecture**: Copy-on-Write pattern for safe grid modifications
-6. **State Management**: Explicit state transitions with validation
+### Phase 5: Intelligent Runtime
+This phase achieved a multi-layered approach that defined the system's maturity:
+- **Core Execution**: Established order lifecycles and blockchain synchronization using COW.
+- **Signal Pipeline**: Introduced the Market Adapter for real-time weights and regime detection.
+- **Credit/Debt Layer**: Added a specialized runtime for Margin Position Assets (MPA).
+- **Credential Security**: Implemented a secure daemon for policy-gated signing.
 
 ---
 
@@ -260,40 +202,20 @@ dexbot.js (entry)
 
 - **v0.1.x-v0.5.x**: Foundation, fee handling, stability, and the COW groundwork.
 - **v0.6.0**: Market adapter release with AMA grid centers and trigger wiring.
-- **v0.7**: Current internal work on signals, dynamic weights, credit/debt, and docs/tooling.
+- **v0.7 Expansion**: Integration of advanced signals, dynamic weights, credit/debt runtime, and comprehensive documentation.
 
 ---
 
 ## Development Statistics
 
-### Monthly Activity
+### Key Milestones
+- **Project Initialization**: December 2, 2025
+- **v0.1.0 Alpha**: December 10, 2025
+- **v0.6.0 Market Adapter**: March 3, 2026
+- **v0.7 Expansion**: May 2026
 
-| Month | Commits |
-|-------|---------|
-| December 2025 | 401 |
-| January 2026 | 421 |
-| February 2026 | 164 |
-| March 2026 | 57 |
-| April 2026 | 158 |
-
-### Code Metrics
-
-#### Largest Files (by line count)
-1. **modules/dexbot_class.js**: 3,155 lines
-2. **modules/order/grid.js**: 1,833 lines
-3. **modules/order/manager.js**: 1,496 lines
-
-#### Test Coverage
-- **Total Test Files**: 160
-- **Test Categories**:
-  - Unit tests (logic ported from Jest)
-  - Integration tests (fill processing, grid, manager)
-  - Scenario tests (market scenarios, resync)
-  - Edge case tests (boundary, precision, partial fills)
-  - COW tests (master plan, commit guards, concurrent fills, divergence correction)
-  - Signal tests (dynamic weight, derivative trap, momentum gate)
-  - Credit/debt tests (CR planner, credit runtime, MPA wiring)
-  - Credential tests (daemon, session cache, policy)
+### Development Progress
+The project has maintained a high velocity of commits throughout its first six months, with a strong emphasis on test-driven development and architectural robustness. The evolution from basic grid operations to a signal-intelligent trading system represents a significant shift in sophistication.
 
 ---
 
@@ -338,17 +260,12 @@ dexbot.js (entry)
 - Inline code comments
 - Limited architecture documentation
 
-### Current Documentation (May 2026, v0.7)
-- **[README.md](../README.md)**: Comprehensive user guide with icons and sections
-- **[architecture.md](architecture.md)**: System architecture and module relationships
-- **[developer_guide.md](developer_guide.md)**: Developer quick start and glossary
-- **[WORKFLOW.md](WORKFLOW.md)**: Branch workflow and development process
-- **[EVOLUTION.md](EVOLUTION.md)**: Project timeline, architecture phases, and release history
-- **[FUND_MOVEMENT_AND_ACCOUNTING.md](FUND_MOVEMENT_AND_ACCOUNTING.md)**: Fund accounting mechanics
-- **[CHANGELOG.md](../CHANGELOG.md)**: Detailed version history
-- **[AGENTS.md](../AGENTS.md)**: AI assistant guidelines
-- **[COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md)**: COW architecture documentation
-- **Inline JSDoc**: Comprehensive function documentation
+### Documentation Maturity
+By the v0.7 cycle, the project established a comprehensive documentation framework:
+- **Core Guides**: Comprehensive README, architecture maps, and developer onboarding.
+- **Specialized Docs**: Deep dives into COW invariants, fund accounting, and credential security.
+- **Automated Metadata**: High JSDoc coverage (80%+) and structured changelogs.
+- **AI-Ready Context**: Specialized `AGENTS.md` for AI assistant orchestration.
 
 ### Documentation Statistics
 - **Total Documentation Commits**: 137 (11.4% of total)
@@ -364,123 +281,45 @@ dexbot.js (entry)
 1. **Initial**: Manual testing with real blockchain
 2. **Jest Era**: Unit tests with Jest framework
 3. **Native Tests**: Ported to Node.js assert for lightweight setup
-4. **Current**: Comprehensive suite with unit, integration, and scenario tests
+### Advanced Verification Framework
+The testing strategy matured into a multi-layered verification suite:
+- **Unit & Integration**: Logic validation for accounting, sync, and grid operations.
+- **Scenario Simulations**: Complex market behavior and resynchronization tests.
+- **Edge Case Coverage**: Boundary handling, precision quantization, and partial fill logic.
+- **Architectural Guards**: COW master plan invariants, concurrent fill isolation, and mutation detection.
+- **Signal & Credit Gates**: Validation for dynamic weights, derivative traps, and credit runtime workflows.
 
-### Test Categories
-
-#### Unit Tests
-- `test_accounting_logic.js`: Fee accounting logic
-- `test_strategy_logic.js`: Trading strategy logic
-- `test_sync_logic.js`: Blockchain synchronization
-- `test_grid_logic.js`: Grid calculation logic
-- `test_manager_logic.js`: Order manager logic
-- `test_bts_fee_logic.js`: BTS fee settlement
-
-#### Integration Tests
-- `test_fills_integration.js`: Fill processing
-- `test_grid_integration.js`: Grid operations
-- `test_manager_integration.js`: Manager operations
-- `test_engine_integration.js`: Engine integration
-
-#### Scenario Tests
-- `test_market_scenarios.js`: Market scenario simulations
-- `test_resync_*.js`: Resynchronization scenarios
-- `test_ghost_order_fix.js`: Ghost order prevention
-
-#### Edge Case Tests
-- `test_boundary_*.js`: Boundary handling
-- `test_precision_*.js`: Precision edge cases
-- `test_partial_*.js`: Partial fill handling
-
----
-
-## Deployment & Operations
-
-### Process Management
-- **PM2 Integration**: Production process manager
-- **Multi-Bot Support**: Multiple bots per account
-- **Auto-Restart**: Automatic recovery on failures
-- **Log Management**: Structured logging with rotation
-
-### Configuration Management
-- **bots.json**: Bot configurations
-- **constants.js**: Centralized tuning parameters
-- **keys.json**: Encrypted private keys
-- **Dynamic Refresh**: Periodic configuration reload (4h interval)
-
-### Update Mechanism
-- **Automated Updates**: Cross-platform weekly updater
-- **Safe Updates**: Preserve user settings during updates
-- **Branch Promotion**: test → dev → main pipeline
-- **Rollback Support**: Backup branches for recovery
-
-### Monitoring
-- **Dashboard**: Ratatui-based operations dashboard
-- **Health Checks**: Multi-node health checking
-- **Diagnostics**: Enhanced diagnostics and logging
-- **Analysis Tools**: Order analysis script for metrics
-
----
-
-## Lessons Learned
-
-### Technical Lessons
-1. **Concurrency is Hard**: Race conditions require careful design (AsyncLock pattern)
-2. **Precision Matters**: Blockchain integers prevent float errors
-3. **State Management**: Explicit state transitions prevent bugs
-4. **Testing**: Comprehensive test suite catches edge cases
-5. **Documentation**: Good docs accelerate development
-
-### Process Lessons
-1. **Incremental Development**: Small, focused commits > large changes
-2. **Testing Early**: Catch bugs before they compound
-3. **Documentation**: Document as you code, not after
-4. **Code Review**: Regular refactoring prevents technical debt
-5. **User Feedback**: Real-world usage reveals edge cases
-
-### Architecture Lessons
-1. **Modularity**: Clear module boundaries improve maintainability
-2. **Separation of Concerns**: Each module should have one responsibility
-3. **Immutability**: COW pattern prevents corruption
-4. **Fail-Fast**: Early validation prevents cascading failures
-5. **Observability**: Good logging saves debugging time
-
----
-
-## Acknowledgments
-
-### Primary Developer
-- **froooze**: 1,157 commits (99.2%)
-
-### Contributors
-- **froooze** (via GitHub): 9 commits (0.8%)
-
-### Tools & Technologies
-- **BitShares Blockchain**: Decentralized exchange platform
-- **Node.js**: Runtime environment
-- **PM2**: Process manager
-- **Git**: Version control
-- **Jest** (historical): Testing framework (now migrated)
 
 ---
 
 ## Conclusion
 
-DEXBot2 has evolved from a basic trading bot to a sophisticated, production-ready system with:
+DEXBot2 has evolved from a basic trading bot to a sophisticated, production-ready system with a robust history of architectural refinement and a clear vision for the future.
 
-- **Robust Architecture**: Modular, maintainable, and scalable (~25,000+ lines across 80+ runtime modules)
-- **Comprehensive Testing**: 160 test files covering all critical paths
-- **Production Hardening**: Battle-tested with real funds on mainnet
-- **Advanced Features**: COW architecture, self-healing, multi-node support, AMA market adaptation, dynamic weight regime detection, derivative signals, credit/debt runtime
-- **Excellent Documentation**: Comprehensive guides for users and developers
-- **Active Development**: 1205 commits over 6 months
+---
 
-The project demonstrates strong engineering practices, continuous improvement, and a commitment to quality. The Copy-on-Write architecture, dynamic weight signal pipeline, and native credit/debt runtime represent the current production-grade foundation.
+## Roadmap
+
+The future of DEXBot2 focuses on accessibility, rigorous performance validation, and modernizing the core codebase to ensure long-term sustainability.
+
+### UX, Education & Services
+- **Web & Terminal UI**: Development of intuitive interfaces for both browser-based and command-line management.
+- **Content Creation**: Production of instructional videos, eBooks, and comprehensive tutorials for user onboarding.
+- **Marketing**: Strategic advertisement and outreach to expand the BitShares trading community.
+- **Hosting Service**: Implementation of managed hosting solutions to simplify bot deployment.
+
+### Backtesting & Statistics
+- **Simulation Engine**: Robust backtesting framework for validating strategies against historical data.
+- **Performance Analytics**: Detailed statistical reporting, PnL tracking, and risk assessment tools.
+
+### Modernization & Migration
+- **TypeScript Migration**: Transitioning the codebase to TypeScript for enhanced type safety and maintainability.
+- **Dependency Reduction**: A strategic move towards a "no-dependency" architecture to minimize external risks and bloat.
 
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: May 1, 2026
-**Total Commits**: 1205
-**Date Range**: December 2, 2025 - May 1, 2026 (ongoing)
+**Last Updated**: May 3, 2026
+**Total Commits**: 1216
+**Date Range**: December 2, 2025 - May 3, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)
