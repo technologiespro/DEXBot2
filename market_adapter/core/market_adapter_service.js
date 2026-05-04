@@ -1448,13 +1448,28 @@ class MarketAdapterService {
         let triggerCallbackError = null;
         let triggerSuppressedReason = null;
         let snapshotPersistedThisCycle = false;
-        const previousCenterPrice = Number(botState.centerPrice || 0);
+        let previousCenterPrice = Number(botState.centerPrice || 0);
 
         if (!staleData && Number.isFinite(referencePrice) && referencePrice > 0) {
+            // Bootstrap when market-adapter state is missing (e.g. after clearing)
+            // or when a bot runs for the first time.
             if (!Number.isFinite(previousCenterPrice) || previousCenterPrice <= 0) {
                 const bootstrapCenterPrice = Number.isFinite(centerPrice) && centerPrice > 0
                     ? centerPrice
                     : referencePrice;
+
+                // The .dynamicgrid.json may survive a clear-market-adapter run
+                // (it lives under profiles/orders/, not market_adapter/state/).
+                // Recover the old center from it so the unified delta block below
+                // can decide whether a trigger is warranted.
+                const dynGridPath = deps.path.join(
+                    deps.root, 'profiles', 'orders', `${bot.botKey}.dynamicgrid.json`,
+                );
+                const prevDynGrid = !isDryRun && typeof deps.loadJson === 'function'
+                    ? deps.loadJson(dynGridPath, null)
+                    : null;
+                const dynGridOldPrice = Number(prevDynGrid?.centerPrice || 0);
+
                 let amaCenterPersisted = true;
                 if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
                     amaCenterPersisted = deps.writeBotDynamicGrid(bot.botKey, bootstrapCenterPrice, {
@@ -1468,14 +1483,65 @@ class MarketAdapterService {
                 }
 
                 if (amaCenterPersisted) {
+                    snapshotPersistedThisCycle = true;
                     botState.centerPrice = bootstrapCenterPrice;
                     botState.amaCenterPrice = amaPrice;
                     botState.lastGridResetAt = nowIso;
-                    snapshotPersistedThisCycle = true;
+
+                    if (Number.isFinite(dynGridOldPrice) && dynGridOldPrice > 0) {
+                        // Feed the recovered price into the unified delta block below.
+                        previousCenterPrice = dynGridOldPrice;
+                    } else {
+                        // First-ever bootstrap — no previous center anywhere.
+                        // Create a trigger so the bot recalibrates to the new center.
+                        if (!isDryRun) {
+                            triggerPath = deps.writeGridResetTrigger(bot, {
+                                reason: 'market_adapter_bootstrap',
+                                newCenterPrice: bootstrapCenterPrice,
+                                referencePrice,
+                                rawAmaPrice: amaPrice,
+                                poolId: ctx.poolId,
+                                marketSource,
+                            });
+                        } else {
+                            dryRunMessages.push(`[DRY RUN] Would write grid reset trigger for ${bot.botKey} (bootstrap)`);
+                        }
+                        triggered = true;
+                        botState.triggerCount = Number(botState.triggerCount || 0) + 1;
+
+                        if (typeof hooks.onTrigger === 'function') {
+                            try {
+                                await hooks.onTrigger({
+                                    bot,
+                                    botKey: bot.botKey,
+                                    botName: bot.name,
+                                    poolId: ctx.poolId,
+                                    thresholdPercent: botThreshold,
+                                    deltaPercent: null,
+                                    previousCenterPrice: undefined,
+                                    newCenterPrice: bootstrapCenterPrice,
+                                    referencePrice,
+                                    rawAmaPrice: amaPrice,
+                                    triggerPath,
+                                    marketSource,
+                                });
+                            } catch (err) {
+                                triggerCallbackError = err.message;
+                            }
+                        }
+                    }
+
+                    if (canApplyDynamicWeights && dynamicWeightsPayload) {
+                        botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
+                    }
                 } else {
                     triggerSuppressedReason = 'ama_center_persist_failed';
                 }
-            } else {
+            }
+
+            // Unified delta check — runs when previousCenterPrice is known
+            // (either from state or recovered from .dynamicgrid.json).
+            if (!triggered && Number.isFinite(previousCenterPrice) && previousCenterPrice > 0) {
                 deltaPercent = Math.abs((centerPrice - previousCenterPrice) / previousCenterPrice) * 100;
                 if (deltaPercent >= botThreshold) {
                     let amaCenterPersisted = true;
