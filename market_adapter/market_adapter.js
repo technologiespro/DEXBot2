@@ -629,19 +629,6 @@ function candleFileForBot(botKey, intervalSeconds = RUNTIME_DEFAULTS.intervalSec
     return path.join(DATA_DIR, `market_adapter_${botKey}_${label}.json`);
 }
 
-function requiredCandlesForAma(ama = DEFAULT_AMA) {
-    // Formula: erPeriod + (slowPeriod * 5) + padding
-    // This ensures that after the warmup (erPeriod), the KAMA has enough candles 
-    // to stabilize through the smoothing phase (usually 3-5x the slow period).
-    const smoothingBuffer = Math.ceil(ama.slowPeriod * 5);
-    const padding = RUNTIME_DEFAULTS.amaWarmupPaddingCandles || 100;
-    
-    return Math.max(
-        ama.erPeriod + smoothingBuffer + padding,
-        RUNTIME_DEFAULTS.minRequiredCandles || 100
-    );
-}
-
 function calculateBotThreshold(cfg) {
     const value = Number(cfg?.deltaThresholdPercent);
     return Number.isFinite(value) && value > 0 ? value : null;
@@ -941,7 +928,6 @@ const adapterService = new MarketAdapterService({
     candleFileForBot,
     loadJson,
     saveJson,
-    requiredCandlesForAma,
     calculateBotThreshold,
     computeCandleStaleness,
     withRetries,

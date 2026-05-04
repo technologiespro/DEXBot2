@@ -361,10 +361,7 @@ class MarketAdapterService {
         }
 
         const needBootstrap = existingCandles.length === 0;
-        const analysisKeepCount = Math.max(
-            deps.requiredCandlesForAma(botAma),
-            getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars) + 1
-        );
+        const analysisKeepCount = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars, botAma.fastPeriod) + 1;
         // Retain one extra raw candle so the closed-candle analysis window still keeps a
         // full warmup/history set when the newest bucket is the current in-progress bar.
         const rawKeepCount = analysisKeepCount + 1;
@@ -496,7 +493,7 @@ class MarketAdapterService {
                 }
             } else if (needBootstrap) {
                 const lookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
-                const warmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars);
+                const warmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars, botAma.fastPeriod);
 
                 // ── Step 1: Kibana first (deep history, handles large candle requirements) ──
                 let kibanaCandles = null;
@@ -914,8 +911,8 @@ class MarketAdapterService {
         // If we don't have enough candles for the full warmup, the "AMA" is just
         // the last raw price — useless for grid centering. Abort analysis but
         // still save candles so the next cycle can try again after backfill.
-        const amaWarmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars);
-        if (closes.length < amaWarmupBars) {
+        const amaWarmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars, botAma.fastPeriod);
+        if (closes.length < amaWarmupBars + 1) {
             const triggerSuppressedReason = 'ama_warmup_insufficient';
             const { staleData, staleAgeHours } = deps.computeCandleStaleness(lastClosedCandleTs, cfg.maxStaleHours);
             state.bots[bot.botKey] = {
@@ -1044,6 +1041,7 @@ class MarketAdapterService {
             ...(cfg.amaSlope || {}),
             erPeriod:              botAma.erPeriod,
             slowPeriod:            botAma.slowPeriod,
+            fastPeriod:            botAma.fastPeriod,
             maxSlopeOffset:        cfg.maxSlopeOffset,
             maxVolatilityOffset:   volatilityClamp,
             volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,

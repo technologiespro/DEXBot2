@@ -154,7 +154,8 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
         ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
     const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
     const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
-    const amaWarmupBars = getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars);
+    const amaFastPeriod = cfg.amaSlope?.fastPeriod ?? botAma.fastPeriod;
+    const amaWarmupBars = getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars, amaFastPeriod);
 
     let amaClipThreshold = Infinity;
     if (clipPercentile > 0 && amaValues.length > amaWarmupBars) {
@@ -175,6 +176,7 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
         ...(cfg.amaSlope || {}),
         erPeriod: amaErPeriod,
         slowPeriod: amaSlowPeriod,
+        fastPeriod: amaFastPeriod,
         maxSlopeOffset: cfg.maxSlopeOffset,
         maxVolatilityOffset: volatilityClamp,
         volatilityExponent: cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
@@ -345,11 +347,10 @@ async function testTriggerHookCalledOnThreshold() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => null,
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 0.5,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -426,7 +427,7 @@ async function testNumericStartPriceSkipsAllMarketFetches() {
                 marketSource: 'pool',
             };
         },
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_fixed_1h.json`),
         loadJson: () => {
             throw new Error('loadJson should not run for fixed startPrice bots');
@@ -514,7 +515,6 @@ async function testOrderbookNativeFetchUsesBitsharesHistory() {
         saveJson: (_filePath, payload) => {
             savedPayload = payload;
         },
-        requiredCandlesForAma: () => 2,
         calculateBotThreshold: () => 0.75,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1 }),
         withRetries: async (fn) => fn(),
@@ -609,11 +609,10 @@ async function testAmaWarmupInsufficientSuppressesRawCloseRecenter() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateCandles(30, 105) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 0.5,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -686,7 +685,6 @@ async function testKibanaBackfillFillsHistoricalShortfall() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateCandles(60, 100) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 0.5,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -743,7 +741,7 @@ async function testKibanaBackfillFillsHistoricalShortfall() {
 
     assert.strictEqual(result.ok, true, 'processBot should complete with backfill');
     assert.strictEqual(result.kibanaBackfillCount, 54, 'backfill should report all candles returned by Kibana');
-    assert.strictEqual(result.candleCount, 111, 'total candles should equal rawKeepCount after prune');
+    assert.strictEqual(result.candleCount, 114, 'total candles should equal merged set when rawKeepCount exceeds available candles');
     assert.ok(result.source.includes('kibana-backfill'), 'source label should include backfill marker');
     assert.strictEqual(kibanaCalls, 1, 'kibana should be called exactly once for backfill');
 }
@@ -758,11 +756,10 @@ async function testBootstrapFallsBackWhenKibanaIsEmpty() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => null,
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 0.5,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -830,13 +827,12 @@ async function testAmaGridPriceIsCaseInsensitive() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(110, 101),
         }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 1,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -907,13 +903,12 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(110, 101),
         }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 1,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -984,13 +979,12 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(110, 101),
         }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 1,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -1051,7 +1045,7 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
     const secondResult = await service.processBot(bot, state, cfg, contextCache, {});
 
     assert.strictEqual(secondResult.ok, true, 'bootstrap retry should still complete');
-    assert.strictEqual(secondResult.triggered, false, 'bootstrap retry should establish the baseline without a trigger');
+    assert.strictEqual(secondResult.triggered, true, 'bootstrap retry should create trigger to recalibrate after fresh bootstrap');
     assert.strictEqual(secondResult.triggerSuppressedReason, null, 'successful bootstrap retry should clear the suppression reason');
     assert.strictEqual(writeAttempts, 2, 'the same closed candle should be retried after bootstrap persistence failure');
     assert.strictEqual(secondResult.pendingClosedCandle, false, 'successful retry should process the closed candle rather than skip it');
@@ -1070,13 +1064,12 @@ async function testCenterEqualsAmaTriggeredByAmaDelta() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(110, 100),
         }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 0.25,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -1157,13 +1150,12 @@ async function testNoTriggerWhenCenterMatchesAma() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(110, 100),
         }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 0.25,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -1244,13 +1236,12 @@ async function testCenterClampedByBotBounds() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(110, 110),
         }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 0.5,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -1340,13 +1331,12 @@ async function testContextCacheInvalidatesOnPoolChange() {
                 poolId: bot.poolId,
             };
         },
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(30, 101),
         }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 0.5,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -1410,7 +1400,7 @@ async function testKibanaGapRepairPatchesMissingCandles() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: [
@@ -1421,7 +1411,6 @@ async function testKibanaGapRepairPatchesMissingCandles() {
         saveJson: (_filePath, payload) => {
             savedPayload = payload;
         },
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 5,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -1529,7 +1518,7 @@ async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: [
@@ -1540,7 +1529,6 @@ async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
         saveJson: (_filePath, payload) => {
             savedPayload = payload;
         },
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 5,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -1612,7 +1600,6 @@ async function testNativeIncrementalFillsNoTradeGapsUpToStaleTailThreshold() {
         saveJson: (_filePath, payload) => {
             savedPayload = payload;
         },
-        requiredCandlesForAma: () => 2,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -1691,7 +1678,6 @@ async function testNativeIncrementalDoesNotFillNoTradeGapsPastStaleTailThreshold
         saveJson: (_filePath, payload) => {
             savedPayload = payload;
         },
-        requiredCandlesForAma: () => 2,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: true, staleAgeHours: 30.0 }),
         withRetries: async (fn) => fn(),
@@ -1767,7 +1753,6 @@ async function testStaleTailThresholdCanBeOverriddenPerConfig() {
         saveJson: (_filePath, payload) => {
             savedPayload = payload;
         },
-        requiredCandlesForAma: () => 2,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -1845,7 +1830,6 @@ async function testNativeIncrementalUsesTradeSequenceOverlap() {
         saveJson: (_filePath, payload) => {
             savedPayload = payload;
         },
-        requiredCandlesForAma: () => 2,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -1944,7 +1928,6 @@ async function testTimeBasedNativeIncrementalDoesNotReaggregateExistingBuckets()
         saveJson: (_filePath, payload) => {
             savedPayload = payload;
         },
-        requiredCandlesForAma: () => 2,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -2024,15 +2007,20 @@ async function testClosedCandleGateSkipsCurrentPartialHour() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 3 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: [
-                [closedTs, 100, 100, 100, 100, 1],
-                [partialTs, 110, 110, 110, 110, 1],
-            ],
+            candles: (() => {
+                const candles = [];
+                // Prehistory: enough closed candles to satisfy AMA convergence warmup
+                for (let i = 0; i < 23; i++) {
+                    candles.push([closedTs - (23 - i) * 3600000, 100, 100, 100, 100, 1]);
+                }
+                candles.push([closedTs, 100, 100, 100, 100, 1],
+                             [partialTs, 110, 110, 110, 110, 1]);
+                return candles;
+            })(),
         }),
         saveJson: (_filePath, payload) => {
             savedPayload = payload;
         },
-        requiredCandlesForAma: () => 2,
         calculateBotThreshold: () => 0.25,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1 }),
         withRetries: async (fn) => fn(),
@@ -2095,14 +2083,14 @@ async function testClosedCandleGateSkipsCurrentPartialHour() {
     assert.strictEqual(result.ok, true, 'processBot should succeed');
     assert.strictEqual(result.pendingClosedCandle, true, 'current partial hour should be ignored');
     assert.strictEqual(result.triggered, false, 'no trigger should fire before a new closed candle exists');
-    assert.strictEqual(result.analysisCandleCount, 1, 'only the closed candle should be used for analysis');
+    assert.strictEqual(result.analysisCandleCount, 24, 'all closed prehistory candles + the new closed candle should be used for analysis');
     assert.strictEqual(result.lastCandleTs, partialTs, 'raw latest candle timestamp should still be reported');
     assert.strictEqual(result.lastClosedCandleTs, closedTs, 'closed candle timestamp should drive the signal');
     assert.strictEqual(triggerWrites, 0, 'grid reset should not run for a partial candle');
     assert.strictEqual(weightWrites, 0, 'weight writes should not run for a partial candle');
     assert.ok(savedPayload, 'raw candle file should still be persisted');
-    assert.strictEqual(savedPayload.meta.candleCount, 2, 'raw candle payload should keep both candles');
-    assert.strictEqual(savedPayload.meta.analysisCandleCount, 1, 'raw candle payload should record the closed-candle count');
+    assert.strictEqual(savedPayload.meta.candleCount, 25, 'raw candle payload should keep prehistory + closed + partial candles');
+    assert.strictEqual(savedPayload.meta.analysisCandleCount, 24, 'raw candle payload should record closed-candle count including prehistory');
     assert.strictEqual(state.bots['xrp-bts-closed-0'].centerPrice, 100, 'state should remain unchanged when waiting for a close');
 }
 
@@ -2127,7 +2115,6 @@ async function testClosedCandleGateSurfacesStaleData() {
         saveJson: (_filePath, payload) => {
             savedPayload = payload;
         },
-        requiredCandlesForAma: () => 2,
         calculateBotThreshold: () => 0.25,
         computeCandleStaleness: () => {
             stalenessChecks += 1;
@@ -2209,6 +2196,10 @@ async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
         [baseTs + 7 * bucketMs, 107, 107, 107, 107, 1],
         [baseTs + 8 * bucketMs, 108, 108, 108, 108, 1],
         [baseTs + 9 * bucketMs, 109, 109, 109, 109, 1],
+        [baseTs + 10 * bucketMs, 110, 110, 110, 110, 1],
+        [baseTs + 11 * bucketMs, 111, 111, 111, 111, 1],
+        [baseTs + 12 * bucketMs, 112, 112, 112, 112, 1],
+        [baseTs + 13 * bucketMs, 113, 113, 113, 113, 1],
     ];
 
     const service = new MarketAdapterService({
@@ -2221,7 +2212,6 @@ async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_prune_1h.json`),
         loadJson: () => ({ candles }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 2,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 0.5 }),
         withRetries: async (fn) => fn(),
@@ -2231,6 +2221,7 @@ async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (inputCandles, keepCount) => {
             pruneKeepCount = keepCount;
+            if (inputCandles.length <= keepCount) return inputCandles;
             return inputCandles.slice(inputCandles.length - keepCount);
         },
         calcAmaComparison: () => [],
@@ -2240,7 +2231,7 @@ async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
             return true;
         },
         isBotDynamicWeightWhitelisted: () => true,
-        getNowMs: () => baseTs + (9 * bucketMs) + (30 * 60 * 1000),
+        getNowMs: () => baseTs + (13 * bucketMs) + (30 * 60 * 1000),
         root: process.cwd(),
         path,
     });
@@ -2279,8 +2270,8 @@ async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
     const result = await service.processBot(bot, state, cfg, new Map(), {});
 
     assert.strictEqual(result.ok, true, 'processBot should succeed with a partial trailing candle');
-    assert.strictEqual(result.analysisCandleCount, 9, 'analysis should retain the full closed-candle warmup window');
-    assert.strictEqual(pruneKeepCount, 10, 'raw candle pruning should keep one extra bucket beyond the analysis window');
+    assert.strictEqual(result.analysisCandleCount, 11, 'analysis should retain the full closed-candle warmup window');
+    assert.strictEqual(pruneKeepCount, 12, 'raw candle pruning should keep one extra bucket beyond the analysis window');
     assert.ok(writtenPayload, 'dynamic weights should still persist when the warmup window is fully retained');
     assert.strictEqual(writtenPayload.dynamicWeights.isReady, true, 'dynamic weights should stay ready after pruning away only the partial bucket');
 }
@@ -2306,13 +2297,12 @@ async function testIdOnlyBotIsNotRejected() {
             assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
             poolId: '1.19.133',
         }),
-        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
             candles: generateCandles(30, 101),
         }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 1,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -2372,7 +2362,6 @@ async function testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights(
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateCandles(1000, 100) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -2445,7 +2434,6 @@ async function testDynamicWeightMinOutputThresholdZeroDisablesGate() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateCandles(1000, 100) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -2512,9 +2500,8 @@ async function testDynamicWeightGainScalesOutputLinearly() {
             }),
             resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
             candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
-            loadJson: () => ({ candles: generateTrendingCandles(220, 100, 1) }),
+            loadJson: () => ({ candles: generateTrendingCandles(300, 100, 1) }),
             saveJson: () => {},
-            requiredCandlesForAma: () => 80,
             calculateBotThreshold: () => 100,
             computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
             withRetries: async (fn) => fn(),
@@ -2594,7 +2581,6 @@ async function testDynamicWeightSignalConfirmBarsCanLatchFlatState() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 1,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -2756,7 +2742,6 @@ async function testDynamicWeightChartParityMatchesLiveService() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -2843,7 +2828,6 @@ async function testDynamicWeightVolatilityOnlyPathRemainsReady() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateVolatileFlatCandles(1000, 100, 110, 90) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -2916,7 +2900,6 @@ async function testDynamicWeightVolatilityOverridesFlowIntoService() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateVolatileFlatCandles(1000, 100, 110, 90) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -2986,7 +2969,6 @@ async function testDynamicWeightSuppressedTrendUsesFlatProfile() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateTrendingCandles(1000, 100, 0.2) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -3059,7 +3041,6 @@ async function testDynamicWeightWeightOnlyWritesPersistOnClosedCandle() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateVolatileFlatCandles(1000, 100, 110, 90) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -3128,7 +3109,6 @@ async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateCandles(1000, 100) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -3213,7 +3193,6 @@ async function testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateCandles(1000, 100) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: true, staleAgeHours: 12.0 }),
         withRetries: async (fn) => fn(),
@@ -3285,7 +3264,6 @@ async function testDynamicWeightInvalidAtrPeriodAndClampAreSanitized() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateVolatileFlatCandles(1000, 100, 110, 90) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 100,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -3353,7 +3331,6 @@ async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateTrendingCandles(1000, 100, 0.5) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 1000,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -3425,7 +3402,6 @@ async function testDynamicWeightDiagnosticsDoNotLeakIntoBootstrapState() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({ candles: generateTrendingCandles(1000, 100, 0.5) }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 80,
         calculateBotThreshold: () => 1000,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
@@ -3502,7 +3478,6 @@ async function testWeightOnlyUpdateInDryRunUpdatesState() {
             ],
         }),
         saveJson: () => {},
-        requiredCandlesForAma: () => 1,
         calculateBotThreshold: () => 10,
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 0.1 }),
         withRetries: async (fn) => fn(),

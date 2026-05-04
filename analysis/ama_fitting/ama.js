@@ -2,7 +2,16 @@
  * Kaufman's Adaptive Moving Average (KAMA)
  */
 class AMA {
-    constructor(erPeriod = 10, fastPeriod = 2, slowPeriod = 30) {
+    constructor(erPeriod, fastPeriod, slowPeriod) {
+        if (!Number.isFinite(erPeriod) || erPeriod <= 0) {
+            throw new TypeError(`AMA erPeriod must be a positive finite number, got ${erPeriod}`);
+        }
+        if (!Number.isFinite(fastPeriod) || fastPeriod <= 0) {
+            throw new TypeError(`AMA fastPeriod must be a positive finite number, got ${fastPeriod}`);
+        }
+        if (!Number.isFinite(slowPeriod) || slowPeriod <= 0) {
+            throw new TypeError(`AMA slowPeriod must be a positive finite number, got ${slowPeriod}`);
+        }
         this.erPeriod = erPeriod;
         this.fastSC = 2 / (fastPeriod + 1);
         this.slowSC = 2 / (slowPeriod + 1);
@@ -54,15 +63,52 @@ class AMA {
     }
 }
 
-function getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars = 0) {
-    const safeErPeriod = Number.isFinite(erPeriod) && erPeriod > 0 ? Math.ceil(erPeriod) : 0;
-    const safeSlowPeriod = Number.isFinite(slowPeriod) && slowPeriod > 0 ? Math.ceil(slowPeriod) : 0;
-    const safeLookbackBars = Number.isFinite(lookbackBars) && lookbackBars >= 0 ? Math.ceil(lookbackBars) : 0;
-    
-    // We want erPeriod for warmup + at least 3x slowPeriod for smoothing stabilization + lookback
-    const smoothingStabilization = Math.ceil(safeSlowPeriod * 3);
-    
-    return safeErPeriod + smoothingStabilization + safeLookbackBars;
+/**
+ * AMA convergence from cold start — the initialization bias at the end of
+ * the ER buffer decays asymptotically as ∏(1−SC_i).  Using a typical-market
+ * Efficiency Ratio the average effective SC is:
+ *
+ *   SC_avg = [ER_avg × (fastSC − slowSC) + slowSC]²
+ *
+ * Bars needed to reduce initialization bias below fraction ε:
+ *
+ *   K = ln(ε) / ln(1 − SC_avg)
+ *
+ * The dominant term is O(slowPeriod²), not O(slowPeriod), so a multiplier
+ * on slowPeriod alone cannot stay accurate across different AMA presets.
+ *
+ * Calibration constants are in modules/constants.js (MARKET_ADAPTER):
+ */
+const { MARKET_ADAPTER } = require('../../modules/constants');
+
+function getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars, fastPeriod) {
+    if (!Number.isFinite(erPeriod) || erPeriod <= 0) {
+        throw new TypeError(`getAmaWarmupBars erPeriod must be a positive finite number, got ${erPeriod}`);
+    }
+    if (!Number.isFinite(slowPeriod) || slowPeriod <= 0) {
+        throw new TypeError(`getAmaWarmupBars slowPeriod must be a positive finite number, got ${slowPeriod}`);
+    }
+    if (!Number.isFinite(lookbackBars) || lookbackBars < 0) {
+        throw new TypeError(`getAmaWarmupBars lookbackBars must be a non-negative finite number, got ${lookbackBars}`);
+    }
+    if (!Number.isFinite(fastPeriod) || fastPeriod <= 0) {
+        throw new TypeError(`getAmaWarmupBars fastPeriod must be a positive finite number, got ${fastPeriod}`);
+    }
+
+    const safeErPeriod = Math.ceil(erPeriod);
+    const safeSlowPeriod = Math.ceil(slowPeriod);
+    const safeLookbackBars = Math.ceil(lookbackBars);
+    const safeFastPeriod = fastPeriod;
+
+    const fastSC = 2 / (safeFastPeriod + 1);
+    const slowSC = 2 / (safeSlowPeriod + 1);
+    const deltaSC = fastSC - slowSC;
+    const scAvg = (MARKET_ADAPTER.AMA_CONVERGENCE_ER_AVG * deltaSC + slowSC) ** 2;
+    const convergenceBars = Math.ceil(
+        Math.log(MARKET_ADAPTER.AMA_CONVERGENCE_EPSILON) / Math.log(1 - scAvg)
+    );
+
+    return safeErPeriod + convergenceBars + safeLookbackBars;
 }
 
 /**
@@ -72,8 +118,24 @@ function getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars = 0) {
  * @returns {Array} Array of AMA values corresponding to the inputs
  */
 function calculateAMA(closes, params) {
+    if (!params || typeof params !== 'object') {
+        throw new TypeError('calculateAMA params must be an object with erPeriod, fastPeriod, slowPeriod');
+    }
+    if (!Number.isFinite(params.erPeriod) || params.erPeriod <= 0) {
+        throw new TypeError(`calculateAMA params.erPeriod must be a positive finite number, got ${params.erPeriod}`);
+    }
+    if (!Number.isFinite(params.fastPeriod) || params.fastPeriod <= 0) {
+        throw new TypeError(`calculateAMA params.fastPeriod must be a positive finite number, got ${params.fastPeriod}`);
+    }
+    if (!Number.isFinite(params.slowPeriod) || params.slowPeriod <= 0) {
+        throw new TypeError(`calculateAMA params.slowPeriod must be a positive finite number, got ${params.slowPeriod}`);
+    }
     const indicator = new AMA(params.erPeriod, params.fastPeriod, params.slowPeriod);
     return closes.map(price => indicator.update(price));
 }
 
-module.exports = { AMA, calculateAMA, getAmaWarmupBars };
+module.exports = {
+    AMA,
+    calculateAMA,
+    getAmaWarmupBars,
+};

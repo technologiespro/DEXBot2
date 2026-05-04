@@ -604,7 +604,6 @@ let MARKET_ADAPTER = {
         retryDelayMs: 800,
         maxPages: 80,
         pageLimit: 100,
-        amaWarmupPaddingCandles: 250, // Increased from 20 to 250 for better stabilization
         minRequiredCandles: 80,
     },
 
@@ -820,6 +819,17 @@ let MARKET_ADAPTER = {
             slowPeriod: 136.4,
         },
     },
+
+    // AMA_CONVERGENCE_ER_AVG: Typical market Efficiency Ratio used to estimate
+    // average AMA convergence rate from cold start. Lower = more conservative
+    // (assumes more noise → slower convergence → more candles needed).
+    // Calibrated against pool 133 1h (3 years) — implied ER corrects for
+    // Jensen's inequality (E[f(ER)] ≠ f(E[ER]) for convex f = x²).
+    AMA_CONVERGENCE_ER_AVG: 0.16,
+
+    // AMA_CONVERGENCE_EPSILON: Target fraction of initialization bias remaining
+    // after convergence. 0.01 = 99 % of the initial bias has decayed.
+    AMA_CONVERGENCE_EPSILON: 0.01,
 };
 
 // Logging Level Configuration

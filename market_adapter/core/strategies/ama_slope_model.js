@@ -12,6 +12,7 @@ const MAX_SYMMETRIC_SHIFT = MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP;
 
 const DEFAULT_ER_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod;
 const DEFAULT_SLOW_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod;
+const DEFAULT_FAST_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].fastPeriod;
 
 function clamp(v, min, max) {
     return Math.max(min, Math.min(max, v));
@@ -56,6 +57,9 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const slowPeriod = Number.isFinite(opts.slowPeriod) && opts.slowPeriod > 0
         ? Math.ceil(opts.slowPeriod)
         : DEFAULT_SLOW_PERIOD;
+    const fastPeriod = Number.isFinite(opts.fastPeriod) && opts.fastPeriod > 0
+        ? opts.fastPeriod
+        : DEFAULT_FAST_PERIOD;
     const maxSlopeOffset = opts.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
     const maxVolatilityOffset = normalizeMaxVolatilityOffset(opts.maxVolatilityOffset);
     const clipThreshold = opts.clipThreshold ?? Infinity;
@@ -78,7 +82,7 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
         trend: 'NEUTRAL',
     };
 
-    const warmupBars = getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars);
+    const warmupBars = getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars, fastPeriod);
 
     // 1. Guard: need ER warm-up + slow-period convergence + lookback window + current bar.
     if (!Array.isArray(amaValues) || amaValues.length < warmupBars + 1) {

@@ -16,13 +16,15 @@ console.log('Running market adapter signal gate tests');
 function testAmaSlopeWarmupUsesSlowPeriod() {
     const erPeriod = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod;
     const slowPeriod = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod;
+    const fastPeriod = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].fastPeriod;
     const lookbackBars = MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
-    const warmupBars = getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars);
+    const warmupBars = getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars, fastPeriod);
 
     const shortSeries = new Array(warmupBars).fill(100);
     const shortResult = computeAmaSlopeWeights(shortSeries, 0, {
         erPeriod,
         slowPeriod,
+        fastPeriod,
         lookbackBars,
     });
     assert.strictEqual(shortResult.isReady, false, 'AMA slope should not be ready before the slow-period warmup');
@@ -32,6 +34,7 @@ function testAmaSlopeWarmupUsesSlowPeriod() {
     const readyResult = computeAmaSlopeWeights(readySeries, 0, {
         erPeriod,
         slowPeriod,
+        fastPeriod,
         lookbackBars,
     });
     assert.strictEqual(readyResult.isReady, true, 'AMA slope should be ready after the slow-period warmup');

@@ -127,6 +127,21 @@ AMA parameter optimization and comparison tools.
 | `generate_unified_comparison_chart.js` | AMA comparison chart across multiple parameter sets |
 | `analyze_ama_price_changes.js` | AMA price-change analysis |
 | `fetch_lp_candles.js` | LP candle data fetcher |
+| `calibrate_convergence_er.js` | Calibrate AMA_CONVERGENCE_ER_AVG from LP data |
+
+**Calibration workflow (ER convergence):**
+
+`calibrate_convergence_er.js` computes the implied Efficiency Ratio that reproduces the empirical average SC (smoothing constant) from real LP candle data. Because `SC = (ER × deltaSC + slowSC)²` is convex, `E[f(ER)] ≠ f(E[ER])` — the arithmetic mean ER underestimates true convergence. The script outputs the Jensen-corrected value for `AMA_CONVERGENCE_ER_AVG` in `modules/constants.js`.
+
+```bash
+# Default data file (pool 133 1h)
+node analysis/ama_fitting/calibrate_convergence_er.js
+
+# Custom data, specific AMAs
+node analysis/ama_fitting/calibrate_convergence_er.js \
+  --data market_adapter/data/lp/<path>/<file>.json \
+  --amas AMA1,AMA3
+```
 
 **Local deps:** Run `npm install` inside `ama_fitting/` if you need the optimizer's worker-thread dependencies (`package.json`).
 
