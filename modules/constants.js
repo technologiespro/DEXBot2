@@ -604,7 +604,7 @@ let MARKET_ADAPTER = {
         retryDelayMs: 800,
         maxPages: 80,
         pageLimit: 100,
-        amaWarmupPaddingCandles: 20,
+        amaWarmupPaddingCandles: 250, // Increased from 20 to 250 for better stabilization
         minRequiredCandles: 80,
     },
 

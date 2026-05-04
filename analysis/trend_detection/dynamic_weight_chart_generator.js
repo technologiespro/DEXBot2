@@ -565,7 +565,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             const lb = currentLookbackBars;
             const amaErWarmup = Math.max(0, Number.isFinite(data.amaErPeriod) ? Math.ceil(data.amaErPeriod) : ${JSON.stringify(MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod)});
             const amaSlowWarmup = Math.max(0, Number.isFinite(data.amaSlowPeriod) ? Math.ceil(data.amaSlowPeriod) : ${JSON.stringify(MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod)});
-            const amaReadyBar = amaErWarmup + amaSlowWarmup + lb;
+            const amaReadyBar = data.amaWarmupBars;
             const acl = currentAmaClipThreshold;
             const kcl = currentKalClipThreshold;
 

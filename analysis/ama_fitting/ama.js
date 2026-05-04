@@ -58,7 +58,11 @@ function getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars = 0) {
     const safeErPeriod = Number.isFinite(erPeriod) && erPeriod > 0 ? Math.ceil(erPeriod) : 0;
     const safeSlowPeriod = Number.isFinite(slowPeriod) && slowPeriod > 0 ? Math.ceil(slowPeriod) : 0;
     const safeLookbackBars = Number.isFinite(lookbackBars) && lookbackBars >= 0 ? Math.ceil(lookbackBars) : 0;
-    return safeErPeriod + safeSlowPeriod + safeLookbackBars;
+    
+    // We want erPeriod for warmup + at least 3x slowPeriod for smoothing stabilization + lookback
+    const smoothingStabilization = Math.ceil(safeSlowPeriod * 3);
+    
+    return safeErPeriod + smoothingStabilization + safeLookbackBars;
 }
 
 /**

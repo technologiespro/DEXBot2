@@ -97,17 +97,16 @@ function testDynamicWeightChartUsesSlowPeriodWarmup() {
             { timestamp: '2026-01-01T02:00:00Z', price: 102, ama3Price: 102, amaSlopePct: 999, velocityPct: null, displacementPct: null, isReady: false, signal: 'NEUTRAL' },
             { timestamp: '2026-01-01T03:00:00Z', price: 103, ama3Price: 103, amaSlopePct: 999, velocityPct: null, displacementPct: null, isReady: false, signal: 'NEUTRAL' },
             { timestamp: '2026-01-01T04:00:00Z', price: 104, ama3Price: 104, amaSlopePct: 999, velocityPct: null, displacementPct: null, isReady: false, signal: 'NEUTRAL' },
-            { timestamp: '2026-01-01T05:00:00Z', price: 105, ama3Price: 105, amaSlopePct: 999, velocityPct: null, displacementPct: null, isReady: false, signal: 'NEUTRAL' },
-            { timestamp: '2026-01-01T06:00:00Z', price: 106, ama3Price: 106, amaSlopePct: 1, velocityPct: null, displacementPct: null, isReady: true, signal: 'NEUTRAL' },
-            { timestamp: '2026-01-01T07:00:00Z', price: 107, ama3Price: 107, amaSlopePct: 2, velocityPct: null, displacementPct: null, isReady: true, signal: 'NEUTRAL' },
+            { timestamp: '2026-01-01T05:00:00Z', price: 105, ama3Price: 105, amaSlopePct: 1, velocityPct: null, displacementPct: null, isReady: true, signal: 'NEUTRAL' },
+            { timestamp: '2026-01-01T06:00:00Z', price: 106, ama3Price: 106, amaSlopePct: 2, velocityPct: null, displacementPct: null, isReady: true, signal: 'NEUTRAL' },
         ],
-        amaConfig: { erPeriod: 2, slowPeriod: 3 },
+        amaConfig: { erPeriod: 1, slowPeriod: 1 },
         amaWeightConfig: { lookbackBars: 1 },
     }, 'Dynamic Weight Test');
 
     const payload = extractHtmlPayload(html);
-    assert.strictEqual(payload.amaSlowPeriod, 3, 'chart payload should carry AMA slow-period warmup');
-    assert.strictEqual(payload.amaWarmupBars, 6, 'chart payload should expose the full AMA warmup window');
+    assert.strictEqual(payload.amaSlowPeriod, 1, 'chart payload should carry AMA slow-period warmup');
+    assert.strictEqual(payload.amaWarmupBars, 5, 'chart payload should expose the full AMA warmup window');
     assert.strictEqual(payload.amaPercentiles[100], 2, 'AMA clip percentiles should ignore startup bars before the full warmup');
     assert.match(html, /data\.amaSlowPeriod/, 'interactive chart should use the AMA slow period in its readiness gate');
     assert.match(html, /for \(let i = amaReadyBar; i < data\.realBarCount; i\+\+\)/, 'interactive clip-threshold recompute should skip the full AMA warmup window');

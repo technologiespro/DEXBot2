@@ -408,59 +408,81 @@ class MarketAdapterService {
                 nativePagesFetched = null;
                 const bucketMs = Number(cfg.intervalSeconds) * 1000;
                 const nowMs = this.getNowMs();
-                const nativeLookbackHours = Math.max(
-                    Number(cfg.bootstrapLookbackHours) || 0,
-                    Number(cfg.nativeBackfillHours) || 0,
-                    (analysisKeepCount * Math.max(Number(cfg.intervalSeconds) || 3600, 3600)) / 3600
-                );
-                const nativeStartMs = needBootstrap
-                    ? Math.max(0, nowMs - (nativeLookbackHours * 3600 * 1000))
-                    : Math.max(0, (nextCandles[nextCandles.length - 1]?.[0] || 0) - bucketMs);
-                let nativeCandles = [];
-                try {
-                    if (typeof deps.fetchNativeMarketHistorySince === 'function') {
-                        nativeCandles = await deps.withRetries(() => deps.fetchNativeMarketHistorySince(
-                            ctx.assetA,
-                            ctx.assetB,
-                            nativeStartMs,
-                            nowMs,
-                            cfg.intervalSeconds,
-                            { fillCandleGaps: deps.fillCandleGaps }
-                        ), cfg.sourceRetries, cfg.retryDelayMs, 'native market history fetch failed');
-                    }
-                } catch (err) {
-                    if (nextCandles.length === 0) {
-                        throw err;
-                    }
-                }
 
-                if (Array.isArray(nativeCandles) && nativeCandles.length > 0) {
-                    nextCandles = needBootstrap
-                        ? nativeCandles
-                        : deps.mergeCandles(nextCandles, nativeCandles);
-                    sourceLabel = needBootstrap ? 'native-book-bootstrap' : 'native-book-history';
-                } else if (nextCandles.length === 0) {
+                if (needBootstrap) {
+                    // Bootstrap: Kibana first (deep history), native as fallback
                     const kibanaLookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
+                    let kibanaCandles = null;
                     try {
-                        const kibanaCandles = await deps.withRetries(() => fetchKibanaCandles({
+                        kibanaCandles = await deps.withRetries(() => fetchKibanaCandles({
                             intervalSeconds: cfg.intervalSeconds,
                             lookbackHours: kibanaLookbackHours,
                             consolidateByTimestamp: true,
                             fillGapsToRequestedRange: false,
                             apiKey: null,
                         }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana orderbook bootstrap failed');
+                    } catch (_) {}
 
-                        if (Array.isArray(kibanaCandles) && kibanaCandles.length > 0) {
-                            nextCandles = kibanaCandles;
-                            sourceLabel = 'kibana-book-bootstrap';
+                    if (Array.isArray(kibanaCandles) && kibanaCandles.length > 0) {
+                        nextCandles = kibanaCandles;
+                        sourceLabel = 'kibana-book-bootstrap';
+                    } else {
+                        // Fall back to native
+                        const nativeLookbackHours = Math.max(
+                            Number(cfg.bootstrapLookbackHours) || 0,
+                            Number(cfg.nativeBackfillHours) || 0,
+                            (analysisKeepCount * Math.max(Number(cfg.intervalSeconds) || 3600, 3600)) / 3600
+                        );
+                        const nativeStartMs = Math.max(0, nowMs - (nativeLookbackHours * 3600 * 1000));
+                        let nativeCandles = [];
+                        try {
+                            if (typeof deps.fetchNativeMarketHistorySince === 'function') {
+                                nativeCandles = await deps.withRetries(() => deps.fetchNativeMarketHistorySince(
+                                    ctx.assetA,
+                                    ctx.assetB,
+                                    nativeStartMs,
+                                    nowMs,
+                                    cfg.intervalSeconds,
+                                    { fillCandleGaps: deps.fillCandleGaps }
+                                ), cfg.sourceRetries, cfg.retryDelayMs, 'native market history bootstrap failed');
+                            }
+                        } catch (_) {}
+
+                        if (Array.isArray(nativeCandles) && nativeCandles.length > 0) {
+                            nextCandles = nativeCandles;
+                            sourceLabel = 'native-book-bootstrap';
                         } else {
-                            throw new Error('kibana orderbook source returned no candles');
+                            throw new Error('both kibana and native orderbook bootstrap failed');
                         }
-                    } catch (err) {
-                        throw err;
                     }
                 } else {
-                    sourceLabel = 'cached-book';
+                    // Incremental: native fetch
+                    const nativeLookbackHours = Math.max(
+                        Number(cfg.bootstrapLookbackHours) || 0,
+                        Number(cfg.nativeBackfillHours) || 0,
+                        (analysisKeepCount * Math.max(Number(cfg.intervalSeconds) || 3600, 3600)) / 3600
+                    );
+                    const nativeStartMs = Math.max(0, (nextCandles[nextCandles.length - 1]?.[0] || 0) - bucketMs);
+                    let nativeCandles = [];
+                    try {
+                        if (typeof deps.fetchNativeMarketHistorySince === 'function') {
+                            nativeCandles = await deps.withRetries(() => deps.fetchNativeMarketHistorySince(
+                                ctx.assetA,
+                                ctx.assetB,
+                                nativeStartMs,
+                                nowMs,
+                                cfg.intervalSeconds,
+                                { fillCandleGaps: deps.fillCandleGaps }
+                            ), cfg.sourceRetries, cfg.retryDelayMs, 'native market history fetch failed');
+                        }
+                    } catch (_) {}
+
+                    if (Array.isArray(nativeCandles) && nativeCandles.length > 0) {
+                        nextCandles = deps.mergeCandles(nextCandles, nativeCandles);
+                        sourceLabel = 'native-book-history';
+                    } else {
+                        sourceLabel = 'cached-book';
+                    }
                 }
 
                 if (nextCandles.length > 0 && typeof deps.pruneStaleTail === 'function') {
@@ -476,47 +498,47 @@ class MarketAdapterService {
                 const lookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
                 const warmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars);
 
-                // ── Step 1: try native bootstrap first ────────────────────────
-                let nativeCandles = [];
+                // ── Step 1: Kibana first (deep history, handles large candle requirements) ──
+                let kibanaCandles = null;
                 try {
-                    const sinceMs = Date.now() - (lookbackHours * 3600 * 1000);
-                    const trades = await deps.withRetries(
-                        () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
-                        cfg.sourceRetries,
-                        cfg.retryDelayMs,
-                        'native bootstrap failed'
-                    );
-                    if (trades.length > 0) {
-                        nativeRecentTradeSequences = this.getNativeRecentTradeSequences(trades);
-                        const latestTradeTs = Math.max(...trades.map((t) => Number(t?.tsMs)).filter(Number.isFinite));
-                        if (Number.isFinite(latestTradeTs)) nativeLastTradeTs = latestTradeTs;
-                    }
-                    nativeCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
-                    if (nativeCandles.length > 0 && typeof deps.fillCandleGaps === 'function') {
-                        const eTs = nativeCandles[0][0];
-                        const lTs = nativeCandles[nativeCandles.length - 1][0];
-                        nativeCandles = deps.fillCandleGaps(nativeCandles, cfg.intervalSeconds, eTs, lTs);
-                    }
+                    kibanaCandles = await deps.withRetries(() => fetchKibanaCandles({
+                        intervalSeconds: cfg.intervalSeconds,
+                        lookbackHours,
+                        consolidateByTimestamp: true,
+                        fillGapsToRequestedRange: false,
+                        apiKey: null,
+                    }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana bootstrap failed');
                 } catch (_) {
-                    nativeCandles = [];
+                    kibanaCandles = null;
                 }
 
-                if (nativeCandles.length >= warmupBars) {
-                    nextCandles = nativeCandles;
-                    sourceLabel = 'native-bootstrap';
+                if (Array.isArray(kibanaCandles) && kibanaCandles.length >= warmupBars) {
+                    nextCandles = kibanaCandles;
+                    sourceLabel = 'kibana-bootstrap';
                 } else {
-                    // ── Step 2: native insufficient → supplement with Kibana ──
-                    let kibanaCandles = null;
+                    // ── Step 2: Kibana insufficient → fall back to native ──
+                    let nativeCandles = [];
                     try {
-                        kibanaCandles = await deps.withRetries(() => fetchKibanaCandles({
-                            intervalSeconds: cfg.intervalSeconds,
-                            lookbackHours,
-                            consolidateByTimestamp: true,
-                            fillGapsToRequestedRange: false,
-                            apiKey: null,
-                        }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana bootstrap failed');
+                        const sinceMs = Date.now() - (lookbackHours * 3600 * 1000);
+                        const trades = await deps.withRetries(
+                            () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
+                            cfg.sourceRetries,
+                            cfg.retryDelayMs,
+                            'native bootstrap failed'
+                        );
+                        if (trades.length > 0) {
+                            nativeRecentTradeSequences = this.getNativeRecentTradeSequences(trades);
+                            const latestTradeTs = Math.max(...trades.map((t) => Number(t?.tsMs)).filter(Number.isFinite));
+                            if (Number.isFinite(latestTradeTs)) nativeLastTradeTs = latestTradeTs;
+                        }
+                        nativeCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
+                        if (nativeCandles.length > 0 && typeof deps.fillCandleGaps === 'function') {
+                            const eTs = nativeCandles[0][0];
+                            const lTs = nativeCandles[nativeCandles.length - 1][0];
+                            nativeCandles = deps.fillCandleGaps(nativeCandles, cfg.intervalSeconds, eTs, lTs);
+                        }
                     } catch (_) {
-                        kibanaCandles = null;
+                        nativeCandles = [];
                     }
 
                     if (Array.isArray(kibanaCandles) && kibanaCandles.length > 0) {

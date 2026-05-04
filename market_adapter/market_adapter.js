@@ -630,9 +630,15 @@ function candleFileForBot(botKey, intervalSeconds = RUNTIME_DEFAULTS.intervalSec
 }
 
 function requiredCandlesForAma(ama = DEFAULT_AMA) {
+    // Formula: erPeriod + (slowPeriod * 5) + padding
+    // This ensures that after the warmup (erPeriod), the KAMA has enough candles 
+    // to stabilize through the smoothing phase (usually 3-5x the slow period).
+    const smoothingBuffer = Math.ceil(ama.slowPeriod * 5);
+    const padding = RUNTIME_DEFAULTS.amaWarmupPaddingCandles || 100;
+    
     return Math.max(
-        ama.erPeriod + ama.slowPeriod + RUNTIME_DEFAULTS.amaWarmupPaddingCandles,
-        RUNTIME_DEFAULTS.minRequiredCandles
+        ama.erPeriod + smoothingBuffer + padding,
+        RUNTIME_DEFAULTS.minRequiredCandles || 100
     );
 }
 

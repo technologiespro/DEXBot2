@@ -354,7 +354,7 @@ async function testTriggerHookCalledOnThreshold() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: {
-            getLpCandlesForPool: async () => generateCandles(80, 105),
+            getLpCandlesForPool: async () => generateCandles(110, 105),
         },
         fetchNativeTradesSince: async () => [],
         tradesToCandles: () => [],
@@ -743,7 +743,7 @@ async function testKibanaBackfillFillsHistoricalShortfall() {
 
     assert.strictEqual(result.ok, true, 'processBot should complete with backfill');
     assert.strictEqual(result.kibanaBackfillCount, 54, 'backfill should report all candles returned by Kibana');
-    assert.strictEqual(result.candleCount, 81, 'total candles should equal rawKeepCount after prune');
+    assert.strictEqual(result.candleCount, 111, 'total candles should equal rawKeepCount after prune');
     assert.ok(result.source.includes('kibana-backfill'), 'source label should include backfill marker');
     assert.strictEqual(kibanaCalls, 1, 'kibana should be called exactly once for backfill');
 }
@@ -833,7 +833,7 @@ async function testAmaGridPriceIsCaseInsensitive() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: generateCandles(80, 101),
+            candles: generateCandles(110, 101),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -910,7 +910,7 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: generateCandles(80, 101),
+            candles: generateCandles(110, 101),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -987,7 +987,7 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: generateCandles(80, 101),
+            candles: generateCandles(110, 101),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -1073,7 +1073,7 @@ async function testCenterEqualsAmaTriggeredByAmaDelta() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: generateCandles(80, 100),
+            candles: generateCandles(110, 100),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -1160,7 +1160,7 @@ async function testNoTriggerWhenCenterMatchesAma() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: generateCandles(80, 100),
+            candles: generateCandles(110, 100),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -1247,7 +1247,7 @@ async function testCenterClampedByBotBounds() {
         resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
         loadJson: () => ({
-            candles: generateCandles(80, 110),
+            candles: generateCandles(110, 110),
         }),
         saveJson: () => {},
         requiredCandlesForAma: () => 80,
@@ -2205,6 +2205,10 @@ async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
         [baseTs + 3 * bucketMs, 103, 103, 103, 103, 1],
         [baseTs + 4 * bucketMs, 104, 104, 104, 104, 1],
         [baseTs + 5 * bucketMs, 105, 105, 105, 105, 1],
+        [baseTs + 6 * bucketMs, 106, 106, 106, 106, 1],
+        [baseTs + 7 * bucketMs, 107, 107, 107, 107, 1],
+        [baseTs + 8 * bucketMs, 108, 108, 108, 108, 1],
+        [baseTs + 9 * bucketMs, 109, 109, 109, 109, 1],
     ];
 
     const service = new MarketAdapterService({
@@ -2236,7 +2240,7 @@ async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
             return true;
         },
         isBotDynamicWeightWhitelisted: () => true,
-        getNowMs: () => baseTs + (5 * bucketMs) + (30 * 60 * 1000),
+        getNowMs: () => baseTs + (9 * bucketMs) + (30 * 60 * 1000),
         root: process.cwd(),
         path,
     });
@@ -2275,8 +2279,8 @@ async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
     const result = await service.processBot(bot, state, cfg, new Map(), {});
 
     assert.strictEqual(result.ok, true, 'processBot should succeed with a partial trailing candle');
-    assert.strictEqual(result.analysisCandleCount, 5, 'analysis should retain the full closed-candle warmup window');
-    assert.strictEqual(pruneKeepCount, 6, 'raw candle pruning should keep one extra bucket beyond the analysis window');
+    assert.strictEqual(result.analysisCandleCount, 9, 'analysis should retain the full closed-candle warmup window');
+    assert.strictEqual(pruneKeepCount, 10, 'raw candle pruning should keep one extra bucket beyond the analysis window');
     assert.ok(writtenPayload, 'dynamic weights should still persist when the warmup window is fully retained');
     assert.strictEqual(writtenPayload.dynamicWeights.isReady, true, 'dynamic weights should stay ready after pruning away only the partial bucket');
 }
@@ -3491,6 +3495,7 @@ async function testWeightOnlyUpdateInDryRunUpdatesState() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_dry_run.json`),
         loadJson: () => ({
             candles: [
+                [closedTs - 3 * hour, 100, 100, 100, 100, 1],
                 [closedTs - 2 * hour, 100, 100, 100, 100, 1],
                 [closedTs - 1 * hour, 100, 100, 100, 100, 1],
                 [closedTs, 100, 100, 100, 100, 1],
