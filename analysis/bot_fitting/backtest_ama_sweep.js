@@ -11,8 +11,8 @@
  *   - Three weight profiles: valley, neutral, mountain (symmetric buy/sell)
  *
  * Usage:
- *   node analysis/bot_fitting/backtest_ama_sweep.js
- *   node analysis/bot_fitting/backtest_ama_sweep.js --spread 4:16:1 --increment 0.5:4:0.25
+ *   node analysis/bot_fitting/backtest_ama_sweep.js --data <path-to-lp-candles.json>
+ *   node analysis/bot_fitting/backtest_ama_sweep.js --data <path-to-lp-candles.json> --spread 4:16:1 --increment 0.5:4:0.25
  */
 
 const fs = require('fs');
@@ -22,9 +22,6 @@ const { Worker, isMainThread, parentPort, workerData } = require('worker_threads
 const { calculateAMA } = require('../ama_fitting/ama');
 const { range } = require('../math_utils');
 const { toCandles, parseListOrRange, loadLpData, fmt } = require('./shared_utils');
-
-const DEFAULT_DATA = path.join(__dirname, '..', '..', 'market_adapter', 'data', 'lp', '1_3_5537_1_3_0', 'lp_pool_133_1h.json');
-const DEFAULT_RESULTS = path.join(__dirname, '..', 'ama_fitting', 'optimization_results_lp_pool_133_1h.json');
 
 const DEFAULT_MAX_ORDERS = 20; // matches bot default activeOrders per side
 const DEFAULT_FEE_ROUNDTRIP_PCT = 0.20;
@@ -62,8 +59,8 @@ function jsonSafe(key, val) {
 function parseArgs() {
     const args = process.argv.slice(2);
     const out = {
-        dataPath: DEFAULT_DATA,
-        resultsPath: DEFAULT_RESULTS,
+        dataPath: null,
+        resultsPath: null,
         spreadValues: DEFAULT_SPREAD_VALUES,
         incrementValues: DEFAULT_INCREMENT_VALUES,
         ratioValues: DEFAULT_RATIO_VALUES,
@@ -101,6 +98,12 @@ function parseArgs() {
             case '--tx-fee-price': out.txFeePrice = Number(val); i++; break;
             case '--top': out.topN = Number(val); i++; break;
         }
+    }
+    if (!out.dataPath) {
+        throw new Error('--data <path-to-lp-candles.json> is required');
+    }
+    if (!out.resultsPath) {
+        throw new Error('--results <path-to-optimization-results.json> is required');
     }
     return out;
 }

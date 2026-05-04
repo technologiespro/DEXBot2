@@ -10,7 +10,7 @@ Most runners expect LP candle JSON files under `market_adapter/data/lp/`. To fet
 
 ```bash
 # Via the market adapter LP exporter (recommended for blockchain-backed candles)
-node market_adapter/inputs/fetch_lp_data.js --bot T-BTS --interval 1h --lookback 26280h
+node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --lookback 26280h
 
 # Via the analysis fetcher (uses Kibana source directly)
 node analysis/ama_fitting/fetch_lp_candles.js --pool 1.19.133 \
@@ -39,7 +39,7 @@ SMA/MACD/RSI signal analyzer. Produces a multi-panel HTML chart showing BULL/BEA
 # Recommended 1h setup
 node analysis/analyze_derivatives.js \
   --source json \
-  --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
+  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
   --sma 500 --fast-sma 100 \
   --macd-fast 48 --macd-slow 104 --macd-signal 36 --macd-min-hist 0.02 \
   --rsi 96 --rsi-extreme 90 --rsi-zone 10 \
@@ -55,7 +55,7 @@ Interactive 4-panel chart blending AMA slope and Kalman filter signals, gated by
 
 ```bash
 node analysis/analyze_dynamic_weight.js \
-  --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
+  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
   --alpha 0.6 --gain 0.25 --clip 20
 ```
 
@@ -67,7 +67,7 @@ Standalone Kalman filter chart with tactical/modal state tracking — velocity a
 
 ```bash
 node analysis/analyze_kalman.js \
-  --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
+  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
 ### Regime Analysis (`analyze_regime.js`, `analyze_regime_windows.js`)
@@ -80,7 +80,7 @@ ATR-based symmetric volatility penalty research. Uses the same math as the produ
 
 ```bash
 node analysis/analyze_volatility.js \
-  --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
+  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
 ## Subarea Details
@@ -157,12 +157,12 @@ Parameter sweep backtests that simulate grid fills for the AMA winners from `ama
 
 ```bash
 node analysis/bot_fitting/backtest_bot_fitting.js \
-  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
+  --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
 ```bash
 node analysis/bot_fitting/backtest_ama_sweep.js \
-  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
+  --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
   --spread 4:16:1 --increment 0.5:4:0.25
 ```
 
@@ -194,6 +194,8 @@ Details: [bot_fitting/README.md](bot_fitting/README.md)
 
 ## npm Script Shortcuts
 
+These npm scripts wrap common analysis runners:
+
 | Script | Command |
 |--------|---------|
 | `npm run analysis:derivatives` | `node analysis/analyze_derivatives.js` |
@@ -201,6 +203,16 @@ Details: [bot_fitting/README.md](bot_fitting/README.md)
 | `npm run ama:chart:lp-local` | `node analysis/ama_fitting/generate_unified_comparison_chart.js` |
 
 All three accept `--` forwarded flags (e.g. `npm run analysis:tradingview -- --file <path>`).
+
+Other runners are invoked directly:
+
+```bash
+node analysis/analyze_dynamic_weight.js --file <path>
+node analysis/analyze_kalman.js --file <path>
+node analysis/analyze_volatility.js --file <path>
+node analysis/analyze_regime.js --file <path>
+node analysis/analyze_regime_windows.js --file <path>
+```
 
 ## Related Docs
 

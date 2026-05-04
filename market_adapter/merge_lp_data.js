@@ -13,12 +13,12 @@
  *   node market_adapter/merge_lp_data.js <file1> <file2> --out <output>
  *
  * Example (2-year 1h dataset):
- *   node market_adapter/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --start 2024-03-06 --end 2025-03-06
- *   node market_adapter/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --start 2025-03-06 --end 2026-03-06
+ *   node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start 2024-03-06 --end 2025-03-06
+ *   node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start 2025-03-06 --end 2026-03-06
  *   node market_adapter/merge_lp_data.js \
- *     market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h_2024.json \
- *     market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h_2025.json \
- *     --out market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
+ *     market_adapter/data/lp/<pair>/lp_pool_<poolShort>_1h_2024.json \
+ *     market_adapter/data/lp/<pair>/lp_pool_<poolShort>_1h_2025.json \
+ *     --out market_adapter/data/lp/<pair>/lp_pool_<poolShort>_1h.json
  */
 
 const fs   = require('fs');

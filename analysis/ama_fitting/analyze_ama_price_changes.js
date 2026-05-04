@@ -5,7 +5,7 @@
  * AMA REPOSITION FREQUENCY ANALYSIS
  *
  * Simulates AMA_DELTA_THRESHOLD_PERCENT grid-reposition logic for all four AMA
- * series on LP Pool 133 (1h candles).
+ * series on LP candle data.
  *
  * For each threshold (1%, 2%, 3%, 4%):
  *   - Set a baseline at the first post-warmup AMA value
@@ -17,8 +17,7 @@
  * per 1000 live steps — for each AMA × threshold combination.
  *
  * Usage:
- *   node analysis/ama_fitting/analyze_ama_price_changes.js
- *   node analysis/ama_fitting/analyze_ama_price_changes.js --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
+ *   node analysis/ama_fitting/analyze_ama_price_changes.js --data <path-to-lp-candles.json> --results <path-to-optimization-results.json>
  */
 
 const fs   = require('fs');
@@ -26,9 +25,6 @@ const path = require('path');
 const { calculateAMA } = require('./ama');
 
 const THRESHOLDS = [1, 2, 3, 4]; // percent
-
-const DEFAULT_DATA = path.join(__dirname, '..', '..', 'market_adapter', 'data', 'lp', '1_3_5537_1_3_0', 'lp_pool_133_1h.json');
-const DEFAULT_RESULTS = path.join(__dirname, 'optimization_results_lp_pool_133_1h.json');
 
 // ── Load data ─────────────────────────────────────────────────────────────────
 
@@ -119,11 +115,21 @@ function pad(s, w) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 function run() {
-    const dataArgIdx = process.argv.indexOf('--data');
-    const dataFile   = dataArgIdx !== -1 ? path.resolve(process.argv[dataArgIdx + 1]) : DEFAULT_DATA;
+    const dataArgIdx    = process.argv.indexOf('--data');
+    const resultsArgIdx = process.argv.indexOf('--results');
+
+    if (dataArgIdx === -1) {
+        throw new Error('--data <path-to-lp-candles.json> is required');
+    }
+    if (resultsArgIdx === -1) {
+        throw new Error('--results <path-to-optimization-results.json> is required');
+    }
+
+    const dataFile    = path.resolve(process.argv[dataArgIdx + 1]);
+    const resultsFile = path.resolve(process.argv[resultsArgIdx + 1]);
 
     const { candles, meta } = loadData(dataFile);
-    const amaParams         = loadAmaParams(DEFAULT_RESULTS);
+    const amaParams         = loadAmaParams(resultsFile);
     const closes            = candles.map(c => c.close);
     const totalSteps        = closes.length - 1; // candle-to-candle transitions
 

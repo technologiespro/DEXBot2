@@ -9,7 +9,6 @@ const { generateHTML } = require('./tradingview_uplot_chart_generator');
 const { MARKET_ADAPTER } = require('../../modules/constants');
 const { toIntervalLabel } = require('../../market_adapter/candle_utils');
 
-const DEFAULT_FILE = path.join(__dirname, '..', '..', 'market_adapter', 'data', 'lp', '1_3_5537_1_3_0', 'lp_pool_133_1h.json');
 const DEFAULT_CHART_DIR = path.join(__dirname, '..', 'charts');
 const DEFAULT_CHART_FILE = path.join(DEFAULT_CHART_DIR, 'tradingview_chart.html');
 const DEFAULT_AMA = MARKET_ADAPTER.AMAS?.AMA3 || MARKET_ADAPTER.AMAS?.[MARKET_ADAPTER.DEFAULT_AMA_KEY || 'AMA3'] || {
@@ -21,7 +20,7 @@ const DEFAULT_AMA = MARKET_ADAPTER.AMAS?.AMA3 || MARKET_ADAPTER.AMAS?.[MARKET_AD
 function parseArgs() {
     const args = process.argv.slice(2);
     const config = {
-        source: { type: 'json', config: { filePath: DEFAULT_FILE } },
+        source: { type: 'json', config: { filePath: null } },
         chartFile: DEFAULT_CHART_FILE,
         title: null,
         priceScale: 'log',
@@ -83,6 +82,9 @@ function inferTitle(meta, fallback) {
 async function main() {
     try {
         const config = parseArgs();
+        if (config.source.type === 'json' && !config.source.config.filePath) {
+            throw new Error('--file <path-to-candles.json> is required (or use --source market_adapter)');
+        }
         const srcConfig = config.source.config;
         if (config.source.type === 'market_adapter' && !srcConfig.stateDir) {
             srcConfig.stateDir = path.join(__dirname, '..', '..', 'market_adapter', 'state');

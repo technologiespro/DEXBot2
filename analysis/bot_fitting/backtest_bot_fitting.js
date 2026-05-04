@@ -6,7 +6,6 @@ const { calculateAMA } = require('../ama_fitting/ama');
 const { range } = require('../math_utils');
 const { toCandles, parseListOrRange, loadLpData, fmt } = require('./shared_utils');
 
-const DEFAULT_DATA = path.join(__dirname, '..', '..', 'market_adapter', 'data', 'lp', '1_3_5537_1_3_0', 'lp_pool_133_1h.json');
 const DEFAULT_ACTIVE_ORDERS = 5;
 const DEFAULT_FEE_ROUNDTRIP_PCT = 0.20;
 const DEFAULT_MIN_SPREAD_FACTOR = 2.1;
@@ -24,7 +23,7 @@ const DEFAULT_RATIO_VALUES = [1.5, 1.75, 2, 2.5, 3, 4, 5, 8, 10];
 function parseArgs() {
     const args = process.argv.slice(2);
     const out = {
-        dataPath: DEFAULT_DATA,
+        dataPath: null,
         resultsPath: null,
         spreadValues: DEFAULT_SPREAD_VALUES,
         incrementValues: DEFAULT_INCREMENT_VALUES,
@@ -92,6 +91,10 @@ function parseArgs() {
                 i++;
                 break;
         }
+    }
+
+    if (!out.dataPath) {
+        throw new Error('--data <path-to-lp-candles.json> is required');
     }
 
     if (!out.resultsPath) {

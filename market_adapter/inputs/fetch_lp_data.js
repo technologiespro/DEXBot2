@@ -7,19 +7,18 @@
  * then fetches all swap history from Kibana and exports OHLCV candles to JSON.
  *
  * Usage:
- *   node market_adapter/fetch_lp_data.js
- *   node market_adapter/fetch_lp_data.js --bot XRP-BTS
- *   node market_adapter/fetch_lp_data.js --bot XRP-BTS --interval 4h --lookback 8760h
+ *   node market_adapter/inputs/fetch_lp_data.js
+ *   node market_adapter/inputs/fetch_lp_data.js --bot <botName> --interval 4h --lookback 8760h
  *
  * Manual override (no blockchain connection needed):
- *   node market_adapter/fetch_lp_data.js --pool 133 --precA 4 --precB 5
+ *   node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB>
  *
  * Date range fetch (for historical windows or multi-step fetching):
- *   node market_adapter/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --start 2024-03-06 --end 2025-03-06
- *   node market_adapter/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --start 2025-03-06 --end 2026-03-06
+ *   node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start 2024-03-06 --end 2025-03-06
+ *   node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start 2025-03-06 --end 2026-03-06
  *
  * Output:
- *   market_adapter/data/lp/<assetA>_<assetB>/lp_pool_133_4h.json
+ *   market_adapter/data/lp/<assetA>_<assetB>/lp_pool_<poolId>_<interval>.json
  *
  * Precision:
  *   Resolved automatically from the BitShares blockchain via lookup_asset_symbols.

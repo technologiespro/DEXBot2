@@ -63,11 +63,11 @@ On top of this blend, **Hurst Exponent** and **Permutation Entropy** act as a re
 ```bash
 # From JSON candle file
 node analysis/analyze_dynamic_weight.js \
-  --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
+  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 
 # With custom initial parameters
 node analysis/analyze_dynamic_weight.js \
-  --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
+  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
   --alpha 0.6 \
   --gain 0.25 \
   --clip 20

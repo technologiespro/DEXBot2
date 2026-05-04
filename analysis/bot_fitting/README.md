@@ -1,6 +1,6 @@
-## Bot Fitting Backtest (LP 1h + 4 AMA)
+## Bot Fitting Backtest
 
-This folder contains a parameter sweep backtest that simulates grid fills for the four AMA winners from `analysis/ama_fitting`.
+This folder contains parameter sweep backtests that simulate grid fills for the four AMA winners from `analysis/ama_fitting`.
 
 ### What it optimizes
 
@@ -17,23 +17,29 @@ For each of the 4 AMA strategies, it searches for best:
 
 ### Input dependencies
 
-- LP candles JSON (recommended 1h):
-  - `market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json`
-- AMA optimization winners JSON:
-  - `analysis/ama_fitting/optimization_results_lp_pool_133_1h.json`
+Both scripts require:
+
+- **LP candles JSON** (recommended 1h), from `market_adapter/data/lp/` — pass via `--data`
+- **AMA optimization winners JSON**, from `analysis/ama_fitting/` — for `backtest_ama_sweep.js`, pass via `--results`
 
 ### Run
 
 ```bash
+# Lightweight sweep
 node analysis/bot_fitting/backtest_bot_fitting.js \
-  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
+  --data <path-to-lp-candles.json>
+
+# Persistent grid simulation with AMA winners
+node analysis/bot_fitting/backtest_ama_sweep.js \
+  --data <path-to-lp-candles.json> \
+  --results <path-to-optimization-results.json>
 ```
 
 Optional tuning:
 
 ```bash
 node analysis/bot_fitting/backtest_bot_fitting.js \
-  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
+  --data <path-to-lp-candles.json> \
   --spread 0.4:1.6:0.1 \
   --increment 0.2:0.8:0.1 \
   --ratio 1.5,2,2.5,3,4,5,8,10 \
@@ -48,7 +54,7 @@ node analysis/bot_fitting/backtest_bot_fitting.js \
 
 ### Output
 
-- `analysis/bot_fitting/bot_fitting_results_lp_pool_133_1h.json`
+Results are written to `analysis/bot_fitting/` and to `analysis/ama_fitting/` using filenames derived from the input data file.
 
 The console also prints best parameter set per AMA with matched pairs, fill efficiency, net capture and score.
 
@@ -63,3 +69,32 @@ The console also prints best parameter set per AMA with matched pairs, fill effi
   - `baseScore = totalNetCapturePct * (fillEfficiency / 100)`
   - `riskPenalty = avgOpenDurationBars*1.0 + peakOpenOrders*2.0 + avgImbalance*1.2 + canceledOnReposition*0.15`
   - `finalScore = baseScore - riskPenalty`
+
+## Persistent Grid Simulation Details
+
+`backtest_ama_sweep.js` models the real bot mechanics:
+
+- Orders sit at FIXED chain prices until canceled or filled
+- When AMA drifts past reposition threshold, grid re-centers
+- Grid compression: AMA shift pushes one side's orders closer to market
+- Order sizing depends on capital, ratio (range width), and weight profile
+- Three weight profiles: valley, neutral, mountain (symmetric buy/sell)
+
+Search grid defaults — centered around bot defaults (spread=2%, increment=0.5%):
+
+| Param | Default Range |
+|-------|--------------|
+| Spread | 0.5:4:0.25 + 5:12:1 (%) |
+| Increment | 0.2:2:0.1 + 2.5:8:0.5 (%) |
+| Max/min ratio | 1.05, 1.1, 1.15, 1.2, 1.3, 1.5, 2, 3, 5, 10 |
+| Reposition threshold | 2.5% |
+| Max orders per side | 20 |
+| Round-trip fee | 0.20% |
+| Spread ≥ factor × increment | 2.1 |
+
+```bash
+node analysis/bot_fitting/backtest_ama_sweep.js \
+  --data <path-to-lp-candles.json> \
+  --results <path-to-optimization-results.json> \
+  --spread 4:16:1 --increment 0.5:4:0.25
+```

@@ -33,7 +33,7 @@ bootstrap (gaps filled via `candle_utils.fillCandleGaps`), but without pruning.
 | BTS          | BTS          | 1.3.0      | 5         |
 | HONEST.MONEY | HONEST.MONEY | —          | —         |
 
-**XRP-BTS pool (3 years):**
+**IOB.XRP/BTS pool (3 years):**
 ```bash
 node analysis/ama_fitting/fetch_lp_candles.js \
   --pool 1.19.133 \
@@ -42,7 +42,7 @@ node analysis/ama_fitting/fetch_lp_candles.js \
   --hours 26280
 ```
 
-Output: `market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json`
+Output: `market_adapter/data/lp/iob_xrp_bts/lp_pool_<poolShort>_<interval>.json` (interval-dependent)
 
 **Options:**
 
@@ -73,13 +73,13 @@ to `profiles/market_profiles.json`.
 **Run on the fetched LP data:**
 ```bash
 node analysis/ama_fitting/optimizer_high_resolution.js \
-  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json
+  --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
 **Export winners to the market adapter profile file:**
 ```bash
 node analysis/ama_fitting/optimizer_high_resolution.js \
-  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json \
+  --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
   --write-profiles
 ```
 
@@ -94,7 +94,7 @@ node analysis/ama_fitting/optimizer_high_resolution.js \
 Override ranges via CLI:
 ```bash
 node analysis/ama_fitting/optimizer_high_resolution.js \
-  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json \
+  --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
   --erMin 100 --erMax 600 \
   --slowMin 800 --slowMax 6000
 ```
@@ -149,7 +149,7 @@ Recommended entrypoint:
 
 ```bash
 npm run lp:chart -- \
-  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_iob.xrp_bts_1h.json
+  --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
 This generates both:
@@ -164,7 +164,7 @@ Local LP comparison entrypoint:
 
 ```bash
 npm run ama:chart:lp-local -- \
-  --data market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
+  --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
 Open the generated HTML in a browser to compare all four AMA overlays against the candlestick price.

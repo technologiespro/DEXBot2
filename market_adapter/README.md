@@ -163,7 +163,7 @@ node market_adapter/market_adapter.js
 node market_adapter/ama_signal_runner.js
 
 # Print one bot's signal output
-node market_adapter/ama_signal_runner.js --bot xrp-bts-0 --compact
+node market_adapter/ama_signal_runner.js --bot <botKey> --compact
 ```
 
 `--deltaPercent` overrides the configured threshold for that run.
@@ -207,7 +207,7 @@ node market_adapter/ama_signal_runner.js --bot xrp-bts-0 --compact
 node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --lookback 8760h
 
 # Generate LP chart from an exported candle file
-npm run lp:chart -- --data market_adapter/data/lp_pool_133_iob.xrp_bts_1h.json
+npm run lp:chart -- --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
 ## Technical Reference
@@ -224,6 +224,9 @@ triggers when the grid should be rebuilt.
 
 For the similar bot-scoped debt workflow and collateral advisory path, see
 [MPA and Credit Usage](../docs/MPA_CREDIT_USAGE.md).
+
+For the research tools behind AMA fitting, signal analysis, and parameter
+calibration, see [Analysis README](../analysis/README.md).
 
 The adapter runs independently from `dexbot.js`. It does not place orders,
 manage bot lifecycle, or edit bot configuration. Order execution and grid
@@ -353,18 +356,29 @@ market_adapter/
 |-- lp_chart_core.js               chart HTML renderer
 |-- lp_chart_strategy_loader.js    AMA strategy/profile resolver for charts
 |-- lp_chart_runner.js             LP chart orchestration
+|-- test_helpers.js                test utilities
 |-- core/
 |   |-- market_adapter_service.js  full signal pipeline service
-|   |-- kibana_client.js           low-level Kibana client
-|   |-- kibana_market_candles.js   Kibana candle fetch and transform
+|   |-- config_normalizers.js      shared config normalization
+|   |-- kibana_client.js           low-level Kibana/ES query client
+|   |-- kibana_candles.js          LP pool candle fetch engine
+|   |-- kibana_market_candles.js   orderbook candle fetch and transform
 |   |-- consolidate_candles.js     candle consolidation helpers
 |   `-- strategies/
 |       |-- ama_slope_model.js     AMA slope and trend weight logic
 |       |-- collateral_manager.js  advisory collateral-ratio logic
+|       |-- regime_gate.js         regime multiplier gating
 |       `-- atr/calculator.js      ATR calculation
 |-- inputs/
 |   |-- kibana_source.js           Elasticsearch LP data source
 |   `-- fetch_lp_data.js           historical LP candle exporter
+|-- utils/
+|   |-- chain.js                   blockchain query helpers
+|   |-- ws_client.js               lightweight BitShares WebSocket client
+|   |-- adapter_client.js          inter-process credential daemon client
+|   |-- native_history.js          native BitShares market history fetch
+|   |-- file_lock.js               single-instance file lock
+|   `-- data_discovery.js          data directory auto-discovery
 |-- data/                          runtime candle caches and exports
 `-- state/                         runtime state, centers, and lock file
 ```
@@ -376,7 +390,7 @@ market_adapter/
 ```json
 {
   "whitelist": {
-    "xrp-bts-0": {
+    "<botKey>": {
       "ama": true,
       "dynamicWeight": true
     }
@@ -403,8 +417,8 @@ The file contains a trigger payload like:
 {
   "createdAt": "2026-03-01T00:00:00.000Z",
   "source": "market_adapter/market_adapter.js",
-  "botName": "XRP-BTS",
-  "botKey": "xrp-bts-0",
+  "botName": "IOB.XRP/BTS",
+  "botKey": "<botKey>",
   "thresholdPercent": 0.8,
   "deltaPercent": 1.1,
   "previousCenterPrice": 1280.5,
@@ -444,12 +458,14 @@ Main override knobs live in `profiles/market_adapter_settings.json`:
 | `minOutputThreshold` | Minimum trend output before directional shift applies |
 | `maxSlopeOffset` | Cap for asymmetric trend offset |
 | `maxVolatilityOffset` | Cap for symmetric ATR penalty |
+| `clipPercentile` | Outlier filter for AMA/Kalman velocity (clips top N% of values) |
 | `absoluteThreshold` | Dead band before regime filtering |
 | `atrPeriod` | ATR lookback |
 | `volatilityExponent` | ATR penalty exponent |
 | `volatilityScaleX` | ATR penalty scale |
 | `volatilityThreshold` | Minimum volatility penalty before applying shift |
 | `kalmanSmoothPct` | Raw vs smoothed Kalman blend |
+| `dispScaleMinPct` | Kalman displacement minimum scale floor |
 | `kalmanDispScaleMult` | Kalman displacement scale multiplier |
 | `kalmanDispThresholdMult` | Kalman displacement threshold multiplier |
 | `kalmanSlope.maxSlopePct` | Kalman slope saturation |
@@ -465,6 +481,78 @@ The adapter keeps candle caches current using Kibana bootstrap plus native
 incremental updates. It repairs gaps through targeted Kibana fetches when
 possible, prunes old candles to the required AMA window, and acts only on closed
 1h candles.
+
+#### AMA Warmup Window — Why Candle Length Matters
+
+The AMA is a recursive (infinite impulse response) filter. On cold start it
+initialises to the first price after the Efficiency Ratio (ER) buffer, creating
+an initialisation bias. This bias decays asymptotically — each bar, the AMA
+"forgets" a fraction equal to its smoothing constant:
+
+```
+bias_remaining(K) ≈ bias_initial × ∏ (1 − SC_i)      for i = 1..K
+```
+
+Kaufman's smoothing constant is the ER-scaled value, squared:
+
+```
+SC_i = [ER_i × (fastSC − slowSC) + slowSC]²
+
+where  fastSC = 2 / (fastPeriod + 1)
+      slowSC = 2 / (slowPeriod + 1)
+```
+
+Because `ER_i` varies bar-by-bar, a **typical-market ER** (`ER_avg`) is used to
+estimate an average decay rate:
+
+```
+SC_avg = [ER_avg × (fastSC − slowSC) + slowSC]²
+```
+
+Bars needed to reduce bias below a target fraction ε:
+
+```
+convergenceBars = ln(ε) / ln(1 − SC_avg)
+```
+
+The **full warmup window** the adapter requires:
+
+```
+amaWarmupBars = erPeriod + convergenceBars + lookbackBars
+```
+
+| Component | Role |
+|-----------|------|
+| `erPeriod` | Bars for the first Efficiency Ratio value to become available |
+| `convergenceBars` | Bars to decay 99 % of the cold-start initialisation bias |
+| `lookbackBars` | Extra lookback for slope/trend analysis (AMA slope, ATR) |
+
+The two **calibration constants** live in `modules/constants.js` under
+`MARKET_ADAPTER`:
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `AMA_CONVERGENCE_ER_AVG` | `0.16` | Typical-market Efficiency Ratio. Lower = more conservative (assumes more noise, slower convergence, more candles needed). Calibrated against 3 years of pool 133 1h candles; corrects for Jensen's inequality — `E[f(ER)] ≠ f(E[ER])` when `f` is the squaring function. |
+| `AMA_CONVERGENCE_EPSILON` | `0.01` | Target remaining bias fraction. `0.01` means 99 % of the initial bias has decayed by the end of the convergence window. |
+
+To recalibrate `AMA_CONVERGENCE_ER_AVG` against new market data, use the
+research script:
+```bash
+node analysis/ama_fitting/calibrate_convergence_er.js [--data <lp-file.json>] [--amas AMA3,AMA4]
+```
+See `analysis/ama_fitting/calibrate_convergence_er.js` for details on the
+implied-ER correction (Jensen's inequality).
+
+**Why `slowPeriod` dominates:** `slowSC ≈ 2 / slowPeriod`, so `SC_avg` scales
+as `~ (2 / slowPeriod)² = 4 / slowPeriod²`. Since `convergenceBars` is
+proportional to `1 / SC_avg`, the required candle count scales as
+**O(slowPeriod²)**, not O(slowPeriod). For the AMA3 default (`slowPeriod = 136`)
+this is roughly 1100 convergence bars; doubling `slowPeriod` would quadruple
+that requirement.
+
+If the adapter has fewer candles than the warmup window, the AMA output is too
+biased for grid centering and the cycle skips with reason
+`ama_warmup_insufficient`.
 
 Stale data suppresses trigger writes. Check `staleData` and `staleAgeHours` in
 `market_adapter/state/market_adapter_state.json` when a trigger should have

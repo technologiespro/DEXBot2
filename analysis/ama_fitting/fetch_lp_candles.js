@@ -12,19 +12,33 @@
  *     --pool 1.19.133 \
  *     --assetA IOB.XRP --assetAId 1.3.3926 --assetAPrecision 4 \
  *     --assetB BTS     --assetBId 1.3.0    --assetBPrecision 5 \
- *     [--hours 26280]  [--out my_file.json]
+ *     [--interval 1h] [--hours 26280] [--out my_file.json]
  *
- * Default --hours: 26280 (3 years of 1h candles)
- * Output: market_adapter/data/<pool>_1h.json
+ * Defaults: --interval 1h  --hours 26280 (3 years)
+ * Output: market_adapter/data/lp/<assetA>_<assetB>/lp_pool_<poolShort>_<interval>.json
  */
 
 const fs   = require('fs');
 const path = require('path');
 
 const kibanaSource = require('../../market_adapter/inputs/kibana_source');
+const { toIntervalLabel } = require('../../market_adapter/interval_utils');
+const { MARKET_ADAPTER } = require('../../modules/constants');
 
-const DATA_DIR = path.resolve(__dirname, '../../market_adapter/data');
+const DATA_DIR = path.resolve(__dirname, '../../market_adapter/data/lp');
 const HOURS_3Y  = 3 * 365 * 24; // 26280
+
+function slugPart(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'unknown';
+}
+
+function slugPairFolder(symbolA, symbolB) {
+    return `${slugPart(symbolA)}_${slugPart(symbolB)}`;
+}
 
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -36,23 +50,27 @@ function parseArgs() {
         assetBSymbol:     null,
         assetBId:         null,
         assetBPrecision:  null,
+        intervalSeconds:  MARKET_ADAPTER.RUNTIME_DEFAULTS.intervalSeconds,
         hours:            HOURS_3Y,
         outFile:          null,
     };
+
+    const intervalMap = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
 
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
         const v = args[i + 1];
         switch (a) {
-            case '--pool':             out.pool            = v;         i++; break;
-            case '--assetA':           out.assetASymbol    = v;         i++; break;
-            case '--assetAId':         out.assetAId        = v;         i++; break;
-            case '--assetAPrecision':  out.assetAPrecision = Number(v); i++; break;
-            case '--assetB':           out.assetBSymbol    = v;         i++; break;
-            case '--assetBId':         out.assetBId        = v;         i++; break;
-            case '--assetBPrecision':  out.assetBPrecision = Number(v); i++; break;
-            case '--hours':            out.hours           = Number(v); i++; break;
-            case '--out':              out.outFile         = v;         i++; break;
+            case '--pool':             out.pool             = v;         i++; break;
+            case '--assetA':           out.assetASymbol     = v;         i++; break;
+            case '--assetAId':         out.assetAId         = v;         i++; break;
+            case '--assetAPrecision':  out.assetAPrecision  = Number(v); i++; break;
+            case '--assetB':           out.assetBSymbol     = v;         i++; break;
+            case '--assetBId':         out.assetBId         = v;         i++; break;
+            case '--assetBPrecision':  out.assetBPrecision  = Number(v); i++; break;
+            case '--interval':         out.intervalSeconds  = intervalMap[v] ?? parseInt(v, 10); i++; break;
+            case '--hours':            out.hours            = Number(v); i++; break;
+            case '--out':              out.outFile          = v;         i++; break;
             case '--help':
             case '-h':
                 printHelp();
@@ -63,7 +81,7 @@ function parseArgs() {
 }
 
 function printHelp() {
-    console.log('fetch_lp_candles.js — fetch LP pool 1h candles from Kibana for AMA optimizer');
+    console.log('fetch_lp_candles.js — fetch LP pool candles from Kibana for AMA optimizer');
     console.log('');
     console.log('Usage:');
     console.log('  node fetch_lp_candles.js --pool 1.19.133 \\');
@@ -78,8 +96,9 @@ function printHelp() {
     console.log('  --assetB <symbol>        Asset B symbol (e.g. BTS)');
     console.log('  --assetBId <id>          Asset B object ID (e.g. 1.3.0)');
     console.log('  --assetBPrecision <n>    Asset B precision (e.g. 5)');
+    console.log('  --interval <label>       Candle interval (1m, 5m, 15m, 1h, 4h, 1d; default: 1h)');
     console.log('  --hours <n>              Lookback hours (default: 26280 = 3 years)');
-    console.log('  --out <filename>         Output filename (default: <pool>_1h.json in market_adapter/data/)');
+    console.log('  --out <filename>         Output filename (default: auto-generated in market_adapter/data/lp/)');
 }
 
 function validateArgs(args) {
@@ -106,19 +125,21 @@ async function main() {
         symbol:    args.assetBSymbol || args.assetBId,
     };
 
-    const poolId      = kibanaSource.normalizePoolId(args.pool);
-    const lookback    = Math.round(args.hours);
-    const yearsApprox = (lookback / (365 * 24)).toFixed(1);
+    const { intervalSeconds } = args;
+    const intervalLabel    = toIntervalLabel(intervalSeconds);
+    const poolId           = kibanaSource.normalizePoolId(args.pool);
+    const lookback         = Math.round(args.hours);
+    const yearsApprox      = (lookback / (365 * 24)).toFixed(1);
 
     console.log(`Fetching LP candles from Kibana`);
     console.log(`  Pool:     ${poolId}`);
     console.log(`  Pair:     ${assetA.symbol} / ${assetB.symbol}`);
+    console.log(`  Interval: ${intervalLabel}`);
     console.log(`  Lookback: ${lookback}h (~${yearsApprox} years)`);
-    console.log(`  Interval: 1h`);
     console.log('');
 
     const candles = await kibanaSource.getLpCandlesForPool(poolId, assetA, assetB, {
-        intervalSeconds:       3600,
+        intervalSeconds,
         lookbackHours:         lookback,
         consolidateByTimestamp: true,
         apiKey:                null,
@@ -140,7 +161,7 @@ async function main() {
             pool:            poolId,
             assetA,
             assetB,
-            intervalSeconds: 3600,
+            intervalSeconds,
             lookbackHours:   lookback,
             candleCount:     candles.length,
             format:          '[timestamp_ms, open, high, low, close, volume_A]',
@@ -149,13 +170,15 @@ async function main() {
     };
 
     const poolShort = poolId.replace('1.19.', '');
-    const defaultName = `lp_pool_${poolShort}_${assetA.symbol}_${assetB.symbol}_1h.json`
-        .replace(/[^a-z0-9._-]/gi, '_')
-        .toLowerCase();
+    const pairFolder = slugPairFolder(assetA.symbol, assetB.symbol);
+    const defaultName = `lp_pool_${poolShort}_${intervalLabel}.json`;
     const outName = args.outFile || defaultName;
-    const outPath = path.isAbsolute(outName) ? outName : path.join(DATA_DIR, outName);
+    const outPath = args.outFile && path.isAbsolute(args.outFile)
+        ? args.outFile
+        : path.join(DATA_DIR, pairFolder, outName);
 
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    const outDir = path.dirname(outPath);
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(outPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
 
     console.log(`  Saved:    ${path.relative(process.cwd(), outPath)}`);

@@ -15,7 +15,7 @@
  * Usage:
  *   node analysis/analyze_regime_windows.js \
  *     --source json \
- *     --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json
+ *     --file market_adapter/data/lp/<path>/<to>/<lp-candles>.json
  */
 
 'use strict';

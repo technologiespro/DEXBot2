@@ -29,14 +29,16 @@ analysis/charts/tradingview_chart.html
 ## Direct CLI Usage
 
 ```bash
-node analysis/tradingview/analyze_tradingview.js --file <path-to-candles.json> --chart <output.html>
+node analysis/tradingview/analyze_tradingview.js \
+  --file <path-to-lp-candles.json> \
+  --chart analysis/charts/tradingview_chart.html
 ```
 
-Example:
+Example using market adapter LP data:
 
 ```bash
 node analysis/tradingview/analyze_tradingview.js \
-  --file market_adapter/data/lp/1_3_5537_1_3_0/lp_pool_133_1h.json \
+  --file market_adapter/data/lp/<pair-folder>/lp_pool_<id>_<interval>.json \
   --chart analysis/charts/tradingview_chart.html
 ```
 
@@ -54,7 +56,7 @@ If you pass a raw JSON file, the runner normalizes the candles before rendering.
 Use the market adapter LP exporter to pull blockchain-backed candles before generating the HTML:
 
 ```bash
-node market_adapter/inputs/fetch_lp_data.js --bot T-BTS --interval 1h --lookback 26280h
+node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --lookback 26280h
 ```
 
 That writes a JSON file under `market_adapter/data/lp/` which you can then pass to the TradingView exporter.
