@@ -100,7 +100,7 @@ Override per-bot via `market_adapter_settings.json`:
 ```json
 {
   "asymmetricBounds": {
-    "maxAsymmetryFactor": 0.25
+    "maxAsymmetryFactor": 0.35
   }
 }
 ```
