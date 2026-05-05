@@ -1036,7 +1036,7 @@ async function runOnce(cfg, state, contextCache) {
             const closeText = isOneHourResult && Number.isFinite(r.lastClosedCandleClose) ? ` close=${r.lastClosedCandleClose.toFixed(8)}` : '';
             const analysisText = isOneHourResult && Number.isFinite(r.analysisCandleCount) ? ` analysis=${r.analysisCandleCount}` : '';
             const nativeText = isOneHourResult && Number.isFinite(r.nativePagesFetched) ? ` nativePages=${r.nativePagesFetched}` : '';
-            const dynText = isOneHourResult ? ` dyn[whitelist=${r.dynamicWeightWhitelisted ? 'yes' : 'no'},base=${r.hasExplicitBaseWeights ? 'yes' : 'no'},ready=${r.dynamicWeightReady ? 'yes' : 'no'},applied=${r.dynamicWeightApplied ? 'yes' : 'no'}${r.dynamicWeightProfile ? `,profile=${r.dynamicWeightProfile}` : ''}]` : '';
+            const dynText = isOneHourResult ? ` dyn[whitelist=${r.dynamicWeightWhitelisted ? 'yes' : 'no'},base=${r.hasExplicitBaseWeights ? 'yes' : 'no'},ready=${r.dynamicWeightReady ? 'yes' : 'no'},applied=${r.dynamicWeightApplied ? 'yes' : 'no'}${r.dynamicWeightProfile ? `,profile=${r.dynamicWeightProfile}` : ''}${r.asymmetricBoundsWhitelisted ? ',ab=yes' : ''}]` : '';
 
             log(cfg, `${r.source}, candles=${r.candleCount}${analysisText}${closedTsText}${rawTsText}${closeText}, ama=${amaText} (prevCenter=${prevCenterText}, delta=${deltaText}), threshold=${thresholdText}${offText}${amaOffText}${regimeText}${staleText}${patchText}${backfillText}${gapText}${trigText}${pendingText}${warmupText}${trendText}${weightText}${dynText}${nativeText}`);
             if (r.triggerSuppressedReason === 'waiting_for_new_closed_candle') {
@@ -1260,6 +1260,7 @@ module.exports = {
     usesOrderbookMarketSource,
     isBotWhitelisted,
     isBotDynamicWeightWhitelisted,
+    isBotAsymmetricBoundsWhitelisted,
     _resetCycleCache,
     writeCenterSnapshot,
     normalizeNativeMarketHistoryCandles,

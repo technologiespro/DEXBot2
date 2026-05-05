@@ -94,7 +94,7 @@ Neutral:   symmetric bounds (asymmetry = 0)
 
 | Setting | Default | Description |
 |---------|--------:|-------------|
-| `ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR` | 0.30 | Maximum ratio tilt at full slope (0 = disabled) |
+| `ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR` | 0.35 | Maximum ratio tilt at full slope (0 = disabled) |
 
 Override per-bot via `market_adapter_settings.json`:
 ```json

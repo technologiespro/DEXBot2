@@ -352,20 +352,26 @@ class MarketAdapterService {
             return deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, options);
         };
 
-        const verifyAndPruneStaleTail = async (candles, threshold) => {
-            if (typeof deps.pruneStaleTail !== 'function') return candles;
+        const verifyAndPruneStaleTail = async (candles, threshold, staleTailVerifiedTs = null) => {
+            if (typeof deps.pruneStaleTail !== 'function') return { candles };
             const pruned = deps.pruneStaleTail(candles, threshold);
             if (pruned.length === candles.length || candles.length === 0) {
-                return pruned;
+                return { candles: pruned };
             }
 
             // Use the shared detector to find the tail range without re-sorting
             const detected = typeof deps.detectStaleTail === 'function'
                 ? deps.detectStaleTail(candles, threshold)
                 : null;
-            if (!detected) return pruned;
+            if (!detected) return { candles: pruned };
             const tailStartTs = detected.sorted[detected.sorted.length - detected.runLength][0];
             const tailEndTs = detected.sorted[detected.sorted.length - 1][0];
+
+            // Skip Kibana verification if this tail was already confirmed flat
+            // on a previous cycle (same tailStartTs or within the verified range).
+            if (Number.isFinite(staleTailVerifiedTs) && tailStartTs >= staleTailVerifiedTs) {
+                return { candles, keptStaleTailTs: tailStartTs };
+            }
 
             // Verify with Kibana: did the market actually trade during this period?
             try {
@@ -386,15 +392,15 @@ class MarketAdapterService {
                     );
                     if (!hasKibanaActivity) {
                         // Kibana confirms flat/inactive: our data is genuine → keep it
-                        return candles;
+                        return { candles, keptStaleTailTs: tailStartTs };
                     }
                     // Kibana shows real trades: our gap-fill is stale → prune it
                 }
                 // Kibana has no data for this period (or query failed) → prune
-                return pruned;
+                return { candles: pruned };
             } catch (_) {
                 // Kibana query failed: prune (existing behavior)
-                return pruned;
+                return { candles: pruned };
             }
         };
 
@@ -404,7 +410,13 @@ class MarketAdapterService {
             const staleThreshold = Number.isFinite(cfg.staleTailThreshold)
                 ? cfg.staleTailThreshold
                 : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
-            existingCandles = await verifyAndPruneStaleTail(existingCandles, staleThreshold);
+            const verified = await verifyAndPruneStaleTail(
+                existingCandles, staleThreshold, existingMeta.staleTailVerifiedTs
+            );
+            existingCandles = verified.candles;
+            if (verified.keptStaleTailTs) {
+                existingMeta.staleTailVerifiedTs = verified.keptStaleTailTs;
+            }
         }
 
         const hasStoredPoolContext = existingMeta.pool != null && String(existingMeta.pool).trim() !== '';
@@ -415,6 +427,7 @@ class MarketAdapterService {
             existingCandles = [];
             existingMeta.nativeRecentTradeSequences = [];
             existingMeta.nativeLastTradeTs = null;
+            existingMeta.staleTailVerifiedTs = null;
         }
 
         const needBootstrap = existingCandles.length === 0;
@@ -529,7 +542,13 @@ class MarketAdapterService {
                     const staleThreshold = Number.isFinite(cfg.staleTailThreshold)
                         ? cfg.staleTailThreshold
                         : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
-                    nextCandles = await verifyAndPruneStaleTail(nextCandles, staleThreshold);
+                    const verified = await verifyAndPruneStaleTail(
+                        nextCandles, staleThreshold, existingMeta.staleTailVerifiedTs
+                    );
+                    nextCandles = verified.candles;
+                    if (verified.keptStaleTailTs) {
+                        existingMeta.staleTailVerifiedTs = verified.keptStaleTailTs;
+                    }
                 }
             } else if (needBootstrap) {
                 const lookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
@@ -708,7 +727,13 @@ class MarketAdapterService {
                 const staleThreshold = Number.isFinite(cfg.staleTailThreshold)
                     ? cfg.staleTailThreshold
                     : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
-                nextCandles = await verifyAndPruneStaleTail(nextCandles, staleThreshold);
+                const verified = await verifyAndPruneStaleTail(
+                    nextCandles, staleThreshold, existingMeta.staleTailVerifiedTs
+                );
+                nextCandles = verified.candles;
+                if (verified.keptStaleTailTs) {
+                    existingMeta.staleTailVerifiedTs = verified.keptStaleTailTs;
+                }
             }
 
             let kibanaGapRepairTimestamps = [];
@@ -870,6 +895,8 @@ class MarketAdapterService {
                 nativeLastTradeTs,
                 nativeOverlapCount,
                 nativePagesFetched,
+                staleTailVerifiedTs: Number.isFinite(existingMeta.staleTailVerifiedTs)
+                    ? existingMeta.staleTailVerifiedTs : null,
                 format: '[timestamp_ms, open, high, low, close, volume_A]',
             },
             candles: nextCandles,

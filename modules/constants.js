@@ -755,7 +755,7 @@ let MARKET_ADAPTER = {
     // giving the grid more room when the AMA center trails price in a trend.
     // 0 disables asymmetry. Recommended range: 0.15–0.35.
     // Overridable per bot via market_adapter_settings.json.
-    ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR: 0.30,
+    ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR: 0.35,
 
     // STALE_TAIL_THRESHOLD_CANDLES: Number of consecutive candles with an identical close
     // price that triggers pruning of the trailing tail. Prevents gap-filled synthetic candles
