@@ -1420,6 +1420,9 @@ class MarketAdapterService {
                     gain,
                     atrPeriod,
                     maxSlopeOffset: mo,
+                    maxAsymmetryFactor:  (cfg.asymmetricBounds?.maxAsymmetryFactor != null)
+                        ? cfg.asymmetricBounds.maxAsymmetryFactor
+                        : null,
                     amaSlope: {
                         maxSlopePct: amaMaxS,
                     },

@@ -1059,10 +1059,18 @@ async function runOnce(cfg, state, contextCache) {
                     `rawOff=${Number.isFinite(m.rawFinalOffset) ? m.rawFinalOffset.toFixed(3) : 'n/a'}`,
                     `finalOff=${Number.isFinite(m.finalOffset) ? m.finalOffset.toFixed(3) : 'n/a'}`,
                     `slopePct=${Number.isFinite(m.slopePct) ? m.slopePct.toFixed(4) : 'n/a'}`,
+                    `maxSlopePct=${Number.isFinite(m.amaSlope?.maxSlopePct) ? m.amaSlope.maxSlopePct.toFixed(2) : 'n/a'}`,
+                    `maxSlope=${Number.isFinite(m.maxSlopeOffset) ? m.maxSlopeOffset.toFixed(2) : 'n/a'}`,
                     `belowMin=${m.belowMinOutputThreshold ? 'yes' : 'no'}`,
                     `kalmanReady=${m.kalmanReady ? 'yes' : 'no'}`,
                 ];
                 log(cfg, `  Dynamic weights: ${parts.join(' | ')}`);
+                if (r.asymmetricBoundsWhitelisted && m.slopeOffset && m.maxSlopeOffset && m.maxSlopeOffset > 0 && m.trend && m.trend !== 'NEUTRAL') {
+                    const slopeAbs = Math.min(Math.abs(m.slopeOffset) / m.maxSlopeOffset, 1);
+                    const maxAsymFactor = m.maxAsymmetryFactor ?? (MARKET_ADAPTER.ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR ?? 0.35);
+                    const calculatedAsymPct = (slopeAbs * maxAsymFactor * 100).toFixed(1);
+                    log(cfg, `  Asymmetric bounds: asym=${calculatedAsymPct}%, maxAsym=${(maxAsymFactor * 100).toFixed(0)}%`);
+                }
             }
             if (Array.isArray(r.amaComparison) && r.amaComparison.length > 0) {
                 const parts = r.amaComparison.map((a) => {
