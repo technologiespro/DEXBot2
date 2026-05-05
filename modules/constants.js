@@ -167,8 +167,8 @@ const COW_ACTIONS = Object.freeze({
 let DEFAULT_CONFIG = {
     // Price configuration
     startPrice: "pool",          // Market price source: "pool" (liquidity pool), "book" (order book), or numeric value
-    minPrice: "3x",               // Lower price bound: "Nx" = N times below startPrice, or numeric value
-    maxPrice: "3x",               // Upper price bound: "Nx" = N times above startPrice, or numeric value
+    minPrice: "2x",               // Lower price bound: "Nx" = N times below startPrice, or numeric value
+    maxPrice: "2x",               // Upper price bound: "Nx" = N times above startPrice, or numeric value
     gridPrice: null,              // Optional reference price for x-factor bounds calculation.
                                   // "pool"    = use the live pool price for the pair
                                   // "book"    = use the live order book price for the pair
@@ -187,7 +187,7 @@ let DEFAULT_CONFIG = {
     assetB: null,                 // Quote asset symbol (e.g., "USD")
 
     // Fund allocation
-    weightDistribution: { sell: 0.5, buy: 0.5 },  // Geometric weight for order sizing (0.5 = linear, >0.5 = more weight to market-close orders)
+    weightDistribution: { sell: 0.75, buy: 0.75 },  // Geometric weight for order sizing (0.5 = linear, >0.5 = more weight to market-close orders)
     botFunds: { sell: "100%", buy: "100%" },      // Percentage of wallet balance to allocate ("100%" or numeric value)
     activeOrders: { sell: 20, buy: 20 },          // Number of orders to maintain closest to market on each side
 };
@@ -740,17 +740,28 @@ let MARKET_ADAPTER = {
     DYNAMIC_WEIGHT_VOLATILITY_EXPONENT: 1.0,
 
     // DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT: Overall strength multiplier of the ATR-based
-    // volatility penalty, expressed as an x-factor instead of a percent.
-    // 10.0x is the normal starting strength. Higher values reduce both buy and sell weights more
+    // volatility penalty. Higher = more aggressive shrinking of unused inventory.
+    // 1-100 range; 10.0 is a recommended start that leaves orders on the book during
+    // mild volatility. Increase to 20-30 if you want the bot to pull orders more
     // aggressively during volatile periods.
     // Overridable per market pair or per bot via market_adapter_settings.json.
     DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT: 10.0,
 
+    // ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR: Maximum ratio tilt applied to min/max
+    // grid bounds when the AMA slope indicates a strong trend. At full slope strength:
+    //   Downtrend: minPrice divisor grows by 1+factor, maxPrice multiplier shrinks by 1-factor
+    //   Uptrend:   maxPrice multiplier grows by 1+factor, minPrice divisor shrinks by 1-factor
+    // This widens the bound in the trend direction and tightens the opposite side,
+    // giving the grid more room when the AMA center trails price in a trend.
+    // 0 disables asymmetry. Recommended range: 0.15–0.35.
+    // Overridable per bot via market_adapter_settings.json.
+    ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR: 0.30,
+
     // STALE_TAIL_THRESHOLD_CANDLES: Number of consecutive candles with an identical close
     // price that triggers pruning of the trailing tail. Prevents gap-filled synthetic candles
     // from carrying a frozen price forward indefinitely when the pool has no activity.
-    // At 1h intervals, 24 = 24 hours. Overridable via cfg.staleTailThreshold.
-    STALE_TAIL_THRESHOLD_CANDLES: 24,
+    // At 1h intervals, 36 = 36 hours. Overridable via cfg.staleTailThreshold.
+    STALE_TAIL_THRESHOLD_CANDLES: 36,
 
     // HURST_CONFIG: Standard window and scales for Hurst exponent calculation.
     HURST_CONFIG: {

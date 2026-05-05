@@ -82,6 +82,12 @@ npm run market-adapter:whitelist
 # Rewrite the whitelist with dynamicWeight disabled for AMA bots
 node scripts/generate_market_adapter_whitelist.js --no-dynamic-weight
 
+# Rewrite the whitelist with asymmetricBounds disabled for AMA bots
+node scripts/generate_market_adapter_whitelist.js --no-asymmetric-bounds
+
+# Disable both dynamicWeight and asymmetricBounds
+node scripts/generate_market_adapter_whitelist.js --no-dynamic-weight --no-asymmetric-bounds
+
 # Print the generated JSON without writing it
 node scripts/generate_market_adapter_whitelist.js --dry-run
 ```

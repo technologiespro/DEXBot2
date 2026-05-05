@@ -338,16 +338,73 @@ class MarketAdapterService {
         const marketSource = resolveMarketSourceForBot(bot) || 'pool';
         const isBookSource = marketSource === 'book';
 
+        const fetchKibanaCandles = async (options = {}) => {
+            if (isBookSource) {
+                if (!deps.kibanaMarketSource || typeof deps.kibanaMarketSource.getMarketCandles !== 'function') {
+                    throw new Error('orderbook candle source unavailable');
+                }
+                return deps.kibanaMarketSource.getMarketCandles(ctx.assetA, ctx.assetB, options);
+            }
+
+            if (!deps.kibanaSource || typeof deps.kibanaSource.getLpCandlesForPool !== 'function') {
+                throw new Error('liquidity pool candle source unavailable');
+            }
+            return deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, options);
+        };
+
+        const verifyAndPruneStaleTail = async (candles, threshold) => {
+            if (typeof deps.pruneStaleTail !== 'function') return candles;
+            const pruned = deps.pruneStaleTail(candles, threshold);
+            if (pruned.length === candles.length || candles.length === 0) {
+                return pruned;
+            }
+
+            // Use the shared detector to find the tail range without re-sorting
+            const detected = typeof deps.detectStaleTail === 'function'
+                ? deps.detectStaleTail(candles, threshold)
+                : null;
+            if (!detected) return pruned;
+            const tailStartTs = detected.sorted[detected.sorted.length - detected.runLength][0];
+            const tailEndTs = detected.sorted[detected.sorted.length - 1][0];
+
+            // Verify with Kibana: did the market actually trade during this period?
+            try {
+                const kibanaCandles = await deps.withRetries(() => fetchKibanaCandles({
+                    intervalSeconds: cfg.intervalSeconds,
+                    consolidateByTimestamp: true,
+                    fillGapsToRequestedRange: false,
+                    apiKey: null,
+                    timeRange: {
+                        gte: new Date(tailStartTs).toISOString(),
+                        lte: new Date(tailEndTs).toISOString(),
+                    },
+                }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana stale-tail verification failed');
+
+                if (Array.isArray(kibanaCandles) && kibanaCandles.length > 0) {
+                    const hasKibanaActivity = kibanaCandles.some(
+                        (c) => Array.isArray(c) && Number(c[5] || 0) > 0
+                    );
+                    if (!hasKibanaActivity) {
+                        // Kibana confirms flat/inactive: our data is genuine → keep it
+                        return candles;
+                    }
+                    // Kibana shows real trades: our gap-fill is stale → prune it
+                }
+                // Kibana has no data for this period (or query failed) → prune
+                return pruned;
+            } catch (_) {
+                // Kibana query failed: prune (existing behavior)
+                return pruned;
+            }
+        };
+
         // Prune stale trailing candles from a previous run before any processing.
-        // Prevents gap-fill from carrying a frozen price forward indefinitely.
-        if (existingCandles.length > 0 && typeof deps.pruneStaleTail === 'function') {
+        // Verifies with Kibana first to avoid removing genuinely flat market periods.
+        if (existingCandles.length > 0) {
             const staleThreshold = Number.isFinite(cfg.staleTailThreshold)
                 ? cfg.staleTailThreshold
                 : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
-            const pruned = deps.pruneStaleTail(existingCandles, staleThreshold);
-            if (pruned.length < existingCandles.length) {
-                existingCandles = pruned;
-            }
+            existingCandles = await verifyAndPruneStaleTail(existingCandles, staleThreshold);
         }
 
         const hasStoredPoolContext = existingMeta.pool != null && String(existingMeta.pool).trim() !== '';
@@ -370,20 +427,6 @@ class MarketAdapterService {
         if (!Number.isFinite(botThreshold) || botThreshold <= 0) {
             throw new Error(`deltaThresholdPercent missing/invalid for bot ${bot.name}`);
         }
-
-        const fetchKibanaCandles = async (options = {}) => {
-            if (isBookSource) {
-                if (!deps.kibanaMarketSource || typeof deps.kibanaMarketSource.getMarketCandles !== 'function') {
-                    throw new Error('orderbook candle source unavailable');
-                }
-                return deps.kibanaMarketSource.getMarketCandles(ctx.assetA, ctx.assetB, options);
-            }
-
-            if (!deps.kibanaSource || typeof deps.kibanaSource.getLpCandlesForPool !== 'function') {
-                throw new Error('liquidity pool candle source unavailable');
-            }
-            return deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, options);
-        };
 
         const loadCandles = async () => {
             let nextCandles = existingCandles;
@@ -482,14 +525,11 @@ class MarketAdapterService {
                     }
                 }
 
-                if (nextCandles.length > 0 && typeof deps.pruneStaleTail === 'function') {
+                if (nextCandles.length > 0) {
                     const staleThreshold = Number.isFinite(cfg.staleTailThreshold)
                         ? cfg.staleTailThreshold
                         : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
-                    const pruned = deps.pruneStaleTail(nextCandles, staleThreshold);
-                    if (pruned.length < nextCandles.length) {
-                        nextCandles = pruned;
-                    }
+                    nextCandles = await verifyAndPruneStaleTail(nextCandles, staleThreshold);
                 }
             } else if (needBootstrap) {
                 const lookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
@@ -664,12 +704,11 @@ class MarketAdapterService {
 
                 // After incremental merge (or native fetch failure), prune any stale tail
                 // that may have been carried forward when the pool had no activity.
-                if (typeof deps.pruneStaleTail === 'function') {
-                    const staleThreshold = Number.isFinite(cfg.staleTailThreshold)
-                        ? cfg.staleTailThreshold
-                        : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
-                    nextCandles = deps.pruneStaleTail(nextCandles, staleThreshold);
-                }
+                // Verifies with Kibana first to avoid removing genuinely flat market periods.
+                const staleThreshold = Number.isFinite(cfg.staleTailThreshold)
+                    ? cfg.staleTailThreshold
+                    : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
+                nextCandles = await verifyAndPruneStaleTail(nextCandles, staleThreshold);
             }
 
             let kibanaGapRepairTimestamps = [];
@@ -1001,6 +1040,8 @@ class MarketAdapterService {
         //    later by the AMA whitelist and the dynamic-weight whitelist.
         const isDynamicWeightWhitelisted = forceWhitelistAll || (typeof deps.isBotDynamicWeightWhitelisted === 'function'
             && deps.isBotDynamicWeightWhitelisted(bot.botKey));
+        const isAsymmetricBoundsWhitelisted = forceWhitelistAll || (typeof deps.isBotAsymmetricBoundsWhitelisted === 'function'
+            && deps.isBotAsymmetricBoundsWhitelisted(bot.botKey));
         const hasExplicitBaseWeights = Number.isFinite(bot.weightDistribution?.sell)
             && Number.isFinite(bot.weightDistribution?.buy);
         const isAmaGridBot = /^ama(?:[1-4])?$/i.test(String(bot?.gridPrice || '').trim());
@@ -1406,6 +1447,9 @@ class MarketAdapterService {
                 kalmanSmoothSpanPct,
                 signalConfirmBars,
                 rawFinalOffset:      rawFinalOff,
+                maxAsymmetryFactor:  (cfg.asymmetricBounds?.maxAsymmetryFactor != null)
+                    ? cfg.asymmetricBounds.maxAsymmetryFactor
+                    : null,
                 amaChannelContribution: amaSlopeGated,
                 trend:                   slopeResult.trend,
                 confidence:              slopeResult.confidence,
@@ -1685,6 +1729,7 @@ class MarketAdapterService {
                 ? dynamicWeightsPayload.effectiveWeights
                 : (botState.effectiveWeights || null),
             dynamicWeightWhitelisted: isDynamicWeightWhitelisted,
+            asymmetricBoundsWhitelisted: isAsymmetricBoundsWhitelisted,
             dynamicWeightReady:       dynamicWeightsPayload?.isReady ?? false,
             dynamicWeightProfile:     weights?.profile || null,
             dynamicWeightApplied:     snapshotPersistedThisCycle && canApplyDynamicWeights,
@@ -1723,6 +1768,7 @@ class MarketAdapterService {
             collateralRecommendation,
             amaSlope,
             dynamicWeightWhitelisted: isDynamicWeightWhitelisted,
+            asymmetricBoundsWhitelisted: isAsymmetricBoundsWhitelisted,
             dynamicWeightReady: dynamicWeightsPayload?.isReady ?? false,
             dynamicWeightProfile: weights?.profile || null,
             dynamicWeightApplied: snapshotPersistedThisCycle && canApplyDynamicWeights,

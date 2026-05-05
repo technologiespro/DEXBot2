@@ -24,12 +24,16 @@ function buildWhitelist(bots) {
         || process.argv.includes('--no-dynamic-weight')
         ? false
         : true;
+    const asymmetricBounds = process.argv.includes('--asymmetric-bounds=false')
+        || process.argv.includes('--no-asymmetric-bounds')
+        ? false
+        : true;
     const entries = [];
 
     for (const [index, bot] of bots.entries()) {
         const botKey = createBotKey(bot, index);
         if (!botKey || !isAmaGridPrice(bot?.gridPrice)) continue;
-        entries.push([String(botKey), { ama: true, dynamicWeight }]);
+        entries.push([String(botKey), { ama: true, dynamicWeight, asymmetricBounds }]);
     }
 
     entries.sort((a, b) => a[0].localeCompare(b[0]));

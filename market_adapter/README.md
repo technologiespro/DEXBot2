@@ -38,6 +38,12 @@ To whitelist AMA pricing but keep dynamic weights disabled:
 node scripts/generate_market_adapter_whitelist.js --no-dynamic-weight
 ```
 
+To keep asymmetric bounds disabled:
+
+```bash
+node scripts/generate_market_adapter_whitelist.js --no-asymmetric-bounds
+```
+
 ### 3. Start DEXBot2
 
 Start DEXBot2. The bot runtime will launch and stop the adapter automatically
@@ -65,6 +71,51 @@ The multiplier notation is symmetric around the grid center in ratio terms:
 `center * 1.40`.
 
 Use the selected multiplier for both bounds.
+
+## Asymmetric Bound Tilt
+
+When the bot uses `gridPrice: "ama"` mode, the AMA slope signal can tilt the
+bounds asymmetrically — widening the bound in the trend direction and tightening
+the opposite side. This gives the grid more room when the AMA center trails
+price during a trend.
+
+```
+slope = AMA slope percent over the lookback window
+asymmetry = min(|slope| / maxSlopePct, 1) × maxAsymmetryFactor
+
+Downtrend: minPrice = center / (M × (1 + asymmetry))
+           maxPrice = center × (M × (1 - asymmetry))
+
+Uptrend:   maxPrice = center × (M × (1 + asymmetry))
+           minPrice = center / (M × (1 - asymmetry))
+
+Neutral:   symmetric bounds (asymmetry = 0)
+```
+
+| Setting | Default | Description |
+|---------|--------:|-------------|
+| `ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR` | 0.30 | Maximum ratio tilt at full slope (0 = disabled) |
+
+Override per-bot via `market_adapter_settings.json`:
+```json
+{
+  "asymmetricBounds": {
+    "maxAsymmetryFactor": 0.25
+  }
+}
+```
+
+Enable/disable per-bot via the whitelist (`profiles/market_adapter_whitelist.json`):
+```json
+{
+  "whitelist": {
+    "my-bot-0": { "ama": true, "dynamicWeight": true, "asymmetricBounds": true },
+    "my-bot-1": { "ama": true, "asymmetricBounds": false }
+  }
+}
+```
+Asymmetric bounds default to **on** for all whitelisted bots. Set `asymmetricBounds: false`
+to disable for a specific bot while keeping AMA and/or dynamic weights enabled.
 
 ## Trigger Threshold
 

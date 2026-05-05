@@ -173,27 +173,29 @@ function fillCandleGaps(candles, intervalSeconds, startTs = null, endTs = null) 
 }
 
 /**
- * Prune trailing candles that appear stale — i.e. zero-volume candles carrying
- * the same close for `threshold` consecutive buckets. This prevents gap-fill
- * (or a previous run) from carrying a frozen price forward indefinitely
- * without deleting real same-price trades.
+ * Detect a stale trailing run of consecutive zero-volume candles with the
+ * same close price. Returns the tail range so callers can verify with
+ * external sources before committing to a prune.
  *
  * @param {Array}  candles   - [[ts, o, h, l, c, v], ...]
- * @param {number} threshold - min consecutive identical closes to prune
- * @returns {Array} candles with stale tail removed
+ * @param {number} threshold - min consecutive identical closes to flag
+ * @returns {{ sorted: Array, runLength: number, lastClose: number } | null}
+ *          null if no stale tail detected; otherwise the sorted array,
+ *          the run length, and the tail close price so the caller can
+ *          decide whether to slice.
  */
-function pruneStaleTail(candles, threshold) {
-    if (!Number.isFinite(threshold) || threshold <= 0) throw new Error('pruneStaleTail: threshold must be a positive number');
-    if (!candles || !Array.isArray(candles) || candles.length === 0) return [];
+function detectStaleTail(candles, threshold) {
+    if (!Number.isFinite(threshold) || threshold <= 0) throw new Error('detectStaleTail: threshold must be a positive number');
+    if (!candles || !Array.isArray(candles) || candles.length === 0) return null;
     const sorted = candles
         .filter((c) => Array.isArray(c) && Number.isFinite(c[0]))
         .slice()
         .sort((a, b) => a[0] - b[0]);
 
-    if (sorted.length < threshold) return sorted;
+    if (sorted.length < threshold) return null;
 
     const lastClose = sorted[sorted.length - 1][4];
-    if (Number(sorted[sorted.length - 1][5] || 0) !== 0) return sorted;
+    if (Number(sorted[sorted.length - 1][5] || 0) !== 0) return null;
 
     let runLength = 1;
     for (let i = sorted.length - 2; i >= 0; i--) {
@@ -204,13 +206,26 @@ function pruneStaleTail(candles, threshold) {
         }
     }
 
-    if (runLength >= threshold) {
-        // Keep everything up to (but not including) the start of the run.
-        // If the entire series is identical, return empty so Kibana can backfill.
-        const keepCount = sorted.length - runLength;
-        return keepCount > 0 ? sorted.slice(0, keepCount) : [];
-    }
-    return sorted;
+    if (runLength < threshold) return null;
+    return { sorted, runLength, lastClose };
+}
+
+/**
+ * Prune trailing candles that appear stale — i.e. zero-volume candles carrying
+ * the same close for `threshold` consecutive buckets. This prevents gap-fill
+ * (or a previous run) from carrying a frozen price forward indefinitely
+ * without deleting real same-price trades.
+ *
+ * @param {Array}  candles   - [[ts, o, h, l, c, v], ...]
+ * @param {number} threshold - min consecutive identical closes to prune
+ * @returns {Array} candles with stale tail removed
+ */
+function pruneStaleTail(candles, threshold) {
+    const detected = detectStaleTail(candles, threshold);
+    if (!detected) return candles;
+    const { sorted, runLength } = detected;
+    const keepCount = sorted.length - runLength;
+    return keepCount > 0 ? sorted.slice(0, keepCount) : [];
 }
 
 function mergeCandles(a, b, { onCollision } = {}) {
@@ -235,6 +250,7 @@ module.exports = {
     tradesToCandles,
     detectMissingCandleTimestamps,
     fillCandleGaps,
+    detectStaleTail,
     pruneStaleTail,
     mergeCandles,
 };

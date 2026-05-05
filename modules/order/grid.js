@@ -87,7 +87,7 @@
  * ===============================================================================
  */
 
-const { ORDER_TYPES, ORDER_STATES, COW_ACTIONS, DEFAULT_CONFIG, GRID_LIMITS, TIMING, INCREMENT_BOUNDS, FEE_PARAMETERS } = require('../constants');
+const { ORDER_TYPES, ORDER_STATES, COW_ACTIONS, DEFAULT_CONFIG, GRID_LIMITS, TIMING, INCREMENT_BOUNDS, FEE_PARAMETERS, MARKET_ADAPTER } = require('../constants');
 const { GRID_COMPARISON } = GRID_LIMITS;
 const Format = require('./format');
 
@@ -128,7 +128,8 @@ const {
     calculateIdealBoundary,
     assignGridRoles
 } = require('./utils/order');
-const { derivePrice, loadAmaCenterPrice } = require('./utils/system');
+const { derivePrice, loadAmaCenterPrice, loadAmaCenterSnapshot } = require('./utils/system');
+const { getWhitelistFlags } = require('../market_adapter_whitelist');
 
 class Grid {
     /**
@@ -516,6 +517,7 @@ class Grid {
         //   - null/anything else: fallback to startPrice (backward-compatible)
         let gp = mp;
         let gpSource = 'startPrice';
+        let amaSnapshot = null;
         const gpRaw = manager.config.gridPrice;
         const gpModeRaw = (typeof gpRaw === 'string') ? gpRaw.trim().toLowerCase() : null;
         const gpMode = gpModeRaw === 'market' ? 'book' : gpModeRaw; // normalize legacy alias
@@ -538,7 +540,8 @@ class Grid {
                 manager.logger?.log?.(`initializeGrid: ${gpMode} gridPrice derivation failed: ${err.message}`, 'warn');
             }
         } else if (/^ama(?:[1-4])?$/.test(gpMode || '')) {
-            const amaCenter = loadAmaCenterPrice(manager.config.botKey);
+            amaSnapshot = loadAmaCenterSnapshot(manager.config.botKey);
+            const amaCenter = amaSnapshot?.centerPrice ?? loadAmaCenterPrice(manager.config.botKey);
             if (Number.isFinite(amaCenter) && amaCenter > 0) {
                 gp = amaCenter;
                 gpSource = 'ama';
@@ -551,26 +554,68 @@ class Grid {
         const minP = resolveConfiguredPriceBound(manager.config.minPrice, DEFAULT_CONFIG.minPrice, gp, 'min');
         const maxP = resolveConfiguredPriceBound(manager.config.maxPrice, DEFAULT_CONFIG.maxPrice, gp, 'max');
 
+        // Asymmetric bound adjustment: widen the bound in the AMA trend direction
+        // and tighten the opposite side, giving the grid more room when the center
+        // trails price. Uses slope data from the dynamicgrid.json snapshot.
+        let resolvedMinP = minP;
+        let resolvedMaxP = maxP;
+        if (gpSource === 'ama' && Number.isFinite(minP) && Number.isFinite(maxP)
+            && getWhitelistFlags(manager.config.botKey).asymmetricBounds !== false) {
+            const dw = amaSnapshot?.dynamicWeights;
+            const maxAsymmetryFactor = Number.isFinite(manager.config.asymmetricBounds?.maxAsymmetryFactor)
+                ? manager.config.asymmetricBounds.maxAsymmetryFactor
+                : Number.isFinite(dw?.maxAsymmetryFactor)
+                    ? dw.maxAsymmetryFactor
+                    : MARKET_ADAPTER.ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR;
+            if (dw && Number.isFinite(dw.slopeOffset) && Number.isFinite(dw.maxSlopeOffset) && dw.maxSlopeOffset > 0
+                && maxAsymmetryFactor > 0 && dw.trend && dw.trend !== 'NEUTRAL' && Number.isFinite(gp) && gp > 0) {
+                const slopeAbs = Math.min(Math.abs(dw.slopeOffset) / dw.maxSlopeOffset, 1);
+                const rawAsymmetry = slopeAbs * maxAsymmetryFactor;
+                const baseMinDiv = gp / minP;
+                const baseMaxMult = maxP / gp;
+                // Clamp asymmetry so the tightening side never collapses past center.
+                // e.g. 1.30x bound × (1 − 0.35) = 0.845x → maxPrice falls below gridPrice.
+                const maxSafeAsymmetryDown = baseMaxMult > 1 ? 1 - (1 / baseMaxMult) : 0;
+                const maxSafeAsymmetryUp   = baseMinDiv > 1 ? 1 - (1 / baseMinDiv) : 0;
+                const asymmetry = Math.min(rawAsymmetry,
+                    dw.trend === 'DOWN' ? maxSafeAsymmetryDown : maxSafeAsymmetryUp);
+                if (dw.trend === 'DOWN') {
+                    resolvedMinP = gp / (baseMinDiv * (1 + asymmetry));
+                    resolvedMaxP = gp * (baseMaxMult * (1 - asymmetry));
+                } else if (dw.trend === 'UP') {
+                    resolvedMinP = gp / (baseMinDiv * (1 - asymmetry));
+                    resolvedMaxP = gp * (baseMaxMult * (1 + asymmetry));
+                }
+                manager.logger?.log?.(
+                    `[BOUND-ASYMMETRY] trend=${dw.trend} slopeOffset=${dw.slopeOffset.toFixed(4)} `
+                    + `asymmetry=${(asymmetry * 100).toFixed(1)}% `
+                    + `min ${minP.toFixed(8)}→${resolvedMinP.toFixed(8)} `
+                    + `max ${maxP.toFixed(8)}→${resolvedMaxP.toFixed(8)}`,
+                    'info'
+                );
+            }
+        }
+
         let gridStartPrice = mp;
-        if (!(gridStartPrice >= minP && gridStartPrice <= maxP)) {
-            if (Number.isFinite(gp) && gp > 0 && gp >= minP && gp <= maxP) {
+        if (!(gridStartPrice >= resolvedMinP && gridStartPrice <= resolvedMaxP)) {
+            if (Number.isFinite(gp) && gp > 0 && gp >= resolvedMinP && gp <= resolvedMaxP) {
                 gridStartPrice = gp;
                 manager.logger?.log?.(
-                    `initializeGrid: startPrice (${mp}) outside bounds [${minP}, ${maxP}]; using gridPrice center ${gp}`,
+                    `initializeGrid: startPrice (${mp}) outside bounds [${resolvedMinP}, ${resolvedMaxP}]; using gridPrice center ${gp}`,
                     'warn'
                 );
             } else {
-                const clamped = Math.min(maxP, Math.max(minP, gridStartPrice));
+                const clamped = Math.min(resolvedMaxP, Math.max(resolvedMinP, gridStartPrice));
                 manager.logger?.log?.(
-                    `initializeGrid: startPrice (${mp}) outside bounds [${minP}, ${maxP}]; clamping to ${clamped}`,
+                    `initializeGrid: startPrice (${mp}) outside bounds [${resolvedMinP}, ${resolvedMaxP}]; clamping to ${clamped}`,
                     'warn'
                 );
                 gridStartPrice = clamped;
             }
         }
 
-        manager.config.minPrice = minP;
-        manager.config.maxPrice = maxP;
+        manager.config.minPrice = resolvedMinP;
+        manager.config.maxPrice = resolvedMaxP;
 
         // Ensure percentage-based funds are resolved before sizing
         try {

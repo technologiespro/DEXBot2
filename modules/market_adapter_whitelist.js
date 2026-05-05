@@ -14,14 +14,15 @@ function resetMarketAdapterWhitelistCache() {
 
 function normalizeEntry(entry) {
     if (entry === true) {
-        return { ama: true, dynamicWeight: true };
+        return { ama: true, dynamicWeight: true, asymmetricBounds: true };
     }
     if (!entry || typeof entry !== 'object') {
-        return { ama: false, dynamicWeight: false };
+        return { ama: false, dynamicWeight: false, asymmetricBounds: false };
     }
     return {
         ama: entry.ama === true,
         dynamicWeight: entry.dynamicWeight === true,
+        asymmetricBounds: entry.asymmetricBounds !== false ? true : false,
     };
 }
 
@@ -39,7 +40,7 @@ function loadMarketAdapterWhitelist() {
 
         if (Array.isArray(raw)) {
             for (const botKey of raw) {
-                map.set(String(botKey), { ama: true, dynamicWeight: true });
+                map.set(String(botKey), { ama: true, dynamicWeight: true, asymmetricBounds: true });
             }
         } else if (raw && typeof raw === 'object') {
             for (const [botKey, entry] of Object.entries(raw)) {
@@ -71,10 +72,15 @@ function isBotDynamicWeightWhitelisted(botKey) {
     return getWhitelistFlags(botKey).dynamicWeight === true;
 }
 
+function isBotAsymmetricBoundsWhitelisted(botKey) {
+    return getWhitelistFlags(botKey).asymmetricBounds === true;
+}
+
 module.exports = {
     WHITELIST_FILE,
     resetMarketAdapterWhitelistCache,
     getWhitelistFlags,
     isBotWhitelisted,
     isBotDynamicWeightWhitelisted,
+    isBotAsymmetricBoundsWhitelisted,
 };

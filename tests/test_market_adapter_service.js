@@ -1498,7 +1498,7 @@ function testGapRepairRangeUsesSuspiciousGapThresholdInsteadOfNativeBackfillWind
     });
     const range = service.buildGapRepairTimeRange(missingTimestamps, 3600, maxHours);
 
-    assert.strictEqual(maxHours, 26, 'gap repair should be capped by the suspicious-gap threshold plus context, not nativeBackfillHours');
+    assert.strictEqual(maxHours, 38, 'gap repair should be capped by the suspicious-gap threshold plus context, not nativeBackfillHours');
     assert.deepStrictEqual(
         range,
         {
@@ -1659,7 +1659,7 @@ async function testNativeIncrementalDoesNotFillNoTradeGapsPastStaleTailThreshold
     let savedPayload = null;
     const baseTs = Date.parse('2026-04-28T00:00:00Z');
     const hour = 3600000;
-    const nowMs = baseTs + (31 * hour) + 1;
+    const nowMs = baseTs + (38 * hour) + 1;
 
     const service = new MarketAdapterService({
         getNowMs: () => nowMs,

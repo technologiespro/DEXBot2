@@ -68,11 +68,12 @@ const {
     resetMarketAdapterWhitelistCache,
     isBotWhitelisted,
     isBotDynamicWeightWhitelisted,
+    isBotAsymmetricBoundsWhitelisted,
 } = require('../modules/market_adapter_whitelist');
 const kibanaSource = require('./inputs/kibana_source');
 const kibanaMarketSource = require('./core/kibana_market_candles');
 const { normalizePoolId } = kibanaSource;
-const { tradesToCandles, detectMissingCandleTimestamps, fillCandleGaps, pruneStaleTail, mergeCandles } = require('./candle_utils');
+const { tradesToCandles, detectMissingCandleTimestamps, fillCandleGaps, detectStaleTail, pruneStaleTail, mergeCandles } = require('./candle_utils');
 const { toIntervalLabel } = require('./interval_utils');
 const {
     normalizeMarketSource,
@@ -224,6 +225,7 @@ function applyMarketAdapterOverrides(target, overrides, opts = {}) {
         'kalmanSmoothSpanPct',
         'signalConfirmBars',
         'dispScaleMinPct',
+        'asymmetricBounds',
     ]);
     if (overrides.maxVolatilityOffset != null) {
         target.maxVolatilityOffset = normalizeMaxVolatilityOffset(overrides.maxVolatilityOffset);
@@ -939,6 +941,7 @@ const adapterService = new MarketAdapterService({
     tradesToCandles,
     detectMissingCandleTimestamps,
     fillCandleGaps,
+    detectStaleTail,
     pruneStaleTail,
     mergeCandles,
     pruneCandles,
@@ -947,6 +950,7 @@ const adapterService = new MarketAdapterService({
     writeGridResetTrigger,
     writeBotDynamicGrid,
     isBotDynamicWeightWhitelisted,
+    isBotAsymmetricBoundsWhitelisted,
     logger,
     root: ROOT,
     path,
