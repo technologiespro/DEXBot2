@@ -1688,13 +1688,14 @@ class MarketAdapterService {
         // Weight-only update path: persist fresh weights to dynamicgrid.json without a grid reset.
         // The bot will pick these up on the next recalculation cycle after fills or config reload.
         if (!snapshotPersistedThisCycle && !triggered && !isDryRun && !staleData && canApplyDynamicWeights
-                && dynamicWeightsPayload && persistedCenterPrice > 0
+                && dynamicWeightsPayload && Number.isFinite(centerPrice) && centerPrice > 0
                 && typeof deps.writeBotDynamicGrid === 'function') {
-            const dynamicWeightsPersisted = deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
+            const dynamicWeightsPersisted = deps.writeBotDynamicGrid(bot.botKey, centerPrice, {
                 amaCenterPrice: amaPrice,
                 dynamicWeights: dynamicWeightsPayload,
             }) !== false;
             if (dynamicWeightsPersisted) {
+                botState.centerPrice = centerPrice;
                 botState.amaCenterPrice = amaPrice;
                 botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
                 snapshotPersistedThisCycle = true;
@@ -1731,7 +1732,9 @@ class MarketAdapterService {
             amaCenterPrice: Number(botState.amaCenterPrice || 0) > 0
                 ? Number(botState.amaCenterPrice)
                 : undefined,
-            centerPrice: persistedCenterPrice,
+            centerPrice: Number(botState.centerPrice || 0) > 0
+                ? Number(botState.centerPrice)
+                : persistedCenterPrice,
             amaConfig: {
                 erPeriod: botAma.erPeriod,
                 fastPeriod: botAma.fastPeriod,

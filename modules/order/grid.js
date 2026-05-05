@@ -632,8 +632,8 @@ class Grid {
         const { orders, boundaryIdx, initialSpreadCount } = Grid.createOrderGrid({
             ...manager.config,
             startPrice: gridStartPrice,
-            minPrice: minP,
-            maxPrice: maxP,
+            minPrice: resolvedMinP,
+            maxPrice: resolvedMaxP,
         });
 
         // RC-8: Update boundary with notification to dependent systems
