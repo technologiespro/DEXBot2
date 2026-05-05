@@ -66,6 +66,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const chainKeys = require('./modules/chain_keys');
+const { TIMING } = require('./modules/constants');
 const credentialPolicy = require('./modules/credential_policy');
 const { createAccountClient } = require('./modules/bitshares_client');
 const {
@@ -110,6 +111,7 @@ let daemonShuttingDown = false;
 let policyConfig = null;
 let activeSessions = new Map(); // sessionId → { accountName, createdAt }
 let auditLogPath = null;
+let auditLogQueue = Promise.resolve();
 
 function debugLog(message, err = null) {
     const suffix = err && err.message ? `: ${err.message}` : '';
@@ -172,12 +174,65 @@ function checkSessionValid(accountName, sessionId) {
     return session && session.accountName === accountName;
 }
 
+function queueAuditLogWork(work) {
+    auditLogQueue = auditLogQueue
+        .then(() => Promise.resolve().then(work))
+        .catch((err) => {
+            debugLog('Audit log operation failed', err);
+        });
+    return auditLogQueue;
+}
+
+function performAuditLogPrune() {
+    return new Promise((resolve) => {
+        if (!auditLogPath) {
+            resolve();
+            return;
+        }
+
+        fs.readFile(auditLogPath, 'utf8', (err, data) => {
+            if (err || !data.trim()) {
+                resolve();
+                return;
+            }
+
+            const cutoff = Date.now() - TIMING.AUDIT_LOG_RETENTION_MS;
+            const lines = data.split('\n').filter(line => {
+                if (!line.trim()) return false;
+                try {
+                    const entry = JSON.parse(line);
+                    return new Date(entry.timestamp).getTime() > cutoff;
+                } catch {
+                    return false;
+                }
+            });
+
+            fs.writeFile(auditLogPath, lines.join('\n') + '\n', (writeErr) => {
+                if (writeErr) debugLog('Audit log prune failed', writeErr);
+                resolve();
+            });
+        });
+    });
+}
+
+function pruneAuditLog() {
+    return queueAuditLogWork(() => performAuditLogPrune());
+}
+
 function appendAuditLog(entry) {
     if (!auditLogPath) return;
     const line = JSON.stringify(entry) + '\n';
-    fs.appendFile(auditLogPath, line, (err) => {
-        if (err) debugLog('Audit log write failed', err);
-    });
+    return queueAuditLogWork(() => new Promise((resolve) => {
+        fs.appendFile(auditLogPath, line, (err) => {
+            if (err) {
+                debugLog('Audit log write failed', err);
+                resolve();
+                return;
+            }
+
+            performAuditLogPrune().finally(resolve);
+        });
+    }));
 }
 
 async function resolveVaultSecret() {

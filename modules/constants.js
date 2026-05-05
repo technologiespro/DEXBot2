@@ -187,7 +187,7 @@ let DEFAULT_CONFIG = {
     assetB: null,                 // Quote asset symbol (e.g., "USD")
 
     // Fund allocation
-    weightDistribution: { sell: 0.75, buy: 0.75 },  // Geometric weight for order sizing (0.5 = linear, >0.5 = more weight to market-close orders)
+    weightDistribution: { sell: 1, buy: 1 },  // Geometric weight for order sizing (1 = ~1:2 center/outer split, 0.5 = linear)
     botFunds: { sell: "100%", buy: "100%" },      // Percentage of wallet balance to allocate ("100%" or numeric value)
     activeOrders: { sell: 20, buy: 20 },          // Number of orders to maintain closest to market on each side
 };
@@ -207,6 +207,7 @@ let TIMING = {
     FILL_RECORD_RETENTION_MS: 3600000, // 1 hour - how long to keep persisted fill records
     PROCESSED_FILL_PERSIST_BATCH_MS: 250, // 250ms - coalesce processed-fill persistence writes under burst load
     PROCESSED_FILL_PERSIST_BATCH_SIZE: 25, // Flush immediately once this many processed fills are queued
+    AUDIT_LOG_RETENTION_MS: 7 * 24 * 60 * 60 * 1000, // 7 days - retention window for daemon audit logs
 
     // Order locking timing
     // Reduced from 30s to 10s to prevent lock-based starvation under high fill rates.
