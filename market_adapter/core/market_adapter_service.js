@@ -231,6 +231,9 @@ class MarketAdapterService {
             effectiveWeights: null,
             collateralRecommendation: null,
             amaSlope: null,
+            rawKeepCount: 0,
+            analysisKeepCount: 0,
+            amaWarmupBars: 0,
             staleData: false,
             staleAgeHours: null,
             ...overrides,
@@ -266,6 +269,9 @@ class MarketAdapterService {
             weights: null,
             collateralRecommendation: null,
             amaSlope: null,
+            rawKeepCount: 0,
+            analysisKeepCount: 0,
+            amaWarmupBars: 0,
             poolId: null,
             candleFile: null,
             lastCandleTs: null,
@@ -339,17 +345,21 @@ class MarketAdapterService {
         const isBookSource = marketSource === 'book';
 
         const fetchKibanaCandles = async (options = {}) => {
+            const kibanaOptions = {
+                timeout: kibanaRequestTimeoutMs,
+                ...options,
+            };
             if (isBookSource) {
                 if (!deps.kibanaMarketSource || typeof deps.kibanaMarketSource.getMarketCandles !== 'function') {
                     throw new Error('orderbook candle source unavailable');
                 }
-                return deps.kibanaMarketSource.getMarketCandles(ctx.assetA, ctx.assetB, options);
+                return deps.kibanaMarketSource.getMarketCandles(ctx.assetA, ctx.assetB, kibanaOptions);
             }
 
             if (!deps.kibanaSource || typeof deps.kibanaSource.getLpCandlesForPool !== 'function') {
                 throw new Error('liquidity pool candle source unavailable');
             }
-            return deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, options);
+            return deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, kibanaOptions);
         };
 
         const verifyAndPruneStaleTail = async (candles, threshold, staleTailVerifiedTs = null) => {
@@ -431,10 +441,14 @@ class MarketAdapterService {
         }
 
         const needBootstrap = existingCandles.length === 0;
-        const analysisKeepCount = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars, botAma.fastPeriod) + 1;
+        const amaWarmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars, botAma.fastPeriod);
+        const analysisKeepCount = amaWarmupBars + 1;
         // Retain one extra raw candle so the closed-candle analysis window still keeps a
         // full warmup/history set when the newest bucket is the current in-progress bar.
         const rawKeepCount = analysisKeepCount + 1;
+        const kibanaRequestTimeoutMs = Number.isFinite(cfg.kibanaRequestTimeoutMs) && cfg.kibanaRequestTimeoutMs > 0
+            ? cfg.kibanaRequestTimeoutMs
+            : MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS;
         const nowIso = new Date().toISOString();
         const botThreshold = deps.calculateBotThreshold(cfg);
         if (!Number.isFinite(botThreshold) || botThreshold <= 0) {
@@ -552,7 +566,6 @@ class MarketAdapterService {
                 }
             } else if (needBootstrap) {
                 const lookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
-                const warmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars, botAma.fastPeriod);
 
                 // ── Step 1: Kibana first (deep history, handles large candle requirements) ──
                 let kibanaCandles = null;
@@ -568,7 +581,7 @@ class MarketAdapterService {
                     kibanaCandles = null;
                 }
 
-                if (Array.isArray(kibanaCandles) && kibanaCandles.length >= warmupBars) {
+                if (Array.isArray(kibanaCandles) && kibanaCandles.length >= amaWarmupBars) {
                     nextCandles = kibanaCandles;
                     sourceLabel = 'kibana-bootstrap';
                 } else {
@@ -885,6 +898,9 @@ class MarketAdapterService {
                 intervalSeconds: cfg.intervalSeconds,
                 candleCount: nextCandles.length,
                 analysisCandleCount: closedCandles.length,
+                rawKeepCount,
+                analysisKeepCount,
+                amaWarmupBars,
                 currentBucketStartMs,
                 lastClosedCandleTs,
                 rawLastCandleTs,
@@ -918,6 +934,9 @@ class MarketAdapterService {
                 candleFile: deps.path.relative(deps.root, filePath),
                 candleCount: nextCandles.length,
                 analysisCandleCount: closedCandles.length,
+                rawKeepCount,
+                analysisKeepCount,
+                amaWarmupBars,
                 kibanaGapRepairCount,
                 kibanaBackfillCount,
                 unresolvedGapCount,
@@ -941,6 +960,9 @@ class MarketAdapterService {
                 marketSource,
                 candleCount: nextCandles.length,
                 analysisCandleCount: closedCandles.length,
+                rawKeepCount,
+                analysisKeepCount,
+                amaWarmupBars,
                 kibanaGapRepairCount,
                 kibanaBackfillCount,
                 unresolvedGapCount,
@@ -977,7 +999,6 @@ class MarketAdapterService {
         // If we don't have enough candles for the full warmup, the "AMA" is just
         // the last raw price — useless for grid centering. Abort analysis but
         // still save candles so the next cycle can try again after backfill.
-        const amaWarmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars, botAma.fastPeriod);
         if (closes.length < amaWarmupBars + 1) {
             const triggerSuppressedReason = 'ama_warmup_insufficient';
             const { staleData, staleAgeHours } = deps.computeCandleStaleness(lastClosedCandleTs, cfg.maxStaleHours);
@@ -990,6 +1011,9 @@ class MarketAdapterService {
                 candleFile: deps.path.relative(deps.root, filePath),
                 candleCount: nextCandles.length,
                 analysisCandleCount: closedCandles.length,
+                rawKeepCount,
+                analysisKeepCount,
+                amaWarmupBars,
                 kibanaGapRepairCount,
                 kibanaBackfillCount,
                 unresolvedGapCount,
@@ -1013,6 +1037,9 @@ class MarketAdapterService {
                 marketSource,
                 candleCount: nextCandles.length,
                 analysisCandleCount: closedCandles.length,
+                rawKeepCount,
+                analysisKeepCount,
+                amaWarmupBars,
                 kibanaGapRepairCount,
                 kibanaBackfillCount,
                 unresolvedGapCount,
@@ -1721,6 +1748,9 @@ class MarketAdapterService {
             candleFile: deps.path.relative(deps.root, filePath),
             candleCount: nextCandles.length,
             analysisCandleCount: analysisCandles.length,
+            rawKeepCount,
+            analysisKeepCount,
+            amaWarmupBars,
             kibanaGapRepairCount,
             kibanaBackfillCount,
             unresolvedGapCount,
@@ -1778,6 +1808,9 @@ class MarketAdapterService {
             intervalSeconds: cfg.intervalSeconds,
             candleCount: nextCandles.length,
             analysisCandleCount: analysisCandles.length,
+            rawKeepCount,
+            analysisKeepCount,
+            amaWarmupBars,
             kibanaGapRepairCount,
             kibanaBackfillCount,
             unresolvedGapCount,

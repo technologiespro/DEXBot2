@@ -115,6 +115,7 @@ const DEFAULTS = {
     maxStaleHours: RUNTIME_DEFAULTS.maxStaleHours,
     sourceRetries: RUNTIME_DEFAULTS.sourceRetries,
     retryDelayMs: RUNTIME_DEFAULTS.retryDelayMs,
+    kibanaRequestTimeoutMs: MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS,
     metricsJson: false,
     quiet: false,
     dryRun: false,
@@ -207,6 +208,7 @@ function applyMarketAdapterOverrides(target, overrides, opts = {}) {
         'maxStaleHours',
         'sourceRetries',
         'retryDelayMs',
+        'kibanaRequestTimeoutMs',
         'maxSlopeOffset',
         'staleTailThreshold',
         'absoluteThreshold',
@@ -1029,16 +1031,23 @@ async function runOnce(cfg, state, contextCache) {
             const pendingText = r.pendingClosedCandle ? ' WAITING_FOR_CLOSED_CANDLE' : '';
             const weightText = r.weights ? ` weights[buy=${r.weights.buy}, sell=${r.weights.sell}]` : '';
             const trendText = r.amaSlope?.trend ? ` trend=${r.amaSlope.trend}` : '';
-            const warmupText = r.triggerSuppressedReason === 'ama_warmup_insufficient' ? ` WARMUP_INSUFFICIENT(${r.candleCount})` : '';
+            const warmupText = r.triggerSuppressedReason === 'ama_warmup_insufficient'
+                ? ` WARMUP_INSUFFICIENT(used=${r.analysisCandleCount}${Number.isFinite(r.analysisKeepCount) ? `/${r.analysisKeepCount}` : ''})`
+                : '';
             const isOneHourResult = Number(r.intervalSeconds) === RUNTIME_DEFAULTS.intervalSeconds;
             const closedTsText = isOneHourResult && Number.isFinite(r.lastClosedCandleTs) ? ` closed=${new Date(r.lastClosedCandleTs).toISOString()}` : '';
             const rawTsText = isOneHourResult && Number.isFinite(r.rawLastCandleTs) ? ` rawLast=${new Date(r.rawLastCandleTs).toISOString()}` : '';
             const closeText = isOneHourResult && Number.isFinite(r.lastClosedCandleClose) ? ` close=${r.lastClosedCandleClose.toFixed(8)}` : '';
-            const analysisText = isOneHourResult && Number.isFinite(r.analysisCandleCount) ? ` analysis=${r.analysisCandleCount}` : '';
+            const rawCountText = Number.isFinite(r.candleCount)
+                ? ` raw=${r.candleCount}${Number.isFinite(r.rawKeepCount) ? `/${r.rawKeepCount}` : ''}`
+                : '';
+            const usedCountText = Number.isFinite(r.analysisCandleCount)
+                ? ` used=${r.analysisCandleCount}${Number.isFinite(r.analysisKeepCount) ? `/${r.analysisKeepCount}` : ''}`
+                : '';
             const nativeText = isOneHourResult && Number.isFinite(r.nativePagesFetched) ? ` nativePages=${r.nativePagesFetched}` : '';
             const dynText = isOneHourResult ? ` dyn[whitelist=${r.dynamicWeightWhitelisted ? 'yes' : 'no'},base=${r.hasExplicitBaseWeights ? 'yes' : 'no'},ready=${r.dynamicWeightReady ? 'yes' : 'no'},applied=${r.dynamicWeightApplied ? 'yes' : 'no'}${r.dynamicWeightProfile ? `,profile=${r.dynamicWeightProfile}` : ''}${r.asymmetricBoundsWhitelisted ? ',ab=yes' : ''}]` : '';
 
-            log(cfg, `${r.source}, candles=${r.candleCount}${analysisText}${closedTsText}${rawTsText}${closeText}, ama=${amaText} (prevCenter=${prevCenterText}, delta=${deltaText}), threshold=${thresholdText}${offText}${amaOffText}${regimeText}${staleText}${patchText}${backfillText}${gapText}${trigText}${pendingText}${warmupText}${trendText}${weightText}${dynText}${nativeText}`);
+            log(cfg, `${r.source},${rawCountText}${usedCountText}${closedTsText}${rawTsText}${closeText}, ama=${amaText} (prevCenter=${prevCenterText}, delta=${deltaText}), threshold=${thresholdText}${offText}${amaOffText}${regimeText}${staleText}${patchText}${backfillText}${gapText}${trigText}${pendingText}${warmupText}${trendText}${weightText}${dynText}${nativeText}`);
             if (r.triggerSuppressedReason === 'waiting_for_new_closed_candle') {
                 log(cfg, '  No write pass: the latest 1h candle has not closed yet, so the adapter kept the snapshot unchanged.');
             }

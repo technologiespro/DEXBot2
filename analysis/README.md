@@ -131,7 +131,7 @@ AMA parameter optimization and comparison tools.
 
 **Calibration workflow (ER convergence):**
 
-`calibrate_convergence_er.js` computes the implied Efficiency Ratio that reproduces the empirical average SC (smoothing constant) from real LP candle data. Because `SC = (ER × deltaSC + slowSC)²` is convex, `E[f(ER)] ≠ f(E[ER])` — the arithmetic mean ER underestimates true convergence. The script outputs the Jensen-corrected value for `AMA_CONVERGENCE_ER_AVG` in `modules/constants.js`.
+`calibrate_convergence_er.js` computes the implied Efficiency Ratio that reproduces the empirical average SC (smoothing constant) from real LP candle data. Because `SC = (ER × deltaSC + slowSC)²` is convex, `E[f(ER)] ≠ f(E[ER])` — the arithmetic mean ER underestimates true convergence. The current fetched 3-year pool 133 1h dataset calibrates `AMA_CONVERGENCE_ER_AVG` to `0.151`.
 
 ```bash
 # Default data file (pool 133 1h)

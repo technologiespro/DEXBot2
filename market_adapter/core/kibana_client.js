@@ -17,6 +17,7 @@
 
 const https = require('https');
 const { toIntervalLabel } = require('../interval_utils');
+const { MARKET_ADAPTER } = require('../../modules/constants');
 
 const KIBANA_URL = 'https://kibana.bitshares.dev';
 const INDEX      = 'bitshares-*';
@@ -24,7 +25,7 @@ const INDEX      = 'bitshares-*';
 const DEFAULT_CONFIG = Object.freeze({
   kibanaUrl:  KIBANA_URL,
   apiKey:     null,     // 'base64(id:key)' if auth required
-  timeout:    15000,
+  timeout:    MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS,
 });
 
 const PROXY_PATH = (index) =>
@@ -40,6 +41,14 @@ const PROXY_PATH = (index) =>
 function doKibanaRequest(cfg, esQuery, resolve, reject, redirectCount = 0) {
   const body = JSON.stringify(esQuery);
   const url  = new URL(cfg.kibanaUrl);
+  const signal = cfg.signal;
+
+  if (signal?.aborted) {
+    const err = signal.reason instanceof Error ? signal.reason : new Error('Kibana request aborted');
+    err.name = 'AbortError';
+    reject(err);
+    return;
+  }
 
   const headers = {
     'Content-Type':   'application/json',
@@ -80,6 +89,17 @@ function doKibanaRequest(cfg, esQuery, resolve, reject, redirectCount = 0) {
       catch (e) { reject(new Error(`JSON parse failed: ${e.message}\n${raw.slice(0, 200)}`)); }
     });
   });
+
+  const onAbort = () => {
+    const reason = signal?.reason instanceof Error ? signal.reason : new Error('Kibana request aborted');
+    reason.name = 'AbortError';
+    req.destroy(reason);
+  };
+
+  if (signal) {
+    signal.addEventListener('abort', onAbort, { once: true });
+    req.on('close', () => signal.removeEventListener('abort', onAbort));
+  }
 
   req.on('error', reject);
   req.on('timeout', () => { req.destroy(); reject(new Error('Kibana request timed out')); });

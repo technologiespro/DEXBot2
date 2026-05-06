@@ -608,6 +608,15 @@ let MARKET_ADAPTER = {
         minRequiredCandles: 80,
     },
 
+    // KIBANA_REQUEST_TIMEOUT_MS: Shared per-request timeout for Kibana-backed candle fetches.
+    // Used by both the standalone LP history fetcher and the live market adapter's
+    // bootstrap / repair / backfill calls so long-running scans share one ceiling.
+    KIBANA_REQUEST_TIMEOUT_MS: 3 * 60 * 1000,
+
+    // KIBANA_FETCH_CHUNK_MONTHS: Default historical window size for the standalone
+    // LP fetcher when it splits long requests into sequential sub-requests.
+    KIBANA_FETCH_CHUNK_MONTHS: 3,
+
     // AMA_DELTA_THRESHOLD_PERCENT: Percentage change in AMA center price that triggers a grid reset.
     //   - When AMA price moves ±AMA_DELTA_THRESHOLD_PERCENT from the last recorded center,
     //     a recalculate.<botKey>.trigger file is written to signal grid regeneration.
@@ -835,9 +844,9 @@ let MARKET_ADAPTER = {
     // AMA_CONVERGENCE_ER_AVG: Typical market Efficiency Ratio used to estimate
     // average AMA convergence rate from cold start. Lower = more conservative
     // (assumes more noise → slower convergence → more candles needed).
-    // Calibrated against pool 133 1h (3 years) — implied ER corrects for
+    // Calibrated against pool 133 1h (2023-05-07 -> 2026-05-06) — implied ER corrects for
     // Jensen's inequality (E[f(ER)] ≠ f(E[ER]) for convex f = x²).
-    AMA_CONVERGENCE_ER_AVG: 0.16,
+    AMA_CONVERGENCE_ER_AVG: 0.151,
 
     // AMA_CONVERGENCE_EPSILON: Target fraction of initialization bias remaining
     // after convergence. 0.01 = 99 % of the initial bias has decayed.

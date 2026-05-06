@@ -583,7 +583,7 @@ The two **calibration constants** live in `modules/constants.js` under
 
 | Constant | Value | Meaning |
 |----------|-------|---------|
-| `AMA_CONVERGENCE_ER_AVG` | `0.16` | Typical-market Efficiency Ratio. Lower = more conservative (assumes more noise, slower convergence, more candles needed). Calibrated against 3 years of pool 133 1h candles; corrects for Jensen's inequality — `E[f(ER)] ≠ f(E[ER])` when `f` is the squaring function. |
+| `AMA_CONVERGENCE_ER_AVG` | `0.151` | Typical-market Efficiency Ratio. Lower = more conservative (assumes more noise, slower convergence, more candles needed). Calibrated against the fetched 3-year pool 133 1h dataset (`2023-05-07` -> `2026-05-06`); corrects for Jensen's inequality — `E[f(ER)] ≠ f(E[ER])` when `f` is the squaring function. |
 | `AMA_CONVERGENCE_EPSILON` | `0.01` | Target remaining bias fraction. `0.01` means 99 % of the initial bias has decayed by the end of the convergence window. |
 
 To recalibrate `AMA_CONVERGENCE_ER_AVG` against new market data, use the
@@ -597,8 +597,8 @@ implied-ER correction (Jensen's inequality).
 **Why `slowPeriod` dominates:** `slowSC ≈ 2 / slowPeriod`, so `SC_avg` scales
 as `~ (2 / slowPeriod)² = 4 / slowPeriod²`. Since `convergenceBars` is
 proportional to `1 / SC_avg`, the required candle count scales as
-**O(slowPeriod²)**, not O(slowPeriod). For the AMA3 default (`slowPeriod = 136`)
-this is roughly 1100 convergence bars; doubling `slowPeriod` would quadruple
+**O(slowPeriod²)**, not O(slowPeriod). For the AMA3 default (`slowPeriod = 112.7`)
+this is roughly 1130 convergence bars; doubling `slowPeriod` would quadruple
 that requirement.
 
 If the adapter has fewer candles than the warmup window, the AMA output is too

@@ -37,7 +37,7 @@ function buildDirectionalDocumentQuery({ opType, soldAssetField, receivedAssetFi
 
     const query = {
         size,
-        track_total_hits: true,
+        track_total_hits: false,
         _source: true,
         query: { bool: { filter: filters } },
         sort: [

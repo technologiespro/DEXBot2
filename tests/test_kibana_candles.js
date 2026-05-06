@@ -3,6 +3,7 @@ const assert = require('assert');
 console.log('Running kibana candle tests');
 
 const {
+    buildDirectionalDocumentQuery,
     fetchKibanaCandles,
     resolveRequestedFillRange,
 } = require('../market_adapter/core/kibana_candles');
@@ -221,10 +222,54 @@ async function testKibanaBuildsTrueOhlcFromTradeDocuments() {
     );
 }
 
+function testDirectionalDocumentQueryDisablesTotalHitCounting() {
+    const query = buildDirectionalDocumentQuery({
+        opType: 63,
+        soldAssetField: FIELD_MAP.soldAssetField,
+        receivedAssetField: FIELD_MAP.receivedAssetField,
+        poolField: FIELD_MAP.poolField,
+        soldAssetId: ASSET_A.id,
+        receivedAssetId: ASSET_B.id,
+        lookbackHours: 24,
+        poolId: '1.19.1',
+        timeRange: null,
+        size: 1000,
+    });
+
+    assert.strictEqual(query.track_total_hits, false, 'paginated kibana scans should not ask Elasticsearch for exact total hit counts');
+}
+
+async function testFetchKibanaCandlesForwardsAbortSignal() {
+    const controller = new AbortController();
+    const seenSignals = [];
+
+    await fetchKibanaCandles({
+        opType: 63,
+        fieldMap: FIELD_MAP,
+        assetA: ASSET_A,
+        assetB: ASSET_B,
+        poolId: '1.19.1',
+        config: {
+            intervalSeconds: 3600,
+            fillGaps: false,
+            signal: controller.signal,
+            kibanaSearch: async (cfg) => {
+                seenSignals.push(cfg.signal);
+                return kibanaHits([]);
+            },
+        },
+    });
+
+    assert.strictEqual(seenSignals.length, 2, 'both directions should receive the shared search signal');
+    assert.ok(seenSignals.every((signal) => signal === controller.signal), 'fetchKibanaCandles should forward the same abort signal to each paginated search');
+}
+
 async function run() {
     await testTimeRangeControlsRequestedFillRange();
     await testLiveAdapterCanDisableRequestedRangeFill();
     await testKibanaBuildsTrueOhlcFromTradeDocuments();
+    testDirectionalDocumentQueryDisablesTotalHitCounting();
+    await testFetchKibanaCandlesForwardsAbortSignal();
 }
 
 run()

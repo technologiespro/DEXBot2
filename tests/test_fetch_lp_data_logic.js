@@ -3,6 +3,7 @@ const assert = require('assert');
 console.log('Running fetch_lp_data parsing tests');
 
 const {
+    applyPrecisionOverrides,
     parseBotsConfig,
     selectBot,
 } = require('../market_adapter/inputs/fetch_lp_data');
@@ -44,6 +45,17 @@ const {
     ];
     const selected = selectBot(bots, null);
     assert.strictEqual(selected.name, 'C', 'selectBot should pick first active pool-price bot');
+}
+
+{
+    const { assetA, assetB } = applyPrecisionOverrides(
+        { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+        { id: '1.3.0', precision: 5, symbol: 'BTS' },
+        8,
+        null
+    );
+    assert.strictEqual(assetA.precision, 8, 'precision override should be applied to cached or resolved asset A metadata');
+    assert.strictEqual(assetB.precision, 5, 'missing override should preserve the existing asset B precision');
 }
 
 console.log('fetch_lp_data parsing tests passed');

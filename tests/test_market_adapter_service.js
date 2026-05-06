@@ -746,6 +746,252 @@ async function testKibanaBackfillFillsHistoricalShortfall() {
     assert.strictEqual(kibanaCalls, 1, 'kibana should be called exactly once for backfill');
 }
 
+function buildRestartCandles(rawCount, nowMs, price = 100, intervalSeconds = 3600) {
+    const bucketMs = intervalSeconds * 1000;
+    const currentBucketStartMs = Math.floor(nowMs / bucketMs) * bucketMs;
+    const firstTs = currentBucketStartMs - ((rawCount - 1) * bucketMs);
+    const candles = [];
+    for (let i = 0; i < rawCount; i++) {
+        const ts = firstTs + (i * bucketMs);
+        candles.push([ts, price, price, price, price, 1]);
+    }
+    return candles;
+}
+
+function buildOlderBackfillCandles(existingOldestTs, count, price = 100, intervalSeconds = 3600) {
+    const bucketMs = intervalSeconds * 1000;
+    const candles = [];
+    for (let i = count; i >= 1; i--) {
+        const ts = existingOldestTs - (i * bucketMs);
+        candles.push([ts, price, price, price, price, 1]);
+    }
+    return candles;
+}
+
+async function testRestartBackfillsOldAma3WindowBeforeWaitingForNextClosedCandle() {
+    const ama3 = MARKET_ADAPTER.AMAS.AMA3;
+    const intervalSeconds = 3600;
+    const nowMs = Date.parse('2026-05-06T12:30:00Z');
+    const analysisKeepCount = getAmaWarmupBars(
+        ama3.erPeriod,
+        ama3.slowPeriod,
+        MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
+        ama3.fastPeriod
+    ) + 1;
+    const rawKeepCount = analysisKeepCount + 1;
+    const oldRawCount = 1836;
+    const missingCount = rawKeepCount - oldRawCount;
+    const oldCandles = buildRestartCandles(oldRawCount, nowMs, 100, intervalSeconds);
+    const latestClosedTs = oldCandles[oldCandles.length - 2][0];
+    const backfillCandles = buildOlderBackfillCandles(oldCandles[0][0], missingCount, 100, intervalSeconds);
+    let kibanaCalls = 0;
+    let triggerWrites = 0;
+    let dynamicGridWrites = 0;
+    let savedPayload = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, ...ama3 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_restart_wait_1h.json`),
+        loadJson: () => ({ candles: oldCandles }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        calculateBotThreshold: () => MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 0.5 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async (_poolId, _assetA, _assetB, options) => {
+                kibanaCalls += 1;
+                return options.timeRange ? backfillCandles : [];
+            },
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => {
+            const map = new Map();
+            [...existing, ...incoming].forEach((c) => map.set(c[0], c));
+            return Array.from(map.values()).sort((a, b) => a[0] - b[0]);
+        },
+        pruneCandles: (candles, keepCount) => candles.length <= keepCount ? candles : candles.slice(candles.length - keepCount),
+        detectMissingCandleTimestamps: () => ({ gapCount: 0, missingTimestamps: [] }),
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-restart-wait.trigger';
+        },
+        writeBotDynamicGrid: () => {
+            dynamicGridWrites += 1;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => false,
+        getNowMs: () => nowMs,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-restart-wait',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama3',
+        incrementPercent: 0.4,
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-restart-wait': {
+                centerPrice: 100,
+                lastClosedCandleTs: latestClosedTs,
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'restart should complete successfully');
+    assert.strictEqual(result.pendingClosedCandle, true, 'without a new closed candle the adapter should wait after backfilling');
+    assert.strictEqual(result.triggered, false, 'backfilling an old window alone must not trigger a grid update');
+    assert.strictEqual(result.triggerSuppressedReason, 'waiting_for_new_closed_candle', 'restart should report the closed-candle gate when history was repaired but no new close exists');
+    assert.strictEqual(result.kibanaBackfillCount, missingCount, 'restart should fetch exactly the missing historical candles');
+    assert.strictEqual(result.candleCount, rawKeepCount, 'raw retained candle count should be expanded to the new AMA3 target');
+    assert.strictEqual(result.analysisCandleCount, analysisKeepCount, 'effective analysis candles should exclude only the live partial bucket');
+    assert.strictEqual(result.rawKeepCount, rawKeepCount, 'result should expose the updated raw retention target');
+    assert.strictEqual(result.analysisKeepCount, analysisKeepCount, 'result should expose the updated analysis retention target');
+    assert.ok(result.source.includes('kibana-backfill'), 'restart source should show that historical repair occurred');
+    assert.strictEqual(kibanaCalls, 1, 'restart should perform a single targeted historical backfill request');
+    assert.strictEqual(triggerWrites, 0, 'closed-candle gate should prevent a grid trigger after backfill');
+    assert.strictEqual(dynamicGridWrites, 0, 'closed-candle gate should prevent AMA center persistence after backfill');
+    assert.ok(savedPayload, 'repaired candle file should be persisted');
+    assert.strictEqual(savedPayload.meta.candleCount, rawKeepCount, 'saved raw candle file should contain the expanded retention window');
+    assert.strictEqual(savedPayload.meta.analysisCandleCount, analysisKeepCount, 'saved metadata should record the effective closed-candle window');
+}
+
+async function testRestartBackfillsOldAma3WindowAndTriggersWhenDeltaThresholdIsExceeded() {
+    const ama3 = MARKET_ADAPTER.AMAS.AMA3;
+    const intervalSeconds = 3600;
+    const nowMs = Date.parse('2026-05-06T12:30:00Z');
+    const analysisKeepCount = getAmaWarmupBars(
+        ama3.erPeriod,
+        ama3.slowPeriod,
+        MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
+        ama3.fastPeriod
+    ) + 1;
+    const rawKeepCount = analysisKeepCount + 1;
+    const oldRawCount = 1836;
+    const missingCount = rawKeepCount - oldRawCount;
+    const oldCandles = buildRestartCandles(oldRawCount, nowMs, 100, intervalSeconds);
+    const latestClosedTs = oldCandles[oldCandles.length - 2][0];
+    const backfillCandles = buildOlderBackfillCandles(oldCandles[0][0], missingCount, 100, intervalSeconds);
+    let kibanaCalls = 0;
+    let triggerWrites = 0;
+    let dynamicGridWrites = 0;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, ...ama3 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_restart_trigger_1h.json`),
+        loadJson: () => ({ candles: oldCandles }),
+        saveJson: () => {},
+        calculateBotThreshold: () => MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 0.5 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async (_poolId, _assetA, _assetB, options) => {
+                kibanaCalls += 1;
+                return options.timeRange ? backfillCandles : [];
+            },
+        },
+        fetchNativeTradesSince: async () => [],
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => {
+            const map = new Map();
+            [...existing, ...incoming].forEach((c) => map.set(c[0], c));
+            return Array.from(map.values()).sort((a, b) => a[0] - b[0]);
+        },
+        pruneCandles: (candles, keepCount) => candles.length <= keepCount ? candles : candles.slice(candles.length - keepCount),
+        detectMissingCandleTimestamps: () => ({ gapCount: 0, missingTimestamps: [] }),
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-restart-trigger.trigger';
+        },
+        writeBotDynamicGrid: () => {
+            dynamicGridWrites += 1;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => false,
+        getNowMs: () => nowMs,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-restart-trigger',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama3',
+        incrementPercent: 0.4,
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-restart-trigger': {
+                centerPrice: 95,
+                lastClosedCandleTs: latestClosedTs - (intervalSeconds * 1000),
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'restart should complete successfully');
+    assert.strictEqual(result.kibanaBackfillCount, missingCount, 'restart should fetch the missing historical candles before analysis');
+    assert.strictEqual(result.candleCount, rawKeepCount, 'raw retained candle count should be expanded to the new AMA3 target');
+    assert.strictEqual(result.analysisCandleCount, analysisKeepCount, 'effective analysis candles should match the updated AMA3 window');
+    assert.strictEqual(result.triggered, true, 'after a repaired restart window, a threshold breach should still trigger a grid update');
+    assert.ok(result.deltaPercent > MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT, 'restart trigger should be driven by a real AMA delta above threshold');
+    assert.strictEqual(result.amaPrice, 100, 'flat repaired history should yield the expected AMA center');
+    assert.ok(result.source.includes('kibana-backfill'), 'restart source should show the historical repair path');
+    assert.strictEqual(kibanaCalls, 1, 'restart should perform one targeted historical backfill request');
+    assert.strictEqual(dynamicGridWrites, 1, 'threshold trigger should persist the refreshed AMA center once');
+    assert.strictEqual(triggerWrites, 1, 'threshold trigger should write exactly one grid-reset marker');
+    assert.strictEqual(state.bots['xrp-bts-restart-trigger'].lastClosedCandleTs, latestClosedTs, 'restart should advance the consumed closed-candle cursor after a successful trigger');
+    assert.strictEqual(state.bots['xrp-bts-restart-trigger'].centerPrice, 100, 'restart should persist the new AMA center after the trigger');
+}
+
 async function testBootstrapFallsBackWhenKibanaIsEmpty() {
     let kibanaCalls = 0;
     let nativeCalls = 0;
@@ -2079,11 +2325,15 @@ async function testClosedCandleGateSkipsCurrentPartialHour() {
     };
 
     const result = await service.processBot(bot, state, cfg, new Map(), {});
+    const expectedAnalysisKeepCount = getAmaWarmupBars(1, 3, MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS, 2) + 1;
+    const expectedRawKeepCount = expectedAnalysisKeepCount + 1;
 
     assert.strictEqual(result.ok, true, 'processBot should succeed');
     assert.strictEqual(result.pendingClosedCandle, true, 'current partial hour should be ignored');
     assert.strictEqual(result.triggered, false, 'no trigger should fire before a new closed candle exists');
     assert.strictEqual(result.analysisCandleCount, 24, 'all closed prehistory candles + the new closed candle should be used for analysis');
+    assert.strictEqual(result.rawKeepCount, expectedRawKeepCount, 'result should surface the retained raw candle target');
+    assert.strictEqual(result.analysisKeepCount, expectedAnalysisKeepCount, 'result should surface the effective closed-candle target');
     assert.strictEqual(result.lastCandleTs, partialTs, 'raw latest candle timestamp should still be reported');
     assert.strictEqual(result.lastClosedCandleTs, closedTs, 'closed candle timestamp should drive the signal');
     assert.strictEqual(triggerWrites, 0, 'grid reset should not run for a partial candle');
@@ -2091,6 +2341,8 @@ async function testClosedCandleGateSkipsCurrentPartialHour() {
     assert.ok(savedPayload, 'raw candle file should still be persisted');
     assert.strictEqual(savedPayload.meta.candleCount, 25, 'raw candle payload should keep prehistory + closed + partial candles');
     assert.strictEqual(savedPayload.meta.analysisCandleCount, 24, 'raw candle payload should record closed-candle count including prehistory');
+    assert.strictEqual(savedPayload.meta.rawKeepCount, expectedRawKeepCount, 'raw candle payload should persist the retained raw target');
+    assert.strictEqual(savedPayload.meta.analysisKeepCount, expectedAnalysisKeepCount, 'raw candle payload should persist the closed-candle target');
     assert.strictEqual(state.bots['xrp-bts-closed-0'].centerPrice, 100, 'state should remain unchanged when waiting for a close');
 }
 
@@ -2268,10 +2520,14 @@ async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
     };
 
     const result = await service.processBot(bot, state, cfg, new Map(), {});
+    const expectedAnalysisKeepCount = getAmaWarmupBars(1, 2, cfg.amaSlope.lookbackBars, 2) + 1;
+    const expectedRawKeepCount = expectedAnalysisKeepCount + 1;
 
     assert.strictEqual(result.ok, true, 'processBot should succeed with a partial trailing candle');
     assert.strictEqual(result.analysisCandleCount, 11, 'analysis should retain the full closed-candle warmup window');
-    assert.strictEqual(pruneKeepCount, 12, 'raw candle pruning should keep one extra bucket beyond the analysis window');
+    assert.strictEqual(result.rawKeepCount, expectedRawKeepCount, 'raw keep target should remain one candle larger than the closed-candle window');
+    assert.strictEqual(result.analysisKeepCount, expectedAnalysisKeepCount, 'analysis keep target should match the effective closed-candle window');
+    assert.strictEqual(pruneKeepCount, expectedRawKeepCount, 'raw candle pruning should keep one extra bucket beyond the analysis window');
     assert.ok(writtenPayload, 'dynamic weights should still persist when the warmup window is fully retained');
     assert.strictEqual(writtenPayload.dynamicWeights.isReady, true, 'dynamic weights should stay ready after pruning away only the partial bucket');
 }
@@ -3546,6 +3802,8 @@ async function run() {
     await testOrderbookNativeFetchUsesBitsharesHistory();
     await testAmaWarmupInsufficientSuppressesRawCloseRecenter();
     await testKibanaBackfillFillsHistoricalShortfall();
+    await testRestartBackfillsOldAma3WindowBeforeWaitingForNextClosedCandle();
+    await testRestartBackfillsOldAma3WindowAndTriggersWhenDeltaThresholdIsExceeded();
     await testIdOnlyBotIsNotRejected();
     await testBootstrapFallsBackWhenKibanaIsEmpty();
     await testAmaGridPriceIsCaseInsensitive();
