@@ -198,6 +198,69 @@ class MarketAdapterService {
         }
     }
 
+    computeAppliedAsymmetryMetrics(bot, centerPrice, dynamicWeights) {
+        const gp = Number(centerPrice);
+        const slopeOffset = Number(dynamicWeights?.slopeOffset);
+        const maxSlopeOffset = Number(dynamicWeights?.maxSlopeOffset);
+        const trend = dynamicWeights?.trend;
+        const maxAsymmetryFactor = Number.isFinite(bot?.asymmetricBounds?.maxAsymmetryFactor)
+            ? bot.asymmetricBounds.maxAsymmetryFactor
+            : Number.isFinite(dynamicWeights?.maxAsymmetryFactor)
+                ? dynamicWeights.maxAsymmetryFactor
+                : MARKET_ADAPTER.ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR;
+
+        if (!Number.isFinite(slopeOffset) || !Number.isFinite(maxSlopeOffset) || maxSlopeOffset <= 0
+                || !Number.isFinite(maxAsymmetryFactor) || maxAsymmetryFactor <= 0
+                || (trend !== 'UP' && trend !== 'DOWN')) {
+            return {
+                rawAsymmetryFactor: null,
+                appliedAsymmetryFactor: null,
+                maxAsymmetryFactor: Number.isFinite(maxAsymmetryFactor) ? maxAsymmetryFactor : null,
+            };
+        }
+
+        const slopeAbs = Math.min(Math.abs(slopeOffset) / maxSlopeOffset, 1);
+        const rawAsymmetryFactor = slopeAbs * maxAsymmetryFactor;
+
+        if (!Number.isFinite(gp) || gp <= 0) {
+            return {
+                rawAsymmetryFactor,
+                appliedAsymmetryFactor: rawAsymmetryFactor,
+                maxAsymmetryFactor,
+            };
+        }
+
+        try {
+            const minP = resolveConfiguredPriceBound(bot?.minPrice, DEFAULT_CONFIG.minPrice, gp, 'min');
+            const maxP = resolveConfiguredPriceBound(bot?.maxPrice, DEFAULT_CONFIG.maxPrice, gp, 'max');
+            if (!Number.isFinite(minP) || !Number.isFinite(maxP) || minP <= 0 || maxP <= 0) {
+                return {
+                    rawAsymmetryFactor,
+                    appliedAsymmetryFactor: rawAsymmetryFactor,
+                    maxAsymmetryFactor,
+                };
+            }
+
+            const baseMinDiv = gp / minP;
+            const baseMaxMult = maxP / gp;
+            const maxSafeAsymmetryFactor = trend === 'DOWN'
+                ? (baseMaxMult > 1 ? 1 - (1 / baseMaxMult) : 0)
+                : (baseMinDiv > 1 ? 1 - (1 / baseMinDiv) : 0);
+
+            return {
+                rawAsymmetryFactor,
+                appliedAsymmetryFactor: Math.min(rawAsymmetryFactor, maxSafeAsymmetryFactor),
+                maxAsymmetryFactor,
+            };
+        } catch (_) {
+            return {
+                rawAsymmetryFactor,
+                appliedAsymmetryFactor: rawAsymmetryFactor,
+                maxAsymmetryFactor,
+            };
+        }
+    }
+
     buildDefaultBotState(bot, overrides = {}) {
         return {
             botName: bot.name,
@@ -299,6 +362,9 @@ class MarketAdapterService {
             ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
         const mo = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
         const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
+        const volatilityThreshold = normalizeVolatilityThreshold(cfg.volatilityThreshold);
+        const volatilityExponent = cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
+        const volatilityScaleX = cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT;
 
         // Compute separate clip thresholds for AMA (slopes) and Kalman (velocities)
         let amaClipThreshold = Infinity;
@@ -326,9 +392,9 @@ class MarketAdapterService {
             fastPeriod:            botAma.fastPeriod,
             maxSlopeOffset:        cfg.maxSlopeOffset,
             maxVolatilityOffset:   volatilityClamp,
-            volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
-            volatilityScaleX:      cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
-            volatilityThreshold:   normalizeVolatilityThreshold(cfg.volatilityThreshold),
+            volatilityExponent,
+            volatilityScaleX,
+            volatilityThreshold,
             neutralZonePct:        nz,
             clipPercentile,
             clipThreshold:         amaClipThreshold,
@@ -585,6 +651,8 @@ class MarketAdapterService {
                 slopeOffset:             slopeResult.slopeOffset,
                 amaSlopeGated,
                 regimeMultiplier,
+                regimeSensitivity,
+                absoluteThreshold,
                 volatilityPenalty:       volPenalty,
                 alpha,
                 dw,
@@ -594,6 +662,11 @@ class MarketAdapterService {
                 maxAsymmetryFactor:  (cfg.asymmetricBounds?.maxAsymmetryFactor != null)
                     ? cfg.asymmetricBounds.maxAsymmetryFactor
                     : null,
+                clipPercentile,
+                neutralZonePct: nz,
+                volatilityThreshold,
+                volatilityExponent,
+                volatilityScaleX,
                 amaSlope: {
                     maxSlopePct: amaMaxS,
                 },
@@ -636,6 +709,11 @@ class MarketAdapterService {
             kalmanSlope: {
                 maxSlopePct: kalMaxS,
             },
+            clipPercentile,
+            neutralZonePct: nz,
+            volatilityThreshold,
+            volatilityExponent,
+            volatilityScaleX,
             maxVolatilityOffset: volatilityClamp,
             kalmanSmoothPct,
             kalmanDispScaleMult,
@@ -651,6 +729,8 @@ class MarketAdapterService {
             confidence:              slopeResult.confidence,
             slopePct:                slopeResult.slopePct,
             regimeMultiplier,
+            regimeSensitivity,
+            absoluteThreshold,
             minOutputThreshold,
             outputThreshold,
             belowMinOutputThreshold,
@@ -1536,6 +1616,9 @@ class MarketAdapterService {
             ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
         const mo = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
         const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
+        const volatilityThreshold = normalizeVolatilityThreshold(cfg.volatilityThreshold);
+        const volatilityExponent = cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
+        const volatilityScaleX = cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT;
 
         // Compute separate clip thresholds for AMA (slopes) and Kalman (velocities)
         let amaClipThreshold = Infinity;
@@ -1563,9 +1646,9 @@ class MarketAdapterService {
             fastPeriod:            botAma.fastPeriod,
             maxSlopeOffset:        cfg.maxSlopeOffset,
             maxVolatilityOffset:   volatilityClamp,
-            volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
-            volatilityScaleX:      cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
-            volatilityThreshold:   normalizeVolatilityThreshold(cfg.volatilityThreshold),
+            volatilityExponent,
+            volatilityScaleX,
+            volatilityThreshold,
             neutralZonePct:        nz,
             clipPercentile,
             clipThreshold:         amaClipThreshold,
@@ -1611,6 +1694,18 @@ class MarketAdapterService {
         const centerPrice = Number.isFinite(clampedCenterPrice) && clampedCenterPrice > 0
             ? clampedCenterPrice
             : referencePrice;
+        if (dynamicWeightsPayload) {
+            const asymmetryMetrics = isAsymmetricBoundsWhitelisted
+                ? this.computeAppliedAsymmetryMetrics(bot, centerPrice, dynamicWeightsPayload)
+                : {
+                    rawAsymmetryFactor: null,
+                    appliedAsymmetryFactor: null,
+                };
+            Object.assign(dynamicWeightsPayload, asymmetryMetrics);
+            if (weights?.meta) {
+                Object.assign(weights.meta, asymmetryMetrics);
+            }
+        }
 
         let triggered = false;
         let triggerPath = null;

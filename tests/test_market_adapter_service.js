@@ -631,6 +631,7 @@ async function testAmaWarmupInsufficientSuppressesRawCloseRecenter() {
             return true;
         },
         isBotDynamicWeightWhitelisted: () => false,
+        isBotAsymmetricBoundsWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -2875,6 +2876,24 @@ function testSleepUntilAlignedBoundaryAnchorsToCycleStart() {
     assert.strictEqual(midCycleDelay, 2401000, 'sleep should still target the next aligned boundary from the cycle start');
 }
 
+function testAppliedAsymmetryMetricsClampToSafeBounds() {
+    const service = new MarketAdapterService();
+    const metrics = service.computeAppliedAsymmetryMetrics({
+        minPrice: '2x',
+        maxPrice: '1.1x',
+        asymmetricBounds: { maxAsymmetryFactor: 0.35 },
+    }, 100, {
+        slopeOffset: 0.5,
+        maxSlopeOffset: 0.5,
+        trend: 'DOWN',
+    });
+
+    assert.strictEqual(metrics.rawAsymmetryFactor, 0.35, 'raw asymmetry should reflect the full configured cap');
+    assert.ok(Math.abs(metrics.appliedAsymmetryFactor - (1 - (1 / 1.1))) < 1e-12,
+        'applied asymmetry should be clamped to the safe bound implied by maxPrice');
+    assert.strictEqual(metrics.maxAsymmetryFactor, 0.35, 'resolved maxAsymmetryFactor should be preserved');
+}
+
 async function testIdOnlyBotIsNotRejected() {
     const service = new MarketAdapterService({
         resolveBotContext: async () => ({
@@ -3367,10 +3386,15 @@ async function testDynamicWeightChartParityMatchesLiveService() {
     assert.strictEqual(dw.finalOffset, liveSeries.finalOff, 'persisted final offset should match the parity model');
     assert.strictEqual(dw.belowMinOutputThreshold, expectedBelowThreshold, 'persisted threshold gate should match the confirmed pre-gain state');
     assert.deepStrictEqual(dw.effectiveWeights, expectedEffectiveWeights, 'persisted effective weights should match the parity model');
+    assert.strictEqual(dw.regimeSensitivity, cfg.regimeSensitivity, 'persisted payload should retain regimeSensitivity for snapshot parity');
+    assert.strictEqual(dw.absoluteThreshold, MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT,
+        'persisted payload should retain absoluteThreshold for snapshot parity');
     assert.strictEqual(result.weights.meta.rawFinalOffset, liveSeries.rawFinalOff, 'service metadata should expose the same raw final offset');
     assert.strictEqual(result.weights.meta.finalOffset, liveSeries.finalOff, 'service metadata should expose the same final offset');
     assert.strictEqual(result.weights.meta.belowMinOutputThreshold, expectedBelowThreshold, 'service metadata should expose the same threshold decision');
     assert.strictEqual(result.weights.meta.trendOffset, expectedTrendOffset, 'applied trend offset should match the parity model');
+    assert.strictEqual(dw.regimeSensitivity, result.weights.meta.regimeSensitivity, 'snapshot and live metadata should agree on regimeSensitivity');
+    assert.strictEqual(dw.absoluteThreshold, result.weights.meta.absoluteThreshold, 'snapshot and live metadata should agree on absoluteThreshold');
     assert.deepStrictEqual(
         { sell: result.weights.sell, buy: result.weights.buy },
         expectedEffectiveWeights,
@@ -3971,6 +3995,8 @@ async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
     assert.ok(result.weights, 'diagnostic weights should be returned for logging');
     assert.ok(result.amaSlope, 'diagnostic amaSlope should be returned for logging');
     assert.strictEqual(result.weights.meta.source, 'dynamic_weight', 'diagnostic weights should come from the dynamic-weight path');
+    assert.strictEqual(result.weights.meta.rawAsymmetryFactor, null, 'asymmetry diagnostics should stay blank when asymmetric bounds are not whitelisted');
+    assert.strictEqual(result.weights.meta.appliedAsymmetryFactor, null, 'applied asymmetry should stay blank when asymmetric bounds are not whitelisted');
     assert.strictEqual(state.bots['xrp-bts-dw-diagnostic'].effectiveWeights, null, 'non-whitelisted diagnostics should not update live effective weights');
 }
 
@@ -4158,6 +4184,7 @@ async function run() {
     await testClosedCandleGateSurfacesStaleData();
     await testClosedCandlePruningRetainsFullDynamicWeightWarmup();
     testSleepUntilAlignedBoundaryAnchorsToCycleStart();
+    testAppliedAsymmetryMetricsClampToSafeBounds();
     await testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights();
     await testDynamicWeightMinOutputThresholdZeroDisablesGate();
     await testDynamicWeightGainScalesOutputLinearly();

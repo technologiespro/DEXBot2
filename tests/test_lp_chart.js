@@ -81,17 +81,25 @@ function testGenerateHtml() {
 }
 
 function testGenerateMarketLpChartUplot() {
-    const dataFile = path.join(
-        __dirname,
-        '..',
-        'market_adapter',
-        'data',
-        'lp',
-        'iob_xrp_bts',
-        'lp_pool_133_1h.json',
-    );
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot2-lp-uplot-'));
+    const dataFile = path.join(tmpDir, 'lp_pool_133_1h.json');
     const outFile = path.join(tmpDir, 'lp_chart.html');
+    fs.writeFileSync(dataFile, JSON.stringify({
+        meta: {
+            pool: '1.19.133',
+            intervalSeconds: 3600,
+            fetchedAt: '2026-04-13T00:00:00.000Z',
+            assetA: { id: '1.3.3926', symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', symbol: 'BTS' },
+        },
+        candles: [
+            [1710000000000, 1.00, 1.10, 0.95, 1.02, 10],
+            [1710003600000, 1.02, 1.16, 1.00, 1.08, 12],
+            [1710007200000, 1.08, 1.20, 1.04, 1.14, 9],
+            [1710010800000, 1.14, 1.25, 1.10, 1.19, 14],
+            [1710014400000, 1.19, 1.28, 1.15, 1.23, 11],
+        ],
+    }, null, 2));
     const result = generateMarketLpChartUplot({
         dataFile,
         noOpen: true,

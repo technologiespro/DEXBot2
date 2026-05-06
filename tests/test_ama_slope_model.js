@@ -5,6 +5,7 @@ const assert = require('assert');
 console.log('Running ama_slope_model tests');
 
 const { computeAmaSlopeWeights } = require('../market_adapter/core/strategies/ama_slope_model');
+const { getAmaWarmupBars } = require('../analysis/ama_fitting/ama');
 
 // Generate a series of N values with a given pattern
 function flatSeries(n, value) {
@@ -12,9 +13,16 @@ function flatSeries(n, value) {
 }
 
 // Default opts use large AMA warmup periods — too large for unit tests.
-// Override erPeriod=10, slowPeriod=10, lookbackBars=10 so we need 10+10+10+1=31 values minimum.
-const SMALL_OPTS = { erPeriod: 10, slowPeriod: 10, lookbackBars: 10 };
-const MIN_LEN = 31; // erPeriod + slowPeriod + lookbackBars + 1
+// Keep the periods small, but derive the exact readiness threshold from the
+// same helper the production model uses so the test stays aligned with the
+// convergence contract.
+const SMALL_OPTS = { erPeriod: 10, fastPeriod: 2, slowPeriod: 10, lookbackBars: 10 };
+const MIN_LEN = getAmaWarmupBars(
+    SMALL_OPTS.erPeriod,
+    SMALL_OPTS.slowPeriod,
+    SMALL_OPTS.lookbackBars,
+    SMALL_OPTS.fastPeriod
+) + 1;
 const MODEL_NEUTRAL_WEIGHT = 0.5;
 const HALF_POWER_VOL_OPTS = {
     ...SMALL_OPTS,
@@ -38,7 +46,7 @@ function derivedWeights(result) {
 
 function testNotReadyWhenTooFewValues() {
     const result = computeAmaSlopeWeights(flatSeries(20, 100), 0, SMALL_OPTS);
-    assert.strictEqual(result.isReady, false, 'should not be ready with fewer than erPeriod+lookback+1 values');
+    assert.strictEqual(result.isReady, false, 'should not be ready with fewer than the computed warmup length');
     assert.ok(!('sellW' in result), 'model should not return sellW');
     assert.ok(!('buyW' in result), 'model should not return buyW');
     assert.strictEqual(result.slopeOffset, 0);

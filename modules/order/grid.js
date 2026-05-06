@@ -588,6 +588,8 @@ class Grid {
                 }
                 manager.logger?.log?.(
                     `[BOUND-ASYMMETRY] trend=${dw.trend} slopeOffset=${dw.slopeOffset.toFixed(4)} `
+                    + `raw=${(rawAsymmetry * 100).toFixed(1)}% `
+                    + `cap=${(maxAsymmetryFactor * 100).toFixed(0)}% `
                     + `asymmetry=${(asymmetry * 100).toFixed(1)}% `
                     + `min ${minP.toFixed(8)}→${resolvedMinP.toFixed(8)} `
                     + `max ${maxP.toFixed(8)}→${resolvedMaxP.toFixed(8)}`,

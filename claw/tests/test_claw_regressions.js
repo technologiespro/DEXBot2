@@ -13,18 +13,17 @@ async function testClawBitsharesClientLoadsEventPatchAndDetectsExistingConnectio
 
   Module._load = function(request, parent, isMain) {
     if (request === 'btsdex' && parent?.filename === clawBitsharesPath) {
-      return {
-        subscribe(event, callback) {
-          if (event === 'connected') {
-            callback();
-          }
-        }
-      };
+      return function MockBitSharesClient() {};
     }
 
     if (request === '../../modules/btsdex_event_patch' && parent?.filename === clawBitsharesPath) {
       patchLoaded = true;
-      return { patched: true };
+      return {
+        patched: true,
+        addStatusCallback(callback) {
+          callback('open');
+        }
+      };
     }
 
     return originalLoad.call(this, request, parent, isMain);
@@ -437,19 +436,16 @@ async function testDecisionLoopReplacesAnalyzerOnConfigChange() {
 
 async function testPositionManagerEntryExposesSellPriceInBts() {
   const positionManagerPath = require.resolve('../modules/position_manager');
-  const chainQueriesPath = require.resolve('../modules/chain_queries');
+  const mpaUtilsPath = require.resolve('../modules/mpa_utils');
 
-  require.cache[chainQueriesPath] = {
-    id: chainQueriesPath, filename: chainQueriesPath, loaded: true,
+  clearModule(mpaUtilsPath);
+  require.cache[mpaUtilsPath] = {
+    id: mpaUtilsPath, filename: mpaUtilsPath, loaded: true,
     exports: {
-      getAsset: async (sym) => ({ id: `1.3.${sym.length}`, symbol: sym, precision: 5, bitasset_data_id: '2.4.1' }),
-      getBackingAsset: async () => ({ id: '1.3.0', symbol: 'BTS', precision: 5 }),
-      getBitassetData: async () => ({
-        asset_id: '1.3.999',
-        options: { short_backing_asset: '1.3.0' }
-      }),
-      dbCall: async () => null,
-      waitForConnected: async () => {}
+      requireBtsBackedMpa: async (sym) => ({
+        backingAsset: { id: '1.3.0', symbol: 'BTS', precision: 5 },
+        mpaAsset: { id: `1.3.${sym.length}`, symbol: sym, precision: 5, bitasset_data_id: '2.4.1' }
+      })
     }
   };
 
@@ -474,7 +470,7 @@ async function testPositionManagerEntryExposesSellPriceInBts() {
   assert.strictEqual(position.entry.priceInBts, 1000, 'entry must also have generic priceInBts from createOrderTracking');
 
   clearModule(positionManagerPath);
-  clearModule(chainQueriesPath);
+  clearModule(mpaUtilsPath);
 }
 
 function testClawBridgeRespectsRuntimeNameOption() {
@@ -644,10 +640,23 @@ function testZeroClawCommandInjectsRuntimeName() {
 }
 
 function testBuildQueryScopesAnyPoolByReceivedAsset() {
-  const { buildQuery } = require('../../market_adapter/inputs/kibana_source');
+  const { buildDirectionalDocumentQuery } = require('../../market_adapter/core/kibana_candles');
+  const fieldMap = {
+    soldAssetField: 'operation_history.op_object.amount_to_sell.asset_id.keyword',
+    receivedAssetField: 'operation_history.op_object.min_to_receive.asset_id.keyword',
+    poolField: 'operation_history.op_object.pool.keyword'
+  };
 
   // With poolId: no received asset filter needed
-  const poolScoped = buildQuery('1.3.0', 100, 3600, '1.19.133');
+  const poolScoped = buildDirectionalDocumentQuery({
+    opType: 63,
+    ...fieldMap,
+    soldAssetId: '1.3.0',
+    receivedAssetId: null,
+    lookbackHours: 100,
+    poolId: '1.19.133',
+    size: 10000
+  });
   const poolFilters = poolScoped.query.bool.filter;
   assert.ok(
     poolFilters.some((f) => f.term?.['operation_history.op_object.pool.keyword'] === '1.19.133'),
@@ -659,7 +668,15 @@ function testBuildQueryScopesAnyPoolByReceivedAsset() {
   );
 
   // Without poolId but with receivedAssetId: must scope by counterpart
-  const pairScoped = buildQuery('1.3.0', 100, 3600, null, null, '1.3.1');
+  const pairScoped = buildDirectionalDocumentQuery({
+    opType: 63,
+    ...fieldMap,
+    soldAssetId: '1.3.0',
+    receivedAssetId: '1.3.1',
+    lookbackHours: 100,
+    poolId: null,
+    size: 10000
+  });
   const pairFilters = pairScoped.query.bool.filter;
   assert.ok(
     !pairFilters.some((f) => f.term?.['operation_history.op_object.pool.keyword']),

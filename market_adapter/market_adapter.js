@@ -56,7 +56,7 @@ const path = require('path');
 
 const { parseJsonWithComments, sleep, ensureDir } = require('../modules/order/utils/system');
 const { readGeneralSettings } = require('../modules/general_settings');
-const { MARKET_ADAPTER } = require('../modules/constants');
+const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../modules/constants');
 const { createBotKey } = require('../modules/account_orders');
 const { calculateAMA } = require('../analysis/ama_fitting/ama');
 const {
@@ -89,6 +89,14 @@ const { acquireFileLockSync, releaseFileLockSync } = require('./utils/file_lock'
 const {
     normalizeNativeMarketHistoryCandles,
 } = require('./utils/native_history');
+const {
+    formatLogPercent,
+    buildWeightSummary,
+    buildDynamicWeightInputsLog,
+    buildDynamicWeightTuningLog,
+    buildAsymmetricBoundsLog,
+    buildStartupDefaultsLog,
+} = require('./log_format');
 
 const ROOT = path.join(__dirname, '..');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
@@ -1094,7 +1102,7 @@ async function runOnce(cfg, state, contextCache) {
             const gapText = Number.isFinite(r.unresolvedGapCount) && r.unresolvedGapCount > 0 ? ` GAPS(${r.unresolvedGapCount})` : '';
             const trigText = r.triggered ? ` TRIGGERED -> ${r.triggerPath ? path.relative(ROOT, r.triggerPath) : '[suppressed, dry-run]'}` : '';
             const pendingText = r.pendingClosedCandle ? ' WAITING_FOR_CLOSED_CANDLE' : '';
-            const weightText = r.weights ? ` weights[buy=${r.weights.buy}, sell=${r.weights.sell}]` : '';
+            const weightText = buildWeightSummary(r.weights);
             const trendText = r.amaSlope?.trend ? ` trend=${r.amaSlope.trend}` : '';
             const warmupText = r.triggerSuppressedReason === 'ama_warmup_insufficient'
                 ? ` WARMUP_INSUFFICIENT(used=${r.analysisCandleCount}${Number.isFinite(r.analysisKeepCount) ? `/${r.analysisKeepCount}` : ''})`
@@ -1110,7 +1118,7 @@ async function runOnce(cfg, state, contextCache) {
                 ? ` used=${r.analysisCandleCount}${Number.isFinite(r.analysisKeepCount) ? `/${r.analysisKeepCount}` : ''}`
                 : '';
             const nativeText = isOneHourResult && Number.isFinite(r.nativePagesFetched) ? ` nativePages=${r.nativePagesFetched}` : '';
-            const dynText = isOneHourResult ? ` dyn[whitelist=${r.dynamicWeightWhitelisted ? 'yes' : 'no'},base=${r.hasExplicitBaseWeights ? 'yes' : 'no'},ready=${r.dynamicWeightReady ? 'yes' : 'no'},applied=${r.dynamicWeightApplied ? 'yes' : 'no'}${r.dynamicWeightProfile ? `,profile=${r.dynamicWeightProfile}` : ''}${r.asymmetricBoundsWhitelisted ? ',ab=yes' : ''}]` : '';
+            const dynText = isOneHourResult ? ` flags[whitelist=${r.dynamicWeightWhitelisted ? 'yes' : 'no'},base=${r.hasExplicitBaseWeights ? 'yes' : 'no'},ready=${r.dynamicWeightReady ? 'yes' : 'no'},applied=${r.dynamicWeightApplied ? 'yes' : 'no'}${r.dynamicWeightProfile ? `,profile=${r.dynamicWeightProfile}` : ''}${r.asymmetricBoundsWhitelisted ? ',ab=yes' : ''}]` : '';
 
             log(cfg, `${r.source},${rawCountText}${usedCountText}${closedTsText}${rawTsText}${closeText}, ama=${amaText} (prevCenter=${prevCenterText}, delta=${deltaText}), threshold=${thresholdText}${offText}${amaOffText}${regimeText}${staleText}${patchText}${backfillText}${gapText}${trigText}${pendingText}${warmupText}${trendText}${weightText}${dynText}${nativeText}`);
             if (r.triggerSuppressedReason === 'waiting_for_new_closed_candle') {
@@ -1127,23 +1135,12 @@ async function runOnce(cfg, state, contextCache) {
             }
             if (isOneHourResult && r.weights?.meta) {
                 const m = r.weights.meta;
-                const parts = [
-                    `trendOffset=${Number.isFinite(m.trendOffset) ? m.trendOffset.toFixed(3) : 'n/a'}`,
-                    `volPenalty=${Number.isFinite(m.volatilityPenalty) ? m.volatilityPenalty.toFixed(3) : 'n/a'}`,
-                    `rawOff=${Number.isFinite(m.rawFinalOffset) ? m.rawFinalOffset.toFixed(3) : 'n/a'}`,
-                    `finalOff=${Number.isFinite(m.finalOffset) ? m.finalOffset.toFixed(3) : 'n/a'}`,
-                    `slopePct=${Number.isFinite(m.slopePct) ? m.slopePct.toFixed(4) : 'n/a'}`,
-                    `maxSlopePct=${Number.isFinite(m.amaSlope?.maxSlopePct) ? m.amaSlope.maxSlopePct.toFixed(2) : 'n/a'}`,
-                    `maxSlope=${Number.isFinite(m.maxSlopeOffset) ? m.maxSlopeOffset.toFixed(2) : 'n/a'}`,
-                    `belowMin=${m.belowMinOutputThreshold ? 'yes' : 'no'}`,
-                    `kalmanReady=${m.kalmanReady ? 'yes' : 'no'}`,
-                ];
-                log(cfg, `  Dynamic weights: ${parts.join(' | ')}`);
+                log(cfg, `  Inputs: ${buildDynamicWeightInputsLog(m, r.amaConfig, {
+                    asymmetricBoundsWhitelisted: r.asymmetricBoundsWhitelisted,
+                })}`);
+                log(cfg, `  Tuning: ${buildDynamicWeightTuningLog(m)}`);
                 if (r.asymmetricBoundsWhitelisted && m.slopeOffset && m.maxSlopeOffset && m.maxSlopeOffset > 0 && m.trend && m.trend !== 'NEUTRAL') {
-                    const slopeAbs = Math.min(Math.abs(m.slopeOffset) / m.maxSlopeOffset, 1);
-                    const maxAsymFactor = m.maxAsymmetryFactor ?? (MARKET_ADAPTER.ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR ?? 0.35);
-                    const calculatedAsymPct = (slopeAbs * maxAsymFactor * 100).toFixed(1);
-                    log(cfg, `  Asymmetric bounds: asym=${calculatedAsymPct}%, maxAsym=${(maxAsymFactor * 100).toFixed(0)}%`);
+                    log(cfg, `  Asymmetric bounds: ${buildAsymmetricBoundsLog(m)}`);
                 }
             }
             if (Array.isArray(r.amaComparison) && r.amaComparison.length > 0) {
@@ -1257,15 +1254,9 @@ async function main() {
     try {
         log(cfg, '═══════════════════════════════════════');
         log(cfg, ' Market Adapter Hub Settings:');
-        log(cfg, `  - Poll Interval: ${cfg.pollSeconds}s`);
-        log(cfg, `  - Delta Threshold: ${cfg.deltaThresholdPercent}%`);
-        log(cfg, `  - Dry Run: ${cfg.dryRun}`);
-        log(cfg, `  - Max Pages: ${cfg.maxPages} (Limit: ${cfg.pageLimit})`);
-        log(cfg, `  - Native Backfill: ${cfg.nativeBackfillHours}h (Max Stale: ${cfg.maxStaleHours}h)`);
-        log(cfg, `  - Bootstrap Lookback: ${cfg.bootstrapLookbackHours}h`);
-        log(cfg, `  - Source Retries: ${cfg.sourceRetries} (Delay: ${cfg.retryDelayMs}ms)`);
-        log(cfg, `  - Metrics JSON: ${cfg.metricsJson}`);
-        log(cfg, `  - Quiet Mode: ${cfg.quiet}`);
+        log(cfg, `  runtime : poll=${cfg.pollSeconds}s | bootstrap=${cfg.bootstrapLookbackHours}h | native=${cfg.nativeBackfillHours}h | stale=${cfg.maxStaleHours}h`);
+        log(cfg, `  fetch   : retries=${cfg.sourceRetries}x${cfg.retryDelayMs}ms | pages=${cfg.maxPages}x${cfg.pageLimit} | delta=${formatLogPercent(cfg.deltaThresholdPercent, 3)} | dryRun=${cfg.dryRun ? 'yes' : 'no'} | quiet=${cfg.quiet ? 'yes' : 'no'} | metrics=${cfg.metricsJson ? 'yes' : 'no'}`);
+        log(cfg, buildStartupDefaultsLog(DEFAULT_AMA, DEFAULT_CONFIG, MARKET_ADAPTER));
         log(cfg, '═══════════════════════════════════════');
 
         if (cfg.once && cfg.dryRun) {

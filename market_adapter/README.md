@@ -594,6 +594,21 @@ node analysis/ama_fitting/calibrate_convergence_er.js [--data <lp-file.json>] [-
 See `analysis/ama_fitting/calibrate_convergence_er.js` for details on the
 implied-ER correction (Jensen's inequality).
 
+For a calibrated `AMA_CONVERGENCE_ER_AVG` of `0.151` and
+`AMA_CONVERGENCE_EPSILON = 0.01` in 1-hour candles, the full AMA warm-up for
+the built-in presets is:
+
+| Preset | Candles | Days |
+|--------|---------|------|
+| `AMA1` | `1,822` | `75.9` |
+| `AMA2` | `1,874` | `78.1` |
+| `AMA3` | `1,925` | `80.2` |
+| `AMA4` | `2,023` | `84.3` |
+
+These totals include the ER buffer, the convergence window, and the default
+9-bar lookback used by the dynamic-weight logic. If the candle timeframe is
+not 1 hour, scale the total by the candle duration.
+
 **Why `slowPeriod` dominates:** `slowSC ≈ 2 / slowPeriod`, so `SC_avg` scales
 as `~ (2 / slowPeriod)² = 4 / slowPeriod²`. Since `convergenceBars` is
 proportional to `1 / SC_avg`, the required candle count scales as

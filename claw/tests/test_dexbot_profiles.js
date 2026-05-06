@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
+const { GRID_LIMITS } = require('../../modules/constants');
 
 const {
   createBotKey,
@@ -286,6 +287,7 @@ async function testSparseBotPatchRespectsDefaultBackedValidation() {
   }, null, 2));
 
   const adapter = createDexbotProfileAdapter(profilesDir);
+  const minSpreadPattern = new RegExp(`targetSpreadPercent must be >= ${GRID_LIMITS.MIN_SPREAD_FACTOR}x incrementPercent`);
   const preview = await adapter.previewBotSettingsUpdate('solo', {
     targetSpreadPercent: 0.1
   }, {
@@ -293,14 +295,14 @@ async function testSparseBotPatchRespectsDefaultBackedValidation() {
   });
 
   assert.strictEqual(preview.valid, false, 'preview must reject patches that are invalid after defaults are applied');
-  assert.match(preview.errors.join('\n'), /targetSpreadPercent must be >= 2x incrementPercent/);
+  assert.match(preview.errors.join('\n'), minSpreadPattern);
   await assert.rejects(
     () => adapter.applyBotSettingsPatch('solo', {
       targetSpreadPercent: 0.1
     }, {
       trigger: false
     }),
-    /targetSpreadPercent must be >= 2x incrementPercent/
+    minSpreadPattern
   );
 }
 
