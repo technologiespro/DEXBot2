@@ -120,16 +120,14 @@ async function testTimeRangeControlsRequestedFillRange() {
     assert.deepStrictEqual(
         candles.map((c) => c[0]),
         [
-            Date.parse('2026-04-28T00:00:00Z'),
-            Date.parse('2026-04-28T01:00:00Z'),
             Date.parse('2026-04-28T02:00:00Z'),
             Date.parse('2026-04-28T03:00:00Z'),
         ],
-        'timeRange fill should not extend to wall-clock now'
+        'timeRange fill should skip leading gaps if no baseline, but still fill trailing gaps'
     );
-    assert.strictEqual(candles[0][4], 2, 'range-prefix fills retain the first known close');
-    assert.strictEqual(candles[3][4], 2, 'range-tail fills retain the last known close only to the requested end');
-    assert.strictEqual(candles[candles.length - 1][0] - candles[0][0], 3 * hour, 'filled span should be bounded by the request');
+    assert.strictEqual(candles[0][4], 2, 'first known candle retains its close');
+    assert.strictEqual(candles[1][4], 2, 'range-tail fills retain the last known close');
+    assert.strictEqual(candles.length, 2, 'filled span should only start from the first known trade');
 }
 
 async function testLiveAdapterCanDisableRequestedRangeFill() {

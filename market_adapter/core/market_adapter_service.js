@@ -286,7 +286,391 @@ class MarketAdapterService {
         };
     }
 
+    _computeDynamicWeights(params) {
+        const {
+            analysisCandles, closes, amaValues, amaWarmupBars, lookbackBars,
+            botAma, weightVariance, amaPrice, nowIso, cfg, bot, ctx, deps
+        } = params;
+
+        const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
+        const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
+        const amaMaxS = cfg.amaSlope?.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
+        const kalMaxS = cfg.kalmanSlope?.maxSlopePct
+            ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
+        const mo = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
+        const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
+
+        // Compute separate clip thresholds for AMA (slopes) and Kalman (velocities)
+        let amaClipThreshold = Infinity;
+        let kalClipThreshold = Infinity;
+
+        if (clipPercentile > 0 && amaValues.length > amaWarmupBars) {
+            // AMA clip threshold from slope distribution — skip initialization period
+            const amaSlopes = [];
+            for (let i = amaWarmupBars; i < amaValues.length; i++) {
+                const last = amaValues[i];
+                const past = amaValues[i - lookbackBars];
+                if (past > 0) amaSlopes.push(Math.abs((last - past) / past * 100));
+            }
+            if (amaSlopes.length > 0) {
+                const sorted = amaSlopes.sort((a, b) => a - b);
+                const idx = Math.min(Math.floor((100 - clipPercentile) / 100 * sorted.length), sorted.length - 1);
+                amaClipThreshold = sorted[idx];
+            }
+        }
+
+        const slopeCfg = {
+            ...(cfg.amaSlope || {}),
+            erPeriod:              botAma.erPeriod,
+            slowPeriod:            botAma.slowPeriod,
+            fastPeriod:            botAma.fastPeriod,
+            maxSlopeOffset:        cfg.maxSlopeOffset,
+            maxVolatilityOffset:   volatilityClamp,
+            volatilityExponent:    cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT,
+            volatilityScaleX:      cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT,
+            volatilityThreshold:   normalizeVolatilityThreshold(cfg.volatilityThreshold),
+            neutralZonePct:        nz,
+            clipPercentile,
+            clipThreshold:         amaClipThreshold,
+        };
+
+        const slopeResult = computeAmaSlopeWeights(amaValues, weightVariance, slopeCfg);
+
+        // Kalman filter computation - collect per-bar results in single pass
+        const kalman = new KalmanTrendAnalyzer({
+            rNoise: cfg.kalman?.rNoise ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_R_NOISE_DEFAULT,
+            qTactical: cfg.kalman?.qTactical ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_TACTICAL_DEFAULT,
+            qModal: cfg.kalman?.qModal ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_MODAL_DEFAULT,
+            warmupBars: cfg.kalman?.warmupBars ?? 20,
+        });
+
+        const kalmanHistory = [];
+        for (const price of closes) {
+            const kr = kalman.update(price);
+            kalmanHistory.push(kr);
+        }
+
+        const kalmanResult = kalmanHistory[kalmanHistory.length - 1];
+        const kalmanWarmupBars = kalman.warmupBars ?? 20;
+
+        // Regime gate (Hurst + PE bilinear multiplier)
+        const regimeSensitivity = cfg.regimeSensitivity ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY;
+        const absoluteThreshold = cfg.absoluteThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT;
+        let regimeResult = null;
+        let regimeMultiplier = 1.0;
+        const regimeMultipliers = new Array(closes.length).fill(1.0);
+
+        if (regimeSensitivity > 0) {
+            regimeResult = computeRegimeMultiplier(closes, {
+                regimeSensitivity,
+                regimeTable: cfg.regimeTable,
+                hurstZoneBand: cfg.hurstZoneBand,
+                peNodes: cfg.peNodes,
+            });
+            regimeMultiplier = regimeResult.isReady && Math.abs(regimeResult.multiplier - 1.0) >= absoluteThreshold
+                ? regimeResult.multiplier
+                : 1.0;
+            if (Array.isArray(regimeResult.series) && regimeResult.series.length === closes.length) {
+                for (let i = 0; i < closes.length; i++) {
+                    const rawMult = regimeResult.series[i];
+                    regimeMultipliers[i] = Math.abs(rawMult - 1.0) >= absoluteThreshold ? rawMult : 1.0;
+                }
+            }
+        }
+
+        const alpha = cfg.alpha ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA;
+        const dw = cfg.dw ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DW;
+        const gain = cfg.gain ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN;
+        const kalmanSmoothPct = cfg.kalmanSmoothPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT;
+        const kalmanDispScaleMult = cfg.kalmanDispScaleMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT;
+        const kalmanDispThresholdMult = cfg.kalmanDispThresholdMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT;
+        const kalmanSmoothSpanPct = cfg.kalmanSmoothSpanPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT;
+        const signalConfirmBars = cfg.signalConfirmBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT;
+        const minOutputThreshold = cfg.minOutputThreshold
+            ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD;
+        const dispScaleMinPct  = cfg.dispScaleMinPct  ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
+        const hasDirectionalOffset = mo > 0;
+        const useAmaBlend = hasDirectionalOffset && alpha !== 0;
+        const useKalmanBlend = hasDirectionalOffset && alpha !== 1;
+        const useNeutralZone = nz > 0;
+        const useClipThreshold = clipPercentile > 0;
+        const zeroOutputThreshold = minOutputThreshold === 0;
+
+        let kalmanSmoothedVelocityPct = new Array(kalmanHistory.length).fill(null);
+        let amaOffsets = new Array(closes.length).fill(0);
+        let kalmanOffsets = new Array(closes.length).fill(0);
+
+        if (useKalmanBlend) {
+            kalmanSmoothedVelocityPct = buildKalmanVelocitySeries(kalmanHistory, {
+                kalmanSmoothPct,
+                kalmanDispScaleMult,
+                kalmanDispThresholdMult,
+                kalmanSmoothSpanPct,
+            });
+
+            kalClipThreshold = useClipThreshold
+                ? computeAbsolutePercentileThreshold(
+                    kalmanSmoothedVelocityPct.slice(kalmanWarmupBars),
+                    clipPercentile,
+                    Infinity
+                )
+                : Infinity;
+
+            for (let i = 0; i < kalmanHistory.length; i++) {
+                const kr = kalmanHistory[i];
+                const vp = kalmanSmoothedVelocityPct[i];
+                if (!kr.isReady || vp == null || kr.displacementRawPct == null) continue;
+
+                const dp = kr.displacementRawPct;
+                const clippedV = Math.max(-kalClipThreshold, Math.min(kalClipThreshold, vp));
+                if (useNeutralZone && Math.abs(clippedV) < nz) continue;
+
+                const dispScale = Math.max(1e-6, dispScaleMinPct);
+                const dispConf = Math.min(Math.abs(dp) / dispScale, 1.0);
+                const momAlign = Math.max(0, (clippedV * dp) / (Math.abs(clippedV) * Math.abs(dp) + 1e-10));
+                const composite = clippedV * (1 - dw + dw * dispConf * momAlign);
+                kalmanOffsets[i] = Math.max(-mo, Math.min(mo, (composite / kalMaxS) * mo));
+            }
+        }
+
+        if (useAmaBlend) {
+            for (let i = 0; i < closes.length; i++) {
+                if (!slopeResult.isReady || i < amaWarmupBars) continue;
+                const last = amaValues[i];
+                const past = amaValues[i - lookbackBars];
+                if (!Number.isFinite(last) || !Number.isFinite(past) || past === 0) continue;
+                const sp  = (last - past) / past * 100;
+                const csp = Math.max(-amaClipThreshold, Math.min(amaClipThreshold, sp));
+                amaOffsets[i] = (!useNeutralZone || Math.abs(csp) >= nz)
+                    ? Math.max(-mo, Math.min(mo, (csp / amaMaxS) * mo))
+                    : 0;
+            }
+        }
+
+        const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
+        const channelNorm = Math.max(Math.abs(offsetClamp), 1e-9);
+        const outputThreshold = minOutputThreshold;
+        const outputThresholdIsZero = zeroOutputThreshold;
+
+        const combinedOffSeries = new Array(closes.length).fill(0);
+        const gatedOffSeries = new Array(closes.length).fill(0);
+        for (let i = 0; i < closes.length; i++) {
+            let blendedOff;
+            if (useAmaBlend && useKalmanBlend) {
+                blendedOff = (alpha * (amaOffsets[i] / channelNorm) + (1 - alpha) * (kalmanOffsets[i] / channelNorm));
+            } else if (useAmaBlend) {
+                blendedOff = amaOffsets[i] / channelNorm;
+            } else if (useKalmanBlend) {
+                blendedOff = kalmanOffsets[i] / channelNorm;
+            } else {
+                blendedOff = 0;
+            }
+
+            const regimeAdjusted = blendedOff * regimeMultipliers[i];
+            const gatedOff = outputThresholdIsZero
+                ? regimeAdjusted
+                : (Math.abs(regimeAdjusted) < outputThreshold ? 0 : regimeAdjusted);
+            const off = Math.max(-offsetClamp, Math.min(offsetClamp, gatedOff * gain));
+            gatedOffSeries[i] = gatedOff;
+            combinedOffSeries[i] = Math.round(off * 1000) / 1000;
+        }
+
+        const confirmBars = Math.max(0, Math.min(5, Math.round(signalConfirmBars)));
+        let echoedOffSeries = new Array(closes.length).fill(0);
+        let echoedGatedOffSeries = new Array(closes.length).fill(0);
+        if (confirmBars === 0) {
+            echoedOffSeries = combinedOffSeries;
+            echoedGatedOffSeries = gatedOffSeries;
+        } else {
+            let latchedSign = 0;
+            let pendingSign = 0;
+            let pendingCount = 0;
+            let latchedOff = 0;
+            let latchedGatedOff = 0;
+            for (let i = 0; i < closes.length; i++) {
+                const raw = combinedOffSeries[i];
+                const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
+                if (sign === latchedSign) {
+                    pendingSign = 0;
+                    pendingCount = 0;
+                    latchedOff = raw;
+                    latchedGatedOff = gatedOffSeries[i];
+                } else {
+                    if (pendingSign !== sign) {
+                        pendingSign = sign;
+                        pendingCount = 1;
+                    } else {
+                        pendingCount++;
+                    }
+                    if (pendingCount >= confirmBars) {
+                        latchedSign = sign;
+                        pendingSign = 0;
+                        pendingCount = 0;
+                        latchedOff = raw;
+                        latchedGatedOff = gatedOffSeries[i];
+                    }
+                }
+                echoedOffSeries[i] = latchedOff;
+                echoedGatedOffSeries[i] = latchedGatedOff;
+            }
+        }
+
+        const rawFinalOff = combinedOffSeries[combinedOffSeries.length - 1] ?? 0;
+        const rawFinalPreGainOff = gatedOffSeries[gatedOffSeries.length - 1] ?? 0;
+        const finalPreGainOff = echoedGatedOffSeries[echoedGatedOffSeries.length - 1] ?? rawFinalPreGainOff;
+        const finalOff = echoedOffSeries[echoedOffSeries.length - 1] ?? rawFinalOff;
+
+        const lastAmaOffset = useAmaBlend ? (amaOffsets[amaOffsets.length - 1] ?? 0) : 0;
+        const amaSlopeGated = slopeResult.isReady
+            ? Math.round((alpha * (lastAmaOffset / channelNorm) * gain * regimeMultiplier) * 1000) / 1000
+            : 0;
+
+        const amaSlope = {
+            trend:          slopeResult.trend,
+            confidence:     slopeResult.confidence,
+            slopePct:       slopeResult.slopePct,
+            slopeOffset:    slopeResult.slopeOffset,
+            amaSlopeGated,
+            regimeMultiplier,
+            symmetricDelta: slopeResult.symmetricDelta,
+            weightVariance,
+            isReady:        slopeResult.isReady,
+            kalmanReady:    kalmanResult?.isReady ?? false,
+            alpha,
+            dw,
+            gain,
+            atrPeriod:      params.atrPeriod,
+            maxSlopeOffset: mo,
+            amaSlope: {
+                maxSlopePct: amaMaxS,
+            },
+            kalmanSlope: {
+                maxSlopePct: kalMaxS,
+            },
+            maxVolatilityOffset: volatilityClamp,
+            kalmanSmoothPct,
+            kalmanDispScaleMult,
+            kalmanDispThresholdMult,
+            kalmanSmoothSpanPct,
+            signalConfirmBars,
+        };
+
+        const staticSell = bot.weightDistribution.sell;
+        const staticBuy = bot.weightDistribution.buy;
+        const MIN_W = MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT;
+        const MAX_W = MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT;
+        const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+        const belowMinOutputThreshold = Math.abs(finalPreGainOff) < outputThreshold;
+        const volPenalty = slopeResult.isReady ? (slopeResult.symmetricDelta ?? 0) : 0;
+        const trendOff   = belowMinOutputThreshold ? 0 : finalOff;
+
+        const effectiveSell = Math.round(clamp(staticSell + trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
+        const effectiveBuy  = Math.round(clamp(staticBuy  - trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
+
+        const weights = {
+            sell: effectiveSell,
+            buy:  effectiveBuy,
+            profile: !slopeResult.isReady ? 'static'
+                : trendOff !== 0 ? 'slope'
+                : volPenalty !== 0 ? 'volatility'
+                : 'flat',
+            meta: {
+                source:                  'dynamic_weight',
+                staticSell,
+                staticBuy,
+                trend:                   slopeResult.trend,
+                confidence:              slopeResult.confidence,
+                slopePct:                slopeResult.slopePct,
+                slopeOffset:             slopeResult.slopeOffset,
+                amaSlopeGated,
+                regimeMultiplier,
+                volatilityPenalty:       volPenalty,
+                alpha,
+                dw,
+                gain,
+                atrPeriod:      params.atrPeriod,
+                maxSlopeOffset: mo,
+                maxAsymmetryFactor:  (cfg.asymmetricBounds?.maxAsymmetryFactor != null)
+                    ? cfg.asymmetricBounds.maxAsymmetryFactor
+                    : null,
+                amaSlope: {
+                    maxSlopePct: amaMaxS,
+                },
+                kalmanSlope: {
+                    maxSlopePct: kalMaxS,
+                },
+                maxVolatilityOffset: volatilityClamp,
+                kalmanSmoothPct,
+                kalmanDispScaleMult,
+                kalmanDispThresholdMult,
+                kalmanSmoothSpanPct,
+                signalConfirmBars,
+                amaChannelContribution: amaSlopeGated,
+                rawFinalOffset:          rawFinalOff,
+                trendOffset:             trendOff,
+                finalOffset:             finalOff,
+                minOutputThreshold,
+                outputThreshold,
+                belowMinOutputThreshold,
+                kalmanReady:             kalmanResult?.isReady ?? false,
+                isReady:                 slopeResult.isReady,
+            },
+        };
+
+        const dynamicWeightsPayload = {
+            effectiveWeights: { sell: effectiveSell, buy: effectiveBuy },
+            baseWeights:      { sell: staticSell,    buy: staticBuy },
+            slopeOffset:      slopeResult.slopeOffset,
+            amaSlopeGated,
+            volatilityPenalty: volPenalty,
+            finalOffset:      finalOff,
+            alpha,
+            dw,
+            gain,
+            atrPeriod:      params.atrPeriod,
+            maxSlopeOffset: mo,
+            amaSlope: {
+                maxSlopePct: amaMaxS,
+            },
+            kalmanSlope: {
+                maxSlopePct: kalMaxS,
+            },
+            maxVolatilityOffset: volatilityClamp,
+            kalmanSmoothPct,
+            kalmanDispScaleMult,
+            kalmanDispThresholdMult,
+            kalmanSmoothSpanPct,
+            signalConfirmBars,
+            rawFinalOffset:      rawFinalOff,
+            maxAsymmetryFactor:  (cfg.asymmetricBounds?.maxAsymmetryFactor != null)
+                ? cfg.asymmetricBounds.maxAsymmetryFactor
+                : null,
+            amaChannelContribution: amaSlopeGated,
+            trend:                   slopeResult.trend,
+            confidence:              slopeResult.confidence,
+            slopePct:                slopeResult.slopePct,
+            regimeMultiplier,
+            minOutputThreshold,
+            outputThreshold,
+            belowMinOutputThreshold,
+            kalmanReady:             kalmanResult?.isReady ?? false,
+            ...(regimeResult ? {
+                hurst:       regimeResult.hurst,
+                pe:          regimeResult.pe,
+                hurstRegime: regimeResult.hurstRegime,
+                peRegime:    regimeResult.peRegime,
+                regimeReady: regimeResult.isReady,
+            } : {}),
+            isReady:          slopeResult.isReady && (!belowMinOutputThreshold || volPenalty !== 0),
+            updatedAt:        nowIso,
+        };
+
+        return { weights, dynamicWeightsPayload, slopeResult, regimeResult, kalmanResult, amaSlope };
+    }
+
     async processBot(bot, state, cfg, contextCache, hooks = {}) {
+
         const deps = this.deps;
         const isDryRun = !!hooks.isDryRun;
         const forceWhitelistAll = !!hooks.forceWhitelistAll;
@@ -343,6 +727,9 @@ class MarketAdapterService {
         const existingMarketSource = normalizeMarketSource(existingMeta.marketSource);
         const marketSource = resolveMarketSourceForBot(bot) || 'pool';
         const isBookSource = marketSource === 'book';
+        const kibanaRequestTimeoutMs = Number.isFinite(cfg.kibanaRequestTimeoutMs) && cfg.kibanaRequestTimeoutMs > 0
+            ? cfg.kibanaRequestTimeoutMs
+            : MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS;
 
         const fetchKibanaCandles = async (options = {}) => {
             const kibanaOptions = {
@@ -362,7 +749,21 @@ class MarketAdapterService {
             return deps.kibanaSource.getLpCandlesForPool(ctx.poolId, ctx.assetA, ctx.assetB, kibanaOptions);
         };
 
-        const verifyAndPruneStaleTail = async (candles, threshold, staleTailVerifiedTs = null) => {
+        const staleTailVerifiedRangeFromMeta = () => {
+            const startTs = Number(existingMeta.staleTailVerifiedStartTs);
+            const endTs = Number(existingMeta.staleTailVerifiedEndTs);
+            if (Number.isFinite(startTs) && Number.isFinite(endTs)) {
+                return { startTs, endTs };
+            }
+
+            const legacyStartTs = Number(existingMeta.staleTailVerifiedTs);
+            if (Number.isFinite(legacyStartTs)) {
+                return { startTs: legacyStartTs, endTs: Number.POSITIVE_INFINITY };
+            }
+            return {};
+        };
+
+        const verifyAndPruneStaleTail = async (candles, threshold, verifiedRange = {}) => {
             if (typeof deps.pruneStaleTail !== 'function') return { candles };
             const pruned = deps.pruneStaleTail(candles, threshold);
             if (pruned.length === candles.length || candles.length === 0) {
@@ -377,10 +778,12 @@ class MarketAdapterService {
             const tailStartTs = detected.sorted[detected.sorted.length - detected.runLength][0];
             const tailEndTs = detected.sorted[detected.sorted.length - 1][0];
 
-            // Skip Kibana verification if this tail was already confirmed flat
-            // on a previous cycle (same tailStartTs or within the verified range).
-            if (Number.isFinite(staleTailVerifiedTs) && tailStartTs >= staleTailVerifiedTs) {
-                return { candles, keptStaleTailTs: tailStartTs };
+            // Skip Kibana verification if this tail range was already confirmed flat
+            // on a previous cycle (the current tail is contained within a verified range).
+            const { startTs: vStart, endTs: vEnd } = verifiedRange;
+            if (Number.isFinite(vStart) && (Number.isFinite(vEnd) || vEnd === Number.POSITIVE_INFINITY)
+                    && tailStartTs >= vStart && tailEndTs <= vEnd) {
+                return { candles, keptStaleTailStartTs: tailStartTs, keptStaleTailEndTs: tailEndTs };
             }
 
             // Verify with Kibana: did the market actually trade during this period?
@@ -402,7 +805,7 @@ class MarketAdapterService {
                     );
                     if (!hasKibanaActivity) {
                         // Kibana confirms flat/inactive: our data is genuine → keep it
-                        return { candles, keptStaleTailTs: tailStartTs };
+                        return { candles, keptStaleTailStartTs: tailStartTs, keptStaleTailEndTs: tailEndTs };
                     }
                     // Kibana shows real trades: our gap-fill is stale → prune it
                 }
@@ -414,6 +817,16 @@ class MarketAdapterService {
             }
         };
 
+        const applyStaleTailVerificationMeta = (verified) => {
+            if (Number.isFinite(verified?.keptStaleTailStartTs) && Number.isFinite(verified?.keptStaleTailEndTs)) {
+                existingMeta.staleTailVerifiedStartTs = verified.keptStaleTailStartTs;
+                existingMeta.staleTailVerifiedEndTs = verified.keptStaleTailEndTs;
+                return;
+            }
+            existingMeta.staleTailVerifiedStartTs = null;
+            existingMeta.staleTailVerifiedEndTs = null;
+        };
+
         // Prune stale trailing candles from a previous run before any processing.
         // Verifies with Kibana first to avoid removing genuinely flat market periods.
         if (existingCandles.length > 0) {
@@ -421,12 +834,10 @@ class MarketAdapterService {
                 ? cfg.staleTailThreshold
                 : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
             const verified = await verifyAndPruneStaleTail(
-                existingCandles, staleThreshold, existingMeta.staleTailVerifiedTs
+                existingCandles, staleThreshold, staleTailVerifiedRangeFromMeta()
             );
             existingCandles = verified.candles;
-            if (verified.keptStaleTailTs) {
-                existingMeta.staleTailVerifiedTs = verified.keptStaleTailTs;
-            }
+            applyStaleTailVerificationMeta(verified);
         }
 
         const hasStoredPoolContext = existingMeta.pool != null && String(existingMeta.pool).trim() !== '';
@@ -438,6 +849,8 @@ class MarketAdapterService {
             existingMeta.nativeRecentTradeSequences = [];
             existingMeta.nativeLastTradeTs = null;
             existingMeta.staleTailVerifiedTs = null;
+            existingMeta.staleTailVerifiedStartTs = null;
+            existingMeta.staleTailVerifiedEndTs = null;
         }
 
         const needBootstrap = existingCandles.length === 0;
@@ -446,9 +859,6 @@ class MarketAdapterService {
         // Retain one extra raw candle so the closed-candle analysis window still keeps a
         // full warmup/history set when the newest bucket is the current in-progress bar.
         const rawKeepCount = analysisKeepCount + 1;
-        const kibanaRequestTimeoutMs = Number.isFinite(cfg.kibanaRequestTimeoutMs) && cfg.kibanaRequestTimeoutMs > 0
-            ? cfg.kibanaRequestTimeoutMs
-            : MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS;
         const nowIso = new Date().toISOString();
         const botThreshold = deps.calculateBotThreshold(cfg);
         if (!Number.isFinite(botThreshold) || botThreshold <= 0) {
@@ -557,12 +967,11 @@ class MarketAdapterService {
                         ? cfg.staleTailThreshold
                         : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
                     const verified = await verifyAndPruneStaleTail(
-                        nextCandles, staleThreshold, existingMeta.staleTailVerifiedTs
+                        nextCandles, staleThreshold, staleTailVerifiedRangeFromMeta()
                     );
                     nextCandles = verified.candles;
-                    if (verified.keptStaleTailTs) {
-                        existingMeta.staleTailVerifiedTs = verified.keptStaleTailTs;
-                    }
+                    applyStaleTailVerificationMeta(verified);
+
                 }
             } else if (needBootstrap) {
                 const lookbackHours = Math.max(cfg.bootstrapLookbackHours, analysisKeepCount * 2);
@@ -587,20 +996,24 @@ class MarketAdapterService {
                 } else {
                     // ── Step 2: Kibana insufficient → fall back to native ──
                     let nativeCandles = [];
-                    try {
-                        const sinceMs = Date.now() - (lookbackHours * 3600 * 1000);
-                        const trades = await deps.withRetries(
-                            () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
-                            cfg.sourceRetries,
-                            cfg.retryDelayMs,
-                            'native bootstrap failed'
-                        );
-                        if (trades.length > 0) {
-                            nativeRecentTradeSequences = this.getNativeRecentTradeSequences(trades);
-                            const latestTradeTs = Math.max(...trades.map((t) => Number(t?.tsMs)).filter(Number.isFinite));
-                            if (Number.isFinite(latestTradeTs)) nativeLastTradeTs = latestTradeTs;
-                        }
-                        nativeCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
+                        try {
+                            const sinceMs = Date.now() - (lookbackHours * 3600 * 1000);
+                            const fetchResult = await deps.withRetries(
+                                () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
+                                cfg.sourceRetries,
+                                cfg.retryDelayMs,
+                                'native bootstrap failed'
+                            );
+                            const trades = Array.isArray(fetchResult?.trades) ? fetchResult.trades : [];
+                            if (fetchResult?.truncated && typeof deps.logger?.warn === 'function') {
+                                deps.logger.warn(`[market_adapter] ${bot.botKey}: native bootstrap history truncated (exhausted ${cfg.maxPages} pages)`);
+                            }
+                            if (trades.length > 0) {
+                                nativeRecentTradeSequences = this.getNativeRecentTradeSequences(trades);
+                                const latestTradeTs = Math.max(...trades.map((t) => Number(t?.tsMs)).filter(Number.isFinite));
+                                if (Number.isFinite(latestTradeTs)) nativeLastTradeTs = latestTradeTs;
+                            }
+                            nativeCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
                         if (nativeCandles.length > 0 && typeof deps.fillCandleGaps === 'function') {
                             const eTs = nativeCandles[0][0];
                             const lTs = nativeCandles[nativeCandles.length - 1][0];
@@ -656,15 +1069,21 @@ class MarketAdapterService {
                                 cfg.retryDelayMs,
                                 'native incremental overlap fetch failed'
                             );
-                            fetchedTrades = Array.isArray(overlapResult?.trades) ? overlapResult.trades : [];
-                            nativeOverlapCount = Number(overlapResult?.overlapCount || 0);
-                            nativePagesFetched = Number(overlapResult?.pages || 0);
-                            sourceLabel = 'native-incremental-overlap';
-                            newTrades = fetchedTrades.filter((trade) => {
-                                if (!Number.isFinite(Number(trade?.sequence))) return true;
-                                return !knownSequences.has(String(trade.sequence));
-                            });
-                            overlapUsed = true;
+                            if (overlapResult?.reachedOverlap === false) {
+                                if (typeof deps.logger?.warn === 'function') {
+                                    deps.logger.warn(`[market_adapter] ${bot.botKey}: native overlap fetch exhausted (${cfg.maxPages} pages) without finding an overlap; falling back to time-based`);
+                                }
+                            } else {
+                                fetchedTrades = Array.isArray(overlapResult?.trades) ? overlapResult.trades : [];
+                                nativeOverlapCount = Number(overlapResult?.overlapCount || 0);
+                                nativePagesFetched = Number(overlapResult?.pages || 0);
+                                sourceLabel = 'native-incremental-overlap';
+                                newTrades = fetchedTrades.filter((trade) => {
+                                    if (!Number.isFinite(Number(trade?.sequence))) return true;
+                                    return !knownSequences.has(String(trade.sequence));
+                                });
+                                overlapUsed = true;
+                            }
                         } catch (overlapErr) {
                             if (typeof deps.logger?.log === 'function') {
                                 deps.logger.log(`[market_adapter] ${bot.botKey}: overlap fetch exhausted (${overlapErr.message}), falling back to time-based`, 'warn');
@@ -675,12 +1094,16 @@ class MarketAdapterService {
 
                     if (!overlapUsed) {
                         const sinceMs = lastTs - (cfg.nativeBackfillHours * 3600 * 1000);
-                        fetchedTrades = await deps.withRetries(
+                        const fetchResult = await deps.withRetries(
                             () => deps.fetchNativeTradesSince(ctx.poolId, sinceMs, cfg.pageLimit, cfg.maxPages),
                             cfg.sourceRetries,
                             cfg.retryDelayMs,
                             'native incremental fetch failed'
                         );
+                        fetchedTrades = Array.isArray(fetchResult?.trades) ? fetchResult.trades : [];
+                        if (fetchResult?.truncated && typeof deps.logger?.warn === 'function') {
+                            deps.logger.warn(`[market_adapter] ${bot.botKey}: native incremental history truncated (exhausted ${cfg.maxPages} pages)`);
+                        }
                         newTrades = this.filterTimeBasedNativeNewTrades(
                             fetchedTrades,
                             knownSequences,
@@ -690,7 +1113,7 @@ class MarketAdapterService {
                         );
                         sourceLabel = 'native-incremental-time';
                         nativeOverlapCount = null;
-                        nativePagesFetched = null;
+                        nativePagesFetched = fetchResult?.pages || null;
                     }
 
                     if (fetchedTrades.length > 0) {
@@ -741,12 +1164,11 @@ class MarketAdapterService {
                     ? cfg.staleTailThreshold
                     : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
                 const verified = await verifyAndPruneStaleTail(
-                    nextCandles, staleThreshold, existingMeta.staleTailVerifiedTs
+                    nextCandles, staleThreshold, staleTailVerifiedRangeFromMeta()
                 );
                 nextCandles = verified.candles;
-                if (verified.keptStaleTailTs) {
-                    existingMeta.staleTailVerifiedTs = verified.keptStaleTailTs;
-                }
+                applyStaleTailVerificationMeta(verified);
+
             }
 
             let kibanaGapRepairTimestamps = [];
@@ -911,8 +1333,10 @@ class MarketAdapterService {
                 nativeLastTradeTs,
                 nativeOverlapCount,
                 nativePagesFetched,
-                staleTailVerifiedTs: Number.isFinite(existingMeta.staleTailVerifiedTs)
-                    ? existingMeta.staleTailVerifiedTs : null,
+                staleTailVerifiedStartTs: Number.isFinite(existingMeta.staleTailVerifiedStartTs)
+                    ? existingMeta.staleTailVerifiedStartTs : null,
+                staleTailVerifiedEndTs: Number.isFinite(existingMeta.staleTailVerifiedEndTs)
+                    ? existingMeta.staleTailVerifiedEndTs : null,
                 format: '[timestamp_ms, open, high, low, close, volume_A]',
             },
             candles: nextCandles,
@@ -1153,379 +1577,26 @@ class MarketAdapterService {
         let dynamicWeightsPayload = null;
 
         if (shouldComputeDynamicWeights) {
-            // AMA slope computation (final state). The trend branch stays ATR-free;
-            // symmetricDelta still uses weightVariance from the ATR/price ratio.
-            slopeResult = computeAmaSlopeWeights(amaValues, weightVariance, slopeCfg);
-
-            // Kalman filter computation - collect per-bar results in single pass
-            const kalman = new KalmanTrendAnalyzer({
-                rNoise: cfg.kalman?.rNoise ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_R_NOISE_DEFAULT,
-                qTactical: cfg.kalman?.qTactical ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_TACTICAL_DEFAULT,
-                qModal: cfg.kalman?.qModal ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_Q_MODAL_DEFAULT,
-                warmupBars: cfg.kalman?.warmupBars ?? 20,
-            });
-
-            const kalmanHistory = [];
-            for (const price of closes) {
-                const kr = kalman.update(price);
-                kalmanHistory.push(kr);
-            }
-
-            const kalmanResult = kalmanHistory[kalmanHistory.length - 1];
-
-            const kalmanWarmupBars = kalman.warmupBars ?? 20;
-
-            // Regime gate (Hurst + PE bilinear multiplier)
-            const regimeSensitivity = cfg.regimeSensitivity ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_REGIME_SENSITIVITY;
-            const absoluteThreshold = cfg.absoluteThreshold ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT;
-            let regimeResult = null;
-            let regimeMultiplier = 1.0;
-            const regimeMultipliers = new Array(closes.length).fill(1.0);
-
-            if (regimeSensitivity > 0) {
-                regimeResult = computeRegimeMultiplier(closes, {
-                    regimeSensitivity,
-                    regimeTable: cfg.regimeTable,
-                    hurstZoneBand: cfg.hurstZoneBand,
-                    peNodes: cfg.peNodes,
-                });
-                regimeMultiplier = regimeResult.isReady && Math.abs(regimeResult.multiplier - 1.0) >= absoluteThreshold
-                    ? regimeResult.multiplier
-                    : 1.0;
-                if (Array.isArray(regimeResult.series) && regimeResult.series.length === closes.length) {
-                    for (let i = 0; i < closes.length; i++) {
-                        const rawMult = regimeResult.series[i];
-                        regimeMultipliers[i] = Math.abs(rawMult - 1.0) >= absoluteThreshold ? rawMult : 1.0;
-                    }
-                }
-            }
-
-            // Research tool parameters
-            const alpha = cfg.alpha ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA;
-            const dw = cfg.dw ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DW;
-            const gain = cfg.gain ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_GAIN;
-            const kalmanSmoothPct = cfg.kalmanSmoothPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT;
-            const kalmanDispScaleMult = cfg.kalmanDispScaleMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_SCALE_MULT_DEFAULT;
-            const kalmanDispThresholdMult = cfg.kalmanDispThresholdMult ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_DISP_THRESHOLD_MULT_DEFAULT;
-            const kalmanSmoothSpanPct = cfg.kalmanSmoothSpanPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_SPAN_PCT_DEFAULT;
-            const signalConfirmBars = cfg.signalConfirmBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_SIGNAL_CONFIRM_BARS_DEFAULT;
-            const minOutputThreshold = cfg.minOutputThreshold
-                ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD;
-            const dispScaleMinPct  = cfg.dispScaleMinPct  ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_DISP_SCALE_MIN_PCT;
-            const hasDirectionalOffset = mo > 0;
-            const useAmaBlend = hasDirectionalOffset && alpha !== 0;
-            const useKalmanBlend = hasDirectionalOffset && alpha !== 1;
-            const useNeutralZone = nz > 0;
-            const useClipThreshold = clipPercentile > 0;
-            const zeroOutputThreshold = minOutputThreshold === 0;
-
-            let kalmanSmoothedVelocityPct = new Array(kalmanHistory.length).fill(null);
-            let amaOffsets = new Array(closes.length).fill(0);
-            let kalmanOffsets = new Array(closes.length).fill(0);
-
-            if (useKalmanBlend) {
-                kalmanSmoothedVelocityPct = buildKalmanVelocitySeries(kalmanHistory, {
-                    kalmanSmoothPct,
-                    kalmanDispScaleMult,
-                    kalmanDispThresholdMult,
-                    kalmanSmoothSpanPct,
-                });
-
-                // Compute Kalman clip threshold from the research-chart filtered velocity distribution.
-                // Skip the analyzer warm-up period so the percentile is not contaminated by startup noise.
-                kalClipThreshold = useClipThreshold
-                    ? computeAbsolutePercentileThreshold(
-                        kalmanSmoothedVelocityPct.slice(kalmanWarmupBars),
-                        clipPercentile,
-                        Infinity
-                    )
-                    : Infinity;
-
-                // Build Kalman offset array using the research-chart filtered velocity series.
-                for (let i = 0; i < kalmanHistory.length; i++) {
-                    const kr = kalmanHistory[i];
-                    const vp = kalmanSmoothedVelocityPct[i];
-                    // kr.displacementRawPct provides higher precision than the rounded displacementPct
-                    if (!kr.isReady || vp == null || kr.displacementRawPct == null) {
-                        continue;
-                    }
-
-                    const dp = kr.displacementRawPct;
-                    const clippedV = Math.max(-kalClipThreshold, Math.min(kalClipThreshold, vp));
-
-                    if (useNeutralZone && Math.abs(clippedV) < nz) {
-                        continue;
-                    }
-
-                    const dispScale = Math.max(1e-6, dispScaleMinPct);
-                    const dispConf = Math.min(Math.abs(dp) / dispScale, 1.0);
-                    const momAlign = Math.max(0, (clippedV * dp) / (Math.abs(clippedV) * Math.abs(dp) + 1e-10));
-                    const composite = clippedV * (1 - dw + dw * dispConf * momAlign);
-                    // Convert to offset: (composite / kalMaxS) * mo, capped at mo
-                    kalmanOffsets[i] = Math.max(-mo, Math.min(mo, (composite / kalMaxS) * mo));
-                }
-            }
-
-            if (useAmaBlend) {
-                // Build AMA offset array — compute slopeOffset directly from AMA values per bar.
-                // computeAmaSlopeWeights only reads amaValues[i] and amaValues[i-lookbackBars],
-                // so there is no need to slice the full series for each bar.
-                for (let i = 0; i < closes.length; i++) {
-                    if (!slopeResult.isReady || i < amaWarmupBars) {
-                        continue;
-                    }
-                    const last = amaValues[i];
-                    const past = amaValues[i - lookbackBars];
-                    if (!Number.isFinite(last) || !Number.isFinite(past) || past === 0) {
-                        continue;
-                    }
-                    const sp  = (last - past) / past * 100;
-                    const csp = Math.max(-amaClipThreshold, Math.min(amaClipThreshold, sp));
-                    amaOffsets[i] = (!useNeutralZone || Math.abs(csp) >= nz)
-                        ? Math.max(-mo, Math.min(mo, (csp / amaMaxS) * mo))
-                        : 0;
-                }
-            }
-
-            // Parity rule with the research chart:
-            // 1. Normalize AMA/Kalman rails by the runtime clamp so alpha only changes the blend ratio.
-            // 2. Decide regime/dead-band in pre-gain space so gain cannot reshape the signal.
-            // 3. Apply gain as the final scale factor, then clamp to the runtime offset cap.
-            const offsetClamp = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
-            const channelNorm = Math.max(Math.abs(offsetClamp), 1e-9);
-            const outputThreshold = minOutputThreshold;
-            const outputThresholdIsZero = zeroOutputThreshold;
-
-            // Build the same per-bar combined output series as the research chart, then
-            // optionally latch it with signalConfirmBars before taking the last live value.
-            const combinedOffSeries = new Array(closes.length).fill(0);
-            const gatedOffSeries = new Array(closes.length).fill(0);
-            for (let i = 0; i < closes.length; i++) {
-                let blendedOff;
-                if (useAmaBlend && useKalmanBlend) {
-                    blendedOff = (alpha * (amaOffsets[i] / channelNorm) + (1 - alpha) * (kalmanOffsets[i] / channelNorm));
-                } else if (useAmaBlend) {
-                    blendedOff = amaOffsets[i] / channelNorm;
-                } else if (useKalmanBlend) {
-                    blendedOff = kalmanOffsets[i] / channelNorm;
-                } else {
-                    blendedOff = 0;
-                }
-
-                const regimeAdjusted = blendedOff * regimeMultipliers[i];
-                const gatedOff = outputThresholdIsZero
-                    ? regimeAdjusted
-                    : (Math.abs(regimeAdjusted) < outputThreshold ? 0 : regimeAdjusted);
-                const off = Math.max(-offsetClamp, Math.min(offsetClamp, gatedOff * gain));
-                gatedOffSeries[i] = gatedOff;
-                combinedOffSeries[i] = Math.round(off * 1000) / 1000;
-            }
-
-            const confirmBars = Math.max(0, Math.min(5, Math.round(signalConfirmBars)));
-            let echoedOffSeries = new Array(closes.length).fill(0);
-            let echoedGatedOffSeries = new Array(closes.length).fill(0);
-            if (confirmBars === 0) {
-                echoedOffSeries = combinedOffSeries;
-                echoedGatedOffSeries = gatedOffSeries;
-            } else {
-                let latchedSign = 0;
-                let pendingSign = 0;
-                let pendingCount = 0;
-                let latchedOff = 0;
-                let latchedGatedOff = 0;
-                for (let i = 0; i < closes.length; i++) {
-                    const raw = combinedOffSeries[i];
-                    const sign = raw > 0 ? 1 : raw < 0 ? -1 : 0;
-                    if (sign === latchedSign) {
-                        pendingSign = 0;
-                        pendingCount = 0;
-                        latchedOff = raw;
-                        latchedGatedOff = gatedOffSeries[i];
-                    } else {
-                        if (pendingSign !== sign) {
-                            pendingSign = sign;
-                            pendingCount = 1;
-                        } else {
-                            pendingCount++;
-                        }
-                        if (pendingCount >= confirmBars) {
-                            latchedSign = sign;
-                            pendingSign = 0;
-                            pendingCount = 0;
-                            latchedOff = raw;
-                            latchedGatedOff = gatedOffSeries[i];
-                        }
-                    }
-                    echoedOffSeries[i] = latchedOff;
-                    echoedGatedOffSeries[i] = latchedGatedOff;
-                }
-            }
-
-            const rawFinalOff = combinedOffSeries[combinedOffSeries.length - 1] ?? 0;
-            const rawFinalPreGainOff = gatedOffSeries[gatedOffSeries.length - 1] ?? 0;
-            const finalPreGainOff = echoedGatedOffSeries[echoedGatedOffSeries.length - 1] ?? rawFinalPreGainOff;
-            const finalOff = echoedOffSeries[echoedOffSeries.length - 1] ?? rawFinalOff;
-
-            // Store for metadata.
-            // amaSlopeGated tracks the AMA channel contribution after the live normalization
-            // and regime gate, so the diagnostic aligns with the actual signal path.
-            const lastAmaOffset = useAmaBlend ? (amaOffsets[amaOffsets.length - 1] ?? 0) : 0;
-            const amaSlopeGated = slopeResult.isReady
-                ? Math.round((alpha * (lastAmaOffset / channelNorm) * gain * regimeMultiplier) * 1000) / 1000
-                : 0;
-
-            amaSlope = {
-                trend:          slopeResult.trend,
-                confidence:     slopeResult.confidence,
-                slopePct:       slopeResult.slopePct,
-                slopeOffset:    slopeResult.slopeOffset,
-                amaSlopeGated,
-                regimeMultiplier,
-                symmetricDelta: slopeResult.symmetricDelta,
+            const dwResult = this._computeDynamicWeights({
+                analysisCandles,
+                closes,
+                amaValues,
+                amaWarmupBars,
+                lookbackBars,
+                botAma,
                 weightVariance,
-                isReady:        slopeResult.isReady,
-                kalmanReady:    kalmanResult?.isReady ?? false,
-                alpha,
-                dw,
-                gain,
+                amaPrice,
+                nowIso,
+                cfg,
+                bot,
+                ctx,
+                deps,
                 atrPeriod,
-                maxSlopeOffset: mo,
-                amaSlope: {
-                    maxSlopePct: amaMaxS,
-                },
-                kalmanSlope: {
-                    maxSlopePct: kalMaxS,
-                },
-                maxVolatilityOffset: volatilityClamp,
-                kalmanSmoothPct,
-                kalmanDispScaleMult,
-                kalmanDispThresholdMult,
-                kalmanSmoothSpanPct,
-                signalConfirmBars,
-            };
-
-            // Apply to bot weights. Dynamic weight requires explicit bot midpoint settings.
-            const staticSell = bot.weightDistribution.sell;
-            const staticBuy = bot.weightDistribution.buy;
-
-            const MIN_W = MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT;
-            const MAX_W = MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT;
-            const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-
-            // Min-output threshold: evaluate the same confirmed pre-gain state that drives
-            // the latched live output so signalConfirmBars affects gating and application consistently.
-            const belowMinOutputThreshold = Math.abs(finalPreGainOff) < outputThreshold;
-
-            // Volatility penalty is the separate symmetric ATR shift. It is independent of
-            // the trend gate so volatile markets reduce both sides even when trend is flat.
-            const volPenalty = slopeResult.isReady ? (slopeResult.symmetricDelta ?? 0) : 0;
-            const trendOff   = belowMinOutputThreshold ? 0 : finalOff;
-
-            const effectiveSell = Math.round(clamp(staticSell + trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
-            const effectiveBuy  = Math.round(clamp(staticBuy  - trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
-
-            weights = {
-                sell: effectiveSell,
-                buy:  effectiveBuy,
-                profile: !slopeResult.isReady ? 'static'
-                    : trendOff !== 0 ? 'slope'
-                    : volPenalty !== 0 ? 'volatility'
-                    : 'flat',
-                meta: {
-                    source:                  'dynamic_weight',
-                    staticSell,
-                    staticBuy,
-                    trend:                   slopeResult.trend,
-                    confidence:              slopeResult.confidence,
-                    slopePct:                slopeResult.slopePct,
-                    slopeOffset:             slopeResult.slopeOffset,
-                    amaSlopeGated,
-                    regimeMultiplier,
-                    volatilityPenalty:       volPenalty,
-                    alpha,
-                    dw,
-                    gain,
-                    atrPeriod,
-                    maxSlopeOffset: mo,
-                    maxAsymmetryFactor:  (cfg.asymmetricBounds?.maxAsymmetryFactor != null)
-                        ? cfg.asymmetricBounds.maxAsymmetryFactor
-                        : null,
-                    amaSlope: {
-                        maxSlopePct: amaMaxS,
-                    },
-                    kalmanSlope: {
-                        maxSlopePct: kalMaxS,
-                    },
-                    maxVolatilityOffset: volatilityClamp,
-                    kalmanSmoothPct,
-                    kalmanDispScaleMult,
-                    kalmanDispThresholdMult,
-                    kalmanSmoothSpanPct,
-                    signalConfirmBars,
-                    amaChannelContribution: amaSlopeGated,
-                    rawFinalOffset:          rawFinalOff,
-                    trendOffset:             trendOff,
-                    finalOffset:             finalOff,
-                    minOutputThreshold,
-                    outputThreshold,
-                    belowMinOutputThreshold,
-                    kalmanReady:             kalmanResult?.isReady ?? false,
-                    isReady:                 slopeResult.isReady,
-                },
-            };
-
-            // Payload written to dynamicgrid.json — bot re-reads this before every rebalance
-            // (fill processing, spread correction, divergence correction, etc.) so new orders
-            // always use the latest live weights. When belowMinOutputThreshold, effectiveWeights
-            // equal baseWeights so the bot applies no dynamic offset and isReady is set to false
-            // to prevent stale application.
-            dynamicWeightsPayload = {
-                effectiveWeights: { sell: effectiveSell, buy: effectiveBuy },
-                baseWeights:      { sell: staticSell,    buy: staticBuy },
-                slopeOffset:      slopeResult.slopeOffset,
-                amaSlopeGated,
-                volatilityPenalty: volPenalty,
-                finalOffset:      finalOff,
-                alpha,
-                dw,
-                gain,
-                atrPeriod,
-                maxSlopeOffset: mo,
-                amaSlope: {
-                    maxSlopePct: amaMaxS,
-                },
-                kalmanSlope: {
-                    maxSlopePct: kalMaxS,
-                },
-                maxVolatilityOffset: volatilityClamp,
-                kalmanSmoothPct,
-                kalmanDispScaleMult,
-                kalmanDispThresholdMult,
-                kalmanSmoothSpanPct,
-                signalConfirmBars,
-                rawFinalOffset:      rawFinalOff,
-                maxAsymmetryFactor:  (cfg.asymmetricBounds?.maxAsymmetryFactor != null)
-                    ? cfg.asymmetricBounds.maxAsymmetryFactor
-                    : null,
-                amaChannelContribution: amaSlopeGated,
-                trend:                   slopeResult.trend,
-                confidence:              slopeResult.confidence,
-                slopePct:                slopeResult.slopePct,
-                regimeMultiplier,
-                minOutputThreshold,
-                outputThreshold,
-                belowMinOutputThreshold,
-                kalmanReady:             kalmanResult?.isReady ?? false,
-                ...(regimeResult ? {
-                    hurst:       regimeResult.hurst,
-                    pe:          regimeResult.pe,
-                    hurstRegime: regimeResult.hurstRegime,
-                    peRegime:    regimeResult.peRegime,
-                    regimeReady: regimeResult.isReady,
-                } : {}),
-                isReady:          slopeResult.isReady && (!belowMinOutputThreshold || volPenalty !== 0),
-                updatedAt:        nowIso,
-            };
+            });
+            slopeResult = dwResult.slopeResult;
+            amaSlope = dwResult.amaSlope;
+            weights = dwResult.weights;
+            dynamicWeightsPayload = dwResult.dynamicWeightsPayload;
         }
 
         // 4. Advisory collateral-ratio hint only; execution is owned by the debt runtime.

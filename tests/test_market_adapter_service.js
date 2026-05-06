@@ -357,7 +357,7 @@ async function testTriggerHookCalledOnThreshold() {
         kibanaSource: {
             getLpCandlesForPool: async () => generateCandles(110, 105),
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -543,7 +543,7 @@ async function testOrderbookNativeFetchUsesBitsharesHistory() {
                 throw new Error('LP fetch should not run for orderbook bots');
             },
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => {
             const map = new Map();
@@ -617,7 +617,7 @@ async function testAmaWarmupInsufficientSuppressesRawCloseRecenter() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -697,7 +697,7 @@ async function testKibanaBackfillFillsHistoricalShortfall() {
                 return [];
             },
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => {
             const map = new Map();
@@ -810,7 +810,7 @@ async function testRestartBackfillsOldAma3WindowBeforeWaitingForNextClosedCandle
                 return options.timeRange ? backfillCandles : [];
             },
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => {
             const map = new Map();
@@ -922,7 +922,7 @@ async function testRestartBackfillsOldAma3WindowAndTriggersWhenDeltaThresholdIsE
                 return options.timeRange ? backfillCandles : [];
             },
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => {
             const map = new Map();
@@ -1017,11 +1017,15 @@ async function testBootstrapFallsBackWhenKibanaIsEmpty() {
         },
         fetchNativeTradesSince: async () => {
             nativeCalls += 1;
-            return [{
-                tsMs: 1700000000000,
-                sell: { asset_id: '1.3.1', amount: 10000 },
-                received: { asset_id: '1.3.0', amount: 100000 },
-            }];
+            return {
+                trades: [{
+                    tsMs: 1700000000000,
+                    sell: { asset_id: '1.3.1', amount: 10000 },
+                    received: { asset_id: '1.3.0', amount: 100000 },
+                }],
+                truncated: false,
+                pages: 1,
+            };
         },
         tradesToCandles: () => [[1700000000000, 100, 100, 100, 100, 1]],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
@@ -1083,9 +1087,13 @@ async function testAmaGridPriceIsCaseInsensitive() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: {
-            getLpCandlesForPool: async () => [],
+            getLpCandlesForPool: async () => ([
+                [baseTs + hour, 100, 100, 100, 100, 0],
+                [baseTs + (2 * hour), 100, 100, 100, 100, 0],
+                [baseTs + (3 * hour), 100, 100, 100, 100, 0],
+            ]),
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -1161,7 +1169,7 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
         kibanaSource: {
             getLpCandlesForPool: async () => [],
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -1237,7 +1245,7 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
         kibanaSource: {
             getLpCandlesForPool: async () => [],
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -1322,7 +1330,7 @@ async function testCenterEqualsAmaTriggeredByAmaDelta() {
         kibanaSource: {
             getLpCandlesForPool: async () => [],
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -1408,7 +1416,7 @@ async function testNoTriggerWhenCenterMatchesAma() {
         kibanaSource: {
             getLpCandlesForPool: async () => [],
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -1494,7 +1502,7 @@ async function testCenterClampedByBotBounds() {
         kibanaSource: {
             getLpCandlesForPool: async () => [],
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -1589,7 +1597,7 @@ async function testContextCacheInvalidatesOnPoolChange() {
         kibanaSource: {
             getLpCandlesForPool: async () => [],
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -1669,7 +1677,7 @@ async function testKibanaGapRepairPatchesMissingCandles() {
                 ];
             },
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         detectMissingCandleTimestamps,
         mergeCandles: (existing, incoming) => [...existing, ...incoming].sort((a, b) => a[0] - b[0]),
@@ -1781,7 +1789,7 @@ async function testRemainingGapsAreReportedWhenKibanaHasNoPatchData() {
         kibanaSource: {
             getLpCandlesForPool: async () => [],
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         detectMissingCandleTimestamps,
         mergeCandles: (existing, incoming) => [...existing, ...incoming].sort((a, b) => a[0] - b[0]),
@@ -1850,7 +1858,7 @@ async function testNativeIncrementalFillsNoTradeGapsUpToStaleTailThreshold() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [{ tsMs: baseTs + (13 * hour) }],
+        fetchNativeTradesSince: async () => ({ trades: [{ tsMs: baseTs + (13 * hour) }], truncated: false, pages: 1 }),
         tradesToCandles: () => [
             [baseTs + (13 * hour), 113, 113, 113, 113, 2],
         ],
@@ -1928,7 +1936,7 @@ async function testNativeIncrementalDoesNotFillNoTradeGapsPastStaleTailThreshold
         computeCandleStaleness: () => ({ staleData: true, staleAgeHours: 30.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         fillCandleGaps,
         detectMissingCandleTimestamps,
@@ -2003,7 +2011,7 @@ async function testStaleTailThresholdCanBeOverriddenPerConfig() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         fillCandleGaps,
         detectMissingCandleTimestamps,
@@ -2047,6 +2055,230 @@ async function testStaleTailThresholdCanBeOverriddenPerConfig() {
         [[baseTs, 100, 100, 100, 100, 1]],
         'custom staleTailThreshold should prune the trailing zero-volume flat tail'
     );
+}
+
+async function testStaleTailVerificationRangeIsPersisted() {
+    let savedPayload = null;
+    const baseTs = Date.parse('2026-04-28T00:00:00Z');
+    const hour = 3600000;
+    const nowMs = baseTs + (4 * hour) + 1;
+
+    const service = new MarketAdapterService({
+        getNowMs: () => nowMs,
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 2 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_stale-meta_1h.json`),
+        loadJson: () => ({
+            candles: [
+                [baseTs, 100, 100, 100, 100, 1],
+                [baseTs + hour, 100, 100, 100, 100, 0],
+                [baseTs + (2 * hour), 100, 100, 100, 100, 0],
+                [baseTs + (3 * hour), 100, 100, 100, 100, 0],
+            ],
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => ([
+                [baseTs + hour, 100, 100, 100, 100, 0],
+                [baseTs + (2 * hour), 100, 100, 100, 100, 0],
+                [baseTs + (3 * hour), 100, 100, 100, 100, 0],
+            ]),
+        },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        fillCandleGaps,
+        detectMissingCandleTimestamps,
+        mergeCandles,
+        pruneCandles: (candles) => candles,
+        pruneStaleTail,
+        detectStaleTail: require('../market_adapter/candle_utils').detectStaleTail,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-stale-meta.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-stale-meta',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    await service.processBot(bot, { bots: {} }, {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 24,
+        staleTailThreshold: 2,
+    }, new Map(), {});
+
+    assert.strictEqual(savedPayload.meta.staleTailVerifiedStartTs, baseTs + hour, 'saved metadata should persist the verified stale-tail start');
+    assert.strictEqual(savedPayload.meta.staleTailVerifiedEndTs, baseTs + (3 * hour), 'saved metadata should persist the verified stale-tail end');
+}
+
+async function testLegacyStaleTailVerificationTimestampIsHonored() {
+    let savedPayload = null;
+    const baseTs = Date.parse('2026-04-28T00:00:00Z');
+    const hour = 3600000;
+
+    const service = new MarketAdapterService({
+        getNowMs: () => baseTs + (4 * hour) + 1,
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 2 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_legacy-stale-meta_1h.json`),
+        loadJson: () => ({
+            meta: {
+                staleTailVerifiedTs: baseTs + hour,
+            },
+            candles: [
+                [baseTs, 100, 100, 100, 100, 1],
+                [baseTs + hour, 100, 100, 100, 100, 0],
+                [baseTs + (2 * hour), 100, 100, 100, 100, 0],
+                [baseTs + (3 * hour), 100, 100, 100, 100, 0],
+            ],
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => {
+                throw new Error('legacy verified stale tail should not require Kibana revalidation');
+            },
+        },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        fillCandleGaps,
+        detectMissingCandleTimestamps,
+        mergeCandles,
+        pruneCandles: (candles) => candles,
+        pruneStaleTail,
+        detectStaleTail: require('../market_adapter/candle_utils').detectStaleTail,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-legacy-stale-meta.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    await service.processBot({
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-legacy-stale-meta',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    }, { bots: {} }, {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 24,
+        staleTailThreshold: 2,
+    }, new Map(), {});
+
+    assert.strictEqual(savedPayload.candles.length, 4, 'legacy verified stale tail should be kept without revalidation');
+    assert.strictEqual(savedPayload.meta.staleTailVerifiedStartTs, baseTs + hour, 'legacy timestamp should migrate to range start');
+    assert.strictEqual(savedPayload.meta.staleTailVerifiedEndTs, baseTs + (3 * hour), 'legacy timestamp should migrate to range end');
+}
+
+async function testSourceMismatchClearsPersistedStaleTailVerificationRange() {
+    let savedPayload = null;
+    const baseTs = Date.parse('2026-04-28T00:00:00Z');
+    const hour = 3600000;
+
+    const service = new MarketAdapterService({
+        getNowMs: () => baseTs + (2 * hour) + 1,
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: null,
+            marketSource: 'book',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 3 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_source-mismatch_1h.json`),
+        loadJson: () => ({
+            meta: {
+                marketSource: 'pool',
+                pool: '1.19.133',
+                staleTailVerifiedStartTs: baseTs,
+                staleTailVerifiedEndTs: baseTs + hour,
+            },
+            candles: generateCandles(10, 100),
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaMarketSource: { getMarketCandles: async () => [] },
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeMarketHistorySince: async () => generateCandles(10, 100),
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        fillCandleGaps,
+        detectMissingCandleTimestamps,
+        mergeCandles,
+        pruneCandles: (candles) => candles,
+        pruneStaleTail,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-source-mismatch.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-source-mismatch',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        startPrice: 'book',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    };
+
+    await service.processBot(bot, { bots: {} }, {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 24,
+    }, new Map(), {});
+
+    assert.strictEqual(savedPayload.meta.marketSource, 'book', 'saved metadata should reflect the new source');
+    assert.strictEqual(savedPayload.meta.staleTailVerifiedStartTs, null, 'source mismatch should clear the persisted stale-tail start');
+    assert.strictEqual(savedPayload.meta.staleTailVerifiedEndTs, null, 'source mismatch should clear the persisted stale-tail end');
 }
 
 async function testNativeIncrementalUsesTradeSequenceOverlap() {
@@ -2151,6 +2383,99 @@ async function testNativeIncrementalUsesTradeSequenceOverlap() {
     assert.strictEqual(savedPayload.meta.nativePagesFetched, 1, 'saved metadata should expose native page count');
 }
 
+async function testNativeIncrementalFallsBackWhenOverlapNotReached() {
+    let tradesToCandlesInput = null;
+    let timeBasedFetchCalled = false;
+    const baseTs = Date.parse('2026-04-28T00:00:00Z');
+    const hour = 3600000;
+
+    const service = new MarketAdapterService({
+        getNowMs: () => baseTs + (2 * hour) + 1,
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 2 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            meta: {
+                nativeRecentTradeSequences: [100, 99],
+                nativeLastTradeTs: baseTs + 1000,
+            },
+            candles: [
+                [baseTs, 100, 110, 90, 100, 10],
+            ],
+        }),
+        saveJson: () => {},
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesUntilOverlap: async () => ({
+            pages: 80,
+            overlapCount: 0,
+            reachedOverlap: false,
+            trades: [
+                { tsMs: baseTs - 1000, sequence: 98 },
+                { tsMs: baseTs - 2000, sequence: 97 },
+            ],
+        }),
+        fetchNativeTradesSince: async () => {
+            timeBasedFetchCalled = true;
+            return {
+                trades: [
+                    { tsMs: baseTs + hour + 1000, sequence: 101 },
+                ],
+                truncated: false,
+                pages: 1,
+            };
+        },
+        tradesToCandles: (trades) => {
+            tradesToCandlesInput = trades;
+            return [
+                [baseTs + hour, 120, 120, 120, 120, 2],
+            ];
+        },
+        fillCandleGaps,
+        detectMissingCandleTimestamps,
+        mergeCandles,
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-native-overlap-fallback.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
+        logger: { warn: () => {} },
+        root: process.cwd(),
+        path,
+    });
+
+    await service.processBot({
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-native-overlap-fallback',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+    }, { bots: {} }, {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 24,
+        maxNativeGapFillCandles: MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES,
+    }, new Map(), {});
+
+    assert.strictEqual(timeBasedFetchCalled, true, 'incomplete overlap scan should fall back to time-based fetch');
+    assert.deepStrictEqual(
+        tradesToCandlesInput.map((t) => t.sequence),
+        [101],
+        'partial overlap fetch rows must not be re-aggregated when no overlap is reached'
+    );
+}
+
 async function testTimeBasedNativeIncrementalDoesNotReaggregateExistingBuckets() {
     let savedPayload = null;
     let tradesToCandlesInput = null;
@@ -2178,10 +2503,14 @@ async function testTimeBasedNativeIncrementalDoesNotReaggregateExistingBuckets()
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [
-            { tsMs: baseTs + 3000, sequence: null },
-            { tsMs: baseTs + hour + 1000, sequence: null },
-        ],
+        fetchNativeTradesSince: async () => ({
+            trades: [
+                { tsMs: baseTs + 3000, sequence: null },
+                { tsMs: baseTs + hour + 1000, sequence: null },
+            ],
+            truncated: false,
+            pages: 1,
+        }),
         tradesToCandles: (trades) => {
             tradesToCandlesInput = trades;
             return [
@@ -2273,7 +2602,7 @@ async function testClosedCandleGateSkipsCurrentPartialHour() {
         kibanaSource: {
             getLpCandlesForPool: async () => [],
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -2376,7 +2705,7 @@ async function testClosedCandleGateSurfacesStaleData() {
         kibanaSource: {
             getLpCandlesForPool: async () => [],
         },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -2468,7 +2797,7 @@ async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 0.5 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (inputCandles, keepCount) => {
@@ -2563,7 +2892,7 @@ async function testIdOnlyBotIsNotRejected() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -2622,7 +2951,7 @@ async function testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights(
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -2694,7 +3023,7 @@ async function testDynamicWeightMinOutputThresholdZeroDisablesGate() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -2762,7 +3091,7 @@ async function testDynamicWeightGainScalesOutputLinearly() {
             computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
             withRetries: async (fn) => fn(),
             kibanaSource: { getLpCandlesForPool: async () => [] },
-            fetchNativeTradesSince: async () => [],
+            fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
             tradesToCandles: () => [],
             mergeCandles: (existing, incoming) => [...existing, ...incoming],
             pruneCandles: (candles) => candles,
@@ -2841,7 +3170,7 @@ async function testDynamicWeightSignalConfirmBarsCanLatchFlatState() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (series) => series,
@@ -3002,7 +3331,7 @@ async function testDynamicWeightChartParityMatchesLiveService() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (series) => series,
@@ -3088,7 +3417,7 @@ async function testDynamicWeightVolatilityOnlyPathRemainsReady() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -3160,7 +3489,7 @@ async function testDynamicWeightVolatilityOverridesFlowIntoService() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -3229,7 +3558,7 @@ async function testDynamicWeightSuppressedTrendUsesFlatProfile() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -3301,7 +3630,7 @@ async function testDynamicWeightWeightOnlyWritesPersistOnClosedCandle() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -3369,7 +3698,7 @@ async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -3453,7 +3782,7 @@ async function testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData() {
         computeCandleStaleness: () => ({ staleData: true, staleAgeHours: 12.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -3524,7 +3853,7 @@ async function testDynamicWeightInvalidAtrPeriodAndClampAreSanitized() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -3591,7 +3920,7 @@ async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -3662,7 +3991,7 @@ async function testDynamicWeightDiagnosticsDoNotLeakIntoBootstrapState() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
@@ -3738,7 +4067,7 @@ async function testWeightOnlyUpdateInDryRunUpdatesState() {
         computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 0.1 }),
         withRetries: async (fn) => fn(),
         kibanaSource: { getLpCandlesForPool: async () => [] },
-        fetchNativeTradesSince: async () => [],
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
         tradesToCandles: () => [],
         mergeCandles: (existing, incoming) => existing,
         pruneCandles: (candles) => candles,
@@ -3819,7 +4148,11 @@ async function run() {
     await testNativeIncrementalFillsNoTradeGapsUpToStaleTailThreshold();
     await testNativeIncrementalDoesNotFillNoTradeGapsPastStaleTailThreshold();
     await testStaleTailThresholdCanBeOverriddenPerConfig();
+    await testStaleTailVerificationRangeIsPersisted();
+    await testLegacyStaleTailVerificationTimestampIsHonored();
+    await testSourceMismatchClearsPersistedStaleTailVerificationRange();
     await testNativeIncrementalUsesTradeSequenceOverlap();
+    await testNativeIncrementalFallsBackWhenOverlapNotReached();
     await testTimeBasedNativeIncrementalDoesNotReaggregateExistingBuckets();
     await testClosedCandleGateSkipsCurrentPartialHour();
     await testClosedCandleGateSurfacesStaleData();

@@ -10,6 +10,18 @@ function normalizeAssetSymbol(value) {
     return String(value || '').trim().toUpperCase();
 }
 
+function isExactPair(a, b, targetA, targetB) {
+    const na = normalizeAssetSymbol(a);
+    const nb = normalizeAssetSymbol(b);
+    const nta = normalizeAssetSymbol(targetA);
+    const ntb = normalizeAssetSymbol(targetB);
+    return na === nta && nb === ntb;
+}
+
+function isSamePair(a, b, targetA, targetB) {
+    return isExactPair(a, b, targetA, targetB) || isExactPair(a, b, targetB, targetA);
+}
+
 function inferIntervalLabel(meta) {
     const sec = Number(meta?.intervalSeconds);
     if (!Number.isFinite(sec) || sec <= 0) return null;
@@ -94,19 +106,26 @@ function loadStrategiesFromProfiles(profilesPath, meta) {
     const intervalSeconds = Number(meta?.intervalSeconds);
     const intervalLabel = inferIntervalLabel(meta);
 
-    const matches = profiles.filter((p) => {
+    const matches = profiles.map((p) => {
         const pA = normalizeAssetSymbol(p?.assetA);
         const pB = normalizeAssetSymbol(p?.assetB);
         const pAId = normalizeAssetSymbol(p?.assetAId);
         const pBId = normalizeAssetSymbol(p?.assetBId);
 
-        const bySymbol = assetASymbol && assetBSymbol && pA === assetASymbol && pB === assetBSymbol;
-        const byId = assetAId && assetBId && pAId === assetAId && pBId === assetBId;
-        return bySymbol || byId;
-    });
+        const exactBySymbol = assetASymbol && assetBSymbol && isExactPair(assetASymbol, assetBSymbol, pA, pB);
+        const exactById = assetAId && assetBId && isExactPair(assetAId, assetBId, pAId, pBId);
+        const symmetricBySymbol = assetASymbol && assetBSymbol && isSamePair(assetASymbol, assetBSymbol, pA, pB);
+        const symmetricById = assetAId && assetBId && isSamePair(assetAId, assetBId, pAId, pBId);
+        const matchRank = (exactBySymbol || exactById) ? 2 : ((symmetricBySymbol || symmetricById) ? 1 : 0);
+        return { profile: p, matchRank };
+    }).filter((entry) => entry.matchRank > 0);
     if (matches.length === 0) return null;
 
-    const sameInterval = matches.filter((p) => {
+    const exactMatches = matches.filter((entry) => entry.matchRank === 2);
+    const matchedProfiles = (exactMatches.length > 0 ? exactMatches : matches)
+        .map((entry) => entry.profile);
+
+    const sameInterval = matchedProfiles.filter((p) => {
         if (Number.isFinite(intervalSeconds) && intervalSeconds > 0 && Number(p?.intervalSeconds) === intervalSeconds) {
             return true;
         }
@@ -115,7 +134,7 @@ function loadStrategiesFromProfiles(profilesPath, meta) {
         }
         return false;
     });
-    const candidates = sameInterval.length > 0 ? sameInterval : matches;
+    const candidates = sameInterval.length > 0 ? sameInterval : matchedProfiles;
     const profile = [...candidates].sort((a, b) => {
         const aTs = Date.parse(String(a?.updatedAt || 0)) || 0;
         const bTs = Date.parse(String(b?.updatedAt || 0)) || 0;

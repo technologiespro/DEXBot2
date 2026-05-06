@@ -115,8 +115,10 @@ function detectMissingCandleTimestamps(candles, intervalSeconds = 3600) {
  * @param {number} intervalSeconds - bucket size in seconds
  * @param {number} [startTs]       - optional start timestamp (ms) to stretch to the past
  * @param {number} [endTs]         - optional end timestamp (ms) to stretch to the future
+ * @param {Object} [options]       - optional settings
+ * @param {number} [options.baselinePrice] - optional price to use for leading gaps before the first candle
  */
-function fillCandleGaps(candles, intervalSeconds, startTs = null, endTs = null) {
+function fillCandleGaps(candles, intervalSeconds, startTs = null, endTs = null, options = {}) {
     const bucketMs = Number(intervalSeconds) * 1000;
     if (!candles || !Array.isArray(candles)) return [];
     if (!Number.isFinite(bucketMs) || bucketMs <= 0) return candles;
@@ -128,7 +130,17 @@ function fillCandleGaps(candles, intervalSeconds, startTs = null, endTs = null) 
 
     if (sorted.length === 0) {
         // If we have no data, we can't really fill unless we have a baseline price.
-        // For now, return empty.
+        if (options.baselinePrice != null && startTs != null && endTs != null) {
+            const filled = [];
+            let currentTs = Math.floor(Number(startTs) / bucketMs) * bucketMs;
+            const finalTs = Math.floor(Number(endTs) / bucketMs) * bucketMs;
+            const p = options.baselinePrice;
+            while (currentTs <= finalTs) {
+                filled.push([currentTs, p, p, p, p, 0]);
+                currentTs += bucketMs;
+            }
+            return filled;
+        }
         return [];
     }
 
@@ -147,24 +159,27 @@ function fillCandleGaps(candles, intervalSeconds, startTs = null, endTs = null) 
         : lastKnownTs;
 
     let sourceIdx = 0;
-    let lastKnownCandle = sorted[0];
+    let lastKnownPrice = options.baselinePrice ?? null;
 
-    // Find first available candle at or after currentTs to initialize lastKnownCandle
+    // Advance sourceIdx to the first candle at or after currentTs
+    // and initialize lastKnownPrice if it's still null.
     while (sourceIdx < sorted.length && sorted[sourceIdx][0] < currentTs) {
-        lastKnownCandle = sorted[sourceIdx];
+        lastKnownPrice = sorted[sourceIdx][4];
         sourceIdx++;
     }
 
     while (currentTs <= finalTs) {
         if (sourceIdx < sorted.length && sorted[sourceIdx][0] === currentTs) {
-            lastKnownCandle = sorted[sourceIdx];
-            filled.push(lastKnownCandle);
+            lastKnownPrice = sorted[sourceIdx][4];
+            filled.push(sorted[sourceIdx]);
             sourceIdx++;
-        } else {
-            // Gap: carry forward lastKnownCandle's close
-            const p = lastKnownCandle[4]; // close
+        } else if (lastKnownPrice !== null) {
+            // Gap: carry forward lastKnownPrice
+            const p = lastKnownPrice;
             // Format: [ts, open, high, low, close, volume]
             filled.push([currentTs, p, p, p, p, 0]);
+        } else {
+            // Leading gap with no baseline: skip this bucket
         }
         currentTs += bucketMs;
     }

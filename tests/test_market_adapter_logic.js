@@ -23,6 +23,7 @@ const {
 const { resolveMarketSourceForBot } = require('../market_adapter/utils/chain');
 const { detectMissingCandleTimestamps, fillCandleGaps, pruneStaleTail, tradesToCandles } = require('../market_adapter/candle_utils');
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
+const { loadStrategiesFromProfiles } = require('../market_adapter/lp_chart_strategy_loader');
 
 const MARKET_PROFILES_FILE = path.join(__dirname, '..', 'profiles', 'market_profiles.json');
 
@@ -421,6 +422,139 @@ async function testNativeMarketHistoryDirectOrder() {
             'market_profiles comparison should use pair-specific profile presets when present'
         );
         assert.ok(comparison.every((entry) => entry.ok), 'profile-based comparison presets should produce valid AMA values with enough candles');
+    } finally {
+        if (hadOriginal) {
+            fs.writeFileSync(MARKET_PROFILES_FILE, original, 'utf8');
+        } else if (fs.existsSync(MARKET_PROFILES_FILE)) {
+            fs.unlinkSync(MARKET_PROFILES_FILE);
+        }
+    }
+}
+
+// Flipped market_profiles entries should still match, but exact orientation should win if both exist.
+{
+    const hadOriginal = fs.existsSync(MARKET_PROFILES_FILE);
+    const original = hadOriginal ? fs.readFileSync(MARKET_PROFILES_FILE, 'utf8') : null;
+
+    try {
+        fs.mkdirSync(path.dirname(MARKET_PROFILES_FILE), { recursive: true });
+        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
+            profiles: [
+                {
+                    assetA: 'TESTB',
+                    assetB: 'TESTA',
+                    intervalSeconds: 3600,
+                    defaultAma: 'AMA1',
+                    updatedAt: '2026-03-08T00:00:00.000Z',
+                    amas: {
+                        AMA1: { erPeriod: 2, fastPeriod: 2.2, slowPeriod: 6 },
+                    },
+                },
+                {
+                    assetA: 'TESTA',
+                    assetB: 'TESTB',
+                    intervalSeconds: 3600,
+                    defaultAma: 'AMA1',
+                    updatedAt: '2026-03-07T00:00:00.000Z',
+                    amas: {
+                        AMA1: { erPeriod: 2, fastPeriod: 1.1, slowPeriod: 5 },
+                    },
+                },
+            ],
+        }, null, 2));
+
+        const exactAma = resolveAmaForBot({ assetA: 'TESTA', assetB: 'TESTB', gridPrice: 'ama1' });
+        assert.strictEqual(exactAma.fastPeriod, 1.1, 'exact profile orientation should win over a newer flipped profile');
+
+        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
+            profiles: [
+                {
+                    assetA: 'TESTB',
+                    assetB: 'TESTA',
+                    intervalSeconds: 3600,
+                    defaultAma: 'AMA1',
+                    updatedAt: '2026-03-08T00:00:00.000Z',
+                    amas: {
+                        AMA1: { erPeriod: 2, fastPeriod: 2.2, slowPeriod: 6 },
+                    },
+                },
+            ],
+        }, null, 2));
+
+        const flippedAma = resolveAmaForBot({ assetA: 'TESTA', assetB: 'TESTB', gridPrice: 'ama1' });
+        assert.strictEqual(flippedAma.fastPeriod, 2.2, 'flipped profile should remain a valid fallback when no exact profile exists');
+    } finally {
+        if (hadOriginal) {
+            fs.writeFileSync(MARKET_PROFILES_FILE, original, 'utf8');
+        } else if (fs.existsSync(MARKET_PROFILES_FILE)) {
+            fs.unlinkSync(MARKET_PROFILES_FILE);
+        }
+    }
+}
+
+// LP chart profile loader should mirror runtime pair matching.
+{
+    const hadOriginal = fs.existsSync(MARKET_PROFILES_FILE);
+    const original = hadOriginal ? fs.readFileSync(MARKET_PROFILES_FILE, 'utf8') : null;
+
+    try {
+        fs.mkdirSync(path.dirname(MARKET_PROFILES_FILE), { recursive: true });
+        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
+            profiles: [
+                {
+                    assetA: 'TESTB',
+                    assetB: 'TESTA',
+                    intervalSeconds: 3600,
+                    updatedAt: '2026-03-08T00:00:00.000Z',
+                    amas: {
+                        AMA1: { name: 'Flipped AMA1', erPeriod: 3, fastPeriod: 3.3, slowPeriod: 7 },
+                        AMA2: { name: 'Flipped AMA2', erPeriod: 4, fastPeriod: 4.4, slowPeriod: 8 },
+                        AMA3: { name: 'Flipped AMA3', erPeriod: 5, fastPeriod: 5.5, slowPeriod: 9 },
+                        AMA4: { name: 'Flipped AMA4', erPeriod: 6, fastPeriod: 6.6, slowPeriod: 10 },
+                    },
+                },
+                {
+                    assetA: 'TESTA',
+                    assetB: 'TESTB',
+                    intervalSeconds: 3600,
+                    updatedAt: '2026-03-07T00:00:00.000Z',
+                    amas: {
+                        AMA1: { name: 'Exact AMA1', erPeriod: 1, fastPeriod: 1.1, slowPeriod: 5 },
+                        AMA2: { name: 'Exact AMA2', erPeriod: 2, fastPeriod: 2.2, slowPeriod: 6 },
+                        AMA3: { name: 'Exact AMA3', erPeriod: 3, fastPeriod: 3.3, slowPeriod: 7 },
+                        AMA4: { name: 'Exact AMA4', erPeriod: 4, fastPeriod: 4.4, slowPeriod: 8 },
+                    },
+                },
+            ],
+        }, null, 2));
+
+        const meta = {
+            assetA: { symbol: 'TESTA', id: '1.3.1' },
+            assetB: { symbol: 'TESTB', id: '1.3.0' },
+            intervalSeconds: 3600,
+        };
+        const exactStrategies = loadStrategiesFromProfiles(MARKET_PROFILES_FILE, meta);
+        assert.strictEqual(exactStrategies[0].name, 'Exact AMA1', 'LP chart loader should prefer an exact orientation match');
+
+        fs.writeFileSync(MARKET_PROFILES_FILE, JSON.stringify({
+            profiles: [
+                {
+                    assetA: 'TESTB',
+                    assetB: 'TESTA',
+                    intervalSeconds: 3600,
+                    updatedAt: '2026-03-08T00:00:00.000Z',
+                    amas: {
+                        AMA1: { name: 'Flipped AMA1', erPeriod: 3, fastPeriod: 3.3, slowPeriod: 7 },
+                        AMA2: { name: 'Flipped AMA2', erPeriod: 4, fastPeriod: 4.4, slowPeriod: 8 },
+                        AMA3: { name: 'Flipped AMA3', erPeriod: 5, fastPeriod: 5.5, slowPeriod: 9 },
+                        AMA4: { name: 'Flipped AMA4', erPeriod: 6, fastPeriod: 6.6, slowPeriod: 10 },
+                    },
+                },
+            ],
+        }, null, 2));
+
+        const flippedStrategies = loadStrategiesFromProfiles(MARKET_PROFILES_FILE, meta);
+        assert.strictEqual(flippedStrategies[0].name, 'Flipped AMA1', 'LP chart loader should still accept a flipped profile as fallback');
     } finally {
         if (hadOriginal) {
             fs.writeFileSync(MARKET_PROFILES_FILE, original, 'utf8');

@@ -276,6 +276,43 @@ function testResolveBotCfgDoesNotLeakNestedTopLevelOverridesAcrossBots() {
     );
 }
 
+function testResolveBotCfgPrefersExactPairOverFlippedFallback() {
+    const settingsJson = {
+        pairs: [
+            {
+                key: '1.3.0|1.3.1',
+                assetASymbol: 'BTS',
+                assetBSymbol: 'IOB.XRP',
+                marketAdapterSettings: {
+                    maxSlopeOffset: 0.11,
+                },
+            },
+            {
+                key: '1.3.1|1.3.0',
+                assetASymbol: 'IOB.XRP',
+                assetBSymbol: 'BTS',
+                marketAdapterSettings: {
+                    maxSlopeOffset: 0.22,
+                },
+            },
+        ],
+    };
+
+    installMarketAdapterStubs(settingsJson);
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+
+    const bot = {
+        name: 'XRP-BTS',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        assetAId: '1.3.1',
+        assetBId: '1.3.0',
+    };
+
+    const merged = resolveBotCfg(bot, { ...DEFAULTS });
+    assert.strictEqual(merged.maxSlopeOffset, 0.22, 'exact pair orientation should win over a flipped fallback match');
+}
+
 async function main() {
     try {
         testResolveBotCfgWiresMissingPairAndBotOverrides();
@@ -291,6 +328,9 @@ async function main() {
         restoreMarketAdapterStubs();
 
         testResolveBotCfgDoesNotLeakNestedTopLevelOverridesAcrossBots();
+        restoreMarketAdapterStubs();
+
+        testResolveBotCfgPrefersExactPairOverFlippedFallback();
         console.log('dynamic weight override wiring tests passed');
     } finally {
         restoreMarketAdapterStubs();

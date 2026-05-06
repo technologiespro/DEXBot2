@@ -156,20 +156,68 @@ function loadMarketAdapterSettings() {
     }
 }
 
+function isSamePair(a, b, targetA, targetB) {
+    const na = normalizeAssetSymbol(a);
+    const nb = normalizeAssetSymbol(b);
+    const nta = normalizeAssetSymbol(targetA);
+    const ntb = normalizeAssetSymbol(targetB);
+    return (na === nta && nb === ntb) || (na === ntb && nb === nta);
+}
+
+function isExactPair(a, b, targetA, targetB) {
+    const na = normalizeAssetSymbol(a);
+    const nb = normalizeAssetSymbol(b);
+    const nta = normalizeAssetSymbol(targetA);
+    const ntb = normalizeAssetSymbol(targetB);
+    return na === nta && nb === ntb;
+}
+
+function isSamePairIds(aId, bId, targetAId, targetBId) {
+    const sa = String(aId || '');
+    const sb = String(bId || '');
+    const sta = String(targetAId || '');
+    const stb = String(targetBId || '');
+    return (sa === sta && sb === stb) || (sa === stb && sb === sta);
+}
+
+function isExactPairIds(aId, bId, targetAId, targetBId) {
+    const sa = String(aId || '');
+    const sb = String(bId || '');
+    const sta = String(targetAId || '');
+    const stb = String(targetBId || '');
+    return sa === sta && sb === stb;
+}
+
 function findPairForBot(bot, pairs) {
     if (!Array.isArray(pairs)) return null;
     const botAId = String(bot.assetAId || '');
     const botBId = String(bot.assetBId || '');
     const botA = normalizeAssetSymbol(bot.assetA);
     const botB = normalizeAssetSymbol(bot.assetB);
-    return pairs.find((p) => {
+    let fallbackMatch = null;
+    for (const p of pairs) {
         const parts = String(p.key || '').split('|');
-        if (botAId && botBId && parts[0] === botAId && parts[1] === botBId) return true;
-        if (botA && botB &&
-            normalizeAssetSymbol(p.assetASymbol) === botA &&
-            normalizeAssetSymbol(p.assetBSymbol) === botB) return true;
-        return false;
-    }) || null;
+        const pAId = parts[0];
+        const pBId = parts[1];
+        const pA = normalizeAssetSymbol(p.assetASymbol);
+        const pB = normalizeAssetSymbol(p.assetBSymbol);
+
+        if (botAId && botBId && pAId && pBId) {
+            if (isExactPairIds(botAId, botBId, pAId, pBId)) return p;
+            if (!fallbackMatch && isSamePairIds(botAId, botBId, pAId, pBId)) {
+                fallbackMatch = p;
+                continue;
+            }
+        }
+
+        if (botA && botB && pA && pB) {
+            if (isExactPair(botA, botB, pA, pB)) return p;
+            if (!fallbackMatch && isSamePair(botA, botB, pA, pB)) {
+                fallbackMatch = p;
+            }
+        }
+    }
+    return fallbackMatch;
 }
 
 function assignPresent(target, source, keys) {
@@ -323,20 +371,32 @@ function findAmaProfileForBot(bot, ctx = null) {
     if (!botAssetA && !ctxAssetAId) return null;
     if (!botAssetB && !ctxAssetBId) return null;
 
-    const matches = profiles.filter((p) => {
-        const pA = normalizeAssetSymbol(p?.assetA);
-        const pB = normalizeAssetSymbol(p?.assetB);
-        const pAId = normalizeAssetSymbol(p?.assetAId);
-        const pBId = normalizeAssetSymbol(p?.assetBId);
+    const matches = profiles.map((p) => {
+        const pA = p?.assetA;
+        const pB = p?.assetB;
+        const pAId = p?.assetAId;
+        const pBId = p?.assetBId;
 
-        const bySymbol = botAssetA && botAssetB && pA === botAssetA && pB === botAssetB;
-        const byId = ctxAssetAId && ctxAssetBId && pAId === ctxAssetAId && pBId === ctxAssetBId;
-        return bySymbol || byId;
-    });
+        const exactBySymbol = botAssetA && botAssetB && pA && pB && isExactPair(botAssetA, botAssetB, pA, pB);
+        const exactById = ctxAssetAId && ctxAssetBId && pAId && pBId
+            && isExactPairIds(ctxAssetAId, ctxAssetBId, pAId, pBId);
+        const symmetricBySymbol = botAssetA && botAssetB && pA && pB && isSamePair(botAssetA, botAssetB, pA, pB);
+        const symmetricById = ctxAssetAId && ctxAssetBId && pAId && pBId
+            && isSamePairIds(ctxAssetAId, ctxAssetBId, pAId, pBId);
+
+        const matchRank = (exactById || exactBySymbol)
+            ? 2
+            : ((symmetricById || symmetricBySymbol) ? 1 : 0);
+        return { profile: p, matchRank };
+    }).filter((entry) => entry.matchRank > 0);
     if (matches.length === 0) return null;
 
-    const oneHour = matches.filter((p) => Number(p?.intervalSeconds) === RUNTIME_DEFAULTS.intervalSeconds);
-    const candidates = oneHour.length > 0 ? oneHour : matches;
+    const exactMatches = matches.filter((entry) => entry.matchRank === 2);
+    const matchedProfiles = (exactMatches.length > 0 ? exactMatches : matches)
+        .map((entry) => entry.profile);
+
+    const oneHour = matchedProfiles.filter((p) => Number(p?.intervalSeconds) === RUNTIME_DEFAULTS.intervalSeconds);
+    const candidates = oneHour.length > 0 ? oneHour : matchedProfiles;
     return [...candidates].sort((a, b) => {
         const aTs = Date.parse(String(a?.updatedAt || 0)) || 0;
         const bTs = Date.parse(String(b?.updatedAt || 0)) || 0;
@@ -751,11 +811,11 @@ async function fetchNativeTradesSince(poolId, sinceMs, pageLimit, maxPages) {
         startSeq = lastSeq - 1;
     }
 
-    if (pages >= maxPages && !hitOld) {
-        throw new Error(`fetchNativeTradesSince exhausted maxPages (${maxPages}) before reaching sinceMs; native history is incomplete`);
-    }
-
-    return trades;
+    return {
+        trades,
+        pages,
+        truncated: pages >= maxPages && !hitOld,
+    };
 }
 
 function nativeHistoryRowToTrade(row) {
@@ -832,7 +892,12 @@ async function fetchNativeTradesUntilOverlap(poolId, overlapSequences, minOverla
         startSeq = lastSeq - 1;
     }
 
-    throw new Error(`fetchNativeTradesUntilOverlap exhausted maxPages (${maxPages}) before finding ${minOverlap} overlap trades`);
+    return {
+        trades,
+        pages,
+        overlapCount,
+        reachedOverlap: false,
+    };
 }
 
 async function fetchNativeMarketHistorySince(assetA, assetB, sinceMs, untilMs, intervalSeconds, options = {}) {
