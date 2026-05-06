@@ -16,6 +16,10 @@ const {
     computeAbsolutePercentileThreshold,
 } = require('../../analysis/trend_detection/kalman_velocity_smoothing');
 const { adjustCollateralRatio } = require('./strategies/collateral_manager');
+const {
+    resolveMaxAsymmetryFactor,
+    computeAsymmetricBoundsMetrics,
+} = require('./asymmetric_bounds');
 const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../../modules/constants');
 const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order');
 
@@ -199,66 +203,26 @@ class MarketAdapterService {
     }
 
     computeAppliedAsymmetryMetrics(bot, centerPrice, dynamicWeights) {
-        const gp = Number(centerPrice);
-        const slopeOffset = Number(dynamicWeights?.slopeOffset);
-        const maxSlopeOffset = Number(dynamicWeights?.maxSlopeOffset);
-        const trend = dynamicWeights?.trend;
-        const maxAsymmetryFactor = Number.isFinite(bot?.asymmetricBounds?.maxAsymmetryFactor)
-            ? bot.asymmetricBounds.maxAsymmetryFactor
-            : Number.isFinite(dynamicWeights?.maxAsymmetryFactor)
-                ? dynamicWeights.maxAsymmetryFactor
-                : MARKET_ADAPTER.ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR;
-
-        if (!Number.isFinite(slopeOffset) || !Number.isFinite(maxSlopeOffset) || maxSlopeOffset <= 0
-                || !Number.isFinite(maxAsymmetryFactor) || maxAsymmetryFactor <= 0
-                || (trend !== 'UP' && trend !== 'DOWN')) {
-            return {
-                rawAsymmetryFactor: null,
-                appliedAsymmetryFactor: null,
-                maxAsymmetryFactor: Number.isFinite(maxAsymmetryFactor) ? maxAsymmetryFactor : null,
-            };
-        }
-
-        const slopeAbs = Math.min(Math.abs(slopeOffset) / maxSlopeOffset, 1);
-        const rawAsymmetryFactor = slopeAbs * maxAsymmetryFactor;
-
-        if (!Number.isFinite(gp) || gp <= 0) {
-            return {
-                rawAsymmetryFactor,
-                appliedAsymmetryFactor: rawAsymmetryFactor,
-                maxAsymmetryFactor,
-            };
-        }
-
+        const maxAsymmetryFactor = resolveMaxAsymmetryFactor(
+            bot?.asymmetricBounds?.maxAsymmetryFactor,
+            dynamicWeights?.maxAsymmetryFactor,
+            MARKET_ADAPTER.ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR
+        );
+        let minP = null;
+        let maxP = null;
         try {
-            const minP = resolveConfiguredPriceBound(bot?.minPrice, DEFAULT_CONFIG.minPrice, gp, 'min');
-            const maxP = resolveConfiguredPriceBound(bot?.maxPrice, DEFAULT_CONFIG.maxPrice, gp, 'max');
-            if (!Number.isFinite(minP) || !Number.isFinite(maxP) || minP <= 0 || maxP <= 0) {
-                return {
-                    rawAsymmetryFactor,
-                    appliedAsymmetryFactor: rawAsymmetryFactor,
-                    maxAsymmetryFactor,
-                };
-            }
-
-            const baseMinDiv = gp / minP;
-            const baseMaxMult = maxP / gp;
-            const maxSafeAsymmetryFactor = trend === 'DOWN'
-                ? (baseMaxMult > 1 ? 1 - (1 / baseMaxMult) : 0)
-                : (baseMinDiv > 1 ? 1 - (1 / baseMinDiv) : 0);
-
-            return {
-                rawAsymmetryFactor,
-                appliedAsymmetryFactor: Math.min(rawAsymmetryFactor, maxSafeAsymmetryFactor),
-                maxAsymmetryFactor,
-            };
-        } catch (_) {
-            return {
-                rawAsymmetryFactor,
-                appliedAsymmetryFactor: rawAsymmetryFactor,
-                maxAsymmetryFactor,
-            };
-        }
+            minP = resolveConfiguredPriceBound(bot?.minPrice, DEFAULT_CONFIG.minPrice, centerPrice, 'min');
+            maxP = resolveConfiguredPriceBound(bot?.maxPrice, DEFAULT_CONFIG.maxPrice, centerPrice, 'max');
+        } catch (_) {}
+        return computeAsymmetricBoundsMetrics({
+            centerPrice,
+            minPrice: minP,
+            maxPrice: maxP,
+            trend: dynamicWeights?.trend,
+            slopeOffset: dynamicWeights?.slopeOffset,
+            maxSlopeOffset: dynamicWeights?.maxSlopeOffset,
+            maxAsymmetryFactor,
+        });
     }
 
     buildDefaultBotState(bot, overrides = {}) {

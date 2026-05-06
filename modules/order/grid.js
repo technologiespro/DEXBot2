@@ -90,6 +90,10 @@
 const { ORDER_TYPES, ORDER_STATES, COW_ACTIONS, DEFAULT_CONFIG, GRID_LIMITS, TIMING, INCREMENT_BOUNDS, FEE_PARAMETERS, MARKET_ADAPTER } = require('../constants');
 const { GRID_COMPARISON } = GRID_LIMITS;
 const Format = require('./format');
+const {
+    resolveMaxAsymmetryFactor,
+    applyAsymmetricBounds,
+} = require('../../market_adapter/core/asymmetric_bounds');
 
 // FIX: Extract magic numbers to named constants for maintainability
 const GRID_CONSTANTS = {
@@ -562,35 +566,28 @@ class Grid {
         if (gpSource === 'ama' && Number.isFinite(minP) && Number.isFinite(maxP)
             && getWhitelistFlags(manager.config.botKey).asymmetricBounds !== false) {
             const dw = amaSnapshot?.dynamicWeights;
-            const maxAsymmetryFactor = Number.isFinite(manager.config.asymmetricBounds?.maxAsymmetryFactor)
-                ? manager.config.asymmetricBounds.maxAsymmetryFactor
-                : Number.isFinite(dw?.maxAsymmetryFactor)
-                    ? dw.maxAsymmetryFactor
-                    : MARKET_ADAPTER.ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR;
-            if (dw && Number.isFinite(dw.slopeOffset) && Number.isFinite(dw.maxSlopeOffset) && dw.maxSlopeOffset > 0
-                && maxAsymmetryFactor > 0 && dw.trend && dw.trend !== 'NEUTRAL' && Number.isFinite(gp) && gp > 0) {
-                const slopeAbs = Math.min(Math.abs(dw.slopeOffset) / dw.maxSlopeOffset, 1);
-                const rawAsymmetry = slopeAbs * maxAsymmetryFactor;
-                const baseMinDiv = gp / minP;
-                const baseMaxMult = maxP / gp;
-                // Clamp asymmetry so the tightening side never collapses past center.
-                // e.g. 1.30x bound × (1 − 0.35) = 0.845x → maxPrice falls below gridPrice.
-                const maxSafeAsymmetryDown = baseMaxMult > 1 ? 1 - (1 / baseMaxMult) : 0;
-                const maxSafeAsymmetryUp   = baseMinDiv > 1 ? 1 - (1 / baseMinDiv) : 0;
-                const asymmetry = Math.min(rawAsymmetry,
-                    dw.trend === 'DOWN' ? maxSafeAsymmetryDown : maxSafeAsymmetryUp);
-                if (dw.trend === 'DOWN') {
-                    resolvedMinP = gp / (baseMinDiv * (1 + asymmetry));
-                    resolvedMaxP = gp * (baseMaxMult * (1 - asymmetry));
-                } else if (dw.trend === 'UP') {
-                    resolvedMinP = gp / (baseMinDiv * (1 - asymmetry));
-                    resolvedMaxP = gp * (baseMaxMult * (1 + asymmetry));
-                }
+            const maxAsymmetryFactor = resolveMaxAsymmetryFactor(
+                manager.config.asymmetricBounds?.maxAsymmetryFactor,
+                dw?.maxAsymmetryFactor,
+                MARKET_ADAPTER.ASYMMETRIC_BOUNDS_MAX_ASYMMETRY_FACTOR
+            );
+            const adjustment = applyAsymmetricBounds({
+                centerPrice: gp,
+                minPrice: minP,
+                maxPrice: maxP,
+                trend: dw?.trend,
+                slopeOffset: dw?.slopeOffset,
+                maxSlopeOffset: dw?.maxSlopeOffset,
+                maxAsymmetryFactor,
+            });
+            if (dw && Number.isFinite(adjustment.appliedAsymmetryFactor)) {
+                resolvedMinP = adjustment.resolvedMinPrice;
+                resolvedMaxP = adjustment.resolvedMaxPrice;
                 manager.logger?.log?.(
                     `[BOUND-ASYMMETRY] trend=${dw.trend} slopeOffset=${dw.slopeOffset.toFixed(4)} `
-                    + `raw=${(rawAsymmetry * 100).toFixed(1)}% `
+                    + `raw=${(adjustment.rawAsymmetryFactor * 100).toFixed(1)}% `
                     + `cap=${(maxAsymmetryFactor * 100).toFixed(0)}% `
-                    + `asymmetry=${(asymmetry * 100).toFixed(1)}% `
+                    + `asymmetry=${(adjustment.appliedAsymmetryFactor * 100).toFixed(1)}% `
                     + `min ${minP.toFixed(8)}→${resolvedMinP.toFixed(8)} `
                     + `max ${maxP.toFixed(8)}→${resolvedMaxP.toFixed(8)}`,
                     'info'
