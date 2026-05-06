@@ -884,6 +884,114 @@ async function testRestartBackfillsOldAma3WindowBeforeWaitingForNextClosedCandle
     assert.strictEqual(savedPayload.meta.analysisCandleCount, analysisKeepCount, 'saved metadata should record the effective closed-candle window');
 }
 
+async function testRestartBackfillsOldAma3WindowEvenWhenGapRepairWasAttempted() {
+    const ama3 = MARKET_ADAPTER.AMAS.AMA3;
+    const intervalSeconds = 3600;
+    const nowMs = Date.parse('2026-05-06T12:30:00Z');
+    const analysisKeepCount = getAmaWarmupBars(
+        ama3.erPeriod,
+        ama3.slowPeriod,
+        MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS,
+        ama3.fastPeriod
+    ) + 1;
+    const rawKeepCount = analysisKeepCount + 1;
+    const oldRawCount = 1836;
+    const missingCount = rawKeepCount - oldRawCount;
+    const oldCandles = buildRestartCandles(oldRawCount, nowMs, 100, intervalSeconds);
+    const latestClosedTs = oldCandles[oldCandles.length - 2][0];
+    const backfillCandles = buildOlderBackfillCandles(oldCandles[0][0], missingCount, 100, intervalSeconds);
+    let kibanaCalls = 0;
+    let savedPayload = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, ...ama3 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_restart_gap_backfill_1h.json`),
+        loadJson: () => ({ candles: oldCandles }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        calculateBotThreshold: () => MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 0.5 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async (_poolId, _assetA, _assetB, options) => {
+                kibanaCalls += 1;
+                if (!options.timeRange) return [];
+                return kibanaCalls === 1 ? [] : backfillCandles;
+            },
+        },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => {
+            const map = new Map();
+            [...existing, ...incoming].forEach((c) => map.set(c[0], c));
+            return Array.from(map.values()).sort((a, b) => a[0] - b[0]);
+        },
+        pruneCandles: (candles, keepCount) => candles.length <= keepCount ? candles : candles.slice(candles.length - keepCount),
+        detectMissingCandleTimestamps: () => ({
+            gapCount: 2,
+            missingTimestamps: [
+                oldCandles[250][0] + (intervalSeconds * 1000),
+                oldCandles[250][0] + (intervalSeconds * 2000),
+            ],
+        }),
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-restart-gap-backfill.trigger',
+        writeBotDynamicGrid: () => true,
+        isBotDynamicWeightWhitelisted: () => false,
+        getNowMs: () => nowMs,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-restart-gap-backfill',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama3',
+        incrementPercent: 0.4,
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-restart-gap-backfill': {
+                centerPrice: 100,
+                lastClosedCandleTs: latestClosedTs,
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'restart should still complete successfully when gap repair was attempted');
+    assert.strictEqual(result.pendingClosedCandle, true, 'closed-candle gate should still apply after repairing history');
+    assert.strictEqual(result.triggerSuppressedReason, 'waiting_for_new_closed_candle', 'historical repair should happen before the closed-candle wait');
+    assert.strictEqual(result.kibanaBackfillCount, missingCount, 'restart should still fetch the missing historical candles after gap repair');
+    assert.strictEqual(result.candleCount, rawKeepCount, 'raw retained candle count should still expand to the AMA3 target');
+    assert.strictEqual(result.analysisCandleCount, analysisKeepCount, 'effective analysis candles should still reach the target window');
+    assert.ok(result.source.includes('kibana-backfill'), 'source label should still report the historical backfill');
+    assert.strictEqual(kibanaCalls, 2, 'gap repair and historical backfill should both query Kibana');
+    assert.ok(savedPayload, 'repaired candle file should be persisted');
+    assert.strictEqual(savedPayload.meta.candleCount, rawKeepCount, 'saved raw candle file should include the repaired retention window');
+}
+
 async function testRestartBackfillsOldAma3WindowAndTriggersWhenDeltaThresholdIsExceeded() {
     const ama3 = MARKET_ADAPTER.AMAS.AMA3;
     const intervalSeconds = 3600;
@@ -4158,6 +4266,7 @@ async function run() {
     await testAmaWarmupInsufficientSuppressesRawCloseRecenter();
     await testKibanaBackfillFillsHistoricalShortfall();
     await testRestartBackfillsOldAma3WindowBeforeWaitingForNextClosedCandle();
+    await testRestartBackfillsOldAma3WindowEvenWhenGapRepairWasAttempted();
     await testRestartBackfillsOldAma3WindowAndTriggersWhenDeltaThresholdIsExceeded();
     await testIdOnlyBotIsNotRejected();
     await testBootstrapFallsBackWhenKibanaIsEmpty();

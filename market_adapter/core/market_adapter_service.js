@@ -1260,7 +1260,8 @@ class MarketAdapterService {
             //    cases where native bootstrap fell short or the file was truncated.
             const candleShortfall = rawKeepCount - nextCandles.length;
             let kibanaBackfillCount = 0;
-            if (!kibanaBootstrapEmpty && !kibanaGapRepairAttempted && candleShortfall > 0 && nextCandles.length > 0 && hasKibanaSource) {
+            const needsHistoricalBackfill = !kibanaGapRepairAttempted || gapAnalysis.gapCount > 0;
+            if (!kibanaBootstrapEmpty && needsHistoricalBackfill && candleShortfall > 0 && nextCandles.length > 0 && hasKibanaSource) {
                 const oldestTs = nextCandles[0][0];
                 const shortfallMs = candleShortfall * cfg.intervalSeconds * 1000;
                 const bufferMs = 24 * 3600 * 1000; // 24h buffer
