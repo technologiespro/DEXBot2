@@ -78,6 +78,22 @@ function generateUpThenFlatCandles(upCount, flatCount, start = 100, step = 1) {
     return candles;
 }
 
+function generateUpThenDownCandles(upCount, downCount, start = 100, upStep = 0.4, downStep = 0.5) {
+    const candles = [];
+    const baseTs = 1700000000000;
+    let price = start;
+    for (let i = 0; i < upCount; i++) {
+        price = start + i * upStep;
+        candles.push([baseTs + i * 3600000, price, price, price, price, 1]);
+    }
+    for (let i = 0; i < downCount; i++) {
+        const index = upCount + i;
+        price = Math.max(1, price - downStep);
+        candles.push([baseTs + index * 3600000, price, price, price, price, 1]);
+    }
+    return candles;
+}
+
 function roundTo(value, decimals) {
     const factor = 10 ** decimals;
     return Math.round(value * factor) / factor;
@@ -363,7 +379,7 @@ async function testTriggerHookCalledOnThreshold() {
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-0.trigger',
-        isBotDynamicWeightWhitelisted: () => true,
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -554,7 +570,7 @@ async function testOrderbookNativeFetchUsesBitsharesHistory() {
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.book.trigger',
-        isBotDynamicWeightWhitelisted: () => false,
+        isBotDynamicWeightWhitelisted: () => true,
         root: process.cwd(),
         path,
     });
@@ -630,7 +646,7 @@ async function testAmaWarmupInsufficientSuppressesRawCloseRecenter() {
             dynamicGridWrites += 1;
             return true;
         },
-        isBotDynamicWeightWhitelisted: () => false,
+        isBotDynamicWeightWhitelisted: () => true,
         isBotAsymmetricBoundsWhitelisted: () => false,
         root: process.cwd(),
         path,
@@ -712,7 +728,7 @@ async function testKibanaBackfillFillsHistoricalShortfall() {
         detectMissingCandleTimestamps: () => ({ gapCount: 0, missingTimestamps: [] }),
         calcAmaComparison: () => [],
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-backfill.trigger',
-        isBotDynamicWeightWhitelisted: () => true,
+        isBotDynamicWeightWhitelisted: () => false,
         root: process.cwd(),
         path,
     });
@@ -1332,6 +1348,101 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
     assert.strictEqual(state.bots['xrp-bts-0'].amaCenterPrice, 100, 'raw AMA center should remain aligned with the persisted snapshot');
 }
 
+async function testAmaCenterPersistFailureBlocksSlopeTriggerFallback() {
+    let triggerWrites = 0;
+    let dynamicGridWrites = 0;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: generateUpThenDownCandles(160, 160, 100, 0.55, 0.75),
+        }),
+        saveJson: () => {},
+        calculateBotThreshold: () => 0.01,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-center-slope-fail.trigger';
+        },
+        writeBotDynamicGrid: () => {
+            dynamicGridWrites += 1;
+            return false;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        isBotGridRangeScalingWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-center-slope-fail',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        incrementPercent: 0.4,
+        gridPrice: 'ama',
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-center-slope-fail': {
+                centerPrice: 100,
+                amaCenterPrice: 100,
+                amaSlope: {
+                    trend: 'UP',
+                    slopePct: 1.0,
+                    slopeOffset: 0.5,
+                    isReady: true,
+                },
+                gridRangeScalingAmaSlope: {
+                    trend: 'UP',
+                    slopePct: 1.0,
+                    slopeOffset: 0.5,
+                    isReady: true,
+                },
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        amaSlopeDeltaThresholdPercent: 0.12,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should still complete');
+    assert.strictEqual(result.triggered, false, 'slope trigger should not run after center persistence fails');
+    assert.strictEqual(result.triggerSuppressedReason, 'ama_center_persist_failed', 'center persistence failure should remain the reported reason');
+    assert.strictEqual(triggerWrites, 0, 'no trigger file should be written after a failed center snapshot write');
+    assert.strictEqual(dynamicGridWrites, 1, 'failed center snapshot should not be followed by a second slope snapshot write');
+    assert.strictEqual(state.bots['xrp-bts-center-slope-fail'].centerPrice, 100, 'center price should not advance after persistence failure');
+    assert.strictEqual(state.bots['xrp-bts-center-slope-fail'].gridRangeScalingAmaSlope.trend, 'UP', 'slope reset baseline should not advance after persistence failure');
+}
+
 async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
     let triggerWrites = 0;
     let writeAttempts = 0;
@@ -1680,6 +1791,329 @@ async function testCenterClampedByBotBounds() {
     assert.strictEqual(noOpResult.triggered, false, 'no trigger when clamping keeps center unchanged');
     assert.strictEqual(noOpState.bots['xrp-bts-3'].centerPrice, 101, 'center should remain at clamp boundary');
     assert.strictEqual(triggerWrites, 1, 'only the initial clamp move should have triggered');
+}
+
+// A stable AMA center should still reset when the AMA slope delta crosses the threshold.
+async function testCenterStableButSlopeDeltaTriggersReset() {
+    let triggerWrites = 0;
+    let lastTrigger = null;
+    let lastWrite = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({
+            candles: generateUpThenDownCandles(160, 160, 100, 0.55, 0.75),
+        }),
+        saveJson: () => {},
+        calculateBotThreshold: () => 9999,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: (_, payload) => {
+            triggerWrites += 1;
+            lastTrigger = payload;
+            return '/tmp/recalculate.xrp-bts-slope.trigger';
+        },
+        writeBotDynamicGrid: (...args) => {
+            lastWrite = args;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => false,
+        isBotGridRangeScalingWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-slope',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-slope': {
+                centerPrice: 100,
+                amaCenterPrice: 100,
+                amaSlope: {
+                    trend: 'UP',
+                    slopePct: 1.0,
+                    slopeOffset: 0.5,
+                    isReady: true,
+                },
+                gridRangeScalingAmaSlope: {
+                    trend: 'UP',
+                    slopePct: 1.0,
+                    slopeOffset: 0.5,
+                    isReady: true,
+                },
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        amaSlopeDeltaThresholdPercent: 0.12,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.strictEqual(result.triggered, true, 'slope delta should trigger a recenter');
+    assert.strictEqual(triggerWrites, 1, 'slope delta should write one trigger');
+    assert.ok(lastTrigger, 'trigger payload should be captured');
+    assert.strictEqual(lastTrigger.reason, 'market_adapter_ama_slope_delta_threshold', 'delta-threshold reason should be explicit');
+    assert.ok(Number.isFinite(lastTrigger.deltaPercent), 'trigger payload should carry the slope delta');
+    assert.ok(lastTrigger.previousGridResetAmaSlope, 'trigger payload should carry the last grid-reset slope baseline');
+    assert.ok(Number.isFinite(result.amaSlopeDeltaPercent), 'result should expose the slope delta');
+    assert.ok(Array.isArray(lastWrite), 'dynamic snapshot should be persisted with slope metadata');
+    assert.ok(lastWrite[2].amaSlope, 'dynamic snapshot should persist the current slope snapshot');
+    assert.ok(lastWrite[2].dynamicWeights, 'range-scaling snapshot should persist slope fields without live dynamic weights');
+    assert.strictEqual(result.dynamicWeightApplied, false, 'range-scaling snapshot should not report live dynamic weights as applied');
+    assert.strictEqual(state.bots['xrp-bts-slope'].effectiveWeights, null, 'range-only snapshot should not advance live effective weights');
+    assert.strictEqual(state.bots['xrp-bts-slope'].amaSlope.trend, 'DOWN', 'state should retain current slope direction');
+    assert.strictEqual(state.bots['xrp-bts-slope'].gridRangeScalingAmaSlope.trend, 'DOWN', 'reset baseline should advance only after the slope reset');
+    assert.ok(Number.isFinite(state.bots['xrp-bts-slope'].amaSlopeDeltaPercent), 'state should retain the slope delta');
+}
+
+async function testSlopeTriggerRecoversBaselineFromDynamicGridAfterStateClear() {
+    let triggerWrites = 0;
+    let lastTrigger = null;
+    let dynamicGridWrites = 0;
+
+    const persistedGridRangeScalingAmaSlope = {
+        trend: 'UP',
+        slopePct: 1.0,
+        slopeOffset: 0.5,
+        isReady: true,
+    };
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: (filePath) => {
+            if (String(filePath).endsWith('.dynamicgrid.json')) {
+                return {
+                    centerPrice: 100,
+                    amaCenterPrice: 100,
+                    amaSlope: {
+                        trend: 'NEUTRAL',
+                        slopePct: 0.03,
+                        slopeOffset: 0,
+                        isReady: true,
+                    },
+                    gridRangeScalingAmaSlope: persistedGridRangeScalingAmaSlope,
+                    amaSlopeDeltaPercent: 0.01,
+                    amaSlopeThresholdPercent: 0.12,
+                };
+            }
+            return {
+                candles: generateUpThenDownCandles(160, 160, 100, 0.55, 0.75),
+            };
+        },
+        saveJson: () => {},
+        calculateBotThreshold: () => 9999,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: (_, payload) => {
+            triggerWrites += 1;
+            lastTrigger = payload;
+            return '/tmp/recalculate.xrp-bts-slope-after-clear.trigger';
+        },
+        writeBotDynamicGrid: () => {
+            dynamicGridWrites += 1;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => false,
+        isBotGridRangeScalingWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-slope-after-clear',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = { bots: {} };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        amaSlopeDeltaThresholdPercent: 0.12,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed after state clear');
+    assert.strictEqual(result.triggered, true, 'slope trigger should still fire after recovering the persisted baseline');
+    assert.strictEqual(triggerWrites, 1, 'recovered baseline should produce one slope trigger');
+    assert.strictEqual(dynamicGridWrites, 1, 'successful slope trigger should refresh the persisted snapshot once');
+    assert.ok(lastTrigger, 'trigger payload should be captured');
+    assert.deepStrictEqual(
+        lastTrigger.previousGridResetAmaSlope,
+        persistedGridRangeScalingAmaSlope,
+        'slope trigger should use the persisted grid reset baseline from dynamicgrid.json'
+    );
+    assert.strictEqual(result.previousCenterPrice, 100, 'previous center should be restored from dynamicgrid.json after state clear');
+    assert.strictEqual(state.bots['xrp-bts-slope-after-clear'].centerPrice > 0, true, 'state should be rebuilt from the recovered snapshot');
+}
+
+function testSlopeDirectionChangeDoesNotTriggerBelowDeltaThreshold() {
+    const service = new MarketAdapterService({});
+    const details = service.buildAmaSlopeResetDetails(
+        { trend: 'UP', slopePct: 0.02, isReady: true },
+        { trend: 'DOWN', slopePct: -0.02, isReady: true },
+        { amaSlopeDeltaThresholdPercent: 0.1 }
+    );
+
+    assert.strictEqual(details.thresholdCrossed, false, 'small near-zero reversal should stay below threshold');
+    assert.strictEqual(details.shouldTrigger, false, 'direction change alone should not trigger a grid reset');
+}
+
+async function testSlopePersistFailurePreservesRetryBaseline() {
+    let triggerWrites = 0;
+    let dynamicGridWrites = 0;
+    const candles = generateUpThenDownCandles(160, 160, 100, 0.55, 0.75);
+    const previousClosedCandleTs = candles[candles.length - 2][0];
+    const previousAmaSlope = {
+        trend: 'UP',
+        slopePct: 1.0,
+        slopeOffset: 0.5,
+        isReady: true,
+    };
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles }),
+        saveJson: () => {},
+        calculateBotThreshold: () => 9999,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: {
+            getLpCandlesForPool: async () => [],
+        },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (values) => values,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-slope-retry.trigger';
+        },
+        writeBotDynamicGrid: () => {
+            dynamicGridWrites += 1;
+            return dynamicGridWrites > 1;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        isBotGridRangeScalingWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-slope-retry',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+    const state = {
+        bots: {
+            'xrp-bts-slope-retry': {
+                centerPrice: 100,
+                amaCenterPrice: 100,
+                lastClosedCandleTs: previousClosedCandleTs,
+                amaSlope: previousAmaSlope,
+                gridRangeScalingAmaSlope: previousAmaSlope,
+                amaSlopeDeltaPercent: 0.01,
+                amaSlopeThresholdPercent: 0.12,
+            },
+        },
+    };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        amaSlopeDeltaThresholdPercent: 0.12,
+    };
+
+    const failed = await service.processBot(bot, state, cfg, new Map(), {});
+    assert.strictEqual(failed.triggered, false, 'failed slope snapshot write should suppress the trigger');
+    assert.strictEqual(failed.triggerSuppressedReason, 'ama_slope_persist_failed');
+    assert.strictEqual(triggerWrites, 0, 'trigger file should not be written when snapshot persistence fails');
+    assert.strictEqual(state.bots['xrp-bts-slope-retry'].lastClosedCandleTs, previousClosedCandleTs, 'failed closed candle should remain retryable');
+    assert.deepStrictEqual(state.bots['xrp-bts-slope-retry'].amaSlope, previousAmaSlope, 'failed retry should not advance accepted slope baseline');
+    assert.deepStrictEqual(state.bots['xrp-bts-slope-retry'].gridRangeScalingAmaSlope, previousAmaSlope, 'failed retry should not advance grid range scaling baseline');
+    assert.strictEqual(state.bots['xrp-bts-slope-retry'].amaSlopeDeltaPercent, 0.01, 'failed retry should keep previous slope delta diagnostic');
+
+    const retried = await service.processBot(bot, state, cfg, new Map(), {});
+    assert.strictEqual(retried.triggered, true, 'preserved slope baseline should allow the next cycle to retry the trigger');
+    assert.strictEqual(triggerWrites, 1, 'retry should write the slope trigger after snapshot persistence succeeds');
+    assert.notDeepStrictEqual(state.bots['xrp-bts-slope-retry'].amaSlope, previousAmaSlope, 'successful retry should advance accepted slope baseline');
+    assert.notDeepStrictEqual(state.bots['xrp-bts-slope-retry'].gridRangeScalingAmaSlope, previousAmaSlope, 'successful retry should advance grid range scaling baseline');
+    assert.strictEqual(state.bots['xrp-bts-slope-retry'].lastClosedCandleTs, candles[candles.length - 1][0], 'successful retry should consume the closed candle');
 }
 
 async function testContextCacheInvalidatesOnPoolChange() {
@@ -4037,6 +4471,7 @@ async function testDynamicWeightInvalidAtrPeriodAndClampAreSanitized() {
 
 async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
     let dynamicGridWrites = 0;
+    let triggerWrites = 0;
 
     const service = new MarketAdapterService({
         resolveBotContext: async () => ({
@@ -4057,7 +4492,10 @@ async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
         mergeCandles: (existing, incoming) => [...existing, ...incoming],
         pruneCandles: (candles) => candles,
         calcAmaComparison: () => [],
-        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-diagnostic.trigger',
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-dw-diagnostic.trigger';
+        },
         writeBotDynamicGrid: () => {
             dynamicGridWrites += 1;
             return true;
@@ -4077,7 +4515,14 @@ async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
         weightDistribution: { sell: 0.6, buy: 0.4 },
     };
 
-    const state = { bots: { 'xrp-bts-dw-diagnostic': { centerPrice: 100 } } };
+    const state = {
+        bots: {
+            'xrp-bts-dw-diagnostic': {
+                centerPrice: 100,
+                gridRangeScalingAmaSlope: { trend: 'UP', slopePct: 1.0, isReady: true },
+            },
+        },
+    };
     const cfg = {
         intervalSeconds: 3600,
         bootstrapLookbackHours: 1200,
@@ -4091,12 +4536,14 @@ async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
         regimeSensitivity: 0,
         signalConfirmBars: 0,
         maxVolatilityOffset: 0,
+        amaSlopeDeltaThresholdPercent: 0.01,
     };
 
     const result = await service.processBot(bot, state, cfg, new Map(), {});
 
     assert.strictEqual(result.ok, true, 'processBot should succeed');
     assert.strictEqual(dynamicGridWrites, 0, 'non-whitelisted AMA bots should not persist dynamic grids');
+    assert.strictEqual(triggerWrites, 0, 'non-grid-range-scaling bots should not emit slope reset triggers');
     assert.strictEqual(result.dynamicWeightWhitelisted, false, 'whitelist flag should remain false');
     assert.strictEqual(result.dynamicWeightReady, true, 'diagnostic dynamic weights should still be computed');
     assert.strictEqual(result.dynamicWeightApplied, false, 'diagnostic weights should not be reported as applied');
@@ -4272,6 +4719,7 @@ async function run() {
     await testBootstrapFallsBackWhenKibanaIsEmpty();
     await testAmaGridPriceIsCaseInsensitive();
     await testAmaTriggerSuppressedWhenCenterPersistFails();
+    await testAmaCenterPersistFailureBlocksSlopeTriggerFallback();
     await testBootstrapCenterDoesNotAdvanceWhenPersistFails();
     await testCenterEqualsAmaTriggeredByAmaDelta();
     await testNoTriggerWhenCenterMatchesAma();
@@ -4298,6 +4746,10 @@ async function run() {
     await testDynamicWeightMinOutputThresholdZeroDisablesGate();
     await testDynamicWeightGainScalesOutputLinearly();
     await testDynamicWeightSignalConfirmBarsCanLatchFlatState();
+    await testCenterStableButSlopeDeltaTriggersReset();
+    await testSlopeTriggerRecoversBaselineFromDynamicGridAfterStateClear();
+    testSlopeDirectionChangeDoesNotTriggerBelowDeltaThreshold();
+    await testSlopePersistFailurePreservesRetryBaseline();
     await testDynamicWeightChartParityMatchesLiveService();
     await testDynamicWeightVolatilityOnlyPathRemainsReady();
     await testDynamicWeightVolatilityOverridesFlowIntoService();

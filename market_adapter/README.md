@@ -92,9 +92,9 @@ The multiplier notation is symmetric around the grid center in ratio terms:
 AMA slope can tilt the configured range. In a trend, the adapter gives the grid
 more room on the trend side and less room on the opposite side.
 
-This is separate from dynamic buy/sell weighting. It is enabled by default for
-whitelisted bots; set `asymmetricBounds: false` in
-`profiles/market_adapter_whitelist.json` to disable only this range tilt.
+This is separate from dynamic buy/sell weighting. It is enabled only when
+`asymmetricBounds: true` is set in
+`profiles/market_adapter_whitelist.json`.
 
 Technical formula and tuning details are in
 [Grid Range Scaling Model](#grid-range-scaling-model).
@@ -274,6 +274,7 @@ trend + ATR    -> dynamic buy/sell weights
 
 trend regime   -> advisory collateral-ratio hint
 AMA delta      -> recalculate.<botKey>.trigger
+AMA slope delta -> recalculate.<botKey>.trigger for grid range scaling bots
 ```
 
 Per cycle, per processed bot, the adapter can produce:
@@ -300,7 +301,7 @@ Per cycle, per processed bot, the adapter can produce:
 8. Compute AMA center, trend, ATR, weights, and collateral hint.
 9. Compare the new AMA center to the stored center.
 10. Suppress live writes if the bot is not whitelisted or candle data is stale.
-11. Write `dynamicgrid.json` and a recalc trigger when the threshold is crossed.
+11. Write `dynamicgrid.json` and a recalc trigger when the AMA center threshold is crossed, or when the AMA slope threshold is crossed for a grid range scaling bot.
 12. Persist state snapshots under `market_adapter/state/`.
 
 ### Files
@@ -322,7 +323,7 @@ During normal operation, the adapter may write:
 
 | File | Purpose |
 |------|---------|
-| `profiles/orders/<botKey>.dynamicgrid.json` | Persisted AMA center snapshot and optional dynamic weights used by the bot runtime |
+| `profiles/orders/<botKey>.dynamicgrid.json` | Persisted AMA center snapshot, AMA slope diagnostics, and optional dynamic weights used by the bot runtime |
 | `profiles/recalculate.<botKey>.trigger` | Signal for `dexbot.js` to rebuild the grid |
 | `market_adapter/state/market_adapter_state.json` | Full runtime state and diagnostics |
 | `market_adapter/state/market_adapter_centers.json` | Lightweight center-price snapshot |
@@ -346,6 +347,13 @@ Typical fields:
 {
   "centerPrice": 1294.6,
   "amaCenterPrice": 1294.6,
+  "amaSlope": {
+    "trend": "UP",
+    "slopePct": 0.32,
+    "slopeOffset": 0.16
+  },
+  "amaSlopeDeltaPercent": 0.18,
+  "amaSlopeThresholdPercent": 0.1,
   "updatedAt": "2026-03-01T00:00:00.000Z",
   "source": "market_adapter/market_adapter.js",
   "dynamicWeights": {
@@ -358,6 +366,11 @@ Typical fields:
 
 - `centerPrice` is the persisted grid baseline used for future delta checks.
 - `amaCenterPrice` is the raw AMA output before downstream handling.
+- `amaSlope` is the latest AMA slope snapshot used for diagnostics and snapshot writes.
+- `gridRangeScalingAmaSlope` in adapter state is the last grid-reset slope baseline used for slope-triggered range-scaling resets.
+- `amaSlopeDeltaPercent` records the change from the last grid-reset slope baseline.
+- `amaSlopeThresholdPercent` is the configured slope-reset threshold.
+- `amaSlope.trend` records the current direction; direction changes do not trigger resets unless the slope delta threshold is crossed.
 - During a manual grid reset, the bot refreshes `centerPrice` from the latest
   `amaCenterPrice` before rebuilding the grid.
 - `dynamicWeights` is present only when live dynamic weights were computed and
@@ -428,7 +441,10 @@ market_adapter/
 - `ama: true` allows live `dynamicgrid.json` and recalc trigger writes.
 - `dynamicWeight: true` allows dynamic weights to be applied by the bot runtime,
   but only when the snapshot is also marked ready.
-- `asymmetricBounds: true` allows AMA-slope range scaling during grid rebuilds.
+- `asymmetricBounds: true` allows AMA-slope grid range scaling during grid rebuilds.
+  Runtime code reports this as `gridRangeScalingWhitelisted`; the whitelist key
+  remains `asymmetricBounds` for compatibility.
+- Omitted whitelist flags are treated as `false`.
 - Missing whitelist file means all live AMA writes are suppressed.
 - Missing bot entry means that bot runs in dry-run mode.
 
@@ -545,6 +561,7 @@ Main override knobs live in `profiles/market_adapter_settings.json`:
 | `amaSlope.lookbackBars` | AMA slope lookback |
 | `amaSlope.neutralZonePct` | Dead band around flat AMA slope |
 | `amaSlope.maxSlopePct` | AMA slope saturation |
+| `amaSlopeDeltaThresholdPercent` | AMA slope delta threshold for slope-based resets |
 | `minOutputThreshold` | Minimum trend output before directional shift applies |
 | `maxSlopeOffset` | Cap for asymmetric trend offset |
 | `maxVolatilityOffset` | Cap for symmetric ATR penalty |
@@ -562,7 +579,7 @@ Main override knobs live in `profiles/market_adapter_settings.json`:
 | `kalmanSmoothSpanPct` | Adaptive EMA span ratio |
 | `signalConfirmBars` | Signal latch confirmation bars |
 
-Most operators should tune only the trigger threshold and AMA profile unless
+Most operators should tune only the price and slope trigger thresholds plus the AMA profile unless
 they are deliberately fitting a market.
 
 ### Candle and Staleness Handling

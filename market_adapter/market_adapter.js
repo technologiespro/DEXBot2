@@ -69,6 +69,7 @@ const {
     isBotWhitelisted,
     isBotDynamicWeightWhitelisted,
     isBotAsymmetricBoundsWhitelisted,
+    isBotGridRangeScalingWhitelisted,
 } = require('../modules/market_adapter_whitelist');
 const kibanaSource = require('./inputs/kibana_source');
 const kibanaMarketSource = require('./core/kibana_market_candles');
@@ -116,6 +117,7 @@ const RUNTIME_DEFAULTS = MARKET_ADAPTER.RUNTIME_DEFAULTS;
 const DEFAULTS = {
     pollSeconds: RUNTIME_DEFAULTS.pollSeconds,
     deltaThresholdPercent: MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT,
+    amaSlopeDeltaThresholdPercent: MARKET_ADAPTER.AMA_SLOPE_DELTA_THRESHOLD_PERCENT,
     absoluteThreshold: MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT,
     intervalSeconds: RUNTIME_DEFAULTS.intervalSeconds,
     bootstrapLookbackHours: RUNTIME_DEFAULTS.bootstrapLookbackHours,
@@ -258,6 +260,7 @@ function applyMarketAdapterOverrides(target, overrides, opts = {}) {
     if (opts.includeDefaultAmaKey && overrides.defaultAmaKey) target.defaultAmaKey = overrides.defaultAmaKey;
     assignPresent(target, overrides, [
         'deltaThresholdPercent',
+        'amaSlopeDeltaThresholdPercent',
         'pollSeconds',
         'bootstrapLookbackHours',
         'nativeBackfillHours',
@@ -970,6 +973,10 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
  * @param {number} centerPrice - Current AMA-derived center price (B/A format)
  * @param {Object} options
  * @param {number} [options.amaCenterPrice]   - Raw AMA center price before any downstream handling
+ * @param {Object} [options.amaSlope]         - Raw AMA slope snapshot used for grid-scaling diagnostics
+ * @param {Object} [options.gridRangeScalingAmaSlope] - Accepted slope baseline used for future slope-trigger comparisons
+ * @param {number} [options.amaSlopeDeltaPercent] - Absolute slope delta percentage since the last accepted snapshot
+ * @param {number} [options.amaSlopeThresholdPercent] - Trigger threshold used for slope-based recalc decisions
  * @param {Object} [options.dynamicWeights]   - Computed weight offsets for live order sizing
  */
 function writeBotDynamicGrid(botKey, centerPrice, options = {}) {
@@ -985,6 +992,18 @@ function writeBotDynamicGrid(botKey, centerPrice, options = {}) {
             updatedAt: new Date().toISOString(),
             source: 'market_adapter/market_adapter.js',
         };
+        if (options.amaSlope && typeof options.amaSlope === 'object') {
+            payload.amaSlope = options.amaSlope;
+        }
+        if (options.gridRangeScalingAmaSlope && typeof options.gridRangeScalingAmaSlope === 'object') {
+            payload.gridRangeScalingAmaSlope = options.gridRangeScalingAmaSlope;
+        }
+        if (Number.isFinite(Number(options.amaSlopeDeltaPercent))) {
+            payload.amaSlopeDeltaPercent = Number(options.amaSlopeDeltaPercent);
+        }
+        if (Number.isFinite(Number(options.amaSlopeThresholdPercent))) {
+            payload.amaSlopeThresholdPercent = Number(options.amaSlopeThresholdPercent);
+        }
         if (options.dynamicWeights && typeof options.dynamicWeights === 'object') {
             payload.dynamicWeights = options.dynamicWeights;
         }
@@ -1025,7 +1044,7 @@ const adapterService = new MarketAdapterService({
     writeGridResetTrigger,
     writeBotDynamicGrid,
     isBotDynamicWeightWhitelisted,
-    isBotAsymmetricBoundsWhitelisted,
+    isBotGridRangeScalingWhitelisted,
     logger,
     root: ROOT,
     path,
@@ -1048,6 +1067,9 @@ function writeCenterSnapshot(state) {
             lastGridResetAt: v.lastGridResetAt,
             lastAmaPrice: v.lastAmaPrice,
             lastDeltaPercent: v.lastDeltaPercent,
+            amaSlopeDeltaPercent: v.amaSlopeDeltaPercent,
+            amaSlopeThresholdPercent: v.amaSlopeThresholdPercent,
+            gridRangeScalingAmaSlope: v.gridRangeScalingAmaSlope,
             weights: v.weights,
             effectiveWeights: v.effectiveWeights,
             collateralRecommendation: v.collateralRecommendation ?? null,
@@ -1118,7 +1140,7 @@ async function runOnce(cfg, state, contextCache) {
                 ? ` used=${r.analysisCandleCount}${Number.isFinite(r.analysisKeepCount) ? `/${r.analysisKeepCount}` : ''}`
                 : '';
             const nativeText = isOneHourResult && Number.isFinite(r.nativePagesFetched) ? ` nativePages=${r.nativePagesFetched}` : '';
-            const dynText = isOneHourResult ? ` flags[whitelist=${r.dynamicWeightWhitelisted ? 'yes' : 'no'},base=${r.hasExplicitBaseWeights ? 'yes' : 'no'},ready=${r.dynamicWeightReady ? 'yes' : 'no'},applied=${r.dynamicWeightApplied ? 'yes' : 'no'}${r.dynamicWeightProfile ? `,profile=${r.dynamicWeightProfile}` : ''}${r.asymmetricBoundsWhitelisted ? ',ab=yes' : ''}]` : '';
+            const dynText = isOneHourResult ? ` flags[whitelist=${r.dynamicWeightWhitelisted ? 'yes' : 'no'},base=${r.hasExplicitBaseWeights ? 'yes' : 'no'},ready=${r.dynamicWeightReady ? 'yes' : 'no'},applied=${r.dynamicWeightApplied ? 'yes' : 'no'}${r.dynamicWeightProfile ? `,profile=${r.dynamicWeightProfile}` : ''}${r.gridRangeScalingWhitelisted ? ',range=yes' : ''}]` : '';
 
             log(cfg, `${r.source},${rawCountText}${usedCountText}${closedTsText}${rawTsText}${closeText}, ama=${amaText} (prevCenter=${prevCenterText}, delta=${deltaText}), threshold=${thresholdText}${offText}${amaOffText}${regimeText}${staleText}${patchText}${backfillText}${gapText}${trigText}${pendingText}${warmupText}${trendText}${weightText}${dynText}${nativeText}`);
             if (r.triggerSuppressedReason === 'waiting_for_new_closed_candle') {
@@ -1136,10 +1158,10 @@ async function runOnce(cfg, state, contextCache) {
             if (isOneHourResult && r.weights?.meta) {
                 const m = r.weights.meta;
                 log(cfg, `  Inputs: ${buildDynamicWeightInputsLog(m, r.amaConfig, {
-                    asymmetricBoundsWhitelisted: r.asymmetricBoundsWhitelisted,
+                    asymmetricBoundsWhitelisted: r.gridRangeScalingWhitelisted,
                 })}`);
                 log(cfg, `  Tuning: ${buildDynamicWeightTuningLog(m)}`);
-                if (r.asymmetricBoundsWhitelisted && m.slopeOffset && m.maxSlopeOffset && m.maxSlopeOffset > 0 && m.trend && m.trend !== 'NEUTRAL') {
+                if (r.gridRangeScalingWhitelisted && m.slopeOffset && m.maxSlopeOffset && m.maxSlopeOffset > 0 && m.trend && m.trend !== 'NEUTRAL') {
                     log(cfg, `  Asymmetric bounds: ${buildAsymmetricBoundsLog(m)}`);
                 }
             }
@@ -1334,6 +1356,7 @@ module.exports = {
     isBotWhitelisted,
     isBotDynamicWeightWhitelisted,
     isBotAsymmetricBoundsWhitelisted,
+    isBotGridRangeScalingWhitelisted,
     _resetCycleCache,
     writeCenterSnapshot,
     normalizeNativeMarketHistoryCandles,

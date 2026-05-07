@@ -18,6 +18,18 @@ async function testSnapshotReaderExposesCenterOnly() {
   await fs.writeFile(filePath, JSON.stringify({
     amaCenterPrice: 100,
     centerPrice: 101.5,
+    amaSlope: {
+      trend: 'DOWN',
+      slopePct: -0.28,
+      slopeOffset: -0.14,
+    },
+    gridRangeScalingAmaSlope: {
+      trend: 'UP',
+      slopePct: 0.42,
+      slopeOffset: 0.21,
+    },
+    amaSlopeDeltaPercent: 0.18,
+    amaSlopeThresholdPercent: 0.1,
     source: 'market_adapter/market_adapter.js',
     updatedAt: '2026-01-01T00:00:00Z'
   }, null, 2) + '\n', 'utf8');
@@ -27,6 +39,18 @@ async function testSnapshotReaderExposesCenterOnly() {
     assert(snapshot, 'snapshot should be returned for a valid file');
     assert.strictEqual(snapshot.amaCenterPrice, 100);
     assert.strictEqual(snapshot.centerPrice, 101.5);
+    assert.deepStrictEqual(snapshot.amaSlope, {
+      trend: 'DOWN',
+      slopePct: -0.28,
+      slopeOffset: -0.14,
+    });
+    assert.deepStrictEqual(snapshot.gridRangeScalingAmaSlope, {
+      trend: 'UP',
+      slopePct: 0.42,
+      slopeOffset: 0.21,
+    });
+    assert.strictEqual(snapshot.amaSlopeDeltaPercent, 0.18);
+    assert.strictEqual(snapshot.amaSlopeThresholdPercent, 0.1);
     assert.strictEqual(loadAmaCenterPrice(botKey), 101.5);
   } finally {
     await fs.unlink(filePath).catch(() => {});
@@ -80,10 +104,16 @@ async function testCenterSnapshotWriterUsesOnlyNewCollateralField() {
           lastGridResetAt: '2026-01-01T00:00:00Z',
           lastAmaPrice: 121.25,
           lastDeltaPercent: 1.5,
+          amaSlopeDeltaPercent: 0.12,
+          amaSlopeThresholdPercent: 0.1,
           weights: { buy: 0.6, sell: 0.4 },
           effectiveWeights: { buy: 0.55, sell: 0.45 },
           collateralRecommendation: 1.62,
-          amaSlope: 0.12,
+          amaSlope: {
+            trend: 'UP',
+            slopePct: 0.28,
+            slopeOffset: 0.14,
+          },
           atr: 0.34,
         },
       },
@@ -93,6 +123,13 @@ async function testCenterSnapshotWriterUsesOnlyNewCollateralField() {
     assert(write, 'snapshot writer should emit a JSON payload');
     const parsed = JSON.parse(write.data);
     assert.strictEqual(parsed.bots.testBot.collateralRecommendation, 1.62);
+    assert.strictEqual(parsed.bots.testBot.amaSlopeDeltaPercent, 0.12);
+    assert.strictEqual(parsed.bots.testBot.amaSlopeThresholdPercent, 0.1);
+    assert.deepStrictEqual(parsed.bots.testBot.amaSlope, {
+      trend: 'UP',
+      slopePct: 0.28,
+      slopeOffset: 0.14,
+    });
     assert.strictEqual(Object.prototype.hasOwnProperty.call(parsed.bots.testBot, 'collateral'), false, 'legacy collateral field should not be written');
   } finally {
     fsSync.writeFileSync = originalWriteFileSync;

@@ -433,6 +433,7 @@ async function deriveLiquidityPoolTokenValue(BitShares, shareAssetRef, denominat
  * price and, for dynamic-weight-whitelisted bots, any computed effective weight offsets.
  * On manual resets the bot may rewrite centerPrice to the latest AMA baseline, but
  * amaCenterPrice remains the raw AMA output for diagnostics and comparison.
+ * The snapshot may also expose AMA slope diagnostics for slope-triggered resets.
  * Called by initializeGrid() when manager.config.gridPrice uses an AMA keyword,
  * by performGridResync(), and by refreshDynamicWeightDistribution() before every
  * rebalance so new orders use live weights — not only on grid reset.
@@ -454,6 +455,14 @@ function loadAmaCenterSnapshot(botKey) {
             centerPrice,
             source: data?.source || null,
             updatedAt: data?.updatedAt || null,
+            amaSlope: data?.amaSlope ?? null,
+            gridRangeScalingAmaSlope: data?.gridRangeScalingAmaSlope ?? null,
+            amaSlopeDeltaPercent: Number.isFinite(Number(data?.amaSlopeDeltaPercent))
+                ? Number(data.amaSlopeDeltaPercent)
+                : null,
+            amaSlopeThresholdPercent: Number.isFinite(Number(data?.amaSlopeThresholdPercent))
+                ? Number(data.amaSlopeThresholdPercent)
+                : null,
             dynamicWeights: data?.dynamicWeights || null,
         };
     } catch (_) {

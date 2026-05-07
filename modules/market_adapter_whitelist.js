@@ -6,7 +6,7 @@ const path = require('path');
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
 const WHITELIST_FILE = path.join(PROFILES_DIR, 'market_adapter_whitelist.json');
 
-let _whitelistCache = null; // Map<string, { ama: boolean, dynamicWeight: boolean }> | false | null
+let _whitelistCache = null; // Map<string, { ama: boolean, dynamicWeight: boolean, asymmetricBounds: boolean }> | false | null
 
 function resetMarketAdapterWhitelistCache() {
     _whitelistCache = null;
@@ -22,7 +22,7 @@ function normalizeEntry(entry) {
     return {
         ama: entry.ama === true,
         dynamicWeight: entry.dynamicWeight === true,
-        asymmetricBounds: entry.asymmetricBounds !== false ? true : false,
+        asymmetricBounds: entry.asymmetricBounds === true,
     };
 }
 
@@ -59,9 +59,9 @@ function loadMarketAdapterWhitelist() {
 function getWhitelistFlags(botKey) {
     const whitelist = loadMarketAdapterWhitelist();
     if (whitelist === false || !botKey) {
-        return { ama: false, dynamicWeight: false };
+        return { ama: false, dynamicWeight: false, asymmetricBounds: false };
     }
-    return whitelist.get(String(botKey)) || { ama: false, dynamicWeight: false };
+    return whitelist.get(String(botKey)) || { ama: false, dynamicWeight: false, asymmetricBounds: false };
 }
 
 function isBotWhitelisted(botKey) {
@@ -76,6 +76,10 @@ function isBotAsymmetricBoundsWhitelisted(botKey) {
     return getWhitelistFlags(botKey).asymmetricBounds === true;
 }
 
+function isBotGridRangeScalingWhitelisted(botKey) {
+    return isBotAsymmetricBoundsWhitelisted(botKey);
+}
+
 module.exports = {
     WHITELIST_FILE,
     resetMarketAdapterWhitelistCache,
@@ -83,4 +87,5 @@ module.exports = {
     isBotWhitelisted,
     isBotDynamicWeightWhitelisted,
     isBotAsymmetricBoundsWhitelisted,
+    isBotGridRangeScalingWhitelisted,
 };

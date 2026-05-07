@@ -5,6 +5,7 @@ const path = require('path');
 const {
     isBotWhitelisted,
     isBotDynamicWeightWhitelisted,
+    isBotAsymmetricBoundsWhitelisted,
 } = require('../market_adapter/market_adapter');
 
 const {
@@ -38,25 +39,39 @@ async function testWhitelistCache() {
 
         assert.strictEqual(isBotWhitelisted('test-bot-1'), true, 'Should find bot in whitelist');
         assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-1'), false, 'AMA-only whitelist should not imply dynamic weights');
+        assert.strictEqual(
+            isBotAsymmetricBoundsWhitelisted('test-bot-1'),
+            false,
+            'AMA-only whitelist should not imply asymmetric bounds'
+        );
         assert.strictEqual(isBotWhitelisted('test-bot-2'), false, 'Should not find AMA flag when disabled');
         assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-2'), true, 'Dynamic-weight flag should be read independently');
+        assert.strictEqual(
+            isBotAsymmetricBoundsWhitelisted('test-bot-2'),
+            false,
+            'dynamic-weight whitelist should not imply asymmetric bounds'
+        );
 
         fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
             whitelist: {
-                'test-bot-1': { ama: false, dynamicWeight: true },
+                'test-bot-1': { ama: false, dynamicWeight: true, asymmetricBounds: true },
                 'test-bot-2': { ama: true, dynamicWeight: false },
             },
         }), 'utf8');
         assert.strictEqual(isBotWhitelisted('test-bot-1'), true, 'Should still return old value due to cache');
         assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-1'), false, 'Should still return old value due to cache');
+        assert.strictEqual(isBotAsymmetricBoundsWhitelisted('test-bot-1'), false, 'Should still return old asymmetry value due to cache');
         assert.strictEqual(isBotWhitelisted('test-bot-2'), false, 'Should still return old value due to cache');
         assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-2'), true, 'Should still return old value due to cache');
+        assert.strictEqual(isBotAsymmetricBoundsWhitelisted('test-bot-2'), false, 'Should still return old asymmetry value due to cache');
 
         _resetCycleCache();
         assert.strictEqual(isBotWhitelisted('test-bot-1'), false, 'Should now reflect file change after cache reset');
         assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-1'), true, 'Should now reflect file change after cache reset');
+        assert.strictEqual(isBotAsymmetricBoundsWhitelisted('test-bot-1'), true, 'Should now reflect explicit asymmetric-bounds enable after cache reset');
         assert.strictEqual(isBotWhitelisted('test-bot-2'), true, 'Should now reflect file change after cache reset');
         assert.strictEqual(isBotDynamicWeightWhitelisted('test-bot-2'), false, 'Should now reflect file change after cache reset');
+        assert.strictEqual(isBotAsymmetricBoundsWhitelisted('test-bot-2'), false, 'Missing asymmetric-bounds flag should remain false after cache reset');
     } finally {
         if (originalContent !== null) {
             fs.writeFileSync(WHITELIST_FILE, originalContent, 'utf8');

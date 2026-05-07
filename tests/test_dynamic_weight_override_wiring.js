@@ -55,6 +55,7 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
                     dispScaleMinPct: 0.25,
                     hurstZoneBand: 0.08,
                     peNodes: [0.58, 0.70, 0.82],
+                    amaSlopeDeltaThresholdPercent: 0.22,
                     amaSlope: {
                         maxSlopePct: 1.2,
                     },
@@ -68,6 +69,7 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
                         dispScaleMinPct: 0.35,
                         hurstZoneBand: 0.09,
                         peNodes: [0.57, 0.69, 0.81],
+                        amaSlopeDeltaThresholdPercent: 0.33,
                         amaSlope: {
                             maxSlopePct: 1.6,
                         },
@@ -98,6 +100,11 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
     assert.strictEqual(merged.dispScaleMinPct, 0.35, 'bot override should win for dispScaleMinPct');
     assert.strictEqual(merged.hurstZoneBand, 0.09, 'bot override should win for hurstZoneBand');
     assert.deepStrictEqual(merged.peNodes, [0.57, 0.69, 0.81], 'bot override should win for peNodes');
+    assert.strictEqual(
+        merged.amaSlopeDeltaThresholdPercent,
+        0.33,
+        'bot override should win for amaSlopeDeltaThresholdPercent'
+    );
     assert.strictEqual(merged.amaSlope.maxSlopePct, 1.6, 'bot override should win for amaSlope.maxSlopePct');
     assert.strictEqual(merged.kalmanSlope.maxSlopePct, 1.6, 'bot override should win for kalmanSlope.maxSlopePct');
 }
@@ -114,6 +121,7 @@ function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
                     dispScaleMinPct: 0.2,
                     hurstZoneBand: 0.07,
                     peNodes: [0.59, 0.71, 0.83],
+                    amaSlopeDeltaThresholdPercent: 0.21,
                     amaSlope: {
                         maxSlopePct: 1.15,
                     },
@@ -143,6 +151,11 @@ function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
     assert.strictEqual(merged.dispScaleMinPct, 0.2, 'pair override should apply for dispScaleMinPct');
     assert.strictEqual(merged.hurstZoneBand, 0.07, 'pair override should apply for hurstZoneBand');
     assert.deepStrictEqual(merged.peNodes, [0.59, 0.71, 0.83], 'pair override should apply for peNodes');
+    assert.strictEqual(
+        merged.amaSlopeDeltaThresholdPercent,
+        0.21,
+        'pair override should apply for amaSlopeDeltaThresholdPercent'
+    );
     assert.strictEqual(merged.amaSlope.maxSlopePct, 1.15, 'pair override should apply for amaSlope.maxSlopePct');
     assert.strictEqual(merged.kalmanSlope.maxSlopePct, 1.15, 'pair override should apply for kalmanSlope.maxSlopePct');
 }
@@ -227,6 +240,7 @@ function testResolveBotCfgDoesNotLeakNestedTopLevelOverridesAcrossBots() {
                         maxSlopePct: 1.23,
                         neutralZonePct: 0.12,
                     },
+                    amaSlopeDeltaThresholdPercent: 0.19,
                     kalmanSlope: {
                         maxSlopePct: 1.24,
                     },
@@ -258,6 +272,11 @@ function testResolveBotCfgDoesNotLeakNestedTopLevelOverridesAcrossBots() {
 
     assert.strictEqual(matched.amaSlope.maxSlopePct, 1.23, 'matched pair should receive AMA override');
     assert.strictEqual(matched.amaSlope.neutralZonePct, 0.12, 'matched pair should receive neutral-zone override');
+    assert.strictEqual(
+        matched.amaSlopeDeltaThresholdPercent,
+        0.19,
+        'matched pair should receive slope delta threshold override'
+    );
     assert.strictEqual(matched.kalmanSlope.maxSlopePct, 1.24, 'matched pair should receive Kalman override');
     assert.strictEqual(
         unmatched.amaSlope.maxSlopePct,
@@ -273,6 +292,11 @@ function testResolveBotCfgDoesNotLeakNestedTopLevelOverridesAcrossBots() {
         unmatched.kalmanSlope.maxSlopePct,
         MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT,
         'unmatched bot should keep default Kalman max slope'
+    );
+    assert.strictEqual(
+        unmatched.amaSlopeDeltaThresholdPercent,
+        MARKET_ADAPTER.AMA_SLOPE_DELTA_THRESHOLD_PERCENT,
+        'unmatched bot should keep the default AMA slope delta threshold'
     );
 }
 
