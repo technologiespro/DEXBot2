@@ -1,5 +1,5 @@
 #!/bin/bash
-# Clear DEXBot2 settings files and reset market tuning back to built-in defaults.
+# Reset DEXBot2 settings files and restore built-in defaults.
 #
 # Removes the three settings files used by the bot runtime and market adapter:
 # - profiles/general.settings.json
@@ -8,7 +8,7 @@
 #
 # On the next run, the application will recreate or fall back to defaults.
 #
-# Usage: ./scripts/clean-settings.sh or bash scripts/clean-settings.sh
+# Usage: ./scripts/reset-settings.sh or bash scripts/reset-settings.sh
 
 set -e
 
@@ -44,7 +44,7 @@ log_error() {
 }
 
 log_info "=========================================="
-log_info "DEXBot2 Clean Settings Script"
+log_info "DEXBot2 Reset Settings Script"
 log_info "=========================================="
 log_info "General settings:         $GENERAL_SETTINGS_FILE"
 log_info "Market profiles:          $MARKET_PROFILES_FILE"
