@@ -210,7 +210,7 @@ Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local boo
 ### Operational & Security
 
 - **[Credential Security](docs/CREDENTIAL_SECURITY.md)** - Key handling, daemon-backed signing, and runtime file hardening
-- **[Grid Recalculation](docs/GRID_RECALCULATION.md)** - AMA delta threshold, grid reset triggers, and runtime recalc behavior
+- **[Grid Recalculation](docs/GRID_RECALCULATION.md)** - Market-adapter bootstrap/delta/slope resets, divergence correction, fund regeneration, and runtime trigger handling
 - **[Logging](docs/LOGGING.md)** - Logging system documentation
 - **[Docker](docs/docker.md)** - Container build, release images, and secure startup
 

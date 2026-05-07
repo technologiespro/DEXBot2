@@ -1286,14 +1286,14 @@ price_candles -> ATR -> weight_variance (symmetric shift)
 - `weights` — `{ buy, sell }` dynamic grid weighting
 - `collateralRecommendation` — advisory collateral ratio hint
 - `trend` / `atr` — raw regime and volatility signals
-- Trigger files when grid price delta exceeds threshold
+- Trigger files when the adapter accepts the first AMA center, the grid price delta exceeds threshold, or whitelisted range-scaling slope delta exceeds threshold
 
 ### Integration with Bot Runtime
 
-1. Adapter writes `profiles/recalculate.<botKey>.trigger` when threshold crossed
-2. `dexbot_maintenance_runtime.js` picks up trigger and requests grid reset
-3. Dynamic weights are read from `market_adapter/state/market_adapter_state.json`
-4. Bot runtime applies weight offsets during grid recalculation
+1. Adapter persists `profiles/orders/<botKey>.dynamicgrid.json` before any reset trigger.
+2. Adapter writes `profiles/recalculate.<botKey>.trigger` for bootstrap, AMA-center delta, or whitelisted AMA-slope range reset.
+3. `dexbot_maintenance_runtime.js` consumes the trigger under `_fillProcessingLock`, with idle/dust deferral when needed.
+4. Bot runtime reads accepted center, range-scaling fields, and dynamic weights from the dynamic-grid snapshot during reset and selected maintenance paths.
 
 ---
 

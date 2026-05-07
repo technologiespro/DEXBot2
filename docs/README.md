@@ -48,9 +48,9 @@ This directory contains the comprehensive technical documentation for the DEXBot
 
 ### 📊 [Grid Recalculation](GRID_RECALCULATION.md)
 *When and why the grid resets.*
-- **Three Independent Triggers**: AMA Delta (market move), RMS Divergence (state drift), and Regeneration (fund accumulation)
-- **Configuration**: Per-trigger thresholds and their defaults
-- **AMA Delta**: How the market adapter's price signal drives grid repositioning
+- **Reset Sources**: Market-adapter bootstrap, AMA delta, AMA-slope range reset, RMS divergence correction, and fund regeneration
+- **Configuration**: Per-source thresholds, whitelist requirements, and defaults
+- **Trigger Execution**: How `profiles/recalculate.<botKey>.trigger` is consumed under the fill-processing lock
 
 ### 📝 [Logging System](LOGGING.md)
 *Observability and debugging.*

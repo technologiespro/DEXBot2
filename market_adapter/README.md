@@ -2,7 +2,9 @@
 
 The market adapter is the live signal layer for AMA-priced bots. It reads
 candles, computes the AMA center price, optionally writes dynamic weights, and
-creates a recalc trigger when the grid center moves far enough.
+creates recalc triggers when a bot accepts its first center, when the center
+moves far enough, or when whitelisted range-scaling slope drift requires a
+grid-bound reset.
 
 DEXBot2 starts and stops the adapter automatically when active AMA bots exist.
 
@@ -12,8 +14,8 @@ The adapter feeds four separate grid controls from the same candle/AMA pipeline:
 
 | Control | Signal | Effect |
 |---------|--------|--------|
-| Grid price | AMA price | Moves the grid center |
-| Grid range scaling | AMA slope | Widens the trend side and tightens the opposite bound |
+| Grid price | AMA price | Moves the grid center through bootstrap and delta reset triggers |
+| Grid range scaling | AMA slope | Widens the trend side and tightens the opposite bound through whitelisted slope reset triggers |
 | Asymmetric weight shift | AMA slope + Kalman filter | Biases buy/sell allocation in the trend direction |
 | Symmetric weight shift | Volatility | Reduces both buy and sell weights during noisy periods |
 
@@ -98,6 +100,11 @@ This is separate from dynamic buy/sell weighting. It is enabled only when
 
 Technical formula and tuning details are in
 [Grid Range Scaling Model](#grid-range-scaling-model).
+
+When range scaling is whitelisted, the adapter persists the accepted slope
+baseline in `gridRangeScalingAmaSlope`. A reset trigger is emitted only when
+the slope delta crosses the configured threshold; direction changes alone do
+not reset the grid.
 
 ## Asymmetric Weight Shift
 
@@ -273,6 +280,7 @@ ATR            -> symmetric volatility penalty
 trend + ATR    -> dynamic buy/sell weights
 
 trend regime   -> advisory collateral-ratio hint
+first AMA center -> recalculate.<botKey>.trigger for bootstrap
 AMA delta      -> recalculate.<botKey>.trigger
 AMA slope delta -> recalculate.<botKey>.trigger for grid range scaling bots
 ```
@@ -299,9 +307,9 @@ Per cycle, per processed bot, the adapter can produce:
 6. Repair missing candle gaps when possible.
 7. Ignore still-forming 1h candles.
 8. Compute AMA center, trend, ATR, weights, and collateral hint.
-9. Compare the new AMA center to the stored center.
+9. Persist the first accepted center, compare center delta, and compare whitelisted range-scaling slope delta.
 10. Suppress live writes if the bot is not whitelisted or candle data is stale.
-11. Write `dynamicgrid.json` and a recalc trigger when the AMA center threshold is crossed, or when the AMA slope threshold is crossed for a grid range scaling bot.
+11. Write `dynamicgrid.json` and a recalc trigger for bootstrap, AMA-center threshold, or grid-range-scaling AMA-slope threshold events.
 12. Persist state snapshots under `market_adapter/state/`.
 
 ### Files

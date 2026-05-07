@@ -1,23 +1,25 @@
 # Grid Recalculation Mechanisms
 
-DEXBot2 uses **three independent grid recalculation triggers** to keep the trading grid synchronized with market conditions and bot funds.
-The AMA center baseline supports the AMA trigger, but is not a separate trigger on its own.
+DEXBot2 uses **five independent grid reset/update sources** to keep the trading grid synchronized with market conditions, bot funds, and on-chain state.
+The market adapter writes the AMA center baseline and selected dynamic-grid payloads first, then emits a reset trigger only when the bot should rebuild around that accepted snapshot.
 
 ---
 
-## Overview: Three Recalculation Triggers
+## Overview: Reset and Update Sources
 
 | Mechanism | Trigger | Config | Location | Scope |
 |-----------|---------|--------|----------|-------|
-| **AMA Delta** | Market price moved significantly | `AMA_DELTA_THRESHOLD_PERCENT` | `general.settings.json` | Global default; pair/bot overrides in `market_adapter_settings.json` |
+| **Market Adapter Bootstrap** | First accepted AMA center for a bot | AMA bot configuration and whitelist | `profiles/orders/<botKey>.dynamicgrid.json` + `profiles/recalculate.<botKey>.trigger` | Per bot |
+| **AMA Delta** | AMA center moved significantly | `AMA_DELTA_THRESHOLD_PERCENT` / `deltaThresholdPercent` | `general.settings.json`; pair/bot overrides in `market_adapter_settings.json` | Global default, pair, or bot |
+| **AMA Slope Range Reset** | Accepted AMA-slope baseline moved past threshold | `amaSlopeThresholdPercent` / range-scaling profile settings | `market_profiles.json` + `market_adapter_whitelist.json` | Whitelisted range-scaling bots |
 | **RMS Divergence** | Grid state diverged from blockchain | `RMS_PERCENTAGE` | `general.settings.json` | Global (all bots) |
 | **Regeneration** | Available funds exceed threshold | `GRID_REGENERATION_PERCENTAGE` | `constants.js` | Per-side (BUY/SELL) |
 
-Each trigger is **independent and can be configured separately**. They don't interfere with each other.
+Each source is evaluated independently. Market-adapter reset triggers are serialized through `profiles/recalculate.<botKey>.trigger`; runtime maintenance updates are executed under the order manager fill-processing lock.
 
 ---
 
-## 1. AMA Center Baseline
+## 1. AMA Center Baseline and Trigger File
 
 The market adapter persists the AMA-derived grid center directly. There is no
 additional deviation-based price adjustment layer on top of the AMA output.
@@ -25,9 +27,63 @@ additional deviation-based price adjustment layer on top of the AMA output.
 The adapter writes the current center to `profiles/orders/<botKey>.dynamicgrid.json`
 and the grid engine uses that snapshot as the baseline for future delta comparisons.
 
+When a rebuild is required, the adapter writes
+`profiles/recalculate.<botKey>.trigger` with JSON metadata such as `reason`,
+`newCenterPrice`, `previousCenterPrice`, `rawAmaPrice`, and slope diagnostics.
+DEXBot watches the `profiles/` directory and also checks for a pending trigger
+before startup grid initialization.
+
+The bot executes the reset through `_performGridResync()`:
+
+1. Acquire `_fillProcessingLock`.
+2. Defer if the bot is not idle or a pending dust-cancel timer has not settled.
+3. Reload this bot's entry from `profiles/bots.json`.
+4. For manual or legacy empty triggers, refresh `centerPrice` in
+   `<botKey>.dynamicgrid.json` from the latest `amaCenterPrice` before rebuilding.
+5. Call `Grid.recalculateGrid()` using fresh open orders from chain.
+6. Reset fee-debt bookkeeping, persist the rebuilt grid, and remove the trigger file.
+
+Market-adapter triggers are not treated as manual triggers because their JSON
+payload has `source: "market_adapter/market_adapter.js"`. Empty or malformed
+trigger files remain supported as manual/legacy resets.
+
 ---
 
-## 2. AMA Delta Threshold (Market Adapter)
+## 2. Market Adapter Bootstrap Reset
+
+### What It Does
+When the adapter has no accepted `centerPrice` baseline for a bot, it persists
+the first valid AMA center and writes a reset trigger so the running bot
+rebuilds around that center.
+
+**Why it matters:** The adapter and bot must agree on the first grid center. A
+bootstrap trigger prevents the adapter from silently accepting a center while
+the bot continues operating on stale or missing dynamic-grid data.
+
+### How It Works
+
+1. `processBot()` detects that the bot has no valid previous `centerPrice`.
+2. It writes `profiles/orders/<botKey>.dynamicgrid.json` with `centerPrice`,
+   `amaCenterPrice`, AMA slope fields, and whitelisted dynamic weights.
+3. Only after that write succeeds, it writes `profiles/recalculate.<botKey>.trigger`
+   with `reason: "market_adapter_bootstrap"`.
+4. The bot consumes the trigger through the normal grid-resync path.
+5. If the snapshot write fails, no trigger is written and the next adapter cycle
+   retries bootstrap from scratch.
+
+### Debugging
+
+**Bootstrap persistence failure:**
+```text
+triggerSuppressedReason: 'ama_center_persist_failed'
+```
+
+If this appears repeatedly, check disk space, write permissions for
+`profiles/orders/`, and the `writeBotDynamicGrid` service dependency.
+
+---
+
+## 3. AMA Delta Threshold (Market Adapter)
 
 ### What It Does
 Monitors the Adaptive Moving Average (AMA) of market prices. When the AMA center price deviates from the last recorded center by more than the threshold, a grid recalculation is triggered.
@@ -103,9 +159,10 @@ node market_adapter/market_adapter.js --deltaPercent 2
 4. Tracks the **AMA center price** for each bot
 5. When `|currentAMA - lastRecordedAMA| >= AMA_DELTA_THRESHOLD_PERCENT`:
    - **Checks if the bot is whitelisted** (non-whitelisted bots only log results)
+   - Persists `profiles/orders/<botKey>.dynamicgrid.json`
    - Creates `profiles/recalculate.<botKey>.trigger` file
-   - DEXBot's main loop detects the trigger and calls `Grid.recalculateGrid()`
-6. Last recorded center is updated after recalculation
+   - DEXBot detects the trigger at startup or through `fs.watch` and runs a full grid resync under `_fillProcessingLock`
+6. Last recorded center is updated only after the dynamic-grid snapshot write succeeds
 
 ### When to Adjust
 
@@ -126,7 +183,51 @@ fallback bot-level AMA settings, edit the bot entry in `profiles/bots.json`.
 
 ---
 
-## 3. RMS Divergence Check (Grid Engine)
+## 4. AMA Slope Range Reset (Market Adapter)
+
+### What It Does
+For bots whitelisted for asymmetric bounds / grid range scaling, the adapter
+tracks the AMA slope baseline accepted at the last grid reset. When the slope
+delta crosses the configured threshold, the adapter persists the latest range
+scaling snapshot and writes a reset trigger.
+
+**Why it matters:** Range scaling changes grid bounds, not just live order
+weights. Existing orders need a reset to move to the new asymmetric range.
+
+### Configuration
+
+Range scaling is enabled by whitelist:
+
+```bash
+npm run market-adapter:whitelist
+```
+
+To leave range scaling disabled while allowing AMA pricing:
+
+```bash
+node scripts/generate_market_adapter_whitelist.js --no-asymmetric-bounds
+```
+
+The snapshot fields involved are:
+
+- `amaSlope`: latest slope diagnostic
+- `gridRangeScalingAmaSlope`: last accepted grid-reset slope baseline
+- `amaSlopeDeltaPercent`: distance from the accepted baseline
+- `amaSlopeThresholdPercent`: threshold required to trigger the reset
+
+### How It Works
+
+1. Adapter computes the current AMA slope and range-scaling bounds.
+2. It compares the current slope with `gridRangeScalingAmaSlope`.
+3. If the threshold is crossed and the bot is range-scaling-whitelisted:
+   - Persists the dynamic-grid snapshot
+   - Writes a trigger with `reason: "market_adapter_ama_slope_delta_threshold"`
+   - Advances the accepted slope baseline only after persistence succeeds
+4. Direction changes alone do not reset the grid unless the slope delta threshold is crossed.
+
+---
+
+## 5. RMS Divergence Check (Grid Engine)
 
 ### What It Does
 Compares the **calculated grid** (in-memory state) with the **persisted grid** (blockchain state). When divergence exceeds a threshold, the grid is regenerated to re-sync with reality.
@@ -173,9 +274,10 @@ Compares the **calculated grid** (in-memory state) with the **persisted grid** (
    RMS = √(mean of ((calculated - persisted) / persisted)²)
    ```
 4. If `RMS >= RMS_PERCENTAGE`:
-   - Triggers `Grid.updateGridOrderSizes()` to regenerate
-   - Calls `compareGrids()` to report detailed divergence metrics
-5. Grid sizes are recalculated and updated
+   - Logs the structural divergence metrics
+   - Calls `applyGridDivergenceCorrections()`
+   - Applies the resulting COW update/cancel/create plan through the batch order path
+5. The master grid is committed only after successful blockchain execution; failed COW plans are discarded
 
 ### When to Adjust
 
@@ -196,7 +298,7 @@ Compares the **calculated grid** (in-memory state) with the **persisted grid** (
 
 ---
 
-## 4. Grid Regeneration Threshold (Internal)
+## 6. Grid Regeneration Threshold (Internal)
 
 ### What It Does
 Monitors available funds on each side (BUY/SELL). When accumulated fill proceeds exceed the threshold, the grid is regenerated to re-utilize the freed capital.
@@ -244,41 +346,19 @@ GRID_LIMITS: {
 
 ---
 
-## Bootstrap Center Persistence
-
-On the **first cycle** for a bot (when no `centerPrice` baseline exists yet), the market adapter must persist the initial AMA center to disk before advancing the in-memory baseline. This ordering prevents a dangerous split where the order engine reads stale or missing snapshot data while the adapter believes it succeeded.
-
-### How It Works
-
-1. `processBot()` detects the bootstrap case (`centerPrice` is not yet set).
-2. It calls `writeBotDynamicGrid(botKey, centerPrice, { amaCenterPrice })`.
-3. **If the write succeeds** (returns anything other than `false`): the in-memory baseline (`centerPrice`, `amaCenterPrice`, `lastGridResetAt`) is set. No recalculation trigger is created during bootstrap — the bot enters normal delta-comparison behavior on subsequent cycles.
-4. **If the write fails** (returns `false`): the in-memory baseline is left unset, `triggerSuppressedReason` is set to `ama_center_persist_failed`, and no recalculation trigger is written. The next cycle will retry the bootstrap from scratch.
-
-### Debugging
-
-**Bootstrap persistence failure:**
-```
-triggerSuppressedReason: 'ama_center_persist_failed'
-```
-
-If this appears repeatedly, check:
-- disk space and write permissions on the state directory
-- whether `writeBotDynamicGrid` is correctly wired in the service deps
-
----
-
 ## Interaction Between Mechanisms
 
 ### Independence
-All three triggers are **independent**:
+All reset/update sources are **independent**:
+- Bootstrap reset is triggered by accepting the first AMA center
 - AMA delta is triggered by market price changes
+- AMA slope reset is triggered by accepted range-scaling slope drift
 - RMS divergence is triggered by blockchain state drift
 - Regeneration is triggered by available funds
-- They can all fire at the same time without conflict
+- Runtime execution is serialized by the fill-processing lock and idle/dust deferral
 
 ### Configuration Priority
-1. **All three are INDEPENDENT** — no priority or suppression
+1. **All mechanisms are independent** — no global priority or suppression
 2. Each can be configured and disabled separately
 3. Disabling one doesn't affect the others
 
@@ -348,18 +428,33 @@ Check the logs for these messages:
 
 **AMA Delta Trigger:**
 ```
-Creating trigger: profiles/recalculate.<botKey>.trigger
+TRIGGERED -> profiles/recalculate.<botKey>.trigger
+```
+
+Trigger payload reasons:
+
+```text
+market_adapter_bootstrap
+market_adapter_delta_threshold
+market_adapter_ama_slope_delta_threshold
 ```
 
 **RMS Divergence Trigger:**
 ```
-[grid] compareGrids: RMS divergence 18.5% exceeds threshold 14.3%
-[grid] updateGridOrderSizes: Regenerating grid due to divergence
+Grid update triggered by structural divergence during periodic: buy=..., sell=...
+Grid divergence corrections applied during periodic
 ```
 
 **Regeneration Trigger:**
 ```
-[grid] Grid regeneration triggered: available 3.2% >= threshold 3.0%
+Grid update triggered by funds during periodic (buy: ..., sell: ...)
+```
+
+**Trigger Resync Execution:**
+```text
+Pending trigger file detected. Processing reset before startup...
+Grid regeneration triggered. Performing full grid resync...
+Removed trigger file.
 ```
 
 ---
@@ -402,6 +497,8 @@ Creating trigger: profiles/recalculate.<botKey>.trigger
 - `modules/constants.js` — Default configuration values
 - `modules/account_bots.js` — Bot configuration schema and defaults
 - `market_adapter/market_adapter.js` — AMA calculation and trigger logic
+- `market_adapter/core/market_adapter_service.js` — Bootstrap, AMA-delta, and AMA-slope trigger decisions
+- `modules/dexbot_maintenance_runtime.js` — Trigger-file detection, manual center refresh, idle/dust deferral, and resync execution
 - `modules/order/grid.js` — RMS divergence check and grid comparison
 - `modules/order/manager.js` — Regeneration threshold logic
 - `profiles/general.settings.json` — User-editable configuration
