@@ -6,7 +6,10 @@ console.log('Running market adapter service tests');
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
 const { detectMissingCandleTimestamps, fillCandleGaps, mergeCandles, pruneStaleTail } = require('../market_adapter/candle_utils');
 const { calculateATR } = require('../market_adapter/core/strategies/atr/calculator');
-const { computeAmaSlopeWeights } = require('../market_adapter/core/strategies/ama_slope_model');
+const {
+    computeAmaSlopeWeights,
+    computeAverageAmaSlopePct,
+} = require('../market_adapter/core/strategies/ama_slope_model');
 const { normalizeAtrPeriod, normalizeMaxVolatilityOffset, normalizeVolatilityThreshold } = require('../market_adapter/core/config_normalizers');
 const { computeRegimeMultiplier } = require('../market_adapter/core/strategies/regime_gate');
 const { MARKET_ADAPTER } = require('../modules/constants');
@@ -179,7 +182,8 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
         for (let i = amaWarmupBars; i < amaValues.length; i++) {
             const last = amaValues[i];
             const past = amaValues[i - lookbackBars];
-            if (past > 0) amaSlopes.push(Math.abs((last - past) / past * 100));
+            const slopePct = computeAverageAmaSlopePct(last, past, lookbackBars);
+            if (Number.isFinite(slopePct)) amaSlopes.push(Math.abs(slopePct));
         }
         if (amaSlopes.length > 0) {
             amaSlopes.sort((a, b) => a - b);
@@ -266,7 +270,11 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
             amaOffsets.push(0);
             continue;
         }
-        const slopePct = (last - past) / past * 100;
+        const slopePct = computeAverageAmaSlopePct(last, past, lookbackBars);
+        if (!Number.isFinite(slopePct)) {
+            amaOffsets.push(0);
+            continue;
+        }
         const clippedSlopePct = clamp(slopePct, -amaClipThreshold, amaClipThreshold);
         amaOffsets.push(Math.abs(clippedSlopePct) < nz ? 0 : clamp((clippedSlopePct / amaSlopeMaxPct) * offsetClamp, -offsetClamp, offsetClamp));
     }
@@ -1997,10 +2005,12 @@ async function testSlopeTriggerRecoversBaselineFromDynamicGridAfterStateClear() 
     assert.strictEqual(triggerWrites, 1, 'recovered baseline should produce one slope trigger');
     assert.strictEqual(dynamicGridWrites, 1, 'successful slope trigger should refresh the persisted snapshot once');
     assert.ok(lastTrigger, 'trigger payload should be captured');
-    assert.deepStrictEqual(
-        lastTrigger.previousGridResetAmaSlope,
-        persistedGridRangeScalingAmaSlope,
-        'slope trigger should use the persisted grid reset baseline from dynamicgrid.json'
+    assert.strictEqual(lastTrigger.previousGridResetAmaSlope.trend, persistedGridRangeScalingAmaSlope.trend);
+    assert.strictEqual(lastTrigger.previousGridResetAmaSlope.slopeOffset, persistedGridRangeScalingAmaSlope.slopeOffset);
+    assert.strictEqual(
+        roundTo(lastTrigger.previousGridResetAmaSlope.slopePct, 6),
+        roundTo(persistedGridRangeScalingAmaSlope.slopePct / MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS, 6),
+        'slope trigger should normalize the persisted grid reset baseline from dynamicgrid.json before comparison'
     );
     assert.strictEqual(result.previousCenterPrice, 100, 'previous center should be restored from dynamicgrid.json after state clear');
     assert.strictEqual(state.bots['xrp-bts-slope-after-clear'].centerPrice > 0, true, 'state should be rebuilt from the recovered snapshot');
@@ -2016,6 +2026,146 @@ function testSlopeDirectionChangeDoesNotTriggerBelowDeltaThreshold() {
 
     assert.strictEqual(details.thresholdCrossed, false, 'small near-zero reversal should stay below threshold');
     assert.strictEqual(details.shouldTrigger, false, 'direction change alone should not trigger a grid reset');
+}
+
+function testLegacyStateSlopeDiagnosticsConvertToPerBar() {
+    const service = new MarketAdapterService({});
+    const normalized = service.normalizePersistedBotState({
+        amaSlope: { trend: 'UP', slopePct: 0.9, slopeOffset: 0.3, isReady: true },
+        gridRangeScalingAmaSlope: { trend: 'DOWN', slopePct: -1.8, slopeOffset: -0.5, isReady: true },
+        amaSlopeDeltaPercent: 0.18,
+        amaSlopeThresholdPercent: 0.09,
+    }, 9);
+
+    assert.strictEqual(normalized.amaSlopePercentMode, 'perBar', 'legacy state should be promoted to per-bar mode');
+    assert.strictEqual(roundTo(normalized.amaSlope.slopePct, 6), 0.1, 'legacy amaSlope should be divided by lookback');
+    assert.strictEqual(roundTo(normalized.gridRangeScalingAmaSlope.slopePct, 6), -0.2, 'legacy reset baseline should be divided by lookback');
+    assert.strictEqual(roundTo(normalized.amaSlopeDeltaPercent, 6), 0.02, 'legacy slope delta should be divided by lookback');
+    assert.strictEqual(roundTo(normalized.amaSlopeThresholdPercent, 6), 0.01, 'legacy slope threshold should be divided by lookback');
+}
+
+function testMarkedPerBarStateSlopeDiagnosticsStayUnchanged() {
+    const service = new MarketAdapterService({});
+    const normalized = service.normalizePersistedBotState({
+        amaSlopePercentMode: 'perBar',
+        amaSlope: { trend: 'UP', slopePct: 0.0417, slopeOffset: 0.2, isReady: true },
+        gridRangeScalingAmaSlope: { trend: 'UP', slopePct: 0.0381, slopeOffset: 0.18, isReady: true },
+        amaSlopeDeltaPercent: 0.0011,
+        amaSlopeThresholdPercent: 0.0014,
+    }, 72);
+
+    assert.strictEqual(normalized.amaSlopePercentMode, 'perBar', 'explicit per-bar mode should be preserved');
+    assert.strictEqual(normalized.amaSlope.slopePct, 0.0417, 'per-bar amaSlope should remain unchanged');
+    assert.strictEqual(normalized.gridRangeScalingAmaSlope.slopePct, 0.0381, 'per-bar reset baseline should remain unchanged');
+    assert.strictEqual(normalized.amaSlopeDeltaPercent, 0.0011, 'per-bar slope delta should remain unchanged');
+    assert.strictEqual(normalized.amaSlopeThresholdPercent, 0.0014, 'per-bar slope threshold should remain unchanged');
+}
+
+async function testLegacyDynamicGridSlopeBaselineIsNormalizedBeforeComparison() {
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-legacy-slope-baseline',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+    const candles = generateUpThenDownCandles(160, 160, 100, 0.55, 0.75);
+    const baseDeps = {
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: (filePath) => {
+            if (String(filePath).endsWith('.dynamicgrid.json')) return null;
+            return { candles };
+        },
+        saveJson: () => {},
+        calculateBotThreshold: () => 9999,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (input) => input,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-legacy-slope-baseline.trigger',
+        writeBotDynamicGrid: () => true,
+        isBotDynamicWeightWhitelisted: () => false,
+        isBotGridRangeScalingWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    };
+
+    const baselineService = new MarketAdapterService(baseDeps);
+    const baselineState = { bots: {} };
+    const baselineCfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        amaSlopeDeltaThresholdPercent: 0.5,
+    };
+    const baselineResult = await baselineService.processBot(bot, baselineState, baselineCfg, new Map(), {});
+    const currentSlopePct = Number(baselineResult.amaSlope?.slopePct);
+    assert.ok(Number.isFinite(currentSlopePct), 'baseline run should compute a slope percent');
+
+    const lookbackBars = MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
+    const legacyWindowSlopePct = currentSlopePct * lookbackBars;
+    const falseDelta = Math.abs(currentSlopePct - legacyWindowSlopePct);
+    let triggerWrites = 0;
+
+    const comparisonService = new MarketAdapterService({
+        ...baseDeps,
+        loadJson: (filePath) => {
+            if (String(filePath).endsWith('.dynamicgrid.json')) {
+                return {
+                    centerPrice: 100,
+                    amaCenterPrice: 100,
+                    gridRangeScalingAmaSlope: {
+                        trend: baselineResult.amaSlope.trend,
+                        slopePct: legacyWindowSlopePct,
+                        slopeOffset: baselineResult.amaSlope.slopeOffset,
+                        isReady: true,
+                    },
+                    amaSlopeDeltaPercent: falseDelta,
+                    amaSlopeThresholdPercent: falseDelta / 2,
+                };
+            }
+            return { candles };
+        },
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-legacy-slope-baseline.trigger';
+        },
+        isBotGridRangeScalingWhitelisted: () => true,
+    });
+
+    const state = { bots: {} };
+    const cfg = {
+        ...baselineCfg,
+        amaSlopeDeltaThresholdPercent: falseDelta / 2,
+    };
+    const result = await comparisonService.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'comparison run should succeed');
+    assert.strictEqual(result.triggered, false, 'legacy window baseline should not false-trigger after normalization');
+    assert.strictEqual(triggerWrites, 0, 'legacy window baseline should not emit a reset trigger');
+    assert.strictEqual(state.bots[bot.botKey].amaSlopePercentMode, 'perBar', 'state should persist the normalized unit marker');
+    assert.strictEqual(
+        roundTo(state.bots[bot.botKey].gridRangeScalingAmaSlope.slopePct, 6),
+        roundTo(currentSlopePct, 6),
+        'legacy reset baseline should be converted to the current per-bar slope before comparison'
+    );
 }
 
 async function testSlopePersistFailurePreservesRetryBaseline() {
@@ -2084,6 +2234,7 @@ async function testSlopePersistFailurePreservesRetryBaseline() {
                 gridRangeScalingAmaSlope: previousAmaSlope,
                 amaSlopeDeltaPercent: 0.01,
                 amaSlopeThresholdPercent: 0.12,
+                amaSlopePercentMode: 'perBar',
             },
         },
     };
@@ -3820,8 +3971,8 @@ async function testDynamicWeightChartParityMatchesLiveService() {
         kalmanSmoothSpanPct: 120,
         amaSlope: {
             lookbackBars: 2,
-            maxSlopePct: 0.9,
-            neutralZonePct: 0.02,
+            maxSlopePct: 0.45,
+            neutralZonePct: 0.01,
         },
         kalmanSlope: {
             maxSlopePct: 1.8,
@@ -4749,6 +4900,9 @@ async function run() {
     await testCenterStableButSlopeDeltaTriggersReset();
     await testSlopeTriggerRecoversBaselineFromDynamicGridAfterStateClear();
     testSlopeDirectionChangeDoesNotTriggerBelowDeltaThreshold();
+    testLegacyStateSlopeDiagnosticsConvertToPerBar();
+    testMarkedPerBarStateSlopeDiagnosticsStayUnchanged();
+    await testLegacyDynamicGridSlopeBaselineIsNormalizedBeforeComparison();
     await testSlopePersistFailurePreservesRetryBaseline();
     await testDynamicWeightChartParityMatchesLiveService();
     await testDynamicWeightVolatilityOnlyPathRemainsReady();

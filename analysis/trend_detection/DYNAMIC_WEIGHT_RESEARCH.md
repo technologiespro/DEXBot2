@@ -157,7 +157,7 @@ All panels share aligned vertical time grid lines, and the bottom output panel s
 |------|-------|---------|---------|
 | **nz%** | 0–1 | 0.00 | Neutral zone: dead-band below which offset is forced to 0 |
 | **lb** | 1–32 | 9 | Logarithmic. Lookback bars for AMA slope calculation |
-| **amaS%** | 0.05–5 | 0.75 | Logarithmic. Gear ratio for AMA slope saturation |
+| **amaS%** | 0.005–0.5 | 0.100 | Logarithmic. Gear ratio for average per-bar AMA slope saturation |
 | **kalS%** | 0.05–1.5 | 0.75 | Logarithmic. Gear ratio for Kalman composite saturation |
 | **clip%** | 0–55 | 10 | Percentile clip: filters extreme inputs (0 = off) |
 
@@ -270,6 +270,7 @@ The lookup table can be customized per-market or per-bot (see [Custom Configurat
 
 ### AMA Offset
 ```
+amaSlope% = ((AMA_now − AMA_lb_bars_ago) / AMA_lb_bars_ago × 100) / lb
 amaClip = clamp(amaSlope%, ±clipThreshold)    // percentile-based clip
 amaOff  = clamp(amaClip / amaS% × outputClamp, ±outputClamp)
 ```
@@ -343,7 +344,7 @@ Number of bars to look back when computing AMA slope:
 - `lb = 9` (default): ~9 hours of hourly candles, balanced responsiveness and smoothing
 - `lb = 32`: ~1.3 days of hourly candles, stable but slower to react
 
-Lower values = more noise, faster reaction. Higher values = smoother signals, more lag.
+AMA slope is normalized to an average percent per bar, not the cumulative move across the full lookback. Lower values = more noise, faster reaction. Higher values = smoother signals, more lag without adding gain just because the measurement window is longer.
 
 ### regi (regime sensitivity)
 - 0 = regime multiplier is always 1.0 (Hurst+PE ignored)

@@ -18,6 +18,16 @@ function clamp(v, min, max) {
     return Math.max(min, Math.min(max, v));
 }
 
+function computeAverageAmaSlopePct(current, past, lookbackBars) {
+    const safeLookbackBars = Number.isFinite(lookbackBars) && lookbackBars > 0
+        ? Math.ceil(lookbackBars)
+        : 1;
+    if (!Number.isFinite(current) || !Number.isFinite(past) || past === 0) {
+        return null;
+    }
+    return ((current - past) / past * 100) / safeLookbackBars;
+}
+
 /**
  * Compute AMA slope and volatility offsets from the AMA series.
  *
@@ -29,8 +39,8 @@ function clamp(v, min, max) {
  * @param {number}   weightVariance      ATR(period) / amaPrice  (0 = no volatility)
  * @param {Object}   [opts]              Market-reading tuning — no offset bounds here
  * @param {number}   [opts.lookbackBars=MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS]  Bars to look back for slope
- * @param {number}   [opts.maxSlopePct=MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT]  Slope % that saturates slopeOffset
- * @param {number}   [opts.neutralZonePct=MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT]  Dead-band around zero slope
+ * @param {number}   [opts.maxSlopePct=MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT]  Average per-bar slope % that saturates slopeOffset
+ * @param {number}   [opts.neutralZonePct=MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT]  Dead-band around zero average slope
  * @param {number}   [opts.volatilityExponent=1.0]      Exponent for ATR-based penalty
  * @param {number}   [opts.volatilityScaleX=10.0]       Scale factor penalty (10.0 = normal start)
  * @param {number}   [opts.volatilityThreshold=0.1]      Minimum |symmetricDelta| before penalty applies
@@ -97,8 +107,12 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
         return notReady;
     }
 
-    // 2. Slope percent over lookback window
-    const slopePct = (last - past) / past * 100;
+    // 2. Average slope percent per bar over the lookback window. This keeps
+    // lookback as a smoothing/lag knob instead of adding gain in sustained trends.
+    const slopePct = computeAverageAmaSlopePct(last, past, lookbackBars);
+    if (!Number.isFinite(slopePct)) {
+        return notReady;
+    }
 
     // 2b. Percentile clip — symmetric clip on slope magnitude
     const clippedSlopePct = Math.max(-clipThreshold, Math.min(clipThreshold, slopePct));
@@ -149,4 +163,4 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     };
 }
 
-module.exports = { computeAmaSlopeWeights };
+module.exports = { computeAmaSlopeWeights, computeAverageAmaSlopePct };

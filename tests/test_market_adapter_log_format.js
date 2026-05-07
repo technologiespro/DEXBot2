@@ -100,6 +100,17 @@ function testBuildDynamicWeightTuningLogFormatsKnobs() {
     assert.ok(text.includes('kalman(sm/disp/th/span)=60.00/1.70/1.15/120.00'), 'Kalman tuning tuple should be formatted');
 }
 
+function testBuildDynamicWeightTuningLogKeepsTinyAmaKnobsVisible() {
+    const text = buildDynamicWeightTuningLog({
+        amaSlope: { maxSlopePct: 0.0417 },
+        kalmanSlope: { maxSlopePct: 1.8 },
+        neutralZonePct: 0.0021,
+    });
+
+    assert.ok(text.includes('slopeMax=0.0417'), 'small AMA slope max should retain fine precision');
+    assert.ok(text.includes('nz=0.0021'), 'small neutral-zone values should retain fine precision');
+}
+
 function testBuildAsymmetricBoundsLogFormatsPercentages() {
     assert.strictEqual(
         buildAsymmetricBoundsLog({
@@ -125,6 +136,7 @@ testBuildWeightSummaryFormatsSellBuyOrder();
 testBuildDynamicWeightInputsLogMasksAsymmetryWhenDisabled();
 testBuildDynamicWeightInputsLogShowsAsymmetryWhenEnabled();
 testBuildDynamicWeightTuningLogFormatsKnobs();
+testBuildDynamicWeightTuningLogKeepsTinyAmaKnobsVisible();
 testBuildAsymmetricBoundsLogFormatsPercentages();
 testBuildStartupDefaultsLogReflectsExplicitOnlyDynamicBase();
 

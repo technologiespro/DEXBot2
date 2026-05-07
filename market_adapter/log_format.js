@@ -4,6 +4,13 @@ function formatLogNumber(value, digits = 2) {
     return Number.isFinite(value) ? Number(value).toFixed(digits) : 'n/a';
 }
 
+function formatAdaptiveLogNumber(value, coarseDigits = 2, fineDigits = 4, fineThreshold = 0.1) {
+    if (!Number.isFinite(value)) return 'n/a';
+    return Math.abs(Number(value)) < fineThreshold
+        ? Number(value).toFixed(fineDigits)
+        : Number(value).toFixed(coarseDigits);
+}
+
 function formatLogPercent(value, digits = 2) {
     return Number.isFinite(value) ? `${Number(value).toFixed(digits)}%` : 'n/a';
 }
@@ -41,14 +48,14 @@ function buildDynamicWeightInputsLog(meta, amaConfig, options = {}) {
 
 function buildDynamicWeightTuningLog(meta) {
     return [
-        `slopeMax=${formatLogNumber(meta?.amaSlope?.maxSlopePct, 2)}`,
+        `slopeMax=${formatAdaptiveLogNumber(meta?.amaSlope?.maxSlopePct, 2, 4)}`,
         `kalmanMax=${formatLogNumber(meta?.kalmanSlope?.maxSlopePct, 2)}`,
         `alpha=${formatLogNumber(meta?.alpha, 2)}`,
         `dw=${formatLogNumber(meta?.dw, 2)}`,
         `gain=${formatLogNumber(meta?.gain, 2)}`,
         `vol(thr/exp/x)=${formatLogNumber(meta?.volatilityThreshold, 2)}/${formatLogNumber(meta?.volatilityExponent, 2)}/${formatLogNumber(meta?.volatilityScaleX, 2)}`,
         `clip=${formatLogPercent(meta?.clipPercentile, 0)}`,
-        `nz=${formatLogNumber(meta?.neutralZonePct, 2)}`,
+        `nz=${formatAdaptiveLogNumber(meta?.neutralZonePct, 2, 4)}`,
         `minOut=${formatLogNumber(meta?.minOutputThreshold, 2)}`,
         `reg(sens/abs)=${formatLogNumber(meta?.regimeSensitivity, 2)}/${formatLogNumber(meta?.absoluteThreshold, 2)}`,
         `kalman(sm/disp/th/span)=${formatLogNumber(meta?.kalmanSmoothPct, 2)}/${formatLogNumber(meta?.kalmanDispScaleMult, 2)}/${formatLogNumber(meta?.kalmanDispThresholdMult, 2)}/${formatLogNumber(meta?.kalmanSmoothSpanPct, 2)}`,

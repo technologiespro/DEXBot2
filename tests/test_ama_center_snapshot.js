@@ -15,12 +15,13 @@ async function testSnapshotReaderExposesCenterOnly() {
   const filePath = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify({
-    amaCenterPrice: 100,
-    centerPrice: 101.5,
-    amaSlope: {
-      trend: 'DOWN',
-      slopePct: -0.28,
+	  await fs.writeFile(filePath, JSON.stringify({
+	    amaCenterPrice: 100,
+	    centerPrice: 101.5,
+	    amaSlopePercentMode: 'perBar',
+	    amaSlope: {
+	      trend: 'DOWN',
+	      slopePct: -0.28,
       slopeOffset: -0.14,
     },
     gridRangeScalingAmaSlope: {
@@ -37,10 +38,11 @@ async function testSnapshotReaderExposesCenterOnly() {
   try {
     const snapshot = loadAmaCenterSnapshot(botKey);
     assert(snapshot, 'snapshot should be returned for a valid file');
-    assert.strictEqual(snapshot.amaCenterPrice, 100);
-    assert.strictEqual(snapshot.centerPrice, 101.5);
-    assert.deepStrictEqual(snapshot.amaSlope, {
-      trend: 'DOWN',
+	    assert.strictEqual(snapshot.amaCenterPrice, 100);
+	    assert.strictEqual(snapshot.centerPrice, 101.5);
+	    assert.strictEqual(snapshot.amaSlopePercentMode, 'perBar');
+	    assert.deepStrictEqual(snapshot.amaSlope, {
+	      trend: 'DOWN',
       slopePct: -0.28,
       slopeOffset: -0.14,
     });
@@ -121,11 +123,12 @@ async function testCenterSnapshotWriterUsesOnlyNewCollateralField() {
 
     const write = capturedWrites.find((entry) => entry.filePath && String(entry.filePath).endsWith('.tmp'));
     assert(write, 'snapshot writer should emit a JSON payload');
-    const parsed = JSON.parse(write.data);
-    assert.strictEqual(parsed.bots.testBot.collateralRecommendation, 1.62);
-    assert.strictEqual(parsed.bots.testBot.amaSlopeDeltaPercent, 0.12);
-    assert.strictEqual(parsed.bots.testBot.amaSlopeThresholdPercent, 0.1);
-    assert.deepStrictEqual(parsed.bots.testBot.amaSlope, {
+	    const parsed = JSON.parse(write.data);
+	    assert.strictEqual(parsed.bots.testBot.collateralRecommendation, 1.62);
+	    assert.strictEqual(parsed.bots.testBot.amaSlopeDeltaPercent, 0.12);
+	    assert.strictEqual(parsed.bots.testBot.amaSlopeThresholdPercent, 0.1);
+	    assert.strictEqual(parsed.bots.testBot.amaSlopePercentMode, 'perBar');
+	    assert.deepStrictEqual(parsed.bots.testBot.amaSlope, {
       trend: 'UP',
       slopePct: 0.28,
       slopeOffset: 0.14,

@@ -1,7 +1,10 @@
 'use strict';
 
 const { calculateATR } = require('./strategies/atr/calculator');
-const { computeAmaSlopeWeights } = require('./strategies/ama_slope_model');
+const {
+    computeAmaSlopeWeights,
+    computeAverageAmaSlopePct,
+} = require('./strategies/ama_slope_model');
 const {
     normalizeAtrPeriod,
     normalizeMaxVolatilityOffset,
@@ -22,6 +25,62 @@ const {
 } = require('./asymmetric_bounds');
 const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../../modules/constants');
 const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order');
+
+const AMA_SLOPE_PERCENT_MODE_PER_BAR = 'perBar';
+const AMA_SLOPE_PERCENT_MODE_WINDOW = 'window';
+
+function normalizeAmaSlopePercentMode(value) {
+    const text = String(value || '').trim().toLowerCase();
+    if (['perbar', 'per_bar', 'per-bar', 'averageperbar', 'average_per_bar'].includes(text)) {
+        return AMA_SLOPE_PERCENT_MODE_PER_BAR;
+    }
+    if (['window', 'lookback', 'cumulative', 'legacy'].includes(text)) {
+        return AMA_SLOPE_PERCENT_MODE_WINDOW;
+    }
+    return null;
+}
+
+function normalizeAmaSlopeLookbackBars(value) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return Math.ceil(n);
+    return MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
+}
+
+function convertSlopePercentToPerBar(value, lookbackBars, mode) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return mode === AMA_SLOPE_PERCENT_MODE_PER_BAR
+        ? n
+        : n / normalizeAmaSlopeLookbackBars(lookbackBars);
+}
+
+function normalizePersistedAmaSlopeSnapshot(snapshot, lookbackBars, mode) {
+    if (!snapshot || typeof snapshot !== 'object') return null;
+    const normalized = { ...snapshot };
+    const slopePct = convertSlopePercentToPerBar(snapshot.slopePct, lookbackBars, mode);
+    if (Number.isFinite(slopePct)) {
+        normalized.slopePct = slopePct;
+    }
+    return normalized;
+}
+
+function normalizePersistedAmaSlopeDiagnostics(data, lookbackBars) {
+    if (!data || typeof data !== 'object') return data;
+    const mode = normalizeAmaSlopePercentMode(data.amaSlopePercentMode) || AMA_SLOPE_PERCENT_MODE_WINDOW;
+    const normalized = { ...data };
+    normalized.amaSlopePercentMode = AMA_SLOPE_PERCENT_MODE_PER_BAR;
+    normalized.amaSlope = normalizePersistedAmaSlopeSnapshot(data.amaSlope, lookbackBars, mode);
+    normalized.gridRangeScalingAmaSlope = normalizePersistedAmaSlopeSnapshot(
+        data.gridRangeScalingAmaSlope,
+        lookbackBars,
+        mode
+    );
+    const deltaPercent = convertSlopePercentToPerBar(data.amaSlopeDeltaPercent, lookbackBars, mode);
+    const thresholdPercent = convertSlopePercentToPerBar(data.amaSlopeThresholdPercent, lookbackBars, mode);
+    normalized.amaSlopeDeltaPercent = Number.isFinite(deltaPercent) ? deltaPercent : null;
+    normalized.amaSlopeThresholdPercent = Number.isFinite(thresholdPercent) ? thresholdPercent : null;
+    return normalized;
+}
 
 
 class MarketAdapterService {
@@ -348,28 +407,34 @@ class MarketAdapterService {
         };
     }
 
-    extractPersistedDynamicGridState(snapshot) {
+    normalizePersistedBotState(botState, lookbackBars) {
+        if (!botState || typeof botState !== 'object') return {};
+        return normalizePersistedAmaSlopeDiagnostics(botState, lookbackBars);
+    }
+
+    extractPersistedDynamicGridState(snapshot, lookbackBars) {
         if (!snapshot || typeof snapshot !== 'object') return null;
 
         const centerPrice = Number(snapshot.centerPrice);
         const amaCenterPrice = Number(snapshot.amaCenterPrice);
-        const amaSlope = snapshot.amaSlope && typeof snapshot.amaSlope === 'object'
-            ? snapshot.amaSlope
-            : null;
-        const gridRangeScalingAmaSlope = snapshot.gridRangeScalingAmaSlope
-            && typeof snapshot.gridRangeScalingAmaSlope === 'object'
-            ? snapshot.gridRangeScalingAmaSlope
-            : amaSlope;
-        const amaSlopeDeltaPercent = Number(snapshot.amaSlopeDeltaPercent);
-        const amaSlopeThresholdPercent = Number(snapshot.amaSlopeThresholdPercent);
+        const normalized = normalizePersistedAmaSlopeDiagnostics({
+            amaSlopePercentMode: snapshot.amaSlopePercentMode,
+            amaSlope: snapshot.amaSlope,
+            gridRangeScalingAmaSlope: snapshot.gridRangeScalingAmaSlope,
+            amaSlopeDeltaPercent: snapshot.amaSlopeDeltaPercent,
+            amaSlopeThresholdPercent: snapshot.amaSlopeThresholdPercent,
+        }, lookbackBars);
+        const amaSlope = normalized?.amaSlope ?? null;
+        const gridRangeScalingAmaSlope = normalized?.gridRangeScalingAmaSlope ?? amaSlope;
 
         return {
             centerPrice: Number.isFinite(centerPrice) && centerPrice > 0 ? centerPrice : null,
             amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : null,
             amaSlope,
             gridRangeScalingAmaSlope,
-            amaSlopeDeltaPercent: Number.isFinite(amaSlopeDeltaPercent) ? amaSlopeDeltaPercent : null,
-            amaSlopeThresholdPercent: Number.isFinite(amaSlopeThresholdPercent) ? amaSlopeThresholdPercent : null,
+            amaSlopeDeltaPercent: normalized?.amaSlopeDeltaPercent ?? null,
+            amaSlopeThresholdPercent: normalized?.amaSlopeThresholdPercent ?? null,
+            amaSlopePercentMode: AMA_SLOPE_PERCENT_MODE_PER_BAR,
         };
     }
 
@@ -400,7 +465,8 @@ class MarketAdapterService {
             for (let i = amaWarmupBars; i < amaValues.length; i++) {
                 const last = amaValues[i];
                 const past = amaValues[i - lookbackBars];
-                if (past > 0) amaSlopes.push(Math.abs((last - past) / past * 100));
+                const slopePct = computeAverageAmaSlopePct(last, past, lookbackBars);
+                if (Number.isFinite(slopePct)) amaSlopes.push(Math.abs(slopePct));
             }
             if (amaSlopes.length > 0) {
                 const sorted = amaSlopes.sort((a, b) => a - b);
@@ -529,7 +595,8 @@ class MarketAdapterService {
                 const last = amaValues[i];
                 const past = amaValues[i - lookbackBars];
                 if (!Number.isFinite(last) || !Number.isFinite(past) || past === 0) continue;
-                const sp  = (last - past) / past * 100;
+                const sp = computeAverageAmaSlopePct(last, past, lookbackBars);
+                if (!Number.isFinite(sp)) continue;
                 const csp = Math.max(-amaClipThreshold, Math.min(amaClipThreshold, sp));
                 amaOffsets[i] = (!useNeutralZone || Math.abs(csp) >= nz)
                     ? Math.max(-mo, Math.min(mo, (csp / amaMaxS) * mo))
@@ -1402,7 +1469,7 @@ class MarketAdapterService {
         rawLastCandleTs = rawLastCandle[0] || null;
         latestClosedCandle = closedCandles[closedCandles.length - 1] || null;
         lastClosedCandleTs = latestClosedCandle ? latestClosedCandle[0] : null;
-        botState = { ...(state.bots[bot.botKey] || {}) };
+        botState = this.normalizePersistedBotState(state.bots[bot.botKey], lookbackBars);
         if (sourceMismatch) {
             botState = {};
         }
@@ -1410,7 +1477,7 @@ class MarketAdapterService {
             deps.root, 'profiles', 'orders', `${bot.botKey}.dynamicgrid.json`,
         );
         const persistedDynamicGridState = typeof deps.loadJson === 'function'
-            ? this.extractPersistedDynamicGridState(deps.loadJson(dynGridPath, null))
+            ? this.extractPersistedDynamicGridState(deps.loadJson(dynGridPath, null), lookbackBars)
             : null;
         if (persistedDynamicGridState) {
             if (!(Number(botState.centerPrice) > 0) && persistedDynamicGridState.centerPrice) {
@@ -1687,7 +1754,8 @@ class MarketAdapterService {
             for (let i = amaWarmupBars; i < amaValues.length; i++) {
                 const last = amaValues[i];
                 const past = amaValues[i - lookbackBars];
-                if (past > 0) amaSlopes.push(Math.abs((last - past) / past * 100));
+                const slopePct = computeAverageAmaSlopePct(last, past, lookbackBars);
+                if (Number.isFinite(slopePct)) amaSlopes.push(Math.abs(slopePct));
             }
             if (amaSlopes.length > 0) {
                 const sorted = amaSlopes.sort((a, b) => a - b);
@@ -1818,6 +1886,7 @@ class MarketAdapterService {
                 ? amaSlopeDeltaPercent
                 : botState.amaSlopeDeltaPercent ?? null;
             botState.amaSlopeThresholdPercent = amaSlopeThresholdPercent;
+            botState.amaSlopePercentMode = AMA_SLOPE_PERCENT_MODE_PER_BAR;
             botState.triggerCount = Number(botState.triggerCount || 0) + 1;
             if (canApplyDynamicWeights && dynamicWeightsPayload) {
                 botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
@@ -2004,6 +2073,7 @@ class MarketAdapterService {
                     ? amaSlopeDeltaPercent
                     : botState.amaSlopeDeltaPercent ?? null;
                 botState.amaSlopeThresholdPercent = amaSlopeThresholdPercent;
+                botState.amaSlopePercentMode = AMA_SLOPE_PERCENT_MODE_PER_BAR;
                 botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
                 snapshotPersistedThisCycle = true;
             } else if (!triggerSuppressedReason) {
@@ -2085,6 +2155,7 @@ class MarketAdapterService {
             gridRangeScalingAmaSlope: stateGridRangeScalingAmaSlope,
             amaSlopeDeltaPercent: stateAmaSlopeDeltaPercent,
             amaSlopeThresholdPercent: stateAmaSlopeThresholdPercent,
+            amaSlopePercentMode: AMA_SLOPE_PERCENT_MODE_PER_BAR,
             effectiveWeights:         (canApplyDynamicWeights && (snapshotPersistedThisCycle || isDryRun) && dynamicWeightsPayload?.effectiveWeights)
                 ? dynamicWeightsPayload.effectiveWeights
                 : (botState.effectiveWeights || null),

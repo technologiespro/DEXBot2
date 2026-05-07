@@ -55,6 +55,7 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
                     dispScaleMinPct: 0.25,
                     hurstZoneBand: 0.08,
                     peNodes: [0.58, 0.70, 0.82],
+                    amaSlopePercentMode: 'perBar',
                     amaSlopeDeltaThresholdPercent: 0.22,
                     amaSlope: {
                         maxSlopePct: 1.2,
@@ -121,6 +122,7 @@ function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
                     dispScaleMinPct: 0.2,
                     hurstZoneBand: 0.07,
                     peNodes: [0.59, 0.71, 0.83],
+                    amaSlopePercentMode: 'perBar',
                     amaSlopeDeltaThresholdPercent: 0.21,
                     amaSlope: {
                         maxSlopePct: 1.15,
@@ -158,6 +160,105 @@ function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
     );
     assert.strictEqual(merged.amaSlope.maxSlopePct, 1.15, 'pair override should apply for amaSlope.maxSlopePct');
     assert.strictEqual(merged.kalmanSlope.maxSlopePct, 1.15, 'pair override should apply for kalmanSlope.maxSlopePct');
+}
+
+function testResolveBotCfgConvertsUnmarkedLegacyAmaSlopePercents() {
+    const settingsJson = {
+        globals: {
+            amaSlope: {
+                lookbackBars: 9,
+                maxSlopePct: 0.9,
+                neutralZonePct: 0.18,
+            },
+            amaSlopeDeltaThresholdPercent: 0.09,
+        },
+        pairs: [
+            {
+                key: '1.3.1|1.3.0',
+                assetASymbol: 'IOB.XRP',
+                assetBSymbol: 'BTS',
+                marketAdapterSettings: {
+                    amaSlope: {
+                        lookbackBars: 18,
+                        maxSlopePct: 1.8,
+                    },
+                    amaSlopeDeltaThresholdPercent: 0.18,
+                },
+            },
+        ],
+    };
+
+    installMarketAdapterStubs(settingsJson);
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+
+    const bot = {
+        name: 'XRP-BTS',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        assetAId: '1.3.1',
+        assetBId: '1.3.0',
+    };
+
+    const merged = resolveBotCfg(bot, { ...DEFAULTS });
+
+    assert.strictEqual(merged.amaSlope.lookbackBars, 18, 'pair lookback should apply before conversion');
+    assert.strictEqual(merged.amaSlope.maxSlopePct, 0.1, 'legacy cumulative max slope should convert to per-bar');
+    assert.strictEqual(merged.amaSlope.neutralZonePct, 0.02, 'legacy cumulative neutral zone should convert to per-bar');
+    assert.strictEqual(
+        merged.amaSlopeDeltaThresholdPercent,
+        0.01,
+        'legacy cumulative slope delta threshold should convert to per-bar'
+    );
+}
+
+function testResolveBotCfgKeepsMarkedPerBarAmaSlopePercents() {
+    const settingsJson = {
+        globals: {
+            amaSlopePercentMode: 'perBar',
+            amaSlope: {
+                lookbackBars: 72,
+                maxSlopePct: 0.0417,
+                neutralZonePct: 0.0021,
+            },
+            amaSlopeDeltaThresholdPercent: 0.0014,
+        },
+        pairs: [
+            {
+                key: '1.3.1|1.3.0',
+                assetASymbol: 'IOB.XRP',
+                assetBSymbol: 'BTS',
+                marketAdapterSettings: {
+                    amaSlopeDeltaThresholdPercent: 0.0017,
+                },
+                botOverrides: {
+                    'XRP-BTS': {
+                        amaSlopeDeltaThresholdPercent: 0.0011,
+                    },
+                },
+            },
+        ],
+    };
+
+    installMarketAdapterStubs(settingsJson);
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+
+    const bot = {
+        name: 'XRP-BTS',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        assetAId: '1.3.1',
+        assetBId: '1.3.0',
+    };
+
+    const merged = resolveBotCfg(bot, { ...DEFAULTS });
+
+    assert.strictEqual(merged.amaSlope.maxSlopePct, 0.0417, 'marked per-bar max slope should stay unchanged');
+    assert.strictEqual(merged.amaSlope.neutralZonePct, 0.0021, 'marked per-bar neutral zone should stay unchanged');
+    assert.strictEqual(
+        merged.amaSlopeDeltaThresholdPercent,
+        0.0011,
+        'marked per-bar bot threshold should stay unchanged'
+    );
 }
 
 function testBilinearInterpolateUsesOverrideNodes() {
@@ -236,6 +337,7 @@ function testResolveBotCfgDoesNotLeakNestedTopLevelOverridesAcrossBots() {
                 assetASymbol: 'IOB.XRP',
                 assetBSymbol: 'BTS',
                 marketAdapterSettings: {
+                    amaSlopePercentMode: 'perBar',
                     amaSlope: {
                         maxSlopePct: 1.23,
                         neutralZonePct: 0.12,
@@ -343,6 +445,12 @@ async function main() {
         restoreMarketAdapterStubs();
 
         testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride();
+        restoreMarketAdapterStubs();
+
+        testResolveBotCfgConvertsUnmarkedLegacyAmaSlopePercents();
+        restoreMarketAdapterStubs();
+
+        testResolveBotCfgKeepsMarkedPerBarAmaSlopePercents();
         restoreMarketAdapterStubs();
 
         testBilinearInterpolateUsesOverrideNodes();

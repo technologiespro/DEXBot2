@@ -455,6 +455,7 @@ function loadAmaCenterSnapshot(botKey) {
             centerPrice,
             source: data?.source || null,
             updatedAt: data?.updatedAt || null,
+            amaSlopePercentMode: data?.amaSlopePercentMode || null,
             amaSlope: data?.amaSlope ?? null,
             gridRangeScalingAmaSlope: data?.gridRangeScalingAmaSlope ?? null,
             amaSlopeDeltaPercent: Number.isFinite(Number(data?.amaSlopeDeltaPercent))

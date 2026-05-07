@@ -44,11 +44,13 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const gainInitSlider = Math.round((Math.log(clampedGain) - GAIN_LOG_MIN_N) / (GAIN_LOG_MAX_N - GAIN_LOG_MIN_N) * 1000);
 
     // Log mapping for slope saturation sliders
-    const AMA_MS_LOG_MIN_N = Math.log(0.05);
-    const AMA_MS_LOG_MAX_N = Math.log(5.0);
+    const AMA_MS_MIN = 0.005;
+    const AMA_MS_MAX = 0.5;
+    const AMA_MS_LOG_MIN_N = Math.log(AMA_MS_MIN);
+    const AMA_MS_LOG_MAX_N = Math.log(AMA_MS_MAX);
     const KAL_MS_LOG_MIN_N = Math.log(0.05);
     const KAL_MS_LOG_MAX_N = Math.log(1.5);
-    const clampedAmaMs = Math.min(Math.max(defaultAmaMaxSlopePct, 0.05), 5.0);
+    const clampedAmaMs = Math.min(Math.max(defaultAmaMaxSlopePct, AMA_MS_MIN), AMA_MS_MAX);
     const clampedKalMs = Math.min(Math.max(defaultKalmanMaxSlopePct, 0.05), 1.5);
     const amaMsInitSlider = Math.round((Math.log(clampedAmaMs) - AMA_MS_LOG_MIN_N) / (AMA_MS_LOG_MAX_N - AMA_MS_LOG_MIN_N) * 1000);
     const kalMsInitSlider = Math.round((Math.log(clampedKalMs) - KAL_MS_LOG_MIN_N) / (KAL_MS_LOG_MAX_N - KAL_MS_LOG_MIN_N) * 1000);
@@ -279,7 +281,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 <div class="group-sep"></div>
                 <div class="ctrl nz"><label for="nz-slider">nz%</label><input type="range" id="nz-slider" min="0" max="100" value="${Math.round(defaultNeutralZone * 100)}" title="Neutral Zone %"><span class="val" id="nz-value">${defaultNeutralZone.toFixed(2)}</span></div>
                 <div class="ctrl lb"><label for="lb-slider">lb</label><input type="range" id="lb-slider" min="0" max="1000" value="${lbInitSlider}" title="Lookback Bars (1-32)"><span class="val" id="lb-value">${lookbackBars}</span></div>
-                <div class="ctrl ms-ama"><label for="ama-ms-slider">amaS%</label><input type="range" id="ama-ms-slider" min="0" max="1000" value="${amaMsInitSlider}" title="AMA Max Slope % (0.05-5)"><span class="val" id="ama-ms-value">${defaultAmaMaxSlopePct.toFixed(2)}</span></div>
+                <div class="ctrl ms-ama"><label for="ama-ms-slider">amaS%</label><input type="range" id="ama-ms-slider" min="0" max="1000" value="${amaMsInitSlider}" title="AMA Max Slope % per bar (0.005-0.5)"><span class="val" id="ama-ms-value">${defaultAmaMaxSlopePct.toFixed(4)}</span></div>
                 <div class="ctrl clip"><label for="clip-slider">clip%</label><input type="range" id="clip-slider" min="0" max="55" value="${Math.min(defaultClipPct, 55)}" title="Outlier Clip %"><span class="val" id="clip-value">${Math.min(defaultClipPct, 55)}%</span></div>
 
                 <div class="group-sep"></div>
@@ -551,7 +553,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             const current = data.ama3Prices[idx];
             const past = data.ama3Prices[idx - lb];
             if (past <= 0) return 0;
-            return (current - past) / past * 100;
+            return ((current - past) / past * 100) / Math.max(lb, 1);
         }
 
         function recalcInputs() {
@@ -566,7 +568,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             const lb = currentLookbackBars;
             const amaErWarmup = Math.max(0, Number.isFinite(data.amaErPeriod) ? Math.ceil(data.amaErPeriod) : ${JSON.stringify(MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod)});
             const amaSlowWarmup = Math.max(0, Number.isFinite(data.amaSlowPeriod) ? Math.ceil(data.amaSlowPeriod) : ${JSON.stringify(MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod)});
-            const amaReadyBar = data.amaWarmupBars;
+            const amaReadyBar = Math.max(0, (data.amaWarmupBars || 0) - (data.lookbackBars || 0) + lb);
             const acl = currentAmaClipThreshold;
             const kcl = currentKalClipThreshold;
 
@@ -1108,7 +1110,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
             document.getElementById('ama-ms-slider').addEventListener('input', (e) => {
                 currentAmaMaxSlopePct = amaMsSliderToVal(parseInt(e.target.value, 10));
-                document.getElementById('ama-ms-value').textContent = currentAmaMaxSlopePct.toFixed(2);
+                document.getElementById('ama-ms-value').textContent = currentAmaMaxSlopePct.toFixed(4);
                 onSliderChange();
             });
 
@@ -1213,9 +1215,9 @@ function applyParams(p, btn) {
                     document.getElementById('dw-value').textContent = currentDw.toFixed(2);
                 }
                 if (p.amaMaxSlopePct != null) {
-                    currentAmaMaxSlopePct = Math.max(0.05, Math.min(10, p.amaMaxSlopePct));
+                    currentAmaMaxSlopePct = Math.max(0.005, Math.min(0.5, p.amaMaxSlopePct));
                     document.getElementById('ama-ms-slider').value = Math.round((Math.log(currentAmaMaxSlopePct) - AMA_MS_LOG_MIN) / (AMA_MS_LOG_MAX - AMA_MS_LOG_MIN) * 1000);
-                    document.getElementById('ama-ms-value').textContent = currentAmaMaxSlopePct.toFixed(2);
+                    document.getElementById('ama-ms-value').textContent = currentAmaMaxSlopePct.toFixed(4);
                 }
                 if (p.kalmanMaxSlopePct != null) {
                     currentKalmanMaxSlopePct = Math.max(0.05, Math.min(1.5, p.kalmanMaxSlopePct));
@@ -1353,7 +1355,7 @@ function applyParams(p, btn) {
                 const btn = document.getElementById('copy-params-btn');
                 const params = {
                     alpha:             +currentAlpha.toFixed(2),
-                    amaMaxSlopePct:    +currentAmaMaxSlopePct.toFixed(2),
+                    amaMaxSlopePct:    +currentAmaMaxSlopePct.toFixed(4),
                     kalmanMaxSlopePct: +currentKalmanMaxSlopePct.toFixed(2),
                     minOutputThreshold: +currentMinOutputThreshold.toFixed(2),
                     gain:              +currentGain.toFixed(3),

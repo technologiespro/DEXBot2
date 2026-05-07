@@ -146,6 +146,34 @@ const DEFAULTS = {
     atrPeriod: MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT,
 };
 
+const AMA_SLOPE_PERCENT_MODE_PER_BAR = 'perBar';
+const AMA_SLOPE_PERCENT_MODE_WINDOW = 'window';
+
+function normalizeAmaSlopePercentMode(value) {
+    const text = String(value || '').trim().toLowerCase();
+    if (['perbar', 'per_bar', 'per-bar', 'averageperbar', 'average_per_bar'].includes(text)) {
+        return AMA_SLOPE_PERCENT_MODE_PER_BAR;
+    }
+    if (['window', 'lookback', 'cumulative', 'legacy'].includes(text)) {
+        return AMA_SLOPE_PERCENT_MODE_WINDOW;
+    }
+    return null;
+}
+
+function normalizeAmaSlopeLookbackBars(value, fallback = MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return Math.ceil(n);
+    return fallback;
+}
+
+function toPerBarSlopePercent(value, lookbackBars, mode) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return value;
+    return mode === AMA_SLOPE_PERCENT_MODE_WINDOW
+        ? n / normalizeAmaSlopeLookbackBars(lookbackBars)
+        : n;
+}
+
 // Cycle-scoped caches — reset once per runOnce() so each cycle reads files fresh
 // but all bots within that cycle share the same loaded data (N bots → 1 file read).
 let _marketAdapterSettingsCache = null;
@@ -240,8 +268,40 @@ function assignPresent(target, source, keys) {
 function applyAmaSlopeOverrides(target, overrides) {
     if (!overrides || typeof overrides !== 'object') return target;
     target.amaSlope = { ...(target.amaSlope || {}) };
+    const previousLookbackBars = target.amaSlope.lookbackBars;
+    const explicitMode = normalizeAmaSlopePercentMode(
+        overrides.amaSlopePercentMode
+        ?? overrides.amaSlopeUnits
+        ?? overrides.amaSlope?.percentMode
+        ?? overrides.amaSlope?.units
+    );
+    if (explicitMode) target.amaSlopePercentMode = explicitMode;
+    const mode = explicitMode || target.amaSlopePercentMode || AMA_SLOPE_PERCENT_MODE_WINDOW;
+
+    if (overrides.amaSlopeDeltaThresholdPercent != null) {
+        target.amaSlopeDeltaThresholdPercent = toPerBarSlopePercent(
+            overrides.amaSlopeDeltaThresholdPercent,
+            overrides.amaSlope?.lookbackBars ?? previousLookbackBars,
+            mode
+        );
+    }
+
     if (overrides.amaSlope && typeof overrides.amaSlope === 'object') {
-        target.amaSlope = { ...target.amaSlope, ...overrides.amaSlope };
+        const {
+            percentMode: _percentMode,
+            units: _units,
+            maxSlopePct,
+            neutralZonePct,
+            ...amaSlopeRest
+        } = overrides.amaSlope;
+        target.amaSlope = { ...target.amaSlope, ...amaSlopeRest };
+        const lookbackBars = target.amaSlope.lookbackBars ?? previousLookbackBars;
+        if (maxSlopePct != null) {
+            target.amaSlope.maxSlopePct = toPerBarSlopePercent(maxSlopePct, lookbackBars, mode);
+        }
+        if (neutralZonePct != null) {
+            target.amaSlope.neutralZonePct = toPerBarSlopePercent(neutralZonePct, lookbackBars, mode);
+        }
     }
     return target;
 }
@@ -260,7 +320,6 @@ function applyMarketAdapterOverrides(target, overrides, opts = {}) {
     if (opts.includeDefaultAmaKey && overrides.defaultAmaKey) target.defaultAmaKey = overrides.defaultAmaKey;
     assignPresent(target, overrides, [
         'deltaThresholdPercent',
-        'amaSlopeDeltaThresholdPercent',
         'pollSeconds',
         'bootstrapLookbackHours',
         'nativeBackfillHours',
@@ -989,6 +1048,7 @@ function writeBotDynamicGrid(botKey, centerPrice, options = {}) {
         const payload = {
             centerPrice: resolvedCenterPrice,
             amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : resolvedCenterPrice,
+            amaSlopePercentMode: AMA_SLOPE_PERCENT_MODE_PER_BAR,
             updatedAt: new Date().toISOString(),
             source: 'market_adapter/market_adapter.js',
         };
@@ -1069,6 +1129,7 @@ function writeCenterSnapshot(state) {
             lastDeltaPercent: v.lastDeltaPercent,
             amaSlopeDeltaPercent: v.amaSlopeDeltaPercent,
             amaSlopeThresholdPercent: v.amaSlopeThresholdPercent,
+            amaSlopePercentMode: v.amaSlopePercentMode || AMA_SLOPE_PERCENT_MODE_PER_BAR,
             gridRangeScalingAmaSlope: v.gridRangeScalingAmaSlope,
             weights: v.weights,
             effectiveWeights: v.effectiveWeights,

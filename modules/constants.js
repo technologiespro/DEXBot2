@@ -628,8 +628,8 @@ let MARKET_ADAPTER = {
     // AMA_SLOPE_DELTA_THRESHOLD_PERCENT: Percentage change in AMA slope that can trigger a
     // grid reset when the slope delta moves far enough away from the last accepted snapshot.
     //   - Configurable per market pair and per bot via market_adapter_settings.json.
-    //   - Default: 0.1 (grid can react to meaningful slope changes without waiting for price delta)
-    AMA_SLOPE_DELTA_THRESHOLD_PERCENT: 0.1,
+    //   - Default: 0.015 (average per-bar slope delta)
+    AMA_SLOPE_DELTA_THRESHOLD_PERCENT: 0.015,
 
     // DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD: Minimum blended trend strength required
     // before the bot applies a directional weight shift in the asymmetrical path.
@@ -659,11 +659,11 @@ let MARKET_ADAPTER = {
     // nob: lb (Lookback Bars)
     DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS: 9,
 
-    // DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: Trend size that counts as "full strength" for AMA.
+    // DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: Average per-bar trend size that counts as "full strength" for AMA.
     // Lower values make the AMA channel reach maximum influence more easily.
     // Higher values require a stronger price move before AMA reaches full effect.
     // nob: amaS% (AMA Max Slope %)
-    DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: 0.75,
+    DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: 0.1,
 
     // DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT: Trend size that counts as "full strength" for
     // the Kalman composite branch. Kept separate from the AMA slope knob so the two

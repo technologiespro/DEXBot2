@@ -357,11 +357,11 @@ Typical fields:
   "amaCenterPrice": 1294.6,
   "amaSlope": {
     "trend": "UP",
-    "slopePct": 0.32,
+    "slopePct": 0.04,
     "slopeOffset": 0.16
   },
-  "amaSlopeDeltaPercent": 0.18,
-  "amaSlopeThresholdPercent": 0.1,
+  "amaSlopeDeltaPercent": 0.015,
+  "amaSlopeThresholdPercent": 0.015,
   "updatedAt": "2026-03-01T00:00:00.000Z",
   "source": "market_adapter/market_adapter.js",
   "dynamicWeights": {
@@ -474,7 +474,7 @@ This uses `dynamicWeights.trend`, `dynamicWeights.slopeOffset`, and
 weight shift. The whitelist flag is `asymmetricBounds`.
 
 ```
-slope = AMA slope percent over the lookback window
+slope = average AMA slope percent per bar over the lookback window
 slopeOffset = slope normalized to the configured dynamic-weight slope cap
 asymmetry = min(|slopeOffset| / maxSlopeOffset, 1) × maxAsymmetryFactor
 
@@ -566,10 +566,11 @@ Main override knobs live in `profiles/market_adapter_settings.json`:
 | `alpha` | AMA vs Kalman blend |
 | `dw` | Kalman displacement weighting |
 | `gain` | Output amplitude |
-| `amaSlope.lookbackBars` | AMA slope lookback |
-| `amaSlope.neutralZonePct` | Dead band around flat AMA slope |
-| `amaSlope.maxSlopePct` | AMA slope saturation |
-| `amaSlopeDeltaThresholdPercent` | AMA slope delta threshold for slope-based resets |
+| `amaSlopePercentMode` | Slope override units: `perBar` for average percent per bar, or `window`/unset for legacy cumulative percent over the lookback |
+| `amaSlope.lookbackBars` | AMA slope lookback; slope is averaged per bar over this window |
+| `amaSlope.neutralZonePct` | Dead band around flat average AMA slope |
+| `amaSlope.maxSlopePct` | Average AMA slope saturation |
+| `amaSlopeDeltaThresholdPercent` | Average AMA slope delta threshold for slope-based resets |
 | `minOutputThreshold` | Minimum trend output before directional shift applies |
 | `maxSlopeOffset` | Cap for asymmetric trend offset |
 | `maxVolatilityOffset` | Cap for symmetric ATR penalty |
@@ -586,6 +587,12 @@ Main override knobs live in `profiles/market_adapter_settings.json`:
 | `kalmanSlope.maxSlopePct` | Kalman slope saturation |
 | `kalmanSmoothSpanPct` | Adaptive EMA span ratio |
 | `signalConfirmBars` | Signal latch confirmation bars |
+
+When migrating older settings, either divide AMA slope percent overrides by
+`amaSlope.lookbackBars`, or add `"amaSlopePercentMode": "window"` and let the
+adapter convert them at load time. New settings should use
+`"amaSlopePercentMode": "perBar"` so small per-bar values are not converted
+again by pair or bot overrides.
 
 Most operators should tune only the price and slope trigger thresholds plus the AMA profile unless
 they are deliberately fitting a market.

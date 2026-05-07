@@ -84,19 +84,18 @@ function testNeutralZoneZeroSlope() {
 }
 
 function testNeutralZoneJustBelow() {
-    // slopePct = 0.14% < neutralZonePct=0.15% → still NEUTRAL
+    // Average slopePct = 0.14% per bar < neutralZonePct=0.15% → still NEUTRAL
     const values = flatSeries(MIN_LEN, 100);
-    // Set last value slightly higher: 100 * 1.0014 = 100.14
-    values[MIN_LEN - 1] = 100.14;
+    values[MIN_LEN - 1] = 101.4;
     const result = computeAmaSlopeWeights(values, 0, { ...SMALL_OPTS, neutralZonePct: 0.15 });
     assert.strictEqual(result.trend, 'NEUTRAL');
     assert.strictEqual(result.slopeOffset, 0);
 }
 
 function testTrendJustAboveNeutralZone() {
-    // slopePct = 0.16% > neutralZonePct=0.15% → UP
+    // Average slopePct = 0.16% per bar > neutralZonePct=0.15% → UP
     const values = flatSeries(MIN_LEN, 100);
-    values[MIN_LEN - 1] = 100.16;
+    values[MIN_LEN - 1] = 101.6;
     const result = computeAmaSlopeWeights(values, 0, { ...SMALL_OPTS, neutralZonePct: 0.15 });
     assert.strictEqual(result.trend, 'UP');
     assert.ok(result.slopeOffset > 0, 'positive slopeOffset for UP trend');
@@ -105,9 +104,9 @@ function testTrendJustAboveNeutralZone() {
 // ─── Positive slope (up trend) ──────────────────────────────────────────────
 
 function testPositiveSlopePartialSaturation() {
-    // slopePct = 1.5%, maxSlopePct = 3.0 → slopeOffset = (1.5/3.0)*0.5 = 0.25
+    // Average slopePct = 1.5% per bar, maxSlopePct = 3.0 → slopeOffset = (1.5/3.0)*0.5 = 0.25
     const values = flatSeries(MIN_LEN, 100);
-    values[MIN_LEN - 1] = 101.5; // past=100, last=101.5 → 1.5%
+    values[MIN_LEN - 1] = 115;
     const opts = { ...SMALL_OPTS, maxSlopePct: 3.0, neutralZonePct: 0.15 };
     const result = computeAmaSlopeWeights(values, 0, opts);
     assert.strictEqual(result.isReady, true);
@@ -117,9 +116,9 @@ function testPositiveSlopePartialSaturation() {
 }
 
 function testPositiveSlopeFullSaturation() {
-    // slopePct = 6% > maxSlopePct=3.0 → clamped to 1 → slopeOffset=0.5
+    // Average slopePct = 6% per bar > maxSlopePct=3.0 → clamped to 1 → slopeOffset=0.5
     const values = flatSeries(MIN_LEN, 100);
-    values[MIN_LEN - 1] = 106;
+    values[MIN_LEN - 1] = 160;
     const opts = { ...SMALL_OPTS, maxSlopePct: 3.0, neutralZonePct: 0.15 };
     const result = computeAmaSlopeWeights(values, 0, opts);
     assert.strictEqual(result.trend, 'UP');
@@ -130,9 +129,9 @@ function testPositiveSlopeFullSaturation() {
 // ─── Negative slope (down trend) ────────────────────────────────────────────
 
 function testNegativeSlopePartialSaturation() {
-    // slopePct = -1.5%, maxSlopePct=3.0 → slopeOffset = -0.25
+    // Average slopePct = -1.5% per bar, maxSlopePct=3.0 → slopeOffset = -0.25
     const values = flatSeries(MIN_LEN, 100);
-    values[MIN_LEN - 1] = 98.5;
+    values[MIN_LEN - 1] = 85;
     const opts = { ...SMALL_OPTS, maxSlopePct: 3.0, neutralZonePct: 0.15 };
     const result = computeAmaSlopeWeights(values, 0, opts);
     assert.strictEqual(result.trend, 'DOWN');
@@ -142,7 +141,7 @@ function testNegativeSlopePartialSaturation() {
 
 function testNegativeSlopeFullSaturation() {
     const values = flatSeries(MIN_LEN, 100);
-    values[MIN_LEN - 1] = 94;
+    values[MIN_LEN - 1] = 40;
     const opts = { ...SMALL_OPTS, maxSlopePct: 3.0, neutralZonePct: 0.15 };
     const result = computeAmaSlopeWeights(values, 0, opts);
     assert.strictEqual(result.trend, 'DOWN');
@@ -260,7 +259,7 @@ function testInvalidMaxVolatilityOffsetFallsBackToDefaultClamp() {
 function testCombinedUptrendZeroVol() {
     // slopeOffset=+0.25 (partial UP), symmetricDelta=0 (no penalty at zero ATR)
     const values = flatSeries(MIN_LEN, 100);
-    values[MIN_LEN - 1] = 101.5;
+    values[MIN_LEN - 1] = 115;
     const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const result = computeAmaSlopeWeights(values, 0, opts);
     assert.deepStrictEqual(derivedWeights(result), { sellW: 0.75, buyW: 0.25 });
@@ -269,7 +268,7 @@ function testCombinedUptrendZeroVol() {
 function testCombinedUptrendHighVol() {
     // slopeOffset=+0.5 (full UP), weightVariance=0.04, exponent=0.5, scaleX=1.0 → delta=-0.2
     const values = flatSeries(MIN_LEN, 100);
-    values[MIN_LEN - 1] = 106;
+    values[MIN_LEN - 1] = 160;
     const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const result = computeAmaSlopeWeights(values, 0.04, opts);
     assert.deepStrictEqual(derivedWeights(result), { sellW: 0.8, buyW: -0.2 });
@@ -278,7 +277,7 @@ function testCombinedUptrendHighVol() {
 function testClampAtMaxPenalty() {
     // Full UP slope (slopeOffset=0.5) + max penalty (symmetricDelta=-0.5)
     const values = flatSeries(MIN_LEN, 100);
-    values[MIN_LEN - 1] = 106;
+    values[MIN_LEN - 1] = 160;
     const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const result = computeAmaSlopeWeights(values, 1.0, opts);
     assert.deepStrictEqual(derivedWeights(result), { sellW: 0.5, buyW: -0.5 });
@@ -293,20 +292,20 @@ function testConfidenceDerivation() {
 
     // slopeOffset=0.5 (full) → confidence=100
     const values = flatSeries(MIN_LEN, 100);
-    values[MIN_LEN - 1] = 106;
+    values[MIN_LEN - 1] = 160;
     const r2 = computeAmaSlopeWeights(values, 0.015, { ...SMALL_OPTS, maxSlopePct: 3.0, neutralZonePct: 0.15 });
     assert.strictEqual(r2.confidence, 100);
 
     // slopeOffset=0.25 (half) → confidence=50
     const values2 = flatSeries(MIN_LEN, 100);
-    values2[MIN_LEN - 1] = 101.5;
+    values2[MIN_LEN - 1] = 115;
     const r3 = computeAmaSlopeWeights(values2, 0.015, { ...SMALL_OPTS, maxSlopePct: 3.0, neutralZonePct: 0.15 });
     assert.strictEqual(r3.confidence, 50);
 }
 
 function testZeroMaxSlopeOffsetKeepsConfidenceFinite() {
     const values = flatSeries(MIN_LEN, 100);
-    values[MIN_LEN - 1] = 106;
+    values[MIN_LEN - 1] = 160;
     const result = computeAmaSlopeWeights(values, 0, {
         ...SMALL_OPTS,
         maxSlopePct: 3.0,
@@ -352,10 +351,10 @@ function testNeutralSlopeVolatilityTable() {
 }
 
 function testUptrendSlopeOffsetTable() {
-    // slopeOffset ≈ +0.33: slopePct = 2% → slopeOffset = (2/3)*0.5 = 0.333... → 0.33 rounded
+    // slopeOffset ≈ +0.33: average slopePct = 2% per bar → slopeOffset = (2/3)*0.5 = 0.333... → 0.33 rounded
     const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const values = flatSeries(MIN_LEN, 100);
-    values[MIN_LEN - 1] = 102; // slopePct = 2%
+    values[MIN_LEN - 1] = 120;
 
     // ATR/price = 0.00 → delta=0 → derived weights reflect the 0.5 neutral center
     let r = computeAmaSlopeWeights(values, 0.00, opts);
