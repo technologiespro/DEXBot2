@@ -289,7 +289,7 @@ Per cycle, per processed bot, the adapter can produce:
 
 | Output | Meaning |
 |--------|---------|
-| `gridPrice` / `centerPrice` | AMA-derived grid center, clamped to bounds |
+| `gridCenterPrice` | AMA-derived grid center, clamped to bounds |
 | `weights` | Dynamic `{ buy, sell }` grid weights |
 | `trend` | `UP`, `DOWN`, or `NEUTRAL` |
 | `atr` / `weightVariance` | Volatility diagnostics |
@@ -520,7 +520,7 @@ The file contains a trigger payload like:
   "previousCenterPrice": 1280.5,
   "newCenterPrice": 1348.32,
   "referencePrice": 1294.6,
-  "rawAmaPrice": 1294.6,
+  "amaCenterPrice": 1294.6,
   "poolId": "1.19.133"
 }
 ```

@@ -1861,6 +1861,7 @@ class MarketAdapterService {
         let previousCenterPrice = Number(botState.centerPrice || 0);
 
         const buildDynamicGridOptions = (options = {}) => ({
+            gridCenterPrice: options.gridCenterPrice ?? null, // explicit baseline if provided
             amaCenterPrice: amaPrice,
             amaSlope: options.amaSlope ?? amaSlope,
             gridRangeScalingAmaSlope: options.gridRangeScalingAmaSlope ?? (amaSlope || previousGridResetAmaSlope || null),
@@ -1955,7 +1956,7 @@ class MarketAdapterService {
                             reason: 'market_adapter_bootstrap',
                             newCenterPrice: bootstrapCenterPrice,
                             referencePrice,
-                            rawAmaPrice: amaPrice,
+                            amaCenterPrice: amaPrice,
                             amaSlope: amaSlope || previousAmaSlope || null,
                             amaSlopeDeltaPercent,
                             amaSlopeThresholdPercent,
@@ -1968,7 +1969,7 @@ class MarketAdapterService {
                             previousCenterPrice: undefined,
                             newCenterPrice: bootstrapCenterPrice,
                             referencePrice,
-                            rawAmaPrice: amaPrice,
+                            amaCenterPrice: amaPrice,
                         },
                         dryRunMessage: `[DRY RUN] Would write grid reset trigger for ${bot.botKey} (bootstrap)`,
                     });
@@ -1998,7 +1999,7 @@ class MarketAdapterService {
                                 previousCenterPrice,
                                 newCenterPrice: centerPrice,
                                 referencePrice,
-                                rawAmaPrice: amaPrice,
+                                amaCenterPrice: amaPrice,
                                 amaSlope,
                                 amaSlopeDeltaPercent,
                                 amaSlopeThresholdPercent,
@@ -2011,7 +2012,7 @@ class MarketAdapterService {
                                 previousCenterPrice,
                                 newCenterPrice: centerPrice,
                                 referencePrice,
-                                rawAmaPrice: amaPrice,
+                                amaCenterPrice: amaPrice,
                             },
                             dryRunMessage: `[DRY RUN] Would write grid reset trigger for ${bot.botKey}`,
                         });
@@ -2039,7 +2040,7 @@ class MarketAdapterService {
                             previousCenterPrice,
                             newCenterPrice: centerPrice,
                             referencePrice,
-                            rawAmaPrice: amaPrice,
+                            amaCenterPrice: amaPrice,
                             poolId: ctx.poolId,
                             marketSource,
                         },
@@ -2054,7 +2055,7 @@ class MarketAdapterService {
                             previousCenterPrice,
                             newCenterPrice: centerPrice,
                             referencePrice,
-                            rawAmaPrice: amaPrice,
+                            amaCenterPrice: amaPrice,
                         },
                         dryRunMessage: `[DRY RUN] Would write grid reset trigger for ${bot.botKey} (AMA slope)`,
                     });

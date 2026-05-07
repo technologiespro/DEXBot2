@@ -195,7 +195,7 @@ type BotState = {
   maxPrice?: string | number;
   gridPrice?: string | number | null;
   lastResetAt?: number;
-  lastCenterPrice?: number;
+  lastGridCenterPrice?: number;
 };
 ```
 

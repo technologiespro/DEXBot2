@@ -1270,7 +1270,7 @@ The market adapter runs as a standalone process that computes AMA-derived grid p
 ### Signal Flow
 
 ```
-price_candles -> AMA -> gridPrice
+price_candles -> AMA -> gridCenterPrice
                 |
                 +-> slope_analysis -> trend_offset (asymmetric weight shift)
                 |
@@ -1282,7 +1282,7 @@ price_candles -> ATR -> weight_variance (symmetric shift)
 ```
 
 ### Outputs (per cycle, per bot)
-- `gridPrice` — AMA center price, clamped to min/max bounds
+- `gridCenterPrice` — AMA center price, clamped to min/max bounds
 - `weights` — `{ buy, sell }` dynamic grid weighting
 - `collateralRecommendation` — advisory collateral ratio hint
 - `trend` / `atr` — raw regime and volatility signals

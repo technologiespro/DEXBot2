@@ -428,7 +428,7 @@ declare module 'btsdex' {
 **Testing Throughout**:
 ```bash
 # Run tests after each phase
-npm test  # All 130+ tests passing
+npm test  # All 171 tests passing
 
 # TypeScript strict checking incrementally
 # Start with tsconfig.strict: false
@@ -502,7 +502,7 @@ npm test  # All 130+ tests passing
 ### 5.4 Success Criteria
 
 ✅ **Definition of Done**:
-- All 130+ tests passing with TypeScript
+- All 171 tests passing with TypeScript
 - Zero `any` types in critical modules (chain, accounting, manager)
 - Full type coverage on public APIs
 - Zero runtime errors in 2-week production trial
@@ -606,7 +606,7 @@ account_orders.js (70 hours, 728 lines)
 | 1,012 JSDoc blocks (40-50% coverage) | Type inference help | 100-150 |
 | Only 3 dependencies | Fewer type wrappers | 50 |
 | No circular deps | Clean module structure | 30 |
-| 130+ tests | Regression safety | 50-100 |
+| 171 tests | Regression safety | 50-100 |
 | Clean architecture | Easier typed transitions | 50 |
 
 **Total Savings**: 430-530 hours vs. typical JavaScript project

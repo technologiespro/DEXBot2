@@ -1094,7 +1094,7 @@ The bot performs a **Periodic Configuration Refresh** (every 4 hours by default)
 *   **Valuation locked**: All calculations use the configured numeric value
 *   **Manual Override Required**: To change numeric anchor, edit `bots.json` and use the bot's reset trigger file.
 
-*   **Applying Changes**: To force the bot to move orders to a new `startPrice` immediately, create `profiles/recalculate.<botKey>.trigger` to perform a full grid reset. Empty or malformed trigger files are treated as manual/legacy resets; for AMA bots the runtime refreshes `centerPrice` from the latest `amaCenterPrice` before rebuilding.
+*   **Applying Changes**: To force the bot to move orders to a new `startPrice` immediately, create `profiles/recalculate.<botKey>.trigger` to perform a full grid reset. Empty or malformed trigger files are treated as manual/legacy resets; for AMA bots the runtime refreshes `gridCenterPrice` from the latest `amaCenterPrice` before rebuilding.
 
 ---
 

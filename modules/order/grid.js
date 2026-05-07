@@ -629,7 +629,8 @@ class Grid {
             resolvedMinPrice: resolvedMinP,
             resolvedMaxPrice: resolvedMaxP,
             amaSnapshot: amaSnapshot ? {
-                centerPrice: amaSnapshot.centerPrice,
+                centerPrice: amaSnapshot.gridCenterPrice,
+                gridCenterPrice: amaSnapshot.gridCenterPrice,
                 amaCenterPrice: amaSnapshot.amaCenterPrice,
                 source: amaSnapshot.source,
                 updatedAt: amaSnapshot.updatedAt,

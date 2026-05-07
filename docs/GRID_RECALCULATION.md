@@ -11,7 +11,7 @@ The market adapter writes the AMA center baseline and selected dynamic-grid payl
 |-----------|---------|--------|----------|-------|
 | **Market Adapter Bootstrap** | First accepted AMA center for a bot | AMA bot configuration and whitelist | `profiles/orders/<botKey>.dynamicgrid.json` + `profiles/recalculate.<botKey>.trigger` | Per bot |
 | **AMA Delta** | AMA center moved significantly | `AMA_DELTA_THRESHOLD_PERCENT` / `deltaThresholdPercent` | `general.settings.json`; pair/bot overrides in `market_adapter_settings.json` | Global default, pair, or bot |
-| **AMA Slope Range Reset** | Accepted AMA-slope baseline moved past threshold | `amaSlopeThresholdPercent` / range-scaling profile settings | `market_profiles.json` + `market_adapter_whitelist.json` | Whitelisted range-scaling bots |
+| **AMA Slope Range Reset** | Accepted AMA-slope baseline moved past threshold | `amaSlopeDeltaThresholdPercent` / range-scaling settings | `profiles/market_adapter_settings.json` + `profiles/market_adapter_whitelist.json` | Whitelisted range-scaling bots |
 | **RMS Divergence** | Grid state diverged from blockchain | `RMS_PERCENTAGE` | `general.settings.json` | Global (all bots) |
 | **Regeneration** | Available funds exceed threshold | `GRID_REGENERATION_PERCENTAGE` | `constants.js` | Per-side (BUY/SELL) |
 
@@ -29,7 +29,7 @@ and the grid engine uses that snapshot as the baseline for future delta comparis
 
 When a rebuild is required, the adapter writes
 `profiles/recalculate.<botKey>.trigger` with JSON metadata such as `reason`,
-`newCenterPrice`, `previousCenterPrice`, `rawAmaPrice`, and slope diagnostics.
+`newCenterPrice`, `previousCenterPrice`, `amaCenterPrice`, and slope diagnostics.
 DEXBot watches the `profiles/` directory and also checks for a pending trigger
 before startup grid initialization.
 
@@ -38,7 +38,7 @@ The bot executes the reset through `_performGridResync()`:
 1. Acquire `_fillProcessingLock`.
 2. Defer if the bot is not idle or a pending dust-cancel timer has not settled.
 3. Reload this bot's entry from `profiles/bots.json`.
-4. For manual or legacy empty triggers, refresh `centerPrice` in
+4. For manual or legacy empty triggers, refresh `gridCenterPrice` in
    `<botKey>.dynamicgrid.json` from the latest `amaCenterPrice` before rebuilding.
 5. Call `Grid.recalculateGrid()` using fresh open orders from chain.
 6. Reset fee-debt bookkeeping, persist the rebuilt grid, and remove the trigger file.
@@ -52,7 +52,7 @@ trigger files remain supported as manual/legacy resets.
 ## 2. Market Adapter Bootstrap Reset
 
 ### What It Does
-When the adapter has no accepted `centerPrice` baseline for a bot, it persists
+When the adapter has no accepted `gridCenterPrice` baseline for a bot, it persists
 the first valid AMA center and writes a reset trigger so the running bot
 rebuilds around that center.
 
@@ -62,8 +62,8 @@ the bot continues operating on stale or missing dynamic-grid data.
 
 ### How It Works
 
-1. `processBot()` detects that the bot has no valid previous `centerPrice`.
-2. It writes `profiles/orders/<botKey>.dynamicgrid.json` with `centerPrice`,
+1. `processBot()` detects that the bot has no valid previous `gridCenterPrice`.
+2. It writes `profiles/orders/<botKey>.dynamicgrid.json` with `gridCenterPrice`,
    `amaCenterPrice`, AMA slope fields, and whitelisted dynamic weights.
 3. Only after that write succeeds, it writes `profiles/recalculate.<botKey>.trigger`
    with `reason: "market_adapter_bootstrap"`.
@@ -214,6 +214,13 @@ The snapshot fields involved are:
 - `gridRangeScalingAmaSlope`: last accepted grid-reset slope baseline
 - `amaSlopeDeltaPercent`: distance from the accepted baseline
 - `amaSlopeThresholdPercent`: threshold required to trigger the reset
+
+AMA slope values are stored and compared as average percent per bar. Older
+settings that used cumulative percent over the full lookback can either be
+divided by `amaSlope.lookbackBars`, or marked with
+`"amaSlopePercentMode": "window"` in `profiles/market_adapter_settings.json`
+so the adapter converts them when loading overrides. New settings should use
+`"amaSlopePercentMode": "perBar"`.
 
 ### How It Works
 
