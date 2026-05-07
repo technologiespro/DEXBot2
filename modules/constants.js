@@ -622,8 +622,8 @@ let MARKET_ADAPTER = {
     //     a recalculate.<botKey>.trigger file is written to signal grid regeneration.
     //   - Configurable per deployment via profiles/general.settings.json under MARKET_ADAPTER.
     //   - Range: 0.1 to 50.0 (enforced in account_bots.js)
-    //   - Default: 2.5 (grid recalculates when market moves 2.5% from last recorded AMA center)
-    AMA_DELTA_THRESHOLD_PERCENT: 2.5,
+    //   - Default: 2.0 (grid recalculates when market moves 2.0% from last recorded AMA center)
+    AMA_DELTA_THRESHOLD_PERCENT: 2.0,
 
     // DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD: Minimum blended trend strength required
     // before the bot applies a directional weight shift in the asymmetrical path.
