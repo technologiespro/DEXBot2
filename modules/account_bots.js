@@ -42,11 +42,11 @@
  *                                  //              profiles/orders/<botKey>.dynamicgrid.json; grid reads the effective center on reset
  *                                  //   <number> = fixed numeric reference
  *                                  //   null     = use startPrice
- *       "minPrice": "3x",
- *       "maxPrice": "3x",
+ *       "minPrice": "2x",
+ *       "maxPrice": "2x",
  *       "incrementPercent": 0.5,
  *       "targetSpreadPercent": 2,
- *       "weightDistribution": { "sell": 0.5, "buy": 0.5 },
+ *       "weightDistribution": { "sell": 1, "buy": 1 },
  *       "botFunds": { "sell": "100%", "buy": "100%" },
  *       "activeOrders": { "sell": 20, "buy": 20 },
  *     }
@@ -56,7 +56,7 @@
  * GLOBAL SETTINGS CONFIGURATION (profiles/general.settings.json):
  * {
  *   "MARKET_ADAPTER": {
- *     "AMA_DELTA_THRESHOLD_PERCENT": 2.5  // % change in AMA center price triggers grid reset
+ *     "AMA_DELTA_THRESHOLD_PERCENT": 2  // % change in AMA center price triggers grid reset
  *   },
  *   "GRID_LIMITS": {
  *     "GRID_COMPARISON": {

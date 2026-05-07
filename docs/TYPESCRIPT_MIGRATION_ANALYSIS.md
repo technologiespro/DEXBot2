@@ -1,6 +1,6 @@
 # DEXBot2: TypeScript Migration Analysis Report
 
-**Date**: February 2026 *(metrics updated April 2026)*
+**Date**: February 2026 *(metrics updated May 2026)*
 **Codebase Version**: 0.7 internal (v0.6.0 latest tagged release)
 **Analysis Scope**: JavaScript to TypeScript migration feasibility and effort estimation
 
@@ -8,11 +8,11 @@
 
 ## Executive Summary
 
-The DEXBot2 codebase is **well-positioned for a TypeScript migration**. With 18,212 lines of production code across 28 focused modules and only 3 external dependencies, the project presents a **low-complexity migration with medium-high effort** (1,488-1,588 total hours).
+The DEXBot2 codebase is **well-positioned for a TypeScript migration**. With 18,212 lines of production code across 28 focused modules and 171 test files, plus only 3 external dependencies, the project presents a **low-complexity migration with medium-high effort** (1,488-1,588 total hours).
 
 ### Quick Stats
 - **Total Production Code**: ~21,300 lines across 30+ modules
-- **Test Coverage**: 102 test files
+- **Test Coverage**: 171 test files
 - **External Dependencies**: 3 (btsdex, bs58check, readline-sync)
 - **Estimated Timeline**: 4-5 months (3-4 developers) | 6-7 months (2 developers) | 9-10 months (1 developer)
 - **Budget Estimate**: $240,000-$300,000 (assuming $120/hour contractors)
@@ -68,7 +68,7 @@ DEXBot2/
 │   └── core/market_adapter_service.js  # Adapter service
 ├── analysis/                    # Standalone analysis tools (AMA fitting, trend detection)
 ├── scripts/                     # Utilities (git analysis, validation, etc.)
-└── tests/                       # 102 test files
+└── tests/                       # 171 test files
 ```
 
 ### 1.2 Dependency Analysis
@@ -338,7 +338,7 @@ declare module 'btsdex' {
 - **Effort Reduction**: 30-40% via parallelization
 
 #### **Phase 6: Testing & Integration** (200-300 hours)
-- [ ] Migrate 130+ test files to TypeScript
+- [ ] Migrate 171 test files to TypeScript
 - [ ] Update test runner configs
 - [ ] Run full test suite on typed codebase
 - [ ] Fix type errors found during testing
@@ -684,7 +684,7 @@ npm run test:ts → ts-node runs TS tests directly (faster during development)
 1. ✅ Small, focused codebase (~21K LOC)
 2. ✅ Minimal dependencies (3 packages)
 3. ✅ Already modern (async/await)
-4. ✅ Good test coverage (102 test files)
+4. ✅ Good test coverage (171 test files)
 5. ✅ Clear architecture (no circular deps)
 6. ✅ Strong business case (trading bot → type safety critical)
 

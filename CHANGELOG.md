@@ -2,9 +2,73 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.0] - 2026-05-01 - Chronological Summary Since 0.6.0-patch.26
+## [0.7.0] - 2026-05-07 - Detailed Changelog Since 0.6.0-patch.26
 
-This section summarizes the work that landed after `0.6.0-patch.26`, in the order it reached the branch.
+This section summarizes the full 0.7 line after `0.6.0-patch.26`, including the detailed May 1-7 work restored from git history.
+
+### 2026-05-01 to 2026-05-07
+
+#### Market Adapter Price Sources and Runtime Modes
+
+- Added first-class support for orderbook-derived candles and fixed-price adapter modes, allowing the market adapter to operate from direct book data or an explicit configured price instead of only LP/Kibana history (`6662be9`).
+- Replaced the market adapter's `btsdex` dependency path with a lightweight raw WebSocket client for chain history access, reducing adapter startup weight and making connection behavior easier to isolate (`28979f5`).
+- Added a native history fallback path and Kibana-first bootstrap behavior so the adapter can continue building warmup history when one source is incomplete or temporarily unavailable (`f4b75cc`, `23382df`, `882401a`).
+- Moved grid recalculation documentation from `market_adapter/` into the central `docs/` tree and refreshed the docs around manual resets, trigger files, and adapter-to-grid handoff (`1dfc69d`, `4513904`).
+- Consolidated market adapter trigger persistence so recalculation state is managed in one place instead of being duplicated across service paths (`6727a29`).
+
+#### AMA Warmup, Dynamic Weights, and Signal Gating
+
+- Fixed stale dynamic-weight application by rejecting cached dynamic weights when the base weights in `bots.json` change, preventing old runtime state from silently overriding fresh configuration (`733d0b8`).
+- Refreshed the AMA center baseline when a manual grid reset is requested, keeping reset-triggered grids anchored to the current adapter baseline instead of an older center snapshot (`318d367`).
+- Expanded AMA warmup behavior with a wider warmup window, corrected convergence calculations, and additional backfill handling when unresolved gaps remain in the candle stream (`23382df`, `4151311`, `35c3476`).
+- Added stale-tail pruning and cached stale-tail verification so flat or gap-filled Kibana tails do not poison AMA warmup, while already-confirmed stale tails are not repeatedly queried (`5820c14`, `b257b33`, `4efa7f2`).
+- Added AMA slope range reset state so slope-derived dynamic behavior can reset cleanly when market conditions move outside the tracked operating range (`903a4fd`).
+- Lowered the default AMA delta threshold to 2% and aligned the documented grid reset defaults with the runtime constants (`2ca77e7`).
+- Updated dynamic-weight defaults and removed noisy daemon audit logging to keep live adapter output focused on actionable state (`a3205a1`).
+
+#### Asymmetric Bounds and Grid Placement
+
+- Added asymmetric AMA-slope bound tilt, allowing grid bounds to bias with measured slope instead of applying only symmetric expansion around the center (`f2d8f18`).
+- Centralized asymmetric bounds calculations into a dedicated core helper and added targeted tests, reducing duplicated clamp/tilt math across the adapter service (`6382571`).
+- Passed tilted bounds through to `createOrderGrid()` and kept `dynamicgrid.json` center data fresh so generated grids reflect the adapter's latest asymmetric center and range (`50b4ca2`).
+- Logged asymmetric bounds parameters in market adapter output to make live slope, range, and clamp decisions visible during diagnostics (`9554018`).
+- Fixed the asymmetric bounds documentation example so documented defaults match the implementation (`1301688`).
+
+#### BitShares Connectivity, Node Failover, and Fill Replay
+
+- Hardened BitShares node failover with a persistent node blacklist and a 7-day cooldown, reducing repeat attempts against recently failing nodes (`21271c5`, `ef58415`).
+- Added startup retry and node-manager coverage for default BitShares client behavior, RPC protocol handling, and blacklist state transitions (`21271c5`, `ef58415`).
+- Tightened market adapter WebSocket lifecycle handling with per-cycle reconnects, explicit connection guards, intentional-disconnect handling, and guarded cleanup in `finally` paths (`c147e28`, `cbe06bf`, `2375e90`).
+- Hardened fill replay persistence during credential outages so processed-fill state is not lost or partially written when the credential daemon is unavailable (`41aad06`).
+
+#### Diagnostics, Cleanup, and Operational Scripts
+
+- Added direct market adapter diagnostics for adapter-client behavior, WebSocket lifecycle checks, and node connectivity (`tests/diag_adapter_client.js`, `tests/diag_ws_lifecycle.js`, `tests/diag_ws_nodes.js`).
+- Aligned market adapter diagnostics and tests with current runtime behavior after the refactor, including no-write paths, snapshot handling, and current latching semantics (`f6d9306`, `f33b3ff`).
+- Extended `clear-market-adapter` cleanup so it also removes `dexbot-adapter` logs, making state-reset runs less likely to inherit stale operational output (`d05b933`).
+- Renamed the settings cleanup script from `clean-settings.sh` to `reset-settings.sh` and updated script documentation so the command name matches its operational purpose (`0788722`).
+- Clarified the market adapter whitelist requirement for live operation and updated whitelist generation around the new market adapter inputs (`61056f9`, `f2d8f18`).
+
+#### Analysis and Research Tooling
+
+- Decoupled the AMA fitting chart generator from `lp_chart_runner`, reducing coupling between fitting experiments and the LP chart orchestration path (`8f3b1d9`).
+- Unified LP data source structure and removed hard-coded pool/asset references so analysis tools can be reused across markets more safely (`2d866d0`).
+- Added AMA convergence calibration support and refreshed AMA fitting utilities around current warmup and convergence assumptions (`4151311`).
+- Expanded `analysis/README.md` with a fuller subarea map, added signal-reference links, and reorganized the dynamic-weight research documentation for readability (`58fb6ff`, `26298af`).
+
+#### Documentation Refresh
+
+- Reorganized and trimmed the documentation index, then rebalanced section headings and labels so the docs hub points at the current architecture, analysis, market-adapter, and operational material (`152e78b`, `9e41790`, `f925c33`).
+- Updated project evolution and roadmap documentation to reflect the current post-0.7 runtime direction and removed stale planning documents that no longer describe active behavior (`e1c78c1`).
+- Expanded the market adapter README with current source modes, asymmetric bounds behavior, reset flow, logging fields, and whitelist guidance (`6662be9`, `f2d8f18`, `903a4fd`, `e9e7dbb`).
+- Aligned user-facing defaults across the main README, market-adapter docs, and global bot-settings help text so AMA delta, dust-cancel, and example bot values match current runtime defaults.
+- Refreshed version and roadmap-facing markdown in `docs/`, and updated comparison and migration analysis docs to match the current test-file count.
+
+#### Test Coverage
+
+- Added and expanded tests around market adapter service behavior, orderbook/fixed-price modes, AMA center snapshots, asymmetric bounds, dynamic-weight override wiring, Kibana candle handling, and market adapter log formatting.
+- Added BitShares client and node-manager regression coverage for startup retry, default node-manager wiring, RPC protocol behavior, and persistent failover policy.
+- Updated fill replay, COW, fee schedule, strategy, startup partial-fill, and maintenance-runtime tests to match the current runtime behavior after the adapter and persistence changes.
 
 ### 2026-03-01 to 2026-03-03
 

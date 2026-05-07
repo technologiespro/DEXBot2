@@ -1,7 +1,7 @@
 # DEXBot vs DEXBot2 — Detailed Comparison Report
 
-> **Date:** 2026-02-19 *(metrics updated 2026-04-24)*
-> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite). DEXBot2 v0.6.0 is the latest tagged release; current internal documentation tracks v0.7.
+> **Date:** 2026-05-07 *(metrics refreshed against local source trees)*
+> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite). DEXBot2 is currently tracked as `0.7.0-alpha` in `package.json`.
 > **Audience:** Developers, contributors, and operators evaluating or migrating between the two projects.
 
 ---
@@ -35,22 +35,22 @@
 
 | Attribute | DEXBot (original) | DEXBot2 |
 |---|---|---|
-| **Version** | 1.0.0 | 0.7 internal; v0.6.0 tagged release |
+| **Version** | 1.0.0 | 0.7.0-alpha |
 | **Language** | Python 3.6+ | Node.js (JavaScript ES2022) |
 | **Status** | Alpha / Maintenance | Active Development |
-| **Last Update** | ~May 2020 | April 2026 |
+| **Last Update** | May 23, 2020 | May 2026 |
 | **License** | MIT | MIT |
 | **Origin** | BitShares worker-proposal funded, Codaone Oy | Private rewrite by froooze |
-| **Primary Goal** | Multi-strategy, extensible trading framework | Hardened, single-strategy grid bot |
+| **Primary Goal** | Multi-strategy, extensible trading framework | Hardened adaptive grid runtime with operator/AI tooling |
 | **Target Exchange** | BitShares DEX | BitShares DEX |
-| **Lines of Code** | ~10,846 (Python) | ~21,000+ (JavaScript) |
-| **Source Files** | 72 Python files | 30+ JS modules |
+| **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large JS codebase; core runtime, adapter, analysis, Claw, and test modules |
+| **Source Files** | 72 Python files in `dexbot/` | 150+ runtime/test JS files in active modules |
 
 ### Summary
 
 DEXBot (original) is a community-governed, multi-strategy trading framework built in Python with a full GUI and plugin system. It was designed to be user-friendly and extensible, supporting multiple strategies and external price feeds out of the box.
 
-DEXBot2 is a ground-up rewrite in Node.js focused entirely on a single, deeply engineered grid trading strategy. It trades breadth of features for depth of correctness, adding production-grade state management (Copy-on-Write architecture), concurrency safety, AMA-based market adaptation, and a comprehensive test suite (102 files).
+DEXBot2 is a ground-up rewrite in Node.js that prioritizes production correctness over the original project's GUI/plugin breadth. The core trading runtime is still centered on one deeply engineered boundary-crawl grid strategy, but the surrounding system has expanded significantly: Copy-on-Write order state, replay-safe fill accounting, two-pass startup and runtime reconciliation, dynamic AMA/Kalman market adaptation, credential-daemon key handling, PM2 orchestration, Claw automation APIs, credit/MPA support, and a broad regression suite.
 
 ---
 
@@ -66,16 +66,16 @@ DEXBot2 is a ground-up rewrite in Node.js focused entirely on a single, deeply e
 | **Database / State** | SQLite via SQLAlchemy ORM | JSON flat files (no DB) |
 | **DB Migrations** | Alembic | N/A |
 | **Process Manager** | Systemd service (Linux) | PM2 |
-| **External APIs** | CoinGecko, CCXT, Waves | None (on-chain only) |
+| **External APIs** | CoinGecko, CCXT, Waves | No CEX APIs; adapter can consume on-chain/pool/Kibana candle inputs |
 | **Container** | Docker (Ubuntu 18.04) | Docker (multi-stage) |
-| **Dashboard** | PyQt5 GUI | Rust/Ratatui TUI (in progress) |
-| **Testing** | pytest + Docker testnet | Native Node.js assert (102 test files) |
-| **CI/CD** | Travis CI, AppVeyor | GitHub Actions |
+| **Dashboard** | PyQt5 GUI | CLI/PM2 logs; Claw/runtime automation surface |
+| **Testing** | pytest + Docker testnet | Native Node.js assert (171 `test_*.js` files; 93 scripts in `npm test`) |
+| **CI/CD** | Travis CI, AppVeyor | GitHub Actions / local deterministic script suite |
 | **Packaging** | PyInstaller (Win/Mac/Linux binaries) | npm / PM2 ecosystem |
 
 ### Key Difference
 
-DEXBot brings a full Python scientific ecosystem and desktop GUI. DEXBot2 runs headlessly in a terminal, deploying on any server via PM2 with minimal dependencies — just Node.js and two npm packages.
+DEXBot brings a full Python desktop GUI and a strategy plugin model. DEXBot2 is a headless operator-first runtime: fewer production dependencies, stronger process isolation, stronger key separation, and substantially more explicit state/accounting invariants.
 
 ---
 
@@ -140,7 +140,7 @@ DEXBot brings a full Python scientific ecosystem and desktop GUI. DEXBot2 runs h
 - **Four specialized engines** (Accountant, StrategyEngine, Grid, SyncEngine) coordinate through OrderManager
 - **Copy-on-Write** grid: planning happens on isolated `WorkingGrid`; committed atomically or discarded on failure
 - **No event callbacks**: polling-based loop with fixed-cap fill batching (max 4 fills per cycle)
-- **Market Adapter**: AMA-based price tracking with shard-parallel fitting and configurable delta triggers
+- **Market Adapter**: AMA-based price tracking, dynamic buy/sell weighting, Kalman confirmation, ATR/regime dampening, asymmetric grid bounds, and configurable delta triggers
 - State in **JSON flat files** (no database dependency)
 - Each PM2 process manages **one bot**
 
@@ -157,8 +157,8 @@ DEXBot brings a full Python scientific ecosystem and desktop GUI. DEXBot2 runs h
 | **State Storage** | SQLite (relational, queryable) | JSON flat files (simple, no dependency) |
 | **State Safety** | Mutable shared state per worker | Copy-on-Write immutable master grid |
 | **Multi-bot Scaling** | Single thread, multiple workers | One PM2 process per bot |
-| **Strategy Coupling** | Loosely coupled via base class | Single strategy deeply integrated |
-| **Recovery Model** | Restart from SQLite state | Startup reconciliation + blockchain re-sync |
+| **Strategy Coupling** | Loosely coupled via base class | Core grid strategy deeply integrated; Claw/adapter layers extend around it |
+| **Recovery Model** | Restart from SQLite state | Startup reconciliation + blockchain re-sync + fill replay guards |
 | **Error Isolation** | Per-worker exception handling | Per-engine try/catch, up to 5 recovery retries |
 
 ---
@@ -198,7 +198,7 @@ DEXBot brings a full Python scientific ecosystem and desktop GUI. DEXBot2 runs h
 
 ---
 
-### DEXBot2 — Single Boundary-Crawl Grid Strategy
+### DEXBot2 — Adaptive Boundary-Crawl Grid Runtime
 
 #### Boundary-Crawl Grid Strategy (deeply engineered)
 - Creates a **geometric price grid** from min to max price
@@ -207,6 +207,9 @@ DEXBot brings a full Python scientific ecosystem and desktop GUI. DEXBot2 runs h
 - On fill: grid **crawls** — boundary shifts, slots reassign roles, new orders placed
 - **Partial fill consolidation**: dust detection and cleanup
 - **Fixed-cap fill batching**: 1–4 fills per unified batch, >4 chunked at 4-fill boundaries
+- **Replay-safe fill dedupe**: processed-fill persistence prevents duplicate accounting after restarts or resyncs
+- **Dynamic weighting**: AMA slope, Kalman confirmation, ATR volatility, and regime gates can bias buy/sell allocation without changing the core grid model
+- **Asymmetric range scaling**: trend diagnostics can tilt grid bounds during recalculation, giving the grid more room in the direction of movement
 
 ```
 Price Scale (geometric, e.g. 0.4% increments):
@@ -220,9 +223,10 @@ Price Scale (geometric, e.g. 0.4% increments):
   ─── minPrice
 ```
 
-#### No Plugin System
-- Single strategy is not swappable at runtime
-- Strategy logic is deeply integrated into OrderManager, Grid, and Accountant
+#### Extensibility Model
+- The core trading strategy is not swappable at runtime
+- Strategy logic is intentionally integrated into OrderManager, Grid, SyncEngine, and Accountant for stronger invariants
+- Extension happens around the runtime through MarketAdapter, analysis tools, Claw modules, and operator automation rather than through DEXBot-style strategy plugins
 
 ---
 
@@ -231,14 +235,15 @@ Price Scale (geometric, e.g. 0.4% increments):
 | Feature | DEXBot | DEXBot2 |
 |---|---|---|
 | **Number of Strategies** | 3 built-in + plugins | 1 (boundary-crawl grid) |
-| **Custom Strategies** | Yes (plugin system) | No |
-| **External Price Feeds** | Yes (CoinGecko, CCXT, Waves) | No (on-chain only) |
+| **Custom Strategies** | Yes (plugin system) | No core strategy plugins |
+| **External Price Feeds** | Yes (CoinGecko, CCXT, Waves) | No centralized exchange feed dependency; adapter uses on-chain/pool/Kibana candle sources |
 | **Strategy Isolation** | Yes (each worker independent) | N/A (one strategy) |
 | **Grid Trading** | Staggered Orders (similar concept) | Yes (core, heavily engineered) |
 | **Market Making** | Relative Orders, KOTH | Yes (spread-based) |
-| **Rebalancing Logic** | Per-strategy | Centralized in OrderManager |
+| **Rebalancing Logic** | Per-strategy | Centralized in OrderManager with adapter-triggered recalculation |
 | **Partial Fill Handling** | Basic | Advanced (consolidation, dust detection) |
 | **Boundary Mechanics** | N/A | Atomic boundary-crawl with role reassignment |
+| **Adaptive Signals** | External reference price for Relative Orders | AMA/Kalman/ATR/regime dynamic grid and weight signals |
 
 ---
 
@@ -264,6 +269,8 @@ Price Scale (geometric, e.g. 0.4% increments):
   3. Mark orphaned grid orders as VIRTUAL
 - **Ghost order prevention**: robust full-fill detection
 - **Version epoch tracking**: stale working grids detected and aborted
+- **Processed fill store**: persistent dedupe layer for replay-safe accounting
+- **Startup reconciliation**: detects existing, orphaned, partial, and missing orders before normal trading resumes
 
 ### Order Management Comparison
 
@@ -279,6 +286,8 @@ Price Scale (geometric, e.g. 0.4% increments):
 | **Partial Fill Tracking** | Basic | Advanced (per-order tracking) |
 | **Dust Detection** | No | Yes |
 | **Stale State Detection** | No | Version epoch tracking |
+| **Fill Replay Dedupe** | No formal persistent layer | Yes (`processed_fill_store.js`) |
+| **Startup Reconcile** | Basic restart from SQLite | Dedicated startup reconciliation pipeline |
 
 ---
 
@@ -313,10 +322,11 @@ workers:
 ### DEXBot2
 
 - **Format:** JSON (`profiles/bots.json`, `profiles/general.settings.json`)
-- **No interactive wizard** — manual JSON editing
+- **No GUI wizard** — manual JSON editing plus scripts/runtime helpers
 - **14 frozen configuration objects** in `modules/constants.js` (loaded at startup)
-- Runtime parameters via environment variables (`RUN_LOOP_MS`, `BOT_NAME`, etc.)
+- Runtime parameters via environment variables (`RUN_LOOP_MS`, `BOT_NAME`, launcher/daemon settings, etc.)
 - `profiles/general.settings.json` for global timing/limits/node settings
+- `profiles/market_profiles.json` and market-adapter settings for AMA profiles, dynamic weights, and recalculation thresholds
 - **Encrypted key storage** (AES-256-GCM) with RAM-only master password
 
 ```json
@@ -346,9 +356,9 @@ workers:
 | **Key Encryption** | No (file-system only) | Yes (AES-256-GCM) |
 | **Multi-bot in one config** | Yes (YAML array) | Yes (JSON array) |
 | **Runtime overrides** | Env vars (limited) | Env vars (full) |
-| **Hot reload** | Partial (restart worker) | No (restart process) |
+| **Hot reload** | Partial (restart worker) | Limited via runtime snapshots/triggers; process restart for static bot config |
 | **Validation** | `config_validator.py` | `modules/order/utils/validate.js` |
-| **Documentation** | Strategy ConfigElement docs | README + developer_guide.md |
+| **Documentation** | Strategy ConfigElement docs | README + developer guide + architecture/security/accounting docs |
 
 ---
 
@@ -361,12 +371,13 @@ workers:
 | **Key Management** | `uptick` library | Custom AES-256-GCM + RAM-only password |
 | **Connection Mode** | WebSocket (event-driven) | WebSocket (polling + subscriptions) |
 | **Multi-node Failover** | Yes (latency-sorted) | Yes (health-checked) |
-| **External Price Feeds** | CoinGecko, CCXT, Waves | None |
+| **External Price Feeds** | CoinGecko, CCXT, Waves | No CEX feed dependency; market adapter consumes on-chain/pool/Kibana candles |
 | **Account Type** | Single or multi-account | Per-bot account |
 | **Order Operations** | Place, cancel, update via `bitshares` lib | Place, cancel, update via `btsdex` |
 | **Asset Metadata** | Fetched via `bitshares` | Fetched on startup, cached |
 | **Balance Queries** | Per tick via library | Periodic + event-triggered |
 | **Fee Handling** | Basic (relies on library) | Advanced (reservation system, fee accounting) |
+| **Automation API** | Strategy/plugin hooks | Claw modules for profiles, chain queries/actions, position health, and bot automation |
 
 ---
 
@@ -400,6 +411,8 @@ Where:
 - **Fee reservation**: ensures future operations never fail due to missing fees
 - **Atomic snapshots**: consistent reads across all fund components
 - **Recovery triggers**: invariant violation automatically initiates recovery cycle
+- **Market-fee and BTS-fee regression coverage**: tests cover fee cache fallback, BTS fee deduction, batching, and precision quantization
+- **Credit/MPA runtime support**: separate runtime modules track collateral/debt position data and planning state for advanced BitShares workflows
 
 ### Accounting Comparison
 
@@ -413,6 +426,7 @@ Where:
 | **Overdraft Protection** | Basic | Yes (invariant enforcement) |
 | **Optimistic Proceeds** | No | Yes |
 | **Accounting Audit Trail** | No | Partial (logging) |
+| **Credit/MPA Awareness** | No | Yes (credit runtime and Claw position modules) |
 
 ---
 
@@ -439,6 +453,7 @@ Where:
 - **Double-check pattern**: consistency validated both outside and inside locks
 - **Layer 1 & Layer 2 defenses** against rapid-restart cascades
 - **Lock refresh mechanism**: prevents timeout during long blockchain operations
+- **Replay and duplicate guards**: fill dedupe, resync duplicate-race tests, and startup reconciliation prevent repeated handling of the same chain event
 
 ### Concurrency Comparison
 
@@ -451,6 +466,7 @@ Where:
 | **Concurrent Fill Safety** | Partial | Yes (fill batching + COW) |
 | **Deadlock Prevention** | Basic | Formal lock hierarchy |
 | **Rapid-restart Protection** | No | Yes (Layer 1 + Layer 2) |
+| **Duplicate Fill Protection** | Basic | Persistent replay guards + race regression tests |
 
 ---
 
@@ -475,8 +491,8 @@ Where:
 - `bot.js`: single bot launcher
 - `pm2.js`: PM2 orchestration (start, stop, restart, status, logs)
 - `unlock-start.js`: single-prompt startup helper
-- **Rust/Ratatui TUI dashboard** (in development — not yet complete)
-- Designed for operators comfortable with terminal and JSON config
+- Claw scripts and modules expose automation-friendly operations for profiles, chain actions, position health, and launcher workflows
+- Designed for operators comfortable with terminal, JSON config, and service logs
 
 ### UI Comparison
 
@@ -484,10 +500,11 @@ Where:
 |---|---|---|
 | **Desktop GUI** | Yes (PyQt5) | No |
 | **Interactive Config Wizard** | Yes (GUI + whiptail) | No |
-| **TUI Dashboard** | No | In development (Rust/Ratatui) |
+| **TUI Dashboard** | No | Not a primary interface |
 | **CLI** | Yes (Click) | Yes (custom) |
 | **Real-time Status** | GUI view | PM2 status + log tailing |
-| **Accessibility** | High (non-technical users) | Low (requires CLI comfort) |
+| **Automation Surface** | Plugin/strategy hooks | Claw modules, scripts, and runtime helpers |
+| **Accessibility** | High (non-technical users) | Medium-low for casual users; stronger for technical operators |
 
 ---
 
@@ -512,7 +529,7 @@ Where:
   - Log management (PM2 log rotation)
 - **credential-daemon.js**: RAM-only key management daemon
 - Docker: multi-stage Dockerfile
-- **Automated updates**: daily repository pull with branch tracking
+- Launch modes for full bot startup or credential-daemon-only runtime
 - No binary packages — requires Node.js runtime
 - Horizontal scaling: add more PM2 processes for more bots
 
@@ -526,7 +543,7 @@ Where:
 | **Binary Distribution** | Yes (PyInstaller) | No (requires Node.js) |
 | **Docker** | Yes | Yes |
 | **Systemd Integration** | Yes (sdnotify) | No |
-| **Automated Updates** | No | Yes (daily pull) |
+| **Credential-daemon-only Mode** | No | Yes |
 | **Raspberry Pi** | Yes | Yes (Node.js supported) |
 | **Windows** | Yes (binary) | Partial (PM2 on Windows) |
 
@@ -550,6 +567,7 @@ Where:
 - Config in plain JSON but no keys stored in config (separate encrypted store)
 - `.gitignore` ensures `keys.json` and sensitive files are never committed
 - **Fund invariant enforcement**: prevents accidental overdraft
+- Allowed-operations policy and credential session tests enforce separation between key access, launch modes, and bot execution
 
 ### Security Comparison
 
@@ -562,6 +580,7 @@ Where:
 | **Memory Safety** | No explicit wipe | RAM-only password |
 | **Overdraft Protection** | No | Fund invariant system |
 | **Audit Logging** | Basic | Structured per-component logging |
+| **Credential Runtime Tests** | No | Yes |
 
 ---
 
@@ -582,12 +601,15 @@ Where:
 ### DEXBot2
 
 - **Framework:** Native Node.js `assert` module (no external test framework)
-- **102 test files** covering:
+- **171 `test_*.js` files** in the repository, with **93 scripts in `npm test`** covering:
   - Unit tests: accounting, strategy, grid, manager logic
   - Copy-on-Write semantics: COW commits, guards, concurrent fills
   - Edge cases: ghost orders, partial fills, BTS fee accounting, precision
   - Concurrency: fill batching, lock behaviors
   - Scenario tests: specific bug reproductions
+  - Market adapter: AMA snapshots, dynamic weights, asymmetric bounds, signal gates
+  - Credential runtime: daemon, session cache, launch modes, private-key sanitization
+  - Claw/position layer: profiles, chain layer, short MPA strategy, position health
 - Tests run with `npm test` (concatenated `node` commands)
 - No Docker testnet — pure unit/integration testing with mocks
 - Migrated from Jest to eliminate all external test dependencies
@@ -597,13 +619,15 @@ Where:
 | Feature | DEXBot | DEXBot2 |
 |---|---|---|
 | **Framework** | pytest | Native Node.js assert |
-| **Test Count** | ~20-30 | 102 |
-| **Test Types** | Unit + integration | Unit + integration + edge-case |
+| **Test Count** | 32 Python test files | 171 `test_*.js` files; 93 scripts in `npm test` |
+| **Test Types** | Unit + integration | Unit + integration + edge-case + runtime regression |
 | **Testnet Integration** | Yes (Docker) | No (mocks) |
 | **External Dependency** | pytest, Docker | None |
 | **COW / Concurrency Tests** | No | Yes (dedicated suite) |
 | **Edge Case Coverage** | Moderate | Extensive |
 | **CI Integration** | Travis CI, AppVeyor | GitHub Actions |
+| **Credential/Launcher Coverage** | Limited | Dedicated daemon/session/PM2 tests |
+| **Market Adapter Coverage** | Price feed tests | Dedicated AMA/dynamic-weight/signal-gate tests |
 
 ---
 
@@ -632,9 +656,12 @@ Where:
 | `docs/WORKFLOW.md` | 7 KB | Branch strategy, commit standards |
 | `docs/TEST_UPDATES_SUMMARY.md` | 14 KB | Test suite coverage and improvements |
 | `docs/GRID_RECALCULATION.md` | 11 KB | Three independent grid recalculation triggers |
+| `docs/COW_INVARIANTS.md` | 4 KB | Non-negotiable COW behavioral invariants |
+| `docs/CREDENTIAL_SECURITY.md` | 8 KB | Credential daemon, key policy, and security model |
+| `docs/MPA_CREDIT_USAGE.md` | 20 KB | Credit runtime and MPA usage guidance |
 | `docs/TYPESCRIPT_MIGRATION_ANALYSIS.md` | 23 KB | Future TypeScript migration roadmap |
 | `AGENTS.md` | 6.5 KB | AI development context |
-| `CHANGELOG.md` | Very large | Full version history (1159+ commits) |
+| `CHANGELOG.md` | Very large | Full version history (1250 commits at current HEAD) |
 
 ### Documentation Comparison
 
@@ -645,7 +672,7 @@ Where:
 | **Architecture Docs** | None | Extensive (architecture.md, 48 KB) |
 | **Developer Guide** | Sphinx strategybase.rst | developer_guide.md (56 KB) |
 | **Fund Model** | None | FUND_MOVEMENT_AND_ACCOUNTING.md (30 KB) |
-| **Changelog** | None | CHANGELOG.md (complete, 983 commits) |
+| **Changelog** | None | CHANGELOG.md plus workflow/evolution docs |
 | **Accessibility** | Moderate | Technical / developer-focused |
 
 ---
@@ -687,7 +714,7 @@ Where:
 | **GUI Framework** | PyQt5 (~80MB) | None |
 | **Database ORM** | SQLAlchemy | None |
 | **External Price APIs** | CoinGecko, CCXT, Waves | None |
-| **Install Size (approx)** | Large (100MB+) | Small (<20MB with node_modules) |
+| **Install Size (approx)** | Large (100MB+) | Small core dependency tree; analysis/data assets can be larger |
 | **Runtime Requirement** | Python 3.6+ | Node.js LTS |
 
 ---
@@ -705,22 +732,25 @@ Where:
 
 ### DEXBot2
 
-- **No plugin system**
-- Single hardcoded strategy (boundary-crawl grid)
-- Extending requires forking the codebase or modifying core modules
-- Market adapter (`market_adapter/`) allows real-time parameter tuning
-- `analysis/` tools for offline AMA fitting and trend detection
+- **No DEXBot-style strategy plugin system**
+- Single hardcoded core strategy (boundary-crawl grid)
+- Extending core trading behavior requires modifying runtime modules
+- Market adapter (`market_adapter/`) provides real-time signal-driven parameter tuning: AMA center, dynamic weights, Kalman confirmation, ATR/regime dampening, and asymmetric bounds
+- `analysis/` tools provide AMA fitting, dynamic-weight research, derivative/Kalman signal research, volatility/regime analysis, and bot-parameter sweeps
+- `claw/` exposes a separate automation and AI-consumption layer: profile reading, chain queries/actions, short MPA workflows, position health, runtime manifests, and skill/plugin artifacts
 
 ### Extensibility Comparison
 
 | Feature | DEXBot | DEXBot2 |
 |---|---|---|
-| **Plugin System** | Yes (setuptools entry points) | No |
-| **Custom Strategies** | Yes | No |
+| **Plugin System** | Yes (setuptools entry points) | No core strategy plugin system |
+| **Custom Strategies** | Yes | No runtime-swappable core strategies |
 | **Strategy Template** | Yes | No |
 | **Community Strategy Sharing** | Yes (PyPI packages) | No |
-| **Runtime Parameter Tuning** | Via config/restart | MarketAdapter (in progress) |
-| **Analysis Tools** | No | Yes (AMA fitting, trend detection) |
+| **Runtime Parameter Tuning** | Via config/restart | MarketAdapter live snapshots/triggers |
+| **Analysis Tools** | No | Yes (AMA fitting, trend, volatility, regime, bot sweeps) |
+| **Automation API Layer** | No dedicated API layer | Yes (Claw modules/scripts/skills) |
+| **Credit/MPA Tooling** | No | Yes |
 
 ---
 
@@ -728,18 +758,18 @@ Where:
 
 | Metric | DEXBot | DEXBot2 |
 |---|---|---|
-| **Version** | 1.0.0 | 0.7 internal; v0.6.0 tagged release |
+| **Version** | 1.0.0 | 0.7.0-alpha |
 | **Active Since** | ~2018 | December 2025 |
-| **Last Commit** | ~May 2020 | April 2026 |
-| **Total Commits** | Unknown (mature project) | 1159+ (5 months) |
-| **Lines of Code** | ~10,846 | ~21,000+ |
-| **Source Files** | 72 Python files | 30+ JS modules |
-| **Test Files** | ~20-30 | 102 |
-| **Documentation** | Sphinx docs + README | 15+ comprehensive Markdown files |
+| **Last Commit** | May 23, 2020 | May 2026 |
+| **Total Commits** | 2281 | 1250 at current HEAD |
+| **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large JS runtime + adapter + Claw + analysis + tests |
+| **Source Files** | 72 Python files in `dexbot/` | 150+ active runtime/test JS files |
+| **Test Files** | 32 Python test files | 171 `test_*.js` files |
+| **Documentation** | Sphinx docs + README | 18+ Markdown docs plus Claw/analysis docs |
 | **Strategies** | 3 + plugins | 1 |
 | **Max Concurrent Bots** | Many (one process) | Many (one process per bot, PM2) |
 | **Primary Developer** | Codaone Oy (team) | froooze (individual, 99.1% commits) |
-| **Community** | BitShares worker-funded | Private |
+| **Community** | BitShares worker-funded | Private, operator-focused |
 | **Governance** | "The Cabinet" (6-person, 3/5 multisig) | None |
 
 ---
@@ -748,10 +778,14 @@ Where:
 
 ### DEXBot Limitations
 
-- **No longer actively maintained** (last commit ~May 2020, 6 years ago)
+- **No longer actively maintained** (last commit May 23, 2020)
 - Python GIL limits true parallelism for multi-worker scenarios
 - Mutable shared state — susceptible to race conditions in multi-worker use
 - No formal fund invariant enforcement — overdraft possible under edge cases
+- No Copy-on-Write or atomic planning/commit boundary for grid transitions
+- No persistent fill replay-dedupe layer comparable to DEXBot2's processed fill store
+- No adaptive AMA/Kalman/dynamic-weight signal layer
+- No credential daemon or separate automation API layer
 - YAML config has no key encryption (relies on OS file permissions)
 - Staggered Orders strategy can suffer inventory skew in strong trends
 - External price feeds introduce latency and potential for price manipulation
@@ -760,15 +794,15 @@ Where:
 
 ### DEXBot2 Limitations
 
-- **Single strategy only** — no flexibility for different market conditions
+- **Single core strategy only** — no runtime-swappable strategy plugins
 - No GUI — requires CLI proficiency
-- No external price feed support (on-chain prices only)
+- No DEXBot-style external CEX price-feed strategy support
 - JSON config requires manual editing (no wizard)
-- No built-in backtesting framework
-- Rust TUI dashboard not yet complete
+- Backtesting/research exists under `analysis/`, but it is not a polished end-user backtesting product
+- No polished TUI/dashboard product
 - No community/plugin ecosystem
 - Heavy documentation suggests significant learning curve for contributors
-- 1159+ commits in 5 months suggests rapid iteration (stabilizing as COW architecture, signal intelligence, and credit/debt runtime work mature)
+- Rapid iteration means new adapter/Claw/credit features require disciplined regression testing before production use
 
 ---
 
@@ -783,16 +817,37 @@ Where:
 | **Security** | ★★★☆☆ | ★★★★★ (AES-256-GCM, RAM-only) | DEXBot2 |
 | **Ease of Setup** | ★★★★★ (GUI wizard) | ★★☆☆☆ (manual JSON) | DEXBot |
 | **Accessibility** | ★★★★★ (GUI) | ★★☆☆☆ (CLI only) | DEXBot |
-| **Testing Depth** | ★★★☆☆ | ★★★★★ (102 test files) | DEXBot2 |
-| **Documentation** | ★★★☆☆ | ★★★★★ (14 detailed docs) | DEXBot2 |
+| **Testing Depth** | ★★★☆☆ | ★★★★★ (171 test files; focused regressions) | DEXBot2 |
+| **Documentation** | ★★★☆☆ | ★★★★★ (architecture/accounting/security/adapter docs) | DEXBot2 |
 | **Dependency Footprint** | ★★☆☆☆ (heavy) | ★★★★★ (3 packages) | DEXBot2 |
 | **Extensibility** | ★★★★★ (plugins) | ★☆☆☆☆ | DEXBot |
 | **Active Maintenance** | ★☆☆☆☆ (abandoned) | ★★★★★ (active) | DEXBot2 |
 | **Grid Strategy Depth** | ★★★☆☆ (Staggered) | ★★★★★ (engineered) | DEXBot2 |
-| **Process Management** | ★★★☆☆ (Systemd) | ★★★★☆ (PM2) | DEXBot2 |
+| **Adaptive Market Signals** | ★★☆☆☆ (external feeds only for Relative Orders) | ★★★★★ (AMA/Kalman/ATR/regime/dynamic weights) | DEXBot2 |
+| **Process Management** | ★★★☆☆ (Systemd) | ★★★★☆ (PM2 + daemon launch modes) | DEXBot2 |
+| **Automation/API Surface** | ★★☆☆☆ (strategy hooks) | ★★★★☆ (Claw modules/scripts/skills) | DEXBot2 |
+| **Credit/MPA Tooling** | ★☆☆☆☆ | ★★★★☆ | DEXBot2 |
 | **Community/Ecosystem** | ★★★★☆ | ★☆☆☆☆ | DEXBot |
 | **Multi-Strategy Support** | ★★★★★ | ★☆☆☆☆ | DEXBot |
 
 ---
 
-*Report generated 2026-02-19. Metrics updated 2026-03-03. DEXBot analyzed at HEAD of DEXBot-master.*
+## 20. Migration Considerations
+
+DEXBot2 is not a drop-in upgrade for DEXBot. The projects optimize for different operators:
+
+| If you need... | Better fit |
+|---|---|
+| Desktop GUI, wizard setup, and non-technical operation | DEXBot |
+| Multiple runtime-swappable strategies or community strategy plugins | DEXBot |
+| Hardened grid accounting, COW state transitions, and replay-safe fill handling | DEXBot2 |
+| Headless PM2 operation across many bot processes | DEXBot2 |
+| AMA/Kalman/ATR adaptive grid weighting and recalculation triggers | DEXBot2 |
+| Credential-daemon key separation and launcher-mode testing | DEXBot2 |
+| Claw automation, position health, MPA/credit tooling, and AI-consumable runtime surfaces | DEXBot2 |
+
+The practical migration path is to treat DEXBot2 as a new runtime: recreate bot configs in `profiles/bots.json`, validate price orientation and fund allocation, start with small funds, and rely on startup reconciliation plus logs before scaling position size.
+
+---
+
+*Report generated 2026-02-19. Metrics refreshed 2026-05-07 from local DEXBot-master and DEXBot2 source trees.*
