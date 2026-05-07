@@ -429,9 +429,9 @@ async function deriveLiquidityPoolTokenValue(BitShares, shareAssetRef, denominat
 /**
  * Load the full dynamic grid snapshot written by market_adapter for a bot.
  * The snapshot is stored atomically at profiles/orders/<botKey>.dynamicgrid.json
- * and is updated every market adapter cycle. It contains the AMA-derived center
- * price and, for dynamic-weight-whitelisted bots, any computed effective weight offsets.
- * On manual resets the bot may rewrite centerPrice to the latest AMA baseline, but
+ * and is updated every market adapter cycle. It contains the persisted grid
+ * center and, for dynamic-weight-whitelisted bots, any computed effective weight offsets.
+ * On manual resets the bot may rewrite gridCenterPrice to the latest AMA baseline, but
  * amaCenterPrice remains the raw AMA output for diagnostics and comparison.
  * The snapshot may also expose AMA slope diagnostics for slope-triggered resets.
  * Called by initializeGrid() when manager.config.gridPrice uses an AMA keyword,
@@ -445,14 +445,15 @@ function loadAmaCenterSnapshot(botKey) {
         const gridPriceFile = path.join(__dirname, '../../../profiles/orders', `${botKey}.dynamicgrid.json`);
         const raw = fs.readFileSync(gridPriceFile, 'utf8');
         const data = JSON.parse(raw);
-        const centerPrice = Number(data?.centerPrice);
+        const gridCenterPrice = Number(data?.gridCenterPrice ?? data?.centerPrice);
         const amaCenterPrice = Number(data?.amaCenterPrice);
-        if (!Number.isFinite(centerPrice) || centerPrice <= 0) {
+        if (!Number.isFinite(gridCenterPrice) || gridCenterPrice <= 0) {
             return null;
         }
         return {
+            gridCenterPrice,
+            centerPrice: gridCenterPrice,
             amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : null,
-            centerPrice,
             source: data?.source || null,
             updatedAt: data?.updatedAt || null,
             amaSlopePercentMode: data?.amaSlopePercentMode || null,
@@ -475,11 +476,11 @@ function loadAmaCenterSnapshot(botKey) {
  * Load the AMA grid center price written by market_adapter for a bot.
  * This is the numeric accessor used by the order engine.
  * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
- * @returns {number|null} Center price in B/A format, or null if file absent/invalid
+ * @returns {number|null} Grid center price in B/A format, or null if file absent/invalid
  */
 function loadAmaCenterPrice(botKey) {
     const snapshot = loadAmaCenterSnapshot(botKey);
-    return snapshot ? snapshot.centerPrice : null;
+    return snapshot ? snapshot.gridCenterPrice : null;
 }
 
 // ================================================================================
@@ -561,12 +562,19 @@ async function initializeFeeCache(botsConfig, BitShares) {
 async function persistGridSnapshot(manager, accountOrders, botKey) {
     if (!manager || !accountOrders || !botKey) return false;
     try {
+        const orders = Array.from(manager.orders.values());
         await accountOrders.storeMasterGrid(
             botKey,
-            Array.from(manager.orders.values()),
+            orders,
             manager.funds.btsFeesOwed,
             manager.boundaryIdx,
-            manager.assets || null
+            manager.assets || null,
+            {
+                persistedAt: new Date().toISOString(),
+                config: manager.config || null,
+                accountTotals: manager.accountTotals || null,
+                pricing: manager._lastGridPricingContext || null
+            }
         );
         return true;
     } catch (e) {

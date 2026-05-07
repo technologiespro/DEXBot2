@@ -312,6 +312,7 @@ class MarketAdapterService {
             lastCandleTs: null,
             rawLastCandleTs: null,
             lastClosedCandleTs: null,
+            gridCenterPrice: null,
             centerPrice: null,
             amaCenterPrice: null,
             amaConfig: null,
@@ -417,7 +418,7 @@ class MarketAdapterService {
     extractPersistedDynamicGridState(snapshot, lookbackBars) {
         if (!snapshot || typeof snapshot !== 'object') return null;
 
-        const centerPrice = Number(snapshot.centerPrice);
+        const gridCenterPrice = Number(snapshot.gridCenterPrice ?? snapshot.centerPrice);
         const amaCenterPrice = Number(snapshot.amaCenterPrice);
         const normalized = normalizePersistedAmaSlopeDiagnostics({
             amaSlopePercentMode: snapshot.amaSlopePercentMode,
@@ -430,7 +431,8 @@ class MarketAdapterService {
         const gridRangeScalingAmaSlope = normalized?.gridRangeScalingAmaSlope ?? amaSlope;
 
         return {
-            centerPrice: Number.isFinite(centerPrice) && centerPrice > 0 ? centerPrice : null,
+            gridCenterPrice: Number.isFinite(gridCenterPrice) && gridCenterPrice > 0 ? gridCenterPrice : null,
+            centerPrice: Number.isFinite(gridCenterPrice) && gridCenterPrice > 0 ? gridCenterPrice : null,
             amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : null,
             amaSlope,
             gridRangeScalingAmaSlope,
@@ -1478,6 +1480,11 @@ class MarketAdapterService {
         if (sourceMismatch) {
             botState = {};
         }
+        const stateGridCenterPrice = Number(botState.gridCenterPrice ?? botState.centerPrice);
+        if (Number.isFinite(stateGridCenterPrice) && stateGridCenterPrice > 0) {
+            botState.gridCenterPrice = stateGridCenterPrice;
+            botState.centerPrice = stateGridCenterPrice;
+        }
         const dynGridPath = deps.path.join(
             deps.root, 'profiles', 'orders', `${bot.botKey}.dynamicgrid.json`,
         );
@@ -1485,8 +1492,9 @@ class MarketAdapterService {
             ? this.extractPersistedDynamicGridState(deps.loadJson(dynGridPath, null), lookbackBars)
             : null;
         if (persistedDynamicGridState) {
-            if (!(Number(botState.centerPrice) > 0) && persistedDynamicGridState.centerPrice) {
-                botState.centerPrice = persistedDynamicGridState.centerPrice;
+            if (!(Number(botState.gridCenterPrice ?? botState.centerPrice) > 0) && persistedDynamicGridState.gridCenterPrice) {
+                botState.gridCenterPrice = persistedDynamicGridState.gridCenterPrice;
+                botState.centerPrice = persistedDynamicGridState.gridCenterPrice;
             }
             if (!(Number(botState.amaCenterPrice) > 0) && persistedDynamicGridState.amaCenterPrice) {
                 botState.amaCenterPrice = persistedDynamicGridState.amaCenterPrice;
@@ -1882,6 +1890,7 @@ class MarketAdapterService {
 
         const advanceTriggeredBotState = (newCenterPrice, options = {}) => {
             snapshotPersistedThisCycle = true;
+            botState.gridCenterPrice = newCenterPrice;
             botState.centerPrice = newCenterPrice;
             botState.amaCenterPrice = amaPrice;
             botState.lastGridResetAt = nowIso;
@@ -2053,16 +2062,17 @@ class MarketAdapterService {
             }
         }
 
-        const persistedCenterPrice = Number(botState.centerPrice || 0) > 0
-            ? Number(botState.centerPrice)
+        const acceptedGridCenterPrice = Number(botState.gridCenterPrice ?? botState.centerPrice);
+        const persistedCenterPrice = acceptedGridCenterPrice > 0
+            ? acceptedGridCenterPrice
             : undefined;
 
         // Weight-only update path: persist fresh weights to dynamicgrid.json without a grid reset.
         // The bot will pick these up on the next recalculation cycle after fills or config reload.
         if (!snapshotPersistedThisCycle && !triggered && !triggerSuppressedReason && !isDryRun && !staleData && canApplyDynamicWeights
-                && dynamicWeightsPayload && Number.isFinite(centerPrice) && centerPrice > 0
+                && dynamicWeightsPayload && persistedCenterPrice > 0
                 && typeof deps.writeBotDynamicGrid === 'function') {
-            const dynamicWeightsPersisted = deps.writeBotDynamicGrid(bot.botKey, centerPrice, {
+            const dynamicWeightsPersisted = deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
                 amaCenterPrice: amaPrice,
                 amaSlope: amaSlope || previousAmaSlope || null,
                 gridRangeScalingAmaSlope: botState.gridRangeScalingAmaSlope || previousGridResetAmaSlope || null,
@@ -2071,7 +2081,6 @@ class MarketAdapterService {
                 dynamicWeights: dynamicWeightsPayload,
             }) !== false;
             if (dynamicWeightsPersisted) {
-                botState.centerPrice = centerPrice;
                 botState.amaCenterPrice = amaPrice;
                 botState.amaSlope = amaSlope || previousAmaSlope || null;
                 botState.amaSlopeDeltaPercent = Number.isFinite(amaSlopeDeltaPercent)
@@ -2134,8 +2143,11 @@ class MarketAdapterService {
             amaCenterPrice: Number(botState.amaCenterPrice || 0) > 0
                 ? Number(botState.amaCenterPrice)
                 : undefined,
-            centerPrice: Number(botState.centerPrice || 0) > 0
-                ? Number(botState.centerPrice)
+            gridCenterPrice: acceptedGridCenterPrice > 0
+                ? acceptedGridCenterPrice
+                : persistedCenterPrice,
+            centerPrice: acceptedGridCenterPrice > 0
+                ? acceptedGridCenterPrice
                 : persistedCenterPrice,
             amaConfig: {
                 erPeriod: botAma.erPeriod,

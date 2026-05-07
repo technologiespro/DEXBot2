@@ -353,6 +353,7 @@ Typical fields:
 
 ```json
 {
+  "gridCenterPrice": 1294.6,
   "centerPrice": 1294.6,
   "amaCenterPrice": 1294.6,
   "amaSlope": {
@@ -372,14 +373,15 @@ Typical fields:
 }
 ```
 
-- `centerPrice` is the persisted grid baseline used for future delta checks.
+- `gridCenterPrice` is the persisted grid baseline used for future delta checks.
+- `centerPrice` remains as a compatibility alias for older readers.
 - `amaCenterPrice` is the raw AMA output before downstream handling.
 - `amaSlope` is the latest AMA slope snapshot used for diagnostics and snapshot writes.
 - `gridRangeScalingAmaSlope` in adapter state is the last grid-reset slope baseline used for slope-triggered range-scaling resets.
 - `amaSlopeDeltaPercent` records the change from the last grid-reset slope baseline.
 - `amaSlopeThresholdPercent` is the configured slope-reset threshold.
 - `amaSlope.trend` records the current direction; direction changes do not trigger resets unless the slope delta threshold is crossed.
-- During a manual grid reset, the bot refreshes `centerPrice` from the latest
+- During a manual grid reset, the bot refreshes `gridCenterPrice` from the latest
   `amaCenterPrice` before rebuilding the grid.
 - `dynamicWeights` is present only when live dynamic weights were computed and
   the bot is allowed to consume them.
@@ -716,7 +718,7 @@ Important fields in `market_adapter/state/market_adapter_state.json`:
 | `botsProcessed` | Number of bots evaluated |
 | `cycleMs` | Cycle wall-clock duration |
 | `lastAmaPrice` | Latest computed AMA price for a bot |
-| `centerPrice` | Stored center used for delta comparison |
+| `gridCenterPrice` | Stored center used for delta comparison |
 | `lastDeltaPercent` | Move from stored center to latest AMA |
 | `thresholdPercent` | Active recalc trigger threshold |
 | `triggered` | Whether a trigger was written this cycle |

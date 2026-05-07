@@ -110,6 +110,39 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const SENSITIVE_KEY_PATTERN = /(private|secret|password|credential|wif|token|hmac|memo)/i;
+
+function cloneForDebug(value, seen = new WeakSet()) {
+  if (typeof value === 'bigint') return value.toString();
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value)) return '[Circular]';
+  if (value instanceof Map) {
+    seen.add(value);
+    return Object.fromEntries(Array.from(value.entries(), ([key, item]) => [
+      key,
+      SENSITIVE_KEY_PATTERN.test(String(key)) ? '[REDACTED]' : cloneForDebug(item, seen)
+    ]));
+  }
+  if (value instanceof Set) {
+    seen.add(value);
+    return Array.from(value.values(), item => cloneForDebug(item, seen));
+  }
+  if (value instanceof Date) return value.toISOString();
+
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.map(item => cloneForDebug(item, seen));
+  }
+
+  const result = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === 'function') continue;
+    result[key] = SENSITIVE_KEY_PATTERN.test(key) ? '[REDACTED]' : cloneForDebug(item, seen);
+  }
+  return result;
+}
+
 /**
  * AccountOrders class - manages order grid persistence
  * 
@@ -128,14 +161,16 @@ class AccountOrders {
    * Create an AccountOrders instance.
    * @param {Object} options - Configuration options
    * @param {string} options.botKey - Bot identifier (e.g., 'xrp-bts-0', 'h-bts-1')
+   * @param {string} [options.ordersDir] - Optional override for the per-bot storage directory
+   * @param {string} [options.profilesPath] - Optional override for the per-bot storage file path
    */
   constructor(options = {}) {
     if (!options.botKey) throw new Error("botKey required for AccountOrders");
     this.botKey = options.botKey;
 
     // Use per-bot file: {botKey}.json
-    const ordersDir = path.join(__dirname, '..', 'profiles', 'orders');
-    this.profilesPath = path.join(ordersDir, `${this.botKey}.json`);
+    const ordersDir = options.ordersDir || path.join(__dirname, '..', 'profiles', 'orders');
+    this.profilesPath = options.profilesPath || path.join(ordersDir, `${this.botKey}.json`);
 
     // AsyncLock prevents concurrent read-modify-write races on file I/O
     this._persistenceLock = new AsyncLock();
@@ -309,9 +344,10 @@ class AccountOrders {
    * @param {Array} orders - Array of order objects from OrderManager
    * @param {number} btsFeesOwed - Optional BTS blockchain fees owed
    * @param {number} boundaryIdx - Optional master boundary index for StrategyEngine
-  * @param {Object} assets - Optional asset metadata { assetA, assetB }
+   * @param {Object} assets - Optional asset metadata { assetA, assetB }
+   * @param {Object} debugInputs - Optional debug-only input snapshot
    */
-  async storeMasterGrid(botKey, orders = [], btsFeesOwed = null, boundaryIdx = null, assets = null) {
+  async storeMasterGrid(botKey, orders = [], btsFeesOwed = null, boundaryIdx = null, assets = null, debugInputs = null) {
     if (!botKey) return;
 
     // Use AsyncLock to serialize read-modify-write operations (fixes Issue #1, #5)
@@ -322,6 +358,7 @@ class AccountOrders {
       this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
 
       const snapshot = Array.isArray(orders) ? orders.map(order => this._serializeOrder(order)) : [];
+      const debugSnapshot = debugInputs ? cloneForDebug(debugInputs) : null;
       if (!this.data.bots[botKey]) {
         const meta = this._buildMeta({ name: null, assetA: null, assetB: null, active: false }, botKey, null);
         this.data.bots[botKey] = {
@@ -330,6 +367,7 @@ class AccountOrders {
           btsFeesOwed: Number.isFinite(btsFeesOwed) ? btsFeesOwed : 0,
           boundaryIdx: Number.isFinite(boundaryIdx) ? boundaryIdx : null,
           assets: assets || null,
+          debugInputs: debugSnapshot,
           processedFills: {},
           createdAt: meta.createdAt,
           lastUpdated: meta.updatedAt
@@ -347,6 +385,10 @@ class AccountOrders {
 
         if (assets) {
           this.data.bots[botKey].assets = assets;
+        }
+
+        if (debugSnapshot) {
+          this.data.bots[botKey].debugInputs = debugSnapshot;
         }
 
         // Initialize processedFills if missing (backward compat)

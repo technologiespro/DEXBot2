@@ -101,7 +101,7 @@ async function testCenterSnapshotWriterUsesOnlyNewCollateralField() {
       bots: {
         testBot: {
           botName: 'test-bot',
-          centerPrice: 123.45,
+          gridCenterPrice: 123.45,
           amaCenterPrice: 120.5,
           lastGridResetAt: '2026-01-01T00:00:00Z',
           lastAmaPrice: 121.25,
@@ -124,6 +124,8 @@ async function testCenterSnapshotWriterUsesOnlyNewCollateralField() {
     const write = capturedWrites.find((entry) => entry.filePath && String(entry.filePath).endsWith('.tmp'));
     assert(write, 'snapshot writer should emit a JSON payload');
 	    const parsed = JSON.parse(write.data);
+	    assert.strictEqual(parsed.bots.testBot.gridCenterPrice, 123.45);
+	    assert.strictEqual(parsed.bots.testBot.centerPrice, 123.45);
 	    assert.strictEqual(parsed.bots.testBot.collateralRecommendation, 1.62);
 	    assert.strictEqual(parsed.bots.testBot.amaSlopeDeltaPercent, 0.12);
 	    assert.strictEqual(parsed.bots.testBot.amaSlopeThresholdPercent, 0.1);

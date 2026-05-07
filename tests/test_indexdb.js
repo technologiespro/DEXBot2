@@ -1,6 +1,10 @@
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const { AccountOrders, createBotKey } = require('../modules/account_orders');
+const { OrderManager, utils } = require('../modules/order');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 
 async function main() {
@@ -30,6 +34,54 @@ async function main() {
   const resByName = db.getDBAssetBalances('My Bot');
   assert(resByName, 'Expected non-null result for bot name');
   assert.deepStrictEqual(resByKey, resByName);
+
+  const debugBotKey = createBotKey({ name: 'Debug Bot' }, 0);
+  const tempOrdersDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot2-indexdb-'));
+  try {
+    const debugDb = new AccountOrders({
+      botKey: debugBotKey,
+      profilesPath: path.join(tempOrdersDir, `${debugBotKey}.json`)
+    });
+    const manager = new OrderManager({
+      name: 'Debug Bot',
+      botKey: debugBotKey,
+      assetA: 'ASSET.A',
+      assetB: 'ASSET.B',
+      privateKey: 'should-not-persist',
+      botHmacSecret: 'should-not-persist'
+    });
+    manager.accountOrders = debugDb;
+    manager.assets = {
+      assetA: { symbol: 'ASSET.A', precision: 5 },
+      assetB: { symbol: 'ASSET.B', precision: 5 }
+    };
+    manager.accountTotals = { buy: 10, sell: 20, buyFree: 8, sellFree: 18 };
+    manager._lastGridPricingContext = {
+      requestedStartPrice: 1,
+      effectiveStartPrice: 1.1,
+      gridPriceInput: 'ama',
+      effectiveGridPrice: 1.1,
+      gridPriceSource: 'ama'
+    };
+    manager.funds.btsFeesOwed = 0.01;
+
+    await utils.persistGridSnapshot(manager, debugDb, debugBotKey);
+
+    const debugEntry = debugDb._loadData().bots[debugBotKey];
+    assert(debugEntry.debugInputs, 'Expected debug input snapshot to persist');
+    assert.strictEqual(debugEntry.debugInputs.config.assetA, 'ASSET.A');
+    assert.strictEqual(debugEntry.debugInputs.accountTotals.buyFree, 8);
+    assert.strictEqual(debugEntry.debugInputs.pricing.effectiveGridPrice, 1.1);
+    assert.strictEqual(debugEntry.debugInputs.assets, undefined);
+    assert.strictEqual(debugEntry.debugInputs.boundaryIdx, undefined);
+    assert.strictEqual(debugEntry.debugInputs.orderCount, undefined);
+    assert.strictEqual(debugEntry.debugInputs.botKey, undefined);
+    assert.strictEqual(debugEntry.debugInputs.runtimeState, undefined);
+    assert.strictEqual(debugEntry.debugInputs.config.privateKey, '[REDACTED]');
+    assert.strictEqual(debugEntry.debugInputs.config.botHmacSecret, '[REDACTED]');
+  } finally {
+    fs.rmSync(tempOrdersDir, { recursive: true, force: true });
+  }
 
   console.log('AccountOrders getDBAssetBalances tests passed');
   process.exit(0);

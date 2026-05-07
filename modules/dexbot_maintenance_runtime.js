@@ -412,13 +412,14 @@ function refreshAmaCenterSnapshotForManualReset(botKey) {
         return false;
     }
 
-    const currentCenterPrice = Number(snapshot?.centerPrice);
+    const currentCenterPrice = Number(snapshot?.gridCenterPrice ?? snapshot?.centerPrice);
     if (Number.isFinite(currentCenterPrice) && currentCenterPrice === amaCenterPrice) {
         return true;
     }
 
     const updatedSnapshot = {
         ...snapshot,
+        gridCenterPrice: amaCenterPrice,
         centerPrice: amaCenterPrice,
         updatedAt: new Date().toISOString(),
     };

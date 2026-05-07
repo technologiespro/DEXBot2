@@ -511,6 +511,9 @@ class Grid {
             }
         }
 
+        const configuredStartPrice = manager.config.startPrice;
+        const configuredMinPrice = manager.config.minPrice;
+        const configuredMaxPrice = manager.config.maxPrice;
         const mp = Number(manager.config.startPrice);
 
         // Derive gridPrice — separate reference for x-factor bounds (may differ from startPrice).
@@ -545,7 +548,7 @@ class Grid {
             }
         } else if (/^ama(?:[1-4])?$/.test(gpMode || '')) {
             amaSnapshot = loadAmaCenterSnapshot(manager.config.botKey);
-            const amaCenter = amaSnapshot?.centerPrice ?? loadAmaCenterPrice(manager.config.botKey);
+            const amaCenter = amaSnapshot?.gridCenterPrice ?? loadAmaCenterPrice(manager.config.botKey);
             if (Number.isFinite(amaCenter) && amaCenter > 0) {
                 gp = amaCenter;
                 gpSource = 'ama';
@@ -615,6 +618,28 @@ class Grid {
 
         manager.config.minPrice = resolvedMinP;
         manager.config.maxPrice = resolvedMaxP;
+        manager._lastGridPricingContext = {
+            requestedStartPrice: configuredStartPrice,
+            effectiveStartPrice: gridStartPrice,
+            gridPriceInput: gpRaw ?? null,
+            effectiveGridPrice: gp,
+            gridPriceSource: gpSource,
+            configuredMinPrice,
+            configuredMaxPrice,
+            resolvedMinPrice: resolvedMinP,
+            resolvedMaxPrice: resolvedMaxP,
+            amaSnapshot: amaSnapshot ? {
+                centerPrice: amaSnapshot.centerPrice,
+                amaCenterPrice: amaSnapshot.amaCenterPrice,
+                source: amaSnapshot.source,
+                updatedAt: amaSnapshot.updatedAt,
+                amaSlopePercentMode: amaSnapshot.amaSlopePercentMode,
+                amaSlope: amaSnapshot.amaSlope,
+                gridRangeScalingAmaSlope: amaSnapshot.gridRangeScalingAmaSlope,
+                amaSlopeDeltaPercent: amaSnapshot.amaSlopeDeltaPercent,
+                amaSlopeThresholdPercent: amaSnapshot.amaSlopeThresholdPercent
+            } : null
+        };
 
         // Ensure percentage-based funds are resolved before sizing
         try {

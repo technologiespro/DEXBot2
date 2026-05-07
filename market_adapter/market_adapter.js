@@ -1029,7 +1029,7 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
  * corrections, etc.) — not only on grid reset — so fresh weights are applied to new orders.
  * Uses write-then-rename to prevent partial reads by the dexbot process.
  * @param {string} botKey      - Bot key (e.g. "iob-xrp-bts-0")
- * @param {number} centerPrice - Current AMA-derived center price (B/A format)
+ * @param {number} gridCenterPrice - Current persisted grid center price (B/A format)
  * @param {Object} options
  * @param {number} [options.amaCenterPrice]   - Raw AMA center price before any downstream handling
  * @param {Object} [options.amaSlope]         - Raw AMA slope snapshot used for grid-scaling diagnostics
@@ -1038,16 +1038,17 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
  * @param {number} [options.amaSlopeThresholdPercent] - Trigger threshold used for slope-based recalc decisions
  * @param {Object} [options.dynamicWeights]   - Computed weight offsets for live order sizing
  */
-function writeBotDynamicGrid(botKey, centerPrice, options = {}) {
+function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
     try {
         ensureDir(ORDERS_DIR);
         const filePath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
         const tmpPath = `${filePath}.tmp`;
         const amaCenterPrice = Number(options.amaCenterPrice);
-        const resolvedCenterPrice = Math.round(Number(centerPrice) * 1e8) / 1e8;
+        const resolvedGridCenterPrice = Math.round(Number(gridCenterPrice) * 1e8) / 1e8;
         const payload = {
-            centerPrice: resolvedCenterPrice,
-            amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : resolvedCenterPrice,
+            gridCenterPrice: resolvedGridCenterPrice,
+            centerPrice: resolvedGridCenterPrice,
+            amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : resolvedGridCenterPrice,
             amaSlopePercentMode: AMA_SLOPE_PERCENT_MODE_PER_BAR,
             updatedAt: new Date().toISOString(),
             source: 'market_adapter/market_adapter.js',
@@ -1120,9 +1121,11 @@ function writeCenterSnapshot(state) {
         bots: {},
     };
     for (const [botKey, v] of Object.entries(state.bots || {})) {
+        const gridCenterPrice = v.gridCenterPrice ?? v.centerPrice;
         centers.bots[botKey] = {
             botName: v.botName,
-            centerPrice: v.centerPrice,
+            gridCenterPrice,
+            centerPrice: gridCenterPrice,
             amaCenterPrice: v.amaCenterPrice,
             lastGridResetAt: v.lastGridResetAt,
             lastAmaPrice: v.lastAmaPrice,

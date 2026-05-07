@@ -1706,6 +1706,76 @@ async function testNoTriggerWhenCenterMatchesAma() {
     assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'stored center should remain unchanged');
 }
 
+async function testGridCenterPriceOnlyStateRestoresBaseline() {
+    let triggerWrites = 0;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 5 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateCandles(110, 100) }),
+        saveJson: () => {},
+        calculateBotThreshold: () => 0.25,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => {
+            triggerWrites += 1;
+            return '/tmp/recalculate.xrp-bts-grid-center.trigger';
+        },
+        writeBotDynamicGrid: () => true,
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-grid-center',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-grid-center': {
+                gridCenterPrice: 100,
+                amaCenterPrice: 100,
+            },
+        },
+    };
+
+    const result = await service.processBot(bot, state, {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    }, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.strictEqual(result.deltaPercent, 0, 'gridCenterPrice-only state should be used as the reset baseline');
+    assert.strictEqual(result.triggered, false, 'gridCenterPrice-only state should not bootstrap a new reset');
+    assert.strictEqual(triggerWrites, 0, 'trigger file must not be written');
+    assert.strictEqual(state.bots['xrp-bts-grid-center'].gridCenterPrice, 100);
+    assert.strictEqual(state.bots['xrp-bts-grid-center'].centerPrice, 100, 'compatibility alias should be restored');
+}
+
 // Center is clamped to bot.minPrice/maxPrice bounds when AMA drifts outside them.
 async function testCenterClampedByBotBounds() {
     let triggerWrites = 0;
@@ -4390,7 +4460,21 @@ async function testDynamicWeightWeightOnlyWritesPersistOnClosedCandle() {
         weightDistribution: { sell: 0.6, buy: 0.4 },
     };
 
-    const state = { bots: { 'xrp-bts-dw-persist': { centerPrice: 100 } } };
+    const previousGridResetAmaSlope = {
+        trend: 'UP',
+        slopePct: 0.25,
+        slopeOffset: 0.1,
+        isReady: true,
+    };
+    const state = {
+        bots: {
+            'xrp-bts-dw-persist': {
+                centerPrice: 100,
+                amaSlopePercentMode: 'perBar',
+                gridRangeScalingAmaSlope: previousGridResetAmaSlope,
+            },
+        },
+    };
     const cfg = {
         intervalSeconds: 3600,
         bootstrapLookbackHours: 1200,
@@ -4412,6 +4496,8 @@ async function testDynamicWeightWeightOnlyWritesPersistOnClosedCandle() {
     assert.strictEqual(secondResult.pendingClosedCandle, true, 'second poll with no new closed candle should be skipped');
     assert.strictEqual(writeCount, 1, 'weight-only dynamic weights should only persist when a new closed candle is available');
     assert.deepStrictEqual(lastPayload.dynamicWeights.effectiveWeights, firstWeights, 'identical closed-candle data should yield identical effective weights');
+    assert.deepStrictEqual(lastPayload.gridRangeScalingAmaSlope, previousGridResetAmaSlope, 'weight-only snapshot should preserve the last grid-reset slope baseline');
+    assert.deepStrictEqual(state.bots['xrp-bts-dw-persist'].gridRangeScalingAmaSlope, previousGridResetAmaSlope, 'weight-only state update should not advance the reset slope baseline');
 }
 
 async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
@@ -4891,6 +4977,7 @@ async function run() {
     await testBootstrapCenterDoesNotAdvanceWhenPersistFails();
     await testCenterEqualsAmaTriggeredByAmaDelta();
     await testNoTriggerWhenCenterMatchesAma();
+    await testGridCenterPriceOnlyStateRestoresBaseline();
     await testCenterClampedByBotBounds();
     await testContextCacheInvalidatesOnPoolChange();
     await testKibanaGapRepairPatchesMissingCandles();
