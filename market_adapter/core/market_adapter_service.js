@@ -1779,6 +1779,76 @@ class MarketAdapterService {
         let snapshotPersistedThisCycle = false;
         let previousCenterPrice = Number(botState.centerPrice || 0);
 
+        const buildDynamicGridOptions = (options = {}) => ({
+            amaCenterPrice: amaPrice,
+            amaSlope: options.amaSlope ?? amaSlope,
+            gridRangeScalingAmaSlope: options.gridRangeScalingAmaSlope ?? (amaSlope || previousGridResetAmaSlope || null),
+            amaSlopeDeltaPercent,
+            amaSlopeThresholdPercent,
+            ...(options.previousCenterPrice !== undefined
+                ? { previousCenterPrice: options.previousCenterPrice }
+                : {}),
+            ...(dynamicSnapshotPayload
+                ? { dynamicWeights: dynamicSnapshotPayload }
+                : {}),
+        });
+
+        const persistDynamicGridSnapshot = (snapshotCenterPrice, options = {}) => {
+            if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
+                return deps.writeBotDynamicGrid(
+                    bot.botKey,
+                    snapshotCenterPrice,
+                    buildDynamicGridOptions(options),
+                ) !== false;
+            }
+            if (isDryRun) {
+                dryRunMessages.push(`[DRY RUN] Would write dynamic grid for ${bot.botKey}: ${snapshotCenterPrice}`);
+            }
+            return true;
+        };
+
+        const advanceTriggeredBotState = (newCenterPrice, options = {}) => {
+            snapshotPersistedThisCycle = true;
+            botState.centerPrice = newCenterPrice;
+            botState.amaCenterPrice = amaPrice;
+            botState.lastGridResetAt = nowIso;
+            botState.amaSlope = options.amaSlope ?? (amaSlope || previousAmaSlope || null);
+            botState.gridRangeScalingAmaSlope = options.gridRangeScalingAmaSlope ?? (amaSlope || previousGridResetAmaSlope || null);
+            botState.amaSlopeDeltaPercent = Number.isFinite(amaSlopeDeltaPercent)
+                ? amaSlopeDeltaPercent
+                : botState.amaSlopeDeltaPercent ?? null;
+            botState.amaSlopeThresholdPercent = amaSlopeThresholdPercent;
+            botState.triggerCount = Number(botState.triggerCount || 0) + 1;
+            if (canApplyDynamicWeights && dynamicWeightsPayload) {
+                botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
+            }
+            triggered = true;
+        };
+
+        const writeTriggerAndNotify = async ({ triggerPayload, hookPayload, dryRunMessage }) => {
+            if (!isDryRun) {
+                triggerPath = deps.writeGridResetTrigger(bot, triggerPayload);
+            } else {
+                dryRunMessages.push(dryRunMessage);
+            }
+
+            if (typeof hooks.onTrigger === 'function') {
+                try {
+                    await hooks.onTrigger({
+                        bot,
+                        botKey: bot.botKey,
+                        botName: bot.name,
+                        poolId: ctx.poolId,
+                        ...hookPayload,
+                        triggerPath,
+                        marketSource,
+                    });
+                } catch (err) {
+                    triggerCallbackError = err.message;
+                }
+            }
+        };
+
         if (!staleData && Number.isFinite(referencePrice) && referencePrice > 0) {
             // Bootstrap when market-adapter state is missing (e.g. after clearing)
             // or when a bot runs for the first time.
@@ -1787,37 +1857,18 @@ class MarketAdapterService {
                     ? centerPrice
                     : referencePrice;
 
-                let amaCenterPersisted = true;
-                if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
-                    amaCenterPersisted = deps.writeBotDynamicGrid(bot.botKey, bootstrapCenterPrice, {
-                        amaCenterPrice: amaPrice,
-                        amaSlope: amaSlope || previousAmaSlope || null,
-                        gridRangeScalingAmaSlope: amaSlope || previousGridResetAmaSlope || null,
-                        amaSlopeDeltaPercent,
-                        amaSlopeThresholdPercent,
-                        ...(dynamicSnapshotPayload
-                            ? { dynamicWeights: dynamicSnapshotPayload }
-                            : {}),
-                    }) !== false;
-                } else if (isDryRun) {
-                    dryRunMessages.push(`[DRY RUN] Would write dynamic grid for ${bot.botKey}: ${bootstrapCenterPrice}`);
-                }
+                const amaCenterPersisted = persistDynamicGridSnapshot(bootstrapCenterPrice, {
+                    amaSlope: amaSlope || previousAmaSlope || null,
+                });
 
                 if (amaCenterPersisted) {
-                    snapshotPersistedThisCycle = true;
-                    botState.centerPrice = bootstrapCenterPrice;
-                    botState.amaCenterPrice = amaPrice;
-                    botState.lastGridResetAt = nowIso;
-                    botState.amaSlope = amaSlope || previousAmaSlope || null;
-                    botState.gridRangeScalingAmaSlope = amaSlope || previousGridResetAmaSlope || null;
-                    botState.amaSlopeDeltaPercent = Number.isFinite(amaSlopeDeltaPercent)
-                        ? amaSlopeDeltaPercent
-                        : botState.amaSlopeDeltaPercent ?? null;
-                    botState.amaSlopeThresholdPercent = amaSlopeThresholdPercent;
+                    advanceTriggeredBotState(bootstrapCenterPrice, {
+                        amaSlope: amaSlope || previousAmaSlope || null,
+                    });
                     // First-ever bootstrap — no previous center anywhere.
                     // Create a trigger so the bot recalibrates to the new center.
-                    if (!isDryRun) {
-                        triggerPath = deps.writeGridResetTrigger(bot, {
+                    await writeTriggerAndNotify({
+                        triggerPayload: {
                             reason: 'market_adapter_bootstrap',
                             newCenterPrice: bootstrapCenterPrice,
                             referencePrice,
@@ -1827,37 +1878,17 @@ class MarketAdapterService {
                             amaSlopeThresholdPercent,
                             poolId: ctx.poolId,
                             marketSource,
-                        });
-                    } else {
-                        dryRunMessages.push(`[DRY RUN] Would write grid reset trigger for ${bot.botKey} (bootstrap)`);
-                    }
-                    triggered = true;
-                    botState.triggerCount = Number(botState.triggerCount || 0) + 1;
-
-                    if (typeof hooks.onTrigger === 'function') {
-                        try {
-                            await hooks.onTrigger({
-                                bot,
-                                botKey: bot.botKey,
-                                botName: bot.name,
-                                poolId: ctx.poolId,
-                                thresholdPercent: botThreshold,
-                                deltaPercent: null,
-                                previousCenterPrice: undefined,
-                                newCenterPrice: bootstrapCenterPrice,
-                                referencePrice,
-                                rawAmaPrice: amaPrice,
-                                triggerPath,
-                                marketSource,
-                            });
-                        } catch (err) {
-                            triggerCallbackError = err.message;
-                        }
-                    }
-
-                    if (canApplyDynamicWeights && dynamicWeightsPayload) {
-                        botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
-                    }
+                        },
+                        hookPayload: {
+                            thresholdPercent: botThreshold,
+                            deltaPercent: null,
+                            previousCenterPrice: undefined,
+                            newCenterPrice: bootstrapCenterPrice,
+                            referencePrice,
+                            rawAmaPrice: amaPrice,
+                        },
+                        dryRunMessage: `[DRY RUN] Would write grid reset trigger for ${bot.botKey} (bootstrap)`,
+                    });
                 } else {
                     triggerSuppressedReason = 'ama_center_persist_failed';
                 }
@@ -1868,30 +1899,16 @@ class MarketAdapterService {
             if (!triggered && Number.isFinite(previousCenterPrice) && previousCenterPrice > 0) {
                 deltaPercent = Math.abs((centerPrice - previousCenterPrice) / previousCenterPrice) * 100;
                 if (deltaPercent >= botThreshold) {
-                    let amaCenterPersisted = true;
-
-                    if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
-                        amaCenterPersisted = deps.writeBotDynamicGrid(bot.botKey, centerPrice, {
-                            amaCenterPrice: amaPrice,
-                            previousCenterPrice,
-                            amaSlope,
-                            gridRangeScalingAmaSlope: amaSlope || previousGridResetAmaSlope || null,
-                            amaSlopeDeltaPercent,
-                            amaSlopeThresholdPercent,
-                            ...(dynamicSnapshotPayload
-                                ? { dynamicWeights: dynamicSnapshotPayload }
-                                : {}),
-                        }) !== false;
-                    } else if (isDryRun) {
-                        dryRunMessages.push(`[DRY RUN] Would write dynamic grid for ${bot.botKey}: ${centerPrice}`);
-                    }
+                    const amaCenterPersisted = persistDynamicGridSnapshot(centerPrice, {
+                        previousCenterPrice,
+                    });
 
                     if (!amaCenterPersisted) {
                         triggerSuppressedReason = 'ama_center_persist_failed';
                     } else {
-                        snapshotPersistedThisCycle = true;
-                        if (!isDryRun) {
-                            triggerPath = deps.writeGridResetTrigger(bot, {
+                        advanceTriggeredBotState(centerPrice);
+                        await writeTriggerAndNotify({
+                            triggerPayload: {
                                 reason: 'market_adapter_delta_threshold',
                                 thresholdPercent: botThreshold,
                                 deltaPercent,
@@ -1904,73 +1921,30 @@ class MarketAdapterService {
                                 amaSlopeThresholdPercent,
                                 poolId: ctx.poolId,
                                 marketSource,
-                            });
-                        } else {
-                            dryRunMessages.push(`[DRY RUN] Would write grid reset trigger for ${bot.botKey}`);
-                        }
-                        botState.centerPrice = centerPrice;
-                        botState.amaCenterPrice = amaPrice;
-                        botState.lastGridResetAt = nowIso;
-                        botState.amaSlope = amaSlope || previousAmaSlope || null;
-                        botState.gridRangeScalingAmaSlope = amaSlope || previousGridResetAmaSlope || null;
-                        botState.amaSlopeDeltaPercent = Number.isFinite(amaSlopeDeltaPercent)
-                            ? amaSlopeDeltaPercent
-                            : botState.amaSlopeDeltaPercent ?? null;
-                        botState.amaSlopeThresholdPercent = amaSlopeThresholdPercent;
-                        botState.triggerCount = Number(botState.triggerCount || 0) + 1;
-                        // Grid reset only syncs live weights when the dynamic-weight whitelist permits it.
-                        if (canApplyDynamicWeights && dynamicWeightsPayload) {
-                            botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
-                        }
-                        triggered = true;
-
-                        if (typeof hooks.onTrigger === 'function') {
-                            try {
-                                await hooks.onTrigger({
-                                    bot,
-                                    botKey: bot.botKey,
-                                    botName: bot.name,
-                                    poolId: ctx.poolId,
-                                    thresholdPercent: botThreshold,
-                                    deltaPercent,
-                                    previousCenterPrice,
-                                    newCenterPrice: centerPrice,
-                                    referencePrice,
-                                    rawAmaPrice: amaPrice,
-                                    triggerPath,
-                                    marketSource,
-                                });
-                            } catch (err) {
-                                triggerCallbackError = err.message;
-                            }
-                        }
+                            },
+                            hookPayload: {
+                                thresholdPercent: botThreshold,
+                                deltaPercent,
+                                previousCenterPrice,
+                                newCenterPrice: centerPrice,
+                                referencePrice,
+                                rawAmaPrice: amaPrice,
+                            },
+                            dryRunMessage: `[DRY RUN] Would write grid reset trigger for ${bot.botKey}`,
+                        });
                     }
                 }
             }
 
             if (!triggered && !triggerSuppressedReason && isGridRangeScalingWhitelisted && amaSlopeResetDetails.shouldTrigger) {
-                let amaSlopePersisted = true;
-                if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
-                    amaSlopePersisted = deps.writeBotDynamicGrid(bot.botKey, centerPrice, {
-                        amaCenterPrice: amaPrice,
-                        amaSlope,
-                        gridRangeScalingAmaSlope: amaSlope || previousGridResetAmaSlope || null,
-                        amaSlopeDeltaPercent,
-                        amaSlopeThresholdPercent,
-                        ...(dynamicSnapshotPayload
-                            ? { dynamicWeights: dynamicSnapshotPayload }
-                            : {}),
-                    }) !== false;
-                } else if (isDryRun) {
-                    dryRunMessages.push(`[DRY RUN] Would write dynamic grid for ${bot.botKey}: ${centerPrice}`);
-                }
+                const amaSlopePersisted = persistDynamicGridSnapshot(centerPrice);
 
                 if (!amaSlopePersisted) {
                     triggerSuppressedReason = 'ama_slope_persist_failed';
                 } else {
-                    snapshotPersistedThisCycle = true;
-                    if (!isDryRun) {
-                        triggerPath = deps.writeGridResetTrigger(bot, {
+                    advanceTriggeredBotState(centerPrice);
+                    await writeTriggerAndNotify({
+                        triggerPayload: {
                             reason: 'market_adapter_ama_slope_delta_threshold',
                             thresholdPercent: amaSlopeThresholdPercent,
                             deltaPercent: amaSlopeDeltaPercent,
@@ -1985,50 +1959,22 @@ class MarketAdapterService {
                             rawAmaPrice: amaPrice,
                             poolId: ctx.poolId,
                             marketSource,
-                        });
-                    } else {
-                        dryRunMessages.push(`[DRY RUN] Would write grid reset trigger for ${bot.botKey} (AMA slope)`);
-                    }
-                    botState.centerPrice = centerPrice;
-                    botState.amaCenterPrice = amaPrice;
-                    botState.lastGridResetAt = nowIso;
-                    botState.amaSlope = amaSlope || previousAmaSlope || null;
-                    botState.gridRangeScalingAmaSlope = amaSlope || previousGridResetAmaSlope || null;
-                    botState.amaSlopeDeltaPercent = Number.isFinite(amaSlopeDeltaPercent)
-                        ? amaSlopeDeltaPercent
-                        : botState.amaSlopeDeltaPercent ?? null;
-                    botState.amaSlopeThresholdPercent = amaSlopeThresholdPercent;
-                    botState.triggerCount = Number(botState.triggerCount || 0) + 1;
-                    if (canApplyDynamicWeights && dynamicWeightsPayload) {
-                        botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
-                    }
-                    triggered = true;
-
-                    if (typeof hooks.onTrigger === 'function') {
-                        try {
-                            await hooks.onTrigger({
-                                bot,
-                                botKey: bot.botKey,
-                                botName: bot.name,
-                                poolId: ctx.poolId,
-                                thresholdPercent: amaSlopeThresholdPercent,
-                                deltaPercent: amaSlopeDeltaPercent,
-                                previousAmaSlope,
-                                previousGridResetAmaSlope,
-                                amaSlope,
-                                amaSlopeDeltaPercent,
-                                amaSlopeThresholdPercent,
-                                previousCenterPrice,
-                                newCenterPrice: centerPrice,
-                                referencePrice,
-                                rawAmaPrice: amaPrice,
-                                triggerPath,
-                                marketSource,
-                            });
-                        } catch (err) {
-                            triggerCallbackError = err.message;
-                        }
-                    }
+                        },
+                        hookPayload: {
+                            thresholdPercent: amaSlopeThresholdPercent,
+                            deltaPercent: amaSlopeDeltaPercent,
+                            previousAmaSlope,
+                            previousGridResetAmaSlope,
+                            amaSlope,
+                            amaSlopeDeltaPercent,
+                            amaSlopeThresholdPercent,
+                            previousCenterPrice,
+                            newCenterPrice: centerPrice,
+                            referencePrice,
+                            rawAmaPrice: amaPrice,
+                        },
+                        dryRunMessage: `[DRY RUN] Would write grid reset trigger for ${bot.botKey} (AMA slope)`,
+                    });
                 }
             }
         }
