@@ -359,6 +359,7 @@ function testUptrendSlopeOffsetTable() {
     // ATR/price = 0.00 → delta=0 → derived weights reflect the 0.5 neutral center
     let r = computeAmaSlopeWeights(values, 0.00, opts);
     assert.strictEqual(r.slopeOffset, 0.33);
+    assert.ok(Math.abs(r.rawSlopeOffset - (1 / 3)) < 1e-12);
     assert.deepStrictEqual(derivedWeights(r), { sellW: 0.83, buyW: 0.17 });
 
     // ATR/price = 0.0025 → suppressed → same as zero vol

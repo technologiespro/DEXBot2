@@ -3587,6 +3587,23 @@ function testAppliedAsymmetryMetricsClampToSafeBounds() {
     assert.strictEqual(metrics.maxAsymmetryFactor, 0.35, 'resolved maxAsymmetryFactor should be preserved');
 }
 
+function testAppliedAsymmetryMetricsPreferRawSlopeOffset() {
+    const service = new MarketAdapterService();
+    const metrics = service.computeAppliedAsymmetryMetrics({
+        minPrice: '2x',
+        maxPrice: '2x',
+        asymmetricBounds: { maxAsymmetryFactor: 0.35 },
+    }, 100, {
+        slopeOffset: 0.01,
+        rawSlopeOffset: 0.01896502787963161,
+        maxSlopeOffset: 0.5,
+        trend: 'DOWN',
+    });
+
+    assert.ok(Math.abs(metrics.rawAsymmetryFactor - 0.013275519515742126) < 1e-12,
+        'range asymmetry should use the precise offset instead of the rounded weight offset');
+}
+
 async function testIdOnlyBotIsNotRejected() {
     const service = new MarketAdapterService({
         resolveBotContext: async () => ({
@@ -4893,6 +4910,7 @@ async function run() {
     await testClosedCandlePruningRetainsFullDynamicWeightWarmup();
     testSleepUntilAlignedBoundaryAnchorsToCycleStart();
     testAppliedAsymmetryMetricsClampToSafeBounds();
+    testAppliedAsymmetryMetricsPreferRawSlopeOffset();
     await testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights();
     await testDynamicWeightMinOutputThresholdZeroDisablesGate();
     await testDynamicWeightGainScalesOutputLinearly();

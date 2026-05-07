@@ -154,6 +154,7 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
 
     return {
         slopeOffset: roundedSlopeOffset,
+        rawSlopeOffset: slopeOffset,
         symmetricDelta: roundedSymmetricDelta,
         slopePct,
         clippedSlopePct,

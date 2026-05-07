@@ -280,7 +280,9 @@ class MarketAdapterService {
             minPrice: minP,
             maxPrice: maxP,
             trend: dynamicWeights?.trend,
-            slopeOffset: dynamicWeights?.slopeOffset,
+            slopeOffset: Number.isFinite(dynamicWeights?.rawSlopeOffset)
+                ? dynamicWeights.rawSlopeOffset
+                : dynamicWeights?.slopeOffset,
             maxSlopeOffset: dynamicWeights?.maxSlopeOffset,
             maxAsymmetryFactor,
         });
@@ -687,6 +689,7 @@ class MarketAdapterService {
             confidence:     slopeResult.confidence,
             slopePct:       slopeResult.slopePct,
             slopeOffset:    slopeResult.slopeOffset,
+            rawSlopeOffset: slopeResult.rawSlopeOffset,
             amaSlopeGated,
             regimeMultiplier,
             symmetricDelta: slopeResult.symmetricDelta,
@@ -740,6 +743,7 @@ class MarketAdapterService {
                 confidence:              slopeResult.confidence,
                 slopePct:                slopeResult.slopePct,
                 slopeOffset:             slopeResult.slopeOffset,
+                rawSlopeOffset:          slopeResult.rawSlopeOffset,
                 amaSlopeGated,
                 regimeMultiplier,
                 regimeSensitivity,
@@ -786,6 +790,7 @@ class MarketAdapterService {
             effectiveWeights: { sell: effectiveSell, buy: effectiveBuy },
             baseWeights:      { sell: staticSell,    buy: staticBuy },
             slopeOffset:      slopeResult.slopeOffset,
+            rawSlopeOffset:   slopeResult.rawSlopeOffset,
             amaSlopeGated,
             volatilityPenalty: volPenalty,
             finalOffset:      finalOff,
