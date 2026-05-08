@@ -1,20 +1,7 @@
 'use strict';
 
 const { toIntervalLabel } = require('./candle_utils');
-
-function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, (m) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;',
-    }[m]));
-}
-
-function serializeJsonForScript(value) {
-    return JSON.stringify(value).replace(/</g, '\\u003c');
-}
+const { escapeHtml, serializeJsonForScript } = require('../analysis/chart_utils');
 
 function formatPct(v) {
     const num = Number(v);

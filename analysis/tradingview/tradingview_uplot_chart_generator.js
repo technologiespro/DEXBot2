@@ -1407,6 +1407,5 @@ function generateHTML(data, title = 'TradingView Style Research') {
 
 module.exports = {
     generateHTML,
-    inferBaseIntervalSeconds,
     normalizeCandle,
 };

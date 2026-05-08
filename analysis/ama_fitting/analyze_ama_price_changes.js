@@ -106,12 +106,6 @@ function trackRepositions(amaValues, thresholds, erPeriod) {
     return result;
 }
 
-// ── Formatting ────────────────────────────────────────────────────────────────
-
-function pad(s, w) {
-    return String(s).padStart(w);
-}
-
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 function run() {

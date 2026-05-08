@@ -32,15 +32,11 @@ function buildWeightSummary(weights) {
     return weights ? ` weights(sell/buy)=${formatLogPair(weights.sell, weights.buy, 2)}` : '';
 }
 
-function buildDynamicWeightInputsLog(meta, amaConfig, options = {}) {
-    const asymmetricBoundsWhitelisted = options.asymmetricBoundsWhitelisted === true;
+function buildDynamicWeightInputsLog(meta, amaConfig) {
     return [
         `ama=${formatAmaTuple(amaConfig)}`,
         `base=${formatLogPair(meta?.staticSell, meta?.staticBuy, 2)}`,
         `clamp=${formatLogPair(meta?.maxSlopeOffset, meta?.maxVolatilityOffset, 2)}`,
-        `asymCap=${asymmetricBoundsWhitelisted ? formatAsymmetryFactor(meta?.maxAsymmetryFactor, 0) : 'n/a'}`,
-        `rawAsym=${asymmetricBoundsWhitelisted ? formatAsymmetryFactor(meta?.rawAsymmetryFactor) : 'n/a'}`,
-        `appliedAsym=${asymmetricBoundsWhitelisted ? formatAsymmetryFactor(meta?.appliedAsymmetryFactor) : 'n/a'}`,
         `atr=${formatLogNumber(meta?.atrPeriod, 0)}`,
         `confirm=${Number.isFinite(meta?.signalConfirmBars) ? Math.round(meta.signalConfirmBars) : 'n/a'}`,
     ].join(' | ');
@@ -63,7 +59,7 @@ function buildDynamicWeightTuningLog(meta) {
 }
 
 function buildAsymmetricBoundsLog(meta) {
-    return `raw=${formatAsymmetryFactor(meta?.rawAsymmetryFactor)}, applied=${formatAsymmetryFactor(meta?.appliedAsymmetryFactor)}, maxAsym=${formatAsymmetryFactor(meta?.maxAsymmetryFactor, 0)}`;
+    return `raw=${formatAsymmetryFactor(meta?.rawAsymmetryFactor, 2)}, applied=${formatAsymmetryFactor(meta?.appliedAsymmetryFactor, 2)}, maxAsym=${formatAsymmetryFactor(meta?.maxAsymmetryFactor, 0)}`;
 }
 
 function buildStartupDefaultsLog(defaultAma, defaultConfig, marketAdapterCfg) {

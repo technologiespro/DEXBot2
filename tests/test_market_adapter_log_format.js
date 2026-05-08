@@ -23,53 +23,25 @@ function testBuildWeightSummaryFormatsSellBuyOrder() {
     assert.strictEqual(buildWeightSummary(null), '', 'missing weights should yield an empty suffix');
 }
 
-function testBuildDynamicWeightInputsLogMasksAsymmetryWhenDisabled() {
+function testBuildDynamicWeightInputsLogFormatsFields() {
     const text = buildDynamicWeightInputsLog({
         staticSell: 0.6,
         staticBuy: 0.4,
         maxSlopeOffset: 0.5,
         maxVolatilityOffset: 0.25,
-        maxAsymmetryFactor: 0.35,
-        rawAsymmetryFactor: 0.24,
-        appliedAsymmetryFactor: 0.11,
         atrPeriod: 14,
         signalConfirmBars: 2,
     }, {
         erPeriod: 781,
         fastPeriod: 5.2,
         slowPeriod: 112.7,
-    }, {
-        asymmetricBoundsWhitelisted: false,
     });
 
     assert.ok(text.includes('ama=781/5.2/112.7'), 'AMA tuple should be included');
     assert.ok(text.includes('base=0.60/0.40'), 'base weights should be formatted');
     assert.ok(text.includes('clamp=0.50/0.25'), 'clamp pair should be formatted');
-    assert.ok(text.includes('asymCap=n/a'), 'asymmetry cap should be hidden when bounds are disabled');
-    assert.ok(text.includes('rawAsym=n/a'), 'raw asymmetry should be hidden when bounds are disabled');
-    assert.ok(text.includes('appliedAsym=n/a'), 'applied asymmetry should be hidden when bounds are disabled');
     assert.ok(text.includes('atr=14'), 'ATR period should be shown');
     assert.ok(text.includes('confirm=2'), 'confirm bars should be shown');
-}
-
-function testBuildDynamicWeightInputsLogShowsAsymmetryWhenEnabled() {
-    const text = buildDynamicWeightInputsLog({
-        staticSell: 0.6,
-        staticBuy: 0.4,
-        maxSlopeOffset: 0.5,
-        maxVolatilityOffset: 0.25,
-        maxAsymmetryFactor: 0.35,
-        rawAsymmetryFactor: 0.24,
-        appliedAsymmetryFactor: 0.11,
-        atrPeriod: 14,
-        signalConfirmBars: 2,
-    }, null, {
-        asymmetricBoundsWhitelisted: true,
-    });
-
-    assert.ok(text.includes('asymCap=35%'), 'asymmetry cap should be shown when bounds are enabled');
-    assert.ok(text.includes('rawAsym=24.0%'), 'raw asymmetry should be shown when bounds are enabled');
-    assert.ok(text.includes('appliedAsym=11.0%'), 'applied asymmetry should be shown when bounds are enabled');
 }
 
 function testBuildDynamicWeightTuningLogFormatsKnobs() {
@@ -118,7 +90,7 @@ function testBuildAsymmetricBoundsLogFormatsPercentages() {
             appliedAsymmetryFactor: 0.11,
             maxAsymmetryFactor: 0.35,
         }),
-        'raw=24.0%, applied=11.0%, maxAsym=35%',
+        'raw=24.00%, applied=11.00%, maxAsym=35%',
         'asymmetric bounds log should format all percentages consistently'
     );
 }
@@ -133,8 +105,7 @@ function testBuildStartupDefaultsLogReflectsExplicitOnlyDynamicBase() {
 }
 
 testBuildWeightSummaryFormatsSellBuyOrder();
-testBuildDynamicWeightInputsLogMasksAsymmetryWhenDisabled();
-testBuildDynamicWeightInputsLogShowsAsymmetryWhenEnabled();
+testBuildDynamicWeightInputsLogFormatsFields();
 testBuildDynamicWeightTuningLogFormatsKnobs();
 testBuildDynamicWeightTuningLogKeepsTinyAmaKnobsVisible();
 testBuildAsymmetricBoundsLogFormatsPercentages();

@@ -92,9 +92,6 @@ function normalizeCandle(candle) {
 module.exports = {
     range,
     computeATR,
-    getCandleOpen,
-    getCandleHigh,
-    getCandleLow,
     getCandleClose,
     getCandleTimestamp,
     normalizeCandle,

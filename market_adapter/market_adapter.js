@@ -73,7 +73,6 @@ const {
 } = require('../modules/market_adapter_whitelist');
 const kibanaSource = require('./inputs/kibana_source');
 const kibanaMarketSource = require('./core/kibana_market_candles');
-const { normalizePoolId } = kibanaSource;
 const { tradesToCandles, detectMissingCandleTimestamps, fillCandleGaps, detectStaleTail, pruneStaleTail, mergeCandles } = require('./candle_utils');
 const { toIntervalLabel } = require('./interval_utils');
 const {
@@ -804,14 +803,6 @@ function pruneCandles(candles, keepCount) {
     return candles.slice(candles.length - keepCount);
 }
 
-function calcAmaPrice(candles, ama = DEFAULT_AMA) {
-    const closes = (candles || []).map((c) => Number(c?.[4])).filter((v) => Number.isFinite(v) && v > 0);
-    if (closes.length < ama.erPeriod + 1) return null;
-    const values = calculateAMA(closes, ama);
-    const last = values[values.length - 1];
-    return Number.isFinite(last) ? last : null;
-}
-
 function calcAmaComparison(candles, bot = null, ctx = null) {
     const closes = (candles || []).map((c) => Number(c?.[4])).filter((v) => Number.isFinite(v) && v > 0);
     const out = [];
@@ -1043,15 +1034,12 @@ function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
         ensureDir(ORDERS_DIR);
         const filePath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
         const tmpPath = `${filePath}.tmp`;
+        const amaCenterPrice = Number(options.amaCenterPrice);
         const resolvedGridCenterPrice = Math.round(Number(gridCenterPrice) * 1e8) / 1e8;
-        const rawAmaCenterPrice = Number(options.amaCenterPrice);
-        const resolvedAmaCenterPrice = Number.isFinite(rawAmaCenterPrice) && rawAmaCenterPrice > 0
-            ? Math.round(rawAmaCenterPrice * 1e8) / 1e8
-            : resolvedGridCenterPrice;
         const payload = {
             gridCenterPrice: resolvedGridCenterPrice,
             centerPrice: resolvedGridCenterPrice,
-            amaCenterPrice: resolvedAmaCenterPrice,
+            amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : resolvedGridCenterPrice,
             amaSlopePercentMode: AMA_SLOPE_PERCENT_MODE_PER_BAR,
             updatedAt: new Date().toISOString(),
             source: 'market_adapter/market_adapter.js',
@@ -1103,7 +1091,6 @@ const adapterService = new MarketAdapterService({
     pruneStaleTail,
     mergeCandles,
     pruneCandles,
-    calcAmaPrice,
     calcAmaComparison,
     writeGridResetTrigger,
     writeBotDynamicGrid,
@@ -1227,9 +1214,7 @@ async function runOnce(cfg, state, contextCache) {
             }
             if (isOneHourResult && r.weights?.meta) {
                 const m = r.weights.meta;
-                log(cfg, `  Inputs: ${buildDynamicWeightInputsLog(m, r.amaConfig, {
-                    asymmetricBoundsWhitelisted: r.gridRangeScalingWhitelisted,
-                })}`);
+                log(cfg, `  Inputs: ${buildDynamicWeightInputsLog(m, r.amaConfig)}`);
                 log(cfg, `  Tuning: ${buildDynamicWeightTuningLog(m)}`);
                 if (r.gridRangeScalingWhitelisted && m.slopeOffset && m.maxSlopeOffset && m.maxSlopeOffset > 0 && m.trend && m.trend !== 'NEUTRAL') {
                     log(cfg, `  Asymmetric bounds: ${buildAsymmetricBoundsLog(m)}`);

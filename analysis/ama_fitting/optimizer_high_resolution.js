@@ -709,5 +709,4 @@ if (!isMainThread) {
 
 module.exports = {
     parseArgs,
-    updateAmaProfilesFile,
 };

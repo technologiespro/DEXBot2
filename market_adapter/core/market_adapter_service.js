@@ -329,10 +329,10 @@ class MarketAdapterService {
         });
     }
 
-    clampGridPriceToBounds(gridCenterPrice, referencePrice, bot) {
-        const base = Number(gridCenterPrice);
+    clampGridPriceToBounds(centerPrice, referencePrice, bot) {
+        const base = Number(centerPrice);
         const ref = Number(referencePrice);
-        if (!Number.isFinite(base) || base <= 0) return gridCenterPrice;
+        if (!Number.isFinite(base) || base <= 0) return centerPrice;
         try {
             const startPrice = Number.isFinite(ref) && ref > 0 ? ref : base;
             const minP = resolveConfiguredPriceBound(bot?.minPrice, DEFAULT_CONFIG.minPrice, startPrice, 'min');
@@ -344,7 +344,7 @@ class MarketAdapterService {
         }
     }
 
-    computeAppliedAsymmetryMetrics(bot, gridCenterPrice, dynamicWeights) {
+    computeAppliedAsymmetryMetrics(bot, centerPrice, dynamicWeights) {
         const maxAsymmetryFactor = resolveMaxAsymmetryFactor(
             bot?.asymmetricBounds?.maxAsymmetryFactor,
             dynamicWeights?.maxAsymmetryFactor,
@@ -353,11 +353,11 @@ class MarketAdapterService {
         let minP = null;
         let maxP = null;
         try {
-            minP = resolveConfiguredPriceBound(bot?.minPrice, DEFAULT_CONFIG.minPrice, gridCenterPrice, 'min');
-            maxP = resolveConfiguredPriceBound(bot?.maxPrice, DEFAULT_CONFIG.maxPrice, gridCenterPrice, 'max');
+            minP = resolveConfiguredPriceBound(bot?.minPrice, DEFAULT_CONFIG.minPrice, centerPrice, 'min');
+            maxP = resolveConfiguredPriceBound(bot?.maxPrice, DEFAULT_CONFIG.maxPrice, centerPrice, 'max');
         } catch (_) {}
         return computeAsymmetricBoundsMetrics({
-            centerPrice: gridCenterPrice,
+            centerPrice,
             minPrice: minP,
             maxPrice: maxP,
             trend: dynamicWeights?.trend,
@@ -1320,9 +1320,7 @@ class MarketAdapterService {
                     } catch (_) {}
 
                     if (Array.isArray(nativeCandles) && nativeCandles.length > 0) {
-                        nextCandles = deps.mergeCandles(nextCandles, nativeCandles, {
-                            onCollision: (existingCandle, incomingCandle) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
-                        });
+                        nextCandles = deps.mergeCandles(nextCandles, nativeCandles);
                         sourceLabel = 'native-book-history';
                     } else {
                         sourceLabel = 'cached-book';
@@ -1603,9 +1601,7 @@ class MarketAdapterService {
 
                         if (Array.isArray(kibanaGapCandles) && kibanaGapCandles.length > 0) {
                             const beforeTimestamps = new Set(nextCandles.map((c) => c[0]));
-                            nextCandles = deps.mergeCandles(nextCandles, kibanaGapCandles, {
-                                onCollision: (existingCandle, incomingCandle) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
-                            });
+                            nextCandles = deps.mergeCandles(nextCandles, kibanaGapCandles);
                             const afterTimestamps = new Set(nextCandles.map((c) => c[0]));
                             kibanaGapRepairTimestamps = gapAnalysis.missingTimestamps.filter((ts) => !beforeTimestamps.has(ts) && afterTimestamps.has(ts));
                             logGapRepairEvent(
@@ -1967,10 +1963,8 @@ class MarketAdapterService {
 
         const amaValues = calculateAMA(closes, botAma);
 
-        // amaPrice is the last value of the full AMA series.
-        // Standardize to 8 decimals to ensure parity between internal state and persisted bot snapshots.
-        const rawAmaPrice = amaValues[amaValues.length - 1];
-        const amaPrice = Math.round(rawAmaPrice * 1e8) / 1e8;
+        // amaPrice is the last value of the full AMA series
+        const amaPrice = amaValues[amaValues.length - 1];
         const lastCandle = latestClosedCandle || [0, 0, 0, 0, 0];
 
         // 2. ATR — used only for the symmetric volatility shift. The asymmetrical
@@ -2097,15 +2091,13 @@ class MarketAdapterService {
         const { staleData, staleAgeHours } = deps.computeCandleStaleness(closedCandleTs, cfg.maxStaleHours);
 
         const referencePrice = amaPrice;
-        const rawClampedGridCenterPrice = this.clampGridPriceToBounds(referencePrice, referencePrice, bot);
-        const gridCenterPrice = Number.isFinite(rawClampedGridCenterPrice)
-            ? Math.round(rawClampedGridCenterPrice * 1e8) / 1e8
+        const clampedCenterPrice = this.clampGridPriceToBounds(referencePrice, referencePrice, bot);
+        const centerPrice = Number.isFinite(clampedCenterPrice) && clampedCenterPrice > 0
+            ? clampedCenterPrice
             : referencePrice;
-        const centerPrice = gridCenterPrice; // Compatibility alias
-
         if (dynamicWeightsPayload) {
             const asymmetryMetrics = isAsymmetricBoundsWhitelisted
-                ? this.computeAppliedAsymmetryMetrics(bot, gridCenterPrice, dynamicWeightsPayload)
+                ? this.computeAppliedAsymmetryMetrics(bot, centerPrice, dynamicWeightsPayload)
                 : {
                     rawAsymmetryFactor: null,
                     appliedAsymmetryFactor: null,
@@ -2253,23 +2245,23 @@ class MarketAdapterService {
             // Unified delta check — runs when previousCenterPrice is known
             // (either from state or recovered from .dynamicgrid.json).
             if (!triggered && Number.isFinite(previousCenterPrice) && previousCenterPrice > 0) {
-                deltaPercent = Math.abs((gridCenterPrice - previousCenterPrice) / previousCenterPrice) * 100;
+                deltaPercent = Math.abs((centerPrice - previousCenterPrice) / previousCenterPrice) * 100;
                 if (deltaPercent >= botThreshold) {
-                    const amaCenterPersisted = persistDynamicGridSnapshot(gridCenterPrice, {
+                    const amaCenterPersisted = persistDynamicGridSnapshot(centerPrice, {
                         previousCenterPrice,
                     });
 
                     if (!amaCenterPersisted) {
                         triggerSuppressedReason = 'ama_center_persist_failed';
                     } else {
-                        advanceTriggeredBotState(gridCenterPrice);
+                        advanceTriggeredBotState(centerPrice);
                         await writeTriggerAndNotify({
                             triggerPayload: {
                                 reason: 'market_adapter_delta_threshold',
                                 thresholdPercent: botThreshold,
                                 deltaPercent,
                                 previousCenterPrice,
-                                newCenterPrice: gridCenterPrice,
+                                newCenterPrice: centerPrice,
                                 referencePrice,
                                 amaCenterPrice: amaPrice,
                                 amaSlope,
@@ -2282,7 +2274,7 @@ class MarketAdapterService {
                                 thresholdPercent: botThreshold,
                                 deltaPercent,
                                 previousCenterPrice,
-                                newCenterPrice: gridCenterPrice,
+                                newCenterPrice: centerPrice,
                                 referencePrice,
                                 amaCenterPrice: amaPrice,
                             },
@@ -2293,12 +2285,12 @@ class MarketAdapterService {
             }
 
             if (!triggered && !triggerSuppressedReason && isGridRangeScalingWhitelisted && amaSlopeResetDetails.shouldTrigger) {
-                const amaSlopePersisted = persistDynamicGridSnapshot(gridCenterPrice);
+                const amaSlopePersisted = persistDynamicGridSnapshot(centerPrice);
 
                 if (!amaSlopePersisted) {
                     triggerSuppressedReason = 'ama_slope_persist_failed';
                 } else {
-                    advanceTriggeredBotState(gridCenterPrice);
+                    advanceTriggeredBotState(centerPrice);
                     await writeTriggerAndNotify({
                         triggerPayload: {
                             reason: 'market_adapter_ama_slope_delta_threshold',
@@ -2310,7 +2302,7 @@ class MarketAdapterService {
                             amaSlopeDeltaPercent,
                             amaSlopeThresholdPercent,
                             previousCenterPrice,
-                            newCenterPrice: gridCenterPrice,
+                            newCenterPrice: centerPrice,
                             referencePrice,
                             amaCenterPrice: amaPrice,
                             poolId: ctx.poolId,
@@ -2325,7 +2317,7 @@ class MarketAdapterService {
                             amaSlopeDeltaPercent,
                             amaSlopeThresholdPercent,
                             previousCenterPrice,
-                            newCenterPrice: gridCenterPrice,
+                            newCenterPrice: centerPrice,
                             referencePrice,
                             amaCenterPrice: amaPrice,
                         },
@@ -2450,7 +2442,6 @@ class MarketAdapterService {
                 ? dynamicWeightsPayload.effectiveWeights
                 : (botState.effectiveWeights || null),
             dynamicWeightWhitelisted: isDynamicWeightWhitelisted,
-            asymmetricBoundsWhitelisted: isAsymmetricBoundsWhitelisted,
             gridRangeScalingWhitelisted: isGridRangeScalingWhitelisted,
             dynamicWeightReady:       dynamicWeightsPayload?.isReady ?? false,
             dynamicWeightProfile:     weights?.profile || null,
@@ -2497,7 +2488,6 @@ class MarketAdapterService {
                 : botState.amaSlopeDeltaPercent ?? null,
             amaSlopeThresholdPercent: amaSlopeThresholdPercent ?? botState.amaSlopeThresholdPercent ?? null,
             dynamicWeightWhitelisted: isDynamicWeightWhitelisted,
-            asymmetricBoundsWhitelisted: isAsymmetricBoundsWhitelisted,
             gridRangeScalingWhitelisted: isGridRangeScalingWhitelisted,
             dynamicWeightReady: dynamicWeightsPayload?.isReady ?? false,
             dynamicWeightProfile: weights?.profile || null,

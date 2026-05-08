@@ -412,7 +412,6 @@ market_adapter/
 |   |-- kibana_client.js           low-level Kibana/ES query client
 |   |-- kibana_candles.js          LP pool candle fetch engine
 |   |-- kibana_market_candles.js   orderbook candle fetch and transform
-|   |-- consolidate_candles.js     candle consolidation helpers
 |   `-- strategies/
 |       |-- ama_slope_model.js     AMA slope and trend weight logic
 |       |-- collateral_manager.js  advisory collateral-ratio logic

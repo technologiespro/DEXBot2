@@ -24,22 +24,8 @@ function parseNativeMarketHistoryTimestamp(entry) {
 
     for (const candidate of candidates) {
         if (candidate == null) continue;
-        if (typeof candidate === 'number') {
-            if (Number.isFinite(candidate)) {
-                // BitShares may return epoch seconds (10-digit) or epoch ms (13-digit).
-                // Normalize to ms.
-                return candidate > 1e12 ? candidate : candidate * 1000;
-            }
-            continue;
-        }
-        const s = String(candidate).trim();
-        if (!s) continue;
-        // BitShares Core serializes fc::time_point_sec as ISO-8601 *without* a
-        // timezone suffix (UTC).  Date.parse() interprets a bare date-time as LOCAL
-        // time in many JS engines, which would shift timestamps by the host offset.
-        // Appending 'Z' forces UTC interpretation — matching parseChainTimeToMs and
-        // hitToTrade in kibana_candles.js.
-        const ts = Date.parse(s.endsWith('Z') ? s : `${s}Z`);
+        if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
+        const ts = Date.parse(String(candidate));
         if (Number.isFinite(ts)) return ts;
     }
 
@@ -130,9 +116,7 @@ function normalizeNativeMarketHistoryCandles(history, assetA, assetB, intervalSe
         return source
             .filter((c) => Array.isArray(c) && Number.isFinite(c[0]))
             .map((c) => {
-                const rawTs = Number(c[0]);
-                // Normalize epoch seconds (> 1e12 means ms already, else interpret as s)
-                const ts = rawTs > 1e12 ? rawTs : rawTs * 1000;
+                const ts = Number(c[0]);
                 const open = Number(c[1]);
                 const high = Number(c[2]);
                 const low = Number(c[3]);

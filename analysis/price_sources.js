@@ -119,7 +119,5 @@ function createSource(type, config) {
 }
 
 module.exports = {
-    JsonFileSource,
-    MarketAdapterSource,
     createSource,
 };

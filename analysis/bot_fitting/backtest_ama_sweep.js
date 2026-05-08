@@ -21,7 +21,7 @@ const os = require('os');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const { calculateAMA } = require('../ama_fitting/ama');
 const { range } = require('../math_utils');
-const { toCandles, parseListOrRange, loadLpData, fmt } = require('./shared_utils');
+const { parseListOrRange, loadLpData, fmt } = require('./shared_utils');
 
 const DEFAULT_MAX_ORDERS = 20; // matches bot default activeOrders per side
 const DEFAULT_FEE_ROUNDTRIP_PCT = 0.20;

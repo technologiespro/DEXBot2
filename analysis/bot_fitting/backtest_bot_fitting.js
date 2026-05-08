@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { calculateAMA } = require('../ama_fitting/ama');
 const { range } = require('../math_utils');
-const { toCandles, parseListOrRange, loadLpData, fmt } = require('./shared_utils');
+const { parseListOrRange, loadLpData, fmt } = require('./shared_utils');
 
 const DEFAULT_ACTIVE_ORDERS = 5;
 const DEFAULT_FEE_ROUNDTRIP_PCT = 0.20;
