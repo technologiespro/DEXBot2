@@ -1055,6 +1055,94 @@ class MarketAdapterService {
                 : null;
             let nativeOverlapCount = null;
             let nativePagesFetched = null;
+            const hasKibanaSource = isBookSource
+                ? deps.kibanaMarketSource && typeof deps.kibanaMarketSource.getMarketCandles === 'function'
+                : deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function';
+            const verifyAndFillLongSilence = async (candles, lastTs, latestClosedBucketTs, sourceLabel, incomingCandles = []) => {
+                const bucketMs = Number(cfg.intervalSeconds) * 1000;
+                const silenceStartTs = Number(lastTs) + bucketMs;
+                const earliestIncomingTs = (Array.isArray(incomingCandles) ? incomingCandles : [])
+                    .filter((c) => Array.isArray(c) && Number.isFinite(c[0]) && c[0] > lastTs)
+                    .sort((a, b) => a[0] - b[0])[0]?.[0];
+                const silenceEndTs = Number.isFinite(earliestIncomingTs) && earliestIncomingTs > silenceStartTs
+                    ? earliestIncomingTs - bucketMs
+                    : Number(latestClosedBucketTs);
+                if (!hasKibanaSource || typeof deps.fillCandleGaps !== 'function') {
+                    return { candles, sourceLabel };
+                }
+                if (!Number.isFinite(bucketMs) || bucketMs <= 0 || !Number.isFinite(silenceStartTs) || !Number.isFinite(silenceEndTs) || silenceEndTs < silenceStartTs) {
+                    return { candles, sourceLabel };
+                }
+
+                try {
+                    const kibanaSilenceCandles = await deps.withRetries(() => fetchKibanaCandles({
+                        intervalSeconds: cfg.intervalSeconds,
+                        consolidateByTimestamp: true,
+                        fillGapsToRequestedRange: false,
+                        apiKey: null,
+                        timeRange: {
+                            gte: new Date(silenceStartTs).toISOString(),
+                            lte: new Date(silenceEndTs).toISOString(),
+                        },
+                    }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana long-silence verification failed');
+
+                    const hasKibanaActivity = Array.isArray(kibanaSilenceCandles) && kibanaSilenceCandles.some(
+                        (c) => Array.isArray(c) && Number(c[5] || 0) > 0
+                    );
+                    if (hasKibanaActivity) {
+                        return {
+                            candles: deps.mergeCandles(candles, kibanaSilenceCandles, {
+                                onCollision: (existingCandle, incomingCandle) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
+                            }),
+                            sourceLabel: `${sourceLabel}+kibana-silence-activity`,
+                        };
+                    }
+
+                    const previousCandle = candles
+                        .filter((c) => Array.isArray(c) && c[0] === lastTs)
+                        .slice(-1)[0];
+                    const filledSilence = previousCandle
+                        ? deps.fillCandleGaps([previousCandle, ...(Array.isArray(incomingCandles) ? incomingCandles : [])], cfg.intervalSeconds, lastTs, silenceEndTs)
+                            .filter((c) => Array.isArray(c) && c[0] > lastTs)
+                        : [];
+                    if (filledSilence.length === 0) return { candles, sourceLabel };
+
+                    existingMeta.staleTailVerifiedStartTs = silenceStartTs;
+                    existingMeta.staleTailVerifiedEndTs = silenceEndTs;
+                    const lastClose = previousCandle?.[4];
+                    const message = `[market_adapter] ${bot.botKey}: verified no trades from ${new Date(silenceStartTs).toISOString()} to ${new Date(silenceEndTs).toISOString()}; carrying flat close ${Number.isFinite(Number(lastClose)) ? Number(lastClose) : 'n/a'}`;
+                    if (typeof deps.logger?.log === 'function') {
+                        deps.logger.log(message, 'info');
+                    } else if (typeof deps.logger?.info === 'function') {
+                        deps.logger.info(message);
+                    } else if (typeof deps.logger?.warn === 'function') {
+                        deps.logger.warn(message);
+                    }
+
+                    return {
+                        candles: deps.mergeCandles(candles, filledSilence),
+                        sourceLabel: `${sourceLabel}+verified-silence`,
+                    };
+                } catch (_) {
+                    // Verification failed: preserve stale-data protection.
+                    return { candles, sourceLabel };
+                }
+            };
+            const fillBoundedTrailingClosedGap = (candles, latestClosedBucketTs, nowMs, maxNativeGapFill) => {
+                const bucketMs = Number(cfg.intervalSeconds) * 1000;
+                const latestKnownTs = Array.isArray(candles) && candles.length > 0
+                    ? candles[candles.length - 1]?.[0]
+                    : null;
+                const trailingGapBuckets = Number.isFinite(bucketMs) && bucketMs > 0
+                    && Number.isFinite(latestClosedBucketTs) && Number.isFinite(latestKnownTs)
+                    && latestClosedBucketTs > latestKnownTs
+                    ? Math.round((latestClosedBucketTs - latestKnownTs) / bucketMs)
+                    : 0;
+                if (trailingGapBuckets <= 0 || trailingGapBuckets > maxNativeGapFill) {
+                    return candles;
+                }
+                return this.fillNativeIncrementalClosedGaps(candles, latestKnownTs, cfg.intervalSeconds, nowMs);
+            };
 
             if (isBookSource) {
                 nativeRecentTradeSequences = [];
@@ -1117,7 +1205,8 @@ class MarketAdapterService {
                         Number(cfg.nativeBackfillHours) || 0,
                         (analysisKeepCount * Math.max(Number(cfg.intervalSeconds) || 3600, 3600)) / 3600
                     );
-                    const nativeStartMs = Math.max(0, (nextCandles[nextCandles.length - 1]?.[0] || 0) - bucketMs);
+                    const lastTs = nextCandles[nextCandles.length - 1]?.[0] || 0;
+                    const nativeStartMs = Math.max(0, lastTs - bucketMs);
                     let nativeCandles = [];
                     try {
                         if (typeof deps.fetchNativeMarketHistorySince === 'function') {
@@ -1137,6 +1226,27 @@ class MarketAdapterService {
                         sourceLabel = 'native-book-history';
                     } else {
                         sourceLabel = 'cached-book';
+                    }
+
+                    const currentBucketStartMs = Math.floor(Number(nowMs) / bucketMs) * bucketMs;
+                    const latestClosedBucketTs = currentBucketStartMs - bucketMs;
+                    const earliestIncomingTs = nativeCandles.length > 0 ? nativeCandles[0][0] : null;
+                    const gapEndTs = Number.isFinite(earliestIncomingTs) && earliestIncomingTs > lastTs
+                        ? earliestIncomingTs
+                        : latestClosedBucketTs + bucketMs;
+                    const gapBuckets = Number.isFinite(gapEndTs) && gapEndTs > lastTs
+                        ? Math.round((gapEndTs - lastTs) / bucketMs) - 1
+                        : 0;
+                    const maxNativeGapFill = Number.isFinite(cfg.maxNativeGapFillCandles)
+                        ? cfg.maxNativeGapFillCandles
+                        : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
+                    if (gapBuckets > maxNativeGapFill) {
+                        const verifiedSilence = await verifyAndFillLongSilence(
+                            nextCandles, lastTs, latestClosedBucketTs, sourceLabel, nativeCandles
+                        );
+                        nextCandles = verifiedSilence.candles;
+                        sourceLabel = verifiedSilence.sourceLabel;
+                        nextCandles = fillBoundedTrailingClosedGap(nextCandles, latestClosedBucketTs, nowMs, maxNativeGapFill);
                     }
                 }
 
@@ -1324,6 +1434,13 @@ class MarketAdapterService {
                         : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
                     if (gapBuckets <= maxNativeGapFill) {
                         nextCandles = this.fillNativeIncrementalClosedGaps(nextCandles, lastTs, cfg.intervalSeconds);
+                    } else {
+                        const verifiedSilence = await verifyAndFillLongSilence(
+                            nextCandles, lastTs, latestClosedBucketTs, sourceLabel, incomingCandles
+                        );
+                        nextCandles = verifiedSilence.candles;
+                        sourceLabel = verifiedSilence.sourceLabel;
+                        nextCandles = fillBoundedTrailingClosedGap(nextCandles, latestClosedBucketTs, nowMs, maxNativeGapFill);
                     }
                 } catch (err) {
                     if (typeof deps.logger?.warn === 'function') {
@@ -1354,10 +1471,6 @@ class MarketAdapterService {
             let gapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
                 ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
                 : { gapCount: 0, missingTimestamps: [] };
-
-            const hasKibanaSource = isBookSource
-                ? deps.kibanaMarketSource && typeof deps.kibanaMarketSource.getMarketCandles === 'function'
-                : deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function';
 
             if (gapAnalysis.gapCount > 0 && hasKibanaSource) {
                 const timeRange = this.buildGapRepairTimeRange(
