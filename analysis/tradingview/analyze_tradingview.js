@@ -79,6 +79,12 @@ function inferTitle(meta, fallback) {
     return `${label} · ${interval} · TradingView`;
 }
 
+function resolveMarketAdapterCandleFile(botKey, intervalSeconds = 3600) {
+    if (!botKey) throw new Error('--bot-key is required when using --source market_adapter');
+    const label = toIntervalLabel(intervalSeconds);
+    return path.join(__dirname, '..', '..', 'market_adapter', 'data', `market_adapter_${botKey}_${label}.json`);
+}
+
 async function main() {
     try {
         const config = parseArgs();
@@ -86,8 +92,13 @@ async function main() {
             throw new Error('--file <path-to-candles.json> is required (or use --source market_adapter)');
         }
         const srcConfig = config.source.config;
-        if (config.source.type === 'market_adapter' && !srcConfig.stateDir) {
-            srcConfig.stateDir = path.join(__dirname, '..', '..', 'market_adapter', 'state');
+        if (config.source.type === 'market_adapter') {
+            const candleFile = resolveMarketAdapterCandleFile(srcConfig.botKey, 3600);
+            if (!fs.existsSync(candleFile)) {
+                throw new Error(`Market adapter candle file not found for bot '${srcConfig.botKey}': ${candleFile}`);
+            }
+            srcConfig.filePath = candleFile;
+            config.source.type = 'json';
         }
 
         const source = createSource(config.source.type, srcConfig);

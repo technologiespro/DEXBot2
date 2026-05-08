@@ -182,6 +182,19 @@ Details: [bot_fitting/README.md](bot_fitting/README.md)
 | `analyze_tradingview.js` | TradingView chart analysis runner |
 | `tradingview_uplot_chart_generator.js` | TradingView-style uPlot chart generator |
 
+```bash
+# From a market adapter candle snapshot by bot key
+node analysis/tradingview/analyze_tradingview.js \
+  --source market_adapter \
+  --bot-key xrp-bts-0 \
+  --chart analysis/charts/xrp_bts_tradingview.html
+
+# From an explicit candle file
+node analysis/tradingview/analyze_tradingview.js \
+  --file market_adapter/data/market_adapter_xrp-bts-0_1h.json \
+  --chart analysis/charts/xrp_bts_tradingview.html
+```
+
 ## Shared Helpers
 
 | File | Purpose |
@@ -202,7 +215,14 @@ These npm scripts wrap common analysis runners:
 | `npm run analysis:tradingview` | `node analysis/tradingview/analyze_tradingview.js` |
 | `npm run ama:chart:lp-local` | `node analysis/ama_fitting/generate_unified_comparison_chart.js` |
 
-All three accept `--` forwarded flags (e.g. `npm run analysis:tradingview -- --file <path>`).
+All three accept `--` forwarded flags.
+
+Examples:
+
+```bash
+npm run analysis:tradingview -- --file market_adapter/data/market_adapter_xrp-bts-0_1h.json
+npm run analysis:tradingview -- --source market_adapter --bot-key xrp-bts-0 --chart analysis/charts/xrp_bts_tradingview.html
+```
 
 Other runners are invoked directly:
 
