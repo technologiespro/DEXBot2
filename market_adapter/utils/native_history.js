@@ -24,8 +24,18 @@ function parseNativeMarketHistoryTimestamp(entry) {
 
     for (const candidate of candidates) {
         if (candidate == null) continue;
-        if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
-        const ts = Date.parse(String(candidate));
+        if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+            if (candidate >= 1000000000 && candidate <= 9999999999) return candidate * 1000;
+            return candidate;
+        }
+        let candidateStr = String(candidate);
+        if (/^\d{10}$/.test(candidateStr)) return Number(candidateStr) * 1000;
+        const match = candidateStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+        if (match) {
+            const [_, y, m, d, hh, mm, ss] = match.map(Number);
+            return Date.UTC(y, m - 1, d, hh, mm, ss);
+        }
+        const ts = Date.parse(candidateStr);
         if (Number.isFinite(ts)) return ts;
     }
 
@@ -116,7 +126,8 @@ function normalizeNativeMarketHistoryCandles(history, assetA, assetB, intervalSe
         return source
             .filter((c) => Array.isArray(c) && Number.isFinite(c[0]))
             .map((c) => {
-                const ts = Number(c[0]);
+                let ts = Number(c[0]);
+                if (ts >= 1000000000 && ts <= 9999999999) ts *= 1000;
                 const open = Number(c[1]);
                 const high = Number(c[2]);
                 const low = Number(c[3]);

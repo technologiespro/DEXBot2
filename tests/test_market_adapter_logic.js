@@ -314,7 +314,7 @@ assert.strictEqual(usesOrderbookMarketSource({ startPrice: 'book' }), true, 'boo
     }], { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' }, { id: '1.3.0', precision: 5, symbol: 'BTS' }, 3600);
 
     assert.strictEqual(candles.length, 1, 'native market history should normalize one candle');
-    assert.strictEqual(candles[0][0], Date.UTC(2026, 0, 1, 0, 0, 0), 'timestamp should be parsed as UTC (key.open has no timezone suffix)');
+    assert.strictEqual(candles[0][0], new Date('2026-01-01T00:00:00Z').getTime(), 'timestamp should be parsed as UTC');
     assert.strictEqual(candles[0][1], 0.5, 'IOB.XRP/BTS open should be normalized to BTS per XRP');
     assert.strictEqual(candles[0][2], 0.8, 'IOB.XRP/BTS high should remain the larger normalized price');
     assert.strictEqual(candles[0][3], 0.4, 'IOB.XRP/BTS low should remain the smaller normalized price');
