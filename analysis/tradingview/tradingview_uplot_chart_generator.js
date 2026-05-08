@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { MARKET_ADAPTER } = require('../../modules/constants');
 const { escapeHtml, serializeJsonForScript } = require('../chart_utils');
 const { normalizeCandle } = require('../math_utils');
@@ -19,6 +21,58 @@ function inferBaseIntervalSeconds(candles, fallback = 3600) {
     const mid = Math.floor(deltas.length / 2);
     const med = deltas.length % 2 === 0 ? (deltas[mid - 1] + deltas[mid]) / 2 : deltas[mid];
     return Math.max(60, Math.round(med));
+}
+
+function loadMarketProfiles(filePath = path.join(__dirname, '..', '..', 'profiles', 'market_profiles.json')) {
+    if (!filePath || !fs.existsSync(filePath)) return null;
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (err) {
+        return null;
+    }
+}
+
+function findMarketProfile(profiles, meta = {}) {
+    const entries = Array.isArray(profiles?.profiles) ? profiles.profiles : [];
+    if (!entries.length) return null;
+    const assetA = meta.assetA?.symbol || meta.assetA?.id || meta.assetA;
+    const assetB = meta.assetB?.symbol || meta.assetB?.id || meta.assetB;
+    const intervalSeconds = Number(meta.intervalSeconds);
+    return entries.find((entry) => {
+        if (!entry || typeof entry !== 'object') return false;
+        if (assetA && assetB) {
+            const matchesPair = (String(entry.assetA) === String(assetA) || String(entry.assetAId) === String(assetA))
+                && (String(entry.assetB) === String(assetB) || String(entry.assetBId) === String(assetB));
+            if (!matchesPair) return false;
+        } else {
+            return false;
+        }
+        if (Number.isFinite(intervalSeconds) && intervalSeconds > 0 && Number(entry.intervalSeconds) !== intervalSeconds) {
+            return false;
+        }
+        return true;
+    }) || null;
+}
+
+function resolveAmaDefaults({ meta, data, marketProfiles } = {}) {
+    const amaDefaultsSource = MARKET_ADAPTER.AMAS?.AMA3
+        || MARKET_ADAPTER.AMAS?.[MARKET_ADAPTER.DEFAULT_AMA_KEY || 'AMA3']
+        || { erPeriod: 781, fastPeriod: 5.2, slowPeriod: 112.7 };
+    const profile = findMarketProfile(marketProfiles, meta);
+    const profileAmaKey = profile?.defaultAma && profile.amas && profile.amas[profile.defaultAma]
+        ? profile.defaultAma
+        : null;
+    const profileAma = profileAmaKey ? profile.amas[profileAmaKey] : null;
+    const source = data?.amaDefaults || profileAma || amaDefaultsSource;
+    return {
+        erPeriod: Math.max(1, Math.round(Number(data?.amaErPeriod ?? source.erPeriod ?? 781))),
+        fastPeriod: Number.isFinite(Number(data?.amaFastPeriod))
+            ? Number(data.amaFastPeriod)
+            : Number(source.fastPeriod ?? 5.2),
+        slowPeriod: Number.isFinite(Number(data?.amaSlowPeriod))
+            ? Number(data.amaSlowPeriod)
+            : Number(source.slowPeriod ?? 112.7),
+    };
 }
 
 function generateHTML(data, title = 'TradingView Style Research') {
@@ -42,18 +96,8 @@ function generateHTML(data, title = 'TradingView Style Research') {
         || timeframes.find((item) => item.enabled)
         || timeframes[0];
 
-    const amaDefaultsSource = MARKET_ADAPTER.AMAS?.AMA3
-        || MARKET_ADAPTER.AMAS?.[MARKET_ADAPTER.DEFAULT_AMA_KEY || 'AMA3']
-        || { erPeriod: 781, fastPeriod: 5.2, slowPeriod: 112.7 };
-    const defaultAmaConfig = {
-        erPeriod: Math.max(1, Math.round(Number(data.amaErPeriod ?? amaDefaultsSource.erPeriod ?? 781))),
-        fastPeriod: Number.isFinite(Number(data.amaFastPeriod))
-            ? Number(data.amaFastPeriod)
-            : Number(amaDefaultsSource.fastPeriod ?? 5.2),
-        slowPeriod: Number.isFinite(Number(data.amaSlowPeriod))
-            ? Number(data.amaSlowPeriod)
-            : Number(amaDefaultsSource.slowPeriod ?? 112.7),
-    };
+    const marketProfiles = data.marketProfiles || loadMarketProfiles();
+    const defaultAmaConfig = resolveAmaDefaults({ meta, data, marketProfiles });
     const defaults = {
         smaPeriod: Math.max(1, Math.round(data.smaPeriod ?? 500)),
         amaDefaults: defaultAmaConfig,
@@ -84,6 +128,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
         priceScale: defaults.priceScale,
         poolLabel,
         intervalLabel,
+        amaDefaultsSource: marketProfiles ? 'market_profiles' : 'constants',
     };
 
     return `<!doctype html>

@@ -85,10 +85,12 @@ For manual pool discovery, use `--pool`, `--precA`, and `--precB` instead of `--
 - The displayed indicators are computed from the 1h base candles and then sampled onto the selected timeframe.
 - The current volume-weighted overlay is a rolling `VWMA`, not a session-reset VWAP.
 - SMA is disabled by default.
-- AMA is disabled by default.
 - VWMA is disabled by default.
-- The AMA controls start with the AMA3 values from `modules/constants.js`.
-- The AMA `Reset` button restores those AMA3 defaults.
+- AMA is auto-enabled when the bot has `gridPrice: "ama"` (or ama1-4), otherwise disabled by default.
+- AMA settings priority: bot-specific `ama` object > market profile > constants (112.7).
+- The AMA controls start with the bot-specific AMA, then pair-specific entry from `profiles/market_profiles.json` when available, falling back to AMA3 values from `modules/constants.js`.
+- The AMA `Reset` button restores the HTML defaults, not the browser-stored overrides.
+- Indicator, timeframe, and scale changes are persisted in browser `localStorage` for the generated HTML.
 - The price axis defaults to log base `10`, with a toolbar switch for `Log` / `Linear`.
 - If you regenerate the HTML and then open it later, the browser still needs access to the `uPlot` CDN unless you inline or bundle the library.
 

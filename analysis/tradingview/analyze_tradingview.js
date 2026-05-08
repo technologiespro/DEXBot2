@@ -16,6 +16,7 @@ const DEFAULT_AMA = MARKET_ADAPTER.AMAS?.AMA3 || MARKET_ADAPTER.AMAS?.[MARKET_AD
     fastPeriod: 5.2,
     slowPeriod: 112.7,
 };
+const DEFAULT_BOTS_FILE = path.join(__dirname, '..', '..', 'profiles', 'bots.json');
 
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -29,7 +30,7 @@ function parseArgs() {
         amaFastPeriod: DEFAULT_AMA.fastPeriod,
         amaSlowPeriod: DEFAULT_AMA.slowPeriod,
         smaEnabled: false,
-        amaEnabled: false,
+        amaEnabled: true,
         vwapEnabled: false,
         vwapBars: 500,
         quiet: false,
@@ -69,6 +70,40 @@ function loadJsonMeta(filePath) {
     return { meta: null, candles: null };
 }
 
+function loadMarketProfiles(filePath = path.join(__dirname, '..', '..', 'profiles', 'market_profiles.json')) {
+    if (!filePath || !fs.existsSync(filePath)) return null;
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (err) {
+        return null;
+    }
+}
+
+function loadBotSettings(filePath = DEFAULT_BOTS_FILE) {
+    if (!filePath || !fs.existsSync(filePath)) return null;
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (err) {
+        return null;
+    }
+}
+
+function sanitizeKey(source) {
+    if (!source) return 'bot';
+    return String(source).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'bot';
+}
+
+function loadBotMeta(botKey, filePath = DEFAULT_BOTS_FILE) {
+    const settings = loadBotSettings(filePath);
+    const entries = Array.isArray(settings?.bots) ? settings.bots : [];
+    if (!botKey) return null;
+    const normalizedKey = String(botKey).toLowerCase();
+    const exact = entries.find((bot, index) => `${sanitizeKey(bot?.name || `bot-${index}`)}-${index}` === normalizedKey);
+    if (exact) return exact;
+    const loose = entries.find((bot) => sanitizeKey(bot?.name) === normalizedKey.replace(/-\d+$/, ''));
+    return loose || null;
+}
+
 function inferTitle(meta, fallback) {
     const pool = meta?.pool ? `Pool ${String(meta.pool).replace(/^1\.19\./, '')}` : null;
     const a = meta?.assetA?.symbol || meta?.assetA?.id || null;
@@ -92,12 +127,18 @@ async function main() {
             throw new Error('--file <path-to-candles.json> is required (or use --source market_adapter)');
         }
         const srcConfig = config.source.config;
-        if (config.source.type === 'market_adapter') {
+        const isMarketAdapterSource = config.source.type === 'market_adapter';
+        if (isMarketAdapterSource) {
             const candleFile = resolveMarketAdapterCandleFile(srcConfig.botKey, 3600);
             if (!fs.existsSync(candleFile)) {
                 throw new Error(`Market adapter candle file not found for bot '${srcConfig.botKey}': ${candleFile}`);
             }
             srcConfig.filePath = candleFile;
+            const botMeta = loadBotMeta(srcConfig.botKey);
+            if (botMeta && !srcConfig.assetA && !srcConfig.assetB) {
+                srcConfig.assetA = botMeta.assetA;
+                srcConfig.assetB = botMeta.assetB;
+            }
             config.source.type = 'json';
         }
 
@@ -109,8 +150,23 @@ async function main() {
             throw new Error('No candles returned from source');
         }
 
-        const jsonMeta = config.source.type === 'json' ? loadJsonMeta(srcConfig.filePath).meta : null;
+        const rawJson = config.source.type === 'json' ? loadJsonMeta(srcConfig.filePath) : { meta: null, candles: null };
+        const botMeta = isMarketAdapterSource ? loadBotMeta(srcConfig.botKey) : null;
+        const jsonMeta = rawJson.meta || (botMeta ? {
+            assetA: { symbol: botMeta.assetA },
+            assetB: { symbol: botMeta.assetB },
+            intervalSeconds: 3600,
+        } : null);
         const title = config.title || inferTitle(jsonMeta, path.basename(srcConfig.filePath || 'tradingview'));
+        const marketProfiles = loadMarketProfiles();
+        const selectedProfile = botMeta && marketProfiles?.profiles
+            ? marketProfiles.profiles.find((entry) => String(entry.assetA) === String(botMeta.assetA) && String(entry.assetB) === String(botMeta.assetB) && Number(entry.intervalSeconds) === 3600)
+            : null;
+        const profileAma = selectedProfile?.amas?.[selectedProfile.defaultAma] || null;
+        const botAma = (botMeta?.ama && typeof botMeta.ama === 'object') ? botMeta.ama : null;
+        const selectedAma = botAma || profileAma;
+        const hasAmaGridPrice = botMeta?.gridPrice && String(botMeta.gridPrice).toLowerCase().startsWith('ama');
+        const amaEnabled = hasAmaGridPrice ? config.amaEnabled : false;
 
         const html = generateHTML({
             candles,
@@ -119,16 +175,23 @@ async function main() {
                 assetB: { symbol: 'Asset B' },
             },
             smaPeriod: config.smaPeriod,
-            amaErPeriod: config.amaErPeriod,
-            amaFastPeriod: config.amaFastPeriod,
-            amaSlowPeriod: config.amaSlowPeriod,
+            amaDefaults: selectedAma ? {
+                erPeriod: botAma?.erPeriod || selectedAma.erPeriod,
+                fastPeriod: botAma?.fastPeriod || selectedAma.fastPeriod,
+                slowPeriod: botAma?.slowPeriod || selectedAma.slowPeriod,
+            } : {
+                erPeriod: config.amaErPeriod,
+                fastPeriod: config.amaFastPeriod,
+                slowPeriod: config.amaSlowPeriod,
+            },
             smaEnabled: config.smaEnabled,
-            amaEnabled: config.amaEnabled,
+            amaEnabled,
             vwapEnabled: config.vwapEnabled,
             vwapBars: config.vwapBars,
             priceScale: config.priceScale === 'linear' ? 'linear' : 'log',
             defaultTimeframe: '1h',
             marketAdapter: MARKET_ADAPTER,
+            marketProfiles,
         }, title);
 
         const chartDir = path.dirname(config.chartFile);
@@ -150,5 +213,8 @@ module.exports = {
     main,
     parseArgs,
     loadJsonMeta,
+    loadMarketProfiles,
+    loadBotSettings,
+    loadBotMeta,
     inferTitle,
 };
