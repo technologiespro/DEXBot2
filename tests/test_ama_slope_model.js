@@ -37,8 +37,8 @@ const HALF_POWER_SLOPE_VOL_OPTS = {
 
 function derivedWeights(result) {
     return {
-        sellW: Math.round((MODEL_NEUTRAL_WEIGHT + result.slopeOffset + result.symmetricDelta) * 100) / 100,
-        buyW: Math.round((MODEL_NEUTRAL_WEIGHT - result.slopeOffset + result.symmetricDelta) * 100) / 100,
+        sellW: Math.round((MODEL_NEUTRAL_WEIGHT - result.slopeOffset + result.symmetricDelta) * 100) / 100,
+        buyW: Math.round((MODEL_NEUTRAL_WEIGHT + result.slopeOffset + result.symmetricDelta) * 100) / 100,
     };
 }
 
@@ -262,7 +262,7 @@ function testCombinedUptrendZeroVol() {
     values[MIN_LEN - 1] = 115;
     const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const result = computeAmaSlopeWeights(values, 0, opts);
-    assert.deepStrictEqual(derivedWeights(result), { sellW: 0.75, buyW: 0.25 });
+    assert.deepStrictEqual(derivedWeights(result), { sellW: 0.25, buyW: 0.75 });
 }
 
 function testCombinedUptrendHighVol() {
@@ -271,7 +271,7 @@ function testCombinedUptrendHighVol() {
     values[MIN_LEN - 1] = 160;
     const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const result = computeAmaSlopeWeights(values, 0.04, opts);
-    assert.deepStrictEqual(derivedWeights(result), { sellW: 0.8, buyW: -0.2 });
+    assert.deepStrictEqual(derivedWeights(result), { sellW: -0.2, buyW: 0.8 });
 }
 
 function testClampAtMaxPenalty() {
@@ -280,7 +280,7 @@ function testClampAtMaxPenalty() {
     values[MIN_LEN - 1] = 160;
     const opts = { ...HALF_POWER_SLOPE_VOL_OPTS };
     const result = computeAmaSlopeWeights(values, 1.0, opts);
-    assert.deepStrictEqual(derivedWeights(result), { sellW: 0.5, buyW: -0.5 });
+    assert.deepStrictEqual(derivedWeights(result), { sellW: -0.5, buyW: 0.5 });
 }
 
 // ─── Confidence derivation ────────────────────────────────────────────────────
@@ -360,24 +360,24 @@ function testUptrendSlopeOffsetTable() {
     let r = computeAmaSlopeWeights(values, 0.00, opts);
     assert.strictEqual(r.slopeOffset, 0.33);
     assert.ok(Math.abs(r.rawSlopeOffset - (1 / 3)) < 1e-12);
-    assert.deepStrictEqual(derivedWeights(r), { sellW: 0.83, buyW: 0.17 });
+    assert.deepStrictEqual(derivedWeights(r), { sellW: 0.17, buyW: 0.83 });
 
     // ATR/price = 0.0025 → suppressed → same as zero vol
     r = computeAmaSlopeWeights(values, 0.0025, opts);
     assert.strictEqual(r.symmetricDelta, 0);
-    assert.deepStrictEqual(derivedWeights(r), { sellW: 0.83, buyW: 0.17 });
+    assert.deepStrictEqual(derivedWeights(r), { sellW: 0.17, buyW: 0.83 });
 
     // ATR/price = 0.01 → delta=-0.10
     r = computeAmaSlopeWeights(values, 0.01, opts);
-    assert.deepStrictEqual(derivedWeights(r), { sellW: 0.73, buyW: 0.07 });
+    assert.deepStrictEqual(derivedWeights(r), { sellW: 0.07, buyW: 0.73 });
 
     // ATR/price = 0.04 → delta=-0.20
     r = computeAmaSlopeWeights(values, 0.04, opts);
-    assert.deepStrictEqual(derivedWeights(r), { sellW: 0.63, buyW: -0.03 });
+    assert.deepStrictEqual(derivedWeights(r), { sellW: -0.03, buyW: 0.63 });
 
     // ATR/price = 0.25 → delta=-0.5
     r = computeAmaSlopeWeights(values, 0.25, opts);
-    assert.deepStrictEqual(derivedWeights(r), { sellW: 0.33, buyW: -0.33 });
+    assert.deepStrictEqual(derivedWeights(r), { sellW: -0.33, buyW: 0.33 });
 }
 
 // ─── Run ─────────────────────────────────────────────────────────────────────

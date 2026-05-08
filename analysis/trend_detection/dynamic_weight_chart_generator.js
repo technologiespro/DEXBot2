@@ -645,8 +645,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     const gatedOff = Math.abs(blendedOff * finalMult) < outputThreshold ? 0 : (blendedOff * finalMult);
                     const off = gatedOff * currentGain;
                     combinedOff[i] = Math.round(off * 1000) / 1000;
-                    combinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL + off) * 100) / 100));
-                    combinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY - off) * 100) / 100));
+                    combinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL - off) * 100) / 100));
+                    combinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY + off) * 100) / 100));
                     currentOutputAxisMax = Math.max(currentOutputAxisMax, Math.abs(off));
                 }
             }
@@ -693,8 +693,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     }
                 }
                 echoCombinedOff[i] = latchedOff;
-                echoCombinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL + latchedOff) * 100) / 100));
-                echoCombinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY - latchedOff) * 100) / 100));
+                echoCombinedSell[i] = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_SELL - latchedOff) * 100) / 100));
+                echoCombinedBuy[i]  = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round((STATIC_BUY + latchedOff) * 100) / 100));
             }
 
             for (let i = 0; i < data.dates.length; i++) {

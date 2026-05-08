@@ -4100,7 +4100,7 @@ async function testDynamicWeightChartParityMatchesLiveService() {
     const expectedEffectiveWeights = {
         sell: roundTo(
             clamp(
-                staticWeights.sell + expectedTrendOffset + expectedVolatilityPenalty,
+                staticWeights.sell - expectedTrendOffset + expectedVolatilityPenalty,
                 MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT,
                 MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT
             ),
@@ -4108,7 +4108,7 @@ async function testDynamicWeightChartParityMatchesLiveService() {
         ),
         buy: roundTo(
             clamp(
-                staticWeights.buy - expectedTrendOffset + expectedVolatilityPenalty,
+                staticWeights.buy + expectedTrendOffset + expectedVolatilityPenalty,
                 MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT,
                 MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT
             ),
@@ -4166,6 +4166,14 @@ async function testDynamicWeightChartParityMatchesLiveService() {
     assert.strictEqual(dw.finalOffset, liveSeries.finalOff, 'persisted final offset should match the parity model');
     assert.strictEqual(dw.belowMinOutputThreshold, expectedBelowThreshold, 'persisted threshold gate should match the confirmed pre-gain state');
     assert.deepStrictEqual(dw.effectiveWeights, expectedEffectiveWeights, 'persisted effective weights should match the parity model');
+    assert.notStrictEqual(expectedTrendOffset, 0, 'fixture should exercise a directional trend offset');
+    if (expectedTrendOffset > 0) {
+        assert.ok(dw.effectiveWeights.buy > staticWeights.buy, 'positive trend offset should increase buy weight');
+        assert.ok(dw.effectiveWeights.sell < staticWeights.sell, 'positive trend offset should decrease sell weight');
+    } else {
+        assert.ok(dw.effectiveWeights.buy < staticWeights.buy, 'negative trend offset should decrease buy weight');
+        assert.ok(dw.effectiveWeights.sell > staticWeights.sell, 'negative trend offset should increase sell weight');
+    }
     assert.strictEqual(dw.regimeSensitivity, cfg.regimeSensitivity, 'persisted payload should retain regimeSensitivity for snapshot parity');
     assert.strictEqual(dw.absoluteThreshold, MARKET_ADAPTER.DYNAMIC_WEIGHT_ABSOLUTE_THRESHOLD_DEFAULT,
         'persisted payload should retain absoluteThreshold for snapshot parity');

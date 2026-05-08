@@ -548,16 +548,16 @@ On each closed-candle cycle, the adapter applies two adjustments:
 
 | Adjustment | Signal | Formula effect |
 |------------|--------|----------------|
-| `trendOffset` | AMA slope + Kalman confirmation | Adds to sell, subtracts from buy |
+| `trendOffset` | AMA slope + Kalman confirmation | Subtracts from sell, adds to buy |
 | `volatilityPenalty` | Volatility | Adds the same normally negative value to both sides |
 
 ```text
-effectiveSell = staticSell + trendOffset + volatilityPenalty
-effectiveBuy  = staticBuy  - trendOffset + volatilityPenalty
+effectiveSell = staticSell - trendOffset + volatilityPenalty
+effectiveBuy  = staticBuy  + trendOffset + volatilityPenalty
 ```
 
-A positive `trendOffset` shifts weight toward sell and away from buy. A
-negative `trendOffset` shifts weight toward buy and away from sell. The final
+A positive `trendOffset` shifts weight toward buy and away from sell. A
+negative `trendOffset` shifts weight toward sell and away from buy. The final
 values are clamped and rounded before being written to the dynamic grid
 snapshot.
 

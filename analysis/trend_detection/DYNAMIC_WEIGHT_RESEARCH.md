@@ -116,7 +116,7 @@ All panels share aligned vertical time grid lines, and the bottom output panel s
 - Displacement measures *how far price has already moved* from equilibrium
 
 ### Panel 4 — Combined Weight Output (remaining ~31%)
-- Green/red fill: positive offset (sell weight > 0.5) vs negative offset (buy weight > 0.5)
+- Green/red fill: positive offset (buy weight increases, sell weight decreases) vs negative offset (sell weight increases, buy weight decreases)
 - Legend shows: offset value, sell weight (S), buy weight (B)
 - Interactive knobs for real-time parameter tuning
 - Weight amplitude is scaled by the Hurst+PE regime multiplier on each bar
@@ -208,8 +208,8 @@ symmetricDelta    = |clampedRawDelta| < volatilityThreshold ? 0 : clampedRawDelt
 
 Applied to weights:
 ```text
-effectiveSell = clamp(staticSell + trendOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT)
-effectiveBuy  = clamp(staticBuy  - trendOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT)
+effectiveSell = clamp(staticSell - trendOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT)
+effectiveBuy  = clamp(staticBuy  + trendOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT)
 ```
 
 The dedicated volatility research chart in `analysis/analyze_volatility.js` uses the same math without any directional component.

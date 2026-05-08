@@ -727,8 +727,8 @@ class MarketAdapterService {
         const volPenalty = slopeResult.isReady ? (slopeResult.symmetricDelta ?? 0) : 0;
         const trendOff   = belowMinOutputThreshold ? 0 : finalOff;
 
-        const effectiveSell = Math.round(clamp(staticSell + trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
-        const effectiveBuy  = Math.round(clamp(staticBuy  - trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
+        const effectiveSell = Math.round(clamp(staticSell - trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
+        const effectiveBuy  = Math.round(clamp(staticBuy  + trendOff + volPenalty, MIN_W, MAX_W) * 100) / 100;
 
         const weights = {
             sell: effectiveSell,
