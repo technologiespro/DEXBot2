@@ -566,6 +566,7 @@ class Grid {
         // trails price. Uses slope data from the dynamicgrid.json snapshot.
         let resolvedMinP = minP;
         let resolvedMaxP = maxP;
+        let rangeScalingFactor = null;
         if (gpSource === 'ama' && Number.isFinite(minP) && Number.isFinite(maxP)
             && getWhitelistFlags(manager.config.botKey).asymmetricBounds !== false) {
             const dw = amaSnapshot?.dynamicWeights;
@@ -586,6 +587,7 @@ class Grid {
             if (dw && Number.isFinite(adjustment.appliedAsymmetryFactor)) {
                 resolvedMinP = adjustment.resolvedMinPrice;
                 resolvedMaxP = adjustment.resolvedMaxPrice;
+                rangeScalingFactor = Number(adjustment.appliedAsymmetryFactor);
                 manager.logger?.log?.(
                     `[BOUND-ASYMMETRY] trend=${dw.trend} slopeOffset=${dw.slopeOffset.toFixed(4)} `
                     + `raw=${(adjustment.rawAsymmetryFactor * 100).toFixed(1)}% `
@@ -624,10 +626,14 @@ class Grid {
             gridPriceInput: gpRaw ?? null,
             effectiveGridPrice: gp,
             gridPriceSource: gpSource,
+            exactAmaPrice: amaSnapshot?.amaCenterPrice ?? null,
             configuredMinPrice,
             configuredMaxPrice,
+            staticMinPrice: minP,
+            staticMaxPrice: maxP,
             resolvedMinPrice: resolvedMinP,
             resolvedMaxPrice: resolvedMaxP,
+            rangeScalingFactor,
             amaSnapshot: amaSnapshot ? {
                 centerPrice: amaSnapshot.gridCenterPrice,
                 gridCenterPrice: amaSnapshot.gridCenterPrice,

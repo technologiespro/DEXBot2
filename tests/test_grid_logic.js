@@ -14,6 +14,7 @@ const { ORDER_TYPES, ORDER_STATES, DEFAULT_CONFIG, GRID_LIMITS } = require('../m
 const { OrderManager } = require('../modules/order/manager');
 const { allocateFundsByWeights, getSingleDustThreshold } = require('../modules/order/utils/math');
 const { shouldFlagOutOfSpread } = require('../modules/order/utils/order');
+const { WHITELIST_FILE, resetMarketAdapterWhitelistCache } = require('../modules/market_adapter_whitelist');
 
 async function runTests() {
     console.log('Running Grid Logic Tests...');
@@ -273,11 +274,26 @@ async function runTests() {
         const botKey = `test-grid-ama-center-${process.pid}`;
         const ordersDir = path.join(__dirname, '..', 'profiles', 'orders');
         const amaFile = path.join(ordersDir, `${botKey}.dynamicgrid.json`);
+        const originalWhitelist = fs.existsSync(WHITELIST_FILE)
+            ? fs.readFileSync(WHITELIST_FILE, 'utf8')
+            : null;
 
         fs.mkdirSync(ordersDir, { recursive: true });
+        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+            whitelist: {
+                [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: true }
+            }
+        }, null, 2) + '\n', 'utf8');
+        resetMarketAdapterWhitelistCache();
         fs.writeFileSync(amaFile, JSON.stringify({
             centerPrice: 1100,
             amaCenterPrice: 1000,
+            dynamicWeights: {
+                trend: 'UP',
+                slopeOffset: 0.1,
+                maxSlopeOffset: 0.5,
+                maxAsymmetryFactor: 0.35
+            },
             updatedAt: new Date().toISOString(),
         }, null, 2) + '\n', 'utf8');
 
@@ -306,10 +322,21 @@ async function runTests() {
             await Grid.initializeGrid(manager);
 
             assert(manager.orders.size > 0, 'initializeGrid should succeed with AMA gridPrice');
-            assert.strictEqual(manager.config.minPrice, 550, 'AMA gridPrice should use the persisted center price');
-            assert.strictEqual(manager.config.maxPrice, 2200, 'AMA gridPrice should use the persisted center price');
+            assert.strictEqual(manager._lastGridPricingContext.exactAmaPrice, 1000, 'debug pricing should expose the exact raw AMA price');
+            assert.strictEqual(manager._lastGridPricingContext.staticMinPrice, 550, 'debug pricing should preserve the static min before range scaling');
+            assert.strictEqual(manager._lastGridPricingContext.staticMaxPrice, 2200, 'debug pricing should preserve the static max before range scaling');
+            assert(Math.abs(manager._lastGridPricingContext.rangeScalingFactor - 0.07) < 1e-12, 'debug pricing should expose the applied range-scaling factor');
+            assert.strictEqual(manager._lastGridPricingContext.rangeScaling, undefined, 'debug pricing should avoid duplicating nested range-scaling diagnostics');
+            assert(Math.abs(manager.config.minPrice - 591.3978494623656) < 1e-9, 'AMA gridPrice should use the persisted center price plus range scaling');
+            assert.strictEqual(manager.config.maxPrice, 2354, 'AMA gridPrice should use the persisted center price plus range scaling');
         } finally {
             try { fs.unlinkSync(amaFile); } catch (_) {}
+            if (originalWhitelist == null) {
+                try { fs.unlinkSync(WHITELIST_FILE); } catch (_) {}
+            } else {
+                fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
+            }
+            resetMarketAdapterWhitelistCache();
         }
     }
 
