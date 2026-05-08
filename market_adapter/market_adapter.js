@@ -1213,6 +1213,9 @@ async function runOnce(cfg, state, contextCache) {
             if (r.triggerSuppressedReason === 'ama_warmup_insufficient') {
                 log(cfg, '  No write pass: AMA warmup history is still insufficient for a valid grid-centering write.');
             }
+            if (r.triggerSuppressedReason === 'unresolved_candle_gaps') {
+                log(cfg, '  No write pass: unresolved candle gaps remain, so the adapter kept the snapshot unchanged.');
+            }
             if (r.triggerSuppressedReason === 'fixed_start_price') {
                 log(cfg, '  No write pass: numeric startPrice disables market adapter fetch.');
             }

@@ -91,7 +91,8 @@ class MarketAdapterService {
     static isRetryableClosedCandleFailure(reason) {
         return reason === 'ama_center_persist_failed'
             || reason === 'dynamic_weight_persist_failed'
-            || reason === 'ama_slope_persist_failed';
+            || reason === 'ama_slope_persist_failed'
+            || reason === 'unresolved_candle_gaps';
     }
 
     getNowMs() {
@@ -143,6 +144,14 @@ class MarketAdapterService {
         };
     }
 
+    getMissingTimestampsWithinTimeRange(missingTimestamps, timeRange) {
+        if (!Array.isArray(missingTimestamps) || missingTimestamps.length === 0 || !timeRange) return [];
+        const gteMs = Date.parse(timeRange.gte);
+        const lteMs = Date.parse(timeRange.lte);
+        if (!Number.isFinite(gteMs) || !Number.isFinite(lteMs) || lteMs < gteMs) return [];
+        return missingTimestamps.filter((ts) => Number.isFinite(ts) && ts >= gteMs && ts <= lteMs);
+    }
+
     getGapRepairMaxHours(cfg) {
         const intervalSeconds = Number(cfg?.intervalSeconds);
         const intervalHours = Number.isFinite(intervalSeconds) && intervalSeconds > 0
@@ -154,8 +163,14 @@ class MarketAdapterService {
 
         // Include the candle before and after the missing run so Kibana repair
         // does not truncate a valid threshold-sized gap while still respecting
-        // the configured suspicious-gap threshold.
+        // the configured "trust native no-trade up to N candles" threshold.
         return Math.max(1, (maxCandles + 2) * intervalHours);
+    }
+
+    getTrustedNoTradeGapThresholdCandles(cfg) {
+        return Number.isFinite(cfg?.maxNativeGapFillCandles)
+            ? cfg.maxNativeGapFillCandles
+            : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
     }
 
     fillNativeIncrementalClosedGaps(candles, previousLastTs, intervalSeconds, nowMs = this.getNowMs()) {
@@ -195,6 +210,72 @@ class MarketAdapterService {
             incoming[4],
             existingVol + incomingVol,
         ];
+    }
+
+    // Historical internal holes are different from the live trailing silence path:
+    // native incremental fetches cannot directly tell us "no trades happened here"
+    // because the hole is already detached from the current native fetch window.
+    // When Kibana also returns no candles for a bounded internal run, we accept
+    // that as verified no-trade and synthesize flat candles up to the same
+    // trusted no-trade threshold used by live native silence handling.
+    fillVerifiedInternalNoTradeGaps(candles, missingTimestamps, intervalSeconds, maxGapCandles) {
+        const deps = this.deps;
+        const bucketMs = Number(intervalSeconds) * 1000;
+        if (!Array.isArray(candles) || candles.length === 0 || !Array.isArray(missingTimestamps) || missingTimestamps.length === 0) {
+            return { candles, filledTimestamps: [] };
+        }
+        if (!Number.isFinite(bucketMs) || bucketMs <= 0) return { candles, filledTimestamps: [] };
+        if (!Number.isFinite(maxGapCandles) || maxGapCandles <= 0) return { candles, filledTimestamps: [] };
+
+        const sortedCandles = candles
+            .filter((c) => Array.isArray(c) && Number.isFinite(c[0]))
+            .slice()
+            .sort((a, b) => a[0] - b[0]);
+        const sortedMissing = missingTimestamps
+            .filter((ts) => Number.isFinite(ts))
+            .slice()
+            .sort((a, b) => a - b);
+
+        if (sortedCandles.length === 0 || sortedMissing.length === 0) {
+            return { candles: sortedCandles, filledTimestamps: [] };
+        }
+
+        const candleByTs = new Map(sortedCandles.map((c) => [c[0], c]));
+        const synthesized = [];
+        const filledTimestamps = [];
+
+        let runStart = sortedMissing[0];
+        let previousMissingTs = sortedMissing[0];
+        const flushRun = (startTs, endTs) => {
+            const runLength = Math.round((endTs - startTs) / bucketMs) + 1;
+            if (runLength <= 0 || runLength > maxGapCandles) return;
+            const previousCandle = candleByTs.get(startTs - bucketMs);
+            const nextCandle = candleByTs.get(endTs + bucketMs);
+            if (!previousCandle || !nextCandle) return;
+            const baselineClose = Number(previousCandle[4]);
+            if (!Number.isFinite(baselineClose) || baselineClose <= 0) return;
+            for (let ts = startTs; ts <= endTs; ts += bucketMs) {
+                const c = [ts, baselineClose, baselineClose, baselineClose, baselineClose, 0];
+                synthesized.push(c);
+                filledTimestamps.push(ts);
+            }
+        };
+
+        for (let i = 1; i < sortedMissing.length; i++) {
+            const currentTs = sortedMissing[i];
+            if (currentTs !== previousMissingTs + bucketMs) {
+                flushRun(runStart, previousMissingTs);
+                runStart = currentTs;
+            }
+            previousMissingTs = currentTs;
+        }
+        flushRun(runStart, previousMissingTs);
+
+        if (synthesized.length === 0) return { candles: sortedCandles, filledTimestamps: [] };
+        return {
+            candles: deps.mergeCandles(sortedCandles, synthesized),
+            filledTimestamps,
+        };
     }
 
     getNativeRecentTradeSequences(trades, limit = 8) {
@@ -1055,6 +1136,23 @@ class MarketAdapterService {
                 : null;
             let nativeOverlapCount = null;
             let nativePagesFetched = null;
+            // Policy:
+            // - Trust native "no trades" directly for bounded runs up to this threshold.
+            // - Only escalate to Kibana verification once a no-trade run exceeds it.
+            // - Reuse the same threshold when deciding whether an old internal hole is
+            //   small enough to synthesize after Kibana also returns no candles.
+            const trustedNoTradeGapThresholdCandles = this.getTrustedNoTradeGapThresholdCandles(cfg);
+            const logGapRepairEvent = (message, level = 'info') => {
+                if (typeof deps.logger?.log === 'function') {
+                    deps.logger.log(message, level);
+                } else if (level === 'warn' && typeof deps.logger?.warn === 'function') {
+                    deps.logger.warn(message);
+                } else if (level === 'info' && typeof deps.logger?.info === 'function') {
+                    deps.logger.info(message);
+                } else if (typeof deps.logger?.warn === 'function') {
+                    deps.logger.warn(message);
+                }
+            };
             const hasKibanaSource = isBookSource
                 ? deps.kibanaMarketSource && typeof deps.kibanaMarketSource.getMarketCandles === 'function'
                 : deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function';
@@ -1429,10 +1527,7 @@ class MarketAdapterService {
                     const gapBuckets = Number.isFinite(gapEndTs) && gapEndTs > lastTs
                         ? Math.round((gapEndTs - lastTs) / bucketMs) - 1
                         : 0;
-                    const maxNativeGapFill = Number.isFinite(cfg.maxNativeGapFillCandles)
-                        ? cfg.maxNativeGapFillCandles
-                        : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
-                    if (gapBuckets <= maxNativeGapFill) {
+                    if (gapBuckets <= trustedNoTradeGapThresholdCandles) {
                         nextCandles = this.fillNativeIncrementalClosedGaps(nextCandles, lastTs, cfg.intervalSeconds);
                     } else {
                         const verifiedSilence = await verifyAndFillLongSilence(
@@ -1440,7 +1535,7 @@ class MarketAdapterService {
                         );
                         nextCandles = verifiedSilence.candles;
                         sourceLabel = verifiedSilence.sourceLabel;
-                        nextCandles = fillBoundedTrailingClosedGap(nextCandles, latestClosedBucketTs, nowMs, maxNativeGapFill);
+                        nextCandles = fillBoundedTrailingClosedGap(nextCandles, latestClosedBucketTs, nowMs, trustedNoTradeGapThresholdCandles);
                     }
                 } catch (err) {
                     if (typeof deps.logger?.warn === 'function') {
@@ -1480,6 +1575,15 @@ class MarketAdapterService {
                 );
                 if (timeRange) {
                     kibanaGapRepairAttempted = true;
+                    const verifiedGapTimestamps = this.getMissingTimestampsWithinTimeRange(
+                        gapAnalysis.missingTimestamps,
+                        timeRange
+                    );
+                    logGapRepairEvent(
+                        `[market_adapter] ${bot.botKey}: detected ${gapAnalysis.gapCount} unresolved candle gap(s); `
+                        + `requesting Kibana repair for ${timeRange.gte} -> ${timeRange.lte} `
+                        + `missing=[${gapAnalysis.missingTimestamps.map((ts) => new Date(ts).toISOString()).join(', ')}]`
+                    );
                     try {
                         const kibanaGapCandles = await deps.withRetries(() => fetchKibanaCandles({
                             intervalSeconds: cfg.intervalSeconds,
@@ -1489,17 +1593,60 @@ class MarketAdapterService {
                             timeRange,
                         }), cfg.sourceRetries, cfg.retryDelayMs, 'kibana gap repair failed');
 
+                        logGapRepairEvent(
+                            `[market_adapter] ${bot.botKey}: Kibana gap repair returned `
+                            + `${Array.isArray(kibanaGapCandles) ? kibanaGapCandles.length : 0} candle(s) `
+                            + `for ${timeRange.gte} -> ${timeRange.lte}`
+                        );
+
                         if (Array.isArray(kibanaGapCandles) && kibanaGapCandles.length > 0) {
                             const beforeTimestamps = new Set(nextCandles.map((c) => c[0]));
                             nextCandles = deps.mergeCandles(nextCandles, kibanaGapCandles);
                             const afterTimestamps = new Set(nextCandles.map((c) => c[0]));
                             kibanaGapRepairTimestamps = gapAnalysis.missingTimestamps.filter((ts) => !beforeTimestamps.has(ts) && afterTimestamps.has(ts));
+                            logGapRepairEvent(
+                                `[market_adapter] ${bot.botKey}: Kibana gap repair patched ${kibanaGapRepairTimestamps.length}/${gapAnalysis.gapCount} gap(s)`
+                                + (kibanaGapRepairTimestamps.length > 0
+                                    ? ` [${kibanaGapRepairTimestamps.map((ts) => new Date(ts).toISOString()).join(', ')}]`
+                                    : '')
+                            );
+                        } else {
+                            logGapRepairEvent(
+                                `[market_adapter] ${bot.botKey}: Kibana gap repair returned no candles for the requested gap window`,
+                                'warn'
+                            );
+                            const verifiedNoTrade = this.fillVerifiedInternalNoTradeGaps(
+                                nextCandles,
+                                verifiedGapTimestamps,
+                                cfg.intervalSeconds,
+                                trustedNoTradeGapThresholdCandles
+                            );
+                            if (verifiedNoTrade.filledTimestamps.length > 0) {
+                                nextCandles = verifiedNoTrade.candles;
+                                kibanaGapRepairTimestamps = verifiedNoTrade.filledTimestamps.slice();
+                                logGapRepairEvent(
+                                    `[market_adapter] ${bot.botKey}: synthesized ${verifiedNoTrade.filledTimestamps.length} no-trade candle(s) after empty Kibana repair `
+                                    + `[${verifiedNoTrade.filledTimestamps.map((ts) => new Date(ts).toISOString()).join(', ')}]`
+                                );
+                            }
                         }
-                    } catch (_) {}
+                    } catch (err) {
+                        logGapRepairEvent(
+                            `[market_adapter] ${bot.botKey}: Kibana gap repair failed (${err.message || String(err)})`,
+                            'warn'
+                        );
+                    }
                 }
                 gapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
                     ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
                     : { gapCount: 0, missingTimestamps: [] };
+                if (gapAnalysis.gapCount > 0) {
+                    logGapRepairEvent(
+                        `[market_adapter] ${bot.botKey}: ${gapAnalysis.gapCount} candle gap(s) still unresolved after Kibana repair `
+                        + `[${gapAnalysis.missingTimestamps.map((ts) => new Date(ts).toISOString()).join(', ')}]`,
+                        'warn'
+                    );
+                }
             }
 
             // ── Historical backfill: if candle count is still insufficient for AMA warmup,
@@ -1972,6 +2119,10 @@ class MarketAdapterService {
         let triggerSuppressedReason = null;
         let snapshotPersistedThisCycle = false;
         let previousCenterPrice = Number(botState.centerPrice || 0);
+        const hasUnresolvedCandleGaps = Number.isFinite(unresolvedGapCount) && unresolvedGapCount > 0;
+        if (hasUnresolvedCandleGaps) {
+            triggerSuppressedReason = 'unresolved_candle_gaps';
+        }
 
         const buildDynamicGridOptions = (options = {}) => ({
             gridCenterPrice: options.gridCenterPrice ?? null, // explicit baseline if provided
@@ -2046,7 +2197,7 @@ class MarketAdapterService {
             }
         };
 
-        if (!staleData && Number.isFinite(referencePrice) && referencePrice > 0) {
+        if (!staleData && !hasUnresolvedCandleGaps && Number.isFinite(referencePrice) && referencePrice > 0) {
             // Bootstrap when market-adapter state is missing (e.g. after clearing)
             // or when a bot runs for the first time.
             if (!Number.isFinite(previousCenterPrice) || previousCenterPrice <= 0) {
