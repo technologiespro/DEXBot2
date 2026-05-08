@@ -29,20 +29,20 @@ bootstrap (gaps filled via `candle_utils.fillCandleGaps`), but without pruning.
 
 | Asset        | Symbol       | Object ID  | Precision |
 |--------------|--------------|------------|-----------|
-| IOB.XRP      | IOB.XRP      | 1.3.3926   | 4         |
-| BTS          | BTS          | 1.3.0      | 5         |
-| HONEST.MONEY | HONEST.MONEY | —          | —         |
+| `<ASSET_A>`        | `<ASSET_A>`        | `<asset_a_id>`   | `<n>`         |
+| `<ASSET_B>`          | `<ASSET_B>`          | `<asset_b_id>`      | `<n>`         |
+| `<ASSET_C>` | `<ASSET_C>` | —          | —         |
 
-**IOB.XRP/BTS pool (3 years):**
+**`<ASSET_A>`/`<ASSET_B>` pool (3 years):**
 ```bash
 node analysis/ama_fitting/fetch_lp_candles.js \
   --pool 1.19.133 \
-  --assetA IOB.XRP --assetAId 1.3.3926 --assetAPrecision 4 \
-  --assetB BTS     --assetBId 1.3.0    --assetBPrecision 5 \
+  --assetA <ASSET_A> --assetAId <asset_a_id> --assetAPrecision <n> \
+  --assetB <ASSET_B>     --assetBId <asset_b_id>    --assetBPrecision <n> \
   --hours 26280
 ```
 
-Output: `market_adapter/data/lp/iob_xrp_bts/lp_pool_<poolShort>_<interval>.json` (interval-dependent)
+Output: `market_adapter/data/lp/<pair_folder>/lp_pool_<poolShort>_<interval>.json` (interval-dependent)
 
 **Options:**
 
@@ -50,7 +50,7 @@ Output: `market_adapter/data/lp/iob_xrp_bts/lp_pool_<poolShort>_<interval>.json`
 |------|---------|-------------|
 | `--pool` | required | Pool ID (e.g. `1.19.133` or just `133`) |
 | `--assetA` | required | Asset A symbol |
-| `--assetAId` | required | Asset A object ID (e.g. `1.3.3926`) |
+| `--assetAId` | required | Asset A object ID (e.g. `<asset_a_id>`) |
 | `--assetAPrecision` | required | Asset A precision |
 | `--assetB` | required | Asset B symbol |
 | `--assetBId` | required | Asset B object ID |
@@ -187,8 +187,8 @@ market adapter cycle.
 {
   "meta": {
     "pool": "1.19.133",
-    "assetA": { "id": "1.3.3926", "precision": 4, "symbol": "IOB.XRP" },
-    "assetB": { "id": "1.3.0",    "precision": 5, "symbol": "BTS" },
+    "assetA": { "id": "<asset_a_id>", "precision": <n>, "symbol": "<ASSET_A>" },
+    "assetB": { "id": "<asset_b_id>",    "precision": <n>, "symbol": "<ASSET_B>" },
     "intervalSeconds": 3600,
     "lookbackHours": 26280,
     "candleCount": 26280

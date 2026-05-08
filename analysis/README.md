@@ -4,30 +4,31 @@ This directory contains research runners, chart generators, and helper modules u
 
 All runners write self-contained HTML to `charts/`. These files are regenerated on each run and are not committed.
 
-## Data Prerequisites
+## Quick Start
 
-Most runners expect LP candle JSON files under `market_adapter/data/lp/`. To fetch fresh data:
+Most runners default to the market adapter source — just pass a bot key from `profiles/bots.json`:
 
 ```bash
-# Via the market adapter LP exporter (recommended for blockchain-backed candles)
-node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --lookback 26280h
+# Derivative signals (SMA/MACD/RSI)
+npm run analysis:derivatives -- --bot-key <bot-key>
 
-# Via the analysis fetcher (uses Kibana source directly)
-node analysis/ama_fitting/fetch_lp_candles.js --pool 1.19.133 \
-  --assetA IOB.XRP --assetAId 1.3.3926 --assetAPrecision 4 \
-  --assetB BTS     --assetBId 1.3.0    --assetBPrecision 5
+# Dynamic weight research (AMA + Kalman + Hurst)
+node analysis/analyze_dynamic_weight.js --bot-key <bot-key>
+
+# Kalman filter analysis
+node analysis/analyze_kalman.js --bot-key <bot-key>
+
+# Volatility (ATR-based symmetric penalty)
+node analysis/analyze_volatility.js --bot-key <bot-key>
+
+# Regime classification (Hurst + Permutation Entropy)
+node analysis/analyze_regime.js --bot-key <bot-key>
+
+# TradingView-style chart
+npm run analysis:tradingview -- --source market_adapter --bot-key <bot-key>
 ```
 
-See [ama_fitting/README.md](ama_fitting/README.md) for full fetch options and data format.
-
-## Subareas
-
-- `trend_detection/` - SMA, MACD, RSI, Hurst, Kalman, regime, and dynamic-weight analysis plus research docs
-- `ama_fitting/` - AMA fitting, synthetic comparison charts, and LP data workflows
-- `bot_fitting/` - Grid parameter sweep backtests for AMA winners
-- `bot_usage/` - DEXBot account discovery and Kibana query helpers
-- `tradingview/` - TradingView-style chart export
-- `charts/` - Generated HTML chart output (not committed, regenerated on each run)
+> The market adapter source reads from `market_adapter/state/price_adapter_centers.json` — make sure the bot has been running and produced state data first.
 
 ## Main Entry Points
 
@@ -36,7 +37,10 @@ See [ama_fitting/README.md](ama_fitting/README.md) for full fetch options and da
 SMA/MACD/RSI signal analyzer. Produces a multi-panel HTML chart showing BULL/BEAR/NEUTRAL/OVERBOUGHT/OVERSOLD interpretation states with entry bias metadata.
 
 ```bash
-# Recommended 1h setup
+# Bot-key (uses market adapter source)
+npm run analysis:derivatives -- --bot-key <bot-key>
+
+# From LP candle file (recommended 1h setup)
 node analysis/analyze_derivatives.js \
   --source json \
   --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
@@ -54,6 +58,10 @@ Full signal documentation: [SIGNAL_DOCUMENTATION.md](trend_detection/SIGNAL_DOCU
 Interactive 4-panel chart blending AMA slope and Kalman filter signals, gated by Hurst Exponent and Permutation Entropy regime detection. Knobs for α, gain, clip%, nz%, and more.
 
 ```bash
+# Bot-key (uses market adapter source)
+node analysis/analyze_dynamic_weight.js --bot-key <bot-key>
+
+# From LP candle file with custom parameters
 node analysis/analyze_dynamic_weight.js \
   --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
   --alpha 0.6 --gain 0.25 --clip 20
@@ -66,7 +74,24 @@ Full research docs: [DYNAMIC_WEIGHT_RESEARCH.md](trend_detection/DYNAMIC_WEIGHT_
 Standalone Kalman filter chart with tactical/modal state tracking — velocity and displacement as separate orthogonal signals.
 
 ```bash
+# Bot-key (uses market adapter source)
+node analysis/analyze_kalman.js --bot-key <bot-key>
+
+# From LP candle file
 node analysis/analyze_kalman.js \
+  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
+```
+
+### Volatility Analysis (`analyze_volatility.js`)
+
+ATR-based symmetric volatility penalty research. Uses the same math as the production volatility penalty without any directional component.
+
+```bash
+# Bot-key (uses market adapter source)
+node analysis/analyze_volatility.js --bot-key <bot-key>
+
+# From LP candle file
+node analysis/analyze_volatility.js \
   --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
@@ -74,14 +99,51 @@ node analysis/analyze_kalman.js \
 
 Hurst Exponent and Permutation Entropy regime classification. `analyze_regime.js` shows the standard regime chart; `analyze_regime_windows.js` explores different window configurations.
 
-### Volatility Analysis (`analyze_volatility.js`)
-
-ATR-based symmetric volatility penalty research. Uses the same math as the production volatility penalty without any directional component.
-
 ```bash
-node analysis/analyze_volatility.js \
+# Bot-key (uses market adapter source)
+node analysis/analyze_regime.js --bot-key <bot-key>
+node analysis/analyze_regime_windows.js --bot-key <bot-key>
+
+# From LP candle file
+node analysis/analyze_regime.js \
+  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
+node analysis/analyze_regime_windows.js \
   --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
+
+### TradingView Chart (`analyze_tradingview.js`)
+
+Generates a standalone TradingView-style HTML chart with candle OHLC, SMA, AMA, VWMA, and volume panel. See [tradingview/README.md](tradingview/README.md) for full documentation.
+
+```bash
+# Bot-key (auto-resolves candle file and AMA settings)
+npm run analysis:tradingview -- --source market_adapter --bot-key <bot-key>
+
+# From an explicit candle file
+node analysis/tradingview/analyze_tradingview.js \
+  --file market_adapter/data/market_adapter_<bot-key>_1h.json \
+  --chart analysis/charts/<pair>_tradingview.html
+```
+
+## Data Prerequisites
+
+Most runners expect candle data. Two paths to get it:
+
+**Market adapter source** (default for most runners) — reads from `market_adapter/state/price_adapter_centers.json`. No setup needed; just run the bot first to populate state.
+
+**LP candle files** — for deeper analysis with full OHLC data:
+
+```bash
+# Via the market adapter LP exporter (recommended for blockchain-backed candles)
+node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --lookback 26280h
+
+# Via the analysis fetcher (uses Kibana source directly)
+node analysis/ama_fitting/fetch_lp_candles.js --pool 1.19.133 \
+  --assetA <ASSET_A> --assetAId <asset_a_id> --assetAPrecision <n> \
+  --assetB <ASSET_B>     --assetBId <asset_b_id>    --assetBPrecision <n>
+```
+
+See [ama_fitting/README.md](ama_fitting/README.md) for full fetch options and data format.
 
 ## Subarea Details
 
@@ -177,23 +239,7 @@ Details: [bot_fitting/README.md](bot_fitting/README.md)
 
 ### `tradingview/`
 
-| Script | Purpose |
-|--------|---------|
-| `analyze_tradingview.js` | TradingView chart analysis runner |
-| `tradingview_uplot_chart_generator.js` | TradingView-style uPlot chart generator |
-
-```bash
-# From a market adapter candle snapshot by bot key
-node analysis/tradingview/analyze_tradingview.js \
-  --source market_adapter \
-  --bot-key xrp-bts-0 \
-  --chart analysis/charts/xrp_bts_tradingview.html
-
-# From an explicit candle file
-node analysis/tradingview/analyze_tradingview.js \
-  --file market_adapter/data/market_adapter_xrp-bts-0_1h.json \
-  --chart analysis/charts/xrp_bts_tradingview.html
-```
+Generates a standalone TradingView-style HTML chart. See [tradingview/README.md](tradingview/README.md) for full documentation.
 
 ## Shared Helpers
 
@@ -215,23 +261,26 @@ These npm scripts wrap common analysis runners:
 | `npm run analysis:tradingview` | `node analysis/tradingview/analyze_tradingview.js` |
 | `npm run ama:chart:lp-local` | `node analysis/ama_fitting/generate_unified_comparison_chart.js` |
 
-All three accept `--` forwarded flags.
-
-Examples:
+All accept `--` forwarded flags.
 
 ```bash
-npm run analysis:tradingview -- --file market_adapter/data/market_adapter_xrp-bts-0_1h.json
-npm run analysis:tradingview -- --source market_adapter --bot-key xrp-bts-0 --chart analysis/charts/xrp_bts_tradingview.html
+# Bot-key shortcuts
+npm run analysis:derivatives -- --bot-key <bot-key>
+npm run analysis:tradingview -- --source market_adapter --bot-key <bot-key>
+
+# File-based
+npm run analysis:tradingview -- --file market_adapter/data/market_adapter_<bot-key>_1h.json
+npm run ama:chart:lp-local -- --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
-Other runners are invoked directly:
+Runners without npm shortcuts are invoked directly:
 
 ```bash
-node analysis/analyze_dynamic_weight.js --file <path>
-node analysis/analyze_kalman.js --file <path>
-node analysis/analyze_volatility.js --file <path>
-node analysis/analyze_regime.js --file <path>
-node analysis/analyze_regime_windows.js --file <path>
+node analysis/analyze_dynamic_weight.js --bot-key <bot-key>
+node analysis/analyze_kalman.js --bot-key <bot-key>
+node analysis/analyze_volatility.js --bot-key <bot-key>
+node analysis/analyze_regime.js --bot-key <bot-key>
+node analysis/analyze_regime_windows.js --bot-key <bot-key>
 ```
 
 ## Related Docs

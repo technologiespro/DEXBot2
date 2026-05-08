@@ -26,15 +26,66 @@ This writes:
 analysis/charts/tradingview_chart.html
 ```
 
-## Direct CLI Usage
+## Bot-Key Usage (Recommended)
+
+The easiest way to generate a chart for a specific bot. Pass the bot key from `profiles/bots.json` and the exporter automatically resolves the candle file and AMA settings:
+
+```bash
+npm run analysis:tradingview -- \
+  --source market_adapter \
+  --bot-key <bot-key>
+```
+
+This picks up the bot's asset pair, market profile AMA defaults, and candle data from `market_adapter/data/`. AMA is auto-enabled when the bot uses `gridPrice: "ama"` (or ama1-4).
+
+With a custom chart path:
+
+```bash
+npm run analysis:tradingview -- \
+  --source market_adapter \
+  --bot-key <bot-key> \
+  --chart analysis/charts/<pair>_tradingview.html
+```
+
+CLI direct equivalent:
 
 ```bash
 node analysis/tradingview/analyze_tradingview.js \
-  --file <path-to-lp-candles.json> \
-  --chart analysis/charts/tradingview_chart.html
+  --source market_adapter \
+  --bot-key <bot-key>
 ```
 
-Example using market adapter LP data:
+### How It Works
+
+1. Reads `profiles/bots.json` to find the bot's `assetA`, `assetB`, and `ama` settings.
+2. Resolves the candle file at `market_adapter/data/market_adapter_<bot-key>_1h.json`.
+3. Looks up the matching market profile in `profiles/market_profiles.json` for AMA defaults.
+4. AMA settings priority: bot-specific `ama` object > market profile > constants (112.7).
+
+> The candle file must exist — run the market adapter LP exporter first if needed (see [Getting Blockchain Data](#getting-blockchain-data)).
+
+## Source / File Usage
+
+### From a Market Adapter Candle Snapshot
+
+```bash
+node analysis/tradingview/analyze_tradingview.js \
+  --source market_adapter \
+  --bot-key <bot-key> \
+  --chart analysis/charts/<pair>_tradingview.html
+```
+
+The `--source market_adapter` flag tells the exporter to look up candle data from the market adapter's data directory instead of requiring an explicit `--file` path.
+
+### From an Explicit Candle File
+
+```bash
+node analysis/tradingview/analyze_tradingview.js \
+  --file market_adapter/data/market_adapter_<bot-key>_1h.json \
+  --chart analysis/charts/<pair>_tradingview.html
+```
+
+Using LP candle files directly:
 
 ```bash
 node analysis/tradingview/analyze_tradingview.js \
@@ -65,19 +116,23 @@ For manual pool discovery, use `--pool`, `--precA`, and `--precB` instead of `--
 
 ## CLI Flags
 
-- `--file <path>`: candle JSON input file
-- `--chart <path>`: output HTML file
-- `--title <text>`: chart title
-- `--sma-period <n>`: SMA period, default `500`
-- `--ama-er-period <n>`: AMA ER period, default `781`
-- `--ama-fast-period <n>`: AMA fast period, default `5.2`
-- `--ama-slow-period <n>`: AMA slow period, default `112.7`
-- `--price-scale <log|linear>`: price axis scale, default `log`
-- `--no-sma`: disable SMA
-- `--no-ama`: disable AMA
-- `--no-vwap`: disable VWMA
-- `--vwap-bars <n>`: rolling VWMA window, default `500`
-- `--quiet`: suppress progress logs
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--source <json\|market_adapter>` | Data source type | `json` |
+| `--file <path>` | Candle JSON input file (required for `json` source) | — |
+| `--bot-key <key>` | Bot key for `market_adapter` source | — |
+| `--chart <path>` | Output HTML file | `analysis/charts/tradingview_chart.html` |
+| `--title <text>` | Chart title | auto-generated from meta |
+| `--sma-period <n>` | SMA period | `500` |
+| `--ama-er-period <n>` | AMA ER period | `781` |
+| `--ama-fast-period <n>` | AMA fast period | `5.2` |
+| `--ama-slow-period <n>` | AMA slow period | `112.7` |
+| `--price-scale <log\|linear>` | Price axis scale | `log` |
+| `--vwap-bars <n>` | Rolling VWMA window | `500` |
+| `--no-sma` | Disable SMA | — |
+| `--no-ama` | Disable AMA | — |
+| `--no-vwap` | Disable VWMA | — |
+| `--quiet` | Suppress progress logs | — |
 
 ## Notes
 
