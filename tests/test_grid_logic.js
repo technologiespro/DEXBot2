@@ -322,11 +322,17 @@ async function runTests() {
             await Grid.initializeGrid(manager);
 
             assert(manager.orders.size > 0, 'initializeGrid should succeed with AMA gridPrice');
-            assert.strictEqual(manager._lastGridPricingContext.exactAmaPrice, 1000, 'debug pricing should expose the exact raw AMA price');
-            assert.strictEqual(manager._lastGridPricingContext.staticMinPrice, 550, 'debug pricing should preserve the static min before range scaling');
-            assert.strictEqual(manager._lastGridPricingContext.staticMaxPrice, 2200, 'debug pricing should preserve the static max before range scaling');
+            assert.strictEqual(manager._lastGridPricingContext.gridPrice, 1100, 'debug pricing should expose the resolved grid price once');
+            assert.strictEqual(manager._lastGridPricingContext.weightDistribution, undefined, 'debug pricing should not duplicate weights from config');
+            assert.strictEqual(manager._lastGridPricingContext.gridPriceInput, undefined, 'debug pricing should not duplicate grid price inputs');
+            assert.strictEqual(manager._lastGridPricingContext.exactAmaPrice, undefined, 'debug pricing should not duplicate AMA-specific price diagnostics');
+            assert.strictEqual(manager._lastGridPricingContext.staticMinPrice, undefined, 'debug pricing should not persist pre-scaling range diagnostics');
+            assert.strictEqual(manager._lastGridPricingContext.staticMaxPrice, undefined, 'debug pricing should not persist pre-scaling range diagnostics');
+            assert.strictEqual(manager._lastGridPricingContext.resolvedMinPrice, undefined, 'debug pricing should not duplicate resolved min from config');
+            assert.strictEqual(manager._lastGridPricingContext.resolvedMaxPrice, undefined, 'debug pricing should not duplicate resolved max from config');
             assert(Math.abs(manager._lastGridPricingContext.rangeScalingFactor - 0.07) < 1e-12, 'debug pricing should expose the applied range-scaling factor');
             assert.strictEqual(manager._lastGridPricingContext.rangeScaling, undefined, 'debug pricing should avoid duplicating nested range-scaling diagnostics');
+            assert.strictEqual(manager._lastGridPricingContext.amaSnapshot, undefined, 'debug pricing should not persist market adapter diagnostics');
             assert(Math.abs(manager.config.minPrice - 591.3978494623656) < 1e-9, 'AMA gridPrice should use the persisted center price plus range scaling');
             assert.strictEqual(manager.config.maxPrice, 2354, 'AMA gridPrice should use the persisted center price plus range scaling');
         } finally {

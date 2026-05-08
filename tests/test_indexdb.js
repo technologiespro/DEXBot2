@@ -57,11 +57,10 @@ async function main() {
     };
     manager.accountTotals = { buy: 10, sell: 20, buyFree: 8, sellFree: 18 };
     manager._lastGridPricingContext = {
-      requestedStartPrice: 1,
-      effectiveStartPrice: 1.1,
-      gridPriceInput: 'ama',
-      effectiveGridPrice: 1.1,
-      gridPriceSource: 'ama'
+      gridPrice: 1.1,
+      configuredMinPrice: '2x',
+      configuredMaxPrice: '2x',
+      rangeScalingFactor: 0.1
     };
     manager.funds.btsFeesOwed = 0.01;
 
@@ -70,8 +69,12 @@ async function main() {
     const debugEntry = debugDb._loadData().bots[debugBotKey];
     assert(debugEntry.debugInputs, 'Expected debug input snapshot to persist');
     assert.strictEqual(debugEntry.debugInputs.config.assetA, 'ASSET.A');
+    assert.strictEqual(debugEntry.debugInputs.config.gridPrice, 1.1);
+    assert.strictEqual(debugEntry.debugInputs.config.configuredMinPrice, '2x');
+    assert.strictEqual(debugEntry.debugInputs.config.configuredMaxPrice, '2x');
+    assert.strictEqual(debugEntry.debugInputs.config.rangeScalingFactor, 0.1);
     assert.strictEqual(debugEntry.debugInputs.accountTotals.buyFree, 8);
-    assert.strictEqual(debugEntry.debugInputs.pricing.effectiveGridPrice, 1.1);
+    assert.strictEqual(debugEntry.debugInputs.pricing, undefined);
     assert.strictEqual(debugEntry.debugInputs.assets, undefined);
     assert.strictEqual(debugEntry.debugInputs.boundaryIdx, undefined);
     assert.strictEqual(debugEntry.debugInputs.orderCount, undefined);

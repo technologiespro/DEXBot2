@@ -621,31 +621,10 @@ class Grid {
         manager.config.minPrice = resolvedMinP;
         manager.config.maxPrice = resolvedMaxP;
         manager._lastGridPricingContext = {
-            requestedStartPrice: configuredStartPrice,
-            effectiveStartPrice: gridStartPrice,
-            gridPriceInput: gpRaw ?? null,
-            effectiveGridPrice: gp,
-            gridPriceSource: gpSource,
-            exactAmaPrice: amaSnapshot?.amaCenterPrice ?? null,
+            gridPrice: gp,
             configuredMinPrice,
             configuredMaxPrice,
-            staticMinPrice: minP,
-            staticMaxPrice: maxP,
-            resolvedMinPrice: resolvedMinP,
-            resolvedMaxPrice: resolvedMaxP,
-            rangeScalingFactor,
-            amaSnapshot: amaSnapshot ? {
-                centerPrice: amaSnapshot.gridCenterPrice,
-                gridCenterPrice: amaSnapshot.gridCenterPrice,
-                amaCenterPrice: amaSnapshot.amaCenterPrice,
-                source: amaSnapshot.source,
-                updatedAt: amaSnapshot.updatedAt,
-                amaSlopePercentMode: amaSnapshot.amaSlopePercentMode,
-                amaSlope: amaSnapshot.amaSlope,
-                gridRangeScalingAmaSlope: amaSnapshot.gridRangeScalingAmaSlope,
-                amaSlopeDeltaPercent: amaSnapshot.amaSlopeDeltaPercent,
-                amaSlopeThresholdPercent: amaSnapshot.amaSlopeThresholdPercent
-            } : null
+            rangeScalingFactor
         };
 
         // Ensure percentage-based funds are resolved before sizing

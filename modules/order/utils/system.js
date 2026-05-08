@@ -563,6 +563,24 @@ async function persistGridSnapshot(manager, accountOrders, botKey) {
     if (!manager || !accountOrders || !botKey) return false;
     try {
         const orders = Array.from(manager.orders.values());
+        const pricing = manager._lastGridPricingContext || null;
+        let debugConfig = manager.config || null;
+        if (debugConfig && pricing) {
+            const {
+                gridPrice: _gridPrice,
+                configuredMinPrice: _configuredMinPrice,
+                configuredMaxPrice: _configuredMaxPrice,
+                rangeScalingFactor: _rangeScalingFactor,
+                ...restConfig
+            } = debugConfig;
+            debugConfig = {
+                gridPrice: pricing.gridPrice,
+                configuredMinPrice: pricing.configuredMinPrice,
+                configuredMaxPrice: pricing.configuredMaxPrice,
+                rangeScalingFactor: pricing.rangeScalingFactor,
+                ...restConfig
+            };
+        }
         await accountOrders.storeMasterGrid(
             botKey,
             orders,
@@ -571,9 +589,8 @@ async function persistGridSnapshot(manager, accountOrders, botKey) {
             manager.assets || null,
             {
                 persistedAt: new Date().toISOString(),
-                config: manager.config || null,
-                accountTotals: manager.accountTotals || null,
-                pricing: manager._lastGridPricingContext || null
+                config: debugConfig,
+                accountTotals: manager.accountTotals || null
             }
         );
         return true;
