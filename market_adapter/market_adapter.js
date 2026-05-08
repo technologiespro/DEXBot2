@@ -1043,12 +1043,15 @@ function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
         ensureDir(ORDERS_DIR);
         const filePath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
         const tmpPath = `${filePath}.tmp`;
-        const amaCenterPrice = Number(options.amaCenterPrice);
         const resolvedGridCenterPrice = Math.round(Number(gridCenterPrice) * 1e8) / 1e8;
+        const rawAmaCenterPrice = Number(options.amaCenterPrice);
+        const resolvedAmaCenterPrice = Number.isFinite(rawAmaCenterPrice) && rawAmaCenterPrice > 0
+            ? Math.round(rawAmaCenterPrice * 1e8) / 1e8
+            : resolvedGridCenterPrice;
         const payload = {
             gridCenterPrice: resolvedGridCenterPrice,
             centerPrice: resolvedGridCenterPrice,
-            amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : resolvedGridCenterPrice,
+            amaCenterPrice: resolvedAmaCenterPrice,
             amaSlopePercentMode: AMA_SLOPE_PERCENT_MODE_PER_BAR,
             updatedAt: new Date().toISOString(),
             source: 'market_adapter/market_adapter.js',

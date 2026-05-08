@@ -21,6 +21,7 @@ const {
     _setBitsharesClientForTests,
 } = require('../market_adapter/market_adapter');
 const { resolveMarketSourceForBot } = require('../market_adapter/utils/chain');
+const { parseNativeMarketHistoryTimestamp } = require('../market_adapter/utils/native_history');
 const { detectMissingCandleTimestamps, fillCandleGaps, pruneStaleTail, tradesToCandles } = require('../market_adapter/candle_utils');
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
 const { loadStrategiesFromProfiles } = require('../market_adapter/lp_chart_strategy_loader');
@@ -313,11 +314,66 @@ assert.strictEqual(usesOrderbookMarketSource({ startPrice: 'book' }), true, 'boo
     }], { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' }, { id: '1.3.0', precision: 5, symbol: 'BTS' }, 3600);
 
     assert.strictEqual(candles.length, 1, 'native market history should normalize one candle');
+    assert.strictEqual(candles[0][0], Date.UTC(2026, 0, 1, 0, 0, 0), 'timestamp should be parsed as UTC (key.open has no timezone suffix)');
     assert.strictEqual(candles[0][1], 0.5, 'IOB.XRP/BTS open should be normalized to BTS per XRP');
     assert.strictEqual(candles[0][2], 0.8, 'IOB.XRP/BTS high should remain the larger normalized price');
     assert.strictEqual(candles[0][3], 0.4, 'IOB.XRP/BTS low should remain the smaller normalized price');
     assert.strictEqual(candles[0][4], 0.5, 'IOB.XRP/BTS close should be normalized to BTS per XRP');
     assert.strictEqual(candles[0][5], 18, 'IOB.XRP/BTS volume should be expressed in XRP units');
+}
+
+// Timestamp: UTC parsing must be independent of the host timezone
+{
+    const inBerlinSummer = { key: { base: '1.3.0', quote: '1.3.1', open: '2026-07-15T12:00:00' } };
+    const ts = parseNativeMarketHistoryTimestamp(inBerlinSummer);
+    const expected = Date.UTC(2026, 6, 15, 12, 0, 0);
+    assert.strictEqual(ts, expected,
+        `parseNativeMarketHistoryTimestamp must parse UTC, got ${ts} (${ts - expected}ms off from ${expected})`
+    );
+
+    // Winter (no DST) should also be correct
+    const inWinter = { key: { base: '1.3.0', quote: '1.3.1', open: '2026-01-15T12:00:00' } };
+    const tsWinter = parseNativeMarketHistoryTimestamp(inWinter);
+    const expectedWinter = Date.UTC(2026, 0, 15, 12, 0, 0);
+    assert.strictEqual(tsWinter, expectedWinter,
+        `parseNativeMarketHistoryTimestamp must parse winter UTC correctly`
+    );
+
+    // Already has Z suffix — should still work
+    const withZ = { key: { base: '1.3.0', quote: '1.3.1', open: '2026-01-15T12:00:00Z' } };
+    const tsZ = parseNativeMarketHistoryTimestamp(withZ);
+    assert.strictEqual(tsZ, expectedWinter, 'Z suffix should also parse as UTC');
+
+    // Epoch seconds (10-digit) should be normalized to ms
+    const epochSec = { key: { base: '1.3.0', quote: '1.3.1', open: 1704067200 } };
+    const tsEpochSec = parseNativeMarketHistoryTimestamp(epochSec);
+    assert.strictEqual(tsEpochSec, 1704067200 * 1000, 'epoch seconds should be multiplied to ms');
+
+    // Epoch ms (13-digit) should pass through
+    const epochMs = { key: { base: '1.3.0', quote: '1.3.1', open: 1704067200000 } };
+    const tsEpochMs = parseNativeMarketHistoryTimestamp(epochMs);
+    assert.strictEqual(tsEpochMs, 1704067200000, 'epoch ms should pass through unchanged');
+}
+
+// Epoch-second normalization in normalizeNativeMarketHistoryCandles (array path)
+{
+    const candles = normalizeNativeMarketHistoryCandles(
+        [[1704067200, 0.5, 0.6, 0.4, 0.55, 10]],
+        { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+        { id: '1.3.0', precision: 5, symbol: 'BTS' },
+        3600
+    );
+    assert.strictEqual(candles.length, 1);
+    assert.strictEqual(candles[0][0], 1704067200000, 'array-path epoch seconds should be normalized to ms');
+
+    // Epoch ms should pass through unchanged
+    const candlesMs = normalizeNativeMarketHistoryCandles(
+        [[1704067200000, 0.5, 0.6, 0.4, 0.55, 10]],
+        { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+        { id: '1.3.0', precision: 5, symbol: 'BTS' },
+        3600
+    );
+    assert.strictEqual(candlesMs[0][0], 1704067200000, 'array-path epoch ms should pass through unchanged');
 }
 
 async function testNativeMarketHistoryDirectOrder() {

@@ -329,10 +329,10 @@ class MarketAdapterService {
         });
     }
 
-    clampGridPriceToBounds(centerPrice, referencePrice, bot) {
-        const base = Number(centerPrice);
+    clampGridPriceToBounds(gridCenterPrice, referencePrice, bot) {
+        const base = Number(gridCenterPrice);
         const ref = Number(referencePrice);
-        if (!Number.isFinite(base) || base <= 0) return centerPrice;
+        if (!Number.isFinite(base) || base <= 0) return gridCenterPrice;
         try {
             const startPrice = Number.isFinite(ref) && ref > 0 ? ref : base;
             const minP = resolveConfiguredPriceBound(bot?.minPrice, DEFAULT_CONFIG.minPrice, startPrice, 'min');
@@ -344,7 +344,7 @@ class MarketAdapterService {
         }
     }
 
-    computeAppliedAsymmetryMetrics(bot, centerPrice, dynamicWeights) {
+    computeAppliedAsymmetryMetrics(bot, gridCenterPrice, dynamicWeights) {
         const maxAsymmetryFactor = resolveMaxAsymmetryFactor(
             bot?.asymmetricBounds?.maxAsymmetryFactor,
             dynamicWeights?.maxAsymmetryFactor,
@@ -353,11 +353,11 @@ class MarketAdapterService {
         let minP = null;
         let maxP = null;
         try {
-            minP = resolveConfiguredPriceBound(bot?.minPrice, DEFAULT_CONFIG.minPrice, centerPrice, 'min');
-            maxP = resolveConfiguredPriceBound(bot?.maxPrice, DEFAULT_CONFIG.maxPrice, centerPrice, 'max');
+            minP = resolveConfiguredPriceBound(bot?.minPrice, DEFAULT_CONFIG.minPrice, gridCenterPrice, 'min');
+            maxP = resolveConfiguredPriceBound(bot?.maxPrice, DEFAULT_CONFIG.maxPrice, gridCenterPrice, 'max');
         } catch (_) {}
         return computeAsymmetricBoundsMetrics({
-            centerPrice,
+            centerPrice: gridCenterPrice,
             minPrice: minP,
             maxPrice: maxP,
             trend: dynamicWeights?.trend,
@@ -1320,7 +1320,9 @@ class MarketAdapterService {
                     } catch (_) {}
 
                     if (Array.isArray(nativeCandles) && nativeCandles.length > 0) {
-                        nextCandles = deps.mergeCandles(nextCandles, nativeCandles);
+                        nextCandles = deps.mergeCandles(nextCandles, nativeCandles, {
+                            onCollision: (existingCandle, incomingCandle) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
+                        });
                         sourceLabel = 'native-book-history';
                     } else {
                         sourceLabel = 'cached-book';
@@ -1601,7 +1603,9 @@ class MarketAdapterService {
 
                         if (Array.isArray(kibanaGapCandles) && kibanaGapCandles.length > 0) {
                             const beforeTimestamps = new Set(nextCandles.map((c) => c[0]));
-                            nextCandles = deps.mergeCandles(nextCandles, kibanaGapCandles);
+                            nextCandles = deps.mergeCandles(nextCandles, kibanaGapCandles, {
+                                onCollision: (existingCandle, incomingCandle) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
+                            });
                             const afterTimestamps = new Set(nextCandles.map((c) => c[0]));
                             kibanaGapRepairTimestamps = gapAnalysis.missingTimestamps.filter((ts) => !beforeTimestamps.has(ts) && afterTimestamps.has(ts));
                             logGapRepairEvent(
@@ -1963,8 +1967,10 @@ class MarketAdapterService {
 
         const amaValues = calculateAMA(closes, botAma);
 
-        // amaPrice is the last value of the full AMA series
-        const amaPrice = amaValues[amaValues.length - 1];
+        // amaPrice is the last value of the full AMA series.
+        // Standardize to 8 decimals to ensure parity between internal state and persisted bot snapshots.
+        const rawAmaPrice = amaValues[amaValues.length - 1];
+        const amaPrice = Math.round(rawAmaPrice * 1e8) / 1e8;
         const lastCandle = latestClosedCandle || [0, 0, 0, 0, 0];
 
         // 2. ATR — used only for the symmetric volatility shift. The asymmetrical
@@ -2091,13 +2097,15 @@ class MarketAdapterService {
         const { staleData, staleAgeHours } = deps.computeCandleStaleness(closedCandleTs, cfg.maxStaleHours);
 
         const referencePrice = amaPrice;
-        const clampedCenterPrice = this.clampGridPriceToBounds(referencePrice, referencePrice, bot);
-        const centerPrice = Number.isFinite(clampedCenterPrice) && clampedCenterPrice > 0
-            ? clampedCenterPrice
+        const rawClampedGridCenterPrice = this.clampGridPriceToBounds(referencePrice, referencePrice, bot);
+        const gridCenterPrice = Number.isFinite(rawClampedGridCenterPrice)
+            ? Math.round(rawClampedGridCenterPrice * 1e8) / 1e8
             : referencePrice;
+        const centerPrice = gridCenterPrice; // Compatibility alias
+
         if (dynamicWeightsPayload) {
             const asymmetryMetrics = isAsymmetricBoundsWhitelisted
-                ? this.computeAppliedAsymmetryMetrics(bot, centerPrice, dynamicWeightsPayload)
+                ? this.computeAppliedAsymmetryMetrics(bot, gridCenterPrice, dynamicWeightsPayload)
                 : {
                     rawAsymmetryFactor: null,
                     appliedAsymmetryFactor: null,
@@ -2245,23 +2253,23 @@ class MarketAdapterService {
             // Unified delta check — runs when previousCenterPrice is known
             // (either from state or recovered from .dynamicgrid.json).
             if (!triggered && Number.isFinite(previousCenterPrice) && previousCenterPrice > 0) {
-                deltaPercent = Math.abs((centerPrice - previousCenterPrice) / previousCenterPrice) * 100;
+                deltaPercent = Math.abs((gridCenterPrice - previousCenterPrice) / previousCenterPrice) * 100;
                 if (deltaPercent >= botThreshold) {
-                    const amaCenterPersisted = persistDynamicGridSnapshot(centerPrice, {
+                    const amaCenterPersisted = persistDynamicGridSnapshot(gridCenterPrice, {
                         previousCenterPrice,
                     });
 
                     if (!amaCenterPersisted) {
                         triggerSuppressedReason = 'ama_center_persist_failed';
                     } else {
-                        advanceTriggeredBotState(centerPrice);
+                        advanceTriggeredBotState(gridCenterPrice);
                         await writeTriggerAndNotify({
                             triggerPayload: {
                                 reason: 'market_adapter_delta_threshold',
                                 thresholdPercent: botThreshold,
                                 deltaPercent,
                                 previousCenterPrice,
-                                newCenterPrice: centerPrice,
+                                newCenterPrice: gridCenterPrice,
                                 referencePrice,
                                 amaCenterPrice: amaPrice,
                                 amaSlope,
@@ -2274,7 +2282,7 @@ class MarketAdapterService {
                                 thresholdPercent: botThreshold,
                                 deltaPercent,
                                 previousCenterPrice,
-                                newCenterPrice: centerPrice,
+                                newCenterPrice: gridCenterPrice,
                                 referencePrice,
                                 amaCenterPrice: amaPrice,
                             },
@@ -2285,12 +2293,12 @@ class MarketAdapterService {
             }
 
             if (!triggered && !triggerSuppressedReason && isGridRangeScalingWhitelisted && amaSlopeResetDetails.shouldTrigger) {
-                const amaSlopePersisted = persistDynamicGridSnapshot(centerPrice);
+                const amaSlopePersisted = persistDynamicGridSnapshot(gridCenterPrice);
 
                 if (!amaSlopePersisted) {
                     triggerSuppressedReason = 'ama_slope_persist_failed';
                 } else {
-                    advanceTriggeredBotState(centerPrice);
+                    advanceTriggeredBotState(gridCenterPrice);
                     await writeTriggerAndNotify({
                         triggerPayload: {
                             reason: 'market_adapter_ama_slope_delta_threshold',
@@ -2302,7 +2310,7 @@ class MarketAdapterService {
                             amaSlopeDeltaPercent,
                             amaSlopeThresholdPercent,
                             previousCenterPrice,
-                            newCenterPrice: centerPrice,
+                            newCenterPrice: gridCenterPrice,
                             referencePrice,
                             amaCenterPrice: amaPrice,
                             poolId: ctx.poolId,
@@ -2317,7 +2325,7 @@ class MarketAdapterService {
                             amaSlopeDeltaPercent,
                             amaSlopeThresholdPercent,
                             previousCenterPrice,
-                            newCenterPrice: centerPrice,
+                            newCenterPrice: gridCenterPrice,
                             referencePrice,
                             amaCenterPrice: amaPrice,
                         },

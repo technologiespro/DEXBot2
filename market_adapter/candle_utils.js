@@ -11,7 +11,13 @@ function buildOutputPath(poolId, intervalSeconds, ext = 'json') {
 }
 
 function rawToHuman(rawAmount, precision) {
-    return Number(rawAmount || 0) / Math.pow(10, Number(precision || 0));
+    const num = Number(rawAmount || 0);
+    if (num >= Number.MAX_SAFE_INTEGER) {
+        // BitShares uses 64-bit ints; JS Numbers lose integer precision above 2^53.
+        // We warn here to provide visibility for high-supply asset pairs.
+        console.warn(`[PRECISION-WARNING] rawAmount ${rawAmount} is near or exceeds MAX_SAFE_INTEGER. Calculation may be lossy.`);
+    }
+    return num / Math.pow(10, Number(precision || 0));
 }
 
 function tradeToBPerA(trade, assetA, assetB) {
@@ -262,6 +268,7 @@ function mergeCandles(a, b, { onCollision } = {}) {
 module.exports = {
     toIntervalLabel,
     buildOutputPath,
+    rawToHuman,
     tradesToCandles,
     detectMissingCandleTimestamps,
     fillCandleGaps,
