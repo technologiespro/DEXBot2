@@ -39,7 +39,9 @@
  *   node dexbot drystart <bot-name>  - Start bot in dry-run mode (no transactions)
  *
  * BOT MANAGEMENT:
+ *   node dexbot reset all            - Reset all active bot grids (full regeneration)
  *   node dexbot reset <bot-name>     - Reset bot grid (full regeneration)
+ *   node dexbot disable all          - Mark all bots inactive in config
  *   node dexbot disable <bot-name>   - Mark bot inactive in config
  *
  * CONFIGURATION:
@@ -112,6 +114,7 @@ const CLI_EXAMPLES = [
     { title: 'Start a bot from the tracked config', command: 'dexbot start bot-name', notes: 'Targets the named entry in profiles/bots.json.' },
     { title: 'Dry-run a bot without broadcasting', command: 'dexbot drystart bot-name', notes: 'Forces the run into dry-run mode even if the stored config was live.' },
     { title: 'Disable a bot in config', command: 'dexbot disable bot-name', notes: 'Marks the bot inactive in config.' },
+    { title: 'Reset all active bot grids', command: 'dexbot reset all', notes: 'Triggers full grid regeneration for every active bot.' },
     { title: 'Reset a bot grid', command: 'dexbot reset bot-name', notes: 'Triggers a full grid regeneration for the named bot.' },
     { title: 'Manage keys', command: 'dexbot keys', notes: 'Runs modules/chain_keys.js to add or update master passwords.' },
     { title: 'Edit bot definitions', command: 'dexbot bots', notes: 'Launches the interactive modules/account_bots.js helper for the JSON config.' },
@@ -129,7 +132,9 @@ function printCLIUsage() {
     console.log('Commands:');
     console.log('  start <bot>       Start the named bot using the tracked config.');
     console.log('  drystart <bot>    Same as start but forces dry-run execution.');
+    console.log('  reset all         Trigger grid resets for all active bots.');
     console.log('  reset <bot>       Trigger a grid reset (auto-reloads if running, or applies on next start).');
+    console.log('  disable all       Mark all bots inactive in config.');
     console.log('  disable <bot>     Mark the bot inactive in config.');
     console.log('  export <bot>      Export bot trades and settings for QTradeX backtesting.');
     console.log('  keys              Launch the chain key helper (modules/chain_keys.js).');
@@ -633,10 +638,20 @@ async function handleCLICommands() {
             await startBotByName(target, { dryRun: true });
             return true;
         case 'reset':
-            await resetBotByName(target);
+            if (!target) {
+                console.error('Error: Target required. Specify "all" or a bot name.');
+                printCLIUsage();
+                process.exit(1);
+            }
+            await resetBotByName(target === 'all' ? null : target);
             process.exit(0);
         case 'disable':
-            await disableBotByName(target);
+            if (!target) {
+                console.error('Error: Target required. Specify "all" or a bot name.');
+                printCLIUsage();
+                process.exit(1);
+            }
+            await disableBotByName(target === 'all' ? null : target);
             process.exit(0);
         case 'keys':
             await runAccountManager({ waitForConnection: true, exitAfter: true, disconnectAfter: true });

@@ -185,10 +185,10 @@ node pm2 stop {all|<bot-name>}
 node pm2 delete {all|<bot-name>}
 
 # Reset grid (regenerate orders)
-node dexbot reset {all|[<bot-name>]}
+node dexbot reset {all|<bot-name>}
 
 # Disable a bot in config
-node dexbot disable {all|[<bot-name>]}
+node dexbot disable {all|<bot-name>}
 
 # Show PM2 wrapper usage
 node pm2 help

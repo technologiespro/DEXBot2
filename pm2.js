@@ -866,8 +866,10 @@ Commands:
   update                    Run the update script immediately
   stop <bot-name|all>       Stop PM2 process(es) - only dexbot processes
   delete <bot-name|all>     Delete PM2 process(es) - only dexbot processes
-  restart <bot-name|all>    Restart managed apps safely; dexbot-cred uses fresh unlock flow
-  reload <bot-name|all>     Reload managed apps safely; dexbot-cred uses fresh unlock flow
+  restart <bot-name|all|dexbot-cred>
+                            Restart managed apps safely; dexbot-cred uses fresh unlock flow
+  reload <bot-name|all|dexbot-cred>
+                            Reload managed apps safely; dexbot-cred uses fresh unlock flow
   help                      Show this help message
 
 Examples:
@@ -879,6 +881,7 @@ Examples:
   node pm2 delete all           # Delete all dexbot processes from PM2
   node pm2 delete XRP-BTS       # Delete specific bot from PM2
   node pm2 restart all          # Safe restart path for managed apps
+  node pm2 restart dexbot-cred  # Re-unlock credential daemon
   node pm2 reload XRP-BTS       # Safe reload path for a specific bot
   node pm2 help                 # Show help
     `);
