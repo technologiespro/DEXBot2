@@ -82,7 +82,7 @@ value is the fit cap plus 10%.
 |------------|------------:|---------:|-----:|----------:|
 | AMA1 | 25% | 1.35x | 1.40x | 1.45x+ |
 | AMA2 | 30% | 1.40x | 1.45x | 1.50x+ |
-| AMA3 | 35% | 1.45x | 1.50x | 1.55x+ |
+| **AMA3** | 35% | 1.45x | 1.50x | 1.55x+ |
 | AMA4 | 40% | 1.50x | 1.55x | 1.60x+ |
 
 The multiplier notation is symmetric around the grid center in ratio terms:

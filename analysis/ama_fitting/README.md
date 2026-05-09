@@ -111,7 +111,7 @@ These are the active defaults used by the optimizer:
 |------|-----------------------|-----------|
 | AMA1 | 0.25 | Tightest fit, most reactive |
 | AMA2 | 0.30 | Balanced |
-| AMA3 | 0.35 | Default for market adapter |
+| **AMA3** | 0.35 | Default |
 | AMA4 | 0.40 | Widest fit, most conservative |
 
 **Inventory price range guidance:**
@@ -131,7 +131,7 @@ preserving reasonable inventory turnover.
 |------|-----------:|----------------------:|-----------:|---------:|
 | AMA1 | 25% | 35% to 40% | 45% | 50%+ |
 | AMA2 | 30% | 40% to 45% | 50% | 55%+ |
-| AMA3 | 35% | 45% to 50% | 55% | 60%+ |
+| **AMA3** | 35% | 45% to 50% | 55% | 60%+ |
 | AMA4 | 40% | 50% to 55% | 60% | 65%+ |
 
 **Outputs:**
