@@ -2,10 +2,19 @@ const assert = require('assert');
 const { OrderManager } = require('../modules/order/manager');
 const { ORDER_TYPES, ORDER_STATES, GRID_LIMITS } = require('../modules/constants');
 const { Grid } = require('../modules/order/grid');
-const { countOrdersByType } = require('../modules/order/utils/order');
 const Format = require('../modules/order/format');
 
 console.log('Running Partial Order Edge Cases test suite...\n');
+
+// Local implementation of the counting logic previously exported by utils/order.js
+function countOrders(orderType, ordersMap) {
+    if (!ordersMap?.size) return 0;
+    let count = 0;
+    for (const order of ordersMap.values()) {
+        if (order.type === orderType && [ORDER_STATES.ACTIVE, ORDER_STATES.PARTIAL].includes(order.state)) count++;
+    }
+    return count;
+}
 
 // ============================================================================
 // TEST 1: Partial at Grid Boundary (sell-173 at highest sell slot)
@@ -156,9 +165,9 @@ async function testPartialOrdersCounting() {
         });
     }
 
-    // TEST: countOrdersByType includes both ACTIVE and PARTIAL
-    const buyCount = countOrdersByType(ORDER_TYPES.BUY, mgr.orders);
-    const sellCount = countOrdersByType(ORDER_TYPES.SELL, mgr.orders);
+    // TEST: countOrders includes both ACTIVE and PARTIAL
+    const buyCount = countOrders(ORDER_TYPES.BUY, mgr.orders);
+    const sellCount = countOrders(ORDER_TYPES.SELL, mgr.orders);
 
     assert.strictEqual(buyCount, 2, `BUY count should be 2 (1 ACTIVE + 1 PARTIAL), got ${buyCount}`);
     assert.strictEqual(sellCount, 3, `SELL count should be 3 (all ACTIVE), got ${sellCount}`);
@@ -223,7 +232,7 @@ async function testMultiplePartialsOnSameSide() {
     });
 
     // TEST: Count includes both PARTIAL orders
-    const buyCount = countOrdersByType(ORDER_TYPES.BUY, mgr.orders);
+    const buyCount = countOrders(ORDER_TYPES.BUY, mgr.orders);
     assert.strictEqual(buyCount, 2, `BUY count should be 2 (2 PARTIAL), got ${buyCount}`);
 
     // TEST: preparePartialOrderMove returns null for second partial (only first found)
@@ -403,8 +412,8 @@ async function testSpreadConditionWithPartials() {
 
     // No BUY orders yet
     // TEST: Should recognize PARTIAL as "having both sides" (if buy exists)
-    let hasBothSides = countOrdersByType(ORDER_TYPES.BUY, mgr.orders) > 0 &&
-                       countOrdersByType(ORDER_TYPES.SELL, mgr.orders) > 0;
+    let hasBothSides = countOrders(ORDER_TYPES.BUY, mgr.orders) > 0 &&
+                       countOrders(ORDER_TYPES.SELL, mgr.orders) > 0;
     assert(!hasBothSides, 'Should recognize missing BUY side');
 
     // Add a PARTIAL BUY
@@ -417,8 +426,8 @@ async function testSpreadConditionWithPartials() {
         orderId: '1.7.200'
     });
 
-    hasBothSides = countOrdersByType(ORDER_TYPES.BUY, mgr.orders) > 0 &&
-                   countOrdersByType(ORDER_TYPES.SELL, mgr.orders) > 0;
+    hasBothSides = countOrders(ORDER_TYPES.BUY, mgr.orders) > 0 &&
+                   countOrders(ORDER_TYPES.SELL, mgr.orders) > 0;
     assert(hasBothSides, 'Should recognize both sides present via PARTIAL orders');
 
     console.log(`  ✓ Spread condition check includes PARTIAL in "has both sides"`);

@@ -1,7 +1,16 @@
 const assert = require('assert');
 const { OrderManager } = require('../modules/order/manager');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
-const { countOrdersByType } = require('../modules/order/utils/order');
+
+// Local implementation of counting logic
+function countOrders(orderType, ordersMap) {
+    if (!ordersMap?.size) return 0;
+    let count = 0;
+    for (const order of ordersMap.values()) {
+        if (order.type === orderType && [ORDER_STATES.ACTIVE, ORDER_STATES.PARTIAL].includes(order.state)) count++;
+    }
+    return count;
+}
 
 console.log('Running Integration Tests: Partial Orders in Complex Scenarios\n');
 
@@ -43,7 +52,7 @@ async function testStartupAfterDivergenceWithPartial() {
 
     const activeBuyCount = mgr.getOrdersByTypeAndState(ORDER_TYPES.BUY, ORDER_STATES.ACTIVE).length;
     const partialBuyCount = mgr.getOrdersByTypeAndState(ORDER_TYPES.BUY, ORDER_STATES.PARTIAL).length;
-    const totalBuyCount = countOrdersByType(ORDER_TYPES.BUY, mgr.orders);
+    const totalBuyCount = countOrders(ORDER_TYPES.BUY, mgr.orders);
 
     assert.strictEqual(activeBuyCount, 2, 'Should have 2 ACTIVE buys');
     assert.strictEqual(partialBuyCount, 1, 'Should have 1 PARTIAL buy');
@@ -80,7 +89,7 @@ async function testFundCyclingWithPartialFills() {
     await mgr.setAccountTotals({ buy: 600, sell: 515, buyFree: 100, sellFree: 0 });
     await mgr.recalculateFunds();
 
-    const buyCount = countOrdersByType(ORDER_TYPES.BUY, mgr.orders);
+    const buyCount = countOrders(ORDER_TYPES.BUY, mgr.orders);
     assert.strictEqual(buyCount, 1, 'Should have 1 ACTIVE buy after setup');
     console.log(`  ✓ Fund cycling with partial fill: maintains grid consistency`);
     console.log(`  ✓ Partial orders don't interfere with fund rebalancing\n`);
@@ -114,7 +123,7 @@ async function testRebalancingWithExistingPartial() {
         await mgr._updateOrder({ id: `buy-${i}`, type: ORDER_TYPES.BUY, state: ORDER_STATES.VIRTUAL, price: 1600 - (i - 2) * 10, size: 0 });
     }
 
-    const buyCount = countOrdersByType(ORDER_TYPES.BUY, mgr.orders);
+    const buyCount = countOrders(ORDER_TYPES.BUY, mgr.orders);
     const targetBuys = mgr.config.activeOrders.buy;
     const buyBelowTarget = buyCount < targetBuys;
 
@@ -196,7 +205,7 @@ async function testEdgeBoundGridWithPartial() {
     await mgr._updateOrder({ id: 'buy-0', type: ORDER_TYPES.SPREAD, state: ORDER_STATES.VIRTUAL, price: 1800, size: 0 });
     await mgr._updateOrder({ id: 'buy-1', type: ORDER_TYPES.BUY, state: ORDER_STATES.ACTIVE, price: 1700, size: 100, orderId: '1.7.200' });
 
-    const sellCount = countOrdersByType(ORDER_TYPES.SELL, mgr.orders);
+    const sellCount = countOrders(ORDER_TYPES.SELL, mgr.orders);
     assert.strictEqual(sellCount, 1, 'Should count the partial sell at edge');
     console.log(`  ✓ Edge-bound partial recognized in count: ${sellCount}`);
 
@@ -207,7 +216,7 @@ async function testEdgeBoundGridWithPartial() {
     console.log(`  ✓ Partial at grid edge (sell-0) recognized`);
     console.log(`  ✓ STEP 2.5 handles in-place: not moved despite being at boundary`);
 
-    const buyCount = countOrdersByType(ORDER_TYPES.BUY, mgr.orders);
+    const buyCount = countOrders(ORDER_TYPES.BUY, mgr.orders);
     const targetBuys = mgr.config.activeOrders.buy;
     const belowTarget = buyCount < targetBuys;
     console.log(`  ✓ BUY count (${buyCount}) vs target (${targetBuys}): Below=${belowTarget}`);

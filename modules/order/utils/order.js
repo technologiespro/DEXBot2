@@ -512,38 +512,6 @@ function extractBatchOperationResults(result) {
 }
 
 /**
- * Get partial orders grouped by type.
- * Extracts orders in PARTIAL state, organized by BUY/SELL.
- * 
- * @param {Array<Object>} orders - Orders to filter
- * @returns {Object} Object with buy and sell partial order arrays
- */
-function getPartialsByType(orders) {
-    if (!Array.isArray(orders)) return { buy: [], sell: [] };
-    return {
-        buy: orders.filter(o => o && o.type === ORDER_TYPES.BUY && o.state === ORDER_STATES.PARTIAL),
-        sell: orders.filter(o => o && o.type === ORDER_TYPES.SELL && o.state === ORDER_STATES.PARTIAL)
-    };
-}
-
-/**
- * Count on-chain orders of a specific type.
- * Counts only ACTIVE and PARTIAL orders (excludes VIRTUAL).
- * 
- * @param {string} orderType - Order type to count (BUY, SELL, SPREAD)
- * @param {Map} ordersMap - Orders map from manager.orders
- * @returns {number} Count of on-chain orders of type
- */
-function countOrdersByType(orderType, ordersMap) {
-    if (!ordersMap?.size) return 0;
-    let count = 0;
-    for (const order of ordersMap.values()) {
-        if (order.type === orderType && [ORDER_STATES.ACTIVE, ORDER_STATES.PARTIAL].includes(order.state)) count++;
-    }
-    return count;
-}
-
-/**
  * Check if order is on blockchain (ACTIVE or PARTIAL state).
  * 
  * @param {Object} order - Order to check
@@ -1107,8 +1075,6 @@ module.exports = {
     filterOrdersByType,
     buildOutsideInPairGroups,
     extractBatchOperationResults,
-    getPartialsByType,
-    countOrdersByType,
     isOrderOnChain,
     isOrderVirtual,
     hasOnChainId,

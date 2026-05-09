@@ -256,20 +256,14 @@ let feeCache = {};
 
 /**
  * @private Set the fee cache (called by system.js::initializeFeeCache).
- * 
+ *
  * @param {Object} cache - Fee cache object keyed by asset symbol
  */
 function _setFeeCache(cache) { feeCache = cache; }
 
 /**
- * @private Get the current fee cache.
- * 
- * @returns {Object} Current fee cache
- */
-function _getFeeCache() { return feeCache; }
-
-/**
  * Get fee information for an asset.
+
  * Returns fee structure or net proceeds calculation if asset amount provided.
  * 
  * @param {string} assetSymbol - Asset symbol (e.g., "BTS", "USD")
@@ -1067,7 +1061,6 @@ module.exports = {
     calculateOrderCreationFees,
     deductOrderFeesFromFunds,
     _setFeeCache,
-    _getFeeCache,
     cloneWeightDistribution
 };
 

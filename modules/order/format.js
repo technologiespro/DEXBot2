@@ -172,17 +172,6 @@ function formatPercent2(value) {
 }
 
 /**
- * Format percentages to 4 decimal places
- * Used for: precise percentage measurements (basis points context)
- *
- * @param {number} value - The percentage value
- * @returns {string} Formatted percentage to 4 decimals
- */
-function formatPercent4(value) {
-	return safeFormat(value, 4);
-}
-
-/**
  * Format percentages with custom decimal places
  *
  * @param {number} value - The percentage value
@@ -293,7 +282,6 @@ module.exports = {
 	formatAmount8,
 	formatAmount,
 	formatAmountByPrecision,
-	formatAmountStrict,
 	formatSizeByOrderType,
 
 	// Price formatting
@@ -303,7 +291,6 @@ module.exports = {
 
 	// Percentage formatting
 	formatPercent2,
-	formatPercent4,
 	formatPercent,
 
 	// Ratio/Metric formatting
