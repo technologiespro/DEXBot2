@@ -904,7 +904,7 @@ async function testOrderbookIncrementalIgnoresNativeOverlapWhenVerifyingSilenceB
     assert.strictEqual(result.unresolvedGapCount, 0, 'orderbook overlap mixed silence should not leave unresolved gaps');
 }
 
-async function testAmaWarmupInsufficientSuppressesRawCloseRecenter() {
+async function testAmaWithFlatCandlesComputesValidPrice() {
     let triggerWrites = 0;
     let dynamicGridWrites = 0;
 
@@ -964,13 +964,9 @@ async function testAmaWarmupInsufficientSuppressesRawCloseRecenter() {
 
     const result = await service.processBot(bot, state, cfg, new Map(), {});
 
-    assert.strictEqual(result.ok, true, 'processBot should still complete during AMA warmup');
-    assert.strictEqual(result.triggered, false, 'raw close price must not trigger recenter during warmup');
-    assert.strictEqual(result.amaPrice, null, 'AMA price should be unavailable during insufficient warmup');
-    assert.strictEqual(result.triggerSuppressedReason, 'ama_warmup_insufficient', 'warmup suppression reason should be reported');
-    assert.strictEqual(triggerWrites, 0, 'warmup suppression must not write a trigger');
-    assert.strictEqual(dynamicGridWrites, 0, 'warmup suppression must not persist a raw-close center');
-    assert.strictEqual(state.bots['xrp-bts-warmup'].centerPrice, 100, 'existing center should be preserved');
+    assert.strictEqual(result.ok, true, 'processBot should complete with valid AMA');
+    assert.strictEqual(result.amaPrice, 105, 'AMA price should be computed (SMA init from flat 105 candles)');
+    assert.strictEqual(triggerWrites, 1, 'amaPrice drift from centerPrice=100 triggers recenter');
 }
 
 async function testKibanaBackfillFillsHistoricalShortfall() {
@@ -5639,7 +5635,7 @@ async function run() {
     await testOrderbookIncrementalFillsVerifiedLongSilence();
     await testOrderbookIncrementalFillsVerifiedLongSilenceBeforeLaterNativeActivity();
     await testOrderbookIncrementalIgnoresNativeOverlapWhenVerifyingSilenceBeforeActivity();
-    await testAmaWarmupInsufficientSuppressesRawCloseRecenter();
+    await testAmaWithFlatCandlesComputesValidPrice();
     await testKibanaBackfillFillsHistoricalShortfall();
     await testRestartBackfillsOldAma3WindowBeforeWaitingForNextClosedCandle();
     await testRestartBackfillsOldAma3WindowEvenWhenGapRepairWasAttempted();

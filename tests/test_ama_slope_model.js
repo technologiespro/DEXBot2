@@ -17,12 +17,8 @@ function flatSeries(n, value) {
 // same helper the production model uses so the test stays aligned with the
 // convergence contract.
 const SMALL_OPTS = { erPeriod: 10, fastPeriod: 2, slowPeriod: 10, lookbackBars: 10 };
-const MIN_LEN = getAmaWarmupBars(
-    SMALL_OPTS.erPeriod,
-    SMALL_OPTS.slowPeriod,
-    SMALL_OPTS.lookbackBars,
-    SMALL_OPTS.fastPeriod
-) + 1;
+// Guard in computeAmaSlopeWeights requires erPeriod + lookbackBars + 1
+const MIN_LEN = SMALL_OPTS.erPeriod + SMALL_OPTS.lookbackBars + 1;
 const MODEL_NEUTRAL_WEIGHT = 0.5;
 const HALF_POWER_VOL_OPTS = {
     ...SMALL_OPTS,

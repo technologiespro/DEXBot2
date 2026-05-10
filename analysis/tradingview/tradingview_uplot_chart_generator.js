@@ -340,6 +340,11 @@ function generateHTML(data, title = 'TradingView Style Research') {
                         <input type="number" id="ama-slow" min="0.1" step="0.1" value="${defaults.amaDefaults.slowPeriod}">
                         <button type="button" class="reset-btn" id="ama-reset">Reset</button>
                     </div>
+                    <div class="indicator" style="margin-top:4px">
+                        <label style="font-size:11px;color:#8b949e">Init Offset</label>
+                        <input type="range" id="ama-init-offset" min="-50" max="50" value="0" step="1" style="width:120px;vertical-align:middle">
+                        <span id="ama-init-offset-val" style="font-size:11px;color:#8b949e;width:32px;display:inline-block;text-align:right">0%</span>
+                    </div>
                 </div>
                 <div class="group">
                     <div class="status pill">Drag to pan · wheel to zoom · crosshair legends</div>
@@ -358,6 +363,10 @@ function generateHTML(data, title = 'TradingView Style Research') {
                 <div class="legend-line">
                     <span class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span><span class="legend-label">SMA</span> <span class="legend-value" id="legend-sma">-</span></span>
                     <span class="legend-item"><span class="legend-dot" style="background:#2dd4bf"></span><span class="legend-label">AMA</span> <span class="legend-value" id="legend-ama">-</span></span>
+                    <span class="legend-item"><span class="legend-dot" style="background:#22c55e"></span><span class="legend-label">AMA Init</span> <span class="legend-value" id="legend-sma-init">-</span></span>
+                    <span class="legend-item"><span class="legend-dot" style="background:#a855f7"></span><span class="legend-label">Off Init</span> <span class="legend-value" id="legend-off-init">-</span></span>
+                    <span class="legend-item"><span class="legend-dot" style="background:#a855f7"></span><span class="legend-label">AMA Off</span> <span class="legend-value" id="legend-ama-off">-</span></span>
+
                     <span class="legend-item"><span class="legend-dot" style="background:#93c5fd"></span><span class="legend-label">VWMA</span> <span class="legend-value" id="legend-vwap">-</span></span>
                 </div>
             </div>
@@ -394,6 +403,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
             : Number(payload.amaDefaults?.slowPeriod || 112.7);
         let currentVwapEnabled = state.vwapEnabled ?? !!payload.vwapEnabled;
         let currentVwapBars = Number.isFinite(state.vwapBars) ? state.vwapBars : Number(payload.vwapBars || 500);
+        let currentAmaInitOffset = Number.isFinite(state.amaInitOffset) ? state.amaInitOffset : 0;
         let currentPriceScale = state.priceScale || payload.priceScale || 'log';
         let currentCandles = [];
         let currentOpen = [];
@@ -406,6 +416,9 @@ function generateHTML(data, title = 'TradingView Style Research') {
         let currentSma = [];
         let currentAma = [];
         let currentVwap = [];
+        let currentSmaInit = [];
+        let currentSmaInitOff = [];
+        let currentAmaOff = [];
         let priceChart = null;
         let volumeChart = null;
         let lastRenderedPriceScale = null;
@@ -499,8 +512,8 @@ function generateHTML(data, title = 'TradingView Style Research') {
                     amaSlowPeriod: currentAmaSlowPeriod,
                     vwapEnabled: currentVwapEnabled,
                     vwapBars: currentVwapBars,
+                    amaInitOffset: currentAmaInitOffset,
                     priceScale: currentPriceScale,
-
                 }));
             } catch (e) {}
         }
@@ -690,12 +703,12 @@ function generateHTML(data, title = 'TradingView Style Research') {
                 slowPeriod: Math.max(0.1, Number(currentAmaSlowPeriod) || 0.1),
             };
         }
-        function computeAMA(candles, cfg) {
+        function computeAMA(candles, cfg, initOffset = 0) {
             const params = cfg || currentAmaConfig();
             const erPeriod = Math.max(1, Math.round(params.erPeriod ?? 10));
             const fastPeriod = Math.max(0.1, Number(params.fastPeriod ?? 2));
             const slowPeriod = Math.max(0.1, Number(params.slowPeriod ?? 30));
-            const cacheKey = erPeriod + '|' + fastPeriod + '|' + slowPeriod + '|' + candles.length;
+            const cacheKey = erPeriod + '|' + fastPeriod + '|' + slowPeriod + '|' + candles.length + '|' + initOffset;
             if (amaCache.has(cacheKey)) return amaCache.get(cacheKey);
             const fastSC = 2 / (fastPeriod + 1);
             const slowSC = 2 / (slowPeriod + 1);
@@ -706,26 +719,22 @@ function generateHTML(data, title = 'TradingView Style Research') {
             let len = 0;
             let volatility = 0;
             let prev = null;
+            let smaSum = 0;
             for (const candle of candles) {
                 const price = candle.close;
-                if (len === 0) {
-                    history[0] = price;
-                    len = 1;
-                    prev = price;
-                    out.push(price);
-                    continue;
-                }
                 if (len < windowSize) {
                     history[(head + len) % windowSize] = price;
-                    volatility += Math.abs(price - history[(head + len - 1) % windowSize]);
+                    smaSum += price;
+                    if (len > 0) {
+                        volatility += Math.abs(price - history[(head + len - 1) % windowSize]);
+                    }
                     len++;
-                    const oldest = history[head];
-                    const direction = Math.abs(price - oldest);
-                    const er = volatility === 0 ? 0 : (direction / volatility);
-                    const smoothing = Math.pow(er * (fastSC - slowSC) + slowSC, 2);
-                    const ama = prev + smoothing * (price - prev);
-                    prev = ama;
-                    out.push(ama);
+                    if (len < windowSize) {
+                        out.push(price);
+                        continue;
+                    }
+                    prev = initOffset !== 0 ? (smaSum / windowSize) * (1 + initOffset / 100) : smaSum / windowSize;
+                    out.push(prev);
                     continue;
                 }
                 const oldest = history[head];
@@ -849,11 +858,14 @@ function generateHTML(data, title = 'TradingView Style Research') {
             setIndicatorSeriesVisible(5, currentSmaEnabled);
             setIndicatorSeriesVisible(6, currentAmaEnabled);
             setIndicatorSeriesVisible(7, currentVwapEnabled);
+            setIndicatorSeriesVisible(8, currentAmaEnabled);
+            setIndicatorSeriesVisible(9, currentAmaEnabled && currentAmaInitOffset !== 0);
+            setIndicatorSeriesVisible(10, currentAmaEnabled && currentAmaInitOffset !== 0);
         }
         function hideSmaSeriesImmediate() {
             clearSMAWorker();
             currentSma = new Array(currentCandles.length).fill(null);
-            if (Array.isArray(currentPriceData) && currentPriceData.length >= 8) {
+            if (Array.isArray(currentPriceData) && currentPriceData.length >= 11) {
                 currentPriceData[5] = currentSma;
             }
             setIndicatorSeriesVisible(5, false);
@@ -862,16 +874,25 @@ function generateHTML(data, title = 'TradingView Style Research') {
         }
         function hideAmaSeriesImmediate() {
             currentAma = new Array(currentCandles.length).fill(null);
-            if (Array.isArray(currentPriceData) && currentPriceData.length >= 8) {
+            currentAmaOff = new Array(currentCandles.length).fill(null);
+            currentSmaInit = new Array(currentCandles.length).fill(null);
+            currentSmaInitOff = new Array(currentCandles.length).fill(null);
+            if (Array.isArray(currentPriceData) && currentPriceData.length >= 11) {
                 currentPriceData[6] = currentAma;
+                currentPriceData[8] = currentSmaInit;
+                currentPriceData[9] = currentSmaInitOff;
+                currentPriceData[10] = currentAmaOff;
             }
             setIndicatorSeriesVisible(6, false);
+            setIndicatorSeriesVisible(8, false);
+            setIndicatorSeriesVisible(9, false);
+            setIndicatorSeriesVisible(10, false);
             refreshLegend();
             saveState();
         }
         function hideVwapSeriesImmediate() {
             currentVwap = new Array(currentCandles.length).fill(null);
-            if (Array.isArray(currentPriceData) && currentPriceData.length >= 8) {
+            if (Array.isArray(currentPriceData) && currentPriceData.length >= 11) {
                 currentPriceData[7] = currentVwap;
             }
             setIndicatorSeriesVisible(7, false);
@@ -893,6 +914,9 @@ function generateHTML(data, title = 'TradingView Style Research') {
             document.getElementById('legend-scale').textContent = currentPriceScale === 'linear' ? 'Linear' : 'Log 10';
             document.getElementById('legend-sma').textContent = Number.isFinite(currentSma[idx]) ? fmtPrice(currentSma[idx]) : (smaPending ? '...' : '-');
             document.getElementById('legend-ama').textContent = Number.isFinite(currentAma[idx]) ? fmtPrice(currentAma[idx]) : '-';
+            document.getElementById('legend-sma-init').textContent = Number.isFinite(currentSmaInit[idx]) ? fmtPrice(currentSmaInit[idx]) : '-';
+            document.getElementById('legend-off-init').textContent = Number.isFinite(currentSmaInitOff[idx]) ? fmtPrice(currentSmaInitOff[idx]) : '-';
+            document.getElementById('legend-ama-off').textContent = Number.isFinite(currentAmaOff[idx]) ? fmtPrice(currentAmaOff[idx]) : '-';
             document.getElementById('legend-vwap').textContent = Number.isFinite(currentVwap[idx]) ? fmtPrice(currentVwap[idx]) : '-';
         }
         function candlePlugin() {
@@ -1046,6 +1070,9 @@ function generateHTML(data, title = 'TradingView Style Research') {
             currentLow = currentCandles.map((c) => c.low);
             currentClose = currentDisplayCandles.map((c) => c.close);
             const baseAma = currentAmaEnabled ? computeAMA(baseCandles, currentAmaConfig()) : [];
+            const baseAmaOff = currentAmaEnabled && currentAmaInitOffset !== 0
+                ? computeAMA(baseCandles, currentAmaConfig(), currentAmaInitOffset)
+                : [];
             const baseVwap = currentVwapEnabled ? computeVWMA(baseCandles, currentVwapBars) : [];
             if (currentSmaEnabled) {
                 const smaKey = getSmaCacheKey(currentSmaPeriod);
@@ -1060,7 +1087,21 @@ function generateHTML(data, title = 'TradingView Style Research') {
                 currentSma = new Array(currentCandles.length).fill(null);
             }
             currentAma = currentAmaEnabled ? sampleSeriesByIndex(baseAma, aggregated.idxs) : new Array(currentCandles.length).fill(null);
+            currentAmaOff = currentAmaEnabled && currentAmaInitOffset !== 0 ? sampleSeriesByIndex(baseAmaOff, aggregated.idxs) : new Array(currentCandles.length).fill(null);
             currentVwap = currentVwapEnabled ? sampleSeriesByIndex(baseVwap, aggregated.idxs) : new Array(currentCandles.length).fill(null);
+            const amaCfg = currentAmaConfig();
+            const warmupInit = currentAmaEnabled && baseAma.length > amaCfg.erPeriod ? baseAma[amaCfg.erPeriod] : null;
+            const baseSmaInit = warmupInit !== null
+                ? baseCandles.map((c, i) => i <= amaCfg.erPeriod ? warmupInit : null)
+                : new Array(baseCandles.length).fill(null);
+            currentSmaInit = sampleSeriesByIndex(baseSmaInit, aggregated.idxs);
+            const offsetInit = currentAmaEnabled && currentAmaInitOffset !== 0 && baseAmaOff.length > amaCfg.erPeriod
+                ? baseAmaOff[amaCfg.erPeriod]
+                : null;
+            const baseSmaInitOff = offsetInit !== null
+                ? baseCandles.map((c, i) => i <= amaCfg.erPeriod ? offsetInit : null)
+                : new Array(baseCandles.length).fill(null);
+            currentSmaInitOff = sampleSeriesByIndex(baseSmaInitOff, aggregated.idxs);
             currentPriceData = [
                 currentCandles.map((c) => c.time),
                 currentOpen,
@@ -1070,6 +1111,9 @@ function generateHTML(data, title = 'TradingView Style Research') {
                 currentSma,
                 currentAma,
                 currentVwap,
+                currentSmaInit,
+                currentSmaInitOff,
+                currentAmaOff,
             ];
             currentVolumeData = [
                 currentCandles.map((c) => c.time),
@@ -1118,6 +1162,9 @@ function generateHTML(data, title = 'TradingView Style Research') {
                     { label: 'SMA', stroke: '#ffffff', width: 2, points: { show: false }, spanGaps: true },
                     { label: 'AMA', stroke: '#facc15', width: 2, points: { show: false }, spanGaps: true },
                     { label: 'VWMA', stroke: '#93c5fd', width: 2, points: { show: false }, spanGaps: true },
+                    { label: 'AMA Init', stroke: '#22c55e', width: 1.5, dash: [6, 4], points: { show: false }, spanGaps: false },
+                    { label: 'Off Init', stroke: '#a855f7', width: 1.5, dash: [6, 4], points: { show: false }, spanGaps: false },
+                    { label: 'AMA Off', stroke: '#a855f7', width: 1.5, dash: [4, 4], points: { show: false }, spanGaps: false },
                 ],
                 axes: [
                     makeTimeAxis(false),
@@ -1262,6 +1309,8 @@ function generateHTML(data, title = 'TradingView Style Research') {
             document.getElementById('ama-slow').value = String(currentAmaSlowPeriod);
             document.getElementById('vwap-toggle').checked = currentVwapEnabled;
             document.getElementById('vwap-bars').value = String(currentVwapBars);
+            document.getElementById('ama-init-offset').value = String(currentAmaInitOffset);
+            document.getElementById('ama-init-offset-val').textContent = currentAmaInitOffset + '%';
             setActiveTimeframe(currentTimeframe);
         }
         function rerender(keepRange = true) {
@@ -1336,6 +1385,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
             currentAmaErPeriod = clamp(Math.round(Number(document.getElementById('ama-er').value) || 781), 1, 999999);
             currentAmaFastPeriod = clamp(Number(document.getElementById('ama-fast').value) || Number(payload.amaDefaults?.fastPeriod || 5.2), 0.1, 999999);
             currentAmaSlowPeriod = clamp(Number(document.getElementById('ama-slow').value) || Number(payload.amaDefaults?.slowPeriod || 112.7), 0.1, 999999);
+            currentAmaInitOffset = Math.round(Number(document.getElementById('ama-init-offset').value) || 0);
             currentVwapEnabled = document.getElementById('vwap-toggle').checked;
             currentVwapBars = clamp(Math.round(Number(document.getElementById('vwap-bars').value) || 500), 24, 2000);
             setControls();
@@ -1383,6 +1433,11 @@ function generateHTML(data, title = 'TradingView Style Research') {
             document.getElementById(id).addEventListener('input', syncInputs);
         });
         document.getElementById('ama-reset').addEventListener('click', resetAmaDefaults);
+        document.getElementById('ama-init-offset').addEventListener('input', () => {
+            const val = document.getElementById('ama-init-offset').value;
+            document.getElementById('ama-init-offset-val').textContent = val + '%';
+            syncInputs();
+        });
 
         window.addEventListener('resize', () => {
             if (!charts.length) return;

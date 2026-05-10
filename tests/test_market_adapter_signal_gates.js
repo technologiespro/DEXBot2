@@ -4,7 +4,6 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { MARKET_ADAPTER } = require('../modules/constants');
-const { getAmaWarmupBars } = require('../analysis/ama_fitting/ama');
 const { computeAmaSlopeWeights } = require('../market_adapter/core/strategies/ama_slope_model');
 const { calculateATR } = require('../market_adapter/core/strategies/atr/calculator');
 const { KalmanTrendAnalyzer } = require('../analysis/trend_detection/kalman_trend_analyzer');
@@ -18,26 +17,26 @@ function testAmaSlopeWarmupUsesSlowPeriod() {
     const slowPeriod = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod;
     const fastPeriod = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].fastPeriod;
     const lookbackBars = MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
-    const warmupBars = getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars, fastPeriod);
+    const minBars = erPeriod + lookbackBars + 1;
 
-    const shortSeries = new Array(warmupBars).fill(100);
+    const shortSeries = new Array(minBars - 1).fill(100);
     const shortResult = computeAmaSlopeWeights(shortSeries, 0, {
         erPeriod,
         slowPeriod,
         fastPeriod,
         lookbackBars,
     });
-    assert.strictEqual(shortResult.isReady, false, 'AMA slope should not be ready before the slow-period warmup');
+    assert.strictEqual(shortResult.isReady, false, 'AMA slope should not be ready before minBars');
 
-    const readySeries = new Array(warmupBars + 1).fill(100);
-    readySeries[warmupBars] = 101;
+    const readySeries = new Array(minBars).fill(100);
+    readySeries[minBars - 1] = 101;
     const readyResult = computeAmaSlopeWeights(readySeries, 0, {
         erPeriod,
         slowPeriod,
         fastPeriod,
         lookbackBars,
     });
-    assert.strictEqual(readyResult.isReady, true, 'AMA slope should be ready after the slow-period warmup');
+    assert.strictEqual(readyResult.isReady, true, 'AMA slope should be ready at minBars');
 }
 
 function testAtrRejectsInvalidCandles() {

@@ -201,7 +201,7 @@ function run() {
         console.log('');
     }
 
-    console.log(' Note: warmup candles excluded (AMA starts after erPeriod with SMA init).');
+    console.log(' Note: warmup candles excluded (AMA initializes from SMA of the ER window).');
     console.log('');
 
     // ── Ranking: fewest repositions ────────────────────────────────────────────

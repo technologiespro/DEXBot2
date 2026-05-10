@@ -18,6 +18,8 @@ class AMA {
         this.prevAMA = null;
         this.history = []; // Keep track of closing prices for ER calc
         this.warmedUp = false;
+        this.smaSum = 0;
+        this.smaCount = 0;
     }
 
     /**
@@ -33,18 +35,25 @@ class AMA {
             this.history.shift();
         }
 
-        // First call — initialize prevAMA with first price
+        // Warmup phase: accumulate SMA over the ER buffer window.
+        // Initializing prevAMA to the first price (p0) creates a bias that
+        // persists through the recursive AMA formula; using the SMA of the
+        // full ER window eliminates that bias.
         if (!this.warmedUp) {
+            this.smaSum += price;
+            this.smaCount++;
+            if (this.smaCount < this.erPeriod + 1) {
+                return price;
+            }
             this.warmedUp = true;
-            this.prevAMA = price;
-            return price;
+            this.prevAMA = this.smaSum / this.smaCount;
+            return this.prevAMA;
         }
 
-        // 1. Efficiency Ratio (ER) — progressive: uses all history available,
-        //    growing from 2 bars to erPeriod+1, then rolling at erPeriod+1
+        // 1. Efficiency Ratio (ER) — buffer is rolling at erPeriod+1
         // Direction = |Price - Price(n-ago)|
         const direction = Math.abs(price - this.history[0]);
-        
+
         // Volatility = Sum( |Price(i) - Price(i-1)| )
         let volatility = 0;
         for (let i = 1; i < this.history.length; i++) {
@@ -60,7 +69,7 @@ class AMA {
         // 3. AMA Calculation
         // AMA = PriorAMA + SC * (Price - PriorAMA)
         const ama = this.prevAMA + smooth * (price - this.prevAMA);
-        
+
         this.prevAMA = ama;
         return ama;
     }
