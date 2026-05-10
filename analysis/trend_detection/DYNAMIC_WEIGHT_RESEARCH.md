@@ -16,7 +16,7 @@ An **Adaptive Moving Average** (AMA) — specifically the Kaufman variant (KAMA)
 ER = |Close[t] − Close[t−N]| / Σ |Close[i] − Close[i−1]|
 ```
 
-Crucially, the input start price used to seed the AMA calculation is a **medianed value** derived from the initial price window. Using a median rather than a raw closing price ensures that the baseline is resistant to outliers or anomalous price spikes during the initialization phase, providing a more stable anchor for the subsequent adaptive trend tracking.
+Crucially, the input start price used to seed the AMA calculation is an **SMA (Simple Moving Average)** derived from the initial ER buffer window. Using an SMA rather than a single raw closing price ensures that the baseline is resistant to anomalous price spikes during the initialization phase, providing a more stable anchor before the recursive AMA formula begins. During this warmup phase, the history buffer is filled to allow the calculation of the Efficiency Ratio (ER) and the subsequent adaptive trend tracking.
 
 Think of ER as "how much net progress did price make, divided by how much it zigzagged to get there":
 

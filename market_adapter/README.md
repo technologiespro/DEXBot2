@@ -36,7 +36,9 @@ default preset.
 |--------------|----------------|
 | `pool` | LP history |
 | `book` | Orderbook history |
-| numeric value | Fixed anchor; candle fetching disabled |
+| numeric value | Fixed anchor (skips candle fetching and SMA warmup); used directly as the static seed price |
+
+When fetching candles (`pool` or `book`), the adapter requires a full historical window. The oldest `erPeriod` candles are used for an initial SMA (Simple Moving Average) warmup phase to seed the AMA and establish the first Efficiency Ratio (ER) calculation. See [AMA Warmup Window](#ama-warmup-window--why-candle-length-matters) for technical details.
 
 ### 2. Whitelist Live Writes
 
@@ -607,10 +609,9 @@ possible, prunes old candles to the required AMA window, and acts only on closed
 
 #### AMA Warmup Window — Why Candle Length Matters
 
-The AMA is a recursive (infinite impulse response) filter. On cold start it
-initialises to the first price after the Efficiency Ratio (ER) buffer, creating
-an initialisation bias. This bias decays asymptotically — each bar, the AMA
-"forgets" a fraction equal to its smoothing constant:
+The AMA is a recursive (infinite impulse response) filter. On cold start, the adapter uses an initial warmup phase: it calculates an **SMA (Simple Moving Average)** over the first `erPeriod` candles to establish a stable seed price, while simultaneously building the price history needed to calculate the first valid Efficiency Ratio (ER).
+
+Starting the recursive AMA formula from this SMA, rather than a single raw closing price, provides a more stable anchor. However, a residual initialization bias still exists and decays asymptotically — each bar, the AMA "forgets" a fraction equal to its smoothing constant:
 
 ```
 bias_remaining(K) ≈ bias_initial × ∏ (1 − SC_i)      for i = 1..K
