@@ -5,7 +5,7 @@ const {
     normalizeMaxVolatilityOffset,
     normalizeVolatilityThreshold,
 } = require('../config_normalizers');
-const { getAmaWarmupBars } = require('../../../analysis/ama_fitting/ama');
+
 
 const MAX_OFFSET_FROM_NEUTRAL = MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
 const MAX_SYMMETRIC_SHIFT = MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP;
@@ -92,10 +92,8 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
         trend: 'NEUTRAL',
     };
 
-    const warmupBars = getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars, fastPeriod);
-
-    // 1. Guard: need ER warm-up + slow-period convergence + lookback window + current bar.
-    if (!Array.isArray(amaValues) || amaValues.length < warmupBars + 1) {
+    // 1. Guard: need ER window + lookback + current bar for valid slope.
+    if (!Array.isArray(amaValues) || amaValues.length < erPeriod + lookbackBars + 1) {
         return notReady;
     }
 

@@ -500,6 +500,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
                     vwapEnabled: currentVwapEnabled,
                     vwapBars: currentVwapBars,
                     priceScale: currentPriceScale,
+
                 }));
             } catch (e) {}
         }
@@ -707,17 +708,17 @@ function generateHTML(data, title = 'TradingView Style Research') {
             let prev = null;
             for (const candle of candles) {
                 const price = candle.close;
+                if (len === 0) {
+                    history[0] = price;
+                    len = 1;
+                    prev = price;
+                    out.push(price);
+                    continue;
+                }
                 if (len < windowSize) {
                     history[(head + len) % windowSize] = price;
-                    if (len > 0) {
-                        volatility += Math.abs(price - history[(head + len - 1) % windowSize]);
-                    }
+                    volatility += Math.abs(price - history[(head + len - 1) % windowSize]);
                     len++;
-                    if (len <= erPeriod) {
-                        prev = price;
-                        out.push(price);
-                        continue;
-                    }
                     const oldest = history[head];
                     const direction = Math.abs(price - oldest);
                     const er = volatility === 0 ? 0 : (direction / volatility);
@@ -727,7 +728,6 @@ function generateHTML(data, title = 'TradingView Style Research') {
                     out.push(ama);
                     continue;
                 }
-
                 const oldest = history[head];
                 const second = history[(head + 1) % windowSize];
                 const last = history[(head + windowSize - 1) % windowSize];

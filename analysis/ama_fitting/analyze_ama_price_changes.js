@@ -201,7 +201,7 @@ function run() {
         console.log('');
     }
 
-    console.log(' Note: warmup candles excluded (calculateAMA returns raw price during warmup).');
+    console.log(' Note: warmup candles excluded (AMA starts after erPeriod with SMA init).');
     console.log('');
 
     // ── Ranking: fewest repositions ────────────────────────────────────────────

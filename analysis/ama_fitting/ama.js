@@ -17,6 +17,7 @@ class AMA {
         this.slowSC = 2 / (slowPeriod + 1);
         this.prevAMA = null;
         this.history = []; // Keep track of closing prices for ER calc
+        this.warmedUp = false;
     }
 
     /**
@@ -32,13 +33,15 @@ class AMA {
             this.history.shift();
         }
 
-        // Need enough history to calculate ER
-        if (this.history.length <= this.erPeriod) {
-            this.prevAMA = price; // Initialize with price until we have enough data
+        // First call — initialize prevAMA with first price
+        if (!this.warmedUp) {
+            this.warmedUp = true;
+            this.prevAMA = price;
             return price;
         }
 
-        // 1. Efficiency Ratio (ER)
+        // 1. Efficiency Ratio (ER) — progressive: uses all history available,
+        //    growing from 2 bars to erPeriod+1, then rolling at erPeriod+1
         // Direction = |Price - Price(n-ago)|
         const direction = Math.abs(price - this.history[0]);
         
