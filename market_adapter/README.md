@@ -36,7 +36,7 @@ default preset.
 |--------------|----------------|
 | `pool` | LP history |
 | `book` | Orderbook history |
-| numeric value | Fixed anchor (used as medianed baseline); candle fetching disabled |
+| numeric value | Fixed anchor; candle fetching disabled |
 
 ### 2. Whitelist Live Writes
 

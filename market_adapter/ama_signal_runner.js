@@ -158,7 +158,7 @@ async function main() {
     const out = buildOutput(payload, cli.bot);
     const json = cli.compact ? JSON.stringify(out) : JSON.stringify(out, null, 2);
     fs.writeFileSync(1, `${json}\n`, 'utf8');
-    return 0;
+    process.exit(0);
 }
 
 main().catch((err) => {
@@ -167,5 +167,5 @@ main().catch((err) => {
         error: err.message,
     };
     fs.writeFileSync(1, `${JSON.stringify(out, null, 2)}\n`, 'utf8');
-    process.exitCode = 1;
+    process.exit(1);
 });

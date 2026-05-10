@@ -1301,7 +1301,7 @@ async function runOnceForAma(overrides = {}) {
         staleMs: Math.max(2, cfg.pollSeconds) * 1000 * 2,
     });
     try {
-        const { connectClient } = getBitsharesClient();
+        const { connectClient, disconnectClient } = getBitsharesClient();
         await connectClient();
         const state = loadJson(STATE_FILE, { meta: {}, bots: {} });
         const contextCache = new Map();
@@ -1313,6 +1313,8 @@ async function runOnceForAma(overrides = {}) {
             state,
         };
     } finally {
+        const { disconnectClient } = getBitsharesClient();
+        disconnectClient();
         releaseFileLockSync(lock);
     }
 }
