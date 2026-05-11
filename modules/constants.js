@@ -622,14 +622,14 @@ let MARKET_ADAPTER = {
     //     a recalculate.<botKey>.trigger file is written to signal grid regeneration.
     //   - Configurable per deployment via profiles/general.settings.json under MARKET_ADAPTER.
     //   - Range: 0.1 to 50.0 (enforced in account_bots.js)
-    //   - Default: 2.0 (grid recalculates when market moves 2.0% from last recorded AMA center)
-    AMA_DELTA_THRESHOLD_PERCENT: 2.0,
+    //   - Default: 1.25 (1.0 Sigma: calibrated at 1.21% on pool 133 3y; triggers reset beyond hourly noise)
+    AMA_DELTA_THRESHOLD_PERCENT: 1.25,
 
     // AMA_SLOPE_DELTA_THRESHOLD_PERCENT: Percentage change in AMA slope that can trigger a
     // grid reset when the slope delta moves far enough away from the last accepted snapshot.
     //   - Configurable per market pair and per bot via market_adapter_settings.json.
-    //   - Default: 0.015 (average per-bar slope delta)
-    AMA_SLOPE_DELTA_THRESHOLD_PERCENT: 0.015,
+    //   - Default: 0.20 (Trend Sentinel: pro-actively resets when trend accelerates)
+    AMA_SLOPE_DELTA_THRESHOLD_PERCENT: 0.20,
 
     // DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD: Minimum blended trend strength required
     // before the bot applies a directional weight shift in the asymmetrical path.
