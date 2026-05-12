@@ -84,7 +84,7 @@ The adapter uses tiered clamping thresholds to manage inventory risk during extr
 node analysis/ama_fitting/calculate_clamping_limits.js
 ```
 
-| AMA preset | 99.9% — 3.29σ (Soft-Clamp) | 99.99% — 3.89σ (Hard-Clamp) | 99.999% — 4.42σ (Limit Exit) |
+| AMA preset | 99.9% — 3.29σ | 99.99% — 3.89σ | 99.999% — 4.42σ |
 |------------|-------------------:|--------------------:|-------------------------:|
 | AMA1 | 1.461x | 1.571x | 1.626x |
 | AMA2 | 1.467x | 1.564x | 1.619x |

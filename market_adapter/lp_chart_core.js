@@ -777,7 +777,8 @@ function bindPan(chart) {
         startMax = current.currMax;
         
         // Calculate units per pixel once at start of drag to avoid sliding bug
-        xUnitsPerPx = (current.currMax - current.currMin) / chart.plotWidCss;
+        // chart.bbox.width is in device pixels; divide by pxRatio for CSS pixels
+        xUnitsPerPx = (current.currMax - current.currMin) / (chart.bbox.width / (chart.pxRatio || 1));
         
         document.body.style.cursor = 'grabbing';
         window.addEventListener('mousemove', onMouseMove);

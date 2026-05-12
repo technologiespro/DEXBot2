@@ -113,7 +113,7 @@ node analysis/analyze_regime_windows.js \
 
 ### Risk Profile Analyzer (`analyze_risk_profile.js`)
 
-Measures inventory risk by calculating empirical divergence quantiles (based on price-to-AMA deviation). Use this to calibrate 'Safe Range' clamping tiers (Soft-Clamp, Hard-Clamp, Emergency Exit) for your liquidity strategy.
+Measures inventory risk by calculating empirical divergence quantiles (based on price-to-AMA deviation). Use this to calibrate 'Safe Range' clamping tiers for your liquidity strategy.
 
 ```bash
 node analysis/analyze_risk_profile.js \
