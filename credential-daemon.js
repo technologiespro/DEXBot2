@@ -255,9 +255,8 @@ async function resolveVaultSecret() {
         } catch (err) {
             daemonLogger.error(
                 `[credential-daemon] Bootstrap secret transfer failed: ${err.message}. ` +
-                'Restart with `node pm2` or `node pm2 restart dexbot-cred` to create a fresh bootstrap socket.'
+                'Falling back to interactive authentication.'
             );
-            throw err;
         }
     }
 
