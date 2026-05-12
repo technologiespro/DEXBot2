@@ -78,16 +78,20 @@ bot's `ama` block is used as the fallback.
 
 ### Empirical Divergence Risk Management
 
-The adapter uses tiered clamping thresholds to manage inventory risk during extreme price divergence from the AMA trend center. These thresholds are derived from historical pool volatility and replace static 'fit cap' multipliers:
+The adapter uses tiered clamping thresholds to manage inventory risk during extreme price divergence from the AMA trend center. These thresholds are derived from historical pool volatility and replace static 'fit cap' multipliers. The specific clamping limits and exit parameters are calculated per pair and preset using:
 
-| AMA preset | 99.9% (Soft-Clamp) | 99.99% (Hard-Clamp) | 99.999% (Emergency Exit) |
+```bash
+node analysis/ama_fitting/calculate_clamping_limits.js
+```
+
+| AMA preset | 99.9% (Soft-Clamp) | 99.99% (Hard-Clamp) | 99.999% (Limit Exit) |
 |------------|-------------------:|--------------------:|-------------------------:|
 | AMA1 | 1.461x | 1.571x | 1.626x |
 | AMA2 | 1.467x | 1.564x | 1.619x |
 | **AMA3** | 1.473x | 1.557x | 1.612x |
 | AMA4 | 1.479x | 1.546x | 1.601x |
 
-Divergence is calculated as `abs(Price - AMA) / AMA`. Emergency exits trigger when price exceeds the 99.9th percentile of historical divergence, protecting the bot from extreme 'Black Swan' excursions and preventing runaway inventory accumulation during high-divergence volatility.
+Divergence is calculated as `abs(Price - AMA) / AMA`. Limit exits trigger when price exceeds the 99.9th percentile of historical divergence, protecting the bot from extreme price excursions and preventing runaway inventory accumulation during high-divergence volatility.
 
 ## Grid Range Scaling
 
