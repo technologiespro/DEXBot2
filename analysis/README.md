@@ -127,6 +127,37 @@ Metrics include:
 - **Quantiles (99.9%, 99.99%, 99.999%):** Safe Range bounds for clamping tiers.
 - **σ_ama_delta:** Std dev of per-bar AMA movement — use this to calibrate `AMA_DELTA_THRESHOLD_PERCENT`.
 
+### Trade Heatmap (`analyze_trade_heatmap.js`)
+
+Generates a 2D heatmap + summed histogram showing where trade volume concentrates relative to AMA deviation. Time-slice rows show how the distribution evolved; the bottom histogram shows the aggregate bell-curve shape with threshold annotations.
+
+```bash
+node analysis/analyze_trade_heatmap.js \
+  --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
+  --ama AMA3 \
+  --output analysis/charts/trade_heatmap.html \
+  --bin-size 5 \
+  --max-neg 50 \
+  --max-pos 60 \
+  --slice-months 6
+```
+
+**Options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--data` | — | Path to LP candle JSON (required) |
+| `--ama` | `AMA3` | AMA preset (AMA1–AMA4) |
+| `--output` | `analysis/charts/trade_heatmap.html` | Output path |
+| `--bin-size` | `5` | Percentage points per bin |
+| `--max-neg` | `bin-size × 10` | Max negative deviation % |
+| `--max-pos` | `bin-size × 10` | Max positive deviation % |
+| `--buckets` | — | Total bins (symmetric, overrides `--max-neg/--max-pos`) |
+| `--warmup` | AMA erPeriod | Bars to skip for AMA warmup |
+| `--slice-months` | `12` | Months per time-slice row |
+| `--thresholds` | `1,2,3,5,10,20` | Deviation % thresholds for volume concentration table |
+| `--verbose` | off | Print processing info |
+
 ### TradingView Chart (`analyze_tradingview.js`)
 
 Generates a standalone TradingView-style HTML chart with candle OHLC, SMA, AMA, VWMA, and volume panel. See [tradingview/README.md](tradingview/README.md) for full documentation.
