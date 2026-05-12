@@ -71,7 +71,11 @@ function bindWheelZoom(chart) {
         e.preventDefault();
         e.stopPropagation();
         const rect = chart.root.getBoundingClientRect();
-        const center = chart.posToVal(e.clientX - rect.left, 'x');
+        
+        // Correctly calculate plot-relative 'left' for accurate centering
+        const left = e.clientX - rect.left - (chart.bbox.left / (chart.pxRatio || 1));
+        const center = chart.posToVal(left, 'x');
+        
         const s = chart.scales.x || {};
         const currMin = Number.isFinite(s.min) ? s.min : xMin;
         const currMax = Number.isFinite(s.max) ? s.max : xMax;
@@ -85,17 +89,21 @@ function bindWheelZoom(chart) {
 }
 
 function bindPan(chart) {
-    let dragging = false, startClientX = 0, startMin = xMin, startMax = xMax;
+    let dragging = false, startClientX = 0, startClientY = 0, startMin = xMin, startMax = xMax, xUnitsPerPx = 0;
     const getScale = () => {
         const s = chart.scales.x || {};
         return { currMin: Number.isFinite(s.min) ? s.min : xMin, currMax: Number.isFinite(s.max) ? s.max : xMax };
     };
     const onMouseMove = (e) => {
         if (!dragging) return;
+        
+        // Ignore if vertical movement is dominant (likely scrolling)
+        if (Math.abs(e.clientY - startClientY) > 20) return;
+        
         e.preventDefault();
-        const rect = chart.root.getBoundingClientRect();
-        const delta = chart.posToVal(e.clientX - rect.left, 'x') - chart.posToVal(startClientX - rect.left, 'x');
-        syncXRange(startMin - delta, startMax - delta);
+        const deltaPx = e.clientX - startClientX;
+        const deltaVal = deltaPx * xUnitsPerPx;
+        syncXRange(startMin - deltaVal, startMax - deltaVal);
     };
     const endDrag = () => {
         if (!dragging) return;
@@ -108,17 +116,23 @@ function bindPan(chart) {
         if (!e || e.button !== 0 || e.ctrlKey || e.metaKey || e.altKey) return;
         const rect = chart.root.getBoundingClientRect();
         if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+        
         e.preventDefault();
         e.stopPropagation();
+        
         dragging = true;
         startClientX = e.clientX;
+        startClientY = e.clientY;
         const cur = getScale();
         startMin = cur.currMin; startMax = cur.currMax;
+        
+        // Calculate units per pixel once at start of drag to avoid sliding bug
+        xUnitsPerPx = (cur.currMax - cur.currMin) / chart.plotWidCss;
+        
         document.body.style.cursor = 'grabbing';
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', endDrag, { once: true });
     });
-    chart.root.addEventListener('mouseleave', () => { if (dragging) document.body.style.cursor = 'grabbing'; });
 }
 `;
 

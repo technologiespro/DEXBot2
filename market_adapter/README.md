@@ -76,20 +76,18 @@ the pair's `defaultAma` from
 `gridPrice: "ama4"` force a specific preset. If no pair profile matches, the
 bot's `ama` block is used as the fallback.
 
-Choose a bound multiplier larger than the AMA fit cap so the bot has room to
-absorb normal noise without making the book unnecessarily wide. The standard
-value is the fit cap plus 10%.
+### Empirical Divergence Risk Management
 
-| AMA preset | AMA fit cap | Standard | Wide | Excessive |
-|------------|------------:|---------:|-----:|----------:|
-| AMA1 | 25% | 1.35x | 1.40x | 1.45x+ |
-| AMA2 | 30% | 1.40x | 1.45x | 1.50x+ |
-| **AMA3** | 35% | 1.45x | 1.50x | 1.55x+ |
-| AMA4 | 40% | 1.50x | 1.55x | 1.60x+ |
+The adapter uses tiered clamping thresholds to manage inventory risk during extreme price divergence from the AMA trend center. These thresholds are derived from historical pool volatility and replace static 'fit cap' multipliers:
 
-The multiplier notation is symmetric around the grid center in ratio terms:
-`minPrice: "1.40x"` means `center / 1.40`, and `maxPrice: "1.40x"` means
-`center * 1.40`. Use the same multiplier for both bounds.
+| AMA preset | 99.9% (Soft-Clamp) | 99.99% (Hard-Clamp) | 99.999% (Emergency Exit) |
+|------------|-------------------:|--------------------:|-------------------------:|
+| AMA1 | 1.461x | 1.571x | 1.626x |
+| AMA2 | 1.467x | 1.564x | 1.619x |
+| **AMA3** | 1.473x | 1.557x | 1.612x |
+| AMA4 | 1.479x | 1.546x | 1.601x |
+
+Divergence is calculated as `abs(Price - AMA) / AMA`. Emergency exits trigger when price exceeds the 99.9th percentile of historical divergence, protecting the bot from extreme 'Black Swan' excursions and preventing runaway inventory accumulation during high-divergence volatility.
 
 ## Grid Range Scaling
 

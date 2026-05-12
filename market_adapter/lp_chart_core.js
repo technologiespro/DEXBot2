@@ -20,7 +20,7 @@ function padRange(min, max, lower = 0.04, upper = 0.04) {
 }
 
 function generateHTML(meta, candles, amaResults) {
-    const { assetA = {}, assetB = {}, intervalSeconds, fetchedAt, pool } = meta || {};
+    const { assetA = {}, assetB = {}, intervalSeconds, fetchedAt, pool, thresholds = [] } = meta || {};
     if (!Array.isArray(candles) || candles.length === 0) {
         throw new Error('No candles supplied to LP uPlot renderer');
     }
@@ -108,7 +108,7 @@ function generateHTML(meta, candles, amaResults) {
             color: #b8c0d0;
         }
         #stats, #params, #live {
-            position: fixed;
+            position: absolute;
             right: 12px;
             z-index: 100;
             background: rgba(20,24,32,0.88);
@@ -120,9 +120,23 @@ function generateHTML(meta, candles, amaResults) {
             line-height: 1.8;
             min-width: 240px;
         }
-        #stats { top: 90px; }
-        #params { top: 310px; }
-        #live { top: 540px; bottom: 12px; overflow: auto; }
+        #right-panel {
+            position: fixed;
+            top: 50px;
+            right: 0;
+            width: 276px;
+            bottom: 0;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        #stats, #params, #live {
+            position: relative;
+            right: 0;
+            width: 100%;
+        }
         #stats .label, #params .label, #live .label { color: #c0c8d8; }
         #stats .val, #params .val, #live .val { color: #f1f5ff; font-weight: 600; }
         #stats .pos { color: #26a69a; }
@@ -183,25 +197,28 @@ function generateHTML(meta, candles, amaResults) {
     <span class="sub" style="margin-left:auto">Fetched: ${fetchedAt ? escapeHtml(new Date(fetchedAt).toLocaleString()) : 'n/a'}</span>
 </div>
 
-<div id="stats">
-    <div><span class="label">Last Price  </span><span class="val">${Number.isFinite(lastPrice) ? lastPrice.toFixed(6) : 'n/a'}</span></div>
-    <div style="margin-top:4px; margin-bottom:2px"><span class="label" style="font-size:10px">── Deviations ──</span></div>
-    ${amaStats.map((s) => `<div><span style="color:${s.color}">● </span><span class="label" style="font-size:11px">${escapeHtml(String(s.name || '').padEnd(22))}</span><span class="${s.dev >= 0 ? 'pos' : 'neg'}">${formatPct(s.dev)}</span></div>`).join('\n    ')}
-    <div style="margin-top:6px"><span class="label">Max |dev|   </span><span class="val">${maxDev.toFixed(3)}% (primary)</span></div>
-    <div><span class="label">Candles     </span><span class="val">${candles.length}</span></div>
-    <div><span class="label">Source      </span><span class="label" style="font-size:10px">Kibana LP (op_type 63)</span></div>
-</div>
+<div id="right-panel">
+    <div id="stats">
+        <div><span class="label">Last Price  </span><span class="val">${Number.isFinite(lastPrice) ? lastPrice.toFixed(6) : 'n/a'}</span></div>
+        <div style="margin-top:4px; margin-bottom:2px"><span class="label" style="font-size:10px">── Deviations ──</span></div>
+        ${amaStats.map((s) => `<div><span style="color:${s.color}">● </span><span class="label" style="font-size:11px">${escapeHtml(String(s.name || '').padEnd(22))}</span><span class="${s.dev >= 0 ? 'pos' : 'neg'}">${formatPct(s.dev)}</span></div>`).join('\n    ')}
+        <div style="margin-top:6px"><span class="label">Max |dev|   </span><span class="val">${maxDev.toFixed(3)}% (primary)</span></div>
+        ${thresholds.length ? `<div style="margin-top:4px; margin-bottom:2px"><span class="label" style="font-size:10px">── Clamping Thresholds ──</span></div>
+        ${thresholds.map(t => `<div><span class="label" style="font-size:11px">${(t.quantile * 100).toFixed(3)}%</span><span class="val" style="margin-left:8px">${t.multiplier}x</span></div>`).join('')}` : ''}
+        <div style="margin-top:6px"><span class="label">Candles     </span><span class="val">${candles.length}</span></div>
+        <div><span class="label">Source      </span><span class="label" style="font-size:10px">Kibana LP (op_type 63)</span></div>
+    </div>
 
-<div id="params">
-    <div style="margin-bottom:2px"><span class="label" style="font-size:10px">── AMA Parameters ──</span></div>
-    <table id="params-table"></table>
-</div>
+    <div id="params">
+        <div style="margin-bottom:2px"><span class="label" style="font-size:10px">── AMA Parameters ──</span></div>
+        <table id="params-table"></table>
+    </div>
 
-<div id="live">
-    <div style="margin-bottom:2px"><span class="label" style="font-size:10px">── Live Values ──</span></div>
-    <table id="live-table"></table>
+    <div id="live">
+        <div style="margin-bottom:2px"><span class="label" style="font-size:10px">── Live Values ──</span></div>
+        <table id="live-table"></table>
+    </div>
 </div>
-
 <div id="charts">
     <div id="price-chart" class="chart"></div>
     <div id="dev-chart" class="chart"></div>
@@ -681,8 +698,11 @@ function bindWheelZoom(chart) {
         e.stopPropagation();
 
         const rect = chart.root.getBoundingClientRect();
-        const left = e.clientX - rect.left;
+        
+        // Correctly calculate plot-relative 'left' for accurate centering
+        const left = e.clientX - rect.left - (chart.bbox.left / (chart.pxRatio || 1));
         const center = chart.posToVal(left, 'x');
+        
         const xScale = chart.scales.x || {};
         const currMin = Number.isFinite(xScale.min) ? xScale.min : xMin;
         const currMax = Number.isFinite(xScale.max) ? xScale.max : xMax;
@@ -704,8 +724,10 @@ function bindWheelZoom(chart) {
 function bindPan(chart) {
     let dragging = false;
     let startClientX = 0;
+    let startClientY = 0;
     let startMin = xMin;
     let startMax = xMax;
+    let xUnitsPerPx = 0;
 
     const getCurrentScale = () => {
         const xScale = chart.scales.x || {};
@@ -716,16 +738,15 @@ function bindPan(chart) {
 
     const onMouseMove = (e) => {
         if (!dragging) return;
+        
+        // Ignore if vertical movement is dominant (likely scrolling)
+        if (Math.abs(e.clientY - startClientY) > 20) return;
+        
         e.preventDefault();
+        const deltaPx = e.clientX - startClientX;
+        const deltaVal = deltaPx * xUnitsPerPx;
 
-        const rect = chart.root.getBoundingClientRect();
-        const currentLeft = e.clientX - rect.left;
-        const startLeft = startClientX - rect.left;
-        const startVal = chart.posToVal(startLeft, 'x');
-        const currentVal = chart.posToVal(currentLeft, 'x');
-        const delta = currentVal - startVal;
-
-        syncXRange(startMin - delta, startMax - delta);
+        syncXRange(startMin - deltaVal, startMax - deltaVal);
     };
 
     const endDrag = () => {
@@ -749,9 +770,14 @@ function bindPan(chart) {
 
         dragging = true;
         startClientX = e.clientX;
+        startClientY = e.clientY;
         const current = getCurrentScale();
         startMin = current.currMin;
         startMax = current.currMax;
+        
+        // Calculate units per pixel once at start of drag to avoid sliding bug
+        xUnitsPerPx = (current.currMax - current.currMin) / chart.plotWidCss;
+        
         document.body.style.cursor = 'grabbing';
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', endDrag, { once: true });

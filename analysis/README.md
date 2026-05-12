@@ -111,6 +111,21 @@ node analysis/analyze_regime_windows.js \
   --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
+### Risk Profile Analyzer (`analyze_risk_profile.js`)
+
+Measures inventory risk by calculating empirical divergence quantiles (based on price-to-AMA deviation). Use this to calibrate 'Safe Range' clamping tiers (Soft-Clamp, Hard-Clamp, Emergency Exit) for your liquidity strategy.
+
+```bash
+node analysis/analyze_risk_profile.js \
+  --data market_adapter/data/lp/<pair>/lp_pool_<id>_1h.json \
+  --ama AMA3 \
+  --output analysis/charts/risk_report.html
+```
+
+Metrics include:
+- **Max Divergence:** The structural risk limit of the AMA preset.
+- **Quantiles (99.9%, 99.99%, 99.999%):** Statistical 'Safe Range' bounds for automated clamping.
+
 ### TradingView Chart (`analyze_tradingview.js`)
 
 Generates a standalone TradingView-style HTML chart with candle OHLC, SMA, AMA, VWMA, and volume panel. See [tradingview/README.md](tradingview/README.md) for full documentation.
