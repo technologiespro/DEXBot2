@@ -20,7 +20,7 @@ function padRange(min, max, lower = 0.04, upper = 0.04) {
 }
 
 function generateHTML(meta, candles, amaResults) {
-    const { assetA = {}, assetB = {}, intervalSeconds, fetchedAt, pool, thresholds = [] } = meta || {};
+    const { assetA = {}, assetB = {}, intervalSeconds, fetchedAt, pool, thresholds = [], sigmaAmaDelta } = meta || {};
     if (!Array.isArray(candles) || candles.length === 0) {
         throw new Error('No candles supplied to LP uPlot renderer');
     }
@@ -205,6 +205,7 @@ function generateHTML(meta, candles, amaResults) {
         <div style="margin-top:6px"><span class="label">Max |dev|   </span><span class="val">${maxDev.toFixed(3)}% (primary)</span></div>
         ${thresholds.length ? `<div style="margin-top:4px; margin-bottom:2px"><span class="label" style="font-size:10px">── Clamping Thresholds ──</span></div>
         ${thresholds.map(t => `<div><span class="label" style="font-size:11px">${(t.quantile * 100).toFixed(3)}%</span><span class="val" style="margin-left:8px">${t.multiplier}x</span></div>`).join('')}` : ''}
+        ${sigmaAmaDelta !== null && sigmaAmaDelta !== undefined ? `<div><span class="label">σ_ama_delta </span><span class="val">${sigmaAmaDelta}% (hourly)</span></div>` : ''}
         <div style="margin-top:6px"><span class="label">Candles     </span><span class="val">${candles.length}</span></div>
         <div><span class="label">Source      </span><span class="label" style="font-size:10px">Kibana LP (op_type 63)</span></div>
     </div>

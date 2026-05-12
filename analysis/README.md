@@ -123,8 +123,9 @@ node analysis/analyze_risk_profile.js \
 ```
 
 Metrics include:
-- **Max Divergence:** The structural risk limit of the AMA preset.
-- **Quantiles (99.9%, 99.99%, 99.999%):** Statistical 'Safe Range' bounds for automated clamping.
+- **Max Divergence:** Structural risk limit of the AMA preset.
+- **Quantiles (99.9%, 99.99%, 99.999%):** Safe Range bounds for clamping tiers.
+- **σ_ama_delta:** Std dev of per-bar AMA movement — use this to calibrate `AMA_DELTA_THRESHOLD_PERCENT`.
 
 ### TradingView Chart (`analyze_tradingview.js`)
 
