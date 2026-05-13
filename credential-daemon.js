@@ -69,6 +69,7 @@ const chainKeys = require('./modules/chain_keys');
 const { TIMING } = require('./modules/constants');
 const credentialPolicy = require('./modules/credential_policy');
 const { createAccountClient } = require('./modules/bitshares_client');
+const { execSync } = require('child_process');
 const {
     assertPrivatePathSecurity,
     ensureCredentialRuntimeDirSync,
@@ -257,9 +258,20 @@ async function resolveVaultSecret() {
                 `[credential-daemon] Bootstrap secret transfer failed: ${err.message}.`
             );
             if (!process.stdin || !process.stdin.isTTY) {
+                // Stale DEXBOT_CRED_BOOTSTRAP_SOCKET persisted by PM2 from a
+                // previous launcher run.  Delete the PM2 app entry to stop the
+                // restart loop, then exit.
                 daemonLogger.error(
                     '[credential-daemon] No TTY available for interactive fallback. ' +
-                    'Restart the unlock flow with: node pm2 restart dexbot-cred'
+                    'Removing stale PM2 app entry to stop restart loop.'
+                );
+                try {
+                    execSync('pm2 delete dexbot-cred', { stdio: 'ignore', timeout: 5000 });
+                } catch (_) {
+                    // pm2 may not be installed or already deleted — proceed
+                }
+                daemonLogger.error(
+                    '[credential-daemon] Restart the unlock flow with: node pm2 restart dexbot-cred'
                 );
                 process.exit(1);
             }
