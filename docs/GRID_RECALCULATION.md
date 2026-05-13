@@ -189,10 +189,12 @@ fallback bot-level AMA settings, edit the bot entry in `profiles/bots.json`.
 For bots whitelisted for asymmetric bounds / grid range scaling, the adapter
 tracks the AMA slope baseline accepted at the last grid reset. When the slope
 delta crosses the configured threshold, the adapter persists the latest range
-scaling snapshot and writes a reset trigger.
+scaling snapshot, including the live market price offset derived from that
+slope, and writes a reset trigger.
 
-**Why it matters:** Range scaling changes grid bounds, not just live order
-weights. Existing orders need a reset to move to the new asymmetric range.
+**Why it matters:** Range scaling changes grid bounds and the live market/start
+price used for initial placement, not just live order weights. Existing orders
+need a reset to move to the new asymmetric range and offset placement price.
 
 ### Configuration
 
@@ -212,6 +214,7 @@ The snapshot fields involved are:
 
 - `amaSlope`: latest slope diagnostic
 - `gridRangeScalingAmaSlope`: last accepted grid-reset slope baseline
+- `gridPriceOffsetPct`: signed market/start-price offset derived from AMA slope
 - `amaSlopeDeltaPercent`: distance from the accepted baseline
 - `amaSlopeThresholdPercent`: threshold required to trigger the reset
 
@@ -224,7 +227,7 @@ so the adapter converts them when loading overrides. New settings should use
 
 ### How It Works
 
-1. Adapter computes the current AMA slope and range-scaling bounds.
+1. Adapter computes the current AMA slope, range-scaling bounds, and market price offset.
 2. It compares the current slope with `gridRangeScalingAmaSlope`.
 3. If the threshold is crossed and the bot is range-scaling-whitelisted:
    - Persists the dynamic-grid snapshot
