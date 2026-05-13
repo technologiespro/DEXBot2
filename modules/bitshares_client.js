@@ -358,8 +358,11 @@ async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS, option
  * @returns {Object} btsdex client instance for this account
  */
 function createAccountClient(accountName, privateKey) {
-    // Instantiate a per-account client used for signing/broadcasting transactions.
-    return new BitSharesLib(accountName, privateKey);
+    // Pass fee symbol explicitly to avoid crash when BitShares.chain is undefined
+    // during a reconnect window. The btsdex constructor default parameter
+    // (_feeSymbol = BitShares.chain.coreAsset) throws if chain is not yet set.
+    const feeSymbol = (BitSharesLib.chain && BitSharesLib.chain.coreAsset) || 'BTS';
+    return new BitSharesLib(accountName, privateKey, feeSymbol);
 }
 
 function getConnectionStatus() {
