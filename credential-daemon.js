@@ -448,6 +448,12 @@ async function initialize() {
                 '[credential-daemon] SIGINT ignored (daemon is managed by PM2; use `pm2 stop dexbot-cred` to shut down).'
             );
         });
+        // Also ignore SIGHUP — PM2 may forward it on terminal disconnect.
+        process.on('SIGHUP', () => {
+            daemonLogger.log?.(
+                '[credential-daemon] SIGHUP ignored (daemon is managed by PM2).'
+            );
+        });
 
     } catch (error) {
         daemonLogger.error(`[credential-daemon] Startup failed: ${error.stack || error.message}`);
