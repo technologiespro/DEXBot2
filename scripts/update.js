@@ -284,12 +284,17 @@ try {
                  * 2. Actually running in PM2
                  */
                 const botsToReload = activeInConfig.filter(name => runningProcesses.includes(name));
+                const activeBots = (config.bots || []).filter(b => b.active !== false);
+                const { needsMarketAdapter } = require('../pm2');
+                const marketAdapterRequired = needsMarketAdapter(activeBots);
 
                 /**
                  * Also reload service apps that are part of the ecosystem
-                 * (e.g., dexbot-adapter) if they are currently running.
+                 * if they are currently running. dexbot-adapter follows AMA
+                 * grid activity and is only reloaded when an active AMA bot
+                 * requires it.
                  */
-                const serviceAppsToReload = ['dexbot-adapter'];
+                const serviceAppsToReload = marketAdapterRequired ? ['dexbot-adapter'] : [];
                 const servicesToReload = serviceAppsToReload.filter(name => runningProcesses.includes(name));
                 const allToReload = [...botsToReload, ...servicesToReload];
 
@@ -316,9 +321,7 @@ try {
                  * Individual reloads only touch existing processes; starting from
                  * the ecosystem file materializes missing apps.
                  */
-                const activeBots = (config.bots || []).filter(b => b.active !== false);
-                const { needsMarketAdapter } = require('../pm2');
-                if (needsMarketAdapter(activeBots) && !runningProcesses.includes('dexbot-adapter')) {
+                if (marketAdapterRequired && !runningProcesses.includes('dexbot-adapter')) {
                     log('dexbot-adapter is required by an AMA-grid bot but not running. Starting from ecosystem...');
                     try {
                         run('pm2 start profiles/ecosystem.config.js --only dexbot-adapter');
