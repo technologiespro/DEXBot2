@@ -781,28 +781,14 @@ function shutdown(exitCode = 0, reason = 'shutdown') {
         sessionAccountKeys.clear();
     }
 
-    const forceExitTimer = setTimeout(() => {
-        daemonLogger.error(`[credential-daemon] Forced exit after shutdown timeout (${reason}, exitCode=${exitCode})`);
-        process.exit(exitCode);
-    }, 5000);
-    if (typeof forceExitTimer.unref === 'function') {
-        forceExitTimer.unref();
-    }
-
-    // Close server
+    // Close server — don't wait for active connections, process.exit will
+    // tear everything down.  A hanging server.close() would prevent PM2 from
+    // stopping the daemon, causing a SIGKILL after 1.6s.
     if (server) {
-        server.close((err) => {
-            clearTimeout(forceExitTimer);
-            if (err) {
-                daemonLogger.error(`[credential-daemon] Server close failed: ${err.message}`);
-            }
-            daemonLogger.log?.('[credential-daemon] Server closed');
-            process.exit(exitCode);
-        });
-    } else {
-        clearTimeout(forceExitTimer);
-        process.exit(exitCode);
+        try { server.close(); } catch (_) {}
     }
+    daemonLogger.log?.('[credential-daemon] Server closed');
+    process.exit(exitCode);
 }
 
 // Start daemon
