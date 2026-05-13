@@ -31,7 +31,9 @@ const ALLOWED_OP_TYPES = [
     'credit_deal_update',
 ];
 
-// Hardcoded fallback policy — now forces Strict Mode Granular constraints
+// Hardcoded baseline policy used when resolving policy layers in-process.
+// The credential daemon now requires an explicit on-disk policy file and
+// fails closed on startup/reload mismatches.
 const BUILTIN_DEFAULT_POLICY = Object.freeze({
     allowedOps: Object.freeze({
         limit_order_create: null,
@@ -51,6 +53,78 @@ const BUILTIN_DEFAULT_POLICY = Object.freeze({
 
 const policyCache = new Map();
 
+function createMinimalPolicyConfig() {
+    return {
+        accounts: {},
+    };
+}
+
+function readPolicyConfigDetailed(filePath) {
+    if (!fs.existsSync(filePath)) {
+        return {
+            status: 'missing',
+            config: null,
+            error: `config file not found: ${filePath}`,
+        };
+    }
+
+    let raw;
+    try {
+        raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (error) {
+        return {
+            status: 'invalid',
+            config: null,
+            error: `failed to load config: ${error.message}`,
+        };
+    }
+
+    const { valid, errors } = validatePolicyConfig(raw);
+    if (!valid) {
+        return {
+            status: 'invalid',
+            config: null,
+            error: `config validation failed: ${errors.join('; ')}`,
+        };
+    }
+
+    return {
+        status: 'ok',
+        config: raw,
+        error: null,
+    };
+}
+
+/**
+ * Ensure daemon-policies.json exists before the credential daemon starts.
+ * Missing files are initialized to a minimal strict-compatible policy; invalid
+ * existing files still fail closed and are not overwritten.
+ *
+ * @param {string} filePath - Path to daemon-policies.json
+ * @returns {object} Valid parsed config
+ * @throws {Error} When the existing file is invalid or creation fails
+ */
+function ensurePolicyConfig(filePath) {
+    if (!fs.existsSync(filePath)) {
+        try {
+            fs.mkdirSync(path.dirname(filePath), { recursive: true });
+            fs.writeFileSync(filePath, JSON.stringify(createMinimalPolicyConfig(), null, 2), {
+                encoding: 'utf8',
+                mode: 0o600,
+                flag: 'wx',
+            });
+        } catch (err) {
+            if (err.code !== 'EEXIST') {
+                const wrapped = new Error(`Failed to create required policy config: ${err.message}`);
+                wrapped.code = 'POLICY_CONFIG_CREATE_FAILED';
+                throw wrapped;
+            }
+        }
+    }
+
+    return loadRequiredPolicyConfig(filePath);
+}
+
 /**
  * Load and parse daemon-policies.json. Returns normalized config or null on error.
  * On error, logs a warning and returns null (daemon will use BUILTIN_DEFAULT_POLICY).
@@ -65,29 +139,38 @@ function loadPolicyConfig(filePath, options = {}) {
         return policyCache.get(filePath);
     }
 
-    try {
-        if (!fs.existsSync(filePath)) {
-            console.warn(`[policy] config file not found: ${filePath} — using builtin defaults`);
-            policyCache.set(filePath, null);
-            return null;
-        }
-
-        const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        const { valid, errors } = validatePolicyConfig(raw);
-
-        if (!valid) {
-            console.warn(`[policy] config validation failed: ${errors.join('; ')} — using builtin defaults`);
-            policyCache.set(filePath, null);
-            return null;
-        }
-
-        policyCache.set(filePath, raw);
-        return raw;
-    } catch (error) {
-        console.warn(`[policy] failed to load config: ${error.message} — using builtin defaults`);
+    const detailed = readPolicyConfigDetailed(filePath);
+    if (detailed.status !== 'ok') {
+        console.warn(`[policy] ${detailed.error} — using builtin defaults`);
         policyCache.set(filePath, null);
         return null;
     }
+
+    policyCache.set(filePath, detailed.config);
+    return detailed.config;
+}
+
+/**
+ * Load daemon-policies.json as a required runtime dependency.
+ * Used by the credential daemon, which fails closed on missing/invalid policy.
+ *
+ * @param {string} filePath - Path to daemon-policies.json
+ * @returns {object} Valid parsed config
+ * @throws {Error} When the file is missing or invalid
+ */
+function loadRequiredPolicyConfig(filePath) {
+    const detailed = readPolicyConfigDetailed(filePath);
+    if (detailed.status !== 'ok') {
+        policyCache.set(filePath, null);
+        const err = new Error(`Required policy config ${detailed.status}: ${detailed.error}`);
+        err.code = detailed.status === 'missing'
+            ? 'POLICY_CONFIG_MISSING'
+            : 'POLICY_CONFIG_INVALID';
+        throw err;
+    }
+
+    policyCache.set(filePath, detailed.config);
+    return detailed.config;
 }
 
 /**
@@ -1177,7 +1260,9 @@ function verifySourceHmac(request, policyConfig) {
 module.exports = {
     POLICY_DENIED_PREFIX,
     BUILTIN_DEFAULT_POLICY,
+    ensurePolicyConfig,
     loadPolicyConfig,
+    loadRequiredPolicyConfig,
     validatePolicyConfig,
     deriveDebtPolicyConstraints,
     resolveAccountPolicy,

@@ -502,6 +502,7 @@ let NODE_MANAGEMENT = {
 
     // Health check defaults
     HEALTH_CHECK_INTERVAL_MS: 4 * 60 * 60 * 1000,  // 4 hours
+    CREDENTIAL_DAEMON_NODE_REFRESH_INTERVAL_MS: 60 * 60 * 1000,  // 1 hour - lightweight health-cache reread by credential daemon
     HEALTH_CHECK_TIMEOUT_MS: 5000,      // 5 seconds per check
     MAX_PING_MS: 3000,                  // Max acceptable latency
     BLACKLIST_THRESHOLD: 3,             // Failures before blacklist

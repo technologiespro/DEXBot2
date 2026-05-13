@@ -18,12 +18,14 @@ function installStubs(settings = null) {
     const disconnectCalls = [];
     let connectedCallback = null;
     let statusCallback = null;
+    let activeApiUrl = null;
     const createdManagers = [];
 
     class FakeNodeManager {
         constructor(config = {}) {
             this.config = config;
             this.checkCalls = 0;
+            this.blacklistCalls = [];
             createdManagers.push(this);
         }
 
@@ -36,9 +38,16 @@ function installStubs(settings = null) {
         }
 
         getHealthyNodes() {
+            if (Array.isArray(this.config.fakeHealthyNodes)) {
+                return this.config.fakeHealthyNodes.slice();
+            }
             return this.checkCalls > 0
                 ? ['wss://healthy-node.example/ws']
                 : [];
+        }
+
+        blacklistNode(nodeUrl) {
+            this.blacklistCalls.push(nodeUrl);
         }
 
         getStats() {
@@ -117,6 +126,9 @@ function installStubs(settings = null) {
         getStatus() {
             return 'closed';
         },
+        instance() {
+            return activeApiUrl ? { url: activeApiUrl } : null;
+        },
     });
 
     return {
@@ -127,6 +139,9 @@ function installStubs(settings = null) {
         getStatusCallback: () => statusCallback,
         setConnectSucceed(value) {
             shouldConnectSucceed = !!value;
+        },
+        setActiveApiUrl(value) {
+            activeApiUrl = value;
         },
         restore() {
             restoreCachedModule(nodeManagerPath, originalNodeManager);
@@ -230,6 +245,36 @@ async function runStatusClosedScenario() {
     }
 }
 
+async function runFailoverSkipsClosedNodeWithoutBlacklistingScenario() {
+    const activeNode = 'wss://active-node.example/ws';
+    const alternateNode = 'wss://alternate-node.example/ws';
+    const stubs = installStubs({
+        NODES: {
+            enabled: true,
+            list: [activeNode, alternateNode],
+            fakeHealthyNodes: [activeNode, alternateNode],
+        },
+    });
+    try {
+        delete require.cache[bitsharesClientPath];
+        const bsModule = require('../modules/bitshares_client');
+
+        stubs.setConnectSucceed(true);
+        stubs.setActiveApiUrl(activeNode);
+        await bsModule._assessFailover('Connection closed');
+
+        const manager = stubs.createdManagers[0];
+        assert.deepStrictEqual(manager.blacklistCalls, [], 'Failover should not persistently blacklist a transiently closed node');
+        assert.deepStrictEqual(
+            stubs.connectCalls[0],
+            [alternateNode],
+            'Failover should temporarily prefer another healthy node when one is available'
+        );
+    } finally {
+        stubs.restore();
+    }
+}
+
 async function runHealthCheckDisabledScenario() {
     const configuredList = ['wss://configured-node.example/ws'];
     const stubs = installStubs({
@@ -264,6 +309,7 @@ async function main() {
     await runRecoveryScenario();
     await runTimeoutScenario();
     await runStatusClosedScenario();
+    await runFailoverSkipsClosedNodeWithoutBlacklistingScenario();
     await runHealthCheckDisabledScenario();
     console.log('✓ BitShares client startup retry tests passed\n');
 }

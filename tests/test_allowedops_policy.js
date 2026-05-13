@@ -3,6 +3,9 @@
  */
 
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const policy = require('../modules/credential_policy');
 
 console.log('Testing allowedOps per-operation parameter constraints...\n');
@@ -252,8 +255,66 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     assert(evalResult9.reason.includes('maxDeltaSellAmount'));
     console.log('  ✓ Delta exceeding limit denied (absolute value)');
 
-    // Test 8: allowFillOrKill constraint
-    console.log('[Test 8] Evaluate allowedOps - allowFillOrKill constraint');
+    // Test 8: Required loader should fail on missing policy file
+    console.log('[Test 8] Required loader rejects missing policy file');
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-policy-'));
+    const policyPath = path.join(tempDir, 'daemon-policies.json');
+    assert.throws(
+        () => policy.loadRequiredPolicyConfig(policyPath),
+        /Required policy config missing:/,
+        'Missing policy file should fail closed'
+    );
+    console.log('  ✓ Missing policy file rejected');
+
+    // Test 9: Required loader should fail on invalid policy
+    console.log('[Test 9] Required loader rejects invalid policy');
+    const validPolicy = {
+        default: {
+            maxOpsPerBatch: 7,
+            allowedOps: {
+                limit_order_create: null,
+            },
+        },
+    };
+    fs.writeFileSync(policyPath, '{"default":', 'utf8');
+    assert.throws(
+        () => policy.loadRequiredPolicyConfig(policyPath),
+        /Required policy config invalid:/,
+        'Invalid policy file should fail closed'
+    );
+    console.log('  ✓ Invalid policy file rejected');
+
+    // Test 10: Required loader should accept valid policy
+    console.log('[Test 10] Required loader accepts valid policy');
+    fs.writeFileSync(policyPath, JSON.stringify(validPolicy, null, 2), 'utf8');
+    const requiredPolicy = policy.loadRequiredPolicyConfig(policyPath);
+    assert.deepStrictEqual(requiredPolicy, validPolicy, 'Valid policy should load successfully');
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    console.log('  ✓ Valid policy file accepted');
+
+    // Test 11: Policy preflight should create a minimal valid policy
+    console.log('[Test 11] Policy preflight creates minimal policy file');
+    const preflightDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-policy-preflight-'));
+    const preflightPath = path.join(preflightDir, 'nested', 'daemon-policies.json');
+    const ensuredPolicy = policy.ensurePolicyConfig(preflightPath);
+    assert.deepStrictEqual(ensuredPolicy, { accounts: {} }, 'Missing policy should be initialized minimally');
+    assert.deepStrictEqual(
+        JSON.parse(fs.readFileSync(preflightPath, 'utf8')),
+        { accounts: {} },
+        'Initialized policy should be written to disk'
+    );
+    assert.strictEqual((fs.statSync(preflightPath).mode & 0o777), 0o600, 'Initialized policy should be private');
+    fs.writeFileSync(preflightPath, '{"accounts":', 'utf8');
+    assert.throws(
+        () => policy.ensurePolicyConfig(preflightPath),
+        /Required policy config invalid:/,
+        'Invalid existing policy should fail closed'
+    );
+    fs.rmSync(preflightDir, { recursive: true, force: true });
+    console.log('  ✓ Policy preflight initializes missing file and rejects invalid file');
+
+    // Test 12: allowFillOrKill constraint
+    console.log('[Test 12] Evaluate allowedOps - allowFillOrKill constraint');
     const testPolicy4 = {
         allowedOps: {
             limit_order_create: {
@@ -299,7 +360,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     console.log('  ✓ fill_or_kill=false allowed');
 
     // Test 9: transfer parameter validation
-    console.log('[Test 9] Evaluate allowedOps - transfer parameter validation');
+    console.log('[Test 13] Evaluate allowedOps - transfer parameter validation');
     const transferPolicy = {
         allowedOps: {
             transfer: {
@@ -368,7 +429,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     console.log('  ✓ transfer exceeding limit denied');
 
     // Test 10: call_order_update parameter validation
-    console.log('[Test 10] Evaluate allowedOps - call_order_update parameter validation');
+    console.log('[Test 14] Evaluate allowedOps - call_order_update parameter validation');
     const callPolicy = {
         allowedOps: {
             call_order_update: {
@@ -418,7 +479,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     console.log('  ✓ call_order_update exceeding collateral limit denied');
 
     // Test 11: liquidity_pool_exchange parameter validation
-    console.log('[Test 11] Evaluate allowedOps - liquidity_pool_exchange parameter validation');
+    console.log('[Test 15] Evaluate allowedOps - liquidity_pool_exchange parameter validation');
     const lpHookPolicy = {
         allowedOps: {
             liquidity_pool_exchange: {
@@ -470,7 +531,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     console.log('  ✓ liquidity_pool_exchange for non-whitelisted pool denied');
 
     // Test 12: credit_offer_accept parameter validation
-    console.log('[Test 12] Evaluate allowedOps - credit_offer_accept parameter validation');
+    console.log('[Test 16] Evaluate allowedOps - credit_offer_accept parameter validation');
     const creditOfferPolicy = {
         allowedOps: {
             credit_offer_accept: {
@@ -547,7 +608,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     console.log('  ✓ credit_offer_accept cumulative amount caps left to runtime');
 
     // Test 13: credit_deal_repay parameter validation
-    console.log('[Test 13] Evaluate allowedOps - credit_deal_repay parameter validation');
+    console.log('[Test 17] Evaluate allowedOps - credit_deal_repay parameter validation');
     const creditRepayPolicy = {
         allowedOps: {
             credit_deal_repay: {
@@ -579,7 +640,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     console.log('  ✓ credit_deal_repay within limits allowed');
 
     // Test 14: credit_deal_update parameter validation
-    console.log('[Test 14] Evaluate allowedOps - credit_deal_update parameter validation');
+    console.log('[Test 18] Evaluate allowedOps - credit_deal_update parameter validation');
     const creditUpdatePolicy = {
         allowedOps: {
             credit_deal_update: {
@@ -610,7 +671,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     console.log('  ✓ credit_deal_update auto_repay change denied');
 
     // Test 14: maxOpsPerBatch limit enforcement
-    console.log('[Test 15] Evaluate allowedOps - maxOpsPerBatch limit enforcement');
+    console.log('[Test 19] Evaluate allowedOps - maxOpsPerBatch limit enforcement');
     const batchContext = {
         accountName: 'test',
         requestType: 'sign',

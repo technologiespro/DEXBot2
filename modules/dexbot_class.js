@@ -2168,9 +2168,18 @@ class DEXBot {
                 await this._runCredentialRecoveryAfterDaemonRestored();
             } catch (err) {
                 if (!this._credentialDaemonDown) {
-                    const hint = String(err.message || '').includes('ENOENT')
-                        ? `Socket file missing at ${token.socketPath}. The credential daemon process may have been killed (e.g. by stray Ctrl-C). Restart it with: node pm2 restart dexbot-cred. If the problem persists, check the daemon log: profiles/logs/dexbot-cred.log`
-                        : `Write operations will remain paused until re-unlocked with node pm2.`;
+                    const errMsg = String(err.message || '');
+                    let hint = '';
+                    if (errMsg.includes('ENOENT')) {
+                        hint = `Socket file missing at ${token.socketPath}. The credential daemon process may have been killed (e.g. by stray Ctrl-C). Restart it with: node pm2 restart dexbot-cred. If the problem persists, check the daemon log: profiles/logs/dexbot-cred.log`;
+                    } else if (errMsg.includes('ECONNREFUSED')) {
+                        hint = `Connection refused at ${token.socketPath}. The daemon may be in a zombie state or restarting. Try: node pm2 restart dexbot-cred.`;
+                    } else if (errMsg.includes('timeout')) {
+                        hint = `Probe timed out. The daemon may be under heavy load or blocked. Check profiles/logs/dexbot-cred.log.`;
+                    } else {
+                        hint = `Write operations will remain paused until re-unlocked with node pm2.`;
+                    }
+
                     this.manager?.logger?.log?.(
                         `[CREDENTIAL] Credential daemon watchdog failed: ${err.message}. ${hint}`,
                         'error'

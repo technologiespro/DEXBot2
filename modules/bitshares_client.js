@@ -156,9 +156,23 @@ async function assessFailover(reason = 'status change') {
     failoverAssessmentPromise = (async () => {
         console.warn(`[NodeManager] ${reason}, triggering failover assessment`);
         try {
+            const activeNode = typeof BitSharesApi.instance === 'function'
+                ? BitSharesApi.instance()?.url
+                : null;
             await nodeManager.checkAllNodes();
             const healthyNodes = nodeManager.getHealthyNodes();
-            const nextNodes = healthyNodes.length > 0 ? healthyNodes : getConfiguredOrDefaultNodes();
+            const availableHealthyNodes = activeNode
+                ? healthyNodes.filter((node) => node !== activeNode)
+                : healthyNodes;
+            const fallbackNodes = getConfiguredOrDefaultNodes();
+            const availableFallbackNodes = activeNode
+                ? fallbackNodes.filter((node) => node !== activeNode)
+                : fallbackNodes;
+            const nextNodes = availableHealthyNodes.length > 0
+                ? availableHealthyNodes
+                : (healthyNodes.length > 0
+                    ? healthyNodes
+                    : (availableFallbackNodes.length > 0 ? availableFallbackNodes : fallbackNodes));
             return restartBitsharesConnection(nextNodes, reason);
         } catch (err) {
             console.warn('[NodeManager] Failover assessment error:', err.message);

@@ -75,6 +75,7 @@ const { parseJsonWithComments } = require('./modules/order/utils/system');
 const { readBotsFileWithLock } = require('./modules/bots_file_lock');
 const { loadSettingsFile, selectActiveBotEntries } = require('./modules/bot_settings');
 const chainKeys = require('./modules/chain_keys');
+const credentialPolicy = require('./modules/credential_policy');
 const {
     ensureCredentialRuntimeDirSync,
     getCredentialReadyFilePath,
@@ -95,6 +96,7 @@ const ROOT = __dirname;
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 const BOTS_JSON = path.join(PROFILES_DIR, 'bots.json');
 const ECOSYSTEM_FILE = path.join(PROFILES_DIR, 'ecosystem.config.js');
+const POLICY_CONFIG_FILE = path.join(PROFILES_DIR, 'daemon-policies.json');
 const LOGS_DIR = path.join(PROFILES_DIR, 'logs');
 const CREDENTIAL_DAEMON_APP_NAME = 'dexbot-cred';
 const CREDENTIAL_SOCKET_PATH = getCredentialSocketPath({ root: ROOT });
@@ -328,6 +330,7 @@ function cleanupStaleCredentialDaemonFiles() {
 
 async function ensureCredentialDaemonPM2({ forceRefresh = false } = {}) {
     ensureCredentialRuntimeDirSync({ root: ROOT, socketPath: CREDENTIAL_SOCKET_PATH, readyFilePath: CREDENTIAL_READY_FILE });
+    credentialPolicy.ensurePolicyConfig(POLICY_CONFIG_FILE);
     const daemonReady = await chainKeys.isDaemonResponsive({
         socketPath: CREDENTIAL_SOCKET_PATH,
         readyFilePath: CREDENTIAL_READY_FILE,

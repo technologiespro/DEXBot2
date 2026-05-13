@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const chainKeys = require('../chain_keys');
+const credentialPolicy = require('../credential_policy');
 const {
     assertPrivatePathSecurity,
     ensureCredentialRuntimeDirSync,
@@ -69,6 +70,7 @@ function createCredentialDaemonController({
 
         await removeStaleDaemonFiles();
         ensureCredentialRuntimeDirSync({ socketPath, readyFilePath, root });
+        credentialPolicy.ensurePolicyConfig(path.join(root, 'profiles', 'daemon-policies.json'));
 
         const vaultSecret = await chainKeys.authenticate();
         const bootstrap = await createPasswordBootstrapServer({ secret: vaultSecret });

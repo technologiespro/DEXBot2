@@ -367,6 +367,37 @@ async function broadcastWithRetry(accountName, privateKey, broadcastFn) {
 }
 
 /**
+ * Refresh the BitShares node list from the health cache.
+ * Ensures the daemon isn't stuck on stale nodes if they fail during long uptime.
+ */
+function refreshNodeList() {
+    const settings = readGeneralSettings({ fallback: null });
+    const nodeSettings = settings?.NODES;
+    const nodeManagerEnabled = nodeSettings?.enabled ?? NODE_MANAGEMENT.DEFAULT_ENABLED;
+
+    if (nodeManagerEnabled) {
+        try {
+            const bestNodes = orderNodesForSettings(settings);
+            if (bestNodes && bestNodes.length > 0) {
+                BitSharesLib.node = bestNodes;
+                daemonLogger.log?.(`[credential-daemon] Node list refreshed: using best ${bestNodes.length} nodes from cache.`);
+            }
+        } catch (err) {
+            daemonLogger.warn?.(`[credential-daemon] Failed to refresh node list: ${err.message}`);
+        }
+    }
+}
+
+function getCredentialDaemonNodeRefreshIntervalMs(settings) {
+    const configured = settings?.NODES?.credentialDaemonRefreshIntervalMs
+        ?? settings?.NODES?.CREDENTIAL_DAEMON_NODE_REFRESH_INTERVAL_MS
+        ?? NODE_MANAGEMENT.CREDENTIAL_DAEMON_NODE_REFRESH_INTERVAL_MS;
+    return Number.isFinite(configured) && configured > 0
+        ? configured
+        : NODE_MANAGEMENT.CREDENTIAL_DAEMON_NODE_REFRESH_INTERVAL_MS;
+}
+
+/**
  * Initialize daemon: authenticate and start listening
  */
 async function initialize() {
@@ -394,10 +425,7 @@ async function initialize() {
 
         // Load policy config
         const policyConfigPath = path.join(__dirname, 'profiles', 'daemon-policies.json');
-        policyConfig = credentialPolicy.loadPolicyConfig(policyConfigPath);
-        if (policyConfig === null) {
-            debugLog('No policy config loaded — using built-in defaults');
-        }
+        policyConfig = credentialPolicy.loadRequiredPolicyConfig(policyConfigPath);
 
         // Set audit log path
         const auditLogDir = path.join(__dirname, 'profiles', 'logs');
@@ -416,18 +444,33 @@ async function initialize() {
         // daemon ~80s after startup).  Mirror the enabled check from
         // bitshares_client.js so both stay aligned.
         const settings = readGeneralSettings({ fallback: null });
-        const nodeSettings = settings?.NODES;
-        const nodeManagerEnabled = nodeSettings?.enabled ?? NODE_MANAGEMENT.DEFAULT_ENABLED;
-        if (nodeManagerEnabled) {
-            BitSharesLib.node = orderNodesForSettings(settings);
+        refreshNodeList();
+
+        // Lightweight node list refresh from the health cache. This is separate
+        // from updater schedules and does not run active node probes.
+        const nodeRefreshInterval = setInterval(refreshNodeList, getCredentialDaemonNodeRefreshIntervalMs(settings));
+        if (typeof nodeRefreshInterval.unref === 'function') {
+            nodeRefreshInterval.unref();
         }
 
-        // Register SIGHUP handler for policy reload
+        // Register SIGHUP handler for policy and node list reload.
+        // PM2 may forward SIGHUP on terminal disconnect, but we treat it
+        // as a trigger to refresh configuration.
         process.on('SIGHUP', () => {
-            debugLog('Reloading policy config...');
-            const newConfig = credentialPolicy.loadPolicyConfig(policyConfigPath, { forceReload: true });
-            policyConfig = newConfig;
-            debugLog(newConfig ? 'Policy config reloaded' : 'Policy config reload failed, using built-in defaults');
+            daemonLogger.log?.('[credential-daemon] SIGHUP received: refreshing configuration and node list...');
+
+            try {
+                // Reload policy config first. If it no longer validates, fail closed.
+                policyConfig = credentialPolicy.loadRequiredPolicyConfig(policyConfigPath);
+                debugLog('Policy config reloaded');
+            } catch (err) {
+                daemonLogger.error?.(`[credential-daemon] SIGHUP policy reload failed: ${err.message}`);
+                shutdown(1, 'invalid policy reload');
+                return;
+            }
+
+            // Reload node list
+            refreshNodeList();
         });
 
         ensureCredentialRuntimeDirSync({ root: __dirname, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });
@@ -477,12 +520,6 @@ async function initialize() {
         process.on('SIGINT', () => {
             daemonLogger.log?.(
                 '[credential-daemon] SIGINT ignored (daemon is managed by PM2; use `pm2 stop dexbot-cred` to shut down).'
-            );
-        });
-        // Also ignore SIGHUP — PM2 may forward it on terminal disconnect.
-        process.on('SIGHUP', () => {
-            daemonLogger.log?.(
-                '[credential-daemon] SIGHUP ignored (daemon is managed by PM2).'
             );
         });
 
