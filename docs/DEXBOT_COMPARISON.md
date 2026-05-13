@@ -1,7 +1,7 @@
 # DEXBot vs DEXBot2 — Detailed Comparison Report
 
-> **Date:** 2026-05-07 *(metrics refreshed against local source trees)*
-> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite). DEXBot2 is currently tracked as `0.7.0-alpha` in `package.json`.
+> **Date:** 2026-05-13 *(metrics refreshed against local source trees)*
+> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite). DEXBot2 is on the v0.7.0 development track, with `v0.6.0` as the latest tagged release.
 > **Audience:** Developers, contributors, and operators evaluating or migrating between the two projects.
 
 ---
@@ -35,10 +35,10 @@
 
 | Attribute | DEXBot (original) | DEXBot2 |
 |---|---|---|
-| **Version** | 1.0.0 | 0.7.0-alpha |
+| **Release Track** | 1.0.0 | v0.6.0 tagged release; v0.7.0 development track |
 | **Language** | Python 3.6+ | Node.js (JavaScript ES2022) |
-| **Status** | Alpha / Maintenance | Active Development |
-| **Last Update** | May 23, 2020 | May 2026 |
+| **Status** | Released 1.0.0, unmaintained | Active development |
+| **Last Repo Activity** | May 23, 2020 | 2026-05-13 |
 | **License** | MIT | MIT |
 | **Origin** | BitShares worker-proposal funded, Codaone Oy | Private rewrite by froooze |
 | **Primary Goal** | Multi-strategy, extensible trading framework | Hardened adaptive grid runtime with operator/AI tooling |
@@ -758,12 +758,12 @@ Where:
 
 | Metric | DEXBot | DEXBot2 |
 |---|---|---|
-| **Version** | 1.0.0 | 0.7.0-alpha |
+| **Release Track** | 1.0.0 | v0.6.0 tagged release; v0.7.0 development track |
 | **Active Since** | ~2018 | December 2025 |
-| **Last Commit** | May 23, 2020 | May 2026 |
-| **Total Commits** | 2281 | 1250 at current HEAD |
+| **Last Commit** | May 23, 2020 | 2026-05-13 |
+| **Total Commits** | 2281 | 1296 at current HEAD |
 | **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large JS runtime + adapter + Claw + analysis + tests |
-| **Source Files** | 72 Python files in `dexbot/` | 150+ active runtime/test JS files |
+| **Source Files** | 72 Python files in `dexbot/` | 370 JS files across the repo |
 | **Test Files** | 32 Python test files | 171 `test_*.js` files |
 | **Documentation** | Sphinx docs + README | 18+ Markdown docs plus Claw/analysis docs |
 | **Strategies** | 3 + plugins | 1 |
@@ -778,7 +778,7 @@ Where:
 
 ### DEXBot Limitations
 
-- **No longer actively maintained** (last commit May 23, 2020)
+- **No longer actively maintained** (last repo activity May 23, 2020)
 - Python GIL limits true parallelism for multi-worker scenarios
 - Mutable shared state — susceptible to race conditions in multi-worker use
 - No formal fund invariant enforcement — overdraft possible under edge cases
@@ -821,13 +821,13 @@ Where:
 | **Documentation** | ★★★☆☆ | ★★★★★ (architecture/accounting/security/adapter docs) | DEXBot2 |
 | **Dependency Footprint** | ★★☆☆☆ (heavy) | ★★★★★ (3 packages) | DEXBot2 |
 | **Extensibility** | ★★★★★ (plugins) | ★☆☆☆☆ | DEXBot |
-| **Active Maintenance** | ★☆☆☆☆ (abandoned) | ★★★★★ (active) | DEXBot2 |
+| **Active Maintenance** | ★☆☆☆☆ (unmaintained) | ★★★★★ (active) | DEXBot2 |
 | **Grid Strategy Depth** | ★★★☆☆ (Staggered) | ★★★★★ (engineered) | DEXBot2 |
 | **Adaptive Market Signals** | ★★☆☆☆ (external feeds only for Relative Orders) | ★★★★★ (AMA/Kalman/ATR/regime/dynamic weights) | DEXBot2 |
 | **Process Management** | ★★★☆☆ (Systemd) | ★★★★☆ (PM2 + daemon launch modes) | DEXBot2 |
 | **Automation/API Surface** | ★★☆☆☆ (strategy hooks) | ★★★★☆ (Claw modules/scripts/skills) | DEXBot2 |
 | **Credit/MPA Tooling** | ★☆☆☆☆ | ★★★★☆ | DEXBot2 |
-| **Community/Ecosystem** | ★★★★☆ | ★☆☆☆☆ | DEXBot |
+| **Community/Ecosystem** | ★★★☆☆ | ★★☆☆☆ | DEXBot |
 | **Multi-Strategy Support** | ★★★★★ | ★☆☆☆☆ | DEXBot |
 
 ---
@@ -850,4 +850,4 @@ The practical migration path is to treat DEXBot2 as a new runtime: recreate bot 
 
 ---
 
-*Report generated 2026-02-19. Metrics refreshed 2026-05-07 from local DEXBot-master and DEXBot2 source trees.*
+*Report generated 2026-05-13. Metrics refreshed 2026-05-13 from local DEXBot-master and DEXBot2 source trees.*
