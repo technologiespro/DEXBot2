@@ -254,9 +254,16 @@ async function resolveVaultSecret() {
             return normalizeBootstrapCredential(secret);
         } catch (err) {
             daemonLogger.error(
-                `[credential-daemon] Bootstrap secret transfer failed: ${err.message}. ` +
-                'Falling back to interactive authentication.'
+                `[credential-daemon] Bootstrap secret transfer failed: ${err.message}.`
             );
+            if (!process.stdin || !process.stdin.isTTY) {
+                daemonLogger.error(
+                    '[credential-daemon] No TTY available for interactive fallback. ' +
+                    'Restart the unlock flow with: node pm2 restart dexbot-cred'
+                );
+                process.exit(1);
+            }
+            daemonLogger.log?.('[credential-daemon] Falling back to interactive authentication.');
         }
     }
 
@@ -584,8 +591,8 @@ function processRequest(requestStr, socket) {
 
                     // Policy passed — now load key material
                     return loadCurrentPrivateKey(accountName)
-                        .then((privateKey) => {
-                            const client = createAccountClient(accountName, privateKey);
+                        .then(async (privateKey) => {
+                            const client = await createAccountClient(accountName, privateKey);
                             return client.broadcast(operation);
                         })
                         .then((signResult) => {
@@ -664,8 +671,8 @@ function processRequest(requestStr, socket) {
 
                     // Policy passed — now load key material
                     return loadCurrentPrivateKey(accountName)
-                        .then((privateKey) => {
-                            const client = createAccountClient(accountName, privateKey);
+                        .then(async (privateKey) => {
+                            const client = await createAccountClient(accountName, privateKey);
                             return executeOperationsWithClient(client, operations);
                         })
                         .then((signResult) => {
