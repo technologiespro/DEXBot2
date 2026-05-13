@@ -591,7 +591,7 @@ function processRequest(requestStr, socket) {
             });
 
             credentialPolicy.evaluatePolicy(policy, context)
-                .then((result) => {
+                .then(async (result) => {
                     if (!result.allow) {
                         appendAuditLog({
                             event: 'sign_denied',
@@ -607,25 +607,21 @@ function processRequest(requestStr, socket) {
                         return;
                     }
 
-                    // Policy passed — now load key material
-                    return loadCurrentPrivateKey(accountName)
-                        .then(async (privateKey) => {
-                            if (!BitSharesLib.chain) await BitSharesLib.connect();
-                            const client = new BitSharesLib(accountName, privateKey, 'BTS');
-                            await client.initPromise;
-                            return client.broadcast(operation);
-                        })
-                        .then((signResult) => {
-                            appendAuditLog({
-                                event: 'sign_allowed',
-                                accountName,
-                                sessionId,
-                                opCount: 1,
-                                opTypes: [operation && operation.op_name].filter(Boolean),
-                                timestamp: new Date().toISOString(),
-                            });
-                            sendSuccess(socket, signResult);
-                        });
+                    const privateKey = await loadCurrentPrivateKey(accountName);
+                    if (!BitSharesLib.chain) await BitSharesLib.connect();
+                    const client = new BitSharesLib(accountName, privateKey, 'BTS');
+                    await client.initPromise;
+                    const signResult = await client.broadcast(operation);
+
+                    appendAuditLog({
+                        event: 'sign_allowed',
+                        accountName,
+                        sessionId,
+                        opCount: 1,
+                        opTypes: [operation && operation.op_name].filter(Boolean),
+                        timestamp: new Date().toISOString(),
+                    });
+                    sendSuccess(socket, signResult);
                 })
                 .catch((error) => sendError(socket, error.message));
             return;
@@ -673,7 +669,7 @@ function processRequest(requestStr, socket) {
             const context = credentialPolicy.buildPolicyContext(request);
 
             credentialPolicy.evaluatePolicy(policy, context)
-                .then((result) => {
+                .then(async (result) => {
                     if (!result.allow) {
                         appendAuditLog({
                             event: 'sign_denied',
@@ -689,25 +685,21 @@ function processRequest(requestStr, socket) {
                         return;
                     }
 
-                    // Policy passed — now load key material
-                    return loadCurrentPrivateKey(accountName)
-                        .then(async (privateKey) => {
-                            if (!BitSharesLib.chain) await BitSharesLib.connect();
-                            const client = new BitSharesLib(accountName, privateKey, 'BTS');
-                            await client.initPromise;
-                            return executeOperationsWithClient(client, operations);
-                        })
-                        .then((signResult) => {
-                            appendAuditLog({
-                                event: 'sign_allowed',
-                                accountName,
-                                sessionId,
-                                opCount: operations.length,
-                                opTypes: operations.map((o) => o && o.op_name).filter(Boolean),
-                                timestamp: new Date().toISOString(),
-                            });
-                            sendSuccess(socket, signResult);
-                        });
+                    const privateKey = await loadCurrentPrivateKey(accountName);
+                    if (!BitSharesLib.chain) await BitSharesLib.connect();
+                    const client = new BitSharesLib(accountName, privateKey, 'BTS');
+                    await client.initPromise;
+                    const signResult = await executeOperationsWithClient(client, operations);
+
+                    appendAuditLog({
+                        event: 'sign_allowed',
+                        accountName,
+                        sessionId,
+                        opCount: operations.length,
+                        opTypes: operations.map((o) => o && o.op_name).filter(Boolean),
+                        timestamp: new Date().toISOString(),
+                    });
+                    sendSuccess(socket, signResult);
                 })
                 .catch((error) => sendError(socket, error.message));
             return;
