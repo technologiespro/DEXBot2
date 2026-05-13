@@ -222,7 +222,6 @@ function buildCredentialDaemonApp({ credentialEnv = {} } = {}) {
         script: path.join(ROOT, 'credential-daemon.js'),
         cwd: ROOT,
         autorestart: false,
-        max_memory_restart: '100M',
         error_file: path.join(LOGS_DIR, 'dexbot-cred-error.log'),
         out_file: path.join(LOGS_DIR, 'dexbot-cred.log'),
         log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
@@ -504,7 +503,6 @@ function startCredentialDaemonPM2({ credentialEnv = {} } = {}) {
         '--cwd', app.cwd,
         '--output', app.out_file,
         '--error', app.error_file,
-        '--max-memory-restart', app.max_memory_restart,
         '--log-date-format', app.log_date_format,
         '--no-autorestart',
     ];
