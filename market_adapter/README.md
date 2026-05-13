@@ -95,11 +95,14 @@ Divergence is calculated as `abs(Price - AMA) / AMA`. Limit exits trigger when p
 
 ## Grid Range Scaling
 
-AMA slope can tilt the configured range. In a trend, the adapter gives the grid
-more room on the trend side and less room on the opposite side.
+AMA slope can scale the rebuilt grid in two linked ways under the same
+whitelist gate:
 
-This is separate from dynamic buy/sell weighting. It is enabled only when
-`asymmetricBounds: true` is set in
+- tilt the configured min/max range toward the trend direction
+- offset the live market/start price used for initial placement
+
+This is separate from dynamic buy/sell weighting. Both grid-range effects are
+enabled only when `asymmetricBounds: true` is set in
 `profiles/market_adapter_whitelist.json`.
 
 Technical formula and tuning details are in
@@ -365,6 +368,7 @@ Typical fields:
     "slopePct": 0.04,
     "slopeOffset": 0.16
   },
+  "gridPriceOffsetPct": 0.8,
   "amaSlopeDeltaPercent": 0.015,
   "amaSlopeThresholdPercent": 0.015,
   "updatedAt": "2026-03-01T00:00:00.000Z",
@@ -381,6 +385,7 @@ Typical fields:
 - `centerPrice` remains as a compatibility alias for older readers.
 - `amaCenterPrice` is the raw AMA output before downstream handling.
 - `amaSlope` is the latest AMA slope snapshot used for diagnostics and snapshot writes.
+- `gridPriceOffsetPct` is the signed market/start-price offset derived from AMA slope and capped at half of `targetSpreadPercent`; it is not applied to `gridCenterPrice`.
 - `gridRangeScalingAmaSlope` in adapter state is the last grid-reset slope baseline used for slope-triggered range-scaling resets.
 - `amaSlopeDeltaPercent` records the change from the last grid-reset slope baseline.
 - `amaSlopeThresholdPercent` is the configured slope-reset threshold.
@@ -467,12 +472,19 @@ Grid range scaling is the technical path for:
 
 ```text
 AMA slope -> min/max bound tilt
+AMA slope -> live market/start-price offset, capped at half spread
 ```
 
 During a grid rebuild, the bot loads the latest dynamic grid snapshot and uses
 the AMA slope diagnostics to tilt the configured `minPrice` and `maxPrice`
 around the AMA center. An uptrend widens the upper bound and tightens the lower
 bound; a downtrend widens the lower bound and tightens the upper bound.
+
+The same `asymmetricBounds` whitelist also enables `gridPriceOffsetPct`: a
+slope-ratio offset applied only to the live `startPrice` used for initial
+placement. It is capped at half of `targetSpreadPercent` (`2` allows `-1%` to
+`+1%`) and does not change `gridCenterPrice`, the AMA center, or reset
+threshold baselines.
 
 This uses `dynamicWeights.trend`, `dynamicWeights.slopeOffset`, and
 `dynamicWeights.maxSlopeOffset`, but it is separate from the dynamic buy/sell

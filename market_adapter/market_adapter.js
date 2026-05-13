@@ -1027,6 +1027,7 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
  * @param {Object} [options.gridRangeScalingAmaSlope] - Accepted slope baseline used for future slope-trigger comparisons
  * @param {number} [options.amaSlopeDeltaPercent] - Absolute slope delta percentage since the last accepted snapshot
  * @param {number} [options.amaSlopeThresholdPercent] - Trigger threshold used for slope-based recalc decisions
+ * @param {number} [options.gridPriceOffsetPct] - Signed grid-center offset percentage derived from AMA slope
  * @param {Object} [options.dynamicWeights]   - Computed weight offsets for live order sizing
  */
 function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
@@ -1049,6 +1050,9 @@ function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
         }
         if (options.gridRangeScalingAmaSlope && typeof options.gridRangeScalingAmaSlope === 'object') {
             payload.gridRangeScalingAmaSlope = options.gridRangeScalingAmaSlope;
+        }
+        if (Number.isFinite(Number(options.gridPriceOffsetPct))) {
+            payload.gridPriceOffsetPct = Number(options.gridPriceOffsetPct);
         }
         if (Number.isFinite(Number(options.amaSlopeDeltaPercent))) {
             payload.amaSlopeDeltaPercent = Number(options.amaSlopeDeltaPercent);

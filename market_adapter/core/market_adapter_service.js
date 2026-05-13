@@ -82,6 +82,42 @@ function normalizePersistedAmaSlopeDiagnostics(data, lookbackBars) {
     return normalized;
 }
 
+function roundTo(value, places = 6) {
+    const n = Number(value);
+    const scale = 10 ** Math.max(0, Math.floor(places));
+    if (!Number.isFinite(n)) return null;
+    return Math.round(n * scale) / scale;
+}
+
+function computeGridPriceOffsetPlan(bot, amaSlope) {
+    const targetSpreadPercentRaw = Number(bot?.targetSpreadPercent);
+    const targetSpreadPercent = Number.isFinite(targetSpreadPercentRaw) && targetSpreadPercentRaw > 0
+        ? targetSpreadPercentRaw
+        : Number(DEFAULT_CONFIG.targetSpreadPercent) || 2;
+    const maxGridPriceOffsetPct = targetSpreadPercent / 2;
+    const trend = amaSlope?.trend;
+    const rawSlopeOffset = Number(amaSlope?.rawSlopeOffset);
+    const maxSlopeOffset = Number(amaSlope?.maxSlopeOffset);
+    const directionalSlope = Number.isFinite(rawSlopeOffset)
+        ? Math.abs(rawSlopeOffset)
+        : Math.abs(Number(amaSlope?.slopeOffset));
+    const slopeRatio = Number.isFinite(directionalSlope) && Number.isFinite(maxSlopeOffset) && maxSlopeOffset > 0
+        ? Math.min(directionalSlope / maxSlopeOffset, 1)
+        : 0;
+    const direction = trend === 'UP' ? 1 : trend === 'DOWN' ? -1 : 0;
+    const gridPriceOffsetPct = roundTo(direction * slopeRatio * maxGridPriceOffsetPct, 6) || 0;
+
+    return {
+        trend: trend || 'NEUTRAL',
+        rawSlopeOffset: Number.isFinite(rawSlopeOffset) ? rawSlopeOffset : null,
+        maxSlopeOffset: Number.isFinite(maxSlopeOffset) ? maxSlopeOffset : null,
+        slopeRatio: roundTo(slopeRatio, 6) || 0,
+        targetSpreadPercent: roundTo(targetSpreadPercent, 6),
+        maxGridPriceOffsetPct: roundTo(maxGridPriceOffsetPct, 6),
+        gridPriceOffsetPct,
+    };
+}
+
 
 class MarketAdapterService {
     constructor(deps = {}) {
@@ -501,6 +537,7 @@ class MarketAdapterService {
 
         const gridCenterPrice = Number(snapshot.gridCenterPrice ?? snapshot.centerPrice);
         const amaCenterPrice = Number(snapshot.amaCenterPrice);
+        const gridPriceOffsetPct = Number(snapshot.gridPriceOffsetPct);
         const normalized = normalizePersistedAmaSlopeDiagnostics({
             amaSlopePercentMode: snapshot.amaSlopePercentMode,
             amaSlope: snapshot.amaSlope,
@@ -520,6 +557,7 @@ class MarketAdapterService {
             amaSlopeDeltaPercent: normalized?.amaSlopeDeltaPercent ?? null,
             amaSlopeThresholdPercent: normalized?.amaSlopeThresholdPercent ?? null,
             amaSlopePercentMode: AMA_SLOPE_PERCENT_MODE_PER_BAR,
+            gridPriceOffsetPct: Number.isFinite(gridPriceOffsetPct) ? gridPriceOffsetPct : null,
         };
     }
 
@@ -2025,6 +2063,7 @@ class MarketAdapterService {
         const centerPrice = Number.isFinite(clampedCenterPrice) && clampedCenterPrice > 0
             ? clampedCenterPrice
             : referencePrice;
+        const gridPriceOffsetPlan = computeGridPriceOffsetPlan(bot, amaSlope);
         if (dynamicWeightsPayload) {
             const asymmetryMetrics = isAsymmetricBoundsWhitelisted
                 ? this.computeAppliedAsymmetryMetrics(bot, centerPrice, dynamicWeightsPayload)
@@ -2054,20 +2093,26 @@ class MarketAdapterService {
             triggerSuppressedReason = 'unresolved_candle_gaps';
         }
 
-        const buildDynamicGridOptions = (options = {}) => ({
-            gridCenterPrice: options.gridCenterPrice ?? null, // explicit baseline if provided
-            amaCenterPrice: amaPrice,
-            amaSlope: options.amaSlope ?? amaSlope,
-            gridRangeScalingAmaSlope: options.gridRangeScalingAmaSlope ?? (amaSlope || previousGridResetAmaSlope || null),
-            amaSlopeDeltaPercent,
-            amaSlopeThresholdPercent,
-            ...(options.previousCenterPrice !== undefined
-                ? { previousCenterPrice: options.previousCenterPrice }
-                : {}),
-            ...(dynamicSnapshotPayload
-                ? { dynamicWeights: dynamicSnapshotPayload }
-                : {}),
-        });
+        const buildDynamicGridOptions = (options = {}) => {
+            const payload = {
+                gridCenterPrice: options.gridCenterPrice ?? null, // explicit baseline if provided
+                amaCenterPrice: amaPrice,
+                amaSlope: options.amaSlope ?? amaSlope,
+                gridRangeScalingAmaSlope: options.gridRangeScalingAmaSlope ?? (amaSlope || previousGridResetAmaSlope || null),
+                amaSlopeDeltaPercent,
+                amaSlopeThresholdPercent,
+                ...(options.previousCenterPrice !== undefined
+                    ? { previousCenterPrice: options.previousCenterPrice }
+                    : {}),
+                ...(dynamicSnapshotPayload
+                    ? { dynamicWeights: dynamicSnapshotPayload }
+                    : {}),
+            };
+            if (isGridRangeScalingWhitelisted) {
+                payload.gridPriceOffsetPct = options.gridPriceOffsetPct ?? gridPriceOffsetPlan.gridPriceOffsetPct;
+            }
+            return payload;
+        };
 
         const persistDynamicGridSnapshot = (snapshotCenterPrice, options = {}) => {
             if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
@@ -2137,11 +2182,13 @@ class MarketAdapterService {
 
                 const amaCenterPersisted = persistDynamicGridSnapshot(bootstrapCenterPrice, {
                     amaSlope: amaSlope || previousAmaSlope || null,
+                    gridPriceOffsetPct: gridPriceOffsetPlan.gridPriceOffsetPct,
                 });
 
                 if (amaCenterPersisted) {
                     advanceTriggeredBotState(bootstrapCenterPrice, {
                         amaSlope: amaSlope || previousAmaSlope || null,
+                        gridPriceOffsetPct: gridPriceOffsetPlan.gridPriceOffsetPct,
                     });
                     // First-ever bootstrap — no previous center anywhere.
                     // Create a trigger so the bot recalibrates to the new center.
@@ -2179,6 +2226,7 @@ class MarketAdapterService {
                 if (deltaPercent >= botThreshold) {
                     const amaCenterPersisted = persistDynamicGridSnapshot(centerPrice, {
                         previousCenterPrice,
+                        gridPriceOffsetPct: gridPriceOffsetPlan.gridPriceOffsetPct,
                     });
 
                     if (!amaCenterPersisted) {
@@ -2273,6 +2321,9 @@ class MarketAdapterService {
                 gridRangeScalingAmaSlope: botState.gridRangeScalingAmaSlope || previousGridResetAmaSlope || null,
                 amaSlopeDeltaPercent,
                 amaSlopeThresholdPercent,
+                ...(isGridRangeScalingWhitelisted
+                    ? { gridPriceOffsetPct: gridPriceOffsetPlan.gridPriceOffsetPct }
+                    : {}),
                 dynamicWeights: dynamicWeightsPayload,
             }) !== false;
             if (dynamicWeightsPersisted) {

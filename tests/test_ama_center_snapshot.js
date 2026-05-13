@@ -15,13 +15,14 @@ async function testSnapshotReaderExposesCenterOnly() {
   const filePath = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-	  await fs.writeFile(filePath, JSON.stringify({
-	    amaCenterPrice: 100,
-	    centerPrice: 101.5,
-	    amaSlopePercentMode: 'perBar',
-	    amaSlope: {
-	      trend: 'DOWN',
-	      slopePct: -0.28,
+  await fs.writeFile(filePath, JSON.stringify({
+    amaCenterPrice: 100,
+    centerPrice: 101.5,
+    gridPriceOffsetPct: 0.75,
+    amaSlopePercentMode: 'perBar',
+    amaSlope: {
+      trend: 'DOWN',
+      slopePct: -0.28,
       slopeOffset: -0.14,
     },
     gridRangeScalingAmaSlope: {
@@ -32,17 +33,17 @@ async function testSnapshotReaderExposesCenterOnly() {
     amaSlopeDeltaPercent: 0.18,
     amaSlopeThresholdPercent: 0.1,
     source: 'market_adapter/market_adapter.js',
-    updatedAt: '2026-01-01T00:00:00Z'
+    updatedAt: '2026-01-01T00:00:00Z',
   }, null, 2) + '\n', 'utf8');
 
   try {
     const snapshot = loadAmaCenterSnapshot(botKey);
     assert(snapshot, 'snapshot should be returned for a valid file');
-	    assert.strictEqual(snapshot.amaCenterPrice, 100);
-	    assert.strictEqual(snapshot.centerPrice, 101.5);
-	    assert.strictEqual(snapshot.amaSlopePercentMode, 'perBar');
-	    assert.deepStrictEqual(snapshot.amaSlope, {
-	      trend: 'DOWN',
+    assert.strictEqual(snapshot.amaCenterPrice, 100);
+    assert.strictEqual(snapshot.centerPrice, 101.5);
+    assert.strictEqual(snapshot.amaSlopePercentMode, 'perBar');
+    assert.deepStrictEqual(snapshot.amaSlope, {
+      trend: 'DOWN',
       slopePct: -0.28,
       slopeOffset: -0.14,
     });
@@ -53,6 +54,7 @@ async function testSnapshotReaderExposesCenterOnly() {
     });
     assert.strictEqual(snapshot.amaSlopeDeltaPercent, 0.18);
     assert.strictEqual(snapshot.amaSlopeThresholdPercent, 0.1);
+    assert.strictEqual(snapshot.gridPriceOffsetPct, 0.75);
     assert.strictEqual(loadAmaCenterPrice(botKey), 101.5);
   } finally {
     await fs.unlink(filePath).catch(() => {});

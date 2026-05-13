@@ -525,6 +525,9 @@ class Grid {
         let gp = mp;
         let gpSource = 'startPrice';
         let amaSnapshot = null;
+        const whitelistFlags = getWhitelistFlags(manager.config.botKey);
+        const isGridRangeScalingWhitelisted = whitelistFlags.asymmetricBounds === true;
+        let gridPriceOffsetPct = 0;
         const gpRaw = manager.config.gridPrice;
         const gpModeRaw = (typeof gpRaw === 'string') ? gpRaw.trim().toLowerCase() : null;
         const gpMode = gpModeRaw === 'market' ? 'book' : gpModeRaw; // normalize legacy alias
@@ -552,6 +555,11 @@ class Grid {
             if (Number.isFinite(amaCenter) && amaCenter > 0) {
                 gp = amaCenter;
                 gpSource = 'ama';
+                const snapshotGridPriceOffsetPct = Number(amaSnapshot?.gridPriceOffsetPct);
+                const hasGridPriceOffset = isGridRangeScalingWhitelisted
+                    && Number.isFinite(snapshotGridPriceOffsetPct)
+                    && snapshotGridPriceOffsetPct !== 0;
+                gridPriceOffsetPct = hasGridPriceOffset ? snapshotGridPriceOffsetPct : 0;
                 manager.logger?.log?.(`[DIAGNOSTIC] initializeGrid: gridPrice=AMA center ${gp.toFixed(8)}`, 'info');
             } else {
                 manager.logger?.log?.(`initializeGrid: AMA center unavailable for gridPrice, falling back to startPrice`, 'warn');
@@ -568,7 +576,7 @@ class Grid {
         let resolvedMaxP = maxP;
         let rangeScalingFactor = null;
         if (gpSource === 'ama' && Number.isFinite(minP) && Number.isFinite(maxP)
-            && getWhitelistFlags(manager.config.botKey).asymmetricBounds !== false) {
+            && isGridRangeScalingWhitelisted) {
             const dw = amaSnapshot?.dynamicWeights;
             const maxAsymmetryFactor = resolveMaxAsymmetryFactor(
                 manager.config.asymmetricBounds?.maxAsymmetryFactor,
@@ -601,6 +609,17 @@ class Grid {
         }
 
         let gridStartPrice = mp;
+        let offsetAdjustedStartPrice = gridStartPrice;
+        if (gpSource === 'ama' && gridPriceOffsetPct !== 0 && Number.isFinite(gridStartPrice) && gridStartPrice > 0) {
+            const adjustedMarketPrice = gridStartPrice * (1 + (gridPriceOffsetPct / 100));
+            manager.logger?.log?.(
+                `[DIAGNOSTIC] initializeGrid: applying AMA market-price offset ${gridPriceOffsetPct.toFixed(3)}% `
+                + `to startPrice ${gridStartPrice.toFixed(8)} -> ${adjustedMarketPrice.toFixed(8)}`,
+                'info'
+            );
+            gridStartPrice = adjustedMarketPrice;
+            offsetAdjustedStartPrice = adjustedMarketPrice;
+        }
         if (!(gridStartPrice >= resolvedMinP && gridStartPrice <= resolvedMaxP)) {
             if (Number.isFinite(gp) && gp > 0 && gp >= resolvedMinP && gp <= resolvedMaxP) {
                 gridStartPrice = gp;
@@ -622,6 +641,9 @@ class Grid {
         manager.config.maxPrice = resolvedMaxP;
         manager._lastGridPricingContext = {
             gridPrice: gp,
+            gridPriceOffsetPct,
+            offsetAdjustedStartPrice,
+            startPrice: gridStartPrice,
             configuredMinPrice,
             configuredMaxPrice,
             rangeScalingFactor

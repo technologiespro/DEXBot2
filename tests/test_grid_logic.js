@@ -15,6 +15,7 @@ const { OrderManager } = require('../modules/order/manager');
 const { allocateFundsByWeights, getSingleDustThreshold } = require('../modules/order/utils/math');
 const { shouldFlagOutOfSpread } = require('../modules/order/utils/order');
 const { WHITELIST_FILE, resetMarketAdapterWhitelistCache } = require('../modules/market_adapter_whitelist');
+const gridModulePath = require.resolve('../modules/order/grid');
 
 async function runTests() {
     console.log('Running Grid Logic Tests...');
@@ -336,6 +337,214 @@ async function runTests() {
             assert(Math.abs(manager.config.minPrice - 591.3978494623656) < 1e-9, 'AMA gridPrice should use the persisted center price plus range scaling');
             assert.strictEqual(manager.config.maxPrice, 2354, 'AMA gridPrice should use the persisted center price plus range scaling');
         } finally {
+            try { fs.unlinkSync(amaFile); } catch (_) {}
+            if (originalWhitelist == null) {
+                try { fs.unlinkSync(WHITELIST_FILE); } catch (_) {}
+            } else {
+                fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
+            }
+            resetMarketAdapterWhitelistCache();
+        }
+    }
+
+    console.log(' - Testing AMA gridPrice keeps the persisted center while offsetting market placement price...');
+    {
+        const botKey = `test-grid-ama-offset-${process.pid}`;
+        const ordersDir = path.join(__dirname, '..', 'profiles', 'orders');
+        const amaFile = path.join(ordersDir, `${botKey}.dynamicgrid.json`);
+        const originalWhitelist = fs.existsSync(WHITELIST_FILE)
+            ? fs.readFileSync(WHITELIST_FILE, 'utf8')
+            : null;
+
+        fs.mkdirSync(ordersDir, { recursive: true });
+        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+            whitelist: {
+                [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: true }
+            }
+        }, null, 2) + '\n', 'utf8');
+        resetMarketAdapterWhitelistCache();
+        fs.writeFileSync(amaFile, JSON.stringify({
+            gridCenterPrice: 1000,
+            centerPrice: 1000,
+            amaCenterPrice: 1000,
+            gridPriceOffsetPct: 0.8,
+            updatedAt: new Date().toISOString(),
+        }, null, 2) + '\n', 'utf8');
+
+        try {
+            const manager = new OrderManager({
+                assetA: 'TESTA',
+                assetB: 'TESTB',
+                botKey,
+                startPrice: 100,
+                gridPrice: 'ama',
+                minPrice: '2x',
+                maxPrice: '2x',
+                incrementPercent: 1,
+                targetSpreadPercent: 2,
+                weightDistribution: { buy: 0.5, sell: 0.5 },
+                botFunds: { buy: '100%', sell: '100%' },
+                activeOrders: { buy: 6, sell: 6 }
+            });
+
+            manager.assets = {
+                assetA: { id: '1.3.1', symbol: 'TESTA', precision: 5 },
+                assetB: { id: '1.3.2', symbol: 'TESTB', precision: 5 }
+            };
+            await manager.setAccountTotals({ buy: 5000, sell: 5000, buyFree: 5000, sellFree: 5000 });
+
+            await Grid.initializeGrid(manager);
+
+            assert(manager.orders.size > 0, 'initializeGrid should succeed with an offset AMA snapshot');
+            assert.strictEqual(manager._lastGridPricingContext.gridPriceOffsetPct, 0.8, 'debug pricing should expose the persisted spread offset');
+            assert(Math.abs(manager._lastGridPricingContext.gridPrice - 1000) < 1e-9, 'AMA gridPrice should remain anchored to the persisted center price');
+            assert(Math.abs(manager._lastGridPricingContext.offsetAdjustedStartPrice - 100.8) < 1e-9, 'AMA spread offset should adjust only the market placement price before bounds fallback');
+            assert(Math.abs(manager._lastGridPricingContext.startPrice - 1000) < 1e-9, 'if the adjusted market price is still out of bounds, rebuild should continue to fall back to the AMA grid center');
+        } finally {
+            try { fs.unlinkSync(amaFile); } catch (_) {}
+            if (originalWhitelist == null) {
+                try { fs.unlinkSync(WHITELIST_FILE); } catch (_) {}
+            } else {
+                fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
+            }
+            resetMarketAdapterWhitelistCache();
+        }
+    }
+
+    console.log(' - Testing AMA gridPrice ignores spread offset without grid range scaling whitelist...');
+    {
+        const botKey = `test-grid-ama-offset-disabled-${process.pid}`;
+        const ordersDir = path.join(__dirname, '..', 'profiles', 'orders');
+        const amaFile = path.join(ordersDir, `${botKey}.dynamicgrid.json`);
+        const originalWhitelist = fs.existsSync(WHITELIST_FILE)
+            ? fs.readFileSync(WHITELIST_FILE, 'utf8')
+            : null;
+
+        fs.mkdirSync(ordersDir, { recursive: true });
+        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+            whitelist: {
+                [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: false }
+            }
+        }, null, 2) + '\n', 'utf8');
+        resetMarketAdapterWhitelistCache();
+        fs.writeFileSync(amaFile, JSON.stringify({
+            gridCenterPrice: 1000,
+            centerPrice: 1000,
+            amaCenterPrice: 1000,
+            gridPriceOffsetPct: 0.8,
+            dynamicWeights: {
+                isReady: true,
+                trend: 'UP',
+                slopeOffset: 0.1,
+                maxSlopeOffset: 1,
+            },
+            updatedAt: new Date().toISOString(),
+        }, null, 2) + '\n', 'utf8');
+
+        try {
+            const manager = new OrderManager({
+                assetA: 'TESTA',
+                assetB: 'TESTB',
+                botKey,
+                startPrice: 100,
+                gridPrice: 'ama',
+                minPrice: '2x',
+                maxPrice: '2x',
+                incrementPercent: 1,
+                targetSpreadPercent: 2,
+                weightDistribution: { buy: 0.5, sell: 0.5 },
+                botFunds: { buy: '100%', sell: '100%' },
+                activeOrders: { buy: 6, sell: 6 }
+            });
+
+            manager.assets = {
+                assetA: { id: '1.3.1', symbol: 'TESTA', precision: 5 },
+                assetB: { id: '1.3.2', symbol: 'TESTB', precision: 5 }
+            };
+            await manager.setAccountTotals({ buy: 5000, sell: 5000, buyFree: 5000, sellFree: 5000 });
+
+            await Grid.initializeGrid(manager);
+
+            assert(manager.orders.size > 0, 'initializeGrid should succeed with spread offset disabled');
+            assert.strictEqual(manager._lastGridPricingContext.gridPriceOffsetPct, 0, 'debug pricing should hide ignored spread offset');
+            assert(Math.abs(manager._lastGridPricingContext.gridPrice - 1000) < 1e-9, 'AMA gridPrice should ignore spread offset unless grid range scaling is whitelisted');
+            assert(Math.abs(manager._lastGridPricingContext.startPrice - 1000) < 1e-9, 'without the whitelist the rebuild should still fall back to the raw AMA center');
+            assert.strictEqual(manager._lastGridPricingContext.rangeScalingFactor, null, 'range scaling should also be disabled by the same whitelist flag');
+        } finally {
+            try { fs.unlinkSync(amaFile); } catch (_) {}
+            if (originalWhitelist == null) {
+                try { fs.unlinkSync(WHITELIST_FILE); } catch (_) {}
+            } else {
+                fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
+            }
+            resetMarketAdapterWhitelistCache();
+        }
+    }
+
+    console.log(' - Testing pool gridPrice ignores the persisted AMA spread offset...');
+    {
+        const botKey = `test-grid-pool-no-offset-${process.pid}`;
+        const ordersDir = path.join(__dirname, '..', 'profiles', 'orders');
+        const amaFile = path.join(ordersDir, `${botKey}.dynamicgrid.json`);
+        const originalWhitelist = fs.existsSync(WHITELIST_FILE)
+            ? fs.readFileSync(WHITELIST_FILE, 'utf8')
+            : null;
+        const systemModule = require('../modules/order/utils/system');
+        const originalDerivePrice = systemModule.derivePrice;
+        const originalGridModule = require.cache[gridModulePath];
+
+        fs.mkdirSync(ordersDir, { recursive: true });
+        fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
+            whitelist: {
+                [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: true }
+            }
+        }, null, 2) + '\n', 'utf8');
+        resetMarketAdapterWhitelistCache();
+        fs.writeFileSync(amaFile, JSON.stringify({
+            gridCenterPrice: 1000,
+            centerPrice: 1000,
+            amaCenterPrice: 1000,
+            gridPriceOffsetPct: 0.8,
+            updatedAt: new Date().toISOString(),
+        }, null, 2) + '\n', 'utf8');
+
+        try {
+            systemModule.derivePrice = async () => 1000;
+            delete require.cache[gridModulePath];
+            const GridFresh = require('../modules/order/grid');
+
+            const manager = new OrderManager({
+                assetA: 'TESTA',
+                assetB: 'TESTB',
+                botKey,
+                startPrice: 100,
+                gridPrice: 'pool',
+                priceMode: 'pool',
+                minPrice: '2x',
+                maxPrice: '2x',
+                incrementPercent: 1,
+                targetSpreadPercent: 2,
+                weightDistribution: { buy: 0.5, sell: 0.5 },
+                botFunds: { buy: '100%', sell: '100%' },
+                activeOrders: { buy: 6, sell: 6 }
+            });
+
+            manager.assets = {
+                assetA: { id: '1.3.1', symbol: 'TESTA', precision: 5 },
+                assetB: { id: '1.3.2', symbol: 'TESTB', precision: 5 }
+            };
+            await manager.setAccountTotals({ buy: 5000, sell: 5000, buyFree: 5000, sellFree: 5000 });
+
+            await GridFresh.initializeGrid(manager);
+
+            assert(manager.orders.size > 0, 'initializeGrid should succeed with a pool gridPrice');
+            assert.strictEqual(manager._lastGridPricingContext.gridPriceOffsetPct, 0, 'pool gridPrice should not carry an AMA spread offset in debug context');
+            assert(Math.abs(manager._lastGridPricingContext.gridPrice - 1000) < 1e-9, 'pool gridPrice should not apply the AMA spread offset');
+            assert(Math.abs(manager._lastGridPricingContext.startPrice - 1000) < 1e-9, 'pool gridPrice should not apply the AMA spread offset to placement price');
+        } finally {
+            systemModule.derivePrice = originalDerivePrice;
+            if (originalGridModule) require.cache[gridModulePath] = originalGridModule;
+            else delete require.cache[gridModulePath];
             try { fs.unlinkSync(amaFile); } catch (_) {}
             if (originalWhitelist == null) {
                 try { fs.unlinkSync(WHITELIST_FILE); } catch (_) {}

@@ -2247,6 +2247,8 @@ async function testCenterStableButSlopeDeltaTriggersReset() {
     assert.ok(Number.isFinite(result.amaSlopeDeltaPercent), 'result should expose the slope delta');
     assert.ok(Array.isArray(lastWrite), 'dynamic snapshot should be persisted with slope metadata');
     assert.ok(lastWrite[2].amaSlope, 'dynamic snapshot should persist the current slope snapshot');
+    assert.ok(Number.isFinite(lastWrite[2].gridPriceOffsetPct), 'dynamic snapshot should persist the AMA spread offset');
+    assert.ok(lastWrite[2].gridPriceOffsetPct < 0, 'downtrend should persist a negative spread offset');
     assert.ok(lastWrite[2].dynamicWeights, 'range-scaling snapshot should persist slope fields without live dynamic weights');
     assert.strictEqual(result.dynamicWeightApplied, false, 'range-scaling snapshot should not report live dynamic weights as applied');
     assert.strictEqual(state.bots['xrp-bts-slope'].effectiveWeights, null, 'range-only snapshot should not advance live effective weights');
