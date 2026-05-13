@@ -66,7 +66,8 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const chainKeys = require('./modules/chain_keys');
-const { TIMING } = require('./modules/constants');
+const { TIMING, NODE_MANAGEMENT } = require('./modules/constants');
+const { readGeneralSettings } = require('./modules/general_settings');
 const credentialPolicy = require('./modules/credential_policy');
 const BitSharesLib = require('btsdex');
 const { execSync } = require('child_process');
@@ -347,6 +348,23 @@ async function executeOperationsWithClient(client, operations) {
     };
 }
 
+async function broadcastWithRetry(accountName, privateKey, broadcastFn) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        if (!BitSharesLib.chain) await BitSharesLib.connect();
+        const client = new BitSharesLib(accountName, privateKey, 'BTS');
+        await client.initPromise;
+        try {
+            return await broadcastFn(client);
+        } catch (err) {
+            if (attempt === 2) throw err;
+            debugLog(`Broadcast failed (attempt ${attempt}), reconnecting: ${err.message}`);
+            try { await BitSharesLib.disconnect(); } catch (_) {}
+            BitSharesLib.connectPromise = undefined;
+            BitSharesLib.chain = undefined;
+        }
+    }
+}
+
 /**
  * Initialize daemon: authenticate and start listening
  */
@@ -390,6 +408,24 @@ async function initialize() {
             }
         }
         auditLogPath = path.join(auditLogDir, 'daemon-audit.jsonl');
+
+        // Apply configured node list so the daemon uses the same
+        // nodes as bot processes (when node management is enabled),
+        // without instantiating NodeManager (which was crashing the
+        // daemon ~80s after startup).  Mirror the enabled check from
+        // bitshares_client.js so both stay aligned.
+        const settings = readGeneralSettings({ fallback: null });
+        const nodeSettings = settings?.NODES;
+        const nodeManagerEnabled = nodeSettings?.enabled ?? NODE_MANAGEMENT.DEFAULT_ENABLED;
+        if (nodeManagerEnabled) {
+            const configuredNodes = Array.isArray(nodeSettings?.list)
+                ? nodeSettings.list.filter((node) => typeof node === 'string' && node.trim())
+                : [];
+            const nodeList = configuredNodes.length > 0
+                ? configuredNodes
+                : NODE_MANAGEMENT.DEFAULT_NODES;
+            BitSharesLib.node = nodeList.slice();
+        }
 
         // Register SIGHUP handler for policy reload
         process.on('SIGHUP', () => {
@@ -608,10 +644,10 @@ function processRequest(requestStr, socket) {
                     }
 
                     const privateKey = await loadCurrentPrivateKey(accountName);
-                    if (!BitSharesLib.chain) await BitSharesLib.connect();
-                    const client = new BitSharesLib(accountName, privateKey, 'BTS');
-                    await client.initPromise;
-                    const signResult = await client.broadcast(operation);
+                    const signResult = await broadcastWithRetry(
+                        accountName, privateKey,
+                        (client) => client.broadcast(operation)
+                    );
 
                     appendAuditLog({
                         event: 'sign_allowed',
@@ -686,10 +722,10 @@ function processRequest(requestStr, socket) {
                     }
 
                     const privateKey = await loadCurrentPrivateKey(accountName);
-                    if (!BitSharesLib.chain) await BitSharesLib.connect();
-                    const client = new BitSharesLib(accountName, privateKey, 'BTS');
-                    await client.initPromise;
-                    const signResult = await executeOperationsWithClient(client, operations);
+                    const signResult = await broadcastWithRetry(
+                        accountName, privateKey,
+                        (client) => executeOperationsWithClient(client, operations)
+                    );
 
                     appendAuditLog({
                         event: 'sign_allowed',
