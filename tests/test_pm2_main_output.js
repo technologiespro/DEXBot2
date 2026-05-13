@@ -182,6 +182,7 @@ const { main } = require('../pm2');
         assert.ok(!logs.some((line) => line.includes('[PM2][WARN] Applications')), 'launcher should strip PM2 not-running warnings');
         assert.ok(!logs.some((line) => line.includes('(1 instances)')), 'launcher should strip PM2 instance counts');
         assert.ok(!logs.some((line) => line.includes('(1 instance)')), 'launcher should strip PM2 instance counts');
+        assert.ok(logs.includes('[PM2] App [dexbot-cred] launched'), 'launcher should list the credential daemon launch with other compact PM2 output');
         assert.ok(logs.includes('[PM2] App [XRP-BTS] launched'), 'launcher should keep the app launch line without the instance count');
         assert.ok(logs.includes('[PM2] App [H-BTS] launched'), 'launcher should keep the app launch line without the instance count');
         assert.ok(logs.includes('[PM2] App [T-BTS] launched'), 'launcher should keep the app launch line without the instance count');

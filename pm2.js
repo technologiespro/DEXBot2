@@ -227,6 +227,8 @@ function buildCredentialDaemonApp({ credentialEnv = {} } = {}) {
         error_file: path.join(LOGS_DIR, 'dexbot-cred-error.log'),
         out_file: path.join(LOGS_DIR, 'dexbot-cred.log'),
         log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
+        merge_logs: false,
+        combine_logs: true,
         env: {
             DEXBOT_CRED_DAEMON_SOCKET: CREDENTIAL_SOCKET_PATH,
             DEXBOT_CRED_DAEMON_READY_FILE: CREDENTIAL_READY_FILE,
@@ -509,7 +511,10 @@ function startCredentialDaemonPM2({ credentialEnv = {} } = {}) {
         '--log-date-format', app.log_date_format,
         '--no-autorestart',
     ];
-    return startPM2Process(args, buildScopedChildEnv({ extra: app.env }));
+    return startPM2Process(args, buildScopedChildEnv({ extra: app.env }))
+        .then(() => {
+            console.log(`[PM2] App [${CREDENTIAL_DAEMON_APP_NAME}] launched`);
+        });
 }
 
 async function startManagedRuntimePM2({ apps, bootstrap = null } = {}) {

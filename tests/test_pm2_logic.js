@@ -67,6 +67,8 @@ assert.deepStrictEqual(
     'credential bootstrap env should only be attached to dexbot-cred'
 );
 assert.strictEqual(credentialApp.autorestart, false, 'credential daemon should require a fresh unlock after stop/crash');
+assert.strictEqual(credentialApp.merge_logs, false, 'credential daemon should use the same merge_logs setting as managed apps');
+assert.strictEqual(credentialApp.combine_logs, true, 'credential daemon should use the same combine_logs setting as managed apps');
 process.env.TEST_PM2_SECRET = 'should-not-leak';
 const scopedEnv = buildScopedChildEnv({ extra: { DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/test-bootstrap.sock' } });
 delete process.env.TEST_PM2_SECRET;
