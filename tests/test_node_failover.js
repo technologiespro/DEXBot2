@@ -10,8 +10,27 @@
 
 const NodeManager = require('../modules/node_manager');
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { NODE_MANAGEMENT } = require('../modules/constants');
 
 console.log('Testing Node Failover Integration...\n');
+
+const tempStateDirs = [];
+
+function createNodeManager(config = {}) {
+    if (config.stateDir) return new NodeManager(config);
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-node-failover-test-'));
+    tempStateDirs.push(stateDir);
+    return new NodeManager({ ...config, stateDir });
+}
+
+process.on('exit', () => {
+    for (const dir of tempStateDirs) {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
 
 // ============================================================================
 // Test 1: Configuration with Multiple Nodes
@@ -32,7 +51,7 @@ console.log('Testing Node Failover Integration...\n');
         }
     };
 
-    const nm = new NodeManager(config);
+    const nm = createNodeManager(config);
     assert.strictEqual(nm.config.list.length, 3);
     assert.strictEqual(nm.config.healthCheck.enabled, true);
     assert.strictEqual(nm.config.healthCheck.intervalMs, 30000);
@@ -50,11 +69,11 @@ console.log('Testing Node Failover Integration...\n');
         // No healthCheck settings - should use defaults
     };
 
-    const nm = new NodeManager(config);
-    assert.strictEqual(nm.config.healthCheck.intervalMs, 60000, 'Should default to 60s');
-    assert.strictEqual(nm.config.healthCheck.timeoutMs, 5000, 'Should default to 5s');
-    assert.strictEqual(nm.config.healthCheck.maxPingMs, 3000, 'Should default to 3000ms');
-    assert.strictEqual(nm.config.healthCheck.blacklistThreshold, 3, 'Should default to 3');
+    const nm = createNodeManager(config);
+    assert.strictEqual(nm.config.healthCheck.intervalMs, NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS, 'Should default to shared interval');
+    assert.strictEqual(nm.config.healthCheck.timeoutMs, NODE_MANAGEMENT.HEALTH_CHECK_TIMEOUT_MS, 'Should default to shared timeout');
+    assert.strictEqual(nm.config.healthCheck.maxPingMs, NODE_MANAGEMENT.MAX_PING_MS, 'Should default to shared max ping');
+    assert.strictEqual(nm.config.healthCheck.blacklistThreshold, NODE_MANAGEMENT.BLACKLIST_THRESHOLD, 'Should default to shared threshold');
     console.log('✓ Default configuration test passed\n');
 }
 
@@ -64,7 +83,7 @@ console.log('Testing Node Failover Integration...\n');
 {
     console.log('Test 3: Failover when current best node fails');
 
-    const nm = new NodeManager({
+    const nm = createNodeManager({
         list: ['primary', 'backup', 'tertiary']
     });
 
@@ -93,7 +112,7 @@ console.log('Testing Node Failover Integration...\n');
 {
     console.log('Test 4: Cascading failover through multiple nodes');
 
-    const nm = new NodeManager({
+    const nm = createNodeManager({
         list: ['node1', 'node2', 'node3', 'node4']
     });
 
@@ -130,7 +149,7 @@ console.log('Testing Node Failover Integration...\n');
 {
     console.log('Test 5: Falling back to slow nodes when no healthy nodes');
 
-    const nm = new NodeManager({
+    const nm = createNodeManager({
         list: ['healthy1', 'slow1', 'slow2']
     });
 
@@ -159,7 +178,7 @@ console.log('Testing Node Failover Integration...\n');
 {
     console.log('Test 6: Handling all nodes down scenario');
 
-    const nm = new NodeManager({
+    const nm = createNodeManager({
         list: ['node1', 'node2', 'node3']
     });
 
@@ -183,7 +202,7 @@ console.log('Testing Node Failover Integration...\n');
 {
     console.log('Test 7: Node recovery after being blacklisted');
 
-    const nm = new NodeManager({
+    const nm = createNodeManager({
         list: ['node1', 'node2']
     });
 
@@ -212,17 +231,17 @@ console.log('Testing Node Failover Integration...\n');
     console.log('Test 8: Configuration validation');
 
     // Empty list should work (but with no nodes)
-    const nm1 = new NodeManager({ list: [] });
+    const nm1 = createNodeManager({ list: [] });
     assert.strictEqual(nm1.config.list.length, 0);
     assert.strictEqual(nm1.getBestNode(), null);
 
     // Single node
-    const nm2 = new NodeManager({ list: ['wss://only-node.com/ws'] });
+    const nm2 = createNodeManager({ list: ['wss://only-node.com/ws'] });
     assert.strictEqual(nm2.config.list.length, 1);
 
     // Very large list
     const manyNodes = Array.from({ length: 100 }, (_, i) => `wss://node${i}.com/ws`);
-    const nm3 = new NodeManager({ list: manyNodes });
+    const nm3 = createNodeManager({ list: manyNodes });
     assert.strictEqual(nm3.config.list.length, 100);
 
     console.log('✓ Configuration validation test passed\n');
@@ -234,7 +253,7 @@ console.log('Testing Node Failover Integration...\n');
 {
     console.log('Test 9: Monitoring state transitions');
 
-    const nm = new NodeManager({
+    const nm = createNodeManager({
         list: ['node1']
     });
 
@@ -269,7 +288,7 @@ console.log('Testing Node Failover Integration...\n');
         }
     };
 
-    const nm1 = new NodeManager(config1);
+    const nm1 = createNodeManager(config1);
     assert.strictEqual(nm1.config.healthCheck.timeoutMs, 2000);
 
     const config2 = {
@@ -279,7 +298,7 @@ console.log('Testing Node Failover Integration...\n');
         }
     };
 
-    const nm2 = new NodeManager(config2);
+    const nm2 = createNodeManager(config2);
     assert.strictEqual(nm2.config.healthCheck.timeoutMs, 10000);
 
     console.log('✓ Health check timeout configuration test passed\n');
@@ -291,7 +310,7 @@ console.log('Testing Node Failover Integration...\n');
 {
     console.log('Test 11: Complex latency sorting');
 
-    const nm = new NodeManager({
+    const nm = createNodeManager({
         list: ['a', 'b', 'c', 'd', 'e']
     });
 
@@ -321,7 +340,7 @@ console.log('Testing Node Failover Integration...\n');
 {
     console.log('Test 12: Statistics persistence');
 
-    const nm = new NodeManager({
+    const nm = createNodeManager({
         list: ['node1', 'node2']
     });
 

@@ -68,6 +68,7 @@ const crypto = require('crypto');
 const chainKeys = require('./modules/chain_keys');
 const { TIMING, NODE_MANAGEMENT } = require('./modules/constants');
 const { readGeneralSettings } = require('./modules/general_settings');
+const { orderNodesForSettings } = require('./modules/node_health_cache');
 const credentialPolicy = require('./modules/credential_policy');
 const BitSharesLib = require('btsdex');
 const { execSync } = require('child_process');
@@ -418,13 +419,7 @@ async function initialize() {
         const nodeSettings = settings?.NODES;
         const nodeManagerEnabled = nodeSettings?.enabled ?? NODE_MANAGEMENT.DEFAULT_ENABLED;
         if (nodeManagerEnabled) {
-            const configuredNodes = Array.isArray(nodeSettings?.list)
-                ? nodeSettings.list.filter((node) => typeof node === 'string' && node.trim())
-                : [];
-            const nodeList = configuredNodes.length > 0
-                ? configuredNodes
-                : NODE_MANAGEMENT.DEFAULT_NODES;
-            BitSharesLib.node = nodeList.slice();
+            BitSharesLib.node = orderNodesForSettings(settings);
         }
 
         // Register SIGHUP handler for policy reload

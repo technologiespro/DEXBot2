@@ -11,18 +11,42 @@
 
 const NodeManager = require('../modules/node_manager');
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const {
+    orderNodesFromHealthCache,
+    orderNodesForSettings,
+    readHealthCache,
+} = require('../modules/node_health_cache');
+const { NODE_MANAGEMENT } = require('../modules/constants');
 
 console.log('Testing NodeManager...\n');
+
+const tempStateDirs = [];
+
+function createNodeManager(config = {}) {
+    if (config.stateDir) return new NodeManager(config);
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-node-manager-test-'));
+    tempStateDirs.push(stateDir);
+    return new NodeManager({ ...config, stateDir });
+}
+
+process.on('exit', () => {
+    for (const dir of tempStateDirs) {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
 
 // ============================================================================
 // Test 1: Initialization
 // ============================================================================
 {
     console.log('Test 1: Initialization with empty config');
-    const nm = new NodeManager({});
+    const nm = createNodeManager({});
     assert.strictEqual(nm.config.list.length, 0, 'Empty list should work');
-    assert.strictEqual(nm.config.healthCheck.intervalMs, 60000);
-    assert.strictEqual(nm.config.healthCheck.timeoutMs, 5000);
+    assert.strictEqual(nm.config.healthCheck.intervalMs, NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS);
+    assert.strictEqual(nm.config.healthCheck.timeoutMs, NODE_MANAGEMENT.HEALTH_CHECK_TIMEOUT_MS);
     console.log('✓ Initialization test passed\n');
 }
 
@@ -32,7 +56,7 @@ console.log('Testing NodeManager...\n');
 {
     console.log('Test 2: Node stats initialization');
     const nodes = ['wss://node1.com/ws', 'wss://node2.com/ws'];
-    const nm = new NodeManager({ list: nodes });
+    const nm = createNodeManager({ list: nodes });
 
     const stats = nm.getStats();
     assert.strictEqual(stats.length, 2, 'Should track both nodes');
@@ -47,7 +71,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 3: Healthy nodes filtering');
-    const nm = new NodeManager({ list: ['n1', 'n2', 'n3'] });
+    const nm = createNodeManager({ list: ['n1', 'n2', 'n3'] });
 
     // Manually set node statuses
     nm.nodeStats.get('n1').status = 'healthy';
@@ -68,7 +92,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 4: Best node selection by latency');
-    const nm = new NodeManager({ list: ['fast', 'slow', 'medium'] });
+    const nm = createNodeManager({ list: ['fast', 'slow', 'medium'] });
 
     nm.nodeStats.get('fast').status = 'healthy';
     nm.nodeStats.get('fast').latencyMs = 50;
@@ -87,7 +111,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 4b: Preferred healthy node selection');
-    const nm = new NodeManager({
+    const nm = createNodeManager({
         list: ['fast', 'preferred', 'slow'],
         selection: { preferredNode: 'preferred' },
     });
@@ -111,7 +135,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 5: Handling when no healthy nodes available');
-    const nm = new NodeManager({ list: ['n1', 'n2'] });
+    const nm = createNodeManager({ list: ['n1', 'n2'] });
     nm.nodeStats.get('n1').status = 'blacklisted';
     nm.nodeStats.get('n2').status = 'failed';
 
@@ -128,7 +152,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 6: Failure counting and blacklisting');
-    const nm = new NodeManager({
+    const nm = createNodeManager({
         list: ['node1'],
         healthCheck: { blacklistThreshold: 3 }
     });
@@ -154,7 +178,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 7: Manual node blacklisting');
-    const nm = new NodeManager({ list: ['node1', 'node2'] });
+    const nm = createNodeManager({ list: ['node1', 'node2'] });
 
     nm.nodeStats.get('node1').status = 'healthy';
     nm.nodeStats.get('node2').status = 'healthy';
@@ -173,7 +197,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 8: Node reset functionality');
-    const nm = new NodeManager({ list: ['node1', 'node2'] });
+    const nm = createNodeManager({ list: ['node1', 'node2'] });
 
     // Mark node1 as failed
     nm.nodeStats.get('node1').status = 'blacklisted';
@@ -196,7 +220,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 9: Reset all nodes');
-    const nm = new NodeManager({ list: ['n1', 'n2', 'n3'] });
+    const nm = createNodeManager({ list: ['n1', 'n2', 'n3'] });
 
     // Mark all as failed
     for (const node of ['n1', 'n2', 'n3']) {
@@ -219,7 +243,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 10: Statistics summary');
-    const nm = new NodeManager({ list: ['h1', 'h2', 's1', 'f1', 'b1'] });
+    const nm = createNodeManager({ list: ['h1', 'h2', 's1', 'f1', 'b1'] });
 
     nm.nodeStats.get('h1').status = 'healthy';
     nm.nodeStats.get('h1').latencyMs = 100;
@@ -247,7 +271,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 11: Slow vs healthy classification');
-    const nm = new NodeManager({
+    const nm = createNodeManager({
         list: ['n1', 'n2'],
         healthCheck: { maxPingMs: 2000 }
     });
@@ -269,7 +293,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 12: Monitoring state tracking');
-    const nm = new NodeManager({ list: ['node1'] });
+    const nm = createNodeManager({ list: ['node1'] });
 
     assert.strictEqual(nm.monitoringActive, false, 'Should start inactive');
 
@@ -286,7 +310,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 13: Duplicate start protection');
-    const nm = new NodeManager({ list: ['node1'] });
+    const nm = createNodeManager({ list: ['node1'] });
 
     nm.start();
     const firstId = nm.checkIntervalId;
@@ -305,7 +329,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 14: Health status history tracking');
-    const nm = new NodeManager({ list: ['node1'] });
+    const nm = createNodeManager({ list: ['node1'] });
     const stats = nm.nodeStats.get('node1');
 
     assert.strictEqual(stats.lastCheckTime, null, 'Should start with no check time');
@@ -323,7 +347,7 @@ console.log('Testing NodeManager...\n');
 // ============================================================================
 {
     console.log('Test 15: Chain ID storage');
-    const nm = new NodeManager({ list: ['node1'] });
+    const nm = createNodeManager({ list: ['node1'] });
     const stats = nm.nodeStats.get('node1');
 
     assert.strictEqual(stats.chainId, null, 'Should start with null chainId');
@@ -331,6 +355,101 @@ console.log('Testing NodeManager...\n');
     stats.chainId = '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8';
     assert.strictEqual(stats.chainId, '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8');
     console.log('✓ Chain ID storage test passed\n');
+}
+
+// ============================================================================
+// Test 16: Health Cache Persistence
+// ============================================================================
+{
+    console.log('Test 16: Health cache persistence');
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-node-cache-'));
+    try {
+        const nm = createNodeManager({ list: ['fast', 'slow', 'failed'], stateDir });
+        nm.nodeStats.get('fast').status = 'healthy';
+        nm.nodeStats.get('fast').latencyMs = 50;
+        nm.nodeStats.get('fast').lastCheckTime = '2026-05-13T00:00:00.000Z';
+        nm.nodeStats.get('slow').status = 'slow';
+        nm.nodeStats.get('slow').latencyMs = 4000;
+        nm.nodeStats.get('failed').status = 'failed';
+
+        nm.saveHealthCache();
+
+        const cache = readHealthCache({ stateDir });
+        assert.ok(cache, 'health cache should be readable');
+        assert.deepStrictEqual(cache.nodes.map((node) => node.url), ['fast', 'slow']);
+
+        const ordered = orderNodesFromHealthCache(['slow', 'failed', 'fast', 'extra'], { stateDir });
+        assert.deepStrictEqual(ordered, ['fast', 'slow', 'failed', 'extra'], 'cache should order known good nodes first and preserve fallbacks');
+    } finally {
+        fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+    console.log('✓ Health cache persistence test passed\n');
+}
+
+// ============================================================================
+// Test 17: Settings interval controls health cache freshness
+// ============================================================================
+{
+    console.log('Test 17: Settings interval controls health cache freshness');
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-node-cache-stale-'));
+    try {
+        const nm = createNodeManager({ list: ['cached'], stateDir });
+        nm.nodeStats.get('cached').status = 'healthy';
+        nm.nodeStats.get('cached').latencyMs = 25;
+        const now = Date.now();
+        nm.nodeStats.get('cached').lastCheckTime = new Date(now - 8 * 60 * 60 * 1000).toISOString();
+        nm.saveHealthCache();
+
+        const settings = {
+            NODES: {
+                list: ['configured', 'cached'],
+                healthCheck: { intervalMs: 24 * 60 * 60 * 1000 },
+            },
+        };
+        const freshForSettings = orderNodesForSettings(settings, {
+            stateDir,
+            now: now + 8 * 60 * 60 * 1000,
+        });
+        assert.deepStrictEqual(freshForSettings, ['cached', 'configured'], '24h settings interval should keep 8h cache usable');
+
+        const staleForSettings = orderNodesForSettings(settings, {
+            stateDir,
+            now: now + 25 * 60 * 60 * 1000,
+        });
+        assert.deepStrictEqual(staleForSettings, ['configured', 'cached'], 'cache older than configured interval should not reorder configured nodes');
+    } finally {
+        fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+    console.log('✓ Settings interval cache freshness test passed\n');
+}
+
+// ============================================================================
+// Test 18: Disabled health checks preserve configured node order
+// ============================================================================
+{
+    console.log('Test 18: Disabled health checks preserve configured node order');
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-node-cache-disabled-'));
+    try {
+        const nm = createNodeManager({ list: ['configured-first', 'cached-fast'], stateDir });
+        nm.nodeStats.get('configured-first').status = 'slow';
+        nm.nodeStats.get('configured-first').latencyMs = 5000;
+        nm.nodeStats.get('cached-fast').status = 'healthy';
+        nm.nodeStats.get('cached-fast').latencyMs = 10;
+        nm.saveHealthCache();
+
+        const settings = {
+            NODES: {
+                enabled: true,
+                list: ['configured-first', 'cached-fast'],
+                healthCheck: { enabled: false },
+            },
+        };
+        const ordered = orderNodesForSettings(settings, { stateDir });
+        assert.deepStrictEqual(ordered, ['configured-first', 'cached-fast'], 'disabled health checks should ignore cached reordering');
+    } finally {
+        fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+    console.log('✓ Disabled health check ordering test passed\n');
 }
 
 console.log('='.repeat(60));

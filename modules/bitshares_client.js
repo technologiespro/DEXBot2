@@ -418,4 +418,9 @@ module.exports = {
     getConnectionError: () => lastConnectionError,
     _refreshStartupNodeServers: refreshStartupNodeServers,
     _assessFailover: assessFailover,
+    _internal: {
+        get connected() {
+            return connected;
+        },
+    },
 };

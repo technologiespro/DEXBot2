@@ -45,6 +45,10 @@ const path = require('path');
 const WebSocket = require('isomorphic-ws');
 const Logger = require('./logger');
 const { NODE_MANAGEMENT } = require('./constants');
+const {
+    resolveHealthCacheFile,
+    writeHealthCache,
+} = require('./node_health_cache');
 
 const BLACKLIST_STATE_FILE = path.join(__dirname, '..', 'profiles', 'node_blacklist.json');
 
@@ -55,7 +59,7 @@ const BLACKLIST_STATE_FILE = path.join(__dirname, '..', 'profiles', 'node_blackl
  * @param {Object} config - Configuration object
  * @param {string[]} config.list - List of node URLs to monitor (e.g., wss://dex.iobanker.com/ws)
  * @param {Object} [config.healthCheck] - Health check settings
- * @param {number} [config.healthCheck.intervalMs=60000] - How often to check nodes (milliseconds)
+ * @param {number} [config.healthCheck.intervalMs=NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS] - How often to check nodes (milliseconds)
  * @param {number} [config.healthCheck.timeoutMs=5000] - Timeout for each health check
  * @param {number} [config.healthCheck.maxPingMs=3000] - Max acceptable latency
  * @param {number} [config.healthCheck.blacklistThreshold=3] - Failures before blacklist
@@ -66,13 +70,19 @@ const BLACKLIST_STATE_FILE = path.join(__dirname, '..', 'profiles', 'node_blackl
 class NodeManager {
     constructor(config = {}) {
         this.logger = new Logger('NodeManager');
+        this.blacklistStateFile = typeof config.blacklistStateFile === 'string' && config.blacklistStateFile.trim()
+            ? config.blacklistStateFile
+            : (typeof config.stateDir === 'string' && config.stateDir.trim()
+                ? path.join(config.stateDir, 'node_blacklist.json')
+                : BLACKLIST_STATE_FILE);
+        this.healthCacheFile = resolveHealthCacheFile(config);
         this.config = {
             list: config.list || [],
             healthCheck: {
-                intervalMs: config.healthCheck?.intervalMs ?? 60000,
-                timeoutMs: config.healthCheck?.timeoutMs ?? 5000,
-                maxPingMs: config.healthCheck?.maxPingMs ?? 3000,
-                blacklistThreshold: config.healthCheck?.blacklistThreshold ?? 3,
+                intervalMs: config.healthCheck?.intervalMs ?? NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS,
+                timeoutMs: config.healthCheck?.timeoutMs ?? NODE_MANAGEMENT.HEALTH_CHECK_TIMEOUT_MS,
+                maxPingMs: config.healthCheck?.maxPingMs ?? NODE_MANAGEMENT.MAX_PING_MS,
+                blacklistThreshold: config.healthCheck?.blacklistThreshold ?? NODE_MANAGEMENT.BLACKLIST_THRESHOLD,
                 enabled: config.healthCheck?.enabled ?? true
             },
             selection: {
@@ -125,8 +135,8 @@ class NodeManager {
      */
     loadBlacklistState() {
         try {
-            if (!fs.existsSync(BLACKLIST_STATE_FILE)) return;
-            const raw = fs.readFileSync(BLACKLIST_STATE_FILE, 'utf8');
+            if (!fs.existsSync(this.blacklistStateFile)) return;
+            const raw = fs.readFileSync(this.blacklistStateFile, 'utf8');
             const state = JSON.parse(raw);
             if (!state || typeof state !== 'object') return;
             for (const [nodeUrl, entry] of Object.entries(state)) {
@@ -161,9 +171,23 @@ class NodeManager {
                     };
                 }
             }
-            fs.writeFileSync(BLACKLIST_STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+            fs.mkdirSync(path.dirname(this.blacklistStateFile), { recursive: true });
+            fs.writeFileSync(this.blacklistStateFile, JSON.stringify(state, null, 2), 'utf8');
         } catch (err) {
             this.logger.warn(`Failed to save blacklist state: ${err.message}`);
+        }
+    }
+
+    /**
+     * Persist the latest healthy/slow node ordering for lightweight consumers
+     * such as the credential daemon.
+     * @private
+     */
+    saveHealthCache() {
+        try {
+            writeHealthCache(this.nodeStats.values(), { healthCacheFile: this.healthCacheFile });
+        } catch (err) {
+            this.logger.warn(`Failed to save node health cache: ${err.message}`);
         }
     }
 
@@ -246,6 +270,7 @@ class NodeManager {
                 });
 
             await Promise.all(promises);
+            this.saveHealthCache();
         })();
 
         try {
@@ -504,6 +529,7 @@ class NodeManager {
             stats.failureCount = this.config.healthCheck.blacklistThreshold;
             stats.blacklistedAt = Date.now();
             this.saveBlacklistState();
+            this.saveHealthCache();
             this.logger.warn(`Manually blacklisted: ${nodeUrl}`);
         }
     }
@@ -521,6 +547,7 @@ class NodeManager {
             stats.lastErrorMessage = null;
             stats.blacklistedAt = null;
             this.saveBlacklistState();
+            this.saveHealthCache();
             this.logger.info(`Reset node: ${nodeUrl}`);
         }
     }
@@ -538,6 +565,7 @@ class NodeManager {
             stats.blacklistedAt = null;
         }
         this.saveBlacklistState();
+        this.saveHealthCache();
         this.logger.info('Reset all nodes');
     }
 
