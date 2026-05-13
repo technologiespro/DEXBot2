@@ -68,7 +68,7 @@ const crypto = require('crypto');
 const chainKeys = require('./modules/chain_keys');
 const { TIMING } = require('./modules/constants');
 const credentialPolicy = require('./modules/credential_policy');
-const { createAccountClient } = require('./modules/bitshares_client');
+const BitSharesLib = require('btsdex');
 const { execSync } = require('child_process');
 const {
     assertPrivatePathSecurity,
@@ -610,7 +610,9 @@ function processRequest(requestStr, socket) {
                     // Policy passed — now load key material
                     return loadCurrentPrivateKey(accountName)
                         .then(async (privateKey) => {
-                            const client = await createAccountClient(accountName, privateKey);
+                            if (!BitSharesLib.chain) await BitSharesLib.connect();
+                            const client = new BitSharesLib(accountName, privateKey, 'BTS');
+                            await client.initPromise;
                             return client.broadcast(operation);
                         })
                         .then((signResult) => {
@@ -690,7 +692,9 @@ function processRequest(requestStr, socket) {
                     // Policy passed — now load key material
                     return loadCurrentPrivateKey(accountName)
                         .then(async (privateKey) => {
-                            const client = await createAccountClient(accountName, privateKey);
+                            if (!BitSharesLib.chain) await BitSharesLib.connect();
+                            const client = new BitSharesLib(accountName, privateKey, 'BTS');
+                            await client.initPromise;
                             return executeOperationsWithClient(client, operations);
                         })
                         .then((signResult) => {
