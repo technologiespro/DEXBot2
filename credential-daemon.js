@@ -417,9 +417,18 @@ async function initialize() {
             process.exit(1);
         });
 
-        // Handle graceful shutdown
-        process.on('SIGINT', () => shutdown(0, 'SIGINT'));
+        // Handle graceful shutdown.
+        // SIGTERM is sent by PM2 when stopping the daemon — honour it.
+        // SIGINT is from stray Ctrl-C in the parent terminal; under PM2
+        // management we ignore it so the daemon stays alive.  When running
+        // interactively (not via PM2), SIGINT still works because the
+        // process group leader is the shell.
         process.on('SIGTERM', () => shutdown(0, 'SIGTERM'));
+        process.on('SIGINT', () => {
+            daemonLogger.log?.(
+                '[credential-daemon] SIGINT ignored (daemon is managed by PM2; use `pm2 stop dexbot-cred` to shut down).'
+            );
+        });
 
     } catch (error) {
         daemonLogger.error(`[credential-daemon] Startup failed: ${error.stack || error.message}`);

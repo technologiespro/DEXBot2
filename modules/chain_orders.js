@@ -737,7 +737,7 @@ async function updateOrder(accountName, privateKey, orderId, newParams) {
             return { success: true, orderId, raw: result.raw, operation_results: result.operation_results };
         }
 
-        const acc = createAccountClient(accountName, privateKey);
+        const acc = await createAccountClient(accountName, privateKey);
         await acc.initPromise;
         const tx = acc.newTx();
 
@@ -845,7 +845,7 @@ async function createOrder(accountName, privateKey, amountToSell, sellAssetId, m
             return result;
         }
 
-        const acc = createAccountClient(accountName, privateKey);
+        const acc = await createAccountClient(accountName, privateKey);
         await acc.initPromise;
         const tx = acc.newTx();
         // Invoke standard method directly
@@ -900,7 +900,7 @@ async function cancelOrder(accountName, privateKey, orderId) {
             return { success: true, orderId, verified: true, raw: result.raw, operation_results: result.operation_results };
         }
 
-        const acc = createAccountClient(accountName, privateKey);
+        const acc = await createAccountClient(accountName, privateKey);
         await acc.initPromise;
         const tx = acc.newTx();
         // Explicit call
@@ -942,7 +942,7 @@ async function executeBatch(accountName, privateKey, operations) {
             return executeViaDaemonToken(accountName, privateKey, operations);
         }
 
-        const acc = createAccountClient(accountName, privateKey);
+        const acc = await createAccountClient(accountName, privateKey);
         await acc.initPromise;
         const tx = acc.newTx();
 

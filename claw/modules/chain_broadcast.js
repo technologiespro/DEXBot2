@@ -56,7 +56,7 @@ async function resolveSessionCredentials(accountName, options = {}) {
   return { sessionId, botHmacSecret };
 }
 
-function createSigningClient(accountName, privateKey) {
+async function createSigningClient(accountName, privateKey) {
   return createAccountClient(accountName, privateKey);
 }
 

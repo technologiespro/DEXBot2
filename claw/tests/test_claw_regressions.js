@@ -37,8 +37,8 @@ async function testClawBitsharesClientLoadsEventPatchAndDetectsExistingConnectio
 
     assert.strictEqual(patchLoaded, true, 'claw BitShares client should load the shared reconnect patch');
     assert.strictEqual(clawBitshares.isConnected(), true, 'connected callback should immediately mark the shared client ready');
-    assert.throws(() => clawBitshares.createAccountClient('', 'wif'), /accountName is required/);
-    assert.throws(() => clawBitshares.createAccountClient('alice', ''), /privateKey is required/);
+    await assert.rejects(() => clawBitshares.createAccountClient('', 'wif'), /accountName is required/);
+    await assert.rejects(() => clawBitshares.createAccountClient('alice', ''), /privateKey is required/);
   } finally {
     Module._load = originalLoad;
     clearModule(clawBitsharesPath);

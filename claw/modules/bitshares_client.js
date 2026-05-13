@@ -62,7 +62,7 @@ async function waitForConnected(timeoutMs = DEFAULT_TIMEOUT_MS) {
   }
 }
 
-function createAccountClient(accountName, privateKey) {
+async function createAccountClient(accountName, privateKey) {
   if (!accountName) {
     throw new Error('accountName is required');
   }
@@ -70,7 +70,9 @@ function createAccountClient(accountName, privateKey) {
     throw new Error('privateKey is required');
   }
 
-  return new BitSharesLib(accountName, privateKey);
+  await waitForConnected();
+  const feeSymbol = (BitSharesLib.chain && BitSharesLib.chain.coreAsset) || 'BTS';
+  return new BitSharesLib(accountName, privateKey, feeSymbol);
 }
 
 module.exports = {

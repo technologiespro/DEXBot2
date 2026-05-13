@@ -357,10 +357,13 @@ async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS, option
  * @param {string} privateKey - WIF-encoded private key
  * @returns {Object} btsdex client instance for this account
  */
-function createAccountClient(accountName, privateKey) {
-    // Pass fee symbol explicitly to avoid crash when BitShares.chain is undefined
-    // during a reconnect window. The btsdex constructor default parameter
-    // (_feeSymbol = BitShares.chain.coreAsset) throws if chain is not yet set.
+async function createAccountClient(accountName, privateKey) {
+    // Ensure the shared WebSocket is present before constructing a per-account
+    // signing client.  Both the btsdex constructor default parameter
+    // (_feeSymbol = BitShares.chain.coreAsset) and the broadcast path
+    // (btsdex-api fetch → ws.send()) can fail when the connection is in an
+    // inconsistent state after a node-manager reconnect cycle.
+    await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
     const feeSymbol = (BitSharesLib.chain && BitSharesLib.chain.coreAsset) || 'BTS';
     return new BitSharesLib(accountName, privateKey, feeSymbol);
 }
