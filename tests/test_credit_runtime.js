@@ -2129,6 +2129,68 @@ async function testAutoReborrowQueueIsIgnoredWhenDisabled() {
   }
 }
 
+async function testPendingReborrowResolvesPolicyWithColdAssetCache() {
+  const calls = [];
+  const dbCalls = [];
+  const warnings = [];
+  const restore = installStubs(calls, dbCalls, {
+    dealResponses: [[]],
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-reborrow-cold-cache-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-reborrow-cold-cache',
+        debtPolicy: {
+          lending: [
+            {
+              asset: 'HONEST.USD',
+                    collateralAsset: 'BTS',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+              autoRepay: 2,
+            },
+          ],
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn(message) { warnings.push(message); },
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.loadState();
+    runtime.queueReborrow({
+      sourceDealId: '1.19.77',
+      offerId: '1.18.42',
+      borrowAmount: 200,
+      collateralAmount: null,
+      autoRepay: 2,
+    });
+
+    const result = await runtime.processPendingReborrows();
+    assert.strictEqual(result.processed, 1, 'cold-cache pending reborrow should process after resolving policy asset');
+    assert.strictEqual(result.remaining, 0, 'processed pending reborrow should leave an empty queue');
+    assert.strictEqual(calls.length, 1, 'pending reborrow should broadcast one accept operation');
+    assert.strictEqual(calls[0].operations[0].op_name, 'credit_offer_accept', 'pending reborrow should accept the credit offer');
+    assert.strictEqual(calls[0].operations[0].op_data.borrow_amount.amount, 200, 'pending reborrow should preserve requested borrow amount');
+    assert.deepStrictEqual(calls[0].operations[0].op_data.extensions, { auto_repay: 2 }, 'pending reborrow should preserve autoRepay mode');
+    assert.strictEqual(warnings.some((message) => String(message).includes('dropping pending reborrow')), false, 'policy lookup should not drop a valid cold-cache reborrow');
+    assert.strictEqual(dbCalls.some((entry) => entry.method === 'lookup_asset_symbols'), true, 'policy lookup should resolve configured asset when cache is cold');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
 async function testStatePersistsAcrossRestart() {
   const calls = [];
   const dbCalls = [];
@@ -2275,6 +2337,7 @@ async function testGetCollateralOffsets() {
   await testDeferredReborrowQueuesAfterConfirmedRepay();
   await testCreditDealUpdatePreservesAutoRepayMode();
   await testAutoReborrowQueueIsIgnoredWhenDisabled();
+  await testPendingReborrowResolvesPolicyWithColdAssetCache();
   await testStatePersistsAcrossRestart();
   await testGetCollateralOffsets();
   console.log('credit runtime tests passed');

@@ -1,16 +1,14 @@
 # Market Adapter
 
 The market adapter is the live signal layer for AMA-priced bots. It reads
-candles, computes the AMA center price, optionally writes dynamic weights, and
-creates recalc triggers when a bot accepts its first center, when the center
-moves far enough, or when whitelisted range-scaling slope drift requires a
-grid-bound reset.
+candles, computes the AMA center price, writes optional dynamic weights, and
+creates recalc triggers when a grid should be rebuilt.
 
 DEXBot2 starts and stops the adapter automatically when active AMA bots exist.
 
 ## Big Picture
 
-The adapter feeds five separate grid controls from the same candle/AMA pipeline:
+The adapter drives five grid controls from the same candle and AMA pipeline:
 
 | Control | Signal | Effect |
 |---------|--------|--------|
@@ -20,9 +18,9 @@ The adapter feeds five separate grid controls from the same candle/AMA pipeline:
 | Asymmetric weight shift | AMA slope + Kalman filter | Biases buy/sell allocation in the trend direction |
 | Symmetric weight shift | Volatility | Reduces both buy and sell weights during noisy periods |
 
-In short: AMA price sets the center; AMA slope scales the range and derives the
-market price offset; AMA plus Kalman drives directional weight bias; volatility
-applies the symmetric penalty.
+In short: AMA price sets the center, AMA slope scales the range and price
+offset, AMA plus Kalman biases buy/sell weights, and volatility applies the
+symmetric weight penalty.
 
 ## Quick Start
 
@@ -40,7 +38,10 @@ default preset.
 | `book` | Orderbook history |
 | numeric value | Fixed anchor (skips candle fetching and SMA warmup); used directly as the static seed price |
 
-When fetching candles (`pool` or `book`), the adapter requires a full historical window. The oldest `erPeriod` candles are used for an initial SMA (Simple Moving Average) warmup phase to seed the AMA and establish the first Efficiency Ratio (ER) calculation. See [AMA Warmup Window](#ama-warmup-window--why-candle-length-matters) for technical details.
+When fetching candles (`pool` or `book`), the adapter needs a full historical
+window. The first `erPeriod` candles seed the AMA with an SMA and establish the
+first Efficiency Ratio (ER). See [AMA Warmup Window](#ama-warmup-window--why-candle-length-matters)
+for details.
 
 ### 2. Whitelist Live Writes
 
@@ -80,7 +81,9 @@ bot's `ama` block is used as the fallback.
 
 ### Empirical Divergence Risk Management
 
-The adapter uses tiered clamping thresholds to manage inventory risk during extreme price divergence from the AMA trend center. These thresholds are derived from historical pool volatility and replace static 'fit cap' multipliers. The specific clamping limits and exit parameters are calculated per pair and preset using:
+The adapter can use tiered clamping thresholds when live price diverges sharply
+from the AMA center. These thresholds should be fitted per market pair. Calculate
+pair and preset limits with:
 
 ```bash
 node analysis/ama_fitting/calculate_clamping_limits.js
@@ -93,41 +96,42 @@ node analysis/ama_fitting/calculate_clamping_limits.js
 | **AMA3** | 1.473x | 1.557x | 1.612x |
 | AMA4 | 1.479x | 1.546x | 1.601x |
 
-Divergence is calculated as `abs(Price - AMA) / AMA`. Limit exits trigger when price exceeds the 99.9th percentile of historical divergence, protecting the bot from extreme price excursions and preventing runaway inventory accumulation during high-divergence volatility.
+The table above is one calibrated reference. For a live bot, treat these values
+as market-specific calibration inputs. Divergence is `abs(Price - AMA) / AMA`;
+limit exits can trigger when live divergence exceeds the selected historical
+percentile.
 
 ## Grid Range Scaling
 
-AMA slope can scale the rebuilt grid in two linked ways under the same
-whitelist gate:
+AMA slope can affect a rebuilt grid in two ways under the same whitelist gate:
 
 - tilt the configured min/max range toward the trend direction
 - offset the live market/start price used for initial placement
 
-This is separate from dynamic buy/sell weighting. Both grid-range effects are
-enabled only when `asymmetricBounds: true` is set in
+This is separate from buy/sell weighting. Both range effects are enabled only
+when `asymmetricBounds: true` is set in
 `profiles/market_adapter_whitelist.json`.
 
 Technical formula and tuning details are in
 [Grid Range Scaling Model](#grid-range-scaling-model).
 
-When range scaling is whitelisted, the adapter persists the accepted slope
-baseline in `gridRangeScalingAmaSlope`. A reset trigger is emitted only when
-the slope delta crosses the configured threshold; direction changes alone do
-not reset the grid.
+When range scaling is whitelisted, the adapter stores the accepted slope
+baseline in `gridRangeScalingAmaSlope`. A reset trigger is emitted only when the
+slope delta crosses the configured threshold. Direction changes alone do not
+reset the grid.
 
 ## Asymmetric Weight Shift
 
-AMA slope plus Kalman filter confirmation can bias the bot's configured
-`weightDistribution` in the trend direction. In an uptrend or downtrend, this
-can shift allocation toward the side the strategy wants to emphasize while
-still starting from the bot's static buy/sell weights.
+AMA slope plus Kalman confirmation can bias the bot's configured
+`weightDistribution` toward the trend. The static buy/sell weights remain the
+baseline.
 
 ## Symmetric Weight Shift
 
 Volatility can reduce both buy and sell weights during noisy periods. This is a
 shared penalty on both sides, separate from the directional AMA/Kalman bias.
 
-Both weight shifts are controlled separately from AMA pricing. Set
+Weight shifts are controlled separately from AMA pricing. Set
 `dynamicWeight: false` in `profiles/market_adapter_whitelist.json` to keep AMA
 pricing active but leave buy/sell weights static. Most users should leave the
 tuning values alone unless they are fitting or testing strategy parameters.
@@ -146,7 +150,7 @@ Configure the default in `profiles/general.settings.json` or from the
 ```json
 {
   "MARKET_ADAPTER": {
-    "AMA_DELTA_THRESHOLD_PERCENT": 2.0
+    "AMA_DELTA_THRESHOLD_PERCENT": 1.25
   }
 }
 ```
@@ -168,8 +172,8 @@ Market-adapter settings resolve in this order:
 
 ## Live Writes and Dry-Run
 
-The whitelist controls what the adapter may write. Non-whitelisted bots are
-still processed, but live grid files and recalc triggers are suppressed.
+The whitelist controls live writes. Non-whitelisted bots are still processed,
+but grid files and recalc triggers are suppressed.
 
 | Invocation | Behavior |
 |---|---|
@@ -200,7 +204,9 @@ Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 - Confirm `gridPrice` is `ama`, `ama1`, `ama2`, `ama3`, or `ama4`.
 - Regenerate the whitelist with `npm run market-adapter:whitelist`.
 - Confirm the expected `botKey` exists in `profiles/market_adapter_whitelist.json`.
-- If `startPrice` is numeric, the adapter will not fetch pool/book candles for that bot. Use `startPrice` only for a fixed anchor in that case; `gridPrice` remains a separate grid setting.
+- If `startPrice` is numeric, the adapter skips pool/book candle fetching for
+  that bot. Use numeric `startPrice` only for a fixed anchor; `gridPrice`
+  remains a separate grid setting.
 
 ### Trigger is not created
 
@@ -230,8 +236,8 @@ Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 Export candles and charts:
 
 ```bash
-node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --lookback 8760h
-node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start 2025-03-06 --end 2026-03-06
+node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB> --interval 1h --lookback <hours>
+node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start <start-date> --end <end-date>
 npm run lp:chart -- --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
@@ -250,15 +256,14 @@ More tools:
 
 ## Technical Reference
 
-This section keeps the full market adapter details in one place. Normal
-operation should follow the Quick Start above.
+This section is for operators who need implementation details. For normal setup,
+use the Quick Start above.
 
 ### Purpose and Boundaries
 
-The market adapter bridges historical analysis and live bot operation. It keeps
-fresh market candles per bot, computes the AMA-based market center, evaluates
-trend and volatility signals, writes dynamic weight snapshots, and emits recalc
-triggers when the grid should be rebuilt.
+The market adapter bridges historical analysis and live bot operation. Per bot,
+it keeps candles current, computes the AMA center, evaluates trend and
+volatility, writes dynamic weight snapshots, and emits recalc triggers.
 
 For the similar bot-scoped debt workflow and collateral advisory path, see
 [MPA and Credit Usage](../docs/MPA_CREDIT_USAGE.md).
@@ -267,8 +272,7 @@ The adapter runs independently from `dexbot.js`. It does not place orders,
 manage bot lifecycle, or edit bot configuration. Order execution and grid
 rebuilds stay owned by the bot runtime.
 
-Standalone daemon mode is still available for direct inspection or manual
-operation:
+Standalone daemon mode is available for direct inspection or manual operation:
 
 ```bash
 node market_adapter/market_adapter.js
@@ -294,7 +298,7 @@ AMA delta      -> recalculate.<botKey>.trigger
 AMA slope delta -> recalculate.<botKey>.trigger for grid range scaling bots
 ```
 
-Per cycle, per processed bot, the adapter can produce:
+Each processed bot can produce:
 
 | Output | Meaning |
 |--------|---------|
@@ -312,13 +316,13 @@ Per cycle, per processed bot, the adapter can produce:
 2. Select bots with `gridPrice` set to `ama`, `ama1`, `ama2`, `ama3`, or `ama4`.
 3. Resolve AMA settings from `profiles/market_profiles.json`.
 4. Read `startPrice` to choose the candle source: `pool`, `book`, or fixed.
-5. Sync candle data from Kibana or native BitShares data, using the selected source.
+5. Sync candle data from Kibana or native BitShares data.
 6. Repair missing candle gaps when possible.
 7. Ignore still-forming 1h candles.
 8. Compute AMA center, trend, ATR, weights, and collateral hint.
-9. Persist the first accepted center, compare center delta, and compare whitelisted range-scaling slope delta.
+9. Persist the first accepted center, then compare center and range-scaling slope deltas.
 10. Suppress live writes if the bot is not whitelisted or candle data is stale.
-11. Write `dynamicgrid.json` and a recalc trigger for bootstrap, AMA-center threshold, or grid-range-scaling AMA-slope threshold events.
+11. Write `dynamicgrid.json` and, when needed, a recalc trigger.
 12. Persist state snapshots under `market_adapter/state/`.
 
 ### Files
@@ -353,10 +357,9 @@ adapter does not place orders, start bots, stop bots, or edit
 
 ### Dynamic Grid Snapshot
 
-`profiles/orders/<botKey>.dynamicgrid.json` is the live snapshot that the bot
-runtime reloads on selected rebalance and maintenance paths. It is written with
-the current AMA-derived center and, when enabled, the live dynamic-weight
-payload.
+`profiles/orders/<botKey>.dynamicgrid.json` is the live snapshot read by the bot
+runtime during selected rebalance and maintenance paths. It contains the current
+AMA-derived center and, when enabled, the dynamic-weight payload.
 
 Typical fields:
 
@@ -386,8 +389,10 @@ Typical fields:
 - `gridCenterPrice` is the persisted grid baseline used for future delta checks.
 - `centerPrice` remains as a compatibility alias for older readers.
 - `amaCenterPrice` is the raw AMA output before downstream handling.
-- `amaSlope` is the latest AMA slope snapshot used for diagnostics and snapshot writes.
-- `gridPriceOffsetPct` is the signed market/start-price offset derived from AMA slope and capped at half of `targetSpreadPercent`; it is not applied to `gridCenterPrice`.
+- `amaSlope` is the latest AMA slope snapshot used for diagnostics.
+- `gridPriceOffsetPct` is the signed market/start-price offset derived from AMA
+  slope and capped at half of `targetSpreadPercent`; it is not applied to
+  `gridCenterPrice`.
 - `gridRangeScalingAmaSlope` in adapter state is the last grid-reset slope baseline used for slope-triggered range-scaling resets.
 - `amaSlopeDeltaPercent` records the change from the last grid-reset slope baseline.
 - `amaSlopeThresholdPercent` is the configured slope-reset threshold.
@@ -478,15 +483,14 @@ AMA slope -> live market/start-price offset, capped at half spread
 ```
 
 During a grid rebuild, the bot loads the latest dynamic grid snapshot and uses
-the AMA slope diagnostics to tilt the configured `minPrice` and `maxPrice`
-around the AMA center. An uptrend widens the upper bound and tightens the lower
-bound; a downtrend widens the lower bound and tightens the upper bound.
+AMA slope diagnostics to tilt `minPrice` and `maxPrice` around the AMA center.
+An uptrend widens the upper bound and tightens the lower bound; a downtrend does
+the inverse.
 
-The same `asymmetricBounds` whitelist also enables `gridPriceOffsetPct`: a
-slope-ratio offset applied only to the live `startPrice` used for initial
+The same `asymmetricBounds` whitelist also enables `gridPriceOffsetPct`, a
+slope-based offset applied only to the live `startPrice` used for initial
 placement. It is capped at half of `targetSpreadPercent` (`2` allows `-1%` to
-`+1%`) and does not change `gridCenterPrice`, the AMA center, or reset
-threshold baselines.
+`+1%`) and does not change `gridCenterPrice`, the AMA center, or reset baselines.
 
 This uses `dynamicWeights.trend`, `dynamicWeights.slopeOffset`, and
 `dynamicWeights.maxSlopeOffset`, but it is separate from the dynamic buy/sell
@@ -530,7 +534,7 @@ The file contains a trigger payload like:
 {
   "createdAt": "2026-03-01T00:00:00.000Z",
   "source": "market_adapter/market_adapter.js",
-  "botName": "IOB.XRP/BTS",
+  "botName": "<botName>",
   "botKey": "<botKey>",
   "thresholdPercent": 0.8,
   "deltaPercent": 1.1,
@@ -538,7 +542,7 @@ The file contains a trigger payload like:
   "newCenterPrice": 1348.32,
   "referencePrice": 1294.6,
   "amaCenterPrice": 1294.6,
-  "poolId": "1.19.133"
+  "poolId": "<poolId>"
 }
 ```
 
@@ -549,10 +553,9 @@ that the runtime can reload.
 
 ### Dynamic Weight Model
 
-Dynamic weights start from the bot's configured `weightDistribution`. These
-configured values are the static baseline.
+Dynamic weights start from the bot's configured `weightDistribution`.
 
-The production dynamic-weight output combines:
+The dynamic-weight output combines:
 
 | Branch | Role |
 |--------|------|
@@ -573,10 +576,9 @@ effectiveSell = staticSell - trendOffset + volatilityPenalty
 effectiveBuy  = staticBuy  + trendOffset + volatilityPenalty
 ```
 
-A positive `trendOffset` shifts weight toward buy and away from sell. A
-negative `trendOffset` shifts weight toward sell and away from buy. The final
-values are clamped and rounded before being written to the dynamic grid
-snapshot.
+A positive `trendOffset` shifts weight toward buy. A negative value shifts
+weight toward sell. Final values are clamped and rounded before being written to
+the dynamic grid snapshot.
 
 Main override knobs live in `profiles/market_adapter_settings.json`:
 
@@ -613,8 +615,8 @@ adapter convert them at load time. New settings should use
 `"amaSlopePercentMode": "perBar"` so small per-bar values are not converted
 again by pair or bot overrides.
 
-Most operators should tune only the price and slope trigger thresholds plus the AMA profile unless
-they are deliberately fitting a market.
+Most operators should tune only the price threshold, slope threshold, and AMA
+profile unless they are deliberately fitting a market.
 
 ### Candle and Staleness Handling
 
@@ -625,9 +627,13 @@ possible, prunes old candles to the required AMA window, and acts only on closed
 
 #### AMA Warmup Window — Why Candle Length Matters
 
-The AMA is a recursive (infinite impulse response) filter. On cold start, the adapter uses an initial warmup phase: it calculates an **SMA (Simple Moving Average)** over the first `erPeriod` candles to establish a stable seed price, while simultaneously building the price history needed to calculate the first valid Efficiency Ratio (ER).
+The AMA is a recursive filter. On cold start, the adapter warms it up by
+calculating an SMA over the first `erPeriod` candles. That seed price also
+provides the history needed for the first valid Efficiency Ratio (ER).
 
-Starting the recursive AMA formula from this SMA, rather than a single raw closing price, provides a more stable anchor. However, a residual initialization bias still exists and decays asymptotically — each bar, the AMA "forgets" a fraction equal to its smoothing constant:
+Starting from this SMA is more stable than starting from a single raw close, but
+some initialization bias remains. That bias decays each bar as the AMA
+"forgets" a fraction equal to its smoothing constant:
 
 ```
 bias_remaining(K) ≈ bias_initial × ∏ (1 − SC_i)      for i = 1..K
@@ -655,7 +661,7 @@ Bars needed to reduce bias below a target fraction ε:
 convergenceBars = ln(ε) / ln(1 − SC_avg)
 ```
 
-The **full warmup window** the adapter requires:
+The adapter requires this full warmup window:
 
 ```
 amaWarmupBars = erPeriod + convergenceBars + lookbackBars
@@ -694,9 +700,9 @@ the built-in presets is:
 | `AMA3` | `1,925` | `80.2` |
 | `AMA4` | `2,023` | `84.3` |
 
-These totals include the ER buffer, the convergence window, and the default
-9-bar lookback used by the dynamic-weight logic. If the candle timeframe is
-not 1 hour, scale the total by the candle duration.
+These totals include the ER buffer, convergence window, and default 9-bar
+dynamic-weight lookback. If the candle timeframe is not 1 hour, scale the total
+by the candle duration.
 
 **Why `slowPeriod` dominates:** `slowSC ≈ 2 / slowPeriod`, so `SC_avg` scales
 as `~ (2 / slowPeriod)² = 4 / slowPeriod²`. Since `convergenceBars` is
@@ -705,9 +711,8 @@ proportional to `1 / SC_avg`, the required candle count scales as
 this is roughly 1130 convergence bars; doubling `slowPeriod` would quadruple
 that requirement.
 
-If the adapter has fewer candles than the warmup window, the AMA output is too
-biased for grid centering and the cycle skips with reason
-`ama_warmup_insufficient`.
+If the adapter has fewer candles than the warmup window, the AMA is too biased
+for grid centering and the cycle skips with reason `ama_warmup_insufficient`.
 
 Stale data suppresses trigger writes. Check `staleData` and `staleAgeHours` in
 `market_adapter/state/market_adapter_state.json` when a trigger should have

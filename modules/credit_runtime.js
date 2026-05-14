@@ -523,12 +523,15 @@ class CreditRuntime {
         return intValue;
     }
 
-    _resolveLendingPolicyForOffer(offer) {
+    async _resolveLendingPolicyForOffer(offer) {
         const offerDebtAssetId = offer?.asset_type || null;
         if (!offerDebtAssetId || !this.debtPolicy?.lending) return null;
         for (const item of this.debtPolicy.lending) {
             if (item.type !== 'creditOffer') continue;
-            const cached = this._assetCache.get(String(item.asset));
+            let cached = this._assetCache.get(String(item.asset));
+            if (!cached && item.asset) {
+                cached = await this._resolveAsset(item.asset);
+            }
             if (cached && String(cached.id) === String(offerDebtAssetId)) {
                 return item;
             }
@@ -1830,7 +1833,7 @@ class CreditRuntime {
             }
 
             // Resolve policy: prefer request.specificPolicy, fall back to current debtPolicy lending item
-            const requestPolicy = request.specificPolicy || this._resolveLendingPolicyForOffer(offer);
+            const requestPolicy = request.specificPolicy || await this._resolveLendingPolicyForOffer(offer);
             if (!requestPolicy || !requestPolicy.autoReborrow) {
                 this.warn(`credit runtime: dropping pending reborrow for offer ${request.offerId}; autoReborrow disabled or policy missing`);
                 continue;
