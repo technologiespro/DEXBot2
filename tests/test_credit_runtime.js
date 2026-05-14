@@ -757,6 +757,101 @@ async function testMpaDebtFailureDoesNotFallbackOnAmbiguousError() {
   }
 }
 
+async function testMpaDebtFailureSurfacesWhenCollateralFallbackUnavailable() {
+  const calls = [];
+  const dbCalls = [];
+  const callOrders = [
+    {
+      id: '1.8.13',
+      borrower: '1.2.3',
+      debt: { amount: 10000, asset_id: '1.3.10' },
+      collateral: { amount: 25000, asset_id: '1.3.0' },
+      call_price: {
+        base: { amount: 200, asset_id: '1.3.0' },
+        quote: { amount: 100, asset_id: '1.3.10' },
+      },
+    },
+  ];
+  const restore = installStubs(calls, dbCalls, {
+    assetsById: {
+      '1.3.10': {
+        id: '1.3.10',
+        symbol: 'HONEST.USD',
+        precision: 2,
+        bitasset_data_id: '2.4.1',
+      },
+      '1.3.0': {
+        id: '1.3.0',
+        symbol: 'BTS',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+    },
+    bitassetObjects: {
+      '2.4.1': {
+        id: '2.4.1',
+        current_feed: {
+          settlement_price: {
+            base: { amount: 200, asset_id: '1.3.0' },
+            quote: { amount: 100, asset_id: '1.3.10' },
+          },
+        },
+      },
+    },
+    callOrders,
+    onExecuteBatch: async ({ operations }) => {
+      const op = operations[0];
+      if (op.op_name === 'call_order_update' && Number(op.op_data?.delta_debt?.amount || 0) < 0) {
+        throw new Error('insufficient balance for debt repayment');
+      }
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-mpa-fallback-unavailable-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-mpa-fallback-unavailable',
+        debtPolicy: {
+          maxCollateralAmount: 250,
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              collateralAsset: 'BTS',
+              type: 'mpa',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralAmount: 250,
+              minCollateralRatio: 2,
+              maxCollateralRatio: 2.5,
+              targetCollateralRatio: 2.2,
+            },
+          ],
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    await assert.rejects(
+      () => runtime.runMaintenance('periodic'),
+      /insufficient balance for debt repayment/,
+      'deterministic debt failure should surface when collateral fallback cannot execute'
+    );
+
+    assert.strictEqual(calls.length, 1, 'runtime should only broadcast the failed combined operation');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
 async function testMpaDebtFallbackRespectsAssignedCollateralBudget() {
   const calls = [];
   const dbCalls = [];
@@ -816,6 +911,38 @@ async function testMpaDebtFallbackRespectsAssignedCollateralBudget() {
     assetBalances: {
       '1.3.0': { free: 1000, locked: 0, total: 1000 },
     },
+    offersById: {
+      '1.18.42': {
+        id: '1.18.42',
+        asset_type: '1.3.10',
+        current_balance: 10000,
+        fee_rate: 30000,
+        min_deal_amount: 100,
+        enabled: true,
+        max_duration_seconds: 86400,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 2, asset_id: '1.3.0' },
+            quote: { amount: 1, asset_id: '1.3.10' },
+          },
+        },
+      },
+      '1.18.43': {
+        id: '1.18.43',
+        asset_type: '1.3.11',
+        current_balance: 10000,
+        fee_rate: 30000,
+        min_deal_amount: 100,
+        enabled: true,
+        max_duration_seconds: 86400,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 1, asset_id: '1.3.0' },
+            quote: { amount: 1, asset_id: '1.3.11' },
+          },
+        },
+      },
+    },
     callOrders,
     onExecuteBatch: async ({ operations }) => {
       const op = operations[0];
@@ -858,6 +985,7 @@ async function testMpaDebtFallbackRespectsAssignedCollateralBudget() {
               maxBorrowAmount: 1000,
               maxCollateralRatio: 2.5,
               maxFeeRatePerDay: 0.05,
+              allowedOfferIds: ['1.18.43'],
             },
           ],
         },
@@ -980,12 +1108,10 @@ async function testMpaDebtFirstThenCollateralFallbackTriggersReset() {
     await runtime.refreshState();
     const result = await runtime.runMaintenance('periodic');
 
-    assert.strictEqual(calls.length, 2, 'CR repair should broadcast debt and collateral legs separately');
-    assert.strictEqual(calls[0].operations[0].op_data.delta_debt.amount, 1000, 'first leg should increase debt up to the total cap');
-    assert.strictEqual(calls[0].operations[0].op_data.delta_collateral.amount, 0, 'debt leg should not change collateral');
-    assert.strictEqual(calls[1].operations[0].op_data.delta_debt.amount, 0, 'collateral leg should not change debt');
-    assert.strictEqual(calls[1].operations[0].op_data.delta_collateral.amount < 0, true, 'second leg should withdraw collateral after the capped debt increase');
-    assert.deepStrictEqual(result.mpa[0].executed.map((entry) => entry.leg), ['debt', 'collateral'], 'maintenance should record both legs');
+    assert.strictEqual(calls.length, 1, 'CR repair should broadcast debt and collateral legs in a single atomic update');
+    assert.strictEqual(calls[0].operations[0].op_data.delta_debt.amount, 1000, 'combined op should increase debt up to the total cap');
+    assert.strictEqual(calls[0].operations[0].op_data.delta_collateral.amount < 0, true, 'combined op should withdraw collateral after the capped debt increase');
+    assert.deepStrictEqual(result.mpa[0].executed.map((entry) => entry.leg), ['combined'], 'maintenance should record combined execution');
     assert.strictEqual(result.mpa[0].resetResult.reason, 'cr-adjustment', 'grid reset should be requested after CR adjustment');
     assert.strictEqual(resetCalls[0].options.fillLockAlreadyHeld, true, 'periodic CR reset should reuse the existing fill lock');
 
@@ -2133,6 +2259,7 @@ async function testGetCollateralOffsets() {
   await testMpaPrecisionAwareBroadcast();
   await testMpaDebtFailureFallsBackToCollateral();
   await testMpaDebtFailureDoesNotFallbackOnAmbiguousError();
+  await testMpaDebtFailureSurfacesWhenCollateralFallbackUnavailable();
   await testMpaDebtFallbackRespectsAssignedCollateralBudget();
   await testMpaDebtFirstThenCollateralFallbackTriggersReset();
   await testRepayAndReborrowFlow();
