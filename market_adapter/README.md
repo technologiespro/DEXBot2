@@ -15,7 +15,7 @@ The adapter feeds four separate grid controls from the same candle/AMA pipeline:
 | Control | Signal | Effect |
 |---------|--------|--------|
 | Grid price | AMA price | Moves the grid center through bootstrap and delta reset triggers |
-| Grid range scaling | AMA slope + market price offset | Widens the trend side, tightens the opposite bound, and offsets the live market/start price through whitelisted slope reset triggers |
+| Grid range scaling + market price offset | AMA slope | Widens the trend side, tightens the opposite bound, and offsets the live market/start price through whitelisted slope reset triggers |
 | Asymmetric weight shift | AMA slope + Kalman filter | Biases buy/sell allocation in the trend direction |
 | Symmetric weight shift | Volatility | Reduces both buy and sell weights during noisy periods |
 
