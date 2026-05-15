@@ -114,7 +114,42 @@ The update script automatically:
 
 ## 🔧 Configuration
 
-### Bot Options
+### Recommended Bot Setup
+
+Keep the generated defaults and tune only these first:
+
+1. `targetSpreadPercent`
+2. `incrementPercent`
+3. `gridPrice: "ama"`
+4. `minPrice` / `maxPrice`
+
+`targetSpreadPercent` controls profit room per completed cycle. A wider spread
+targets more profit per cycle but trades less often.
+
+`incrementPercent` controls grid density and order size. Smaller increments
+create more grid levels and smaller orders; larger increments create fewer
+levels and larger orders.
+
+Use `gridPrice: "ama"` so the market adapter can center the grid on AMA. Once
+AMA is active, tighten `minPrice` / `maxPrice` around the maximum expected
+market volatility instead of using an unnecessarily wide range.
+
+### Simple AMA Workflow
+
+1. Create the bot with `node dexbot bots`.
+2. Leave defaults unchanged.
+3. Tune `targetSpreadPercent` and `incrementPercent`.
+4. Set `gridPrice` to `ama`.
+5. Generate the market-adapter whitelist:
+
+   ```bash
+   npm run market-adapter:whitelist
+   ```
+
+6. Start DEXBot2 normally with `node pm2` or `node unlock-start`.
+7. Then tune `minPrice` / `maxPrice` for the market's volatility range.
+
+### Bot Options Reference
 
 Configuration options from `node dexbot bots`, stored in `profiles/bots.json`:
 
@@ -126,13 +161,13 @@ Configuration options from `node dexbot bots`, stored in `profiles/bots.json`:
 | **`active`** | boolean | `false` to keep config without running |
 | **`dryRun`** | boolean | Simulate orders without broadcasting |
 | **`preferredAccount`** | string | BitShares account name for trading |
-| **`startPrice`** | num \| str | Initial price. `"pool"` (liquidity pool), `"book"` (order book), or numeric `A/B` ratio. For the market adapter, this also selects the candle source. |
-| **`minPrice`** | num \| str | Lower bound. Number or multiplier (e.g., `"2x"` = `startPrice / 2`) |
-| **`maxPrice`** | num \| str | Upper bound. Number or multiplier (e.g., `"2x"` = `startPrice * 2`) |
-| **`gridPrice`** | num \| str \| null | Grid reference only. `null` falls back to `startPrice`; AMA keywords (`"ama"`, `"ama1"`-`"ama4"`) use the AMA center; numeric values use that fixed value. **Requires whitelisting the bot for the `market_adapter` to work live (otherwise it only logs).** |
-| **`incrementPercent`** | number | Geometric step between layers (e.g., `0.5` = 0.5%) |
-| **`targetSpreadPercent`** | number | Width of the empty spread zone between buy and sell orders |
-| **`weightDistribution`** | object | Sizing: `{ "sell": 1.0, "buy": 1.0 }`. Range `-1` (super valley) to `2` (super mountain), `0.5` = neutral |
+| **`startPrice`** | num \| str | Initial price and adapter candle source. Default `"pool"` uses liquidity-pool history; `"book"` uses order-book history; a number uses a fixed anchor. |
+| **`minPrice`** | num \| str | Lower bound. Default `"2x"` means `gridPrice / 2` when AMA is active, otherwise `startPrice / 2`. |
+| **`maxPrice`** | num \| str | Upper bound. Default `"2x"` means `gridPrice * 2` when AMA is active, otherwise `startPrice * 2`. |
+| **`gridPrice`** | num \| str \| null | Grid reference. Use `"ama"` for the recommended AMA center; `null` falls back to `startPrice`; numeric values use that fixed value. |
+| **`incrementPercent`** | number | Geometric step between layers. Default `0.5` = 0.5%. |
+| **`targetSpreadPercent`** | number | Width of the empty spread zone between buy and sell orders. Default `2` = 2%. |
+| **`weightDistribution`** | object | Advanced sizing control. Default `{ "sell": 1.0, "buy": 1.0 }`; leave unchanged for normal setup. |
 | **`botFunds`** | object | Capital: `{ "sell": "100%", "buy": 1000 }`. Numbers or percentage strings |
 | **`activeOrders`** | object | Max concurrent orders per side: `{ "sell": 5, "buy": 5 }` |
 
