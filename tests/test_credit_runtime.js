@@ -317,7 +317,7 @@ async function testRefreshAndMpaPlan() {
 
     const op = await runtime.buildMpaUpdateOperation(plan, {}, mpaLending, '1.3.10');
     assert.strictEqual(op.op_name, 'call_order_update', 'MPA plan should build a call_order_update op');
-    assert.strictEqual(op.op_data.extensions.target_collateral_ratio, 2, 'target CR should be embedded in the op');
+    assert.strictEqual(op.op_data.extensions.target_collateral_ratio, 200, 'target CR should be embedded as Graphene ratio basis points');
 
     const result = await runtime.runMaintenance('periodic');
     assert.strictEqual(result.context, 'periodic', 'maintenance context should round-trip');
@@ -1306,6 +1306,46 @@ async function testMultipleMpaPositionsAreBlocked() {
     const result = await runtime.runMaintenance('periodic');
     assert.strictEqual(result.mpa[0].blocked, true, 'maintenance should block MPA actions when the position is ambiguous');
     assert.strictEqual(calls.length, 0, 'no blockchain write should happen when MPA is ambiguous');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testRemovedCreditPolicyPrunesGlobalTracking() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls);
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-prune-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({ botKey: 'credit-bot-prune' }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    assert.strictEqual(runtime.state.creditDeals.length, 1, 'initial refresh should discover the credit deal');
+
+    runtime.config.debtPolicy = {
+      lending: runtime.config.debtPolicy.lending.filter((item) => item.type !== 'creditOffer'),
+    };
+    await runtime.refreshState();
+
+    assert.strictEqual(runtime.state.creditDeals.length, 0, 'removed credit policy should prune global credit deals');
+    assert.strictEqual(runtime.state.activeDealIds.length, 0, 'removed credit policy should prune active deal ids');
+    assert.strictEqual(runtime.state.activeOfferIds.length, 0, 'removed credit policy should prune active offer ids');
+    assert.strictEqual(
+      runtime.state.debtSnapshot.assets['1.3.0']?.creditCollateral || 0,
+      0,
+      'debt snapshot should not include collateral from a pruned credit position'
+    );
   } finally {
     restore();
     try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
@@ -2327,6 +2367,7 @@ async function testGetCollateralOffsets() {
   await testRepayAndReborrowFlow();
   await testFixedCreditCollateralDoesNotResolvePercentageBase();
   await testMultipleMpaPositionsAreBlocked();
+  await testRemovedCreditPolicyPrunesGlobalTracking();
   await testDefaultFeeRateCapRejectsExpensiveOffer();
   await testMaxFeeRatePerDayRejectsExpensiveOffer();
   await testCreditBorrowIsDerivedFromCollateral();

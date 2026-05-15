@@ -53,6 +53,12 @@ const BUILTIN_DEFAULT_POLICY = Object.freeze({
 
 const policyCache = new Map();
 
+function normalizeGrapheneCollateralRatio(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) return null;
+    return numeric >= 100 ? numeric / 100 : numeric;
+}
+
 function createMinimalPolicyConfig() {
     return {
         accounts: {},
@@ -733,7 +739,7 @@ function evaluateOpConstraints(opName, opData, constraints) {
             }
         }
         if (constraints.minCollateralRatio != null && d.extensions && d.extensions.target_collateral_ratio != null) {
-            const target = Number(d.extensions.target_collateral_ratio);
+            const target = normalizeGrapheneCollateralRatio(d.extensions.target_collateral_ratio);
             if (Number.isFinite(target) && target < constraints.minCollateralRatio) {
                 return {
                     allow: false,
@@ -743,7 +749,7 @@ function evaluateOpConstraints(opName, opData, constraints) {
             }
         }
         if (constraints.maxCollateralRatio != null && d.extensions && d.extensions.target_collateral_ratio != null) {
-            const target = Number(d.extensions.target_collateral_ratio);
+            const target = normalizeGrapheneCollateralRatio(d.extensions.target_collateral_ratio);
             if (Number.isFinite(target) && target > constraints.maxCollateralRatio) {
                 return {
                     allow: false,

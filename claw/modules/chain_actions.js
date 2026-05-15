@@ -27,6 +27,15 @@ function nextYearExpirationIso() {
   return `${now.toISOString().slice(0, 10)}T23:59:59`;
 }
 
+function toGrapheneCollateralRatio(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return null;
+  }
+  const scaled = Math.round(numericValue * 100);
+  return Number.isInteger(scaled) && scaled > 0 && scaled <= 0xffff ? scaled : null;
+}
+
 async function resolveAssetMeta(symbolOrId) {
   const asset = await getAsset(symbolOrId);
   if (!asset) {
@@ -145,8 +154,9 @@ async function buildBorrowMpaOperation({
   }
 
   const extensions = {};
-  if (targetCollateralRatio !== undefined && targetCollateralRatio !== null) {
-    extensions.target_collateral_ratio = targetCollateralRatio;
+  const grapheneTargetCollateralRatio = toGrapheneCollateralRatio(targetCollateralRatio);
+  if (grapheneTargetCollateralRatio !== null) {
+    extensions.target_collateral_ratio = grapheneTargetCollateralRatio;
   }
 
   return {

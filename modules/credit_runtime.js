@@ -13,6 +13,7 @@ const { buildCollateralFallbackPlan, buildDebtFirstCrPlan, resolveTargetCollater
 const CREDIT_FEE_RATE_DENOM = 1_000_000;
 const ZERO_ASSET_ID = '1.3.0';
 const DEFAULT_STATE_DIR = path.join(__dirname, '..', 'profiles', 'credit_runtime');
+const GRAPHENE_COLLATERAL_RATIO_DENOM = 100;
 
 const { ensureDir: ensureDirSync } = require('./order/utils/system');
 
@@ -63,6 +64,13 @@ function roundToPlaces(value, places = 6) {
     if (!Number.isFinite(num)) return null;
     const factor = 10 ** places;
     return Math.round(num * factor) / factor;
+}
+
+function toGrapheneCollateralRatio(value) {
+    const numeric = positiveOrNull(value);
+    if (numeric === null) return null;
+    const scaled = Math.round(numeric * GRAPHENE_COLLATERAL_RATIO_DENOM);
+    return Number.isInteger(scaled) && scaled > 0 && scaled <= 0xffff ? scaled : null;
 }
 
 function getMapEntries(value) {
@@ -475,6 +483,47 @@ class CreditRuntime {
 
     _normalizePolicyList(value) {
         return normalizeNumberArray(value);
+    }
+
+    _rebuildCreditTrackingFromPositions() {
+        const allActiveDealIds = [];
+        const allActiveOfferIds = [];
+        const allCreditDeals = [];
+        for (const pos of Object.values(this.state.positions || {})) {
+            if (Array.isArray(pos.activeDealIds)) {
+                allActiveDealIds.push(...pos.activeDealIds);
+            }
+            if (Array.isArray(pos.activeOfferIds)) {
+                allActiveOfferIds.push(...pos.activeOfferIds);
+            }
+            if (Array.isArray(pos.creditDeals)) {
+                allCreditDeals.push(...pos.creditDeals);
+            }
+        }
+        this.state.activeDealIds = allActiveDealIds;
+        this.state.activeOfferIds = allActiveOfferIds;
+        this.state.creditDeals = allCreditDeals;
+    }
+
+    async _pruneCreditStateForPolicy(lendingItems = []) {
+        const validCreditPositionKeys = new Set();
+        for (const item of lendingItems) {
+            if (item?.type !== 'creditOffer') continue;
+            const debtAsset = await this._resolveAsset(item.asset);
+            const collateralAsset = await this._resolveAsset(item.collateralAsset);
+            if (debtAsset?.id && collateralAsset?.id) {
+                validCreditPositionKeys.add(this._positionKey(String(debtAsset.id), String(collateralAsset.id)));
+            }
+        }
+
+        for (const [key, pos] of Object.entries(this.state.positions || {})) {
+            if (validCreditPositionKeys.has(key)) continue;
+            if (!pos || typeof pos !== 'object') continue;
+            delete pos.creditDeals;
+            delete pos.activeDealIds;
+            delete pos.activeOfferIds;
+            delete pos.creditConversionRate;
+        }
     }
 
     async _resolveAmountToBlockchainInt(spec, asset, accountRef, { balanceField = 'total', referenceAmount = null, referenceLabel = 'available balance' } = {}) {
@@ -1202,24 +1251,7 @@ class CreditRuntime {
         this.state.positions[posKey].activeDealIds = activeDealIds;
         this.state.positions[posKey].activeOfferIds = activeOfferIds;
 
-        // Rebuild global tracking arrays from all positions
-        const allActiveDealIds = [];
-        const allActiveOfferIds = [];
-        const allCreditDeals = [];
-        for (const pos of Object.values(this.state.positions)) {
-            if (Array.isArray(pos.activeDealIds)) {
-                allActiveDealIds.push(...pos.activeDealIds);
-            }
-            if (Array.isArray(pos.activeOfferIds)) {
-                allActiveOfferIds.push(...pos.activeOfferIds);
-            }
-            if (Array.isArray(pos.creditDeals)) {
-                allCreditDeals.push(...pos.creditDeals);
-            }
-        }
-        this.state.activeDealIds = allActiveDealIds;
-        this.state.activeOfferIds = allActiveOfferIds;
-        this.state.creditDeals = allCreditDeals;
+        this._rebuildCreditTrackingFromPositions();
 
         this.state.ownedCreditOffers = ownedCreditOffers;
         this.state.lastBorrowRequest = this.state.lastBorrowRequest || null;
@@ -1246,7 +1278,9 @@ class CreditRuntime {
                 await this.refreshCreditState({ deals: allDeals }, item);
             }
         }
+        await this._pruneCreditStateForPolicy(dp.lending);
         await this._calculateCollateralDistribution();
+        this._rebuildCreditTrackingFromPositions();
 
         this.state.debtSnapshot = await this._buildDebtSnapshot();
         this._fullAccountCache = null;
@@ -1333,8 +1367,9 @@ class CreditRuntime {
         }
 
         const extensions = {};
-        if (Number.isFinite(plan.targetCollateralRatio)) {
-            extensions.target_collateral_ratio = plan.targetCollateralRatio;
+        const targetCollateralRatio = toGrapheneCollateralRatio(plan.targetCollateralRatio);
+        if (targetCollateralRatio !== null) {
+            extensions.target_collateral_ratio = targetCollateralRatio;
         }
 
         return {

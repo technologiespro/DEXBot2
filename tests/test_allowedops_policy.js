@@ -478,6 +478,32 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
     assert(evalResult16.reason.includes('maxDeltaCollateral'));
     console.log('  ✓ call_order_update exceeding collateral limit denied');
 
+    const crPolicy = {
+        allowedOps: {
+            call_order_update: {
+                minCollateralRatio: 2,
+                maxCollateralRatio: 2.5,
+            },
+        },
+    };
+    const context16b = {
+        accountName: 'test',
+        requestType: 'sign',
+        operations: [
+            {
+                op_name: 'call_order_update',
+                op_data: {
+                    delta_collateral: { asset_id: '1.3.0', amount: 500 },
+                    delta_debt: { asset_id: '1.3.861', amount: 250 },
+                    extensions: { target_collateral_ratio: 220 },
+                },
+            },
+        ],
+    };
+    const evalResult16b = await policy.evaluatePolicy(crPolicy, context16b);
+    assert.strictEqual(evalResult16b.allow, true, `Expected allow for Graphene-scaled target CR, got deny: ${evalResult16b.reason}`);
+    console.log('  ✓ call_order_update Graphene target collateral ratio allowed');
+
     // Test 11: liquidity_pool_exchange parameter validation
     console.log('[Test 15] Evaluate allowedOps - liquidity_pool_exchange parameter validation');
     const lpHookPolicy = {
