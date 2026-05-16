@@ -9,20 +9,8 @@ All runners write self-contained HTML to `charts/`. These files are regenerated 
 Most runners default to the market adapter source — just pass a bot key from `profiles/bots.json`:
 
 ```bash
-# Derivative signals (SMA/MACD/RSI)
-npm run analysis:derivatives -- --bot-key <bot-key>
-
 # Dynamic weight research (AMA + Kalman + Hurst)
 node analysis/analyze_dynamic_weight.js --bot-key <bot-key>
-
-# Kalman filter analysis
-node analysis/analyze_kalman.js --bot-key <bot-key>
-
-# Volatility (ATR-based symmetric penalty)
-node analysis/analyze_volatility.js --bot-key <bot-key>
-
-# Regime classification (Hurst + Permutation Entropy)
-node analysis/analyze_regime.js --bot-key <bot-key>
 
 # TradingView-style chart
 npm run analysis:tradingview -- --source market_adapter --bot-key <bot-key>
@@ -32,30 +20,18 @@ npm run analysis:tradingview -- --source market_adapter --bot-key <bot-key>
 
 ## Main Entry Points
 
-### Derivative Signals (`analyze_derivatives.js`)
+The order below follows the live market adapter path:
 
-SMA/MACD/RSI signal analyzer. Produces a multi-panel HTML chart showing BULL/BEAR/NEUTRAL/OVERBOUGHT/OVERSOLD interpretation states with entry bias metadata.
-
-```bash
-# Bot-key (uses market adapter source)
-npm run analysis:derivatives -- --bot-key <bot-key>
-
-# From LP candle file (recommended 1h setup)
-node analysis/analyze_derivatives.js \
-  --source json \
-  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
-  --sma 500 --fast-sma 100 \
-  --macd-fast 48 --macd-slow 104 --macd-signal 36 --macd-min-hist 0.02 \
-  --rsi 96 --rsi-extreme 90 --rsi-zone 10 \
-  --interp-confirm 3 --interp-hold 3 \
-  --trend-filter --trend-filter-min-bars 3
-```
-
-Full signal documentation: [SIGNAL_DOCUMENTATION.md](trend_detection/SIGNAL_DOCUMENTATION.md)
+1. Candle data/state feeds the adapter.
+2. AMA computes the grid center and divergence risk.
+3. AMA slope and Kalman drive asymmetric dynamic weights and range/offset signals.
+4. ATR volatility applies the symmetric weight penalty.
+5. Hurst and Permutation Entropy gate trend signals by regime.
+6. Chart tools inspect the combined output.
 
 ### Dynamic Weight Research (`analyze_dynamic_weight.js`)
 
-Interactive 4-panel chart blending AMA slope and Kalman filter signals, gated by Hurst Exponent and Permutation Entropy regime detection. Knobs for α, gain, clip%, nz%, and more.
+Interactive 4-panel chart for the production trend-weight path: AMA slope plus Kalman confirmation, gated by Hurst Exponent and Permutation Entropy. Use this first when tuning asymmetric buy/sell weight bias, AMA slope offset behavior, and regime damping.
 
 ```bash
 # Bot-key (uses market adapter source)
@@ -69,45 +45,32 @@ node analysis/analyze_dynamic_weight.js \
 
 Full research docs: [DYNAMIC_WEIGHT_RESEARCH.md](trend_detection/DYNAMIC_WEIGHT_RESEARCH.md)
 
-### Kalman Analysis (`analyze_kalman.js`)
+Legacy asymmetric-weight reference: [Derivative signal documentation](trend_detection/SIGNAL_DOCUMENTATION.md).
 
-Standalone Kalman filter chart with tactical/modal state tracking — velocity and displacement as separate orthogonal signals.
+#### Supporting Dynamic Weight Analyzers
 
-```bash
-# Bot-key (uses market adapter source)
-node analysis/analyze_kalman.js --bot-key <bot-key>
+These isolate the sub-signals used by the dynamic-weight path. Use them when the combined chart needs a narrower diagnosis:
 
-# From LP candle file
-node analysis/analyze_kalman.js \
-  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
-```
-
-### Volatility Analysis (`analyze_volatility.js`)
-
-ATR-based symmetric volatility penalty research. Uses the same math as the production volatility penalty without any directional component.
+| Analyzer | Focus | Use when |
+|----------|-------|----------|
+| `analyze_volatility.js` | ATR-based symmetric volatility penalty | Buy and sell weights are both being reduced too much or too little |
+| `analyze_regime.js` | Hurst + Permutation Entropy regime classification | Trend signals need more or less regime damping |
+| `analyze_regime_windows.js` | Alternate Hurst/PE window configurations | Testing whether the regime gate is too slow or too noisy |
+| `analyze_kalman.js` | Kalman velocity/displacement trend state | Isolating the Kalman side of the AMA/Kalman blend |
 
 ```bash
-# Bot-key (uses market adapter source)
+# Volatility: ATR-based symmetric penalty
 node analysis/analyze_volatility.js --bot-key <bot-key>
 
-# From LP candle file
-node analysis/analyze_volatility.js \
-  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
-```
-
-### Regime Analysis (`analyze_regime.js`, `analyze_regime_windows.js`)
-
-Hurst Exponent and Permutation Entropy regime classification. `analyze_regime.js` shows the standard regime chart; `analyze_regime_windows.js` explores different window configurations.
-
-```bash
-# Bot-key (uses market adapter source)
+# Regime gate: Hurst + Permutation Entropy
 node analysis/analyze_regime.js --bot-key <bot-key>
 node analysis/analyze_regime_windows.js --bot-key <bot-key>
 
-# From LP candle file
-node analysis/analyze_regime.js \
-  --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
-node analysis/analyze_regime_windows.js \
+# Kalman side of the trend blend
+node analysis/analyze_kalman.js --bot-key <bot-key>
+
+# All also accept explicit LP candle files
+node analysis/analyze_volatility.js \
   --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
@@ -199,14 +162,12 @@ See [ama_fitting/README.md](ama_fitting/README.md) for full fetch options and da
 Shared analyzers and chart renderers for regime work. Contains the core signal engines behind the runner scripts above.
 
 **Research docs:**
-- [SIGNAL_DOCUMENTATION.md](trend_detection/SIGNAL_DOCUMENTATION.md) — full derivative signal layer reference (SMA, MACD, RSI decision tree, every flag, entry bias metadata)
 - [DYNAMIC_WEIGHT_RESEARCH.md](trend_detection/DYNAMIC_WEIGHT_RESEARCH.md) — AMA+Kalman blend with Hurst/PE regime gating, formula reference, knob guide
 
 **Modules:**
 
 | Module | Purpose |
 |--------|---------|
-| `derivative_analyzer.js` | SMA/MACD/RSI signal engine with confirmation, hysteresis, and gates |
 | `dynamic_weight_chart_generator.js` | 4-panel uPlot chart with interactive knobs for dynamic weight tuning |
 | `kalman_trend_analyzer.js` | Kalman filter with tactical (velocity) and modal (displacement) states |
 | `kalman_velocity_smoothing.js` | Adaptive EMA smoothing for Kalman velocity (kf/kfd/kdt/kfs knobs) |
@@ -293,7 +254,6 @@ Generates a standalone TradingView-style HTML chart. See [tradingview/README.md]
 | File | Purpose |
 |------|---------|
 | `price_sources.js` | Unified candle source abstraction (`json`, `market_adapter`) |
-| `derivative_chart_generator.js` | HTML chart renderer for `analyze_derivatives.js` (multi-panel derivative signal chart) |
 | `chart_utils.js` | Shared chart rendering utilities |
 | `cli_utils.js` | CLI argument parsing helpers |
 | `math_utils.js` | Shared math utilities |
@@ -304,7 +264,6 @@ These npm scripts wrap common analysis runners:
 
 | Script | Command |
 |--------|---------|
-| `npm run analysis:derivatives` | `node analysis/analyze_derivatives.js` |
 | `npm run analysis:tradingview` | `node analysis/tradingview/analyze_tradingview.js` |
 | `npm run ama:chart:lp-local` | `node analysis/ama_fitting/generate_unified_comparison_chart.js` |
 
@@ -312,7 +271,6 @@ All accept `--` forwarded flags.
 
 ```bash
 # Bot-key shortcuts
-npm run analysis:derivatives -- --bot-key <bot-key>
 npm run analysis:tradingview -- --source market_adapter --bot-key <bot-key>
 
 # File-based
@@ -320,14 +278,14 @@ npm run analysis:tradingview -- --file market_adapter/data/market_adapter_<bot-k
 npm run ama:chart:lp-local -- --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
-Runners without npm shortcuts are invoked directly:
+Dynamic-weight research and its supporting analyzers are invoked directly:
 
 ```bash
 node analysis/analyze_dynamic_weight.js --bot-key <bot-key>
-node analysis/analyze_kalman.js --bot-key <bot-key>
 node analysis/analyze_volatility.js --bot-key <bot-key>
 node analysis/analyze_regime.js --bot-key <bot-key>
 node analysis/analyze_regime_windows.js --bot-key <bot-key>
+node analysis/analyze_kalman.js --bot-key <bot-key>
 ```
 
 ## Related Docs
