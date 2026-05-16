@@ -15,48 +15,21 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ## Pre-History: Generational Lineage
 
-DEXBot2 is the third generation of BitShares DEX trading bot development. Two earlier Python-based projects laid the conceptual and architectural groundwork.
+DEXBot2 is the third generation of BitShares DEX trading bot development, preceded by two Python-based projects.
 
 ### Generation 0: StakeMachine (2017)
-**Author**: Fabian Schuh (ChainSquad GmbH)  
-**Language**: Python 2/3  
-**Version**: 0.0.6 (alpha)
+**Author**: Fabian Schuh (ChainSquad GmbH) — v0.0.6 alpha
 
-The original proof-of-concept. A straightforward event-driven bot subscribing to BitShares WebSocket notifications (`Notify`). Implemented a single **Walls** strategy — placing a static buy wall and sell wall at fixed percentage offsets from the asset's settlement price feed. Used SQLite via SQLAlchemy for persistent key-value storage. CLI via Click. Demonstrated the core idea of programmatic BitShares DEX trading but lacked sophistication: no grid, no adaptive signals, no multi-node failover, no tests.
+Proof-of-concept. Subscribed to BitShares WebSocket notifications and placed static buy/sell walls at fixed percentage offsets from the settlement price feed. No grid, no adaptive signals, no tests. Established the event-driven subscription model (on_block, on_market, on_account), plugin strategy loading, and per-bot persistent storage.
 
-**Architectural seeds**:
-- Event-driven subscription model (on_block, on_market, on_account)
-- Plugin strategy loading via `importlib`
-- Persistent per-bot storage namespace
-- Transaction bundling (cancel + place in one broadcast)
+### Generation 1: DEXBot Python v1.0.0 (2018–2020)
+**Author**: Codaone Oy (BitShares worker proposal funded)
 
-### Generation 1: DEXBot (Python) — v1.0.0 (2018–2020)
-**Author**: Codaone Oy (funded via BitShares worker proposal)  
-**Language**: Python 3  
-**Dependencies**: pyqt5, bitshares, ccxt, sqlalchemy, alembic, click
+Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves external feeds, multi-node management, SQLite with Alembic migrations, systemd integration, and Windows installer. Ran hundreds of workers across dozens of BitShares markets.
 
-A full production rewrite from StakeMachine. Added PyQt5 desktop GUI, three strategies, external price feeds, multi-node management, database migrations, and a Windows installer. Ran hundreds of workers across dozens of BitShares markets.
+**Strategies**: **Staggered Orders** (2256 lines, grid-based with 5 distribution modes and virtual orders — the direct ancestor of DEXBot2's grid), **Relative Orders** (two-sided market making with dynamic spread), **King of the Hill** (top-of-book best bid/ask).
 
-**Strategies shipped**:
-1. **Staggered Orders** (2256 lines) — Grid-based market making across a price range with 5 distribution modes (mountain, valley, neutral, buy_slope, sell_slope). Introduced **virtual orders**: orders beyond operational depth stored locally, promoted to real only when the grid shifts close enough. This is the direct ancestor of DEXBot2's grid.
-2. **Relative Orders** (639 lines) — Classic two-sided market making with dynamic spread based on market depth, external price feeds (CoinGecko, CCXT, Waves), and asset-offset center price.
-3. **King of the Hill** (426 lines) — Top-of-book strategy placing orders at best bid/ask, re-placing one tick ahead when outbid.
-
-**Key advances over StakeMachine**:
-- SQLite with Alembic migrations, not just key-value storage
-- Multi-worker architecture (multiple markets per account)
-- External price feeds from 100+ exchanges via CCXT
-- Multi-node health checking with latency sorting
-- PyQt5 GUI with real-time monitoring
-- Transaction bundling and retry logic for blockchain errors
-- systemd integration and Windows installer
-
-**Architectural seeds for DEXBot2**:
-- Staggered grid concept (the anchor + refill pattern)
-- Virtual order tracking (off-chain order state)
-- Workers as isolated per-market runtimes
-- Event dispatch via Python `Events` library
-- Market center price calculation
+**Carried into DEXBot2**: Staggered grid concept, virtual/off-chain order tracking, isolated per-market workers, event dispatch via Events library, and market center price calculation.
 
 ---
 
@@ -182,8 +155,8 @@ A full production rewrite from StakeMachine. Added PyQt5 desktop GUI, three stra
 ---
 
 ### Phase 5: Signal Intelligence & Debt Runtime (March - May 2026)
-**Duration**: March 4 - May 3, 2026 (ongoing)
-**Commits**: 181 (14.9% of total)
+**Duration**: March 4 - May 16, 2026
+**Commits**: 277 (21.2% of total)
 **Focus**: Market adapter offset groundwork, Claw/credential hardening, SMA derivative signals, dynamic-weight/Kalman research, regime filtering, credit/debt runtime, and production stabilization
 
 #### Key Milestones
@@ -200,7 +173,12 @@ A full production rewrite from StakeMachine. Added PyQt5 desktop GUI, three stra
 - **Apr 20**: Credit/debt runtime — MPA borrowing, credit offer accept/repay, auto-reborrow
 - **Apr 21-22**: Dynamic weight snapshot persistence, warmup/closed-candle alignment, rebalance refresh wiring
 - **Apr 23-28**: Credit-offer hardening, direct market adapter runtime management, whitelist generator, and documentation hub reorganization
-- **May 1-2**: Market adapter stabilization — fixed-price/orderbook candle modes, test suite repair, node failover hardening, and stale dynamic weight rejection
+- **May 1-2**: Market adapter stabilization — fixed-price/orderbook candle modes, test suite repair, node failover hardening, stale dynamic weight rejection
+- **May 8-10**: AMA warmup rework — SMA-based progressive warmup replaces first-price and full-convergence approaches. Market adapter lifecycle stability, candle merge robustness
+- **May 11**: AMA delta threshold refresh and constants update
+- **May 12**: Analysis expansion — trade heatmap (volume distribution by AMA deviation), risk profile analyzer with sigma metrics
+- **May 13**: Credential daemon hardening sprint — broadcast retry, node list mirroring, bootstrap resilience, PM2 restart loop prevention, stale socket exit. AMA slope market price offset applied
+- **May 14-15**: Credit runtime fixes — MPA target CR encoding, pair-scoped pricing, reborrow policy preservation. Documentation finalization for 0.7.0
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -211,27 +189,20 @@ A full production rewrite from StakeMachine. Added PyQt5 desktop GUI, three stra
 6. **Bot Auto-Tuner**: Direct tuning and reasoning bridge for parameter optimization
 7. **Fallback Removal**: Strict precision, explicit price derivation modes, no orphan lax matching
 8. **Credential/Claw Hardening**: Strict daemon policy, daemon signing cache, secure credential runtime, Claw bridge/runtime support
-9. **Analysis Tooling**: TradingView uPlot exporter, volatility research chart, regime window analyzer, simplified chart entrypoints
+9. **Analysis Tooling**: TradingView uPlot exporter, volatility research chart, regime window analyzer, simplified chart entrypoints, trade heatmap, risk profile analyzer
 10. **Maintenance Safety**: Grid maintenance defers structural work during active fills and dust-cancel windows
+11. **AMA Warmup Rework**: SMA-based progressive warmup replaces first-price initialization and full-convergence warmup
+12. **AMA Slope Price Offset**: Asymmetric market price offset driven by live AMA slope, applied at grid recalculation
+13. **Credential Daemon Resilience**: Broadcast retry, stale socket handling, node list mirroring, PM2 restart loop prevention
 
 ---
 
 ## Architecture Evolution
 
-DEXBot2's architecture transitioned from a monolithic utility-based approach to a strictly decoupled, event-driven, and immutable state system.
-
-### Phase 1-2: The Foundation
-Initially built as a set of loose modules for order and account management, focusing on establishing a reliable link to the BitShares blockchain and basic grid trading logic.
-
-### Phase 3-4: COW & Market Adaptation
-The introduction of the **Copy-on-Write (COW)** pattern revolutionized the bot's reliability by ensuring that grid modifications are atomic and thread-safe. This phase also saw the birth of the **Market Adapter**, which decoupled market signal intelligence (AMA, Volatility) from the execution logic.
-
-### Phase 5: Intelligent Runtime
-This phase achieved a multi-layered approach that defined the system's maturity:
-- **Core Execution**: Established order lifecycles and blockchain synchronization using COW.
-- **Signal Pipeline**: Introduced the Market Adapter for real-time weights and regime detection.
-- **Credit/Debt Layer**: Added a specialized runtime for Margin Position Assets (MPA).
-- **Credential Security**: Implemented a secure daemon for policy-gated signing.
+DEXBot2's architecture transitioned from monolithic utilities to a decoupled, event-driven, immutable state system:
+- **Phase 1-2**: Loose modules for order/account management, basic grid trading.
+- **Phase 3-4**: Copy-on-Write grid with atomic modifications, Market Adapter decoupling signals from execution.
+- **Phase 5**: Multi-layered runtime — COW core execution, signal pipeline (AMA/Kalman/regime), credit/debt MPA runtime, credential daemon.
 
 ---
 
@@ -262,86 +233,32 @@ This phase achieved a multi-layered approach that defined the system's maturity:
 
 ## Development Statistics
 
-### Key Milestones
-- **Project Initialization**: December 2, 2025
-- **v0.1.0 Alpha**: December 10, 2025
-- **v0.6.0 Market Adapter**: March 3, 2026
-- **v0.7 Expansion**: May 2026
-
-### Development Progress
-The project has maintained a high velocity of commits throughout its first six months, with a strong emphasis on test-driven development and architectural robustness. The evolution from basic grid operations to a signal-intelligent trading system represents a significant shift in sophistication.
+1,307 commits over 6 active months, 168 automated tests, 15 tagged releases. Evolution from basic grid operations to a signal-intelligent trading system.
 
 ---
 
 ## Technical Challenges & Solutions
 
-### Challenge 1: Race Conditions in Fill Processing
-**Problem**: Concurrent fill processing causing double-counting and fund drift  
-**Solution**: Implemented AsyncLock pattern with atomic operations  
-**Impact**: Eliminated 12+ critical race conditions
-
-### Challenge 2: Float Precision Errors
-**Problem**: Float rounding causing order size mismatches  
-**Solution**: Blockchain integer-based calculations (satoshi integers)  
-**Impact**: Deterministic behavior matching chain storage semantics
-
-### Challenge 3: Ghost Orders
-**Problem**: Tiny remainders hanging in PARTIAL state  
-**Solution**: Robust full-fill detection with integer-based rounding  
-**Impact**: Prevented stuck orders and fund tracking drift
-
-### Challenge 4: Grid Corruption During Divergence
-**Problem**: Boundary shifts causing grid state corruption  
-**Solution**: Copy-on-Write architecture with atomic boundary shifts  
-**Impact**: Safe concurrent grid modifications without data loss
-
-### Challenge 5: BTS Fee Accounting Drift
-**Problem**: Inconsistent fee deduction causing fund tracking errors  
-**Solution**: Unified fee deduction in calculateAvailableFunds  
-**Impact**: Accurate fund accounting across all operations
-
-### Challenge 6: Rapid-Restart Cascades
-**Problem**: Bot restarts causing cascading failures  
-**Solution**: Layer 1 & Layer 2 defenses with self-healing recovery  
-**Impact**: Stable restart behavior with automatic recovery
+| Challenge | Solution | Impact |
+|-----------|----------|--------|
+| Race conditions in fill processing | AsyncLock pattern with atomic operations | Eliminated 12+ critical race conditions |
+| Float precision in order sizes | Blockchain integer-based calculations (satoshi integers) | Deterministic behavior matching chain storage |
+| Ghost orders (tiny remainders in PARTIAL state) | Integer-based full-fill detection | Prevented stuck orders and fund drift |
+| Grid corruption during divergence | Copy-on-Write with atomic boundary shifts | Safe concurrent modifications, no data loss |
+| BTS fee accounting drift | Unified fee deduction in calculateAvailableFunds | Accurate fee tracking across all operations |
+| Rapid-restart cascading failures | Layer 1 & Layer 2 self-healing defenses | Stable restart with automatic recovery |
 
 ---
 
 ## Documentation Evolution
 
-### Initial Documentation (December 2025)
-- README.md with basic usage
-- Inline code comments
-- Limited architecture documentation
-
-### Documentation Maturity
-By the v0.7 cycle, the project established a comprehensive documentation framework:
-- **Core Guides**: Comprehensive README, architecture maps, and developer onboarding.
-- **Specialized Docs**: Deep dives into COW invariants, fund accounting, and credential security.
-- **Automated Metadata**: High JSDoc coverage (80%+) and structured changelogs.
-- **AI-Ready Context**: Specialized `AGENTS.md` for AI assistant orchestration.
-
-### Documentation Statistics
-- **Total Documentation Commits**: 137 (11.4% of total)
-- **README Updates**: 50+ commits
-- **JSDoc Coverage**: 80%+ of exported functions
-- **Architecture Docs**: 15+ pages
+Evolved from basic README + inline comments to a comprehensive framework: 23 docs/ entries (architecture map, COW invariants, fund accounting, credential security, developer guide), 80%+ JSDoc coverage, 137 documentation commits (11.4% of total), and an `AGENTS.md` for AI-assisted development.
 
 ---
 
 ## Testing Strategy
 
-### Test Evolution
-1. **Initial**: Manual testing with real blockchain
-2. **Jest Era**: Unit tests with Jest framework
-3. **Native Tests**: Ported to Node.js assert for lightweight setup
-### Advanced Verification Framework
-The testing strategy matured into a multi-layered verification suite:
-- **Unit & Integration**: Logic validation for accounting, sync, and grid operations.
-- **Scenario Simulations**: Complex market behavior and resynchronization tests.
-- **Edge Case Coverage**: Boundary handling, precision quantization, and partial fill logic.
-- **Architectural Guards**: COW master plan invariants, concurrent fill isolation, and mutation detection.
-- **Signal & Credit Gates**: Validation for dynamic weights, derivative traps, and credit runtime workflows.
+Evolved from manual blockchain testing → Jest unit tests → lightweight Node.js assert (zero test dependencies for the 168-file suite). Multi-layered verification: unit/integration for accounting/sync/grid, complex market scenario simulations, edge-case coverage, COW architectural guards (invariants, mutation detection), and signal/credit runtime validation.
 
 
 ---
