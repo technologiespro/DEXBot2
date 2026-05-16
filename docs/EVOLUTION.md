@@ -298,23 +298,48 @@ DEXBot2 has evolved from a basic trading bot to a sophisticated, production-read
 
 ---
 
-## Roadmap
-
-The future of DEXBot2 focuses on accessibility, rigorous performance validation, and modernizing the core codebase to ensure long-term sustainability.
+## Phase 6: Technical Modernization & Growth (Planned)
 
 ### UX, Education & Services
-- **Web & Terminal UI**: Development of intuitive interfaces for both browser-based and command-line management.
-- **Content Creation**: Production of instructional videos, eBooks, and comprehensive tutorials for user onboarding.
-- **Marketing**: Strategic advertisement and outreach to expand the BitShares trading community.
-- **Hosting Service**: Implementation of managed hosting solutions to simplify bot deployment.
+- **Web & Terminal UI**: Browser-based and TUI dashboards for bot monitoring, manual intervention, and parameter tuning live.
+- **Content Creation**: Instructional videos, tutorials, and onboarding material to grow the BitShares trading community.
+- **Hosting Service**: Managed deployment option for users who want bot operation without infrastructure management.
 
-### Backtesting & Statistics
-- **Simulation Engine**: Robust backtesting framework for validating strategies against historical data.
-- **Performance Analytics**: Detailed statistical reporting, PnL tracking, and risk assessment tools.
+### Backtesting & Performance Analytics
+- **Simulation Engine**: Replay historical candles through the core `OrderManager`/COW engine via a `MemoryExchange` (drop-in at the `bitshares_client` boundary). Same strategy code, same grid, same fill processing — zero changes needed for backtest mode.
+- **Performance Analytics**: PnL tracking, grid efficiency metrics, risk assessment, and HTML report generation from backtest runs.
 
-### Modernization & Migration
-- **TypeScript Migration**: Transitioning the codebase to TypeScript for enhanced type safety and maintainability.
-- **Dependency Reduction**: A strategic move towards a "no-dependency" architecture to minimize external risks and bloat.
+### Architecture & Code Quality
+
+#### Tier 1 — High Impact
+
+1. **Monorepo & Packages** — Split into `@dexbot/core`, `@dexbot/bitshares`, `@dexbot/strategies`, `@dexbot/indicators`. Enables incremental TypeScript migration (each package typed independently) and parallelized builds/testing.
+
+2. **Event Bus** — Replace the tight `FillCallback → Manager → Accounting → SyncEngine → chain_orders` call chain with a typed event bus. Modules subscribe independently, testable with mocked events, and new features (metrics, logging) wire in without touching core flow.
+
+3. **Unified Indicator Library** — Centralize scattered signal code (AMA, Kalman, dynamic weight, regime detection) into `@dexbot/indicators`. Add standard indicators (SMA, MACD, RSI, BB) for non-grid strategies. Importable by both strategies and backtesting.
+
+4. **Incremental TypeScript** — Migrate in package order: `core` (COW + accounting — highest bug surface) → `indicators` → `bitshares` → `strategies`. Each package typed while consuming JS neighbors via `.d.ts` wrappers or `@ts-nocheck`.
+
+#### Tier 2 — Medium Impact
+
+5. **Strategy Effects Pattern** — Strategies return declarative action objects (`{ action: 'CREATE_ORDER', price, amount }`) instead of calling `manager.js` directly. Strategy logic becomes a pure function — unit-testable without blockchain, same code for live and backtest.
+
+6. **Database (Prisma/SQLite) + Zod Validation** — Replace JSON file persistence with SQLite. Validate all blockchain objects at the `bitshares_client` boundary via Zod schemas before they enter COW/accounting, preventing invariant violations from malformed data.
+
+7. **Vitest Migration** — Wrap the 168 test files in Vitest for parallel execution, watch mode, and coverage reporting.
+
+#### Tier 3 — Nice-to-Have
+
+8. **Exchange Abstraction** — `IExchange` interface over `chain_orders.js` + `bitshares_client.js`. Enables paper trading and the MemoryExchange used by backtesting.
+
+9. **tRPC API** — Type-safe API layer for remote bot management and dashboard integration.
+
+10. **Pino Logger** — Structured JSON logging with level filtering and composable transports.
+
+11. **Commander.js CLI** — Better `dexbot.js` argument parsing with subcommands and auto-generated help.
+
+12. **Dependency Reduction** — Ongoing reduction of external dependencies beyond the current 3-production-dep baseline.
 
 ---
 
