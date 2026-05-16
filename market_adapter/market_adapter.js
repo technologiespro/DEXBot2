@@ -1001,6 +1001,7 @@ async function fetchNativeMarketHistorySince(assetA, assetB, sinceMs, untilMs, i
 
 function writeGridResetTrigger(bot, payload) {
     const triggerPath = path.join(PROFILES_DIR, `recalculate.${bot.botKey}.trigger`);
+    const tmpPath = `${triggerPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
     const content = {
         createdAt: new Date().toISOString(),
         source: 'market_adapter/market_adapter.js',
@@ -1008,7 +1009,13 @@ function writeGridResetTrigger(bot, payload) {
         botKey: bot.botKey,
         ...payload,
     };
-    fs.writeFileSync(triggerPath, JSON.stringify(content, null, 2) + '\n', 'utf8');
+    try {
+        fs.writeFileSync(tmpPath, JSON.stringify(content, null, 2) + '\n', 'utf8');
+        fs.renameSync(tmpPath, triggerPath);
+    } catch (err) {
+        try { fs.unlinkSync(tmpPath); } catch (_) {}
+        throw err;
+    }
     return triggerPath;
 }
 
@@ -1030,6 +1037,7 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
  * @param {number} [options.amaSlopeThresholdPercent] - Trigger threshold used for slope-based recalc decisions
  * @param {number} [options.gridPriceOffsetPct] - Signed grid-center offset percentage derived from AMA slope
  * @param {Object} [options.dynamicWeights]   - Computed weight offsets for live order sizing
+ * @param {string} [options.observedLastGridResetAt] - Reset timestamp seen before this adapter write was calculated
  */
 function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
     try {
@@ -1038,12 +1046,24 @@ function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
             if (!snapshot?.lastGridResetAt) return target;
             const incomingResetMs = Date.parse(String(snapshot.lastGridResetAt));
             const currentResetMs = Date.parse(String(target.lastGridResetAt || ''));
+            const observedResetMs = Date.parse(String(options.observedLastGridResetAt || ''));
             if (Number.isFinite(currentResetMs) && Number.isFinite(incomingResetMs) && currentResetMs > incomingResetMs) {
                 return target;
             }
             target.lastGridResetAt = snapshot.lastGridResetAt;
             if (snapshot.lastGridResetSource) {
                 target.lastGridResetSource = snapshot.lastGridResetSource;
+            }
+            const hasObservedResetMarker = Object.prototype.hasOwnProperty.call(options, 'observedLastGridResetAt');
+            const snapshotResetIsNewerThanObserved = Number.isFinite(incomingResetMs)
+                && hasObservedResetMarker
+                && (!Number.isFinite(observedResetMs) || incomingResetMs > observedResetMs);
+            if (snapshotResetIsNewerThanObserved) {
+                const resetGridCenterPrice = Number(snapshot.gridCenterPrice ?? snapshot.centerPrice);
+                if (Number.isFinite(resetGridCenterPrice) && resetGridCenterPrice > 0) {
+                    target.gridCenterPrice = resetGridCenterPrice;
+                    target.centerPrice = resetGridCenterPrice;
+                }
             }
             return target;
         };
@@ -1135,6 +1155,7 @@ function writeCenterSnapshot(state) {
             centerPrice: gridCenterPrice,
             amaCenterPrice: v.amaCenterPrice,
             lastGridResetAt: v.lastGridResetAt,
+            lastGridResetSource: v.lastGridResetSource,
             lastAmaPrice: v.lastAmaPrice,
             lastDeltaPercent: v.lastDeltaPercent,
             amaSlopeDeltaPercent: v.amaSlopeDeltaPercent,
@@ -1472,6 +1493,7 @@ module.exports = {
     _resetCycleCache,
     writeCenterSnapshot,
     writeBotDynamicGrid,
+    writeGridResetTrigger,
     mergeGridResetMetadataFromDynamicGrid,
     normalizeNativeMarketHistoryCandles,
     fetchNativeMarketHistorySince,

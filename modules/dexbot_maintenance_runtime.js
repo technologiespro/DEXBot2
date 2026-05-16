@@ -27,6 +27,40 @@ const MARKET_ADAPTER_APP_NAME = 'dexbot-adapter';
 const MARKET_ADAPTER_SCRIPT = path.join(__dirname, '..', 'market_adapter', 'market_adapter.js');
 const MARKET_ADAPTER_ERROR_FILE = path.join(LOGS_DIR, 'dexbot-adapter-error.log');
 const MARKET_ADAPTER_OUT_FILE = path.join(LOGS_DIR, 'dexbot-adapter.log');
+const MARKET_ADAPTER_TRIGGER_SOURCE = 'market_adapter/market_adapter.js';
+const MANUAL_TRIGGER_METADATA = {
+    shouldRefreshCenterPrice: true,
+    centerRefreshContext: 'manual grid resync',
+    centerRefreshLabel: 'manual grid reset',
+    resetSource: 'manual_grid_resync',
+};
+const MARKET_ADAPTER_TRIGGER_RESETS = Object.freeze({
+    market_adapter_bootstrap: {
+        shouldRefreshCenterPrice: true,
+        centerRefreshContext: 'AMA bootstrap grid resync',
+        centerRefreshLabel: 'AMA bootstrap grid reset',
+    },
+    market_adapter_ama_slope_delta_threshold: {
+        shouldRefreshCenterPrice: true,
+        centerRefreshContext: 'AMA slope grid resync',
+        centerRefreshLabel: 'AMA slope grid reset',
+    },
+    market_adapter_delta_threshold: {
+        shouldRefreshCenterPrice: true,
+        centerRefreshContext: 'AMA center grid resync',
+        centerRefreshLabel: 'AMA center grid reset',
+    },
+});
+const GRID_RESYNC_REASONS = Object.freeze({
+    ...MARKET_ADAPTER_TRIGGER_RESETS,
+    manual_grid_resync: MANUAL_TRIGGER_METADATA,
+    rms_structural_grid_resync: {
+        shouldRefreshCenterPrice: true,
+        centerRefreshContext: 'RMS structural grid resync',
+        centerRefreshLabel: 'RMS structural grid resync',
+    },
+});
+
 function usesAmaGridPrice(bot) {
     const gridPrice = String(bot?.gridPrice || '').trim().toLowerCase();
     return /^ama(?:[1-4])?$/.test(gridPrice);
@@ -369,30 +403,75 @@ function refreshDynamicWeightDistribution(context = 'runtime') {
 }
 
 function readTriggerMetadata(triggerFile) {
+    const manualTriggerMetadata = (payload = null) => ({
+        ...buildGridResyncMetadata('manual_grid_resync'),
+        payload,
+    });
+
+    const marketAdapterTriggerMetadata = (payload) => {
+        const reason = String(payload?.reason || '').trim();
+        return {
+            ...buildGridResyncMetadata(reason || 'market_adapter_grid_resync'),
+            payload,
+        };
+    };
+
     try {
         const raw = fs.readFileSync(triggerFile, 'utf8').trim();
         if (!raw) {
             // An empty trigger is the legacy/manual CLI reset signal.
-            return { isManual: true, payload: null };
+            return manualTriggerMetadata();
         }
 
         const payload = JSON.parse(raw);
         const source = String(payload?.source || '').trim();
-        return {
-            isManual: source !== 'market_adapter/market_adapter.js',
-            payload,
-        };
+        return source === MARKET_ADAPTER_TRIGGER_SOURCE
+            ? marketAdapterTriggerMetadata(payload)
+            : manualTriggerMetadata(payload);
     } catch (_) {
-        return { isManual: true, payload: null };
+        return manualTriggerMetadata();
     }
 }
 
-function refreshAmaCenterSnapshotForManualReset(botKey) {
+function buildGridResyncMetadata(reason) {
+    const resetSource = String(reason || '').trim() || 'dexbot_grid_resync';
+    const defaults = {
+        shouldRefreshCenterPrice: false,
+        centerRefreshContext: 'grid resync',
+        centerRefreshLabel: 'grid resync',
+    };
+    const marketAdapterUnknown = resetSource === 'market_adapter_grid_resync'
+        ? {
+            centerRefreshContext: 'market adapter grid resync',
+            centerRefreshLabel: 'market adapter grid reset',
+        }
+        : null;
+    return {
+        ...defaults,
+        ...marketAdapterUnknown,
+        ...GRID_RESYNC_REASONS[resetSource],
+        resetSource,
+    };
+}
+
+function buildGridResyncOptions(reasonOrMetadata) {
+    const metadata = typeof reasonOrMetadata === 'string'
+        ? buildGridResyncMetadata(reasonOrMetadata)
+        : reasonOrMetadata;
+    return {
+        refreshCenterPrice: !!metadata?.shouldRefreshCenterPrice,
+        centerRefreshContext: metadata?.centerRefreshContext,
+        centerRefreshLabel: metadata?.centerRefreshLabel,
+        resetSource: metadata?.resetSource,
+    };
+}
+
+function promoteAmaCenterSnapshotForGridReset(botKey) {
     if (!botKey) return false;
 
-    // Manual resets should advance the persisted center baseline to the latest
-    // AMA output before the grid is rebuilt. The raw AMA value remains intact
-    // in amaCenterPrice for diagnostics.
+    // Full grid resets rebuild from the latest AMA center. The active grid
+    // baseline is promoted to that value before recalculation, while the raw
+    // AMA output remains intact in amaCenterPrice for diagnostics.
     const snapshotPath = path.join(PROFILES_DIR, 'orders', `${botKey}.dynamicgrid.json`);
     try {
         const result = updateDynamicGridSnapshotSync(snapshotPath, (snapshot) => {
@@ -451,8 +530,8 @@ function performGridResync(options = {}) {
     const self = this;
     let success = false;
     const refreshCenterPrice = !!options.refreshCenterPrice;
-    const centerRefreshContext = options.centerRefreshContext || (refreshCenterPrice ? 'manual grid resync' : 'grid resync');
-    const centerRefreshLabel = options.centerRefreshLabel || (refreshCenterPrice ? 'manual grid reset' : 'grid reset');
+    const centerRefreshContext = options.centerRefreshContext || (refreshCenterPrice ? 'grid reset recenter' : 'grid resync');
+    const centerRefreshLabel = options.centerRefreshLabel || (refreshCenterPrice ? 'grid reset' : 'grid resync');
     const resetSource = options.resetSource || (refreshCenterPrice ? 'manual_grid_resync' : 'dexbot_grid_resync');
     const dustDelayMs = getPendingDustDelayMs(self);
     const idleDelayMs = getMaintenanceIdleDelayMs(self);
@@ -495,7 +574,7 @@ function performGridResync(options = {}) {
             }
 
             if (refreshCenterPrice) {
-                if (refreshAmaCenterSnapshotForManualReset(self.config?.botKey)) {
+                if (promoteAmaCenterSnapshotForGridReset(self.config?.botKey)) {
                     self._log(`Refreshed AMA center snapshot for ${centerRefreshLabel}.`, 'info');
                     refreshDynamicWeightDistribution.call(self, centerRefreshContext);
                 } else {
@@ -546,9 +625,7 @@ async function handlePendingTriggerReset() {
 
     let resetSucceeded = false;
     await this.manager._fillProcessingLock.acquire(async () => {
-        resetSucceeded = await this._performGridResync({
-            refreshCenterPrice: triggerInfo.isManual,
-        });
+        resetSucceeded = await this._performGridResync(buildGridResyncOptions(triggerInfo));
     });
 
     if (!resetSucceeded) {
@@ -581,9 +658,7 @@ async function setupTriggerFileDetection() {
                             this._triggerDebounceTimer = null;
                             const triggerInfo = readTriggerMetadata(this.triggerFile);
                             this.manager._fillProcessingLock.acquire(async () => {
-                                const ok = await this._performGridResync({
-                                    refreshCenterPrice: triggerInfo.isManual,
-                                });
+                                const ok = await this._performGridResync(buildGridResyncOptions(triggerInfo));
                                 if (!ok) {
                                     this._warn('Runtime trigger reset failed; retaining existing grid state.');
                                 }
@@ -928,12 +1003,7 @@ async function executeMaintenanceLogic(context) {
                 }
                 if (hasRmsDivergence) {
                     this._log(`Grid update triggered by structural divergence during ${context}: buy=${Format.formatPrice6(divergence.buy.metric)}, sell=${Format.formatPrice6(divergence.sell.metric)}`);
-                    const ok = await this._performGridResync({
-                        refreshCenterPrice: true,
-                        centerRefreshContext: 'RMS structural grid resync',
-                        centerRefreshLabel: 'RMS structural grid resync',
-                        resetSource: 'rms_structural_grid_resync',
-                    });
+                    const ok = await this._performGridResync(buildGridResyncOptions('rms_structural_grid_resync'));
                     if (!ok) {
                         this._warn(`RMS structural divergence full grid resync failed during ${context}; retaining existing grid state.`);
                     }

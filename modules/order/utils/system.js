@@ -431,7 +431,7 @@ async function deriveLiquidityPoolTokenValue(BitShares, shareAssetRef, denominat
  * The snapshot is stored atomically at profiles/orders/<botKey>.dynamicgrid.json
  * and is updated every market adapter cycle. It contains the persisted grid
  * center and, for dynamic-weight-whitelisted bots, any computed effective weight offsets.
- * On manual resets the bot may rewrite gridCenterPrice to the latest AMA baseline, but
+ * On full grid resets the bot may rewrite gridCenterPrice to the latest AMA baseline, but
  * amaCenterPrice remains the raw AMA output for diagnostics and comparison.
  * The snapshot may also expose AMA slope diagnostics and a gridPriceOffsetPct
  * that downstream grid initialization can apply to the raw center price.

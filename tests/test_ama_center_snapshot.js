@@ -106,6 +106,7 @@ async function testCenterSnapshotWriterUsesOnlyNewCollateralField() {
           gridCenterPrice: 123.45,
           amaCenterPrice: 120.5,
           lastGridResetAt: '2026-01-01T00:00:00Z',
+          lastGridResetSource: 'manual_grid_resync',
           lastAmaPrice: 121.25,
           lastDeltaPercent: 1.5,
           amaSlopeDeltaPercent: 0.12,
@@ -128,6 +129,7 @@ async function testCenterSnapshotWriterUsesOnlyNewCollateralField() {
 	    const parsed = JSON.parse(write.data);
 	    assert.strictEqual(parsed.bots.testBot.gridCenterPrice, 123.45);
 	    assert.strictEqual(parsed.bots.testBot.centerPrice, 123.45);
+	    assert.strictEqual(parsed.bots.testBot.lastGridResetSource, 'manual_grid_resync');
 	    assert.strictEqual(parsed.bots.testBot.collateralRecommendation, 1.62);
 	    assert.strictEqual(parsed.bots.testBot.amaSlopeDeltaPercent, 0.12);
 	    assert.strictEqual(parsed.bots.testBot.amaSlopeThresholdPercent, 0.1);
@@ -261,6 +263,91 @@ async function testDynamicGridWritePreservesExistingResetMetadata() {
   }
 }
 
+async function testDynamicGridWritePreservesNewerResetCenterWhenAdapterStateIsStale() {
+  const marketAdapterPath = require.resolve('../market_adapter/market_adapter.js');
+  delete require.cache[marketAdapterPath];
+
+  const botKey = `adapter-stale-reset-${Date.now()}`;
+  const filePath = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
+
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify({
+    gridCenterPrice: 150,
+    centerPrice: 150,
+    amaCenterPrice: 151,
+    lastGridResetAt: '2026-05-15T00:01:00.327Z',
+    lastGridResetSource: 'manual_grid_resync',
+    source: 'market_adapter/market_adapter.js',
+    updatedAt: '2026-05-15T00:01:00.327Z',
+  }, null, 2) + '\n', 'utf8');
+
+  try {
+    const { writeBotDynamicGrid } = require('../market_adapter/test_helpers.js');
+    assert.strictEqual(writeBotDynamicGrid(botKey, 100, {
+      amaCenterPrice: 130.25,
+      observedLastGridResetAt: '2026-05-13T18:00:01.190Z',
+      dynamicWeights: {
+        isReady: true,
+        effectiveWeights: { sell: 0.55, buy: 0.45 },
+      },
+    }), true);
+
+    const updated = JSON.parse(fsSync.readFileSync(filePath, 'utf8'));
+    assert.strictEqual(updated.gridCenterPrice, 150, 'stale adapter writes should not roll back the newer reset center');
+    assert.strictEqual(updated.centerPrice, 150, 'center alias should stay aligned with the preserved reset center');
+    assert.strictEqual(updated.amaCenterPrice, 130.25, 'fresh AMA diagnostics should still be written');
+    assert.strictEqual(updated.lastGridResetAt, '2026-05-15T00:01:00.327Z');
+    assert.strictEqual(updated.lastGridResetSource, 'manual_grid_resync');
+  } finally {
+    await fs.unlink(filePath).catch(() => {});
+    delete require.cache[marketAdapterPath];
+  }
+}
+
+async function testGridResetTriggerWriteIsAtomicRename() {
+  const marketAdapterPath = require.resolve('../market_adapter/market_adapter.js');
+  delete require.cache[marketAdapterPath];
+
+  const originalWriteFileSync = fsSync.writeFileSync;
+  const originalRenameSync = fsSync.renameSync;
+  const writes = [];
+  const renames = [];
+  const botKey = `atomic-trigger-${Date.now()}`;
+
+  try {
+    fsSync.writeFileSync = (filePath, data, encoding) => {
+      writes.push({ filePath: String(filePath), data: String(data), encoding });
+    };
+    fsSync.renameSync = (src, dst) => {
+      renames.push({ src: String(src), dst: String(dst) });
+    };
+
+    const { writeGridResetTrigger } = require('../market_adapter/test_helpers.js');
+    const triggerPath = writeGridResetTrigger({
+      name: 'Atomic Trigger Bot',
+      botKey,
+    }, {
+      reason: 'market_adapter_delta_threshold',
+      newCenterPrice: 123.45,
+    });
+
+    assert.strictEqual(writes.length, 1, 'trigger writer should write exactly one temp payload');
+    assert.notStrictEqual(writes[0].filePath, triggerPath, 'trigger JSON should not be written directly to the final path');
+    assert.ok(writes[0].filePath.startsWith(`${triggerPath}.`), 'temp trigger path should be adjacent to the final trigger');
+    assert.ok(writes[0].filePath.endsWith('.tmp'), 'temp trigger path should use a .tmp suffix');
+    assert.deepStrictEqual(renames, [{ src: writes[0].filePath, dst: triggerPath }], 'trigger writer should publish with one rename');
+
+    const parsed = JSON.parse(writes[0].data);
+    assert.strictEqual(parsed.source, 'market_adapter/market_adapter.js');
+    assert.strictEqual(parsed.reason, 'market_adapter_delta_threshold');
+    assert.strictEqual(parsed.newCenterPrice, 123.45);
+  } finally {
+    fsSync.writeFileSync = originalWriteFileSync;
+    fsSync.renameSync = originalRenameSync;
+    delete require.cache[marketAdapterPath];
+  }
+}
+
 async function main() {
   await testSnapshotReaderExposesCenterOnly();
   await testSnapshotReaderRejectsLegacyEffectiveCenterOnly();
@@ -268,6 +355,8 @@ async function main() {
   await testCenterSnapshotWriterIgnoresLegacyCollateralInput();
   await testAdapterStateMergePreservesBotResetMetadata();
   await testDynamicGridWritePreservesExistingResetMetadata();
+  await testDynamicGridWritePreservesNewerResetCenterWhenAdapterStateIsStale();
+  await testGridResetTriggerWriteIsAtomicRename();
   console.log('ama center snapshot tests passed');
 }
 

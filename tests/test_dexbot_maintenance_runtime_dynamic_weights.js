@@ -176,20 +176,24 @@ async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
         triggerFile: '/tmp/nonexistent-dw.trigger',
     };
 
-    const ok = await performGridResync.call(self);
+    try {
+        const ok = await performGridResync.call(self);
 
-    assert.strictEqual(ok, true, 'performGridResync should succeed');
-    assert.strictEqual(startCalled, true, 'bootstrap should start');
-    assert.strictEqual(finishCalled, true, 'bootstrap should finish');
-    assert.strictEqual(recalculateCalled, true, 'grid recalculation should run');
-    assert.strictEqual(persistCalled, true, 'grid state should persist after resync');
-    assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.42, buy: 0.22 });
-    assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.42, buy: 0.22 });
-    assert.strictEqual(self.manager.funds.btsFeesOwed, 0, 'fee accumulator should reset after resync');
-    assert.ok(
-        logs.some((msg) => String(msg).includes('Applied live dynamic weights (grid resync): sell=0.42 buy=0.22')),
-        'resync should log that it applied the dynamic weights'
-    );
+        assert.strictEqual(ok, true, 'performGridResync should succeed');
+        assert.strictEqual(startCalled, true, 'bootstrap should start');
+        assert.strictEqual(finishCalled, true, 'bootstrap should finish');
+        assert.strictEqual(recalculateCalled, true, 'grid recalculation should run');
+        assert.strictEqual(persistCalled, true, 'grid state should persist after resync');
+        assert.deepStrictEqual(self.config.weightDistribution, { sell: 0.42, buy: 0.22 });
+        assert.deepStrictEqual(self.manager.config.weightDistribution, { sell: 0.42, buy: 0.22 });
+        assert.strictEqual(self.manager.funds.btsFeesOwed, 0, 'fee accumulator should reset after resync');
+        assert.ok(
+            logs.some((msg) => String(msg).includes('Applied live dynamic weights (grid resync): sell=0.42 buy=0.22')),
+            'resync should log that it applied the dynamic weights'
+        );
+    } finally {
+        fs.unlinkSync = originalUnlinkSync;
+    }
 }
 
 function testRefreshDynamicWeightDistributionAppliesAndFallsBack() {
@@ -359,6 +363,7 @@ async function testManualTriggerResetRefreshesCenterPrice() {
         const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
         assert.strictEqual(updated.centerPrice, 123.45, 'manual reset should refresh centerPrice from amaCenterPrice');
         assert.strictEqual(updated.gridPriceOffsetPct, 0.8, 'manual reset should preserve the AMA spread offset for the rebuild');
+        assert.strictEqual(updated.lastGridResetSource, 'manual_grid_resync', 'manual reset should record manual reset provenance');
         assert.ok(
             logs.some((msg) => String(msg).includes('Refreshed AMA center snapshot for manual grid reset.')),
             'manual reset should log that the center snapshot was refreshed'
@@ -366,8 +371,8 @@ async function testManualTriggerResetRefreshesCenterPrice() {
     } finally {
         fs.existsSync = previousExistsSync;
         fs.readFileSync = previousReadFileSync;
-        originalUnlinkSync(triggerFile);
-        originalUnlinkSync(snapshotFile);
+        try { originalUnlinkSync(triggerFile); } catch (_) {}
+        try { originalUnlinkSync(snapshotFile); } catch (_) {}
     }
 }
 
@@ -461,8 +466,324 @@ async function testManualTriggerResetKeepsOffsetWhenCenterAlreadyCurrent() {
     } finally {
         fs.existsSync = previousExistsSync;
         fs.readFileSync = previousReadFileSync;
-        originalUnlinkSync(triggerFile);
-        originalUnlinkSync(snapshotFile);
+        try { originalUnlinkSync(triggerFile); } catch (_) {}
+        try { originalUnlinkSync(snapshotFile); } catch (_) {}
+    }
+}
+
+async function testMarketAdapterTriggerResetRefreshesAmaCenterPrice() {
+    const { handlePendingTriggerReset } = require(runtimePath);
+
+    const botKey = `market-adapter-reset-${Date.now()}`;
+    const triggerFile = `/tmp/${botKey}.trigger`;
+    const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
+
+    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
+    fs.writeFileSync(snapshotFile, JSON.stringify({
+        gridCenterPrice: 100,
+        centerPrice: 100,
+        amaCenterPrice: 123.45,
+        gridPriceOffsetPct: 0.8,
+        source: 'market_adapter/market_adapter.js',
+        updatedAt: '2026-01-01T00:00:00Z',
+    }, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(triggerFile, JSON.stringify({
+        source: 'market_adapter/market_adapter.js',
+        reason: 'market_adapter_delta_threshold',
+        newCenterPrice: 100,
+        amaCenterPrice: 123.45,
+    }, null, 2) + '\n', 'utf8');
+
+    const previousExistsSync = fs.existsSync;
+    const previousReadFileSync = fs.readFileSync;
+    const logs = [];
+
+    fs.existsSync = (filePath) => {
+        const text = String(filePath);
+        if (text === triggerFile) return true;
+        return previousExistsSync(filePath);
+    };
+    fs.readFileSync = (filePath, encoding) => {
+        const text = String(filePath);
+        if (text.endsWith('/profiles/bots.json')) {
+            return JSON.stringify({
+                bots: [
+                    {
+                        name: 'Market Adapter Reset Bot',
+                        weightDistribution: { sell: 0.6, buy: 0.4 },
+                    },
+                ],
+            });
+        }
+        if (text.endsWith('/profiles/market_adapter_whitelist.json')) {
+            return JSON.stringify({
+                whitelist: {
+                    [botKey]: { ama: true, dynamicWeight: true },
+                },
+            });
+        }
+        return previousReadFileSync(filePath, encoding);
+    };
+
+    const self = {
+        config: {
+            name: 'Market Adapter Reset Bot',
+            botKey,
+            botIndex: 0,
+            weightDistribution: { sell: 0.6, buy: 0.4 },
+        },
+        _baseWeightDistribution: { sell: 0.6, buy: 0.4 },
+        manager: {
+            config: {
+                name: 'Market Adapter Reset Bot',
+                botKey,
+                botIndex: 0,
+                weightDistribution: { sell: 0.6, buy: 0.4 },
+            },
+            funds: { btsFeesOwed: 2 },
+            _fillProcessingLock: {
+                acquire: async (fn) => fn(),
+            },
+            startBootstrap: () => {},
+            finishBootstrap: () => {},
+            persistGrid: async () => {},
+        },
+        accountId: '1.2.345',
+        account: { id: '1.2.345' },
+        privateKey: 'test-key',
+        triggerFile,
+        _log: (msg) => logs.push(msg),
+        _warn: (msg) => logs.push(`WARN:${msg}`),
+        _performGridResync: async (options) => require(runtimePath).performGridResync.call(self, options),
+    };
+
+    try {
+        const ok = await handlePendingTriggerReset.call(self);
+        assert.strictEqual(ok, true, 'market-adapter trigger reset should succeed');
+
+        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        assert.strictEqual(updated.centerPrice, 123.45, 'market-adapter reset should refresh centerPrice from latest amaCenterPrice');
+        assert.strictEqual(updated.amaCenterPrice, 123.45, 'market-adapter reset should preserve raw AMA diagnostics');
+        assert.strictEqual(updated.lastGridResetSource, 'market_adapter_delta_threshold', 'market-adapter reset should preserve the trigger reason as reset provenance');
+        assert.ok(
+            logs.some((msg) => String(msg).includes('AMA center grid reset')),
+            'market-adapter reset should log that the AMA center snapshot was refreshed'
+        );
+    } finally {
+        fs.existsSync = previousExistsSync;
+        fs.readFileSync = previousReadFileSync;
+        try { originalUnlinkSync(triggerFile); } catch (_) {}
+        try { originalUnlinkSync(snapshotFile); } catch (_) {}
+    }
+}
+
+async function testMarketAdapterBootstrapTriggerResetRecordsBootstrapSource() {
+    const { handlePendingTriggerReset } = require(runtimePath);
+
+    const botKey = `market-adapter-bootstrap-${Date.now()}`;
+    const triggerFile = `/tmp/${botKey}.trigger`;
+    const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
+
+    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
+    fs.writeFileSync(snapshotFile, JSON.stringify({
+        gridCenterPrice: 100,
+        centerPrice: 100,
+        amaCenterPrice: 123.45,
+        source: 'market_adapter/market_adapter.js',
+        updatedAt: '2026-01-01T00:00:00Z',
+    }, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(triggerFile, JSON.stringify({
+        source: 'market_adapter/market_adapter.js',
+        reason: 'market_adapter_bootstrap',
+        newCenterPrice: 100,
+        amaCenterPrice: 123.45,
+    }, null, 2) + '\n', 'utf8');
+
+    const previousExistsSync = fs.existsSync;
+    const previousReadFileSync = fs.readFileSync;
+    const logs = [];
+
+    fs.existsSync = (filePath) => {
+        const text = String(filePath);
+        if (text === triggerFile) return true;
+        return previousExistsSync(filePath);
+    };
+    fs.readFileSync = (filePath, encoding) => {
+        const text = String(filePath);
+        if (text.endsWith('/profiles/bots.json')) {
+            return JSON.stringify({
+                bots: [
+                    {
+                        name: 'Market Adapter Bootstrap Bot',
+                        weightDistribution: { sell: 0.6, buy: 0.4 },
+                    },
+                ],
+            });
+        }
+        if (text.endsWith('/profiles/market_adapter_whitelist.json')) {
+            return JSON.stringify({
+                whitelist: {
+                    [botKey]: { ama: true, dynamicWeight: true },
+                },
+            });
+        }
+        return previousReadFileSync(filePath, encoding);
+    };
+
+    const self = {
+        config: {
+            name: 'Market Adapter Bootstrap Bot',
+            botKey,
+            botIndex: 0,
+            weightDistribution: { sell: 0.6, buy: 0.4 },
+        },
+        _baseWeightDistribution: { sell: 0.6, buy: 0.4 },
+        manager: {
+            config: {
+                name: 'Market Adapter Bootstrap Bot',
+                botKey,
+                botIndex: 0,
+                weightDistribution: { sell: 0.6, buy: 0.4 },
+            },
+            funds: { btsFeesOwed: 2 },
+            _fillProcessingLock: {
+                acquire: async (fn) => fn(),
+            },
+            startBootstrap: () => {},
+            finishBootstrap: () => {},
+            persistGrid: async () => {},
+        },
+        accountId: '1.2.345',
+        account: { id: '1.2.345' },
+        privateKey: 'test-key',
+        triggerFile,
+        _log: (msg) => logs.push(msg),
+        _warn: (msg) => logs.push(`WARN:${msg}`),
+        _performGridResync: async (options) => require(runtimePath).performGridResync.call(self, options),
+    };
+
+    try {
+        const ok = await handlePendingTriggerReset.call(self);
+        assert.strictEqual(ok, true, 'market-adapter bootstrap trigger reset should succeed');
+
+        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        assert.strictEqual(updated.centerPrice, 123.45, 'market-adapter bootstrap reset should refresh centerPrice from latest amaCenterPrice');
+        assert.strictEqual(updated.amaCenterPrice, 123.45, 'market-adapter bootstrap reset should preserve raw AMA diagnostics');
+        assert.strictEqual(updated.lastGridResetSource, 'market_adapter_bootstrap', 'market-adapter bootstrap reset should preserve bootstrap provenance');
+        assert.ok(
+            logs.some((msg) => String(msg).includes('AMA bootstrap grid reset')),
+            'market-adapter bootstrap reset should log that the AMA center snapshot was refreshed'
+        );
+    } finally {
+        fs.existsSync = previousExistsSync;
+        fs.readFileSync = previousReadFileSync;
+        try { originalUnlinkSync(triggerFile); } catch (_) {}
+        try { originalUnlinkSync(snapshotFile); } catch (_) {}
+    }
+}
+
+async function testMarketAdapterSlopeTriggerResetRecordsSlopeSource() {
+    const { handlePendingTriggerReset } = require(runtimePath);
+
+    const botKey = `market-adapter-slope-${Date.now()}`;
+    const triggerFile = `/tmp/${botKey}.trigger`;
+    const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
+
+    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
+    fs.writeFileSync(snapshotFile, JSON.stringify({
+        gridCenterPrice: 100,
+        centerPrice: 100,
+        amaCenterPrice: 123.45,
+        source: 'market_adapter/market_adapter.js',
+        updatedAt: '2026-01-01T00:00:00Z',
+    }, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(triggerFile, JSON.stringify({
+        source: 'market_adapter/market_adapter.js',
+        reason: 'market_adapter_ama_slope_delta_threshold',
+        newCenterPrice: 100,
+        amaCenterPrice: 123.45,
+    }, null, 2) + '\n', 'utf8');
+
+    const previousExistsSync = fs.existsSync;
+    const previousReadFileSync = fs.readFileSync;
+    const logs = [];
+
+    fs.existsSync = (filePath) => {
+        const text = String(filePath);
+        if (text === triggerFile) return true;
+        return previousExistsSync(filePath);
+    };
+    fs.readFileSync = (filePath, encoding) => {
+        const text = String(filePath);
+        if (text.endsWith('/profiles/bots.json')) {
+            return JSON.stringify({
+                bots: [
+                    {
+                        name: 'Market Adapter Slope Bot',
+                        weightDistribution: { sell: 0.6, buy: 0.4 },
+                    },
+                ],
+            });
+        }
+        if (text.endsWith('/profiles/market_adapter_whitelist.json')) {
+            return JSON.stringify({
+                whitelist: {
+                    [botKey]: { ama: true, dynamicWeight: true },
+                },
+            });
+        }
+        return previousReadFileSync(filePath, encoding);
+    };
+
+    const self = {
+        config: {
+            name: 'Market Adapter Slope Bot',
+            botKey,
+            botIndex: 0,
+            weightDistribution: { sell: 0.6, buy: 0.4 },
+        },
+        _baseWeightDistribution: { sell: 0.6, buy: 0.4 },
+        manager: {
+            config: {
+                name: 'Market Adapter Slope Bot',
+                botKey,
+                botIndex: 0,
+                weightDistribution: { sell: 0.6, buy: 0.4 },
+            },
+            funds: { btsFeesOwed: 2 },
+            _fillProcessingLock: {
+                acquire: async (fn) => fn(),
+            },
+            startBootstrap: () => {},
+            finishBootstrap: () => {},
+            persistGrid: async () => {},
+        },
+        accountId: '1.2.345',
+        account: { id: '1.2.345' },
+        privateKey: 'test-key',
+        triggerFile,
+        _log: (msg) => logs.push(msg),
+        _warn: (msg) => logs.push(`WARN:${msg}`),
+        _performGridResync: async (options) => require(runtimePath).performGridResync.call(self, options),
+    };
+
+    try {
+        const ok = await handlePendingTriggerReset.call(self);
+        assert.strictEqual(ok, true, 'market-adapter slope trigger reset should succeed');
+
+        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        assert.strictEqual(updated.centerPrice, 123.45, 'market-adapter slope reset should refresh centerPrice from latest amaCenterPrice');
+        assert.strictEqual(updated.amaCenterPrice, 123.45, 'market-adapter slope reset should preserve raw AMA diagnostics');
+        assert.strictEqual(updated.lastGridResetSource, 'market_adapter_ama_slope_delta_threshold', 'market-adapter slope reset should preserve slope provenance');
+        assert.ok(
+            logs.some((msg) => String(msg).includes('AMA slope grid reset')),
+            'market-adapter slope reset should log that the AMA center snapshot was refreshed'
+        );
+    } finally {
+        fs.existsSync = previousExistsSync;
+        fs.readFileSync = previousReadFileSync;
+        try { originalUnlinkSync(triggerFile); } catch (_) {}
+        try { originalUnlinkSync(snapshotFile); } catch (_) {}
     }
 }
 
@@ -802,6 +1123,9 @@ async function main() {
         testUpdateBotGridResetMetadataRejectsInvalidSnapshot();
         await testManualTriggerResetRefreshesCenterPrice();
         await testManualTriggerResetKeepsOffsetWhenCenterAlreadyCurrent();
+        await testMarketAdapterTriggerResetRefreshesAmaCenterPrice();
+        await testMarketAdapterBootstrapTriggerResetRecordsBootstrapSource();
+        await testMarketAdapterSlopeTriggerResetRecordsSlopeSource();
         await testRmsDivergenceRunsFullGridResync();
         await testDexbotClassPerformGridResyncForwardsOptions();
         console.log('dexbot maintenance runtime dynamic weight tests passed');

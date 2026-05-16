@@ -11,6 +11,7 @@ const {
     _resetCycleCache,
     writeCenterSnapshot,
     writeBotDynamicGrid,
+    writeGridResetTrigger,
     sleepUntilAlignedBoundary,
     normalizeMarketSource,
 } = require('./market_adapter');
@@ -26,6 +27,7 @@ module.exports = {
     _resetCycleCache,
     writeCenterSnapshot,
     writeBotDynamicGrid,
+    writeGridResetTrigger,
     sleepUntilAlignedBoundary,
     normalizeMarketSource,
     resolveMarketSourceForBot,

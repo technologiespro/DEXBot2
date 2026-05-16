@@ -2114,6 +2114,7 @@ class MarketAdapterService {
                 gridRangeScalingAmaSlope: options.gridRangeScalingAmaSlope ?? (amaSlope || previousGridResetAmaSlope || null),
                 amaSlopeDeltaPercent,
                 amaSlopeThresholdPercent,
+                observedLastGridResetAt: botState.lastGridResetAt,
                 ...(options.previousCenterPrice !== undefined
                     ? { previousCenterPrice: options.previousCenterPrice }
                     : {}),
@@ -2146,7 +2147,6 @@ class MarketAdapterService {
             botState.gridCenterPrice = newCenterPrice;
             botState.centerPrice = newCenterPrice;
             botState.amaCenterPrice = amaPrice;
-            botState.lastGridResetAt = nowIso;
             botState.amaSlope = options.amaSlope ?? (amaSlope || previousAmaSlope || null);
             botState.gridRangeScalingAmaSlope = options.gridRangeScalingAmaSlope ?? (amaSlope || previousGridResetAmaSlope || null);
             botState.amaSlopeDeltaPercent = Number.isFinite(amaSlopeDeltaPercent)
@@ -2334,6 +2334,7 @@ class MarketAdapterService {
                 gridRangeScalingAmaSlope: botState.gridRangeScalingAmaSlope || previousGridResetAmaSlope || null,
                 amaSlopeDeltaPercent,
                 amaSlopeThresholdPercent,
+                observedLastGridResetAt: botState.lastGridResetAt,
                 ...(isGridRangeScalingWhitelisted
                     ? { gridPriceOffsetPct: gridPriceOffsetPlan.gridPriceOffsetPct }
                     : {}),

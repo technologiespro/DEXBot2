@@ -395,7 +395,7 @@ Typical fields:
 - `amaSlopeDeltaPercent` records the change from the last grid-reset slope baseline.
 - `amaSlopeThresholdPercent` is the configured slope-reset threshold.
 - `amaSlope.trend` records the current direction; direction changes do not trigger resets unless the slope delta threshold is crossed.
-- During a manual grid reset, the bot refreshes `gridCenterPrice` from the latest
+- During a full grid reset, the bot refreshes `gridCenterPrice` from the latest
   `amaCenterPrice` before rebuilding the grid.
 - `dynamicWeights` is present only when live dynamic weights were computed and
   the bot is allowed to consume them.

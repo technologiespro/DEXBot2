@@ -1809,6 +1809,7 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
     assert.strictEqual(writeAttempts, 2, 'the same closed candle should be retried after bootstrap persistence failure');
     assert.strictEqual(secondResult.pendingClosedCandle, false, 'successful retry should process the closed candle rather than skip it');
     assert.ok(Number.isFinite(state.bots['xrp-bts-bootstrap'].centerPrice), 'bootstrap retry should establish the center baseline');
+    assert.strictEqual(state.bots['xrp-bts-bootstrap'].lastGridResetAt, undefined, 'bootstrap trigger request should not pretend the bot reset already completed');
     assert.ok(Number.isFinite(state.bots['xrp-bts-bootstrap'].lastClosedCandleTs), 'successful bootstrap retry should finally consume the closed candle');
 }
 
@@ -2129,6 +2130,7 @@ async function testCenterClampedByBotBounds() {
     assert.strictEqual(clampedResult.ok, true);
     assert.strictEqual(clampedResult.triggered, true, 'clamped center change should trigger recenter');
     assert.strictEqual(clampedState.bots['xrp-bts-1'].centerPrice, 101, 'center should be clamped to maxPrice');
+    assert.strictEqual(clampedState.bots['xrp-bts-1'].lastGridResetAt, undefined, 'adapter trigger request should not record actual reset completion');
     assert.strictEqual(lastWrite[1], 101, 'written center should match clamped value');
     assert.strictEqual(lastWrite[2].amaCenterPrice, 110, 'raw AMA center should be persisted separately');
 

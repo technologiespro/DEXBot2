@@ -54,14 +54,17 @@ The bot executes the reset through `_performGridResync()`:
 1. Acquire `_fillProcessingLock`.
 2. Defer if the bot is not idle or a pending dust-cancel timer has not settled.
 3. Reload this bot's entry from `profiles/bots.json`.
-4. For manual or legacy empty triggers, refresh `gridCenterPrice` in
+4. For full-recenter reset reasons, refresh `gridCenterPrice` in
    `<botKey>.dynamicgrid.json` from the latest `amaCenterPrice` before rebuilding.
 5. Call `Grid.recalculateGrid()` using fresh open orders from chain.
-6. Reset fee-debt bookkeeping, persist the rebuilt grid, and remove the trigger file.
+6. Reset fee-debt bookkeeping, persist the rebuilt grid, record actual reset
+   metadata in `dynamicgrid.json`, and remove the trigger file.
 
-Market-adapter triggers are not treated as manual triggers because their JSON
-payload has `source: "market_adapter/market_adapter.js"`. Empty or malformed
-trigger files remain supported as manual/legacy resets.
+Market-adapter triggers carry `source: "market_adapter/market_adapter.js"` and
+an explicit `reason`, so the runtime can record reset provenance such as
+`market_adapter_bootstrap`, `market_adapter_delta_threshold`, or
+`market_adapter_ama_slope_delta_threshold`. Empty or malformed trigger files
+remain supported as manual/legacy resets.
 
 ---
 
@@ -548,7 +551,7 @@ Removed trigger file.
 - `modules/account_bots.js` — Bot configuration schema and defaults
 - `market_adapter/market_adapter.js` — AMA calculation and trigger logic
 - `market_adapter/core/market_adapter_service.js` — Initial AMA snapshot, AMA-delta, and AMA-slope trigger decisions
-- `modules/dexbot_maintenance_runtime.js` — Trigger-file detection, manual center refresh, idle/dust deferral, and resync execution
+- `modules/dexbot_maintenance_runtime.js` — Trigger-file detection, full-resync center refresh, idle/dust deferral, and reset metadata recording
 - `modules/order/grid.js` — RMS divergence check and grid comparison
 - `modules/order/manager.js` — Available-funds resize threshold logic
 - `profiles/general.settings.json` — User-editable configuration
