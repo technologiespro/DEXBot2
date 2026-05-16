@@ -169,7 +169,7 @@ Configuration options from `node dexbot bots`, stored in `profiles/bots.json`:
 | **`targetSpreadPercent`** | number | Width of the empty spread zone between buy and sell orders. Default `2` = 2%. |
 | **`weightDistribution`** | object | Advanced sizing control. Default `{ "sell": 1.0, "buy": 1.0 }`; leave unchanged for normal setup. |
 | **`botFunds`** | object | Capital: `{ "sell": "100%", "buy": 1000 }`. Numbers or percentage strings |
-| **`activeOrders`** | object | Max concurrent orders per side: `{ "sell": 5, "buy": 5 }` |
+| **`activeOrders`** | object | Target active orders per side: `{ "sell": 20, "buy": 20 }` |
 
 ### General Options (Global)
 
