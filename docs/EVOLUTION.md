@@ -13,6 +13,53 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ---
 
+## Pre-History: Generational Lineage
+
+DEXBot2 is the third generation of BitShares DEX trading bot development. Two earlier Python-based projects laid the conceptual and architectural groundwork.
+
+### Generation 0: StakeMachine (2017)
+**Author**: Fabian Schuh (ChainSquad GmbH)  
+**Language**: Python 2/3  
+**Version**: 0.0.6 (alpha)
+
+The original proof-of-concept. A straightforward event-driven bot subscribing to BitShares WebSocket notifications (`Notify`). Implemented a single **Walls** strategy — placing a static buy wall and sell wall at fixed percentage offsets from the asset's settlement price feed. Used SQLite via SQLAlchemy for persistent key-value storage. CLI via Click. Demonstrated the core idea of programmatic BitShares DEX trading but lacked sophistication: no grid, no adaptive signals, no multi-node failover, no tests.
+
+**Architectural seeds**:
+- Event-driven subscription model (on_block, on_market, on_account)
+- Plugin strategy loading via `importlib`
+- Persistent per-bot storage namespace
+- Transaction bundling (cancel + place in one broadcast)
+
+### Generation 1: DEXBot (Python) — v1.0.0 (2018–2020)
+**Author**: Codaone Oy (funded via BitShares worker proposal)  
+**Language**: Python 3  
+**Dependencies**: pyqt5, bitshares, ccxt, sqlalchemy, alembic, click
+
+A full production rewrite from StakeMachine. Added PyQt5 desktop GUI, three strategies, external price feeds, multi-node management, database migrations, and a Windows installer. Ran hundreds of workers across dozens of BitShares markets.
+
+**Strategies shipped**:
+1. **Staggered Orders** (2256 lines) — Grid-based market making across a price range with 5 distribution modes (mountain, valley, neutral, buy_slope, sell_slope). Introduced **virtual orders**: orders beyond operational depth stored locally, promoted to real only when the grid shifts close enough. This is the direct ancestor of DEXBot2's grid.
+2. **Relative Orders** (639 lines) — Classic two-sided market making with dynamic spread based on market depth, external price feeds (CoinGecko, CCXT, Waves), and asset-offset center price.
+3. **King of the Hill** (426 lines) — Top-of-book strategy placing orders at best bid/ask, re-placing one tick ahead when outbid.
+
+**Key advances over StakeMachine**:
+- SQLite with Alembic migrations, not just key-value storage
+- Multi-worker architecture (multiple markets per account)
+- External price feeds from 100+ exchanges via CCXT
+- Multi-node health checking with latency sorting
+- PyQt5 GUI with real-time monitoring
+- Transaction bundling and retry logic for blockchain errors
+- systemd integration and Windows installer
+
+**Architectural seeds for DEXBot2**:
+- Staggered grid concept (the anchor + refill pattern)
+- Virtual order tracking (off-chain order state)
+- Workers as isolated per-market runtimes
+- Event dispatch via Python `Events` library
+- Market center price calculation
+
+---
+
 ## Timeline Overview
 
 ### Phase 1: Foundation & Core Architecture (December 2025)
@@ -21,7 +68,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 **Focus**: Establishing core trading infrastructure, order management, and fund accounting
 
 #### Key Milestones
-- **Dec 2**: Project initialization with squashed history from predecessor
+- **Dec 2**: Project initialization from DEXBot (Python) concepts; JavaScript rewrite from scratch
 - **Dec 3**: BitShares client integration and order broadcast handling
 - **Dec 4**: Grid calculation system with exact step multipliers
 - **Dec 5**: Utility function extraction and price helper consolidation
@@ -191,7 +238,9 @@ This phase achieved a multi-layered approach that defined the system's maturity:
 ## Feature Timeline
 
 ### Summary
-- **December 2025**: Core grid lifecycle, fees, PM2, and reconciliation.
+- **2017**: StakeMachine — Proof-of-concept Python bot with buy/sell walls.
+- **2018–2020**: DEXBot (Python v1.0.0) — Production bot with 3 strategies, PyQt5 GUI, multi-worker, external feeds.
+- **December 2025**: DEXBot2 — JavaScript rewrite. Core grid lifecycle, fees, PM2, reconciliation.
 - **January 2026**: AMA signals, precision fixes, recovery, and test migration.
 - **February 2026**: Copy-on-Write, multi-node support, and architecture hardening.
 - **March-May 2026**: Market adapter, dynamic weights, credit/debt runtime, and docs refresh.
@@ -200,6 +249,11 @@ This phase achieved a multi-layered approach that defined the system's maturity:
 
 ## Version History
 
+### Pre-DEXBot2
+- **StakeMachine v0.0.6** (2017): Python proof-of-concept, buy/sell walls.
+- **DEXBot v1.0.0** (2018–2020): Python production bot, PyQt5 GUI, 3 strategies, CCXT feeds.
+
+### DEXBot2
 - **v0.1.x-v0.5.x**: Foundation, fee handling, stability, and the COW groundwork.
 - **v0.6.0**: Market adapter release with AMA grid centers and trigger wiring.
 - **v0.7 Expansion**: Integration of advanced signals, dynamic weights, credit/debt runtime, and comprehensive documentation.
@@ -302,44 +356,44 @@ DEXBot2 has evolved from a basic trading bot to a sophisticated, production-read
 
 ### UX, Education & Services
 - **Web & Terminal UI**: Browser-based and TUI dashboards for bot monitoring, manual intervention, and parameter tuning live.
-- **Content Creation**: Instructional videos, tutorials, and onboarding material to grow the BitShares trading community.
-- **Hosting Service**: Managed deployment option for users who want bot operation without infrastructure management.
+- **Content Creation**: Instructional videos, tutorials, and onboarding material for user onboarding.
+- **Marketing**: Strategic advertisement and outreach to expand the BitShares trading community.
+- **Hosting Service**: Managed deployment for users who want bot operation without infrastructure management.
 
-### Backtesting & Performance Analytics
+### Backtesting & Statistics
 - **Simulation Engine**: Replay historical candles through the core `OrderManager`/COW engine via a `MemoryExchange` (drop-in at the `bitshares_client` boundary). Same strategy code, same grid, same fill processing — zero changes needed for backtest mode.
-- **Performance Analytics**: PnL tracking, grid efficiency metrics, risk assessment, and HTML report generation from backtest runs.
+- **Performance Analytics**: PnL tracking, grid efficiency metrics, risk assessment, and HTML report generation.
 
-### Architecture & Code Quality
+### Modernization & Migration
+- **TypeScript Migration**: Incremental migration from JS to TypeScript, starting with highest-bug-surface modules (COW, accounting, sync engine).
+- **Dependency Reduction**: Continued minimization of external dependencies.
+
+### Architecture & Code Quality — Detailed Breakdown
 
 #### Tier 1 — High Impact
 
-1. **Monorepo & Packages** — Split into `@dexbot/core`, `@dexbot/bitshares`, `@dexbot/strategies`, `@dexbot/indicators`. Enables incremental TypeScript migration (each package typed independently) and parallelized builds/testing.
+1. **Monorepo & Packages** — Split into `@dexbot/core`, `@dexbot/bitshares`, `@dexbot/strategies`, `@dexbot/indicators`. Enables incremental TypeScript migration and parallelized builds/testing.
 
-2. **Event Bus** — Replace the tight `FillCallback → Manager → Accounting → SyncEngine → chain_orders` call chain with a typed event bus. Modules subscribe independently, testable with mocked events, and new features (metrics, logging) wire in without touching core flow.
+2. **Event Bus** — Replace the tight `FillCallback → Manager → Accounting → SyncEngine → chain_orders` call chain with a typed event bus. Modules subscribe independently, testable with mocked events.
 
-3. **Unified Indicator Library** — Centralize scattered signal code (AMA, Kalman, dynamic weight, regime detection) into `@dexbot/indicators`. Add standard indicators (SMA, MACD, RSI, BB) for non-grid strategies. Importable by both strategies and backtesting.
+3. **Unified Indicator Library** — Centralize scattered signal code (AMA, Kalman, dynamic weight, regime detection) into `@dexbot/indicators`. Add standard indicators (SMA, MACD, RSI, BB) for non-grid strategies.
 
-4. **Incremental TypeScript** — Migrate in package order: `core` (COW + accounting — highest bug surface) → `indicators` → `bitshares` → `strategies`. Each package typed while consuming JS neighbors via `.d.ts` wrappers or `@ts-nocheck`.
+4. **Incremental TypeScript** — Migrate in package order: `core` (COW + accounting) → `indicators` → `bitshares` → `strategies`.
 
 #### Tier 2 — Medium Impact
 
-5. **Strategy Effects Pattern** — Strategies return declarative action objects (`{ action: 'CREATE_ORDER', price, amount }`) instead of calling `manager.js` directly. Strategy logic becomes a pure function — unit-testable without blockchain, same code for live and backtest.
+5. **Strategy Effects Pattern** — Strategies return declarative action objects (`{ action: 'CREATE_ORDER', price, amount }`) instead of calling `manager.js` directly. Strategy logic becomes a pure function — unit-testable without blockchain.
 
-6. **Database (Prisma/SQLite) + Zod Validation** — Replace JSON file persistence with SQLite. Validate all blockchain objects at the `bitshares_client` boundary via Zod schemas before they enter COW/accounting, preventing invariant violations from malformed data.
+6. **Database (Prisma/SQLite) + Zod Validation** — Replace JSON file persistence with SQLite. Validate all blockchain objects at the `bitshares_client` boundary via Zod schemas.
 
-7. **Vitest Migration** — Wrap the 168 test files in Vitest for parallel execution, watch mode, and coverage reporting.
+7. **Vitest Migration** — Wrap 168 test files in Vitest for parallel execution, watch mode, and coverage reporting.
 
 #### Tier 3 — Nice-to-Have
 
-8. **Exchange Abstraction** — `IExchange` interface over `chain_orders.js` + `bitshares_client.js`. Enables paper trading and the MemoryExchange used by backtesting.
-
+8. **Exchange Abstraction** — `IExchange` interface over `chain_orders.js` + `bitshares_client.js`.
 9. **tRPC API** — Type-safe API layer for remote bot management and dashboard integration.
-
 10. **Pino Logger** — Structured JSON logging with level filtering and composable transports.
-
 11. **Commander.js CLI** — Better `dexbot.js` argument parsing with subcommands and auto-generated help.
-
-12. **Dependency Reduction** — Ongoing reduction of external dependencies beyond the current 3-production-dep baseline.
 
 ---
 
