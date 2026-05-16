@@ -237,9 +237,9 @@ Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local boo
 
 ### User-Facing Workflows
 
-- **[Market Adapter README](market_adapter/README.md)** - AMA pricing, grid triggers, dynamic weights, and collateral advisory signals
+- **[Market Adapter](market_adapter/README.md)** - AMA pricing, grid triggers, dynamic weights, and collateral advisory signals
 - **[MPA and Credit Usage](docs/MPA_CREDIT_USAGE.md)** - Bot-scoped debt policy, MPA borrowing, and credit offer workflows
-- **[Claw README](claw/README.md)** - Bridge setup, launcher commands, short MPA workflow, and example commands
+- **[Claw](claw/README.md)** - Bridge setup, launcher commands, short MPA workflow, and example commands
 - **[Analysis](analysis/README.md)** - Research runners, chart generators, and tuning helpers for AMA fitting, trend detection, bot fitting, and TradingView exports
 
 ### Operational & Security

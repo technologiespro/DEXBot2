@@ -29,7 +29,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Bot Fitting**: Grid parameter sweep backtests for AMA winners
 - **TradingView Exports**: Chart export utilities for visual analysis
 
-### 🦀 [Claw README](../claw/README.md)
+### 🦀 [Claw](../claw/README.md)
 *Bridge between DEXBot2 and external runtimes.*
 - **Purpose**: Exposes BitShares capabilities and DEXBot2 infrastructure through JSON/CLI bridges, MCP, and runtime-native skill packaging for OpenClaw, Hermes, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw.
 - **API Boundary**: Responsibility split between the AI decision layer and the DEXBot2 execution substrate ([AI_BOT_LIBRARY_API.md](../claw/docs/AI_BOT_LIBRARY_API.md))

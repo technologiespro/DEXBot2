@@ -1381,7 +1381,7 @@ For detailed fund calculations and test coverage, see:
 
 - [Fund Movement Logic](FUND_MOVEMENT_AND_ACCOUNTING.md) - Detailed mathematical formulas and algorithms
 - [Developer Guide](developer_guide.md) - Code navigation and onboarding
-- [README.md](../README.md) - User documentation and setup
+- [README](../README.md) - User documentation and setup
 - [WORKFLOW.md](WORKFLOW.md) - Git branch workflow
 
 ---

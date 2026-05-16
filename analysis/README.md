@@ -290,5 +290,5 @@ node analysis/analyze_kalman.js --bot-key <bot-key>
 
 ## Related Docs
 
-- [Market Adapter README](../market_adapter/README.md) — live AMA pricing, grid triggers, dynamic weights, and recalc triggers
+- [Market Adapter](../market_adapter/README.md) — live AMA pricing, grid triggers, dynamic weights, and recalc triggers
 - [DEXBot2 Tuning Cheat Sheet](../claw/docs/DEXBOT2_TUNING_CHEAT_SHEET.md) — grid tuning reference for live bots

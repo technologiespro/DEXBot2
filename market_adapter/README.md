@@ -248,8 +248,8 @@ node analysis/ama_fitting/calibrate_convergence_er.js --data market_adapter/data
 
 More tools:
 
-- [Analysis README](../analysis/README.md)
-- [Scripts README](../scripts/README.md)
+- [Analysis](../analysis/README.md)
+- [Scripts](../scripts/README.md)
 
 ## Technical Reference
 

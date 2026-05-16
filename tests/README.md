@@ -141,7 +141,7 @@ Tests validate:
 - Grid recalculation triggers at correct divergence levels
 - Threshold interpretation matches README documentation
 
-**Reference:** [docs/README.md](../docs/README.md) - GRID RECALCULATION section
+**Reference:** [docs](../docs/README.md) - GRID RECALCULATION section
 
 ### Fund Invariants
 Tests ensure:

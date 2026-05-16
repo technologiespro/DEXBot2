@@ -9,7 +9,7 @@ This folder contains the SMA, MACD, RSI, Hurst, Kalman, and regime analysis code
 
 ## Live Counterpart
 
-- [Market Adapter README](../../market_adapter/README.md) - live AMA pricing, dynamic weights, and recalc triggers
+- [Market Adapter](../../market_adapter/README.md) - live AMA pricing, dynamic weights, and recalc triggers
 
 ## Modules
 
