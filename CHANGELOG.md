@@ -2,9 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.0] - 2026-05-07 - Detailed Changelog Since 0.6.0-patch.26
+## [0.7.0] - 2026-05-16 - Final 0.7 Hardening and Signal Refinement
 
-This section summarizes the full 0.7 line after `0.6.0-patch.26`, including the detailed May 1-7 work restored from git history.
+This update covers the final week of May 0.7 development, focusing on signal refinement, credential daemon stability, credit runtime fixes, and expanded analysis tools.
+
+### 2026-05-08 to 2026-05-16
+
+#### Signal Refinement and AMA Warmup
+
+- Replaced first-price initialization and full convergence warmup with a progressive SMA-based warmup, ensuring smoother AMA anchoring from the first available candles (`6b1e183`, `3351e5b`).
+- Clarified SMA warmup phases and medianed input start price handling in documentation to better reflect the underlying math (`582ebd`, `8b0bce6`).
+- Updated AMA price and slope delta thresholds for more responsive signal transitions in volatile conditions (`6a1f59a`).
+- Applied AMA slope as a direct market price offset, allowing the grid to proactively shift based on trend direction (`af946e8`).
+
+#### Credential Daemon Stability and Hardening
+
+- Stabilized the credential daemon with a major hardening pass: flattened promise chains, improved WebSocket write stability after reconnect, and added broadcast retries with node list mirroring (`2394958`, `0dd6a8e`, `c2fee0f`).
+- Improved daemon lifecycle management: fixed immediate shutdown hangs, ignored SIGHUP, and prevented stray SIGINT from killing the process (`bf724ac`, `fdc513e`, `0dd6a8e`).
+- Hardened daemon security policy and startup: added bootstrap socket verification, guarded against undefined chain state, and implemented interactive fallback when sockets are missing (`2903dda`, `e1588d9`, `42c6932`).
+- Fixed PM2 restart loops and ensured the daemon exits cleanly on bootstrap failure instead of hanging (`304954a`, `aaa7137`).
+
+#### Credit Runtime and MPA Corrections
+
+- Corrected MPA target collateral ratio (CR) encoding and credit pruning logic to ensure accurate debt management (`48c79b5`).
+- Made credit pricing pair-scoped and explicit, preventing price leakage across different market pairs (`6005bf1`).
+- Preserved pending credit reborrow policy lookups so reborrowing decisions respect the latest configured policy (`75b895e`).
+
+#### Expanded Analysis and Research Tooling
+
+- Introduced the Risk Profile Analyzer with sigma metrics and AMA delta calibration for empirical risk assessment (`f3981e8`, `a3a4ba2`).
+- Added a Trade Heatmap analyzer to visualize volume distribution by AMA deviation (`9217a4c`).
+- Enhanced chart interactions with improved drag-pan calculations and added TradingView shortcuts for market adapter bot snapshots (`e036a77`, `9d5067e`).
+- Integrated market profile AMA settings directly into the TradingView chart generator for high-fidelity research visualisations (`89053c0`).
+
+#### Documentation and Lifecycle Improvements
+
+- Refreshed the documentation index, reordered the analysis README around dynamic weights, and corrected links to the tuning cheat sheet (`9b5084e`, `5380dde`).
+- Clarified market adapter signal vs. control logic, grid range market price offsets, and empirical risk management terminology (`f613adb`, `a4e0d0d`, `6c39039`).
+- Standardized grid price terminology and updated AMA slope units across runtime and research tools (`cd8c1bc`, `f38c78e`).
+- Improved market adapter lifecycle management and stability by hardening timestamp parsing and candle merge robustness (`a5f8006`, `dbdf286`).
+- Aligned versioning and comparison docs to the final 0.7.0 state (`7121fee`).
 
 ### 2026-05-01 to 2026-05-07
 

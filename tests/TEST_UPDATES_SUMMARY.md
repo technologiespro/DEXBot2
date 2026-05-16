@@ -385,9 +385,9 @@ These tests catch regressions in:
 ### Related Documentation
 
 See complete technical details in:
-- [docs/FUND_MOVEMENT_AND_ACCOUNTING.md § 1.4](FUND_MOVEMENT_AND_ACCOUNTING.md#14-fill-batch-processing--cache-fund-timeline) - Fill batch processing
-- [docs/FUND_MOVEMENT_AND_ACCOUNTING.md § 3.6](FUND_MOVEMENT_AND_ACCOUNTING.md#36-orphan-fill-deduplication--double-credit-prevention) - Orphan-fill prevention
-- [docs/architecture.md - Fill Processing Pipeline](architecture.md#fill-processing-pipeline) - Architecture & diagrams
+- [docs/FUND_MOVEMENT_AND_ACCOUNTING.md § 1.4](../docs/FUND_MOVEMENT_AND_ACCOUNTING.md#14-fill-batch-processing--cache-fund-timeline) - Fill batch processing
+- [docs/FUND_MOVEMENT_AND_ACCOUNTING.md § 3.6](../docs/FUND_MOVEMENT_AND_ACCOUNTING.md#36-orphan-fill-deduplication--double-credit-prevention) - Orphan-fill prevention
+- [docs/architecture.md - Fill Processing Pipeline](../docs/architecture.md#fill-processing-pipeline) - Architecture & diagrams
 
 ---
 

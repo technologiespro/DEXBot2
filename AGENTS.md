@@ -175,22 +175,23 @@ File: <path>
 - `profiles/market_profiles.json` - Market-specific settings (AMA params, price offset params)
 
 ### Claw Integration (`claw/`)
-- `index.js` - Main export combining all modules
-- `modules/claw_bridge.js` - JSON bridge for runtime integration
-- `modules/zeroclaw_bridge.js` - ZeroClaw runtime bridge
-- `modules/bitshares_client.js` - BitShares connection wrapper
-- `modules/chain_queries.js` - Chain read helpers
-- `modules/chain_broadcast.js` - Chain write helpers
-- `modules/chain_actions.js` - High-level chain operations
-- `modules/position_manager.js` - Position tracking and management
-- `modules/position_health.js` - Position health monitoring
-- `modules/dexbot_profiles.js` - DEXBot2 profile reader
-- `modules/dexbot_credential_client.js` - Credential daemon client
-- `modules/honest_ecosystem.js` - HONEST asset helpers
-- `modules/short_mpa_strategy.js` - Short MPA workflow
-- `modules/claw_infra.js` - Shared runtime infrastructure
-- `docs/AI_BOT_LIBRARY_API.md` - API boundary and responsibility split
-- `docs/DEXBOT2_TUNING_CHEAT_SHEET.md` - Grid tuning reference
+- `claw/index.js` - Main export combining all modules
+- `claw/modules/claw_bridge.js` - JSON bridge for runtime integration
+- `claw/modules/zeroclaw_bridge.js` - ZeroClaw runtime bridge
+- `claw/modules/bitshares_client.js` - BitShares connection wrapper
+- `claw/modules/chain_queries.js` - Chain read helpers
+- `claw/modules/chain_broadcast.js` - Chain write helpers
+- `claw/modules/chain_actions.js` - High-level chain operations
+- `claw/modules/position_manager.js` - Position tracking and management
+- `claw/modules/position_health.js` - Position health monitoring
+- `claw/modules/dexbot_profiles.js` - DEXBot2 profile reader
+- `claw/modules/dexbot_credential_client.js` - Credential daemon client
+- `claw/modules/honest_ecosystem.js` - HONEST asset helpers
+- `claw/modules/short_mpa_strategy.js` - Short MPA workflow
+- `claw/modules/claw_infra.js` - Shared runtime infrastructure
+- `claw/docs/AI_BOT_LIBRARY_API.md` - API boundary and responsibility split
+- `claw/docs/DEXBOT2_TUNING_CHEAT_SHEET.md` - Grid tuning reference
+
 
 ### Analysis Tools (`analysis/`)
 
