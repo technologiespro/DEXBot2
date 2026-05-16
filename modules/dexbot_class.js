@@ -3010,8 +3010,8 @@ class DEXBot {
      * @returns {Promise<boolean>} True if resync succeeded
      * @private
      */
-    async _performGridResync() {
-        return DexbotMaintenanceRuntime.performGridResync.call(this);
+    async _performGridResync(options = {}) {
+        return DexbotMaintenanceRuntime.performGridResync.call(this, options);
     }
 
     /**

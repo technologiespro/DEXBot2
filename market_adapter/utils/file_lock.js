@@ -87,6 +87,42 @@ function releaseFileLockSync(lock) {
     try { if (lock.lockPath) fs.unlinkSync(lock.lockPath); } catch (_) {}
 }
 
+function sleepSync(ms) {
+    const buffer = new SharedArrayBuffer(4);
+    const view = new Int32Array(buffer);
+    Atomics.wait(view, 0, 0, ms);
+}
+
+function acquirePathLockSync(filePath, opts = {}) {
+    const lockPath = `${filePath}.lock`;
+    const staleMs = Number.isFinite(opts.staleMs) && opts.staleMs > 0 ? opts.staleMs : 30000;
+    const timeoutMs = Number.isFinite(opts.timeoutMs) && opts.timeoutMs > 0 ? opts.timeoutMs : 5000;
+    const retryMs = Number.isFinite(opts.retryMs) && opts.retryMs > 0 ? opts.retryMs : 50;
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+        try {
+            const fd = fs.openSync(lockPath, 'wx');
+            fs.writeFileSync(fd, `${JSON.stringify({ pid: process.pid, at: Date.now() })}\n`, 'utf8');
+            return { fd, lockPath };
+        } catch (err) {
+            if (err.code !== 'EEXIST') throw err;
+            try {
+                const stat = fs.statSync(lockPath);
+                if (Date.now() - stat.mtimeMs > staleMs) {
+                    try { fs.unlinkSync(lockPath); } catch (_) {}
+                    continue;
+                }
+            } catch (_) {
+                continue;
+            }
+            sleepSync(retryMs);
+        }
+    }
+
+    throw new Error(`Could not acquire lock on ${filePath} within ${timeoutMs}ms`);
+}
+
 async function acquireFileLock(filePath, opts = {}) {
     const lockPath = `${filePath}.lock`;
     const staleMs = Number.isFinite(opts.staleMs) && opts.staleMs > 0 ? opts.staleMs : 30000;
@@ -127,5 +163,6 @@ async function acquireFileLock(filePath, opts = {}) {
 module.exports = {
     acquireFileLockSync,
     releaseFileLockSync,
+    acquirePathLockSync,
     acquireFileLock,
 };

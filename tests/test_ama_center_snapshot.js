@@ -185,11 +185,89 @@ async function testCenterSnapshotWriterIgnoresLegacyCollateralInput() {
   }
 }
 
+async function testAdapterStateMergePreservesBotResetMetadata() {
+  const marketAdapterPath = require.resolve('../market_adapter/market_adapter.js');
+  delete require.cache[marketAdapterPath];
+
+  const botKey = `adapter-merge-${Date.now()}`;
+  const filePath = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
+
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify({
+    gridCenterPrice: 123.45,
+    centerPrice: 123.45,
+    amaCenterPrice: 130.25,
+    lastGridResetAt: '2026-05-15T00:01:00.327Z',
+    lastGridResetSource: 'dexbot_grid_resync',
+    source: 'market_adapter/market_adapter.js',
+    updatedAt: '2026-05-15T00:01:00.327Z',
+  }, null, 2) + '\n', 'utf8');
+
+  try {
+    const { mergeGridResetMetadataFromDynamicGrid } = require('../market_adapter/market_adapter.js');
+    const state = {
+      bots: {
+        [botKey]: {
+          gridCenterPrice: 100,
+          centerPrice: 100,
+          lastGridResetAt: '2026-05-13T18:00:01.190Z',
+        },
+      },
+    };
+
+    mergeGridResetMetadataFromDynamicGrid(state);
+
+    assert.strictEqual(state.bots[botKey].gridCenterPrice, 123.45);
+    assert.strictEqual(state.bots[botKey].centerPrice, 123.45);
+    assert.strictEqual(state.bots[botKey].lastGridResetAt, '2026-05-15T00:01:00.327Z');
+    assert.strictEqual(state.bots[botKey].lastGridResetSource, 'dexbot_grid_resync');
+  } finally {
+    await fs.unlink(filePath).catch(() => {});
+    delete require.cache[marketAdapterPath];
+  }
+}
+
+async function testDynamicGridWritePreservesExistingResetMetadata() {
+  const marketAdapterPath = require.resolve('../market_adapter/market_adapter.js');
+  delete require.cache[marketAdapterPath];
+
+  const botKey = `adapter-existing-reset-${Date.now()}`;
+  const filePath = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
+
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify({
+    gridCenterPrice: 100,
+    centerPrice: 100,
+    amaCenterPrice: 101,
+    lastGridResetAt: '2026-05-15T00:01:00.327Z',
+    lastGridResetSource: 'manual_grid_resync',
+    source: 'market_adapter/market_adapter.js',
+    updatedAt: '2026-05-15T00:01:00.327Z',
+  }, null, 2) + '\n', 'utf8');
+
+  try {
+    const { writeBotDynamicGrid } = require('../market_adapter/test_helpers.js');
+    assert.strictEqual(writeBotDynamicGrid(botKey, 123.45, {
+      amaCenterPrice: 130.25,
+    }), true);
+
+    const updated = JSON.parse(fsSync.readFileSync(filePath, 'utf8'));
+    assert.strictEqual(updated.gridCenterPrice, 123.45);
+    assert.strictEqual(updated.lastGridResetAt, '2026-05-15T00:01:00.327Z');
+    assert.strictEqual(updated.lastGridResetSource, 'manual_grid_resync');
+  } finally {
+    await fs.unlink(filePath).catch(() => {});
+    delete require.cache[marketAdapterPath];
+  }
+}
+
 async function main() {
   await testSnapshotReaderExposesCenterOnly();
   await testSnapshotReaderRejectsLegacyEffectiveCenterOnly();
   await testCenterSnapshotWriterUsesOnlyNewCollateralField();
   await testCenterSnapshotWriterIgnoresLegacyCollateralInput();
+  await testAdapterStateMergePreservesBotResetMetadata();
+  await testDynamicGridWritePreservesExistingResetMetadata();
   console.log('ama center snapshot tests passed');
 }
 

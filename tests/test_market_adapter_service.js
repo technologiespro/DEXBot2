@@ -5630,6 +5630,108 @@ async function testWeightOnlyUpdateInDryRunUpdatesState() {
     assert.ok(state.bots['xrp-bts-dry-run'].effectiveWeights, 'state should be updated with effective weights even in dry run');
 }
 
+async function testNewerDynamicGridResetCenterOverridesStaleAdapterState() {
+    const botKey = 'xrp-bts-newer-reset-center';
+    const closedTs = Date.parse('2026-01-01T12:00:00Z');
+    const hour = 3600000;
+    let writtenCenter = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 1, slowPeriod: 1 }),
+        candleFileForBot: () => path.join('/tmp', `market_adapter_${botKey}_newer_reset.json`),
+        loadJson: (filePath) => {
+            if (String(filePath).endsWith(`${botKey}.dynamicgrid.json`)) {
+                return {
+                    gridCenterPrice: 130,
+                    centerPrice: 130,
+                    amaCenterPrice: 130,
+                    lastGridResetAt: '2026-05-15T00:01:00.327Z',
+                    lastGridResetSource: 'manual_grid_resync',
+                    updatedAt: '2026-05-15T00:01:00.327Z',
+                };
+            }
+            return {
+                candles: [
+                    [closedTs - 3 * hour, 130, 130, 130, 130, 1],
+                    [closedTs - 2 * hour, 130, 130, 130, 130, 1],
+                    [closedTs - hour, 130, 130, 130, 130, 1],
+                    [closedTs, 130, 130, 130, 130, 1],
+                ],
+            };
+        },
+        saveJson: () => {},
+        calculateBotThreshold: () => 1000,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 0.1 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        mergeCandles: (existing) => existing,
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeBotDynamicGrid: (_botKey, center) => {
+            writtenCenter = center;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        getNowMs: () => closedTs + hour + 60 * 1000,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey,
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.5, buy: 0.5 },
+    };
+
+    const state = {
+        bots: {
+            [botKey]: {
+                centerPrice: 100,
+                gridCenterPrice: 100,
+                amaCenterPrice: 100,
+                lastGridResetAt: '2026-05-13T18:00:01.190Z',
+                lastClosedCandleTs: closedTs - hour,
+            },
+        },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        amaSlope: {
+            lookbackBars: 0,
+            maxSlopePct: 1,
+            neutralZonePct: 0
+        }
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.strictEqual(writtenCenter, 130, 'weight-only snapshot write should preserve the newer reset center');
+    assert.strictEqual(state.bots[botKey].gridCenterPrice, 130);
+    assert.strictEqual(state.bots[botKey].centerPrice, 130);
+    assert.strictEqual(state.bots[botKey].lastGridResetAt, '2026-05-15T00:01:00.327Z');
+    assert.strictEqual(state.bots[botKey].lastGridResetSource, 'manual_grid_resync');
+}
+
 async function run() {
     await testTriggerHookCalledOnThreshold();
     await testNumericStartPriceSkipsAllMarketFetches();
@@ -5697,6 +5799,7 @@ async function run() {
     await testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots();
     await testDynamicWeightDiagnosticsDoNotLeakIntoBootstrapState();
     await testWeightOnlyUpdateInDryRunUpdatesState();
+    await testNewerDynamicGridResetCenterOverridesStaleAdapterState();
 }
 
 run()

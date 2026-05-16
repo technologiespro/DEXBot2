@@ -558,6 +558,8 @@ class MarketAdapterService {
             amaSlopeThresholdPercent: normalized?.amaSlopeThresholdPercent ?? null,
             amaSlopePercentMode: AMA_SLOPE_PERCENT_MODE_PER_BAR,
             gridPriceOffsetPct: Number.isFinite(gridPriceOffsetPct) ? gridPriceOffsetPct : null,
+            lastGridResetAt: snapshot.lastGridResetAt,
+            lastGridResetSource: snapshot.lastGridResetSource,
         };
     }
 
@@ -1790,9 +1792,20 @@ class MarketAdapterService {
             ? this.extractPersistedDynamicGridState(deps.loadJson(dynGridPath, null), lookbackBars)
             : null;
         if (persistedDynamicGridState) {
-            if (!(Number(botState.gridCenterPrice ?? botState.centerPrice) > 0) && persistedDynamicGridState.gridCenterPrice) {
+            const persistedResetMs = Date.parse(String(persistedDynamicGridState.lastGridResetAt || ''));
+            const stateResetMs = Date.parse(String(botState.lastGridResetAt || ''));
+            const persistedResetIsNewer = Number.isFinite(persistedResetMs)
+                && (!Number.isFinite(stateResetMs) || persistedResetMs >= stateResetMs);
+            if ((persistedResetIsNewer || !(Number(botState.gridCenterPrice ?? botState.centerPrice) > 0))
+                    && persistedDynamicGridState.gridCenterPrice) {
                 botState.gridCenterPrice = persistedDynamicGridState.gridCenterPrice;
                 botState.centerPrice = persistedDynamicGridState.gridCenterPrice;
+            }
+            if (persistedResetIsNewer) {
+                botState.lastGridResetAt = persistedDynamicGridState.lastGridResetAt;
+                if (persistedDynamicGridState.lastGridResetSource) {
+                    botState.lastGridResetSource = persistedDynamicGridState.lastGridResetSource;
+                }
             }
             if (!(Number(botState.amaCenterPrice) > 0) && persistedDynamicGridState.amaCenterPrice) {
                 botState.amaCenterPrice = persistedDynamicGridState.amaCenterPrice;

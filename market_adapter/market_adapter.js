@@ -86,6 +86,7 @@ const {
     setBitsharesClientForTests,
 } = require('./utils/chain');
 const { acquireFileLockSync, releaseFileLockSync } = require('./utils/file_lock');
+const { updateDynamicGridSnapshotSync } = require('./utils/dynamic_grid_snapshot');
 const {
     normalizeNativeMarketHistoryCandles,
 } = require('./utils/native_history');
@@ -1032,41 +1033,53 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
  */
 function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
     try {
-        ensureDir(ORDERS_DIR);
         const filePath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
-        const tmpPath = `${filePath}.tmp`;
-        const amaCenterPrice = Number(options.amaCenterPrice);
-        const resolvedGridCenterPrice = Math.round(Number(gridCenterPrice) * 1e8) / 1e8;
-        const payload = {
-            gridCenterPrice: resolvedGridCenterPrice,
-            centerPrice: resolvedGridCenterPrice,
-            amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : resolvedGridCenterPrice,
-            amaSlopePercentMode: AMA_SLOPE_PERCENT_MODE_PER_BAR,
-            updatedAt: new Date().toISOString(),
-            source: 'market_adapter/market_adapter.js',
+        const preserveGridResetMetadata = (target, snapshot) => {
+            if (!snapshot?.lastGridResetAt) return target;
+            const incomingResetMs = Date.parse(String(snapshot.lastGridResetAt));
+            const currentResetMs = Date.parse(String(target.lastGridResetAt || ''));
+            if (Number.isFinite(currentResetMs) && Number.isFinite(incomingResetMs) && currentResetMs > incomingResetMs) {
+                return target;
+            }
+            target.lastGridResetAt = snapshot.lastGridResetAt;
+            if (snapshot.lastGridResetSource) {
+                target.lastGridResetSource = snapshot.lastGridResetSource;
+            }
+            return target;
         };
-        if (options.amaSlope && typeof options.amaSlope === 'object') {
-            payload.amaSlope = options.amaSlope;
-        }
-        if (options.gridRangeScalingAmaSlope && typeof options.gridRangeScalingAmaSlope === 'object') {
-            payload.gridRangeScalingAmaSlope = options.gridRangeScalingAmaSlope;
-        }
-        if (Number.isFinite(Number(options.gridPriceOffsetPct))) {
-            payload.gridPriceOffsetPct = Number(options.gridPriceOffsetPct);
-        }
-        if (Number.isFinite(Number(options.amaSlopeDeltaPercent))) {
-            payload.amaSlopeDeltaPercent = Number(options.amaSlopeDeltaPercent);
-        }
-        if (Number.isFinite(Number(options.amaSlopeThresholdPercent))) {
-            payload.amaSlopeThresholdPercent = Number(options.amaSlopeThresholdPercent);
-        }
-        if (options.dynamicWeights && typeof options.dynamicWeights === 'object') {
-            payload.dynamicWeights = options.dynamicWeights;
-        }
-        // Atomic write: write to .tmp then rename — prevents dexbot reading a partial file
-        fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
-        fs.renameSync(tmpPath, filePath);
-        return true;
+        const result = updateDynamicGridSnapshotSync(filePath, (previousSnapshot) => {
+            const amaCenterPrice = Number(options.amaCenterPrice);
+            const resolvedGridCenterPrice = Math.round(Number(gridCenterPrice) * 1e8) / 1e8;
+            const payload = {
+                gridCenterPrice: resolvedGridCenterPrice,
+                centerPrice: resolvedGridCenterPrice,
+                amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : resolvedGridCenterPrice,
+                amaSlopePercentMode: AMA_SLOPE_PERCENT_MODE_PER_BAR,
+                updatedAt: new Date().toISOString(),
+                source: 'market_adapter/market_adapter.js',
+            };
+            if (options.amaSlope && typeof options.amaSlope === 'object') {
+                payload.amaSlope = options.amaSlope;
+            }
+            if (options.gridRangeScalingAmaSlope && typeof options.gridRangeScalingAmaSlope === 'object') {
+                payload.gridRangeScalingAmaSlope = options.gridRangeScalingAmaSlope;
+            }
+            if (Number.isFinite(Number(options.gridPriceOffsetPct))) {
+                payload.gridPriceOffsetPct = Number(options.gridPriceOffsetPct);
+            }
+            if (Number.isFinite(Number(options.amaSlopeDeltaPercent))) {
+                payload.amaSlopeDeltaPercent = Number(options.amaSlopeDeltaPercent);
+            }
+            if (Number.isFinite(Number(options.amaSlopeThresholdPercent))) {
+                payload.amaSlopeThresholdPercent = Number(options.amaSlopeThresholdPercent);
+            }
+            preserveGridResetMetadata(payload, previousSnapshot);
+            if (options.dynamicWeights && typeof options.dynamicWeights === 'object') {
+                payload.dynamicWeights = options.dynamicWeights;
+            }
+            return payload;
+        });
+        return result.ok && result.written;
     } catch (err) {
         logger.warn(`[writeBotDynamicGrid] Failed to write dynamic grid for ${botKey}: ${err.message}`);
         return false;
@@ -1136,6 +1149,43 @@ function writeCenterSnapshot(state) {
         };
     }
     saveJson(CENTER_FILE, centers);
+}
+
+function mergeGridResetMetadataFromDynamicGrid(state) {
+    if (!state || typeof state !== 'object' || !state.bots || typeof state.bots !== 'object') {
+        return state;
+    }
+
+    for (const [botKey, botState] of Object.entries(state.bots)) {
+        if (!botState || typeof botState !== 'object') continue;
+        const snapshotPath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
+        let snapshot;
+        try {
+            snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
+        } catch (_) {
+            continue;
+        }
+
+        if (!snapshot?.lastGridResetAt) continue;
+        const snapshotResetMs = Date.parse(String(snapshot.lastGridResetAt));
+        const stateResetMs = Date.parse(String(botState.lastGridResetAt || ''));
+        if (Number.isFinite(stateResetMs) && Number.isFinite(snapshotResetMs) && stateResetMs > snapshotResetMs) {
+            continue;
+        }
+
+        botState.lastGridResetAt = snapshot.lastGridResetAt;
+        if (snapshot.lastGridResetSource) {
+            botState.lastGridResetSource = snapshot.lastGridResetSource;
+        }
+
+        const gridCenterPrice = Number(snapshot.gridCenterPrice ?? snapshot.centerPrice);
+        if (Number.isFinite(gridCenterPrice) && gridCenterPrice > 0) {
+            botState.gridCenterPrice = gridCenterPrice;
+            botState.centerPrice = gridCenterPrice;
+        }
+    }
+
+    return state;
 }
 
 async function runOnce(cfg, state, contextCache) {
@@ -1277,6 +1327,7 @@ async function runOnce(cfg, state, contextCache) {
     };
     state.meta.metrics = metrics;
 
+    mergeGridResetMetadataFromDynamicGrid(state);
     saveJson(STATE_FILE, state);
     writeCenterSnapshot(state);
     if (cfg.metricsJson) {
@@ -1420,6 +1471,8 @@ module.exports = {
     isBotGridRangeScalingWhitelisted,
     _resetCycleCache,
     writeCenterSnapshot,
+    writeBotDynamicGrid,
+    mergeGridResetMetadataFromDynamicGrid,
     normalizeNativeMarketHistoryCandles,
     fetchNativeMarketHistorySince,
     _setBitsharesClientForTests: setBitsharesClientForTests,

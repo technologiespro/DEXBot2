@@ -17,6 +17,7 @@ const Format = require('./order/format');
 const { virtualizeOrder } = require('./order/utils/order');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { cloneWeightDistribution } = require('./order/utils/math');
+const { updateDynamicGridSnapshotSync } = require('../market_adapter/utils/dynamic_grid_snapshot');
 
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
 const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
@@ -393,47 +394,66 @@ function refreshAmaCenterSnapshotForManualReset(botKey) {
     // AMA output before the grid is rebuilt. The raw AMA value remains intact
     // in amaCenterPrice for diagnostics.
     const snapshotPath = path.join(PROFILES_DIR, 'orders', `${botKey}.dynamicgrid.json`);
-    let snapshotRaw;
     try {
-        snapshotRaw = fs.readFileSync(snapshotPath, 'utf8');
+        const result = updateDynamicGridSnapshotSync(snapshotPath, (snapshot) => {
+            const amaCenterPrice = Number(snapshot?.amaCenterPrice);
+            if (!Number.isFinite(amaCenterPrice) || amaCenterPrice <= 0) {
+                return { ok: false, write: false };
+            }
+
+            const currentCenterPrice = Number(snapshot?.gridCenterPrice ?? snapshot?.centerPrice);
+            if (Number.isFinite(currentCenterPrice) && currentCenterPrice === amaCenterPrice) {
+                return { write: false };
+            }
+
+            return {
+                ...snapshot,
+                gridCenterPrice: amaCenterPrice,
+                centerPrice: amaCenterPrice,
+                updatedAt: new Date().toISOString(),
+            };
+        });
+        return result.ok;
     } catch (_) {
         return false;
     }
+}
 
-    let snapshot;
+function updateBotGridResetMetadata(botKey, options = {}) {
+    if (!botKey) return false;
+
+    const resetAt = options.resetAt || new Date().toISOString();
+    const resetSource = options.resetSource || 'dexbot_grid_resync';
+    const snapshotPath = path.join(PROFILES_DIR, 'orders', `${botKey}.dynamicgrid.json`);
+
     try {
-        snapshot = JSON.parse(snapshotRaw);
+        const result = updateDynamicGridSnapshotSync(snapshotPath, (snapshot) => {
+            const gridCenterPrice = Number(snapshot?.gridCenterPrice ?? snapshot?.centerPrice);
+            if (!Number.isFinite(gridCenterPrice) || gridCenterPrice <= 0) {
+                return { ok: false, write: false };
+            }
+            return {
+                ...snapshot,
+                gridCenterPrice,
+                centerPrice: gridCenterPrice,
+                lastGridResetAt: resetAt,
+                lastGridResetSource: resetSource,
+                updatedAt: resetAt,
+            };
+        });
+        return result.ok && result.written;
     } catch (_) {
         return false;
     }
-
-    const amaCenterPrice = Number(snapshot?.amaCenterPrice);
-    if (!Number.isFinite(amaCenterPrice) || amaCenterPrice <= 0) {
-        return false;
-    }
-
-    const currentCenterPrice = Number(snapshot?.gridCenterPrice ?? snapshot?.centerPrice);
-    if (Number.isFinite(currentCenterPrice) && currentCenterPrice === amaCenterPrice) {
-        return true;
-    }
-
-    const updatedSnapshot = {
-        ...snapshot,
-        gridCenterPrice: amaCenterPrice,
-        centerPrice: amaCenterPrice,
-        updatedAt: new Date().toISOString(),
-    };
-
-    const tmpPath = `${snapshotPath}.tmp`;
-    fs.writeFileSync(tmpPath, `${JSON.stringify(updatedSnapshot, null, 2)}\n`, 'utf8');
-    fs.renameSync(tmpPath, snapshotPath);
-    return true;
 }
 
 function performGridResync(options = {}) {
     const self = this;
     let success = false;
     const refreshCenterPrice = !!options.refreshCenterPrice;
+    const centerRefreshContext = options.centerRefreshContext || (refreshCenterPrice ? 'manual grid resync' : 'grid resync');
+    const centerRefreshLabel = options.centerRefreshLabel || (refreshCenterPrice ? 'manual grid reset' : 'grid reset');
+    const resetSource = options.resetSource || (refreshCenterPrice ? 'manual_grid_resync' : 'dexbot_grid_resync');
     const dustDelayMs = getPendingDustDelayMs(self);
     const idleDelayMs = getMaintenanceIdleDelayMs(self);
     if (dustDelayMs !== null || idleDelayMs > 0) {
@@ -476,9 +496,10 @@ function performGridResync(options = {}) {
 
             if (refreshCenterPrice) {
                 if (refreshAmaCenterSnapshotForManualReset(self.config?.botKey)) {
-                    self._log('Refreshed AMA center snapshot for manual grid reset.', 'info');
+                    self._log(`Refreshed AMA center snapshot for ${centerRefreshLabel}.`, 'info');
+                    refreshDynamicWeightDistribution.call(self, centerRefreshContext);
                 } else {
-                    self._warn('Manual grid reset requested but AMA center snapshot could not be refreshed.');
+                    self._warn(`${centerRefreshLabel} requested but AMA center snapshot could not be refreshed.`);
                 }
             }
 
@@ -494,6 +515,12 @@ function performGridResync(options = {}) {
             self.manager.funds.btsFeesOwed = 0;
             await self.manager.persistGrid();
             success = true;
+            if (updateBotGridResetMetadata(self.config?.botKey, {
+                resetAt: new Date().toISOString(),
+                resetSource,
+            })) {
+                self._log('Recorded grid reset metadata for dynamic grid state.', 'info');
+            }
 
             if (fs.existsSync(self.triggerFile)) {
                 fs.unlinkSync(self.triggerFile);
@@ -895,11 +922,22 @@ async function executeMaintenanceLogic(context) {
             const divergence = await Grid.monitorDivergence(this.manager, calculatedGrid, persistedGridData);
 
             if (divergence.needsUpdate) {
+                const hasRmsDivergence = !!(divergence.buy.rms || divergence.sell.rms);
                 if (divergence.buy.ratio || divergence.sell.ratio) {
                     this._log(`Grid update triggered by funds during ${context} (buy: ${divergence.buy.ratio}, sell: ${divergence.sell.ratio})`);
                 }
-                if (divergence.buy.rms || divergence.sell.rms) {
+                if (hasRmsDivergence) {
                     this._log(`Grid update triggered by structural divergence during ${context}: buy=${Format.formatPrice6(divergence.buy.metric)}, sell=${Format.formatPrice6(divergence.sell.metric)}`);
+                    const ok = await this._performGridResync({
+                        refreshCenterPrice: true,
+                        centerRefreshContext: 'RMS structural grid resync',
+                        centerRefreshLabel: 'RMS structural grid resync',
+                        resetSource: 'rms_structural_grid_resync',
+                    });
+                    if (!ok) {
+                        this._warn(`RMS structural divergence full grid resync failed during ${context}; retaining existing grid state.`);
+                    }
+                    return;
                 }
 
                 try {
@@ -1151,6 +1189,7 @@ module.exports = {
     loadBotsConfigSnapshot,
     refreshDynamicWeightDistribution,
     performGridResync,
+    updateBotGridResetMetadata,
     handlePendingTriggerReset,
     setupTriggerFileDetection,
     performPeriodicGridChecks,

@@ -1,21 +1,37 @@
 # Grid Recalculation Mechanisms
 
-DEXBot2 uses **five independent grid reset/update sources** to keep the trading grid synchronized with market conditions, bot funds, and on-chain state.
-The market adapter writes the AMA center baseline and selected dynamic-grid payloads first, then emits a reset trigger only when the bot should rebuild around that accepted snapshot.
+DEXBot2 has several independent ways to update the grid. They do not all do
+the same thing:
+
+- A **full grid resync** rebuilds the grid from current chain orders, the
+  current bot configuration, and the accepted dynamic-grid snapshot.
+- A **dynamic-grid snapshot write** updates
+  `profiles/orders/<botKey>.dynamicgrid.json`; it may or may not request a
+  full resync.
+- A **maintenance correction** updates existing orders or local grid state
+  without changing the accepted AMA center.
+
+The market adapter is the owner of AMA-derived market state. It writes the
+accepted `dynamicgrid.json` snapshot first, then writes
+`profiles/recalculate.<botKey>.trigger` only when the running bot should
+rebuild around that snapshot.
 
 ---
 
-## Overview: Reset and Update Sources
+## Overview: Grid Update Sources
 
-| Mechanism | Trigger | Config | Location | Scope |
-|-----------|---------|--------|----------|-------|
-| **Market Adapter Bootstrap** | First accepted AMA center for a bot | AMA bot configuration and whitelist | `profiles/orders/<botKey>.dynamicgrid.json` + `profiles/recalculate.<botKey>.trigger` | Per bot |
-| **AMA Delta** | AMA center moved significantly | `AMA_DELTA_THRESHOLD_PERCENT` / `deltaThresholdPercent` | `general.settings.json`; pair/bot overrides in `market_adapter_settings.json` | Global default, pair, or bot |
-| **AMA Slope Range Reset** | Accepted AMA-slope baseline moved past threshold | `amaSlopeDeltaThresholdPercent` / range-scaling settings | `profiles/market_adapter_settings.json` + `profiles/market_adapter_whitelist.json` | Whitelisted range-scaling bots |
-| **RMS Divergence** | Grid state diverged from blockchain | `RMS_PERCENTAGE` | `general.settings.json` | Global (all bots) |
-| **Regeneration** | Available funds exceed threshold | `GRID_REGENERATION_PERCENTAGE` | `constants.js` | Per-side (BUY/SELL) |
+| Source | Decision Owner | When It Fires | Runtime Action | Effect |
+|--------|----------------|---------------|----------------|--------|
+| **Initial AMA Snapshot** | Market adapter | Bot has no accepted AMA `gridCenterPrice` yet | Write `dynamicgrid.json`, then write a trigger file | Full grid resync around the first accepted AMA center |
+| **AMA Center Move** | Market adapter | Current AMA center moves past the configured delta threshold | Write `dynamicgrid.json`, then write a trigger file | Full grid resync around the new accepted AMA center |
+| **AMA Slope Range Move** | Market adapter | Range-scaling bot's accepted AMA-slope baseline moves past threshold | Write range-scaling fields to `dynamicgrid.json`, then write a trigger file | Full grid resync with updated asymmetric range/offset data |
+| **RMS Structural Divergence** | Bot runtime maintenance | Current grid shape diverges from persisted/on-chain grid by RMS threshold | Refresh `gridCenterPrice` from latest `amaCenterPrice`, then run full grid resync | Full grid resync from latest market-adapter snapshot |
+| **Available-Funds Resize** | Bot runtime maintenance | Filled-order proceeds exceed `GRID_REGENERATION_PERCENTAGE` | Recalculate affected side/order sizes through maintenance logic | Order-size/grid maintenance update, not an AMA recenter trigger |
 
-Each source is evaluated independently. Market-adapter reset triggers are serialized through `profiles/recalculate.<botKey>.trigger`; runtime maintenance updates are executed under the order manager fill-processing lock.
+Each source is evaluated independently. Market-adapter full-resync requests are
+serialized through `profiles/recalculate.<botKey>.trigger`. Runtime maintenance
+paths execute under the order manager fill-processing lock and may defer until
+the bot is idle or pending dust-cancel timers have settled.
 
 ---
 
@@ -49,7 +65,7 @@ trigger files remain supported as manual/legacy resets.
 
 ---
 
-## 2. Market Adapter Bootstrap Reset
+## 2. Initial AMA Snapshot Reset
 
 ### What It Does
 When the adapter has no accepted `gridCenterPrice` baseline for a bot, it persists
@@ -57,7 +73,7 @@ the first valid AMA center and writes a reset trigger so the running bot
 rebuilds around that center.
 
 **Why it matters:** The adapter and bot must agree on the first grid center. A
-bootstrap trigger prevents the adapter from silently accepting a center while
+first-snapshot trigger prevents the adapter from silently accepting a center while
 the bot continues operating on stale or missing dynamic-grid data.
 
 ### How It Works
@@ -69,11 +85,11 @@ the bot continues operating on stale or missing dynamic-grid data.
    with `reason: "market_adapter_bootstrap"`.
 4. The bot consumes the trigger through the normal grid-resync path.
 5. If the snapshot write fails, no trigger is written and the next adapter cycle
-   retries bootstrap from scratch.
+   retries the initial snapshot from scratch.
 
 ### Debugging
 
-**Bootstrap persistence failure:**
+**Initial snapshot persistence failure:**
 ```text
 triggerSuppressedReason: 'ama_center_persist_failed'
 ```
@@ -86,7 +102,9 @@ If this appears repeatedly, check disk space, write permissions for
 ## 3. AMA Delta Threshold (Market Adapter)
 
 ### What It Does
-Monitors the Adaptive Moving Average (AMA) of market prices. When the AMA center price deviates from the last recorded center by more than the threshold, a grid recalculation is triggered.
+Monitors the Adaptive Moving Average (AMA) of market prices. When the AMA
+center price deviates from the last accepted center by more than the threshold,
+the adapter writes a new snapshot and requests a full grid resync.
 
 **Why it matters:** Big market moves require repositioning the grid to stay centered around the new market price.
 
@@ -111,7 +129,7 @@ For a narrower override, set `deltaThresholdPercent` in
 - `AMA_DELTA_THRESHOLD_PERCENT`: Percentage change in AMA center that triggers grid reset
   - Default: `2%`
   - Range: `0.1` to `50.0` (configurable via CLI and `node dexbot bots` general settings)
-  - Example: If set to `1`, grid recalculates when AMA center moves ±1% from last center
+  - Example: If set to `1`, the bot fully resyncs when AMA center moves ±1% from the last accepted center
 
 ### CLI Override
 ```bash
@@ -167,9 +185,9 @@ node market_adapter/market_adapter.js --deltaPercent 2
 ### When to Adjust
 
 **Increase threshold (e.g., 1% → 2%) if:**
-- Grid recalculates too frequently (excessive churn)
+- Full grid resyncs happen too frequently (excessive churn)
 - Market is choppy/sideways
-- You want fewer but larger recalculations
+- You want fewer but larger full resyncs
 
 To change the threshold for every bot, edit `profiles/general.settings.json`
 or use the `node dexbot bots` general settings menu. To change the AMA preset
@@ -237,12 +255,23 @@ so the adapter converts them when loading overrides. New settings should use
 
 ---
 
-## 5. RMS Divergence Check (Grid Engine)
+## 5. RMS Structural Divergence (Runtime Maintenance)
 
 ### What It Does
-Compares the **calculated grid** (in-memory state) with the **persisted grid** (blockchain state). When divergence exceeds a threshold, the grid is regenerated to re-sync with reality.
+Compares the **calculated grid** currently held by the bot with the
+**persisted/on-chain grid state**. When structural divergence exceeds the
+threshold, the bot performs a full grid resync.
 
-**Why it matters:** Order fills, rotations, and fee deductions cause the persisted grid to drift from the calculated state. RMS divergence detects and corrects this drift.
+**Why it matters:** Order fills, rotations, and fee deductions can make the
+active grid shape drift away from the stored/on-chain picture. RMS divergence
+detects that structural drift. Once it crosses the threshold, DEXBot rebuilds
+from the latest market-adapter snapshot instead of trying to keep patching the
+old shape.
+
+The RMS calculation itself uses the current runtime grid and live dynamic
+weights as before. Crossing the threshold only changes the follow-up action:
+the bot refreshes `gridCenterPrice` from the latest `amaCenterPrice` in
+`dynamicgrid.json`, then runs the full resync path.
 
 ### Configuration
 
@@ -268,7 +297,7 @@ Compares the **calculated grid** (in-memory state) with the **persisted grid** (
 | RMS % | Avg Error | Description |
 |-------|-----------|-------------|
 | 0 | N/A | Disabled (no checks) |
-| 4.5% | ~1.0% | Very strict (frequent regens) |
+| 4.5% | ~1.0% | Very strict (frequent full resyncs) |
 | 9.8% | ~2.2% | Strict |
 | **14.3%** | **~3.2%** | **Default (balanced)** |
 | 20.1% | ~4.5% | Lenient |
@@ -285,14 +314,18 @@ Compares the **calculated grid** (in-memory state) with the **persisted grid** (
    ```
 4. If `RMS >= RMS_PERCENTAGE`:
    - Logs the structural divergence metrics
-   - Calls `applyGridDivergenceCorrections()`
-   - Applies the resulting COW update/cancel/create plan through the batch order path
-5. The master grid is committed only after successful blockchain execution; failed COW plans are discarded
+   - Refreshes `gridCenterPrice` in `dynamicgrid.json` from the latest
+     `amaCenterPrice`
+   - Calls `_performGridResync()` with
+     `resetSource: "rms_structural_grid_resync"`
+   - Persists the rebuilt grid and records reset metadata in `dynamicgrid.json`
+5. Market-adapter state and center projection files import that reset metadata
+   on the next adapter cycle
 
 ### When to Adjust
 
 **Increase threshold (e.g., 14.3% → 20%) if:**
-- Grid regens too frequently (expensive due to order updates)
+- Full RMS resyncs happen too frequently
 - You're comfortable with more fill/rotation drift
 - Blockchain latency causes false positives
 
@@ -303,17 +336,23 @@ Compares the **calculated grid** (in-memory state) with the **persisted grid** (
 
 **Disable (set to 0) if:**
 - You want to rely ONLY on AMA triggers (Issue #5: RMS Divergence Check Disabling)
-- You want to prevent automatic grid regeneration from divergence alone
-- You manually trigger grid regens via other mechanisms
+- You want to prevent automatic full resync from divergence alone
+- You manually trigger full grid resyncs through other mechanisms
 
 ---
 
-## 6. Grid Regeneration Threshold (Internal)
+## 6. Available-Funds Resize Threshold (Internal)
 
 ### What It Does
-Monitors available funds on each side (BUY/SELL). When accumulated fill proceeds exceed the threshold, the grid is regenerated to re-utilize the freed capital.
+Monitors available funds on each side (BUY/SELL). When accumulated fill
+proceeds exceed the threshold, the bot recalculates order sizes on the affected
+side so freed capital is used again.
 
-**Why it matters:** As orders fill, capital is freed. Regeneration re-allocates this capital back into active orders instead of leaving it idle.
+**Why it matters:** As orders fill, capital is freed. This maintenance path
+re-allocates that capital back into active orders instead of leaving it idle.
+
+This is not a market-adapter recenter event. It does not mean the AMA center
+changed, and it does not write a market-adapter trigger file.
 
 ### Configuration
 
@@ -326,7 +365,7 @@ GRID_LIMITS: {
 ```
 
 **Parameters:**
-- `GRID_REGENERATION_PERCENTAGE`: Percentage of allocated capital that can accumulate as free funds before triggering regen
+- `GRID_REGENERATION_PERCENTAGE`: Percentage of allocated capital that can accumulate as free funds before triggering a size recalculation
   - Default: `3%`
   - Example: 20 orders × 100 BTS = 2000 BTS grid
     - Triggers when availableFunds ≥ 60 BTS (3% of 2000)
@@ -339,13 +378,13 @@ GRID_LIMITS: {
 3. When `availableFunds / allocatedCapital × 100 >= GRID_REGENERATION_PERCENTAGE`:
    - Triggers `Grid.recalculateGrid()` on that side only
    - Recalculates order sizes to incorporate freed capital
-   - Maintains asymmetric fills (BUY fills don't trigger SELL regen)
-4. After regen, available funds are re-allocated into active orders
+   - Maintains asymmetric fills (BUY fills don't trigger SELL resize)
+4. After the resize, available funds are re-allocated into active orders
 
 ### When to Adjust
 
 **Increase threshold (e.g., 3% → 5%) if:**
-- Grid regens too frequently
+- Size recalculations happen too frequently
 - You want to accumulate more fill proceeds before rebalancing
 - You prefer stability over utilization
 
@@ -360,11 +399,11 @@ GRID_LIMITS: {
 
 ### Independence
 All reset/update sources are **independent**:
-- Bootstrap reset is triggered by accepting the first AMA center
+- Initial AMA snapshot reset is triggered by accepting the first AMA center
 - AMA delta is triggered by market price changes
 - AMA slope reset is triggered by accepted range-scaling slope drift
-- RMS divergence is triggered by blockchain state drift
-- Regeneration is triggered by available funds
+- RMS structural divergence is triggered by blockchain/grid-shape drift
+- Available-funds resize is triggered by accumulated free funds
 - Runtime execution is serialized by the fill-processing lock and idle/dust deferral
 
 ### Configuration Priority
@@ -381,7 +420,7 @@ All reset/update sources are **independent**:
     "AMA_DELTA_THRESHOLD_PERCENT": 0.5  // Respond to small moves
   },
   "GRID_LIMITS": {
-    "GRID_REGENERATION_PERCENTAGE": 1,  // Regen frequently
+    "GRID_REGENERATION_PERCENTAGE": 1,  // Reuse freed funds quickly
     "GRID_COMPARISON": {
       "RMS_PERCENTAGE": 9.8  // Tight divergence tolerance
     }
@@ -391,7 +430,7 @@ All reset/update sources are **independent**:
 - Grid follows price closely
 - Frequently re-utilizes freed capital
 - Detects drift early
-- **Cost:** More recalculations, higher blockchain fees
+- **Cost:** More full resyncs or size recalculations, higher blockchain fees
 
 **Example 2: Aggressive Grid (High Utilization)**
 ```json
@@ -400,7 +439,7 @@ All reset/update sources are **independent**:
     "AMA_DELTA_THRESHOLD_PERCENT": 2  // Ignore minor moves
   },
   "GRID_LIMITS": {
-    "GRID_REGENERATION_PERCENTAGE": 5,  // Regen sparingly
+    "GRID_REGENERATION_PERCENTAGE": 5,  // Accumulate more freed funds first
     "GRID_COMPARISON": {
       "RMS_PERCENTAGE": 0  // Disable RMS checks
     }
@@ -410,7 +449,7 @@ All reset/update sources are **independent**:
 - Grid adapts only to major price moves
 - Accumulates capital before rebalancing
 - No automatic drift correction
-- **Benefit:** Fewer recalculations, lower fees
+- **Benefit:** Fewer full resyncs and size recalculations, lower fees
 
 **Example 3: Balanced (Default)**
 ```json
@@ -452,15 +491,16 @@ market_adapter_ama_slope_delta_threshold
 **RMS Divergence Trigger:**
 ```
 Grid update triggered by structural divergence during periodic: buy=..., sell=...
-Grid divergence corrections applied during periodic
+Grid regeneration triggered. Performing full grid resync...
+Recorded grid reset metadata for dynamic grid state.
 ```
 
-**Regeneration Trigger:**
+**Available-Funds Resize Trigger:**
 ```
 Grid update triggered by funds during periodic (buy: ..., sell: ...)
 ```
 
-**Trigger Resync Execution:**
+**Trigger File Resync Execution:**
 ```text
 Pending trigger file detected. Processing reset before startup...
 Grid regeneration triggered. Performing full grid resync...
@@ -476,7 +516,7 @@ Removed trigger file.
 - Manual intervention required if major divergence occurs
 
 ❌ **Don't:** Set `AMA_DELTA_THRESHOLD_PERCENT` too low (< 0.5%)
-- Grid regens constantly (high fees)
+- Full grid resyncs happen constantly (high fees)
 - May never stabilize in choppy markets
 
 ❌ **Don't:** Disable AMA without disabling AMA configuration
@@ -488,8 +528,8 @@ Removed trigger file.
 - Choppy markets: Raise both AMA_DELTA_THRESHOLD_PERCENT and RMS_PERCENTAGE
 - High-fill markets: Lower GRID_REGENERATION_PERCENTAGE
 
-✅ **Do:** Monitor grid recalculation frequency
-- Log output should show recalcs are balanced
+✅ **Do:** Monitor grid update frequency
+- Log output should show full resyncs and maintenance resizes are balanced
 - Adjust thresholds if too frequent or too rare
 
 ---
@@ -507,9 +547,9 @@ Removed trigger file.
 - `modules/constants.js` — Default configuration values
 - `modules/account_bots.js` — Bot configuration schema and defaults
 - `market_adapter/market_adapter.js` — AMA calculation and trigger logic
-- `market_adapter/core/market_adapter_service.js` — Bootstrap, AMA-delta, and AMA-slope trigger decisions
+- `market_adapter/core/market_adapter_service.js` — Initial AMA snapshot, AMA-delta, and AMA-slope trigger decisions
 - `modules/dexbot_maintenance_runtime.js` — Trigger-file detection, manual center refresh, idle/dust deferral, and resync execution
 - `modules/order/grid.js` — RMS divergence check and grid comparison
-- `modules/order/manager.js` — Regeneration threshold logic
+- `modules/order/manager.js` — Available-funds resize threshold logic
 - `profiles/general.settings.json` — User-editable configuration
 - `profiles/bots.json` — Per-bot configuration including AMA

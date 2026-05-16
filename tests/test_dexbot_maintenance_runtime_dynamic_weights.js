@@ -8,24 +8,48 @@ const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache
 console.log('Running dexbot maintenance runtime dynamic weight tests');
 
 const runtimePath = require.resolve('../modules/dexbot_maintenance_runtime');
+const dexbotClassPath = require.resolve('../modules/dexbot_class');
 const bitsharesClientPath = require.resolve('../modules/bitshares_client');
+const chainKeysPath = require.resolve('../modules/chain_keys');
+const credentialPolicyPath = require.resolve('../modules/credential_policy');
 const chainOrdersPath = require.resolve('../modules/chain_orders');
+const orderModulePath = require.resolve('../modules/order');
 const gridPath = require.resolve('../modules/order/grid');
 const constantsPath = require.resolve('../modules/constants');
 const systemPath = require.resolve('../modules/order/utils/system');
+const validatePath = require.resolve('../modules/order/utils/validate');
 const formatPath = require.resolve('../modules/order/format');
 const orderUtilsPath = require.resolve('../modules/order/utils/order');
+const mathPath = require.resolve('../modules/order/utils/math');
+const processedFillStorePath = require.resolve('../modules/order/processed_fill_store');
+const fillRuntimePath = require.resolve('../modules/dexbot_fill_runtime');
+const creditRuntimePath = require.resolve('../modules/credit_runtime');
+const startupReconcilePath = require.resolve('../modules/order/startup_reconcile');
+const accountOrdersPath = require.resolve('../modules/account_orders');
+const botSettingsPath = require.resolve('../modules/bot_settings');
 const accountBotsPath = require.resolve('../modules/account_bots');
 
 const originals = new Map([
     [runtimePath, require.cache[runtimePath]],
+    [dexbotClassPath, require.cache[dexbotClassPath]],
     [bitsharesClientPath, require.cache[bitsharesClientPath]],
+    [chainKeysPath, require.cache[chainKeysPath]],
+    [credentialPolicyPath, require.cache[credentialPolicyPath]],
     [chainOrdersPath, require.cache[chainOrdersPath]],
+    [orderModulePath, require.cache[orderModulePath]],
     [gridPath, require.cache[gridPath]],
     [constantsPath, require.cache[constantsPath]],
     [systemPath, require.cache[systemPath]],
+    [validatePath, require.cache[validatePath]],
     [formatPath, require.cache[formatPath]],
     [orderUtilsPath, require.cache[orderUtilsPath]],
+    [mathPath, require.cache[mathPath]],
+    [processedFillStorePath, require.cache[processedFillStorePath]],
+    [fillRuntimePath, require.cache[fillRuntimePath]],
+    [creditRuntimePath, require.cache[creditRuntimePath]],
+    [startupReconcilePath, require.cache[startupReconcilePath]],
+    [accountOrdersPath, require.cache[accountOrdersPath]],
+    [botSettingsPath, require.cache[botSettingsPath]],
     [accountBotsPath, require.cache[accountBotsPath]],
 ]);
 
@@ -442,6 +466,84 @@ async function testManualTriggerResetKeepsOffsetWhenCenterAlreadyCurrent() {
     }
 }
 
+function testUpdateBotGridResetMetadataRecordsActualReset() {
+    const { updateBotGridResetMetadata } = require(runtimePath);
+
+    const botKey = `metadata-reset-${Date.now()}`;
+    const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
+    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
+    fs.writeFileSync(snapshotFile, JSON.stringify({
+        gridCenterPrice: 123.45,
+        centerPrice: 123.45,
+        amaCenterPrice: 130.25,
+        gridPriceOffsetPct: 0.8,
+        source: 'market_adapter/market_adapter.js',
+        updatedAt: '2026-01-01T00:00:00Z',
+    }, null, 2) + '\n', 'utf8');
+
+    const prevReadFileSync = fs.readFileSync;
+    let adapterStateReadCount = 0;
+    fs.readFileSync = (filePath, encoding) => {
+        const text = String(filePath);
+        if (text.endsWith('/market_adapter/state/market_adapter_state.json')
+                || text.endsWith('/market_adapter/state/market_adapter_centers.json')) {
+            adapterStateReadCount += 1;
+            throw new Error(`unexpected adapter state read: ${text}`);
+        }
+        return originalReadFileSync(filePath, encoding);
+    };
+
+    try {
+        const ok = updateBotGridResetMetadata(botKey, {
+            resetAt: '2026-05-15T00:01:00.327Z',
+            resetSource: 'unit_test_resync',
+        });
+        assert.strictEqual(ok, true, 'metadata update should succeed when snapshot exists');
+
+        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        assert.strictEqual(updated.gridCenterPrice, 123.45, 'metadata update should preserve grid center');
+        assert.strictEqual(updated.centerPrice, 123.45, 'metadata update should preserve center alias');
+        assert.strictEqual(updated.amaCenterPrice, 130.25, 'metadata update should preserve current AMA diagnostics');
+        assert.strictEqual(updated.gridPriceOffsetPct, 0.8, 'metadata update should preserve actual offset');
+        assert.strictEqual(updated.lastGridResetAt, '2026-05-15T00:01:00.327Z');
+        assert.strictEqual(updated.lastGridResetSource, 'unit_test_resync');
+        assert.strictEqual(updated.updatedAt, '2026-05-15T00:01:00.327Z');
+        assert.strictEqual(adapterStateReadCount, 0, 'metadata update should not touch adapter-owned state snapshots');
+    } finally {
+        fs.readFileSync = prevReadFileSync;
+        originalUnlinkSync(snapshotFile);
+    }
+}
+
+function testUpdateBotGridResetMetadataRejectsInvalidSnapshot() {
+    const { updateBotGridResetMetadata } = require(runtimePath);
+
+    const botKey = `metadata-invalid-${Date.now()}`;
+    const snapshotFile = path.join(__dirname, '..', 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
+    fs.mkdirSync(path.dirname(snapshotFile), { recursive: true });
+    fs.writeFileSync(snapshotFile, JSON.stringify({
+        gridCenterPrice: 0,
+        centerPrice: 0,
+        amaCenterPrice: 130.25,
+        source: 'market_adapter/market_adapter.js',
+        updatedAt: '2026-01-01T00:00:00Z',
+    }, null, 2) + '\n', 'utf8');
+
+    try {
+        const ok = updateBotGridResetMetadata(botKey, {
+            resetAt: '2026-05-15T00:01:00.327Z',
+            resetSource: 'unit_test_resync',
+        });
+        assert.strictEqual(ok, false, 'metadata update should report false when no valid center can be preserved');
+
+        const updated = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+        assert.strictEqual(updated.lastGridResetAt, undefined);
+        assert.strictEqual(updated.lastGridResetSource, undefined);
+    } finally {
+        originalUnlinkSync(snapshotFile);
+    }
+}
+
 function testRefreshDynamicWeightDistributionRejectsStaleBaseWeights() {
     const { refreshDynamicWeightDistribution } = require(runtimePath);
 
@@ -500,14 +602,208 @@ function testRefreshDynamicWeightDistributionRejectsStaleBaseWeights() {
     dynamicWeightSnapshotMode = 'live';
 }
 
+async function testRmsDivergenceRunsFullGridResync() {
+    delete require.cache[runtimePath];
+
+    let resyncOptions = null;
+    let correctionCalled = false;
+    let spreadChecked = false;
+    const logs = [];
+
+    setCachedModule(bitsharesClientPath, { BitShares: {} });
+    setCachedModule(constantsPath, {
+        ORDER_STATES: {},
+        TIMING: {},
+        MAINTENANCE: {},
+        GRID_LIMITS: {
+            DUST_CANCEL_DELAY_SEC: -1,
+        },
+    });
+    setCachedModule(systemPath, {
+        retryPersistenceIfNeeded: async () => {},
+        applyGridDivergenceCorrections: async () => {
+            correctionCalled = true;
+        },
+        loadAmaCenterSnapshot: () => null,
+        parseJsonWithComments: (text) => JSON.parse(text),
+    });
+    setCachedModule(gridPath, {
+        monitorDivergence: async () => ({
+            needsUpdate: true,
+            buy: { ratio: false, rms: true, metric: 14.8 },
+            sell: { ratio: false, rms: false, metric: 0 },
+        }),
+    });
+    setCachedModule(formatPath, {
+        formatPrice6: (value) => Number(value).toFixed(6),
+    });
+    setCachedModule(orderUtilsPath, {
+        virtualizeOrder: (order) => order,
+    });
+    setCachedModule(accountBotsPath, {
+        isBotDynamicWeightWhitelisted: () => false,
+        resetMarketAdapterWhitelistCache: () => {},
+    });
+
+    const { executeMaintenanceLogic } = require(runtimePath);
+    const self = {
+        config: {
+            botKey: 'rms-reset-bot-0',
+            weightDistribution: { sell: 0.6, buy: 0.4 },
+        },
+        _baseWeightDistribution: { sell: 0.6, buy: 0.4 },
+        _maintenanceCooldownCycles: 0,
+        _dustSinceMap: new Map(),
+        manager: {
+            config: {
+                weightDistribution: { sell: 0.6, buy: 0.4 },
+            },
+            orders: new Map([
+                ['buy-0', { id: 'buy-0', type: 'buy', price: 1, size: 1 }],
+            ]),
+            recalculateFunds: async () => {},
+            clearStalePipelineOperations: () => {},
+            isPipelineEmpty: () => ({ isEmpty: true }),
+            checkGridHealth: async () => ({ buyDustOrders: [], sellDustOrders: [] }),
+            checkSpreadCondition: async () => {
+                spreadChecked = true;
+                return null;
+            },
+        },
+        accountOrders: {
+            loadBotGrid: () => [{ id: 'buy-0', type: 'buy', price: 1, size: 1 }],
+        },
+        _getPipelineSignals: () => ({}),
+        _cancelDustOrders: async () => ({ cancelledCount: 0, batchResult: null }),
+        _abortFlowIfIllegalState: async () => false,
+        _performGridResync: async (options) => {
+            resyncOptions = options;
+            return true;
+        },
+        updateOrdersOnChainBatch: async () => {
+            throw new Error('correction batch should not run for RMS resync');
+        },
+        updateOrdersOnChainPlan: async () => {},
+        _persistAndRecoverIfNeeded: async () => {},
+        _log: (msg) => logs.push(String(msg)),
+        _warn: (msg) => logs.push(`WARN:${msg}`),
+    };
+
+    await executeMaintenanceLogic.call(self, 'unit-test-rms');
+
+    assert.deepStrictEqual(resyncOptions, {
+        refreshCenterPrice: true,
+        centerRefreshContext: 'RMS structural grid resync',
+        centerRefreshLabel: 'RMS structural grid resync',
+        resetSource: 'rms_structural_grid_resync',
+    }, 'RMS divergence should run full grid resync from the latest AMA center snapshot');
+    assert.strictEqual(correctionCalled, false, 'RMS divergence should not use correction-only path');
+    assert.strictEqual(spreadChecked, false, 'maintenance should stop after full RMS resync');
+    assert.ok(
+        logs.some((msg) => msg.includes('Grid update triggered by structural divergence during unit-test-rms')),
+        'RMS divergence should be logged'
+    );
+}
+
+async function testDexbotClassPerformGridResyncForwardsOptions() {
+    delete require.cache[dexbotClassPath];
+
+    let forwardedThis = null;
+    let forwardedOptions = null;
+    setCachedModule(runtimePath, {
+        performGridResync(options = {}) {
+            forwardedThis = this;
+            forwardedOptions = options;
+            return Promise.resolve('forwarded');
+        },
+    });
+    setCachedModule(bitsharesClientPath, { BitShares: {}, waitForConnected: async () => {} });
+    setCachedModule(chainKeysPath, {});
+    setCachedModule(credentialPolicyPath, {});
+    setCachedModule(chainOrdersPath, {});
+    setCachedModule(orderModulePath, { OrderManager: class {}, grid: {} });
+    setCachedModule(systemPath, {
+        retryPersistenceIfNeeded: async () => {},
+        initializeFeeCache: async () => {},
+        applyGridDivergenceCorrections: async () => {},
+        parseJsonWithComments: (text) => JSON.parse(text),
+    });
+    setCachedModule(validatePath, {
+        hasExecutableActions: () => false,
+        validateCreateTargetSlots: () => [],
+    });
+    setCachedModule(orderUtilsPath, {
+        buildCreateOrderArgs: () => null,
+        getOrderTypeFromUpdatedFlags: () => null,
+        virtualizeOrder: (order) => order,
+        correctAllPriceMismatches: () => [],
+        convertToSpreadPlaceholder: () => null,
+        buildOutsideInPairGroups: () => [],
+        extractBatchOperationResults: () => [],
+        buildFillKey: () => 'fill-key',
+    });
+    setCachedModule(mathPath, {
+        validateOrderSize: () => true,
+        calculateRotationOrderSizes: () => ({}),
+        cloneWeightDistribution: (weights, fallback) => weights || fallback || null,
+    });
+    setCachedModule(processedFillStorePath, {
+        ProcessedFillStore: class {},
+        PROCESSED_FILL_PERSISTENCE_MODES: {},
+    });
+    setCachedModule(fillRuntimePath, {});
+    setCachedModule(creditRuntimePath, class {});
+    setCachedModule(constantsPath, {
+        ORDER_STATES: {},
+        ORDER_TYPES: {},
+        REBALANCE_STATES: {},
+        COW_ACTIONS: {},
+        TIMING: {},
+        MAINTENANCE: {},
+        GRID_LIMITS: {},
+        FILL_PROCESSING: {},
+    });
+    setCachedModule(startupReconcilePath, {
+        attemptResumePersistedGridByPriceMatch: async () => null,
+        decideStartupGridAction: () => null,
+        reconcileStartupOrders: async () => null,
+    });
+    setCachedModule(accountOrdersPath, {
+        AccountOrders: class {},
+        createBotKey: () => 'bot-key',
+    });
+    setCachedModule(botSettingsPath, {
+        normalizeBotEntry: (entry) => entry,
+    });
+    setCachedModule(formatPath, {});
+
+    const DEXBot = require(dexbotClassPath);
+    const fakeBot = { config: { botKey: 'forward-bot' } };
+    const options = {
+        refreshCenterPrice: true,
+        centerRefreshContext: 'RMS structural grid resync',
+        resetSource: 'rms_structural_grid_resync',
+    };
+
+    const result = await DEXBot.prototype._performGridResync.call(fakeBot, options);
+
+    assert.strictEqual(result, 'forwarded');
+    assert.strictEqual(forwardedThis, fakeBot, 'wrapper should preserve the bot instance');
+    assert.strictEqual(forwardedOptions, options, 'wrapper should forward resync options unchanged');
+}
+
 async function main() {
     try {
         await testPerformGridResyncAppliesVolatilityOnlyDynamicWeights();
         testRefreshDynamicWeightDistributionAppliesAndFallsBack();
         testRefreshDynamicWeightDistributionReloadsWhitelistFlags();
         testRefreshDynamicWeightDistributionRejectsStaleBaseWeights();
+        testUpdateBotGridResetMetadataRecordsActualReset();
+        testUpdateBotGridResetMetadataRejectsInvalidSnapshot();
         await testManualTriggerResetRefreshesCenterPrice();
         await testManualTriggerResetKeepsOffsetWhenCenterAlreadyCurrent();
+        await testRmsDivergenceRunsFullGridResync();
+        await testDexbotClassPerformGridResyncForwardsOptions();
         console.log('dexbot maintenance runtime dynamic weight tests passed');
     } finally {
         fs.existsSync = originalExistsSync;
