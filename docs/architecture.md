@@ -413,6 +413,10 @@ The fill pipeline handles incoming filled orders efficiently through fixed-cap b
 
 ### Impact vs. Legacy Sequential Processing
 
+Scenario source: 29-fill burst during the Feb 7 market crash, modeled at
+roughly 3 seconds per broadcast; see
+[`FUND_MOVEMENT_AND_ACCOUNTING.md`](FUND_MOVEMENT_AND_ACCOUNTING.md#14-fill-batch-processing--cache-fund-timeline).
+
 | Metric | Legacy (1-at-a-time) | Fixed-Cap Batching | Improvement |
 |--------|---------------------|-------------------|-------------|
 | **29 Fills** | ~90 seconds | ~24 seconds | **73% faster** |

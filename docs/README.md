@@ -73,7 +73,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **System Design**: High-level overview of how the bot components interact.
 - **Module Responsibilities**: Detailed breakdown of the **Manager**, **Accountant**, **Strategy**, **Grid**, **FillRuntime**, and **MaintenanceRuntime** modules.
 - **Copy-on-Write Pattern**: Safe concurrent rebalancing with isolated working grids (see [COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md))
-- **Fill Processing Pipeline**: Fixed-cap batch fill processing (1-4 fills per broadcast, ~24s for 29 fills)
+- **Fill Processing Pipeline**: Fixed-cap batch fill processing (1-4 fills per broadcast; documented Feb 7 29-fill scenario: ~24s)
 - **Fund-Driven Boundary Sync**: Automatic grid alignment with inventory distribution
 - **Spread Correction**: Conservative, fund-aware maintenance of constant spread width
 - **Periodic Market Price Refresh**: Background 4-hour price updates

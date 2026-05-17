@@ -86,6 +86,9 @@ The adapter uses tiered clamping thresholds to manage inventory risk during extr
 node analysis/ama_fitting/calculate_clamping_limits.js
 ```
 
+Source: pool 133 `IOB.XRP/BTS`, 1h candles, 2023-05-05 22:00 UTC through
+2026-05-04 22:00 UTC.
+
 | AMA preset | 99.9% — 3.29σ | 99.99% — 3.89σ | 99.999% — 4.42σ |
 |------------|-------------------:|--------------------:|-------------------------:|
 | AMA1 | 1.461x | 1.571x | 1.626x |

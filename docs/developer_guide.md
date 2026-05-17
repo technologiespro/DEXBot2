@@ -79,7 +79,7 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 
 | Term | Meaning |
 |------|---------|
-| **Fixed-Cap Batch Fill Processing** | Groups fills with a hard cap using `MAX_FILL_BATCH_SIZE` (default 4): `<= cap` uses one unified batch; `> cap` chunks at cap size. Reduces market divergence window from ~90s to ~24s for 29 fills. |
+| **Fixed-Cap Batch Fill Processing** | Groups fills with a hard cap using `MAX_FILL_BATCH_SIZE` (default 4): `<= cap` uses one unified batch; `> cap` chunks at cap size. In the documented 29-fill Feb 7 crash scenario, this reduces the estimated divergence window from ~90s to ~24s; see [`FUND_MOVEMENT_AND_ACCOUNTING.md`](FUND_MOVEMENT_AND_ACCOUNTING.md#14-fill-batch-processing--cache-fund-timeline). |
 | **Recovery Retry System** | Count+time-based retry mechanism with periodic reset. Replaces one-shot `_recoveryAttempted` flag. Max 5 attempts per episode with 60s minimum interval between retries. |
 | **Orphan-Fill Deduplication** | Map+TTL-based tracking of stale-cleaned order IDs to prevent double-crediting. Delayed orphan fill events are still blocked by checking `_staleCleanedOrderIds`. |
 

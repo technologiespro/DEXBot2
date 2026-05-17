@@ -134,6 +134,9 @@ preserving reasonable inventory turnover.
 | **AMA3** | 35% | 45% to 50% | 55% | 60%+ |
 | AMA4 | 40% | 50% to 55% | 60% | 65%+ |
 
+Source: pool 133 `IOB.XRP/BTS`, 1h candles, 2023-05-05 22:00 UTC through
+2026-05-04 22:00 UTC.
+
 **Outputs:**
 - `analysis/ama_fitting/optimization_results_<datafile>.json` — full results
 - `profiles/market_profiles.json` — updated with new AMA parameters per pair only when `--write-profiles` is used

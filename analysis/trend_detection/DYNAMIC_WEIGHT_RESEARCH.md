@@ -220,6 +220,9 @@ The dedicated volatility research chart in `analysis/analyze_volatility.js` uses
 
 Estimates the long-memory property of the price series via Rescaled Range (R/S) analysis over a rolling window of 256 bars with scales `[8, 16, 32, 64]`.
 
+The regime bands below are project heuristic defaults, not fitted market-specific
+thresholds.
+
 | H value | Regime | Meaning |
 |---|---|---|
 | H > 0.55 | TRENDING | Returns are persistent — trends continue |
@@ -235,6 +238,9 @@ Estimates the long-memory property of the price series via Rescaled Range (R/S) 
 ### Permutation Entropy
 
 Measures market disorder by counting ordinal (rank-order) patterns in a rolling window of 54 bars, with embedding dimension `m=5` and delay `1`.
+
+The regime bands below are project heuristic defaults, not fitted market-specific
+thresholds.
 
 | Normalized PE | Regime | Meaning |
 |---|---|---|
