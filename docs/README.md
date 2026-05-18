@@ -2,7 +2,7 @@
 
 This directory contains the comprehensive technical documentation for the DEXBot2 trading bot. It is designed to guide developers from high-level architecture down to the nuances of fund accounting and state management.
 
-**Version context:** v0.6.0 is the latest tagged release. Current internal documentation tracks v0.7.0, which introduces signal intelligence, strict runtime behavior, credit/debt workflows, and credit maintenance hardening.
+**Version context:** v0.7.0 is the latest tagged release. This documentation now tracks the released 0.7 line, which includes signal intelligence, strict runtime behavior, credit/debt workflows, and credit maintenance hardening.
 
 ---
 

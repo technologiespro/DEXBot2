@@ -42,6 +42,7 @@ This update covers the final week of May 0.7 development, focusing on signal ref
 - Standardized grid price terminology and updated AMA slope units across runtime and research tools (`cd8c1bc`, `f38c78e`).
 - Improved market adapter lifecycle management and stability by hardening timestamp parsing and candle merge robustness (`a5f8006`, `dbdf286`).
 - Aligned versioning and comparison docs to the final 0.7.0 state (`7121fee`).
+- Promoted the release-facing documentation set to the tagged v0.7.0 line, including the docs index, comparison report, migration analysis, accounting reference, and evolution report.
 
 ### 2026-05-01 to 2026-05-07
 

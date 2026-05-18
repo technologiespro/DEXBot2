@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.0 development cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.0 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
@@ -180,6 +180,7 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 - **May 13**: Credential daemon hardening sprint — broadcast retry, node list mirroring, bootstrap resilience, PM2 restart loop prevention, stale socket exit. AMA slope market price offset applied
 - **May 14-15**: Credit runtime fixes — MPA target CR encoding, pair-scoped pricing, reborrow policy preservation. Documentation finalization for 0.7.0
 - **May 16-18**: Credit maintenance hardening — collateral-gated credit increases, renew-only credit offer policy, credit deal renewal with fallback safety, startup credit maintenance, autoRepay state sync, centralized grid reset metadata handling, dynamic grid reset state preservation, empirical table source documentation
+- **May 18**: Release v0.7.0 - final 0.7 hardening and signal refinement
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -230,7 +231,7 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 ### DEXBot2
 - **v0.1.x-v0.5.x**: Foundation, fee handling, stability, and the COW groundwork.
 - **v0.6.0**: Market adapter release with AMA grid centers and trigger wiring.
-- **v0.7 Expansion**: Integration of advanced signals, dynamic weights, credit/debt runtime, credit maintenance hardening, grid reset metadata, and comprehensive documentation.
+- **v0.7.0**: Integration of advanced signals, dynamic weights, credit/debt runtime, credit maintenance hardening, grid reset metadata, and comprehensive documentation.
 
 ---
 
