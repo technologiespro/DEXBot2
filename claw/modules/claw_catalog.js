@@ -2,7 +2,7 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
 }
 
-const SUPPORTED_RUNTIMES = ['openclaw', 'hermes', 'openfang', 'nanobot', 'picoclaw', 'nanoclaw', 'zeroclaw', 'nullclaw'];
+const SUPPORTED_RUNTIMES = ['openclaw', 'hermes', 'openfang', 'nanobot', 'picoclaw', 'nanoclaw', 'zeroclaw', 'nullclaw', 'memu'];
 
 function stringSchema(description) {
   return {
@@ -89,6 +89,12 @@ function strictObjectSchema(properties = {}, required = [], description = null) 
     ...objectSchema(properties, required, description),
     additionalProperties: false
   };
+}
+
+function memuScopeSchema(description = null) {
+  return objectSchema({
+    user_id: stringSchema('Optional memU user scope id')
+  }, [], description || 'Optional memU scope filter');
 }
 
 
@@ -715,6 +721,235 @@ const CLAW_TOOL_CATALOG = Object.freeze([
     }, []),
     risk: 'execute',
     toolName: 'claw_launcher_pm2_reload'
+  }),
+  createToolDefinition({
+    command: 'memu-manifest',
+    description: 'Inspect the memU memory bridge surface',
+    inputSchema: objectSchema({
+      memuDir: stringSchema('Optional memU state directory')
+    }),
+    risk: 'read',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_manifest'
+  }),
+  createToolDefinition({
+    command: 'memu-memorize',
+    description: 'Store a resource as memU memory',
+    args: {
+      payload_json: 'JSON object with resourceUrl, modality, and optional user'
+    },
+    exampleArgs: ['--payload', '{"resourceUrl":"/tmp/conversation.txt","modality":"conversation"}'],
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      resourceUrl: stringSchema('Path or URL to the resource to memorize'),
+      modality: stringSchema('conversation, document, image, video, or audio'),
+      user: memuScopeSchema('Optional user scope for memory ownership')
+    }, ['resourceUrl', 'modality']),
+    risk: 'execute',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_memorize'
+  }),
+  createToolDefinition({
+    command: 'memu-retrieve',
+    description: 'Query memU memories',
+    args: {
+      payload_json: 'JSON object with queries plus optional where and method'
+    },
+    exampleArgs: ['--payload', '{"queries":[{"role":"user","content":{"text":"What do I prefer for BTS/USD bots?"}}],"where":{"user_id":"trader-123"}}'],
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      queries: {
+        type: 'array',
+        items: objectSchema(),
+        description: 'memU query messages'
+      },
+      where: memuScopeSchema('Optional memU retrieval scope'),
+      method: stringSchema('Optional retrieval method: rag or llm')
+    }, ['queries']),
+    risk: 'read',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_retrieve'
+  }),
+  createToolDefinition({
+    command: 'memu-list-categories',
+    description: 'List memU categories',
+    args: {
+      payload_json: 'JSON object with optional where filter'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      where: memuScopeSchema('Optional memU category scope')
+    }),
+    risk: 'read',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_list_categories'
+  }),
+  createToolDefinition({
+    command: 'memu-list-items',
+    description: 'List memU memory items',
+    args: {
+      payload_json: 'JSON object with optional where filter'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      where: memuScopeSchema('Optional memU item scope')
+    }),
+    risk: 'read',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_list_items'
+  }),
+  createToolDefinition({
+    command: 'memu-create-item',
+    description: 'Create a memU item in a category by category id or category name',
+    args: {
+      payload_json: 'JSON object with categoryId or categoryName, summary, optional memoryType, and optional user'
+    },
+    exampleArgs: ['--payload', '{"categoryName":"preferences","summary":"Prefers 2% BTS/USD grid spacing","user":{"user_id":"trader-123"}}'],
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: {
+      type: 'object',
+      additionalProperties: true,
+      properties: {
+        categoryId: stringSchema('memU category id or name'),
+        categoryName: stringSchema('memU category name alias'),
+        summary: stringSchema('Memory content summary'),
+        memoryType: stringSchema('Optional memory type'),
+        user: memuScopeSchema('Optional user scope for memory ownership')
+      },
+      required: ['summary'],
+      anyOf: [
+        { required: ['categoryId'] },
+        { required: ['categoryName'] }
+      ]
+    },
+    risk: 'execute',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_create_item'
+  }),
+  createToolDefinition({
+    command: 'memu-update-item',
+    description: 'Update a memU item',
+    args: {
+      payload_json: 'JSON object with itemId and updates'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      itemId: stringSchema('memU item id'),
+      updates: objectSchema({}, [], 'Update payload for the memory item')
+    }, ['itemId', 'updates']),
+    risk: 'execute',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_update_item'
+  }),
+  createToolDefinition({
+    command: 'memu-delete-item',
+    description: 'Delete a memU item',
+    args: {
+      payload_json: 'JSON object with itemId'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      itemId: stringSchema('memU item id')
+    }, ['itemId']),
+    risk: 'execute',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_delete_item'
+  }),
+  createToolDefinition({
+    command: 'memu-clear',
+    description: 'Clear memU memory, optionally limited by a where scope',
+    args: {
+      payload_json: 'JSON object with optional where filter'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      where: memuScopeSchema('Optional memU clear scope')
+    }),
+    risk: 'execute',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_clear'
+  }),
+  createToolDefinition({
+    command: 'memu-status',
+    description: 'Inspect memU status and counts',
+    args: {
+      payload_json: 'JSON object with optional where filter'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      where: memuScopeSchema('Optional memU status scope')
+    }),
+    risk: 'read',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_status'
+  }),
+  createToolDefinition({
+    command: 'memu-memorize-conversation',
+    description: 'Store a conversation transcript in memU',
+    args: {
+      payload_json: 'JSON object with messages array and optional user'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      messages: {
+        type: 'array',
+        items: objectSchema(),
+        description: 'Conversation messages'
+      },
+      user: memuScopeSchema('Optional user scope for memory ownership')
+    }, ['messages']),
+    risk: 'execute',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_memorize_conversation'
+  }),
+  createToolDefinition({
+    command: 'memu-memorize-trading-context',
+    description: 'Store trading context in memU',
+    args: {
+      payload_json: 'JSON object with context and optional user'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      context: {
+        oneOf: [
+          { type: 'string' },
+          objectSchema()
+        ],
+        description: 'Trading context content'
+      },
+      user: memuScopeSchema('Optional user scope for memory ownership')
+    }, ['context']),
+    risk: 'execute',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_memorize_trading_context'
+  }),
+  createToolDefinition({
+    command: 'memu-retrieve-trading-context',
+    description: 'Retrieve trading-related memU memories',
+    args: {
+      payload_json: 'JSON object with query and optional user'
+    },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: objectSchema({
+      query: stringSchema('Trading context query'),
+      user: memuScopeSchema('Optional user scope for retrieval')
+    }, ['query']),
+    risk: 'read',
+    runtimes: ['memu'],
+    surface: 'memory',
+    toolName: 'claw_memu_retrieve_trading_context'
   }),
 ]);
 

@@ -41,6 +41,7 @@ function describeClawBridge(options = {}) {
       credentialClient: 'internal only',
       honest: 'read-only context + pair pricing',
       market: 'read-only snapshots',
+      memory: 'memU proactive memory bridge',
       order: 'DEXBot2 order utilities',
       profiles: 'DEXBot2 profile-folder adapter, including bot settings read/preview/apply and read-only general.settings.json context',
       stateStore: 'filesystem-backed AI-Bot state'

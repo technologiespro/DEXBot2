@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+// MCP stdio reserves stdout for JSON-RPC frames. Some shared DEXBot2 modules
+// log during require-time initialization, so suppress incidental console logs.
+console.log = () => {};
+console.warn = () => {};
+
 const { getClawToolByName, getClawToolCatalog } = require('../modules/claw_catalog');
 const { runClawCommand } = require('../modules/claw_bridge');
 

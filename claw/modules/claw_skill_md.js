@@ -182,6 +182,36 @@ function buildRuntimeSetup(runtime, repoRoot, profileRoot) {
         `Set \`DEXBOT_PROFILE_ROOT=${profileRoot}\` for the plugin process if you want a default profile root.`
       ].join('\n');
 
+    case 'memu':
+      return [
+        '## memU Setup',
+        '',
+        'memU provides 24/7 proactive memory for AI agents. It requires Python 3.13+ and the `memu-py` package.',
+        '',
+        '```bash',
+        'pip install memu-py',
+        'export OPENAI_API_KEY=your_api_key',
+        '```',
+        '',
+        'Start the memU MCP server:',
+        '',
+        '```bash',
+        `node ${path.join(repoRoot, 'scripts', 'memu_mcp_server.js').replace(/\\/g, '/')} --memu-dir ${path.join(repoRoot, 'data', 'memu').replace(/\\/g, '/')}`,
+        '```',
+        '',
+        'Or use the npm script:',
+        '',
+        '```bash',
+        'npm run memu:mcp',
+        '```',
+        '',
+        'The hand-written skill file lives at `skills/memu-memory/SKILL.md` in this repository.',
+        '',
+        'memU memory operations are independent of the BitShares trading bridge. Use memU tools for memory, preferences, and context capture, and the Claw bridge tools for on-chain operations.',
+        '',
+        `Set \`DEXBOT_PROFILE_ROOT=${profileRoot}\` if you want a default profile root outside tool args.`
+      ].join('\n');
+
     default:
       return [
         '## Setup',
@@ -218,6 +248,10 @@ function buildRuntimeSkillMarkdown(runtimeName, options = {}) {
 
   if (runtime.runtime === 'zeroclaw') {
     throw new Error('ZeroClaw uses SKILL.toml via scripts/zeroclaw_skill.js, not claw_skill_md.js');
+  }
+
+  if (runtime.runtime === 'nullclaw') {
+    throw new Error('NullClaw uses SKILL.toml via scripts/nullclaw_skill.js, not claw_skill_md.js');
   }
 
   const repoRoot = normalizeRepoRoot(options.repoRoot);

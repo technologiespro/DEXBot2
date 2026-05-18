@@ -24,6 +24,7 @@ const feedPriceSource = require('./modules/feed_price_source');
 const honestEcosystem = require('./modules/honest_ecosystem');
 const kibanaPriceSource = require('./modules/kibana_price_source');
 const liquidityPools = require('./modules/liquidity_pools');
+const memuBridge = require('./modules/memu_bridge');
 const positionDiscovery = require('./modules/position_discovery');
 const positionHealth = require('./modules/position_health');
 const positionManager = require('./modules/position_manager');
@@ -61,6 +62,7 @@ module.exports = {
   ...honestEcosystem,
   ...kibanaPriceSource,
   ...liquidityPools,
+  ...memuBridge,
   ...positionDiscovery,
   ...positionHealth,
   ...positionManager,
@@ -78,6 +80,7 @@ module.exports = {
   describeNanoClawBridge: nanoclawBridge.describeNanoClawBridge,
   describeNullClawBridge: nullclawManifest.describeNullClawBridge,
   describeZeroClawBridge: zeroclawManifest.describeZeroClawBridge,
+  describeMemuBridge: memuBridge.describeMemuBridge,
   resolveAccountName: chainQueries.resolveAccountName,
   resolveSigningAccountName: chainBroadcast.resolveAccountName
 };

@@ -11,10 +11,10 @@ function testRuntimeMatrix() {
   const matrix = require('../modules/claw_runtime_matrix');
 
   const all = matrix.listSupportedClawRuntimes();
-  assert.ok(all.length >= 8);
+  assert.ok(all.length >= 9);
 
   const names = all.map((r) => r.runtime);
-  assert.deepStrictEqual(names, ['openclaw', 'hermes', 'openfang', 'nanobot', 'picoclaw', 'nanoclaw', 'zeroclaw', 'nullclaw']);
+  assert.deepStrictEqual(names, ['openclaw', 'hermes', 'openfang', 'nanobot', 'picoclaw', 'nanoclaw', 'zeroclaw', 'nullclaw', 'memu']);
 
   // Each entry is a defensive clone — mutations must not affect the registry
   all[0].runtime = 'mutated';
@@ -57,10 +57,16 @@ function testRuntimeMatrix() {
   assert.strictEqual(nullclaw.preferredTransport, 'skill-toml-or-mcp');
   assert.strictEqual(nullclaw.skillFile, 'SKILL.toml');
 
+  const memu = matrix.getSupportedClawRuntime('memu');
+  assert.strictEqual(memu.runtime, 'memu');
+  assert.strictEqual(memu.preferredTransport, 'local-cli-json-or-mcp');
+  assert.strictEqual(memu.skillFile, 'SKILL.md');
+
   // Lookup is case-insensitive and trims whitespace
   assert.strictEqual(matrix.getSupportedClawRuntime('  ZeroClaw  ').runtime, 'zeroclaw');
   assert.strictEqual(matrix.getSupportedClawRuntime('OPENCLAW').runtime, 'openclaw');
   assert.strictEqual(matrix.getSupportedClawRuntime('NullClaw').runtime, 'nullclaw');
+  assert.strictEqual(matrix.getSupportedClawRuntime('MEMU').runtime, 'memu');
 
   // Unknown / missing runtime returns null
   assert.strictEqual(matrix.getSupportedClawRuntime('unknown'), null);
@@ -96,6 +102,9 @@ function testClawManifest() {
   assert.ok(desc.commands.includes('manifest'));
   assert.ok(desc.commands.includes('create-limit-order'));
   assert.ok(desc.commands.includes('bot-settings-apply'));
+  assert.ok(desc.commands.includes('memu-status'));
+  assert.ok(desc.commands.includes('memu-create-item'));
+  assert.ok(desc.surfaces.memory.includes('memU'));
 
   // byRisk grouping covers at least read and execute buckets
   assert.ok(Array.isArray(desc.tools.byRisk.read));

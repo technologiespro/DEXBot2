@@ -54,6 +54,13 @@ const SUPPORTED_CLAW_RUNTIMES = Object.freeze([
     preferredTransport: 'skill-toml-or-mcp',
     skillFile: 'SKILL.toml',
     notes: 'NullClaw prefers SKILL.toml in ~/.nullclaw/workspace/skills and can also load Claw through mcp_servers.'
+  },
+  {
+    runtime: 'memu',
+    nativeIntegration: 'subprocess-bridge',
+    preferredTransport: 'local-cli-json-or-mcp',
+    skillFile: 'SKILL.md',
+    notes: 'memU provides 24/7 proactive memory for AI agents. Uses Python subprocess bridge with MCP stdio support for memory operations.'
   }
 ]);
 

@@ -1,6 +1,6 @@
 # Claw BitShares Bridge
 
-Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes: OpenClaw, Hermes, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw.
+Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes: OpenClaw, Hermes, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, NullClaw, and memU.
 
 This scaffold follows the same high-level split used in DEXBot2:
 
@@ -32,10 +32,11 @@ npm install btsdex
 - NanoClaw support: `modules/nanoclaw_bridge.js`, `scripts/nanoclaw_bridge.js`
 - ZeroClaw support: `modules/zeroclaw_bridge.js`, `modules/zeroclaw_catalog.js`, `modules/zeroclaw_manifest.js`, `modules/zeroclaw_skill.js`
 - NullClaw support: `modules/nullclaw_bridge.js`, `modules/nullclaw_catalog.js`, `modules/nullclaw_manifest.js`, `modules/nullclaw_skill.js`
-- Skill packs: `skills/bitshares-guide/SKILL.md`, `skills/margin-trading/SKILL.md`, `skills/launcher-ops/SKILL.md`, shared boundary references under `skills/shared/references/`
+- memU support: `modules/memu_bridge.js`, `scripts/memu_runner.py`, `scripts/memu_mcp_server.js`
+- Skill packs: `skills/bitshares-guide/SKILL.md`, `skills/margin-trading/SKILL.md`, `skills/launcher-ops/SKILL.md`, `skills/memu-memory/SKILL.md`, shared boundary references under `skills/shared/references/`
 - HONEST support: `modules/honest_ecosystem.js`, `modules/liquidity_pools.js`
 - Reference docs: `docs/AI_BOT_LIBRARY_API.md`, `docs/DEXBOT2_TUNING_CHEAT_SHEET.md`, `docs/POSITION_HEALTH.md`, `docs/RUNTIME_COMPARISON.md`
-- Example entrypoints: `examples/connection_test.js`, `examples/short_mpa_bts_strategy.js`, `examples/position_manager_cli.js`, `examples/nullclaw_bridge_example.js`, `examples/zeroclaw_bridge_example.js`
+- Example entrypoints: `examples/connection_test.js`, `examples/short_mpa_bts_strategy.js`, `examples/position_manager_cli.js`, `examples/nullclaw_bridge_example.js`, `examples/zeroclaw_bridge_example.js`, `examples/memu_integration_example.js`
 
 ## Responsibility Boundary
 
@@ -43,7 +44,7 @@ npm install btsdex
 
 What it does:
 
-- expose a local JSON/CLI bridge and native runtime packaging for OpenClaw, Hermes, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, and NullClaw
+- expose a local JSON/CLI bridge and native runtime packaging for OpenClaw, Hermes, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, NullClaw, and memU
 - provide BitShares read helpers, broadcast helpers, and account/action wrappers
 - expose DEXBot2 profile context, order utilities, and liquidity/pool helpers through a smaller surface
 - provide HONEST context helpers, short-MPA helper flows, and position-manager utilities
@@ -150,7 +151,7 @@ Shared boundary notes live in `skills/shared/references/skill-boundaries.md`.
 
 ## Multi-Runtime Support
 
-`claw/` supports eight native runtime families, listed once here for quick reference:
+`claw/` supports nine native runtime families, listed once here for quick reference:
 
 | Runtime | Native integration | Best fit | Main tradeoff |
 | --- | --- | --- | --- |
@@ -162,6 +163,7 @@ Shared boundary notes live in `skills/shared/references/skill-boundaries.md`.
 | NanoClaw | `SKILL.md` skill file plus local JSON bridge | Claude Code skill-driven local runtime | Keep the DEXBot2 bridge skill named `bitshares-claw` so it does not collide with NanoClaw's built-in `claw` skill |
 | ZeroClaw | `SKILL.toml` skill manifest | Smallest and most constrained option | Best cold starts, but the most specialized Rust-oriented workflow |
 | NullClaw | `SKILL.toml` skill manifest plus MCP server config | Zig-native runtime with workspace loading | Strong fit for local workspace loading, but more dependent on NullClaw-specific config conventions |
+| memU | Subprocess bridge plus MCP server | 24/7 proactive memory for AI agents | Python-based memory framework with LLM-powered extraction and vector search |
 
 Practical selection guide:
 
@@ -175,6 +177,7 @@ Practical selection guide:
 | Claude Code skill-driven local runtime | NanoClaw | Skill-file workflow with a dedicated local bridge and a name that avoids NanoClaw's built-in `claw` skill |
 | Lowest footprint and fastest startup | ZeroClaw | Smallest surface, manifest-driven, best for static local automation |
 | Zig-native workspace assistant with manifest loading | NullClaw | Native workspace loading, direct skill-file workflows, and optional MCP server support |
+| Proactive memory and intent capture | memU | 24/7 memory that learns user preferences, reduces LLM costs, and enables context-aware trading |
 
 Rule of thumb:
 
@@ -186,8 +189,9 @@ Rule of thumb:
 - Choose **NanoClaw** for a Claude Code skill-driven local assistant with a narrow local bridge.
 - Choose **ZeroClaw** for the smallest and most deterministic runtime.
 - Choose **NullClaw** for a Zig-native runtime with workspace-centric skill loading.
+- Choose **memU** for 24/7 proactive memory that captures user intent and reduces LLM token costs.
 
-For a deeper comparison of the eight supported runtimes, see [docs/RUNTIME_COMPARISON.md](docs/RUNTIME_COMPARISON.md).
+For a deeper comparison of the supported runtimes, see [docs/RUNTIME_COMPARISON.md](docs/RUNTIME_COMPARISON.md).
 
 Run the commands below from the `claw/` directory.
 
@@ -372,6 +376,64 @@ node scripts/nullclaw_bridge.js update-limit-order --payload '{"accountName":"yo
 node scripts/nullclaw_bridge.js execute-batch --payload '{"accountName":"your-account","operations":[]}'
 node scripts/nullclaw_bridge.js borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
 ```
+
+### memU
+
+memU provides 24/7 proactive memory for AI agents. It captures user intent, reduces LLM token costs, and enables context-aware trading assistance.
+
+**Prerequisites:**
+
+```bash
+pip install memu-py
+export OPENAI_API_KEY=your_api_key
+```
+
+Start the memU MCP server:
+
+```bash
+npm run memu:mcp
+# or
+node scripts/memu_mcp_server.js --memu-dir /path/to/claw/data/memu
+```
+
+Check memU status:
+
+```bash
+npm run memu:status
+```
+
+memU MCP server configuration for Hermes:
+
+```yaml
+mcp_servers:
+  memu:
+    command: "node"
+    args: ["/absolute/path/to/claw/scripts/memu_mcp_server.js", "--memu-dir", "/absolute/path/to/claw/data/memu"]
+```
+
+memU compatibility command surface:
+
+```bash
+# Via claw bridge
+node scripts/claw_bridge.js memu-manifest
+node scripts/claw_bridge.js memu-memorize --payload '{"resourceUrl":"/path/to/conv.txt","modality":"conversation"}'
+node scripts/claw_bridge.js memu-retrieve --payload '{"queries":[{"role":"user","content":{"text":"What are my trading preferences?"}}]}'
+node scripts/claw_bridge.js memu-status
+
+# Via npm scripts
+npm run memu:status
+npm run memu:mcp
+```
+
+Available memU capabilities:
+
+- memorize conversations, documents, images, video, and audio
+- retrieve memories via RAG (fast) or LLM (deep reasoning)
+- list and manage memory categories and items
+- trading context memorization and retrieval
+- proactive intent capture and preference learning
+
+See [skills/memu-memory/SKILL.md](skills/memu-memory/SKILL.md) for detailed usage patterns.
 
 ## HONEST Ecosystem Helper
 

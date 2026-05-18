@@ -19,6 +19,7 @@ function createBridgeHarness() {
   const bridgePath = require.resolve('../modules/claw_bridge');
   const infraPath = require.resolve('../modules/claw_infra');
   const chainActionsPath = require.resolve('../modules/chain_actions');
+  const memuBridgePath = require.resolve('../modules/memu_bridge');
   const shortStrategyPath = require.resolve('../modules/short_mpa_strategy');
 
   const calls = {
@@ -48,7 +49,8 @@ function createBridgeHarness() {
       getBotSettings: [],
       previewBotSettingsUpdate: [],
       applyBotSettingsPatch: []
-    }
+    },
+    memu: []
   };
 
   const bridgeRuntime = {
@@ -223,6 +225,22 @@ function createBridgeHarness() {
     }
   });
 
+  registerMock(memuBridgePath, {
+    describeMemuBridge: (options) => ({
+      options,
+      runtime: 'memu',
+      source: 'describeMemuBridge'
+    }),
+    runMemuCommand: async (command, options) => {
+      calls.memu.push({ command, options });
+      return {
+        command,
+        options,
+        source: 'memu'
+      };
+    }
+  });
+
   clearModule(bridgePath);
   const bridge = require('../modules/claw_bridge');
 
@@ -233,6 +251,7 @@ function createBridgeHarness() {
       clearModule(bridgePath);
       clearModule(chainActionsPath);
       clearModule(infraPath);
+      clearModule(memuBridgePath);
       clearModule(shortStrategyPath);
     }
   };
@@ -455,6 +474,33 @@ async function testRunClawCommandDispatchMatrix() {
     });
     assert.strictEqual(mpaPosition.source, 'mpa-position');
     assert.strictEqual(calls.chainActions.getMpaPosition[0].accountNameOrId, 'alice');
+
+    const memuCreateItem = await bridge.runClawCommand('memu-create-item', {
+      categoryName: 'preferences',
+      summary: 'Prefers 2% spacing'
+    });
+    assert.strictEqual(memuCreateItem.source, 'memu');
+    assert.strictEqual(memuCreateItem.command, 'create-item');
+    assert.strictEqual(calls.memu[0].options.categoryName, 'preferences');
+
+    const memuClear = await bridge.runClawCommand('memu-clear', {
+      where: { user_id: 'trader-123' }
+    });
+    assert.strictEqual(memuClear.command, 'clear');
+    assert.deepStrictEqual(calls.memu[1].options.where, { user_id: 'trader-123' });
+
+    const memuStatus = await bridge.runClawCommand('memu-status', {
+      where: { user_id: 'trader-123' }
+    });
+    assert.strictEqual(memuStatus.command, 'status');
+    assert.deepStrictEqual(calls.memu[2].options.where, { user_id: 'trader-123' });
+
+    await assert.rejects(
+      () => bridge.runClawCommand('memu-create-item', {
+        summary: 'missing category'
+      }),
+      /memu-create-item requires categoryId or categoryName, plus summary/
+    );
 
     await assert.rejects(
       () => bridge.runClawCommand('unsupported-command', {}),

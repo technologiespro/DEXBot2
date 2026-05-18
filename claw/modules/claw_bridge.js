@@ -32,6 +32,7 @@ const {
   launcherPm2Restart,
   launcherPm2Reload,
 } = require('./claw_launcher');
+const { runMemuCommand } = require('./memu_bridge');
 
 function clone(value) {
   if (value === undefined) {
@@ -103,12 +104,18 @@ function describeRuntimeManifest(options = {}) {
       return require('./openclaw_manifest').describeOpenClawBridge(options);
     case 'openfang':
       return require('./openfang_bridge').describeOpenFangBridge(options);
+    case 'nanobot':
+      return require('./claw_manifest').describeClawBridge(options);
+    case 'picoclaw':
+      return require('./claw_manifest').describeClawBridge(options);
     case 'nanoclaw':
       return require('./nanoclaw_bridge').describeNanoClawBridge(options);
     case 'nullclaw':
       return require('./nullclaw_bridge').describeNullClawBridge(options);
     case 'zeroclaw':
       return require('./zeroclaw_manifest').describeZeroClawBridge(options);
+    case 'memu':
+      return require('./memu_bridge').describeMemuBridge(options);
     default:
       return describeClawBridge(options);
   }
@@ -120,11 +127,14 @@ function describeCommandManifest(options = {}) {
     ? String(effectiveRuntimeName).trim().toLowerCase()
     : null;
 
-  if (normalizedRuntimeName === 'hermes') {
-    return require('./hermes_manifest').describeHermesBridge(options);
+  switch (normalizedRuntimeName) {
+    case 'hermes':
+      return require('./hermes_manifest').describeHermesBridge(options);
+    case 'memu':
+      return require('./memu_bridge').describeMemuBridge(options);
+    default:
+      return describeClawBridge(options);
   }
-
-  return describeClawBridge(options);
 }
 
 async function runClawCommand(command, options = {}) {
@@ -336,6 +346,77 @@ async function runClawCommand(command, options = {}) {
 
     case 'launcher-pm2-reload':
       return launcherPm2Reload(safeOptions.botName || 'all', safeOptions);
+
+    case 'memu-manifest':
+      return require('./memu_bridge').describeMemuBridge(safeOptions);
+
+    case 'memu-memorize': {
+      if (!safeOptions.resourceUrl || !safeOptions.modality) {
+        throw new Error('memu-memorize requires resourceUrl and modality');
+      }
+      return runMemuCommand('memorize', safeOptions);
+    }
+
+    case 'memu-retrieve': {
+      if (!safeOptions.queries) {
+        throw new Error('memu-retrieve requires queries');
+      }
+      return runMemuCommand('retrieve', safeOptions);
+    }
+
+    case 'memu-list-categories':
+      return runMemuCommand('list-categories', safeOptions);
+
+    case 'memu-list-items':
+      return runMemuCommand('list-items', safeOptions);
+
+    case 'memu-create-item': {
+      if (!(safeOptions.categoryId || safeOptions.categoryName || safeOptions.category) || !safeOptions.summary) {
+        throw new Error('memu-create-item requires categoryId or categoryName, plus summary');
+      }
+      return runMemuCommand('create-item', safeOptions);
+    }
+
+    case 'memu-update-item': {
+      if (!safeOptions.itemId || !safeOptions.updates) {
+        throw new Error('memu-update-item requires itemId and updates');
+      }
+      return runMemuCommand('update-item', safeOptions);
+    }
+
+    case 'memu-delete-item': {
+      if (!safeOptions.itemId) {
+        throw new Error('memu-delete-item requires itemId');
+      }
+      return runMemuCommand('delete-item', safeOptions);
+    }
+
+    case 'memu-clear':
+      return runMemuCommand('clear', safeOptions);
+
+    case 'memu-status':
+      return runMemuCommand('status', safeOptions);
+
+    case 'memu-memorize-conversation': {
+      if (!safeOptions.messages) {
+        throw new Error('memu-memorize-conversation requires messages');
+      }
+      return runMemuCommand('memorize-conversation', safeOptions);
+    }
+
+    case 'memu-memorize-trading-context': {
+      if (!safeOptions.context) {
+        throw new Error('memu-memorize-trading-context requires context');
+      }
+      return runMemuCommand('memorize-trading-context', safeOptions);
+    }
+
+    case 'memu-retrieve-trading-context': {
+      if (!safeOptions.query) {
+        throw new Error('memu-retrieve-trading-context requires query');
+      }
+      return runMemuCommand('retrieve-trading-context', safeOptions);
+    }
 
     default:
       throw new Error(`Unsupported Claw command: ${command}`);
