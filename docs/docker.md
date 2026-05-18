@@ -16,7 +16,7 @@ Images are published to:
 
 ```bash
 docker build -t dexbot2:local .
-docker run --rm -it dexbot2:local node dexbot.js help
+docker run --rm -it dexbot2:local node dexbot.js --help
 ```
 
 ## Secure startup
@@ -24,7 +24,7 @@ docker run --rm -it dexbot2:local node dexbot.js help
 For production and best secret hygiene without PM2, use the bundled unlock launcher:
 
 ```bash
-node unlock-start
+node unlock-start.js
 ```
 
 - Enter the master password once interactively.
@@ -35,13 +35,13 @@ node unlock-start
 To start only one bot:
 
 ```bash
-node unlock-start <bot-name>
+node unlock-start.js <bot-name>
 ```
 
 For claw-only workflows that only need credentials, use:
 
 ```bash
-node unlock-start --claw-only
+node unlock-start.js --claw-only
 ```
 
 For PM2-managed credential-daemon-only startup:
@@ -56,7 +56,7 @@ node pm2 claw-only
 
 ```dotenv
 BOT_NAME=my-bot
-RUN_LOOP_MS=5000
+OPEN_ORDERS_SYNC_LOOP_MS=5000
 ```
 
 2. Start the bot:
@@ -65,7 +65,7 @@ RUN_LOOP_MS=5000
 docker compose up
 ```
 
-This compose mode runs `dexbot.js` directly and may prompt for the master password.
+This compose mode runs `unlock-start.js`, which starts the credential daemon and may prompt for the master password. If `BOT_NAME` is empty, it starts all active bots from `profiles/bots.json`.
 
 3. View logs:
 
@@ -82,6 +82,8 @@ docker compose down
 ## Notes
 
 - Persist bot state/config by mounting `./profiles:/app/profiles`.
-- Keep `.env` for non-sensitive runtime values (for example `BOT_NAME`, `RUN_LOOP_MS`).
+- Persist market adapter runtime state and candle caches by mounting `./market_adapter/state:/app/market_adapter/state` and `./market_adapter/data:/app/market_adapter/data`.
+- The image runs as the bundled `node` user. Ensure mounted runtime directories are writable by your host user or UID 1000.
+- Keep `.env` for non-sensitive runtime values (for example `BOT_NAME`, `OPEN_ORDERS_SYNC_LOOP_MS`).
 - Do not store the master password in `.env`. The secure launchers prompt once and keep it only in process memory.
 - If you prefer immutable pinning, replace `latest` in `docker-compose.yml` with a `sha-<commit>` tag.

@@ -12,6 +12,7 @@ update.log
 profiles
 analysis
 dashboard
-market_adapter
+market_adapter/data
+market_adapter/state
 tests
 docs

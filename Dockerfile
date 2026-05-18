@@ -2,10 +2,14 @@ FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY --chown=node:node package*.json ./
 RUN npm ci --omit=dev
 
-COPY . .
+COPY --chown=node:node . .
+RUN mkdir -p /app/profiles /app/market_adapter/data /app/market_adapter/state \
+    && chown -R node:node /app/profiles /app/market_adapter/data /app/market_adapter/state
+
+USER node
 
 # Default command starts credential daemon and all active bots interactively.
 # Run with: docker run -it -v ./profiles:/app/profiles <image>
