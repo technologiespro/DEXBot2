@@ -297,6 +297,132 @@ assert.strictEqual(
     'validateBotEntry should accept valid MPA lending item'
 );
 
+// Test: invalid MPA minCollateralIncreaseThreshold is rejected
+const invalidMpaMinCollateralIncreaseThreshold = {
+    name: 'K2',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            {
+                asset: 'USD',
+                collateralAsset: 'BTS',
+                type: 'mpa',
+                maxBorrowAmount: 1000,
+                minCollateralIncreaseThreshold: -1,
+            },
+        ],
+    },
+};
+
+assert(
+    validateBotEntry(invalidMpaMinCollateralIncreaseThreshold, 0, 'test').includes('minCollateralIncreaseThreshold'),
+    'validateBotEntry should reject negative MPA minCollateralIncreaseThreshold'
+);
+
+// Test: invalid creditOffer minCollateralIncreaseThreshold is rejected
+const invalidCreditMinCollateralIncreaseThreshold = {
+    name: 'K3',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            {
+                asset: 'USD',
+                collateralAsset: 'BTS',
+                type: 'creditOffer',
+                maxCollateralRatio: 2.5,
+                minCollateralIncreaseThreshold: -1,
+            },
+        ],
+    },
+};
+
+assert(
+    validateBotEntry(invalidCreditMinCollateralIncreaseThreshold, 0, 'test').includes('minCollateralIncreaseThreshold'),
+    'validateBotEntry should reject negative creditOffer minCollateralIncreaseThreshold'
+);
+
+// Test: percentage minCollateralIncreaseThreshold is accepted
+const validPercentMinCollateralIncreaseThreshold = {
+    name: 'K4',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            {
+                asset: 'USD',
+                collateralAsset: 'BTS',
+                type: 'creditOffer',
+                maxCollateralRatio: 2.5,
+                minCollateralIncreaseThreshold: '10%',
+            },
+        ],
+    },
+};
+
+assert.strictEqual(
+    validateBotEntry(validPercentMinCollateralIncreaseThreshold, 0, 'test'),
+    null,
+    'validateBotEntry should accept percentage minCollateralIncreaseThreshold'
+);
+
+// Test: malformed percentage minCollateralIncreaseThreshold is rejected
+const invalidPercentMinCollateralIncreaseThreshold = {
+    name: 'K5',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            {
+                asset: 'USD',
+                collateralAsset: 'BTS',
+                type: 'creditOffer',
+                maxCollateralRatio: 2.5,
+                minCollateralIncreaseThreshold: '10abc%',
+            },
+        ],
+    },
+};
+
+assert(
+    validateBotEntry(invalidPercentMinCollateralIncreaseThreshold, 0, 'test').includes('minCollateralIncreaseThreshold'),
+    'validateBotEntry should reject malformed percentage minCollateralIncreaseThreshold'
+);
+
+// Test: numeric-string minCollateralIncreaseThreshold is rejected
+const invalidNumericStringMinCollateralIncreaseThreshold = {
+    name: 'K6',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            {
+                asset: 'USD',
+                collateralAsset: 'BTS',
+                type: 'mpa',
+                maxBorrowAmount: 1000,
+                minCollateralIncreaseThreshold: '10',
+            },
+        ],
+    },
+};
+
+assert(
+    validateBotEntry(invalidNumericStringMinCollateralIncreaseThreshold, 0, 'test').includes('minCollateralIncreaseThreshold'),
+    'validateBotEntry should reject numeric-string minCollateralIncreaseThreshold'
+);
+
 // Test: invalid type is rejected
 const invalidType = {
     name: 'L',

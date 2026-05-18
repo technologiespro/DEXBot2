@@ -1117,7 +1117,8 @@ Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
         "maxCollateralAmount": 25000,
         "minCollateralRatio": 2.0,
         "maxCollateralRatio": 2.5,
-        "targetCollateralRatio": 2.2
+        "targetCollateralRatio": 2.2,
+        "minCollateralIncreaseThreshold": 5
       },
       {
         "asset": "HONEST.CNY",
@@ -1128,6 +1129,7 @@ Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
         "maxCollateralAmount": 25000,
         "maxFeeRatePerDay": 0.001,
         "maxCollateralRatio": 2.5,
+        "minCollateralIncreaseThreshold": "5%",
         "autoReborrow": true,
         "autoRepay": 2
       }

@@ -2542,6 +2542,321 @@ async function testPendingReborrowResolvesPolicyWithColdAssetCache() {
   }
 }
 
+async function testCreditMaintenanceBorrowsTowardAssignedTarget() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    assetsById: {
+      '1.3.10': {
+        id: '1.3.10',
+        symbol: 'HONEST.USD',
+        precision: 2,
+        bitasset_data_id: '2.4.1',
+      },
+      '1.3.0': {
+        id: '1.3.0',
+        symbol: 'BTS',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+    },
+    dealResponses: [[]],
+    offersById: {
+      '1.18.42': {
+        id: '1.18.42',
+        asset_type: '1.3.10',
+        current_balance: 100000,
+        fee_rate: 30000,
+        min_deal_amount: 100,
+        enabled: true,
+        max_duration_seconds: 86400,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 200, asset_id: '1.3.0' },
+            quote: { amount: 100, asset_id: '1.3.10' },
+          },
+        },
+      },
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-increase-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const policy = {
+      asset: 'HONEST.USD',
+      collateralAsset: 'BTS',
+      type: 'creditOffer',
+      ratio: 1,
+      maxBorrowAmount: 1000,
+      maxCollateralRatio: 2.5,
+      maxFeeRatePerDay: 0.05,
+      minCollateralIncreaseThreshold: 10,
+      autoRepay: 2,
+    };
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-increase',
+        debtPolicy: { lending: [policy] },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    runtime.state.positions['1.3.10:1.3.0'] = {
+      assignedCollateralBudget: 1000,
+      creditConversionRate: 0.5,
+      creditDeals: [{
+        id: '1.19.77',
+        debtAssetId: '1.3.10',
+        debtAmount: 5000,
+        collateralAssetId: '1.3.0',
+        collateralAmount: 10000,
+        latestRepayTime: '2030-01-01T00:00:00',
+        autoRepay: 2,
+      }],
+    };
+
+    const result = await runtime._runCreditMaintenance(policy, '1.3.10');
+    assert(result, 'credit maintenance should execute an increase');
+    assert.strictEqual(calls.length, 1, 'credit increase should broadcast one operation');
+    assert.strictEqual(calls[0].operations[0].op_name, 'credit_offer_accept');
+    assert.strictEqual(result.plan.collateralIncreaseAmount, 900, 'plan should gate on the collateral-budget shortfall');
+    assert.strictEqual(calls[0].operations[0].op_data.collateral.amount, 90000, 'borrow should use the unused assigned collateral in chain units');
+    assert.strictEqual(calls[0].operations[0].op_data.borrow_amount.amount, 45000, 'borrow should be derived from selected offer price and collateral shortfall');
+    assert.deepStrictEqual(calls[0].operations[0].op_data.extensions, { auto_repay: 2 }, 'credit increase should preserve policy autoRepay');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testCreditMaintenanceSkipsSmallCollateralIncrease() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    assetsById: {
+      '1.3.10': {
+        id: '1.3.10',
+        symbol: 'HONEST.USD',
+        precision: 2,
+        bitasset_data_id: '2.4.1',
+      },
+      '1.3.0': {
+        id: '1.3.0',
+        symbol: 'BTS',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+    },
+    dealResponses: [[]],
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-increase-threshold-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const policy = {
+      asset: 'HONEST.USD',
+      collateralAsset: 'BTS',
+      type: 'creditOffer',
+      ratio: 1,
+      maxBorrowAmount: 1000,
+      maxCollateralRatio: 2.5,
+      maxFeeRatePerDay: 0.05,
+      minCollateralIncreaseThreshold: '20%',
+    };
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-increase-threshold',
+        debtPolicy: { lending: [policy] },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    runtime.state.positions['1.3.10:1.3.0'] = {
+      assignedCollateralBudget: 120,
+      creditConversionRate: 0.5,
+      creditDeals: [{
+        id: '1.19.77',
+        debtAssetId: '1.3.10',
+        debtAmount: 5000,
+        collateralAssetId: '1.3.0',
+        collateralAmount: 10000,
+        latestRepayTime: '2030-01-01T00:00:00',
+        autoRepay: 0,
+      }],
+    };
+
+    const result = await runtime._runCreditMaintenance(policy, '1.3.10');
+    assert.strictEqual(result, null, 'credit maintenance should skip collateral increases below percentage threshold');
+    assert.strictEqual(calls.length, 0, 'no credit increase should be broadcast below collateral threshold');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testCreditMaintenanceAllowsZeroThreshold() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    assetsById: {
+      '1.3.10': {
+        id: '1.3.10',
+        symbol: 'HONEST.USD',
+        precision: 2,
+        bitasset_data_id: '2.4.1',
+      },
+      '1.3.0': {
+        id: '1.3.0',
+        symbol: 'BTS',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+    },
+    dealResponses: [[]],
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-zero-threshold-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const policy = {
+      asset: 'HONEST.USD',
+      collateralAsset: 'BTS',
+      type: 'creditOffer',
+      ratio: 1,
+      maxBorrowAmount: 1000,
+      maxCollateralRatio: 2.5,
+      maxFeeRatePerDay: 0.05,
+      minCollateralIncreaseThreshold: 0,
+    };
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-zero-threshold',
+        debtPolicy: { lending: [policy] },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    runtime.state.positions['1.3.10:1.3.0'] = {
+      assignedCollateralBudget: 260,
+      creditConversionRate: 0.5,
+      creditDeals: [{
+        id: '1.19.77',
+        debtAssetId: '1.3.10',
+        debtAmount: 5000,
+        collateralAssetId: '1.3.0',
+        collateralAmount: 10000,
+        latestRepayTime: '2030-01-01T00:00:00',
+        autoRepay: 0,
+      }],
+    };
+
+    const result = await runtime._runCreditMaintenance(policy, '1.3.10');
+    assert(result, 'zero threshold should allow any positive collateral increase');
+    assert.strictEqual(calls.length, 1, 'credit increase should broadcast with zero threshold');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testCreditMaintenanceCapsIncreaseAtBorrowCeiling() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    assetsById: {
+      '1.3.10': {
+        id: '1.3.10',
+        symbol: 'HONEST.USD',
+        precision: 2,
+        bitasset_data_id: '2.4.1',
+      },
+      '1.3.0': {
+        id: '1.3.0',
+        symbol: 'BTS',
+        precision: 2,
+        bitasset_data_id: null,
+      },
+    },
+    dealResponses: [[]],
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-borrow-cap-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const policy = {
+      asset: 'HONEST.USD',
+      collateralAsset: 'BTS',
+      type: 'creditOffer',
+      ratio: 1,
+      maxBorrowAmount: 60,
+      maxCollateralRatio: 2.5,
+      maxFeeRatePerDay: 0.05,
+      minCollateralIncreaseThreshold: 10,
+    };
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-borrow-cap',
+        debtPolicy: { lending: [policy] },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+    const acceptArgs = [];
+    const originalBuildCreditOfferAcceptOperation = runtime.buildCreditOfferAcceptOperation.bind(runtime);
+    runtime.buildCreditOfferAcceptOperation = async (args) => {
+      acceptArgs.push(args);
+      return originalBuildCreditOfferAcceptOperation(args);
+    };
+
+    runtime.state.positions['1.3.10:1.3.0'] = {
+      assignedCollateralBudget: 1000,
+      creditConversionRate: 0.5,
+      creditDeals: [{
+        id: '1.19.77',
+        debtAssetId: '1.3.10',
+        debtAmount: 5000,
+        collateralAssetId: '1.3.0',
+        collateralAmount: 10000,
+        latestRepayTime: '2030-01-01T00:00:00',
+        autoRepay: 0,
+      }],
+    };
+
+    const result = await runtime._runCreditMaintenance(policy, '1.3.10');
+    assert(result, 'credit maintenance should execute a capped increase');
+    assert.strictEqual(calls.length, 1, 'capped credit increase should broadcast one operation');
+    assert.strictEqual(calls[0].operations[0].op_data.borrow_amount.amount, 1000, 'borrow should be capped to remaining maxBorrowAmount');
+    assert.strictEqual(calls[0].operations[0].op_data.collateral.amount, 2000, 'collateral should be reduced to the selected offer requirement for the capped borrow');
+    assert.strictEqual(result.cappedByBorrowCapacity, true, 'result should record that the increase was capped');
+    assert.strictEqual(acceptArgs.length, 1, 'borrow cap should be applied before building the credit accept operation');
+    assert.strictEqual(acceptArgs[0].borrowAmount, 10, 'initial credit accept operation should use remaining borrow capacity');
+    assert.strictEqual(acceptArgs[0].collateralAmount, undefined, 'borrow-capped increase should not first request the full collateral shortfall');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
 async function testStatePersistsAcrossRestart() {
   const calls = [];
   const dbCalls = [];
@@ -2694,6 +3009,10 @@ async function testGetCollateralOffsets() {
   await testCreditDealUpdatePreservesAutoRepayMode();
   await testAutoReborrowQueueIsIgnoredWhenDisabled();
   await testPendingReborrowResolvesPolicyWithColdAssetCache();
+  await testCreditMaintenanceBorrowsTowardAssignedTarget();
+  await testCreditMaintenanceSkipsSmallCollateralIncrease();
+  await testCreditMaintenanceAllowsZeroThreshold();
+  await testCreditMaintenanceCapsIncreaseAtBorrowCeiling();
   await testStatePersistsAcrossRestart();
   await testGetCollateralOffsets();
   console.log('credit runtime tests passed');

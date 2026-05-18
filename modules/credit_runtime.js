@@ -8,7 +8,12 @@ const { blockchainToFloat, floatToBlockchainInt, resolveConfigValue } = require(
 const { deriveLiquidityPoolTokenValue } = require('./order/utils/system');
 const { toFiniteNumber } = require('./order/format');
 const { createBotKey } = require('./account_orders');
-const { buildCollateralFallbackPlan, buildDebtFirstCrPlan, resolveTargetCollateralRatio } = require('./cr_planner');
+const {
+    buildCollateralFallbackPlan,
+    buildDebtFirstCrPlan,
+    resolveMinCollateralIncreaseThreshold,
+    resolveTargetCollateralRatio,
+} = require('./cr_planner');
 
 const CREDIT_FEE_RATE_DENOM = 1_000_000;
 const ZERO_ASSET_ID = '1.3.0';
@@ -124,6 +129,11 @@ function isDeterministicMpaDebtBalanceError(err, plan) {
     const message = String(err?.message || err || '').toLowerCase();
     return message.includes('insufficient')
         && (message.includes('balance') || message.includes('fund') || message.includes('mpa'));
+}
+
+function isMaxBorrowAmountError(err) {
+    const message = String(err?.message || err || '');
+    return /would exceed maxBorrowAmount/.test(message);
 }
 
 function normalizeCollateralMap(acceptableCollateral) {
@@ -1366,6 +1376,7 @@ class CreditRuntime {
             maxBorrowAmount: lendingItem.maxBorrowAmount,
             maxCollateralAmount: posState.assignedCollateralBudget ?? lendingItem.maxCollateralAmount,
             collateralLimitReferenceAmount: posState.currentCollateralFundsTotal,
+            minCollateralIncreaseThreshold: lendingItem.minCollateralIncreaseThreshold,
         });
 
         if (!plan) return null;
@@ -2029,6 +2040,180 @@ class CreditRuntime {
         return candidates[0] || null;
     }
 
+    async _selectCreditOfferForIncrease({ debtAssetId, collateralAssetId, policy, collateralAmount, minCollateralIncrease = 0, remainingBorrowCapacity = null, autoRepay }) {
+        const allowedOfferIds = this._normalizePolicyList(policy?.allowedOfferIds);
+        const offers = [];
+        const seen = new Set();
+        const accountId = await this._resolveAccountId(getAccountRef(this.bot));
+        const debtAsset = await this._resolveAsset(debtAssetId);
+        const collateralAsset = await this._resolveAsset(collateralAssetId);
+        const finiteRemainingBorrowCapacity = Number.isFinite(Number(remainingBorrowCapacity)) && Number(remainingBorrowCapacity) > 0
+            ? Number(remainingBorrowCapacity)
+            : null;
+
+        for (const offerId of allowedOfferIds) {
+            const offer = await this._getOfferById(offerId);
+            if (offer?.id && !seen.has(String(offer.id))) {
+                seen.add(String(offer.id));
+                offers.push(offer);
+            }
+        }
+
+        if (offers.length === 0) {
+            for (const offer of await this._fetchCreditOffersByAsset(debtAssetId)) {
+                if (offer?.id && !seen.has(String(offer.id))) {
+                    seen.add(String(offer.id));
+                    offers.push(offer);
+                }
+            }
+        }
+
+        const candidates = [];
+        for (const offer of offers) {
+            if (!offer?.id) continue;
+            if (String(offer.asset_type) !== String(debtAssetId)) continue;
+            if (offer.enabled === false) continue;
+            const collateralMap = normalizeCollateralMap(offer.acceptable_collateral);
+            if (!collateralMap.has(String(collateralAssetId))) continue;
+            const collateralPrice = collateralMap.get(String(collateralAssetId));
+            const validation = this._validateCreditPolicy(policy, offer);
+            if (!validation.allow) continue;
+            try {
+                let acceptArgs = {
+                    offer,
+                    collateralAmount,
+                    autoRepay,
+                    specificPolicy: policy,
+                };
+                if (accountId && debtAsset && collateralAsset && finiteRemainingBorrowCapacity !== null) {
+                    const collateralSpec = normalizeAmountSpec(collateralAmount);
+                    const collateralReferenceAmount = isPercentageAmountSpec(collateralSpec)
+                        ? await this._getCollateralPercentageBase(accountId, collateralAsset.id)
+                        : null;
+                    const requestedCollateralInt = await this._resolveAmountToBlockchainInt(collateralSpec, collateralAsset, accountId, {
+                        balanceField: 'total',
+                        referenceAmount: collateralReferenceAmount,
+                        referenceLabel: 'total collateral balance',
+                    });
+                    const desiredBorrowInt = this._calculateBorrowAmountFromCollateral(
+                        requestedCollateralInt,
+                        collateralPrice,
+                        debtAsset,
+                        collateralAsset
+                    );
+                    const desiredBorrowAmount = blockchainToFloat(desiredBorrowInt, debtAsset.precision);
+                    if (Number.isFinite(desiredBorrowAmount) && desiredBorrowAmount > finiteRemainingBorrowCapacity) {
+                        acceptArgs = {
+                            offer,
+                            borrowAmount: finiteRemainingBorrowCapacity,
+                            autoRepay,
+                            specificPolicy: policy,
+                        };
+                    }
+                }
+
+                let op = null;
+                try {
+                    op = await this.buildCreditOfferAcceptOperation(acceptArgs);
+                } catch (err) {
+                    if (!isMaxBorrowAmountError(err)) {
+                        throw err;
+                    }
+                    if (finiteRemainingBorrowCapacity === null) {
+                        throw err;
+                    }
+                    op = await this.buildCreditOfferAcceptOperation({
+                        offer,
+                        borrowAmount: finiteRemainingBorrowCapacity,
+                        autoRepay,
+                        specificPolicy: policy,
+                    });
+                }
+                const opBorrowAmount = blockchainAmountToFloat(op?.op_data?.borrow_amount, await this._resolveAsset(debtAssetId));
+                const opCollateralAmount = blockchainAmountToFloat(op?.op_data?.collateral, await this._resolveAsset(collateralAssetId));
+                if (!Number.isFinite(opBorrowAmount) || opBorrowAmount <= 0 || !Number.isFinite(opCollateralAmount) || opCollateralAmount <= 0) {
+                    continue;
+                }
+                const capped = opCollateralAmount < toFiniteNumber(collateralAmount?.amount ?? collateralAmount, 0);
+                if (capped && opCollateralAmount < minCollateralIncrease) {
+                    continue;
+                }
+                candidates.push({
+                    offer,
+                    op,
+                    borrowAmount: opBorrowAmount,
+                    collateralAmount: opCollateralAmount,
+                    capped,
+                    dailyRate: this._calculateDailyFeeRate(offer),
+                    feeRate: toFiniteNumber(offer.fee_rate, Number.MAX_SAFE_INTEGER),
+                    balance: toFiniteNumber(offer.current_balance, 0),
+                    duration: toFiniteNumber(offer.max_duration_seconds, 0),
+                });
+            } catch (_) {
+                // Candidate does not satisfy amount, ratio, balance, or duration policy.
+            }
+        }
+
+        candidates.sort((a, b) => (
+            a.dailyRate - b.dailyRate
+            || a.feeRate - b.feeRate
+            || b.duration - a.duration
+            || b.balance - a.balance
+            || String(a.offer.id).localeCompare(String(b.offer.id))
+        ));
+        return candidates[0] || null;
+    }
+
+    async _buildCreditIncreasePlan(lendingItem, assetId, posState) {
+        if (!Object.prototype.hasOwnProperty.call(lendingItem, 'minCollateralIncreaseThreshold')) return null;
+        const assignedCollateralBudget = positiveOrNull(posState?.assignedCollateralBudget);
+        if (assignedCollateralBudget === null) return null;
+        const minCollateralIncrease = resolveMinCollateralIncreaseThreshold(
+            lendingItem.minCollateralIncreaseThreshold,
+            assignedCollateralBudget
+        );
+        if (minCollateralIncrease === null) return null;
+
+        const debtAsset = await this._resolveAsset(assetId);
+        const collateralAsset = await this._resolveAsset(lendingItem.collateralAsset);
+        if (!debtAsset || !collateralAsset) return null;
+
+        const currentDebtAmount = (posState.creditDeals || []).reduce((sum, deal) => {
+            return sum + (blockchainAmountToFloat(deal?.debtAmount, debtAsset) || 0);
+        }, 0);
+        const currentCollateralAmount = (posState.creditDeals || []).reduce((sum, deal) => {
+            return sum + (blockchainAmountToFloat(deal?.collateralAmount, collateralAsset) || 0);
+        }, 0);
+
+        const collateralIncreaseAmount = assignedCollateralBudget - currentCollateralAmount;
+        if (
+            !Number.isFinite(collateralIncreaseAmount)
+            || collateralIncreaseAmount <= 0
+            || collateralIncreaseAmount < minCollateralIncrease
+        ) {
+            return null;
+        }
+
+        const maxBorrowAmount = positiveOrNull(lendingItem.maxBorrowAmount);
+        const remainingBorrowCapacity = maxBorrowAmount !== null
+            ? maxBorrowAmount - currentDebtAmount
+            : null;
+        if (remainingBorrowCapacity !== null && remainingBorrowCapacity <= 0) {
+            return null;
+        }
+
+        return {
+            action: 'increase_credit_debt',
+            currentCollateralAmount: roundToPlaces(currentCollateralAmount, 8),
+            collateralIncreaseAmount: roundToPlaces(collateralIncreaseAmount, 8),
+            minCollateralIncrease: roundToPlaces(minCollateralIncrease, 8),
+            currentDebtAmount: roundToPlaces(currentDebtAmount, 8),
+            maxBorrowAmount: maxBorrowAmount !== null ? roundToPlaces(maxBorrowAmount, 8) : null,
+            remainingBorrowCapacity: remainingBorrowCapacity !== null ? roundToPlaces(remainingBorrowCapacity, 8) : null,
+            assignedCollateralBudget: roundToPlaces(assignedCollateralBudget, 8),
+        };
+    }
+
     async _getDealById(dealId) {
         if (!dealId) return null;
         const deals = Array.isArray(this.state.creditDeals) ? this.state.creditDeals : [];
@@ -2285,6 +2470,47 @@ class CreditRuntime {
                         this.warn(`credit runtime: failed to update auto_repay on deal ${deal.id}: ${err.message}`);
                     }
                 }
+            }
+        }
+
+        // Phase 3: If collateral distribution assigns more credit capacity than current deals use,
+        // accept an additional deal to move the asset back toward its target output ratio.
+        if (lendingItem.renewOnly !== true && lendingItem.reborrowOnly !== true) {
+            const increasePlan = await this._buildCreditIncreasePlan(lendingItem, assetId, posState);
+            if (increasePlan) {
+                const offer = await this._selectCreditOfferForIncrease({
+                    debtAssetId: assetId,
+                    collateralAssetId: configuredCollateralAssetId,
+                    policy: lendingItem,
+                    collateralAmount: {
+                        amount: increasePlan.collateralIncreaseAmount,
+                        assetId: configuredCollateralAssetId,
+                    },
+                    minCollateralIncrease: increasePlan.minCollateralIncrease,
+                    remainingBorrowCapacity: increasePlan.remainingBorrowCapacity,
+                    autoRepay: lendingItem.autoRepay ?? false,
+                });
+                if (offer) {
+                    const result = await this.executeOperations([offer.op], 'credit increase');
+                    posState.lastCreditIncrease = {
+                        plan: increasePlan,
+                        cappedByBorrowCapacity: !!offer.capped,
+                        collateralAmount: offer.collateralAmount,
+                        borrowAmount: offer.borrowAmount,
+                        offerId: offer.offer.id,
+                        executedAt: new Date().toISOString(),
+                    };
+                    await this.refreshCreditState({}, lendingItem);
+                    return {
+                        plan: increasePlan,
+                        offer: offer.offer.id,
+                        cappedByBorrowCapacity: !!offer.capped,
+                        collateralAmount: offer.collateralAmount,
+                        borrowAmount: offer.borrowAmount,
+                        result,
+                    };
+                }
+                this.warn(`credit runtime: no acceptable credit offer found for ${assetId} collateral increase of ${increasePlan.collateralIncreaseAmount}`);
             }
         }
 

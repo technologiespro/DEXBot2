@@ -70,7 +70,8 @@ Every item in `lending` must have:
 | `minCollateralRatio` | `number` | No | Hard minimum CR floor. Below this, debt is reduced first. |
 | `maxCollateralRatio` | `number` | No | Hard maximum CR ceiling. Above this, debt is increased first. |
 | `maxBorrowAmount` | `number` | No | **Fixed** total debt ceiling. Must be a positive number (not a percentage). |
-| `maxCollateralAmount` | `number \| string` | No | Total collateral ceiling. May be absolute or percentage. |
+| `maxCollateralAmount` | `number \| percentage string` | No | Total collateral ceiling. Use a number for an absolute collateral amount, e.g. `5000`, or a percentage string of total available collateral, e.g. `"80%"`. |
+| `minCollateralIncreaseThreshold` | `number \| percentage string` | No | Minimum unused collateral allocation before increasing MPA debt. Use a number for an absolute collateral amount, e.g. `25`, or a percentage string of assigned collateral budget, e.g. `"5%"`. `0` means no minimum. |
 
 #### Credit-Offer-Specific Fields
 
@@ -78,19 +79,29 @@ Every item in `lending` must have:
 |-------|------|----------|-------------|
 | `maxCollateralRatio` | `number` | **Yes** | Maximum effective collateral ratio when accepting a credit offer. |
 | `maxBorrowAmount` | `number` | No | **Fixed** total debt ceiling across all active credit deals for this asset. |
-| `maxCollateralAmount` | `number \| string` | No | Total collateral ceiling. May be absolute or percentage. |
+| `maxCollateralAmount` | `number \| percentage string` | No | Total collateral ceiling. Use a number for an absolute collateral amount, e.g. `5000`, or a percentage string of total available collateral, e.g. `"80%"`. |
 | `maxFeeRatePerDay` | `number` | No | Maximum acceptable daily fee rate. Defaults to `1/3000` (~0.033%/day). |
 | `autoReborrow` | `boolean` | No | If `true`, the bot reborrows from the same offer after repayment. |
 | `autoRepay` | `number` | No | On-chain auto-repay mode: `0` (off), `1` (full only), `2` (partial allowed). |
 | `allowedOfferIds` | `string[]` | No | Whitelist of credit offer object IDs the bot may accept. |
+| `minCollateralIncreaseThreshold` | `number \| percentage string` | No | Minimum unused collateral allocation before accepting more credit. Use a number for an absolute collateral amount, e.g. `25`, or a percentage string of assigned collateral budget, e.g. `"5%"`. `0` means no minimum. Omit to keep proactive credit increases disabled. |
 
 ### Global Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `maxCollateralAmount` | `number \| string` | **Global** collateral cap across all lending items. May be absolute or percentage (e.g. `"80%"`). |
+| `maxCollateralAmount` | `number \| percentage string` | **Global** collateral cap across all lending items. Use a number for an absolute collateral amount, e.g. `10000`, or a percentage string of total available collateral, e.g. `"80%"`. |
 
 There is no separate enable switch. If `debtPolicy.lending` is present, non-empty, and every item has a valid `collateralAsset`, the credit runtime loads for that bot.
+
+### Collateral Increase Thresholds
+
+`minCollateralIncreaseThreshold` is evaluated in collateral-asset units against the unused assigned collateral for that lending item:
+
+- `25` means at least 25 units of the collateral asset, such as `25 BTS`.
+- `"5%"` means at least 5% of that item’s assigned collateral budget.
+- `0` means no minimum; any positive unused assigned collateral may trigger an increase.
+- Omitted on credit-offer items leaves proactive credit increases disabled for backward compatibility.
 
 ## Collateral Distribution
 
@@ -142,6 +153,8 @@ For each `type: "mpa"` lending item:
 
 - If CR is below `minCollateralRatio`, **reduce debt first**, then add collateral if needed.
 - If CR is above `maxCollateralRatio`, **increase debt first**, then withdraw collateral if allowed.
+- Debt increases are calculated from the current feed price and current call-order collateral, capped by the total outstanding debt ceiling in `maxBorrowAmount`.
+- `minCollateralIncreaseThreshold` suppresses dust-sized increases when unused assigned collateral is below the configured absolute or percentage threshold.
 - If the debt-first leg fails (e.g. insufficient free MPA to repay), the runtime attempts a collateral-only fallback.
 - If `targetCollateralRatio` is not set, the midpoint of the min/max band is used.
 - After any successful CR adjustment, the bot requests a grid reset so order sizing reflects the new capital base.
@@ -153,6 +166,7 @@ For each `type: "creditOffer"` lending item, the runtime:
 
 - Discovers active credit deals on-chain.
 - Validates deals against the per-item policy (`maxCollateralRatio`, `maxFeeRatePerDay`, `allowedOfferIds`, etc.).
+- Gates increases on unused assigned collateral. If the collateral shortfall is at least `minCollateralIncreaseThreshold`, it accepts an additional credit deal from the cheapest acceptable offer; the selected offer's price derives the borrow amount, capped by `maxBorrowAmount`. A borrow-cap-capped increase is skipped if the actual collateral used would fall below `minCollateralIncreaseThreshold`.
 - Proactively repays deals nearing expiration (within `CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS`) and reborrows when `autoReborrow` is enabled.
 - Ensures `auto_repay` on-chain matches the policy's `autoRepay` setting, updating local state after each successful broadcast.
 

@@ -42,6 +42,29 @@ function clampIncreaseToTotalMax(rawIncrease, currentTotal, maxTotal) {
     return Math.min(numeric, remaining);
 }
 
+function resolveMinCollateralIncreaseThreshold(value, referenceAmount = null) {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === 'string' && value.trim().endsWith('%')) {
+        const trimmed = value.trim();
+        if (!/^(?:\d+(?:\.\d+)?|\.\d+)%$/.test(trimmed)) {
+            return null;
+        }
+        const percent = Number(trimmed.slice(0, -1));
+        const reference = Number(referenceAmount);
+        if (!Number.isFinite(percent) || percent < 0 || !Number.isFinite(reference) || reference <= 0) {
+            return null;
+        }
+        return reference * percent / 100;
+    }
+    if (typeof value === 'string' && value.trim() === '') {
+        return null;
+    }
+    if (typeof value !== 'number') {
+        return null;
+    }
+    return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
 function resolveTargetCollateralRatio(policy = {}) {
     const minCr = positiveOrNull(policy.minCollateralRatio);
     const maxCr = positiveOrNull(policy.maxCollateralRatio);
@@ -116,6 +139,7 @@ function buildDebtFirstCrPlan({
     maxBorrowAmount,
     maxCollateralAmount,
     collateralLimitReferenceAmount,
+    minCollateralIncreaseThreshold,
 } = {}) {
     const currentCr = calculateCollateralRatio(currentCollateralAmount, currentDebtAmount, feedPrice);
     const policy = {
@@ -151,6 +175,27 @@ function buildDebtFirstCrPlan({
         return null;
     }
 
+    const collateralLimit = resolveCollateralLimit(
+        maxCollateralAmount,
+        collateralLimitReferenceAmount ?? currentCollateralAmount
+    );
+
+    if (primaryAction === 'increase_debt' && minCollateralIncreaseThreshold !== undefined) {
+        const minCollateralIncrease = resolveMinCollateralIncreaseThreshold(
+            minCollateralIncreaseThreshold,
+            collateralLimit ?? collateralLimitReferenceAmount ?? currentCollateralAmount
+        );
+        if (minCollateralIncrease === null) return null;
+        if (minCollateralIncrease > 0) {
+            const collateralIncreaseAmount = Number.isFinite(collateralLimit)
+                ? collateralLimit - currentCollateralAmount
+                : 0;
+            if (!Number.isFinite(collateralIncreaseAmount) || collateralIncreaseAmount <= 0 || collateralIncreaseAmount < minCollateralIncrease) {
+                return null;
+            }
+        }
+    }
+
     const targetDebt = currentCollateralAmount / (feedPrice * desiredCr);
     const rawDebtDelta = targetDebt - currentDebtAmount;
     const debtDelta = clampIncreaseToTotalMax(rawDebtDelta, currentDebtAmount, maxBorrowAmount);
@@ -158,10 +203,6 @@ function buildDebtFirstCrPlan({
     const targetCollateral = desiredCr * feedPrice * projectedDebt;
     let collateralDelta = targetCollateral - currentCollateralAmount;
 
-    const collateralLimit = resolveCollateralLimit(
-        maxCollateralAmount,
-        collateralLimitReferenceAmount ?? currentCollateralAmount
-    );
     // Total collateral ceiling: only cap additions; withdrawals are always allowed.
     if (collateralDelta > 0 && collateralLimit !== null) {
         const remaining = collateralLimit - currentCollateralAmount;
@@ -291,5 +332,6 @@ module.exports = {
     debtDeltaForTargetCr,
     debtForTargetCr,
     planCrAdjustment,
+    resolveMinCollateralIncreaseThreshold,
     resolveTargetCollateralRatio,
 };

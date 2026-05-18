@@ -3,6 +3,7 @@ const { readBotsFileSync } = require('./bots_file_lock');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { createBotKey } = require('./account_orders');
 const { isPositiveNumber, isPositiveNumberOrPercent } = require('./order/utils/math');
+const { resolveMinCollateralIncreaseThreshold } = require('./cr_planner');
 
 function loadSettingsFile(filePath, { silent = false, exitOnError = true } = {}) {
     if (!fs.existsSync(filePath)) {
@@ -125,6 +126,15 @@ function validateBotEntry(b, i, src) {
                     // maxCollateralAmount: optional, positive number or percentage
                     if ('maxCollateralAmount' in item && !isPositiveNumberOrPercent(item.maxCollateralAmount)) {
                         problems.push(`debtPolicy.lending[${idx}].maxCollateralAmount must be a positive number or percentage`);
+                    }
+
+                    if ('minCollateralIncreaseThreshold' in item) {
+                        const referenceAmount = typeof item.minCollateralIncreaseThreshold === 'string' && item.minCollateralIncreaseThreshold.trim().endsWith('%')
+                            ? 1
+                            : null;
+                        if (resolveMinCollateralIncreaseThreshold(item.minCollateralIncreaseThreshold, referenceAmount) === null) {
+                            problems.push(`debtPolicy.lending[${idx}].minCollateralIncreaseThreshold must be a non-negative number or percentage`);
+                        }
                     }
 
                     if (item.type === 'mpa') {

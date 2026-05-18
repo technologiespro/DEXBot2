@@ -9,6 +9,7 @@ const {
   debtDeltaForTargetCr,
   debtForTargetCr,
   planCrAdjustment,
+  resolveMinCollateralIncreaseThreshold,
 } = require('../modules/cr_planner');
 
 function testSharedFormulas() {
@@ -55,6 +56,81 @@ function testDebtCeilingOnIncrease() {
   assert.strictEqual(plan.fallbackAction, 'withdraw_collateral', 'high CR should fallback to collateral withdrawal');
   assert.strictEqual(plan.debtDelta, 10, 'debt increase should be capped by total maxBorrowAmount');
   assert.strictEqual(plan.collateralDelta < 0, true, 'collateral should fall when debt increase is capped');
+}
+
+function testMinCollateralIncreaseThresholdSkipsSmallIncrease() {
+  const plan = buildDebtFirstCrPlan({
+    currentCollateralAmount: 520,
+    currentDebtAmount: 100,
+    feedPrice: 2,
+    minCollateralRatio: 2,
+    maxCollateralRatio: 2.5,
+    maxBorrowAmount: 1000,
+    maxCollateralAmount: 525,
+    minCollateralIncreaseThreshold: 10,
+  });
+
+  assert.strictEqual(plan, null, 'small collateral increases should be skipped when below threshold');
+}
+
+function testMinCollateralIncreaseThresholdAllowsLargeIncrease() {
+  const plan = buildDebtFirstCrPlan({
+    currentCollateralAmount: 600,
+    currentDebtAmount: 100,
+    feedPrice: 2,
+    minCollateralRatio: 2,
+    maxCollateralRatio: 2.5,
+    maxBorrowAmount: 1000,
+    maxCollateralAmount: 700,
+    minCollateralIncreaseThreshold: '10%',
+  });
+
+  assert(plan, 'large collateral increases should still allow debt planning');
+  assert.strictEqual(plan.action, 'increase_debt');
+  assert.strictEqual(plan.debtDelta, 20);
+}
+
+function testZeroMinCollateralIncreaseThresholdAllowsMissingBudget() {
+  const plan = buildDebtFirstCrPlan({
+    currentCollateralAmount: 600,
+    currentDebtAmount: 100,
+    feedPrice: 2,
+    minCollateralRatio: 2,
+    maxCollateralRatio: 2.5,
+    maxBorrowAmount: 1000,
+    minCollateralIncreaseThreshold: 0,
+  });
+
+  assert(plan, 'zero threshold should not require a collateral budget');
+  assert.strictEqual(plan.action, 'increase_debt');
+}
+
+function testPercentMinCollateralIncreaseThresholdRequiresBudget() {
+  const plan = buildDebtFirstCrPlan({
+    currentCollateralAmount: 600,
+    currentDebtAmount: 100,
+    feedPrice: 2,
+    minCollateralRatio: 2,
+    maxCollateralRatio: 2.5,
+    maxBorrowAmount: 1000,
+    minCollateralIncreaseThreshold: '10%',
+  });
+
+  assert.strictEqual(plan, null, 'percentage threshold should require a collateral budget reference');
+}
+
+function testMalformedMinCollateralIncreaseThresholds() {
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold('', 100), null);
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold('10%%', 100), null);
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold('10abc%', 100), null);
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold('abc', 100), null);
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold('10', 100), null);
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold(false, 100), null);
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold(true, 100), null);
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold([], 100), null);
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold('.5%', 100), 0.5);
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold('10%', 100), 10);
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold(0, 100), 0);
 }
 
 function testCollateralCapPercentage() {
@@ -139,6 +215,11 @@ function testCompatibilityPlanner() {
 testSharedFormulas();
 testDebtFirstPlanner();
 testDebtCeilingOnIncrease();
+testMinCollateralIncreaseThresholdSkipsSmallIncrease();
+testMinCollateralIncreaseThresholdAllowsLargeIncrease();
+testZeroMinCollateralIncreaseThresholdAllowsMissingBudget();
+testPercentMinCollateralIncreaseThresholdRequiresBudget();
+testMalformedMinCollateralIncreaseThresholds();
 testCollateralCapPercentage();
 testCollateralFallbackPlanner();
 testCollateralFallbackPlannerClamped();
