@@ -1459,6 +1459,12 @@ class CreditRuntime {
         if (!policy) {
             throw new Error('creditOffer policy missing');
         }
+        const renewOnly = policy.renewOnly === true || policy.reborrowOnly === true;
+        const isReborrowContext = pendingRepayAmount !== null && pendingRepayAmount !== undefined
+            || pendingReleaseCollateralAmount !== null && pendingReleaseCollateralAmount !== undefined;
+        if (renewOnly && !isReborrowContext) {
+            throw new Error('creditOffer policy is renewOnly; refusing standalone credit borrow');
+        }
 
         const offerObj = typeof offer === 'object' ? offer : null;
         const offerId = offerObj?.id || offer;
@@ -1881,6 +1887,7 @@ class CreditRuntime {
                         collateralAmount: reborrowRequest.collateralAmount,
                         autoRepay: reborrowRequest.autoRepay,
                         specificPolicy: reborrowRequest.specificPolicy,
+                        pendingReleaseCollateralAmount: reborrowRequest.pendingReleaseCollateralAmount,
                     });
                     await this.executeOperations([acceptOp], 'credit reborrow');
                     await this.refreshState();

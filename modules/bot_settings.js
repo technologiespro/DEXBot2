@@ -174,6 +174,12 @@ function validateBotEntry(b, i, src) {
                                 problems.push(`debtPolicy.lending[${idx}].autoRepay must be 0, 1, or 2`);
                             }
                         }
+                        if ('renewOnly' in item && typeof item.renewOnly !== 'boolean') {
+                            problems.push(`debtPolicy.lending[${idx}].renewOnly must be a boolean`);
+                        }
+                        if ('reborrowOnly' in item && typeof item.reborrowOnly !== 'boolean') {
+                            problems.push(`debtPolicy.lending[${idx}].reborrowOnly must be a boolean`);
+                        }
                         if ('allowedOfferIds' in item) {
                             if (!Array.isArray(item.allowedOfferIds)) {
                                 problems.push(`debtPolicy.lending[${idx}].allowedOfferIds must be an array`);

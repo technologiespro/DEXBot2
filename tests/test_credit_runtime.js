@@ -1168,6 +1168,7 @@ async function testRepayAndReborrowFlow() {
               maxFeeRatePerDay: 0.05,
               autoReborrow: true,
               autoRepay: 2,
+              renewOnly: true,
             },
           ],
         },
@@ -1193,6 +1194,71 @@ async function testRepayAndReborrowFlow() {
     const persisted = JSON.parse(fs.readFileSync(path.join(baseDir, 'credit_runtime', 'credit-bot-1.json'), 'utf8'));
     assert.strictEqual(persisted.reborrowPending, false, 'reborrow queue should be empty after successful batch');
     assert.strictEqual(typeof persisted.lastRepayAt, 'string', 'repay timestamp should be persisted');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testRenewOnlyRejectsStandaloneCreditBorrow() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    dealResponses: [[]],
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-renew-only-standalone-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-renew-only-standalone',
+        debtPolicy: {
+          lending: [
+            {
+              asset: 'HONEST.USD',
+              collateralAsset: 'BTS',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+              renewOnly: true,
+            },
+          ],
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await assert.rejects(
+      () => runtime.openCreditPosition({
+        offer: {
+          id: '1.18.42',
+          asset_type: '1.3.10',
+          fee_rate: 30000,
+          enabled: true,
+          max_duration_seconds: 86400,
+          acceptable_collateral: {
+            '1.3.0': {
+              base: { amount: 2, asset_id: '1.3.0' },
+              quote: { amount: 1, asset_id: '1.3.10' },
+            },
+          },
+        },
+        borrowAmount: 200,
+        collateralAmount: 400,
+      }),
+      /renewOnly/,
+      'renewOnly credit policy should reject standalone borrow attempts'
+    );
+    assert.strictEqual(calls.length, 0, 'renewOnly standalone borrow should not broadcast');
   } finally {
     restore();
     try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
@@ -2610,6 +2676,7 @@ async function testGetCollateralOffsets() {
   await testMpaDebtFallbackRespectsAssignedCollateralBudget();
   await testMpaDebtFirstThenCollateralFallbackTriggersReset();
   await testRepayAndReborrowFlow();
+  await testRenewOnlyRejectsStandaloneCreditBorrow();
   await testFixedCreditCollateralDoesNotResolvePercentageBase();
   await testMultipleMpaPositionsAreBlocked();
   await testRemovedCreditPolicyPrunesGlobalTracking();

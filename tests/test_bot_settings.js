@@ -122,6 +122,7 @@ const validCreditOffer = {
                 maxFeeRatePerDay: 0.001,
                 maxCollateralRatio: 2.5,
                 autoReborrow: true,
+                renewOnly: true,
             },
         ],
     },
@@ -131,6 +132,13 @@ assert.strictEqual(
     validateBotEntry(validCreditOffer, 0, 'test'),
     null,
     'validateBotEntry should accept valid creditOffer lending item'
+);
+
+const invalidCreditOfferRenewOnly = JSON.parse(JSON.stringify(validCreditOffer));
+invalidCreditOfferRenewOnly.debtPolicy.lending[0].renewOnly = 'yes';
+assert(
+    validateBotEntry(invalidCreditOfferRenewOnly, 0, 'test').includes('renewOnly must be a boolean'),
+    'validateBotEntry should reject non-boolean creditOffer renewOnly'
 );
 
 // Test: non-positive maxBorrowAmount is rejected
