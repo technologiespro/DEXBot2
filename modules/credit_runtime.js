@@ -181,6 +181,10 @@ function getAccountName(bot) {
         || null;
 }
 
+function snakeToCamel(method) {
+    return String(method || '').replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
 function parseFullAccount(fullAccountResult) {
     if (!Array.isArray(fullAccountResult) || fullAccountResult.length === 0) return null;
     const entry = fullAccountResult[0];
@@ -384,8 +388,17 @@ class CreditRuntime {
 
     async _dbCall(method, args = []) {
         await waitForConnected();
-        if (!BitShares?.db || typeof BitShares.db.call !== 'function') {
+        if (!BitShares?.db) {
             throw new Error('BitShares DB client is unavailable');
+        }
+
+        const camelMethod = snakeToCamel(method);
+        if (camelMethod && typeof BitShares.db[camelMethod] === 'function') {
+            return BitShares.db[camelMethod](...(Array.isArray(args) ? args : []));
+        }
+
+        if (typeof BitShares.db.call !== 'function') {
+            throw new Error(`BitShares DB method is unavailable: ${method}`);
         }
         return BitShares.db.call(method, args);
     }
@@ -671,11 +684,14 @@ class CreditRuntime {
                 const price = collateralMap.get(String(collateralAssetId));
                 if (!price) continue;
 
-                const baseAmount = blockchainAmountToFloat(price?.base, collateralAsset);
-                const quoteAmount = blockchainAmountToFloat(price?.quote, debtAsset);
+                const orientation = this._creditPriceOrientation(price, debtAsset, collateralAsset);
+                const baseAmount = blockchainAmountToFloat(price?.base, orientation === 'legacy-reversed' ? collateralAsset : debtAsset);
+                const quoteAmount = blockchainAmountToFloat(price?.quote, orientation === 'legacy-reversed' ? debtAsset : collateralAsset);
                 if (!Number.isFinite(baseAmount) || !Number.isFinite(quoteAmount) || baseAmount <= 0) continue;
 
-                const rate = quoteAmount / baseAmount;
+                const rate = orientation === 'legacy-reversed'
+                    ? quoteAmount / baseAmount
+                    : baseAmount / quoteAmount;
                 if (!Number.isFinite(rate) || rate <= 0) continue;
 
                 if (!this.state.positions[posKey]) this.state.positions[posKey] = {};
@@ -809,13 +825,26 @@ class CreditRuntime {
         }
     }
 
-    _calculateBorrowAmountFromCollateral(collateralAmountInt, collateralPrice) {
+    _creditPriceOrientation(collateralPrice, debtAsset, collateralAsset) {
+        const baseAssetId = String(collateralPrice?.base?.asset_id || '');
+        const quoteAssetId = String(collateralPrice?.quote?.asset_id || '');
+        const debtAssetId = String(debtAsset?.id || '');
+        const collateralAssetId = String(collateralAsset?.id || '');
+        if (baseAssetId === debtAssetId && quoteAssetId === collateralAssetId) return 'core';
+        if (baseAssetId === collateralAssetId && quoteAssetId === debtAssetId) return 'legacy-reversed';
+        return 'core';
+    }
+
+    _calculateBorrowAmountFromCollateral(collateralAmountInt, collateralPrice, debtAsset = null, collateralAsset = null) {
         const baseAmount = toFiniteNumber(collateralPrice?.base?.amount, null);
         const quoteAmount = toFiniteNumber(collateralPrice?.quote?.amount, null);
         if (!Number.isFinite(baseAmount) || !Number.isFinite(quoteAmount) || baseAmount <= 0 || quoteAmount <= 0) {
             return null;
         }
-        return Math.floor((Number(collateralAmountInt) * quoteAmount) / baseAmount);
+        if (this._creditPriceOrientation(collateralPrice, debtAsset, collateralAsset) === 'legacy-reversed') {
+            return Math.floor((Number(collateralAmountInt) * quoteAmount) / baseAmount);
+        }
+        return Math.floor((Number(collateralAmountInt) * baseAmount) / quoteAmount);
     }
 
     _enforceMaxBorrowAmount(policy, borrowInt, debtAsset, options = {}) {
@@ -886,7 +915,7 @@ class CreditRuntime {
         return onChainTotal + committed;
     }
 
-    async _enforceMaxCollateralAmount(policy, collateralInt, collateralAsset, accountId) {
+    async _enforceMaxCollateralAmount(policy, collateralInt, collateralAsset, accountId, options = {}) {
         const maxCollateralAmountValue = policy?.maxCollateralAmount;
         if (maxCollateralAmountValue == null) return;
         let limitFloat = positiveOrNull(maxCollateralAmountValue);
@@ -903,8 +932,9 @@ class CreditRuntime {
         const collateralFloat = blockchainToFloat(collateralInt, collateralAsset.precision);
         if (!Number.isFinite(collateralFloat)) return;
         const currentTotal = this._getCreditCollateralForAsset(collateralAsset);
-        if (currentTotal + collateralFloat > limitFloat) {
-            throw new Error(`collateralAmount ${collateralFloat} would exceed maxCollateralAmount ${limitFloat} (current total ${currentTotal})`);
+        const pendingReleaseFloat = Number(options.pendingReleaseCollateralAmount) || 0;
+        if (currentTotal - pendingReleaseFloat + collateralFloat > limitFloat) {
+            throw new Error(`collateralAmount ${collateralFloat} would exceed maxCollateralAmount ${limitFloat} (current total ${currentTotal}, pending release ${pendingReleaseFloat})`);
         }
     }
 
@@ -972,12 +1002,34 @@ class CreditRuntime {
             return collateralAmountFloat * valuePerShare;
         }
 
-        const baseAmountFloat = blockchainAmountToFloat(collateralPrice?.base, collateralAsset);
-        const quoteAmountFloat = blockchainAmountToFloat(collateralPrice?.quote, debtAsset);
+        const orientation = this._creditPriceOrientation(collateralPrice, debtAsset, collateralAsset);
+        const baseAmountFloat = blockchainAmountToFloat(collateralPrice?.base, orientation === 'legacy-reversed' ? collateralAsset : debtAsset);
+        const quoteAmountFloat = blockchainAmountToFloat(collateralPrice?.quote, orientation === 'legacy-reversed' ? debtAsset : collateralAsset);
         if (!Number.isFinite(baseAmountFloat) || !Number.isFinite(quoteAmountFloat) || baseAmountFloat <= 0 || quoteAmountFloat <= 0) {
             return null;
         }
-        return (collateralAmountFloat * quoteAmountFloat) / baseAmountFloat;
+        if (orientation === 'legacy-reversed') {
+            return (collateralAmountFloat * quoteAmountFloat) / baseAmountFloat;
+        }
+        return (collateralAmountFloat * baseAmountFloat) / quoteAmountFloat;
+    }
+
+    _calculateCreditOfferCollateralValueInDebtAsset(collateralAmountInt, collateralAsset, debtAsset, collateralPrice) {
+        const collateralAmountFloat = blockchainToFloat(collateralAmountInt, collateralAsset.precision);
+        if (!Number.isFinite(collateralAmountFloat) || collateralAmountFloat <= 0) {
+            return null;
+        }
+
+        const orientation = this._creditPriceOrientation(collateralPrice, debtAsset, collateralAsset);
+        const baseAmountFloat = blockchainAmountToFloat(collateralPrice?.base, orientation === 'legacy-reversed' ? collateralAsset : debtAsset);
+        const quoteAmountFloat = blockchainAmountToFloat(collateralPrice?.quote, orientation === 'legacy-reversed' ? debtAsset : collateralAsset);
+        if (!Number.isFinite(baseAmountFloat) || !Number.isFinite(quoteAmountFloat) || baseAmountFloat <= 0 || quoteAmountFloat <= 0) {
+            return null;
+        }
+        if (orientation === 'legacy-reversed') {
+            return (collateralAmountFloat * quoteAmountFloat) / baseAmountFloat;
+        }
+        return (collateralAmountFloat * baseAmountFloat) / quoteAmountFloat;
     }
 
     async _fetchBorrowerDeals() {
@@ -1384,7 +1436,7 @@ class CreditRuntime {
         };
     }
 
-    async buildCreditOfferAcceptOperation({ offer, borrowAmount, collateralAmount, autoRepay = false, specificPolicy = null, pendingRepayAmount = null }) {
+    async buildCreditOfferAcceptOperation({ offer, borrowAmount, collateralAmount, autoRepay = false, specificPolicy = null, pendingRepayAmount = null, pendingReleaseCollateralAmount = null }) {
         let policy = specificPolicy;
         if (!policy) {
             const dp = this.debtPolicy;
@@ -1444,7 +1496,10 @@ class CreditRuntime {
             throw new Error('Unable to determine acceptable collateral for credit offer');
         }
 
-        const collateralAsset = collateralAssetId ? await this._resolveAsset(collateralAssetId) : await this._resolveAsset(getPriceBaseAssetId(collateralPrice));
+        const inferredCollateralAssetId = collateralAssetId
+            || (collateralMap.size === 1 ? collateralMap.keys().next().value : null)
+            || getPriceQuoteAssetId(collateralPrice);
+        const collateralAsset = await this._resolveAsset(inferredCollateralAssetId);
         if (!collateralAsset) {
             throw new Error('Unable to resolve collateral asset metadata for credit offer');
         }
@@ -1466,7 +1521,7 @@ class CreditRuntime {
             }
             this._enforceMaxBorrowAmount(policy, borrowInt, debtAsset, { pendingRepayAmount });
 
-            const minimumCollateralInt = this._calculateRequiredCollateral(borrowInt, collateralPrice);
+            const minimumCollateralInt = this._calculateRequiredCollateral(borrowInt, collateralPrice, debtAsset, collateralAsset);
             const collateralReferenceAmount = isPercentageAmountSpec(collateralSpec)
                 ? await this._getCollateralPercentageBase(accountId, collateralAsset.id)
                 : null;
@@ -1481,7 +1536,7 @@ class CreditRuntime {
                 ? await this._getCollateralPercentageBase(accountId, collateralAsset.id)
                 : null;
             requiredCollateralInt = await this._resolveAmountToBlockchainInt(collateralSpec, collateralAsset, accountId, { balanceField: 'total', referenceAmount: collateralReferenceAmount, referenceLabel: 'total collateral balance' });
-            borrowInt = this._calculateBorrowAmountFromCollateral(requiredCollateralInt, collateralPrice);
+            borrowInt = this._calculateBorrowAmountFromCollateral(requiredCollateralInt, collateralPrice, debtAsset, collateralAsset);
             if (Number.isFinite(borrowInt) && borrowInt > 0) {
                 this._enforceMaxBorrowAmount(policy, borrowInt, debtAsset, { pendingRepayAmount });
             }
@@ -1495,7 +1550,9 @@ class CreditRuntime {
             throw new Error('Unable to determine borrow amount from collateral amount');
         }
 
-        await this._enforceMaxCollateralAmount(policy, requiredCollateralInt, collateralAsset, accountId);
+        await this._enforceMaxCollateralAmount(policy, requiredCollateralInt, collateralAsset, accountId, {
+            pendingReleaseCollateralAmount,
+        });
 
         const minDealAmount = toFiniteNumber(offerObj?.min_deal_amount, null);
         if (minDealAmount !== null && borrowInt < minDealAmount) {
@@ -1531,13 +1588,16 @@ class CreditRuntime {
 
         const borrowAmountFloat = blockchainToFloat(borrowInt, debtAsset.precision);
         const collateralValueInDebtAsset = await this._calculateCollateralValueInDebtAsset(requiredCollateralInt, collateralAsset, debtAsset, collateralPrice);
-        if (!Number.isFinite(borrowAmountFloat) || borrowAmountFloat <= 0 || !Number.isFinite(collateralValueInDebtAsset) || collateralValueInDebtAsset <= 0) {
+        const offerCollateralValueInDebtAsset = this._calculateCreditOfferCollateralValueInDebtAsset(requiredCollateralInt, collateralAsset, debtAsset, collateralPrice);
+        if (!Number.isFinite(borrowAmountFloat) || borrowAmountFloat <= 0 || !Number.isFinite(collateralValueInDebtAsset) || collateralValueInDebtAsset <= 0 || !Number.isFinite(offerCollateralValueInDebtAsset) || offerCollateralValueInDebtAsset <= 0) {
             throw new Error(collateralAsset?.for_liquidity_pool
                 ? 'Unable to value liquidity pool collateral for credit offer'
                 : 'Unable to determine collateral value for credit offer');
         }
 
-        const collateralRatio = collateralValueInDebtAsset / borrowAmountFloat;
+        const collateralRatio = collateralAsset?.for_liquidity_pool
+            ? collateralValueInDebtAsset / offerCollateralValueInDebtAsset
+            : collateralValueInDebtAsset / borrowAmountFloat;
         if (collateralRatio > maxCollateralRatioValue) {
             throw new Error(`collateral ratio ${collateralRatio} exceeds maxCollateralRatio ${maxCollateralRatioValue}`);
         }
@@ -1573,13 +1633,16 @@ class CreditRuntime {
         return op;
     }
 
-    _calculateRequiredCollateral(borrowAmountInt, collateralPrice) {
+    _calculateRequiredCollateral(borrowAmountInt, collateralPrice, debtAsset = null, collateralAsset = null) {
         const baseAmount = toFiniteNumber(collateralPrice?.base?.amount, null);
         const quoteAmount = toFiniteNumber(collateralPrice?.quote?.amount, null);
         if (!Number.isFinite(baseAmount) || !Number.isFinite(quoteAmount) || baseAmount <= 0 || quoteAmount <= 0) {
             return null;
         }
-        return Math.ceil((Number(borrowAmountInt) * baseAmount) / quoteAmount);
+        if (this._creditPriceOrientation(collateralPrice, debtAsset, collateralAsset) === 'legacy-reversed') {
+            return Math.ceil((Number(borrowAmountInt) * baseAmount) / quoteAmount);
+        }
+        return Math.ceil((Number(borrowAmountInt) * quoteAmount) / baseAmount);
     }
 
     _calculateCreditFee(repayAmountInt, feeRate) {
@@ -1720,32 +1783,69 @@ class CreditRuntime {
                         autoRepay: autoRepaySetting,
                         specificPolicy: options.specificPolicy,
                         pendingRepayAmount: repayAmount,
+                        pendingReleaseCollateralAmount: options.pendingReleaseCollateralAmount,
                     });
                     operations.push(acceptOp);
                     inlineReborrowPlanned = true;
                 } catch (err) {
+                    const fallback = await this._selectFallbackCreditOffer({
+                        debtAssetId: dealSummary.debtAssetId,
+                        collateralAssetId: dealSummary.collateralAssetId,
+                        policy: reborrowPolicy,
+                        borrowAmount: reborrowAmount,
+                        collateralAmount: reborrowCollateralAmount,
+                        autoRepay: autoRepaySetting,
+                        pendingRepayAmount: repayAmount,
+                        pendingReleaseCollateralAmount: options.pendingReleaseCollateralAmount,
+                        excludeOfferId: dealSummary.offerId,
+                    });
+                    if (fallback) {
+                        this.warn(`credit runtime: fallback reborrow offer ${fallback.offer.id} selected after original offer ${dealSummary.offerId} failed: ${err.message}`);
+                        operations.push(fallback.op);
+                        inlineReborrowPlanned = true;
+                    } else {
+                        deferredReborrowRequest = {
+                            sourceDealId: dealSummary.id,
+                            offerId: dealSummary.offerId,
+                            borrowAmount: reborrowAmount,
+                            collateralAmount: reborrowCollateralAmount,
+                            autoRepay: autoRepaySetting,
+                            specificPolicy: reborrowPolicy,
+                            pendingReleaseCollateralAmount: options.pendingReleaseCollateralAmount,
+                            requestedAt: new Date().toISOString(),
+                            reason: err.message,
+                        };
+                    }
+                }
+            } else {
+                const fallback = await this._selectFallbackCreditOffer({
+                    debtAssetId: dealSummary.debtAssetId,
+                    collateralAssetId: dealSummary.collateralAssetId,
+                    policy: reborrowPolicy,
+                    borrowAmount: reborrowAmount,
+                    collateralAmount: reborrowCollateralAmount,
+                    autoRepay: autoRepaySetting,
+                    pendingRepayAmount: repayAmount,
+                    pendingReleaseCollateralAmount: options.pendingReleaseCollateralAmount,
+                    excludeOfferId: dealSummary.offerId,
+                });
+                if (fallback) {
+                    this.warn(`credit runtime: fallback reborrow offer ${fallback.offer.id} selected because original offer ${dealSummary.offerId} is unavailable`);
+                    operations.push(fallback.op);
+                    inlineReborrowPlanned = true;
+                } else {
                     deferredReborrowRequest = {
                         sourceDealId: dealSummary.id,
                         offerId: dealSummary.offerId,
                         borrowAmount: reborrowAmount,
                         collateralAmount: reborrowCollateralAmount,
                         autoRepay: autoRepaySetting,
-                        specificPolicy: options.specificPolicy,
+                        specificPolicy: reborrowPolicy,
+                        pendingReleaseCollateralAmount: options.pendingReleaseCollateralAmount,
                         requestedAt: new Date().toISOString(),
-                        reason: err.message,
+                        reason: 'offer unavailable',
                     };
                 }
-            } else {
-                deferredReborrowRequest = {
-                    sourceDealId: dealSummary.id,
-                    offerId: dealSummary.offerId,
-                    borrowAmount: reborrowAmount,
-                    collateralAmount: reborrowCollateralAmount,
-                    autoRepay: autoRepaySetting,
-                    specificPolicy: options.specificPolicy,
-                    requestedAt: new Date().toISOString(),
-                    reason: 'offer unavailable',
-                };
             }
         }
 
@@ -1768,7 +1868,8 @@ class CreditRuntime {
                     : (Object.prototype.hasOwnProperty.call(reborrowPolicy, 'autoRepay')
                         ? reborrowPolicy.autoRepay
                         : (dealSummary.autoRepay ?? false)),
-                specificPolicy: options.specificPolicy,
+                specificPolicy: reborrowPolicy,
+                pendingReleaseCollateralAmount: options.pendingReleaseCollateralAmount,
                 requestedAt: new Date().toISOString(),
                 reason: deferredReborrowRequest?.reason || null,
             };
@@ -1813,6 +1914,7 @@ class CreditRuntime {
             collateralAmount: request.collateralAmount ?? null,
             autoRepay: request.autoRepay ?? false,
             specificPolicy: request.specificPolicy || null,
+            pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount ?? null,
             requestedAt: request.requestedAt || new Date().toISOString(),
             reason: request.reason || null,
         });
@@ -1831,6 +1933,93 @@ class CreditRuntime {
             this._objectCache.set(cacheKey, offer);
         }
         return offer;
+    }
+
+    async _fetchCreditOffersByAsset(assetId) {
+        if (!assetId) return [];
+        try {
+            const limit = 100;
+            const offers = [];
+            const seen = new Set();
+            let startId = null;
+            for (let pageCount = 0; pageCount < 50; pageCount++) {
+                const args = startId ? [assetId, limit, startId] : [assetId, limit];
+                const page = await this._dbCall('get_credit_offers_by_asset', args);
+                if (!Array.isArray(page) || page.length === 0) break;
+                let added = 0;
+                for (const offer of page) {
+                    if (!offer?.id || seen.has(String(offer.id))) continue;
+                    seen.add(String(offer.id));
+                    offers.push(offer);
+                    added++;
+                }
+                const lastId = page[page.length - 1]?.id;
+                if (!lastId || page.length < limit || added === 0) break;
+                startId = lastId;
+            }
+            return offers;
+        } catch (err) {
+            this.warn(`credit runtime: unable to fetch fallback credit offers for ${assetId}: ${err.message}`);
+            return [];
+        }
+    }
+
+    async _resolveFallbackAssetIds(policy, offer = null) {
+        const debtAsset = offer?.asset_type
+            ? await this._resolveAsset(offer.asset_type)
+            : await this._resolveAsset(policy?.asset);
+        const collateralAsset = policy?.collateralAsset
+            ? await this._resolveAsset(policy.collateralAsset)
+            : null;
+        return {
+            debtAssetId: debtAsset?.id ? String(debtAsset.id) : null,
+            collateralAssetId: collateralAsset?.id ? String(collateralAsset.id) : null,
+        };
+    }
+
+    async _selectFallbackCreditOffer({ debtAssetId, collateralAssetId, policy, borrowAmount, collateralAmount, autoRepay, pendingRepayAmount, pendingReleaseCollateralAmount, excludeOfferId = null }) {
+        const offers = await this._fetchCreditOffersByAsset(debtAssetId);
+        const candidates = [];
+        for (const offer of offers) {
+            if (!offer?.id) continue;
+            if (excludeOfferId && String(offer.id) === String(excludeOfferId)) continue;
+            if (String(offer.asset_type) !== String(debtAssetId)) continue;
+            if (offer.enabled === false) continue;
+            const collateralMap = normalizeCollateralMap(offer.acceptable_collateral);
+            if (!collateralMap.has(String(collateralAssetId))) continue;
+            const validation = this._validateCreditPolicy(policy, offer);
+            if (!validation.allow) continue;
+            try {
+                const op = await this.buildCreditOfferAcceptOperation({
+                    offer,
+                    borrowAmount,
+                    collateralAmount,
+                    autoRepay,
+                    specificPolicy: policy,
+                    pendingRepayAmount,
+                    pendingReleaseCollateralAmount,
+                });
+                candidates.push({
+                    offer,
+                    op,
+                    dailyRate: this._calculateDailyFeeRate(offer),
+                    feeRate: toFiniteNumber(offer.fee_rate, Number.MAX_SAFE_INTEGER),
+                    balance: toFiniteNumber(offer.current_balance, 0),
+                    duration: toFiniteNumber(offer.max_duration_seconds, 0),
+                });
+            } catch (_) {
+                // Candidate does not satisfy amount, ratio, balance, or duration policy.
+            }
+        }
+
+        candidates.sort((a, b) => (
+            a.dailyRate - b.dailyRate
+            || a.feeRate - b.feeRate
+            || b.duration - a.duration
+            || b.balance - a.balance
+            || String(a.offer.id).localeCompare(String(b.offer.id))
+        ));
+        return candidates[0] || null;
     }
 
     async _getDealById(dealId) {
@@ -1862,13 +2051,8 @@ class CreditRuntime {
             }
 
             const offer = await this._getOfferById(request.offerId);
-            if (!offer || offer.enabled === false) {
-                nextQueue.push(request);
-                continue;
-            }
-
             // Resolve policy: prefer request.specificPolicy, fall back to current debtPolicy lending item
-            const requestPolicy = request.specificPolicy || await this._resolveLendingPolicyForOffer(offer);
+            const requestPolicy = request.specificPolicy || (offer ? await this._resolveLendingPolicyForOffer(offer) : null);
             if (!requestPolicy || !requestPolicy.autoReborrow) {
                 this.warn(`credit runtime: dropping pending reborrow for offer ${request.offerId}; autoReborrow disabled or policy missing`);
                 continue;
@@ -1879,6 +2063,34 @@ class CreditRuntime {
                 continue;
             }
 
+            if (!offer || offer.enabled === false) {
+                const fallbackIds = await this._resolveFallbackAssetIds(requestPolicy, offer);
+                const fallback = fallbackIds.debtAssetId && fallbackIds.collateralAssetId
+                    ? await this._selectFallbackCreditOffer({
+                        debtAssetId: fallbackIds.debtAssetId,
+                        collateralAssetId: fallbackIds.collateralAssetId,
+                        policy: requestPolicy,
+                        borrowAmount: request.borrowAmount,
+                        collateralAmount: request.collateralAmount,
+                        autoRepay: request.autoRepay ?? false,
+                        pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount,
+                        excludeOfferId: request.offerId,
+                    })
+                    : null;
+                if (fallback) {
+                    try {
+                        this.warn(`credit runtime: fallback reborrow offer ${fallback.offer.id} selected for pending request after offer ${request.offerId} became unavailable`);
+                        await this.executeOperations([fallback.op], 'credit reborrow');
+                        processed++;
+                    } catch (err) {
+                        nextQueue.push({ ...request, reason: err.message });
+                    }
+                } else {
+                    nextQueue.push({ ...request, reason: offer ? 'offer disabled' : 'offer unavailable' });
+                }
+                continue;
+            }
+
             try {
                 const acceptOp = await this.buildCreditOfferAcceptOperation({
                     offer,
@@ -1886,6 +2098,7 @@ class CreditRuntime {
                     collateralAmount: request.collateralAmount || null,
                     autoRepay: request.autoRepay ?? false,
                     specificPolicy: request.specificPolicy || requestPolicy,
+                    pendingReleaseCollateralAmount: request.pendingReleaseCollateralAmount,
                 });
                 await this.executeOperations([acceptOp], 'credit reborrow');
                 processed++;
@@ -2028,13 +2241,19 @@ class CreditRuntime {
                 try {
                     this.warn(`credit runtime: deal ${deal.id} expires in ${Math.round(timeLeft / 60000)}m; proactively repaying and reborrowing`);
                     const debtAsset = await this._resolveAsset(deal.debtAssetId);
+                    const collateralAsset = await this._resolveAsset(deal.collateralAssetId);
                     const repayAmount = blockchainAmountToFloat(deal.debtAmount, debtAsset);
+                    const reborrowCollateralAmount = blockchainAmountToFloat(deal.collateralAmount, collateralAsset);
                     if (!Number.isFinite(repayAmount) || repayAmount <= 0) {
                         throw new Error(`unable to convert deal ${deal.id} debt amount for repay`);
                     }
+                    if (!Number.isFinite(reborrowCollateralAmount) || reborrowCollateralAmount <= 0) {
+                        throw new Error(`unable to convert deal ${deal.id} collateral amount for reborrow`);
+                    }
                     await this.repayCreditDeal(deal, repayAmount, {
                         autoReborrow: true,
-                        collateralAmount: posState.assignedCollateralBudget,
+                        collateralAmount: reborrowCollateralAmount,
+                        pendingReleaseCollateralAmount: reborrowCollateralAmount,
                         specificPolicy: lendingItem,
                     });
                     activeDealIds.delete(String(deal.id));

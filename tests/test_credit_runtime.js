@@ -136,6 +136,10 @@ function installStubs(calls, dbCalls, options = {}) {
     if (method === 'get_credit_offers_by_owner') {
       return creditOffersByOwner;
     }
+    if (method === 'get_credit_offers_by_asset') {
+      const assetId = args?.[0];
+      return Object.values(offersById).filter((offer) => String(offer?.asset_type) === String(assetId));
+    }
     if (method === 'get_on_chain_asset_balances') {
       return options.assetBalances || {};
     }
@@ -155,6 +159,7 @@ function installStubs(calls, dbCalls, options = {}) {
         get_liquidity_pool_by_asset_ids: async (left, right) => handleDbCall('get_liquidity_pool_by_asset_ids', [left, right]),
         get_credit_deals_by_borrower: async (accountId) => handleDbCall('get_credit_deals_by_borrower', [accountId]),
         get_credit_offers_by_owner: async (accountId) => handleDbCall('get_credit_offers_by_owner', [accountId]),
+        get_credit_offers_by_asset: async (assetId) => handleDbCall('get_credit_offers_by_asset', [assetId]),
         get_on_chain_asset_balances: async (accountRef, assets) => handleDbCall('get_on_chain_asset_balances', [accountRef, assets]),
       },
     },
@@ -371,7 +376,7 @@ async function testCreditOfferCollateralPercentUsesDebtSnapshot() {
           lending: [
             {
               asset: 'HONEST.USD',
-                    collateralAsset: 'BTS',
+              collateralAsset: 'BTS',
               type: 'mpa',
               ratio: 1,
               maxBorrowAmount: 1000,
@@ -382,7 +387,7 @@ async function testCreditOfferCollateralPercentUsesDebtSnapshot() {
             },
             {
               asset: 'HONEST.USD',
-                    collateralAsset: 'BTS',
+              collateralAsset: 'BTS',
               type: 'creditOffer',
               ratio: 1,
               maxBorrowAmount: 1000,
@@ -2058,6 +2063,246 @@ async function testDeferredReborrowQueuesAfterConfirmedRepay() {
   }
 }
 
+async function testFallbackOfferSelectedWhenOriginalOfferUnavailable() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    offersById: {
+      '1.18.42': null,
+      '1.18.43': {
+        id: '1.18.43',
+        asset_type: '1.3.10',
+        current_balance: 10000,
+        fee_rate: 10000,
+        min_deal_amount: 100,
+        enabled: true,
+        max_duration_seconds: 86400,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 2, asset_id: '1.3.0' },
+            quote: { amount: 1, asset_id: '1.3.10' },
+          },
+        },
+      },
+      '1.18.44': {
+        id: '1.18.44',
+        asset_type: '1.3.10',
+        current_balance: 10000,
+        fee_rate: 30000,
+        min_deal_amount: 100,
+        enabled: true,
+        max_duration_seconds: 86400,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 2, asset_id: '1.3.0' },
+            quote: { amount: 1, asset_id: '1.3.10' },
+          },
+        },
+      },
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-fallback-offer-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-fallback-offer',
+        debtPolicy: {
+          lending: [
+            {
+              asset: 'HONEST.USD',
+                    collateralAsset: 'BTS',
+              type: 'creditOffer',
+              ratio: 1,
+              maxBorrowAmount: 1000,
+              maxCollateralAmount: 10000,
+              maxCollateralRatio: 2.5,
+              maxFeeRatePerDay: 0.05,
+              autoReborrow: true,
+              autoRepay: 2,
+              allowedOfferIds: [],
+            },
+          ],
+        },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    const result = await runtime.repayCreditDeal('1.19.77', 200, { collateralAmount: 400 });
+    assert.strictEqual(result.tx_id, 'tx-1', 'repay should broadcast with fallback reborrow in one batch');
+    assert.strictEqual(calls.length, 1, 'fallback should be inline in the repay batch');
+    assert.strictEqual(calls[0].operations[0].op_name, 'credit_deal_repay', 'first op should repay old deal');
+    assert.strictEqual(calls[0].operations[1].op_name, 'credit_offer_accept', 'second op should retake credit');
+    assert.strictEqual(calls[0].operations[1].op_data.offer_id, '1.18.43', 'cheapest matching fallback offer should be selected');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testPendingReborrowUsesFallbackOfferWhenOriginalUnavailable() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    dealResponses: [[]],
+    offersById: {
+      '1.18.42': null,
+      '1.18.43': {
+        id: '1.18.43',
+        asset_type: '1.3.10',
+        current_balance: 10000,
+        fee_rate: 10000,
+        min_deal_amount: 100,
+        enabled: true,
+        max_duration_seconds: 86400,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 2, asset_id: '1.3.0' },
+            quote: { amount: 1, asset_id: '1.3.10' },
+          },
+        },
+      },
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-pending-fallback-offer-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const policy = {
+      asset: 'HONEST.USD',
+      collateralAsset: 'BTS',
+      type: 'creditOffer',
+      ratio: 1,
+      maxBorrowAmount: 1000,
+      maxCollateralAmount: 10000,
+      maxCollateralRatio: 2.5,
+      maxFeeRatePerDay: 0.05,
+      autoReborrow: true,
+      autoRepay: 2,
+      allowedOfferIds: [],
+    };
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-pending-fallback-offer',
+        debtPolicy: { lending: [policy] },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    runtime.state.pendingReborrows = [{
+      sourceDealId: '1.19.77',
+      offerId: '1.18.42',
+      borrowAmount: 200,
+      collateralAmount: 400,
+      autoRepay: 2,
+      specificPolicy: policy,
+      requestedAt: new Date().toISOString(),
+      reason: 'offer unavailable',
+    }];
+    runtime.state.reborrowPending = true;
+
+    const result = await runtime.processPendingReborrows();
+    assert.strictEqual(result.processed, 1, 'pending fallback reborrow should execute');
+    assert.strictEqual(result.remaining, 0, 'pending queue should be cleared after fallback succeeds');
+    assert.strictEqual(calls.length, 1, 'fallback should execute one reborrow batch');
+    assert.strictEqual(calls[0].operations[0].op_name, 'credit_offer_accept', 'pending fallback should accept a credit offer');
+    assert.strictEqual(calls[0].operations[0].op_data.offer_id, '1.18.43', 'pending fallback should use matching fallback offer');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
+async function testPendingFallbackWaitsWhileSourceDealActive() {
+  const calls = [];
+  const dbCalls = [];
+  const restore = installStubs(calls, dbCalls, {
+    offersById: {
+      '1.18.42': null,
+      '1.18.43': {
+        id: '1.18.43',
+        asset_type: '1.3.10',
+        current_balance: 10000,
+        fee_rate: 10000,
+        min_deal_amount: 100,
+        enabled: true,
+        max_duration_seconds: 86400,
+        acceptable_collateral: {
+          '1.3.0': {
+            base: { amount: 2, asset_id: '1.3.0' },
+            quote: { amount: 1, asset_id: '1.3.10' },
+          },
+        },
+      },
+    },
+  });
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-credit-pending-fallback-active-'));
+
+  try {
+    delete require.cache[creditRuntimePath];
+    const CreditRuntime = require('../modules/credit_runtime');
+    const policy = {
+      asset: 'HONEST.USD',
+      collateralAsset: 'BTS',
+      type: 'creditOffer',
+      ratio: 1,
+      maxBorrowAmount: 1000,
+      maxCollateralAmount: 10000,
+      maxCollateralRatio: 2.5,
+      maxFeeRatePerDay: 0.05,
+      autoReborrow: true,
+      autoRepay: 2,
+      allowedOfferIds: [],
+    };
+    const runtime = new CreditRuntime({
+      config: createBaseBotConfig({
+        botKey: 'credit-bot-pending-fallback-active',
+        debtPolicy: { lending: [policy] },
+      }),
+      account: { id: '1.2.3', name: 'alice' },
+      accountId: '1.2.3',
+      privateKey: 'WIF-KEY',
+      _log() {},
+      _warn() {},
+    }, { stateDir: path.join(baseDir, 'credit_runtime') });
+
+    await runtime.refreshState();
+    runtime.state.pendingReborrows = [{
+      sourceDealId: '1.19.77',
+      offerId: '1.18.42',
+      borrowAmount: 200,
+      collateralAmount: 400,
+      autoRepay: 2,
+      specificPolicy: policy,
+      requestedAt: new Date().toISOString(),
+      reason: 'offer unavailable',
+    }];
+    runtime.state.reborrowPending = true;
+
+    const result = await runtime.processPendingReborrows();
+    assert.strictEqual(result.processed, 0, 'pending fallback should not execute while source deal is still active');
+    assert.strictEqual(result.remaining, 1, 'pending request should remain queued while source deal is active');
+    assert.strictEqual(calls.length, 0, 'no fallback reborrow should broadcast while source deal is active');
+    assert.strictEqual(runtime.state.pendingReborrows[0].reason, 'source deal still active on-chain');
+  } finally {
+    restore();
+    try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch (err) { }
+  }
+}
+
 async function testCreditDealUpdatePreservesAutoRepayMode() {
   const calls = [];
   const dbCalls = [];
@@ -2376,6 +2621,9 @@ async function testGetCollateralOffsets() {
   await testLpCollateralRatioGate();
   await testDealDisappearanceDoesNotAutoQueueReborrow();
   await testDeferredReborrowQueuesAfterConfirmedRepay();
+  await testFallbackOfferSelectedWhenOriginalOfferUnavailable();
+  await testPendingReborrowUsesFallbackOfferWhenOriginalUnavailable();
+  await testPendingFallbackWaitsWhileSourceDealActive();
   await testCreditDealUpdatePreservesAutoRepayMode();
   await testAutoReborrowQueueIsIgnoredWhenDisabled();
   await testPendingReborrowResolvesPolicyWithColdAssetCache();
