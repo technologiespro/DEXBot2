@@ -121,10 +121,13 @@ async function main() {
     await bot._setupCreditRuntime();
     assert.strictEqual(runtime.loadStateCalls, 1, 'startup wiring should load runtime state');
 
+    await bot._runCreditRuntimeMaintenance('startup');
+    assert.deepStrictEqual(runtime.runMaintenanceCalls, ['startup'], 'startup should run credit maintenance once');
+
     const result = await bot._performPeriodicGridChecks();
     assert.strictEqual(result, 'grid-ok', 'periodic maintenance should preserve grid result');
-    assert.deepStrictEqual(calls, ['grid-maintenance'], 'periodic grid checks should not touch credit runtime');
-    assert.deepStrictEqual(runtime.runMaintenanceCalls, [], 'credit runMaintenance should not be called from periodic grid checks');
+    assert.deepStrictEqual(calls, ['credit-startup', 'grid-maintenance'], 'periodic grid checks should not touch credit runtime');
+    assert.deepStrictEqual(runtime.runMaintenanceCalls, ['startup'], 'credit runMaintenance should not be called from periodic grid checks');
 
     bot._setupCreditWatchdogInterval();
     assert.ok(bot._creditWatchdogInterval, 'credit watchdog interval should be created');

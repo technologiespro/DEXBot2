@@ -918,6 +918,7 @@ class DEXBot {
             await this._setupTriggerFileDetection();
             await this._setupCreditRuntime();
             await this._refreshAndSyncCreditRuntime();
+            await this._runCreditRuntimeMaintenance('startup', { fillLockAlreadyHeld: true });
             this._setupBlockchainFetchInterval();
             this._setupCreditWatchdogInterval();
             this._setupCredentialDaemonWatchdogInterval();
