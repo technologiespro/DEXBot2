@@ -2280,6 +2280,7 @@ class CreditRuntime {
                         this.log(`credit runtime: updating auto_repay on deal ${deal.id} to ${policyAutoRepay}`);
                         const updateOp = await this.buildCreditDealUpdateOperation(deal, policyAutoRepay);
                         await this.executeOperations([updateOp], 'credit deal auto_repay update');
+                        deal.autoRepay = policyAutoRepay;
                     } catch (err) {
                         this.warn(`credit runtime: failed to update auto_repay on deal ${deal.id}: ${err.message}`);
                     }
