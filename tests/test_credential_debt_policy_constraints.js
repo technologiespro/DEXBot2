@@ -1,0 +1,170 @@
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs');
+const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
+
+console.log('Running credential debt-policy constraint tests');
+
+const credentialPolicyPath = require.resolve('../modules/credential_policy');
+const bitsharesClientPath = require.resolve('../modules/bitshares_client');
+
+function loadPolicyWithAssetStub(assetsBySymbol = {}) {
+    const originalPolicy = require.cache[credentialPolicyPath];
+    const originalBitshares = setCachedModule(bitsharesClientPath, {
+        BitShares: {
+            db: {
+                lookup_asset_symbols: async (symbols) => {
+                    return (symbols || []).map((symbol) => assetsBySymbol[String(symbol)] || null);
+                },
+                get_assets: async (ids) => {
+                    return (ids || []).map((id) => {
+                        const match = Object.values(assetsBySymbol).find((asset) => String(asset?.id) === String(id));
+                        return match || null;
+                    });
+                },
+            },
+        },
+    });
+
+    delete require.cache[credentialPolicyPath];
+
+    try {
+        return {
+            policy: require('../modules/credential_policy'),
+            restore() {
+                restoreCachedModule(credentialPolicyPath, originalPolicy);
+                restoreCachedModule(bitsharesClientPath, originalBitshares);
+            },
+        };
+    } catch (error) {
+        restoreCachedModule(credentialPolicyPath, originalPolicy);
+        restoreCachedModule(bitsharesClientPath, originalBitshares);
+        throw error;
+    }
+}
+
+async function testWrappedCommentedBotsJsonResolvesDebtConstraints() {
+    const originalExistsSync = fs.existsSync;
+    const originalReadFileSync = fs.readFileSync;
+    const { policy, restore } = loadPolicyWithAssetStub({
+        'HONEST.USD': { id: '1.3.10', symbol: 'HONEST.USD' },
+        BTS: { id: '1.3.0', symbol: 'BTS' },
+    });
+
+    try {
+        fs.existsSync = (targetPath) => {
+            if (String(targetPath).endsWith('/profiles/bots.json')) return true;
+            return originalExistsSync(targetPath);
+        };
+        fs.readFileSync = (targetPath, encoding) => {
+            if (String(targetPath).endsWith('/profiles/bots.json')) {
+                return `{
+  // active omitted on purpose: default-enabled bots should still derive constraints
+  "bots": [
+    {
+      "preferredAccount": "alice",
+      "name": "credit-bot",
+      "debtPolicy": {
+        "lending": [
+          {
+            "asset": "HONEST.USD",
+            "collateralAsset": "BTS",
+            "type": "creditOffer"
+          },
+          {
+            "asset": "HONEST.USD",
+            "collateralAsset": "BTS",
+            "type": "mpa"
+          }
+        ]
+      }
+    },
+    {
+      "preferredAccount": "alice",
+      "active": false,
+      "debtPolicy": {
+        "lending": [
+          {
+            "asset": "1.3.999",
+            "collateralAsset": "1.3.998",
+            "type": "creditOffer"
+          }
+        ]
+      }
+    }
+  ]
+}`;
+            }
+            return originalReadFileSync(targetPath, encoding);
+        };
+
+        const resolvedPolicy = policy.resolveAccountPolicy({}, 'alice');
+        assert.strictEqual(
+            resolvedPolicy.allowedOps.call_order_update.collateralAsset,
+            'BTS',
+            'wrapped bots.json should derive MPA collateral constraints for default-enabled bots'
+        );
+        assert.deepStrictEqual(
+            resolvedPolicy.allowedOps.credit_offer_accept.allowedDebtAssets,
+            ['HONEST.USD'],
+            'wrapped bots.json should derive credit debt constraints from the active bot set'
+        );
+
+        const creditAcceptResult = await policy.evaluatePolicy(resolvedPolicy, {
+            accountName: 'alice',
+            requestType: 'sign',
+            operations: [
+                {
+                    op_name: 'credit_offer_accept',
+                    op_data: {
+                        offer_id: '1.18.42',
+                        borrow_amount: { asset_id: '1.3.10', amount: 500 },
+                        collateral: { asset_id: '1.3.0', amount: 1000 },
+                        max_fee_rate: 0,
+                        min_duration_seconds: 0,
+                        extensions: {},
+                    },
+                },
+            ],
+        });
+        assert.strictEqual(
+            creditAcceptResult.allow,
+            true,
+            `symbol-based credit constraints should resolve to on-chain asset IDs, got: ${creditAcceptResult.reason}`
+        );
+
+        const callOrderResult = await policy.evaluatePolicy(resolvedPolicy, {
+            accountName: 'alice',
+            requestType: 'sign',
+            operations: [
+                {
+                    op_name: 'call_order_update',
+                    op_data: {
+                        delta_collateral: { asset_id: '1.3.0', amount: 100 },
+                        delta_debt: { asset_id: '1.3.10', amount: 50 },
+                        extensions: { target_collateral_ratio: 220 },
+                    },
+                },
+            ],
+        });
+        assert.strictEqual(
+            callOrderResult.allow,
+            true,
+            `symbol-based MPA collateral constraints should resolve to on-chain asset IDs, got: ${callOrderResult.reason}`
+        );
+    } finally {
+        fs.existsSync = originalExistsSync;
+        fs.readFileSync = originalReadFileSync;
+        restore();
+    }
+}
+
+(async () => {
+    await testWrappedCommentedBotsJsonResolvesDebtConstraints();
+    console.log('credential debt-policy constraint tests passed');
+    process.exit(0);
+})().catch((err) => {
+    console.error(err);
+    process.exit(1);
+});

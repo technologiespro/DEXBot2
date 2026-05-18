@@ -423,6 +423,31 @@ assert(
     'validateBotEntry should reject numeric-string minCollateralIncreaseThreshold'
 );
 
+// Test: null minCollateralIncreaseThreshold is rejected
+const invalidNullMinCollateralIncreaseThreshold = {
+    name: 'K7',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            {
+                asset: 'USD',
+                collateralAsset: 'BTS',
+                type: 'creditOffer',
+                maxCollateralRatio: 2.5,
+                minCollateralIncreaseThreshold: null,
+            },
+        ],
+    },
+};
+
+assert(
+    validateBotEntry(invalidNullMinCollateralIncreaseThreshold, 0, 'test').includes('minCollateralIncreaseThreshold'),
+    'validateBotEntry should reject null minCollateralIncreaseThreshold'
+);
+
 // Test: invalid type is rejected
 const invalidType = {
     name: 'L',

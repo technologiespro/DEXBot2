@@ -43,7 +43,8 @@ function clampIncreaseToTotalMax(rawIncrease, currentTotal, maxTotal) {
 }
 
 function resolveMinCollateralIncreaseThreshold(value, referenceAmount = null) {
-    if (value === null || value === undefined) return 0;
+    if (value === undefined) return 0;
+    if (value === null) return null;
     if (typeof value === 'string' && value.trim().endsWith('%')) {
         const trimmed = value.trim();
         if (!/^(?:\d+(?:\.\d+)?|\.\d+)%$/.test(trimmed)) {

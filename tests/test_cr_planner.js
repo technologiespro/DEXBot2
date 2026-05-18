@@ -120,6 +120,7 @@ function testPercentMinCollateralIncreaseThresholdRequiresBudget() {
 }
 
 function testMalformedMinCollateralIncreaseThresholds() {
+  assert.strictEqual(resolveMinCollateralIncreaseThreshold(null, 100), null);
   assert.strictEqual(resolveMinCollateralIncreaseThreshold('', 100), null);
   assert.strictEqual(resolveMinCollateralIncreaseThreshold('10%%', 100), null);
   assert.strictEqual(resolveMinCollateralIncreaseThreshold('10abc%', 100), null);

@@ -11,9 +11,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { BitShares } = require('./bitshares_client');
 const { isPositiveInt } = require('./order/utils/math');
+const { parseJsonWithComments } = require('./order/utils/system');
 
 const BOTS_JSON_PATH = path.join(__dirname, '..', 'profiles', 'bots.json');
+const ASSET_OBJECT_ID_PATTERN = /^1\.3\.\d+$/;
 
 const POLICY_DENIED_PREFIX = 'POLICY_DENIED: ';
 const EXECUTABLE_TIMEOUT_MS = 5000;
@@ -52,6 +55,56 @@ const BUILTIN_DEFAULT_POLICY = Object.freeze({
 });
 
 const policyCache = new Map();
+const assetRefResolutionCache = new Map();
+
+async function resolveAssetRefToId(assetRef) {
+    if (!assetRef || typeof assetRef !== 'string') return null;
+    const cacheKey = String(assetRef);
+    if (assetRefResolutionCache.has(cacheKey)) {
+        return assetRefResolutionCache.get(cacheKey);
+    }
+
+    let resolvedId = null;
+    try {
+        if (ASSET_OBJECT_ID_PATTERN.test(cacheKey)) {
+            resolvedId = cacheKey;
+        } else if (BitShares?.db?.lookup_asset_symbols) {
+            const result = await BitShares.db.lookup_asset_symbols([cacheKey]);
+            const asset = Array.isArray(result) ? result[0] : null;
+            resolvedId = asset?.id ? String(asset.id) : null;
+        } else if (BitShares?.db?.get_assets) {
+            const result = await BitShares.db.get_assets([cacheKey]);
+            const asset = Array.isArray(result) ? result[0] : null;
+            resolvedId = asset?.id ? String(asset.id) : null;
+        }
+    } catch (_) {
+        resolvedId = null;
+    }
+
+    assetRefResolutionCache.set(cacheKey, resolvedId);
+    return resolvedId;
+}
+
+async function resolveConfiguredAssetRefs(refs, label) {
+    const resolved = [];
+    for (const ref of refs) {
+        if (!ref) continue;
+        const normalizedRef = String(ref);
+        if (ASSET_OBJECT_ID_PATTERN.test(normalizedRef)) {
+            resolved.push(normalizedRef);
+            continue;
+        }
+        const resolvedId = await resolveAssetRefToId(normalizedRef);
+        if (!resolvedId) {
+            return {
+                ok: false,
+                reason: `unable to resolve asset ref "${normalizedRef}" from ${label}`,
+            };
+        }
+        resolved.push(String(resolvedId));
+    }
+    return { ok: true, values: resolved };
+}
 
 function normalizeGrapheneCollateralRatio(value) {
     const numeric = Number(value);
@@ -439,7 +492,10 @@ function deriveDebtPolicyConstraints(accountName) {
     try {
         if (!fs.existsSync(BOTS_JSON_PATH)) return {};
         const raw = fs.readFileSync(BOTS_JSON_PATH, 'utf8');
-        const bots = JSON.parse(raw);
+        const parsed = parseJsonWithComments(raw);
+        const bots = Array.isArray(parsed)
+            ? parsed.filter(Boolean)
+            : (Array.isArray(parsed?.bots) ? parsed.bots.filter(Boolean) : []);
         if (!Array.isArray(bots)) return {};
 
         const mpaCollaterals = new Set();
@@ -447,7 +503,7 @@ function deriveDebtPolicyConstraints(accountName) {
         const creditDebtAssets = new Set();
 
         for (const bot of bots) {
-            if (!bot || !bot.active) continue;
+            if (!bot || bot.active === false) continue;
             const pref = bot.preferredAccount || bot.account;
             if (pref !== accountName) continue;
             const dp = bot.debtPolicy;
@@ -546,7 +602,7 @@ function buildPolicyContext(request) {
  * Evaluate per-operation parameter constraints.
  * Returns { allow: boolean, reason: string|null, policyId: string }
  */
-function evaluateOpConstraints(opName, opData, constraints) {
+async function evaluateOpConstraints(opName, opData, constraints) {
     if (!constraints) return { allow: true, reason: null, policyId: null };
     const d = opData || {};
 
@@ -698,7 +754,15 @@ function evaluateOpConstraints(opName, opData, constraints) {
         }
         if (constraints.collateralAsset) {
             const collId = d.delta_collateral && d.delta_collateral.asset_id;
-            if (collId && String(collId) !== String(constraints.collateralAsset)) {
+            const resolved = await resolveConfiguredAssetRefs([constraints.collateralAsset], 'collateralAsset');
+            if (!resolved.ok) {
+                return {
+                    allow: false,
+                    reason: `call_order_update: ${resolved.reason}`,
+                    policyId: 'opParams',
+                };
+            }
+            if (collId && !resolved.values.includes(String(collId))) {
                 return {
                     allow: false,
                     reason: `call_order_update: collateral asset "${collId}" does not match collateralAsset`,
@@ -708,7 +772,15 @@ function evaluateOpConstraints(opName, opData, constraints) {
         }
         if (constraints.allowedCollateralAssets) {
             const collId = d.delta_collateral && d.delta_collateral.asset_id;
-            if (collId && !constraints.allowedCollateralAssets.includes(String(collId))) {
+            const resolved = await resolveConfiguredAssetRefs(constraints.allowedCollateralAssets, 'allowedCollateralAssets');
+            if (!resolved.ok) {
+                return {
+                    allow: false,
+                    reason: `call_order_update: ${resolved.reason}`,
+                    policyId: 'opParams',
+                };
+            }
+            if (collId && !resolved.values.includes(String(collId))) {
                 return {
                     allow: false,
                     reason: `call_order_update: collateral asset "${collId}" not in allowedCollateralAssets`,
@@ -773,7 +845,15 @@ function evaluateOpConstraints(opName, opData, constraints) {
         }
         if (constraints.collateralAsset) {
             const assetId = d.collateral && d.collateral.asset_id;
-            if (assetId && String(assetId) !== String(constraints.collateralAsset)) {
+            const resolved = await resolveConfiguredAssetRefs([constraints.collateralAsset], 'collateralAsset');
+            if (!resolved.ok) {
+                return {
+                    allow: false,
+                    reason: `credit_offer_accept: ${resolved.reason}`,
+                    policyId: 'opParams',
+                };
+            }
+            if (assetId && !resolved.values.includes(String(assetId))) {
                 return {
                     allow: false,
                     reason: `credit_offer_accept: collateral asset "${assetId}" does not match collateralAsset`,
@@ -783,7 +863,15 @@ function evaluateOpConstraints(opName, opData, constraints) {
         }
         if (constraints.allowedCollateralAssets) {
             const assetId = d.collateral && d.collateral.asset_id;
-            if (assetId && !constraints.allowedCollateralAssets.includes(String(assetId))) {
+            const resolved = await resolveConfiguredAssetRefs(constraints.allowedCollateralAssets, 'allowedCollateralAssets');
+            if (!resolved.ok) {
+                return {
+                    allow: false,
+                    reason: `credit_offer_accept: ${resolved.reason}`,
+                    policyId: 'opParams',
+                };
+            }
+            if (assetId && !resolved.values.includes(String(assetId))) {
                 return {
                     allow: false,
                     reason: `credit_offer_accept: collateral asset "${assetId}" not in allowedCollateralAssets`,
@@ -793,7 +881,15 @@ function evaluateOpConstraints(opName, opData, constraints) {
         }
         if (constraints.allowedDebtAssets) {
             const assetId = d.borrow_amount && d.borrow_amount.asset_id;
-            if (assetId && !constraints.allowedDebtAssets.includes(String(assetId))) {
+            const resolved = await resolveConfiguredAssetRefs(constraints.allowedDebtAssets, 'allowedDebtAssets');
+            if (!resolved.ok) {
+                return {
+                    allow: false,
+                    reason: `credit_offer_accept: ${resolved.reason}`,
+                    policyId: 'opParams',
+                };
+            }
+            if (assetId && !resolved.values.includes(String(assetId))) {
                 return {
                     allow: false,
                     reason: `credit_offer_accept: debt asset "${assetId}" not in allowedDebtAssets`,
@@ -836,7 +932,15 @@ function evaluateOpConstraints(opName, opData, constraints) {
         }
         if (constraints.allowedDebtAssets) {
             const assetId = d.repay_amount && d.repay_amount.asset_id;
-            if (assetId && !constraints.allowedDebtAssets.includes(String(assetId))) {
+            const resolved = await resolveConfiguredAssetRefs(constraints.allowedDebtAssets, 'allowedDebtAssets');
+            if (!resolved.ok) {
+                return {
+                    allow: false,
+                    reason: `credit_deal_repay: ${resolved.reason}`,
+                    policyId: 'opParams',
+                };
+            }
+            if (assetId && !resolved.values.includes(String(assetId))) {
                 return {
                     allow: false,
                     reason: `credit_deal_repay: debt asset "${assetId}" not in allowedDebtAssets`,
@@ -959,7 +1063,7 @@ async function evaluatePolicy(policy, context) {
 
                 // Get per-op constraints and evaluate
                 const constraints = policy.allowedOps[opName];
-                const result = evaluateOpConstraints(opName, op.op_data, constraints);
+                const result = await evaluateOpConstraints(opName, op.op_data, constraints);
                 if (!result.allow) {
                     return result;
                 }

@@ -1752,6 +1752,36 @@ class CreditRuntime {
         return chainOrders.executeBatch(accountName, this.bot.privateKey, operations);
     }
 
+    async _checkGridMaintenanceAfterCreditUpdate(context = 'credit capital update', options = {}) {
+        const manager = this.bot?.manager;
+        const runGridMaintenance = this.bot?._runGridMaintenance;
+        if (!manager || typeof runGridMaintenance !== 'function') {
+            return { skipped: true, reason: 'grid maintenance unavailable' };
+        }
+
+        const accountId = this.bot?.accountId || this.bot?.account?.id || null;
+        const lock = manager?._fillProcessingLock;
+        const runCheck = async () => {
+            if (typeof manager.fetchAccountTotals === 'function' && accountId) {
+                await manager.fetchAccountTotals(accountId);
+            }
+            return runGridMaintenance.call(this.bot, context, {
+                ...options,
+                fillLockAlreadyHeld: true,
+            });
+        };
+
+        try {
+            if (options.fillLockAlreadyHeld === true || !lock || typeof lock.acquire !== 'function') {
+                return await runCheck();
+            }
+            return await lock.acquire(runCheck);
+        } catch (err) {
+            this.warn(`credit runtime: post-credit grid maintenance failed during ${context}: ${err.message}`);
+            return { skipped: false, error: err.message };
+        }
+    }
+
     async openCreditPosition({ offer, borrowAmount, collateralAmount, autoRepay = false, reason = 'credit borrow' }) {
         const offerObj = typeof offer === 'object' ? offer : await this._getOfferById(offer);
         const acceptOp = await this.buildCreditOfferAcceptOperation({
@@ -1762,6 +1792,7 @@ class CreditRuntime {
         });
         const result = await this.executeOperations([acceptOp], reason);
         await this.refreshState();
+        await this._checkGridMaintenanceAfterCreditUpdate('credit capital update');
         await this.persistState(reason);
         return result;
     }
@@ -1918,6 +1949,9 @@ class CreditRuntime {
         } else if (shouldAutoReborrow && deferredReborrowRequest && !inlineReborrowPlanned && !sourceDealStillActive) {
             this.queueReborrow(deferredReborrowRequest);
         }
+        await this._checkGridMaintenanceAfterCreditUpdate('credit capital update', {
+            fillLockAlreadyHeld: options.fillLockAlreadyHeld === true,
+        });
         await this.persistState('credit repay');
         return result;
     }
@@ -2106,6 +2140,7 @@ class CreditRuntime {
                         acceptArgs = {
                             offer,
                             borrowAmount: finiteRemainingBorrowCapacity,
+                            collateralAmount: { assetId: collateralAsset.id },
                             autoRepay,
                             specificPolicy: policy,
                         };
@@ -2125,6 +2160,7 @@ class CreditRuntime {
                     op = await this.buildCreditOfferAcceptOperation({
                         offer,
                         borrowAmount: finiteRemainingBorrowCapacity,
+                        collateralAmount: { assetId: collateralAssetId },
                         autoRepay,
                         specificPolicy: policy,
                     });
@@ -2302,9 +2338,13 @@ class CreditRuntime {
         this.state.pendingReborrows = nextQueue;
         this.state.reborrowPending = nextQueue.length > 0;
         await this.refreshState();
+        let gridMaintenanceResult = null;
+        if (processed > 0) {
+            gridMaintenanceResult = await this._checkGridMaintenanceAfterCreditUpdate('credit capital update');
+        }
         await this.persistState('pending reborrows');
 
-        return { processed, remaining: nextQueue.length };
+        return { processed, remaining: nextQueue.length, gridMaintenanceResult };
     }
 
     async _runMpaMaintenance(context, options, lendingItem, assetId) {
@@ -2404,7 +2444,7 @@ class CreditRuntime {
         return null;
     }
 
-    async _runCreditMaintenance(lendingItem, assetId) {
+    async _runCreditMaintenance(lendingItem, assetId, runtimeContext = {}) {
         if (!lendingItem || typeof lendingItem !== 'object') {
             throw new Error('_runCreditMaintenance requires a lendingItem');
         }
@@ -2447,6 +2487,7 @@ class CreditRuntime {
                         collateralAmount: reborrowCollateralAmount,
                         pendingReleaseCollateralAmount: reborrowCollateralAmount,
                         specificPolicy: lendingItem,
+                        fillLockAlreadyHeld: runtimeContext?.options?.fillLockAlreadyHeld === true,
                     });
                     activeDealIds.delete(String(deal.id));
                 } catch (err) {
@@ -2501,12 +2542,16 @@ class CreditRuntime {
                         executedAt: new Date().toISOString(),
                     };
                     await this.refreshCreditState({}, lendingItem);
+                    const gridMaintenanceResult = await this._checkGridMaintenanceAfterCreditUpdate('credit capital update', {
+                        fillLockAlreadyHeld: runtimeContext?.options?.fillLockAlreadyHeld === true,
+                    });
                     return {
                         plan: increasePlan,
                         offer: offer.offer.id,
                         cappedByBorrowCapacity: !!offer.capped,
                         collateralAmount: offer.collateralAmount,
                         borrowAmount: offer.borrowAmount,
+                        gridMaintenanceResult,
                         result,
                     };
                 }
@@ -2541,7 +2586,7 @@ class CreditRuntime {
             if (item.type === 'mpa') {
                 results.mpa.push(await this._runMpaMaintenance(context, options, item, assetId));
             } else if (item.type === 'creditOffer') {
-                results.credit.push(await this._runCreditMaintenance(item, assetId));
+                results.credit.push(await this._runCreditMaintenance(item, assetId, { context, options }));
             }
         }
 
@@ -2571,7 +2616,7 @@ class CreditRuntime {
                 if (item.type === 'mpa') {
                     mpaResults.push(await this._runMpaMaintenance('watchdog', {}, item, assetId));
                 } else if (item.type === 'creditOffer') {
-                    creditResults.push(await this._runCreditMaintenance(item, assetId));
+                    creditResults.push(await this._runCreditMaintenance(item, assetId, { context: 'watchdog', options: {} }));
                 }
             }
 
