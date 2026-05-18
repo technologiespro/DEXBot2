@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.0] - 2026-05-16 - Final 0.7 Hardening and Signal Refinement
+## [0.7.0] - 2026-05-18 - Final 0.7 Hardening and Signal Refinement
 
 This update covers the final week of May 0.7 development, focusing on signal refinement, credential daemon stability, credit runtime fixes, and expanded analysis tools.
 
@@ -145,6 +145,19 @@ This update covers the final week of May 0.7 development, focusing on signal ref
 - Simplified market-adapter diagnostics and startup behavior, including direct runtime management, explicit whitelist generation, and stricter latching/logging for adapter state.
 - Reorganized the documentation hub, refreshed the market-adapter README, linked the dynamic-weight research docs, and updated the evolution report so the docs now point to the current codebase.
 - Added the root changelog entry, linked it from the docs index and evolution report, and moved the hero image to `docs/media/DEXBot2.webp` for the README banner.
+
+### 2026-05-16 to 2026-05-18
+
+#### Credit Maintenance and Grid Reset Hardening
+
+- Added collateral-gated credit increases so CR adjustments respect collateral availability before broadcasting (`a1f538b`).
+- Introduced renew-only credit offer policy for deal renewal without fresh borrowing (`23a7115`).
+- Hardened credit deal renewal with fallback offer safety to prevent unsafe renewals when primary offers are unavailable (`c820d8b`).
+- Ensured credit maintenance runs during startup so debt positions are validated before trading begins (`5b93b67`).
+- Synchronized local `autoRepay` state after successful `credit_deal_update` broadcast to prevent stale policy decisions (`23a7115`).
+- Centralized grid reset metadata handling to prevent lost reset state across restarts (`2743744`).
+- Preserved dynamic grid reset state so AMA-triggered resets survive maintenance cycles (`3e6b956`).
+- Clarified empirical table sources in documentation for regime detection and dynamic weight references (`80f6ca0`).
 
 ## [0.6.0-patch.26] - 2026-02-28 - Documentation Updates: Simplified Architecture & Removed Split/Merge Logic
 

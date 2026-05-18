@@ -89,7 +89,7 @@ See [developer_guide.md#order-state-helper-functions](developer_guide.md#order-s
 
 ---
 
-## 1.4 Fill Batch Processing & Cache Fund Timeline
+## 1.4 Fill Batch Processing & Timeline
 
 ### Problem Solved
 

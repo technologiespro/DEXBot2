@@ -6,9 +6,9 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,307 commits over 6 active months
-- **Code Maturity**: Evolution from basic utilities to a ~38,000+ LoC intelligent system
-- **Stability**: Progression from manual testing to a suite of 168 automated test files
+- **Growth Phase**: 1,320 commits over ~5.5 active months
+- **Code Maturity**: Evolution from basic utilities to a ~48,000+ LoC intelligent system
+- **Stability**: Progression from manual testing to a suite of 158 automated test files
 - **Releases**: 15 tagged releases (v0.1.0 to v0.6.0)
 
 ---
@@ -37,7 +37,7 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 
 ### Phase 1: Foundation & Core Architecture (December 2025)
 **Duration**: December 2 - December 31, 2025  
-**Commits**: 408 (31.2% of total)
+**Commits**: 408 (30.9% of total)
 **Focus**: Establishing core trading infrastructure, order management, and fund accounting
 
 #### Key Milestones
@@ -65,7 +65,7 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 
 ### Phase 2: Stabilization & Advanced Features (January 2026)
 **Duration**: January 1 - January 31, 2026  
-**Commits**: 425 (35.2% of total)
+**Commits**: 425 (32.2% of total)
 **Focus**: Bug fixes, race condition resolution, advanced trading strategies, and system hardening
 
 #### Key Milestones
@@ -100,7 +100,7 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 
 ### Phase 3: Architecture Refinement & COW Pattern (February 2026)
 **Duration**: February 1 - February 18, 2026  
-**Commits**: 150 (12.4% of total)
+**Commits**: 150 (11.4% of total)
 **Focus**: Copy-on-Write architecture, code quality, and production hardening
 
 #### Key Milestones
@@ -130,7 +130,7 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 
 ### Phase 4: Market Adapter & Production Hardening (Late Feb - March 2026)
 **Duration**: February 19 - March 3, 2026
-**Commits**: 54 (4.5% of total)
+**Commits**: 54 (4.1% of total)
 **Focus**: AMA integration, market adapter consolidation, fill processing finalization, credential daemon hardening
 
 #### Key Milestones
@@ -155,8 +155,8 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 ---
 
 ### Phase 5: Signal Intelligence & Debt Runtime (March - May 2026)
-**Duration**: March 4 - May 16, 2026
-**Commits**: 277 (21.2% of total)
+**Duration**: March 4 - May 18, 2026
+**Commits**: 283 (21.4% of total)
 **Focus**: Market adapter offset groundwork, Claw/credential hardening, SMA derivative signals, dynamic-weight/Kalman research, regime filtering, credit/debt runtime, and production stabilization
 
 #### Key Milestones
@@ -179,6 +179,7 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 - **May 12**: Analysis expansion — trade heatmap (volume distribution by AMA deviation), risk profile analyzer with sigma metrics
 - **May 13**: Credential daemon hardening sprint — broadcast retry, node list mirroring, bootstrap resilience, PM2 restart loop prevention, stale socket exit. AMA slope market price offset applied
 - **May 14-15**: Credit runtime fixes — MPA target CR encoding, pair-scoped pricing, reborrow policy preservation. Documentation finalization for 0.7.0
+- **May 16-18**: Credit maintenance hardening — collateral-gated credit increases, renew-only credit offer policy, credit deal renewal with fallback safety, startup credit maintenance, autoRepay state sync, centralized grid reset metadata handling, dynamic grid reset state preservation, empirical table source documentation
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -194,6 +195,8 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 11. **AMA Warmup Rework**: SMA-based progressive warmup replaces first-price initialization and full-convergence warmup
 12. **AMA Slope Price Offset**: Asymmetric market price offset driven by live AMA slope, applied at grid recalculation
 13. **Credential Daemon Resilience**: Broadcast retry, stale socket handling, node list mirroring, PM2 restart loop prevention
+14. **Credit Maintenance Hardening**: Collateral-gated credit increases, renew-only policy, deal renewal with fallback safety, startup credit maintenance, autoRepay state synchronization
+15. **Grid Reset Metadata**: Centralized reset metadata handling with dynamic reset state preservation
 
 ---
 
@@ -202,7 +205,7 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 DEXBot2's architecture transitioned from monolithic utilities to a decoupled, event-driven, immutable state system:
 - **Phase 1-2**: Loose modules for order/account management, basic grid trading.
 - **Phase 3-4**: Copy-on-Write grid with atomic modifications, Market Adapter decoupling signals from execution.
-- **Phase 5**: Multi-layered runtime — COW core execution, signal pipeline (AMA/Kalman/regime), credit/debt MPA runtime, credential daemon.
+- **Phase 5**: Multi-layered runtime — COW core execution, signal pipeline (AMA/Kalman/regime), credit/debt MPA runtime, credit maintenance hardening, credential daemon.
 
 ---
 
@@ -214,7 +217,7 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 - **December 2025**: DEXBot2 — JavaScript rewrite. Core grid lifecycle, fees, PM2, reconciliation.
 - **January 2026**: AMA signals, precision fixes, recovery, and test migration.
 - **February 2026**: Copy-on-Write, multi-node support, and architecture hardening.
-- **March-May 2026**: Market adapter, dynamic weights, credit/debt runtime, and docs refresh.
+- **March-May 2026**: Market adapter, dynamic weights, credit/debt runtime, credit maintenance hardening, and docs refresh.
 
 ---
 
@@ -227,13 +230,13 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 ### DEXBot2
 - **v0.1.x-v0.5.x**: Foundation, fee handling, stability, and the COW groundwork.
 - **v0.6.0**: Market adapter release with AMA grid centers and trigger wiring.
-- **v0.7 Expansion**: Integration of advanced signals, dynamic weights, credit/debt runtime, and comprehensive documentation.
+- **v0.7 Expansion**: Integration of advanced signals, dynamic weights, credit/debt runtime, credit maintenance hardening, grid reset metadata, and comprehensive documentation.
 
 ---
 
 ## Development Statistics
 
-1,307 commits over 6 active months, 168 automated tests, 15 tagged releases. Evolution from basic grid operations to a signal-intelligent trading system.
+1,320 commits over ~5.5 active months, 158 automated tests, 15 tagged releases. Evolution from basic grid operations to a signal-intelligent trading system.
 
 ---
 
@@ -252,13 +255,13 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 
 ## Documentation Evolution
 
-Evolved from basic README + inline comments to a comprehensive framework: 23 docs/ entries (architecture map, COW invariants, fund accounting, credential security, developer guide), 80%+ JSDoc coverage, 137 documentation commits (11.4% of total), and an `AGENTS.md` for AI-assisted development.
+Evolved from basic README + inline comments to a comprehensive framework: 23 docs/ entries (architecture map, COW invariants, fund accounting, credential security, developer guide, TypeScript migration analysis), 80%+ JSDoc coverage, 137+ documentation commits (10.4% of total), and an `AGENTS.md` for AI-assisted development.
 
 ---
 
 ## Testing Strategy
 
-Evolved from manual blockchain testing → Jest unit tests → lightweight Node.js assert (zero test dependencies for the 168-file suite). Multi-layered verification: unit/integration for accounting/sync/grid, complex market scenario simulations, edge-case coverage, COW architectural guards (invariants, mutation detection), and signal/credit runtime validation.
+Evolved from manual blockchain testing → Jest unit tests → lightweight Node.js assert (zero test dependencies for the 158-file suite). Multi-layered verification: unit/integration for accounting/sync/grid, complex market scenario simulations, edge-case coverage, COW architectural guards (invariants, mutation detection), and signal/credit runtime validation.
 
 
 ---
@@ -272,7 +275,7 @@ DEXBot2 has evolved from a basic trading bot to a sophisticated, production-read
 ## Phase 6: Technical Modernization & Growth (Planned)
 
 ### UX, Education & Services
-- **Web & Terminal UI**: Browser-based and TUI dashboards for bot monitoring, manual intervention, and parameter tuning live.
+- **Web & Terminal UI**: Browser-based and TUI dashboards for bot monitoring, manual intervention, and parameter tuning live. *(TUI dashboard scaffolded in `dashboard/` — Rust/ratatui sidecar)*
 - **Content Creation**: Instructional videos, tutorials, and onboarding material for user onboarding.
 - **Marketing**: Strategic advertisement and outreach to expand the BitShares trading community.
 - **Hosting Service**: Managed deployment for users who want bot operation without infrastructure management.
@@ -282,8 +285,8 @@ DEXBot2 has evolved from a basic trading bot to a sophisticated, production-read
 - **Performance Analytics**: PnL tracking, grid efficiency metrics, risk assessment, and HTML report generation.
 
 ### Modernization & Migration
-- **TypeScript Migration**: Incremental migration from JS to TypeScript, starting with highest-bug-surface modules (COW, accounting, sync engine).
-- **Dependency Reduction**: Continued minimization of external dependencies.
+- **TypeScript Migration**: Incremental migration from JS to TypeScript, starting with highest-bug-surface modules (COW, accounting, sync engine). *(Analysis complete — see `docs/TYPESCRIPT_MIGRATION_ANALYSIS.md`: ~48K LoC, 158 test files, 3 external deps, 4-5 month estimate with 3-4 developers)*
+- **Dependency Reduction**: Continued minimization of external dependencies. *(Already at 3 deps: btsdex, bs58check, readline-sync)*
 
 ### Architecture & Code Quality — Detailed Breakdown
 
@@ -303,7 +306,7 @@ DEXBot2 has evolved from a basic trading bot to a sophisticated, production-read
 
 6. **Database (Prisma/SQLite) + Zod Validation** — Replace JSON file persistence with SQLite. Validate all blockchain objects at the `bitshares_client` boundary via Zod schemas.
 
-7. **Vitest Migration** — Wrap 168 test files in Vitest for parallel execution, watch mode, and coverage reporting.
+7. **Vitest Migration** — Wrap 158 test files in Vitest for parallel execution, watch mode, and coverage reporting.
 
 #### Tier 3 — Nice-to-Have
 
@@ -315,7 +318,7 @@ DEXBot2 has evolved from a basic trading bot to a sophisticated, production-read
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: May 16, 2026
-**Total Commits**: 1307
-**Date Range**: December 2, 2025 - May 16, 2026 (ongoing)
+**Last Updated**: May 18, 2026
+**Total Commits**: 1320
+**Date Range**: December 2, 2025 - May 18, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

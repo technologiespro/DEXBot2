@@ -8,14 +8,14 @@
 
 ## Executive Summary
 
-The DEXBot2 codebase is **well-positioned for a TypeScript migration**. With 18,212 lines of production code across 28 focused modules and 171 test files, plus only 3 external dependencies, the project presents a **low-complexity migration with medium-high effort** (1,488-1,588 total hours).
+The DEXBot2 codebase is **well-positioned for a TypeScript migration**. With ~48,000+ lines of production code across the modules/ tree and 158 test files, plus only 3 external dependencies, the project presents a **low-complexity migration with medium-high effort** (estimated hours increased proportionally with codebase growth).
 
 ### Quick Stats
-- **Total Production Code**: ~21,300 lines across 30+ modules
-- **Test Coverage**: 171 test files
+- **Total Production Code**: ~48,000+ lines across modules/ (up from ~21,300 in Feb 2026)
+- **Test Coverage**: 158 test files (down from 171 after cleanup)
 - **External Dependencies**: 3 (btsdex, bs58check, readline-sync)
-- **Estimated Timeline**: 4-5 months (3-4 developers) | 6-7 months (2 developers) | 9-10 months (1 developer)
-- **Budget Estimate**: $240,000-$300,000 (assuming $120/hour contractors)
+- **Estimated Timeline**: 6-8 months (3-4 developers) | 9-12 months (2 developers) | 14-18 months (1 developer)
+- **Budget Estimate**: $350,000-$450,000 (assuming $120/hour contractors)
 - **Risk Level**: MEDIUM (manageable)
 
 ---
@@ -399,7 +399,7 @@ declare module 'btsdex' {
 - **Severity**: CRITICAL
 - **Impact**: Can introduce bugs in fund tracking
 - **Mitigation**:
-  - Run existing 40+ tests continuously during migration
+  - Run existing 150+ tests continuously during migration
   - Add property-based tests for fund invariants
   - Use strict typing on Fund structures
   - Manual regression testing vs. current code
