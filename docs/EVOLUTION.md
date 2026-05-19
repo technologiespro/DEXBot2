@@ -36,8 +36,7 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 ## Timeline Overview
 
 ### Phase 1: Foundation & Core Architecture (December 2025)
-**Duration**: December 2 - December 31, 2025  
-**Commits**: 408 (30.9% of total)
+**Duration**: December 2 - December 31, 2025
 **Focus**: Establishing core trading infrastructure, order management, and fund accounting
 
 #### Key Milestones
@@ -64,8 +63,7 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 ---
 
 ### Phase 2: Stabilization & Advanced Features (January 2026)
-**Duration**: January 1 - January 31, 2026  
-**Commits**: 425 (32.2% of total)
+**Duration**: January 1 - January 31, 2026
 **Focus**: Bug fixes, race condition resolution, advanced trading strategies, and system hardening
 
 #### Key Milestones
@@ -99,8 +97,7 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 ---
 
 ### Phase 3: Architecture Refinement & COW Pattern (February 2026)
-**Duration**: February 1 - February 18, 2026  
-**Commits**: 150 (11.4% of total)
+**Duration**: February 1 - February 18, 2026
 **Focus**: Copy-on-Write architecture, code quality, and production hardening
 
 #### Key Milestones
@@ -130,7 +127,6 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 
 ### Phase 4: Market Adapter & Production Hardening (Late Feb - March 2026)
 **Duration**: February 19 - March 3, 2026
-**Commits**: 54 (4.1% of total)
 **Focus**: AMA integration, market adapter consolidation, fill processing finalization, credential daemon hardening
 
 #### Key Milestones
@@ -156,7 +152,6 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 
 ### Phase 5: Signal Intelligence & Debt Runtime (March - May 2026)
 **Duration**: March 4 - May 18, 2026
-**Commits**: 283 (21.4% of total)
 **Focus**: Market adapter offset groundwork, Claw/credential hardening, SMA derivative signals, dynamic-weight/Kalman research, regime filtering, credit/debt runtime, and production stabilization
 
 #### Key Milestones
@@ -210,34 +205,109 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 
 ---
 
-## Feature Timeline
+## Version History
 
-### Summary
-- **2017**: StakeMachine — Proof-of-concept Python bot with buy/sell walls.
-- **2018–2020**: DEXBot (Python v1.0.0) — Production bot with 3 strategies, PyQt5 GUI, multi-worker, external feeds.
-- **December 2025**: DEXBot2 — JavaScript rewrite. Core grid lifecycle, fees, PM2, reconciliation.
-- **January 2026**: AMA signals, precision fixes, recovery, and test migration.
-- **February 2026**: Copy-on-Write, multi-node support, and architecture hardening.
-- **March-May 2026**: Market adapter, dynamic weights, credit/debt runtime, credit maintenance hardening, and docs refresh.
+### v0.6.0 → v0.7.0 (325 commits)
+
+| Category | Commits |
+|----------|---------|
+| 1. AMA-based market adapter | ~120 |
+| 2. Startup & credential hardening | ~35 |
+| 3. Connection resilience | ~9 |
+| 4. Credit/MPA debt runtime | ~19 |
+| 5. Safer grid lifecycle | ~23 |
+| 6. Expanded analysis suite | ~25 |
+| Docs-only commits (not listed) | ~94 |
+| **Total** | **325** |
 
 ---
 
-## Version History
+### v0.5.0 → v0.6.0 (598 commits)
+
+| Category | Commits |
+|----------|---------|
+| 1. Fund accounting overhaul | ~80 |
+| 2. Bug fixes & hardening | ~100 |
+| 3. Strategy engine refactoring | ~60 |
+| 4. Documentation | ~60 |
+| 5. Order manager modularization | ~50 |
+| 6. COW (Copy-on-Write) architecture | ~40 |
+| 7. Fill processing hardening | ~40 |
+| 8. Testing | ~40 |
+| 9. Sync engine improvements | ~30 |
+| 10. AMA/market adapter | ~30 |
+| 11. Refactoring & code quality | ~48 |
+| 12. Credential daemon & security | ~15 |
+| 13. Dashboard | ~5 |
+| **Total** | **598** |
+
+---
+
+### v0.4.0 → v0.5.0 (92 commits)
+
+| Category | Commits |
+|----------|---------|
+| 1. Critical bug fixes | ~15 |
+| 2. Race condition prevention (AsyncLock) | ~15 |
+| 3. Fund management centralization | ~15 |
+| 4. Spread correction | ~10 |
+| 5. Fill processing & deduplication | ~10 |
+| 6. Grid health & dust recovery | ~10 |
+| 7. Documentation | ~10 |
+| 8. Testing | ~7 |
+| **Total** | **92** |
+
+---
+
+### v0.3.0 → v0.4.0 (18 commits)
+
+| Category | Commits |
+|----------|---------|
+| 1. Fund management consolidation | ~5 |
+| 2. Grid sizing & quantization | ~4 |
+| 3. Market fees & RMS threshold | ~3 |
+| 4. Partial order handling | ~3 |
+| 5. Documentation | ~3 |
+| **Total** | **18** |
+
+---
+
+### v0.2.0 → v0.3.0 (155 commits)
+
+| Category | Commits |
+|----------|---------|
+| 1. Fund management & BTS fees | ~30 |
+| 2. Grid divergence detection | ~25 |
+| 3. Persistence & race conditions | ~25 |
+| 4. Order rotation & sizing | ~20 |
+| 5. Documentation | ~20 |
+| 6. Refactoring & code quality | ~20 |
+| 7. Scripts & tooling | ~15 |
+| **Total** | **155** |
+
+---
+
+### v0.1.0 → v0.2.0 (29 commits)
+
+| Category | Commits |
+|----------|---------|
+| 1. Core order/fund management | ~10 |
+| 2. Documentation | ~10 |
+| 3. Scripts & tooling | ~5 |
+| 4. Release & chore | ~4 |
+| **Total** | **29** |
+
+---
 
 ### Pre-DEXBot2
 - **StakeMachine v0.0.6** (2017): Python proof-of-concept, buy/sell walls.
 - **DEXBot v1.0.0** (2018–2020): Python production bot, PyQt5 GUI, 3 strategies, CCXT feeds.
 
-### DEXBot2
-- **v0.1.x-v0.5.x**: Foundation, fee handling, stability, and the COW groundwork.
-- **v0.6.0**: Market adapter release with AMA grid centers and trigger wiring.
-- **v0.7.0**: Integration of advanced signals, dynamic weights, credit/debt runtime, credit maintenance hardening, grid reset metadata, and comprehensive documentation.
-
 ---
 
 ## Development Statistics
 
-1,320 commits over ~5.5 active months, 158 automated tests, 15 tagged releases. Evolution from basic grid operations to a signal-intelligent trading system.
+158 automated tests, 15 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -269,7 +339,7 @@ Evolved from manual blockchain testing → Jest unit tests → lightweight Node.
 
 ## Conclusion
 
-DEXBot2 has evolved from a basic trading bot to a sophisticated, production-ready system with a robust history of architectural refinement and a clear vision for the future.
+DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-ready trading system.
 
 ---
 
