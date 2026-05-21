@@ -215,7 +215,7 @@ Research scripts for parameter tuning — output interactive HTML charts, not us
 - `trend_detection/README.md` - local index for the trend detection research docs
 
 #### AMA Fitting
-- `ama_fitting/ama.js` - Kaufman Adaptive Moving Average implementation
+- `market_adapter/core/strategies/ama.js` - Kaufman Adaptive Moving Average implementation
 - `ama_fitting/optimizer_high_resolution.js` - AMA parameter optimizer
 - `ama_fitting/generate_unified_comparison_chart.js` - AMA comparison chart
 - `ama_fitting/analyze_ama_price_changes.js` - AMA price change analysis

@@ -58,7 +58,7 @@ const { parseJsonWithComments, sleep, ensureDir } = require('../modules/order/ut
 const { readGeneralSettings } = require('../modules/general_settings');
 const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../modules/constants');
 const { createBotKey } = require('../modules/account_orders');
-const { calculateAMA } = require('../analysis/ama_fitting/ama');
+const { calculateAMA } = require('./core/strategies/ama');
 const {
     normalizeAtrPeriod,
     normalizeMaxVolatilityOffset,

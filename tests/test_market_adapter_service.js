@@ -13,7 +13,7 @@ const {
 const { normalizeAtrPeriod, normalizeMaxVolatilityOffset, normalizeVolatilityThreshold } = require('../market_adapter/core/config_normalizers');
 const { computeRegimeMultiplier } = require('../market_adapter/core/strategies/regime_gate');
 const { MARKET_ADAPTER } = require('../modules/constants');
-const { calculateAMA, getAmaWarmupBars } = require('../analysis/ama_fitting/ama');
+const { calculateAMA, getAmaWarmupBars } = require('../market_adapter/core/strategies/ama');
 const { KalmanTrendAnalyzer } = require('../analysis/trend_detection/kalman_trend_analyzer');
 const { buildKalmanVelocitySeries, computeAbsolutePercentileThreshold } = require('../analysis/trend_detection/kalman_velocity_smoothing');
 const { sleepUntilAlignedBoundary } = require('../market_adapter/test_helpers');
@@ -158,7 +158,10 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
     const closes = candles.map((c) => Number(c[4])).filter((value) => Number.isFinite(value) && value > 0);
     const amaErPeriod = cfg.amaSlope?.erPeriod ?? botAma.erPeriod;
     const amaSlowPeriod = cfg.amaSlope?.slowPeriod ?? botAma.slowPeriod;
-    const lookbackBars = cfg.amaSlope?.lookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
+    const rawLookbackBars = cfg.amaSlope?.lookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
+    const lookbackBars = Number.isFinite(Number(rawLookbackBars)) && Number(rawLookbackBars) > 0
+        ? Math.ceil(Number(rawLookbackBars))
+        : MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
     const amaValues = calculateAMA(closes, botAma);
     const amaPrice = amaValues[amaValues.length - 1] ?? null;
     const atrPeriod = normalizeAtrPeriod(cfg.atrPeriod);
@@ -175,11 +178,12 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
     const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
     const amaFastPeriod = cfg.amaSlope?.fastPeriod ?? botAma.fastPeriod;
     const amaWarmupBars = getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars, amaFastPeriod);
+    const amaSlopeReadyBars = Math.ceil(amaErPeriod) + lookbackBars;
 
     let amaClipThreshold = Infinity;
-    if (clipPercentile > 0 && amaValues.length > amaWarmupBars) {
+    if (clipPercentile > 0 && amaValues.length > amaSlopeReadyBars) {
         const amaSlopes = [];
-        for (let i = amaWarmupBars; i < amaValues.length; i++) {
+        for (let i = amaSlopeReadyBars; i < amaValues.length; i++) {
             const last = amaValues[i];
             const past = amaValues[i - lookbackBars];
             const slopePct = computeAverageAmaSlopePct(last, past, lookbackBars);
@@ -260,7 +264,7 @@ function buildDynamicWeightParityInputs(candles, cfg, botAma) {
 
     const amaOffsets = [];
     for (let i = 0; i < closes.length; i++) {
-        if (!slopeResult.isReady || i < amaWarmupBars) {
+        if (!slopeResult.isReady || i < amaSlopeReadyBars) {
             amaOffsets.push(0);
             continue;
         }
@@ -4615,6 +4619,81 @@ async function testDynamicWeightGainScalesOutputLinearly() {
         'different gain values should produce different effective weights when the signal survives gating');
 }
 
+async function testFractionalAmaLookbackIsNormalizedBeforeSeriesLoops() {
+    let writtenPayload = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateTrendingCandles(300, 100, 1) }),
+        saveJson: () => {},
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-fractional-lookback.trigger',
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
+            writtenPayload = payload;
+            return true;
+        },
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-fractional-lookback',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        minOutputThreshold: 0,
+        signalConfirmBars: 0,
+        regimeSensitivity: 0,
+        alpha: 1,
+        maxSlopeOffset: 10,
+        amaSlope: {
+            lookbackBars: 1.2,
+            maxSlopePct: 0.01,
+            neutralZonePct: 0,
+        },
+    };
+
+    const state = { bots: { 'xrp-bts-dw-fractional-lookback': { centerPrice: 100 } } };
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed with fractional lookback config');
+    assert.ok(writtenPayload?.dynamicWeights, 'dynamicWeights payload should be written');
+    assert.strictEqual(writtenPayload.dynamicWeights.isReady, true, 'fractional lookback should not suppress readiness');
+    assert.ok(
+        writtenPayload.dynamicWeights.rawFinalOffset > 0,
+        'AMA-only trend offset should be non-zero after lookback normalization'
+    );
+}
+
 async function testDynamicWeightSignalConfirmBarsCanLatchFlatState() {
     let writtenPayload = null;
     const candles = generateUpThenFlatCandles(90, 8, 100, 1);
@@ -5782,6 +5861,7 @@ async function run() {
     await testDynamicWeightBelowMinOutputThresholdFallsBackToStaticWeights();
     await testDynamicWeightMinOutputThresholdZeroDisablesGate();
     await testDynamicWeightGainScalesOutputLinearly();
+    await testFractionalAmaLookbackIsNormalizedBeforeSeriesLoops();
     await testDynamicWeightSignalConfirmBarsCanLatchFlatState();
     await testCenterStableButSlopeDeltaTriggersReset();
     await testSlopeTriggerRecoversBaselineFromDynamicGridAfterStateClear();

@@ -22,7 +22,7 @@
 
 const fs   = require('fs');
 const path = require('path');
-const { calculateAMA } = require('./ama');
+const { calculateAMA } = require('../../market_adapter/core/strategies/ama');
 
 const THRESHOLDS = [1, 2, 3, 4]; // percent
 

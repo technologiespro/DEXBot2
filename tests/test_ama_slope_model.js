@@ -5,7 +5,7 @@ const assert = require('assert');
 console.log('Running ama_slope_model tests');
 
 const { computeAmaSlopeWeights } = require('../market_adapter/core/strategies/ama_slope_model');
-const { getAmaWarmupBars } = require('../analysis/ama_fitting/ama');
+const { calculateAMA, getAmaWarmupBars } = require('../market_adapter/core/strategies/ama');
 
 // Generate a series of N values with a given pattern
 function flatSeries(n, value) {
@@ -36,6 +36,15 @@ function derivedWeights(result) {
         sellW: Math.round((MODEL_NEUTRAL_WEIGHT - result.slopeOffset + result.symmetricDelta) * 100) / 100,
         buyW: Math.round((MODEL_NEUTRAL_WEIGHT + result.slopeOffset + result.symmetricDelta) * 100) / 100,
     };
+}
+
+function testAmaWarmupReturnsRollingSmaBeforeRecursiveSeed() {
+    const values = calculateAMA([10, 20, 40, 80], { erPeriod: 3, fastPeriod: 2, slowPeriod: 30 });
+    assert.deepStrictEqual(
+        values.slice(0, 4),
+        [10, 15, 70 / 3, 37.5],
+        'AMA warmup should expose rolling SMA and seed recursion with the full-window SMA'
+    );
 }
 
 // ─── isReady guard ──────────────────────────────────────────────────────────
@@ -380,6 +389,7 @@ function testUptrendSlopeOffsetTable() {
 
 async function run() {
     testNotReadyWhenTooFewValues();
+    testAmaWarmupReturnsRollingSmaBeforeRecursiveSeed();
     testNotReadyOnEmptyArray();
     testNotReadyOnExactMinusOne();
     testReadyOnExactMinimum();

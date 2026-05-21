@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { calculateAMA } = require('../ama_fitting/ama');
+const { calculateAMA } = require('../../market_adapter/core/strategies/ama');
 const { range } = require('../math_utils');
 const { parseListOrRange, loadLpData, fmt } = require('./shared_utils');
 

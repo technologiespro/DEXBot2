@@ -4,7 +4,7 @@ const fs   = require('fs');
 const path = require('path');
 const os = require('os');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
-const { calculateAMA } = require('./ama');
+const { calculateAMA } = require('../../market_adapter/core/strategies/ama');
 const { toIntervalLabel } = require('../../market_adapter/interval_utils');
 const {
     loadLpDataFile,

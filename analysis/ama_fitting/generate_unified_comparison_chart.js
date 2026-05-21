@@ -17,7 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { calculateAMA } = require('./ama');
+const { calculateAMA } = require('../../market_adapter/core/strategies/ama');
 const { generateHTML } = require('../../market_adapter/lp_chart_core');
 const { toIntervalLabel } = require('../../market_adapter/candle_utils');
 const { MARKET_ADAPTER } = require('../../modules/constants');

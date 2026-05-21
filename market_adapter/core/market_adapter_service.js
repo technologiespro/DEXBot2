@@ -12,7 +12,7 @@ const {
 } = require('./config_normalizers');
 const { normalizeMarketSource, hasNumericStartPrice, resolveMarketSourceForBot } = require('../utils/chain');
 const { computeRegimeMultiplier } = require('./strategies/regime_gate');
-const { calculateAMA, getAmaWarmupBars } = require('../../analysis/ama_fitting/ama');
+const { calculateAMA, getAmaWarmupBars } = require('./strategies/ama');
 const { KalmanTrendAnalyzer } = require('../../analysis/trend_detection/kalman_trend_analyzer');
 const {
     buildKalmanVelocitySeries,
@@ -583,11 +583,13 @@ class MarketAdapterService {
         // Compute separate clip thresholds for AMA (slopes) and Kalman (velocities)
         let amaClipThreshold = Infinity;
         let kalClipThreshold = Infinity;
+        const amaSlopeReadyBars = Math.ceil(botAma.erPeriod) + lookbackBars;
 
-        if (clipPercentile > 0 && amaValues.length > amaWarmupBars) {
-            // AMA clip threshold from slope distribution — skip initialization period
+        if (clipPercentile > 0 && amaValues.length > amaSlopeReadyBars) {
+            // AMA clip threshold from slope distribution — skip the ER window,
+            // but do not require the full convergence-retention window.
             const amaSlopes = [];
-            for (let i = amaWarmupBars; i < amaValues.length; i++) {
+            for (let i = amaSlopeReadyBars; i < amaValues.length; i++) {
                 const last = amaValues[i];
                 const past = amaValues[i - lookbackBars];
                 const slopePct = computeAverageAmaSlopePct(last, past, lookbackBars);
@@ -716,7 +718,7 @@ class MarketAdapterService {
 
         if (useAmaBlend) {
             for (let i = 0; i < closes.length; i++) {
-                if (!slopeResult.isReady || i < amaWarmupBars) continue;
+                if (!slopeResult.isReady || i < amaSlopeReadyBars) continue;
                 const last = amaValues[i];
                 const past = amaValues[i - lookbackBars];
                 if (!Number.isFinite(last) || !Number.isFinite(past) || past === 0) continue;
@@ -1018,7 +1020,7 @@ class MarketAdapterService {
         if (!botAma.enabled) {
             return { ok: false, reason: 'ama disabled' };
         }
-        const lookbackBars = cfg.amaSlope?.lookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
+        const lookbackBars = normalizeAmaSlopeLookbackBars(cfg.amaSlope?.lookbackBars);
         const filePath = deps.candleFileForBot(bot.botKey, cfg.intervalSeconds);
         const existing = deps.loadJson(filePath, null);
         const existingMeta = existing?.meta && typeof existing.meta === 'object' ? existing.meta : {};
@@ -2001,11 +2003,13 @@ class MarketAdapterService {
         // Compute separate clip thresholds for AMA (slopes) and Kalman (velocities)
         let amaClipThreshold = Infinity;
         let kalClipThreshold = Infinity;
+        const amaSlopeReadyBars = Math.ceil(botAma.erPeriod) + lookbackBars;
 
-        if (clipPercentile > 0 && amaValues.length > amaWarmupBars) {
-            // AMA clip threshold from slope distribution — skip initialization period
+        if (clipPercentile > 0 && amaValues.length > amaSlopeReadyBars) {
+            // AMA clip threshold from slope distribution — skip the ER window,
+            // but do not require the full convergence-retention window.
             const amaSlopes = [];
-            for (let i = amaWarmupBars; i < amaValues.length; i++) {
+            for (let i = amaSlopeReadyBars; i < amaValues.length; i++) {
                 const last = amaValues[i];
                 const past = amaValues[i - lookbackBars];
                 const slopePct = computeAverageAmaSlopePct(last, past, lookbackBars);

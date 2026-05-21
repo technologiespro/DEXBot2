@@ -419,7 +419,7 @@ Candle Data
 | `analysis/trend_detection/permutation_entropy_analyzer.js` | Permutation Entropy via ordinal pattern counting |
 | `market_adapter/core/strategies/regime_gate.js` | Bilinear regime multiplier (Hurst × PE lookup table) |
 | `modules/constants.js` (`MARKET_ADAPTER.HURST_CONFIG`, `PE_CONFIG`) | Shared Hurst + PE config (window sizes, scales) |
-| `analysis/ama_fitting/ama.js` | Kaufman Adaptive Moving Average |
+| `market_adapter/core/strategies/ama.js` | Kaufman Adaptive Moving Average |
 | `market_adapter/core/strategies/ama_slope_model.js` | AMA slope weight computation |
 | `analysis/price_sources.js` | Unified candle data source abstraction |
 

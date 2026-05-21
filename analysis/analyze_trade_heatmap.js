@@ -14,7 +14,7 @@
  *   Expects LP candle JSON with { candles: [[ts, o, h, l, c, v], ...] }
  *
  * Requires:
- *   - calculateAMA from ./ama_fitting/ama
+ *   - calculateAMA from market_adapter/core/strategies/ama
  *   - MARKET_ADAPTER.AMAS presets from ../modules/constants
  *
  * Output:
@@ -27,7 +27,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { calculateAMA } = require('./ama_fitting/ama');
+const { calculateAMA } = require('../market_adapter/core/strategies/ama');
 const { MARKET_ADAPTER } = require('../modules/constants');
 
 /**

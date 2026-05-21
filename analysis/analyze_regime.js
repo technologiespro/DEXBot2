@@ -29,7 +29,7 @@ const { HurstAnalyzer }               = require('./trend_detection/hurst_analyze
 const { PermutationEntropyAnalyzer }  = require('./trend_detection/permutation_entropy_analyzer');
 const { generateRegimeHTML }          = require('./trend_detection/regime_chart_generator');
 const { createSource }                = require('./price_sources');
-const { calculateAMA }                = require('./ama_fitting/ama');
+const { calculateAMA }                = require('../market_adapter/core/strategies/ama');
 const { writeChartFile }              = require('./chart_utils');
 const { getCandleClose }              = require('./math_utils');
 

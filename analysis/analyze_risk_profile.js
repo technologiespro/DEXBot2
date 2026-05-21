@@ -13,7 +13,7 @@
 'use strict';
 
 const fs = require('fs');
-const { calculateAMA } = require('./ama_fitting/ama');
+const { calculateAMA } = require('../market_adapter/core/strategies/ama');
 const { MARKET_ADAPTER } = require('../modules/constants');
 const { generateHTML } = require('../market_adapter/lp_chart_core');
 

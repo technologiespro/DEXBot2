@@ -25,7 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 
-const { calculateAMA } = require('../analysis/ama_fitting/ama');
+const { calculateAMA } = require('./core/strategies/ama');
 const { MARKET_ADAPTER } = require('../modules/constants');
 const { generateHTML } = require('./lp_chart_core');
 const { loadStrategiesForLpChart } = require('./lp_chart_strategy_loader');

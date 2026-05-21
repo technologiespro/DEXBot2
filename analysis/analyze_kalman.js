@@ -17,7 +17,7 @@ const path = require('path');
 const { KalmanTrendAnalyzer } = require('./trend_detection/kalman_trend_analyzer');
 const { generateHTML } = require('./trend_detection/kalman_chart_generator');
 const { createSource } = require('./price_sources');
-const { calculateAMA } = require('./ama_fitting/ama');
+const { calculateAMA } = require('../market_adapter/core/strategies/ama');
 const { computeATR, getCandleClose } = require('./math_utils');
 const { writeChartFile } = require('./chart_utils');
 

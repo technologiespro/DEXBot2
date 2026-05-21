@@ -91,7 +91,7 @@ function extractHtmlPayload(html) {
     return JSON.parse(match[1]);
 }
 
-function testDynamicWeightChartUsesSlowPeriodWarmup() {
+function testDynamicWeightChartUsesErPlusLookbackWarmup() {
     const html = generateHTML({
         allResults: [
             { timestamp: '2026-01-01T00:00:00Z', price: 100, ama3Price: 100, amaSlopePct: 999, velocityPct: null, displacementPct: null, isReady: false, signal: 'NEUTRAL' },
@@ -107,11 +107,12 @@ function testDynamicWeightChartUsesSlowPeriodWarmup() {
     }, 'Dynamic Weight Test');
 
     const payload = extractHtmlPayload(html);
-    assert.strictEqual(payload.amaSlowPeriod, 1, 'chart payload should carry AMA slow-period warmup');
+    assert.strictEqual(payload.amaSlowPeriod, 1, 'chart payload should still expose the AMA slow period');
     assert.strictEqual(payload.amaWarmupBars, 5, 'chart payload should expose the full AMA warmup window');
-    assert.strictEqual(payload.amaPercentiles[100], 2, 'AMA clip percentiles should ignore startup bars before the full warmup');
-    assert.match(html, /data\.amaSlowPeriod/, 'interactive chart should use the AMA slow period in its readiness gate');
-    assert.match(html, /for \(let i = amaReadyBar; i < data\.realBarCount; i\+\+\)/, 'interactive clip-threshold recompute should skip the full AMA warmup window');
+    assert.strictEqual(payload.amaSlopeReadyBars, 2, 'chart payload should expose the ER-plus-lookback readiness gate');
+    assert.strictEqual(payload.amaPercentiles[100], 999, 'AMA clip percentiles should start once ER-plus-lookback bars are available');
+    assert.match(html, /data\.amaErPeriod/, 'interactive chart should use the AMA ER period in its readiness gate');
+    assert.match(html, /const amaReadyBar = Math\.max\(lb, amaErWarmup \+ lb\);/, 'interactive clip-threshold recompute should start at ER-plus-lookback readiness');
 }
 
 function testDynamicWeightChartKeepsGainLinearAtEnd() {
@@ -244,7 +245,7 @@ function main() {
     testAtrInvalidCandleBreaksTrueRangeChain();
     testKalmanWarmupIsConfigurable();
     testRegimeMultiplierReturnsSeries();
-    testDynamicWeightChartUsesSlowPeriodWarmup();
+    testDynamicWeightChartUsesErPlusLookbackWarmup();
     testDynamicWeightChartKeepsGainLinearAtEnd();
     testDynamicWeightChartShowsOutputClampGuide();
     testLiveServiceMatchesChartGainStructure();

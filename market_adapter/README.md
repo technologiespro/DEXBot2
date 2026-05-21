@@ -661,7 +661,8 @@ Bars needed to reduce bias below a target fraction ε:
 convergenceBars = ln(ε) / ln(1 − SC_avg)
 ```
 
-The **full warmup window** the adapter requires:
+The adapter keeps the **full warmup window** in candle history so the AMA seed
+and convergence bias are retained for downstream calculations:
 
 ```
 amaWarmupBars = erPeriod + convergenceBars + lookbackBars
@@ -672,6 +673,16 @@ amaWarmupBars = erPeriod + convergenceBars + lookbackBars
 | `erPeriod` | Bars for the first Efficiency Ratio value to become available |
 | `convergenceBars` | Bars to decay 99 % of the cold-start initialisation bias |
 | `lookbackBars` | Extra lookback for slope/trend analysis (AMA slope, ATR) |
+
+For **AMA slope readiness and percentile clipping**, the earlier gate is:
+
+```
+amaSlopeReadyBars = erPeriod + lookbackBars
+```
+
+That threshold is enough once the ER window exists and the lookback comparison
+bar is available. The longer `amaWarmupBars` window is still retained so the
+underlying AMA series has its full convergence history.
 
 The two **calibration constants** live in `modules/constants.js` under
 `MARKET_ADAPTER`:

@@ -4,7 +4,7 @@ const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../../modules/constants');
 const {
     buildKalmanVelocitySeries,
 } = require('./kalman_velocity_smoothing');
-const { getAmaWarmupBars } = require('../ama_fitting/ama');
+const { getAmaWarmupBars } = require('../../market_adapter/core/strategies/ama');
 const { escapeHtml, serializeJsonForScript, toEpochSeconds, UPLOT_SHARED_SCRIPT } = require('../chart_utils');
 
 function generateHTML(data, title = 'Dynamic Weight Research') {
@@ -29,7 +29,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const defaultMinOutputThreshold = Math.min(Math.max(defaultMinOutputThresholdRaw, 0), 0.5);
     const defaultOutputClamp = data.outputClamp ?? ma.outputClamp ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
     const lookbackBarsRaw     = amaWeightConfig.lookbackBars  ?? ma.amaLookbackBars ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
-    const lookbackBars        = Math.max(1, Math.min(32, Number.isFinite(lookbackBarsRaw) ? lookbackBarsRaw : 1));
+    const lookbackBars        = Math.ceil(Math.max(1, Math.min(32, Number.isFinite(lookbackBarsRaw) ? lookbackBarsRaw : 1)));
 
     // Log mapping for lookback slider (1 to 32 bars)
     const LB_LOG_MIN_N = Math.log(1);
@@ -90,6 +90,25 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const amaSlowPeriod      = data.amaConfig?.slowPeriod ?? MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod;
     const amaFastPeriod       = data.amaConfig?.fastPeriod ?? MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].fastPeriod;
     const amaWarmupBars      = getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars, amaFastPeriod);
+    const amaSlopeReadyBars  = Math.ceil(amaErPeriod) + lookbackBars;
+    const amaSeedSmaLine     = new Array(results.length).fill(null);
+    const amaSeedWindowEnd   = Math.min(results.length - 1, Math.ceil(amaErPeriod));
+    if (amaSeedWindowEnd >= 0) {
+        let seedSum = 0;
+        let seedCount = 0;
+        for (let i = 0; i <= amaSeedWindowEnd; i++) {
+            if (Number.isFinite(prices[i])) {
+                seedSum += prices[i];
+                seedCount++;
+            }
+        }
+        if (seedCount > 0) {
+            const seedSma = seedSum / seedCount;
+            for (let i = 0; i <= amaSeedWindowEnd; i++) {
+                amaSeedSmaLine[i] = seedSma;
+            }
+        }
+    }
 
     const lastDate = dates[dates.length - 1];
     for (let i = 1; i <= 150; i++) {
@@ -106,6 +125,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         kalmanIsReady.push(null);
         signals.push(null);
         ama3Prices.push(null);
+        amaSeedSmaLine.push(null);
     }
 
     const realBarCount = results.length;
@@ -132,7 +152,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         }
         return pcts;
     }
-    const amaPercentiles = buildPercentiles(amaSlopePct, amaWarmupBars);
+    const amaPercentiles = buildPercentiles(amaSlopePct, amaSlopeReadyBars);
     const kalPercentiles = buildPercentiles(kalmanVelocityPct);
     const maxDispPct = Math.ceil(maxAbsPct(kalmanDisplacementPct) * 1.15) || 5;
     return `<!DOCTYPE html>
@@ -244,6 +264,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             <div class="legend">
                 <div class="legend-item"><div class="dot" style="background:#58a6ff;"></div>Price: <span id="l-price" class="legend-val" style="font-weight:bold;">-</span></div>
                 <div class="legend-item"><div class="dot" style="background:#e3b341;"></div>AMA3: <span id="l-ama3" class="legend-val" style="font-weight:bold;">-</span></div>
+                <div class="legend-item"><div class="dot" style="background:#8b949e;"></div>Seed SMA: <span id="l-seed-sma" class="legend-val">-</span></div>
             </div>
             <div id="price-chart"></div>
         </div>
@@ -314,7 +335,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         </div>
     </div>
 
-    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSlopePct, kalmanVelocityPctRaw, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, kalmanSmoothPct: defaultKalmanSmoothPct, kalmanDispScaleMult: defaultKalmanDispScaleMult, kalmanDispThresholdMult: defaultKalmanDispThresholdMult, kalmanSmoothSpanPct: defaultKalmanSmoothSpanPct, signalConfirmBars: defaultSignalConfirmBars, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, amaMaxSlopePct: defaultAmaMaxSlopePct, kalmanMaxSlopePct: defaultKalmanMaxSlopePct, maxDispPct, clipPct: defaultClipPct, minOutputThreshold: defaultMinOutputThreshold, outputClamp: defaultOutputClamp, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, amaErPeriod, amaSlowPeriod, amaWarmupBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, amaSlopeLogMin: AMA_MS_LOG_MIN_N, amaSlopeLogMax: AMA_MS_LOG_MAX_N, kalSlopeLogMin: KAL_MS_LOG_MIN_N, kalSlopeLogMax: KAL_MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, dispScaleMinPct: defaultDispScaleMinPct, weightMin: MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT, weightMax: MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT, marketAdapter: ma, amaWeightConfig, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
+    <script id="payload" type="application/json">${serializeJsonForScript({ dates, prices, hurstArr, peArr, hurstSegments, peSegments, ama3Prices, amaSeedSmaLine, amaSlopePct, kalmanVelocityPctRaw, kalmanVelocityPct, kalmanDisplacementPct, kalmanIsReady, signals, alpha: defaultAlpha, gain: defaultGain, kalmanSmoothPct: defaultKalmanSmoothPct, kalmanDispScaleMult: defaultKalmanDispScaleMult, kalmanDispThresholdMult: defaultKalmanDispThresholdMult, kalmanSmoothSpanPct: defaultKalmanSmoothSpanPct, signalConfirmBars: defaultSignalConfirmBars, neutralZonePct: defaultNeutralZone, dispWeight: defaultDispWeight, amaMaxSlopePct: defaultAmaMaxSlopePct, kalmanMaxSlopePct: defaultKalmanMaxSlopePct, maxDispPct, clipPct: defaultClipPct, minOutputThreshold: defaultMinOutputThreshold, outputClamp: defaultOutputClamp, regimeSensitivity: defaultRegimeSensitivity, absoluteThreshold: defaultAbsoluteThreshold, lookbackBars, amaErPeriod, amaSlowPeriod, amaWarmupBars, amaSlopeReadyBars, realBarCount, amaPctMax, kalPctMax, amaPercentiles, kalPercentiles, amaSlopeLogMin: AMA_MS_LOG_MIN_N, amaSlopeLogMax: AMA_MS_LOG_MAX_N, kalSlopeLogMin: KAL_MS_LOG_MIN_N, kalSlopeLogMax: KAL_MS_LOG_MAX_N, lbLogMin: LB_LOG_MIN_N, lbLogMax: LB_LOG_MAX_N, gainLogMin: GAIN_LOG_MIN_N, gainLogMax: GAIN_LOG_MAX_N, dispScaleMinPct: defaultDispScaleMinPct, weightMin: MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT, weightMax: MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT, marketAdapter: ma, amaWeightConfig, hNodes: [0.5 + MARKET_ADAPTER.HURST_ZONE_BAND, 0.5, 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND], pNodes: MARKET_ADAPTER.PE_NODES, regimeTable: MARKET_ADAPTER.REGIME_TABLE })}</script>
 
     <script>
         const data = JSON.parse(document.getElementById('payload').textContent);
@@ -567,8 +588,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             const dw = currentDw;
             const lb = currentLookbackBars;
             const amaErWarmup = Math.max(0, Number.isFinite(data.amaErPeriod) ? Math.ceil(data.amaErPeriod) : ${JSON.stringify(MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod)});
-            const amaSlowWarmup = Math.max(0, Number.isFinite(data.amaSlowPeriod) ? Math.ceil(data.amaSlowPeriod) : ${JSON.stringify(MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod)});
-            const amaReadyBar = Math.max(0, (data.amaWarmupBars || 0) - (data.lookbackBars || 0) + lb);
+            const amaReadyBar = Math.max(lb, amaErWarmup + lb);
             const acl = currentAmaClipThreshold;
             const kcl = currentKalClipThreshold;
 
@@ -745,6 +765,11 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
             const ama3El = document.getElementById('l-ama3');
             if (ama3 == null) { ama3El.textContent = '-'; ama3El.style.color = '#8b949e'; }
             else { ama3El.textContent = ama3.toFixed(4); ama3El.style.color = '#e3b341'; }
+
+            const seedSma = data.amaSeedSmaLine[idx];
+            const seedSmaEl = document.getElementById('l-seed-sma');
+            if (seedSma == null) { seedSmaEl.textContent = '-'; seedSmaEl.style.color = '#8b949e'; }
+            else { seedSmaEl.textContent = seedSma.toFixed(4); seedSmaEl.style.color = '#8b949e'; }
 
             const sp = dynamicAmaSlopePct[idx];
             const spEl = document.getElementById('l-ama-slope');
@@ -997,6 +1022,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                     { label: 'Time' },
                     { label: 'Price', stroke: '#58a6ff', width: 1.5, scale: 'y', points: { show: false } },
                     { label: 'AMA3',  stroke: '#e3b341', width: 1.5, scale: 'y', points: { show: false } },
+                    { label: 'Seed SMA', stroke: '#8b949e', width: 1.5, dash: [4, 4], scale: 'y', points: { show: false } },
                 ],
                 axes: [
                     makeTimeAxis(false),
@@ -1005,7 +1031,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
                 ],
                 cursor: cursorCfg,
                 hooks: { draw: [makeSignalBgHook('y')] }
-            }, [data.dates, data.prices, data.ama3Prices], document.getElementById('price-chart'));
+            }, [data.dates, data.prices, data.ama3Prices, data.amaSeedSmaLine], document.getElementById('price-chart'));
 
             amaChart = new uPlot({
                 width: amaEl.offsetWidth, height: amaEl.offsetHeight,
