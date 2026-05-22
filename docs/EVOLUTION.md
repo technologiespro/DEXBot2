@@ -379,8 +379,8 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 - **Performance Analytics**: PnL tracking, grid efficiency metrics, risk assessment, and HTML report generation.
 
 ### Modernization & Migration
-- **TypeScript Migration**: Incremental migration from JS to TypeScript, starting with highest-bug-surface modules (COW, accounting, sync engine). *(Analysis complete — see `docs/TYPESCRIPT_MIGRATION_ANALYSIS.md`: ~48K LoC, 158 test files, 3 external deps, 4-5 month estimate with 3-4 developers)*
-- **Dependency Reduction**: Continued minimization of external dependencies. *(Already at 3 deps: btsdex, bs58check, readline-sync)*
+- **TypeScript Migration**: Incremental migration from JS to TypeScript, starting with highest-bug-surface modules (COW, accounting, sync engine). *(Analysis complete — see `docs/TYPESCRIPT_MIGRATION_ANALYSIS.md`: ~48K LoC, 158 test files, 2 external deps, 4-5 month estimate with 3-4 developers)*
+- **Dependency Reduction**: Continued minimization of external dependencies. *(Already at 2 deps: btsdex, bs58check)*
 
 ### Architecture & Code Quality — Detailed Breakdown
 

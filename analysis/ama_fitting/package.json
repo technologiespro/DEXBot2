@@ -7,7 +7,5 @@
     "optimize": "node optimizer_high_resolution.js",
     "chart:lp-local": "node generate_unified_comparison_chart.js"
   },
-  "dependencies": {
-    "ccxt": "^4.0.0"
-  }
+  "dependencies": {}
 }

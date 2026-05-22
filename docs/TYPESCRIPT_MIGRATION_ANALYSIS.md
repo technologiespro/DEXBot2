@@ -8,12 +8,12 @@
 
 ## Executive Summary
 
-The DEXBot2 codebase is **well-positioned for a TypeScript migration**. With ~48,000+ lines of production code across the modules/ tree and 158 test files, plus only 3 external dependencies, the project presents a **low-complexity migration with medium-high effort** (estimated hours increased proportionally with codebase growth).
+The DEXBot2 codebase is **well-positioned for a TypeScript migration**. With ~48,000+ lines of production code across the modules/ tree and 158 test files, plus only 2 external dependencies, the project presents a **low-complexity migration with medium-high effort** (estimated hours increased proportionally with codebase growth).
 
 ### Quick Stats
 - **Total Production Code**: ~48,000+ lines across modules/ (up from ~21,300 in Feb 2026)
 - **Test Coverage**: 158 test files (down from 171 after cleanup)
-- **External Dependencies**: 3 (btsdex, bs58check, readline-sync)
+- **External Dependencies**: 2 (btsdex, bs58check)
 - **Estimated Timeline**: 6-8 months (3-4 developers) | 9-12 months (2 developers) | 14-18 months (1 developer)
 - **Budget Estimate**: $350,000-$450,000 (assuming $120/hour contractors)
 - **Risk Level**: MEDIUM (manageable)
@@ -78,7 +78,6 @@ DEXBot2/
 |---------|---------|------|--------|
 | btsdex | ^0.7.11 | Core blockchain API | **NO TYPE DEFS** - needs wrapper types (20-30 hrs) |
 | bs58check | ^4.0.0 | Key encoding | Minimal usage, simple types |
-| readline-sync | ^1.4.10 | CLI input | Simple async patterns |
 
 **No Dev Dependencies** - Clean setup, but means no existing TypeScript infrastructure.
 
@@ -86,7 +85,7 @@ DEXBot2/
 
 #### Async/Await Coverage: **EXCELLENT** ✅
 - **188 async functions** throughout codebase
-- Minimal callback patterns (mostly legacy readline-sync)
+- Minimal callback patterns
 - Already modern Promise-based architecture
 - No callback hell to refactor
 

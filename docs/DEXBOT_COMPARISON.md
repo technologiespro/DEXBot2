@@ -60,7 +60,7 @@ DEXBot2 is a ground-up rewrite in Node.js that prioritizes production correctnes
 |---|---|---|
 | **Language** | Python 3.6+ | Node.js LTS (JavaScript) |
 | **GUI** | PyQt5 (desktop GUI) | None (CLI only) |
-| **CLI Framework** | Click | Custom (readline-sync, native) |
+| **CLI Framework** | Click | Custom native async prompts |
 | **Blockchain Client** | `bitshares` Python library | `btsdex` Node.js library |
 | **Key Management** | `uptick` (BitShares wallet) | Custom AES-256-GCM encrypted store |
 | **Database / State** | SQLite via SQLAlchemy ORM | JSON flat files (no DB) |
@@ -702,8 +702,7 @@ Where:
 **Production dependencies (package.json):**
 - `btsdex ^0.7.11` — BitShares DEX client
 - `bs58check ^4.0.0` — key encoding
-- `readline-sync ^1.4.10` — CLI prompts
-- Total: **3 packages**, minimal footprint
+- Total: **2 packages**, minimal footprint
 
 ### Dependency Comparison
 

@@ -83,7 +83,7 @@ const { BitShares, waitForConnected, setSuppressConnectionLog } = require('./mod
 const fs = require('fs');
 const path = require('path');
 const chainKeys = require('./modules/chain_keys');
-const { initializeFeeCache, ensureProfilesDirectory } = require('./modules/order/utils/system');
+const { initializeFeeCache, ensureProfilesDirectory, readInput } = require('./modules/order/utils/system');
 const accountBots = require('./modules/account_bots');
 const SharedDEXBot = require('./modules/dexbot_class');
 const { authenticateWithChainKeys } = require('./modules/dexbot_class');
@@ -769,7 +769,8 @@ async function bootstrap() {
         console.log('To get started, you need to configure your master password.');
         console.log('This password will encrypt your private keys.');
         console.log();
-        const setupKeys = readline.keyInYN('Set up master password now?');
+        const setupKeysAnswer = (await readInput('Set up master password now? [y/N]: ')).trim().toLowerCase();
+        const setupKeys = setupKeysAnswer === 'y' || setupKeysAnswer === 'yes';
         if (setupKeys) {
             console.log();
             await chainKeys.main();
