@@ -1,6 +1,6 @@
 # Trend Detection
 
-This folder contains the SMA, MACD, RSI, Hurst, Kalman, and regime analysis code used by the analysis runners.
+This folder contains the AMA, Kalman, Hurst, Permutation Entropy, and regime analysis code used by the analysis runners. The legacy SMA/MACD/RSI derivative signal layer is in `derivative_analyzer.js`.
 
 ## Docs
 

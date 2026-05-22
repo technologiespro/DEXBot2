@@ -38,7 +38,7 @@ This is the shared DEXBot/Claw trend service. It is independent of margin-tradin
 - Per-bot settings: `profiles/bots.json`
 - Recalc triggers: `profiles/recalculate.<botKey>.trigger`
 - Signal state: `market_adapter/state/price_adapter_state.json`
-- Center snapshot: `market_adapter/state/price_adapter_centers.json`
+- Center snapshot: `market_adapter/state/market_adapter_centers.json`
 
 ## Operating Rule
 

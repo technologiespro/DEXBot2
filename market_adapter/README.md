@@ -127,11 +127,13 @@ AMA slope plus Kalman filter confirmation can bias the bot's configured
 `weightDistribution` in the trend direction. In an uptrend or downtrend, this
 can shift allocation toward the side the strategy wants to emphasize while
 still starting from the bot's static buy/sell weights.
+See [research guide](../analysis/trend_detection/DYNAMIC_WEIGHT_RESEARCH.md).
 
 ## Symmetric Weight Shift
 
 Volatility can reduce both buy and sell weights during noisy periods. This is a
 shared penalty on both sides, separate from the directional AMA/Kalman bias.
+See [research guide](../analysis/trend_detection/DYNAMIC_WEIGHT_RESEARCH.md).
 
 Both weight shifts are controlled separately from AMA pricing. Set
 `dynamicWeight: false` in `profiles/market_adapter_whitelist.json` to keep AMA
@@ -152,7 +154,7 @@ Configure the default in `profiles/general.settings.json` or from the
 ```json
 {
   "MARKET_ADAPTER": {
-    "AMA_DELTA_THRESHOLD_PERCENT": 2.0
+    "AMA_DELTA_THRESHOLD_PERCENT": 1.25
   }
 }
 ```
@@ -621,6 +623,8 @@ again by pair or bot overrides.
 
 Most operators should tune only the price and slope trigger thresholds plus the AMA profile unless
 they are deliberately fitting a market.
+
+See also [research guide](../analysis/trend_detection/DYNAMIC_WEIGHT_RESEARCH.md).
 
 ### Candle and Staleness Handling
 

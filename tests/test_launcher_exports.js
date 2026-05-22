@@ -20,6 +20,23 @@ assert.deepStrictEqual(
     { botName: 'XRP-BTS', clawOnly: false },
     'unlock-start parser should capture bot names'
 );
+const originalBotName = process.env.BOT_NAME;
+process.env.BOT_NAME = 'ENV-BOT';
+assert.deepStrictEqual(
+    parseUnlockStartArgs(['node', 'unlock-start']),
+    { botName: 'ENV-BOT', clawOnly: false },
+    'unlock-start parser should use BOT_NAME when no bot argument is passed'
+);
+assert.deepStrictEqual(
+    parseUnlockStartArgs(['node', 'unlock-start', '--claw-only']),
+    { botName: null, clawOnly: true },
+    'unlock-start parser should ignore BOT_NAME in claw-only mode'
+);
+if (originalBotName === undefined) {
+    delete process.env.BOT_NAME;
+} else {
+    process.env.BOT_NAME = originalBotName;
+}
 assert.deepStrictEqual(
     parsePm2Args(['node', 'pm2.js', 'claw-only']),
     { command: 'claw-only', target: null, clawOnly: true },

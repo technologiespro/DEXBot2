@@ -373,7 +373,7 @@ that only need adjustment when you want to change how strict the signal is.
 |------|---------|-------------|
 | `--source` | market_adapter | Data source |
 | `--file PATH` | — | JSON candle input |
-| `--bot-key KEY` | — | Market adapter bot key used to load `market_adapter/state/price_adapter_centers.json` |
+| `--bot-key KEY` | — | Market adapter bot key used to load `market_adapter/state/market_adapter_centers.json` |
 
 ### Output
 

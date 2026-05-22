@@ -72,7 +72,7 @@ class MarketAdapterSource {
     }
 
     async fetchCandles() {
-        const centersFile = path.join(this.stateDir, 'price_adapter_centers.json');
+        const centersFile = path.join(this.stateDir, 'market_adapter_centers.json');
         if (!fs.existsSync(centersFile)) {
             throw new Error(`[MarketAdapterSource] Centers file not found: ${centersFile}`);
         }

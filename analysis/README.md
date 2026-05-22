@@ -16,7 +16,7 @@ node analysis/analyze_dynamic_weight.js --bot-key <bot-key>
 npm run analysis:tradingview -- --source market_adapter --bot-key <bot-key>
 ```
 
-> The market adapter source reads from `market_adapter/state/price_adapter_centers.json` — make sure the bot has been running and produced state data first.
+> The market adapter source reads from `market_adapter/state/market_adapter_centers.json` — make sure the bot has been running and produced state data first.
 
 ## Main Entry Points
 
@@ -139,7 +139,7 @@ node analysis/tradingview/analyze_tradingview.js \
 
 Most runners expect candle data. Two paths to get it:
 
-**Market adapter source** (default for most runners) — reads from `market_adapter/state/price_adapter_centers.json`. No setup needed; just run the bot first to populate state.
+**Market adapter source** (default for most runners) — reads from `market_adapter/state/market_adapter_centers.json`. No setup needed; just run the bot first to populate state.
 
 **LP candle files** — for deeper analysis with full OHLC data:
 

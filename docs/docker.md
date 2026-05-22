@@ -57,9 +57,18 @@ node pm2 claw-only
 ```dotenv
 BOT_NAME=my-bot
 OPEN_ORDERS_SYNC_LOOP_MS=5000
+# Optional: match container user to host UID/GID for volume permissions
+DEXBOT_UID=1000
+DEXBOT_GID=1000
 ```
 
-2. Start the bot:
+2. Ensure the host directories exist with matching ownership:
+
+```bash
+mkdir -p profiles market_adapter/data market_adapter/state
+```
+
+3. Start the bot:
 
 ```bash
 docker compose up
@@ -83,7 +92,9 @@ docker compose down
 
 - Persist bot state/config by mounting `./profiles:/app/profiles`.
 - Persist market adapter runtime state and candle caches by mounting `./market_adapter/state:/app/market_adapter/state` and `./market_adapter/data:/app/market_adapter/data`.
-- The image runs as the bundled `node` user. Ensure mounted runtime directories are writable by your host user or UID 1000.
+- The image runs as the bundled `node` user (UID 1000 by default). To avoid permission issues with bind mounts, either:
+  - Pre-create host directories (`mkdir -p profiles market_adapter/data market_adapter/state`) so they inherit your host user's ownership, or
+  - Set `DEXBOT_UID` and `DEXBOT_GID` in `.env` to match your host user (`id -u` / `id -g`).
 - Keep `.env` for non-sensitive runtime values (for example `BOT_NAME`, `OPEN_ORDERS_SYNC_LOOP_MS`).
 - Do not store the master password in `.env`. The secure launchers prompt once and keep it only in process memory.
 - If you prefer immutable pinning, replace `latest` in `docker-compose.yml` with a `sha-<commit>` tag.

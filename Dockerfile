@@ -3,7 +3,7 @@ FROM node:20-bookworm-slim
 WORKDIR /app
 
 COPY --chown=node:node package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --chown=node:node . .
 RUN mkdir -p /app/profiles /app/market_adapter/data /app/market_adapter/state \
