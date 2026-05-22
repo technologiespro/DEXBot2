@@ -1,7 +1,7 @@
 # DEXBot vs DEXBot2 — Detailed Comparison Report
 
 > **Date:** 2026-05-22 *(metrics refreshed against local source trees)*
-> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite). DEXBot2 is on the v0.7.2 release track, with `v0.7.2` as the latest tagged release.
+> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite). DEXBot2 is on the v0.7.4 release track, with `v0.7.4` as the latest tagged release.
 > **Audience:** Developers, contributors, and operators evaluating or migrating between the two projects.
 
 ---
@@ -35,7 +35,7 @@
 
 | Attribute | DEXBot (original) | DEXBot2 |
 |---|---|---|
-| **Release Track** | 1.0.0 | v0.7.2 tagged release |
+| **Release Track** | 1.0.0 | v0.7.4 tagged release |
 | **Language** | Python 3.6+ | Node.js (JavaScript ES2022) |
 | **Status** | Released 1.0.0, unmaintained | Active development |
 | **Last Repo Activity** | May 23, 2020 | 2026-05-22 |
@@ -756,7 +756,7 @@ Where:
 
 | Metric | DEXBot | DEXBot2 |
 |---|---|---|
-| **Release Track** | 1.0.0 | v0.7.2 tagged release |
+| **Release Track** | 1.0.0 | v0.7.4 tagged release |
 | **Active Since** | ~2018 | December 2025 |
 | **Last Commit** | May 23, 2020 | 2026-05-22 |
 | **Total Commits** | 2281 | 1326 at current HEAD |

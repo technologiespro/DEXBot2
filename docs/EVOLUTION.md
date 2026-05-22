@@ -2,34 +2,28 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.2 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.4 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
 - **Growth Phase**: 1,326 commits over ~5.5 active months
 - **Code Maturity**: Evolution from basic utilities to a ~48,000+ LoC intelligent system
 - **Stability**: Progression from manual testing to a suite of 158 automated test files
-- **Releases**: 18 tagged releases (v0.1.0 to v0.7.2)
+- **Releases**: 19 tagged releases (v0.1.0 to v0.7.3)
 
 ---
 
 ## Pre-History: Generational Lineage
 
-DEXBot2 is the third generation of BitShares DEX trading bot development, preceded by two Python-based projects.
+DEXBot2 is the third generation of BitShares DEX trading bot development, preceded by two Python-based projects. See [DEXBOT_COMPARISON.md](DEXBOT_COMPARISON.md) for a full architectural comparison.
 
 ### Generation 0: StakeMachine (2017)
-**Author**: Fabian Schuh (ChainSquad GmbH) — v0.0.6 alpha
-
-Proof-of-concept. Subscribed to BitShares WebSocket notifications and placed static buy/sell walls at fixed percentage offsets from the settlement price feed. No grid, no adaptive signals, no tests. Established the event-driven subscription model (on_block, on_market, on_account), plugin strategy loading, and per-bot persistent storage.
+Proof-of-concept by Fabian Schuh (ChainSquad GmbH). Static buy/sell walls with event-driven subscription model.
 
 ### Generation 1: DEXBot Python v1.0.0 (2018–2020)
-**Author**: Codaone Oy (BitShares worker proposal funded)
+Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategies (Staggered Orders, Relative Orders, King of the Hill), CCXT/CoinGecko feeds, SQLite persistence.
 
-Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves external feeds, multi-node management, SQLite with Alembic migrations, systemd integration, and Windows installer. Ran hundreds of workers across dozens of BitShares markets.
-
-**Strategies**: **Staggered Orders** (2256 lines, grid-based with 5 distribution modes and virtual orders — the direct ancestor of DEXBot2's grid), **Relative Orders** (two-sided market making with dynamic spread), **King of the Hill** (top-of-book best bid/ask).
-
-**Carried into DEXBot2**: Staggered grid concept, virtual/off-chain order tracking, isolated per-market workers, event dispatch via Events library, and market center price calculation.
+**Carried into DEXBot2**: Staggered grid concept, virtual/off-chain order tracking, market center price calculation.
 
 ---
 
@@ -179,6 +173,8 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 - **May 21-22**: AMA strategy sharing, slope readiness warmup logic, and release v0.7.1
 - **May 22**: Release v0.7.1 - share AMA strategy and readiness fix
 - **May 22**: Release v0.7.2 - dynamic-weight Kalman stability patch
+- **May 22**: Release v0.7.3 - adapter packaging and slope helper consolidation
+- **May 22**: Release v0.7.4 - documentation refresh and version bump
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -209,6 +205,27 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 ---
 
 ## Version History
+
+### v0.7.3 → v0.7.4 (5 commits)
+
+| Category | Commits |
+|----------|---------|
+| 1. Code cleanup (unused deps, inline helper) | 2 |
+| 2. Documentation refresh | 3 |
+| **Total** | **5** |
+
+---
+
+### v0.7.2 → v0.7.3 (3 commits)
+
+| Category | Commits |
+|----------|---------|
+| 1. Docker launcher and adapter state docs alignment | 1 |
+| 2. Centralized AMA slope conversion helpers | 1 |
+| 3. Release metadata | 1 |
+| **Total** | **3** |
+
+---
 
 ### v0.7.1 → v0.7.2 (2 commits)
 
@@ -330,7 +347,7 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 
 ## Development Statistics
 
-158 automated tests, 15 tagged releases. See **Version History** for commit breakdown by release.
+158 automated tests, 19 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -412,7 +429,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: May 18, 2026
-**Total Commits**: 1320
-**Date Range**: December 2, 2025 - May 18, 2026 (ongoing)
+**Last Updated**: May 22, 2026
+**Total Commits**: 1373
+**Date Range**: December 2, 2025 - May 22, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

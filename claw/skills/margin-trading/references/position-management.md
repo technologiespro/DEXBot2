@@ -2,29 +2,21 @@
 
 ## Collateral Ratio Zones
 
-The collateral ratio (CR) determines position health. Five zones — too low risks liquidation, too high wastes capital:
+See `claw/docs/POSITION_HEALTH.md` for the full 5-zone CR model, dual-layer action system, and trend alignment logic.
+
+The skill-level summary:
 
 | Zone | CR Range | Status |
 |---|---|---|
-| Red (high) | Above 3.0 | Over-collateralized — increase debt to deploy capital (layer 1) |
-| Orange (high) | 2.5 – 3.0 | Excess collateral — consider increasing debt (layer 1) |
+| Red (high) | Above 3.0 | Over-collateralized |
+| Orange (high) | 2.5 – 3.0 | Excess collateral |
 | Green | 2.0 – 2.5 | Safe — operating target |
-| Orange (low) | 1.7 – 2.0 | Temporarily acceptable — reduce debt to restore CR (layer 1) |
-| Red (low) | Below 1.7 | Not acceptable — reduce debt immediately (layer 1) |
+| Orange (low) | 1.7 – 2.0 | Temporarily acceptable |
+| Red (low) | Below 1.7 | Not acceptable |
 
-MCR for HONEST.Assets is 1.4. The red (low) boundary at 1.7 maintains a ~21% buffer above protocol liquidation. The red (high) boundary at 3.0 flags capital sitting idle as excess collateral that could be deployed elsewhere.
+MCR for HONEST.Assets is 1.4. See `honest-assets.md` for full ecosystem properties.
 
-Any position outside the green zone should be treated as a signal to act using two layers:
-
-**Layer 1 (primary) — adjust debt:**
-- CR too low → reduce debt (buy back MPA to repay)
-- CR too high → increase debt (borrow more MPA to deploy)
-
-**Layer 2 (fallback) — adjust collateral:**
-- CR too low → add collateral (if debt reduction alone is insufficient)
-- CR too high → withdraw collateral (if debt increase alone is insufficient)
-
-Always exhaust layer 1 before resorting to layer 2.
+Any position outside the green zone triggers two-layer adjustment (debt first, collateral second). See POSITION_HEALTH.md for full action tables.
 
 ## Capital Efficiency Principle
 

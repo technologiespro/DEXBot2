@@ -2,7 +2,7 @@
 
 Market Pegged Assets backed by collateral with on-chain price feeds. They can be borrowed, shorted, and traded on the order book. These are the assets the margin trading system operates on.
 
-All BTS-backed MPAs share: 0% maker fee, 0.1% taker fee, MCR 1.4. Exception: HONEST.USD has 0.2% taker fee.
+For fee structure, MCR, and ecosystem properties, see `honest-assets.md`. This file lists only asset IDs, precisions, and short variants.
 
 Liquidity pools exist for many of these pairs but are handled by arbitrage bots — the margin trading system only uses limit orders on the book.
 

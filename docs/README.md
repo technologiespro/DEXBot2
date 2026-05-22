@@ -2,7 +2,7 @@
 
 This directory contains the comprehensive technical documentation for the DEXBot2 trading bot. It is designed to guide developers from high-level architecture down to the nuances of fund accounting and state management.
 
-**Version context:** v0.7.2 is the latest tagged release. This documentation now tracks the released 0.7 line, which includes signal intelligence, strict runtime behavior, credit/debt workflows, credit maintenance hardening, and dynamic-weight Kalman stability.
+**Version context:** v0.7.4 is the latest tagged release. This documentation now tracks the released 0.7 line, which includes signal intelligence, strict runtime behavior, credit/debt workflows, credit maintenance hardening, dynamic-weight Kalman stability, and adapter packaging consolidation.
 
 ---
 

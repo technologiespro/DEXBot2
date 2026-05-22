@@ -1,4 +1,6 @@
-# Test Suite Updates - Based on Recent Bugfixes
+# Test Suite Updates - Based on Recent Bugfixes (Historical)
+
+> **Status:** Historical reference (archived as of May 2026). Covers Jan 2026 bugfix-era test additions. The test suite has grown significantly since — see `tests/README.md` for current structure.
 
 This document summarizes the comprehensive test suite updates added based on the last 10 bugfixes (commits from 2026-01-09).
 

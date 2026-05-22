@@ -241,14 +241,6 @@ The following scripts allow you to call `dexbot` commands directly from the `scr
 npm run lp:chart -- --data <lp-export.json>
 ```
 
-### LP Chart
-**File:** `generate_lp_chart.js`
-**Purpose:** Generate the standard LP chart output.
-```bash
-# Generate the LP chart output
-npm run lp:chart -- --data <lp-export.json>
-```
-
 ### Local LP Comparison Chart
 **File:** `analysis/ama_fitting/generate_unified_comparison_chart.js`
 **Purpose:** Generate the local LP comparison chart from an LP candle export.

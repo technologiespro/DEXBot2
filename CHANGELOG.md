@@ -2,15 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.4] - 2026-05-22 - Code Cleanup and Documentation Refresh
+
+This patch cleans up unused code paths, refactors a shared validation helper, and refreshes the full documentation set for clarity, completeness, and version alignment.
+
+### 2026-05-22
+
+#### Code Cleanup
+- Remove unused dependency packages to reduce install footprint (`56a44df`).
+- Inline the Base58Check key validation helper into `chain_keys.js`, eliminating a single-use internal module (`566c2e1`).
+
+#### Documentation Refresh
+- Fix duplicate LP Chart section in `scripts/README.md`.
+- Clarify logging test count as logging-specific in `docs/LOGGING.md`.
+- Update `docs/EVOLUTION.md` last-updated date, commit count, and version history entries with accurate git data.
+- Bump version references to 0.7.4 across `docs/README.md`, `docs/DEXBOT_COMPARISON.md`, `docs/FUND_MOVEMENT_AND_ACCOUNTING.md`, `docs/TYPESCRIPT_MIGRATION_ANALYSIS.md`, and `docs/EVOLUTION.md`.
+- De-duplicate MCR/fee info between claw skill reference files (`honest-asset-list.md` → `honest-assets.md`).
+- De-duplicate CR zone content between `POSITION_HEALTH.md` and `position-management.md`.
+- De-duplicate pre-history lineage between `EVOLUTION.md` and `DEXBOT_COMPARISON.md`.
+- Mark `tests/TEST_UPDATES_SUMMARY.md` as historical reference.
+
 ## [0.7.3] - 2026-05-22 - Adapter Packaging and Slope Helper Patch
 
-This patch release cleans up release packaging/runtime documentation and centralizes AMA slope conversion helpers used by market-adapter dynamic-weight configuration.
+This patch release aligns Docker launcher documentation with the current runtime layout and centralizes AMA slope conversion helpers used by market-adapter dynamic-weight configuration.
 
 ### 2026-05-22
 
 #### Packaging, Runtime Docs, and AMA Slope Helpers
-- Align Docker launcher behavior and adapter state documentation with the current runtime layout (`98e0cbe`).
-- Share AMA slope percent-mode, lookback normalization, and per-bar conversion helpers between the core market adapter service and profile override handling to prevent duplicated conversion semantics (`c257674`).
+- Align Docker launcher behavior and adapter state documentation with the current runtime layout (`5dcc9eb`).
+- Share AMA slope percent-mode, lookback normalization, and per-bar conversion helpers between the core market adapter service and profile override handling to prevent duplicated conversion semantics (`abcb8f9`).
 
 ## [0.7.2] - 2026-05-22 - Kalman Stability Patch
 
