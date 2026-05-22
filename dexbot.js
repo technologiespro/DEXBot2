@@ -307,9 +307,10 @@ function printMasterPasswordFailure(err) {
  * 3. Creates DEXBot instances and starts them
  *
  * @param {Array} botEntries - Array of normalized bot configurations
- * @param {Object} options - Execution options
- * @param {boolean} options.forceDryRun - Force all bots into dry-run mode
- * @param {string} options.sourceName - Source label for logging
+ * @param {Object} [options] - Execution options
+ * @param {boolean} [options.forceDryRun=false] - Force all bots into dry-run mode
+ * @param {string} [options.sourceName='settings'] - Source label for logging
+ * @param {Object} [options.launcherStyle=null] - Launcher presentation options
  * @returns {Promise<Array>} Array of started DEXBot instances
  */
 async function runBotInstances(botEntries, { forceDryRun = false, sourceName = 'settings', launcherStyle = null } = {}) {
@@ -451,9 +452,9 @@ async function runBotInstances(botEntries, { forceDryRun = false, sourceName = '
 /**
  * Start a specific bot by name or all active bots if no name provided.
  * Looks up the bot in profiles/bots.json and starts it.
- * @param {string|null} botName - Name of the bot to start, or null for all active
- * @param {Object} options - Start options
- * @param {boolean} options.dryRun - Run in dry-run mode (no broadcasts)
+ * @param {string|null|undefined} botName - Name of the bot to start, or null/undefined for all active
+ * @param {Object} [options] - Start options
+ * @param {boolean} [options.dryRun=false] - Run in dry-run mode (no broadcasts)
  */
 async function startBotByName(botName, { dryRun = false } = {}) {
     if (!botName) {
@@ -489,7 +490,7 @@ async function startBotByName(botName, { dryRun = false } = {}) {
  * Mark a bot (or all bots) as inactive in profiles/bots.json.
  * Note: This only updates the config file; running processes must be
  * stopped separately using pm2.js or Ctrl+C.
- * @param {string|null} botName - Name of the bot to disable, or null for all
+ * @param {string|null|undefined} botName - Name of the bot to disable, or null/undefined for all
  */
 async function disableBotByName(botName) {
     const { config, filePath } = loadSettingsFile(PROFILES_BOTS_FILE);
@@ -533,7 +534,7 @@ async function disableBotByName(botName) {
  * 2. If bot is running, it detects file -> resyncs grid -> deletes file
  * 3. If bot is stopped, it detects file on startup -> resyncs grid -> deletes file
  *
- * @param {string|null} botName - Name of the bot to reset, or null for all active
+ * @param {string|null|undefined} botName - Name of the bot to reset, or null/undefined for all active
  */
 async function resetBotByName(botName) {
     const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
@@ -566,7 +567,7 @@ async function resetBotByName(botName) {
 
 /**
  * Export bot trading history and settings for QTradeX
- * @param {string} botName - Bot name to export
+ * @param {string|undefined} botName - Bot name; may be undefined from CLI when no target provided to export
  */
 async function exportBotTrades(botName) {
     if (!botName) {
@@ -701,6 +702,7 @@ async function handleCLICommands() {
  * @param {Object} [options={}] - Run options.
  * @param {boolean} [options.forceDryRun=false] - Force dry-run mode.
  * @param {string} [options.sourceName='settings'] - Source label.
+ * @param {Object} [options.launcherStyle=null] - Launcher presentation options.
  * @returns {Promise<void>}
  */
 async function runDefaultBots({ forceDryRun = false, sourceName = 'settings', launcherStyle = null } = {}) {

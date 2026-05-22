@@ -865,6 +865,7 @@ async function main() {
 
 /**
  * Check if dexbot-cred daemon is ready and responsive
+ * @param {Object} [options={}] - Optional socket/ready-file path overrides
  * @returns {boolean} True if daemon socket is responsive
  */
 function isDaemonReady(options = {}) {
@@ -940,6 +941,7 @@ function isDaemonResponsive(options = {}, timeout = 2000) {
 /**
  * Wait for dexbot-cred daemon to be ready
  * @param {number} maxWaitMs - Maximum time to wait in milliseconds (default 60000)
+ * @param {Object} [options] - Optional socket/ready-file path overrides
  * @returns {Promise<void>} Resolves when daemon is ready
  * @throws {Error} If daemon doesn't start within timeout
  */
@@ -961,6 +963,7 @@ async function waitForDaemon(maxWaitMs = TIMING.DAEMON_STARTUP_TIMEOUT_MS, optio
  * Request private key from dexbot-cred daemon via Unix socket
  * @param {string} accountName - Name of the account
  * @param {number} timeout - Timeout in milliseconds (default 5000)
+ * @param {Object} [options] - Optional socket/ready-file path overrides
  * @returns {Promise<string>} Decrypted private key
  * @throws {Error} If daemon unavailable or request fails
  */
@@ -1024,7 +1027,7 @@ function getPrivateKeyFromDaemon(accountName, timeout = 5000, options = {}) {
  * @param {string} accountName - Name of the account to probe
  * @param {number} timeout - Timeout in milliseconds (default 5000)
  * @param {Object} options - Optional socket path overrides
- * @returns {Promise<void>} Resolves if the account is available, rejects otherwise
+ * @returns {Promise<string|null>} Resolves with sessionId if account is available, rejects otherwise
  */
 function probeAccountInDaemon(accountName, timeout = 5000, options = {}) {
     const net = require('net');

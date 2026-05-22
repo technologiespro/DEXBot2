@@ -715,6 +715,8 @@ function removeActionsForOrder(actions, actionType, orderRef) {
  * Project target grid into working grid
  * @param {WorkingGrid} workingGrid - Working grid to modify
  * @param {Map} targetGrid - Target state
+ * @param {Object} [options] - Optional parameters
+ * @param {Array} [options.actions] - Pre-existing COW actions to consider
  */
 function _buildUpdateSelectors(actions) {
     const selectors = {

@@ -111,6 +111,7 @@ function detectMissingCandleTimestamps(candles, intervalSeconds = 3600) {
  * @param {number} [endTs]         - optional end timestamp (ms) to stretch to the future
  * @param {Object} [options]       - optional settings
  * @param {number} [options.baselinePrice] - optional price to use for leading gaps before the first candle
+ * @returns {Array} Filled candle array with no gaps
  */
 function fillCandleGaps(candles, intervalSeconds, startTs = null, endTs = null, options = {}) {
     const bucketMs = Number(intervalSeconds) * 1000;

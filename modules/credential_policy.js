@@ -1281,6 +1281,7 @@ function evaluateExecutable(exePath, context) {
  * Load the botHmacSecret for an account from the policy config file.
  * @param {string} accountName - The account name
  * @param {string} policyConfigPath - Path to daemon-policies.json
+ * @param {Object} [options] - Optional configuration
  * @returns {string|null} The botHmacSecret, or null if not configured
  */
 function loadBotHmacSecret(accountName, policyConfigPath, options = {}) {
@@ -1327,7 +1328,7 @@ function loadBotHmacSecret(accountName, policyConfigPath, options = {}) {
  * @param {object} request - Parsed request: { accountName, sessionId, operations, hmac }
  * @param {object|null} policyConfig - Loaded daemon-policies.json content
  * @returns {{ valid: boolean, reason: string|null, skipped: boolean }}
- *   skipped=true means no secret is configured (backward-compat, caller logs warning)
+ *   skipped is always false — missing secrets are rejected in strict mode.
  */
 function verifySourceHmac(request, policyConfig) {
     const accountPolicy =

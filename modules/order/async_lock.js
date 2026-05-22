@@ -186,6 +186,7 @@ class AsyncLock {
     /**
      * Clear all pending operations in the queue.
      * Does NOT stop the currently executing operation if it is already locked.
+     * @returns {number} Count of cleared items
      */
     clearQueue() {
         const count = this._queue.length;

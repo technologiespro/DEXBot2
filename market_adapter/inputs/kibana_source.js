@@ -49,6 +49,9 @@ const DEFAULT_CONFIG = {
 /**
  * Accept pool IDs as short number (133) or full ID (1.19.133).
  * Always returns full form '1.19.XXX'.
+ *
+ * @param {string} id – Pool ID in short or full form
+ * @returns {string} Full form pool ID (1.19.XXX)
  */
 function normalizePoolId(id) {
     if (id == null) return null;

@@ -817,6 +817,8 @@ function sendError(socket, message) {
 /**
  * Gracefully shutdown daemon.
  * Clears the derived vault secret from memory and closes server.
+ * @param {number} [exitCode=0] - Process exit code
+ * @param {string} [reason='shutdown'] - Reason for shutdown (for logging)
  */
 function shutdown(exitCode = 0, reason = 'shutdown') {
     if (daemonShuttingDown) return;

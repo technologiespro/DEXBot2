@@ -125,11 +125,13 @@ function safePct(numerator, denominator) {
 class KalmanTrendAnalyzer {
     /**
      * @param {Object} config
-     * @param {number} config.rNoise - Measurement noise (default 0.05)
-     * @param {number} config.qTactical - Process noise for tactical filter (default 0.01)
-     * @param {number} config.qModal - Process noise for modal filter (default 0.0001)
-     * @param {number} config.beamCount - Number of historical beams to track
-     * @param {number} config.dt - Time step between observations, in bars
+     * @param {number} [config.rNoise=0.05] - Measurement noise
+     * @param {number} [config.qTactical=0.01] - Process noise for tactical filter
+     * @param {number} [config.qModal=0.0001] - Process noise for modal filter
+     * @param {number} [config.qNoise] - Legacy fallback for qTactical/qModal when unset
+     * @param {number} [config.beamCount=100] - Number of historical beams to track
+     * @param {number} [config.dt=1] - Time step between observations, in bars
+     * @param {number} [config.warmupBars=20] - Warmup bars before analysis
      */
     constructor(config = {}) {
         this.config = { ...config };

@@ -365,8 +365,8 @@ function crWeight(zone) {
  * Compute directional order-weight bias from trend direction and confidence.
  * Positive bias means front-load that side; negative means flatten that side.
  *
- * @param {string} trend       – 'UP', 'DOWN', or 'NEUTRAL'
- * @param {number} confidence  – 0–100
+ * @param {string} [trend='NEUTRAL']      – 'UP', 'DOWN', or 'NEUTRAL'
+ * @param {number} [confidence=0] – 0–100
  * @returns {{ profile: string, buyBias: number, sellBias: number, strength: number }}
  */
 function computeOrderWeightBias(trend = 'NEUTRAL', confidence = 0) {
@@ -412,9 +412,9 @@ function computeOrderWeightBias(trend = 'NEUTRAL', confidence = 0) {
  * - final weightDistribution values
  *
  * @param {Object} position      – Position object with onChain collateral/debt/feed data
- * @param {Object} [trendSignal] – Optional trend signal
- * @param {Object} [botConfig]   – Current bot config
- * @param {Object} [options]     – Planning options
+ * @param {Object} [trendSignal=null] – Optional trend signal
+ * @param {Object} [botConfig={}]     – Current bot config
+ * @param {Object} [options={}]       – Planning options
  * @returns {Object} Unified plan with concrete bot patch outputs
  */
 function buildMarginTradingPlan(position, trendSignal = null, botConfig = {}, options = {}) {

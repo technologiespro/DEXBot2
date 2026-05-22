@@ -52,7 +52,7 @@ function parseBtsPerMpa(settlementPrice, mpaAsset, backingAsset) {
  * Fetch the current feed price for an MPA.
  *
  * @param {string} mpaSymbol – e.g. 'HONEST.USD'
- * @returns {Object} { feedPrice, mpaAsset, backingAsset, publicationTime }
+ * @returns {Object} { feedPrice, mpaSymbol, mpaAssetId, backingSymbol, publicationTime }
  *   feedPrice is in BTS-per-MPA units.
  */
 async function fetchFeedPrice(mpaSymbol) {

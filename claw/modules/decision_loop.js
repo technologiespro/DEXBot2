@@ -60,7 +60,7 @@ function getOrCreateAnalyzer(mpaSymbol, config = {}) {
  * @param {Object} [options]
  * @param {Object} [options.analyzerConfig] – TrendAnalyzer config overrides
  * @param {Function} [options.logger]       – Log function (default console.log)
- * @returns {Object} { account, evaluatedAt, positions: [...assessments] }
+ * @returns {Object} { account, evaluatedAt, positionCount, positions: [...assessments], summary }
  */
 async function evaluate(accountName, options = {}) {
   const logger = options.logger || console.log;
@@ -183,7 +183,7 @@ function resetAnalyzers() {
  * @param {Object} [options]
  * @param {Object} [options.analyzerConfig] – TrendAnalyzer config overrides
  * @param {Function} [options.logger] – Log function
- * @returns {Object} { account, evaluatedAt, positions: [...with tuning] }
+ * @returns {Object} { account, evaluatedAt, positionCount, summary, positions: [...with tuning] }
  */
 async function evaluateAndTune(accountName, bots = {}, options = {}) {
   // Run standard evaluation

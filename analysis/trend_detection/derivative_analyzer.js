@@ -162,9 +162,28 @@ class RSI {
 class DerivativeAnalyzer {
     /**
      * @param {Object} config
-     * @param {number}  config.slowSmaPeriod          – SMA period (default 500, null to disable)
-     * @param {number}  config.fastSmaPeriod          – Fast SMA period (default 100, null to disable)
-     * @param {number}  config.minBarsForConfirmation  – Bars to confirm trend (default 3)
+     * @param {number}  [config.slowSmaPeriod=500]          – SMA period (null to disable)
+     * @param {number}  [config.fastSmaPeriod=100]          – Fast SMA period (null to disable)
+     * @param {number}  [config.minBarsForConfirmation=3]   – Bars to confirm trend
+     * @param {number}  [config.macdFastPeriod=12]          – MACD fast period
+     * @param {number}  [config.macdSlowPeriod=26]          – MACD slow period
+     * @param {number}  [config.macdSignalPeriod=9]         – MACD signal period
+     * @param {number}  [config.rsiPeriod=14]               – RSI period
+     * @param {number}  [config.interpConfirmBars=3]        – Confirmation bars for interpolation
+     * @param {number}  [config.interpHoldBars=0]           – Hold bars for interpolation
+     * @param {number}  [config.rsiOverboughtLevel=70]      – RSI overbought threshold
+     * @param {number}  [config.rsiOversoldLevel=30]        – RSI oversold threshold
+     * @param {number}  [config.rsiBullThreshold=55]        – RSI bull threshold
+     * @param {number}  [config.rsiBearThreshold=45]        – RSI bear threshold
+     * @param {number}  [config.macdMinHist=0]              – MACD histogram minimum
+     * @param {number}  [config.fastSmaCommitmentBars=2]    – Fast SMA commitment bars
+     * @param {boolean} [config.trendFilterEnabled=false]   – Enable trend filter
+     * @param {number}  [config.trendFilterMinBars=3]       – Trend filter minimum bars
+     * @param {boolean} [config.momentumGateEnabled=false]  – Enable momentum gate
+     * @param {number}  [config.momentumGateMinBars=3]      – Momentum gate minimum bars
+     * @param {number}  [config.momentumGateRsiZone=35]     – Momentum gate RSI zone
+     * @param {boolean} [config.priceRegimeGateEnabled=true] – Enable price regime gate
+     * @param {number}  [config.priceRegimeMinDistancePct=0.35] – Price regime minimum distance
      */
     constructor(config = {}) {
         this.minBarsForConfirmation = config.minBarsForConfirmation || 3;

@@ -516,7 +516,7 @@ function deltaToCron(days, time) {
 /**
  * Prompts the user for a number within specified bounds.
  * @param {string} promptText - The prompt text to display.
- * @param {number} defaultValue - The default value to use if input is empty.
+ * @param {number} [defaultValue] - The default value to use if input is empty.
  * @param {number} minVal - The minimum allowed value.
  * @param {number} maxVal - The maximum allowed value.
  * @returns {Promise<number|string>} The numeric value or '\x1b' if ESC.
@@ -551,7 +551,7 @@ async function askNumberWithBounds(promptText, defaultValue, minVal, maxVal) {
 /**
  * Prompts the user for the target spread percentage.
  * @param {string} promptText - The prompt text to display.
- * @param {number} defaultValue - The default value to use if input is empty.
+ * @param {number} [defaultValue] - The default value to use if input is empty.
  * @param {number} incrementPercent - The grid increment percentage.
  * @param {number} minSpreadFactor - The minimum spread factor from GRID_LIMITS.
  * @returns {Promise<number|string>} The spread percentage or '\x1b' if ESC.
@@ -592,7 +592,7 @@ async function askTargetSpreadPercent(promptText, defaultValue, incrementPercent
 /**
  * Prompts the user for an integer within a range.
  * @param {string} promptText - The prompt text to display.
- * @param {number} defaultValue - The default value to use if input is empty.
+ * @param {number} [defaultValue] - The default value to use if input is empty.
  * @param {number} minVal - The minimum allowed value.
  * @param {number} maxVal - The maximum allowed value.
  * @returns {Promise<number|string>} The integer or '\x1b' if ESC.
@@ -623,7 +623,7 @@ async function askIntegerInRange(promptText, defaultValue, minVal, maxVal) {
 /**
  * Prompts the user for a numeric value or a multiplier.
  * @param {string} promptText - The prompt text to display.
- * @param {number|string} defaultValue - The default value to use if input is empty.
+ * @param {number|string} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<number|string>} The value or '\x1b' if ESC.
  */
 async function askNumberOrMultiplier(promptText, defaultValue) {
@@ -656,7 +656,7 @@ async function askNumberOrMultiplier(promptText, defaultValue) {
 /**
  * Prompts the user for the maximum price, ensuring it's greater than minimum price.
  * @param {string} promptText - The prompt text to display.
- * @param {number|string} defaultValue - The default value to use if input is empty.
+ * @param {number|string} [defaultValue] - The default value to use if input is empty.
  * @param {number|string} minPrice - The minimum price.
  * @returns {Promise<number|string>} The value or '\x1b' if ESC.
  */
@@ -710,7 +710,7 @@ function normalizePercentageInput(value) {
 /**
  * Prompts the user for a numeric value or a percentage.
  * @param {string} promptText - The prompt text to display.
- * @param {number|string} defaultValue - The default value to use if input is empty.
+ * @param {number|string} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<number|string>} The value or '\x1b' if ESC.
  */
 async function askNumberOrPercentage(promptText, defaultValue) {
@@ -731,7 +731,7 @@ async function askNumberOrPercentage(promptText, defaultValue) {
 /**
  * Prompts the user for a boolean value (Y/n).
  * @param {string} promptText - The prompt text to display.
- * @param {boolean} defaultValue - The default value to use if input is empty.
+ * @param {boolean} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<boolean|string>} The boolean value or '\x1b' if ESC.
  */
 async function askBoolean(promptText, defaultValue) {
@@ -745,7 +745,7 @@ async function askBoolean(promptText, defaultValue) {
 /**
  * Prompts the user for the start price (numeric or "pool"/"book").
  * @param {string} promptText - The prompt text to display.
- * @param {number|string} defaultValue - The default value to use if input is empty.
+ * @param {number|string} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<number|string>} The start price or '\x1b' if ESC.
  */
 async function askStartPrice(promptText, defaultValue) {
@@ -777,6 +777,12 @@ async function askStartPrice(promptText, defaultValue) {
     }
 }
 
+/**
+ * Prompts the user for the grid price mode (pool, book, ama, numeric, or startprice).
+ * @param {string} promptText - The prompt text to display.
+ * @param {string} [defaultValue] - The default value to use if input is empty.
+ * @returns {Promise<string>} The grid price mode or '\x1b' if ESC.
+ */
 async function askGridPriceMode(promptText, defaultValue) {
     while (true) {
         const shownDefault = defaultValue === null || defaultValue === undefined ? 'startPrice' : defaultValue;

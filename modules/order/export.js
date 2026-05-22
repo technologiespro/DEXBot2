@@ -69,6 +69,8 @@ const { TIMING } = require('../constants');
 /**
  * Parse a fill line from PM2 log file
  * Expected format: [2026-01-15T15:29:06.185Z] [DEBUG] [FILL] sell fill: size=0.0316, price=1791.30065898866, proceeds=56.60510082 BTS
+ * @param {string} line - Raw log line
+ * @returns {Object|null} Parsed fill object or null on no match
  */
 function parseFillLine(line) {
     const fillMatch = line.match(/\[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\].*\[FILL\]\s+(\w+)\s+fill:\s+size=([\d.]+),\s+price=([\d.]+),\s+proceeds=([\d.]+)/);
@@ -87,6 +89,8 @@ function parseFillLine(line) {
 /**
  * Parse fee information from log line
  * Expected format: [2026-01-15T15:29:06.185Z] [INFO] [FEES] BTS fees calculated: 1 maker fills @ 0.04826000 BTS = 0.04826000 BTS
+ * @param {string} line - Raw log line
+ * @returns {Object|null} Parsed fee object or null on no match
  */
 function parseFeeLine(line) {
     const feeMatch = line.match(/\[FEES\].*?(\d+)\s+maker\s+fills\s+@\s+([\d.]+)\s+(\w+)\s*=\s*([\d.]+)\s+\w+/);
@@ -103,6 +107,9 @@ function parseFeeLine(line) {
 
 /**
  * Link fill with its corresponding fee information
+ * @param {Array} fills - Array of parsed fill objects
+ * @param {Array} fees - Array of parsed fee objects
+ * @returns {void}
  */
 function linkFillWithFee(fills, fees) {
     // Match most recent fill with most recent fee
@@ -177,6 +184,7 @@ async function parseLogFile(logFilePath) {
  * Write trades to CSV file in QTradeX format
  * @param {Array} trades - Array of trade objects
  * @param {string} outputPath - Path to output CSV file
+ * @returns {Promise<Object>} { success: boolean, count: number } or { success: false, error: string }
  */
 async function writeTradesCSV(trades, outputPath) {
     try {
@@ -221,6 +229,7 @@ async function writeTradesCSV(trades, outputPath) {
  * @param {Object} botConfig - Bot configuration object
  * @param {string} botName - Bot name
  * @param {string} outputPath - Path to output JSON file
+ * @returns {Promise<Object>} Write result { success, count } or { success: false, error }
  */
 async function writeSettingsJSON(botConfig, botName, outputPath) {
     try {

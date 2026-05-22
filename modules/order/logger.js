@@ -105,6 +105,7 @@ class Logger {
     /**
      * Write output to file (appends). Strips ANSI color codes.
      * Creates parent directory if needed.
+     * @param {string} text - Text to write to log file
      * @private
      */
     _writeToFile(text) {
@@ -315,6 +316,8 @@ class Logger {
 
     /**
      * Log detailed fund breakdown (called only on critical events in debug mode).
+     * @param {OrderManager} manager - Manager instance
+     * @param {string} [headerContext=''] - Context label for log header
      * @private
      */
     _logDetailedFunds(manager, headerContext = '') {
@@ -440,6 +443,9 @@ class Logger {
 
     /**
      * Log detailed grid diagnostic: ACTIVE, SPREAD, PARTIAL orders and first VIRTUAL on boundary
+     * @param {OrderManager} manager - Manager instance
+     * @param {string} [context=''] - Context label
+     * @param {boolean} [forceOutput=false] - Force output even if disabled in config
      */
     logGridDiagnostics(manager, context = '', forceOutput = false) {
         if (!manager) return;

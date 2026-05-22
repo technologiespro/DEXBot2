@@ -175,6 +175,9 @@ function _isGridEdgeFullyActive(manager, orderType, updateCount) {
 /**
  * Find the largest order among those being updated.
  * Returns both the order and its index in unmatchedOrders for pairing with gridOrders.
+ * @param {Array<Object>} unmatchedOrders - Array of unmatched on-chain orders
+ * @param {number} updateCount - Number of orders being updated (first N)
+ * @returns {{order: Object, index: number}|null} Largest order and its index, or null if none found
  * @private
  */
 function _findLargestOrder(unmatchedOrders, updateCount) {
@@ -202,6 +205,16 @@ function _findLargestOrder(unmatchedOrders, updateCount) {
  * Cancel the largest unmatched order to free up maximum funds.
  * This is more efficient than reducing to size 1 and then updating twice.
  * Returns the grid slot index and grid order that needs to be filled.
+ * @param {Object} params - Destructured parameters
+ * @param {Function} params.chainOrders - Chain order query function
+ * @param {string} params.account - Account ID or name
+ * @param {string} params.privateKey - Active/owner private key
+ * @param {Object} params.manager - OrderManager instance
+ * @param {Array<Object>} params.unmatchedOrders - Unmatched on-chain orders
+ * @param {number} params.updateCount - Number of orders being updated
+ * @param {string} params.orderType - ORDER_TYPES.BUY or ORDER_TYPES.SELL
+ * @param {boolean} params.dryRun - If true, skip actual cancellation
+ * @returns {Promise<{gridIndex: number, gridOrder: Object}|null>} Grid slot info or null
  * @private
  */
 async function _cancelLargestOrder({ chainOrders, account, privateKey, manager, unmatchedOrders, updateCount, orderType, dryRun }) {
@@ -1005,6 +1018,13 @@ async function _reconcileStartupSide({
  * by matching existing on-chain open orders to grid orders using price+size matching.
  *
  * Returns { resumed: boolean, matchedCount: number }.
+ * @param {Object} params - Destructured parameters
+ * @param {Object} params.manager - OrderManager instance
+ * @param {Array<Object>} params.persistedGrid - Persisted grid orders
+ * @param {Array<Object>} params.chainOpenOrders - On-chain open orders
+ * @param {Object} params.logger - Logger instance
+ * @param {Function} params.storeGrid - Grid persistence callback
+ * @returns {Promise<{resumed: boolean, matchedCount: number}>}
  */
 async function attemptResumePersistedGridByPriceMatch({
     manager,
@@ -1054,6 +1074,14 @@ async function attemptResumePersistedGridByPriceMatch({
  * - If any persisted ACTIVE orderId exists on-chain -> resume
  * - Else if there are on-chain orders -> attempt price-based matching; resume if it matches any
  * - Else -> regenerate
+ * @param {Object} params - Destructured parameters
+ * @param {Array<Object>} params.persistedGrid - Persisted grid orders
+ * @param {Array<Object>} params.chainOpenOrders - On-chain open orders
+ * @param {Object} params.manager - OrderManager instance
+ * @param {Object} params.logger - Logger instance
+ * @param {Function} params.storeGrid - Grid persistence callback
+ * @param {Function} [params.attemptResumeFn=attemptResumePersistedGridByPriceMatch] - Resume function
+ * @returns {Promise<Object>} { shouldRegenerate, hasActiveMatch, resumedByPrice, matchedCount }
  */
 async function decideStartupGridAction({
     persistedGrid,
@@ -1094,6 +1122,14 @@ async function decideStartupGridAction({
  *
  * Targets are derived from config.activeOrders.{buy,sell} and chain counts are computed
  * from current on-chain open orders.
+ * @param {Object} params - Destructured parameters
+ * @param {Object} params.manager - OrderManager instance
+ * @param {Object} params.config - Bot configuration
+ * @param {string} params.account - Account ID or name
+ * @param {string} params.privateKey - Active/owner private key
+ * @param {Function} params.chainOrders - Chain order query function
+ * @param {Array<Object>} params.chainOpenOrders - On-chain open orders
+ * @returns {Promise<Object>} Reconciliation result
  */
 async function reconcileStartupOrders({
     manager,

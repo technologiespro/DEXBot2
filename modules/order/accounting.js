@@ -288,30 +288,18 @@ class Accountant {
 
      /**
       * Verify critical fund tracking invariants.
-      * Now async to support immediate recovery attempts without blocking.
       *
-      * TOLERANCE CALCULATION STRATEGY:
-      * ===============================
-      * Two tolerance sources are combined using MAX() for conservative checking:
-      * 1. PRECISION SLACK: Accounts for blockchain float<→int rounding errors at asset decimals
-      *    - Formula: 10^(-precision) (e.g., BTS @ 8 decimals = 0.00000001)
-      *    - Reason: Float arithmetic can round amounts by ±1 satoshi (smallest unit)
-      *    - Typical: 0.00000001 BTS, 0.0001 USD
-      * 
-      * 2. PERCENTAGE TOLERANCE: Accounts for timing-dependent balance changes (in-flight txs)
-      *    - Formula: balance * (configured percentage / 100)
-      *    - Configured: FUND_INVARIANT_PERCENT_TOLERANCE (default: 0.1 = 0.1%)
-      *    - Reason: Small balance changes from fills/fees may propagate slowly on-chain
-      *    - Scales with balance size (larger balances tolerate larger absolute diffs)
-      * 
-      * Combined tolerance = MAX(precisionSlack, balance * percentTolerance)
-      * This prevents both:
-      *   - False positives from rounding noise on small amounts
-      *   - Undetected drift on large amounts
+      * Checks that accountTotals.buy/sell match chainFree + committed amounts
+      * within combined precision and percentage tolerances. Detects fee double-
+      * deductions, missing fills, and blockchain state desync.
       *
-      * INVARIANTS CHECKED:
-      * 1. Total Balance Drift: accountTotals.buy/sell vs (chainFree + committed)
-      *    - Detects: Fees deducted twice, missing fills, blockchain state desync
+      * @param {Object} mgr - OrderManager instance
+      * @param {number} chainFreeBuy - Free (unallocated) buy-side balance from chain
+      * @param {number} chainFreeSell - Free (unallocated) sell-side balance from chain
+      * @param {number} chainBuy - Committed buy-side balance from chain
+      * @param {number} chainSell - Committed sell-side balance from chain
+      * @returns {void}
+      * @private
       */
       async _verifyFundInvariants(mgr, chainFreeBuy, chainFreeSell, chainBuy, chainSell) {
           const buyPrecision = mgr.assets?.assetB?.precision;
@@ -494,6 +482,7 @@ class Accountant {
       /**
        * Reset the recovery attempt flag.
        * Called at the start of each fill processing cycle to allow fresh recovery attempts.
+       * @returns {void}
        */
        resetRecoveryState() {
            if (!this.manager) return;
@@ -509,6 +498,10 @@ class Accountant {
     /**
      * Check if sufficient funds exist AND atomically deduct (FREE portion only).
      * PRIVATE: Must be called while holding _fundLock.
+     * @param {string} orderType - ORDER_TYPES.BUY or ORDER_TYPES.SELL
+     * @param {number} size - Amount to deduct from chainFree
+     * @param {string} [operation='move'] - Label for logging
+     * @returns {Promise<boolean>} true if deduction succeeded, false if insufficient funds
      */
     async tryDeductFromChainFree(orderType, size, operation = 'move') {
          const mgr = this.manager;
@@ -535,6 +528,10 @@ class Accountant {
     /**
      * Add an amount back to the optimistic chainFree balance (FREE portion only).
      * PRIVATE: Must be called while holding _fundLock.
+     * @param {string} orderType - ORDER_TYPES.BUY or ORDER_TYPES.SELL
+     * @param {number} size - Amount to add to chainFree
+     * @param {string} [operation='release'] - Label for logging
+     * @returns {Promise<boolean>} true if addition succeeded
      */
     async addToChainFree(orderType, size, operation = 'release') {
          const mgr = this.manager;
@@ -555,6 +552,12 @@ class Accountant {
     /**
      * Record a fill in the optimistic total balances.
      * PUBLIC API: Acquires _fundLock.
+     * @param {string} paysAsset - Asset symbol or ID the bot paid
+     * @param {number} paysAmount - Amount the bot paid
+     * @param {string} receivesAsset - Asset symbol or ID the bot received
+     * @param {number} receivesAmount - Amount the bot received
+     * @param {string} [context='fill'] - Label for logging
+     * @returns {Promise<void>}
      */
     async recordFillBalances(paysAsset, paysAmount, receivesAsset, receivesAmount, context = 'fill') {
         return await this.manager._fundLock.acquire(async () => {
@@ -735,6 +738,8 @@ class Accountant {
      * - Fees are part of chainFree (not separate capital)
      * - Full fee amount must reduce chainFree
      * - Defers settlement if insufficient funds (will retry when funds become available)
+     * @param {string|null} [requestedSide=null] - ORDER_TYPES.BUY or ORDER_TYPES.SELL to target a specific side
+     * @returns {void}
      */
     async deductBtsFees(requestedSide = null) {
         const mgr = this.manager;
@@ -907,6 +912,10 @@ class Accountant {
       * Process the fund impact of an order fill.
       * Atomically updates accountTotals to keep internal state in sync with blockchain.
       * CRITICAL: Called within fill processing lock context to prevent race conditions.
+      * @param {Object} fillOp - Fill operation object from chain history
+      * @param {string} [fillKey=null] - Deduplication key for processed fill store
+      * @param {Object} [options={}] - Persistence mode options
+      * @returns {Promise<boolean>} true if fill was successfully processed
       */
     async processFillAccounting(fillOp, fillKey = null, options = {}) {
          const mgr = this.manager;

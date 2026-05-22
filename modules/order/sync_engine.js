@@ -640,6 +640,9 @@ class SyncEngine {
     /**
      * Process one incremental fill-history event.
      * Returns `{ filledOrders, updatedOrders, partialFill }`.
+     * @param {Object} fill - Fill history event object
+     * @param {Object} [options] - Persistence mode options
+     * @returns {Promise<Object>} { filledOrders, updatedOrders, partialFill }
      */
     async syncFromFillHistory(fill, options = {}) {
         const mgr = this.manager;
@@ -854,6 +857,10 @@ class SyncEngine {
      * RETURNS: { newOrders, ordersNeedingCorrection }
      * Most callers use ordersNeedingCorrection to flag price corrections needed.
      * Only syncFromOpenOrders() populates ordersNeedingCorrection.
+     *
+     * @param {Object} chainData - Chain event data
+     * @param {string} source - Source identifier ('createOrder', 'cancelOrder', 'readOpenOrders', etc.)
+     * @returns {Promise<Object>} { newOrders, ordersNeedingCorrection }
      */
     async synchronizeWithChain(chainData, source) {
         const mgr = this.manager;
@@ -1014,6 +1021,8 @@ class SyncEngine {
      * ERROR HANDLING:
      * Gracefully handles lookup failures. If blockchain fetch fails, we don't crash
      * but instead log a warning. The system continues with last-known balances.
+     *
+     * @returns {Promise<void>}
      */
     async fetchAccountBalancesAndSetTotals() {
         const mgr = this.manager;
@@ -1083,6 +1092,8 @@ class SyncEngine {
      * If asset lookup fails (asset doesn't exist, API error, etc.), the error
      * is propagated (not caught). This is intentional - a missing asset is a
      * configuration error that must be fixed before the bot can operate.
+     *
+     * @returns {Promise<void>}
      */
     async initializeAssets() {
         const mgr = this.manager;

@@ -116,17 +116,10 @@ function formatPercent(value) {
 }
 
 /**
- * formatCurrency: Format large numbers with compact notation
- * Handles millions (M), thousands (K), small values (6 decimals)
- * Examples: 1500000 -> "1.50M", 5500 -> "5.50K", 0.001 -> "0.001000"
+ * formatCurrency: Format large numbers with compact notation.
+ * Handles millions (M), thousands (K), small values (6 decimals).
  * @param {number} value - Numeric value to format
  * @returns {string} Formatted currency/quantity string
- */
-/**
- * formatCurrency: Format currency values with K/M abbreviation for large numbers
- * Uses format.js for small value precision, custom for K/M abbreviations
- * @param {number} value - The value to format
- * @returns {string} Formatted currency string
  */
 function formatCurrency(value) {
   if (Math.abs(value) >= 1000000) {
@@ -542,7 +535,7 @@ function getDeltaColor(deltaValue) {
  * createDistributionBar: Create a horizontal bar chart showing BUY/SELL/spread distribution
  * Differentiates between active (dark) and virtual (light) slots
  * @param {Object} counts - Object containing activeBuy, virtualBuy, activeSell, virtualSell, spread
- * @returns {string} Colored bar visualization
+ * @returns {{bar: string, buyWidth: number}} Colored bar visualization
  */
 function createDistributionBar(counts) {
   const barWidth = BAR_WIDTH; // total width in characters
@@ -624,7 +617,7 @@ function createDistributionBar(counts) {
  *
  * @param {Array} buyOrders - Buy orders with size property (in quote currency)
  * @param {Array} sellOrders - Sell orders with size property (in base currency)
- * @param {number} barWidth - Target width in characters (default: 50)
+ * @param {number} barWidth - Target width in characters (default: BAR_WIDTH=51)
  * @param {number} marketPrice - Market price for currency conversion (sell to quote basis)
  * @returns {string} Colored weight visualization with independent scaling
  */

@@ -82,8 +82,7 @@ if (!botName) {
 /**
  * Loads the configuration for a specific bot from profiles/bots.json.
  * @param {string} name - The name of the bot to load.
- * @returns {Object} The bot configuration entry.
- * @throws {Error} If profiles/bots.json is missing or bot not found.
+ * @returns {Object} The bot configuration entry. Exits process on failure.
  */
 function loadBotConfig(name) {
     if (!fs.existsSync(PROFILES_BOTS_FILE)) {

@@ -34,9 +34,11 @@ const PROXY_PATH = (index) =>
 /**
  * Execute an Elasticsearch query against the Kibana proxy.
  *
- * @param {Object} config   – { kibanaUrl, apiKey, timeout }
- * @param {Object} esQuery  – Elasticsearch query body
- * @returns {Promise<Object>} Parsed JSON response
+ * @param {Object} cfg       – { kibanaUrl, apiKey, timeout, signal }
+ * @param {Object} esQuery   – Elasticsearch query body
+ * @param {Function} resolve – Promise resolve callback
+ * @param {Function} reject  – Promise reject callback
+ * @param {number} [redirectCount=0] – Redirect counter
  */
 function doKibanaRequest(cfg, esQuery, resolve, reject, redirectCount = 0) {
   const body = JSON.stringify(esQuery);

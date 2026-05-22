@@ -342,10 +342,10 @@ class AccountOrders {
    * In per-bot mode: Only stores the specified bot's data (ignores other bots in this.data).
    * @param {string} botKey - Bot identifier key
    * @param {Array} orders - Array of order objects from OrderManager
-   * @param {number} btsFeesOwed - Optional BTS blockchain fees owed
-   * @param {number} boundaryIdx - Optional master boundary index for StrategyEngine
-   * @param {Object} assets - Optional asset metadata { assetA, assetB }
-   * @param {Object} debugInputs - Optional debug-only input snapshot
+   * @param {number|null} btsFeesOwed - Optional BTS blockchain fees owed
+   * @param {number|null} boundaryIdx - Optional master boundary index for StrategyEngine
+   * @param {Object|null} assets - Optional asset metadata { assetA, assetB }
+   * @param {Object|null} debugInputs - Optional debug-only input snapshot
    */
   async storeMasterGrid(botKey, orders = [], btsFeesOwed = null, boundaryIdx = null, assets = null, debugInputs = null) {
     if (!botKey) return;

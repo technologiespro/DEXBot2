@@ -396,6 +396,7 @@ class Grid {
      * Note: Uses explicit assignment instead of .clear() to enforce COW semantics:
      * - Replace the master grid atomically with a fresh Map instance
      * - Avoid mutating any previously referenced Map object
+     * @param {Object} manager - OrderManager instance
      * @private
      */
     static _clearOrderCachesLogic(manager) {
@@ -896,6 +897,11 @@ class Grid {
      *     - Apply: size=500 (no cap check)
      *     - Result: slot[1] ready for placement, will consume from sideFree when placed
      *
+     * @param {OrderManager} manager - OrderManager instance
+     * @param {string} orderType - ORDER_TYPES.BUY or ORDER_TYPES.SELL
+     * @param {Object} [options] - Options object
+     * @param {WorkingGrid} [options.workingGrid] - Working grid for COW pattern
+     * @returns {{actions: Array, changed: boolean}|undefined} - COW result or undefined
      * @private
      */
     static async _recalculateGridOrderSizesFromBlockchain(manager, orderType, options = {}) {
@@ -1033,6 +1039,7 @@ class Grid {
      * @param {OrderManager} manager - Manager instance
      * @param {string} orderType - 'buy', 'sell', or 'both' - which sides to update
      * @param {boolean} fromBlockchainTimer - If true, skip refetch of account totals (already current)
+     * @param {number|null} [overrideBoundaryIdx=null] - Optional override for boundary index
      * @returns {Promise<Object|null>} COW result with {workingGrid, actions, workingIndexes, workingBoundary, hasWorkingChanges} or null if no changes
      */
     static async updateGridFromBlockchainSnapshot(manager, orderType = 'both', fromBlockchainTimer = false, overrideBoundaryIdx = null) {
@@ -1112,6 +1119,9 @@ class Grid {
      *   - Prevents mixing old and new grid state
      *   - Ensures consistent RMS metrics across both sides
      *
+     * @param {Object} calculatedGrid - Ideal calculated grid (array of order objects)
+     * @param {Object} persistedGrid - Persisted grid state (array of order objects)
+     * @param {OrderManager} manager - Manager instance (for grid lock access)
      * @returns {Object} { buy: {metric, updated}, sell: {metric, updated} }
      *   - metric: RMS% divergence (higher = more divergent)
      *   - updated: true if metric exceeds GRID_COMPARISON.RMS_PERCENTAGE threshold for that side
@@ -1263,9 +1273,10 @@ class Grid {
     }
 
     /**
-     * Calculate current market spread using on-chain orders.
+     * Collect on-chain buy and sell orders from the manager.
+     * Filters to orders with valid orderId and positive size.
      * @param {OrderManager} manager - The manager instance.
-     * @returns {number} The calculated spread percentage.
+     * @returns {{onChainBuys: Array<Object>, onChainSells: Array<Object>}} Active on-chain orders by side
      */
     static _getOnChainOrders(manager) {
         const onChainBuys = [
@@ -1281,6 +1292,11 @@ class Grid {
         return { onChainBuys, onChainSells };
     }
 
+    /**
+     * Calculate current market spread using on-chain orders.
+     * @param {OrderManager} manager - The manager instance.
+     * @returns {number} The calculated spread percentage.
+     */
     static calculateCurrentSpread(manager) {
         const { onChainBuys, onChainSells } = Grid._getOnChainOrders(manager);
         return calculateSpreadFromOrders(onChainBuys, onChainSells);
@@ -1303,6 +1319,11 @@ class Grid {
      * - MITIGATION: Pre-flight fund verification before submission; comprehensive error handling
      *
      * See RACE_CONDITION_ANALYSIS.md for detailed vulnerability documentation.
+     *
+     * @param {OrderManager} manager - Manager instance
+     * @param {Object} BitShares - BitShares API client
+     * @param {Function|null} [updateOrdersOnChainBatch=null] - Optional batch update function
+     * @returns {{ordersPlaced: number, partialsMoved: number}}
      */
     static async checkSpreadCondition(manager, BitShares, updateOrdersOnChainBatch = null) {
         // CRITICAL: Acquire corrections lock to serialize spread correction operations
@@ -1397,7 +1418,7 @@ class Grid {
      *
      * @param {OrderManager} manager - The manager instance.
      * @param {Function|null} [updateOrdersOnChainBatch=null] - Optional batch update function.
-     * @returns {Promise<Object>} Health status { buyDust, sellDust }.
+     * @returns {Promise<Object>} Health status { buyDust, sellDust, buyDustOrders, sellDustOrders }.
      */
     static async checkGridHealth(manager, updateOrdersOnChainBatch = null) {
         if (!manager) return { buyDust: false, sellDust: false, buyDustOrders: [], sellDustOrders: [] };
@@ -1509,6 +1530,10 @@ class Grid {
 
     /**
      * Check if any partial orders on a side represent "dust" that should be cleaned.
+     * @param {OrderManager} manager - Manager instance
+     * @param {Array<Object>} partials - Partial orders to check
+     * @param {string} type - ORDER_TYPES.BUY or ORDER_TYPES.SELL
+     * @returns {Promise<boolean>} true if dust partials exist
      * @private
      */
     static async _hasAnyDust(manager, partials, type) {
@@ -1666,7 +1691,7 @@ class Grid {
      * Prepares one or more orders to correct a wide spread.
      * @param {Object} manager - The OrderManager instance.
      * @param {string} preferredSide - The side to place the correction on (ORDER_TYPES.BUY/SELL).
-     * @returns {Object} Correction result { ordersToPlace }.
+     * @returns {{ordersToPlace: Array, ordersToUpdate: Array}} Correction result.
      * @throws {Error} If preferredSide is invalid.
      */
     static async prepareSpreadCorrectionOrders(manager, preferredSide) {

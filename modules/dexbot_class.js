@@ -268,6 +268,7 @@ class DEXBot {
     /**
      * Log a message to the console with the bot's prefix.
      * @param {string} msg - The message to log.
+     * @param {string} [level='info'] - The log level ('debug', 'info', 'warn', 'error').
      * @private
      */
     _log(msg, level = 'info') {
@@ -481,6 +482,7 @@ class DEXBot {
     /**
      * Initialize bot state from storage and blockchain.
      * Consolidates common initialization logic for start() and startWithPrivateKey().
+     * @returns {{persistedGrid: Object, persistedBtsFeesOwed: number, persistedBoundaryIdx: number}}
      * @private
      */
     async _initializeStartupState() {
@@ -647,6 +649,7 @@ class DEXBot {
     /**
      * Finalize the bot startup after account and initial grid sync are complete.
      * Consolidates common logic for start() and startWithPrivateKey().
+     * @param {Object} startupState - The startup state from _initializeStartupState.
      * @private
      */
     async _finishStartupSequence(startupState) {
@@ -3007,6 +3010,7 @@ class DEXBot {
      * Perform grid recalculation triggered by trigger file.
      * Reloads config from disk, recalculates grid, resets funds, and removes trigger file.
      * Must be called with _fillProcessingLock already held.
+     * @param {Object} [options] - Optional configuration for grid resync.
      * @returns {Promise<boolean>} True if resync succeeded
      * @private
      */
@@ -3279,7 +3283,7 @@ class DEXBot {
      * - Called before pipeline check to prevent indefinite blocking
      * - See manager.clearStalePipelineOperations() for details
      *
-     * @param {string} context - Maintenance context for logging ('startup', 'periodic', 'post-fill')
+     * @param {Object} context - Maintenance context for logging.
      * @private
      */
     async _executeMaintenanceLogic(context) {

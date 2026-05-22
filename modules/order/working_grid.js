@@ -79,6 +79,8 @@ class WorkingGrid {
     /**
      * Create working grid from master
      * @param {Map} masterGrid - Source of truth grid (will be cloned)
+     * @param {Object} [options] - Optional parameters
+     * @param {number} [options.baseVersion=0] - Base version number
      */
     constructor(masterGrid, options = {}) {
         this.grid = this._cloneGrid(masterGrid);
@@ -171,6 +173,11 @@ class WorkingGrid {
         return this.modified.size > 0;
     }
 
+    /**
+     * Mark grid as stale (out of sync with master)
+     * @param {string} [reason='working grid stale'] - Reason for staleness
+     * @returns {void}
+     */
     markStale(reason = 'working grid stale') {
         this._stale = true;
         this._staleReason = reason;

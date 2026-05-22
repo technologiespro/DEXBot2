@@ -25,7 +25,7 @@
  *   }
  *
  * @param {Object} bot        - Bot config with current settings
- * @param {Object} assessment - Health assessment from assessPosition / decision_loop
+ * @param {Object} [assessment={}] - Health assessment from assessPosition / decision_loop
  * @returns {Object}
  */
 function tuneBot(bot, assessment = {}) {

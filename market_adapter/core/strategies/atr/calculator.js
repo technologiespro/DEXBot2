@@ -10,6 +10,7 @@ const { normalizeAtrPeriod } = require('../../config_normalizers');
  * Calculates ATR from candles (High, Low, Close).
  * @param {Array} candles - Array of [timestamp, open, high, low, close, volume]
  * @param {number} period - ATR period
+ * @returns {number} Average True Range value
  */
 function calculateATR(candles, period = 14) {
   const safePeriod = normalizeAtrPeriod(period);

@@ -63,6 +63,7 @@ const FILL_FIELD_MAP = {
  * @param {number}      lookbackHours
  * @param {number}      intervalSeconds
  * @param {Object|null} timeRange      – { gte, lte } ISO strings
+ * @returns {Object} ES query object
  */
 function buildFillCandleQuery(soldAssetId, receivedAssetId, lookbackHours, intervalSeconds, timeRange = null) {
   const rangeValue = timeRange
@@ -142,6 +143,11 @@ async function getMarketCandles(assetA, assetB, config = {}) {
 
 /**
  * Close prices only — convenience wrapper for AMA / trend analyzer input.
+ *
+ * @param {string} assetA – First asset ID
+ * @param {string} assetB – Second asset ID
+ * @param {Object} [config] – Optional configuration overrides
+ * @returns {Promise<Object>} Parsed close price response
  */
 async function getMarketClosePrices(assetA, assetB, config = {}) {
   return fetchKibanaClosePrices({

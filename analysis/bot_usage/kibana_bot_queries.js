@@ -211,6 +211,7 @@ function buildDailyActivityQuery(accountId, lookbackHours) {
  * @param {number}  lookbackHours
  * @param {string}  [sellAssetId]   - optional: filter to one sell-side asset
  * @param {number}  [maxResults]
+ * @returns {Object} Elasticsearch query object
  */
 function buildOrderPriceQuery(accountId, lookbackHours, sellAssetId = null, maxResults = 1000) {
     const filters = [
@@ -241,6 +242,7 @@ function buildOrderPriceQuery(accountId, lookbackHours, sellAssetId = null, maxR
  * @param {number}  lookbackHours
  * @param {string}  [paysAssetId]
  * @param {number}  [maxResults]
+ * @returns {Object} Elasticsearch query object
  */
 function buildFillPriceQuery(accountId, lookbackHours, paysAssetId = null, maxResults = 500) {
     const filters = [

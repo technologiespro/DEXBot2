@@ -131,6 +131,7 @@ function detectMode(options = {}) {
  * @param {string} mode - One of: claw-only, dexbot-direct, pm2, unlock-start
  * @param {Object} [options={}]
  * @throws {Error} if mode is invalid
+ * @returns {{set: boolean, mode: string, timestamp: string}}
  */
 function setPreferredMode(mode, options = {}) {
   const valid = ['claw-only', 'dexbot-direct', 'pm2', 'unlock-start'];

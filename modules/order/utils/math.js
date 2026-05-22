@@ -367,12 +367,11 @@ function calculateAvailableFundsValue(side, accountTotals, funds, assetA, assetB
 }
 
 /**
- * Calculate bid-ask spread percentage from active buy and sell orders.
- * Spread = (bestSell / bestBuy - 1) * 100 (percentage).
- * 
+ * Find the best (highest) buy price and best (lowest) sell price from active orders.
+ *
  * @param {Array<Object>} activeBuys - Active buy orders with price property
  * @param {Array<Object>} activeSells - Active sell orders with price property
- * @returns {number} Spread percentage or 0 if insufficient data
+ * @returns {{bestBuy: number|null, bestSell: number|null}} Best prices or null if no orders
  */
 function getGridBestPrices(activeBuys, activeSells) {
     const bestBuy  = activeBuys.length  > 0 ? Math.max(...activeBuys.map(o => o.price))  : null;
@@ -380,6 +379,14 @@ function getGridBestPrices(activeBuys, activeSells) {
     return { bestBuy, bestSell };
 }
 
+/**
+ * Calculate bid-ask spread percentage from active buy and sell orders.
+ * Spread = (bestSell / bestBuy - 1) * 100 (percentage).
+ *
+ * @param {Array<Object>} activeBuys - Active buy orders with price property
+ * @param {Array<Object>} activeSells - Active sell orders with price property
+ * @returns {number} Spread percentage or 0 if insufficient data
+ */
 function calculateSpreadFromOrders(activeBuys, activeSells) {
     const { bestBuy, bestSell } = getGridBestPrices(activeBuys, activeSells);
     if (bestBuy === null || bestSell === null || bestBuy === 0) return 0;

@@ -267,12 +267,9 @@ try {
  * Wait for the shared BitShares client to establish a connection.
  * Polls connection state until connected or timeout, refreshing node health
  * and rotating server lists during startup if node management is enabled.
- * @param {number} timeoutMs - Maximum wait time in milliseconds (default: 30000)
- * @param {Object} [options={}] - Startup retry options
- * @param {number} [options.retryDelayMs] - Initial backoff delay
- * @param {number} [options.maxRetryDelayMs] - Maximum backoff delay
- * @param {number} [options.refreshNodesEveryMs] - How often to refresh node health
- * @throws {Error} If connection times out
+ * Refresh node server list for startup, checking health and restarting the connection.
+ * @param {string} [reason='startup'] - Context label for logging
+ * @returns {Promise<string[]>} The resolved node URL list
  */
 async function refreshStartupNodeServers(reason = 'startup') {
     if (!nodeManager || !nodeConfig?.list?.length) {
@@ -317,6 +314,16 @@ async function refreshStartupNodeServers(reason = 'startup') {
     }
 }
 
+/**
+ * Wait for the BitShares client to establish a connection, with retry and node refresh.
+ * @param {number} [timeoutMs=TIMING.CONNECTION_TIMEOUT_MS] - Maximum wait time in milliseconds
+ * @param {Object} [options={}] - Startup retry options
+ * @param {number} [options.retryDelayMs] - Initial backoff delay
+ * @param {number} [options.maxRetryDelayMs] - Maximum backoff delay
+ * @param {number} [options.refreshNodesEveryMs] - How often to refresh node health
+ * @returns {Promise<void>} Resolves when connected
+ * @throws {Error} If connection times out
+ */
 async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS, options = {}) {
     const start = Date.now();
     const initialDelayMs = Number.isFinite(options.retryDelayMs)

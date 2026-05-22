@@ -77,6 +77,12 @@ async function fetchLpCandles(poolId, assetASymbol, assetBSymbol, config = {}) {
 
 /**
  * Fetch close prices only from LP pool swaps.
+ *
+ * @param {string|number} poolId      – e.g. '1.19.305' or 305
+ * @param {string}        assetASymbol – e.g. 'BTS'
+ * @param {string}        assetBSymbol – e.g. 'HONEST.MONEY'
+ * @param {Object}        [config]
+ * @returns {Promise<Object>} LP close prices
  */
 async function fetchLpClosePrices(poolId, assetASymbol, assetBSymbol, config = {}) {
   const assetA = await resolveAsset(assetASymbol);
@@ -107,7 +113,7 @@ async function fetchPoolAssets(poolId, config = {}) {
  *
  * @param {string} mpaSymbol – e.g. 'HONEST.USD'
  * @param {Object} [config]
- * @returns {Object} { candles, closePrices, candleCount, mpaSymbol }
+ * @returns {Promise<Object>} { candles, closePrices, candleCount, mpaSymbol, intervalSeconds, lookbackHours }
  */
 async function fetchTrendHistoryCandles(mpaSymbol, config = {}) {
   const candles = await fetchMarketCandles(mpaSymbol, config);

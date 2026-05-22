@@ -1001,7 +1001,7 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
  * Uses write-then-rename to prevent partial reads by the dexbot process.
  * @param {string} botKey      - Bot key (e.g. "iob-xrp-bts-0")
  * @param {number} gridCenterPrice - Current persisted grid center price (B/A format)
- * @param {Object} options
+ * @param {Object} [options]
  * @param {number} [options.amaCenterPrice]   - Raw AMA center price before any downstream handling
  * @param {Object} [options.amaSlope]         - Raw AMA slope snapshot used for grid-scaling diagnostics
  * @param {Object} [options.gridRangeScalingAmaSlope] - Accepted slope baseline used for future slope-trigger comparisons
@@ -1010,6 +1010,7 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
  * @param {number} [options.gridPriceOffsetPct] - Signed grid-center offset percentage derived from AMA slope
  * @param {Object} [options.dynamicWeights]   - Computed weight offsets for live order sizing
  * @param {string} [options.observedLastGridResetAt] - Reset timestamp seen before this adapter write was calculated
+ * @returns {boolean} true on success
  */
 function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
     try {

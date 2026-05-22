@@ -126,7 +126,7 @@ async function launcherReset(botName, options = {}) {
  * Disable a bot in config.
  * @param {string|null} botName - Bot name or null for all
  * @param {Object} [options={}] - Options
- * @returns {Promise<Object>} { disabled: true, targets: [...] }
+ * @returns {Promise<Object>} { disabled: true, targets: [...] } or { disabled: false, reason: '...' }
  */
 async function launcherDisable(botName, options = {}) {
   const PROFILES_DIR = normalizeProfileDir(options);
@@ -179,7 +179,7 @@ async function launcherDisable(botName, options = {}) {
  * Requires credential daemon to already be running.
  * @param {string|null} botName - Bot name or null for all active
  * @param {Object} [options={}] - Options
- * @returns {Promise<Object>} { started: true, botName, pm2: true }
+ * @returns {Promise<Object>} { started: true, targets: [{ botName, pm2: true }] }
  */
 async function launcherPm2Start(botName, options = {}) {
   const ROOT = normalizeRoot(options);
@@ -295,7 +295,10 @@ async function launcherPm2Reload(target, options = {}) {
  * @param {string} [options.deploymentMode] - Override mode: dexbot-direct, pm2, unlock-start, claw-only
  * @param {boolean} [options.setPreference] - If true, save deploymentMode as preferred
  * @param {string} [options.profileRoot] - Optional profile root
- * @returns {Promise<Object>} { started: true, mode, ... } or { needsChoice: true, choices: [...] }
+ * @returns {Promise<Object>}
+ *   Delegated modes: { started: true, mode?, botName?, pid?, command?, targets?, message?, warning? }
+ *   Mode present in claw-only / unlock-start; absent in dexbot-direct / pm2.
+ *   No-mode: { needsChoice: true, reason, choices: [{ mode, description }], message }
  */
 async function launcherRun(botName, options = {}) {
   const detection = detectMode(options);

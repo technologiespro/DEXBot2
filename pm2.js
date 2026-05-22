@@ -157,8 +157,8 @@ function flushPm2Buffer(buffer, writer, { final = false } = {}) {
 /**
  * Build PM2 app definitions for the current runtime.
  * @param {Array<Object>} bots - Active bot entries.
- * @param {Object} options - Build options.
- * @param {boolean} options.includeUpdater - Whether to add the updater service.
+ * @param {Object} [options] - Build options.
+ * @param {boolean} [options.includeUpdater=true] - Whether to add the updater service.
  * @returns {Array<Object>} PM2 app definitions.
  */
 function buildEcosystemApps(bots, { includeUpdater = true } = {}) {
@@ -242,8 +242,8 @@ function buildCredentialDaemonApp({ credentialEnv = {} } = {}) {
  * @param {Object} [options={}] - Generation options.
  * @param {string|null} [options.botNameFilter=null] - Optional bot name to filter by.
  * @param {boolean} [options.clawOnly=false] - Generate no managed bot apps.
+ * @param {boolean} [options.exitOnError=true] - If true, calls process.exit(1) instead of throwing
  * @returns {Array<Object>} The generated app configurations.
- * @throws {Error} If configuration loading fails.
  */
 function generateEcosystemConfig({ botNameFilter = null, clawOnly = false, exitOnError = true } = {}) {
     function fail(message) {
@@ -647,6 +647,9 @@ async function installPM2() {
  * Execute a PM2 command safely.
  * @param {string} action - PM2 action (start, stop, etc.).
  * @param {string} [target] - The target process name or configuration file.
+ * @param {Object} [options] - Execution options
+ * @param {boolean} [options.suppressStderrOnError=false] - Suppress stderr on failure
+ * @param {boolean} [options.silent=false] - Suppress stdout output
  * @returns {Promise<Object>} Command result.
  * @throws {Error} If action is invalid or command fails.
  */

@@ -43,6 +43,8 @@ function classifyPeRegime(pe, peNodes = null) {
  * @param {number} pe - Normalized permutation entropy [0, 1]
  * @param {Array}  [regimeTable] - Optional override for regime table
  * @param {Object} [opts]        - Optional threshold overrides for interpolation
+ * @param {number} [opts.hurstZoneBand] – Override Hurst neutral-zone width
+ * @param {Array}  [opts.peNodes]       – Override entropy thresholds
  * @returns {number}  - Interpolated multiplier
  */
 function bilinearInterpolate(h, pe, regimeTable = null, opts = {}) {
@@ -104,7 +106,8 @@ function bilinearInterpolate(h, pe, regimeTable = null, opts = {}) {
  * @param {Object}   [opts.hurstConfig]           - Override for HurstAnalyzer config
  * @param {Object}   [opts.peConfig]              - Override for PermutationEntropyAnalyzer config
  * @returns {{ multiplier: number, hurst: number|null, pe: number|null,
- *             hurstRegime: string|null, peRegime: string|null, isReady: boolean }}
+ *             hurstRegime: string|null, peRegime: string|null, isReady: boolean,
+ *             series: number[] }}
  */
 function computeRegimeMultiplier(closes, opts = {}) {
     const sensitivity = Number.isFinite(opts.regimeSensitivity) ? opts.regimeSensitivity : 1.0;

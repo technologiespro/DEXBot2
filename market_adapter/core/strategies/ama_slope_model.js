@@ -41,11 +41,12 @@ function computeAverageAmaSlopePct(current, past, lookbackBars) {
  * @param {number}   [opts.volatilityThreshold=0.1]      Minimum |symmetricDelta| before penalty applies
  * @param {number}   [opts.erPeriod=DEFAULT_ER_PERIOD]  AMA warm-up bars to skip in isReady guard
  * @param {number}   [opts.slowPeriod=DEFAULT_SLOW_PERIOD]  AMA slow period used for warm-up guard
+ * @param {number}   [opts.fastPeriod=DEFAULT_FAST_PERIOD]  AMA fast period used for warm-up guard
  * @param {number}   [opts.maxSlopeOffset=MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP]  Per-bot cap on buy/sell asymmetry offset
  * @param {number}   [opts.maxVolatilityOffset=MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP]  Per-bot cap on volatility shift
  * @param {number}   [opts.clipPercentile=0]             Percentile clip on slope (0=off, 10=clip top 10%)
  * @param {number}   [opts.clipThreshold]                Pre-computed clip threshold from slope history
- * @returns {{ slopeOffset, symmetricDelta, slopePct, clippedSlopePct, confidence, trend, isReady }}
+ * @returns {{ slopeOffset, rawSlopeOffset, symmetricDelta, slopePct, clippedSlopePct, confidence, trend, isReady }}
  */
 function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     const lookbackBars = Number.isFinite(opts.lookbackBars) && opts.lookbackBars >= 0

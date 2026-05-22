@@ -92,7 +92,7 @@ function normalizeCallOrder(callOrder, mpaAsset, backingAsset, bitassetData) {
  * Discover all debt positions for an account by scanning its call orders.
  *
  * @param {string} accountName – BitShares account name or ID
- * @returns {Array} Array of normalized position objects
+ * @returns {Promise<Array>} Array of normalized position objects
  */
 async function discoverPositions(accountName) {
   const fullAccount = await getFullAccount(accountName);
@@ -143,7 +143,7 @@ async function discoverPositions(accountName) {
  * Discover positions and return a summary suitable for quick inspection.
  *
  * @param {string} accountName – BitShares account name or ID
- * @returns {Object} { account, positionCount, positions: [...summary] }
+ * @returns {Promise<Object>} { account, positionCount, discoveredAt, positions: [...summary] }
  */
 async function discoverPositionsSummary(accountName) {
   const positions = await discoverPositions(accountName);

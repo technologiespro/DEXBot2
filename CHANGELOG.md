@@ -4,9 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.4] - 2026-05-22 - Code Cleanup and Documentation Refresh
 
-This patch cleans up unused code paths, refactors a shared validation helper, and refreshes the full documentation set for clarity, completeness, and version alignment.
+This patch cleans up unused code paths, refactors a shared validation helper, refreshes the full documentation set for clarity, completeness, and version alignment, and brings the JSDoc layer up to date across the entire codebase.
 
 ### 2026-05-22
+
+#### JSDoc Accuracy Pass
+- Fix 124 JSDoc inaccuracies across 41 files: 3 misplaced blocks (bitshares_client, math, grid), 7 wrong types/returns (chain_keys, credential_policy, claw_launcher, feed_price_source, chain_orders), and ~114 missing/optional param corrections across modules/order, claw, market_adapter, root, analysis, and scripts (`fecbc4a`).
 
 #### Code Cleanup
 - Remove unused dependency packages to reduce install footprint (`56a44df`).

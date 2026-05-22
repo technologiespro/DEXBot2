@@ -435,7 +435,7 @@ async function readOpenOrders(accountId = null, timeoutMs = TIMING.CONNECTION_TI
  * Uses AsyncLock to safely access preferredAccount and subscription state (fixes Issue #2, #5).
  *
  * @param {string|Function} accountRef - Account name/id, or callback if using preferred
- * @param {Function} callback - Function called with array of fill operations
+ * @param {Function} [callback] - Function called with array of fill operations (when accountRef is a string)
  * @returns {Function} Unsubscribe function to stop listening
  */
 async function listenForFills(accountRef, callback) {
@@ -716,7 +716,7 @@ async function buildUpdateOrderOp(accountName, orderId, newParams, cachedOrder =
 /**
  * Update an existing limit order on the blockchain.
  * @param {string} accountName - The name of the account.
- * @param {string} privateKey - The private key for signing.
+ * @param {string|Object} privateKey - The private key for signing (or daemon signing token).
  * @param {string} orderId - The ID of the order to update.
  * @param {Object} newParams - The new parameters for the order.
  * @returns {Promise<Object|null>} Success object or null if skipped.
@@ -765,7 +765,7 @@ async function updateOrder(accountName, privateKey, orderId, newParams) {
  * @param {number} minToReceive - The minimum amount of the asset to receive.
  * @param {string} receiveAssetId - The ID of the asset to receive.
  * @param {string} [expiration] - The expiration date for the order.
- * @returns {Promise<Object>} The operation object.
+ * @returns {Promise<Object|null>} The operation object, or null if amounts would round to 0.
  * @throws {Error} If account not found.
  */
 async function buildCreateOrderOp(accountName, amountToSell, sellAssetId, minToReceive, receiveAssetId, expiration) {
@@ -818,7 +818,7 @@ async function buildCreateOrderOp(accountName, amountToSell, sellAssetId, minToR
 /**
  * Create a new limit order on the blockchain.
  * @param {string} accountName - The name of the account.
- * @param {string} privateKey - The private key for signing.
+ * @param {string|Object} privateKey - The private key for signing (or daemon signing token).
  * @param {number} amountToSell - The amount of the asset to sell.
  * @param {string} sellAssetId - The ID of the asset to sell.
  * @param {number} minToReceive - The minimum amount of the asset to receive.
@@ -883,7 +883,7 @@ async function buildCancelOrderOp(accountName, orderId) {
 /**
  * Cancel an existing limit order on the blockchain.
  * @param {string} accountName - The name of the account.
- * @param {string} privateKey - The private key for signing.
+ * @param {string|Object} privateKey - The private key for signing (or daemon signing token).
  * @param {string} orderId - The ID of the order to cancel.
  * @returns {Promise<Object>} Success object with order ID and verification metadata.
  * @throws {Error} If cancellation fails.
@@ -930,7 +930,7 @@ async function cancelOrder(accountName, privateKey, orderId) {
 /**
  * Execute a batch of operations in a single transaction.
  * @param {string} accountName - Account paying fees (usually the bot account)
- * @param {string} privateKey - Private key for signing
+ * @param {string|Object} privateKey - Private key for signing (or daemon signing token)
  * @param {Array} operations - Array of operation objects { op_name, op_data } returned by build helpers
  * @returns {Promise<Object>} Transaction result
  */
