@@ -146,34 +146,6 @@ const DEFAULTS = {
     atrPeriod: MARKET_ADAPTER.DYNAMIC_WEIGHT_ATR_PERIOD_DEFAULT,
 };
 
-const AMA_SLOPE_PERCENT_MODE_PER_BAR = 'perBar';
-const AMA_SLOPE_PERCENT_MODE_WINDOW = 'window';
-
-function normalizeAmaSlopePercentMode(value) {
-    const text = String(value || '').trim().toLowerCase();
-    if (['perbar', 'per_bar', 'per-bar', 'averageperbar', 'average_per_bar'].includes(text)) {
-        return AMA_SLOPE_PERCENT_MODE_PER_BAR;
-    }
-    if (['window', 'lookback', 'cumulative', 'legacy'].includes(text)) {
-        return AMA_SLOPE_PERCENT_MODE_WINDOW;
-    }
-    return null;
-}
-
-function normalizeAmaSlopeLookbackBars(value, fallback = MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS) {
-    const n = Number(value);
-    if (Number.isFinite(n) && n > 0) return Math.ceil(n);
-    return fallback;
-}
-
-function toPerBarSlopePercent(value, lookbackBars, mode) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return value;
-    return mode === AMA_SLOPE_PERCENT_MODE_WINDOW
-        ? n / normalizeAmaSlopeLookbackBars(lookbackBars)
-        : n;
-}
-
 // Cycle-scoped caches — reset once per runOnce() so each cycle reads files fresh
 // but all bots within that cycle share the same loaded data (N bots → 1 file read).
 let _marketAdapterSettingsCache = null;
@@ -279,7 +251,7 @@ function applyAmaSlopeOverrides(target, overrides) {
     const mode = explicitMode || target.amaSlopePercentMode || AMA_SLOPE_PERCENT_MODE_WINDOW;
 
     if (overrides.amaSlopeDeltaThresholdPercent != null) {
-        target.amaSlopeDeltaThresholdPercent = toPerBarSlopePercent(
+        target.amaSlopeDeltaThresholdPercent = convertSlopePercentToPerBar(
             overrides.amaSlopeDeltaThresholdPercent,
             overrides.amaSlope?.lookbackBars ?? previousLookbackBars,
             mode
@@ -297,10 +269,10 @@ function applyAmaSlopeOverrides(target, overrides) {
         target.amaSlope = { ...target.amaSlope, ...amaSlopeRest };
         const lookbackBars = target.amaSlope.lookbackBars ?? previousLookbackBars;
         if (maxSlopePct != null) {
-            target.amaSlope.maxSlopePct = toPerBarSlopePercent(maxSlopePct, lookbackBars, mode);
+            target.amaSlope.maxSlopePct = convertSlopePercentToPerBar(maxSlopePct, lookbackBars, mode);
         }
         if (neutralZonePct != null) {
-            target.amaSlope.neutralZonePct = toPerBarSlopePercent(neutralZonePct, lookbackBars, mode);
+            target.amaSlope.neutralZonePct = convertSlopePercentToPerBar(neutralZonePct, lookbackBars, mode);
         }
     }
     return target;
@@ -1106,7 +1078,14 @@ function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
     }
 }
 
-const { MarketAdapterService } = require("./core/market_adapter_service");
+const {
+    MarketAdapterService,
+    AMA_SLOPE_PERCENT_MODE_PER_BAR,
+    AMA_SLOPE_PERCENT_MODE_WINDOW,
+    normalizeAmaSlopePercentMode,
+    normalizeAmaSlopeLookbackBars,
+    convertSlopePercentToPerBar,
+} = require("./core/market_adapter_service");
 const adapterService = new MarketAdapterService({
     resolveBotContext,
     resolveAmaForBot,

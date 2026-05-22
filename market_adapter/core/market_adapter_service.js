@@ -40,10 +40,10 @@ function normalizeAmaSlopePercentMode(value) {
     return null;
 }
 
-function normalizeAmaSlopeLookbackBars(value) {
+function normalizeAmaSlopeLookbackBars(value, fallback = MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS) {
     const n = Number(value);
     if (Number.isFinite(n) && n > 0) return Math.ceil(n);
-    return MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
+    return fallback;
 }
 
 function convertSlopePercentToPerBar(value, lookbackBars, mode) {
@@ -566,7 +566,7 @@ class MarketAdapterService {
     _computeDynamicWeights(params) {
         const {
             analysisCandles, closes, amaValues, amaWarmupBars, lookbackBars,
-            botAma, weightVariance, amaPrice, nowIso, cfg, bot, ctx, deps
+            botAma, weightVariance, amaPrice, nowIso, cfg, bot, ctx, deps, atrPeriod
         } = params;
 
         const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
@@ -824,7 +824,7 @@ class MarketAdapterService {
             alpha,
             dw,
             gain,
-            atrPeriod:      params.atrPeriod,
+            atrPeriod:      atrPeriod,
             maxSlopeOffset: mo,
             amaSlope: {
                 maxSlopePct: amaMaxS,
@@ -877,7 +877,7 @@ class MarketAdapterService {
                 alpha,
                 dw,
                 gain,
-                atrPeriod:      params.atrPeriod,
+                atrPeriod:      atrPeriod,
                 maxSlopeOffset: mo,
                 maxAsymmetryFactor:  (cfg.asymmetricBounds?.maxAsymmetryFactor != null)
                     ? cfg.asymmetricBounds.maxAsymmetryFactor
@@ -922,7 +922,7 @@ class MarketAdapterService {
             alpha,
             dw,
             gain,
-            atrPeriod:      params.atrPeriod,
+            atrPeriod:      atrPeriod,
             maxSlopeOffset: mo,
             amaSlope: {
                 maxSlopePct: amaMaxS,
@@ -1989,54 +1989,6 @@ class MarketAdapterService {
             warn(`[market_adapter] ${bot.botKey} is missing explicit weightDistribution; skipping dynamic volatility weights for this cycle.`);
         }
 
-        const clipPercentile = cfg.clipPercentile ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_CLIP_PERCENTILE;
-        const nz = cfg.amaSlope?.neutralZonePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_NEUTRAL_ZONE_PCT;
-        const amaMaxS = cfg.amaSlope?.maxSlopePct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT;
-        const kalMaxS = cfg.kalmanSlope?.maxSlopePct
-            ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT;
-        const mo = cfg.maxSlopeOffset ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_ASYMMETRIC_OFFSET_CLAMP;
-        const volatilityClamp = normalizeMaxVolatilityOffset(cfg.maxVolatilityOffset);
-        const volatilityThreshold = normalizeVolatilityThreshold(cfg.volatilityThreshold);
-        const volatilityExponent = cfg.volatilityExponent ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_EXPONENT;
-        const volatilityScaleX = cfg.volatilityScaleX ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_VOLATILITY_SCALE_X_DEFAULT;
-
-        // Compute separate clip thresholds for AMA (slopes) and Kalman (velocities)
-        let amaClipThreshold = Infinity;
-        let kalClipThreshold = Infinity;
-        const amaSlopeReadyBars = Math.ceil(botAma.erPeriod) + lookbackBars;
-
-        if (clipPercentile > 0 && amaValues.length > amaSlopeReadyBars) {
-            // AMA clip threshold from slope distribution — skip the ER window,
-            // but do not require the full convergence-retention window.
-            const amaSlopes = [];
-            for (let i = amaSlopeReadyBars; i < amaValues.length; i++) {
-                const last = amaValues[i];
-                const past = amaValues[i - lookbackBars];
-                const slopePct = computeAverageAmaSlopePct(last, past, lookbackBars);
-                if (Number.isFinite(slopePct)) amaSlopes.push(Math.abs(slopePct));
-            }
-            if (amaSlopes.length > 0) {
-                const sorted = amaSlopes.sort((a, b) => a - b);
-                const idx = Math.min(Math.floor((100 - clipPercentile) / 100 * sorted.length), sorted.length - 1);
-                amaClipThreshold = sorted[idx];
-            }
-        }
-
-        const slopeCfg = {
-            ...(cfg.amaSlope || {}),
-            erPeriod:              botAma.erPeriod,
-            slowPeriod:            botAma.slowPeriod,
-            fastPeriod:            botAma.fastPeriod,
-            maxSlopeOffset:        cfg.maxSlopeOffset,
-            maxVolatilityOffset:   volatilityClamp,
-            volatilityExponent,
-            volatilityScaleX,
-            volatilityThreshold,
-            neutralZonePct:        nz,
-            clipPercentile,
-            clipThreshold:         amaClipThreshold,
-        };
-
         let slopeResult = null;
         let amaSlope = null;
         let weights = null;
@@ -2511,4 +2463,11 @@ class MarketAdapterService {
     }
 }
 
-module.exports = { MarketAdapterService };
+module.exports = {
+    MarketAdapterService,
+    AMA_SLOPE_PERCENT_MODE_PER_BAR,
+    AMA_SLOPE_PERCENT_MODE_WINDOW,
+    normalizeAmaSlopePercentMode,
+    normalizeAmaSlopeLookbackBars,
+    convertSlopePercentToPerBar,
+};
