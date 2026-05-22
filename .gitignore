@@ -27,6 +27,8 @@ Thumbs.db
 
 .gemini/
 
+.antigravitycli/
+
 *.html
 analysis/**/*.json
 market_adapter/**/*.json
