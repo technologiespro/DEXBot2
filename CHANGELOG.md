@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.2] - 2026-05-22 - Kalman Stability Patch
+
+This patch release hardens the dynamic-weight Kalman trend path used by the market adapter and Claw trend logic. It focuses on numerical stability, invalid-input guards, and safer research-chart parameter ranges.
+
+### 2026-05-22
+
+#### Dynamic Weight Kalman Stability
+- Preserve tuned Kalman filter configuration across analyzer resets, including tactical/modal process-noise settings and the observation time step (`41ccb90`).
+- Ignore non-finite Kalman measurements and guard near-zero percentage denominators so bad feed values cannot leak NaN/Infinity into dynamic-weight analysis (`41ccb90`).
+- Use structured constant-velocity process noise, Joseph covariance correction, and price-scaled initial covariance for more stable velocity and displacement estimates across very different price ranges (`41ccb90`).
+- Prefer raw Kalman velocity/displacement fields in the dynamic-weight chart export so chart calculations retain precision (`41ccb90`).
+- Tighten AMA/Kalman slope saturation controls in the dynamic-weight chart to avoid overly aggressive low-end knob values (`41ccb90`, `0a581b9`).
+
 ## [0.7.1] - 2026-05-22 - Share AMA Strategy and Readiness Fix
 
 This patch release relocates the Kaufman AMA strategy implementation into the core production codebase so it is shared between the trading runtime, charts, and analysis scripts. It also fixes dynamic weight readiness by gating calculations on the ER period and lookback window rather than the full slow warmup window.

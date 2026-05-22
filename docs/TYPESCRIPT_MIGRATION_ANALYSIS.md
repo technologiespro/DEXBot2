@@ -1,7 +1,7 @@
 # DEXBot2: TypeScript Migration Analysis Report
 
 **Date**: February 2026 *(metrics updated May 2026)*
-**Codebase Version**: 0.7.1 release (v0.7.1 latest tagged release)
+**Codebase Version**: 0.7.2 release (v0.7.2 latest tagged release)
 **Analysis Scope**: JavaScript to TypeScript migration feasibility and effort estimation
 
 ---

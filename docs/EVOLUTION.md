@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.1 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.2 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
 - **Growth Phase**: 1,326 commits over ~5.5 active months
 - **Code Maturity**: Evolution from basic utilities to a ~48,000+ LoC intelligent system
 - **Stability**: Progression from manual testing to a suite of 158 automated test files
-- **Releases**: 17 tagged releases (v0.1.0 to v0.7.1)
+- **Releases**: 18 tagged releases (v0.1.0 to v0.7.2)
 
 ---
 
@@ -178,6 +178,7 @@ Full production rewrite with PyQt5 GUI, three strategies, CCXT/CoinGecko/Waves e
 - **May 18**: Release v0.7.0 - final 0.7 hardening and signal refinement
 - **May 21-22**: AMA strategy sharing, slope readiness warmup logic, and release v0.7.1
 - **May 22**: Release v0.7.1 - share AMA strategy and readiness fix
+- **May 22**: Release v0.7.2 - dynamic-weight Kalman stability patch
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -208,6 +209,16 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 ---
 
 ## Version History
+
+### v0.7.1 → v0.7.2 (2 commits)
+
+| Category | Commits |
+|----------|---------|
+| 1. Dynamic-weight Kalman stability | 1 |
+| 2. Dynamic-weight chart slope floor | 1 |
+| **Total** | **2** |
+
+---
 
 ### v0.7.0 → v0.7.1 (2 commits)
 
