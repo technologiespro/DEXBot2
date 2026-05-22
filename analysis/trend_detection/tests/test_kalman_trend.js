@@ -15,6 +15,10 @@ async function runTests() {
     testNoiseFiltering();
     testTrajectoryProjection();
     testTrendDetectionSign();
+    testResetPreservesFilterConfig();
+    testFilterRejectsInvalidMeasurements();
+    testInitialCovarianceScalesWithPrice();
+    testNearZeroModalPriceDoesNotExplodePercentages();
 
     console.log('All Kalman tests passed!');
 }
@@ -85,6 +89,62 @@ function testTrendDetectionSign() {
     analyzer.reset();
     for (let i = 0; i < 20; i++) analyzer.update(100 + i); // Upward
     assert.strictEqual(analyzer.getAnalysis().trend, 'UP');
+}
+
+function testResetPreservesFilterConfig() {
+    console.log(' - Testing reset preserves filter config');
+    const analyzer = new KalmanTrendAnalyzer({
+        rNoise: 0.25,
+        qTactical: 0.02,
+        qModal: 0.0002,
+        dt: 2
+    });
+
+    analyzer.update(100);
+    analyzer.reset();
+
+    assert.strictEqual(analyzer.tacticalKf.R, 0.25);
+    assert.strictEqual(analyzer.tacticalKf.Q, 0.02);
+    assert.strictEqual(analyzer.tacticalKf.dt, 2);
+    assert.strictEqual(analyzer.modalKf.R, 0.25);
+    assert.strictEqual(analyzer.modalKf.Q, 0.0002);
+    assert.strictEqual(analyzer.modalKf.dt, 2);
+}
+
+function testFilterRejectsInvalidMeasurements() {
+    console.log(' - Testing invalid measurement guard');
+    const kf = new KalmanFilter();
+    const initial = kf.update(100);
+    const state = kf.update(Number.NaN);
+
+    assert.deepStrictEqual(state, initial);
+    assert.strictEqual(kf.x, 100);
+    assert.strictEqual(kf.v, 0);
+    assert.strictEqual(kf.isInitialized, true);
+}
+
+function testInitialCovarianceScalesWithPrice() {
+    console.log(' - Testing price-scaled covariance initialization');
+    const kf = new KalmanFilter();
+    kf.update(0.0001);
+
+    assert.strictEqual(kf.P00, 0.0001 * 0.0001 * 100);
+    assert.strictEqual(kf.P11, 0.0001 * 0.0001);
+}
+
+function testNearZeroModalPriceDoesNotExplodePercentages() {
+    console.log(' - Testing near-zero percentage guard');
+    const analyzer = new KalmanTrendAnalyzer({ warmupBars: 0 });
+    analyzer.currPrice = 1;
+    analyzer.modal = { x: 1e-12, v: 0 };
+    analyzer.tactical = { x: 1, v: 1 };
+    analyzer.velocityFilteredPct = Number.NaN;
+
+    const analysis = analyzer.getAnalysis();
+    assert.strictEqual(analysis.velocityRawPct, 0);
+    assert.strictEqual(analysis.displacementRawPct, 0);
+    assert.ok(Number.isFinite(analysis.velocityPct));
+    assert.ok(Number.isFinite(analysis.displacementPct));
 }
 
 runTests().catch(err => {

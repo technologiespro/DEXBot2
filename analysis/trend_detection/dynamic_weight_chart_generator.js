@@ -48,10 +48,12 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const AMA_MS_MAX = 0.5;
     const AMA_MS_LOG_MIN_N = Math.log(AMA_MS_MIN);
     const AMA_MS_LOG_MAX_N = Math.log(AMA_MS_MAX);
-    const KAL_MS_LOG_MIN_N = Math.log(0.05);
-    const KAL_MS_LOG_MAX_N = Math.log(1.5);
+    const KAL_MS_MIN = 0.15;
+    const KAL_MS_MAX = 1.5;
+    const KAL_MS_LOG_MIN_N = Math.log(KAL_MS_MIN);
+    const KAL_MS_LOG_MAX_N = Math.log(KAL_MS_MAX);
     const clampedAmaMs = Math.min(Math.max(defaultAmaMaxSlopePct, AMA_MS_MIN), AMA_MS_MAX);
-    const clampedKalMs = Math.min(Math.max(defaultKalmanMaxSlopePct, 0.05), 1.5);
+    const clampedKalMs = Math.min(Math.max(defaultKalmanMaxSlopePct, KAL_MS_MIN), KAL_MS_MAX);
     const amaMsInitSlider = Math.round((Math.log(clampedAmaMs) - AMA_MS_LOG_MIN_N) / (AMA_MS_LOG_MAX_N - AMA_MS_LOG_MIN_N) * 1000);
     const kalMsInitSlider = Math.round((Math.log(clampedKalMs) - KAL_MS_LOG_MIN_N) / (KAL_MS_LOG_MAX_N - KAL_MS_LOG_MIN_N) * 1000);
 
@@ -75,8 +77,8 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const hurstSegments     = results.map((r) => r.hurstSegment ?? null);
     const peSegments        = results.map((r) => r.peSegment ?? null);
     const amaSlopePct       = results.map((r) => r.amaSlopePct ?? null);
-    const kalmanVelocityPctRaw = results.map((r) => r.velocityPct ?? null);
-    const kalmanDisplacementPct = results.map((r) => r.displacementPct ?? null);
+    const kalmanVelocityPctRaw = results.map((r) => r.velocityRawPct ?? r.velocityPct ?? null);
+    const kalmanDisplacementPct = results.map((r) => r.displacementRawPct ?? r.displacementPct ?? null);
     const kalmanVelocityPct = buildKalmanVelocitySeries(results, {
         kalmanSmoothPct: defaultKalmanSmoothPct,
         kalmanDispScaleMult: defaultKalmanDispScaleMult,
@@ -310,7 +312,7 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
 
                 <div class="group-sep"></div>
                 <div class="row-break"></div>
-        <div class="ctrl ms-kal"><label for="kal-ms-slider">kalS%</label><input type="range" id="kal-ms-slider" min="0" max="1000" value="${kalMsInitSlider}" title="Kalman Max Slope % (0.05-1.5)"><span class="val" id="kal-ms-value">${defaultKalmanMaxSlopePct.toFixed(2)}</span></div>
+        <div class="ctrl ms-kal"><label for="kal-ms-slider">kalS%</label><input type="range" id="kal-ms-slider" min="0" max="1000" value="${kalMsInitSlider}" title="Kalman Max Slope % (0.15-1.5)"><span class="val" id="kal-ms-value">${clampedKalMs.toFixed(2)}</span></div>
         <div class="ctrl kf"><label for="kf-slider">kf</label><input type="range" id="kf-slider" min="0" max="200" value="${defaultKalmanSmoothPct}" title="Kalman smoothing blend (0 = raw, 100 = current adaptive smoothing, 200 = stronger smoothing)"><span class="val" id="kf-value">${defaultKalmanSmoothPct}%</span></div>
                 <div class="ctrl kfd"><label for="kfd-slider">kfd</label><input type="range" id="kfd-slider" min="100" max="300" value="${Math.round(defaultKalmanDispScaleMult * 100)}" title="Kalman displacement scale multiplier (1x to 3x)"><span class="val" id="kfd-value">${defaultKalmanDispScaleMult.toFixed(2)}x</span></div>
                 <div class="ctrl dsp"><label for="dsp-slider">dsp</label><input type="range" id="dsp-slider" min="25" max="400" value="${Math.round(defaultDispScaleMinPct * 100)}" title="Minimum displacement scale floor (0.25x to 4.0x)"><span class="val" id="dsp-value">${defaultDispScaleMinPct.toFixed(2)}x</span></div>
@@ -1246,7 +1248,7 @@ function applyParams(p, btn) {
                     document.getElementById('ama-ms-value').textContent = currentAmaMaxSlopePct.toFixed(4);
                 }
                 if (p.kalmanMaxSlopePct != null) {
-                    currentKalmanMaxSlopePct = Math.max(0.05, Math.min(1.5, p.kalmanMaxSlopePct));
+                    currentKalmanMaxSlopePct = Math.max(0.15, Math.min(1.5, p.kalmanMaxSlopePct));
                     document.getElementById('kal-ms-slider').value = Math.round((Math.log(currentKalmanMaxSlopePct) - KAL_MS_LOG_MIN) / (KAL_MS_LOG_MAX - KAL_MS_LOG_MIN) * 1000);
                     document.getElementById('kal-ms-value').textContent = currentKalmanMaxSlopePct.toFixed(2);
                 }

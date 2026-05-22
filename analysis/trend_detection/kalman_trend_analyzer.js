@@ -18,13 +18,15 @@ class KalmanFilter {
      * @param {Object} opts
      * @param {number} opts.R - Measurement noise (trust in price data)
      * @param {number} opts.Q - Process noise (trust in the velocity model)
+     * @param {number} opts.dt - Time step between observations, in bars
      */
     constructor(opts = {}) {
         // R represents our confidence in the data (High R = ignore noise, but more lag)
         this.R = opts.R ?? 0.05;
 
-        // Q represents how much we expect the velocity to change (High Q = adapt faster)
+        // Q represents acceleration noise spectral density (High Q = adapt faster)
         this.Q = opts.Q ?? 0.005;
+        this.dt = Number.isFinite(opts.dt) && opts.dt > 0 ? opts.dt : 1;
 
         // State vector [x, v]: [position, velocity]
         this.x = 0;
@@ -44,26 +46,40 @@ class KalmanFilter {
      * @returns {Object} { x, v } Estimated state
      */
     update(z) {
+        if (!Number.isFinite(z)) {
+            return { x: this.x, v: this.v };
+        }
+
         if (!this.isInitialized) {
             this.x = z;
             this.v = 0;
+            const scale = z * z;
+            this.P00 = scale * 100;
+            this.P01 = 0;
+            this.P10 = 0;
+            this.P11 = scale;
             this.isInitialized = true;
             return { x: this.x, v: this.v };
         }
 
         // 1. Predict (Time Update)
-        // x_new = x + v * dt (assuming dt = 1 bar)
+        // x_new = x + v * dt
         // v_new = v
-        const x_p = this.x + this.v;
+        const dt = this.dt;
+        const x_p = this.x + (this.v * dt);
         const v_p = this.v;
 
-        // P_new = F * P * F' + Q
-        // F (Transition) = [[1, 1], [0, 1]]
+        // P_new = F * P * F' + Q_matrix
+        // F (Transition) = [[1, dt], [0, 1]]
+        // Q_matrix = [[dt^3/3*q, dt^2/2*q], [dt^2/2*q, dt*q]]
         // This is a manual 2x2 matrix expansion for performance
-        let p00 = this.P00 + this.P01 + this.P10 + this.P11 + this.Q;
-        let p01 = this.P01 + this.P11 + this.Q;
-        let p10 = this.P10 + this.P11 + this.Q;
-        let p11 = this.P11 + this.Q;
+        const q00 = ((dt * dt * dt) / 3) * this.Q;
+        const q01 = ((dt * dt) / 2) * this.Q;
+        const q11 = dt * this.Q;
+        let p00 = this.P00 + (dt * this.P01) + (dt * this.P10) + (dt * dt * this.P11) + q00;
+        let p01 = this.P01 + (dt * this.P11) + q01;
+        let p10 = this.P10 + (dt * this.P11) + q01;
+        let p11 = this.P11 + q11;
 
         // 2. Update (Measurement Update)
         const y = z - x_p;      // Innovation (error between measurement and prediction)
@@ -78,14 +94,32 @@ class KalmanFilter {
         this.x = x_p + k0 * y;
         this.v = v_p + k1 * y;
 
-        // Corrected Covariance P = (I - K * H) * P
-        this.P00 = (1 - k0) * p00;
-        this.P01 = (1 - k0) * p01;
-        this.P10 = -k1 * p00 + p10;
-        this.P11 = -k1 * p01 + p11;
+        // Corrected Covariance using Joseph form:
+        // P = (I - K * H) * P * (I - K * H)' + K * R * K'
+        const ikh00 = 1 - k0;
+        const ikh01 = 0;
+        const ikh10 = -k1;
+        const ikh11 = 1;
+        const t00 = ikh00 * p00 + ikh01 * p10;
+        const t01 = ikh00 * p01 + ikh01 * p11;
+        const t10 = ikh10 * p00 + ikh11 * p10;
+        const t11 = ikh10 * p01 + ikh11 * p11;
+        this.P00 = t00 * ikh00 + t01 * ikh01 + k0 * this.R * k0;
+        this.P01 = t00 * ikh10 + t01 * ikh11 + k0 * this.R * k1;
+        this.P10 = t10 * ikh00 + t11 * ikh01 + k1 * this.R * k0;
+        this.P11 = t10 * ikh10 + t11 * ikh11 + k1 * this.R * k1;
 
         return { x: this.x, v: this.v };
     }
+}
+
+const MIN_PRICE_DENOMINATOR = 1e-10;
+
+function safePct(numerator, denominator) {
+    const pct = Math.abs(denominator) > MIN_PRICE_DENOMINATOR
+        ? (numerator / denominator) * 100
+        : 0;
+    return Number.isFinite(pct) ? pct : 0;
 }
 
 class KalmanTrendAnalyzer {
@@ -95,18 +129,27 @@ class KalmanTrendAnalyzer {
      * @param {number} config.qTactical - Process noise for tactical filter (default 0.01)
      * @param {number} config.qModal - Process noise for modal filter (default 0.0001)
      * @param {number} config.beamCount - Number of historical beams to track
+     * @param {number} config.dt - Time step between observations, in bars
      */
     constructor(config = {}) {
+        this.config = { ...config };
+        const rNoise = config.rNoise ?? 0.05;
+        const qTactical = config.qTactical ?? config.qNoise ?? 0.01;
+        const qModal = config.qModal ?? config.qNoise ?? 0.0001;
+        const dt = Number.isFinite(config.dt) && config.dt > 0 ? config.dt : 1;
+
         // Tactical Filter: For short-term heading and inflections
         this.tacticalKf = new KalmanFilter({
-            R: config.rNoise ?? 0.05,
-            Q: config.qTactical ?? 0.01
+            R: rNoise,
+            Q: qTactical,
+            dt
         });
 
         // Modal Filter: For long-term equilibrium (The "Center of Gravity")
         this.modalKf = new KalmanFilter({
-            R: config.rNoise ?? 0.05,
-            Q: config.qModal ?? 0.0001
+            R: rNoise,
+            Q: qModal,
+            dt
         });
 
         this.beams = [];
@@ -152,12 +195,8 @@ class KalmanTrendAnalyzer {
             if (this.beams.length > this.maxBeams) this.beams.shift();
         }
 
-        const displacementPct = this.modal.x > 0
-            ? ((this.currPrice - this.modal.x) / this.modal.x) * 100
-            : 0;
-        const rawVelocityPct = this.modal.x > 0
-            ? (this.tactical.v / this.modal.x) * 100
-            : 0;
+        const displacementPct = safePct(this.currPrice - this.modal.x, this.modal.x);
+        const rawVelocityPct = safePct(this.tactical.v, this.modal.x);
         // Keep the analyzer's filtered velocity on the same smoothing path that the
         // research chart and live market adapter use at their default knob values.
         const smoothingResult = smoothKalmanVelocityPoint(
@@ -173,8 +212,8 @@ class KalmanTrendAnalyzer {
 
     getAnalysis() {
         const displacement = this.currPrice - this.modal.x;
-        const displacementPct = this.modal.x > 0 ? (displacement / this.modal.x) * 100 : 0;
-        const rawVelocityPct = this.modal.x > 0 ? (this.tactical.v / this.modal.x) * 100 : 0;
+        const displacementPct = safePct(displacement, this.modal.x);
+        const rawVelocityPct = safePct(this.tactical.v, this.modal.x);
 
         // Signal Regime Logic
         let signal = 'NEUTRAL';
@@ -217,10 +256,17 @@ class KalmanTrendAnalyzer {
     }
 
     reset() {
-        this.tacticalKf = new KalmanFilter();
-        this.modalKf = new KalmanFilter();
+        const rNoise = this.config.rNoise ?? 0.05;
+        const qTactical = this.config.qTactical ?? this.config.qNoise ?? 0.01;
+        const qModal = this.config.qModal ?? this.config.qNoise ?? 0.0001;
+        const dt = Number.isFinite(this.config.dt) && this.config.dt > 0 ? this.config.dt : 1;
+        this.tacticalKf = new KalmanFilter({ R: rNoise, Q: qTactical, dt });
+        this.modalKf = new KalmanFilter({ R: rNoise, Q: qModal, dt });
         this.beams = [];
         this.updateCount = 0;
+        this.currPrice = null;
+        this.tactical = { x: 0, v: 0 };
+        this.modal = { x: 0, v: 0 };
         this.velocityFilteredPct = null;
     }
 }
