@@ -701,8 +701,7 @@ Where:
 
 **Production dependencies (package.json):**
 - `btsdex ^0.7.11` — BitShares DEX client
-- `bs58check ^4.0.0` — key encoding
-- Total: **2 packages**, minimal footprint
+- Total: **1 package**, minimal footprint
 
 ### Dependency Comparison
 

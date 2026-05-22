@@ -1,23 +1,47 @@
-const bs58check = require('bs58check').default || require('bs58check');
+const assert = require('assert');
 const { validatePrivateKey } = require('../modules/chain_keys');
 
-// Generate valid WIFs programmatically so tests don't rely on magic constants
-const payloadUncompressed = Buffer.concat([Buffer.from([0x80]), Buffer.alloc(32, 0x01)]);
-const wifUncompressed = bs58check.encode(payloadUncompressed);
+const cases = [
+    {
+        name: 'valid_wif_compressed_known_vector',
+        key: 'KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn',
+        valid: true,
+    },
+    {
+        name: 'valid_wif_uncompressed_known_vector',
+        key: '5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf',
+        valid: true,
+    },
+    {
+        name: 'invalid_wif_checksum',
+        key: 'KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWm',
+        valid: false,
+    },
+    {
+        name: 'valid_pvt_k1',
+        key: 'PVT_K1_123abcDEF',
+        valid: true,
+    },
+    {
+        name: 'valid_hex',
+        key: 'a'.repeat(64),
+        valid: true,
+    },
+    {
+        name: 'invalid_short',
+        key: '1234',
+        valid: false,
+    },
+    {
+        name: 'invalid_chars',
+        key: '0OIl!@#$%',
+        valid: false,
+    },
+];
 
-const payloadCompressed = Buffer.concat([Buffer.from([0x80]), Buffer.alloc(32, 0x02), Buffer.from([0x01])]);
-const wifCompressed = bs58check.encode(payloadCompressed);
-
-const samples = {
-    'valid_wif_uncompressed': wifUncompressed,
-    'valid_wif_compressed': wifCompressed,
-    'valid_pvt_k1': 'PVT_K1_123abcDEF',
-    'valid_hex': 'a'.repeat(64),
-    'invalid_short': '1234',
-    'invalid_chars': '0OIl!@#$%'
-};
-
-for (const [name, s] of Object.entries(samples)) {
-    const out = validatePrivateKey(s);
-    console.log(name, s.length, out);
+for (const testCase of cases) {
+    const out = validatePrivateKey(testCase.key);
+    assert.strictEqual(out.valid, testCase.valid, `${testCase.name}: ${JSON.stringify(out)}`);
 }
+
+console.log('Key validation tests passed');

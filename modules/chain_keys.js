@@ -355,7 +355,7 @@ function decrypt(encrypted, secret) {
     return decrypted;
 }
 
-const bs58check = require('bs58check').default || require('bs58check');
+const base58check = require('./utils/base58check');
 
 /**
  * Validate a private key format.
@@ -372,8 +372,8 @@ function validatePrivateKey(key) {
 
     // Strict WIF validation using base58check decode (verifies checksum & structure)
     try {
-        // bs58check will throw if checksum invalid
-        const payload = bs58check.decode(k);
+        // Base58Check decode throws if checksum or characters are invalid.
+        const payload = base58check.decode(k);
         // WIFs for Bitcoin-style keys use 0x80 version byte and payload lengths 33 or 34
         // Uncompressed WIF payload: [0x80 | 32-byte privkey]
         // Compressed WIF payload: [0x80 | 32-byte privkey | 0x01]
