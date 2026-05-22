@@ -6,12 +6,7 @@ const { waitForConnected } = require('./bitshares_client');
 const DEFAULT_HEALTH_PATH = path.resolve(__dirname, '..', 'data', 'watcher-health.json');
 const DEFAULT_MAX_CONSECUTIVE_FAILURES = 5;
 
-function clone(value) {
-  if (value === undefined) {
-    return undefined;
-  }
-  return JSON.parse(JSON.stringify(value));
-}
+const { clone } = require('./utils');
 
 function parsePositionManagerWatchArgs(argv = [], env = process.env) {
   const options = {

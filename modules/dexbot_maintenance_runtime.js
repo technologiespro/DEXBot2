@@ -5,8 +5,8 @@ const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const Grid = require('./order/grid');
-const { ORDER_STATES, TIMING, MAINTENANCE, GRID_LIMITS } = require('./constants');
-const { retryPersistenceIfNeeded, applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
+const { ORDER_STATES, TIMING, GRID_LIMITS } = require('./constants');
+const { applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
 const { isPm2Runtime } = require('./order/logger');
 const { getSharedMarketAdapterRuntime } = require('./launcher/market_adapter_runtime');
 const {
@@ -14,7 +14,6 @@ const {
     isBotDynamicWeightWhitelisted,
 } = require('./market_adapter_whitelist');
 const Format = require('./order/format');
-const { virtualizeOrder } = require('./order/utils/order');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { cloneWeightDistribution } = require('./order/utils/math');
 const { updateDynamicGridSnapshotSync } = require('../market_adapter/utils/dynamic_grid_snapshot');

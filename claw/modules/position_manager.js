@@ -24,9 +24,7 @@ function getBlockchainToFloat() {
 const DEFAULT_STATE_PATH = path.resolve(__dirname, '..', 'data', 'positions.json');
 const STRATEGY_NAME = 'short-mpa-bts';
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
+const { clone } = require('./utils');
 
 function nowIso() {
   return new Date().toISOString();

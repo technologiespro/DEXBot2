@@ -88,7 +88,7 @@
  * ===============================================================================
  */
 
-const { ORDER_TYPES, ORDER_STATES, TIMING, GRID_LIMITS } = require('../constants');
+const { ORDER_TYPES, ORDER_STATES, TIMING } = require('../constants');
 const Format = require('./format');
 const { toFiniteNumber } = Format;
 const {

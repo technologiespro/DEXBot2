@@ -10,7 +10,7 @@
  * - Subscription and event handling
  *
  * ===============================================================================
- * EXPORTS (8 items)
+ * EXPORTS (13 items)
  * ===============================================================================
  *
  * 1. BitShares - Shared BitShares class for database operations
@@ -430,7 +430,6 @@ module.exports = {
     getNodeStats: () => nodeManager?.getStats(),
     getNodeSummary: () => nodeManager?.getSummary(),
     getConnectionError: () => lastConnectionError,
-    _refreshStartupNodeServers: refreshStartupNodeServers,
     _assessFailover: assessFailover,
     _internal: {
         get connected() {

@@ -1061,8 +1061,20 @@ module.exports = {
     calculateOrderCreationFees,
     deductOrderFeesFromFunds,
     _setFeeCache,
-    cloneWeightDistribution
+    cloneWeightDistribution,
+    clamp
 };
+
+/**
+ * Clamp a value between min and max bounds.
+ * @param {number} value - The value to clamp
+ * @param {number} min - Lower bound
+ * @param {number} max - Upper bound
+ * @returns {number}
+ */
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
 
 /**
  * Safely clone a weight distribution object.

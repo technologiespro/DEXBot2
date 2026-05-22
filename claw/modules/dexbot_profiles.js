@@ -619,12 +619,7 @@ function normalizeBotEntries(rawEntries, options = {}) {
   });
 }
 
-function clone(value) {
-  if (value === undefined) {
-    return undefined;
-  }
-  return JSON.parse(JSON.stringify(value));
-}
+const { clone } = require('./utils');
 
 function isFileLike(targetPath) {
   try {

@@ -8,7 +8,6 @@
 
 'use strict';
 
-const { DEFAULT_CONFIG } = require('../../modules/constants');
 const {
   collateralDeltaForTargetCr,
   collateralForTargetCr,

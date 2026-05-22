@@ -53,6 +53,26 @@ function describeClawBridge(options = {}) {
   };
 }
 
+function createVariantDescribeFn(runtimeName, displayName, scriptPath, trustModel) {
+  return function describeVariantBridge(options = {}) {
+    const manifest = describeClawBridge({
+      ...options,
+      runtimeName,
+      scriptPath
+    });
+
+    return {
+      ...manifest,
+      compatibility: {
+        ...manifest.compatibility,
+        name: displayName,
+        trustModel
+      }
+    };
+  };
+}
+
 module.exports = {
-  describeClawBridge
+  describeClawBridge,
+  createVariantDescribeFn
 };

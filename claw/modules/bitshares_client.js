@@ -1,3 +1,6 @@
+// Claw subsystem maintains its own connection state for subsystem isolation.
+// The createAccountClient implementation mirrors modules/bitshares_client.js
+// and calls claw's own waitForConnected().
 const BitSharesLib = require('btsdex');
 const btsdexEventPatch = require('../../modules/btsdex_event_patch');
 const { TIMING } = require('../../modules/constants');

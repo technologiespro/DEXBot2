@@ -1,32 +1,7 @@
-const {
-  createClawBridge,
-  runClawCommand
-} = require('./claw_bridge');
-const { describeZeroClawBridge } = require('./zeroclaw_manifest');
+const { createVariantBridgeModule } = require('./claw_bridge');
 
-function createZeroClawBridge(options = {}) {
-  return createClawBridge({
-    ...options,
-    runtime: {
-      ...(options.runtime || {}),
-      name: options.runtime?.name || 'zeroclaw-bridge'
-    }
-  });
-}
-
-function runZeroClawCommand(command, options = {}) {
-  if (command === 'manifest') {
-    return describeZeroClawBridge(options);
-  }
-
-  return runClawCommand(command, {
-    ...options,
-    runtimeName: options.runtimeName || 'zeroclaw'
-  });
-}
-
-module.exports = {
-  createZeroClawBridge,
-  describeZeroClawBridge,
-  runZeroClawCommand
-};
+module.exports = createVariantBridgeModule(
+  'zeroclaw',
+  'ZeroClaw',
+  'ZeroClaw sends intents and reads context; AI-Bot handles signing through DEXBot2'
+);

@@ -69,7 +69,7 @@ process.umask(0o077);
 
 const fs = require('fs');
 const path = require('path');
-const { spawn, exec, execSync } = require('child_process');
+const { spawn, exec } = require('child_process');
 const { promisify } = require('util');
 const { parseJsonWithComments } = require('./modules/order/utils/system');
 const { readBotsFileWithLock } = require('./modules/bots_file_lock');

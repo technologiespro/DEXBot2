@@ -18,9 +18,7 @@ function registerMock(modulePath, exports) {
   };
 }
 
-function clone(value) {
-  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-}
+const { clone } = require('../modules/utils');
 
 async function createHarness() {
   const managerPath = require.resolve('../modules/position_manager');

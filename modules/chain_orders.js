@@ -17,7 +17,7 @@
  * converted to blockchain integers internally using asset precision.
  *
  * ===============================================================================
- * EXPORTS (16 functions + 1 constant)
+ * EXPORTS (15 functions + 1 constant)
  * ===============================================================================
  *
  * ACCOUNT MANAGEMENT (2 functions - async)

@@ -20,12 +20,7 @@ const CLAW_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_DATA_DIR = path.join(CLAW_ROOT, 'data');
 const DEFAULT_STATE_DIR = path.join(DEFAULT_DATA_DIR, 'state');
 
-function clone(value) {
-  if (value === undefined) {
-    return undefined;
-  }
-  return JSON.parse(JSON.stringify(value));
-}
+const { clone } = require('./utils');
 
 function createRuntimeContext(options = {}) {
   const dataDir = options.dataDir || DEFAULT_DATA_DIR;

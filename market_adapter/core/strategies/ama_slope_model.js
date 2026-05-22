@@ -1,5 +1,4 @@
-'use strict';
-
+const { clamp } = require('../../../modules/order/utils/math');
 const { MARKET_ADAPTER } = require('../../../modules/constants');
 const {
     normalizeMaxVolatilityOffset,
@@ -13,10 +12,6 @@ const MAX_SYMMETRIC_SHIFT = MARKET_ADAPTER.DYNAMIC_WEIGHT_SYMMETRIC_SHIFT_CLAMP;
 const DEFAULT_ER_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod;
 const DEFAULT_SLOW_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod;
 const DEFAULT_FAST_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].fastPeriod;
-
-function clamp(v, min, max) {
-    return Math.max(min, Math.min(max, v));
-}
 
 function computeAverageAmaSlopePct(current, past, lookbackBars) {
     const safeLookbackBars = Number.isFinite(lookbackBars) && lookbackBars > 0

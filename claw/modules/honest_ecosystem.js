@@ -19,12 +19,7 @@ const HARDCODED_HONEST_MONEY_BTS_POOL = {
   withdrawalFeePercent: 0
 };
 
-function clone(value) {
-  if (value === undefined) {
-    return undefined;
-  }
-  return JSON.parse(JSON.stringify(value));
-}
+const { clone } = require('./utils');
 
 function isMpa(asset) {
   return Boolean(asset && asset.bitasset_data_id);

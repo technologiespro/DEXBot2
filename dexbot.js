@@ -86,7 +86,7 @@ const chainKeys = require('./modules/chain_keys');
 const { initializeFeeCache, ensureProfilesDirectory, readInput } = require('./modules/order/utils/system');
 const accountBots = require('./modules/account_bots');
 const SharedDEXBot = require('./modules/dexbot_class');
-const { authenticateWithChainKeys } = require('./modules/dexbot_class');
+
 const { setupGracefulShutdown, registerCleanup } = require('./modules/graceful_shutdown');
 const {
     collectValidationIssues,

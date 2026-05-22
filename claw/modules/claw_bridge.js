@@ -20,7 +20,7 @@ const {
   openShortOnBts,
   placeTakeProfitBuyOrderOnBts
 } = require('./short_mpa_strategy');
-const { describeClawBridge } = require('./claw_manifest');
+const { describeClawBridge, createVariantDescribeFn } = require('./claw_manifest');
 const {
   launcherRun,
   launcherDrystart,
@@ -34,13 +34,7 @@ const {
 } = require('./claw_launcher');
 const { runMemuCommand } = require('./memu_bridge');
 
-function clone(value) {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  return JSON.parse(JSON.stringify(value));
-}
+const { clone } = require('./utils');
 
 function stripPrivateKey(options = {}) {
   const sanitized = { ...options };
@@ -427,5 +421,31 @@ module.exports = {
   createClawBridge,
   describeClawBridge,
   describeRuntimeManifest,
-  runClawCommand
+  runClawCommand,
+  createVariantBridgeModule(runtimeName, displayName, trustModel) {
+    const scriptPath = `node scripts/${runtimeName}_bridge.js`;
+    const describeFn = createVariantDescribeFn(runtimeName, displayName, scriptPath, trustModel);
+
+    return {
+      [`create${displayName}Bridge`]: function (options = {}) {
+        return createClawBridge({
+          ...options,
+          runtime: {
+            ...(options.runtime || {}),
+            name: options.runtime?.name || `${runtimeName}-bridge`
+          }
+        });
+      },
+      [`describe${displayName}Bridge`]: describeFn,
+      [`run${displayName}Command`]: function (command, options = {}) {
+        if (command === 'manifest') {
+          return describeFn(options);
+        }
+        return runClawCommand(command, {
+          ...options,
+          runtimeName: options.runtimeName || runtimeName
+        });
+      }
+    };
+  }
 };

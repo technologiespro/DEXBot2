@@ -101,7 +101,6 @@ const {
 } = require('./order/utils/validate');
 const {
     buildCreateOrderArgs,
-    getOrderTypeFromUpdatedFlags,
     virtualizeOrder,
     correctAllPriceMismatches,
     convertToSpreadPlaceholder,
@@ -128,7 +127,7 @@ const {
     FILL_PROCESSING
 } = require('./constants');
 const { attemptResumePersistedGridByPriceMatch, decideStartupGridAction, reconcileStartupOrders } = require('./order/startup_reconcile');
-const { AccountOrders, createBotKey } = require('./account_orders');
+const { AccountOrders } = require('./account_orders');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { cloneWeightDistribution } = require('./order/utils/math');
 const { normalizeBotEntry } = require('./bot_settings');

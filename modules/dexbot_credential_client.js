@@ -18,6 +18,55 @@ function getSocketPath(options = {}) {
     return options.socketPath || DEFAULT_SOCKET_PATH;
 }
 
+function sendCredentialDaemonRequest(socketPath, payload, timeoutMs) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const socket = net.createConnection(socketPath, () => {
+            socket.write(`${JSON.stringify(payload)}\n`);
+        });
+
+        let responseBuffer = '';
+        const timer = setTimeout(() => {
+            socket.destroy();
+            if (!settled) { settled = true; reject(new Error(`Credential daemon request timed out after ${timeoutMs}ms`)); }
+        }, timeoutMs);
+
+        socket.on('data', (data) => {
+            responseBuffer += data.toString();
+            const lines = responseBuffer.split('\n');
+            responseBuffer = lines.pop();
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                clearTimeout(timer);
+                socket.end();
+                if (!settled) {
+                    settled = true;
+                    try {
+                        resolve(JSON.parse(line));
+                    } catch {
+                        reject(new Error('Invalid credential daemon response'));
+                    }
+                }
+                return;
+            }
+        });
+
+        socket.on('error', (error) => {
+            clearTimeout(timer);
+            if (!settled) { settled = true; reject(new Error(`Credential daemon connection failed: ${error.message}`)); }
+        });
+
+        socket.on('end', () => {
+            clearTimeout(timer);
+            if (!settled && !responseBuffer.trim()) {
+                settled = true;
+                reject(new Error('Credential daemon closed the connection unexpectedly'));
+            }
+        });
+    });
+}
+
 function getReadyFilePath(options = {}) {
     return options.readyFilePath || DEFAULT_READY_FILE;
 }
@@ -61,84 +110,31 @@ function executeOperationsViaCredentialDaemon(accountName, operations, options =
     const timeoutMs = Number.isFinite(Number(options.timeoutMs))
         ? Number(options.timeoutMs)
         : DEFAULT_REQUEST_TIMEOUT_MS;
-    const sessionId = options.sessionId || null;
-    const botHmacSecret = options.botHmacSecret || null;
 
-    // Compute HMAC if botHmacSecret is provided
-    let hmac = null;
+    const payload = { type: 'execute-operations', accountName, operations };
+    const sessionId = options.sessionId || null;
+    if (sessionId) payload.sessionId = sessionId;
+
+    const botHmacSecret = options.botHmacSecret || null;
     if (botHmacSecret && sessionId) {
-        const signingPayload = JSON.stringify({ sessionId, operations });
-        hmac = crypto
+        payload.hmac = crypto
             .createHmac('sha256', Buffer.from(botHmacSecret, 'hex'))
-            .update(signingPayload)
+            .update(JSON.stringify({ sessionId, operations }))
             .digest('hex');
     }
 
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const socket = net.createConnection(socketPath, () => {
-            const payload = {
-                type: 'execute-operations',
-                accountName,
-                sessionId,
-                operations,
-            };
-            if (hmac) {
-                payload.hmac = hmac;
-            }
-            socket.write(`${JSON.stringify(payload)}\n`);
-        });
-
-        let responseBuffer = '';
-        const timer = setTimeout(() => {
-            socket.destroy();
-            if (!settled) { settled = true; reject(new Error(`Credential daemon request timed out after ${timeoutMs}ms`)); }
-        }, timeoutMs);
-
-        socket.on('data', (data) => {
-            responseBuffer += data.toString();
-            const lines = responseBuffer.split('\n');
-            responseBuffer = lines.pop();
-
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                clearTimeout(timer);
-                socket.end();
-                if (!settled) {
-                    settled = true;
-                    try {
-                        const response = JSON.parse(line);
-                        if (response.success) {
-                            resolve(response);
-                        } else {
-                            reject(new Error(response.error || 'Unknown credential daemon error'));
-                        }
-                    } catch {
-                        reject(new Error('Invalid credential daemon response'));
-                    }
-                }
-                return;
-            }
-        });
-
-        socket.on('error', (error) => {
-            clearTimeout(timer);
-            if (!settled) { settled = true; reject(new Error(`Credential daemon connection failed: ${error.message}`)); }
-        });
-
-        socket.on('end', () => {
-            clearTimeout(timer);
-            if (!settled && !responseBuffer.trim()) {
-                settled = true;
-                reject(new Error('Credential daemon closed the connection unexpectedly'));
-            }
-        });
+    return sendCredentialDaemonRequest(socketPath, payload, timeoutMs).then((response) => {
+        if (response.success) {
+            return response;
+        }
+        throw new Error(response.error || 'Unknown credential daemon error');
     });
 }
 
 module.exports = {
     DEFAULT_READY_FILE,
     DEFAULT_SOCKET_PATH,
+    sendCredentialDaemonRequest,
     executeOperationsViaCredentialDaemon,
     isCredentialDaemonReady,
     waitForCredentialDaemon,

@@ -1,22 +1,10 @@
-const { describeClawBridge } = require('./claw_manifest');
+const { createVariantDescribeFn } = require('./claw_manifest');
 
-function describeHermesBridge(options = {}) {
-  const manifest = describeClawBridge({
-    ...options,
-    runtimeName: 'hermes',
-    scriptPath: 'node scripts/claw_bridge.js'
-  });
+const describeHermesBridge = createVariantDescribeFn(
+  'hermes',
+  'Hermes',
+  'node scripts/claw_bridge.js',
+  'Hermes consumes Claw through the shared MCP server and optional skill guidance; AI-Bot handles signing through DEXBot2'
+);
 
-  return {
-    ...manifest,
-    compatibility: {
-      ...manifest.compatibility,
-      name: 'Hermes',
-      trustModel: 'Hermes consumes Claw through the shared MCP server and optional skill guidance; AI-Bot handles signing through DEXBot2'
-    }
-  };
-}
-
-module.exports = {
-  describeHermesBridge
-};
+module.exports = { describeHermesBridge };

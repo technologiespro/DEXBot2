@@ -15,9 +15,7 @@ function registerMock(modulePath, exports) {
   };
 }
 
-function clone(value) {
-  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-}
+const { clone } = require('../modules/utils');
 
 function createQueriesHarness() {
   const queriesPath = require.resolve('../modules/chain_queries');

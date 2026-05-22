@@ -1,13 +1,10 @@
 'use strict';
 
+const { clamp } = require('../../modules/order/utils/math');
 const { MARKET_ADAPTER } = require('../../modules/constants');
 
 const KALMAN_SMOOTHING_BUDGET = MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTHING_BUDGET;
 const KALMAN_SMOOTHING_FLOOR = MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTHING_FLOOR;
-
-function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-}
 
 function resolveKalmanVelocitySmoothingConfig(config = {}) {
     const blend = clamp(

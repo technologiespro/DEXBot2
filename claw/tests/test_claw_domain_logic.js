@@ -18,9 +18,7 @@ function registerMock(modulePath, exports) {
   };
 }
 
-function clone(value) {
-  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-}
+const { clone } = require('../modules/utils');
 
 function createHonestHarness(options = {}) {
   const ecosystemPath = require.resolve('../modules/honest_ecosystem');

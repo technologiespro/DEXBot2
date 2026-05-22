@@ -5,7 +5,7 @@
  * Manages multi-bot configuration and metadata.
  *
  * ===============================================================================
- * EXPORTS (4 functions)
+ * EXPORTS (5 functions)
  * ===============================================================================
  *
  * MAIN ENTRY POINT:
@@ -13,14 +13,17 @@
  *      Lists bots, allows add/edit/delete/activate operations
  *      Loads and saves profiles/bots.json
  *
+ *   2. normalizeBotDraft(draft) - Normalize a bot configuration draft
+ *      Applies defaults and validation to raw bot config entries
+ *
  * UTILITIES:
- *   2. parseJsonWithComments(raw) - Parse JSON with comment stripping
+ *   3. parseJsonWithComments(raw) - Parse JSON with comment stripping
  *      Removes / * / and // style comments before JSON parsing
  *
- *   3. parseCronToDelta(cronString) - Parse cron expression to delta (minutes)
+ *   4. parseCronToDelta(cronString) - Parse cron expression to delta (minutes)
  *      Converts cron schedule to rotation frequency
  *
- *   4. deltaToCron(deltaMinutes) - Convert delta (minutes) to cron expression
+ *   5. deltaToCron(deltaMinutes) - Convert delta (minutes) to cron expression
  *      Converts rotation frequency to cron schedule
  *
  * ===============================================================================
