@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.3] - 2026-05-22 - Adapter Packaging and Slope Helper Patch
+
+This patch release cleans up release packaging/runtime documentation and centralizes AMA slope conversion helpers used by market-adapter dynamic-weight configuration.
+
+### 2026-05-22
+
+#### Packaging, Runtime Docs, and AMA Slope Helpers
+- Align Docker launcher behavior and adapter state documentation with the current runtime layout (`98e0cbe`).
+- Share AMA slope percent-mode, lookback normalization, and per-bar conversion helpers between the core market adapter service and profile override handling to prevent duplicated conversion semantics (`c257674`).
+
 ## [0.7.2] - 2026-05-22 - Kalman Stability Patch
 
 This patch release hardens the dynamic-weight Kalman trend path used by the market adapter and Claw trend logic. It focuses on numerical stability, invalid-input guards, and safer research-chart parameter ranges.
