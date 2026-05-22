@@ -96,6 +96,9 @@ class NodeManager {
         this.initializeNodeStats();
         this.loadBlacklistState();
 
+        // Blacklist warning dedup: track last warn time per node+error to suppress repeats.
+        this._lastBlacklistWarnMs = new Map();
+
         // Control flags
         this.monitoringActive = false;
         this.checkIntervalId = null;
@@ -348,13 +351,41 @@ class NodeManager {
                 stats.status = 'blacklisted';
                 stats.blacklistedAt = Date.now();
                 this.saveBlacklistState();
-                this.logger.warn(`✗ ${nodeUrl.substring(0, 40)}... BLACKLISTED (${err.message})`);
+
+                if (this._shouldLogBlacklistWarning(nodeUrl, err.message)) {
+                    this.logger.warn(`✗ ${nodeUrl.substring(0, 40)}... BLACKLISTED (${err.message})`);
+                }
             } else {
                 stats.status = 'failed';
                 this.logger.debug(`✗ ${nodeUrl.substring(0, 40)}... FAILED attempt ${stats.failureCount} (${err.message})`);
             }
 
             return { status: stats.status, latency: null, error: err.message };
+        }
+    }
+
+    _shouldLogBlacklistWarning(nodeUrl, errorMessage, nowMs = Date.now()) {
+        const errorKey = (errorMessage || '').slice(0, 160);
+        const warnKey = `${nodeUrl}\0${errorKey}`;
+        const lastWarnMs = this._lastBlacklistWarnMs.get(warnKey);
+        if (lastWarnMs && (nowMs - lastWarnMs) <= 3_600_000) {
+            return false;
+        }
+        this._lastBlacklistWarnMs.set(warnKey, nowMs);
+        return true;
+    }
+
+    _clearBlacklistWarningCooldown(nodeUrl = null) {
+        if (!nodeUrl) {
+            this._lastBlacklistWarnMs.clear();
+            return;
+        }
+
+        const prefix = `${nodeUrl}\0`;
+        for (const key of this._lastBlacklistWarnMs.keys()) {
+            if (key.startsWith(prefix)) {
+                this._lastBlacklistWarnMs.delete(key);
+            }
         }
     }
 
@@ -546,6 +577,7 @@ class NodeManager {
             stats.latencyMs = null;
             stats.lastErrorMessage = null;
             stats.blacklistedAt = null;
+            this._clearBlacklistWarningCooldown(nodeUrl);
             this.saveBlacklistState();
             this.saveHealthCache();
             this.logger.info(`Reset node: ${nodeUrl}`);
@@ -564,6 +596,7 @@ class NodeManager {
             stats.chainId = null;
             stats.blacklistedAt = null;
         }
+        this._clearBlacklistWarningCooldown();
         this.saveBlacklistState();
         this.saveHealthCache();
         this.logger.info('Reset all nodes');

@@ -1,5 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const {
     restoreCachedModule,
     setCachedModule,
@@ -12,6 +14,7 @@ const {
     createCredentialDaemonController,
 } = require('../modules/launcher/credential_daemon');
 const {
+    BOOTSTRAP_SOCKET_PREFIX,
     createPasswordBootstrapServer,
     fetchBootstrapPassword,
 } = require('../modules/launcher/credential_bootstrap');
@@ -123,6 +126,37 @@ async function testBootstrapSecretTransfer() {
     }
 }
 
+async function testStaleBootstrapDirsAreCleanedBeforeNewServer() {
+    const tmpDir = os.tmpdir();
+    const staleDir = fs.mkdtempSync(path.join(tmpDir, BOOTSTRAP_SOCKET_PREFIX));
+    const freshDir = fs.mkdtempSync(path.join(tmpDir, BOOTSTRAP_SOCKET_PREFIX));
+    const unrelatedDir = fs.mkdtempSync(path.join(tmpDir, 'dexbot-other-bootstrap-'));
+    const staleTime = new Date(Date.now() - (31 * 60 * 1000));
+    let bootstrap = null;
+
+    try {
+        fs.writeFileSync(path.join(staleDir, 'bootstrap.sock'), 'stale');
+        fs.writeFileSync(path.join(freshDir, 'bootstrap.sock'), 'fresh');
+        fs.writeFileSync(path.join(unrelatedDir, 'bootstrap.sock'), 'unrelated');
+        fs.utimesSync(staleDir, staleTime, staleTime);
+
+        try {
+            bootstrap = await createPasswordBootstrapServer({ password: 'test-secret', timeoutMs: 1000 });
+        } catch (error) {
+            if (!error || error.code !== 'EPERM') throw error;
+        }
+
+        assert.strictEqual(fs.existsSync(staleDir), false, 'stale bootstrap dir should be removed before creating a new server');
+        assert.strictEqual(fs.existsSync(freshDir), true, 'fresh bootstrap dir should not be removed');
+        assert.strictEqual(fs.existsSync(unrelatedDir), true, 'non-bootstrap temp dirs should not be removed');
+    } finally {
+        if (bootstrap) bootstrap.close();
+        for (const dir of [staleDir, freshDir, unrelatedDir]) {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    }
+}
+
 function testNormalizeBootstrapCredentialAcceptsLegacyPassword() {
     const secret = { kind: 'dexbot-vault-secret', vaultKeyHex: 'abc123' };
     let unlockArg = null;
@@ -167,6 +201,7 @@ function testNormalizeBootstrapCredentialKeepsDerivedSecret() {
     await testWaitsForExistingDaemon();
     await testBootstrapPasswordTransfer();
     await testBootstrapSecretTransfer();
+    await testStaleBootstrapDirsAreCleanedBeforeNewServer();
     testNormalizeBootstrapCredentialAcceptsLegacyPassword();
     testNormalizeBootstrapCredentialKeepsDerivedSecret();
     console.log('credential daemon tests passed');

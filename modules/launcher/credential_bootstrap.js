@@ -21,7 +21,30 @@ function cleanupBootstrapArtifacts(socketPath, socketDir) {
     }
 }
 
+function cleanupStaleBootstrapDirs() {
+    const tmpDir = os.tmpdir();
+    let entries;
+    try {
+        entries = fs.readdirSync(tmpDir);
+    } catch (err) {
+        return;
+    }
+    const now = Date.now();
+    const staleThresholdMs = 30 * 60 * 1000;
+    for (const entry of entries) {
+        if (!entry.startsWith(BOOTSTRAP_SOCKET_PREFIX)) continue;
+        const dirPath = path.join(tmpDir, entry);
+        let stat;
+        try { stat = fs.statSync(dirPath); } catch (err) { continue; }
+        if (!stat.isDirectory()) continue;
+        if (now - stat.mtimeMs > staleThresholdMs) {
+            try { fs.rmSync(dirPath, { recursive: true, force: true }); } catch (err) { }
+        }
+    }
+}
+
 function createBootstrapSocketDir() {
+    cleanupStaleBootstrapDirs();
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), BOOTSTRAP_SOCKET_PREFIX));
     try {
         fs.chmodSync(dir, 0o700);

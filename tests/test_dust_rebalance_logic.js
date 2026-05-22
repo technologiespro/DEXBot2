@@ -41,6 +41,7 @@ const Grid = require('../modules/order/grid');
 const { _setFeeCache } = require('../modules/order/utils/math');
 const DEXBot = require('../modules/dexbot_class');
 const chainOrders = require('../modules/chain_orders');
+const { isOrderDoesNotExistError } = require('../modules/dexbot_maintenance_runtime');
 const { withDynamicWeightFiles } = require('./helpers/dynamic_weight_files');
 
 async function testDustTrigger() {
@@ -396,6 +397,94 @@ async function testDustCancelDoesNotBeatRealFill() {
         assert.strictEqual(processCalls, 0, 'Failed cancel should not trigger synthetic fill processing');
         assert.strictEqual(persistCalls, 0, 'Failed cancel should not persist synthetic changes');
         console.log('  ✓ Real fill / failed cancel path does not trigger synthetic rotation');
+    } finally {
+        if (typeof bot?._clearDustMaintenanceTimer === 'function') {
+            bot._clearDustMaintenanceTimer();
+        }
+        chainOrders.cancelOrder = originalCancelOrder;
+    }
+}
+
+async function testDustCancelOrderMissingClassifier() {
+    console.log('Testing Dust Cancel Order-Missing Classifier...');
+
+    assert.strictEqual(
+        isOrderDoesNotExistError('order does not exist', '1.7.902'),
+        true,
+        'Explicit order-missing errors should trigger gone-from-chain handling'
+    );
+    assert.strictEqual(
+        isOrderDoesNotExistError('Could not find Object: 1.7.902', '1.7.902'),
+        true,
+        'Object-missing errors for the target order should trigger gone-from-chain handling'
+    );
+    assert.strictEqual(
+        isOrderDoesNotExistError('Unable to find Object 1.7.902', '1.7.902'),
+        true,
+        'Existing unable-to-find-object errors for the target order should trigger gone-from-chain handling'
+    );
+    assert.strictEqual(
+        isOrderDoesNotExistError('account does not exist', '1.7.902'),
+        false,
+        'Unrelated account-missing errors must not trigger gone-from-chain handling'
+    );
+    assert.strictEqual(
+        isOrderDoesNotExistError('asset does not exist', '1.7.902'),
+        false,
+        'Unrelated asset-missing errors must not trigger gone-from-chain handling'
+    );
+    console.log('  ✓ Dust cancel only treats order-specific missing errors as gone from chain');
+}
+
+async function testDustCancelDoesNotTreatAccountMissingAsGone() {
+    console.log('Testing Dust Cancel Account-Missing Rejection...');
+
+    const originalCancelOrder = chainOrders.cancelOrder;
+    let bot;
+    try {
+        let processCalls = 0;
+
+        bot = new DEXBot({
+            botKey: 'test_dust_cancel_account_missing',
+            dryRun: false,
+            startPrice: 1,
+            assetA: 'TESTA',
+            assetB: 'BTS',
+            incrementPercent: 0.5
+        });
+        bot.account = 'missing-account';
+        bot.privateKey = 'test-key';
+        bot.manager = {
+            synchronizeWithChain: async () => {
+                throw new Error('should not sync after unrelated missing-account error');
+            },
+            processFilledOrders: async () => {
+                processCalls++;
+                return { actions: [] };
+            },
+            persistGrid: async () => ({ isValid: true }),
+            recalculateFunds: async () => {}
+        };
+
+        chainOrders.cancelOrder = async () => {
+            throw new Error('account does not exist');
+        };
+
+        const dustOrder = {
+            id: 'dust-sell-account-missing',
+            orderId: '1.7.902',
+            type: ORDER_TYPES.SELL,
+            state: ORDER_STATES.PARTIAL,
+            size: 0.1,
+            price: 1.1
+        };
+
+        bot._dustSinceMap.set('1.7.902', Date.now() - (60 * 1_000) - 1);
+        const result = await bot._cancelDustOrders({ buy: [], sell: [dustOrder] });
+
+        assert.strictEqual(result.cancelledCount, 0, 'Unrelated missing-account error should not count as cancelled');
+        assert.strictEqual(processCalls, 0, 'Unrelated missing-account error should not trigger synthetic fill processing');
+        console.log('  ✓ Account-missing errors do not trigger synthetic dust recovery');
     } finally {
         if (typeof bot?._clearDustMaintenanceTimer === 'function') {
             bot._clearDustMaintenanceTimer();
@@ -1076,6 +1165,8 @@ Promise.resolve()
     .then(() => testDustTrigger())
     .then(() => testDustCancelSyntheticRotation())
     .then(() => testDustCancelDoesNotBeatRealFill())
+    .then(() => testDustCancelOrderMissingClassifier())
+    .then(() => testDustCancelDoesNotTreatAccountMissingAsGone())
     .then(() => testDustCancelFallbackRefetchesOpenOrders())
     .then(() => testDustTimerStartsAtDustFill())
     .then(() => testDustThresholdUsesConfiguredPercentage())

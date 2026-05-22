@@ -193,11 +193,48 @@ process.on('exit', () => {
 }
 
 // ============================================================================
+// Test 7b: Blacklist warning deduplication
+// ============================================================================
+{
+    console.log('Test 7b: Blacklist warning deduplication');
+    const nm = createNodeManager({ list: ['node1'] });
+
+    assert.strictEqual(
+        nm._shouldLogBlacklistWarning('node1', 'timeout', 1_000),
+        true,
+        'First node+error warning should log'
+    );
+    assert.strictEqual(
+        nm._shouldLogBlacklistWarning('node1', 'timeout', 2_000),
+        false,
+        'Repeated node+error warning should be suppressed inside the cooldown'
+    );
+    assert.strictEqual(
+        nm._shouldLogBlacklistWarning('node1', 'connection refused', 3_000),
+        true,
+        'Different errors for the same node should have independent cooldown entries'
+    );
+    assert.strictEqual(
+        nm._shouldLogBlacklistWarning('node1', 'timeout', 3_601_001),
+        true,
+        'Same node+error should log again after the cooldown expires'
+    );
+    console.log('✓ Blacklist warning deduplication test passed\n');
+}
+
+// ============================================================================
 // Test 8: Node Reset
 // ============================================================================
 {
     console.log('Test 8: Node reset functionality');
     const nm = createNodeManager({ list: ['node1', 'node2'] });
+
+    nm._shouldLogBlacklistWarning('node1', 'timeout', 1_000);
+    assert.strictEqual(
+        nm._shouldLogBlacklistWarning('node1', 'timeout', 2_000),
+        false,
+        'Precondition: warning cooldown should be active before reset'
+    );
 
     // Mark node1 as failed
     nm.nodeStats.get('node1').status = 'blacklisted';
@@ -212,6 +249,11 @@ process.on('exit', () => {
     assert.strictEqual(stats.failureCount, 0);
     assert.strictEqual(stats.latencyMs, null);
     assert.strictEqual(stats.lastErrorMessage, null);
+    assert.strictEqual(
+        nm._shouldLogBlacklistWarning('node1', 'timeout', 3_000),
+        true,
+        'Reset should clear blacklist warning cooldown for that node'
+    );
     console.log('✓ Node reset test passed\n');
 }
 
@@ -221,6 +263,11 @@ process.on('exit', () => {
 {
     console.log('Test 9: Reset all nodes');
     const nm = createNodeManager({ list: ['n1', 'n2', 'n3'] });
+
+    nm._shouldLogBlacklistWarning('n1', 'timeout', 1_000);
+    nm._shouldLogBlacklistWarning('n2', 'rpc failure', 1_000);
+    assert.strictEqual(nm._shouldLogBlacklistWarning('n1', 'timeout', 2_000), false);
+    assert.strictEqual(nm._shouldLogBlacklistWarning('n2', 'rpc failure', 2_000), false);
 
     // Mark all as failed
     for (const node of ['n1', 'n2', 'n3']) {
@@ -235,6 +282,8 @@ process.on('exit', () => {
         assert.strictEqual(stats.status, 'unchecked');
         assert.strictEqual(stats.failureCount, 0);
     }
+    assert.strictEqual(nm._shouldLogBlacklistWarning('n1', 'timeout', 3_000), true);
+    assert.strictEqual(nm._shouldLogBlacklistWarning('n2', 'rpc failure', 3_000), true);
     console.log('✓ Reset all nodes test passed\n');
 }
 

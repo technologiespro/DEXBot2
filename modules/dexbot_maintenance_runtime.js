@@ -880,6 +880,20 @@ function getPendingDustDelayMs(ctx) {
     return Math.max(0, nextRunAt - now);
 }
 
+function isOrderDoesNotExistError(message, orderId) {
+    if (typeof message !== 'string' || message.length === 0) return false;
+    const normalized = message.toLowerCase();
+    if (/\border\b.*\bdoes not exist\b/i.test(message)) return true;
+    if (/\bdoes not exist\b.*\border\b/i.test(message)) return true;
+    if (orderId && normalized.includes(String(orderId).toLowerCase())) {
+        return /\bdoes not exist\b/i.test(message)
+            || /\bcould not find object\b/i.test(message)
+            || /\bunable to find object\b/i.test(message)
+            || /\bobject\b.*\bnot found\b/i.test(message);
+    }
+    return false;
+}
+
 function getMaintenanceIdleDelayMs(ctx) {
     const settleDelayMs = Number.isFinite(TIMING.BLOCKCHAIN_SETTLE_DELAY_MS)
         ? Math.max(0, TIMING.BLOCKCHAIN_SETTLE_DELAY_MS)
@@ -943,7 +957,14 @@ function scheduleDeferredGridResync(ctx, options = {}) {
         ctx.manager._fillProcessingLock.acquire(async () => {
             const ok = await ctx._performGridResync(options);
             if (!ok && !ctx._shuttingDown) {
-                ctx._warn('Deferred trigger reset still blocked or failed; retaining existing grid state.');
+                const curDustMs = getPendingDustDelayMs(ctx);
+                const curIdleMs = getMaintenanceIdleDelayMs(ctx);
+                const reason = curDustMs !== null
+                    ? `dust timer pending (${Math.ceil(curDustMs / 1000)}s)`
+                    : curIdleMs > 0
+                        ? `idle cooldown (${Math.ceil(curIdleMs / 1000)}s)`
+                        : 'grid resync rejected or failed';
+                ctx._warn(`Deferred trigger reset blocked: ${reason}; retaining existing grid state.`);
             }
         }).catch(err => {
             ctx._warn(`Deferred trigger reset lock error: ${err.message}`);
@@ -1095,7 +1116,24 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
                 'info'
             );
         } catch (err) {
-            this._warn(`[DUST-CANCEL] Failed to cancel dust order ${order.id}: ${err.message}`);
+            const errMsg = err?.message || '';
+            if (isOrderDoesNotExistError(errMsg, order.orderId)) {
+                this._dustSinceMap.delete(order.orderId);
+                syntheticFills.push({
+                    ...order,
+                    isPartial: true,
+                    isDelayedRotationTrigger: true,
+                    dustCancelTriggeredAt: now,
+                    dustRecoveredFromChain: true,
+                });
+                cancelledCount++;
+                this._log(
+                    `[DUST-CANCEL] Treated dust order ${order.id} (${order.orderId}) as gone from chain (${errMsg.slice(0, 80)})`,
+                    'info'
+                );
+            } else {
+                this._warn(`[DUST-CANCEL] Failed to cancel dust order ${order.id}: ${errMsg}`);
+            }
         }
     }
 
@@ -1269,6 +1307,7 @@ module.exports = {
     stopBlockchainFetchInterval,
     executeMaintenanceLogic,
     cancelDustOrders,
+    isOrderDoesNotExistError,
     clearDustMaintenanceTimer,
     scheduleDustMaintenanceCheck,
     seedDustTimersFromPartialUpdates,

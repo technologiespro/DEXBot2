@@ -1661,7 +1661,11 @@ class DEXBot {
         const accId = await chainOrders.resolveAccountId(accountName);
 
         if (!accId) {
-            throw new Error(`Unable to resolve account id for '${accountName}'`);
+            const isIdFormat = /^1\.2\.\d+$/.test(accountName);
+            throw new Error(
+                `Unable to resolve account${isIdFormat ? ' ID' : ''} '${accountName}' on the BitShares blockchain. ` +
+                `Verify the account ${isIdFormat ? 'ID is correct' : 'name is registered and active on chain'}.`
+            );
         }
 
         await chainOrders.setPreferredAccount(accId, accountName);
