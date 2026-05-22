@@ -2,7 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.1] - 2026-05-22 - Share AMA Strategy and Readiness Fix
+
+This patch release relocates the Kaufman AMA strategy implementation into the core production codebase so it is shared between the trading runtime, charts, and analysis scripts. It also fixes dynamic weight readiness by gating calculations on the ER period and lookback window rather than the full slow warmup window.
+
+### 2026-05-22
+
+#### Shared AMA Strategy & Readiness
+- Relocated Kaufman AMA implementation (`analysis/ama_fitting/ama.js` -> `market_adapter/core/strategies/ama.js`) to share it with production market-adapter runtime (`c90d744`).
+- Expose rolling SMA during warmup and seed recursion from the full ER-window SMA (`c90d744`).
+- Gate slope calculations on `erPeriod` + `lookbackBars` instead of waiting for the full slowPeriod warmup, allowing usable slope signals to trigger sooner without sacrificing clipping safety (`c90d744`).
+
 ## [0.7.0] - 2026-05-18 - Final 0.7 Hardening and Signal Refinement
+
 
 This update covers the final week of May 0.7 development, focusing on signal refinement, credential daemon stability, credit runtime fixes, and expanded analysis tools.
 
