@@ -15,7 +15,7 @@
  *   client.disconnect();
  */
 
-const WebSocket = require('isomorphic-ws');
+const _WebSocket = globalThis.WebSocket;
 
 const CONNECT_TIMEOUT_MS = 10000;
 const RPC_TIMEOUT_MS = 15000;
@@ -32,7 +32,7 @@ function createWsClient() {
 
     function connectOne(url, timeoutMs = CONNECT_TIMEOUT_MS) {
         return new Promise((resolve, reject) => {
-            const socket = new WebSocket(url);
+            const socket = new _WebSocket(url);
             const timer = setTimeout(() => {
                 socket.close();
                 reject(new Error(`handshake timeout ${timeoutMs}ms`));
@@ -55,13 +55,18 @@ function createWsClient() {
         }
         const id = _rpcId++;
         return new Promise((resolve, reject) => {
+            let settled = false;
             const timer = setTimeout(() => {
+                settled = true;
+                ws.removeEventListener('message', handler);
                 reject(new Error(`RPC timeout ${timeoutMs}ms`));
             }, timeoutMs);
-            const handler = (raw) => {
+            function handler(raw) {
+                if (settled) return;
                 try {
                     const msg = JSON.parse(raw.data);
                     if (String(msg.id) !== String(id)) return;
+                    settled = true;
                     clearTimeout(timer);
                     ws.removeEventListener('message', handler);
                     if (msg.error) {
@@ -70,7 +75,7 @@ function createWsClient() {
                         resolve(msg.result);
                     }
                 } catch (_) {}
-            };
+            }
             ws.addEventListener('message', handler);
             ws.send(JSON.stringify({ id, jsonrpc: '2.0', method, params }));
         });

@@ -16,7 +16,7 @@
  * Usage: node tests/diag_ws_nodes.js [--quick] [--stability-s 60]
  */
 
-const WebSocket = require('isomorphic-ws');
+const _WebSocket = globalThis.WebSocket;
 const { NODE_MANAGEMENT } = require('../modules/constants');
 
 const EXPECTED_CHAIN_ID = NODE_MANAGEMENT.EXPECTED_CHAIN_ID;
@@ -41,7 +41,7 @@ function log(msg) { console.log(`${ts()}: ${msg}`); }
 
 function wsConnect(nodeUrl, timeoutMs = CONNECT_TIMEOUT) {
     return new Promise((resolve, reject) => {
-        const ws = new WebSocket(nodeUrl);
+        const ws = new _WebSocket(nodeUrl);
         const timer = setTimeout(() => {
             ws.close();
             reject(new Error(`handshake timeout ${timeoutMs}ms`));

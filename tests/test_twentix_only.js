@@ -1,4 +1,4 @@
-const BitShares = require('btsdex');
+const { BitShares } = require('../modules/bitshares_client');
 
 function blockchainToFloat(intValue, precision) {
     if (intValue === null || intValue === undefined) return 0;

@@ -4,7 +4,7 @@
  * Native BitShares market history parsing utilities.
  *
  * Converts raw bucket_objects / get_market_history responses into
- * normalized OHLCV candles. Handles both the btsdex array format and
+ * normalized OHLCV candles. Handles both the compact array format and
  * the raw object format with key.base / key.quote / open_base / etc.
  */
 

@@ -4,7 +4,7 @@
  * for account hanzac-si, showing order ID, size, and price in a visual format.
  */
 
-const BitShares = require('btsdex');
+const { BitShares } = require('../modules/bitshares_client');
 
 const ACCOUNT_NAME = 'hanzac-si';
 

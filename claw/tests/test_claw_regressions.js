@@ -6,42 +6,73 @@ function clearModule(modulePath) {
   delete require.cache[modulePath];
 }
 
-async function testClawBitsharesClientLoadsEventPatchAndDetectsExistingConnection() {
+async function testClawBitsharesClientNativePathAndConnection() {
   const clawBitsharesPath = require.resolve('../modules/bitshares_client');
-  const originalLoad = Module._load;
-  let patchLoaded = false;
 
-  Module._load = function(request, parent, isMain) {
-    if (request === 'btsdex' && parent?.filename === clawBitsharesPath) {
-      return function MockBitSharesClient() {};
+  try {
+    clearModule(clawBitsharesPath);
+    const clawBitshares = require('../modules/bitshares_client');
+
+    assert.strictEqual(clawBitshares.isConnected(), false, 'initial state should not be connected');
+    assert.strictEqual(typeof clawBitshares.BitShares, 'object', 'BitShares proxy should exist');
+    assert.strictEqual(typeof clawBitshares.createAccountClient, 'function');
+    await assert.rejects(() => clawBitshares.createAccountClient('', 'wif'), /accountName is required/);
+    await assert.rejects(() => clawBitshares.createAccountClient('alice', ''), /privateKey is required/);
+  } finally {
+    clearModule(clawBitsharesPath);
+  }
+}
+
+async function testClawBitsharesClientWaitForConnectedTriggersNativeConnect() {
+  const clawBitsharesPath = require.resolve('../modules/bitshares_client');
+  const nativePath = require.resolve('../../modules/bitshares-native');
+  const originalNativeEntry = require.cache[nativePath];
+  let connectCalls = 0;
+  let nodes = [];
+  let connected = false;
+
+  require.cache[nativePath] = {
+    id: nativePath,
+    filename: nativePath,
+    loaded: true,
+    exports: {
+      createChainClient: ({ onStatusChange }) => ({
+        connect: async () => {
+          connectCalls += 1;
+          connected = true;
+          if (typeof onStatusChange === 'function') onStatusChange('connected');
+        },
+        disconnect: () => {
+          connected = false;
+          if (typeof onStatusChange === 'function') onStatusChange('closed');
+        },
+        getStatus: () => connected ? 'connected' : 'closed',
+        setNodes: (nextNodes) => { nodes = Array.isArray(nextNodes) ? nextNodes.slice() : []; },
+        getNodes: () => nodes.slice(),
+        getCoreAsset: () => '1.3.0',
+        db: {},
+        history: {},
+      }),
+      createSigningClient: () => ({ client: { initPromise: Promise.resolve(), newTx() {} } }),
     }
-
-    if (request === '../../modules/btsdex_event_patch' && parent?.filename === clawBitsharesPath) {
-      patchLoaded = true;
-      return {
-        patched: true,
-        addStatusCallback(callback) {
-          callback('open');
-        }
-      };
-    }
-
-    return originalLoad.call(this, request, parent, isMain);
   };
 
   try {
     clearModule(clawBitsharesPath);
     const clawBitshares = require('../modules/bitshares_client');
 
-    await clawBitshares.waitForConnected(5);
+    await clawBitshares.waitForConnected(200);
 
-    assert.strictEqual(patchLoaded, true, 'claw BitShares client should load the shared reconnect patch');
-    assert.strictEqual(clawBitshares.isConnected(), true, 'connected callback should immediately mark the shared client ready');
-    await assert.rejects(() => clawBitshares.createAccountClient('', 'wif'), /accountName is required/);
-    await assert.rejects(() => clawBitshares.createAccountClient('alice', ''), /privateKey is required/);
+    assert.strictEqual(connectCalls, 1, 'waitForConnected should initiate a native connect when idle');
+    assert.strictEqual(clawBitshares.isConnected(), true, 'client should report connected after lazy connect');
+    assert.ok(Array.isArray(clawBitshares.BitShares.node) && clawBitshares.BitShares.node.length > 0, 'default node list should be populated');
   } finally {
-    Module._load = originalLoad;
     clearModule(clawBitsharesPath);
+    if (originalNativeEntry) {
+      require.cache[nativePath] = originalNativeEntry;
+    } else {
+      delete require.cache[nativePath];
+    }
   }
 }
 
@@ -707,7 +738,8 @@ function testClawDefaultDataPathsStayInsideClawFolder() {
 }
 
 async function main() {
-  await testClawBitsharesClientLoadsEventPatchAndDetectsExistingConnection();
+  await testClawBitsharesClientNativePathAndConnection();
+  await testClawBitsharesClientWaitForConnectedTriggersNativeConnect();
   testClawRootExportsAvoidSilentCollisions();
   testZeroClawSkillQuotesPayloadPlaceholders();
   testLiquidityPoolWrapperInjectsSharedBitSharesClient();

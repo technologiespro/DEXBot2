@@ -1,0 +1,88 @@
+/**
+ * tests/test_native_subscriptions.js - Native subscription regression tests.
+ */
+
+const assert = require('assert');
+const { createSubscriptionManager } = require('../modules/bitshares-native/subscriptions');
+
+console.log('=== Native Subscription Tests ===\n');
+
+(async () => {
+    let noticeHandler = null;
+    const dbCalls = [];
+    const delivered = [];
+    const chainClient = {
+        transport: {
+            addMessageHandler(handler) {
+                noticeHandler = handler;
+                return () => { noticeHandler = null; };
+            },
+        },
+        db: {
+            get_full_accounts: async ([account], subscribe) => {
+                dbCalls.push(['get_full_accounts', account, subscribe]);
+                return [[account, {
+                    account: {
+                        id: account === 'bob' ? '1.2.200' : '1.2.100',
+                        name: account,
+                        statistics: account === 'bob' ? '2.6.200' : '2.6.100',
+                    },
+                }]];
+            },
+            get_objects: async ([id]) => {
+                dbCalls.push(['get_objects', id]);
+                return [{ id, most_recent_op: '1.11.500' }];
+            },
+            call: async (method, args) => {
+                dbCalls.push([method, args]);
+                assert.strictEqual(method, 'set_subscribe_callback');
+                return null;
+            },
+        },
+        history: {
+            getAccountHistory: async (accountId, stop, limit, start) => {
+                assert.strictEqual(accountId, '1.2.100');
+                assert.strictEqual(start, '1.11.500');
+                assert.ok(limit <= 100);
+                return [
+                    { id: '1.11.499', block_num: 10, trx_id: 1, op: [4, { order_id: '1.7.1' }] },
+                    { id: '1.11.498', block_num: 9, trx_id: 1, op: [0, {}] },
+                ];
+            },
+        },
+    };
+
+    const manager = createSubscriptionManager(chainClient);
+    await manager.subscribe('alice', (fills) => {
+        delivered.push(['alice', fills]);
+    });
+    await manager.subscribe('bob', (fills) => {
+        delivered.push(['bob', fills]);
+    });
+
+    assert.strictEqual(typeof noticeHandler, 'function', 'notice handler should be registered');
+    await noticeHandler([1, [{ id: '2.5.999', owner: '1.2.100' }]]);
+
+    assert.strictEqual(delivered.length, 1, 'only the matching account should receive fills');
+    assert.strictEqual(delivered[0][0], 'alice');
+    assert.ok(Array.isArray(delivered[0][1]), 'subscriber should receive fills');
+    assert.strictEqual(delivered[0][1].length, 1);
+    assert.strictEqual(delivered[0][1][0].id, '1.11.499');
+
+    delivered.length = 0;
+    await noticeHandler([1, [{ id: '2.5.1000', owner: '1.2.100' }]]);
+    assert.strictEqual(delivered.length, 0, 'duplicate history id should not be delivered twice');
+
+    assert.ok(dbCalls.some(([method]) => method === 'set_subscribe_callback'), 'subscription RPC should be registered');
+    assert.strictEqual(
+        dbCalls.some(([method, account, subscribe]) => method === 'get_full_accounts' && account === 'alice' && subscribe === true),
+        true,
+        'subscription setup should subscribe the account on-chain'
+    );
+
+    console.log('  PASS: callbacks receive deduped fill notices');
+    console.log('\n=== All subscription tests passed ===');
+})().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+});

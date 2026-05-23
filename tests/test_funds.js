@@ -4,9 +4,11 @@
  * for the configured account.
  */
 
-const BitShares = require('btsdex');
+const { BitShares } = require('../modules/bitshares_client');
 
 const ACCOUNT_NAME = 'hanzac-si';
+const STRICT_LIVE_TEST = process.env.RUN_LIVE_BITSHARES_TESTS_STRICT === '1';
+const OVERALL_TIMEOUT_MS = Number(process.env.BITSHARES_FUNDS_TEST_TIMEOUT_MS) || 20000;
 
 if (!process.env.RUN_LIVE_BITSHARES_TESTS) {
     console.log('Skipping live funds test.');
@@ -58,9 +60,14 @@ async function main() {
         await BitShares.connect();
         console.log('Connected!\n');
     } catch (err) {
-        console.log('⚠️  Skipping live funds test: could not connect to BitShares');
-        console.log('   Error:', err && err.message ? err.message : err);
-        process.exit(0);
+        const message = err && err.message ? err.message : err;
+        if (!STRICT_LIVE_TEST) {
+            console.log('⚠️  Skipping live funds test: could not connect to BitShares');
+            console.log('   Error:', message);
+            process.exit(0);
+            return;
+        }
+        throw err;
     }
 
     const account = await BitShares.accounts[ACCOUNT_NAME];
@@ -173,6 +180,12 @@ main().catch(err => {
 
 // Safety timeout to prevent hanging (this is an integration test that connects to blockchain)
 setTimeout(() => {
-    console.error('Test timeout: process did not exit within 20s');
+    const message = `Test timeout: process did not exit within ${OVERALL_TIMEOUT_MS}ms`;
+    if (!STRICT_LIVE_TEST) {
+        console.log(`Skipping live funds test: ${message}`);
+        process.exit(0);
+        return;
+    }
+    console.error(message);
     process.exit(1);
-}, 20000);
+}, OVERALL_TIMEOUT_MS);

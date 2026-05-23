@@ -70,7 +70,12 @@ const { TIMING, NODE_MANAGEMENT } = require('./modules/constants');
 const { readGeneralSettings } = require('./modules/general_settings');
 const { orderNodesForSettings } = require('./modules/node_health_cache');
 const credentialPolicy = require('./modules/credential_policy');
-const BitSharesLib = require('btsdex');
+let _nativeChainClient = null;
+let _nativeNodeList = [];
+
+const native = require('./modules/bitshares-native');
+_nativeChainClient = native.createChainClient({ rpcTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS });
+_nativeNodeList = [];
 const { execSync } = require('child_process');
 const {
     assertPrivatePathSecurity,
@@ -351,17 +356,20 @@ async function executeOperationsWithClient(client, operations) {
 
 async function broadcastWithRetry(accountName, privateKey, broadcastFn) {
     for (let attempt = 1; attempt <= 2; attempt++) {
-        if (!BitSharesLib.chain) await BitSharesLib.connect();
-        const client = new BitSharesLib(accountName, privateKey, 'BTS');
+        if (_nativeChainClient.getStatus() !== 'connected') {
+            _nativeChainClient.setNodes(_nativeNodeList.length > 0 ? _nativeNodeList : NODE_MANAGEMENT.DEFAULT_NODES);
+            await _nativeChainClient.connect();
+        }
+        const { createSigningClient } = require('./modules/bitshares-native');
+        const signingClient = createSigningClient(_nativeChainClient, accountName, privateKey);
+        const client = signingClient.client;
         await client.initPromise;
         try {
             return await broadcastFn(client);
         } catch (err) {
             if (attempt === 2) throw err;
             debugLog(`Broadcast failed (attempt ${attempt}), reconnecting: ${err.message}`);
-            try { await BitSharesLib.disconnect(); } catch (_) {}
-            BitSharesLib.connectPromise = undefined;
-            BitSharesLib.chain = undefined;
+            try { _nativeChainClient.disconnect(); } catch (_) {}
         }
     }
 }
@@ -379,7 +387,8 @@ function refreshNodeList() {
         try {
             const bestNodes = orderNodesForSettings(settings);
             if (bestNodes && bestNodes.length > 0) {
-                BitSharesLib.node = bestNodes;
+                _nativeNodeList = bestNodes;
+                _nativeChainClient.setNodes(bestNodes);
                 daemonLogger.log?.(`[credential-daemon] Node list refreshed: using best ${bestNodes.length} nodes from cache.`);
             }
         } catch (err) {

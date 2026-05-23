@@ -8,7 +8,7 @@
  *   node tests/test_fee_cache_twentix.js
  */
 
-const BitShares = require('btsdex');
+const { BitShares } = require('../modules/bitshares_client');
 const { initializeFeeCache } = require('../modules/order/utils/system');
 const { getAssetFees } = require('../modules/order/utils/math');
 

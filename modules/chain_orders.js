@@ -297,7 +297,7 @@ async function _ensureAccountSubscriber(accountName) {
         };
 
         try {
-            BitShares.subscribe('account', bsCallback, accountName);
+            await BitShares.subscribe('account', bsCallback, accountName);
         } catch (e) {
             console.warn(`[chain_orders] Failed to subscribe to account '${accountName}': ${e.message}`);
         }
@@ -497,7 +497,7 @@ async function listenForFills(accountRef, callback) {
                 if (entry.userCallbacks.size === 0) {
                     try {
                         if (typeof BitShares.unsubscribe === 'function') {
-                            BitShares.unsubscribe('account', entry.bsCallback, accountName);
+                            await BitShares.unsubscribe('account', entry.bsCallback, accountName);
                         }
                     } catch (e) { }
                     accountSubscriptions.delete(accountName);
@@ -957,7 +957,7 @@ async function executeBatch(accountName, privateKey, operations) {
 
         const result = await tx.broadcast();
 
-        // Normalize broadcast response shape across btsdex/node variants.
+        // Normalize broadcast response shape across node variants.
         const operationResults =
             (result && Array.isArray(result.operation_results) && result.operation_results) ||
             (result && result.trx && Array.isArray(result.trx.operation_results) && result.trx.operation_results) ||

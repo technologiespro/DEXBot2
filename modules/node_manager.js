@@ -21,7 +21,7 @@
  *
  * 3. Failover Integration
  *    - Exports node stats for monitoring
- *    - Designed to work with btsdex-api's setServers() API
+ *    - Designed to work with the native transport's setNodes() API
  *    - Automatic recovery when blacklisted nodes become healthy
  *
  * ===============================================================================
@@ -34,7 +34,7 @@
  *   const nodeManager = new NodeManager(config);
  *   await nodeManager.checkAllNodes();
  *   const bestNode = nodeManager.getBestNode();
- *   btsdexApi.connection.setServers(nodeManager.getHealthyNodes());
+ *   nativeClient.setNodes(nodeManager.getHealthyNodes());
  *   nodeManager.start();  // Begin periodic monitoring
  *
  * ===============================================================================
@@ -42,7 +42,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const WebSocket = require('isomorphic-ws');
+const _WebSocket = globalThis.WebSocket;
 const Logger = require('./logger');
 const { NODE_MANAGEMENT } = require('./constants');
 const {
@@ -420,7 +420,7 @@ class NodeManager {
             }, timeoutMs);
 
             try {
-                ws = new WebSocket(nodeUrl);
+                ws = new _WebSocket(nodeUrl);
 
                 ws.onopen = () => {
                     settle(resolve, ws);

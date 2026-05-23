@@ -9,7 +9,7 @@
  *   node tests/test_fee_cache.js
  */
 
-const BitShares = require('btsdex');
+const { BitShares } = require('../modules/bitshares_client');
 const fs = require('fs');
 const path = require('path');
 const { initializeFeeCache } = require('../modules/order/utils/system');

@@ -7,7 +7,7 @@
  * - Prints (maker order id, amount, returning asset symbol) for matching trades
  */
 
-const BitShares = require('btsdex');
+const { BitShares } = require('../modules/bitshares_client');
 
 const ACCOUNT_NAME = 'hanzac-si';
 

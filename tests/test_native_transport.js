@@ -1,0 +1,384 @@
+/**
+ * tests/test_native_transport.js — Transport layer unit tests
+ *
+ * Tests the transport lifecycle, multi-node failover, JSON-RPC 2.0 request/response
+ * routing, and error handling using Node.js built-in WebSocket server for mocking.
+ */
+
+const assert = require('assert');
+const http = require('http');
+const crypto = require('crypto');
+
+console.log('=== Native Transport Tests ===\n');
+
+// Dynamically create WebSocket server for testing
+// Node 22 has built-in WebSocket, but server-side requires ws package or http upgrade.
+// For mocking, we use a simple HTTP upgrade handler.
+
+function createWsServer(port) {
+    return new Promise((resolve) => {
+        const server = http.createServer((req, res) => {
+            res.writeHead(200);
+            res.end('ok');
+        });
+
+        const connections = new Set();
+
+        server.on('upgrade', (req, socket, head) => {
+            const key = req.headers['sec-websocket-key'];
+            const acceptKey = crypto
+                .createHash('sha1')
+                .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+                .digest('base64');
+
+            socket.write(
+                'HTTP/1.1 101 Switching Protocols\r\n' +
+                'Upgrade: websocket\r\n' +
+                'Connection: Upgrade\r\n' +
+                'Sec-WebSocket-Accept: ' + acceptKey + '\r\n\r\n'
+            );
+
+            connections.add(socket);
+            const handlers = {};
+
+            socket.on('data', (chunk) => {
+                try {
+                    const frame = parseWsFrame(chunk);
+                    if (!frame) return;
+                    const msg = JSON.parse(frame.payload.toString());
+                    const id = msg.id;
+
+                    if (msg.method === 'call') {
+                        const [apiId, method, params] = msg.params;
+
+                        // Handle login
+                        if (method === 'login') {
+                            sendWsFrame(socket, JSON.stringify({
+                                id, jsonrpc: '2.0',
+                                result: true,
+                            }));
+                        }
+                        // Handle API registration
+                        else if (method === 'database') {
+                            sendWsFrame(socket, JSON.stringify({ id, jsonrpc: '2.0', result: 2 }));
+                        }
+                        else if (method === 'history') {
+                            sendWsFrame(socket, JSON.stringify({ id, jsonrpc: '2.0', result: 3 }));
+                        }
+                        else if (method === 'network_broadcast') {
+                            sendWsFrame(socket, JSON.stringify({ id, jsonrpc: '2.0', result: 4 }));
+                        }
+                        else if (method === 'get_chain_id') {
+                            sendWsFrame(socket, JSON.stringify({
+                                id, jsonrpc: '2.0',
+                                result: '4018d7844c78f6a6c41c6a552b898022310fc5dec06a3d6f1d8b71a21bcf8cda',
+                            }));
+                        }
+                        else if (method === 'get_chain_properties') {
+                            sendWsFrame(socket, JSON.stringify({
+                                id, jsonrpc: '2.0',
+                                result: { address_prefix: 'BTS' },
+                            }));
+                        }
+                        else if (method === 'get_global_properties') {
+                            sendWsFrame(socket, JSON.stringify({
+                                id, jsonrpc: '2.0',
+                                result: {
+                                    parameters: {
+                                        current_fees: {
+                                            parameters: [],
+                                            scale: 10000,
+                                        },
+                                    },
+                                },
+                            }));
+                        }
+                        // Handle get_dynamic_global_properties
+                        else if (method === 'get_dynamic_global_properties') {
+                            sendWsFrame(socket, JSON.stringify({
+                                id, jsonrpc: '2.0',
+                                result: { head_block_number: 12345, head_block_id: '00cafe0000000000000000000000000000000000' },
+                            }));
+                        }
+                        // Handle get_objects
+                        else if (method === 'get_objects') {
+                            sendWsFrame(socket, JSON.stringify({
+                                id, jsonrpc: '2.0',
+                                result: [{ id: '2.0.0' }, { id: '2.1.0', head_block_number: 12300, head_block_id: '00cafe0000000000000000000000000000000000' }],
+                            }));
+                        }
+                        // Handle get_assets
+                        else if (method === 'get_assets') {
+                            sendWsFrame(socket, JSON.stringify({
+                                id, jsonrpc: '2.0',
+                                result: [{ id: '1.3.0', precision: 5, symbol: 'BTS' }],
+                            }));
+                        }
+                        // Handle lookup_asset_symbols
+                        else if (method === 'lookup_asset_symbols') {
+                            sendWsFrame(socket, JSON.stringify({
+                                id, jsonrpc: '2.0',
+                                result: [{ id: '1.3.0', precision: 5, symbol: 'BTS' }],
+                            }));
+                        }
+                        // Handle getGlobalProperties
+                        else if (method === 'get_global_properties') {
+                            sendWsFrame(socket, JSON.stringify({
+                                id, jsonrpc: '2.0',
+                                result: {
+                                    parameters: {
+                                        current_fees: {
+                                            parameters: [],
+                                            scale: 10000,
+                                        },
+                                    },
+                                },
+                            }));
+                        }
+                        // Handle get_full_accounts
+                        else if (method === 'get_full_accounts') {
+                            sendWsFrame(socket, JSON.stringify({
+                                id, jsonrpc: '2.0',
+                                result: [[params[0][0], { account: { id: '1.2.100', name: 'test-account' }, balances: [], limit_orders: [] }]],
+                            }));
+                        }
+                        // Handle subscribe
+                        else if (method === 'set_subscribe_callback') {
+                            sendWsFrame(socket, JSON.stringify({ id, jsonrpc: '2.0', result: null }));
+                        }
+                        else {
+                            sendWsFrame(socket, JSON.stringify({ id, jsonrpc: '2.0', result: {} }));
+                        }
+                    }
+
+                    if (handlers.onMessage) handlers.onMessage(JSON.parse(frame.payload.toString()));
+                } catch (e) {
+                    // Ignore parse errors for control frames
+                }
+            });
+
+            socket.on('end', () => { connections.delete(socket); });
+            socket.on('error', () => { connections.delete(socket); });
+
+            if (handlers.onCreate) handlers.onCreate(socket);
+            socket._handlers = handlers;
+        });
+
+        server.on('error', () => {});
+
+        server.listen(port, '127.0.0.1', () => {
+            resolve({
+                server,
+                port,
+                close() {
+                    for (const s of connections) {
+                        try { s.destroy(); } catch (_) {}
+                    }
+                    server.close();
+                },
+                onConnection(handler) {
+                    // Store handler for new connections
+                    server._connHandler = handler;
+                },
+            });
+        });
+    });
+}
+
+function parseWsFrame(chunk) {
+    if (chunk.length < 2) return null;
+    const firstByte = chunk[0];
+    const secondByte = chunk[1];
+    const opcode = firstByte & 0x0f;
+    const masked = (secondByte & 0x80) !== 0;
+    let payloadLength = secondByte & 0x7f;
+    let offset = 2;
+
+    if (payloadLength === 126) {
+        payloadLength = chunk.readUInt16BE(2);
+        offset = 4;
+    } else if (payloadLength === 127) {
+        // 64-bit length - use Number for test simplicity
+        payloadLength = Number(chunk.readBigUInt64BE(2));
+        offset = 10;
+    }
+
+    const maskKey = masked ? chunk.slice(offset, offset + 4) : null;
+    if (masked) offset += 4;
+    const payload = chunk.slice(offset, offset + payloadLength);
+
+    if (masked && maskKey) {
+        for (let i = 0; i < payload.length; i++) {
+            payload[i] ^= maskKey[i % 4];
+        }
+    }
+
+    return { opcode, payload };
+}
+
+function sendWsFrame(socket, data) {
+    const payload = Buffer.from(data, 'utf8');
+    let header;
+    if (payload.length < 126) {
+        header = Buffer.from([0x81, payload.length]);
+    } else if (payload.length < 65536) {
+        header = Buffer.alloc(4);
+        header[0] = 0x81; header[1] = 126;
+        header.writeUInt16BE(payload.length, 2);
+    } else {
+        header = Buffer.alloc(10);
+        header[0] = 0x81; header[1] = 127;
+        header.writeBigUInt64BE(BigInt(payload.length), 2);
+    }
+    socket.write(Buffer.concat([header, payload]));
+}
+
+// ── Test 1: Transport connection lifecycle ───────────────────────────────
+
+async function testConnectionLifecycle() {
+    const { createTransport } = require('../modules/bitshares-native/transport');
+    const port = 18000 + Math.floor(Math.random() * 1000);
+    const wsServer = await createWsServer(port);
+
+    try {
+        const transport = createTransport({});
+
+        // Connect
+        await transport.connect([`ws://127.0.0.1:${port}/ws`]);
+
+        // Check state
+        assert.strictEqual(transport.isConnected(), true, 'Should be connected');
+        assert.ok(transport.getNodeUrl().includes(String(port)), 'Node URL should match');
+
+        // Make an RPC call
+        const result = await transport.call('call', [1, 'get_assets', [['1.3.0']]]);
+        assert.ok(result, 'RPC call should return result');
+
+        // RPC timeout test - call a method the server doesn't know about
+        // The server won't respond, triggering the client-side timeout
+        let timeoutCaught = false;
+        try {
+            await transport.call('unregistered_method', [], 500);
+        } catch (e) {
+            timeoutCaught = e.code === 'RPC_TIMEOUT';
+        }
+        assert.ok(timeoutCaught, 'Timeout should be caught');
+
+        // Disconnect
+        transport.disconnect();
+        assert.strictEqual(transport.isConnected(), false, 'Should be disconnected');
+
+        console.log('  PASS: Connection lifecycle');
+    } finally {
+        wsServer.close();
+    }
+}
+
+// ── Test 2: Multi-node failover ──────────────────────────────────────────
+
+async function testMultiNodeFailover() {
+    const { createTransport } = require('../modules/bitshares-native/transport');
+    const port = 18000 + Math.floor(Math.random() * 1000);
+    const wsServer = await createWsServer(port);
+
+    try {
+        const transport = createTransport({});
+
+        // Connect with invalid first node, valid second
+        await transport.connect([
+            `ws://127.0.0.1:19999/nonexistent`,
+            `ws://127.0.0.1:${port}/ws`,
+        ]);
+
+        assert.strictEqual(transport.isConnected(), true, 'Should connect to fallback node');
+        assert.ok(transport.getNodeUrl().includes(String(port)), 'Should use second node');
+
+        transport.disconnect();
+
+        console.log('  PASS: Multi-node failover (bad node first)');
+    } finally {
+        wsServer.close();
+    }
+}
+
+// ── Test 3: All nodes fail ───────────────────────────────────────────────
+
+async function testAllNodesFail() {
+    const { createTransport, AllNodesFailed } = require('../modules/bitshares-native/transport');
+
+    const transport = createTransport({ connectTimeoutMs: 500 });
+
+    try {
+        await transport.connect([
+            'ws://127.0.0.1:19998/bad',
+            'ws://127.0.0.1:19997/bad',
+        ]);
+        assert.fail('Should have thrown');
+    } catch (e) {
+        assert.ok(e instanceof AllNodesFailed || e.code === 'ALL_NODES_FAILED' || e.code === 'CONNECTION_ERROR',
+            `Expected connection error, got: ${e.code || e.message}`);
+    }
+
+    console.log('  PASS: All nodes fail gracefully');
+}
+
+// ── Test 4: RPC error handling ───────────────────────────────────────────
+
+async function testRpcErrorHandling() {
+    assert.ok(true, 'RPC error types defined');
+    const { RpcError, RpcTimeoutError, ConnectionError } = require('../modules/bitshares-native/transport');
+    const rpcErr = new RpcError('test error', -32000, 'test_method', []);
+    assert.strictEqual(rpcErr.code, -32000);
+    assert.strictEqual(rpcErr.method, 'test_method');
+
+    const timeoutErr = new RpcTimeoutError('test_method', 5000);
+    assert.strictEqual(timeoutErr.code, 'RPC_TIMEOUT');
+    assert.strictEqual(timeoutErr.method, 'test_method');
+
+    const connErr = new ConnectionError('test connection error');
+    assert.strictEqual(connErr.code, 'CONNECTION_ERROR');
+
+    console.log('  PASS: Error type hierarchy');
+}
+
+// ── Test 5: Message handlers and status callbacks ────────────────────────
+
+async function testStatusCallbacks() {
+    const { createTransport } = require('../modules/bitshares-native/transport');
+    const port = 18000 + Math.floor(Math.random() * 1000);
+    const wsServer = await createWsServer(port);
+
+    const statuses = [];
+    const transport = createTransport({
+        onStatusChange: (status) => statuses.push(status),
+    });
+
+    try {
+        await transport.connect([`ws://127.0.0.1:${port}/ws`]);
+        assert.ok(statuses.includes('connected'), 'Should fire connected status');
+
+        transport.disconnect();
+        assert.ok(statuses.includes('closed'), 'Should fire closed status');
+
+        console.log('  PASS: Status callbacks');
+    } finally {
+        wsServer.close();
+    }
+}
+
+// ── Run all tests ────────────────────────────────────────────────────────
+
+(async () => {
+    try {
+        await testConnectionLifecycle();
+        await testMultiNodeFailover();
+        await testAllNodesFail();
+        testRpcErrorHandling();
+        await testStatusCallbacks();
+        console.log('\n=== All transport tests passed ===');
+    } catch (e) {
+        console.error('\nTransport test FAILED:', e.message);
+        console.error(e.stack);
+        process.exit(1);
+    }
+})();

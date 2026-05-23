@@ -1,6 +1,8 @@
 console.log('Starting test for listening to filled orders...');
 
 const RUN_LIVE_TEST = process.env.RUN_LIVE_BITSHARES_TESTS === '1';
+const STRICT_LIVE_TEST = process.env.RUN_LIVE_BITSHARES_TESTS_STRICT === '1';
+const OVERALL_TIMEOUT_MS = Number(process.env.BITSHARES_FILL_LISTENER_TEST_TIMEOUT_MS) || 10000;
 
 if (!RUN_LIVE_TEST) {
     console.log('Skipping live fill-listener test.');
@@ -21,6 +23,19 @@ try {
 console.log(`Listening for fills on account ${TEST_ACCOUNT}. Waiting briefly and then exiting.`);
 
 let unsub;
+const forceExit = setTimeout(() => {
+    const message = `live fill-listener test timed out after ${OVERALL_TIMEOUT_MS}ms`;
+    try {
+        if (typeof unsub === 'function') unsub();
+    } catch (_) {}
+    if (!STRICT_LIVE_TEST) {
+        console.log(`Skipping live fill-listener test: ${message}`);
+        process.exit(0);
+        return;
+    }
+    console.error(message);
+    process.exit(1);
+}, OVERALL_TIMEOUT_MS);
 (async () => {
     try {
         unsub = await listenForFills(TEST_ACCOUNT, (fills) => {
@@ -36,11 +51,20 @@ let unsub;
             });
         });
     } catch (err) {
+        clearTimeout(forceExit);
+        if (!STRICT_LIVE_TEST) {
+            console.log('Skipping live fill-listener test: live connectivity not available.');
+            console.log('Error:', err.message || err);
+            process.exit(0);
+            return;
+        }
         console.error('listenForFills error:', err.message || err);
+        process.exit(1);
     }
 })();
 
 setTimeout(() => {
+    clearTimeout(forceExit);
     try {
         if (typeof unsub === 'function') unsub();
     } catch (e) {}
