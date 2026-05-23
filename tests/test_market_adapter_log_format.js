@@ -35,9 +35,10 @@ function testBuildDynamicWeightInputsLogFormatsFields() {
         erPeriod: 781,
         fastPeriod: 5.2,
         slowPeriod: 112.7,
+        erSmoothPeriod: 3,
     });
 
-    assert.ok(text.includes('ama=781/5.2/112.7'), 'AMA tuple should be included');
+    assert.ok(text.includes('ama=781/5.2/112.7/es3'), 'AMA tuple should include ER smoothing');
     assert.ok(text.includes('base=0.60/0.40'), 'base weights should be formatted');
     assert.ok(text.includes('clamp=0.50/0.25'), 'clamp pair should be formatted');
     assert.ok(text.includes('atr=14'), 'ATR period should be shown');

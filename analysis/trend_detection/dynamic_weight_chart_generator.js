@@ -90,8 +90,9 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
     const ama3Prices         = results.map((r) => r.ama3Price ?? null);
     const amaErPeriod        = data.amaConfig?.erPeriod ?? MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].erPeriod;
     const amaSlowPeriod      = data.amaConfig?.slowPeriod ?? MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod;
-    const amaFastPeriod       = data.amaConfig?.fastPeriod ?? MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].fastPeriod;
-    const amaWarmupBars      = getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars, amaFastPeriod);
+    const amaFastPeriod      = data.amaConfig?.fastPeriod ?? MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].fastPeriod;
+    const amaErSmoothPeriod  = data.amaConfig?.erSmoothPeriod ?? 0;
+    const amaWarmupBars      = getAmaWarmupBars(amaErPeriod, amaSlowPeriod, lookbackBars, amaFastPeriod, amaErSmoothPeriod);
     const amaSlopeReadyBars  = Math.ceil(amaErPeriod) + lookbackBars;
     const amaSeedSmaLine     = new Array(results.length).fill(null);
     const amaSeedWindowEnd   = Math.min(results.length - 1, Math.ceil(amaErPeriod));

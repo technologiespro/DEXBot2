@@ -1155,7 +1155,13 @@ class MarketAdapterService {
         }
 
         const needBootstrap = existingCandles.length === 0;
-        const amaWarmupBars = getAmaWarmupBars(botAma.erPeriod, botAma.slowPeriod, lookbackBars, botAma.fastPeriod);
+        const amaWarmupBars = getAmaWarmupBars(
+            botAma.erPeriod,
+            botAma.slowPeriod,
+            lookbackBars,
+            botAma.fastPeriod,
+            botAma.erSmoothPeriod ?? 0
+        );
         const analysisKeepCount = amaWarmupBars + 1;
         // Retain one extra raw candle so the closed-candle analysis window still keeps a
         // full warmup/history set when the newest bucket is the current in-progress bar.
@@ -1933,6 +1939,7 @@ class MarketAdapterService {
                     erPeriod: botAma.erPeriod,
                     fastPeriod: botAma.fastPeriod,
                     slowPeriod: botAma.slowPeriod,
+                    erSmoothPeriod: botAma.erSmoothPeriod ?? 0,
                 },
                 pendingClosedCandle,
             });
@@ -2369,6 +2376,7 @@ class MarketAdapterService {
                 erPeriod: botAma.erPeriod,
                 fastPeriod: botAma.fastPeriod,
                 slowPeriod: botAma.slowPeriod,
+                erSmoothPeriod: botAma.erSmoothPeriod ?? 0,
             },
             amaComparison,
             lastDeltaPercent: deltaPercent,
@@ -2455,6 +2463,7 @@ class MarketAdapterService {
                 erPeriod: botAma.erPeriod,
                 fastPeriod: botAma.fastPeriod,
                 slowPeriod: botAma.slowPeriod,
+                erSmoothPeriod: botAma.erSmoothPeriod ?? 0,
             },
             atr,
             weightVariance,

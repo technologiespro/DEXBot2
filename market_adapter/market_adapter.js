@@ -450,8 +450,27 @@ function getAmaPresetForKey(key, profile = null) {
     return normalizeAmaPreset(profile?.amas?.[key]) || normalizeAmaPreset(BUILTIN_AMAS[key]) || null;
 }
 
+function normalizeErSmoothPeriod(raw, fallback = 0) {
+    const value = Number(raw);
+    if (value === 0) return 0;
+    if (Number.isFinite(value) && value >= 1) return value;
+
+    const fallbackValue = Number(fallback);
+    return Number.isFinite(fallbackValue) && fallbackValue >= 1 ? fallbackValue : 0;
+}
+
+function resolveErSmoothPeriodForBot(bot) {
+    const raw = (bot && typeof bot.ama === 'object' && bot.ama !== null) ? bot.ama : {};
+    const globalErSmoothPeriod = normalizeErSmoothPeriod(MARKET_ADAPTER.AMA_ER_SMOOTH_FAST_PERIOD, 0);
+    if (Object.prototype.hasOwnProperty.call(raw, 'erSmoothPeriod')) {
+        return normalizeErSmoothPeriod(raw.erSmoothPeriod, globalErSmoothPeriod);
+    }
+    return globalErSmoothPeriod;
+}
+
 function buildAmaComparisonPresets(bot, ctx = null) {
     const profile = findAmaProfileForBot(bot, ctx);
+    const erSmoothPeriod = resolveErSmoothPeriodForBot(bot);
     return AMA_PRESET_KEYS
         .map((key) => {
             const preset = getAmaPresetForKey(key, profile);
@@ -461,6 +480,7 @@ function buildAmaComparisonPresets(bot, ctx = null) {
                 erPeriod: preset.erPeriod,
                 fastPeriod: preset.fastPeriod,
                 slowPeriod: preset.slowPeriod,
+                erSmoothPeriod,
             };
         })
         .filter(Boolean);
@@ -748,14 +768,20 @@ function computeCandleStaleness(lastCandleTs, maxStaleHours) {
 }
 
 function resolveAmaForBot(bot, ctx = null, cfg = null) {
-    const fromProfiles = getAmaFromProfilesForBot(bot, ctx, cfg);
-    if (fromProfiles) return fromProfiles;
-
     const raw = (bot && typeof bot.ama === 'object' && bot.ama !== null) ? bot.ama : {};
+    const erSmoothPeriod = resolveErSmoothPeriodForBot(bot);
+
+    const fromProfiles = getAmaFromProfilesForBot(bot, ctx, cfg);
+    if (fromProfiles) {
+        fromProfiles.erSmoothPeriod = erSmoothPeriod;
+        return fromProfiles;
+    }
+
     const amaCfg = {
         erPeriod: Number(raw.erPeriod),
         fastPeriod: Number(raw.fastPeriod),
         slowPeriod: Number(raw.slowPeriod),
+        erSmoothPeriod,
         enabled: raw.enabled !== false,
     };
 
@@ -791,6 +817,7 @@ function calcAmaComparison(candles, bot = null, ctx = null) {
             erPeriod: p.erPeriod,
             fastPeriod: p.fastPeriod,
             slowPeriod: p.slowPeriod,
+            erSmoothPeriod: p.erSmoothPeriod,
         });
         const value = values[values.length - 1];
         out.push({ ...p, value: Number.isFinite(value) ? value : null, ok: Number.isFinite(value) });
@@ -1278,7 +1305,8 @@ async function runOnce(cfg, state, contextCache) {
             if (Array.isArray(r.amaComparison) && r.amaComparison.length > 0) {
                 const parts = r.amaComparison.map((a) => {
                     const val = Number.isFinite(a.value) ? a.value.toFixed(8) : 'n/a';
-                    return `${a.name}[${a.erPeriod}/${a.fastPeriod}/${a.slowPeriod}]=${val}`;
+                    const erSmoothText = Number.isFinite(Number(a.erSmoothPeriod)) ? `/es${Number(a.erSmoothPeriod).toFixed(0)}` : '';
+                    return `${a.name}[${a.erPeriod}/${a.fastPeriod}/${a.slowPeriod}${erSmoothText}]=${val}`;
                 });
                 log(cfg, `  AMA compare: ${parts.join(' | ')}`);
             }

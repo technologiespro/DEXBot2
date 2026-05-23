@@ -385,6 +385,37 @@ function testUptrendSlopeOffsetTable() {
     assert.deepStrictEqual(derivedWeights(r), { sellW: -0.33, buyW: 0.33 });
 }
 
+// ─── ER Smoothing ────────────────────────────────────────────────────────────
+
+function testERaSmoothingDisabledByDefault() {
+    const closes = [100, 101, 99, 102, 98, 103, 97, 104, 96, 105];
+    const raw = calculateAMA(closes, { erPeriod: 5, fastPeriod: 2, slowPeriod: 30 });
+    const smooth = calculateAMA(closes, { erPeriod: 5, fastPeriod: 2, slowPeriod: 30, erSmoothPeriod: 0 });
+    assert.deepStrictEqual(raw, smooth, 'erSmoothPeriod=0 should match no smoothing');
+}
+
+function testERaSmoothingRejectsSubUnitPeriods() {
+    const closes = [100, 101, 99, 102, 98, 103, 97, 104, 96, 105];
+    const raw = calculateAMA(closes, { erPeriod: 5, fastPeriod: 2, slowPeriod: 30 });
+    const invalid = calculateAMA(closes, { erPeriod: 5, fastPeriod: 2, slowPeriod: 30, erSmoothPeriod: 0.5 });
+    assert.deepStrictEqual(invalid, raw, 'erSmoothPeriod < 1 should fall back to disabled smoothing');
+}
+
+function testERaSmoothingProducesDifferentOutput() {
+    const closes = [100, 102, 98, 103, 96, 104, 95, 105, 93, 106, 92, 107, 90, 108, 89, 109, 87, 110, 86, 111];
+    const raw = calculateAMA(closes, { erPeriod: 5, fastPeriod: 2, slowPeriod: 30 });
+    const smooth = calculateAMA(closes, { erPeriod: 5, fastPeriod: 2, slowPeriod: 30, erSmoothPeriod: 3 });
+    const lastDiff = Math.abs(raw[raw.length - 1] - smooth[smooth.length - 1]);
+    assert.ok(lastDiff > 0, 'erSmoothPeriod=3 should produce different output than raw in choppy data');
+    assert.ok(raw.some((v, i) => v !== smooth[i]), 'some values should differ');
+}
+
+function testAmaWarmupBarsIncludeERSmoothingConvergence() {
+    const unsmoothed = getAmaWarmupBars(10, 30, 5, 2);
+    const smoothed = getAmaWarmupBars(10, 30, 5, 2, 50);
+    assert.strictEqual(smoothed - unsmoothed, 116, 'ER smoothing warmup should include its own EMA convergence bars');
+}
+
 // ─── Run ─────────────────────────────────────────────────────────────────────
 
 async function run() {
@@ -418,6 +449,10 @@ async function run() {
     testZeroMaxSlopeOffsetKeepsConfidenceFinite();
     testNeutralSlopeVolatilityTable();
     testUptrendSlopeOffsetTable();
+    testERaSmoothingDisabledByDefault();
+    testERaSmoothingRejectsSubUnitPeriods();
+    testERaSmoothingProducesDifferentOutput();
+    testAmaWarmupBarsIncludeERSmoothingConvergence();
 }
 
 run()

@@ -429,6 +429,15 @@ async function testNativeMarketHistoryDirectOrder() {
         const ama1 = resolveAmaForBot({ assetA: 'TESTA', assetB: 'TESTB', gridPrice: 'ama1' });
         assert.strictEqual(ama1.fastPeriod, 3.26, 'market_profiles AMA1 override should preserve fractional fastPeriod');
 
+        const smoothedAma1 = resolveAmaForBot({
+            assetA: 'TESTA',
+            assetB: 'TESTB',
+            gridPrice: 'ama1',
+            ama: { erSmoothPeriod: 3 },
+        });
+        assert.strictEqual(smoothedAma1.fastPeriod, 3.26, 'market_profiles AMA1 override should still select profile preset');
+        assert.strictEqual(smoothedAma1.erSmoothPeriod, 3, 'inline bot ER smoothing should apply to profile AMA presets');
+
         const amaDefault = resolveAmaForBot({ assetA: 'TESTA', assetB: 'TESTB', gridPrice: 'ama' });
         assert.strictEqual(amaDefault.fastPeriod, 2.73, 'market_profiles default AMA should preserve fractional fastPeriod');
     } finally {
@@ -466,14 +475,24 @@ async function testNativeMarketHistoryDirectOrder() {
         }, null, 2));
 
         const candles = Array.from({ length: 20 }, (_, i) => [1700000000000 + (i * 3600000), 100 + i, 101 + i, 99 + i, 100 + i, 1]);
-        const comparison = calcAmaComparison(candles, { assetA: 'TESTA', assetB: 'TESTB' });
+        const comparison = calcAmaComparison(candles, {
+            assetA: 'TESTA',
+            assetB: 'TESTB',
+            ama: { erSmoothPeriod: 3 },
+        });
         assert.deepStrictEqual(
-            comparison.map((entry) => ({ name: entry.name, erPeriod: entry.erPeriod, fastPeriod: entry.fastPeriod, slowPeriod: entry.slowPeriod })),
+            comparison.map((entry) => ({
+                name: entry.name,
+                erPeriod: entry.erPeriod,
+                fastPeriod: entry.fastPeriod,
+                slowPeriod: entry.slowPeriod,
+                erSmoothPeriod: entry.erSmoothPeriod,
+            })),
             [
-                { name: 'AMA1', erPeriod: 2, fastPeriod: 2.1, slowPeriod: 6 },
-                { name: 'AMA2', erPeriod: 3, fastPeriod: 3.3, slowPeriod: 7 },
-                { name: 'AMA3', erPeriod: 4, fastPeriod: 4.4, slowPeriod: 8 },
-                { name: 'AMA4', erPeriod: 5, fastPeriod: 5.5, slowPeriod: 9 },
+                { name: 'AMA1', erPeriod: 2, fastPeriod: 2.1, slowPeriod: 6, erSmoothPeriod: 3 },
+                { name: 'AMA2', erPeriod: 3, fastPeriod: 3.3, slowPeriod: 7, erSmoothPeriod: 3 },
+                { name: 'AMA3', erPeriod: 4, fastPeriod: 4.4, slowPeriod: 8, erSmoothPeriod: 3 },
+                { name: 'AMA4', erPeriod: 5, fastPeriod: 5.5, slowPeriod: 9, erSmoothPeriod: 3 },
             ],
             'market_profiles comparison should use pair-specific profile presets when present'
         );
@@ -485,6 +504,23 @@ async function testNativeMarketHistoryDirectOrder() {
             fs.unlinkSync(MARKET_PROFILES_FILE);
         }
     }
+}
+
+// Explicit bot-level ER smoothing should accept 0 as disabled and reject sub-unit periods.
+{
+    const disabled = resolveAmaForBot({
+        assetA: 'TESTA',
+        assetB: 'TESTB',
+        ama: { erPeriod: 10, fastPeriod: 2, slowPeriod: 30, erSmoothPeriod: 0 },
+    });
+    assert.strictEqual(disabled.erSmoothPeriod, 0, 'explicit bot erSmoothPeriod=0 should disable smoothing');
+
+    const invalid = resolveAmaForBot({
+        assetA: 'TESTA',
+        assetB: 'TESTB',
+        ama: { erPeriod: 10, fastPeriod: 2, slowPeriod: 30, erSmoothPeriod: 0.5 },
+    });
+    assert.strictEqual(invalid.erSmoothPeriod, 0, 'invalid sub-unit erSmoothPeriod should fall back to disabled smoothing');
 }
 
 // Flipped market_profiles entries should still match, but exact orientation should win if both exist.

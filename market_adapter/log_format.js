@@ -21,7 +21,8 @@ function formatLogPair(first, second, digits = 2) {
 
 function formatAmaTuple(ama) {
     if (!ama) return 'n/a';
-    return `${formatLogNumber(ama.erPeriod, 0)}/${formatLogNumber(ama.fastPeriod, 1)}/${formatLogNumber(ama.slowPeriod, 1)}`;
+    const erSmoothPeriod = Number.isFinite(Number(ama.erSmoothPeriod)) ? Number(ama.erSmoothPeriod) : 0;
+    return `${formatLogNumber(ama.erPeriod, 0)}/${formatLogNumber(ama.fastPeriod, 1)}/${formatLogNumber(ama.slowPeriod, 1)}/es${formatLogNumber(erSmoothPeriod, 0)}`;
 }
 
 function formatAsymmetryFactor(value, digits = 1) {
