@@ -25,6 +25,19 @@
  *   node analysis/bot_usage/discover_bot_accounts.js --days 14
  *   node analysis/bot_usage/discover_bot_accounts.js --days 7 --min-creates 10 --top 50
  *   node analysis/bot_usage/discover_bot_accounts.js --no-grid   (fast: counts only)
+ *   node analysis/bot_usage/discover_bot_accounts.js --output-json results.json
+ *   node analysis/bot_usage/discover_bot_accounts.js --cv-threshold 0.25
+ *
+ * Options:
+ *   --days <n>         Lookback window in days (default: 14)
+ *   --min-creates <n>  Minimum limit_order_create count (default: 20)
+ *   --top <n>          Top N candidates for grid analysis (default: 30)
+ *   --no-grid          Skip grid spacing analysis (fast, counts only)
+ *   --output-json <f>  Export full results as JSON to <f>
+ *   --cv-threshold <n> CV threshold for grid detection (default: 0.35, lower = stricter)
+ *   --retries <n>      Max retry attempts per Kibana query (default: 3)
+ *   --verbose          Print extra debug/diagnostic info
+ *   --help, -h         Show this help
  */
 
 const {
@@ -54,14 +67,69 @@ function getPrec(id) { return ASSET_PRECISION[id] ?? DEFAULT_PRECISION; }
 
 function parseArgs() {
     const args = process.argv.slice(2);
-    const opts = { days: 14, minCreates: 20, top: 30, skipGrid: false };
+    const opts = {
+        days: 14, minCreates: 20, top: 30, skipGrid: false,
+        cvThreshold: 0.35, maxRetries: 3, outputJson: null, verbose: false,
+    };
     for (let i = 0; i < args.length; i++) {
-        if      (args[i] === '--days'        && args[i + 1]) opts.days       = parseInt(args[++i], 10);
-        else if (args[i] === '--min-creates' && args[i + 1]) opts.minCreates = parseInt(args[++i], 10);
-        else if (args[i] === '--top'         && args[i + 1]) opts.top        = parseInt(args[++i], 10);
-        else if (args[i] === '--no-grid')                    opts.skipGrid   = true;
+        if      (args[i] === '--help'        || args[i] === '-h')     printHelpAndExit();
+        else if (args[i] === '--days'         && args[i + 1]) opts.days        = parseInt(args[++i], 10);
+        else if (args[i] === '--min-creates'  && args[i + 1]) opts.minCreates  = parseInt(args[++i], 10);
+        else if (args[i] === '--top'          && args[i + 1]) opts.top         = parseInt(args[++i], 10);
+        else if (args[i] === '--no-grid')                      opts.skipGrid    = true;
+        else if (args[i] === '--cv-threshold' && args[i + 1]) opts.cvThreshold = parseFloat(args[++i]);
+        else if (args[i] === '--retries'      && args[i + 1]) opts.maxRetries  = parseInt(args[++i], 10);
+        else if (args[i] === '--output-json'  && args[i + 1]) opts.outputJson  = args[++i];
+        else if (args[i] === '--verbose')                     opts.verbose     = true;
     }
     return opts;
+}
+
+function printHelpAndExit() {
+    console.log(`\
+Usage: node analysis/bot_usage/discover_bot_accounts.js [options]
+
+Scans BitShares chain activity via Kibana to identify likely DEXBot/DEXBot2
+staggered-orders strategy accounts. Works in phases: discovery queries ->
+pre-filter -> grid spacing analysis -> name resolution -> ranked output.
+
+Options:
+  --days <n>         Lookback window in days (default: 14)
+  --min-creates <n>  Minimum limit_order_create count (default: 20)
+  --top <n>          Top N candidates for grid analysis (default: 30)
+  --no-grid          Skip grid spacing analysis (fast, counts only)
+  --output-json <f>  Export full results as JSON to <f>
+  --cv-threshold <n> CV threshold for grid detection (default: 0.35)
+                     Lower = stricter grid matching.
+  --retries <n>      Max retry attempts per Kibana query (default: 3)
+  --verbose          Print extra debug/diagnostic info
+  --help, -h         Show this help
+
+Examples:
+  node analysis/bot_usage/discover_bot_accounts.js
+  node analysis/bot_usage/discover_bot_accounts.js --days 30 --top 50
+  node analysis/bot_usage/discover_bot_accounts.js --no-grid
+  node analysis/bot_usage/discover_bot_accounts.js --output-json results.json`);
+    process.exit(0);
+}
+
+// ─── Retry wrapper ────────────────────────────────────────────────────────────
+
+async function withRetry(fn, label, maxRetries = 3, baseDelayMs = 1000) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await fn();
+        } catch (e) {
+            if (attempt < maxRetries) {
+                const delay = baseDelayMs * Math.pow(2, attempt - 1);
+                console.warn(`  [warn] ${label} attempt ${attempt}/${maxRetries} failed: ${e.message}`);
+                console.warn(`         retrying in ${delay}ms...`);
+                await new Promise(r => setTimeout(r, delay));
+            } else {
+                throw new Error(`${label} failed after ${maxRetries} attempts: ${e.message}`);
+            }
+        }
+    }
 }
 
 // ─── Grid analysis helpers (self-contained, no external import) ───────────────
@@ -74,7 +142,7 @@ function hitPrice(hit, sellPrec, recvPrec) {
     return (recv / Math.pow(10, recvPrec)) / (sell / Math.pow(10, sellPrec));
 }
 
-function spacingStats(prices) {
+function spacingStats(prices, cvThreshold = 0.35) {
     if (prices.length < 3) return { isGrid: false, score: 0, count: prices.length };
     const s = [...prices].sort((a, b) => a - b);
     const u = [s[0]];
@@ -87,7 +155,7 @@ function spacingStats(prices) {
     const mean = lr.reduce((a, b) => a + b, 0) / lr.length;
     const vari = lr.reduce((s, r) => s + (r - mean) ** 2, 0) / lr.length;
     const cv   = mean > 1e-10 ? Math.sqrt(vari) / mean : Infinity;
-    const isGrid = cv < 0.35 && u.length >= 4;
+    const isGrid = cv < cvThreshold && u.length >= 4;
     return {
         count:               prices.length,
         uniqueCount:         u.length,
@@ -102,7 +170,7 @@ function spacingStats(prices) {
  * Session-aware grid spacing analysis.
  * Groups hits by 2-minute proximity, finds the best-scoring session.
  */
-function analyzeGrid(hits, sellPrec, recvPrec) {
+function analyzeGrid(hits, sellPrec, recvPrec, cvThreshold = 0.35) {
     if (!hits || hits.length < 3) return { isGrid: false, score: 0, count: hits?.length ?? 0 };
     const SESSION_GAP = 2 * 60 * 1000;
 
@@ -124,13 +192,13 @@ function analyzeGrid(hits, sellPrec, recvPrec) {
     let best = null;
     for (const sess of sessions) {
         if (sess.length < 4) continue;
-        const stats = spacingStats(sess.map(e => e.p));
+        const stats = spacingStats(sess.map(e => e.p), cvThreshold);
         if (!best || stats.score > best.score || (stats.score === best.score && stats.cv < best.cv)) {
             best = stats;
         }
     }
 
-    if (!best) best = spacingStats(entries.map(e => e.p));
+    if (!best) best = spacingStats(entries.map(e => e.p), cvThreshold);
     return { ...best, totalOrders: entries.length, sessionCount: sessions.length };
 }
 
@@ -217,18 +285,37 @@ async function run() {
     console.log('Phase 1: Querying Kibana for top active accounts...');
 
     const [createRes, cancelRes, fillRes] = await Promise.all([
-        kibanaSearch(KIBANA_CFG, buildTopSellerAccountsQuery(lookbackH, 200, opts.minCreates)),
-        kibanaSearch(KIBANA_CFG, buildTopCancellerAccountsQuery(lookbackH, 200, 5)),
-        kibanaSearch(KIBANA_CFG, buildTopFilledAccountsQuery(lookbackH, 200, 3)),
+        withRetry(() => kibanaSearch(KIBANA_CFG, buildTopSellerAccountsQuery(lookbackH, 200, opts.minCreates)),
+            'top-seller query'),
+        withRetry(() => kibanaSearch(KIBANA_CFG, buildTopCancellerAccountsQuery(lookbackH, 200, 5)),
+            'top-canceller query'),
+        withRetry(() => kibanaSearch(KIBANA_CFG, buildTopFilledAccountsQuery(lookbackH, 200, 3)),
+            'top-fills query'),
     ]);
 
     const createBuckets = createRes?.aggregations?.by_account?.buckets ?? [];
     const cancelBuckets = cancelRes?.aggregations?.by_account?.buckets ?? [];
     const fillBuckets   = fillRes?.aggregations?.by_account?.buckets   ?? [];
 
+    if (opts.verbose) {
+        console.log(`  [verbose] createRes keys: ${Object.keys(createRes ?? {}).join(', ')}`);
+        console.log(`  [verbose] createRes took: ${createRes?.took ?? '?'}ms`);
+    }
+
     console.log(`  Creates: ${createBuckets.length} accounts with ≥${opts.minCreates} creates`);
     console.log(`  Cancels: ${cancelBuckets.length} accounts with ≥5 cancels`);
     console.log(`  Fills:   ${fillBuckets.length} accounts with ≥3 fills`);
+
+    if (createBuckets.length === 0) {
+        console.log('');
+        console.log('  No accounts found. Try a larger --days window or lower --min-creates.');
+        if (opts.outputJson) {
+            const fs = require('fs');
+            fs.writeFileSync(opts.outputJson, JSON.stringify({ results: [], note: 'No accounts found', opts }, null, 2));
+            console.log(`  Wrote empty results to ${opts.outputJson}`);
+        }
+        return;
+    }
 
     // ── Phase 2: Merge & pre-filter ────────────────────────────────────────────
 
@@ -277,14 +364,16 @@ async function run() {
             process.stdout.write(`  [${i + 1}–${Math.min(i + BATCH, results.length)}/${results.length}] `);
 
             const priceResults = await Promise.all(
-                slice.map(r => kibanaSearch(KIBANA_CFG, buildOrderPriceQuery(r.id, lookbackH, null, 200)))
+                slice.map(r => withRetry(
+                    () => kibanaSearch(KIBANA_CFG, buildOrderPriceQuery(r.id, lookbackH, null, 200)),
+                    `price-query for ${r.id}`
+                ))
             );
 
             for (let j = 0; j < slice.length; j++) {
                 const r    = slice[j];
                 const hits = priceResults[j]?.hits?.hits ?? [];
 
-                // Separate buy side (selling BTS=1.3.0) from sell side
                 const buyHits  = hits.filter(h =>
                     h._source?.operation_history?.op_object?.amount_to_sell?.asset_id === '1.3.0'
                 );
@@ -292,7 +381,6 @@ async function run() {
                     h._source?.operation_history?.op_object?.amount_to_sell?.asset_id !== '1.3.0'
                 );
 
-                // Detect asset precisions for this account's pair
                 const sellAssetId = sellHits[0]
                     ?._source?.operation_history?.op_object?.amount_to_sell?.asset_id
                     ?? buyHits[0]?._source?.operation_history?.op_object?.min_to_receive?.asset_id;
@@ -300,15 +388,13 @@ async function run() {
                 const btsPrc = getPrec('1.3.0');
                 const aPrc   = getPrec(sellAssetId ?? '');
 
-                // Use the side with more data for grid detection
                 const primaryHits = buyHits.length >= sellHits.length ? buyHits : sellHits;
                 const [pSell, pRecv] = buyHits.length >= sellHits.length
                     ? [btsPrc, aPrc] : [aPrc, btsPrc];
 
-                const grid  = analyzeGrid(primaryHits, pSell, pRecv);
+                const grid  = analyzeGrid(primaryHits, pSell, pRecv, opts.cvThreshold);
                 const batch = analyzeBatching(hits);
 
-                // Detect main trading pair
                 const pairAssets = new Set(hits.flatMap(h => {
                     const op = h._source?.operation_history?.op_object;
                     return [op?.amount_to_sell?.asset_id, op?.min_to_receive?.asset_id].filter(Boolean);
@@ -321,20 +407,28 @@ async function run() {
                 r.maxBatch   = batch.maxBatch;
                 r.dexScore   = dexScore(r.creates, r.fills, r.cancels, grid.score, batch.maxBatch);
                 r.ordersFetched = hits.length;
+                r.buyCount   = buyHits.length;
+                r.sellCount  = sellHits.length;
 
-                process.stdout.write('.');
+                if (opts.verbose && hits.length > 0) {
+                    process.stdout.write(`\n  [verbose] ${r.id}: ${hits.length} orders (${buyHits.length} buy/${sellHits.length} sell), ` +
+                        `grid=${grid.score} cv=${grid.cv?.toFixed(4) ?? '?'} sessions=${grid.sessionCount}`);
+                    process.stdout.write(`\n`);
+                } else {
+                    process.stdout.write('.');
+                }
             }
-            console.log('');
+            if (!opts.verbose) console.log('');
         }
     } else {
         // Without grid: assign a simpler heuristic score
         for (const r of results) {
             const fr = r.fillRate / 100;
-            r.dexScore = Math.min(70,
+            r.dexScore = Math.round(Math.min(70,
                 (Math.min(r.creates, 100) / 100 * 20) +
                 (Math.min(r.cancelRatio, 1.5) / 1.5 * 30) +
                 (fr >= 0.03 && fr <= 0.95 ? 20 : 0)
-            );
+            ));
         }
     }
 
@@ -410,6 +504,33 @@ async function run() {
     console.log('   Incr% = implied grid increment from price spacing');
     console.log('   Grid = grid quality 0-100  |  DEX = DEXBot confidence 0-100');
     console.log('');
+
+    // ── Export JSON ────────────────────────────────────────────────────────────
+
+    if (opts.outputJson) {
+        const fs = require('fs');
+        const exportData = results.map(r => ({
+            id:          r.id,
+            name:        r.name,
+            creates:     r.creates,
+            fills:       r.fills,
+            cancels:     r.cancels,
+            fillPct:     r.fillRate,
+            cancelRatio: r.cancelRatio,
+            maxBatch:    r.maxBatch,
+            gridScore:   r.gridScore,
+            impliedInc:  r.impliedInc,
+            cv:          r.cv,
+            dexScore:    r.dexScore,
+            ordersFetched: r.ordersFetched,
+            buyCount:    r.buyCount,
+            sellCount:   r.sellCount,
+            pairAssets:  r.pairAssets,
+        }));
+        fs.writeFileSync(opts.outputJson, JSON.stringify({ results: exportData, opts: { days: opts.days, minCreates: opts.minCreates, cvThreshold: opts.cvThreshold, skipGrid: opts.skipGrid, timestamp: new Date().toISOString() } }, null, 2));
+        console.log(` Results exported to ${opts.outputJson}`);
+        console.log('');
+    }
 }
 
 run().then(() => process.exit(0)).catch(e => {
