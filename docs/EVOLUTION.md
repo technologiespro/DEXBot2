@@ -405,7 +405,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 1. **Monorepo & Packages** — Split into `@dexbot/core`, `@dexbot/bitshares`, `@dexbot/strategies`, `@dexbot/indicators`. Enables incremental TypeScript migration and parallelized builds/testing.
 
-2. **Event Bus** — Replace the tight `FillCallback → Manager → Accounting → SyncEngine → chain_orders` call chain with a typed event bus. Modules subscribe independently, testable with mocked events.
+2. **Injectable Module Interfaces** — Extract narrow interfaces at existing call boundaries (FillCallback, Accounting, SyncEngine, chain_orders) to enable mock injection during tests. The sequential pipeline should remain direct calls — they are the correct pattern for this pipeline. Testability is achieved through dependency inversion, not an event bus.
 
 3. **Unified Indicator Library** — Centralize scattered signal code (AMA, Kalman, dynamic weight, regime detection) into `@dexbot/indicators`. Add standard indicators (SMA, MACD, RSI, BB) for non-grid strategies.
 
