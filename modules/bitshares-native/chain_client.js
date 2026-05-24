@@ -39,6 +39,9 @@ function createChainClient(config = {}) {
         onStatusChange: wrappedOnStatusChange,
         rpcTimeoutMs,
         connectTimeoutMs,
+        validateNode: validateChainId ? async () => {
+            await login();
+        } : null,
         onReconnect: async () => {
             _dbApiId = null;
             _historyApiId = null;
@@ -147,7 +150,6 @@ function createChainClient(config = {}) {
             setNodes(nodes);
         }
         await transport.connect(undefined, autoreconnect);
-        await login();
     }
 
     function disconnect() {

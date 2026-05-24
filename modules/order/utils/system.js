@@ -66,8 +66,12 @@ const poolIdCache = new Map();
  */
 const lookupAsset = async (BitShares, s) => {
     if (!BitShares) return null;
-    const sym = s.toLowerCase();
-    let cached = BitShares.assets ? BitShares.assets[sym] : null;
+    let cached = null;
+    if (BitShares?.assets) {
+        try {
+            cached = await BitShares.assets[s];
+        } catch (_) {}
+    }
 
     if (cached?.id && typeof cached.precision === 'number') {
         return cached;

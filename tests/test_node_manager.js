@@ -401,8 +401,8 @@ process.on('exit', () => {
 
     assert.strictEqual(stats.chainId, null, 'Should start with null chainId');
 
-    stats.chainId = '4018d7844c78f6a6c41c6a552b898022310fc5dec06a3d6f1d8b71a21bcf8cda';
-    assert.strictEqual(stats.chainId, '4018d7844c78f6a6c41c6a552b898022310fc5dec06a3d6f1d8b71a21bcf8cda');
+    stats.chainId = '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8';
+    assert.strictEqual(stats.chainId, '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8');
     console.log('✓ Chain ID storage test passed\n');
 }
 

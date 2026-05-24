@@ -347,7 +347,7 @@ process.on('exit', () => {
     nm.nodeStats.get('node1').status = 'healthy';
     nm.nodeStats.get('node1').latencyMs = 100;
     nm.nodeStats.get('node1').lastCheckTime = '2026-02-05T10:00:00Z';
-    nm.nodeStats.get('node1').chainId = '4018d7844c78f6a6c41c6a552b898022310fc5dec06a3d6f1d8b71a21bcf8cda';
+    nm.nodeStats.get('node1').chainId = '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8';
 
     // Get stats multiple times - should be consistent
     const stats1 = nm.getStats();

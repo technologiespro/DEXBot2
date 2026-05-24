@@ -71,7 +71,7 @@ function createWsServer(port) {
                         else if (method === 'get_chain_id') {
                             sendWsFrame(socket, JSON.stringify({
                                 id, jsonrpc: '2.0',
-                                result: '4018d7844c78f6a6c41c6a552b898022310fc5dec06a3d6f1d8b71a21bcf8cda',
+                                result: '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8',
                             }));
                         }
                         else if (method === 'get_chain_properties') {

@@ -307,7 +307,7 @@ async function refreshStartupNodeServers(reason = 'startup') {
 }
 
 async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS, options = {}) {
-    if (nodeManagerEnabled && nodeConfig?.list?.length) {
+    if (nodeManagerEnabled && nodeConfig?.list?.length && !connected) {
         await refreshStartupNodeServers('initial');
     }
 
@@ -322,7 +322,7 @@ async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS, option
         ? Math.max(0, options.refreshNodesEveryMs)
         : NODE_MANAGEMENT.STARTUP_REFRESH_INTERVAL_MS;
     let retryDelayMs = initialDelayMs;
-    let nextNodeRefreshAt = 0;
+    let nextNodeRefreshAt = Date.now() + refreshNodesEveryMs;
 
     while (!connected) {
         const elapsedMs = Date.now() - start;

@@ -46,6 +46,7 @@ function createTransport(config = {}) {
         rpcTimeoutMs = RPC_TIMEOUT_MS,
         onStatusChange = null,
         onReconnect = null,
+        validateNode = null,
     } = config;
 
     let ws = null;
@@ -175,12 +176,20 @@ function createTransport(config = {}) {
                 const wasReconnect = reconnectAttempts > 0;
                 reconnectAttempts = 0;
                 setupMessageHandler(socket);
+                if (validateNode) {
+                    await validateNode();
+                }
                 setStatus('connected');
                 if (wasReconnect && onReconnect) {
                     Promise.resolve(onReconnect(nodeUrl)).catch(() => {});
                 }
                 return;
             } catch (err) {
+                if (ws) {
+                    ws.onclose = null;
+                    try { ws.close(); } catch (_) {}
+                    ws = null;
+                }
                 errors.push(err);
             }
         }
@@ -274,6 +283,7 @@ function createTransport(config = {}) {
     function getNodeUrl() { return nodeUrl; }
     function _setNodes(nodes) { nodeList = Array.isArray(nodes) ? [...nodes] : []; }
     function _getNodes() { return [...nodeList]; }
+    function _setAutoReconnect(flag) { autoreconnect = !!flag; }
     function isConnected() { return !!(ws && ws.readyState === 1); }
 
     return {
@@ -286,6 +296,7 @@ function createTransport(config = {}) {
         isConnected,
         _setNodes,
         _getNodes,
+        _setAutoReconnect,
     };
 }
 
