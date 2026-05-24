@@ -2,6 +2,9 @@
 
 const { createTransport, ConnectionError } = require('./transport');
 const { GRAPHENE_CHAIN_ID, GRAPHENE_ADDRESS_PREFIX } = require('./serial/chain_constants');
+const { NATIVE_CLIENT } = require('../constants');
+const { CHAIN } = NATIVE_CLIENT;
+const DEFAULT_CORE_ASSET = CHAIN.CORE_ASSET_ID;
 
 class ChainConfigError extends Error {
     constructor(message) {
@@ -77,7 +80,7 @@ function createChainClient(config = {}) {
 
             const chainId = await transport.call('call', [_dbApiId, 'get_chain_id', []]);
             let addressPrefix = GRAPHENE_ADDRESS_PREFIX;
-            let coreAsset = '1.3.0';
+            let coreAsset = CHAIN.CORE_ASSET_ID;
 
             try {
                 const props = await transport.call('call', [_dbApiId, 'get_chain_properties', []]);
@@ -167,7 +170,7 @@ function createChainClient(config = {}) {
     function getNodes() { return transport._getNodes(); }
     function getStatus() { return transport.getStatus(); }
     function getConfig() { return _chainConfig; }
-    function getCoreAsset() { return _chainConfig ? _chainConfig.coreAsset : '1.3.0'; }
+    function getCoreAsset() { return _chainConfig ? _chainConfig.coreAsset : CHAIN.CORE_ASSET_ID; }
 
     const db = {};
 

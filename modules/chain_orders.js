@@ -95,7 +95,7 @@
 
 const { BitShares, createAccountClient, waitForConnected } = require('./bitshares_client');
 const { floatToBlockchainInt, blockchainToFloat, normalizeInt, validateOrderAmountsWithinLimits } = require('./order/utils/math');
-const { FILL_PROCESSING, TIMING } = require('./constants');
+const { FILL_PROCESSING, TIMING, NATIVE_CLIENT } = require('./constants');
 const Format = require('./order/format');
 const { toFiniteNumber } = Format;
 const AsyncLock = require('./order/async_lock');
@@ -692,7 +692,7 @@ async function buildUpdateOrderOp(accountName, orderId, newParams, cachedOrder =
         op: {
             op_name: 'limit_order_update',
             op_data: {
-                fee: { amount: 0, asset_id: '1.3.0' },
+                fee: { amount: 0, asset_id: NATIVE_CLIENT.CHAIN.CORE_ASSET_ID },
                 seller: accId,
                 order: orderId,
                 new_price: {
@@ -800,7 +800,7 @@ async function buildCreateOrderOp(accountName, amountToSell, sellAssetId, minToR
     const op = {
         op_name: 'limit_order_create',
         op_data: {
-            fee: { amount: 0, asset_id: '1.3.0' },
+            fee: { amount: 0, asset_id: NATIVE_CLIENT.CHAIN.CORE_ASSET_ID },
             seller: accId,
             amount_to_sell: { amount: amountToSellInt, asset_id: sellAssetId },
             min_to_receive: { amount: minToReceiveInt, asset_id: receiveAssetId },
@@ -873,7 +873,7 @@ async function buildCancelOrderOp(accountName, orderId) {
     return {
         op_name: 'limit_order_cancel',
         op_data: {
-            fee: { amount: 0, asset_id: '1.3.0' },
+            fee: { amount: 0, asset_id: NATIVE_CLIENT.CHAIN.CORE_ASSET_ID },
             fee_paying_account: accId,
             order: orderId
         }

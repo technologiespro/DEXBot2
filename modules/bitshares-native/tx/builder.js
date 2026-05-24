@@ -1,13 +1,16 @@
 'use strict';
 
-const { GRAPHENE_CHAIN_ID } = require('../serial/chain_constants');
+const { NATIVE_CLIENT } = require('../../constants');
+const { TRANSACTION, CHAIN } = NATIVE_CLIENT;
 const { ops: serialOps } = require('../serial');
 const { sha256, sign } = require('../crypto/ecc');
 
-const MAX_TX_SIZE = 64000;
-const MAX_OPS_PER_TX = 200;
-const DEFAULT_EXPIRE_SEC = 300;
-const TX_EXPIRATION_MAX_SEC = 86400;
+const MAX_TX_SIZE = TRANSACTION.MAX_SIZE_BYTES;
+const MAX_OPS_PER_TX = TRANSACTION.MAX_OPS_PER_TX;
+const DEFAULT_EXPIRE_SEC = TRANSACTION.DEFAULT_EXPIRE_SEC;
+const TX_EXPIRATION_MAX_SEC = TRANSACTION.MAX_EXPIRE_SEC;
+const DEFAULT_FEE_ASSET = CHAIN.CORE_ASSET_ID;
+const GRAPHENE_CHAIN_ID = CHAIN.CHAIN_ID;
 
 class TransactionTooLargeError extends Error {
     constructor(message) {
@@ -74,7 +77,7 @@ function createTransactionBuilder(chainClient) {
             return this.addOperation('transfer', data);
         },
 
-        async setRequiredFees(feeAssetId = '1.3.0') {
+        async setRequiredFees(feeAssetId = DEFAULT_FEE_ASSET) {
             if (ops.length === 0) return;
 
             try {
@@ -126,7 +129,7 @@ function createTransactionBuilder(chainClient) {
             expiration = Math.floor(expireDate.getTime() / 1000);
         },
 
-        async prepare(feeAssetId = '1.3.0') {
+        async prepare(feeAssetId = DEFAULT_FEE_ASSET) {
             await this.fetchRefBlock();
             if (!expiration) this.setExpiration();
             await this.setRequiredFees(feeAssetId);
@@ -180,7 +183,7 @@ function createTransactionBuilder(chainClient) {
         _castParamsToSerializable(type, params) {
             const result = { ...params };
 
-            result.fee = result.fee || { amount: 0, asset_id: '1.3.0' };
+            result.fee = result.fee || { amount: 0, asset_id: DEFAULT_FEE_ASSET };
 
             if (result.delta_amount_to_sell) {
                 result.delta_amount_to_sell = { ...result.delta_amount_to_sell };

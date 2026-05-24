@@ -1,8 +1,12 @@
 'use strict';
 
-const { OP_FILL_ORDER } = require('./serial/chain_constants');
+const { NATIVE_CLIENT } = require('../constants');
+const { SUBSCRIPTIONS, OPERATIONS } = NATIVE_CLIENT;
 
-const SUBSCRIBE_CALLBACK_ID = 1;
+const SUBSCRIBE_CALLBACK_ID = SUBSCRIPTIONS.CALLBACK_ID;
+const OP_FILL_ORDER = OPERATIONS.FILL_ORDER;
+const FILL_OBJECT_REGEX = new RegExp('^' + SUBSCRIPTIONS.FILL_OBJECT_PREFIX.replace('.', '\\.') + '\\.');
+const [FILL_SPACE, FILL_TYPE] = SUBSCRIPTIONS.FILL_OBJECT_PREFIX.split('.');
 
 function createSubscriptionManager(chainClient) {
     const subscriptions = new Map();
@@ -54,7 +58,7 @@ function createSubscriptionManager(chainClient) {
         for (const item of data) {
             if (!item || typeof item !== 'object') continue;
             const id = typeof item.id === 'string' ? item.id : null;
-            if (!id || !/^2\.5\./.test(id)) continue;
+            if (!id || !FILL_OBJECT_REGEX.test(id)) continue;
             sawFillObject = true;
             if (item.owner && item.owner === sub.accountId) {
                 return true;
@@ -74,7 +78,7 @@ function createSubscriptionManager(chainClient) {
             if (typeof id !== 'string') continue;
 
             const parts = id.split('.');
-            if (parts.length === 3 && parts[0] === '2' && parts[1] === '5') {
+            if (parts.length === 3 && parts[0] === FILL_SPACE && parts[1] === FILL_TYPE) {
                 objectIds.push(id);
             }
         }
@@ -97,8 +101,8 @@ function createSubscriptionManager(chainClient) {
 
             const history = await chainClient.history.getAccountHistory(
                 accountId,
-                '1.11.0',
-                Math.min(100, Math.max(10, objectIds.length * 5)),
+                SUBSCRIPTIONS.HISTORY_API_OBJECT,
+                Math.min(SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX, Math.max(SUBSCRIPTIONS.HISTORY_LOOKBACK_MIN, objectIds.length * 5)),
                 historyId
             );
 
@@ -144,8 +148,8 @@ function createSubscriptionManager(chainClient) {
                 }
             }
 
-            if (delivered.size > 500) {
-                const trimmed = Array.from(delivered).slice(-250);
+            if (delivered.size > SUBSCRIPTIONS.DELIVERED_CACHE_MAX) {
+                const trimmed = Array.from(delivered).slice(-SUBSCRIPTIONS.DELIVERED_CACHE_TRIM);
                 lastDeliveredByAccount.set(accountId, new Set(trimmed));
             } else {
                 lastDeliveredByAccount.set(accountId, delivered);
@@ -163,7 +167,7 @@ function createSubscriptionManager(chainClient) {
                     }
                 }
             } catch (_) {}
-            return '1.11.0';
+            return SUBSCRIPTIONS.HISTORY_API_OBJECT;
         }
     }
 

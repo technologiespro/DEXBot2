@@ -989,6 +989,247 @@ let COW_PERFORMANCE = {
     WORKING_GRID_BYTES_PER_ORDER: 500
 };
 
+// Native BitShares Client Configuration
+// Constants from the btsdex → native integration (modules/bitshares-native/).
+// Documents chain-level constants, transport tuning, cache sizing, and serialization
+// parameters. The underlying native module is self-contained; these mirror its
+// defaults and serve as the canonical reference for DEXBot2 runtime behavior.
+//
+// Structure:
+//   NATIVE_CLIENT.CHAIN          - Graphene chain parameters
+//   NATIVE_CLIENT.OPERATIONS     - Operation type IDs
+//   NATIVE_CLIENT.OBJECT_TYPES   - Object space/type IDs
+//   NATIVE_CLIENT.TRANSACTION    - Transaction builder limits
+//   NATIVE_CLIENT.TRANSPORT      - WebSocket transport tuning
+//   NATIVE_CLIENT.SUBSCRIPTIONS  - Fill-detection subscription settings
+//   NATIVE_CLIENT.RESOLVERS      - Asset/account cache configuration
+//   NATIVE_CLIENT.ECC            - Cryptographic constants (reference only)
+//
+// Source files:
+//   modules/bitshares-native/serial/chain_constants.js  (CHAIN, OPERATIONS, OBJECT_TYPES)
+//   modules/bitshares-native/tx/builder.js               (TRANSACTION)
+//   modules/bitshares-native/transport.js                (TRANSPORT)
+//   modules/bitshares-native/subscriptions.js             (SUBSCRIPTIONS)
+//   modules/bitshares-native/resolvers.js                 (RESOLVERS)
+//   modules/bitshares-native/crypto/ecc.js                (ECC)
+//   modules/bitshares-native/serial/types.js              (object_id encoding)
+//   modules/bitshares-native/serial/operations.js         (operation serializers)
+//   modules/bitshares-native/chain_client.js              (API registration, core asset)
+//   modules/bitshares_client.js                           (connection proxy, event wiring)
+//
+let NATIVE_CLIENT = {
+
+    // -------------------------------------------------------------------------
+    // CHAIN — Graphene blockchain parameters
+    // -------------------------------------------------------------------------
+    CHAIN: {
+        // Precision divisor for blockchain amounts (e.g. 100000 = 5 decimal places).
+        // All on-chain amounts are integers; divide by this for human-readable display.
+        PRECISION: 100000,
+
+        // Maximum serialized transaction size allowed by the Graphene protocol (bytes).
+        // Transactions exceeding this are rejected by the network. Distinct from the
+        // smaller MAX_TX_SIZE soft limit used by the transaction builder.
+        MAX_TRANSACTION_SIZE: 262144,
+
+        // Maximum time until transaction expiration (seconds, 24 hours).
+        // Transactions expire after this if not included in a block.
+        MAX_TIME_UNTIL_EXPIRATION: 86400,
+
+        // Human-readable address prefix for public keys (BTS = BitShares mainnet).
+        ADDRESS_PREFIX: 'BTS',
+
+        // BitShares mainnet chain ID.
+        // Also referenced at NODE_MANAGEMENT.EXPECTED_CHAIN_ID for node validation.
+        CHAIN_ID: '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8',
+
+        // 100% and 1% in Graphene basis points (bps).
+        // Used for fee calculations, credit-offer rates, and collateral ratio checks.
+        PERCENT_100: 10000,
+        PERCENT_1:   100,
+
+        // Core (fee) asset object ID. Always BTS on mainnet (1.3.0).
+        // Used as default fee payment asset for transaction preparation.
+        CORE_ASSET_ID: '1.3.0',
+    },
+
+    // -------------------------------------------------------------------------
+    // OPERATIONS — Graphene operation type IDs
+    // -------------------------------------------------------------------------
+    // Corresponds to OP_* constants in serial/chain_constants.js.
+    // FILL_PROCESSING.OPERATION_TYPE (4) references OP_FILL_ORDER.
+    OPERATIONS: {
+        TRANSFER:             0,
+        LIMIT_ORDER_CREATE:   1,
+        LIMIT_ORDER_CANCEL:   2,
+        CALL_ORDER_UPDATE:    3,
+        FILL_ORDER:           4,
+        ASSET_SETTLE:         17,
+        LIMIT_ORDER_UPDATE:   77,
+    },
+
+    // -------------------------------------------------------------------------
+    // OBJECT_TYPES — Graphene object space/type IDs
+    // -------------------------------------------------------------------------
+    // Space 1 (protocol), used for blockchain entity identification.
+    // Object IDs follow the format "space.type.instance" (e.g. "1.2.12345" = account).
+    OBJECT_TYPES: {
+        NULL:                  0,
+        BASE:                  1,
+        ACCOUNT:               2,
+        ASSET:                 3,
+        FORCE_SETTLEMENT:      4,
+        COMMITTEE_MEMBER:      5,
+        WITNESS:               6,
+        LIMIT_ORDER:           7,
+        CALL_ORDER:            8,
+        CUSTOM:                9,
+        PROPOSAL:              10,
+        OPERATION_HISTORY:     11,
+        WITHDRAW_PERMISSION:   12,
+        VESTING_BALANCE:       13,
+        WORKER:                14,
+        BALANCE:               15,
+        HTLC:                  16,
+        TICKET:                17,
+        LIQUIDITY_POOL:        18,
+        SAMET_FUND:            19,
+        CREDIT_OFFER:          20,
+        CREDIT_DEAL:           21,
+    },
+
+    // -------------------------------------------------------------------------
+    // TRANSACTION — Transaction builder limits (tx/builder.js)
+    // -------------------------------------------------------------------------
+    TRANSACTION: {
+        // Soft limit: maximum serialized transaction size (bytes).
+        // Transactions larger than this are rejected by the builder before broadcast.
+        // Must be ≤ CHAIN.MAX_TRANSACTION_SIZE (262144).
+        MAX_SIZE_BYTES: 64000,
+
+        // Maximum number of operations per single transaction.
+        // Batching above this limit requires multiple transactions.
+        MAX_OPS_PER_TX: 200,
+
+        // Default transaction expiration time (seconds, 5 minutes).
+        // After signing, the transaction must be broadcast and confirmed within this window.
+        DEFAULT_EXPIRE_SEC: 300,
+
+        // Hard cap on transaction expiration (seconds, 24 hours).
+        // Enforced by the builder; values above this are clamped down.
+        MAX_EXPIRE_SEC: 86400,
+    },
+
+    // -------------------------------------------------------------------------
+    // TRANSPORT — WebSocket connection tuning (transport.js)
+    // -------------------------------------------------------------------------
+    TRANSPORT: {
+        // Maximum time for WebSocket handshake to complete (ms).
+        // If the handshake does not complete within this window, the node is skipped.
+        CONNECT_TIMEOUT_MS: 10000,
+
+        // Maximum time waiting for an RPC response before timing out (ms).
+        // Applies to all native JSON-RPC calls (database, history, broadcast).
+        RPC_TIMEOUT_MS: 15000,
+
+        // Interval between keepalive pings during idle periods (ms).
+        // Uses a lightweight `login` call to detect severed connections early.
+        KEEPALIVE_INTERVAL_MS: 45000,
+
+        // Reconnection backoff parameters (ms).
+        // Reconnect delay = min(base × 2^attempt + random(0..1000), max).
+        RECONNECT_BASE_MS: 1000,
+        RECONNECT_MAX_MS:  30000,
+    },
+
+    // -------------------------------------------------------------------------
+    // SUBSCRIPTIONS — Fill-detection subscription settings (subscriptions.js)
+    // -------------------------------------------------------------------------
+    SUBSCRIPTIONS: {
+        // Graphene callback ID used for set_subscribe_callback.
+        // Fixed value; must match the ID registered with the API.
+        CALLBACK_ID: 1,
+
+        // Object space/type prefix for fill order objects (2.5.x).
+        // Notice handlers filter incoming object-change notifications by this prefix
+        // to isolate fill events from other blockchain activity.
+        FILL_OBJECT_PREFIX: '2.5',
+
+        // Default operation history object ID used as a fallback starting point
+        // when the account's most_recent_op cannot be resolved.
+        HISTORY_API_OBJECT: '1.11.0',
+
+        // Delivered fill-ID cache: maximum entries per account before trimming.
+        // Provides deduplication across resubscribe cycles; the cache is trimmed
+        // to TRIM_SIZE (oldest entries first) when MAX is exceeded.
+        DELIVERED_CACHE_MAX:  500,
+        DELIVERED_CACHE_TRIM: 250,
+
+        // History lookback window bounds (number of history entries to fetch).
+        // Scaled by the number of object-change notifications received in a batch.
+        // The actual window = clamp(objectIds × 5, MIN, MAX).
+        HISTORY_LOOKBACK_MIN: 10,
+        HISTORY_LOOKBACK_MAX: 100,
+    },
+
+    // -------------------------------------------------------------------------
+    // RESOLVERS — Asset/account resolution cache (resolvers.js)
+    // -------------------------------------------------------------------------
+    RESOLVERS: {
+        // Time-to-live for cached asset and account lookups (ms, 1 hour).
+        // After expiry, the next lookup re-fetches from the blockchain.
+        ASSET_TTL_MS:   3600000,
+        ACCOUNT_TTL_MS: 3600000,
+
+        // Maximum number of cached assets / accounts.
+        // Least-recently-used entries are evicted when the limit is reached.
+        MAX_ASSETS:   2000,
+        MAX_ACCOUNTS: 1000,
+
+        // Default LRU cache capacity when no explicit maxSize is provided.
+        LRU_DEFAULT_SIZE: 1000,
+    },
+
+    // -------------------------------------------------------------------------
+    // ECC — Cryptographic constants (crypto/ecc.js, reference only)
+    // -------------------------------------------------------------------------
+    // These are protocol-level constants that MUST NOT be changed.
+    // Included here for completeness; the native ECC module uses its own copies.
+    ECC: {
+        // Compact signature length (bytes): 1-byte recovery ID + 32-byte r + 32-byte s.
+        SIGNATURE_LENGTH: 65,
+
+        // Recovery ID offset for BitShares: 27 (Bitcoin standard) + 4 (Graphene offset).
+        // Used when encoding compact [rec|r|s] signatures for broadcast.
+        RECOVERY_OFFSET: 31,
+
+        // Checksum length for base58check-encoded keys and addresses (bytes).
+        // Uses double-SHA256 for WIF/base58check, ripemd160 for address hashes.
+        CHECKSUM_BYTES: 4,
+
+        // Wallet Import Format (WIF) magic bytes.
+        // 0x80 = WIF mainnet version prefix (prepended before the private key bytes).
+        // 0x01 = compressed public key indicator (appended after private key bytes).
+        WIF_VERSION_BYTE:    0x80,
+        WIF_COMPRESSED_FLAG: 0x01,
+
+        // Public key encoding constants.
+        // 0x02/0x03 = compressed (even/odd y), 0x04 = uncompressed prefix.
+        // Valid key lengths: 33 (compressed), 64 (raw xy), 65 (uncompressed).
+        PUBKEY_COMPRESSED_EVEN:  0x02,
+        PUBKEY_COMPRESSED_ODD:   0x03,
+        PUBKEY_UNCOMPRESSED_PREF: 0x04,
+        PUBKEY_LEN_COMPRESSED:   33,
+        PUBKEY_LEN_RAW_XY:       64,
+        PUBKEY_LEN_UNCOMPRESSED: 65,
+
+        // Deterministic K (RFC 6979) initial HMAC seeds.
+        // K = hmac-sha256(Buffer.alloc(32, 0x00), Buffer.alloc(32, 0x01)).
+        // Only relevant for signature generation internally.
+        DETERMINISTIC_K_SEED: '00-filled + 01-filled 32-byte buffers',
+    },
+};
+
 // --- LOCAL SETTINGS OVERRIDES ---
 // Load user-defined settings from profiles/general.settings.json if it exists.
 // This allows preserving settings during updates without git stashing.
@@ -1064,6 +1305,21 @@ if (settings) {
         UPDATER = { ...UPDATER, ...settings.UPDATER };
     }
 
+    if (settings.NATIVE_CLIENT) {
+        const mergeNested = (target, source) => {
+            const sf = Object.fromEntries(
+                Object.entries(source).filter(([key]) => !key.startsWith('_'))
+            );
+            for (const key of Object.keys(sf)) {
+                if (sf[key] && typeof sf[key] === 'object' && !Array.isArray(sf[key])) {
+                    if (!target[key]) target[key] = {};
+                    target[key] = { ...target[key], ...sf[key] };
+                }
+            }
+        };
+        mergeNested(NATIVE_CLIENT, settings.NATIVE_CLIENT);
+    }
+
     if (settings.LOGGING_CONFIG) {
         // Deep merge logging config to preserve defaults not specified in settings
         const mergeConfig = (target, source) => {
@@ -1099,6 +1355,15 @@ Object.freeze(PIPELINE_TIMING);
 Object.freeze(UPDATER);
 Object.freeze(COW_PERFORMANCE);
 Object.freeze(LOGGING_CONFIG);
+Object.freeze(NATIVE_CLIENT.CHAIN);
+Object.freeze(NATIVE_CLIENT.OPERATIONS);
+Object.freeze(NATIVE_CLIENT.OBJECT_TYPES);
+Object.freeze(NATIVE_CLIENT.TRANSACTION);
+Object.freeze(NATIVE_CLIENT.TRANSPORT);
+Object.freeze(NATIVE_CLIENT.SUBSCRIPTIONS);
+Object.freeze(NATIVE_CLIENT.RESOLVERS);
+Object.freeze(NATIVE_CLIENT.ECC);
+Object.freeze(NATIVE_CLIENT);
 Object.freeze(MARKET_ADAPTER.RUNTIME_DEFAULTS);
 Object.freeze(MARKET_ADAPTER.AMAS.AMA1);
 Object.freeze(MARKET_ADAPTER.AMAS.AMA2);
@@ -1107,4 +1372,4 @@ Object.freeze(MARKET_ADAPTER.AMAS.AMA4);
 Object.freeze(MARKET_ADAPTER.AMAS);
 Object.freeze(MARKET_ADAPTER);
 
-module.exports = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE, MARKET_ADAPTER };
+module.exports = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE, NATIVE_CLIENT, MARKET_ADAPTER };

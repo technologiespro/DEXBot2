@@ -1,10 +1,12 @@
 'use strict';
 
 const WebSocket = globalThis.WebSocket || require('ws');
+const { NATIVE_CLIENT } = require('../constants');
+const { TRANSPORT } = NATIVE_CLIENT;
 
-const CONNECT_TIMEOUT_MS = 10000;
-const RPC_TIMEOUT_MS = 15000;
-const KEEPALIVE_INTERVAL_MS = 45000;
+const CONNECT_TIMEOUT_MS = TRANSPORT.CONNECT_TIMEOUT_MS;
+const RPC_TIMEOUT_MS = TRANSPORT.RPC_TIMEOUT_MS;
+const KEEPALIVE_INTERVAL_MS = TRANSPORT.KEEPALIVE_INTERVAL_MS;
 
 let _rpcId = 0;
 

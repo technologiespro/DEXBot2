@@ -1,7 +1,16 @@
 'use strict';
 
+const { NATIVE_CLIENT } = require('../constants');
+const { RESOLVERS } = NATIVE_CLIENT;
+
+const ASSET_TTL_MS = RESOLVERS.ASSET_TTL_MS;
+const ACCOUNT_TTL_MS = RESOLVERS.ACCOUNT_TTL_MS;
+const MAX_ASSETS = RESOLVERS.MAX_ASSETS;
+const MAX_ACCOUNTS = RESOLVERS.MAX_ACCOUNTS;
+const LRU_DEFAULT_SIZE = RESOLVERS.LRU_DEFAULT_SIZE;
+
 class LRUCache {
-    constructor(maxSize = 1000, ttlMs = null) {
+    constructor(maxSize = LRU_DEFAULT_SIZE, ttlMs = null) {
         this.maxSize = maxSize;
         this.ttlMs = ttlMs;
         this.cache = new Map();
@@ -41,11 +50,6 @@ class LRUCache {
 
     get size() { return this.cache.size; }
 }
-
-const ASSET_TTL_MS = 3600000;
-const ACCOUNT_TTL_MS = 3600000;
-const MAX_ASSETS = 2000;
-const MAX_ACCOUNTS = 1000;
 
 function createResolvers(chainClient) {
     const assetCache = new LRUCache(MAX_ASSETS, ASSET_TTL_MS);
