@@ -52,7 +52,7 @@ async function main() {
     delete require.cache[nodeManagerPath];
 
     try {
-        const NodeManager = require('../modules/node_manager.js');
+        const NodeManager = require('../modules/node_manager');
         const nm = new NodeManager({
             list: ['wss://node.example/ws'],
             healthCheck: {

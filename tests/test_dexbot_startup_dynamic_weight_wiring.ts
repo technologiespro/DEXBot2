@@ -32,10 +32,10 @@ setCachedModule(startupReconcilePath, {
     reconcileStartupOrders: async () => ({ actions: [] }),
 });
 
-const chainOrders = require('../modules/chain_orders.js');
-const Grid = require('../modules/order/grid.js');
+const chainOrders = require('../modules/chain_orders');
+const Grid = require('../modules/order/grid');
 delete require.cache[dexbotClassPath];
-const DEXBot = require('../modules/dexbot_class.js');
+const DEXBot = require('../modules/dexbot_class');
 
 async function testPlaceInitialOrdersRefreshesAndFallsBack() {
     const botKey = 'test_startup_dynamic_weight_initial';

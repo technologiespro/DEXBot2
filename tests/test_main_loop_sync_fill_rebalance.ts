@@ -1,6 +1,6 @@
 const assert = require('assert');
-const chainOrders = require('../modules/chain_orders.js');
-const DEXBot = require('../modules/dexbot_class.js');
+const chainOrders = require('../modules/chain_orders');
+const DEXBot = require('../modules/dexbot_class');
 const { withDynamicWeightFiles } = require('./helpers/dynamic_weight_files');
 
 class MockAsyncLock {

@@ -44,7 +44,7 @@ setCachedModule(path.resolve(__dirname, '../modules/chain_orders.js'), {
     executeBatch: async () => ({ tx_id: 'noop', operation_results: [] }),
 });
 
-const CreditRuntime = require('../modules/credit_runtime.js');
+const CreditRuntime = require('../modules/credit_runtime');
 
 async function testCollateralDistribution() {
     console.log('Testing collateral distribution logic...');

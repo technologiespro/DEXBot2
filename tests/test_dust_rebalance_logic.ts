@@ -39,9 +39,9 @@ const { OrderManager } = require('../modules/order/manager');
 const { ORDER_TYPES, ORDER_STATES, GRID_LIMITS, TIMING } = require('../modules/constants');
 const Grid = require('../modules/order/grid');
 const { _setFeeCache } = require('../modules/order/utils/math');
-const chainOrders = require('../modules/chain_orders.js');
-const DEXBot = require('../modules/dexbot_class.js');
-const { isOrderDoesNotExistError } = require('../modules/dexbot_maintenance_runtime.js');
+const chainOrders = require('../modules/chain_orders');
+const DEXBot = require('../modules/dexbot_class');
+const { isOrderDoesNotExistError } = require('../modules/dexbot_maintenance_runtime');
 const { withDynamicWeightFiles } = require('./helpers/dynamic_weight_files');
 
 async function testDustTrigger() {

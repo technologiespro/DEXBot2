@@ -114,14 +114,16 @@ function createTransactionBuilder(chainClient) {
                     refBlockNum = Number(dgp.head_block_number) & 0xFFFF;
                     try {
                         refBlockPrefix = Buffer.from(dgp.head_block_id, 'hex').readUInt32LE(4);
-                    } catch (_: any) {
+                    } catch (err2: any) {
                         refBlockPrefix = 0;
                     }
                     return;
                 }
-            } catch (_: any) {}
+            } catch (err2: any) {
+                // Fallback attempts exhausted below
+            }
 
-            throw new Error('Failed to fetch reference block for transaction');
+            throw new Error('Failed to fetch reference block for transaction (head_block_id via get_objects and get_dynamic_global_properties both failed)');
         },
 
         setExpiration(seconds = DEFAULT_EXPIRE_SEC) {
@@ -245,7 +247,7 @@ function createTransactionBuilder(chainClient) {
         },
 
         async broadcast() {
-            return null;
+            throw new Error('TransactionBuilder.broadcast() not implemented; use createSigningClient wrapper');
         },
 
         _getSerializedOps() {

@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
-const { BitShares } = require('./bitshares_client.js');
+const { BitShares } = require('./bitshares_client');
 const { isPositiveInt } = require('./order/utils/math');
 const { parseJsonWithComments } = require('./order/utils/system');
 

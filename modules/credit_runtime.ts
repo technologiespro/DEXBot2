@@ -3,8 +3,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { BitShares, waitForConnected } = require('./bitshares_client.js');
-const chainOrders = require('./chain_orders.js');
+const { BitShares, waitForConnected } = require('./bitshares_client');
+const chainOrders = require('./chain_orders');
 const { blockchainToFloat, floatToBlockchainInt, resolveConfigValue } = require('./order/utils/math');
 const { deriveLiquidityPoolTokenValue } = require('./order/utils/system');
 const { toFiniteNumber } = require('./order/format');

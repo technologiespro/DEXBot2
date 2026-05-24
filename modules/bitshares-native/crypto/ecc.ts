@@ -82,11 +82,33 @@ function privateKeyToPublicKey(rawKey, compressed = true) {
 }
 
 function sigFromDer(derSig) {
-    const rStart = derSig[0] === 0x30 && derSig[1] > 0 ? 4 : 3;
-    const rLen = derSig[rStart - 1];
+    if (derSig.length < 8 || derSig[0] !== 0x30) {
+        throw new Error('Invalid DER signature: missing sequence tag');
+    }
+    let offset = 2;
+    if (derSig[1] & 0x80) {
+        const lenBytes = derSig[1] & 0x7F;
+        if (lenBytes > 2) throw new Error('Invalid DER signature: length too large');
+        let seqLen = 0;
+        for (let i = 0; i < lenBytes; i++) {
+            seqLen = (seqLen << 8) | derSig[2 + i];
+        }
+        offset = 2 + lenBytes;
+    }
+    if (offset >= derSig.length || derSig[offset] !== 0x02) {
+        throw new Error('Invalid DER signature: missing r integer tag');
+    }
+    const rLen = derSig[offset + 1];
+    const rStart = offset + 2;
+    if (rStart + rLen > derSig.length) throw new Error('Invalid DER signature: r value truncated');
     const r = derSig.slice(rStart, rStart + rLen);
-    const sStart = rStart + rLen + 2;
-    const sLen = derSig[sStart - 1];
+    const sTagOffset = rStart + rLen;
+    if (sTagOffset >= derSig.length || derSig[sTagOffset] !== 0x02) {
+        throw new Error('Invalid DER signature: missing s integer tag');
+    }
+    const sLen = derSig[sTagOffset + 1];
+    const sStart = sTagOffset + 2;
+    if (sStart + sLen > derSig.length) throw new Error('Invalid DER signature: s value truncated');
     const s = derSig.slice(sStart, sStart + sLen);
     return { r, s };
 }
@@ -98,7 +120,9 @@ function bigIntFromBuffer(buf) {
 function bufferFromBigInt(bn, length = 32) {
     let hex = bn.toString(16);
     if (hex.length % 2) hex = '0' + hex;
-    if (hex.length > length * 2) hex = hex.slice(hex.length - length * 2);
+    if (hex.length > length * 2) {
+        throw new Error(`BigInt 0x${bn.toString(16)} exceeds requested byte length ${length}`);
+    }
     if (hex.length < length * 2) hex = hex.padStart(length * 2, '0');
     return Buffer.from(hex, 'hex');
 }
@@ -152,13 +176,16 @@ function pointFromPublicKey(pubKeyBuffer) {
     throw new Error('Unsupported public key length: ' + pubKeyBuffer.length);
 }
 
-function deterministicK(digest, privateKey) {
+function deterministicK(digest, privateKey, counter = 0) {
     const x = bufferFromBigInt(bigIntFromBuffer(privateKey), 32);
     const h1 = bufferFromBigInt(bigIntFromBuffer(digest) % secp256k1.n, 32);
     let K = Buffer.alloc(32, 0x00);
     let V = Buffer.alloc(32, 0x01);
 
-    K = hmacSha256(K, Buffer.concat([V, Buffer.from([0x00]), x, h1]));
+    const extra = Buffer.alloc(4);
+    extra.writeUInt32BE(counter, 0);
+
+    K = hmacSha256(K, Buffer.concat([V, Buffer.from([0x00]), x, h1, extra]));
     V = hmacSha256(K, V);
     K = hmacSha256(K, Buffer.concat([V, Buffer.from([0x01]), x, h1]));
     V = hmacSha256(K, V);
@@ -300,13 +327,10 @@ function sign(digest, privateKey) {
     const nHalf = secp256k1.n >> 1n;
     const pubKeyKnown = privateKeyToPublicKey(privateKey, true);
 
+    const MAX_SIGN_RETRIES = 256;
     let nonce = 0;
-    while (true) {
-        let k = deterministicK(digest, privateKey);
-        if (nonce > 0) {
-            k = (k + BigInt(nonce)) % secp256k1.n;
-            if (k === 0n) k = 1n;
-        }
+    while (nonce < MAX_SIGN_RETRIES) {
+        const k = deterministicK(digest, privateKey, nonce);
         let R = ecPointMul(SECP256K1_BASE_POINT, k);
         let rBig = R ? R.x % secp256k1.n : 0n;
 
@@ -359,6 +383,7 @@ function sign(digest, privateKey) {
         const compactI = recoveryId + 27 + 4;
         return Buffer.concat([Buffer.from([compactI]), rBuf, sBuf]);
     }
+    throw new Error(`Failed to produce valid signature after ${MAX_SIGN_RETRIES} retries`);
 }
 
 function verify(digest, signature, publicKey) {

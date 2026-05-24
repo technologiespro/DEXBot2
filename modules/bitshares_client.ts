@@ -29,7 +29,7 @@
  */
 
 const { TIMING, NODE_MANAGEMENT } = require('./constants');
-const NodeManager = require('./node_manager.js');
+const NodeManager = require('./node_manager');
 const { readGeneralSettings } = require('./general_settings');
 const { sleep } = require('./order/utils/system');
 
@@ -121,13 +121,12 @@ _nativeBitSharesProxy = {
         });
     },
     get history() {
-        const hist = _nativeClient.history;
-        return new Proxy(hist, {
+        return new Proxy(_nativeClient.history, {
             get(target, prop) {
                 if (typeof target[prop] === 'function') {
                     return (...args) => target[prop](...args);
                 }
-                return (...args) => hist.call(prop, args);
+                return (...args) => target.call(prop, args);
             },
         });
     },
@@ -265,7 +264,7 @@ function getConfiguredOrDefaultNodes() {
 function handleConnectionStatus(status) {
     const canHandleFailover = nodeManager && nodeConfig?.healthCheck?.enabled !== false;
 
-    if (status === 'open' || status === 'connected') {
+    if (status === 'open') {
         connected = true;
         lastConnectionError = null;
         if (nodeManager && nodeConfig?.healthCheck?.enabled !== false && !nodeManager.monitoringActive) {
@@ -421,6 +420,13 @@ async function disconnectClient() {
     connected = false;
     try {
         try { _nativeClient.disconnect(); } catch (_: any) {}
+        if (_subscriptionManager) {
+            try {
+                if (typeof _subscriptionManager.removeNoticeSubscription === 'function') {
+                    _subscriptionManager.removeNoticeSubscription();
+                }
+            } catch (_: any) {}
+        }
     } finally {
         intentionalDisconnect = false;
     }

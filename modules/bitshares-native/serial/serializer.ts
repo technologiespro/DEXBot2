@@ -17,49 +17,49 @@ class BufferWriter {
     }
 
     writeUint8(v: number): this {
-        const b = Buffer.allocUnsafe(1);
+        const b = Buffer.alloc(1);
         b.writeUInt8(v, 0);
         this.buf = Buffer.concat([this.buf, b]);
         return this;
     }
 
     writeUint16(v: number): this {
-        const b = Buffer.allocUnsafe(2);
+        const b = Buffer.alloc(2);
         b.writeUInt16LE(v, 0);
         this.buf = Buffer.concat([this.buf, b]);
         return this;
     }
 
     writeUint32(v: number): this {
-        const b = Buffer.allocUnsafe(4);
+        const b = Buffer.alloc(4);
         b.writeUInt32LE(v, 0);
         this.buf = Buffer.concat([this.buf, b]);
         return this;
     }
 
     writeInt16(v: number): this {
-        const b = Buffer.allocUnsafe(2);
+        const b = Buffer.alloc(2);
         b.writeInt16LE(v, 0);
         this.buf = Buffer.concat([this.buf, b]);
         return this;
     }
 
     writeInt32(v: number): this {
-        const b = Buffer.allocUnsafe(4);
+        const b = Buffer.alloc(4);
         b.writeInt32LE(v, 0);
         this.buf = Buffer.concat([this.buf, b]);
         return this;
     }
 
     writeInt64(v: number | bigint | string): this {
-        const b = Buffer.allocUnsafe(8);
+        const b = Buffer.alloc(8);
         b.writeBigInt64LE(BigInt(v), 0);
         this.buf = Buffer.concat([this.buf, b]);
         return this;
     }
 
     writeUint64(v: number | bigint | string): this {
-        const b = Buffer.allocUnsafe(8);
+        const b = Buffer.alloc(8);
         b.writeBigUInt64LE(BigInt(v), 0);
         this.buf = Buffer.concat([this.buf, b]);
         return this;
@@ -99,8 +99,8 @@ class BufferWriter {
     append(src: BufferWriter | Buffer | Uint8Array): this {
         if (src instanceof BufferWriter) {
             this.buf = Buffer.concat([this.buf, src.buf]);
-        } else if (Buffer.isBuffer(src)) {
-            this.buf = Buffer.concat([this.buf, src]);
+        } else {
+            this.buf = Buffer.concat([this.buf, Buffer.isBuffer(src) ? src : Buffer.from(src)]);
         }
         return this;
     }

@@ -94,7 +94,7 @@
  * ===============================================================================
  */
 
-const { BitShares, createAccountClient, waitForConnected } = require('./bitshares_client.js');
+const { BitShares, createAccountClient, waitForConnected } = require('./bitshares_client');
 const { floatToBlockchainInt, blockchainToFloat, normalizeInt, validateOrderAmountsWithinLimits } = require('./order/utils/math');
 const { FILL_PROCESSING, TIMING, NATIVE_CLIENT } = require('./constants');
 const Format = require('./order/format');

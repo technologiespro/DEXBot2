@@ -86,10 +86,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { BitShares, waitForConnected } = require('./bitshares_client.js');
+const { BitShares, waitForConnected } = require('./bitshares_client');
 const chainKeys = require('./chain_keys');
 const credentialPolicy = require('./credential_policy');
-const chainOrders = require('./chain_orders.js');
+const chainOrders = require('./chain_orders');
 const { OrderManager, grid: Grid } = require('./order');
 const {
     retryPersistenceIfNeeded,
@@ -115,8 +115,8 @@ const {
     PROCESSED_FILL_PERSISTENCE_MODES
 } = require('./order/processed_fill_store');
 const DexbotFillRuntime = require('./dexbot_fill_runtime');
-const DexbotMaintenanceRuntime = require('./dexbot_maintenance_runtime.js');
-const CreditRuntime = require('./credit_runtime.js');
+const DexbotMaintenanceRuntime = require('./dexbot_maintenance_runtime');
+const CreditRuntime = require('./credit_runtime');
 const {
     ORDER_STATES,
     ORDER_TYPES,
@@ -127,7 +127,7 @@ const {
     GRID_LIMITS,
     FILL_PROCESSING
 } = require('./constants');
-const { attemptResumePersistedGridByPriceMatch, decideStartupGridAction, reconcileStartupOrders } = require('./order/startup_reconcile.js');
+const { attemptResumePersistedGridByPriceMatch, decideStartupGridAction, reconcileStartupOrders } = require('./order/startup_reconcile');
 const { AccountOrders } = require('./account_orders');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { cloneWeightDistribution } = require('./order/utils/math');

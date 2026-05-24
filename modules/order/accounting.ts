@@ -390,7 +390,7 @@ class Accountant {
         await mgr.fetchAccountTotals(accountRef);
 
         // 2. Sync from open orders
-        const chainOrders = require('../chain_orders.js');
+        const chainOrders = require('../chain_orders');
         const openOrders = await chainOrders.readOpenOrders(accountRef);
         // Recovery runs after fetchAccountTotals() has refreshed authoritative balances
         // from chain. During this pass we only want to reconcile grid structure/order

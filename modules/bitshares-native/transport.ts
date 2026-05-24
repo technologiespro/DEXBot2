@@ -107,11 +107,16 @@ function createTransport(config = {}) {
     function startKeepAlive() {
         if (!Number.isFinite(keepAliveIntervalMs) || keepAliveIntervalMs <= 0 || keepAliveTimer) return;
         keepAliveTimer = setInterval(() => {
-            if (!ws || ws.readyState !== 1 || keepAliveInFlight) return;
+            if (!ws || ws.readyState !== 1) return;
+            if (keepAliveInFlight) return;
             keepAliveInFlight = true;
+            const safe = setTimeout(() => {
+                keepAliveInFlight = false;
+            }, Math.min(rpcTimeoutMs, 15000));
             call('call', [1, 'login', ['', '']], Math.min(rpcTimeoutMs, 10000))
                 .catch(() => {})
                 .finally(() => {
+                    clearTimeout(safe);
                     keepAliveInFlight = false;
                 });
         }, keepAliveIntervalMs);
@@ -133,7 +138,11 @@ function createTransport(config = {}) {
                     clearTimeout(timer);
                     resolve(socket);
                 };
-                socket.onerror = () => {};
+                socket.onerror = (evt) => {
+                    clearTimeout(timer);
+                    const msg = evt && evt.message ? evt.message : 'WebSocket connection error';
+                    reject(new ConnectionError(msg));
+                };
                 socket.onclose = (evt) => {
                     clearTimeout(timer);
                     reject(new ConnectionError(`handshake closed code=${evt.code} for ${url}`));
@@ -182,7 +191,10 @@ function createTransport(config = {}) {
             scheduleReconnect();
         };
 
-        socket.onerror = () => {};
+        socket.onerror = (evt) => {
+            const msg = evt && evt.message ? evt.message : 'WebSocket connection error';
+            console.warn('[transport] WebSocket error on', nodeUrl, msg);
+        };
     }
 
     async function tryConnect() {
