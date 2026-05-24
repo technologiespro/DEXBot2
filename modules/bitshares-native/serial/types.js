@@ -508,14 +508,14 @@ function optionalType(st_operation) {
                 b.writeUint8(0);
             }
         },
-        fromObject(v) {
-            if (v === undefined) return undefined;
-            return st_operation.fromObject(v);
+    fromObject(v) {
+        if (v === undefined || v === null) return undefined;
+        return st_operation.fromObject(v);
         },
-        toObject(v, debug) {
-            if (!debug || !debug.use_default) {
-                if (v === undefined) return undefined;
-            }
+    toObject(v, debug) {
+        if (!debug || !debug.use_default) {
+            if (v === undefined || v === null) return undefined;
+        }
             const result = st_operation.toObject(v, debug);
             if (debug && debug.annotate) {
                 if (typeof result === 'object') {

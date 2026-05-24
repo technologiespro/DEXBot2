@@ -225,10 +225,12 @@ function createTransactionBuilder(chainClient) {
 
             const signedTx = serialOps.signed_transaction.toBuffer(txData);
             assertTxSize(signedTx);
-            const signedTxObject = {
+
+            const txDataForJson = {
                 ...txData,
                 signatures: [sig.toString('hex')],
             };
+            const signedTxObject = serialOps.signed_transaction.toObject(txDataForJson);
 
             return {
                 signedTx,
