@@ -4,7 +4,9 @@ const path = require('path');
 const { PositionManager, DEFAULT_STATE_PATH } = require('./position_manager');
 const { waitForConnected } = require('./bitshares_client');
 
-const DEFAULT_HEALTH_PATH = path.resolve(__dirname, '..', 'data', 'watcher-health.json');
+const PW_PARENT_DIR = path.dirname(path.dirname(__dirname));
+const PW_PROJECT_ROOT = path.basename(PW_PARENT_DIR) === 'dist' ? path.dirname(PW_PARENT_DIR) : PW_PARENT_DIR;
+const DEFAULT_HEALTH_PATH = path.join(PW_PROJECT_ROOT, 'claw', 'data', 'watcher-health.json');
 const DEFAULT_MAX_CONSECUTIVE_FAILURES = 5;
 
 const { clone } = require('./utils');

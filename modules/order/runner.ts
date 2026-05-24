@@ -61,6 +61,8 @@
 const fs = require('fs');
 const path = require('path');
 const { OrderManager } = require('./manager');
+const RUNNER_PARENT = path.dirname(path.dirname(__dirname));
+const RUNNER_ROOT = path.basename(RUNNER_PARENT) === 'dist' ? path.dirname(RUNNER_PARENT) : RUNNER_PARENT;
 const Grid = require('./grid');
 const { readBotsFileSync } = require('../bots_file_lock');
 const { parseJsonWithComments } = require('./utils/system');
@@ -74,7 +76,7 @@ const { isNumeric } = require('./format');
  * @throws {Error} If config invalid or startPrice outside bounds
  */
 async function runOrderManagerCalculation() {
-    const cfgFile = path.join(__dirname, '..', 'profiles', 'bots.json');
+    const cfgFile = path.join(RUNNER_ROOT, 'profiles', 'bots.json');
     let botConfig = {};
 
     try {

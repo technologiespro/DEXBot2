@@ -176,7 +176,9 @@ class AccountOrders {
     this.botKey = options.botKey;
 
     // Use per-bot file: {botKey}.json
-    const ordersDir = options.ordersDir || path.join(__dirname, '..', 'profiles', 'orders');
+    const MODULE_DIR = path.dirname(__dirname);
+    const PROJECT_ROOT = path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
+    const ordersDir = options.ordersDir || path.join(PROJECT_ROOT, 'profiles', 'orders');
     this.profilesPath = options.profilesPath || path.join(ordersDir, `${this.botKey}.json`);
 
     // AsyncLock prevents concurrent read-modify-write races on file I/O

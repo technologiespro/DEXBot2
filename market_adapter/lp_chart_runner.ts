@@ -32,7 +32,8 @@ const { generateHTML } = require('./lp_chart_core');
 const { loadStrategiesForLpChart } = require('./lp_chart_strategy_loader');
 const { findLatestLpData } = require('./utils/data_discovery');
 
-const ROOT = path.resolve(__dirname, '..');
+const PARENT_DIR$1 = path.dirname(__dirname);
+const ROOT = path.basename(PARENT_DIR$1) === 'dist' ? path.dirname(PARENT_DIR$1) : PARENT_DIR$1;
 const LP_DATA_DIR = path.join(ROOT, 'market_adapter', 'data', 'lp');
 const ANALYSIS_CHARTS_DIR = path.join(ROOT, 'analysis', 'charts');
 const AMA_PROFILES_FILE = path.join(ROOT, 'profiles', 'market_profiles.json');

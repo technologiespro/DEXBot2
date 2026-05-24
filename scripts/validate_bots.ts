@@ -24,8 +24,10 @@ const path = require('path');
 // Define paths to configuration files
 // cfgPath: Template file in examples folder (supports JSONC with comments)
 // livePath: Production file in profiles folder (plain JSON, no comments)
-const cfgPath = path.join(__dirname, '..', 'examples', 'bots.json');
-const livePath = path.join(__dirname, '..', 'profiles', 'bots.json');
+const PARENT = path.dirname(__dirname);
+const ROOT = path.basename(PARENT) === 'dist' ? path.dirname(PARENT) : PARENT;
+const cfgPath = path.join(ROOT, 'examples', 'bots.json');
+const livePath = path.join(ROOT, 'profiles', 'bots.json');
 
 /**
  * stripComments: Remove JavaScript-style comments from JSON string

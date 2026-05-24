@@ -51,7 +51,9 @@ const {
     writeHealthCache,
 } = require('./node_health_cache');
 
-const BLACKLIST_STATE_FILE = path.join(__dirname, '..', 'profiles', 'node_blacklist.json');
+const MODULE_DIR = path.dirname(__dirname);
+const PROJECT_ROOT = path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
+const BLACKLIST_STATE_FILE = path.join(PROJECT_ROOT, 'profiles', 'node_blacklist.json');
 
 /**
  * NodeManager - Manages health checking and selection of BitShares nodes

@@ -5,7 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const root = path.join(__dirname, '..');
+const ROOT_DEPTH_1 = path.dirname(__dirname);
+const root = path.basename(ROOT_DEPTH_1) === 'dist' ? path.dirname(ROOT_DEPTH_1) : ROOT_DEPTH_1;
 const nodeBin = process.execPath;
 
 function run(label, args, env = {}) {

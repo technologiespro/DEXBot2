@@ -79,8 +79,10 @@ const { SETTINGS_FILE, readGeneralSettings, writeGeneralSettings } = require('./
 
 const { parseJsonWithComments } = require('./order/utils/system');
 
-const BOTS_FILE = path.join(__dirname, '..', 'profiles', 'bots.json');
-const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
+const MODULE_DIR$1 = path.dirname(__dirname);
+const PROJECT_ROOT$1 = path.basename(MODULE_DIR$1) === 'dist' ? path.dirname(MODULE_DIR$1) : MODULE_DIR$1;
+const BOTS_FILE = path.join(PROJECT_ROOT$1, 'profiles', 'bots.json');
+const PROFILES_DIR = path.join(PROJECT_ROOT$1, 'profiles');
 
 /**
  * Loads the bots configuration from profiles/bots.json.

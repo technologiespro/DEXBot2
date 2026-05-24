@@ -49,7 +49,9 @@ const FETCH_TIMEOUT_MS = MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS;
 const FETCH_MAX_ATTEMPTS = 3;
 const FETCH_MANIFEST_VERSION = 1;
 
-const BOTS_JSON = path.join(__dirname, '..', '..', 'profiles', 'bots.json');
+const GRANDPARENT$1 = path.dirname(path.dirname(__dirname));
+const PROJECT_ROOT$1 = path.basename(GRANDPARENT$1) === 'dist' ? path.dirname(GRANDPARENT$1) : GRANDPARENT$1;
+const BOTS_JSON = path.join(PROJECT_ROOT$1, 'profiles', 'bots.json');
 
 // ─── CLI ──────────────────────────────────────────────────────────────────────
 
@@ -103,7 +105,7 @@ function outputPath(poolId, intervalSeconds, assetA, assetB) {
     const label = toIntervalLabel(intervalSeconds);
     const id  = String(poolId).replace('1.19.', '');
     const pairFolder = pairFolderName(assetA, assetB);
-    return path.join(__dirname, '..', 'data', 'lp', pairFolder, `lp_pool_${id}_${label}.json`);
+    return path.join(PROJECT_ROOT$1, 'market_adapter', 'data', 'lp', pairFolder, `lp_pool_${id}_${label}.json`);
 }
 
 function applyPrecisionOverrides(assetA, assetB, precA, precB) {
@@ -114,7 +116,7 @@ function applyPrecisionOverrides(assetA, assetB, precA, precB) {
 }
 
 function pairFolderPath(assetASymbol, assetBSymbol) {
-    return path.join(__dirname, '..', 'data', 'lp', pairFolderName(
+    return path.join(PROJECT_ROOT$1, 'market_adapter', 'data', 'lp', pairFolderName(
         { symbol: assetASymbol },
         { symbol: assetBSymbol }
     ));

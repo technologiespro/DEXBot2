@@ -66,6 +66,8 @@ const path = require('path');
 const readline = require('readline');
 const Format = require('./format');
 const { TIMING } = require('../constants');
+const EXPORT_PARENT = path.dirname(path.dirname(__dirname));
+const EXPORT_ROOT = path.basename(EXPORT_PARENT) === 'dist' ? path.dirname(EXPORT_PARENT) : EXPORT_PARENT;
 
 /**
  * Parse a fill line from PM2 log file
@@ -280,7 +282,7 @@ async function exportBotTrades(botKey, botConfig, outputDir = './exports') {
         await fsPromises.mkdir(outputDir, { recursive: true });
 
         // Find log file (PM2 format: {botKey}-error.log or {botKey}.log)
-        const logsDir = path.join(__dirname, '..', '..', 'profiles', 'logs');
+        const logsDir = path.join(EXPORT_ROOT, 'profiles', 'logs');
         let logFilePath = null;
 
         try {

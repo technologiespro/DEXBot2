@@ -18,7 +18,9 @@ const {
 
 const CREDIT_FEE_RATE_DENOM = 1_000_000;
 const ZERO_ASSET_ID = '1.3.0';
-const DEFAULT_STATE_DIR = path.join(__dirname, '..', 'profiles', 'credit_runtime');
+const MODULE_DIR = path.dirname(__dirname);
+const PROJECT_ROOT = path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
+const DEFAULT_STATE_DIR = path.join(PROJECT_ROOT, 'profiles', 'credit_runtime');
 // Matches GRAPHENE_COLLATERAL_RATIO_DENOM in bitshares-core (libraries/protocol/include/graphene/protocol/config.hpp)
 // Used for target_collateral_ratio in call_order_update operations.
 const GRAPHENE_COLLATERAL_RATIO_DENOM = 1000;

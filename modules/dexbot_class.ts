@@ -134,8 +134,10 @@ const { cloneWeightDistribution } = require('./order/utils/math');
 const { normalizeBotEntry } = require('./bot_settings');
 const Format = require('./order/format');
 
-const PROFILES_BOTS_FILE = path.join(__dirname, '..', 'profiles', 'bots.json');
-const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
+const MODULE_DIR$1 = path.dirname(__dirname);
+const PROJECT_ROOT$1 = path.basename(MODULE_DIR$1) === 'dist' ? path.dirname(MODULE_DIR$1) : MODULE_DIR$1;
+const PROFILES_BOTS_FILE = path.join(PROJECT_ROOT$1, 'profiles', 'bots.json');
+const PROFILES_DIR = path.join(PROJECT_ROOT$1, 'profiles');
 
 class DEXBot {
     config: any;
@@ -1770,7 +1772,7 @@ class DEXBot {
                         const sessionId = await chainKeys.probeAccountInDaemon(this.config.preferredAccount);
                         const botHmacSecret = credentialPolicy.loadBotHmacSecret(
                             this.config.preferredAccount,
-                            path.join(__dirname, '..', 'profiles', 'daemon-policies.json'),
+                            path.join(PROJECT_ROOT$1, 'profiles', 'daemon-policies.json'),
                             { quiet: true }
                         );
                         privateKey = chainKeys.createDaemonSigningToken(this.config.preferredAccount, {

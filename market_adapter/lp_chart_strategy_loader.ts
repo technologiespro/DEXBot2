@@ -3,8 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const ANALYSIS_AMA_FITTING_DIR = path.resolve(__dirname, '..', 'analysis', 'ama_fitting');
-const MARKET_ADAPTER_DIR = path.resolve(__dirname);
+const PARENT_DIR$1 = path.dirname(__dirname);
+const PROJECT_ROOT = path.basename(PARENT_DIR$1) === 'dist' ? path.dirname(PARENT_DIR$1) : PARENT_DIR$1;
+const ANALYSIS_AMA_FITTING_DIR = path.join(PROJECT_ROOT, 'analysis', 'ama_fitting');
+const MARKET_ADAPTER_DIR = path.join(PROJECT_ROOT, 'market_adapter');
 
 function normalizeAssetSymbol(value) {
     return String(value || '').trim().toUpperCase();

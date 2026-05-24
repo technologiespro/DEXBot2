@@ -9,7 +9,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const rootDir = path.resolve(__dirname, '..');
+const PARENT = path.dirname(__dirname);
+const rootDir = path.basename(PARENT) === 'dist' ? path.dirname(PARENT) : PARENT;
 const rootPackagePath = path.join(rootDir, 'package.json');
 const rootPackage = readJson(rootPackagePath);
 const targetVersion = rootPackage.version;

@@ -3,13 +3,15 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const DEFAULT_MEMU_DIR = path.join(__dirname, '..', 'data', 'memu');
+const MB_PARENT_DIR = path.dirname(path.dirname(__dirname));
+const MB_PROJECT_ROOT = path.basename(MB_PARENT_DIR) === 'dist' ? path.dirname(MB_PARENT_DIR) : MB_PARENT_DIR;
+const DEFAULT_MEMU_DIR = path.join(MB_PROJECT_ROOT, 'claw', 'data', 'memu');
 const DEFAULT_PYTHON = process.env.MEMU_PYTHON || 'python3';
 
 function resolveMemuScript() {
   const candidates = [
-    path.join(__dirname, '..', 'scripts', 'memu_runner.py'),
-    path.join(__dirname, '..', '..', '..', 'claw', 'scripts', 'memu_runner.py'),
+    path.join(MB_PROJECT_ROOT, 'claw', 'scripts', 'memu_runner.py'),
+    path.join(MB_PROJECT_ROOT, 'claw', 'scripts', 'memu_runner.py'),
   ];
 
   for (const candidate of candidates) {

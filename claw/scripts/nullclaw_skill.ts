@@ -8,11 +8,14 @@ const {
   writeNullClawSkillFile
 } = require('../modules/nullclaw_skill');
 
+const NS_PARENT_DIR = path.dirname(path.dirname(__dirname));
+const NS_PROJECT_ROOT = path.basename(NS_PARENT_DIR) === 'dist' ? path.dirname(NS_PARENT_DIR) : NS_PARENT_DIR;
+
 function parseArgs(argv) {
   const options = {
     outputPath: null,
     profileRoot: null,
-    repoRoot: path.resolve(__dirname, '..')
+    repoRoot: path.join(NS_PROJECT_ROOT, 'claw')
   };
 
   for (let i = 0; i < argv.length; i += 1) {

@@ -22,7 +22,9 @@ function getBlockchainToFloat() {
   return loadDexbotOrderUtils().blockchainToFloat;
 }
 
-const DEFAULT_STATE_PATH = path.resolve(__dirname, '..', 'data', 'positions.json');
+const PM_PARENT_DIR = path.dirname(path.dirname(__dirname));
+const PM_PROJECT_ROOT = path.basename(PM_PARENT_DIR) === 'dist' ? path.dirname(PM_PARENT_DIR) : PM_PARENT_DIR;
+const DEFAULT_STATE_PATH = path.join(PM_PROJECT_ROOT, 'claw', 'data', 'positions.json');
 const STRATEGY_NAME = 'short-mpa-bts';
 
 const { clone } = require('./utils');

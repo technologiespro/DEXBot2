@@ -14,7 +14,8 @@ function debugLog(message, err = null) {
 }
 
 function getDexbotRoot() {
-    return path.resolve(__dirname, '..');
+    const MODULE_DIR = path.dirname(__dirname);
+    return path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
 }
 
 function isUsableRuntimeBaseDir(dirPath) {

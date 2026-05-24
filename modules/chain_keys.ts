@@ -112,10 +112,13 @@ const VAULT_SECRET_KIND = 'dexbot-vault-secret';
 const VAULT_SESSION_SECRET_KIND = 'dexbot-session-secret';
 const VAULT_DAEMON_SIGNING_TOKEN_KIND = 'dexbot-daemon-signing-token';
 
+const MODULE_DIR = path.dirname(__dirname);
+const PROJECT_ROOT = path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
+
 // Profiles key file (ignored) only
 const PROFILES_KEYS_FILE = process.env.DEXBOT_KEYS_FILE
     ? path.resolve(process.env.DEXBOT_KEYS_FILE)
-    : path.join(__dirname, '..', 'profiles', 'keys.json');
+    : path.join(PROJECT_ROOT, 'profiles', 'keys.json');
 
 /**
  * Ensures that the profiles/keys directory exists.

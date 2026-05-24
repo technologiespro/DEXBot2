@@ -27,7 +27,9 @@ function findDexbot2Root(startDir) {
   return path.resolve(startDir || __dirname);
 }
 
-const DEFAULT_ROOT = findDexbot2Root(path.resolve(__dirname, '..', '..'));
+const LP_PARENT_DIR = path.dirname(path.dirname(__dirname));
+const LP_PROJECT_ROOT = path.basename(LP_PARENT_DIR) === 'dist' ? path.dirname(LP_PARENT_DIR) : LP_PARENT_DIR;
+const DEFAULT_ROOT = findDexbot2Root(LP_PROJECT_ROOT);
 
 function normalizeRoot(options = {}) {
   if (options.profileRoot) {

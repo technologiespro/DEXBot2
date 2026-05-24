@@ -90,7 +90,9 @@ Options:
 }
 
 function loadBot(botName) {
-  const botsPath = path.join(__dirname, '..', 'profiles', 'bots.json');
+  const PARENT = path.dirname(__dirname);
+  const ROOT = path.basename(PARENT) === 'dist' ? path.dirname(PARENT) : PARENT;
+  const botsPath = path.join(ROOT, 'profiles', 'bots.json');
   const { config } = loadSettingsFile(botsPath, { silent: false, exitOnError: false });
   const entries = normalizeBotEntries(resolveRawBotEntries(config));
   const bot = entries.find((entry) => entry.name === botName);

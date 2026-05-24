@@ -19,8 +19,10 @@ const path = require('path');
 const { formatPrice6, formatPrice4 } = require('../modules/order/format');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 
-const ORDERS_DIR = path.join(__dirname, '../profiles/orders');
-const BOTS_CONFIG = path.join(__dirname, '../profiles/bots.json');
+const PARENT = path.dirname(__dirname);
+const ROOT = path.basename(PARENT) === 'dist' ? path.dirname(PARENT) : PARENT;
+const ORDERS_DIR = path.join(ROOT, 'profiles/orders');
+const BOTS_CONFIG = path.join(ROOT, 'profiles/bots.json');
 
 // Color codes for terminal output
 const colors = {

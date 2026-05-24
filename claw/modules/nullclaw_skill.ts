@@ -8,7 +8,9 @@ function tomlString(value) {
 }
 
 function normalizeRepoRoot(repoRoot) {
-  return path.resolve(repoRoot || path.resolve(__dirname, '..'));
+  const NC_PARENT_DIR = path.dirname(path.dirname(__dirname));
+  const NC_PROJECT_ROOT = path.basename(NC_PARENT_DIR) === 'dist' ? path.dirname(NC_PARENT_DIR) : NC_PARENT_DIR;
+  return path.resolve(repoRoot || path.join(NC_PROJECT_ROOT, 'claw'));
 }
 
 function normalizeProfileRoot(options = {}, repoRoot) {

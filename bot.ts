@@ -59,7 +59,8 @@ const credentialPolicy = require('./modules/credential_policy');
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
 
-const PROFILES_BOTS_FILE = path.join(__dirname, 'profiles', 'bots.json');
+const ROOT = path.basename(__dirname) === 'dist' ? path.dirname(__dirname) : __dirname;
+const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const launcherLogger = createPm2AwareLogger('bot.js');
 
 // Get bot name from args or environment
@@ -122,7 +123,7 @@ async function getSigningSecretForAccount(accountName: string) {
             const sessionId = await chainKeys.probeAccountInDaemon(accountName);
             const botHmacSecret = credentialPolicy.loadBotHmacSecret(
                 accountName,
-                path.join(__dirname, 'profiles', 'daemon-policies.json'),
+                path.join(ROOT, 'profiles', 'daemon-policies.json'),
                 { quiet: true }
             );
             return chainKeys.createDaemonSigningToken(accountName, { sessionId, botHmacSecret });

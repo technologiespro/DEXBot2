@@ -8,7 +8,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
+// Resolve profiles directory correctly whether running from source (modules/)
+// or compiled output (dist/modules/)
+const PARENT_DIR = path.dirname(__dirname);
+const ROOT = path.basename(PARENT_DIR) === 'dist' ? path.dirname(PARENT_DIR) : PARENT_DIR;
+const PROFILES_DIR = path.join(ROOT, 'profiles');
 const SETTINGS_FILE = path.join(PROFILES_DIR, 'general.settings.json');
 
 /**

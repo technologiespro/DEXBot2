@@ -17,7 +17,9 @@ const {
   runPositionManagerWatch
 } = require('./position_manager_watch');
 
-const CLAW_ROOT = path.resolve(__dirname, '..');
+const CI_PARENT_DIR = path.dirname(path.dirname(__dirname));
+const CI_PROJECT_ROOT = path.basename(CI_PARENT_DIR) === 'dist' ? path.dirname(CI_PARENT_DIR) : CI_PARENT_DIR;
+const CLAW_ROOT = path.join(CI_PROJECT_ROOT, 'claw');
 const DEFAULT_DATA_DIR = path.join(CLAW_ROOT, 'data');
 const DEFAULT_STATE_DIR = path.join(DEFAULT_DATA_DIR, 'state');
 

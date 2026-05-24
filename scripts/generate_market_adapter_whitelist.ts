@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { createBotKey } = require('../modules/account_orders');
 
-const ROOT = path.join(__dirname, '..');
+const PARENT = path.dirname(__dirname);
+const ROOT = path.basename(PARENT) === 'dist' ? path.dirname(PARENT) : PARENT;
 const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const WHITELIST_FILE = path.join(ROOT, 'profiles', 'market_adapter_whitelist.json');
 

@@ -103,8 +103,9 @@ setupGracefulShutdown();
 // created in DEXBot.start() in modules/dexbot_class.js. This eliminates shared-file race conditions.
 
 // Primary CLI driver that manages tracked bots and helper utilities such as key/bot editors.
-const PROFILES_BOTS_FILE = path.join(__dirname, 'profiles', 'bots.json');
-const PROFILES_DIR = path.join(__dirname, 'profiles');
+const ROOT = path.basename(__dirname) === 'dist' ? path.dirname(__dirname) : __dirname;
+const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
+const PROFILES_DIR = path.join(ROOT, 'profiles');
 
 
 const CLI_COMMANDS = ['start', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export'];
