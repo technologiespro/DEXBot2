@@ -1,2 +1,4 @@
 #!/usr/bin/env node
-module.exports = require('./dist/credential-daemon.js');
+'use strict';
+require('tsx');
+module.exports = require('./credential-daemon.ts');

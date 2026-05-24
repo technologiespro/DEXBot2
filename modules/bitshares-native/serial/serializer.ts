@@ -81,18 +81,15 @@ class BufferWriter {
 
     writeVarint64(v: number | bigint | string): this {
         v = BigInt(v);
-        if (v < 0x80n) {
-            return this.writeUint8(Number(v));
-        }
-        if (v < 0x4000n) {
-            return this.writeUint16(Number(v | 0x8000n));
-        }
-        if (v < 0x20000000n) {
-            return this.writeUint32(Number(v | 0xc0000000n));
-        }
-        return this.writeUint8(0xf0 | Number((v >> 28n) & 0x0fn))
-                   .writeUint16(Number((v >> 12n) & 0xffffn))
-                   .writeUint32(Number(v & 0xffffffffn));
+        do {
+            const b = Number(v & 0x7Fn);
+            v >>= 7n;
+            if (v === 0n) {
+                this.writeUint8(b);
+                return this;
+            }
+            this.writeUint8(b | 0x80);
+        } while (true);
     }
 
     flip(): this {
@@ -187,7 +184,14 @@ class BufferReader {
     }
 
     readVarint64(): bigint {
-        return BigInt(this.readVarint32());
+        let v = 0n, b = 0, shift = 0;
+        do {
+            b = this.readUint8();
+            v |= BigInt(b & 0x7F) << BigInt(shift);
+            shift += 7;
+            if (!(b & 0x80)) break;
+        } while (shift < 70);
+        return v;
     }
 
     copy(offset: number, end?: number): Buffer {

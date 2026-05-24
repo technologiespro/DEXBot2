@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { createMemuBridge } = require('../modules/memu_bridge');
 
 async function main() {

@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Claw subsystem maintains its own connection state for subsystem isolation.
 const { TIMING, NODE_MANAGEMENT } = require('../../modules/constants');
 const { sleep } = require('../../modules/order/utils/system');

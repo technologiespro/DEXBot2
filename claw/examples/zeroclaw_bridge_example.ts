@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { createZeroClawBridge, describeZeroClawBridge } = require('../modules/zeroclaw_bridge');
 
 async function main() {

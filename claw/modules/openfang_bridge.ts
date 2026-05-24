@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { createVariantBridgeModule } = require('./claw_bridge');
 
 export = createVariantBridgeModule(

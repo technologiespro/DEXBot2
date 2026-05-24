@@ -540,7 +540,7 @@ function brainKeyToPrivateKey(brainKey, sequence = 0) {
 }
 
 function publicKeyToString(pubKeyBuf, addressPrefix = 'BTS') {
-    const checksum = ripemd160(pubKeyBuf).slice(0, 4);
+    const checksum = ripemd160(sha256(pubKeyBuf)).slice(0, 4);
     return addressPrefix + base58Encode(Buffer.concat([pubKeyBuf, checksum]));
 }
 

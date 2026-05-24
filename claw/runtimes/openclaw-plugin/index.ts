@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { definePluginEntry } = require("openclaw/plugin-sdk/plugin-entry");
 const { getClawToolCatalog } = require("../../modules/claw_catalog.js");
 const { runClawCommand } = require("../../modules/claw_bridge.js");

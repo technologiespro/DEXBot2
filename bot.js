@@ -1,2 +1,4 @@
 #!/usr/bin/env node
-module.exports = require('./dist/bot.js');
+'use strict';
+require('tsx');
+module.exports = require('./bot.ts');

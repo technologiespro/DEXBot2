@@ -1,4 +1,3 @@
-// @ts-nocheck
 function clone(value) {
   if (value === undefined) {
     return undefined;

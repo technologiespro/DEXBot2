@@ -1,4 +1,3 @@
-// @ts-nocheck
 const bitsharesClient = require('./modules/bitshares_client');
 const chainActions = require('./modules/chain_actions');
 const chainBroadcast = require('./modules/chain_broadcast');

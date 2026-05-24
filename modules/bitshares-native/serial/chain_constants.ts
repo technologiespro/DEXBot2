@@ -54,11 +54,12 @@ const OBJECT_TYPE = {
     worker: 14,
     balance: 15,
     htlc: 16,
-    ticket: 17,
-    liquidity_pool: 18,
-    samet_fund: 19,
-    credit_offer: 20,
-    credit_deal: 21,
+    custom_authority: 17,
+    ticket: 18,
+    liquidity_pool: 19,
+    samet_fund: 20,
+    credit_offer: 21,
+    credit_deal: 22,
 };
 
 const OBJECT_SPACE_TYPE = {};

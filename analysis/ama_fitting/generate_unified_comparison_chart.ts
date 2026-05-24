@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use strict';
 
 /**
@@ -190,7 +189,7 @@ function parseArgs(argv) {
     return cfg;
 }
 
-function generateChart(options = {}) {
+function generateChart(options = {} as Record<string, any>) {
     const logger = options.logger ?? console;
 
     const dataFile = options.dataFile

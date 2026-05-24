@@ -38,6 +38,6 @@
     "dist",
     "tests",
     "dashboard",
-    "profiles",
+    "profiles"
   ]
 }

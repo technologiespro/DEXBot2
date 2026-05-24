@@ -1,2 +1,4 @@
 #!/usr/bin/env node
-module.exports = require('./dist/unlock-start.js');
+'use strict';
+require('tsx');
+module.exports = require('./unlock-start.ts');

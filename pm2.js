@@ -1,2 +1,4 @@
 #!/usr/bin/env node
-module.exports = require('./dist/pm2.js');
+'use strict';
+require('tsx');
+module.exports = require('./pm2.ts');

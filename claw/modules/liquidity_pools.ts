@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { BitShares } = require('./bitshares_client');
 const { getDexbot2Root, loadDexbotOrderSystemUtils, requireDexbot2Module } = require('./dexbot_bridge');
 

@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { createClawInfrastructure } = require('../modules/claw_infra');
 
 async function main() {

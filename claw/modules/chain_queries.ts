@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { BitShares, waitForConnected } = require('./bitshares_client');
 const { loadDexbotOrderSystemUtils, loadDexbotOrderUtils } = require('./dexbot_bridge');
 

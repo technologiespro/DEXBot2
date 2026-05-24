@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { createVariantDescribeFn } = require('./claw_manifest');
 
 const describeHermesBridge = createVariantDescribeFn(

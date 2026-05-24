@@ -1,4 +1,3 @@
-// @ts-nocheck
 const SUPPORTED_CLAW_RUNTIMES = Object.freeze([
   {
     runtime: 'openclaw',

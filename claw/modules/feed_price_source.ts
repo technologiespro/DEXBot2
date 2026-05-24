@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Feed Price Source
  *

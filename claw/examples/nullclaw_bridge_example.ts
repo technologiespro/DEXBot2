@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { createNullClawBridge, describeNullClawBridge } = require('../modules/nullclaw_bridge');
 
 function main() {

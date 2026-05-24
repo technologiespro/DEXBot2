@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use strict';
 
 const { escapeHtml, serializeJsonForScript, toEpochSeconds, UPLOT_SHARED_SCRIPT } = require('../chart_utils');

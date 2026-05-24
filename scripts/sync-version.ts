@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck
 /**
  * Sync DEXBot2-owned package/plugin manifest versions from root package.json.
  *

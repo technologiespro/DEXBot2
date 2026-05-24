@@ -115,6 +115,8 @@ const fill_order = new Serializer('fill_order', {
     account_id: protocol_id_type('account'),
     pays: asset,
     receives: asset,
+    fill_price: price,
+    is_maker: bool_type,
 });
 
 const asset_settle = new Serializer('asset_settle', {
@@ -155,7 +157,36 @@ operation.st_operations = [
 operation.st_operations[17] = asset_settle;
 operation.st_operations[77] = limit_order_update;
 
-const operation_result = staticVariantType([void_result, object_id_type, asset]);
+const generic_operation_result = new Serializer('generic_operation_result', {
+    new_objects: setType(object_id_type),
+    updated_objects: setType(object_id_type),
+    removed_objects: setType(object_id_type),
+});
+
+const generic_exchange_operation_result = new Serializer('generic_exchange_operation_result', {
+    paid: arrayType(asset),
+    received: arrayType(asset),
+    fees: arrayType(asset),
+});
+
+const extendable_operation_result = extensionType([
+    { name: 'impacted_accounts', type: setType(protocol_id_type('account')) },
+    { name: 'new_objects', type: setType(object_id_type) },
+    { name: 'updated_objects', type: setType(object_id_type) },
+    { name: 'removed_objects', type: setType(object_id_type) },
+    { name: 'paid', type: arrayType(asset) },
+    { name: 'received', type: arrayType(asset) },
+    { name: 'fees', type: arrayType(asset) },
+]);
+
+const operation_result = staticVariantType([
+    void_result,
+    object_id_type,
+    asset,
+    generic_operation_result,
+    generic_exchange_operation_result,
+    extendable_operation_result,
+]);
 
 const transaction = new Serializer('transaction', {
     ref_block_num: uint16,
