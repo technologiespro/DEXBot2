@@ -59,7 +59,7 @@ function installStubs() {
         };
         process.nextTick(() => {
             child.emit('spawn');
-            child.emit('close', 0);
+            setImmediate(() => child.emit('close', 0));
         });
         return child;
     };

@@ -25,6 +25,7 @@
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { sendControlCommand } = require('../modules/launcher/supervisor_control');
 
 // Project root directory (parent of scripts folder)
 const ROOT = path.join(__dirname, '..');
@@ -63,6 +64,36 @@ function run(cmd) {
     }
 }
 
+async function detectIsolatedSupervisor() {
+    try {
+        const resp = await sendControlCommand({ cmd: 'status' });
+        return resp && resp.ok ? resp.status || {} : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+async function reloadActiveIsolatedProcesses() {
+    const status = await detectIsolatedSupervisor();
+    if (!status) {
+        return false;
+    }
+
+    const runningNames = Object.entries(status)
+        .filter(([name, info]) => name !== 'dexbot-update' && info && info.status === 'running')
+        .map(([name]) => name);
+
+    if (runningNames.length === 0) {
+        log('No active isolated processes are currently running. Skipping supervisor restart.');
+        return true;
+    }
+
+    log(`Active isolated processes detected: ${runningNames.join(', ')}`);
+    await sendControlCommand({ cmd: 'restart-running' });
+    return true;
+}
+
+(async () => {
 try {
     // Change to project root for all git operations
     process.chdir(ROOT);
@@ -235,8 +266,14 @@ try {
      * - Handles missing bots.json gracefully
      * - Never reloads dexbot-cred through bulk PM2 actions
      */
-    log('Reloading active bots in PM2...');
+    log('Reloading active runtime processes...');
     try {
+        if (await reloadActiveIsolatedProcesses()) {
+            log('Isolated supervisor runtime restarted.');
+            log('DEXBot2 update completed successfully.');
+            process.exit(0);
+        }
+
         const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
         if (fs.existsSync(BOTS_FILE)) {
             // Read and parse bots configuration
@@ -339,7 +376,7 @@ try {
         }
     } catch (err) {
         // Avoid pm2 reload all because dexbot-cred must only be restarted through node pm2
-        log(`Warning: PM2 reload logic failed (${err.message}). Skipping bulk reload to avoid touching dexbot-cred.`);
+        log(`Warning: runtime reload logic failed (${err.message}). Skipping bulk reload to avoid touching dexbot-cred.`);
     }
 
 
@@ -352,3 +389,4 @@ try {
     console.error('==========================================');
     process.exit(1);
 }
+})();

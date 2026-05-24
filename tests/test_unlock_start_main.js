@@ -8,6 +8,9 @@ console.log('Running unlock-start main tests');
 const controllerPath = require.resolve('../modules/launcher/credential_daemon');
 const originalControllerModule = require.cache[controllerPath];
 const originalSpawn = childProcess.spawn;
+const originalSupervisorSocket = process.env.DEXBOT_SUPERVISOR_SOCKET;
+const originalDisableSupervisorSocket = process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET;
+const originalIsolatedForeground = process.env.DEXBOT_ISOLATED_FOREGROUND;
 
 const state = {
     calls: [],
@@ -45,10 +48,18 @@ function installStubs() {
         state.calls.push({ command, args, options });
         const child = new EventEmitter();
         child.killed = false;
+        child.pid = 9999;
+        child.stdout = new EventEmitter();
+        child.stdout.pipe = (dest) => dest;
+        child.stderr = new EventEmitter();
+        child.stderr.pipe = (dest) => dest;
         child.kill = () => {
             child.killed = true;
         };
-        process.nextTick(() => child.emit('close', 0));
+        process.nextTick(() => {
+            child.emit('spawn');
+            setImmediate(() => child.emit('close', 0));
+        });
         return child;
     };
 }
@@ -59,6 +70,9 @@ function restoreStubs() {
 }
 
 installStubs();
+process.env.DEXBOT_SUPERVISOR_SOCKET = `/tmp/dexbot-supervisor-test-${process.pid}.sock`;
+process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET = '1';
+process.env.DEXBOT_ISOLATED_FOREGROUND = '1';
 
 const unlockStart = require('../unlock-start');
 
@@ -100,11 +114,36 @@ async function runClawOnlyTest() {
     assert.strictEqual(state.stopCount, 1, 'claw-only mode should still clean up owned daemons');
 }
 
+async function runIsolatedAllBotsTest() {
+    resetState();
+    await unlockStart.main({ argv: ['node', 'unlock-start', '--isolated'] });
+
+    assert.strictEqual(state.ensureCount, 1, 'isolated launcher should unlock the credential daemon once');
+    assert.strictEqual(state.stopCount, 1, 'isolated launcher should clean up its owned daemon');
+    assert.ok(state.calls.length >= 1, 'isolated launcher should spawn at least one bot process');
+}
+
+async function runIsolatedSingleBotTest() {
+    resetState();
+    await unlockStart.main({ argv: ['node', 'unlock-start', '--isolated', 'XRP-BTS'] });
+
+    assert.strictEqual(state.ensureCount, 1, 'isolated single-bot launcher should unlock the credential daemon');
+    assert.strictEqual(state.stopCount, 1, 'isolated single-bot launcher should clean up its owned daemon');
+    const botCalls = state.calls.filter((call) => call.args[0].endsWith('bot.js'));
+    assert.strictEqual(botCalls.length, 1, 'isolated single-bot launcher should spawn exactly one bot process');
+    assert.ok(
+        botCalls[0].args[0].endsWith('bot.js'),
+        'isolated launcher should use bot.js entry point'
+    );
+}
+
 (async () => {
     try {
         await runAllBotsTest();
         await runSingleBotTest();
         await runClawOnlyTest();
+        await runIsolatedAllBotsTest();
+        await runIsolatedSingleBotTest();
         console.log('unlock-start main tests passed');
         process.exit(0);
     } catch (err) {
@@ -112,5 +151,20 @@ async function runClawOnlyTest() {
         process.exit(1);
     } finally {
         restoreStubs();
+        if (originalSupervisorSocket === undefined) {
+            delete process.env.DEXBOT_SUPERVISOR_SOCKET;
+        } else {
+            process.env.DEXBOT_SUPERVISOR_SOCKET = originalSupervisorSocket;
+        }
+        if (originalDisableSupervisorSocket === undefined) {
+            delete process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET;
+        } else {
+            process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET = originalDisableSupervisorSocket;
+        }
+        if (originalIsolatedForeground === undefined) {
+            delete process.env.DEXBOT_ISOLATED_FOREGROUND;
+        } else {
+            process.env.DEXBOT_ISOLATED_FOREGROUND = originalIsolatedForeground;
+        }
     }
 })();

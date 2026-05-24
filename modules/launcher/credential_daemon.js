@@ -63,7 +63,7 @@ function createCredentialDaemonController({
         }
     }
 
-    async function ensureCredentialDaemon() {
+    async function ensureCredentialDaemon({ detached = false } = {}) {
         if (await isDaemonReady()) {
             return false;
         }
@@ -79,9 +79,13 @@ function createCredentialDaemonController({
             daemonProcess = spawn(process.execPath, [path.join(root, 'credential-daemon.js')], {
                 cwd: root,
                 env: buildScopedChildEnv({ extra: bootstrap.credentialEnv }),
-                stdio: 'inherit',
+                stdio: detached ? 'ignore' : 'inherit',
+                detached,
             });
             daemonExitPromise = waitForExit(daemonProcess);
+            if (detached) {
+                daemonProcess.unref();
+            }
 
             await Promise.all([
                 chainKeys.waitForDaemon(undefined, { socketPath, readyFilePath }),
@@ -92,6 +96,15 @@ function createCredentialDaemonController({
             bootstrap.close();
             throw error;
         }
+    }
+
+    function getManagedDaemonPid() {
+        return daemonProcess && daemonProcess.pid ? daemonProcess.pid : null;
+    }
+
+    function releaseManagedDaemon() {
+        daemonProcess = null;
+        daemonExitPromise = null;
     }
 
     async function stopManagedDaemon() {
@@ -105,6 +118,8 @@ function createCredentialDaemonController({
 
         try { fs.unlinkSync(socketPath); } catch (err) { }
         try { fs.unlinkSync(readyFilePath); } catch (err) { }
+        daemonProcess = null;
+        daemonExitPromise = null;
     }
 
     async function waitForManagedDaemon() {
@@ -126,7 +141,9 @@ function createCredentialDaemonController({
     return {
         ensureCredentialDaemon,
         forwardSignal,
+        getManagedDaemonPid,
         isDaemonReady,
+        releaseManagedDaemon,
         stopManagedDaemon,
         waitForManagedDaemon,
     };

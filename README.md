@@ -25,9 +25,10 @@ node dexbot keys
 node dexbot bots
 
 # 3. Start with PM2 or directly
-node pm2           # For production
+node pm2           # For production (PM2)
 node pm2 claw-only  # PM2-managed credential daemon only
-node unlock-start  # Single prompt, no PM2
+node unlock-start  # Single prompt, no PM2 (monolithic)
+node unlock-start --isolated  # No PM2, isolated processes (production-grade)
 node unlock-start --claw-only  # Credential daemon only for claw workflows
 node dexbot start  # For testing
 ```
@@ -232,6 +233,28 @@ node pm2 help
 Bot logs are written to `profiles/logs/<bot-name>.log` (errors to `<bot-name>-error.log`).
 
 Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local bootstrap channel instead of exporting the master password to every PM2 app. Use `node pm2 restart ...` or `node pm2 reload ...` for DEXBot-managed PM2 actions. Avoid raw `pm2 restart all` / `pm2 reload all`, because `dexbot-cred` must only be re-unlocked through the wrapper. If `dexbot-cred` stops, rerun `node pm2` or `node pm2 restart dexbot-cred`.
+
+## 🎯 Zero-Dependency Process Management
+
+`node unlock-start --isolated` runs each bot in its own process with auto-restart, memory limits, and log files — no PM2 required.
+
+```bash
+# Start all active bots
+node unlock-start --isolated
+
+# Start a specific bot
+node unlock-start --isolated <bot-name>
+
+# Runtime control
+node unlock-start control status
+node unlock-start control stop <bot-name>
+node unlock-start control restart <bot-name>
+node unlock-start control stop-all
+node unlock-start control restart-all
+node unlock-start control shutdown
+```
+
+The supervisor detaches and returns to the shell. It supports `SIGTERM` (graceful shutdown), `SIGUSR1` (print status), and `SIGUSR2` (restart all). Bot logs go to `profiles/logs/<name>.log`, supervisor output to `profiles/logs/supervisor.log`.
 
 ## 📚 Documentation
 

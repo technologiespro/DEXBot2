@@ -5,9 +5,23 @@ function findFirstPositionalArg(args) {
 function parseUnlockStartArgs(argv = process.argv) {
     const args = argv.slice(2);
     const clawOnly = args.includes('--claw-only') || args.includes('claw-only');
+    const isolated = args.includes('--isolated');
+
+    if (args[0] === 'control') {
+        const cmd = args[1] || 'status';
+        const target = args[2] || null;
+        return {
+            botName: null,
+            clawOnly: false,
+            isolated: false,
+            control: { cmd, target },
+        };
+    }
+
     return {
         botName: clawOnly ? null : findFirstPositionalArg(args) || process.env.BOT_NAME || null,
         clawOnly,
+        isolated,
     };
 }
 

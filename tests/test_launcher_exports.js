@@ -12,24 +12,34 @@ assert.strictEqual(typeof unlockStart.main, 'function', 'unlock-start should exp
 assert.strictEqual(typeof unlockStart.buildDexbotStartArgs, 'function', 'unlock-start should export buildDexbotStartArgs');
 assert.deepStrictEqual(
     parseUnlockStartArgs(['node', 'unlock-start', '--claw-only']),
-    { botName: null, clawOnly: true },
+    { botName: null, clawOnly: true, isolated: false },
     'unlock-start parser should recognize claw-only mode'
 );
 assert.deepStrictEqual(
     parseUnlockStartArgs(['node', 'unlock-start', 'XRP-BTS']),
-    { botName: 'XRP-BTS', clawOnly: false },
+    { botName: 'XRP-BTS', clawOnly: false, isolated: false },
     'unlock-start parser should capture bot names'
+);
+assert.deepStrictEqual(
+    parseUnlockStartArgs(['node', 'unlock-start', '--isolated']),
+    { botName: null, clawOnly: false, isolated: true },
+    'unlock-start parser should recognize isolated flag'
+);
+assert.deepStrictEqual(
+    parseUnlockStartArgs(['node', 'unlock-start', '--isolated', 'XRP-BTS']),
+    { botName: 'XRP-BTS', clawOnly: false, isolated: true },
+    'unlock-start parser should combine isolated flag with bot name'
 );
 const originalBotName = process.env.BOT_NAME;
 process.env.BOT_NAME = 'ENV-BOT';
 assert.deepStrictEqual(
     parseUnlockStartArgs(['node', 'unlock-start']),
-    { botName: 'ENV-BOT', clawOnly: false },
+    { botName: 'ENV-BOT', clawOnly: false, isolated: false },
     'unlock-start parser should use BOT_NAME when no bot argument is passed'
 );
 assert.deepStrictEqual(
     parseUnlockStartArgs(['node', 'unlock-start', '--claw-only']),
-    { botName: null, clawOnly: true },
+    { botName: null, clawOnly: true, isolated: false },
     'unlock-start parser should ignore BOT_NAME in claw-only mode'
 );
 if (originalBotName === undefined) {
@@ -71,6 +81,37 @@ assert.deepStrictEqual(
     unlockStart.buildDexbotStartArgs(null),
     ['dexbot.js', 'start'],
     'launcher should omit the bot arg when starting all bots'
+);
+
+assert.deepStrictEqual(
+    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'status']),
+    { botName: null, clawOnly: false, isolated: false, control: { cmd: 'status', target: null } },
+    'unlock-start parser should parse control status'
+);
+assert.deepStrictEqual(
+    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'stop', 'XRP-BTS']),
+    { botName: null, clawOnly: false, isolated: false, control: { cmd: 'stop', target: 'XRP-BTS' } },
+    'unlock-start parser should parse control stop <name>'
+);
+assert.deepStrictEqual(
+    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'restart', 'XRP-BTS']),
+    { botName: null, clawOnly: false, isolated: false, control: { cmd: 'restart', target: 'XRP-BTS' } },
+    'unlock-start parser should parse control restart <name>'
+);
+assert.deepStrictEqual(
+    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'stop-all']),
+    { botName: null, clawOnly: false, isolated: false, control: { cmd: 'stop-all', target: null } },
+    'unlock-start parser should parse control stop-all'
+);
+assert.deepStrictEqual(
+    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'restart-all']),
+    { botName: null, clawOnly: false, isolated: false, control: { cmd: 'restart-all', target: null } },
+    'unlock-start parser should parse control restart-all'
+);
+assert.deepStrictEqual(
+    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'shutdown']),
+    { botName: null, clawOnly: false, isolated: false, control: { cmd: 'shutdown', target: null } },
+    'unlock-start parser should parse control shutdown'
 );
 
 console.log('launcher export tests passed');
