@@ -174,6 +174,7 @@ function createTransport(config = {}) {
                 setStatus('connecting');
                 const socket = await connectOne(url);
                 if (ws) {
+                    ws.onclose = null;
                     try { ws.close(); } catch (_) {}
                 }
                 ws = socket;

@@ -198,7 +198,7 @@ function createSubscriptionManager(chainClient) {
             try {
                 await chainClient.db.call('set_subscribe_callback', [
                     SUBSCRIBE_CALLBACK_ID,
-                    true,
+                    false,
                 ]);
                 entry.active = !!entry.accountId;
             } catch (err) {
@@ -250,7 +250,7 @@ function createSubscriptionManager(chainClient) {
             try {
                 await chainClient.db.call('set_subscribe_callback', [
                     SUBSCRIBE_CALLBACK_ID,
-                    true,
+                    false,
                 ]);
                 ensureNoticeSubscription();
             } catch (_) {}

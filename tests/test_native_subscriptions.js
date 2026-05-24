@@ -114,6 +114,10 @@ console.log('=== Native Subscription Tests ===\n');
         true,
         'subscription setup should subscribe the account on-chain'
     );
+    assert.ok(
+        dbCalls.some(([method, args]) => method === 'set_subscribe_callback' && Array.isArray(args) && args[1] === false),
+        'subscription callback should not request universal object create/remove notices'
+    );
 
     console.log('  PASS: callbacks receive deduped fill notices');
     console.log('\n=== All subscription tests passed ===');
