@@ -105,7 +105,7 @@ class NodeManager {
         this.checkAllNodesPromise = null;
 
         // Expected chain ID (BitShares mainnet)
-        this.expectedChainId = '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8';
+        this.expectedChainId = require('./bitshares-native/serial/chain_constants').GRAPHENE_CHAIN_ID;
 
         // Blacklist cooldown: retry blacklisted nodes after 7 days
         this.BLACKLIST_COOLDOWN_MS = NODE_MANAGEMENT.BLACKLIST_COOLDOWN_MS;

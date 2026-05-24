@@ -509,7 +509,7 @@ let NODE_MANAGEMENT = {
     BLACKLIST_COOLDOWN_MS: 7 * 24 * 60 * 60 * 1000,  // 7 days before retrying blacklisted nodes
 
     // Expected chain ID (BitShares mainnet)
-    EXPECTED_CHAIN_ID: '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8',
+    EXPECTED_CHAIN_ID: '4018d7844c78f6a6c41c6a552b898022310fc5dec06a3d6f1d8b71a21bcf8cda',
 
     // Selection strategy
     SELECTION_STRATEGY: 'latency'       // latency-based selection
