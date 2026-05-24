@@ -66,6 +66,9 @@ function createSubscriptionManager(chainClient) {
                 if (item.owner && item.owner === sub.accountId) {
                     return true;
                 }
+                if (item.op && Array.isArray(item.op) && item.op[0] === OP_FILL_ORDER && item.op[1] && item.op[1].account_id === sub.accountId) {
+                    return true;
+                }
                 continue;
             }
 
@@ -167,19 +170,18 @@ function createSubscriptionManager(chainClient) {
             } else {
                 lastDeliveredByAccount.set(accountId, delivered);
             }
-        } catch (_: any) {}
+        } catch (err: any) {
+            if (sub.onError) {
+                try { sub.onError(err); } catch (_: any) {}
+            }
+        }
 
         async function getHistoryId(accId) {
-            try {
-                const full = await chainClient.db.get_full_accounts([accId], false);
-                if (full && full[0] && full[0][1] && full[0][1].account && full[0][1].account.statistics) {
-                    const statsId = full[0][1].account.statistics;
-                    const stats = await chainClient.db.get_objects([statsId]);
-                    if (stats && stats[0] && stats[0].most_recent_op) {
-                        return stats[0].most_recent_op;
-                    }
-                }
-            } catch (_: any) {}
+            // Note: account_statistics.most_recent_op is account_history_id_type (2.9.x),
+            // but get_account_history expects operation_history_id_type (1.11.x).
+            // The API treats a default-constructed operation_history_id_type (1.11.0)
+            // as "start from most recent" (max). Use that instead to avoid type mismatch
+            // API errors that would silently drop fills.
             return SUBSCRIPTIONS.HISTORY_API_OBJECT;
         }
     }
@@ -273,7 +275,9 @@ function createSubscriptionManager(chainClient) {
                     false,
                 ]);
                 ensureNoticeSubscription();
-            } catch (_: any) {}
+            } catch (err: any) {
+                console.warn('[subscriptions] Failed to resubscribe', entry.accountName, err.message);
+            }
         }
     }
 
@@ -286,6 +290,7 @@ function createSubscriptionManager(chainClient) {
         unsubscribe,
         onReconnect,
         resubscribeAll,
+        removeNoticeSubscription,
         getSubscriptions: () => new Map(subscriptions),
     };
 }

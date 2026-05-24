@@ -7,9 +7,9 @@ const { withDynamicWeightFiles } = require('./helpers/dynamic_weight_files');
 
 console.log('Running dexbot startup dynamic weight wiring tests');
 
-const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.js');
-const startupReconcilePath = path.resolve(__dirname, '../modules/order/startup_reconcile.js');
-const dexbotClassPath = path.resolve(__dirname, '../modules/dexbot_class.js');
+const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.ts');
+const startupReconcilePath = path.resolve(__dirname, '../modules/order/startup_reconcile.ts');
+const dexbotClassPath = path.resolve(__dirname, '../modules/dexbot_class.ts');
 
 const originalBitsharesClient = require.cache[bitsharesClientPath];
 const originalStartupReconcile = require.cache[startupReconcilePath];

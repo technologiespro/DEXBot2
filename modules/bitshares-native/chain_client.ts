@@ -30,7 +30,7 @@ function createChainClient(config = {}) {
     } = config;
 
     const wrappedOnStatusChange = (status, nodeUrl) => {
-        if (status === 'closed' || status === 'closing') {
+        if (status === 'closed') {
             _dbApiId = null;
             _historyApiId = null;
             _broadcastApiId = null;
@@ -47,11 +47,6 @@ function createChainClient(config = {}) {
             await login();
         } : null,
         onReconnect: async () => {
-            _dbApiId = null;
-            _historyApiId = null;
-            _broadcastApiId = null;
-            _chainConfig = null;
-            await login();
             if (typeof client.onReconnect === 'function') {
                 await client.onReconnect();
             }
@@ -231,7 +226,11 @@ function createChainClient(config = {}) {
 }
 
 function createReadOnlyClient(config = {}) {
-    const { nodes = [] } = config;
+    const {
+        nodes = [],
+        validateChainId = true,
+        expectedChainId = GRAPHENE_CHAIN_ID,
+    } = config;
 
     const transport = createTransport({
         rpcTimeoutMs: config.rpcTimeoutMs,
@@ -250,6 +249,16 @@ function createReadOnlyClient(config = {}) {
         if (!loginOk) throw new ConnectionError('Login error');
         _dbApiId = await transport.call('call', [1, 'database', []]);
         _historyApiId = await transport.call('call', [1, 'history', []]);
+
+        if (validateChainId) {
+            const chainId = await transport.call('call', [_dbApiId, 'get_chain_id', []]);
+            if (chainId !== expectedChainId) {
+                disconnect();
+                throw new ChainConfigError(
+                    `Chain ID mismatch: expected ${expectedChainId}, got ${chainId}`
+                );
+            }
+        }
     }
 
     function disconnect() {

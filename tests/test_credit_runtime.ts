@@ -8,9 +8,9 @@ const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache
 
 console.log('Running credit runtime tests');
 
-const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.js');
-const chainOrdersPath = path.resolve(__dirname, '../modules/chain_orders.js');
-const creditRuntimePath = path.resolve(__dirname, '../modules/credit_runtime.js');
+const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.ts');
+const chainOrdersPath = path.resolve(__dirname, '../modules/chain_orders.ts');
+const creditRuntimePath = path.resolve(__dirname, '../modules/credit_runtime.ts');
 
 function installStubs(calls, dbCalls, options = {}) {
   const callOrders = options.callOrders || [
@@ -322,7 +322,7 @@ async function testRefreshAndMpaPlan() {
 
     const op = await runtime.buildMpaUpdateOperation(plan, {}, mpaLending, '1.3.10');
     assert.strictEqual(op.op_name, 'call_order_update', 'MPA plan should build a call_order_update op');
-    assert.strictEqual(op.op_data.extensions.target_collateral_ratio, 200, 'target CR should be embedded as Graphene ratio basis points');
+    assert.strictEqual(op.op_data.extensions.target_collateral_ratio, 2000, 'target CR should be embedded as Graphene ratio units (1/1000)');
 
     const result = await runtime.runMaintenance('periodic');
     assert.strictEqual(result.context, 'periodic', 'maintenance context should round-trip');

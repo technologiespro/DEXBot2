@@ -20,7 +20,7 @@ const BitSharesMock = {
 
 global.BitShares = BitSharesMock;
 
-setCachedModule(path.resolve(__dirname, '../modules/bitshares_client.js'), {
+setCachedModule(path.resolve(__dirname, '../modules/bitshares_client.ts'), {
     BitShares: BitSharesMock,
     waitForConnected: async () => {},
     createAccountClient: () => ({}),
@@ -31,7 +31,7 @@ setCachedModule(path.resolve(__dirname, '../modules/bitshares_client.js'), {
     _internal: { connected: true },
 });
 
-setCachedModule(path.resolve(__dirname, '../modules/chain_orders.js'), {
+setCachedModule(path.resolve(__dirname, '../modules/chain_orders.ts'), {
     resolveAccountId: async (accountRef) => accountRef || '1.2.0',
     resolveAccountName: async (accountRef) => accountRef || 'account',
     getOnChainAssetBalances: async (accountRef, assets) => {

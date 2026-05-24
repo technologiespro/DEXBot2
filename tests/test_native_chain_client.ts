@@ -325,6 +325,7 @@ function testBroadcastProxy() {
             })
         ]);
         console.log('\n=== All chain client tests passed ===');
+        process.exit(0);
     } catch (e) {
         if (!STRICT_TEST && isEnvironmentError(e)) {
             console.log('Skipping native chain client test: local bind/connect environment not available.');

@@ -6,11 +6,11 @@ const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache
 
 console.log('Running dexbot credit wiring test');
 
-const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.js');
-const chainOrdersPath = path.resolve(__dirname, '../modules/chain_orders.js');
-const maintenanceRuntimePath = path.resolve(__dirname, '../modules/dexbot_maintenance_runtime.js');
-const creditRuntimePath = path.resolve(__dirname, '../modules/credit_runtime.js');
-const dexbotClassPath = path.resolve(__dirname, '../modules/dexbot_class.js');
+const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.ts');
+const chainOrdersPath = path.resolve(__dirname, '../modules/chain_orders.ts');
+const maintenanceRuntimePath = path.resolve(__dirname, '../modules/dexbot_maintenance_runtime.ts');
+const creditRuntimePath = path.resolve(__dirname, '../modules/credit_runtime.ts');
+const dexbotClassPath = path.resolve(__dirname, '../modules/dexbot_class.ts');
 
 function installStubs(calls) {
   const originalBitshares = setCachedModule(bitsharesClientPath, {

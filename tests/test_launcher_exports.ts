@@ -73,7 +73,7 @@ assert.deepStrictEqual(
     { command: 'reload', target: 'dexbot-cred', clawOnly: false },
     'pm2 parser should accept reload commands'
 );
-const expectedDexbotPath = path.join(__dirname, '..', 'dist', 'dexbot.js');
+const expectedDexbotPath = path.join(__dirname, '..', 'dexbot.js');
 assert.deepStrictEqual(
     unlockStart.buildDexbotStartArgs('XRP-BTS'),
     [expectedDexbotPath, 'start', 'XRP-BTS'],

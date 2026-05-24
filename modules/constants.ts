@@ -1155,10 +1155,11 @@ let NATIVE_CLIENT = {
         // Fixed value; must match the ID registered with the API.
         CALLBACK_ID: 1,
 
-        // Object space/type prefix for fill order objects (2.5.x).
+        // Object space/type prefix for operation history objects (1.11.x).
+        // Fill_order virtual operations produce 1.11.x operation history objects.
         // Notice handlers filter incoming object-change notifications by this prefix
         // to isolate fill events from other blockchain activity.
-        FILL_OBJECT_PREFIX: '2.5',
+        FILL_OBJECT_PREFIX: '1.11',
 
         // Default operation history object ID used as a fallback starting point
         // when the account's most_recent_op cannot be resolved.

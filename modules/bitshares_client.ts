@@ -35,7 +35,6 @@ const { sleep } = require('./order/utils/system');
 
 let connected = false;
 let suppressConnectionLog = false;
-const connectedCallbacks = new Set();
 let lastConnectionError = null;
 let intentionalDisconnect = false;
 let nodeManager = null;
@@ -145,16 +144,16 @@ const configuredNodes = Array.isArray(nodeSettings?.list)
     : [];
 const nodeManagerEnabled = nodeSettings?.enabled ?? NODE_MANAGEMENT.DEFAULT_ENABLED;
 
-    if (nodeManagerEnabled) {
-        nodeConfig = {
-            ...nodeSettings,
-            enabled: nodeManagerEnabled,
-            list: configuredNodes.length > 0 ? configuredNodes : NODE_MANAGEMENT.DEFAULT_NODES,
-        };
-        nodeManager = new NodeManager(nodeConfig);
-        _nativeClient.setNodes(Array.isArray(nodeConfig.list) ? nodeConfig.list.slice() : nodeConfig.list);
-        console.log(`[NodeManager] Loaded config for ${nodeConfig.list.length} nodes`);
-    }
+if (nodeManagerEnabled) {
+    nodeConfig = {
+        ...nodeSettings,
+        enabled: nodeManagerEnabled,
+        list: configuredNodes.length > 0 ? configuredNodes : NODE_MANAGEMENT.DEFAULT_NODES,
+    };
+    nodeManager = new NodeManager(nodeConfig);
+    _nativeClient.setNodes(Array.isArray(nodeConfig.list) ? nodeConfig.list.slice() : nodeConfig.list);
+    console.log(`[NodeManager] Loaded config for ${nodeConfig.list.length} nodes`);
+}
 
 /**
  * Suppress or restore connection log output.
@@ -172,6 +171,7 @@ function setSuppressConnectionLog(suppress) {
  * @returns {Promise<boolean>} True if connection succeeded
  */
 async function restartBitsharesConnection(serverList, reason = 'startup') {
+    if (reconnectInProgress) return false;
     const servers = Array.isArray(serverList)
         ? serverList.filter((server) => typeof server === 'string' && server.trim())
         : [];
@@ -264,7 +264,7 @@ function getConfiguredOrDefaultNodes() {
 function handleConnectionStatus(status) {
     const canHandleFailover = nodeManager && nodeConfig?.healthCheck?.enabled !== false;
 
-    if (status === 'open') {
+    if (status === 'open' || status === 'connected') {
         connected = true;
         lastConnectionError = null;
         if (nodeManager && nodeConfig?.healthCheck?.enabled !== false && !nodeManager.monitoringActive) {
@@ -272,9 +272,6 @@ function handleConnectionStatus(status) {
         }
         if (!suppressConnectionLog) {
             console.log('modules/bitshares_client: BitShares connected');
-        }
-        for (const cb of Array.from(connectedCallbacks)) {
-            try { cb(); } catch (e: any) { console.error('connected callback error', e.message); }
         }
         return false;
     }

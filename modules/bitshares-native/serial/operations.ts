@@ -78,7 +78,16 @@ const memo_data = new Serializer('memo_data', {
     message: bytesType(),
 });
 
-const limit_order_auto_action = staticVariantType([]);
+const create_take_profit_order_action = new Serializer('create_take_profit_order_action', {
+    fee_asset_id: protocol_id_type('asset'),
+    spread_percent: uint16,
+    size_percent: uint16,
+    expiration_seconds: uint32,
+    repeat: bool_type,
+    extensions: setType(void_type),
+});
+
+const limit_order_auto_action = staticVariantType([create_take_profit_order_action]);
 
 const limit_order_create = new Serializer('limit_order_create', {
     fee: asset,

@@ -179,26 +179,43 @@ function pointFromPublicKey(pubKeyBuffer) {
 function deterministicK(digest, privateKey, counter = 0) {
     const x = bufferFromBigInt(bigIntFromBuffer(privateKey), 32);
     const h1 = bufferFromBigInt(bigIntFromBuffer(digest) % secp256k1.n, 32);
+
     let K = Buffer.alloc(32, 0x00);
     let V = Buffer.alloc(32, 0x01);
 
-    const extra = Buffer.alloc(4);
-    extra.writeUInt32BE(counter, 0);
-
-    K = hmacSha256(K, Buffer.concat([V, Buffer.from([0x00]), x, h1, extra]));
+    K = hmacSha256(K, Buffer.concat([V, Buffer.from([0x00]), x, h1]));
     V = hmacSha256(K, V);
     K = hmacSha256(K, Buffer.concat([V, Buffer.from([0x01]), x, h1]));
     V = hmacSha256(K, V);
 
-    while (true) {
-        V = hmacSha256(K, V);
-        const candidate = bigIntFromBuffer(V);
-        if (candidate > 0n && candidate < secp256k1.n) {
-            return candidate;
+    let retry = false;
+
+    function rfc6979Generate() {
+        if (retry) {
+            K = hmacSha256(K, Buffer.concat([V, Buffer.from([0x00])]));
+            V = hmacSha256(K, V);
         }
-        K = hmacSha256(K, Buffer.concat([V, Buffer.from([0x00])]));
         V = hmacSha256(K, V);
+        const output = Buffer.from(V);
+        retry = true;
+        return output;
     }
+
+    // C++ extended_nonce_function pre-increments counter 0→1, then calls
+    // nonce_function_rfc6979 which issues counter+1 generate() calls.
+    // counter=0 (first attempt): 2 generate calls, use 2nd output
+    // counter=N (retry N): N+2 generate calls, use (N+2)th output
+    const total = counter + 2;
+    let lastOutput;
+    for (let i = 0; i < total; i++) {
+        lastOutput = rfc6979Generate();
+    }
+
+    const candidate = bigIntFromBuffer(lastOutput);
+    if (candidate > 0n && candidate < secp256k1.n) {
+        return candidate;
+    }
+    return 0n;
 }
 
 function recoverPublicKey(digest, r, s, recoveryId) {
@@ -565,7 +582,7 @@ function brainKeyToPrivateKey(brainKey, sequence = 0) {
 }
 
 function publicKeyToString(pubKeyBuf, addressPrefix = 'BTS') {
-    const checksum = ripemd160(sha256(pubKeyBuf)).slice(0, 4);
+    const checksum = ripemd160(pubKeyBuf).slice(0, 4);
     return addressPrefix + base58Encode(Buffer.concat([pubKeyBuf, checksum]));
 }
 

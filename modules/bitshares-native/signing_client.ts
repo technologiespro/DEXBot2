@@ -85,19 +85,23 @@ function createSigningClient(chainClient, accountName, privateKey) {
                 }
                 const result = await broadcastFn(signed.signedTxObject);
 
-                const opResults = (result && Array.isArray(result.operation_results))
-                    ? result.operation_results
-                    : (result && result.trx && Array.isArray(result.trx.operation_results))
-                        ? result.trx.operation_results
-                        : (Array.isArray(result) && result[0] && result[0].trx && Array.isArray(result[0].trx.operation_results))
-                            ? result[0].trx.operation_results
-                            : [];
-
-                if (Array.isArray(result)) {
-                    return { raw: result, operation_results: opResults };
+                if (result && Array.isArray(result.operation_results)) {
+                    return { ...result, operation_results: result.operation_results };
                 }
 
-                return { ...result, operation_results: opResults };
+                if (result && result.trx && Array.isArray(result.trx.operation_results)) {
+                    return { ...result, operation_results: result.trx.operation_results };
+                }
+
+                if (Array.isArray(result) && result[0] && result[0].trx && Array.isArray(result[0].trx.operation_results)) {
+                    return { raw: result, operation_results: result[0].trx.operation_results };
+                }
+
+                if (typeof result === 'object' && result !== null && result.id && !result.operation_results) {
+                    console.warn('[signing_client] Async broadcast returned no operation_results — tx may not have been processed');
+                }
+
+                return { ...result, operation_results: [] };
             },
 
             setRequiredFees(feeAssetId) {
@@ -109,6 +113,9 @@ function createSigningClient(chainClient, accountName, privateKey) {
 
         return new Proxy(wrapped, {
             get(target, prop) {
+                if (prop === 'sign') {
+                    return keyBuf => tx.sign(keyBuf);
+                }
                 if (typeof prop === 'string' && !(prop in target)) {
                     return (data) => tx.addOperation(prop, data);
                 }

@@ -17,8 +17,8 @@ async function runAutoderiveForBot(botCfg) {
 
     // Monkeypatch shared BitShares client used by the codebase
     const bsModule = require('../modules/bitshares_client');
-    const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.js');
-    const distBitsharesClientPath = path.resolve(__dirname, '../dist/modules/bitshares_client.js');
+    const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.ts');
+    const distBitsharesClientPath = path.resolve(__dirname, '../dist/modules/bitshares_client.ts');
     const systemPath = path.resolve(__dirname, '../modules/order/utils/system.ts');
     const systemModule = require('../modules/order/utils/system');
 

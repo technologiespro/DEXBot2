@@ -89,12 +89,12 @@ function sortOperation(array: any[], st_operation?: any): any[] {
 }
 
 const void_type: SerType = {
-    fromByteBuffer(): any { throw new Error('(void) undefined type'); },
-    appendByteBuffer(): void { throw new Error('(void) undefined type'); },
-    fromObject(): any { throw new Error('(void) undefined type'); },
+    fromByteBuffer(): any { return undefined; },
+    appendByteBuffer(): void { /* void serializes to zero bytes */ },
+    fromObject(): any { return undefined; },
     toObject(object: any, debug?: any): any {
         if (debug && debug.use_default && object === undefined) return undefined;
-        throw new Error('(void) undefined type');
+        return undefined;
     },
 };
 

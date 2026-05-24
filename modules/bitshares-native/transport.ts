@@ -64,6 +64,7 @@ function createTransport(config = {}) {
     let autoreconnect = false;
     let intentionalClose = false;
     let reconnectAttempts = 0;
+    let maxReconnectAttempts = 20;
     let pendingRequests = new Map();
     let onMessageHandlers = [];
     let status = 'closed';
@@ -87,6 +88,7 @@ function createTransport(config = {}) {
             keepAliveTimer = null;
         }
         keepAliveInFlight = false;
+        onMessageHandlers = [];
         for (const [, req] of pendingRequests) {
             if (req.timer) clearTimeout(req.timer);
             req.reject(new ConnectionError('Connection closed'));
@@ -96,6 +98,11 @@ function createTransport(config = {}) {
 
     function scheduleReconnect() {
         if (intentionalClose || !autoreconnect || nodeList.length === 0 || reconnectTimer) return;
+        if (reconnectAttempts >= maxReconnectAttempts) {
+            console.warn(`[transport] Max reconnection attempts (${maxReconnectAttempts}) reached, giving up`);
+            setStatus('closed');
+            return;
+        }
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts) + Math.random() * 1000, 30000);
         reconnectAttempts++;
         reconnectTimer = setTimeout(() => {
@@ -254,6 +261,7 @@ function createTransport(config = {}) {
         if (nodeList.length === 0) {
             throw new ConnectionError('No servers provided');
         }
+        nodeIndex = 0;
         reconnectAttempts = 0;
 
         disconnect();
