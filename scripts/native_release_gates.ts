@@ -50,9 +50,9 @@ function assertMainnetCorpusReport() {
     console.log(`\nMainnet corpus report accepted: ${txCount} transaction(s).`);
 }
 
-run('Native serializer snapshots', ['tests/test_native_serial_ops.js']);
+run('Native serializer snapshots', ['--import', 'tsx', 'tests/test_native_serial_ops.ts']);
 
-run('Native ECC invariants', ['tests/test_native_ecc.js']);
+run('Native ECC invariants', ['--import', 'tsx', 'tests/test_native_ecc.ts']);
 
 assertMainnetCorpusReport();
 
