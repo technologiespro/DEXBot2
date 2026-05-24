@@ -342,9 +342,9 @@ async function executeOperationsWithClient(client, operations) {
 
     const result = await tx.broadcast();
     const operationResults =
-        (result && Array.isArray(result.operation_results) && result.operation_results) ||
-        (result && result.trx && Array.isArray(result.trx.operation_results) && result.trx.operation_results) ||
-        (Array.isArray(result) && result[0] && result[0].trx && Array.isArray(result[0].trx.operation_results) && result[0].trx.operation_results) ||
+        (result && Array.isArray(result.operation_results) && result.operation_results.length > 0 && result.operation_results) ||
+        (result && result.trx && Array.isArray(result.trx.operation_results) && result.trx.operation_results.length > 0 && result.trx.operation_results) ||
+        (Array.isArray(result) && result[0] && result[0].trx && Array.isArray(result[0].trx.operation_results) && result[0].trx.operation_results.length > 0 && result[0].trx.operation_results) ||
         [];
 
     return {

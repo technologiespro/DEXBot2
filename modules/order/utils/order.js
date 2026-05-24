@@ -502,13 +502,14 @@ function buildOutsideInPairGroups(items, { isValid = Boolean, getType, getPrice 
  * @returns {Array} Array of operation result tuples, or empty array if unrecognized.
  */
 function extractBatchOperationResults(result) {
-    return (
+    const ops = (
         (result && Array.isArray(result.operation_results) && result.operation_results) ||
         (result && result.raw && Array.isArray(result.raw.operation_results) && result.raw.operation_results) ||
         (result && result.raw && result.raw.trx && Array.isArray(result.raw.trx.operation_results) && result.raw.trx.operation_results) ||
         (result && Array.isArray(result) && result[0] && result[0].trx && Array.isArray(result[0].trx.operation_results) && result[0].trx.operation_results) ||
         null
     );
+    return (ops && ops.length > 0) ? ops : null;
 }
 
 /**

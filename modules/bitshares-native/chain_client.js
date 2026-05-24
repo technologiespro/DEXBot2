@@ -205,6 +205,7 @@ function createChainClient(config = {}) {
     const broadcast = {
         call: broadcastCall,
         broadcast_transaction: (tx) => broadcastTx(tx),
+        broadcast_transaction_synchronous: (tx) => broadcastCall('broadcast_transaction_synchronous', [tx]),
     };
 
     const client = {
