@@ -8,6 +8,7 @@
 const assert = require('assert');
 const { OrderManager } = require('../modules/order/index.js');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants.js');
+const chainOrders = require('../modules/chain_orders');
 
 const TEST_TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS || 30000);
 const testTimeoutHandle = setTimeout(() => {
@@ -114,6 +115,89 @@ async function runTests() {
         await manager.recalculateFunds();
 
         assert(invariantCallsAfterBootstrap > 0, 'Invariant check should run now that bootstrap is finished');
+    }
+
+    // Test 4: Recovery validation must not be masked by bootstrap suppression
+    console.log(' - Case 4: Recovery validation detects drift while bootstrapping...');
+    {
+        const manager = await createManager();
+        manager.startBootstrap();
+        manager.assets = {
+            assetA: { id: '1.3.1', symbol: 'TEST', precision: 5 },
+            assetB: { id: '1.3.0', symbol: 'BTS', precision: 5 }
+        };
+        await manager.setAccountTotals({
+            buy: 10000,
+            sell: 100,
+            buyFree: 5000,
+            sellFree: 100
+        });
+        await manager._updateOrder({
+            id: 'active-1',
+            state: ORDER_STATES.ACTIVE,
+            type: ORDER_TYPES.BUY,
+            size: 100,
+            orderId: '1.7.1'
+        });
+
+        manager.accountId = '1.2.test';
+        manager.fetchAccountTotals = async () => {};
+        manager.syncFromOpenOrders = async () => ({ filledOrders: [], updatedOrders: [] });
+        const originalReadOpenOrders = chainOrders.readOpenOrders;
+        chainOrders.readOpenOrders = async () => [];
+
+        let validation;
+        try {
+            validation = await manager.accountant._performStateRecovery(manager);
+        } finally {
+            chainOrders.readOpenOrders = originalReadOpenOrders;
+        }
+
+        assert.strictEqual(validation.isValid, false, 'Recovery validation should detect drift even during bootstrap');
+        assert.match(validation.reason, /BUY drift/, 'Recovery validation should report buy drift');
+    }
+
+    // Test 5: Authoritative open-order sync must not double-deduct fetched free balances
+    console.log(' - Case 5: Authoritative sync preserves fetched free balances...');
+    {
+        const manager = new OrderManager({
+            market: 'TEST/BTS',
+            assetA: 'TEST',
+            assetB: 'BTS',
+            activeOrders: { buy: 1, sell: 0 }
+        });
+        manager.assets = {
+            assetA: { id: '1.3.1', symbol: 'TEST', precision: 5 },
+            assetB: { id: '1.3.0', symbol: 'BTS', precision: 5 }
+        };
+        await manager.setAccountTotals({
+            buy: 1000,
+            sell: 0,
+            buyFree: 900,
+            sellFree: 0
+        });
+
+        await manager._updateOrder({
+            id: 'buy-slot',
+            state: ORDER_STATES.VIRTUAL,
+            type: ORDER_TYPES.BUY,
+            price: 10,
+            size: 100,
+            orderId: ''
+        }, 'seed', { skipAccounting: true });
+
+        await manager.synchronizeWithChain([{
+            id: '1.7.buy',
+            for_sale: 10000000,
+            sell_price: {
+                base: { amount: 10000000, asset_id: '1.3.0' },
+                quote: { amount: 1000000, asset_id: '1.3.1' }
+            }
+        }], 'periodicBlockchainFetch');
+
+        assert.strictEqual(manager.accountTotals.buyFree, 900, 'authoritative sync should not deduct already-locked funds from fetched buyFree');
+        const drift = manager.checkFundDriftAfterFills();
+        assert.strictEqual(drift.isValid, true, `authoritative sync should remain drift-free: ${drift.reason}`);
     }
 
     console.log('✓ Resync invariant tests passed!');

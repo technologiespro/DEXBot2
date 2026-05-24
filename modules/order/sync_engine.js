@@ -962,13 +962,16 @@ class SyncEngine {
                 break;
             }
             case 'readOpenOrders':
-            case 'periodicBlockchainFetch': {
-                // Must update accounting when blockchain state has changed (fills detected)
-                // Using skipAccounting: true leaves phantom funds in system, causing invariant violations
-                // Exception: recovery path in Accountant._performStateRecovery() intentionally uses
-                // skipAccounting=true because fetchAccountTotals() already refreshed chain truth and
-                // recovery only needs structural reconciliation, not another optimistic delta pass.
+                // Plain open-order syncs do not imply a fresh account balance fetch,
+                // so they still use optimistic accounting deltas.
                 return this.syncFromOpenOrders(chainData, { skipAccounting: false });
+
+            case 'periodicBlockchainFetch': {
+                // This source is used after fetchAccountTotals() has refreshed
+                // authoritative chain free/locked totals. Applying optimistic
+                // commitment deltas here double-deducts newly adopted or resized
+                // open orders from already-fetched free balances.
+                return this.syncFromOpenOrders(chainData, { skipAccounting: true });
             }
         }
         return { newOrders: [], ordersNeedingCorrection: [] };

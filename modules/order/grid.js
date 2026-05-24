@@ -776,7 +776,7 @@ class Grid {
         // and shouldn't be part of the fresh regenerated grid structure
         const activeOrders = chainOpenOrders.filter(o => o.state !== ORDER_STATES.PARTIAL);
 
-        await manager.synchronizeWithChain(activeOrders, 'readOpenOrders');
+        await manager.syncFromOpenOrders(activeOrders, { skipAccounting: true });
         manager.resetFunds();
 
         await manager.persistGrid();

@@ -35,7 +35,7 @@ function isEnvironmentError(error) {
 // Node 22 has built-in WebSocket, but server-side requires ws package or http upgrade.
 // For mocking, we use a simple HTTP upgrade handler.
 
-function createWsServer(port) {
+function createWsServer(port, options = {}) {
     return new Promise((resolve, reject) => {
         const server = http.createServer((req, res) => {
             res.writeHead(200);
@@ -172,6 +172,9 @@ function createWsServer(port) {
                     }
 
                     if (handlers.onMessage) handlers.onMessage(JSON.parse(frame.payload.toString()));
+                    if (typeof options.onMessage === 'function') {
+                        options.onMessage(JSON.parse(frame.payload.toString()));
+                    }
                 } catch (e) {
                     // Ignore parse errors for control frames
                 }
@@ -386,6 +389,37 @@ async function testStatusCallbacks() {
     }
 }
 
+// ── Test 6: Idle keepalive ───────────────────────────────────────────────
+
+async function testKeepAlive() {
+    const { createTransport } = require('../modules/bitshares-native/transport');
+    const port = 18000 + Math.floor(Math.random() * 1000);
+    let loginCalls = 0;
+    const wsServer = await createWsServer(port, {
+        onMessage: (msg) => {
+            if (msg?.method === 'call' && msg.params?.[1] === 'login') {
+                loginCalls += 1;
+            }
+        },
+    });
+
+    const transport = createTransport({
+        keepAliveIntervalMs: 30,
+        rpcTimeoutMs: 500,
+    });
+
+    try {
+        await transport.connect([`ws://127.0.0.1:${port}/ws`]);
+        const callsAfterConnect = loginCalls;
+        await new Promise(resolve => setTimeout(resolve, 90));
+        assert.ok(loginCalls > callsAfterConnect, 'keepalive should send lightweight login RPCs while idle');
+        transport.disconnect();
+        console.log('  PASS: Idle keepalive');
+    } finally {
+        wsServer.close();
+    }
+}
+
 // ── Run all tests ────────────────────────────────────────────────────────
 
 (async () => {
@@ -395,6 +429,7 @@ async function testStatusCallbacks() {
         await testAllNodesFail();
         testRpcErrorHandling();
         await testStatusCallbacks();
+        await testKeepAlive();
         console.log('\n=== All transport tests passed ===');
     } catch (e) {
         if (!STRICT_TEST && isEnvironmentError(e)) {

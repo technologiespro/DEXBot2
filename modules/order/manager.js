@@ -1372,10 +1372,11 @@ class OrderManager {
         return true;
     }
 
-    validateGridStateForPersistence() {
+    validateGridStateForPersistence(options = {}) {
         const result = validateGridForPersistence(this.orders, this.accountTotals);
+        const allowBootstrapTransient = options.allowBootstrapTransient !== false;
 
-        if (!result.isValid && this._state.isBootstrapping()) {
+        if (!result.isValid && allowBootstrapTransient && this._state.isBootstrapping()) {
             this.logger.log(`[BOOTSTRAP] Transient state (expected): ${result.reason}`, 'debug');
             return { isValid: true, reason: null };
         }

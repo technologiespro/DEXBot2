@@ -4,6 +4,7 @@ const WebSocket = globalThis.WebSocket || require('ws');
 
 const CONNECT_TIMEOUT_MS = 10000;
 const RPC_TIMEOUT_MS = 15000;
+const KEEPALIVE_INTERVAL_MS = 45000;
 
 let _rpcId = 0;
 
@@ -47,11 +48,14 @@ function createTransport(config = {}) {
         onStatusChange = null,
         onReconnect = null,
         validateNode = null,
+        keepAliveIntervalMs = KEEPALIVE_INTERVAL_MS,
     } = config;
 
     let ws = null;
     let nodeUrl = null;
     let reconnectTimer = null;
+    let keepAliveTimer = null;
+    let keepAliveInFlight = false;
     let nodeList = [];
     let nodeIndex = 0;
     let autoreconnect = false;
@@ -75,6 +79,11 @@ function createTransport(config = {}) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
         }
+        if (keepAliveTimer) {
+            clearInterval(keepAliveTimer);
+            keepAliveTimer = null;
+        }
+        keepAliveInFlight = false;
         for (const [, req] of pendingRequests) {
             if (req.timer) clearTimeout(req.timer);
             req.reject(new ConnectionError('Connection closed'));
@@ -90,6 +99,22 @@ function createTransport(config = {}) {
             reconnectTimer = null;
             tryConnect().catch(() => scheduleReconnect());
         }, delay);
+    }
+
+    function startKeepAlive() {
+        if (!Number.isFinite(keepAliveIntervalMs) || keepAliveIntervalMs <= 0 || keepAliveTimer) return;
+        keepAliveTimer = setInterval(() => {
+            if (!ws || ws.readyState !== 1 || keepAliveInFlight) return;
+            keepAliveInFlight = true;
+            call('call', [1, 'login', ['', '']], Math.min(rpcTimeoutMs, 10000))
+                .catch(() => {})
+                .finally(() => {
+                    keepAliveInFlight = false;
+                });
+        }, keepAliveIntervalMs);
+        if (typeof keepAliveTimer.unref === 'function') {
+            keepAliveTimer.unref();
+        }
     }
 
     function connectOne(url) {
@@ -187,6 +212,7 @@ function createTransport(config = {}) {
                     await validateNode();
                 }
                 setStatus('connected');
+                startKeepAlive();
                 if (wasReconnect && onReconnect) {
                     Promise.resolve(onReconnect(nodeUrl)).catch(() => {});
                 }

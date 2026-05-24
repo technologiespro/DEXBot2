@@ -359,7 +359,7 @@ class DEXBot {
             this.manager.logger.log(`Triggering state recovery sync (${reason})...`, 'info');
             await this.manager.fetchAccountTotals(this.accountId);
             const openOrders = await chainOrders.readOpenOrders(this.accountId);
-            await this.manager.syncFromOpenOrders(openOrders, { skipAccounting: false });
+            await this.manager.syncFromOpenOrders(openOrders, { skipAccounting: true });
             if (typeof this.manager.persistGrid === 'function') {
                 await this.manager.persistGrid();
             }
@@ -853,7 +853,7 @@ class DEXBot {
                         if (Array.isArray(chainOpenOrders) && chainOpenOrders.length > 0) {
                             this._log('Generating new grid and syncing with existing on-chain orders...');
                             await Grid.initializeGrid(this.manager);
-                            await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders');
+                            await this.manager.syncFromOpenOrders(chainOpenOrders, { skipAccounting: true });
                             const rebalanceResult = await reconcileStartupOrders({
                                 manager: this.manager,
                                 config: this.config,
@@ -873,7 +873,7 @@ class DEXBot {
                         this._log('Found active session. Loading and syncing existing grid.');
                         await Grid.loadGrid(this.manager, persistedGrid, persistedBoundaryIdx);
                         let startupChainOpenOrders = chainOpenOrders;
-                        const syncResult = await this.manager.synchronizeWithChain(startupChainOpenOrders, 'readOpenOrders');
+                        const syncResult = await this.manager.syncFromOpenOrders(startupChainOpenOrders, { skipAccounting: true });
 
                         if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
                             this._log(`Startup sync: ${syncResult.filledOrders.length} grid order(s) found filled. Processing proceeds.`, 'info');

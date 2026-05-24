@@ -381,8 +381,22 @@ class Accountant {
         // double-counts commitment changes and can amplify invariant drift.
         await mgr.syncFromOpenOrders(openOrders, { skipAccounting: true });
 
-        // 3. Validate recovery
-        return mgr.validateGridStateForPersistence();
+        // 3. Validate recovery. Persistence validation catches structural
+        // corruption; drift validation catches accounting mismatches that are
+        // otherwise masked while bootstrap suppression is active.
+        const persistenceValidation = mgr.validateGridStateForPersistence({ allowBootstrapTransient: false });
+        if (!persistenceValidation.isValid) {
+            return persistenceValidation;
+        }
+
+        if (typeof mgr.checkFundDriftAfterFills === 'function') {
+            const driftValidation = mgr.checkFundDriftAfterFills();
+            if (driftValidation && driftValidation.isValid === false) {
+                return driftValidation;
+            }
+        }
+
+        return persistenceValidation;
     }
 
       /**
