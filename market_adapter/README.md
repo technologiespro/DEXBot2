@@ -29,7 +29,7 @@ applies the symmetric penalty.
 ### 1. Enable AMA
 
 Set `gridPrice` to `ama`, `ama1`, `ama2`, `ama3`, or `ama4` in
-`profiles/bots.json` or through `node dexbot bots`. Use `ama` for the pair's
+`profiles/bots.json` or through `tsx dexbot.ts bots`. Use `ama` for the pair's
 default preset.
 
 `startPrice` selects the candle source:
@@ -57,13 +57,13 @@ This writes `profiles/market_adapter_whitelist.json`.
 To whitelist AMA pricing but keep dynamic weights disabled:
 
 ```bash
-node scripts/generate_market_adapter_whitelist.js --no-dynamic-weight
+tsx scripts/generate_market_adapter_whitelist.ts --no-dynamic-weight
 ```
 
 To keep asymmetric bounds disabled:
 
 ```bash
-node scripts/generate_market_adapter_whitelist.js --no-asymmetric-bounds
+tsx scripts/generate_market_adapter_whitelist.ts --no-asymmetric-bounds
 ```
 
 ### 3. Start DEXBot2
@@ -89,7 +89,7 @@ cause abrupt grid-center changes.
 The adapter uses tiered clamping thresholds to manage inventory risk during extreme price divergence from the AMA trend center. These thresholds are derived from historical pool volatility and replace static 'fit cap' multipliers. The specific clamping limits and exit parameters are calculated per pair and preset using:
 
 ```bash
-node analysis/ama_fitting/calculate_clamping_limits.js
+tsx analysis/ama_fitting/calculate_clamping_limits.ts
 ```
 
 Source: pool 133 `IOB.XRP/BTS`, 1h candles, 2023-05-05 22:00 UTC through
@@ -155,7 +155,7 @@ The adapter writes a recalc trigger when both conditions are true:
 - candle data is not stale
 
 Configure the default in `profiles/general.settings.json` or from the
-`node dexbot bots` general settings menu:
+`tsx dexbot.ts bots` general settings menu:
 
 ```json
 {
@@ -169,8 +169,8 @@ Configure the default in `profiles/general.settings.json` or from the
 
 Market-adapter settings resolve in this order:
 
-1. Built-in defaults in `modules/constants.js`
-2. Global overrides in `profiles/general.settings.json` or `node dexbot bots`
+1. Built-in defaults in `modules/constants.ts`
+2. Global overrides in `profiles/general.settings.json` or `tsx dexbot.ts bots`
 3. Pair-specific overrides in `profiles/market_profiles.json`
 4. Bot-specific overrides in `profiles/market_adapter_settings.json`
 
@@ -187,9 +187,9 @@ still processed, but live grid files and recalc triggers are suppressed.
 
 | Invocation | Behavior |
 |---|---|
-| `node market_adapter/market_adapter.js` | Whitelisted bots write live files; others dry-run |
-| `node market_adapter/market_adapter.js --dryRun` | All bots dry-run |
-| `node market_adapter/market_adapter.js --whitelist-all` | All AMA bots write live files |
+| `tsx market_adapter/market_adapter.ts` | Whitelisted bots write live files; others dry-run |
+| `tsx market_adapter/market_adapter.ts --dryRun` | All bots dry-run |
+| `tsx market_adapter/market_adapter.ts --whitelist-all` | All AMA bots write live files |
 
 Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 
@@ -198,12 +198,12 @@ Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 | Task | Command |
 |------|---------|
 | Generate whitelist | `npm run market-adapter:whitelist` |
-| Preview whitelist | `node scripts/generate_market_adapter_whitelist.js --dry-run` |
-| Run one adapter cycle | `node market_adapter/market_adapter.js --once` |
-| Run one cycle with threshold override | `node market_adapter/market_adapter.js --once --deltaPercent 1.5` |
-| Run continuously | `node market_adapter/market_adapter.js` |
-| Print one-cycle JSON signals | `node market_adapter/ama_signal_runner.js` |
-| Print one bot's compact signal output | `node market_adapter/ama_signal_runner.js --bot <botKey> --compact` |
+| Preview whitelist | `tsx scripts/generate_market_adapter_whitelist.ts --dry-run` |
+| Run one adapter cycle | `tsx market_adapter/market_adapter.ts --once` |
+| Run one cycle with threshold override | `tsx market_adapter/market_adapter.ts --once --deltaPercent 1.5` |
+| Run continuously | `tsx market_adapter/market_adapter.ts` |
+| Print one-cycle JSON signals | `tsx market_adapter/ama_signal_runner.ts` |
+| Print one bot's compact signal output | `tsx market_adapter/ama_signal_runner.ts --bot <botKey> --compact` |
 
 `--deltaPercent` changes the threshold only for that run.
 
@@ -222,7 +222,7 @@ Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 - Check `staleData` and `staleAgeHours`.
 - **Confirm the bot is whitelisted.** Non-whitelisted bots only log and do not write triggers.
 - Confirm the bot's whitelist entry has `"ama": true`.
-- Run `node market_adapter/market_adapter.js --once --deltaPercent <lower-value>` for a one-cycle threshold test.
+- Run `tsx market_adapter/market_adapter.ts --once --deltaPercent <lower-value>` for a one-cycle threshold test.
 
 ### Trigger fires too often
 
@@ -244,17 +244,17 @@ Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 Export candles and charts:
 
 ```bash
-node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB> --interval 1h --lookback 8760h
-node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start <start-date> --end <end-date>
+tsx market_adapter/inputs/fetch_lp_data.ts --pool <poolId> --precA <precA> --precB <precB> --interval 1h --lookback 8760h
+tsx market_adapter/inputs/fetch_lp_data.ts --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start <start-date> --end <end-date>
 npm run lp:chart -- --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
 Research and calibration:
 
 ```bash
-node analysis/analyze_dynamic_weight.js --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
-node analysis/analyze_volatility.js --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
-node analysis/ama_fitting/calibrate_convergence_er.js --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
+tsx analysis/analyze_dynamic_weight.ts --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
+tsx analysis/analyze_volatility.ts --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
+tsx analysis/ama_fitting/calibrate_convergence_er.ts --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
 More tools:
@@ -277,7 +277,7 @@ triggers when the grid should be rebuilt.
 For the similar bot-scoped debt workflow and collateral advisory path, see
 [MPA and Credit Usage](../docs/MPA_CREDIT_USAGE.md).
 
-The adapter runs independently from `dexbot.js`. It does not place orders,
+The adapter runs independently from `dexbot.ts`. It does not place orders,
 manage bot lifecycle, or edit bot configuration. Order execution and grid
 rebuilds stay owned by the bot runtime.
 
@@ -285,7 +285,7 @@ Standalone daemon mode is still available for direct inspection or manual
 operation:
 
 ```bash
-node market_adapter/market_adapter.js
+tsx market_adapter/market_adapter.ts
 ```
 
 The adapter acts only on closed 1h candles. It can poll more often, but live
@@ -355,13 +355,13 @@ During normal operation, the adapter may write:
 | File | Purpose |
 |------|---------|
 | `profiles/orders/<botKey>.dynamicgrid.json` | Persisted AMA center snapshot, AMA slope diagnostics, and optional dynamic weights used by the bot runtime |
-| `profiles/recalculate.<botKey>.trigger` | Signal for `dexbot.js` to rebuild the grid |
+| `profiles/recalculate.<botKey>.trigger` | Signal for `dexbot.ts` to rebuild the grid |
 | `market_adapter/state/market_adapter_state.json` | Full runtime state and diagnostics |
 | `market_adapter/state/market_adapter_centers.json` | Lightweight center-price snapshot |
 | `market_adapter/data/` | Candle caches and exported LP data |
 | `profiles/logs/market_adapter.log` | Standalone adapter runtime log |
 
-`dexbot.js` consumes the recalc trigger and handles the grid rebuild. The market
+`dexbot.ts` consumes the recalc trigger and handles the grid rebuild. The market
 adapter does not place orders, start bots, stop bots, or edit
 `profiles/bots.json`.
 
@@ -388,7 +388,7 @@ Typical fields:
   "amaSlopeDeltaPercent": 0.015,
   "amaSlopeThresholdPercent": 0.015,
   "updatedAt": "2026-03-01T00:00:00.000Z",
-  "source": "market_adapter/market_adapter.js",
+  "source": "market_adapter/market_adapter.ts",
   "dynamicWeights": {
     "effectiveWeights": { "sell": 0.45, "buy": 0.55 },
     "baseWeights": { "sell": 0.5, "buy": 0.5 },
@@ -420,38 +420,38 @@ Typical fields:
 
 ```text
 market_adapter/
-|-- market_adapter.js              main adapter daemon
-|-- ama_signal_runner.js           one-cycle JSON signal CLI
-|-- candle_utils.js                candle transforms, gap detection, pruning
-|-- interval_utils.js              shared interval label helpers
-|-- merge_lp_data.js               candle export merge utility
-|-- lp_chart_core.js               chart HTML renderer
-|-- lp_chart_strategy_loader.js    AMA strategy/profile resolver for charts
-|-- lp_chart_runner.js             LP chart orchestration
-|-- log_format.js                  adapter startup and signal log formatting
-|-- test_helpers.js                test utilities
+|-- market_adapter.ts              main adapter daemon
+|-- ama_signal_runner.ts           one-cycle JSON signal CLI
+|-- candle_utils.ts                candle transforms, gap detection, pruning
+|-- interval_utils.ts              shared interval label helpers
+|-- merge_lp_data.ts               candle export merge utility
+|-- lp_chart_core.ts               chart HTML renderer
+|-- lp_chart_strategy_loader.ts    AMA strategy/profile resolver for charts
+|-- lp_chart_runner.ts             LP chart orchestration
+|-- log_format.ts                  adapter startup and signal log formatting
+|-- test_helpers.ts                test utilities
 |-- core/
-|   |-- asymmetric_bounds.js       AMA-slope range scaling helpers
-|   |-- market_adapter_service.js  full signal pipeline service
-|   |-- config_normalizers.js      shared config normalization
-|   |-- kibana_client.js           low-level Kibana/ES query client
-|   |-- kibana_candles.js          LP pool candle fetch engine
-|   |-- kibana_market_candles.js   orderbook candle fetch and transform
+|   |-- asymmetric_bounds.ts       AMA-slope range scaling helpers
+|   |-- market_adapter_service.ts  full signal pipeline service
+|   |-- config_normalizers.ts      shared config normalization
+|   |-- kibana_client.ts           low-level Kibana/ES query client
+|   |-- kibana_candles.ts          LP pool candle fetch engine
+|   |-- kibana_market_candles.ts   orderbook candle fetch and transform
 |   `-- strategies/
-|       |-- ama_slope_model.js     AMA slope and trend weight logic
-|       |-- collateral_manager.js  advisory collateral-ratio logic
-|       |-- regime_gate.js         regime multiplier gating
-|       `-- atr/calculator.js      ATR calculation
+|       |-- ama_slope_model.ts     AMA slope and trend weight logic
+|       |-- collateral_manager.ts  advisory collateral-ratio logic
+|       |-- regime_gate.ts         regime multiplier gating
+|       `-- atr/calculator.ts      ATR calculation
 |-- inputs/
-|   |-- kibana_source.js           Elasticsearch LP data source
-|   `-- fetch_lp_data.js           historical LP candle exporter
+|   |-- kibana_source.ts           Elasticsearch LP data source
+|   `-- fetch_lp_data.ts           historical LP candle exporter
 |-- utils/
-|   |-- chain.js                   blockchain query helpers
-|   |-- ws_client.js               lightweight BitShares WebSocket client
-|   |-- adapter_client.js          inter-process credential daemon client
-|   |-- native_history.js          native BitShares market history fetch
-|   |-- file_lock.js               single-instance file lock
-|   `-- data_discovery.js          data directory auto-discovery
+|   |-- chain.ts                   blockchain query helpers
+|   |-- ws_client.ts               lightweight BitShares WebSocket client
+|   |-- adapter_client.ts          inter-process credential daemon client
+|   |-- native_history.ts          native BitShares market history fetch
+|   |-- file_lock.ts               single-instance file lock
+|   `-- data_discovery.ts          data directory auto-discovery
 |-- data/                          runtime candle caches and exports
 `-- state/                         runtime state, centers, and lock file
 ```
@@ -543,7 +543,7 @@ The file contains a trigger payload like:
 ```json
 {
   "createdAt": "2026-03-01T00:00:00.000Z",
-  "source": "market_adapter/market_adapter.js",
+  "source": "market_adapter/market_adapter.ts",
   "botName": "<botName>",
   "botKey": "<botKey>",
   "thresholdPercent": 0.8,
@@ -556,7 +556,7 @@ The file contains a trigger payload like:
 }
 ```
 
-`dexbot.js` watches for this file and rebuilds the affected grid from current
+`dexbot.ts` watches for this file and rebuilds the affected grid from current
 runtime state. The trigger is separate from `dynamicgrid.json`: the trigger
 requests a rebuild, while the snapshot carries the center and live weight state
 that the runtime can reload.
@@ -711,7 +711,7 @@ That threshold is enough once the ER window exists and the lookback comparison
 bar is available. The longer `amaWarmupBars` window is still retained so the
 underlying AMA series has its full convergence history.
 
-The two **calibration constants** live in `modules/constants.js` under
+The two **calibration constants** live in `modules/constants.ts` under
 `MARKET_ADAPTER`:
 
 | Constant | Value | Meaning |
@@ -722,9 +722,9 @@ The two **calibration constants** live in `modules/constants.js` under
 To recalibrate `AMA_CONVERGENCE_ER_AVG` against new market data, use the
 research script:
 ```bash
-node analysis/ama_fitting/calibrate_convergence_er.js [--data <lp-file.json>] [--amas AMA3,AMA4]
+tsx analysis/ama_fitting/calibrate_convergence_er.ts [--data <lp-file.json>] [--amas AMA3,AMA4]
 ```
-See `analysis/ama_fitting/calibrate_convergence_er.js` for details on the
+See `analysis/ama_fitting/calibrate_convergence_er.ts` for details on the
 implied-ER correction (Jensen's inequality).
 
 For a calibrated `AMA_CONVERGENCE_ER_AVG` of `0.151` and

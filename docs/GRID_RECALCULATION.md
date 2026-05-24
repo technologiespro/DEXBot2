@@ -60,7 +60,7 @@ The bot executes the reset through `_performGridResync()`:
 6. Reset fee-debt bookkeeping, persist the rebuilt grid, record actual reset
    metadata in `dynamicgrid.json`, and remove the trigger file.
 
-Market-adapter triggers carry `source: "market_adapter/market_adapter.js"` and
+Market-adapter triggers carry `source: "market_adapter/market_adapter.ts"` and
 an explicit `reason`, so the runtime can record reset provenance such as
 `market_adapter_bootstrap`, `market_adapter_delta_threshold`, or
 `market_adapter_ama_slope_delta_threshold`. Empty or malformed trigger files
@@ -136,7 +136,7 @@ For a narrower override, set `deltaThresholdPercent` in
 
 ### CLI Override
 ```bash
-node market_adapter/market_adapter.js --deltaPercent 2
+tsx market_adapter/market_adapter.ts --deltaPercent 2
 ```
 
 ### Bot Configuration (Complementary)
@@ -187,7 +187,7 @@ with those presets.
 
 ### How It Works
 
-1. **Market Adapter** (`market_adapter/market_adapter.js`) runs continuously
+1. **Market Adapter** (`market_adapter/market_adapter.ts`) runs continuously
 2. Loads per-bot AMA configuration (or uses defaults)
 3. Calculates AMA from 1h candlestick closing prices
 4. Tracks the **AMA center price** for each bot
@@ -206,7 +206,7 @@ with those presets.
 - You want fewer but larger full resyncs
 
 To change the threshold for every bot, edit `profiles/general.settings.json`
-or use the `node dexbot bots` general settings menu. To change the AMA preset
+or use the `tsx dexbot.ts bots` general settings menu. To change the AMA preset
 used by a specific market, edit `profiles/market_profiles.json`. To change the
 fallback bot-level AMA settings, edit the bot entry in `profiles/bots.json`.
 
@@ -241,7 +241,7 @@ npm run market-adapter:whitelist
 To leave range scaling disabled while allowing AMA pricing:
 
 ```bash
-node scripts/generate_market_adapter_whitelist.js --no-asymmetric-bounds
+tsx scripts/generate_market_adapter_whitelist.ts --no-asymmetric-bounds
 ```
 
 The snapshot fields involved are:
@@ -322,7 +322,7 @@ the bot refreshes `gridCenterPrice` from the latest `amaCenterPrice` in
 
 ### How It Works
 
-1. **Grid Engine** (`modules/order/grid.js`) calculates the ideal grid state
+1. **Grid Engine** (`modules/order/grid.ts`) calculates the ideal grid state
 2. Compares with the actual blockchain grid state after fills/rotations
 3. Computes RMS divergence metric:
    ```
@@ -372,7 +372,7 @@ changed, and it does not write a market-adapter trigger file.
 
 ### Configuration
 
-**File:** `modules/constants.js`
+**File:** `modules/constants.ts`
 ```javascript
 GRID_LIMITS: {
   GRID_REGENERATION_PERCENTAGE: 3,
@@ -560,12 +560,12 @@ Removed trigger file.
 
 ## References
 
-- `modules/constants.js` — Default configuration values
-- `modules/account_bots.js` — Bot configuration schema and defaults
-- `market_adapter/market_adapter.js` — AMA calculation and trigger logic
-- `market_adapter/core/market_adapter_service.js` — Initial AMA snapshot, AMA-delta, and AMA-slope trigger decisions
-- `modules/dexbot_maintenance_runtime.js` — Trigger-file detection, full-resync center refresh, idle/dust deferral, and reset metadata recording
-- `modules/order/grid.js` — RMS divergence check and grid comparison
-- `modules/order/manager.js` — Available-funds resize threshold logic
+- `modules/constants.ts` — Default configuration values
+- `modules/account_bots.ts` — Bot configuration schema and defaults
+- `market_adapter/market_adapter.ts` — AMA calculation and trigger logic
+- `market_adapter/core/market_adapter_service.ts` — Initial AMA snapshot, AMA-delta, and AMA-slope trigger decisions
+- `modules/dexbot_maintenance_runtime.ts` — Trigger-file detection, full-resync center refresh, idle/dust deferral, and reset metadata recording
+- `modules/order/grid.ts` — RMS divergence check and grid comparison
+- `modules/order/manager.ts` — Available-funds resize threshold logic
 - `profiles/general.settings.json` — User-editable configuration
 - `profiles/bots.json` — Per-bot configuration including AMA

@@ -6,8 +6,8 @@ This is the shared DEXBot/Claw trend service. It is independent of margin-tradin
 
 ## Signal Flow
 
-1. `market_adapter/market_adapter.js` keeps candles current and emits the per-bot center/state snapshot.
-2. `analysis/trend_detection/kalman_trend_analyzer.js` turns candle input plus feed price into trend output.
+1. `market_adapter/market_adapter.ts` keeps candles current and emits the per-bot center/state snapshot.
+2. `analysis/trend_detection/kalman_trend_analyzer.ts` turns candle input plus feed price into trend output.
 3. The service monitors the signal output, premium/discount, and price-ratio context.
 4. Claw applies supported setting changes through `bot-settings-preview` and `bot-settings-apply`.
 

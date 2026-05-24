@@ -6,9 +6,9 @@ This document covers the position health subsystem: on-chain position discovery,
 
 The subsystem has three layers:
 
-1. **Discovery** (`modules/position_discovery.js`) — scans an account's on-chain call orders and normalizes them into position objects.
-2. **Health assessment** (`modules/position_health.js`) — classifies each position into a collateral ratio zone, checks trend alignment, and recommends actions.
-3. **Decision loop** (`modules/decision_loop.js`) — orchestrates discovery, trend analysis, and health assessment into a single evaluation cycle.
+1. **Discovery** (`modules/position_discovery.ts`) — scans an account's on-chain call orders and normalizes them into position objects.
+2. **Health assessment** (`modules/position_health.ts`) — classifies each position into a collateral ratio zone, checks trend alignment, and recommends actions.
+3. **Decision loop** (`modules/decision_loop.ts`) — orchestrates discovery, trend analysis, and health assessment into a single evaluation cycle.
 
 The subsystem evaluates and recommends. It does not execute trades.
 
@@ -67,7 +67,7 @@ When a trend signal is available, the assessor checks whether the position direc
 
 ## CR Adjustment Planning
 
-The `planCrAdjustment()` function now delegates to the shared planner in `modules/cr_planner.js` so Claw and the debt runtime use the same CR math:
+The `planCrAdjustment()` function now delegates to the shared planner in `modules/cr_planner.ts` so Claw and the debt runtime use the same CR math:
 
 - `debtDeltaForTargetCr()` — how much debt to add or remove to reach target CR.
 - `collateralDeltaForTargetCr()` — how much collateral to add or remove to reach target CR.
@@ -104,7 +104,7 @@ The summary includes:
 
 ## Position Manager Watch
 
-`modules/position_manager_watch.js` is a PM2-compatible watcher process that keeps `PositionManager` state synchronized and reacts to fills. It does not invoke `decision_loop.evaluate()` itself.
+`modules/position_manager_watch.ts` is a PM2-compatible watcher process that keeps `PositionManager` state synchronized and reacts to fills. It does not invoke `decision_loop.evaluate()` itself.
 
 ```bash
 npm run service:position-watch -- --account your-account
@@ -112,18 +112,18 @@ npm run service:position-watch -- --account your-account
 
 ## Related Modules
 
-- `modules/feed_price_source.js` — fetches on-chain settlement feed prices and order book mid-prices for trend input.
-- `modules/kibana_price_source.js` — alternative price source using Kibana for historical candle data (order book fills and LP pool swaps).
-- `modules/position_manager.js` — persistent short-position tracking (create, update, close, export). Separate from on-chain discovery.
+- `modules/feed_price_source.ts` — fetches on-chain settlement feed prices and order book mid-prices for trend input.
+- `modules/kibana_price_source.ts` — alternative price source using Kibana for historical candle data (order book fills and LP pool swaps).
+- `modules/position_manager.ts` — persistent short-position tracking (create, update, close, export). Separate from on-chain discovery.
 
 ## Source Of Truth
 
 The executable behavior lives in the modules. This document should be kept aligned with:
 
-- `modules/cr_planner.js`
-- `modules/position_health.js`
-- `modules/position_discovery.js`
-- `modules/decision_loop.js`
-- `modules/feed_price_source.js`
-- `modules/position_manager_watch.js`
-- `claw/tests/test_position_health.js`
+- `modules/cr_planner.ts`
+- `modules/position_health.ts`
+- `modules/position_discovery.ts`
+- `modules/decision_loop.ts`
+- `modules/feed_price_source.ts`
+- `modules/position_manager_watch.ts`
+- `claw/tests/test_position_health.ts`

@@ -65,17 +65,17 @@ Badges shown in list/detail views:
 
 Maintenance:
 
-- `node scripts/update.js`
+- `tsx scripts/update.ts`
 - `bash scripts/check-update.sh`
 - `bash scripts/create-bot-symlinks.sh`
 
 Diagnostics:
 
-- `node scripts/validate_bots.js`
-- `node scripts/analyze-orders.js`
-- `node scripts/divergence-calc.js`
-- `node scripts/print_grid.js`
-- `node scripts/analyze-git.js`
+- `tsx scripts/validate_bots.ts`
+- `tsx scripts/analyze-orders.ts`
+- `tsx scripts/divergence-calc.ts`
+- `tsx scripts/print_grid.ts`
+- `tsx scripts/analyze-git.ts`
 - `bash scripts/git-viewer.sh`
 
 Cleanup:

@@ -16,21 +16,21 @@ npm install
 
 ## Files
 
-- Core BitShares runtime: `modules/bitshares_client.js`, `modules/chain_queries.js`, `modules/chain_broadcast.js`, `modules/chain_actions.js`
-- Strategy and state helpers: `modules/short_mpa_strategy.js`, `modules/position_manager.js`, `modules/position_manager_watch.js`
-- Position health: `modules/position_health.js`, `modules/position_discovery.js`, `modules/decision_loop.js`
-- Price sources: `modules/feed_price_source.js`, `modules/kibana_price_source.js`
-- DEXBot2 and Claw integration: `modules/dexbot_bridge.js`, `modules/dexbot_profiles.js`, `modules/dexbot_credential_client.js`, `modules/claw_bridge.js`, `modules/claw_catalog.js`, `modules/claw_manifest.js`, `modules/claw_skill_md.js`, `modules/claw_runtime_matrix.js`, `scripts/claw_bridge.js`, `scripts/claw_mcp_server.js`
-- Hermes support: `modules/hermes_manifest.js`, `scripts/claw_mcp_server.js`
-- OpenFang support: `modules/openfang_bridge.js`, `scripts/openfang_bridge.js`
-- NanoClaw support: `modules/nanoclaw_bridge.js`, `scripts/nanoclaw_bridge.js`
-- ZeroClaw support: `modules/zeroclaw_bridge.js`, `modules/zeroclaw_catalog.js`, `modules/zeroclaw_manifest.js`, `modules/zeroclaw_skill.js`
-- NullClaw support: `modules/nullclaw_bridge.js`, `modules/nullclaw_catalog.js`, `modules/nullclaw_manifest.js`, `modules/nullclaw_skill.js`
-- memU support: `modules/memu_bridge.js`, `scripts/memu_runner.py`, `scripts/memu_mcp_server.js`
+- Core BitShares runtime: `modules/bitshares_client.ts`, `modules/chain_queries.ts`, `modules/chain_broadcast.ts`, `modules/chain_actions.ts`
+- Strategy and state helpers: `modules/short_mpa_strategy.ts`, `modules/position_manager.ts`, `modules/position_manager_watch.ts`
+- Position health: `modules/position_health.ts`, `modules/position_discovery.ts`, `modules/decision_loop.ts`
+- Price sources: `modules/feed_price_source.ts`, `modules/kibana_price_source.ts`
+- DEXBot2 and Claw integration: `modules/dexbot_bridge.ts`, `modules/dexbot_profiles.ts`, `modules/dexbot_credential_client.ts`, `modules/claw_bridge.ts`, `modules/claw_catalog.ts`, `modules/claw_manifest.ts`, `modules/claw_skill_md.ts`, `modules/claw_runtime_matrix.ts`, `scripts/claw_bridge.ts`, `scripts/claw_mcp_server.ts`
+- Hermes support: `modules/hermes_manifest.ts`, `scripts/claw_mcp_server.ts`
+- OpenFang support: `modules/openfang_bridge.ts`, `scripts/openfang_bridge.ts`
+- NanoClaw support: `modules/nanoclaw_bridge.ts`, `scripts/nanoclaw_bridge.ts`
+- ZeroClaw support: `modules/zeroclaw_bridge.ts`, `modules/zeroclaw_catalog.ts`, `modules/zeroclaw_manifest.ts`, `modules/zeroclaw_skill.ts`
+- NullClaw support: `modules/nullclaw_bridge.ts`, `modules/nullclaw_catalog.ts`, `modules/nullclaw_manifest.ts`, `modules/nullclaw_skill.ts`
+- memU support: `modules/memu_bridge.ts`, `scripts/memu_runner.py`, `scripts/memu_mcp_server.ts`
 - Skill packs: `skills/bitshares-guide/SKILL.md`, `skills/margin-trading/SKILL.md`, `skills/launcher-ops/SKILL.md`, `skills/memu-memory/SKILL.md`, shared boundary references under `skills/shared/references/`
-- HONEST support: `modules/honest_ecosystem.js`, `modules/liquidity_pools.js`
+- HONEST support: `modules/honest_ecosystem.ts`, `modules/liquidity_pools.ts`
 - Reference docs: `docs/AI_BOT_LIBRARY_API.md`, `docs/DEXBOT2_TUNING_CHEAT_SHEET.md`, `docs/POSITION_HEALTH.md`, `docs/RUNTIME_COMPARISON.md`
-- Example entrypoints: `examples/connection_test.js`, `examples/short_mpa_bts_strategy.js`, `examples/position_manager_cli.js`, `examples/nullclaw_bridge_example.js`, `examples/zeroclaw_bridge_example.js`, `examples/memu_integration_example.js`
+- Example entrypoints: `examples/connection_test.ts`, `examples/short_mpa_bts_strategy.ts`, `examples/position_manager_cli.ts`, `examples/nullclaw_bridge_example.ts`, `examples/zeroclaw_bridge_example.ts`, `examples/memu_integration_example.ts`
 
 ## Responsibility Boundary
 
@@ -94,7 +94,7 @@ npm run example:short-mpa-bts -- --mode close --mpa HONEST.USD --repay 10 --rele
 
 ## Position Manager
 
-Persistent short-position tracking is available through `modules/position_manager.js` and the `example:position-manager` CLI.
+Persistent short-position tracking is available through `modules/position_manager.ts` and the `example:position-manager` CLI.
 
 ```bash
 npm run example:position-manager -- --mode create --account your-account --mpa HONEST.USD --debt 10 --collateral 25000 --sell-price 1000
@@ -111,7 +111,7 @@ npm run report:honest-assets
 JSON output:
 
 ```bash
-node scripts/honest_assets_report.js --json
+tsx scripts/honest_assets_report.ts --json
 ```
 
 ## Signing And Broadcast
@@ -126,7 +126,7 @@ Signing uses the DEXBot2 credential daemon. See the API doc for the trust bounda
 
 ## PM2
 
-PM2 can run the watcher process built from `modules/position_manager_watch.js` alongside DEXBot2:
+PM2 can run the watcher process built from `modules/position_manager_watch.ts` alongside DEXBot2:
 
 ```bash
 npm run service:position-watch -- --account your-account
@@ -194,9 +194,9 @@ Run the commands below from the `claw/` directory.
 Use the runtime-neutral bridge command for JSON-friendly local integration:
 
 ```bash
-node scripts/claw_bridge.js manifest
-node scripts/claw_bridge.js profile-context --payload '{"botRef":"default"}'
-node scripts/claw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+tsx scripts/claw_bridge.ts manifest
+tsx scripts/claw_bridge.ts profile-context --payload '{"botRef":"default"}'
+tsx scripts/claw_bridge.ts market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
 ```
 
 ### Bot Settings
@@ -204,9 +204,9 @@ node scripts/claw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quot
 Use the bridge to read, preview, and apply DEXBot2 bot settings through the locked profile adapter:
 
 ```bash
-node scripts/claw_bridge.js bot-settings --payload '{"botRef":"default"}'
-node scripts/claw_bridge.js bot-settings-preview --payload '{"botRef":"default","patch":{"incrementPercent":0.4,"weightDistribution":{"sell":0.7,"buy":0.4}}}'
-node scripts/claw_bridge.js bot-settings-apply --payload '{"botRef":"default","patch":{"incrementPercent":0.4,"weightDistribution":{"sell":0.7,"buy":0.4}}}'
+tsx scripts/claw_bridge.ts bot-settings --payload '{"botRef":"default"}'
+tsx scripts/claw_bridge.ts bot-settings-preview --payload '{"botRef":"default","patch":{"incrementPercent":0.4,"weightDistribution":{"sell":0.7,"buy":0.4}}}'
+tsx scripts/claw_bridge.ts bot-settings-apply --payload '{"botRef":"default","patch":{"incrementPercent":0.4,"weightDistribution":{"sell":0.7,"buy":0.4}}}'
 ```
 
 Settings writes are serialized through the profile lock and the recalc trigger is written atomically, so concurrent bot-setting updates do not clobber each other.
@@ -251,15 +251,15 @@ DEXBOT_ROOT="$(cd .. && pwd)"
 npm run openfang:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT" --output ~/.openfang/skills/bitshares-claw/SKILL.md
 ```
 
-OpenFang uses the same shared bridge surface through a local CLI wrapper. Keep the generated skill file focused on invoking `openfang_bridge.js` rather than vendoring OpenFang internals into DEXBot2.
+OpenFang uses the same shared bridge surface through a local CLI wrapper. Keep the generated skill file focused on invoking `openfang_bridge.ts` rather than vendoring OpenFang internals into DEXBot2.
 
 OpenFang compatibility command surface:
 
 ```bash
-node scripts/openfang_bridge.js manifest
-node scripts/openfang_bridge.js profile-context --payload '{"botRef":"default"}'
-node scripts/openfang_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
-node scripts/openfang_bridge.js create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+tsx scripts/openfang_bridge.ts manifest
+tsx scripts/openfang_bridge.ts profile-context --payload '{"botRef":"default"}'
+tsx scripts/openfang_bridge.ts market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+tsx scripts/openfang_bridge.ts create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
 ```
 
 ### Hermes
@@ -277,8 +277,8 @@ Add the shared Claw MCP server to `~/.hermes/config.yaml`:
 ```yaml
 mcp_servers:
   claw:
-    command: "node"
-    args: ["/absolute/path/to/claw/scripts/claw_mcp_server.js", "--profile-root", "/absolute/path/to/DEXBot2"]
+    command: "tsx"
+    args: ["/absolute/path/to/claw/scripts/claw_mcp_server.ts", "--profile-root", "/absolute/path/to/DEXBot2"]
 ```
 
 Hermes should use the shared MCP server for live tools and keep the generated `SKILL.md` focused on workflow guidance. The Claw MCP server registers raw tool ids such as `claw_manifest`; if Hermes shows a namespaced label in its UI, use the label shown there.
@@ -290,7 +290,7 @@ Run the MCP server over stdio:
 ```bash
 CLAW_ROOT="$(pwd)"
 DEXBOT_ROOT="$(cd .. && pwd)"
-node scripts/claw_mcp_server.js --profile-root "$DEXBOT_ROOT"
+tsx scripts/claw_mcp_server.ts --profile-root "$DEXBOT_ROOT"
 ```
 
 The stdio transport uses newline-delimited JSON-RPC messages on `stdin` and `stdout`.
@@ -321,10 +321,10 @@ NanoClaw already ships its own `claw` skill, so keep this bridge skill named `bi
 NanoClaw compatibility command surface:
 
 ```bash
-node scripts/nanoclaw_bridge.js manifest
-node scripts/nanoclaw_bridge.js profile-context --payload '{"botRef":"default"}'
-node scripts/nanoclaw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
-node scripts/nanoclaw_bridge.js create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+tsx scripts/nanoclaw_bridge.ts manifest
+tsx scripts/nanoclaw_bridge.ts profile-context --payload '{"botRef":"default"}'
+tsx scripts/nanoclaw_bridge.ts market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+tsx scripts/nanoclaw_bridge.ts create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
 ```
 
 ### ZeroClaw
@@ -340,13 +340,13 @@ npm run zeroclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
 ZeroClaw compatibility command surface:
 
 ```bash
-node scripts/zeroclaw_bridge.js manifest
-node scripts/zeroclaw_bridge.js profile-context --payload '{"botRef":"default"}'
-node scripts/zeroclaw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
-node scripts/zeroclaw_bridge.js create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
-node scripts/zeroclaw_bridge.js update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
-node scripts/zeroclaw_bridge.js execute-batch --payload '{"accountName":"your-account","operations":[]}'
-node scripts/zeroclaw_bridge.js borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
+tsx scripts/zeroclaw_bridge.ts manifest
+tsx scripts/zeroclaw_bridge.ts profile-context --payload '{"botRef":"default"}'
+tsx scripts/zeroclaw_bridge.ts market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+tsx scripts/zeroclaw_bridge.ts create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+tsx scripts/zeroclaw_bridge.ts update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
+tsx scripts/zeroclaw_bridge.ts execute-batch --payload '{"accountName":"your-account","operations":[]}'
+tsx scripts/zeroclaw_bridge.ts borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
 ```
 
 ### NullClaw
@@ -362,13 +362,13 @@ npm run nullclaw:skill -- --repo-root "$CLAW_ROOT" --profile-root "$DEXBOT_ROOT"
 NullClaw compatibility command surface:
 
 ```bash
-node scripts/nullclaw_bridge.js manifest
-node scripts/nullclaw_bridge.js profile-context --payload '{"botRef":"default"}'
-node scripts/nullclaw_bridge.js market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
-node scripts/nullclaw_bridge.js create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
-node scripts/nullclaw_bridge.js update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
-node scripts/nullclaw_bridge.js execute-batch --payload '{"accountName":"your-account","operations":[]}'
-node scripts/nullclaw_bridge.js borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
+tsx scripts/nullclaw_bridge.ts manifest
+tsx scripts/nullclaw_bridge.ts profile-context --payload '{"botRef":"default"}'
+tsx scripts/nullclaw_bridge.ts market-snapshot --payload '{"baseSymbol":"BTS","quoteSymbol":"USD"}'
+tsx scripts/nullclaw_bridge.ts create-limit-order --payload '{"accountName":"your-account","sellAsset":"BTS","receiveAsset":"USD","amountToSell":10,"minToReceive":2}'
+tsx scripts/nullclaw_bridge.ts update-limit-order --payload '{"accountName":"your-account","orderId":"1.7.123","newParams":{"amountToSell":10,"minToReceive":2}}'
+tsx scripts/nullclaw_bridge.ts execute-batch --payload '{"accountName":"your-account","operations":[]}'
+tsx scripts/nullclaw_bridge.ts borrow-mpa --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD","debtDelta":10,"collateralDelta":25000}'
 ```
 
 ### memU
@@ -387,7 +387,7 @@ Start the memU MCP server:
 ```bash
 npm run memu:mcp
 # or
-node scripts/memu_mcp_server.js --memu-dir /path/to/claw/data/memu
+tsx scripts/memu_mcp_server.ts --memu-dir /path/to/claw/data/memu
 ```
 
 Check memU status:
@@ -401,18 +401,18 @@ memU MCP server configuration for Hermes:
 ```yaml
 mcp_servers:
   memu:
-    command: "node"
-    args: ["/absolute/path/to/claw/scripts/memu_mcp_server.js", "--memu-dir", "/absolute/path/to/claw/data/memu"]
+    command: "tsx"
+    args: ["/absolute/path/to/claw/scripts/memu_mcp_server.ts", "--memu-dir", "/absolute/path/to/claw/data/memu"]
 ```
 
 memU compatibility command surface:
 
 ```bash
 # Via claw bridge
-node scripts/claw_bridge.js memu-manifest
-node scripts/claw_bridge.js memu-memorize --payload '{"resourceUrl":"/path/to/conv.txt","modality":"conversation"}'
-node scripts/claw_bridge.js memu-retrieve --payload '{"queries":[{"role":"user","content":{"text":"What are my trading preferences?"}}]}'
-node scripts/claw_bridge.js memu-status
+tsx scripts/claw_bridge.ts memu-manifest
+tsx scripts/claw_bridge.ts memu-memorize --payload '{"resourceUrl":"/path/to/conv.txt","modality":"conversation"}'
+tsx scripts/claw_bridge.ts memu-retrieve --payload '{"queries":[{"role":"user","content":{"text":"What are my trading preferences?"}}]}'
+tsx scripts/claw_bridge.ts memu-status
 
 # Via npm scripts
 npm run memu:status
@@ -444,10 +444,10 @@ The position health subsystem discovers on-chain debt positions, classifies coll
 Inspect one on-chain MPA position:
 
 ```bash
-node scripts/claw_bridge.js mpa-position --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD"}'
+tsx scripts/claw_bridge.ts mpa-position --payload '{"accountName":"your-account","mpaAsset":"HONEST.USD"}'
 ```
 
-The decision loop (`modules/decision_loop.js`) is exposed as a module API. Its `evaluate()` call ties discovery, trend analysis, and health assessment into a single result with prioritized actions.
+The decision loop (`modules/decision_loop.ts`) is exposed as a module API. Its `evaluate()` call ties discovery, trend analysis, and health assessment into a single result with prioritized actions.
 
 ## Dynamic Weights
 
@@ -456,24 +456,24 @@ Dynamic weight updates adjust `weightDistribution` based on trend signals. The s
 Inspect the default policy:
 
 ```bash
-node scripts/claw_bridge.js bot-settings --payload '{"botRef":"default"}'
+tsx scripts/claw_bridge.ts bot-settings --payload '{"botRef":"default"}'
 ```
 
 Preview an update without applying:
 
 ```bash
-node scripts/claw_bridge.js bot-settings-preview --payload '{"botRef":"default","patch":{"weightDistribution":{"sell":0.7,"buy":0.4}}}'
+tsx scripts/claw_bridge.ts bot-settings-preview --payload '{"botRef":"default","patch":{"weightDistribution":{"sell":0.7,"buy":0.4}}}'
 ```
 
 Apply the update and write the recalc trigger:
 
 ```bash
-node scripts/claw_bridge.js bot-settings-apply --payload '{"botRef":"default","patch":{"weightDistribution":{"sell":0.7,"buy":0.4}}}'
+tsx scripts/claw_bridge.ts bot-settings-apply --payload '{"botRef":"default","patch":{"weightDistribution":{"sell":0.7,"buy":0.4}}}'
 ```
 
 ## High-Level Actions
 
-The starter now includes these bot-facing actions in `modules/chain_actions.js`:
+The starter now includes these bot-facing actions in `modules/chain_actions.ts`:
 
 - create limit orders
 - cancel limit orders

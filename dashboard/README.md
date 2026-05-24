@@ -29,9 +29,9 @@ cargo check --manifest-path dashboard/Cargo.toml
 ## Included Actions
 
 - `scripts/check-update.sh`
-- `scripts/validate_bots.js`
-- `scripts/analyze-orders.js`
-- `scripts/analyze-git.js`
+- `scripts/validate_bots.ts`
+- `scripts/analyze-orders.ts`
+- `scripts/analyze-git.ts`
 - `scripts/create-bot-symlinks.sh`
 - `scripts/clear-logs.sh`
 - `scripts/clear-orders.sh`

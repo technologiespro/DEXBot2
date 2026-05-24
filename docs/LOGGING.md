@@ -67,9 +67,9 @@ All 7 implementation phases finished, legacy code removed, all logging-specific 
 The logging system uses a **semi-centralized** (hybrid) architecture:
 
 **Centralized:**
-- ✅ **Logger Class** (`modules/order/logger.js` - 467 lines) - Single source of logging logic
-- ✅ **LoggerState** (`modules/order/logger_state.js` - 141 lines) - Smart change detection
-- ✅ **Configuration** (`modules/constants.js`) - Central config management + override loading from `general.settings.json`
+- ✅ **Logger Class** (`modules/order/logger.ts` - 467 lines) - Single source of logging logic
+- ✅ **LoggerState** (`modules/order/logger_state.ts` - 141 lines) - Smart change detection
+- ✅ **Configuration** (`modules/constants.ts`) - Central config management + override loading from `general.settings.json`
 - ✅ **Data Flow** - All calls → Logger → console.log
 
 **Distributed:**
@@ -92,7 +92,7 @@ The logging system uses a **semi-centralized** (hybrid) architecture:
 │                        APPLICATION                          │
 ├─────────────────────────────────────────────────────────────┤
 │  Module A          Module B          Module C          ...   │
-│  (strategy.js)     (manager.js)      (dexbot_class)          │
+│  (strategy.ts)     (manager.ts)      (dexbot_class)          │
 │  21 log calls      20 log calls      45 log calls            │
 │        │                 │                  │                │
 │        └─────────────────┴──────────────────┘                │
@@ -103,7 +103,7 @@ The logging system uses a **semi-centralized** (hybrid) architecture:
                            │
                 ┌──────────▼────────────┐
                 │   Logger Class        │  ← CENTRALIZED
-                │  (logger.js)          │
+                │  (logger.ts)          │
                 │                       │
                 │ • Check config        │
                 │ • Check level         │
@@ -124,10 +124,10 @@ The logging system uses a **semi-centralized** (hybrid) architecture:
 
 ### Configuration Hierarchy
 
-Defaults (from `constants.js`) are overridden by `profiles/general.settings.json`:
+Defaults (from `constants.ts`) are overridden by `profiles/general.settings.json`:
 
 ```
-constants.js DEFAULTS
+constants.ts DEFAULTS
 ├─ LOG_LEVEL: "debug"
 ├─ LOGGING_CONFIG with 6 categories
 └─ All enabled by default
@@ -230,16 +230,16 @@ Each category can be enabled/disabled independently:
 
 | Log Type | Module | Example | Purpose |
 |----------|--------|---------|---------|
-| **[FILL-BATCH]** | `dexbot_class.js` | `[FILL-BATCH] Popping 3 fills (queue depth: 8)` | Diagnostic visibility into batch sizing decisions |
-| **[FILL-BATCH]** | `dexbot_class.js` | `[FILL-BATCH] Processing batch with 3 fills...` | Tracks batch start before rebalance pipeline |
-| **[RECOVERY]** | `accounting.js` | `[RECOVERY] Attempting recovery (attempt 2/5)` | Monitors recovery retry system (count+time-based) |
-| **[RECOVERY]** | `accounting.js` | `[RECOVERY] Recovery succeeded, resetting state` | Confirms successful recovery and reset |
-| **[RECOVERY-RESET]** | `accounting.js` | `[RECOVERY-RESET] Periodic 10min sync, resetting retry counter` | Shows periodic reset points |
-| **[ORPHAN-FILL]** | `dexbot_class.js` | `[ORPHAN-FILL] Skipping double-credit for stale-cleaned order 12345` | Orphan-fill deduplication guard |
-| **[HARD-ABORT]** | `dexbot_class.js` | `[HARD-ABORT] Illegal state during batch processing with 12 ops` | Batch hard-abort with operation count telemetry |
-| **[COOLDOWN]** | `dexbot_class.js` | `[COOLDOWN] Arming maintenance cooldown after hard-abort` | Confirms cooldown consistency |
-| **[STALE-CANCEL]** | `dexbot_class.js` | `[STALE-CANCEL] Single-op batch stale recovery (fast-path)` | Fast-path recovery for single operations |
-| **[REMAINDER]** | `grid.js` | `[REMAINDER] Tracking per-slot allocations (actual: 450/500)` | Unallocated remainder accuracy tracking |
+| **[FILL-BATCH]** | `dexbot_class.ts` | `[FILL-BATCH] Popping 3 fills (queue depth: 8)` | Diagnostic visibility into batch sizing decisions |
+| **[FILL-BATCH]** | `dexbot_class.ts` | `[FILL-BATCH] Processing batch with 3 fills...` | Tracks batch start before rebalance pipeline |
+| **[RECOVERY]** | `accounting.ts` | `[RECOVERY] Attempting recovery (attempt 2/5)` | Monitors recovery retry system (count+time-based) |
+| **[RECOVERY]** | `accounting.ts` | `[RECOVERY] Recovery succeeded, resetting state` | Confirms successful recovery and reset |
+| **[RECOVERY-RESET]** | `accounting.ts` | `[RECOVERY-RESET] Periodic 10min sync, resetting retry counter` | Shows periodic reset points |
+| **[ORPHAN-FILL]** | `dexbot_class.ts` | `[ORPHAN-FILL] Skipping double-credit for stale-cleaned order 12345` | Orphan-fill deduplication guard |
+| **[HARD-ABORT]** | `dexbot_class.ts` | `[HARD-ABORT] Illegal state during batch processing with 12 ops` | Batch hard-abort with operation count telemetry |
+| **[COOLDOWN]** | `dexbot_class.ts` | `[COOLDOWN] Arming maintenance cooldown after hard-abort` | Confirms cooldown consistency |
+| **[STALE-CANCEL]** | `dexbot_class.ts` | `[STALE-CANCEL] Single-op batch stale recovery (fast-path)` | Fast-path recovery for single operations |
+| **[REMAINDER]** | `grid.ts` | `[REMAINDER] Tracking per-slot allocations (actual: 450/500)` | Unallocated remainder accuracy tracking |
 
 ### Configuration for Batch Processing Logs
 
@@ -384,21 +384,21 @@ logger.log('[FUND] available: 100.50000000', 'debug')  // ✓ LOGGED (change det
 ### Phase 1: Core Implementation (Steps 1-3)
 
 **Step 1: Configuration Infrastructure** ✅
-- Added `LOGGING_CONFIG` to `modules/constants.js` (77 lines)
+- Added `LOGGING_CONFIG` to `modules/constants.ts` (77 lines)
 - Implemented deep merge loading from `general.settings.json`
 - 6 categories with independent enable/disable
 - 3 optional display features
 - Configuration frozen/immutable after load
 
 **Step 2: State Tracking Module** ✅
-- Created `modules/order/logger_state.js` (141 lines)
+- Created `modules/order/logger_state.ts` (141 lines)
 - Change detection via deep diff algorithm
 - Change history tracking (last 100 per category)
 - Threshold-based filtering (fund: 8 decimals, price: 4 decimals)
 - Methods: detectChanges(), isSignificantChange(), recordChange(), reset()
 
 **Step 3: Logger Refactoring** ✅
-- Updated `modules/order/logger.js` (467 lines, -50 lines legacy code)
+- Updated `modules/order/logger.ts` (467 lines, -50 lines legacy code)
 - Integrated LoggerState for smart change detection
 - Configuration-driven behavior
 - Config gating for display features
@@ -414,13 +414,13 @@ logger.log('[FUND] available: 100.50000000', 'debug')  // ✓ LOGGED (change det
 - **Result:** Zero code changes needed in call sites
 
 **Step 5: Deduplication & Cleanup** ✅
-- Removed 50 lines of unused legacy code from logger.js
+- Removed 50 lines of unused legacy code from logger.ts
 - Multi-level deduplication: configuration filtering + change detection + code cleanup
 
 ### Phase 3: Testing & Documentation (Steps 6-7)
 
 **Step 6: Testing & Validation** ✅
-- Fixed test_logger.js to use forceDetailed/forceOutput parameters
+- Fixed test_logger.ts to use forceDetailed/forceOutput parameters
 - All 25 automated tests passing (100%)
 - Comprehensive coverage of all logging paths
 
@@ -430,18 +430,18 @@ logger.log('[FUND] available: 100.50000000', 'debug')  // ✓ LOGGED (change det
 ### Files Modified Summary
 
 #### Created Files
-- `modules/order/logger_state.js` (141 lines) - State tracking & change detection
+- `modules/order/logger_state.ts` (141 lines) - State tracking & change detection
 - `docs/LOGGING.md` - This comprehensive guide
 
 #### Modified Files
 
-**`modules/constants.js`**
+**`modules/constants.ts`**
 - Added: LOGGING_CONFIG defaults (77 lines)
 - Added: Deep merge override loading (15 lines)
 - Added: LOGGING_CONFIG to exports and freeze
 - Impact: Configuration now centralized and user-configurable
 
-**`modules/order/logger.js`**
+**`modules/order/logger.ts`**
 - Updated: Constructor to load config (30 lines modified)
 - Added: LoggerState integration (5 lines)
 - Modified: logFundsStatus() for change detection (50 lines)
@@ -451,18 +451,18 @@ logger.log('[FUND] available: 100.50000000', 'debug')  // ✓ LOGGED (change det
 - Removed: logSnapshotComparison() method (50 lines) - never called
 - **Net change:** +28 lines modified, -50 lines removed
 
-**`modules/order/sync_engine.js`**
+**`modules/order/sync_engine.ts`**
 - Added: Comments indicating moved concern (3 lines)
 - **Net change:** -37 lines
 
 #### Unchanged Files (100% Compatible)
-- `modules/order/strategy.js` - 21 logger.log() calls
-- `modules/order/manager.js` - 20 logger.log() calls
-- `modules/dexbot_class.js` - 45 logger.log() calls
-- `modules/order/accounting.js` - 8 logger.log() calls
-- `modules/order/startup_reconcile.js` - 37 logger.log() calls
-- `modules/order/utils.js` - 8 logger.log() calls
-- `modules/order/runner.js` - 1 logger.log() call
+- `modules/order/strategy.ts` - 21 logger.log() calls
+- `modules/order/manager.ts` - 20 logger.log() calls
+- `modules/dexbot_class.ts` - 45 logger.log() calls
+- `modules/order/accounting.ts` - 8 logger.log() calls
+- `modules/order/startup_reconcile.ts` - 37 logger.log() calls
+- `modules/order/utils.ts` - 8 logger.log() calls
+- `modules/order/runner.ts` - 1 logger.log() call
 - All test files - All compatible
 
 ---
@@ -565,7 +565,7 @@ manager.logger.displayStatus(manager, true)        // Force comprehensive status
 
 ### Q: How is the configuration loaded?
 **A:**
-1. Defaults are set in `modules/constants.js`
+1. Defaults are set in `modules/constants.ts`
 2. If `profiles/general.settings.json` exists, it's read
 3. User settings are deep merged with defaults
 4. Merged config is frozen (immutable)
@@ -602,8 +602,8 @@ The logging system has been completely refactored with:
 
 | Metric | Value |
 |--------|-------|
-| New files created | 2 (logger_state.js, LOGGING.md) |
-| Files modified | 3 (constants.js, logger.js, sync_engine.js) |
+| New files created | 2 (logger_state.ts, LOGGING.md) |
+| Files modified | 3 (constants.ts, logger.ts, sync_engine.ts) |
 | Lines added | ~600 (config, state tracking) |
 | Lines removed | 48 (legacy code) |
 | Breaking changes | 0 (100% backward compatible) |

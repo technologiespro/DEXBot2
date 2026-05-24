@@ -64,11 +64,11 @@ On top of this blend, **Hurst Exponent** and **Permutation Entropy** act as a re
 
 ```bash
 # From JSON candle file
-node analysis/analyze_dynamic_weight.js \
+tsx analysis/analyze_dynamic_weight.ts \
   --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 
 # With custom initial parameters
-node analysis/analyze_dynamic_weight.js \
+tsx analysis/analyze_dynamic_weight.ts \
   --file market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
   --alpha 0.6 \
   --gain 0.25 \
@@ -102,7 +102,7 @@ All panels share aligned vertical time grid lines, and the bottom output panel s
 
 ### Panel 1 — Log Price (34%)
 - **Blue line**: Price on logarithmic y-axis
-- **Gold line**: AMA3 (slow KAMA from `constants.js`, erPeriod=781) for macro trend reference
+- **Gold line**: AMA3 (slow KAMA from `constants.ts`, erPeriod=781) for macro trend reference
 - Background shading: green = BULL signal, red = BEAR signal
 
 ### Panel 2 — AMA Slope Input (14%)
@@ -214,7 +214,7 @@ effectiveSell = clamp(staticSell - trendOffset + symmetricDelta, MIN_WEIGHT, MAX
 effectiveBuy  = clamp(staticBuy  + trendOffset + symmetricDelta, MIN_WEIGHT, MAX_WEIGHT)
 ```
 
-The dedicated volatility research chart in `analysis/analyze_volatility.js` uses the same math without any directional component.
+The dedicated volatility research chart in `analysis/analyze_volatility.ts` uses the same math without any directional component.
 
 ### Hurst Exponent
 
@@ -411,17 +411,17 @@ Candle Data
 
 | File | Role |
 |------|------|
-| `analysis/analyze_dynamic_weight.js` | Runner: loads data, computes all signals, generates chart |
-| `analysis/trend_detection/dynamic_weight_chart_generator.js` | HTML generator: 4-panel uPlot chart with interactive knobs |
-| `analysis/trend_detection/kalman_trend_analyzer.js` | Kalman filter with tactical/modal state tracking |
-| `analysis/trend_detection/kalman_velocity_smoothing.js` | Adaptive EMA smoothing for Kalman velocity (kf/kfd/kdt/kfs knobs) |
-| `analysis/trend_detection/hurst_analyzer.js` | Hurst Exponent via R/S analysis (rolling 256-bar window) |
-| `analysis/trend_detection/permutation_entropy_analyzer.js` | Permutation Entropy via ordinal pattern counting |
-| `market_adapter/core/strategies/regime_gate.js` | Bilinear regime multiplier (Hurst × PE lookup table) |
-| `modules/constants.js` (`MARKET_ADAPTER.HURST_CONFIG`, `PE_CONFIG`) | Shared Hurst + PE config (window sizes, scales) |
-| `market_adapter/core/strategies/ama.js` | Kaufman Adaptive Moving Average |
-| `market_adapter/core/strategies/ama_slope_model.js` | AMA slope weight computation |
-| `analysis/price_sources.js` | Unified candle data source abstraction |
+| `analysis/analyze_dynamic_weight.ts` | Runner: loads data, computes all signals, generates chart |
+| `analysis/trend_detection/dynamic_weight_chart_generator.ts` | HTML generator: 4-panel uPlot chart with interactive knobs |
+| `analysis/trend_detection/kalman_trend_analyzer.ts` | Kalman filter with tactical/modal state tracking |
+| `analysis/trend_detection/kalman_velocity_smoothing.ts` | Adaptive EMA smoothing for Kalman velocity (kf/kfd/kdt/kfs knobs) |
+| `analysis/trend_detection/hurst_analyzer.ts` | Hurst Exponent via R/S analysis (rolling 256-bar window) |
+| `analysis/trend_detection/permutation_entropy_analyzer.ts` | Permutation Entropy via ordinal pattern counting |
+| `market_adapter/core/strategies/regime_gate.ts` | Bilinear regime multiplier (Hurst × PE lookup table) |
+| `modules/constants.ts` (`MARKET_ADAPTER.HURST_CONFIG`, `PE_CONFIG`) | Shared Hurst + PE config (window sizes, scales) |
+| `market_adapter/core/strategies/ama.ts` | Kaufman Adaptive Moving Average |
+| `market_adapter/core/strategies/ama_slope_model.ts` | AMA slope weight computation |
+| `analysis/price_sources.ts` | Unified candle data source abstraction |
 
 ## Runtime Notes
 

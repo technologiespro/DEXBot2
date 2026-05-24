@@ -182,7 +182,7 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 2. **Dynamic Weight System**: Live AMA slope, ATR volatility scaling, Kalman confirmation, and weight-only updates
 3. **Regime Detection**: Hurst/PE-based dampening for trending, mean-reverting, and noisy states
 4. **Market Adapter Signal Pipeline**: Full weight output, collateral recommendation, trend/atr export
-5. **Credit/Debt Runtime**: Native MPA and credit-offer workflows with `modules/credit_runtime.js`
+5. **Credit/Debt Runtime**: Native MPA and credit-offer workflows with `modules/credit_runtime.ts`
 6. **Bot Auto-Tuner**: Direct tuning and reasoning bridge for parameter optimization
 7. **Fallback Removal**: Strict precision, explicit price derivation modes, no orphan lax matching
 8. **Credential/Claw Hardening**: Strict daemon policy, daemon signing cache, secure credential runtime, Claw bridge/runtime support
@@ -423,7 +423,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 #### Tier 2 — Medium Impact
 
-5. **Strategy Effects Pattern** — Strategies return declarative action objects (`{ action: 'CREATE_ORDER', price, amount }`) instead of calling `manager.js` directly. Strategy logic becomes a pure function — unit-testable without blockchain.
+5. **Strategy Effects Pattern** — Strategies return declarative action objects (`{ action: 'CREATE_ORDER', price, amount }`) instead of calling `manager.ts` directly. Strategy logic becomes a pure function — unit-testable without blockchain.
 
 6. **Database (Prisma/SQLite) + Zod Validation** — Replace JSON file persistence with SQLite. Validate all blockchain objects at the `bitshares_client` boundary via Zod schemas.
 
@@ -431,10 +431,10 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 #### Tier 3 — Nice-to-Have
 
-8. **Exchange Abstraction** — `IExchange` interface over `chain_orders.js` + `bitshares_client.js`.
+8. **Exchange Abstraction** — `IExchange` interface over `chain_orders.ts` + `bitshares_client.ts`.
 9. **tRPC API** — Type-safe API layer for remote bot management and dashboard integration.
 10. **Pino Logger** — Structured JSON logging with level filtering and composable transports.
-11. **Commander.js CLI** — Better `dexbot.js` argument parsing with subcommands and auto-generated help.
+11. **Commander.js CLI** — Better `dexbot.ts` argument parsing with subcommands and auto-generated help.
 
 ---
 

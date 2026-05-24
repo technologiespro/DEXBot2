@@ -17,7 +17,7 @@ The accounting system is designed around a **Single Source of Truth** principle 
 
 ### 1.2 The Available Funds Formula
 
-This formula determines the bot's spending power. It is calculated atomically in `utils.js::calculateAvailableFundsValue`.
+This formula determines the bot's spending power. It is calculated atomically in `utils.ts::calculateAvailableFundsValue`.
 
 $$Available = \max(0, \text{ChainFree} - \text{Virtual} - \text{FeesOwed} - \text{FeesReservation})$$
 
@@ -47,7 +47,7 @@ sellFree represents unallocated assetA available for limit orders
 
 ### Implementation Location
 
-File: `modules/dexbot_class.js::_buildCreateOps()`
+File: `modules/dexbot_class.ts::_buildCreateOps()`
 
 ```javascript
 // Separate BUY and SELL orders
@@ -80,7 +80,7 @@ if (sellOrders.length > 0) {
 
 ### Helper Reference
 
-For checking order types and states, use centralized helpers from `modules/order/utils.js`:
+For checking order types and states, use centralized helpers from `modules/order/utils.ts`:
 - `isOrderOnChain()` - Check if ACTIVE or PARTIAL
 - `isOrderPlaced()` - Check if safely placed (on-chain with ID)
 - `isOrderVirtual()` - Check if VIRTUAL state
@@ -103,7 +103,7 @@ Previously, fills were processed one-at-a-time (~3s per broadcast). A burst of 2
 
 ### Solution: Fixed-Cap Batch Fill Processing
 
-**Mechanism** (`modules/dexbot_class.js::processFilledOrders`): Groups fills into capped batches before executing the full rebalance pipeline.
+**Mechanism** (`modules/dexbot_class.ts::processFilledOrders`): Groups fills into capped batches before executing the full rebalance pipeline.
 
 **Batch Sizing Algorithm**:
 ```javascript
@@ -113,7 +113,7 @@ const batchSize = MAX_FILL_BATCH_SIZE;
 // queueDepth>4  -> chunk into repeated batches of 4 (last chunk may be smaller)
 ```
 
-**Configuration** (`modules/constants.js`):
+**Configuration** (`modules/constants.ts`):
 ```javascript
 FILL_PROCESSING: {
   MAX_FILL_BATCH_SIZE: 4            // Hard cap on batch size
@@ -177,7 +177,7 @@ RECOVERY_ATTEMPTED (increment count) ← Attempt retry
 RESET via resetRecoveryState() ← Recovery succeeded, reset for next episode
 ```
 
-**Configuration** (`modules/constants.js`):
+**Configuration** (`modules/constants.ts`):
 ```javascript
 PIPELINE_TIMING: {
   RECOVERY_RETRY_INTERVAL_MS: 60000,  // Min 60s between retry attempts
@@ -185,7 +185,7 @@ PIPELINE_TIMING: {
 }
 ```
 
-**Reset Points** (Called by `resetRecoveryState()` in `modules/order/accounting.js`):
+**Reset Points** (Called by `resetRecoveryState()` in `modules/order/accounting.ts`):
 1. **Fill-triggered**: Every fill in `processFilledOrders()` resets recovery state
 2. **Periodic**: Blockchain fetch loop resets state every 10 minutes (even if no fills)
 3. **Bootstrap completion**: After grid initialization
@@ -201,7 +201,7 @@ PIPELINE_TIMING: {
 
 **Solution**: Track stale-cleaned order IDs using timestamp-based TTL.
 
-**Data Structure** (`modules/dexbot_class.js`):
+**Data Structure** (`modules/dexbot_class.ts`):
 ```javascript
 _staleCleanedOrderIds = new Map();  // orderId → cleanupTimestamp
 ```
@@ -311,7 +311,7 @@ The grid is divided into zones by a dynamic **Boundary Index**.
 
 ## 3. The Strategy Engine (Boundary-Crawl Algorithm)
 
-The rebalancing logic (`strategy.js::rebalanceSideRobust`) executes the "Crawl" strategy.
+The rebalancing logic (`strategy.ts::rebalanceSideRobust`) executes the "Crawl" strategy.
 
 ### 3.1 Boundary Shift (The Crawl)
 When a fill occurs, the boundary shifts to "follow" the price.
@@ -418,7 +418,7 @@ targetSlot.orderId = newOrderId;
 
 ## 3.6 Orphan-Fill Deduplication & Double-Credit Prevention
 
-**Location**: `modules/dexbot_class.js` (constructor, `_handleBatchHardAbort()`, batch failure handler)
+**Location**: `modules/dexbot_class.ts` (constructor, `_handleBatchHardAbort()`, batch failure handler)
 
 ### Problem Solved
 
@@ -440,7 +440,7 @@ During Feb 7 market crash, stale-order batch failures cascaded into double-credi
 
 **Mechanism**: Track which orders were cleaned up during batch failure recovery using timestamp retention.
 
-**Data Structure** (`modules/dexbot_class.js`):
+**Data Structure** (`modules/dexbot_class.ts`):
 ```javascript
 // Map of orderId → cleanupTimestamp
 _staleCleanedOrderIds = new Map();
@@ -547,7 +547,7 @@ The bot manages two types of fees: **Blockchain Fees** (BTS) and **Market Fees**
 ### 5.1 BTS Fees (Blockchain Operations)
 BitShares charges fees for `limit_order_create` and `limit_order_cancel`.
 
--   **Reservation** (`BTS_RESERVATION_MULTIPLIER` in `constants.js::FEE_PARAMETERS`):
+-   **Reservation** (`BTS_RESERVATION_MULTIPLIER` in `constants.ts::FEE_PARAMETERS`):
     $$Reserve = N_{active} \times BTS\_RESERVATION\_MULTIPLIER$$
     *(Default: 5× per order — covers create, rotate (cancel+place), update, and cancel over the order's lifetime)*
 
@@ -574,7 +574,7 @@ These are deducted from the *proceeds* of a fill.
 
 For BTS fees, the system returns a structured object (not a simple number) with multiple fields for accounting precision.
 
-**Location**: `modules/order/utils.js::getAssetFees()`
+**Location**: `modules/order/utils.ts::getAssetFees()`
 
 ### BTS Fee Object (Always Object)
 
@@ -695,7 +695,7 @@ For BUY orders that are makers:
 
 ### 5.5.1 Core Quantization Functions
 
-**Location**: `modules/order/utils/math.js` (lines 77-102)
+**Location**: `modules/order/utils/math.ts` (lines 77-102)
 
 #### `quantizeFloat(value, precision)` - Eliminate Accumulation Errors
 
@@ -761,14 +761,14 @@ const normalized = normalizeInt(currentSizeInt, 8);
 ### 5.5.2 Consolidation Impact
 
 Previously, five separate quantization implementations existed:
-- `dexbot_class.js` - Manual rounding logic
-- `order.js` - Custom precision handling
-- `strategy.js` - Divergent rounding approach
-- `chain_orders.js` - Different quantization pattern
-- `export.js` - Isolated float conversions
+- `dexbot_class.ts` - Manual rounding logic
+- `order.ts` - Custom precision handling
+- `strategy.ts` - Divergent rounding approach
+- `chain_orders.ts` - Different quantization pattern
+- `export.ts` - Isolated float conversions
 
 **After Consolidation:**
-✅ Single source of truth (`math.js`)
+✅ Single source of truth (`math.ts`)
 ✅ Consistent precision handling across all modules
 ✅ Reduced regression risk (tested once, used everywhere)
 ✅ Eliminated subtle float accumulation bugs

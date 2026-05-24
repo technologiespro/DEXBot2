@@ -249,13 +249,13 @@ If you optimize primarily for:
 
 The executable behavior lives in the `claw/` modules and scripts. This comparison is documentation only and should be kept aligned with:
 
-- `modules/claw_runtime_matrix.js`
-- `modules/claw_catalog.js`
-- `modules/claw_manifest.js`
-- `modules/claw_skill_md.js`
-- `modules/openfang_bridge.js`
-- `modules/nanoclaw_bridge.js`
-- `scripts/openfang_bridge.js`
-- `scripts/claw_skill_md.js`
-- `scripts/nanoclaw_bridge.js`
-- `scripts/zeroclaw_skill.js`
+- `modules/claw_runtime_matrix.ts`
+- `modules/claw_catalog.ts`
+- `modules/claw_manifest.ts`
+- `modules/claw_skill_md.ts`
+- `modules/openfang_bridge.ts`
+- `modules/nanoclaw_bridge.ts`
+- `scripts/openfang_bridge.ts`
+- `scripts/claw_skill_md.ts`
+- `scripts/nanoclaw_bridge.ts`
+- `scripts/zeroclaw_skill.ts`

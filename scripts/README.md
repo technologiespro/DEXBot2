@@ -7,7 +7,7 @@ This guide provides a terminal-focused reference for the maintenance and diagnos
 ## 🛠️ CORE MAINTENANCE
 
 ### Update DEXBot2
-**File:** `update.js`
+**File:** `update.ts`
 **Purpose:** Perform a safe, production-ready update.
 ```bash
 # Pull latest code, install deps, and reload PM2
@@ -65,61 +65,52 @@ bash scripts/reset-settings.sh
 ## 📊 DIAGNOSTICS & VALIDATION
 
 ### Configuration Audit
-**File:** `validate_bots.js`
+**File:** `validate_bots.ts`
 **Purpose:** Check `bots.json` for schema errors or missing required fields.
 ```bash
 # Validate both example and live bot configurations
-node scripts/validate_bots.js
+tsx scripts/validate_bots.ts
 ```
 
 ### Market Adapter Whitelist Generation
-**File:** `generate_market_adapter_whitelist.js`
+**File:** `generate_market_adapter_whitelist.ts`
 **Purpose:** Generate `profiles/market_adapter_whitelist.json` from bots whose `gridPrice` uses AMA mode.
 ```bash
 # Rewrite the whitelist from profiles/bots.json
 npm run market-adapter:whitelist
 
 # Rewrite the whitelist with dynamicWeight disabled for AMA bots
-node scripts/generate_market_adapter_whitelist.js --no-dynamic-weight
+tsx scripts/generate_market_adapter_whitelist.ts --no-dynamic-weight
 
 # Rewrite the whitelist with asymmetricBounds disabled for AMA bots
-node scripts/generate_market_adapter_whitelist.js --no-asymmetric-bounds
+tsx scripts/generate_market_adapter_whitelist.ts --no-asymmetric-bounds
 
 # Disable both dynamicWeight and asymmetricBounds
-node scripts/generate_market_adapter_whitelist.js --no-dynamic-weight --no-asymmetric-bounds
+tsx scripts/generate_market_adapter_whitelist.ts --no-dynamic-weight --no-asymmetric-bounds
 
 # Print the generated JSON without writing it
-node scripts/generate_market_adapter_whitelist.js --dry-run
+tsx scripts/generate_market_adapter_whitelist.ts --dry-run
 ```
 
 ### Grid Divergence Audit
-**File:** `divergence-calc.js`
+**File:** `divergence-calc.ts`
 **Purpose:** Measure the "drift" between in-memory grid and disk state using RMS divergence metric.
 ```bash
 # Calculates RMS Error (Default threshold is 14.3%)
 # RMS quadratically penalizes large errors - see docs/README.md for threshold interpretation
-node scripts/divergence-calc.js
+tsx scripts/divergence-calc.ts
 ```
 **Reference:** RMS threshold explanation in [root README GRID RECALCULATION section](../README.md#-automatic-grid-recalculation-via-threshold-detection)
 
 ### Grid Trading Analysis
-**File:** `analyze-orders.js`
+**File:** `analyze-orders.ts`
 **Purpose:** Analyze grid trading metrics and order distribution patterns.
 ```bash
 # Analyzes spread accuracy, geometric consistency, and fund distribution
-node scripts/analyze-orders.js
+tsx scripts/analyze-orders.ts
 ```
 
-### Codebase Health
-**File:** `analyze-repo-stats.js`
-**Purpose:** Generate a visual complexity and size report.
-```bash
-# Outputs analysis/charts/repo-stats.html
-node scripts/analyze-repo-stats.js
-```
-
-### Version Manifest Sync
-**File:** `sync-version.js`
+**File:** `sync-version.ts`
 **Purpose:** Keep DEXBot2-owned package and plugin manifests aligned to the root `package.json` version.
 ```bash
 # Check that package-lock.json and Claw manifests match root package.json
@@ -128,7 +119,7 @@ npm run version:check
 # Rewrite aligned manifests from root package.json
 npm run version:sync
 ```
-**Reference:** Runtime code reads `APP_VERSION` from `modules/constants.js`, which imports the root package version.
+**Reference:** Runtime code reads `APP_VERSION` from `modules/constants.ts`, which imports the root package version.
 
 ---
 
@@ -216,7 +207,7 @@ The following scripts allow you to call `dexbot` commands directly from the `scr
 | `scripts/bots` | `node dexbot bots` | `./scripts/bots` |
 | `scripts/keys` | `node dexbot keys` | `./scripts/keys` |
 | `scripts/dexbot` | `node dexbot` | `./scripts/dexbot <cmd>` |
-| `scripts/pm2` | `node pm2.js` | `./scripts/pm2` |
+| `scripts/pm2` | `tsx pm2.ts` | `./scripts/pm2` |
 
 ---
 
@@ -234,7 +225,7 @@ The following scripts allow you to call `dexbot` commands directly from the `scr
 ## 📈 CHART GENERATION
 
 ### LP Chart
-**File:** `generate_lp_chart.js`
+**File:** `generate_lp_chart.ts`
 **Purpose:** Generate the standard uPlot LP chart output.
 ```bash
 # Generate the default LP chart flow
@@ -242,7 +233,7 @@ npm run lp:chart -- --data <lp-export.json>
 ```
 
 ### Local LP Comparison Chart
-**File:** `analysis/ama_fitting/generate_unified_comparison_chart.js`
+**File:** `analysis/ama_fitting/generate_unified_comparison_chart.ts`
 **Purpose:** Generate the local LP comparison chart from an LP candle export.
 **Output:** `analysis/charts/lp_chart_<interval>_UNIFIED_COMPARISON.html`
 ```bash
@@ -251,7 +242,7 @@ npm run ama:chart:lp-local -- --data <lp-export.json>
 ```
 
 ### Derivative Trend Analysis
-**File:** `analysis/analyze_derivatives.js`
+**File:** `analysis/analyze_derivatives.ts`
 **Purpose:** Generate the derivative analysis report.
 ```bash
 # Generate the derivative analysis report
@@ -281,8 +272,8 @@ alias dbu='node dexbot update'
 alias dbc='bash scripts/clear-logs.sh'
 alias dbr='bash scripts/clear-orders.sh'
 alias dba='bash scripts/clear-all.sh'
-alias dbv='node scripts/validate_bots.js'
-alias dbd='node scripts/divergence-calc.js'
+alias dbv='tsx scripts/validate_bots.ts'
+alias dbd='tsx scripts/divergence-calc.ts'
 ```
 
 ---

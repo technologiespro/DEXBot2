@@ -133,7 +133,7 @@ C_i             = C_total * weight_i / sum(all weights)
 
 Credit and MPA maintenance are separated from periodic grid checks. DEXBot2 starts a dedicated credit watchdog interval during bot startup.
 
-Timing defaults live in `modules/constants.js`:
+Timing defaults live in `modules/constants.ts`:
 
 ```json
 {
@@ -250,10 +250,10 @@ Treat this file as runtime state, not primary configuration. The source of truth
 
 ## Related Files
 
-- `modules/credit_runtime.js`: debt workflow executor
-- `modules/dexbot_class.js`: runtime startup and watchdog lifecycle
-- `modules/bot_settings.js`: `debtPolicy` validation
+- `modules/credit_runtime.ts`: debt workflow executor
+- `modules/dexbot_class.ts`: runtime startup and watchdog lifecycle
+- `modules/bot_settings.ts`: `debtPolicy` validation
 - `market_adapter/README.md`: AMA pricing, grid triggers, and dynamic-weight runtime
-- `modules/credential_policy.js`: signing constraints for credit and call-order operations
-- `tests/test_credit_runtime.js`: credit runtime behavior coverage
-- `tests/test_multi_asset_distribution.js`: collateral distribution and multi-asset state coverage
+- `modules/credential_policy.ts`: signing constraints for credit and call-order operations
+- `tests/test_credit_runtime.ts`: credit runtime behavior coverage
+- `tests/test_multi_asset_distribution.ts`: collateral distribution and multi-asset state coverage

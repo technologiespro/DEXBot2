@@ -22,7 +22,7 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `modules/order/grid.js` | `_applyPartialActions` | Dust merge toward ideal size with available-funds cap |
+| `modules/order/grid.ts` | `_applyPartialActions` | Dust merge toward ideal size with available-funds cap |
 
 **Behavior**: When resizing partial orders, growth is capped to available funds. If insufficient funds exist, the merge is skipped.
 
@@ -33,7 +33,7 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `modules/order/grid.js` | ~733 | `// Denominator: side's allocated capital (or chain total fallback).` |
+| `modules/order/grid.ts` | ~733 | `// Denominator: side's allocated capital (or chain total fallback).` |
 
 **Behavior**: When calculating fund utilization ratios, prefer `allocated` (configured %), but fallback to `chainTotal` (on-chain balance) if allocated is 0.
 
@@ -54,7 +54,7 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `modules/order/sync_engine.js` | ~1025 | `const fetchAssetWithFallback = async (symbol, side) => { try { return await lookupAsset(BitShares, symbol); } catch (err) { if (mgr.accountOrders) { const persistedAssets = mgr.accountOrders.loadPersistedAssets(mgr.config.botKey); const assetData = (side === 'A') ? persistedAssets?.assetA : persistedAssets?.assetB; if (assetData && assetData.symbol === symbol && typeof assetData.precision === 'number') { mgr.logger.log(\`Blockchain lookup failed for ${symbol}: ${err.message}. Using persisted fallback: id=${assetData.id}, precision=${assetData.precision}\`, 'warn'); return assetData;` |
+| `modules/order/sync_engine.ts` | ~1025 | `const fetchAssetWithFallback = async (symbol, side) => { try { return await lookupAsset(BitShares, symbol); } catch (err) { if (mgr.accountOrders) { const persistedAssets = mgr.accountOrders.loadPersistedAssets(mgr.config.botKey); const assetData = (side === 'A') ? persistedAssets?.assetA : persistedAssets?.assetB; if (assetData && assetData.symbol === symbol && typeof assetData.precision === 'number') { mgr.logger.log(\`Blockchain lookup failed for ${symbol}: ${err.message}. Using persisted fallback: id=${assetData.id}, precision=${assetData.precision}\`, 'warn'); return assetData;` |
 
 **Behavior**: If blockchain API fails to lookup asset metadata (id, precision), fallback to persisted data from previous successful loads stored in grid state.
 
@@ -67,8 +67,8 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `modules/dexbot_class.js` | ~1351 | `// dexbot.js has fallback to selectAccount, bot.js throws` |
-| `modules/dexbot_class.js` | ~1349-1359 | `catch (err) { ... if (typeof chainOrders.selectAccount === 'function') { ... } else { throw err; }` |
+| `modules/dexbot_class.ts` | ~1351 | `// dexbot.ts has fallback to selectAccount, bot.ts throws` |
+| `modules/dexbot_class.ts` | ~1349-1359 | `catch (err) { ... if (typeof chainOrders.selectAccount === 'function') { ... } else { throw err; }` |
 
 **Behavior**: If auto-selecting a configured preferred account fails, fallback to `selectAccount()` (interactive) if available.
 
@@ -79,7 +79,7 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `modules/dexbot_class.js` | ~2499 | `// Find this bot by name or fallback to index if name changed?` |
+| `modules/dexbot_class.ts` | ~2499 | `// Find this bot by name or fallback to index if name changed?` |
 
 **Behavior**: Comment indicating potential fallback strategy if bot name is changed during runtime config refresh.
 
@@ -92,7 +92,7 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `modules/general_settings.js` | 7-16 | `function readGeneralSettings({ fallback = null, onError = null } = {}) { if (!fs.existsSync(SETTINGS_FILE)) return fallback; try { const raw = fs.readFileSync(SETTINGS_FILE, 'utf8'); if (!raw || !raw.trim()) return fallback; return JSON.parse(raw); } catch (err) { if (typeof onError === 'function') onError(err, SETTINGS_FILE); return fallback;` |
+| `modules/general_settings.ts` | 7-16 | `function readGeneralSettings({ fallback = null, onError = null } = {}) { if (!fs.existsSync(SETTINGS_FILE)) return fallback; try { const raw = fs.readFileSync(SETTINGS_FILE, 'utf8'); if (!raw || !raw.trim()) return fallback; return JSON.parse(raw); } catch (err) { if (typeof onError === 'function') onError(err, SETTINGS_FILE); return fallback;` |
 
 **Behavior**: Load settings file; if file missing, empty, or invalid JSON, return `fallback` parameter (default `null`).
 
@@ -103,9 +103,9 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `modules/constants.js` | 486-487 | `fallback: null,` (in readGeneralSettings call) |
-| `modules/account_bots.js` | 123-124 | `const settings = readGeneralSettings({ fallback: null, onError: (err) => { console.error('Failed to load general settings:', err.message); } });` |
-| `modules/bitshares_client.js` | 60-65 | `const settings = readGeneralSettings({ fallback: null, onError: (err) => { console.warn('[NodeManager] Config load failed, continuing with defaults:', err.message); } });` |
+| `modules/constants.ts` | 486-487 | `fallback: null,` (in readGeneralSettings call) |
+| `modules/account_bots.ts` | 123-124 | `const settings = readGeneralSettings({ fallback: null, onError: (err) => { console.error('Failed to load general settings:', err.message); } });` |
+| `modules/bitshares_client.ts` | 60-65 | `const settings = readGeneralSettings({ fallback: null, onError: (err) => { console.warn('[NodeManager] Config load failed, continuing with defaults:', err.message); } });` |
 
 **Behavior**: All module initialization uses `readGeneralSettings()` with `fallback: null`; if settings unavailable, modules continue with hardcoded defaults (e.g., default node URL).
 
@@ -118,7 +118,7 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `tests/test_utils.js` | 28 | `utils.resolveAccountRef({ accountId: '1.2.345', account: 'fallback-account' }, 'explicit-account'),` |
+| `tests/test_utils.ts` | 28 | `utils.resolveAccountRef({ accountId: '1.2.345', account: 'fallback-account' }, 'explicit-account'),` |
 
 **Behavior**: Test verifying that account resolution prefers `accountId` but falls back to `account` field.
 
@@ -129,7 +129,7 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `tests/test_accounting_logic.js` | 195-196 | `// Test: Missing fee cache must not crash fill accounting (fallback to raw proceeds) console.log(' - Testing fill accounting fee-cache fallback...');` |
+| `tests/test_accounting_logic.ts` | 195-196 | `// Test: Missing fee cache must not crash fill accounting (fallback to raw proceeds) console.log(' - Testing fill accounting fee-cache fallback...');` |
 
 **Behavior**: If fee cache is unavailable during order fill accounting, fallback to using raw fill proceeds without fee deductions.
 
@@ -140,8 +140,8 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 
 | File | Line | Context |
 |------|------|---------|
-| `tests/test_node_failover.js` | 8 | `- Default fallback behavior` |
-| `tests/test_node_failover.js` | 153 | `console.log('✓ Slow node fallback test passed\n');` |
+| `tests/test_node_failover.ts` | 8 | `- Default fallback behavior` |
+| `tests/test_node_failover.ts` | 153 | `console.log('✓ Slow node fallback test passed\n');` |
 
 **Behavior**: NodeManager automatically fails over to next configured node if current node is slow or unresponsive.
 
@@ -161,8 +161,8 @@ Found **35+ distinct instances** of "fallback" across the codebase, organized in
 ### 7.2 Format Module Documentation
 | File | Line | Context |
 |------|------|---------|
-| `modules/order/format.js` | 44-45 | `15. toFiniteNumber(value, defaultValue) - Convert to finite number with fallback 16. safeFormat(value, decimals, fallback) - Safely format with fallback` |
-| `modules/order/format.js` | 247-257 | `@param {string} [fallback='N/A'] - Fallback value if format fails @returns {string} Formatted value or fallback string function safeFormat(value, decimals, fallback = 'N/A') { ... return fallback;` |
+| `modules/order/format.ts` | 44-45 | `15. toFiniteNumber(value, defaultValue) - Convert to finite number with fallback 16. safeFormat(value, decimals, fallback) - Safely format with fallback` |
+| `modules/order/format.ts` | 247-257 | `@param {string} [fallback='N/A'] - Fallback value if format fails @returns {string} Formatted value or fallback string function safeFormat(value, decimals, fallback = 'N/A') { ... return fallback;` |
 
 ---
 

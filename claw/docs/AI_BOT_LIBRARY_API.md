@@ -11,7 +11,7 @@ The goal is simple:
 - `Claw` can talk to DEXBot2 and the blockchain directly
 - The infrastructure layer stays reusable and decision-free
 
-The current scaffold lives in [../modules/claw_infra.js](../modules/claw_infra.js), [../modules/dexbot_profiles.js](../modules/dexbot_profiles.js), [../modules/nanoclaw_bridge.js](../modules/nanoclaw_bridge.js), [../modules/openfang_bridge.js](../modules/openfang_bridge.js), [../modules/zeroclaw_bridge.js](../modules/zeroclaw_bridge.js), and [../modules/nullclaw_bridge.js](../modules/nullclaw_bridge.js), and is exported from [../index.js](../index.js).
+The current scaffold lives in [../modules/claw_infra.ts](../modules/claw_infra.ts), [../modules/dexbot_profiles.ts](../modules/dexbot_profiles.ts), [../modules/nanoclaw_bridge.ts](../modules/nanoclaw_bridge.ts), [../modules/openfang_bridge.ts](../modules/openfang_bridge.ts), [../modules/zeroclaw_bridge.ts](../modules/zeroclaw_bridge.ts), and [../modules/nullclaw_bridge.ts](../modules/nullclaw_bridge.ts), and is exported from [../index.ts](../index.ts).
 
 ## Design Rules
 
@@ -52,8 +52,8 @@ Think of Claw's infrastructure layer as the shared foundation that the workflow 
 
 ZeroClaw should use Claw as a compatibility layer, not as a second signing or credential system.
 
-- ZeroClaw can invoke the JSON/CLI bridge in [../scripts/zeroclaw_bridge.js](../scripts/zeroclaw_bridge.js).
-- The manifest lives in [../modules/zeroclaw_manifest.js](../modules/zeroclaw_manifest.js) and is safe to query without starting the BitShares runtime.
+- ZeroClaw can invoke the JSON/CLI bridge in [../scripts/zeroclaw_bridge.ts](../scripts/zeroclaw_bridge.ts).
+- The manifest lives in [../modules/zeroclaw_manifest.ts](../modules/zeroclaw_manifest.ts) and is safe to query without starting the BitShares runtime.
 - Claw keeps private-key access inside its existing DEXBot2 credential path.
 - ZeroClaw gets read access to market, profile, HONEST, and order context, plus explicit action entrypoints when it needs to request a trade operation.
 
@@ -68,7 +68,7 @@ The bridge surface currently includes:
 - BTS-backed short open, take-profit, close, and plan builders
 - MPA position lookup
 
-Launcher behavior such as `node unlock-start --claw-only` and `node pm2 claw-only` is documented and maintained separately under `skills/launcher-ops/`.
+Launcher behavior such as `tsx unlock-start --claw-only` and `tsx pm2 claw-only` is documented and maintained separately under `skills/launcher-ops/`.
 
 Recommended trust boundary:
 
@@ -88,8 +88,8 @@ npm run zeroclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.
 
 NullClaw uses the same bridge surface, with a native skill path centered on `SKILL.toml` in the workspace.
 
-- NullClaw can invoke the JSON/CLI bridge in [../scripts/nullclaw_bridge.js](../scripts/nullclaw_bridge.js).
-- The manifest lives in [../modules/nullclaw_manifest.js](../modules/nullclaw_manifest.js) and is safe to query without starting the BitShares runtime.
+- NullClaw can invoke the JSON/CLI bridge in [../scripts/nullclaw_bridge.ts](../scripts/nullclaw_bridge.ts).
+- The manifest lives in [../modules/nullclaw_manifest.ts](../modules/nullclaw_manifest.ts) and is safe to query without starting the BitShares runtime.
 - Claw keeps private-key access inside its existing DEXBot2 credential path.
 - NullClaw gets the same read access to market, profile, HONEST, and order context, plus explicit action entrypoints when it needs to request a trade operation.
 
@@ -103,8 +103,8 @@ npm run nullclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.
 
 NanoClaw uses the same bridge surface, with a native `SKILL.md` path in the workspace skill tree.
 
-- NanoClaw can invoke the JSON/CLI bridge in [../scripts/nanoclaw_bridge.js](../scripts/nanoclaw_bridge.js).
-- The bridge lives in [../modules/nanoclaw_bridge.js](../modules/nanoclaw_bridge.js) and uses the shared Claw command surface.
+- NanoClaw can invoke the JSON/CLI bridge in [../scripts/nanoclaw_bridge.ts](../scripts/nanoclaw_bridge.ts).
+- The bridge lives in [../modules/nanoclaw_bridge.ts](../modules/nanoclaw_bridge.ts) and uses the shared Claw command surface.
 - Keep the generated skill named `bitshares-claw` so it does not collide with NanoClaw's bundled `claw` skill.
 
 To generate the skill file from Claw, run:
@@ -117,8 +117,8 @@ npm run nanoclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output /pa
 
 OpenFang uses the same bridge surface through a CLI-first wrapper and a workspace skill file.
 
-- OpenFang can invoke the JSON/CLI bridge in [../scripts/openfang_bridge.js](../scripts/openfang_bridge.js).
-- The bridge lives in [../modules/openfang_bridge.js](../modules/openfang_bridge.js) and uses the shared Claw command surface.
+- OpenFang can invoke the JSON/CLI bridge in [../scripts/openfang_bridge.ts](../scripts/openfang_bridge.ts).
+- The bridge lives in [../modules/openfang_bridge.ts](../modules/openfang_bridge.ts) and uses the shared Claw command surface.
 - Keep the generated skill named `bitshares-claw` so it stays separate from runtime-specific OpenFang skills and remains a thin wrapper around the shared CLI bridge.
 
 To generate the skill file from Claw, run:
@@ -131,8 +131,8 @@ npm run openfang:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.
 
 Hermes should consume Claw through the shared MCP server, with an optional local `SKILL.md` for workflow guidance.
 
-- Hermes can invoke the MCP server in [../scripts/claw_mcp_server.js](../scripts/claw_mcp_server.js).
-- The manifest wrapper lives in [../modules/hermes_manifest.js](../modules/hermes_manifest.js) and advertises Hermes as an MCP-first runtime over the shared Claw command surface.
+- Hermes can invoke the MCP server in [../scripts/claw_mcp_server.ts](../scripts/claw_mcp_server.ts).
+- The manifest wrapper lives in [../modules/hermes_manifest.ts](../modules/hermes_manifest.ts) and advertises Hermes as an MCP-first runtime over the shared Claw command surface.
 - Keep the generated skill named `bitshares-claw` and focused on workflow guidance rather than copying bridge logic into Hermes.
 - Claw keeps private-key access inside its existing DEXBot2 credential path.
 
@@ -147,8 +147,8 @@ Add the MCP server to `~/.hermes/config.yaml`:
 ```yaml
 mcp_servers:
   claw:
-    command: "node"
-    args: ["/absolute/path/to/claw/scripts/claw_mcp_server.js", "--profile-root", "/home/alex/BTS/Git/DEXBot2"]
+    command: "tsx"
+    args: ["/absolute/path/to/claw/scripts/claw_mcp_server.ts", "--profile-root", "/home/alex/BTS/Git/DEXBot2"]
 ```
 
 ## Core Types
@@ -368,7 +368,7 @@ Useful companion method:
 
 ### 10. Command bridge
 
-The bridge exposed by [../modules/claw_bridge.js](../modules/claw_bridge.js) supports:
+The bridge exposed by [../modules/claw_bridge.ts](../modules/claw_bridge.ts) supports:
 
 - `manifest`
 - `runtime`
@@ -401,7 +401,7 @@ The bridge exposed by [../modules/claw_bridge.js](../modules/claw_bridge.js) sup
 
 ## Root Export Disambiguation
 
-The barrel export in `claw/index.js` spreads every module into one flat namespace. Several modules define functions with the same name but different semantics. The barrel resolves these collisions with explicit trailing overrides:
+The barrel export in `claw/index.ts` spreads every module into one flat namespace. Several modules define functions with the same name but different semantics. The barrel resolves these collisions with explicit trailing overrides:
 
 | Export name | Source module | Purpose |
 |---|---|---|
@@ -409,7 +409,7 @@ The barrel export in `claw/index.js` spreads every module into one flat namespac
 | `resolveSigningAccountName` | `chain_broadcast` | Sync extraction — returns the signing account name string from a context object |
 | `describeZeroClawBridge` | `zeroclaw_manifest` | Returns the ZeroClaw manifest descriptor (runtime name, command examples) |
 
-When consuming `claw/index.js` as a library, use the disambiguated names above. The non-prefixed `resolveAccountName` and `describeZeroClawBridge` point to the query/manifest variants by default.
+When consuming `claw/index.ts` as a library, use the disambiguated names above. The non-prefixed `resolveAccountName` and `describeZeroClawBridge` point to the query/manifest variants by default.
 
 ## Suggested Runtime Flow
 

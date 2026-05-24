@@ -26,27 +26,27 @@ Understand these fundamental concepts before diving into code:
 Follow this path through the codebase:
 
 ```
-1. modules/constants.js                    (5 min)   - Configuration and tuning parameters
-2. modules/order/manager.js                (10 min)  - Central coordinator, read constructor + _updateOrder() + _applySafeRebalanceCOW()
-3. modules/order/working_grid.js           (5 min)   - COW working copy; read syncFromMaster() + buildDelta() + _commitWorkingGrid()
-4. modules/order/accounting.js             (5 min)   - Fund tracking, read recalculateFunds() and resetRecoveryState()
-5. modules/order/strategy.js               (5 min)   - Rebalancing logic, read rebalance()
-6. modules/order/grid.js                   (5 min)   - Grid creation, read createOrderGrid()
-7. modules/dexbot_fill_runtime.js          (5 min)   - Fill batch processing pipeline and replay-safe accounting
-8. modules/dexbot_maintenance_runtime.js   (5 min)   - Sync loops, grid maintenance, trigger handling
-9. modules/dexbot_class.js                 (5 min)   - Bot lifecycle, credit runtime startup, maintenance orchestration
+1. modules/constants.ts                    (5 min)   - Configuration and tuning parameters
+2. modules/order/manager.ts                (10 min)  - Central coordinator, read constructor + _updateOrder() + _applySafeRebalanceCOW()
+3. modules/order/working_grid.ts           (5 min)   - COW working copy; read syncFromMaster() + buildDelta() + _commitWorkingGrid()
+4. modules/order/accounting.ts             (5 min)   - Fund tracking, read recalculateFunds() and resetRecoveryState()
+5. modules/order/strategy.ts               (5 min)   - Rebalancing logic, read rebalance()
+6. modules/order/grid.ts                   (5 min)   - Grid creation, read createOrderGrid()
+7. modules/dexbot_fill_runtime.ts          (5 min)   - Fill batch processing pipeline and replay-safe accounting
+8. modules/dexbot_maintenance_runtime.ts   (5 min)   - Sync loops, grid maintenance, trigger handling
+9. modules/dexbot_class.ts                 (5 min)   - Bot lifecycle, credit runtime startup, maintenance orchestration
 ```
 
 **Additional Resources**:
-- `modules/constants.js::FILL_PROCESSING` - Batch configuration (`MAX_FILL_BATCH_SIZE`)
-- `modules/constants.js::PIPELINE_TIMING` - Recovery configuration (RECOVERY_RETRY_INTERVAL_MS, MAX_RECOVERY_ATTEMPTS)
-- `modules/constants.js::MARKET_ADAPTER` - AMA, dynamic weight, and regime detection defaults
-- `modules/constants.js::REGIME_TABLE` - Hurst/PE regime signal-strength table
-- `modules/dexbot_class.js::_handleBatchHardAbort()` - Hard-abort recovery handler
-- `modules/dexbot_class.js::_staleCleanedOrderIds` - Orphan-fill deduplication tracking
-- `modules/dexbot_class.js::_cancelDustOrders()` - Auto-cancel dust partials; timer state in `_dustSinceMap`
-- `modules/credit_runtime.js` - Debt workflow executor (MPA and credit offer)
-- `market_adapter/core/market_adapter_service.js` - Signal pipeline (AMA, dynamic weights, collateral advisory)
+- `modules/constants.ts::FILL_PROCESSING` - Batch configuration (`MAX_FILL_BATCH_SIZE`)
+- `modules/constants.ts::PIPELINE_TIMING` - Recovery configuration (RECOVERY_RETRY_INTERVAL_MS, MAX_RECOVERY_ATTEMPTS)
+- `modules/constants.ts::MARKET_ADAPTER` - AMA, dynamic weight, and regime detection defaults
+- `modules/constants.ts::REGIME_TABLE` - Hurst/PE regime signal-strength table
+- `modules/dexbot_class.ts::_handleBatchHardAbort()` - Hard-abort recovery handler
+- `modules/dexbot_class.ts::_staleCleanedOrderIds` - Orphan-fill deduplication tracking
+- `modules/dexbot_class.ts::_cancelDustOrders()` - Auto-cancel dust partials; timer state in `_dustSinceMap`
+- `modules/credit_runtime.ts` - Debt workflow executor (MPA and credit offer)
+- `market_adapter/core/market_adapter_service.ts` - Signal pipeline (AMA, dynamic weights, collateral advisory)
 
 ---
 
@@ -108,7 +108,7 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 | Term | Meaning |
 |------|---------|
 | **Master Grid** (`manager.orders`) | The immutable source of truth. Frozen with `Object.freeze()`. Never mutated in place—replaced atomically via `_commitWorkingGrid()` only after blockchain success. |
-| **WorkingGrid** | Mutable clone of the master grid used during planning. Created by `new WorkingGrid(masterGrid)`. Discarded on failure; committed on success. Lives in `modules/order/working_grid.js`. |
+| **WorkingGrid** | Mutable clone of the master grid used during planning. Created by `new WorkingGrid(masterGrid)`. Discarded on failure; committed on success. Lives in `modules/order/working_grid.ts`. |
 | **COW Rebalance** | The full plan→broadcast→commit cycle: `_applySafeRebalanceCOW()` → `_updateOrdersOnChainBatchCOW()` → `_commitWorkingGrid()` |
 | **Atomic Commit** | `_commitWorkingGrid(workingGrid, indexes, boundary, options = {})` swaps master to the working copy in a single operation, then increments `_gridVersion`. |
 | **Staleness / Version Mismatch** | If a fill mutates the master grid while a rebalance is in progress, the working grid is marked stale. The commit guard rejects stale or version-mismatched working grids. |
@@ -124,7 +124,7 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 |------|---------|
 | **Dynamic Weight** | Live buy/sell weight bias computed from AMA slope + Kalman confirmation + ATR volatility penalty |
 | **Regime Detection** | Hurst Exponent + Permutation Entropy classification of market structure (trending, mean-reverting, noisy) |
-| **Regime Table** | Signal-strength lookup table in `constants.js` that dampens or preserves dynamic weight based on regime |
+| **Regime Table** | Signal-strength lookup table in `constants.ts` that dampens or preserves dynamic weight based on regime |
 | **AMA Slope** | Filtered measure of AMA velocity used to derive directional weight offset |
 | **Kalman Confirmation** | Kalman-filtered trend signal blended with AMA slope for smoother weight transitions |
 | **Symmetric Shift** | Volatility-driven downward weight penalty applied equally to both sides (ATR-based) |
@@ -155,8 +155,8 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 | **MPA Borrow** | Market-pegged asset call-order update (debt-first CR planning) |
 | **Credit Offer** | On-chain peer-to-peer lending offer acceptance and repayment |
 | **Auto-Reborrow** | Bot-side flag allowing a new credit offer accept after successful repay |
-| **CR Planner** | Shared collateral-ratio math layer in `modules/cr_planner.js` |
-| **Credit Runtime** | Bot-scoped executor in `modules/credit_runtime.js` for debt operations and grid-reset requests |
+| **CR Planner** | Shared collateral-ratio math layer in `modules/cr_planner.ts` |
+| **Credit Runtime** | Bot-scoped executor in `modules/credit_runtime.ts` for debt operations and grid-reset requests |
 | **LP-Backed Collateral** | Liquidity-pool share tokens used as collateral, valued from underlying reserves |
 
 ### Operations
@@ -192,7 +192,7 @@ A **phantom order** is an order in ACTIVE/PARTIAL state WITHOUT a valid `orderId
 | **BitShares `get_ticker(A, B)`** | A/B (base/quote) | `1 / value` | B/A ✓ |
 | **Liquidity Pool Reserves** | `reserve_A / reserve_B` | `floatB / floatA` | B/A ✓ |
 
-#### Implementation (`modules/order/utils/system.js`)
+#### Implementation (`modules/order/utils/system.ts`)
 
 **`deriveMarketPrice(BitShares, symA, symB)`**:
 ```javascript
@@ -228,7 +228,7 @@ If you see prices like `0.000795` when expecting `1350`:
 
 **Problem**: Floating-point arithmetic accumulates rounding errors over many calculations. After repeated price derivations, fund allocations, and order sizing, float values drift from their true blockchain precision.
 
-**Solution**: Use centralized quantization utilities from `modules/order/utils/math.js` to eliminate accumulation.
+**Solution**: Use centralized quantization utilities from `modules/order/utils/math.ts` to eliminate accumulation.
 
 ### When to Quantize
 
@@ -284,7 +284,7 @@ const normalized = normalizeInt(currentSizeInt, assetPrecision);
 
 ## Module Deep Dive
 
-### OrderManager (`modules/order/manager.js`)
+### OrderManager (`modules/order/manager.ts`)
 
 **Role**: Central coordinator for all order operations
 
@@ -375,7 +375,7 @@ try {
 
 ### Three-Layer Prevention System
 
-#### Layer 1: Primary Guard in `OrderManager._updateOrder()` (manager.js:570-584)
+#### Layer 1: Primary Guard in `OrderManager._updateOrder()` (manager.ts:570-584)
 
 **The Critical Validation**:
 ```javascript
@@ -397,7 +397,7 @@ if ((order.state === ORDER_STATES.ACTIVE || order.state === ORDER_STATES.PARTIAL
 - Applies to ALL modules: grid, sync, strategy, dexbot_class
 - Auto-correction with logging provides audit trail
 
-#### Layer 2: Grid Resize Protection (grid.js:1154)
+#### Layer 2: Grid Resize Protection (grid.ts:1154)
 
 **Before (Vulnerable)**:
 ```javascript
@@ -411,7 +411,7 @@ manager._updateOrder({ ...order, size: newSize, state: order.state }, 'grid-resi
 
 **Why It Matters**: Preserves order's current state instead of forcing ACTIVE, preventing VIRTUAL → ACTIVE phantom creation during grid resizing.
 
-#### Layer 3: Sync Cleanup (sync_engine.js:297-305)
+#### Layer 3: Sync Cleanup (sync_engine.ts:297-305)
 
 **Phantom Detection & Prevention**:
 ```javascript
@@ -435,13 +435,13 @@ if (!currentGridOrder?.orderId || !parsedChainOrders.has(currentGridOrder.orderI
 
 ### Additional Hardening
 
-**Strategy Module** (strategy.js:484, 521):
+**Strategy Module** (strategy.ts:484, 521):
 ```javascript
 // Only upgrade to ACTIVE if order has valid orderId
 const newState = partial.orderId ? ORDER_STATES.ACTIVE : ORDER_STATES.VIRTUAL;
 ```
 
-**Fallback Placements** (dexbot_class.js:982):
+**Fallback Placements** (dexbot_class.ts:982):
 ```javascript
 const fallbackPlacements = unmetRotations.map(r => ({
     id: r.newGridId,
@@ -454,7 +454,7 @@ const fallbackPlacements = unmetRotations.map(r => ({
 
 ### Testing
 
-See `tests/repro_phantom_orders.js` for comprehensive test coverage:
+See `tests/repro_phantom_orders.ts` for comprehensive test coverage:
 - Direct phantom creation attempt (blocked)
 - Grid resize phantom prevention (verified)
 - Sync cleanup of orphaned ACTIVE orders (verified)
@@ -517,7 +517,7 @@ For full details see [COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md
 
 ## Order State Helper Functions
 
-**Location**: `modules/order/utils/order.js`
+**Location**: `modules/order/utils/order.ts`
 
 **Purpose**: Single source of truth for order state logic, replacing 34+ inline checks scattered across the codebase.
 
@@ -626,9 +626,9 @@ for (const partial of buyPartials) {
 ```
 
 **Eliminates duplications in**:
-- `strategy.js::_getPartialOrdersByType()`
-- `grid.js::compareGrids()`
-- `startup_reconcile.js::selectPartialSlots()`
+- `strategy.ts::_getPartialOrdersByType()`
+- `grid.ts::compareGrids()`
+- `startup_reconcile.ts::selectPartialSlots()`
 
 #### `validateAssetPrecisions(assets)`
 ```javascript
@@ -657,8 +657,8 @@ if (Math.abs(order.size - expected) <= slack) {
 ```
 
 **Eliminates duplications in**:
-- `accounting.js::recalculateFunds()`
-- `manager.js::_updateOrder()`
+- `accounting.ts::recalculateFunds()`
+- `manager.ts::_updateOrder()`
 
 ### Common Usage Patterns
 
@@ -701,7 +701,7 @@ rebalanceSellSide(sellPartials);
 
 ---
 
-### Accountant (`modules/order/accounting.js`)
+### Accountant (`modules/order/accounting.ts`)
 
 **Role**: Fund tracking and fee management
 
@@ -755,7 +755,7 @@ _verifyFundInvariants(...)
 
 ---
 
-### StrategyEngine (`modules/order/strategy.js`)
+### StrategyEngine (`modules/order/strategy.ts`)
 
 **Role**: Grid rebalancing and order rotation
 
@@ -813,7 +813,7 @@ if (totalIncrease > availablePool) {
 
 ---
 
-### Grid (`modules/order/grid.js`)
+### Grid (`modules/order/grid.ts`)
 
 **Role**: Grid creation, sizing, and divergence detection
 
@@ -868,7 +868,7 @@ for (let i = 0; i < prices.length; i++) {
 
 ---
 
-### SyncEngine (`modules/order/sync_engine.js`)
+### SyncEngine (`modules/order/sync_engine.ts`)
 
 **Role**: Blockchain synchronization and fill detection
 
@@ -1016,12 +1016,12 @@ async start() {
 
 All new orders pass through two validation gates:
 
-1. **Strategy/Grid Logic** (`strategy.js`, `grid.js`):
+1. **Strategy/Grid Logic** (`strategy.ts`, `grid.ts`):
    - Check: `size >= getMinOrderSize(type, assets, factor)`
    - Double-dust threshold: `size >= minHealthySize`
    - Prevents undersized placement attempts
 
-2. **Broadcast Validation** (`dexbot_class.js`):
+2. **Broadcast Validation** (`dexbot_class.ts`):
    - Check: `amount > 0` for each order
    - Rejects zero-amount operations before blockchain transmission
    - Triggers recovery sync on validation failure
@@ -1153,7 +1153,7 @@ Bots can declare a `debtPolicy` block for native MPA and credit-offer workflows.
 
 **1. Update Constants**
 ```javascript
-// modules/constants.js
+// modules/constants.ts
 ORDER_TYPES: {
     BUY: 'buy',
     SELL: 'sell',
@@ -1164,7 +1164,7 @@ ORDER_TYPES: {
 
 **2. Update Manager Indices**
 ```javascript
-// modules/order/manager.js - constructor
+// modules/order/manager.ts - constructor
 this._ordersByType = {
     [ORDER_TYPES.BUY]: new Set(),
     [ORDER_TYPES.SELL]: new Set(),
@@ -1175,7 +1175,7 @@ this._ordersByType = {
 
 **3. Update Fund Calculation**
 ```javascript
-// modules/order/accounting.js - recalculateFunds()
+// modules/order/accounting.ts - recalculateFunds()
 for (const order of orders.values()) {
     if (order.type === ORDER_TYPES.LIMIT) {
         // Handle new type
@@ -1186,14 +1186,14 @@ for (const order of orders.values()) {
 
 **4. Update Strategy Logic**
 ```javascript
-// modules/order/strategy.js - rebalance()
+// modules/order/strategy.ts - rebalance()
 const limitOrders = manager.getOrdersByTypeAndState(ORDER_TYPES.LIMIT, null);
 // Process limit orders...
 ```
 
 **5. Add Tests**
 ```javascript
-// tests/test_manager.js
+// tests/test_manager.ts
 describe('LIMIT order type', () => {
     it('should track LIMIT orders in indices', () => {
         // Test implementation
@@ -1220,19 +1220,19 @@ describe('LIMIT order type', () => {
 
 ### Test Files
 Located in `tests/` (flat directory, no subdirectories):
-- `test_accounting_logic.js` - Fund calculation and accounting tests
-- `test_grid_logic.js` - Grid creation, sizing, and divergence tests
-- `test_manager.js` / `test_manager_logic.js` - State management and COW tests
-- `test_sync_logic.js` - Blockchain synchronization tests
-- `test_strategy_logic.js` - Rebalancing and rotation logic
-- `test_bts_fee_logic.js` - BTS fee deduction and settlement
-- `test_market_adapter_signal_gates.js` - Market adapter signal validation
-- `test_dynamic_weight_override_wiring.js` - Dynamic weight config wiring
-- `test_derivative_signal_trap_regression.js` - Derivative signal trap tests
-- `test_derivative_momentum_gate.js` - Momentum gate tests
-- `test_cr_planner.js` - Collateral ratio planner tests
-- `test_dexbot_credit_wiring.js` - Credit runtime integration tests
-- `test_credential_daemon.js` / `test_credential_session_cache.js` - Credential security tests
+- `test_accounting_logic.ts` - Fund calculation and accounting tests
+- `test_grid_logic.ts` - Grid creation, sizing, and divergence tests
+- `test_manager.ts` / `test_manager_logic.ts` - State management and COW tests
+- `test_sync_logic.ts` - Blockchain synchronization tests
+- `test_strategy_logic.ts` - Rebalancing and rotation logic
+- `test_bts_fee_logic.ts` - BTS fee deduction and settlement
+- `test_market_adapter_signal_gates.ts` - Market adapter signal validation
+- `test_dynamic_weight_override_wiring.ts` - Dynamic weight config wiring
+- `test_derivative_signal_trap_regression.ts` - Derivative signal trap tests
+- `test_derivative_momentum_gate.ts` - Momentum gate tests
+- `test_cr_planner.ts` - Collateral ratio planner tests
+- `test_dexbot_credit_wiring.ts` - Credit runtime integration tests
+- `test_credential_daemon.ts` / `test_credential_session_cache.ts` - Credential security tests
 
 **Run tests**:
 ```bash
@@ -1530,27 +1530,27 @@ console.log('Locked?', manager.isOrderLocked(order.id));
 - [WORKFLOW](WORKFLOW.md) - Git branch workflow
 
 ### Code Entry Points
-- `dexbot.js` - CLI entry point
-- `modules/dexbot_class.js` - Core bot class
-- `modules/dexbot_fill_runtime.js` - Fill processing runtime
-- `modules/dexbot_maintenance_runtime.js` - Maintenance runtime
-- `modules/order/manager.js` - Order management hub
+- `dexbot.ts` - CLI entry point
+- `modules/dexbot_class.ts` - Core bot class
+- `modules/dexbot_fill_runtime.ts` - Fill processing runtime
+- `modules/dexbot_maintenance_runtime.ts` - Maintenance runtime
+- `modules/order/manager.ts` - Order management hub
 
 ### Key Modules
-- `modules/order/accounting.js` - Fund tracking
-- `modules/order/strategy.js` - Rebalancing logic
-- `modules/order/grid.js` - Grid creation
-- `modules/order/sync_engine.js` - Blockchain sync
-- `modules/order/working_grid.js` - COW working copy (clone/delta/commit)
-- `modules/order/processed_fill_store.js` - Fill dedupe persistence
-- `modules/order/utils/order.js` - Order state predicates and helpers
-- `modules/order/utils/math.js` - Precision, quantization, fund math
-- `modules/order/utils/validate.js` - Validation and COW action building
-- `modules/order/utils/system.js` - Price derivation, deduplication
-- `modules/credit_runtime.js` - Debt workflow executor
-- `modules/cr_planner.js` - Collateral ratio math layer
-- `market_adapter/core/market_adapter_service.js` - Signal pipeline
-- `claw/modules/chain_actions.js` - Claw chain operations
+- `modules/order/accounting.ts` - Fund tracking
+- `modules/order/strategy.ts` - Rebalancing logic
+- `modules/order/grid.ts` - Grid creation
+- `modules/order/sync_engine.ts` - Blockchain sync
+- `modules/order/working_grid.ts` - COW working copy (clone/delta/commit)
+- `modules/order/processed_fill_store.ts` - Fill dedupe persistence
+- `modules/order/utils/order.ts` - Order state predicates and helpers
+- `modules/order/utils/math.ts` - Precision, quantization, fund math
+- `modules/order/utils/validate.ts` - Validation and COW action building
+- `modules/order/utils/system.ts` - Price derivation, deduplication
+- `modules/credit_runtime.ts` - Debt workflow executor
+- `modules/cr_planner.ts` - Collateral ratio math layer
+- `market_adapter/core/market_adapter_service.ts` - Signal pipeline
+- `claw/modules/chain_actions.ts` - Claw chain operations
 
 ---
 
@@ -1600,10 +1600,10 @@ The test suite validates the following fund-related behaviors:
 npm test
 
 # Specific logic area
-node tests/test_accounting_logic.js
+tsx tests/test_accounting_logic.ts
 
 # Specific integration test
-node tests/test_fills.js
+tsx tests/test_fills.ts
 ```
 
 ### Understanding Test Structure
@@ -1644,11 +1644,11 @@ describe('Fund Tracking - Fund Updates', () => {
 
 | File | Purpose | Test Count |
 |------|---------|-----------|
-| `tests/test_strategy_logic.js` | Rebalancing, placement, rotation | 16 |
-| `tests/test_accounting_logic.js` | Fund tracking, fees, precision | 10 |
-| `tests/test_grid_logic.js` | Grid creation, sizing, divergence | 8 |
-| `tests/test_manager_logic.js` | State machine, indexing | 8 |
-| `tests/test_sync_logic.js` | Blockchain reconciliation | 6 |
+| `tests/test_strategy_logic.ts` | Rebalancing, placement, rotation | 16 |
+| `tests/test_accounting_logic.ts` | Fund tracking, fees, precision | 10 |
+| `tests/test_grid_logic.ts` | Grid creation, sizing, divergence | 8 |
+| `tests/test_manager_logic.ts` | State machine, indexing | 8 |
+| `tests/test_sync_logic.ts` | Blockchain reconciliation | 6 |
 
 ### Adding Tests for Fund-Related Features
 
@@ -1768,13 +1768,13 @@ The test suite provides comprehensive coverage of fund calculations and rebalanc
 **Running Tests**:
 ```bash
 # Test strategy rebalancing
-node tests/test_strategy_logic.js
+tsx tests/test_strategy_logic.ts
 
 # Test grid divergence
-node tests/test_grid_logic.js
+tsx tests/test_grid_logic.ts
 
 # Test accounting precision
-node tests/test_accounting_logic.js
+tsx tests/test_accounting_logic.ts
 
 # Run full suite
 npm test
@@ -1817,7 +1817,7 @@ console.log('Available buy:', manager.funds.available.buy);
 ### Common Questions
 
 **Q: Where do I start reading the code?**  
-A: Follow the Code Reading Roadmap above, starting with `constants.js` and `manager.js`.
+A: Follow the Code Reading Roadmap above, starting with `constants.ts` and `manager.ts`.
 
 **Q: How do I debug fund issues?**  
 A: Use `manager.logger.logFundsStatus(manager)` and check invariants with `_verifyFundInvariants()`.
@@ -1829,7 +1829,7 @@ A: Check if it's locked (`isOrderLocked()`), in exclusion list, or below dust th
 A: Follow the "How to Add New Features" section above.
 
 **Q: Where are the tests?**  
-A: All tests are in the `tests/` directory. Run `npm test` for the full suite, or `node tests/<file>.js` for individual test files.
+A: All tests are in the `tests/` directory. Run `npm test` for the full suite, or `tsx tests/<file>.ts` for individual test files.
 
 ---
 
@@ -1855,7 +1855,7 @@ See [WORKFLOW.md](WORKFLOW.md) for detailed branching strategy.
 
 1. **Read the Architecture**: [architecture.md](architecture.md)
 2. **Understand Fund Logic**: [FUND_MOVEMENT_AND_ACCOUNTING.md](FUND_MOVEMENT_AND_ACCOUNTING.md)
-3. **Follow Code Roadmap**: Start with `constants.js` → `manager.js`
+3. **Follow Code Roadmap**: Start with `constants.ts` → `manager.ts`
 4. **Try Debugging**: Enable debug logging and explore fund status
 5. **Run Tests**: `npm test` to see how components work
 
@@ -1869,7 +1869,7 @@ Control bot behavior via environment variables (useful for advanced setups):
 
 | Variable | Description |
 |----------|-------------|
-| `DAEMON_PASSWORD` | Optional advanced override for direct `credential-daemon.js` startup; normal launchers use a one-shot local bootstrap channel instead |
+| `DAEMON_PASSWORD` | Optional advanced override for direct `credential-daemon.ts` startup; normal launchers use a one-shot local bootstrap channel instead |
 | `BOT_NAME` / `LIVE_BOT_NAME` | Select a specific bot from `profiles/bots.json` by name |
 | `PREFERRED_ACCOUNT` | Override the preferred account for the selected bot |
 | `RUN_LOOP_MS` | Polling interval in ms (default: `5000`) |
@@ -1878,5 +1878,5 @@ Control bot behavior via environment variables (useful for advanced setups):
 
 Example — run a specific bot with custom polling interval:
 ```bash
-BOT_NAME=my-bot RUN_LOOP_MS=3000 node dexbot.js
+BOT_NAME=my-bot RUN_LOOP_MS=3000 tsx dexbot.ts
 ```

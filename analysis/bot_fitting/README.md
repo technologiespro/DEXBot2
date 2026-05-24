@@ -12,25 +12,25 @@ For each of the 4 AMA strategies, it searches for best:
 
 ### Scripts
 
-- `backtest_bot_fitting.js` — lightweight sweep across spread / increment / ratio with basic risk scoring
-- `backtest_ama_sweep.js` — persistent grid simulation with fixed-chain-price mechanics, reposition thresholds, and worker-thread parallelization
+- `backtest_bot_fitting.ts` — lightweight sweep across spread / increment / ratio with basic risk scoring
+- `backtest_ama_sweep.ts` — persistent grid simulation with fixed-chain-price mechanics, reposition thresholds, and worker-thread parallelization
 
 ### Input dependencies
 
 Both scripts require:
 
 - **LP candles JSON** (recommended 1h), from `market_adapter/data/lp/` — pass via `--data`
-- **AMA optimization winners JSON**, from `analysis/ama_fitting/` — for `backtest_ama_sweep.js`, pass via `--results`
+- **AMA optimization winners JSON**, from `analysis/ama_fitting/` — for `backtest_ama_sweep.ts`, pass via `--results`
 
 ### Run
 
 ```bash
 # Lightweight sweep
-node analysis/bot_fitting/backtest_bot_fitting.js \
+tsx analysis/bot_fitting/backtest_bot_fitting.ts \
   --data <path-to-lp-candles.json>
 
 # Persistent grid simulation with AMA winners
-node analysis/bot_fitting/backtest_ama_sweep.js \
+tsx analysis/bot_fitting/backtest_ama_sweep.ts \
   --data <path-to-lp-candles.json> \
   --results <path-to-optimization-results.json>
 ```
@@ -38,7 +38,7 @@ node analysis/bot_fitting/backtest_ama_sweep.js \
 Optional tuning:
 
 ```bash
-node analysis/bot_fitting/backtest_bot_fitting.js \
+tsx analysis/bot_fitting/backtest_bot_fitting.ts \
   --data <path-to-lp-candles.json> \
   --spread 0.4:1.6:0.1 \
   --increment 0.2:0.8:0.1 \
@@ -72,7 +72,7 @@ The console also prints best parameter set per AMA with matched pairs, fill effi
 
 ## Persistent Grid Simulation Details
 
-`backtest_ama_sweep.js` models the real bot mechanics:
+`backtest_ama_sweep.ts` models the real bot mechanics:
 
 - Orders sit at FIXED chain prices until canceled or filled
 - When AMA drifts past reposition threshold, grid re-centers
@@ -93,7 +93,7 @@ Search grid defaults — centered around bot defaults (spread=2%, increment=0.5%
 | Spread ≥ factor × increment | 2.1 |
 
 ```bash
-node analysis/bot_fitting/backtest_ama_sweep.js \
+tsx analysis/bot_fitting/backtest_ama_sweep.ts \
   --data <path-to-lp-candles.json> \
   --results <path-to-optimization-results.json> \
   --spread 4:16:1 --increment 0.5:4:0.25

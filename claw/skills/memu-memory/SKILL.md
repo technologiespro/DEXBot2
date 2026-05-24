@@ -148,14 +148,14 @@ For Hermes:
 ```yaml
 mcp_servers:
   memu:
-    command: "node"
-    args: ["/path/to/claw/scripts/memu_mcp_server.js", "--memu-dir", "/path/to/claw/data/memu"]
+    command: "tsx"
+    args: ["/path/to/claw/scripts/memu_mcp_server.ts", "--memu-dir", "/path/to/claw/data/memu"]
 ```
 
 For NanoBot/PicoClaw:
 
 ```bash
-node scripts/memu_mcp_server.js --memu-dir /path/to/claw/data/memu
+tsx scripts/memu_mcp_server.ts --memu-dir /path/to/claw/data/memu
 ```
 
 ## Proactive Memory Patterns

@@ -61,7 +61,7 @@ DEXBot2 is a ground-up rewrite in Node.js that prioritizes production correctnes
 | **Language** | Python 3.6+ | Node.js LTS (JavaScript) |
 | **GUI** | PyQt5 (desktop GUI) | None (CLI only) |
 | **CLI Framework** | Click | Custom native async prompts |
-| **Blockchain Client** | `bitshares` Python library | `btsdex` Node.js library |
+| **Blockchain Client** | `bitshares` Python library | `modules/bitshares-native/` (native) |
 | **Key Management** | `uptick` (BitShares wallet) | Custom AES-256-GCM encrypted store |
 | **Database / State** | SQLite via SQLAlchemy ORM | JSON flat files (no DB) |
 | **DB Migrations** | Alembic | N/A |
@@ -69,7 +69,7 @@ DEXBot2 is a ground-up rewrite in Node.js that prioritizes production correctnes
 | **External APIs** | CoinGecko, CCXT, Waves | No CEX APIs; adapter can consume on-chain/pool/Kibana candle inputs |
 | **Container** | Docker (Ubuntu 18.04) | Docker (multi-stage) |
 | **Dashboard** | PyQt5 GUI | CLI/PM2 logs; Claw/runtime automation surface |
-| **Testing** | pytest + Docker testnet | Native Node.js assert (171 `test_*.js` files; 93 scripts in `npm test`) |
+| **Testing** | pytest + Docker testnet | Native Node.js assert (171 `test_*.ts` files; 93 scripts in `npm test`) |
 | **CI/CD** | Travis CI, AppVeyor | GitHub Actions / local deterministic script suite |
 | **Packaging** | PyInstaller (Win/Mac/Linux binaries) | npm / PM2 ecosystem |
 
@@ -114,7 +114,7 @@ DEXBot brings a full Python desktop GUI and a strategy plugin model. DEXBot2 is 
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                    DEXBot (dexbot_class.js)               │
+│                    DEXBot (dexbot_class.ts)               │
 │              Trading Loop + Lifecycle Manager             │
 │  ┌────────────────────────────────────────────────────┐  │
 │  │                   OrderManager                      │  │
@@ -286,7 +286,7 @@ Price Scale (geometric, e.g. 0.4% increments):
 | **Partial Fill Tracking** | Basic | Advanced (per-order tracking) |
 | **Dust Detection** | No | Yes |
 | **Stale State Detection** | No | Version epoch tracking |
-| **Fill Replay Dedupe** | No formal persistent layer | Yes (`processed_fill_store.js`) |
+| **Fill Replay Dedupe** | No formal persistent layer | Yes (`processed_fill_store.ts`) |
 | **Startup Reconcile** | Basic restart from SQLite | Dedicated startup reconciliation pipeline |
 
 ---
@@ -323,7 +323,7 @@ workers:
 
 - **Format:** JSON (`profiles/bots.json`, `profiles/general.settings.json`)
 - **No GUI wizard** — manual JSON editing plus scripts/runtime helpers
-- **14 frozen configuration objects** in `modules/constants.js` (loaded at startup)
+- **14 frozen configuration objects** in `modules/constants.ts` (loaded at startup)
 - Runtime parameters via environment variables (`RUN_LOOP_MS`, `BOT_NAME`, launcher/daemon settings, etc.)
 - `profiles/general.settings.json` for global timing/limits/node settings
 - `profiles/market_profiles.json` and market-adapter settings for AMA profiles, dynamic weights, and recalculation thresholds
@@ -357,7 +357,7 @@ workers:
 | **Multi-bot in one config** | Yes (YAML array) | Yes (JSON array) |
 | **Runtime overrides** | Env vars (limited) | Env vars (full) |
 | **Hot reload** | Partial (restart worker) | Limited via runtime snapshots/triggers; process restart for static bot config |
-| **Validation** | `config_validator.py` | `modules/order/utils/validate.js` |
+| **Validation** | `config_validator.py` | `modules/order/utils/validate.ts` |
 | **Documentation** | Strategy ConfigElement docs | README + developer guide + architecture/security/accounting docs |
 
 ---
@@ -367,13 +367,13 @@ workers:
 | Feature | DEXBot | DEXBot2 |
 |---|---|---|
 | **Exchange** | BitShares DEX | BitShares DEX |
-| **Client Library** | `bitshares` (Python, v0.5.x) | `btsdex` (Node.js, v0.7.x) |
+| **Client Library** | `bitshares` (Python, v0.5.x) | `modules/bitshares-native/` (native) |
 | **Key Management** | `uptick` library | Custom AES-256-GCM + RAM-only password |
 | **Connection Mode** | WebSocket (event-driven) | WebSocket (polling + subscriptions) |
 | **Multi-node Failover** | Yes (latency-sorted) | Yes (health-checked) |
 | **External Price Feeds** | CoinGecko, CCXT, Waves | No CEX feed dependency; market adapter consumes on-chain/pool/Kibana candles |
 | **Account Type** | Single or multi-account | Per-bot account |
-| **Order Operations** | Place, cancel, update via `bitshares` lib | Place, cancel, update via `btsdex` |
+| **Order Operations** | Place, cancel, update via `bitshares` lib | Place, cancel, update via native implementation |
 | **Asset Metadata** | Fetched via `bitshares` | Fetched on startup, cached |
 | **Balance Queries** | Per tick via library | Periodic + event-triggered |
 | **Fee Handling** | Basic (relies on library) | Advanced (reservation system, fee accounting) |
@@ -487,10 +487,10 @@ Where:
 ### DEXBot2
 
 - **CLI-only** (no GUI)
-- `dexbot.js`: multi-bot management, config viewing, log tailing
-- `bot.js`: single bot launcher
-- `pm2.js`: PM2 orchestration (start, stop, restart, status, logs)
-- `unlock-start.js`: single-prompt startup helper
+- `dexbot.ts`: multi-bot management, config viewing, log tailing
+- `bot.ts`: single bot launcher
+- `pm2.ts`: PM2 orchestration (start, stop, restart, status, logs)
+- `unlock-start.ts`: single-prompt startup helper
 - Claw scripts and modules expose automation-friendly operations for profiles, chain actions, position health, and launcher workflows
 - Designed for operators comfortable with terminal, JSON config, and service logs
 
@@ -527,7 +527,7 @@ Where:
   - Auto-restart on crash
   - `ecosystem.config.js` template for PM2
   - Log management (PM2 log rotation)
-- **credential-daemon.js**: RAM-only key management daemon
+- **credential-daemon.ts**: RAM-only key management daemon
 - Docker: multi-stage Dockerfile
 - Launch modes for full bot startup or credential-daemon-only runtime
 - No binary packages — requires Node.js runtime
@@ -563,7 +563,7 @@ Where:
 
 - **AES-256-GCM encrypted key storage** (`profiles/keys.json`)
 - **RAM-only master password**: never written to disk (set only in environment, wiped after use)
-- `credential-daemon.js`: manages key decryption in a separate daemon process
+- `credential-daemon.ts`: manages key decryption in a separate daemon process
 - Config in plain JSON but no keys stored in config (separate encrypted store)
 - `.gitignore` ensures `keys.json` and sensitive files are never committed
 - **Fund invariant enforcement**: prevents accidental overdraft
@@ -601,7 +601,7 @@ Where:
 ### DEXBot2
 
 - **Framework:** Native Node.js `assert` module (no external test framework)
-- **171 `test_*.js` files** in the repository, with **93 scripts in `npm test`** covering:
+- **171 `test_*.ts` files** in the repository, with **93 scripts in `npm test`** covering:
   - Unit tests: accounting, strategy, grid, manager logic
   - Copy-on-Write semantics: COW commits, guards, concurrent fills
   - Edge cases: ghost orders, partial fills, BTS fee accounting, precision
@@ -619,7 +619,7 @@ Where:
 | Feature | DEXBot | DEXBot2 |
 |---|---|---|
 | **Framework** | pytest | Native Node.js assert |
-| **Test Count** | 32 Python test files | 171 `test_*.js` files; 93 scripts in `npm test` |
+| **Test Count** | 32 Python test files | 171 `test_*.ts` files; 93 scripts in `npm test` |
 | **Test Types** | Unit + integration | Unit + integration + edge-case + runtime regression |
 | **Testnet Integration** | Yes (Docker) | No (mocks) |
 | **External Dependency** | pytest, Docker | None |
@@ -763,7 +763,7 @@ Where:
 | **Total Commits** | 2281 | 1326 at current HEAD |
 | **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large JS runtime + adapter + Claw + analysis + tests |
 | **Source Files** | 72 Python files in `dexbot/` | 370 JS files across the repo |
-| **Test Files** | 32 Python test files | 171 `test_*.js` files |
+| **Test Files** | 32 Python test files | 171 `test_*.ts` files |
 | **Documentation** | Sphinx docs + README | 18+ Markdown docs plus Claw/analysis docs |
 | **Strategies** | 3 + plugins | 1 |
 | **Max Concurrent Bots** | Many (one process) | Many (one process per bot, PM2) |

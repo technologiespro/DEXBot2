@@ -50,7 +50,7 @@ npm run analysis:tradingview -- \
 CLI direct equivalent:
 
 ```bash
-node analysis/tradingview/analyze_tradingview.js \
+tsx analysis/tradingview/analyze_tradingview.ts \
   --source market_adapter \
   --bot-key <bot-key>
 ```
@@ -69,7 +69,7 @@ node analysis/tradingview/analyze_tradingview.js \
 ### From a Market Adapter Candle Snapshot
 
 ```bash
-node analysis/tradingview/analyze_tradingview.js \
+tsx analysis/tradingview/analyze_tradingview.ts \
   --source market_adapter \
   --bot-key <bot-key> \
   --chart analysis/charts/<pair>_tradingview.html
@@ -80,7 +80,7 @@ The `--source market_adapter` flag tells the exporter to look up candle data fro
 ### From an Explicit Candle File
 
 ```bash
-node analysis/tradingview/analyze_tradingview.js \
+tsx analysis/tradingview/analyze_tradingview.ts \
   --file market_adapter/data/market_adapter_<bot-key>_1h.json \
   --chart analysis/charts/<pair>_tradingview.html
 ```
@@ -88,7 +88,7 @@ node analysis/tradingview/analyze_tradingview.js \
 Using LP candle files directly:
 
 ```bash
-node analysis/tradingview/analyze_tradingview.js \
+tsx analysis/tradingview/analyze_tradingview.ts \
   --file market_adapter/data/lp/<pair-folder>/lp_pool_<id>_<interval>.json \
   --chart analysis/charts/tradingview_chart.html
 ```
@@ -107,7 +107,7 @@ If you pass a raw JSON file, the runner normalizes the candles before rendering.
 Use the market adapter LP exporter to pull blockchain-backed candles before generating the HTML:
 
 ```bash
-node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --lookback 26280h
+tsx market_adapter/inputs/fetch_lp_data.ts --pool 133 --precA 4 --precB 5 --interval 1h --lookback 26280h
 ```
 
 That writes a JSON file under `market_adapter/data/lp/` which you can then pass to the TradingView exporter.
@@ -143,7 +143,7 @@ For manual pool discovery, use `--pool`, `--precA`, and `--precB` instead of `--
 - VWMA is disabled by default.
 - AMA is auto-enabled when the bot has `gridPrice: "ama"` (or ama1-4), otherwise disabled by default.
 - AMA settings priority: bot-specific `ama` object > market profile > constants (112.7).
-- The AMA controls start with the bot-specific AMA, then pair-specific entry from `profiles/market_profiles.json` when available, falling back to AMA3 values from `modules/constants.js`.
+- The AMA controls start with the bot-specific AMA, then pair-specific entry from `profiles/market_profiles.json` when available, falling back to AMA3 values from `modules/constants.ts`.
 - The AMA `Reset` button restores the HTML defaults, not the browser-stored overrides.
 - Indicator, timeframe, and scale changes are persisted in browser `localStorage` for the generated HTML.
 - The price axis defaults to log base `10`, with a toolbar switch for `Log` / `Linear`.

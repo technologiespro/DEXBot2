@@ -10,8 +10,8 @@ Use this skill for DEXBot2 startup orchestration, PM2 startup, and credential-da
 ## What To Do
 
 - Read the companion reference for the exact command matrix.
-- Keep launcher parsing in `modules/launcher/launch_modes.js`.
-- Keep daemon lifecycle handling in `modules/launcher/credential_daemon.js`.
+- Keep launcher parsing in `modules/launcher/launch_modes.ts`.
+- Keep daemon lifecycle handling in `modules/launcher/credential_daemon.ts`.
 - Keep `unlock-start` as the direct single-prompt path for Docker and local use.
 - Keep `claw-only` independent of bot config and BitShares connection checks.
 

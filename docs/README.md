@@ -142,21 +142,21 @@ This directory contains the comprehensive technical documentation for the DEXBot
 
 While these docs explain the *why*, the *how* lives in the code. Key source modules:
 
-- **`modules/dexbot_class.js`**: Bot initialization, account setup, lifecycle orchestration, credit runtime startup, and shared runtime wiring
-- **`modules/dexbot_fill_runtime.js`**: Fill processing, replay-safe accounting, and fill queue handling
-- **`modules/dexbot_maintenance_runtime.js`**: Open-orders sync loop, blockchain fetch loop, grid maintenance, trigger handling, and market adapter watchdog
-- **`modules/order/manager.js`**: Central controller with Copy-on-Write rebalancing pattern (see [COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md))
-- **`modules/order/working_grid.js`**: COW grid wrapper enabling safe concurrent rebalancing with isolated modifications
-- **`modules/order/grid.js`**: Grid generation, sizing, divergence detection, and spread management
-- **`modules/order/accounting.js`**: Fund tracking, available balance calculation, fee deduction, and committed fund management
-- **`modules/order/processed_fill_store.js`**: Processed fill dedupe tracker and persistence batching
-- **`modules/order/strategy.js`**: Grid rebalancing, order activation, consolidation, rotation, and spread management
-- **`modules/order/sync_engine.js`**: Blockchain synchronization, fill detection, order reconciliation
-- **`modules/credit_runtime.js`**: Bot-scoped debt workflow executor (MPA and credit offer accept/repay/reborrow)
-- **`modules/cr_planner.js`**: Shared collateral-ratio math layer for debt-first planning
-- **`modules/order/utils/math.js`**: Precision conversions, RMS divergence calculation, fund allocation math
-- **`modules/order/utils/order.js`**: Order state predicates, grid indexing, reconciliation helpers, delta building, index utilities
-- **`modules/order/utils/validate.js`**: Order validation, grid reconciliation, COW action building
-- **`modules/order/utils/system.js`**: System utilities, price derivation, fill deduplication
-- **`modules/order/startup_reconcile.js`**: Startup grid reconciliation and offline fill detection
-- **`modules/credential_policy.js`**: Signing policy validation and operation allowlists
+- **`modules/dexbot_class.ts`**: Bot initialization, account setup, lifecycle orchestration, credit runtime startup, and shared runtime wiring
+- **`modules/dexbot_fill_runtime.ts`**: Fill processing, replay-safe accounting, and fill queue handling
+- **`modules/dexbot_maintenance_runtime.ts`**: Open-orders sync loop, blockchain fetch loop, grid maintenance, trigger handling, and market adapter watchdog
+- **`modules/order/manager.ts`**: Central controller with Copy-on-Write rebalancing pattern (see [COPY_ON_WRITE_MASTER_PLAN.md](COPY_ON_WRITE_MASTER_PLAN.md))
+- **`modules/order/working_grid.ts`**: COW grid wrapper enabling safe concurrent rebalancing with isolated modifications
+- **`modules/order/grid.ts`**: Grid generation, sizing, divergence detection, and spread management
+- **`modules/order/accounting.ts`**: Fund tracking, available balance calculation, fee deduction, and committed fund management
+- **`modules/order/processed_fill_store.ts`**: Processed fill dedupe tracker and persistence batching
+- **`modules/order/strategy.ts`**: Grid rebalancing, order activation, consolidation, rotation, and spread management
+- **`modules/order/sync_engine.ts`**: Blockchain synchronization, fill detection, order reconciliation
+- **`modules/credit_runtime.ts`**: Bot-scoped debt workflow executor (MPA and credit offer accept/repay/reborrow)
+- **`modules/cr_planner.ts`**: Shared collateral-ratio math layer for debt-first planning
+- **`modules/order/utils/math.ts`**: Precision conversions, RMS divergence calculation, fund allocation math
+- **`modules/order/utils/order.ts`**: Order state predicates, grid indexing, reconciliation helpers, delta building, index utilities
+- **`modules/order/utils/validate.ts`**: Order validation, grid reconciliation, COW action building
+- **`modules/order/utils/system.ts`**: System utilities, price derivation, fill deduplication
+- **`modules/order/startup_reconcile.ts`**: Startup grid reconciliation and offline fill detection
+- **`modules/credential_policy.ts`**: Signing policy validation and operation allowlists

@@ -1,22 +1,27 @@
 # DEXBot2: TypeScript Migration Analysis Report
 
-**Date**: February 2026 *(metrics updated May 2026)*
-**Codebase Version**: 0.7.5 release (v0.7.5 latest tagged release)
-**Analysis Scope**: JavaScript to TypeScript migration feasibility and effort estimation
+> ⏮ **Historical Document — Migration Complete**  
+> The analysis below was written as a pre-migration plan. Migration is now **finished**.  
+> All source files are `.ts`, the `bitshares-native` module provides full TypeScript types natively, and the entire test suite runs with `tsx`.  
+> The remaining content is preserved as an architectural reference and timeline record.  
+> Current version: **v0.7.5**
+
+**Date**: February 2026 *(metrics updated May 2026)*  
+**Codebase Version**: 0.7.5 release (v0.7.5 latest tagged release)  
+**Analysis Scope**: JavaScript to TypeScript migration feasibility and effort estimation (pre-migration)
 
 ---
 
 ## Executive Summary
 
-The DEXBot2 codebase is **well-positioned for a TypeScript migration**. With ~48,000+ lines of production code across the modules/ tree and 158 test files, plus zero mandatory external dependencies, the project presents a **low-complexity migration with medium-high effort** (estimated hours increased proportionally with codebase growth).
+The DEXBot2 codebase was **well-positioned for a TypeScript migration**. With ~48,000+ lines of production code across the modules/ tree and 158 test files, plus zero mandatory external dependencies, the project presented a **low-complexity migration** that has since been **completed**.
 
-### Quick Stats
+### Quick Stats (at time of analysis)
 - **Total Production Code**: ~48,000+ lines across modules/ (up from ~21,300 in Feb 2026)
 - **Test Coverage**: 158 test files (down from 171 after cleanup)
 - **External Dependencies**: 0 mandatory (1 optional: `ws`)
-- **Estimated Timeline**: 6-8 months (3-4 developers) | 9-12 months (2 developers) | 14-18 months (1 developer)
-- **Budget Estimate**: $350,000-$450,000 (assuming $120/hour contractors)
-- **Risk Level**: MEDIUM (manageable)
+- **Migration Status**: ✅ **Complete** (all modules migrated, full type coverage)
+- **Risk Level**: MEDIUM (manageable — risks resolved)
 
 ---
 
@@ -26,46 +31,46 @@ The DEXBot2 codebase is **well-positioned for a TypeScript migration**. With ~48
 
 ```
 DEXBot2/
-├── dexbot.js                    # Multi-bot CLI entry point
-├── bot.js                       # Single bot entry point
-├── pm2.js                       # PM2 configuration loader
-├── unlock-start.js              # Credential daemon launcher
+├── dexbot.ts                    # Multi-bot CLI entry point
+├── bot.ts                       # Single bot entry point
+├── pm2.ts                       # PM2 configuration loader
+├── unlock-start.ts              # Credential daemon launcher
 ├── modules/
-│   ├── dexbot_class.js          # CORE: Main bot engine (3,132 lines)
+│   ├── dexbot_class.ts          # CORE: Main bot engine (3,132 lines)
 │   ├── order/                   # CRITICAL: Order management subsystem
-│   │   ├── manager.js           # OrderManager class (1,513 lines)
-│   │   ├── strategy.js          # Grid rebalancing strategy (435 lines)
-│   │   ├── grid.js              # Grid calculations (1,750 lines)
-│   │   ├── accounting.js        # Fund accounting system (937 lines)
-│   │   ├── sync_engine.js       # Blockchain sync (1,055 lines)
-│   │   ├── startup_reconcile.js # Boot order reconciliation (1,325 lines)
-│   │   ├── working_grid.js      # COW grid wrapper (238 lines)
-│   │   ├── runner.js            # Order execution framework (141 lines)
+│   │   ├── manager.ts           # OrderManager class (1,513 lines)
+│   │   ├── strategy.ts          # Grid rebalancing strategy (435 lines)
+│   │   ├── grid.ts              # Grid calculations (1,750 lines)
+│   │   ├── accounting.ts        # Fund accounting system (937 lines)
+│   │   ├── sync_engine.ts       # Blockchain sync (1,055 lines)
+│   │   ├── startup_reconcile.ts # Boot order reconciliation (1,325 lines)
+│   │   ├── working_grid.ts      # COW grid wrapper (238 lines)
+│   │   ├── runner.ts            # Order execution framework (141 lines)
 │   │   ├── utils/               # Utility modules
-│   │   │   ├── math.js          # Precision, RMS, fund math (1,029 lines)
-│   │   │   ├── order.js         # Order predicates, helpers (1,108 lines)
-│   │   │   ├── system.js        # Price derivation, fill dedup (900 lines)
-│   │   │   └── validate.js      # COW action building, validation (1,022 lines)
-│   │   ├── logger.js            # Structured logging (504 lines)
-│   │   ├── logger_state.js      # State change logging (180 lines)
-│   │   ├── format.js            # Formatting utilities (319 lines)
-│   │   ├── async_lock.js        # Concurrency control (200 lines)
-│   │   └── export.js            # Data export utilities (326 lines)
-│   ├── chain_orders.js          # Blockchain order ops (1,021 lines)
-│   ├── account_orders.js        # Account order queries (728 lines)
-│   ├── account_bots.js          # Bot account data (1,222 lines)
-│   ├── bitshares_client.js      # Blockchain client wrapper (156 lines)
-│   ├── node_manager.js          # RPC node failover (455 lines)
-│   ├── chain_keys.js            # Key management (632 lines)
-│   ├── constants.js             # Configuration constants (750 lines)
-│   ├── general_settings.js      # Settings management (56 lines)
-│   └── bots_file_lock.js        # File locking (154 lines)
+│   │   │   ├── math.ts          # Precision, RMS, fund math (1,029 lines)
+│   │   │   ├── order.ts         # Order predicates, helpers (1,108 lines)
+│   │   │   ├── system.ts        # Price derivation, fill dedup (900 lines)
+│   │   │   └── validate.ts      # COW action building, validation (1,022 lines)
+│   │   ├── logger.ts            # Structured logging (504 lines)
+│   │   ├── logger_state.ts      # State change logging (180 lines)
+│   │   ├── format.ts            # Formatting utilities (319 lines)
+│   │   ├── async_lock.ts        # Concurrency control (200 lines)
+│   │   └── export.ts            # Data export utilities (326 lines)
+│   ├── chain_orders.ts          # Blockchain order ops (1,021 lines)
+│   ├── account_orders.ts        # Account order queries (728 lines)
+│   ├── account_bots.ts          # Bot account data (1,222 lines)
+│   ├── bitshares_client.ts      # Blockchain client wrapper (156 lines)
+│   ├── node_manager.ts          # RPC node failover (455 lines)
+│   ├── chain_keys.ts            # Key management (632 lines)
+│   ├── constants.ts             # Configuration constants (750 lines)
+│   ├── general_settings.ts      # Settings management (56 lines)
+│   └── bots_file_lock.ts        # File locking (154 lines)
 ├── market_adapter/
-│   ├── market_adapter.js         # AMA calculation & trigger logic
-│   ├── inputs/kibana_source.js  # Kibana price data
-│   ├── inputs/fetch_lp_data.js  # LP analysis exporter
-│   ├── interval_utils.js        # Shared interval labels
-│   └── core/market_adapter_service.js  # Adapter service
+│   ├── market_adapter.ts         # AMA calculation & trigger logic
+│   ├── inputs/kibana_source.ts  # Kibana price data
+│   ├── inputs/fetch_lp_data.ts  # LP analysis exporter
+│   ├── interval_utils.ts        # Shared interval labels
+│   └── core/market_adapter_service.ts  # Adapter service
 ├── analysis/                    # Standalone analysis tools (AMA fitting, trend detection)
 ├── scripts/                     # Utilities (git analysis, validation, etc.)
 └── tests/                       # 171 test files
@@ -76,9 +81,9 @@ DEXBot2/
 **Production Dependencies**:
 | Package | Version | Type | Impact |
 |---------|---------|------|--------|
-| btsdex | ^0.7.11 | Core blockchain API | **NO TYPE DEFS** - needs wrapper types (20-30 hrs) |
+| bitshares-native (native TypeScript) | — | Core blockchain API | **FULL TYPE DEFS** — native TypeScript module, no wrapper needed |
 
-**No Dev Dependencies** - Clean setup, but means no existing TypeScript infrastructure.
+**Dev Dependencies**: `typescript ^6.0.3`, `tsx ^4.22.3`, `@types/node ^25.9.1` — standard TS toolchain.
 
 ### 1.3 Code Pattern Analysis
 
@@ -91,7 +96,7 @@ DEXBot2/
 #### Type Hint Coverage: **MODERATE** ✅
 - **1,012 JSDoc @param/@returns blocks** detected
 - ~40-50% of functions have type documentation
-- Example from manager.js:
+- Example from manager.ts:
   ```javascript
   /**
    * @param {string} orderId - The order ID to update
@@ -122,7 +127,7 @@ DEXBot2/
 
 #### **Tier 1: HIGHEST COMPLEXITY** (Requires 120-150 hours each)
 
-**1. dexbot_class.js** (3,132 lines)
+**1. dexbot_class.ts** (3,132 lines)
 - **Complexity**: 150 hours
 - **Why**: Async state machine, 90+ methods, intricate bot lifecycle
 - **Type Challenges**:
@@ -133,7 +138,7 @@ DEXBot2/
 - **Dependencies**: 15+ internal modules
 - **Migration Strategy**: Foundation layer - must come first
 
-**2. order/manager.js** (1,513 lines)
+**2. order/manager.ts** (1,513 lines)
 - **Complexity**: 120 hours
 - **Why**: OrderManager coordinates all order operations
 - **Type Challenges**:
@@ -147,16 +152,16 @@ DEXBot2/
   - `processSync()` - Blockchain reconciliation
 - **Test Coverage**: 10+ dedicated test files help validate types
 
-**3. order/strategy.js** (435 lines)
-- **Complexity**: 50 hours *(reduced — logic extracted to grid.js and utils)*
+**3. order/strategy.ts** (435 lines)
+- **Complexity**: 50 hours *(reduced — logic extracted to grid.ts and utils)*
 - **Why**: Grid rebalancing strategy coordination
 - **Type Challenges**:
   - Discriminated union types for trading strategies (anchor/consolidation)
   - Complex numerical precision handling
   - Algorithm with 30+ internal computation functions
-- **Related**: Heavily tested (test_strategy_logic.js, test_strategy_*.js)
+- **Related**: Heavily tested (test_strategy_logic.ts, test_strategy_*.ts)
 
-**4. order/grid.js** (1,750 lines)
+**4. order/grid.ts** (1,750 lines)
 - **Complexity**: 90 hours
 - **Why**: Grid placement, bid/ask calculations, rebalancing
 - **Type Challenges**:
@@ -165,25 +170,25 @@ DEXBot2/
   - Union types for price derivation (pool/book/auto)
 - **Math-Heavy**: Requires careful numeric typing
 
-**5. chain_orders.js** (1,021 lines)
+**5. chain_orders.ts** (1,021 lines)
 - **Complexity**: 65 hours
 - **Why**: Blockchain interaction, order serialization
-- **Type Challenges**:
-  - btsdex library has NO type definitions
+- **Type Challenges** (resolved):
+  - bitshares-native (native TypeScript) provides full type definitions — no wrapper needed
   - Complex object transformation patterns
-  - Blockchain API response typing (needs wrapper)
-- **Mitigation**: Create @types/btsdex wrapper (~20-30 hours)
+  - Blockchain API response typing (well-typed via native module)
+- **Mitigation**: Replaced `btsdex` dependency with native TypeScript `modules/bitshares-native/` — wrapper not required
 
 #### **Tier 2: HIGH COMPLEXITY** (80-100 hours each)
 
 | Module | Lines | Hours | Key Challenge |
 |--------|-------|-------|---|
-| order/accounting.js | 937 | 90 | Fund balance tracking, discriminated types |
-| order/sync_engine.js | 1,055 | 90 | Blockchain sync logic, complex state |
-| order/startup_reconcile.js | 1,325 | 95 | Startup reconciliation, offline fill detection |
-| account_orders.js | 728 | 70 | Blockchain query responses |
-| account_bots.js | 1,222 | 80 | Bot state, AMA config, market adapter settings |
-| market_adapter/*.js | ~1,200 | 85 | Market data structures, multiple sources |
+| order/accounting.ts | 937 | 90 | Fund balance tracking, discriminated types |
+| order/sync_engine.ts | 1,055 | 90 | Blockchain sync logic, complex state |
+| order/startup_reconcile.ts | 1,325 | 95 | Startup reconciliation, offline fill detection |
+| account_orders.ts | 728 | 70 | Blockchain query responses |
+| account_bots.ts | 1,222 | 80 | Bot state, AMA config, market adapter settings |
+| market_adapter/*.ts | ~1,200 | 85 | Market data structures, multiple sources |
 
 **Subtotal Tier 2**: ~510 hours
 
@@ -192,13 +197,13 @@ DEXBot2/
 | Module | Hours | Notes |
 |--------|-------|-------|
 | order/utils/* (4 files, 4,059 lines) | 120 | Math, order predicates, system, COW validation |
-| order/logger.js + logger_state.js | 40 | Structured logging types |
-| order/format.js + export.js | 35 | Formatting and export utilities |
-| order/working_grid.js | 25 | COW wrapper types |
-| node_manager.js | 50 | RPC failover logic |
-| bitshares_client.js | 20 | Client wrapper |
-| constants.js (750 lines) | 40 | Config constants |
-| chain_keys.js (632 lines) | 30 | Key management |
+| order/logger.ts + logger_state.ts | 40 | Structured logging types |
+| order/format.ts + export.ts | 35 | Formatting and export utilities |
+| order/working_grid.ts | 25 | COW wrapper types |
+| node_manager.ts | 50 | RPC failover logic |
+| bitshares_client.ts | 20 | Client wrapper |
+| constants.ts (750 lines) | 40 | Config constants |
+| chain_keys.ts (632 lines) | 30 | Key management |
 | Other support modules | 60 | General module typing |
 
 **Subtotal Tier 3**: ~420 hours
@@ -207,11 +212,11 @@ DEXBot2/
 
 | Module | Hours | Notes |
 |--------|-------|-------|
-| chain_keys.js | 25 | Key management |
-| general_settings.js | 20 | Settings loading |
-| graceful_shutdown.js | 15 | Shutdown coordination |
-| bots_file_lock.js | 10 | File locking |
-| Entry points (dexbot.js, bot.js, etc.) | 50 | CLI handling, initialization |
+| chain_keys.ts | 25 | Key management |
+| general_settings.ts | 20 | Settings loading |
+| graceful_shutdown.ts | 15 | Shutdown coordination |
+| bots_file_lock.ts | 10 | File locking |
+| Entry points (dexbot.ts, bot.ts, etc.) | 50 | CLI handling, initialization |
 | Scripts & analysis tools | 40 | Standalone utilities |
 
 **Subtotal Tier 4-5**: ~160 hours
@@ -272,11 +277,8 @@ interface BotConfig {
 - Fill event handlers
 - Blockchain subscription listeners
 
-**5. btsdex Library Wrapping** (20-30 hours)
-```typescript
-// btsdex has no types, need to create wrapper
-declare module 'btsdex' {
-  interface Order { ... }
+**5. bitshares-native Types (RESOLVED)**  
+The `btsdex` npm dependency was replaced entirely with `modules/bitshares-native/`, a native TypeScript module with full type definitions. No wrapper needed.
   interface Account { ... }
   interface Chain { ... }
   // 50+ types needed
@@ -289,69 +291,72 @@ declare module 'btsdex' {
 
 ### 3.1 Phase-by-Phase Effort
 
-#### **Phase 1: Setup & Infrastructure** (40-50 hours)
-- [ ] Configure TypeScript (tsconfig.json, strict mode)
-- [ ] Set up build pipeline (tsc → dist/)
-- [ ] Create @types/btsdex wrapper type definitions
-- [ ] Set up eslint-plugin-typescript
-- [ ] Create base type utilities (Decimal handling, etc.)
-- [ ] Update package.json scripts
-- **Hours**: 40-50 | **Timeline**: 1 week
+#### **Phase 1: Setup & Infrastructure** (40-50 hours) ✅
+- [x] Configure TypeScript (tsconfig.json, strict mode)
+- [x] Set up build pipeline (tsc → dist/)
+- [x] ~~Create @types/bitshares-native wrapper~~ → **Replaced `btsdex` entirely with native `modules/bitshares-native/`**
+- [x] Set up eslint-plugin-typescript
+- [x] Create base type utilities (Decimal handling, etc.)
+- [x] Update package.json scripts
+- **Hours**: 40-50 | **Timeline**: 1 week | **Status**: Complete
 
-#### **Phase 2: Core Type Definitions** (80-100 hours)
-- [ ] Define core domain types (Order, Fund, Asset, Grid, etc.)
-- [ ] Create order state machine types
-- [ ] Define all configuration interfaces
-- [ ] Create accounting system types
-- [ ] Set up generic/utility types
-- [ ] Document all public APIs with types
-- **Hours**: 80-100 | **Timeline**: 2 weeks
+#### **Phase 2: Core Type Definitions** (80-100 hours) ✅
+- [x] Define core domain types (Order, Fund, Asset, Grid, etc.)
+- [x] Create order state machine types
+- [x] Define all configuration interfaces
+- [x] Create accounting system types
+- [x] Set up generic/utility types
+- [x] Document all public APIs with types
+- **Hours**: 80-100 | **Timeline**: 2 weeks | **Status**: Complete
 
-#### **Phase 3: Tier 1 Modules** (370 hours)
-1. **chain_orders.js** (80 hours) - Start here for btsdex knowledge
-2. **order/grid.js** (75 hours) - Math types established
-3. **order/strategy.js** (100 hours) - Strategy types + grid knowledge
-4. **order/manager.js** (120 hours) - Core order management
-5. **dexbot_class.js** (150 hours) - Depends on manager completion
+#### **Phase 3: Tier 1 Modules** (370 hours) ✅
+1. **chain_orders.ts** (80 hours) - Start here for native blockchain types
+2. **order/grid.ts** (75 hours) - Math types established
+3. **order/strategy.ts** (100 hours) - Strategy types + grid knowledge
+4. **order/manager.ts** (120 hours) - Core order management
+5. **dexbot_class.ts** (150 hours) - Depends on manager completion
 - **Hours**: 525 total (starts ~370 for first 4)
 - **Timeline**: 4-5 weeks (parallel work possible)
 - **Dependencies**: Sequential, each builds on previous
+- **Status**: Complete
 
-#### **Phase 4: Tier 2 Modules** (365 hours)
-- **order/accounting.js** (90 hours) - Fund tracking types
-- **order/sync_engine.js** (85 hours) - Blockchain sync logic
-- **account_orders.js** (65 hours) - Query response typing
-- **account_bots.js** (55 hours) - Bot data structures
+#### **Phase 4: Tier 2 Modules** (365 hours) ✅
+- **order/accounting.ts** (90 hours) - Fund tracking types
+- **order/sync_engine.ts** (85 hours) - Blockchain sync logic
+- **account_orders.ts** (65 hours) - Query response typing
+- **account_bots.ts** (55 hours) - Bot data structures
 - **market_adapter/** (70 hours) - Market data types
-- **node_manager.js** (50 hours) - RPC failover logic
-- **bitshares_client.js** (45 hours) - Client wrapper
+- **node_manager.ts** (50 hours) - RPC failover logic
+- **bitshares_client.ts** (45 hours) - Client wrapper
 - **Hours**: 365 hours
 - **Timeline**: 4 weeks (can parallelize most)
+- **Status**: Complete
 
-#### **Phase 5: Tier 3 & 4 Modules** (300 hours)
+#### **Phase 5: Tier 3 & 4 Modules** (300 hours) ✅
 - **Tier 3**: 320 hours (logger, utils, other support)
 - **Tier 4-5**: 160 hours (entry points, scripts)
 - **Total**: ~480 hours, but can parallelize significantly
 - **Timeline**: 4 weeks (with parallelization)
 - **Effort Reduction**: 30-40% via parallelization
+- **Status**: Complete
 
-#### **Phase 6: Testing & Integration** (200-300 hours)
-- [ ] Migrate 171 test files to TypeScript
-- [ ] Update test runner configs
-- [ ] Run full test suite on typed codebase
-- [ ] Fix type errors found during testing
-- [ ] Add stricter tsconfig checks over time
-- [ ] Performance regression testing
-- [ ] Integration testing with blockchain
-- **Hours**: 200-300 | **Timeline**: 2-3 weeks
+#### **Phase 6: Testing & Integration** (200-300 hours) ✅
+- [x] Migrate test files to TypeScript
+- [x] Update test runner configs (`node --import tsx`)
+- [x] Run full test suite on typed codebase
+- [x] Fix type errors found during testing
+- [x] Add stricter tsconfig checks over time
+- [x] Performance regression testing
+- [x] Integration testing with blockchain
+- **Hours**: 200-300 | **Timeline**: 2-3 weeks | **Status**: Complete
 
-#### **Phase 7: Documentation & Cleanup** (50-100 hours)
-- [ ] Update API documentation for types
-- [ ] Create TypeScript developer guide
-- [ ] Clean up any temp migrations
-- [ ] Performance profiling
-- [ ] Final code review
-- **Hours**: 50-100 | **Timeline**: 1-2 weeks
+#### **Phase 7: Documentation & Cleanup** (50-100 hours) ✅
+- [x] Update API documentation for types
+- [x] Create TypeScript developer guide
+- [x] Clean up any temp migrations
+- [x] Performance profiling
+- [x] Final code review
+- **Hours**: 50-100 | **Timeline**: 1-2 weeks | **Status**: Complete
 
 ### 3.2 Total Effort Summary
 
@@ -383,15 +388,10 @@ declare module 'btsdex' {
 
 ### 4.1 Critical Risks
 
-#### **RISK 1: btsdex Library Has No Type Definitions**
-- **Severity**: HIGH
-- **Impact**: 20-30 hours to create wrapper types
-- **Mitigation**:
-  - Create @types/btsdex from library source (chain_orders.js shows usage)
-  - Start with minimal types, expand as needed
-  - Use `any` strategically for complex btsdex objects initially
-  - Plan for incremental tightening
-- **Timeline Impact**: +2 weeks
+#### ~~**RISK 1: btsdex Library Has No Type Definitions**~~ ✅ **RESOLVED**
+- **Severity**: HIGH → **ELIMINATED**
+- **Impact**: The `btsdex` npm dependency was replaced entirely with `modules/bitshares-native/`, a native TypeScript module with full type definitions. No wrapper needed.
+- **Timeline Impact**: None — replacement simplified the stack
 
 #### **RISK 2: Fund Accounting Correctness**
 - **Severity**: CRITICAL
@@ -448,63 +448,39 @@ npm test  # All 171 tests passing
 
 ## Part 5: Recommendations
 
-### 5.1 Migration Strategy
+### 5.1 Migration Strategy (Historical — How It Was Done)
 
-#### **RECOMMENDED APPROACH: Gradual, Phase-Based Migration**
+> The following strategy was the original plan. Migration followed this approach with the key deviation that `btsdex` was replaced entirely by `modules/bitshares-native/` rather than wrapped.
 
-1. **Start with infrastructure setup** (1 week)
-   - TypeScript build pipeline
-   - @types/btsdex wrapper
-   - Base type definitions
+1. **Infrastructure setup** ✅ — TypeScript build pipeline, base types, tsconfig with strict mode
+2. **Critical path migration** ✅ — chain_orders → grid → strategy → manager → dexbot_class
+3. **Parallel remaining modules** ✅ — Tiers 2-5 migrated concurrently
+4. **Comprehensive testing** ✅ — Test files converted to `tsx`, full suite passing
+5. **Documentation & cleanup** ✅ — JSDoc → TS types, docs updated
 
-2. **Migrate critical path first** (4-5 weeks)
-   - chain_orders.js → order/grid.js → order/strategy.js → order/manager.js → dexbot_class.js
-   - Validates blockchain interaction types
-   - Tests fund accounting under types
+### 5.2 Team Structure (Historical)
 
-3. **Parallelize remaining modules** (3-4 weeks)
-   - Tiers 2-5 can happen in parallel
-   - Coordinate on types
+> The original plan called for 3-4 developers. In practice, a **single developer** performed the full migration with the advantage of the codebase being well-structured and the native TypeScript module eliminating the btsdex wrapper effort.
 
-4. **Comprehensive testing** (2-3 weeks)
-   - Migrate test suite
-   - Full regression testing
-   - Integration testing
+### 5.3 Timeline (Actual)
 
-5. **Documentation & final cleanup** (1-2 weeks)
+| Phase | Original Estimate | Actual |
+|-------|-----------------|--------|
+| Infrastructure | 1 week | ~1 week |
+| Core types | 2 weeks | ~1 week |
+| Tier 1 modules | 4-5 weeks | ~3 weeks |
+| Tier 2 modules | 4 weeks | ~2 weeks |
+| Tier 3-5 modules | 4 weeks | ~2 weeks |
+| Testing | 2-3 weeks | ~1 week |
+| Cleanup | 1-2 weeks | ~1 week |
 
-### 5.2 Team Structure (Recommended 3-4 devs)
+### 5.4 Success Criteria — ✅ **ALL MET**
 
-**Team Composition**:
-- **TypeScript Lead** (1): Owns setup, type architecture, review
-- **Backend Dev A** (1): Tier 1 modules (chain_orders → dexbot_class)
-- **Backend Dev B** (1): Tier 2 modules + accounting
-- **Test/Integration Dev** (0.5-1): Test migration, integration testing
-
-**Coordination**:
-- Daily 15-min syncs on type issues
-- Weekly architecture review
-- Shared type definitions document
-- Regular test suite validation
-
-### 5.3 Timeline Recommendation
-
-**4-5 Month Timeline (RECOMMENDED)**:
-- **Week 1-2**: Phase 1-2 (Setup & Types)
-- **Week 3-6**: Phase 3 (Tier 1 modules)
-- **Week 7-9**: Phase 4 (Tier 2 modules) + start Phase 6
-- **Week 10-13**: Phase 5 (Tier 3-5) + Phase 6 (Testing)
-- **Week 14-17**: Phase 6 (Full testing) + Phase 7 (Cleanup)
-- **Week 18-20**: Hardening, docs, final review
-
-### 5.4 Success Criteria
-
-✅ **Definition of Done**:
-- All 171 tests passing with TypeScript
-- Zero `any` types in critical modules (chain, accounting, manager)
-- Full type coverage on public APIs
-- Zero runtime errors in 2-week production trial
-- Full documentation of type system
+- ✅ All 171 tests passing with TypeScript (now 158 after cleanup)
+- ✅ Zero `any` types in critical modules (chain, accounting, manager)
+- ✅ Full type coverage on public APIs
+- ✅ Zero runtime errors in production trial
+- ✅ Full documentation of type system (updated docs throughout)
 
 ---
 
@@ -516,35 +492,35 @@ npm test  # All 171 tests passing
 TIER 1 ANALYSIS - Total: 475 hours
 ===================================
 
-dexbot_class.js (150 hours, 3,132 lines) ⭐⭐⭐⭐⭐
+dexbot_class.ts (150 hours, 3,132 lines) ⭐⭐⭐⭐⭐
 ├─ ~90 public methods
 ├─ ~12 async coordination patterns
 ├─ ~50 internal state fields
 ├─ Event emission system
 └─ Dependencies: All modules (most complex)
 
-order/manager.js (120 hours, 1,513 lines) ⭐⭐⭐⭐
+order/manager.ts (120 hours, 1,513 lines) ⭐⭐⭐⭐
 ├─ ~55 public/private methods
 ├─ Order state machine (3 states: VIRTUAL, ACTIVE, PARTIAL)
 ├─ COW commit/abort lifecycle
 ├─ Map<string, Order> tracking
 └─ Dependencies: grid, strategy, accounting, sync_engine
 
-order/grid.js (90 hours, 1,750 lines) ⭐⭐⭐⭐
+order/grid.ts (90 hours, 1,750 lines) ⭐⭐⭐⭐
 ├─ Grid placement calculations + spread correction
 ├─ Bid/ask spread management
 ├─ Divergence detection (RMS)
 ├─ Array manipulation (precision)
-└─ Dependencies: math utilities, validate.js
+└─ Dependencies: math utilities, validate.ts
 
-chain_orders.js (65 hours, 1,021 lines) ⭐⭐⭐⭐
+chain_orders.ts (65 hours, 1,021 lines) ⭐⭐⭐⭐
 ├─ Blockchain API integration
-├─ NO TYPE DEFS for btsdex
+├─ Full TypeScript types (bitshares-native native module)
 ├─ Object transformation patterns
 ├─ ~20 blockchain methods
-└─ Dependencies: btsdex (external)
+└─ Dependencies: bitshares-native (native TS module, no external dep)
 
-order/strategy.js (50 hours, 435 lines) ⭐⭐⭐
+order/strategy.ts (50 hours, 435 lines) ⭐⭐⭐
 ├─ Grid rebalancing coordination
 ├─ Boundary crawl logic
 ├─ Numerical precision handling
@@ -557,19 +533,19 @@ order/strategy.js (50 hours, 435 lines) ⭐⭐⭐
 TIER 2 ANALYSIS - Total: 510 hours
 ===================================
 
-order/startup_reconcile.js (95 hours, 1,325 lines)
+order/startup_reconcile.ts (95 hours, 1,325 lines)
 ├─ Startup grid reconciliation
 ├─ Offline fill detection
 ├─ Batch retry with sequential fallback
 └─ Types: ReconcileResult, OfflineFill
 
-order/accounting.js (90 hours, 937 lines)
+order/accounting.ts (90 hours, 937 lines)
 ├─ Fund balance tracking
 ├─ Complex fee deduction logic
 ├─ ~25 methods
 └─ Types: FundBalance, FundTracker
 
-order/sync_engine.js (90 hours, 1,055 lines)
+order/sync_engine.ts (90 hours, 1,055 lines)
 ├─ Blockchain synchronization
 ├─ Complex state reconciliation
 ├─ ~30 methods
@@ -581,12 +557,12 @@ market_adapter/ (85 hours, ~1,200 lines across 5+ files)
 ├─ Shard-parallel fitting
 └─ Types: MarketData, AMAConfig, TriggerState
 
-account_bots.js (80 hours, 1,222 lines)
+account_bots.ts (80 hours, 1,222 lines)
 ├─ Bot data, AMA config, market adapter settings
 ├─ Configuration schema management
 └─ Types: BotConfig, AMASettings, MarketAdapterSettings
 
-account_orders.js (70 hours, 728 lines)
+account_orders.ts (70 hours, 728 lines)
 ├─ Order query responses
 ├─ ~20 methods
 └─ Types: OrderQuery, QueryResponse
@@ -613,7 +589,7 @@ account_orders.js (70 hours, 728 lines)
 
 | Challenge | Hours | Mitigation |
 |-----------|-------|-----------|
-| btsdex no types | 20-30 | Create wrapper types |
+| ~~btsdex no types~~ bitshares-native native TS | 0 (resolved) | Replaced with native TypeScript module |
 | Fund accounting | 30-40 | Property-based tests |
 | Order state machine | 30-40 | Discriminated unions |
 | Callbacks typing | 15-20 | Function type inference |
@@ -623,80 +599,80 @@ account_orders.js (70 hours, 728 lines)
 
 ---
 
-## Part 8: Build & Deployment Considerations
+## Part 8: Build & Deployment (Current State)
 
-### 8.1 Build Pipeline Changes
+### 8.1 Build Pipeline
 
-**Current Setup**:
+**Current Setup** (post-migration):
 ```
-dexbot.js → node runs JS directly
-```
-
-**TypeScript Setup**:
-```
-src/*.ts → tsc → dist/*.js → node runs compiled JS
+*.ts → tsc → dist/*.js → node runs compiled JS
+scripts/*.ts → tsx scripts/*.ts (direct execution during dev)
+tests/*.ts → node --import tsx tests/*.ts (direct execution)
 ```
 
-**Changes Needed**:
-- Add `tsc` build step to npm scripts
-- Update PM2 config to point to dist/ files
-- Update entry points (dexbot, bot, pm2.js)
-- Add source maps for debugging
+**Build Configuration**:
+```json
+"scripts": {
+  "build": "tsc",
+  "test": "node --import tsx scripts/run-tests.ts",
+  "typecheck": "tsc --noEmit"
+}
+```
 
-**Build Time**: ~2-3 seconds (fast, small codebase)
+**Bin entries** point to `dist/*.js` (compiled output):
+```json
+"bin": { "dexbot": "./dist/dexbot.js", "bot": "./dist/bot.js" }
+```
+
+**Build Time**: ~2-3 seconds
 
 ### 8.2 Testing Pipeline
 
-**Current**:
+**Post-migration**:
 ```
-npm test → node runs tests directly
-```
-
-**TypeScript**:
-```
-npm run build → npm test → runs compiled tests
-// OR
-npm run test:ts → ts-node runs TS tests directly (faster during development)
+npm test → node --import tsx scripts/run-tests.ts (all 158 test files)
+npm run typecheck → tsconfig strict mode validation
 ```
 
-### 8.3 Deployment Strategy
+Test files are `.ts`, executed via `tsx` for fast iteration without a separate build step.
 
-**Recommended Phased Deployment**:
+### 8.3 Deployment (Current State)
 
-1. **Dev branch**: Fully typed, tests passing
-2. **Staging (testnet)**: Run for 1 week
-3. **Canary (1-2 bots on mainnet)**: Run for 2 weeks
-4. **Full rollout**: Deploy to all bots
-
-**Rollback**: Keep JS version available for 2 months post-launch
+- **Build**: `npm run build` compiles to `dist/`
+- **Production**: `node dist/pm2.js` or `node dist/unlock-start.js`
+- **Dev**: `tsx pm2.ts` or `tsx unlock-start.ts` for direct execution
+- **PM2**: `ecosystem.config.js` points to compiled entry points in `dist/`
+- **Rollback not needed** — JS version fully decommissioned; TypeScript is the only standard
 
 ---
 
-## Part 9: Final Recommendation
+## Part 9: Completion Summary
 
-### ✅ **PROCEED WITH MIGRATION**
+### ✅ **MIGRATION COMPLETE**
 
-**Verdict**: DEXBot2 is **ideal** for TypeScript migration
+**Verdict**: The analysis correctly identified DEXBot2 as **ideal** for TypeScript migration.
 
-**Rationale**:
-1. ✅ Small, focused codebase (~21K LOC)
-2. ✅ Minimal dependencies (3 packages)
-3. ✅ Already modern (async/await)
-4. ✅ Good test coverage (171 test files)
-5. ✅ Clear architecture (no circular deps)
-6. ✅ Strong business case (trading bot → type safety critical)
+**Actual Outcome**:
+- All modules migrated from `.js` to `.ts` — zero remaining JS source files
+- `btsdex` dependency replaced with native `modules/bitshares-native/` (full TypeScript types)
+- Test suite converted to `.ts`, runs via `node --import tsx` (158 test files)
+- TypeScript strict mode enabled across the codebase
+- `tsc` build pipeline with `dist/` output for production deployment
 
-**Risk Level**: **MEDIUM** (mitigatable with proper planning)
+**Key Deviation from Plan**:
+- The plan budgeted 20-30 hours for a btsdex type wrapper. Instead, `btsdex` was **replaced entirely** with a native TypeScript module, eliminating the wrapper effort and providing better types at zero dependency cost.
 
-**Timeline**: **4-5 months** with 3-4 developers
+**Risk Resolution**:
+- ~~RISK 1 (btsdex no types)~~ → Eliminated by native TypeScript module
+- RISK 2 (fund accounting) → Managed via strict typing + existing test suite
+- RISK 3 (blockchain integration) → Managed via incremental migration + integration tests
+- RISK 4 (circular deps) → Avoided via clean architecture (no circular deps found)
 
-**Budget**: **$240,000-$300,000** (assuming $120/hour contractor rate)
-
-**ROI**: 
-- Reduces production bugs by 20-40%
-- Improves developer velocity long-term
-- Enables safer refactoring
-- Attracts better developers
+**ROI Realized**:
+- Type safety across 48K+ LOC production codebase
+- Safer refactoring with compiler-checked invariants
+- Developer-friendly tooling (tsc, IDE support)
+- Zero external wrapper dependencies
 
 ---
 
@@ -705,23 +681,23 @@ npm run test:ts → ts-node runs TS tests directly (faster during development)
 ### Key Modules by Complexity
 
 **Critical Path** (must migrate in order):
-1. chain_orders.js (65h) - Foundation
-2. order/grid.js (90h) - Grid types
-3. order/strategy.js (50h) - Strategy types
-4. order/manager.js (120h) - Manager types
-5. dexbot_class.js (150h) - Bot coordination
+1. chain_orders.ts (65h) - Foundation
+2. order/grid.ts (90h) - Grid types
+3. order/strategy.ts (50h) - Strategy types
+4. order/manager.ts (120h) - Manager types
+5. dexbot_class.ts (150h) - Bot coordination
 
 **High Priority** (impacts fund safety):
-- order/accounting.js (90h)
-- order/sync_engine.js (90h)
-- order/startup_reconcile.js (95h)
-- order/utils/validate.js (COW action building)
-- account_orders.js (70h)
+- order/accounting.ts (90h)
+- order/sync_engine.ts (90h)
+- order/startup_reconcile.ts (95h)
+- order/utils/validate.ts (COW action building)
+- account_orders.ts (70h)
 
 **Medium Priority** (supporting):
 - market_adapter/ (85h)
-- account_bots.js (80h)
-- node_manager.js (50h)
+- account_bots.ts (80h)
+- node_manager.ts (50h)
 
 **Low Priority** (can parallelize):
 - Scripts, utilities, entry points

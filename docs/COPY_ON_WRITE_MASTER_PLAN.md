@@ -88,12 +88,12 @@ and mutates an order object in-place). The COW layer provides the transactional 
 ## Implementation Status
 
 ### Phase 0: Dependencies ✅
-- Created `modules/order/utils/order_comparison.js` - Epsilon-based order comparison
-- Created `modules/order/utils/grid_indexes.js` - Index building utilities (used by WorkingGrid)
+- Created `modules/order/utils/order_comparison.ts` - Epsilon-based order comparison
+- Created `modules/order/utils/grid_indexes.ts` - Index building utilities (used by WorkingGrid)
 
 ### Phase 1: Infrastructure ✅
-- Created `modules/order/working_grid.js` - WorkingGrid class
-- Added `COW_PERFORMANCE` thresholds to `modules/constants.js`
+- Created `modules/order/working_grid.ts` - WorkingGrid class
+- Added `COW_PERFORMANCE` thresholds to `modules/constants.ts`
 
 ### Phase 2: Core Integration ✅
 - `performSafeRebalance()` → delegates to `_applySafeRebalanceCOW()`
@@ -142,7 +142,7 @@ When fills arrive during REBALANCING state (before BROADCASTING):
 3. Continue with current rebalance using updated working copy
 
 ```javascript
-// Implementation in _applyOrderUpdate (manager.js)
+// Implementation in _applyOrderUpdate (manager.ts)
 async _applyOrderUpdate(order, context, options = {}) {
     // ... update master grid (immutable swap) ...
 
@@ -154,7 +154,7 @@ async _applyOrderUpdate(order, context, options = {}) {
     this._syncWorkingGridFromMasterMutation(order.id, context);
 }
 
-// WorkingGrid.syncFromMaster (working_grid.js)
+// WorkingGrid.syncFromMaster (working_grid.ts)
 syncFromMaster(masterGrid, orderId, masterVersion) {
     const masterOrder = masterGrid.get(orderId);
     if (masterOrder) {
@@ -215,12 +215,12 @@ NEW FILL ARRIVES (Individual Order Fill)
 - Commit succeeds only when stale/version/delta guards all pass
 
 ### Phase 5: Tests ✅
-- `tests/test_cow_master_plan.js` - 11 COW core tests
-- `tests/test_cow_commit_guards.js` - Commit guard regression tests
-- `tests/test_cow_concurrent_fills.js` - Concurrent fill integration tests
-- `tests/test_sync_lock_routing.js` - Lock routing verification tests
-- `tests/test_working_grid.js` - WorkingGrid unit tests
-- `tests/benchmark_cow.js` - Performance benchmarks
+- `tests/test_cow_master_plan.ts` - 11 COW core tests
+- `tests/test_cow_commit_guards.ts` - Commit guard regression tests
+- `tests/test_cow_concurrent_fills.ts` - Concurrent fill integration tests
+- `tests/test_sync_lock_routing.ts` - Lock routing verification tests
+- `tests/test_working_grid.ts` - WorkingGrid unit tests
+- `tests/benchmark_cow.ts` - Performance benchmarks
 
 ### Phase 6: Divergence & Cache Updates ✅
 **Critical Rule**: Divergence checks and cache function updates only execute when NO fills are pending.
@@ -300,11 +300,11 @@ await updateOrdersOnChainBatch(cowResult); // Execute via COW
 ### Phase 9: Cleanup ✅
 - Removed snapshot/rollback pattern; `performSafeRebalance()` now delegates to `_applySafeRebalanceCOW()`
 - Removed duplicate `_updateOrdersOnChainBatchCOW`
-- Removed legacy rollback references in `dexbot_class.js`
+- Removed legacy rollback references in `dexbot_class.ts`
 
 ## Key Methods
 
-### OrderManager (manager.js)
+### OrderManager (manager.ts)
 | Method | Description |
 |--------|-------------|
 | `performSafeRebalance(fills, excludeIds)` | Entry point - delegates to COW |
@@ -315,13 +315,13 @@ await updateOrdersOnChainBatch(cowResult); // Execute via COW
 | `_currentWorkingGrid` | Reference to working grid during rebalance for fill sync |
 | `syncFromMaster(masterGrid, orderId)` | Sync specific order from master to working grid (WorkingGrid method) |
 
-### DEXBot (dexbot_class.js)
+### DEXBot (dexbot_class.ts)
 | Method | Description |
 |--------|-------------|
 | `updateOrdersOnChainBatch(rebalanceResult)` | Routes to COW broadcast |
 | `_updateOrdersOnChainBatchCOW(rebalanceResult)` | Full COW broadcast with commit |
 
-### WorkingGrid (working_grid.js)
+### WorkingGrid (working_grid.ts)
 | Method | Description |
 |--------|-------------|
 | `syncFromMaster(masterGrid, orderId)` | Sync specific order from master to working grid during fill processing |
@@ -401,30 +401,30 @@ NEW FILL ARRIVES
 
 ## Files Created
 
-- `modules/order/utils/order_comparison.js` - Epsilon-based order comparison, delta building
-- `modules/order/utils/grid_indexes.js` - Index building and validation utilities
-- `modules/order/working_grid.js` - WorkingGrid class (COW wrapper with clone/delta/stale tracking)
-- `tests/test_cow_master_plan.js` - Core COW tests
-- `tests/test_cow_commit_guards.js` - Commit guard regression tests
-- `tests/test_cow_concurrent_fills.js` - Concurrent fill integration tests
-- `tests/test_cow_divergence_correction.js` - Divergence correction COW tests
-- `tests/test_working_grid.js` - WorkingGrid unit tests
-- `tests/benchmark_cow.js` - Performance benchmarks
+- `modules/order/utils/order_comparison.ts` - Epsilon-based order comparison, delta building
+- `modules/order/utils/grid_indexes.ts` - Index building and validation utilities
+- `modules/order/working_grid.ts` - WorkingGrid class (COW wrapper with clone/delta/stale tracking)
+- `tests/test_cow_master_plan.ts` - Core COW tests
+- `tests/test_cow_commit_guards.ts` - Commit guard regression tests
+- `tests/test_cow_concurrent_fills.ts` - Concurrent fill integration tests
+- `tests/test_cow_divergence_correction.ts` - Divergence correction COW tests
+- `tests/test_working_grid.ts` - WorkingGrid unit tests
+- `tests/benchmark_cow.ts` - Performance benchmarks
 
 ## Files Modified
 
-- `modules/constants.js` - Added COW_PERFORMANCE thresholds
-- `modules/order/manager.js` - Added COW methods, immutable master (Object.freeze), version tracking
-- `modules/dexbot_class.js` - Wired COW broadcast, removed legacy rollback
-- `modules/order/sync_engine.js` - Uses `_applyOrderUpdate` (lock-free) for all sync paths
-- `modules/order/startup_reconcile.js` - Uses `_applySync` (lock-free) when inside `_gridLock`
-- `modules/order/utils/system.js` - Migrated `applyGridDivergenceCorrections` to full COW pattern
-- `modules/order/grid.js` - Migrated `updateGridFromBlockchainSnapshot` to return COW result instead of modifying master directly
+- `modules/constants.ts` - Added COW_PERFORMANCE thresholds
+- `modules/order/manager.ts` - Added COW methods, immutable master (Object.freeze), version tracking
+- `modules/dexbot_class.ts` - Wired COW broadcast, removed legacy rollback
+- `modules/order/sync_engine.ts` - Uses `_applyOrderUpdate` (lock-free) for all sync paths
+- `modules/order/startup_reconcile.ts` - Uses `_applySync` (lock-free) when inside `_gridLock`
+- `modules/order/utils/system.ts` - Migrated `applyGridDivergenceCorrections` to full COW pattern
+- `modules/order/grid.ts` - Migrated `updateGridFromBlockchainSnapshot` to return COW result instead of modifying master directly
 
 ## Test Results
 
 ```
-Core COW Tests (test_cow_master_plan.js):
+Core COW Tests (test_cow_master_plan.ts):
   ✓ COW-001: Master unchanged on failure
   ✓ COW-002: Master updated only on success
   ✓ COW-003: Index transfer
@@ -437,11 +437,11 @@ Core COW Tests (test_cow_master_plan.js):
   ✓ COW-010: Memory stats
   ✓ COW-011: No spurious updates on unchanged grid
 
-Commit Guard Tests (test_cow_commit_guards.js):
+Commit Guard Tests (test_cow_commit_guards.ts):
   ✓ COW-COMMIT-001: Version mismatch rejection
   ✓ COW-COMMIT-002: Empty delta rejection
 
-Concurrent Fill Tests (test_cow_concurrent_fills.js):
+Concurrent Fill Tests (test_cow_concurrent_fills.ts):
   ✓ COW-FILL-001: Fill during REBALANCING syncs to working grid
   ✓ COW-FILL-002: Fill during BROADCASTING syncs to working grid
   ✓ COW-FILL-003: Commit rejected after fill during broadcast
@@ -450,7 +450,7 @@ Concurrent Fill Tests (test_cow_concurrent_fills.js):
   ✓ COW-FILL-006: _cloneOrder handles missing rawOnChain
   ✓ COW-FILL-007: Staleness reason includes phase context
 
-Divergence Correction Tests (test_cow_divergence_correction.js):
+Divergence Correction Tests (test_cow_divergence_correction.ts):
   ✓ Surplus orders are CANCELLED (not UPDATE to size=0)
   ✓ Working grid preserves order states (ACTIVE, PARTIAL)
   ✓ Orders within target window get size updates
@@ -483,21 +483,21 @@ Divergence detection and cache function updates are deferred when fills are pend
 
 ### Validation Gates
 Run these tests before promotion:
-- `node tests/test_engine_integration.js`
-- `node tests/test_sequential_multi_fill.js`
-- `node tests/test_sync_logic.js`
-- `node tests/test_ghost_order_fix.js`
-- `node tests/test_working_grid.js`
-- `node tests/test_cow_master_plan.js`
-- `node tests/test_cow_commit_guards.js`
-- `node tests/test_cow_concurrent_fills.js`
-- `node tests/test_cow_divergence_correction.js`
+- `tsx tests/test_engine_integration.ts`
+- `tsx tests/test_sequential_multi_fill.ts`
+- `tsx tests/test_sync_logic.ts`
+- `tsx tests/test_ghost_order_fix.ts`
+- `tsx tests/test_working_grid.ts`
+- `tsx tests/test_cow_master_plan.ts`
+- `tsx tests/test_cow_commit_guards.ts`
+- `tsx tests/test_cow_concurrent_fills.ts`
+- `tsx tests/test_cow_divergence_correction.ts`
 
 ### Additional Checks
 - Unchanged grids do not emit global COW `update` actions
 - Missing on-chain ACTIVE order with `orderId` appears in `filledOrders` from open-order sync
 
-## Constants Added (modules/constants.js)
+## Constants Added (modules/constants.ts)
 
 ### COW Performance Thresholds
 - `COW_PERFORMANCE.MAX_REBALANCE_PLANNING_MS` - Max time for rebalance planning phase
@@ -527,7 +527,7 @@ Run these tests before promotion:
 
 2. **Atomic Transaction Semantics:** Large boundary shifts (>5 slots) are inherently safe because the COW pattern only commits after successful blockchain confirmation. If market volatility causes rapid shifts during planning, the working grid is simply discarded and replanning occurs on the next cycle.
 
-3. **Resync on Error:** If any blockchain action fails (e.g., "Insufficient funds"), the bot discards the working grid and triggers `startup_reconcile.js` for a fresh blockchain sync.
+3. **Resync on Error:** If any blockchain action fails (e.g., "Insufficient funds"), the bot discards the working grid and triggers `startup_reconcile.ts` for a fresh blockchain sync.
 
 ## Backward Compatibility
 

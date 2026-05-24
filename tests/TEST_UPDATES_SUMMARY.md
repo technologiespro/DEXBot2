@@ -6,15 +6,15 @@ This document summarizes the comprehensive test suite updates added based on the
 
 ## Overview
 Added two new test files to detect and prevent regressions from critical bugfixes:
-- `tests/test_strategy_logic.js` - Strategy engine rebalancing and placement logic
-- `tests/test_accounting_logic.js` - Fund tracking and fee accounting
+- `tests/test_strategy_logic.ts` - Strategy engine rebalancing and placement logic
+- `tests/test_accounting_logic.ts` - Fund tracking and fee accounting
 
 ## Bugs Detected and Tests Added
 
 ### 1. VIRTUAL Order Placement Capping Bug (b913661)
 **Problem**: VIRTUAL orders couldn't activate because their sizes were capped by availablePool, preventing activation of orders with pre-allocated capital.
 
-**Tests Added** (strategy.test.js):
+**Tests Added** (strategy.test.ts):
 - ✅ `should activate VIRTUAL orders at full allocated size regardless of availablePool`
 - ✅ `should only cap size INCREASE, not full order size for VIRTUAL orders`
 
@@ -27,7 +27,7 @@ Added two new test files to detect and prevent regressions from critical bugfixe
 ### 2. PARTIAL Order Update Bug (b913661)
 **Problem**: Non-dust PARTIAL orders weren't being updated, preventing rebalancing when opposite side filled.
 
-**Tests Added** (strategy.test.js):
+**Tests Added** (strategy.test.ts):
 - ✅ `should update dust PARTIAL orders to target size`
 - ✅ `should update non-dust PARTIAL orders for grid rebalancing`
 
@@ -40,7 +40,7 @@ Added two new test files to detect and prevent regressions from critical bugfixe
 ### 3. Grid Divergence & Stale Cache (c02b66d)
 **Problem**: Stale in-memory cache causing false divergence detections during grid comparisons.
 
-**Tests Added** (strategy.test.js):
+**Tests Added** (strategy.test.ts):
 - ✅ `should detect divergence when grid is reloaded`
 - ✅ `should maintain consistent grid state after persistence reload`
 
@@ -53,7 +53,7 @@ Added two new test files to detect and prevent regressions from critical bugfixe
 ### 4. BoundaryIdx Persistence & Recovery (d17ece6)
 **Problem**: Boundary index not persisting across restarts, causing grid misalignment.
 
-**Tests Added** (strategy.test.js):
+**Tests Added** (strategy.test.ts):
 - ✅ `should initialize boundaryIdx from startPrice on first run`
 - ✅ `should recover boundaryIdx from existing BUY orders`
 - ✅ `should persist boundaryIdx across rebalance operations`
@@ -67,7 +67,7 @@ Added two new test files to detect and prevent regressions from critical bugfixe
 ### 5. BUY Side Geometric Weighting - Reverse Parameter (d17ece6)
 **Problem**: Wrong reverse parameter for BUY side weighting, causing incorrect capital distribution.
 
-**Tests Added** (strategy.test.js):
+**Tests Added** (strategy.test.ts):
 - ✅ `should use correct reverse parameter for BUY side weighting`
 - ✅ `should concentrate BUY capital near market price`
 
@@ -80,7 +80,7 @@ Added two new test files to detect and prevent regressions from critical bugfixe
 ### 6. Fund Tracking Integration (32d81ea)
 **Problem**: Bootstrap flag and fund tracking integration not tracking spread correction properly.
 
-**Tests Added** (strategy.test.js):
+**Tests Added** (strategy.test.ts):
 - ✅ `should deduct available funds after new placements`
 - ✅ `should not double-deduct for updates and rotations`
 
@@ -93,7 +93,7 @@ Added two new test files to detect and prevent regressions from critical bugfixe
 ### 7. Rotation Completion (265772d)
 **Problem**: Rotations being skipped instead of completing after divergence checks.
 
-**Tests Added** (strategy.test.js):
+**Tests Added** (strategy.test.ts):
 - ✅ `should complete rotations without skipping`
 - ✅ `should not skip rotations when divergence check succeeds`
 
@@ -106,7 +106,7 @@ Added two new test files to detect and prevent regressions from critical bugfixe
 ### 8. Fee Calculation with isMaker Parameter (d17ece6)
 **Problem**: Missing isMaker parameter in getAssetFees calls causing crashes.
 
-**Tests Added** (strategy.test.js):
+**Tests Added** (strategy.test.ts):
 - ✅ `should correctly process fills with isMaker parameter`
 - ✅ `should account for both maker and taker fees in fill processing`
 
@@ -119,7 +119,7 @@ Added two new test files to detect and prevent regressions from critical bugfixe
 ### 9. Market & Blockchain Taker Fees (7b0a5c5)
 **Problem**: Not accounting for both market and blockchain taker fees in fill processing.
 
-**Tests Added** (accounting.test.js):
+**Tests Added** (accounting.test.ts):
 - ✅ `should account for market taker fees in SELL order proceeds`
 - ✅ `should account for blockchain taker fees in fill processing`
 - ✅ `should correctly calculate net proceeds with both fee types`
@@ -133,7 +133,7 @@ Added two new test files to detect and prevent regressions from critical bugfixe
 ### 10. Fund Precision & Delta Validation (0a3d24d)
 **Problem**: Precision loss and delta validation issues in fund calculations.
 
-**Tests Added** (accounting.test.js):
+**Tests Added** (accounting.test.ts):
 - ✅ `should maintain precision when adding multiple orders`
 - ✅ `should detect fund delta mismatches`
 - ✅ `should validate fund totals after state transitions`
@@ -149,10 +149,10 @@ Added two new test files to detect and prevent regressions from critical bugfixe
 
 ```bash
 # Run all strategy tests
-node tests/test_strategy_logic.js
+node --import tsx tests/test_strategy_logic.ts
 
 # Run accounting tests (with fee enhancements)
-node tests/test_accounting_logic.js
+node --import tsx tests/test_accounting_logic.ts
 
 # Run full test suite
 npm test
@@ -193,7 +193,7 @@ These tests are integrated with the existing test suite:
 npm test
 
 # Run individual test file
-node tests/test_strategy_logic.js
+node --import tsx tests/test_strategy_logic.ts
 ```
 
 ## Notes for Developers
@@ -219,29 +219,29 @@ Coverage for the Feb 7 market crash post-mortem fixes is now split across active
 
 | Test | File | Purpose |
 |------|------|---------|
-| `simulateBatching` | `tests/sim_batching.js` | Verifies fixed-cap behavior: `<=MAX_FILL_BATCH_SIZE` unified; larger queues chunked at max 4 |
-| `recovery retry cooldown and reset` | `tests/test_accounting_logic.js` | Validates count+time-based retry system with cooldown and retry counter behavior |
-| `testSingleStaleCancelBatchUsesStaleOnlyFastPath` | `tests/test_patch17_invariants.js` | Ensures stale-cleaned order IDs prevent double-crediting of delayed orphan fills |
+| `simulateBatching` | `tests/sim_batching.ts` | Verifies fixed-cap behavior: `<=MAX_FILL_BATCH_SIZE` unified; larger queues chunked at max 4 |
+| `recovery retry cooldown and reset` | `tests/test_accounting_logic.ts` | Validates count+time-based retry system with cooldown and retry counter behavior |
+| `testSingleStaleCancelBatchUsesStaleOnlyFastPath` | `tests/test_patch17_invariants.ts` | Ensures stale-cleaned order IDs prevent double-crediting of delayed orphan fills |
 
 **Cache & Stale-Order Handling**:
 
 | Test | File | Purpose |
 |------|------|---------|
-| `testGridResizeRespectsBudgetAfterCap` | `tests/test_patch17_invariants.js` | Verifies capped grid resize never allocates above budget and preserves correct remainder behavior |
-| `testIllegalBatchAbortArmsMaintenanceCooldown` | `tests/test_patch17_invariants.js` | Ensures illegal-state batch hard-abort arms `_maintenanceCooldownCycles` |
-| `testSingleStaleCancelBatchUsesStaleOnlyFastPath` | `tests/test_patch17_invariants.js` | Validates single-op stale cancel recovery avoids unnecessary full sync |
+| `testGridResizeRespectsBudgetAfterCap` | `tests/test_patch17_invariants.ts` | Verifies capped grid resize never allocates above budget and preserves correct remainder behavior |
+| `testIllegalBatchAbortArmsMaintenanceCooldown` | `tests/test_patch17_invariants.ts` | Ensures illegal-state batch hard-abort arms `_maintenanceCooldownCycles` |
+| `testSingleStaleCancelBatchUsesStaleOnlyFastPath` | `tests/test_patch17_invariants.ts` | Validates single-op stale cancel recovery avoids unnecessary full sync |
 
 ### Running Tests
 
 ```bash
 # Run fixed-cap batching simulator
-node tests/sim_batching.js
+node --import tsx tests/sim_batching.ts
 
 # Run recovery retry coverage
-node tests/test_accounting_logic.js
+node --import tsx tests/test_accounting_logic.ts
 
 # Run batch hard-abort/stale-cancel/capped-resize invariants
-node tests/test_patch17_invariants.js
+node --import tsx tests/test_patch17_invariants.ts
 ```
 
 ### Test Details
@@ -333,10 +333,10 @@ MAX_RECOVERY_ATTEMPTS: 5            // Max 5 retries
 Total Tests: 6
 Status: ✅ All passing
 Modules Tested:
-  - dexbot_class.js (batch processing, recovery, hard-abort, stale-cancel)
-  - accounting.js (recovery state management, resetRecoveryState)
-  - order/grid.js (remainder tracking during capped resize)
-  - order/strategy.js (fill boundary shifts, reaction cap precision)
+  - dexbot_class.ts (batch processing, recovery, hard-abort, stale-cancel)
+  - accounting.ts (recovery state management, resetRecoveryState)
+  - order/grid.ts (remainder tracking during capped resize)
+  - order/strategy.ts (fill boundary shifts, reaction cap precision)
 
 Configuration Validated:
   - FILL_PROCESSING.MAX_FILL_BATCH_SIZE
@@ -371,7 +371,7 @@ Fill batching tests are part of the main test suite:
 npm test
 
 # Targeted fixed-cap batching and recovery tests
-node tests/sim_batching.js && node tests/test_accounting_logic.js && node tests/test_patch17_invariants.js
+node --import tsx tests/sim_batching.ts && node --import tsx tests/test_accounting_logic.ts && node --import tsx tests/test_patch17_invariants.ts
 ```
 
 ### Regression Prevention
@@ -401,11 +401,11 @@ The following 5 test files were removed as they referenced deprecated APIs or te
 
 | Test File | Reason | Coverage |
 |-----------|--------|----------|
-| `test_rotation_fallback_recheck.js` | Cleanup verification only; verifying old helper functions were removed | Other tests cover rotation logic |
-| `test_grid_funding_manual.js` | References removed `Grid.updateGridOrderSizesForSide()` API | Strategy module tests cover grid sizing |
-| `test_fee_refinement.js` | Tests old accounting behavior; proceeds now consumed immediately | `test_bts_fee_accounting.js`, `test_fee_backwards_compat.js` |
-| `test_fill_queue_logic.js` | Unit tests internal `_consumeFillQueue` implementation detail | Integration tests & COW pipeline tests cover fills |
-| `test_fix_proceeds_fee_deduction.js` | Uses removed OrderManager methods | `test_accounting_logic.js`, `test_bts_fee_accounting.js` |
+| `test_rotation_fallback_recheck.ts` | Cleanup verification only; verifying old helper functions were removed | Other tests cover rotation logic |
+| `test_grid_funding_manual.ts` | References removed `Grid.updateGridOrderSizesForSide()` API | Strategy module tests cover grid sizing |
+| `test_fee_refinement.ts` | Tests old accounting behavior; proceeds now consumed immediately | `test_bts_fee_accounting.ts`, `test_fee_backwards_compat.ts` |
+| `test_fill_queue_logic.ts` | Unit tests internal `_consumeFillQueue` implementation detail | Integration tests & COW pipeline tests cover fills |
+| `test_fix_proceeds_fee_deduction.ts` | Uses removed OrderManager methods | `test_accounting_logic.ts`, `test_bts_fee_accounting.ts` |
 
 **Impact**: No regression risk. All removed functionality is covered by current active tests.
 
@@ -420,7 +420,7 @@ The following 5 test files were removed as they referenced deprecated APIs or te
 
 When adding new bugfixes:
 1. Create a test that would have caught the bug
-2. Add it to the appropriate test file (strategy.test.js, accounting.test.js, or test_patch*.js)
+2. Add it to the appropriate test file (strategy.test.ts, accounting.test.ts, or test_patch*.ts)
 3. Reference the commit hash in a comment
 4. Update this summary document
 5. Ensure test covers both success and failure paths

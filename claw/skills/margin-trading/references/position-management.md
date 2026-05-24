@@ -112,7 +112,7 @@ Practical range-ratio bands:
 
 ### Unified Plan
 
-The planner in `claw/modules/position_health.js` (`buildMarginTradingPlan(...)`) should therefore produce one unified plan with:
+The planner in `claw/modules/position_health.ts` (`buildMarginTradingPlan(...)`) should therefore produce one unified plan with:
 
 - position assessment
 - target CR resolution
@@ -228,9 +228,9 @@ The evaluation pipeline runs as a cycle:
 discover → trend → assess → recommend
 ```
 
-1. **Discover** (`position_discovery.js`) — scan account's on-chain call orders to find all open debt positions
-2. **Trend** (`feed_price_source.js` + `kalman_trend_analyzer.js`) — fetch feed price and market mid-price per market, update the Kalman-based trend detector
-3. **Assess** (`position_health.js`) — classify each position into a CR zone, check trend alignment, generate prioritized actions
-4. **Recommend** (`decision_loop.js`) — sort actions by priority (immediate → soon → evaluate → fallback), return structured assessment
+1. **Discover** (`position_discovery.ts`) — scan account's on-chain call orders to find all open debt positions
+2. **Trend** (`feed_price_source.ts` + `kalman_trend_analyzer.ts`) — fetch feed price and market mid-price per market, update the Kalman-based trend detector
+3. **Assess** (`position_health.ts`) — classify each position into a CR zone, check trend alignment, generate prioritized actions
+4. **Recommend** (`decision_loop.ts`) — sort actions by priority (immediate → soon → evaluate → fallback), return structured assessment
 
 The loop evaluates and recommends. Execution of recommended actions is a separate concern.

@@ -22,19 +22,19 @@ Over the course of this session, **multiple fallback mechanisms have been system
 
 | File | Pattern Removed | New Behavior |
 |------|-----------------|--------------|
-| `modules/dexbot_class.js` | `config?.assetB?.precision \|\| 8` → `config.assetB.precision` | Must have valid precision or bot fails at startup |
-| `modules/dexbot_class.js` | `config?.assetA?.precision \|\| 8` → `config.assetA.precision` | Same as above |
-| `modules/order/accounting.js` | `config.assetB?.precision \|\| 8` → `config.assetB.precision` | Strict asset precision requirement |
-| `modules/order/accounting.js` | `assets?.assetB?.precision \|\| 8` → `assets.assetB.precision` | Same for assets object |
-| `modules/order/accounting.js` | `assets?.assetA?.precision \|\| 8` → `assets.assetA.precision` | Same for assets object |
-| `modules/order/grid.js` | `config?.assetB?.precision \|\| 8` → `config.assetB.precision` | Grid calculations require valid precision |
-| `modules/order/grid.js` | `config?.assetA?.precision \|\| 8` → `config.assetA.precision` | Same as above |
-| `modules/order/logger.js` | `config?.assetB?.precision \|\| 8` → `config.assetB.precision` | Logging requires valid precision |
-| `modules/order/logger.js` | `config?.assetA?.precision \|\| 8` → `config.assetA.precision` | Same as above |
-| `modules/order/manager.js` | `assets?.assetB?.precision \|\| 8` → `assets.assetB.precision` | Invariant checking requires strict precision |
-| `modules/order/manager.js` | `assets?.assetA?.precision \|\| 8` → `assets.assetA.precision` | Same as above |
-| `modules/order/strategy.js` | `config?.assetB?.precision \|\| 8` → `config.assetB.precision` | Strategy execution requires valid precision |
-| `modules/order/strategy.js` | `config?.assetA?.precision \|\| 8` → `config.assetA.precision` | Same as above |
+| `modules/dexbot_class.ts` | `config?.assetB?.precision \|\| 8` → `config.assetB.precision` | Must have valid precision or bot fails at startup |
+| `modules/dexbot_class.ts` | `config?.assetA?.precision \|\| 8` → `config.assetA.precision` | Same as above |
+| `modules/order/accounting.ts` | `config.assetB?.precision \|\| 8` → `config.assetB.precision` | Strict asset precision requirement |
+| `modules/order/accounting.ts` | `assets?.assetB?.precision \|\| 8` → `assets.assetB.precision` | Same for assets object |
+| `modules/order/accounting.ts` | `assets?.assetA?.precision \|\| 8` → `assets.assetA.precision` | Same for assets object |
+| `modules/order/grid.ts` | `config?.assetB?.precision \|\| 8` → `config.assetB.precision` | Grid calculations require valid precision |
+| `modules/order/grid.ts` | `config?.assetA?.precision \|\| 8` → `config.assetA.precision` | Same as above |
+| `modules/order/logger.ts` | `config?.assetB?.precision \|\| 8` → `config.assetB.precision` | Logging requires valid precision |
+| `modules/order/logger.ts` | `config?.assetA?.precision \|\| 8` → `config.assetA.precision` | Same as above |
+| `modules/order/manager.ts` | `assets?.assetB?.precision \|\| 8` → `assets.assetB.precision` | Invariant checking requires strict precision |
+| `modules/order/manager.ts` | `assets?.assetA?.precision \|\| 8` → `assets.assetA.precision` | Same as above |
+| `modules/order/strategy.ts` | `config?.assetB?.precision \|\| 8` → `config.assetB.precision` | Strategy execution requires valid precision |
+| `modules/order/strategy.ts` | `config?.assetA?.precision \|\| 8` → `config.assetA.precision` | Same as above |
 
 **Impact**:
 - **Risk Reduction**: No silent defaults hiding precision issues
@@ -54,7 +54,7 @@ const buyPrecision = manager.config.assetB.precision;
 
 ### 2. PRICE DERIVATION FALLBACK RESTRUCTURE
 
-**Scope**: `modules/order/utils/system.js` - `derivePrice()` function
+**Scope**: `modules/order/utils/system.ts` - `derivePrice()` function
 **Philosophy**: Make mode semantics explicit - no silent cross-fallback between pool/book
 
 #### Changes:
@@ -112,7 +112,7 @@ return null;
 
 ### 3. ORPHAN ORDER LAX TOLERANCE FALLBACK (Complete Removal)
 
-**Scope**: `modules/order/sync_engine.js` - Pass 2 chain order matching
+**Scope**: `modules/order/sync_engine.ts` - Pass 2 chain order matching
 **Philosophy**: Grid as strict master - no soft matching for orphaned orders
 
 #### Removed Code (23 lines):
@@ -155,24 +155,24 @@ if (!match) {
 - **Orphan Orders**: Left unmatched until strict match occurs
 
 **Helper Function Removal**:
-- Removed `applyChainPriceToGridOrder()` from `modules/order/utils/order.js` (no longer needed)
+- Removed `applyChainPriceToGridOrder()` from `modules/order/utils/order.ts` (no longer needed)
 - Removed from module exports
 
 ---
 
 ### 4. PRICE BOUND FALLBACK — REVERTED
 
-> **Note (March 2026):** This removal was reverted. Relative price resolution (e.g., `"3x"` multiplier syntax) is still active in `resolveConfiguredPriceBound()` at `modules/order/utils/order.js:381`. The function resolves relative expressions first, then falls back to numeric, and throws if neither works. This behavior is intentional — multiplier syntax (`"2x"`, `"15x"`) is a core configuration feature for `minPrice`/`maxPrice` bounds.
+> **Note (March 2026):** This removal was reverted. Relative price resolution (e.g., `"3x"` multiplier syntax) is still active in `resolveConfiguredPriceBound()` at `modules/order/utils/order.ts:381`. The function resolves relative expressions first, then falls back to numeric, and throws if neither works. This behavior is intentional — multiplier syntax (`"2x"`, `"15x"`) is a core configuration feature for `minPrice`/`maxPrice` bounds.
 
 ---
 
 ## Test Updates
 
-### `tests/test_market_price.js`
+### `tests/test_market_price.ts`
 - **Comment Updated**: "Auto Fallback (Pool → Market → Limit Orders)" → "Auto Mode (Pool preferred, Market fallback only in auto)"
 - **Reflects**: Auto mode no longer has cross-fallback to limit orders
 
-### `tests/test_price_derive.js`
+### `tests/test_price_derive.ts`
 **Major Test Logic Change**:
 
 **Before**: Test expected fallback behavior - pool mode could fallback to book

@@ -5,7 +5,7 @@ This document defines the non-negotiable behavioral invariants for the Copy-on-W
 ## Scope
 
 - Applies to COW planning, projection, reconciliation, commit, and fund accounting flows.
-- Primary modules: `modules/order/utils/validate.js`, `modules/order/manager.js`, `modules/order/accounting.js`, `modules/order/working_grid.js`.
+- Primary modules: `modules/order/utils/validate.ts`, `modules/order/manager.ts`, `modules/order/accounting.ts`, `modules/order/working_grid.ts`.
 
 ## Invariants
 
@@ -52,23 +52,23 @@ This document defines the non-negotiable behavioral invariants for the Copy-on-W
 ## Test Mapping
 
 - `INV-COW-001`, `INV-COW-002`
-  - `tests/test_cow_master_plan.js` (`COW-001`, `COW-002`)
-  - `tests/test_cow_commit_guards.js`
+  - `tests/test_cow_master_plan.ts` (`COW-001`, `COW-002`)
+  - `tests/test_cow_commit_guards.ts`
 
 - `INV-REC-001`
-  - `tests/test_cow_master_plan.js` (`COW-016`)
+  - `tests/test_cow_master_plan.ts` (`COW-016`)
 
 - `INV-PROJ-001`
-  - `tests/test_cow_master_plan.js` (`COW-012`, `COW-013`, `COW-014`)
+  - `tests/test_cow_master_plan.ts` (`COW-012`, `COW-013`, `COW-014`)
 
 - `INV-PROJ-002`
-  - `tests/test_cow_master_plan.js` (`COW-018`, `COW-018c`)
+  - `tests/test_cow_master_plan.ts` (`COW-018`, `COW-018c`)
 
 - `INV-PROJ-003`
-  - `tests/test_cow_master_plan.js` (`COW-018b`)
+  - `tests/test_cow_master_plan.ts` (`COW-018b`)
 
 - `INV-DUST-001`
-  - `tests/test_cow_master_plan.js` (`COW-017`)
+  - `tests/test_cow_master_plan.ts` (`COW-017`)
 
 ## Review Checklist (Quick Use)
 

@@ -123,7 +123,7 @@ decrypted.
 
 ## 2. Credential Daemon
 
-The daemon (`credential-daemon.js`) is a long-running local process that holds
+The daemon (`credential-daemon.ts`) is a long-running local process that holds
 the vault key and session cache in RAM. Callers communicate with it over a Unix
 domain socket; the main signing flow never hands raw key bytes to the bot.
 
@@ -269,7 +269,7 @@ through this path.
 ## 6. Startup Path — Daemon-First, Interactive Fallback
 
 ```
-bot.js / dexbot.js
+bot.ts / dexbot.ts
       │
       ▼ probe daemon (probe-account)
   Daemon healthy?
