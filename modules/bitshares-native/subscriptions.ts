@@ -11,7 +11,74 @@ function createSubscriptionManager(chainClient) {
     const subscriptions = new Map();
     let unsubscribeNotice = null;
     let noticeActive = false;
-    const lastDeliveredByAccount = new Map();
+
+    function parseObjectIdInstance(id) {
+        if (typeof id !== 'string') return Number.NaN;
+        const match = id.match(/\.(\d+)$/);
+        return match ? Number(match[1]) : Number.NaN;
+    }
+
+    function sortEntriesOldestFirst(entries) {
+        return entries.sort((left, right) => {
+            const leftInstance = parseObjectIdInstance(left?.id);
+            const rightInstance = parseObjectIdInstance(right?.id);
+            if (!Number.isFinite(leftInstance) || !Number.isFinite(rightInstance)) {
+                return String(left?.id || '').localeCompare(String(right?.id || ''));
+            }
+            return leftInstance - rightInstance;
+        });
+    }
+
+    async function fetchFillHistoryEntries(accountId, stopHistoryId) {
+        const fetchPage = chainClient.history?.getAccountHistoryOperations
+            || chainClient.history?.get_account_history_operations
+            || ((...args) => chainClient.history.call('get_account_history_operations', args));
+
+        const entries = [];
+        const seenIds = new Set();
+        let startHistoryId = SUBSCRIPTIONS.HISTORY_API_OBJECT;
+
+        while (true) {
+            const page = await Promise.resolve(fetchPage(
+                accountId,
+                OP_FILL_ORDER,
+                startHistoryId,
+                stopHistoryId,
+                SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX
+            ));
+
+            if (!Array.isArray(page) || page.length === 0) break;
+
+            for (const entry of page) {
+                if (!entry || !entry.id || seenIds.has(entry.id) || entry.id === stopHistoryId) continue;
+                seenIds.add(entry.id);
+                entries.push(entry);
+            }
+
+            if (page.length < SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX) break;
+
+            const oldestId = page[page.length - 1]?.id;
+            if (!oldestId || oldestId === startHistoryId || oldestId === stopHistoryId) break;
+            startHistoryId = oldestId;
+        }
+
+        return sortEntriesOldestFirst(entries);
+    }
+
+    async function primeLastDeliveredHistoryId(sub) {
+        if (!sub?.accountId) return SUBSCRIPTIONS.HISTORY_API_OBJECT;
+        const fetchPage = chainClient.history?.getAccountHistoryOperations
+            || chainClient.history?.get_account_history_operations
+            || ((...args) => chainClient.history.call('get_account_history_operations', args));
+        const latestFillEntries = await Promise.resolve(fetchPage(
+            sub.accountId,
+            OP_FILL_ORDER,
+            SUBSCRIPTIONS.HISTORY_API_OBJECT,
+            SUBSCRIPTIONS.HISTORY_API_OBJECT,
+            1
+        ));
+        return latestFillEntries?.[0]?.id || SUBSCRIPTIONS.HISTORY_API_OBJECT;
+    }
 
     function ensureNoticeSubscription() {
         if (noticeActive) return;
@@ -109,32 +176,23 @@ function createSubscriptionManager(chainClient) {
             sub.accountId = accountId;
             sub.statisticsId = accData.account?.statistics || sub.statisticsId || null;
 
-            const historyId = accData.account?.statistics
-                ? await getHistoryId(accountId)
-                : null;
+            if (!sub.lastDeliveredHistoryId) {
+                sub.lastDeliveredHistoryId = await primeLastDeliveredHistoryId(sub);
+            }
 
-            if (!historyId) return;
+            const history = await fetchFillHistoryEntries(accountId, sub.lastDeliveredHistoryId);
+            if (history.length === 0) return;
 
-            const history = await chainClient.history.getAccountHistory(
-                accountId,
-                SUBSCRIPTIONS.HISTORY_API_OBJECT,
-                Math.min(SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX, Math.max(SUBSCRIPTIONS.HISTORY_LOOKBACK_MIN, noticeObjectIds.length * 5)),
-                historyId
-            );
-
-            if (!Array.isArray(history)) return;
-
-            const delivered = lastDeliveredByAccount.get(accountId) || new Set();
             const fills = [];
             for (const entry of history) {
-                if (!entry || !entry.op || !entry.id || delivered.has(entry.id)) continue;
+                if (!entry || !entry.op || !entry.id) continue;
                 const opData = entry.op;
                 if (Array.isArray(opData) && opData[0] === OP_FILL_ORDER) {
                     fills.push({
                         type: 'fill',
                         op: opData,
-                        block: entry.block_num,
-                        trx: entry.trx_id,
+                        block_num: entry.block_num,
+                        trx_id: entry.trx_id,
                         id: entry.id,
                     });
                 }
@@ -159,30 +217,12 @@ function createSubscriptionManager(chainClient) {
                     return;
                 }
 
-                for (const fill of fills) {
-                    delivered.add(fill.id);
-                }
-            }
-
-            if (delivered.size > SUBSCRIPTIONS.DELIVERED_CACHE_MAX) {
-                const trimmed = Array.from(delivered).slice(-SUBSCRIPTIONS.DELIVERED_CACHE_TRIM);
-                lastDeliveredByAccount.set(accountId, new Set(trimmed));
-            } else {
-                lastDeliveredByAccount.set(accountId, delivered);
+                sub.lastDeliveredHistoryId = fills[fills.length - 1]?.id || sub.lastDeliveredHistoryId;
             }
         } catch (err: any) {
             if (sub.onError) {
                 try { sub.onError(err); } catch (_: any) {}
             }
-        }
-
-        async function getHistoryId(accId) {
-            // Note: account_statistics.most_recent_op is account_history_id_type (2.9.x),
-            // but get_account_history expects operation_history_id_type (1.11.x).
-            // The API treats a default-constructed operation_history_id_type (1.11.0)
-            // as "start from most recent" (max). Use that instead to avoid type mismatch
-            // API errors that would silently drop fills.
-            return SUBSCRIPTIONS.HISTORY_API_OBJECT;
         }
     }
 
@@ -200,6 +240,7 @@ function createSubscriptionManager(chainClient) {
                 accountName,
                 accountId: null,
                 statisticsId: null,
+                lastDeliveredHistoryId: SUBSCRIPTIONS.HISTORY_API_OBJECT,
                 active: false,
                 callbacks: new Set(),
                 onError: null,
@@ -215,6 +256,8 @@ function createSubscriptionManager(chainClient) {
                 subscriptions.delete(accountName);
                 throw new Error(`Could not resolve subscribed account: ${accountName}`);
             }
+
+            entry.lastDeliveredHistoryId = await primeLastDeliveredHistoryId(entry);
 
             try {
                 await chainClient.db.call('set_subscribe_callback', [

@@ -191,6 +191,7 @@ function createChainClient(config = {}) {
     const HISTORY_METHODS = [
         'getMarketHistory', 'get_market_history', 'getMarketHistoryBuckets', 'get_market_history_buckets',
         'get_account_history_by_operations', 'getAccountHistory', 'get_account_history',
+        'getAccountHistoryOperations', 'get_account_history_operations',
         'get_liquidity_pool_history', 'get_liquidity_pool_history_by_sequence',
         'get_relative_account_history',
     ];
