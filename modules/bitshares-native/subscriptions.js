@@ -6,7 +6,6 @@ const { SUBSCRIPTIONS, OPERATIONS } = NATIVE_CLIENT;
 const SUBSCRIBE_CALLBACK_ID = SUBSCRIPTIONS.CALLBACK_ID;
 const OP_FILL_ORDER = OPERATIONS.FILL_ORDER;
 const FILL_OBJECT_REGEX = new RegExp('^' + SUBSCRIPTIONS.FILL_OBJECT_PREFIX.replace('.', '\\.') + '\\.');
-const [FILL_SPACE, FILL_TYPE] = SUBSCRIPTIONS.FILL_OBJECT_PREFIX.split('.');
 
 function createSubscriptionManager(chainClient) {
     const subscriptions = new Map();
@@ -55,35 +54,47 @@ function createSubscriptionManager(chainClient) {
         if (!Array.isArray(data) || !sub.accountId) return true;
 
         let sawFillObject = false;
+        let sawKnownAccountObject = false;
+        let sawAccountScopedObject = false;
         for (const item of data) {
             if (!item || typeof item !== 'object') continue;
             const id = typeof item.id === 'string' ? item.id : null;
-            if (!id || !FILL_OBJECT_REGEX.test(id)) continue;
-            sawFillObject = true;
-            if (item.owner && item.owner === sub.accountId) {
-                return true;
+            if (!id) continue;
+
+            if (FILL_OBJECT_REGEX.test(id)) {
+                sawFillObject = true;
+                if (item.owner && item.owner === sub.accountId) {
+                    return true;
+                }
+                continue;
+            }
+
+            if (/^(1\.2|2\.6)\.\d+$/.test(id)) {
+                sawAccountScopedObject = true;
+            }
+
+            if (id === sub.accountId || id === sub.statisticsId) {
+                sawKnownAccountObject = true;
             }
         }
 
+        if (sawKnownAccountObject) return true;
+        if (sawAccountScopedObject) return false;
         return !sawFillObject;
     }
 
     async function processObjects(sub, data) {
         if (!data || !Array.isArray(data)) return;
 
-        const objectIds = [];
+        const noticeObjectIds = [];
         for (const item of data) {
             if (!item) continue;
             const id = typeof item === 'object' ? item.id : item;
             if (typeof id !== 'string') continue;
-
-            const parts = id.split('.');
-            if (parts.length === 3 && parts[0] === FILL_SPACE && parts[1] === FILL_TYPE) {
-                objectIds.push(id);
-            }
+            noticeObjectIds.push(id);
         }
 
-        if (objectIds.length === 0) return;
+        if (noticeObjectIds.length === 0) return;
 
         try {
             const accounts = await chainClient.db.get_full_accounts([sub.accountId || sub.accountName], false);
@@ -92,6 +103,8 @@ function createSubscriptionManager(chainClient) {
             const accData = accounts[0][1];
             const accountId = accData.account?.id || sub.accountId;
             if (!accountId) return;
+            sub.accountId = accountId;
+            sub.statisticsId = accData.account?.statistics || sub.statisticsId || null;
 
             const historyId = accData.account?.statistics
                 ? await getHistoryId(accountId)
@@ -102,7 +115,7 @@ function createSubscriptionManager(chainClient) {
             const history = await chainClient.history.getAccountHistory(
                 accountId,
                 SUBSCRIPTIONS.HISTORY_API_OBJECT,
-                Math.min(SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX, Math.max(SUBSCRIPTIONS.HISTORY_LOOKBACK_MIN, objectIds.length * 5)),
+                Math.min(SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX, Math.max(SUBSCRIPTIONS.HISTORY_LOOKBACK_MIN, noticeObjectIds.length * 5)),
                 historyId
             );
 
@@ -184,6 +197,7 @@ function createSubscriptionManager(chainClient) {
             entry = {
                 accountName,
                 accountId: null,
+                statisticsId: null,
                 active: false,
                 callbacks: new Set(),
                 onError: null,
@@ -193,6 +207,7 @@ function createSubscriptionManager(chainClient) {
             const accounts = await chainClient.db.get_full_accounts([accountName], true);
             if (accounts && accounts[0] && accounts[0][1] && accounts[0][1].account) {
                 entry.accountId = accounts[0][1].account.id;
+                entry.statisticsId = accounts[0][1].account.statistics || null;
             }
             if (!entry.accountId) {
                 subscriptions.delete(accountName);
@@ -247,6 +262,7 @@ function createSubscriptionManager(chainClient) {
                 const accounts = await chainClient.db.get_full_accounts([entry.accountName], true);
                 if (accounts && accounts[0] && accounts[0][1] && accounts[0][1].account) {
                     entry.accountId = accounts[0][1].account.id;
+                    entry.statisticsId = accounts[0][1].account.statistics || null;
                     entry.active = true;
                 }
             } catch (_) {}

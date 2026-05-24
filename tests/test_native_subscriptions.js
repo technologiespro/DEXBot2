@@ -73,6 +73,47 @@ console.log('=== Native Subscription Tests ===\n');
     await noticeHandler([1, [{ id: '2.5.1000', owner: '1.2.100' }]]);
     assert.strictEqual(delivered.length, 0, 'duplicate history id should not be delivered twice');
 
+    const accountNoticeDelivered = [];
+    const accountNoticeHistoryAccounts = [];
+    let accountNoticeHandler = null;
+    const accountNoticeClient = {
+        transport: {
+            addMessageHandler(handler) {
+                accountNoticeHandler = handler;
+                return () => { accountNoticeHandler = null; };
+            },
+        },
+        db: chainClient.db,
+        history: {
+            getAccountHistory: async (accountId, stop, limit, start) => {
+                accountNoticeHistoryAccounts.push(accountId);
+                assert.strictEqual(accountId, '1.2.100');
+                assert.strictEqual(start, '1.11.500');
+                assert.ok(limit <= 100);
+                return [
+                    { id: '1.11.700', block_num: 12, trx_id: 3, op: [4, { order_id: '1.7.3' }] },
+                ];
+            },
+        },
+    };
+    const accountNoticeManager = createSubscriptionManager(accountNoticeClient);
+    await accountNoticeManager.subscribe('alice', (fills) => {
+        accountNoticeDelivered.push(fills);
+    });
+
+    await accountNoticeHandler([1, [{ id: '2.6.100' }]]);
+    assert.strictEqual(accountNoticeDelivered.length, 1, 'account/statistics notices should trigger history fill scan');
+    assert.strictEqual(accountNoticeDelivered[0][0].id, '1.11.700');
+
+    await accountNoticeManager.subscribe('bob', () => {
+        throw new Error('bob should not receive alice statistics notices');
+    });
+    accountNoticeDelivered.length = 0;
+    accountNoticeHistoryAccounts.length = 0;
+    await accountNoticeHandler([1, [{ id: '2.6.100' }]]);
+    assert.strictEqual(accountNoticeDelivered.length, 0, 'duplicate alice statistics fill should stay deduped');
+    assert.deepStrictEqual(accountNoticeHistoryAccounts, ['1.2.100'], 'alice statistics notices should not wake bob history scans');
+
     let retryNoticeHandler = null;
     let failedOnce = false;
     let retryDeliveries = 0;
