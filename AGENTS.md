@@ -131,7 +131,6 @@ File: <path>
 - `modules/graceful_shutdown.js` - Graceful shutdown handling
 - `modules/chain_keys.js` - Key management
 - `modules/bots_file_lock.js` - Bot config file locking
-- `modules/btsdex_event_patch.js` - BitShares DEX event patching
 
 ### Order Management (`modules/order/`)
 - `manager.js` - Order lifecycle and state management

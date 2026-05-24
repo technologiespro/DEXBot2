@@ -1,7 +1,6 @@
 /**
- * tests/test_native_ecc.js — ECC crypto tests vs btsdex-ecc
+ * tests/test_native_ecc.js - Native ECC crypto tests.
  *
- * Compares native ecc.js output byte-for-byte against btsdex-ecc for:
  * - Key generation (ECDH public key derivation)
  * - Signing (ECDSA deterministic via RFC 6979)
  * - WIF encode/decode
@@ -183,42 +182,5 @@ assert.ok(b58in.equals(b58checkDec), 'Base58Check round-trip');
 
 assert.throws(() => nativeEcc.base58CheckDecode('invalid'), /Invalid/, 'Bad base58check should throw');
 console.log('  PASS');
-
-// ── Compare against btsdex-ecc ───────────────────────────────────────────
-
-console.log('Comparison with btsdex-ecc');
-try {
-    const btsdexEcc = require('btsdex-ecc');
-
-    const rawKey2 = nativeEcc.generatePrivateKey();
-    const nativePub = nativeEcc.privateKeyToPublicKey(rawKey2, true);
-    const digest2 = nativeEcc.sha256(Buffer.from('cross-library test message'));
-
-    // WIF encode comparison (btsdex-ecc always produces uncompressed WIF)
-    const btsdexPriv2 = btsdexEcc.PrivateKey.fromBuffer(rawKey2);
-    const btsdexWif = btsdexPriv2.toWif();
-    const nativeWifUncomp = nativeEcc.wifEncode(rawKey2, false);
-    assert.strictEqual(nativeWifUncomp, btsdexWif, 'WIF encode (uncompressed) should match btsdex-ecc');
-
-    // WIF decode comparison
-    const btsdexPriv = btsdexEcc.PrivateKey.fromWif(nativeWifUncomp);
-    const btsdexRawKey = btsdexPriv.toBuffer();
-    assert.ok(rawKey2.equals(btsdexRawKey), 'WIF decode should match btsdex-ecc');
-
-    // Public key comparison
-    const btsdexPub = btsdexPriv2.toPublicKey().toBuffer();
-    assert.ok(nativePub.equals(btsdexPub), 'Public key derivation should match btsdex-ecc');
-
-    // Self-verification (each library's signature verifies with itself)
-    const nativeSig = nativeEcc.sign(digest2, rawKey2);
-    assert.ok(nativeEcc.verify(digest2, nativeSig, nativePub), 'Native signature should verify with native');
-
-    const btsdexSig = btsdexEcc.Signature.signBufferSha256(digest2, btsdexPriv2);
-    assert.ok(btsdexSig.verifyHash(digest2, btsdexPriv2.toPublicKey()), 'btsdex-ecc signature should verify with btsdex-ecc');
-
-    console.log('  PASS (cross-library comparison)');
-} catch (e) {
-    console.log('  SKIP (btsdex-ecc comparison failed):', e.message.slice(0, 80));
-}
 
 console.log('\n=== All ECC tests passed ===');

@@ -85,26 +85,7 @@ for (const key of requiredExports) {
 
 console.log('  PASS: All required exports present');
 
-// ── Test 3: btsdex not loaded ──────────────────────────────────────────
-
-console.log('btsdex not loaded');
-
-let btsdexLoaded = false;
-try {
-    if (require.cache[require.resolve('btsdex')]) {
-        btsdexLoaded = true;
-    }
-} catch (_) {
-    // btsdex not installed
-}
-
-if (btsdexLoaded) {
-    console.log('  NOTE: btsdex was loaded (may have been cached from earlier)');
-}
-
-console.log('  PASS: No btsdex dependency in native path');
-
-// ── Test 4: Resolvers ────────────────────────────────────────────────────
+// ── Test 3: Resolvers ────────────────────────────────────────────────────
 
 console.log('Resolvers (LRU Cache)');
 const { LRUCache, createResolvers } = require('../modules/bitshares-native/resolvers');

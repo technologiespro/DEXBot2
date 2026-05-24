@@ -107,7 +107,7 @@ This update covers the final week of May 0.7 development, focusing on signal ref
 #### Market Adapter Price Sources and Runtime Modes
 
 - Added first-class support for orderbook-derived candles and fixed-price adapter modes, allowing the market adapter to operate from direct book data or an explicit configured price instead of only LP/Kibana history (`6662be9`).
-- Replaced the market adapter's `btsdex` dependency path with a lightweight raw WebSocket client for chain history access, reducing adapter startup weight and making connection behavior easier to isolate (`28979f5`).
+- Replaced the market adapter's legacy dependency path with a lightweight raw WebSocket client for chain history access, reducing adapter startup weight and making connection behavior easier to isolate (`28979f5`).
 - Added a native history fallback path and Kibana-first bootstrap behavior so the adapter can continue building warmup history when one source is incomplete or temporarily unavailable (`f4b75cc`, `23382df`, `882401a`).
 - Moved grid recalculation documentation from `market_adapter/` into the central `docs/` tree and refreshed the docs around manual resets, trigger files, and adapter-to-grid handoff (`1dfc69d`, `4513904`).
 - Consolidated market adapter trigger persistence so recalculation state is managed in one place instead of being duplicated across service paths (`6727a29`).
@@ -418,7 +418,7 @@ This patch closes several post-patch.23 correctness gaps discovered in productio
   - **Impact**: Residuals caused avoidable follow-up corrections and noisy state deltas.
   - **Solution**: Normalized stale-size handling in COW projection/sync paths so zero-equivalent dust at chain precision is cleared consistently.
 
-- **Fill Recovery and Rebalance State Reset Hardening** (`modules/btsdex_event_patch.js`, `modules/dexbot_class.js`, `modules/order/accounting.js`, `modules/order/sync_engine.js`) - commit d0de685
+- **Fill Recovery and Rebalance State Reset Hardening** (`modules/dexbot_class.js`, `modules/order/accounting.js`, `modules/order/sync_engine.js`) - commit d0de685
   - **Problem**: Recovery/resubscribe/rebalance state transitions could leave stale flags or incomplete reset behavior after reconnect/failure episodes.
   - **Impact**: Increased chance of delayed self-healing or repeated recovery loops under unstable connectivity.
   - **Solution**: Hardened recovery lifecycle resets across event patching, sync, accounting, and bot orchestration paths.

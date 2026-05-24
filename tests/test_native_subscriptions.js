@@ -73,6 +73,41 @@ console.log('=== Native Subscription Tests ===\n');
     await noticeHandler([1, [{ id: '2.5.1000', owner: '1.2.100' }]]);
     assert.strictEqual(delivered.length, 0, 'duplicate history id should not be delivered twice');
 
+    let retryNoticeHandler = null;
+    let failedOnce = false;
+    let retryDeliveries = 0;
+    let callbackErrors = 0;
+    const retryChainClient = {
+        transport: {
+            addMessageHandler(handler) {
+                retryNoticeHandler = handler;
+                return () => { retryNoticeHandler = null; };
+            },
+        },
+        db: chainClient.db,
+        history: {
+            getAccountHistory: async () => [
+                { id: '1.11.600', block_num: 11, trx_id: 2, op: [4, { order_id: '1.7.2' }] },
+            ],
+        },
+    };
+    const retryManager = createSubscriptionManager(retryChainClient);
+    await retryManager.subscribe('alice', () => {
+        retryDeliveries += 1;
+        if (!failedOnce) {
+            failedOnce = true;
+            throw new Error('transient callback failure');
+        }
+    }, () => {
+        callbackErrors += 1;
+    });
+
+    await retryNoticeHandler([1, [{ id: '2.5.1001', owner: '1.2.100' }]]);
+    await retryNoticeHandler([1, [{ id: '2.5.1002', owner: '1.2.100' }]]);
+    await retryNoticeHandler([1, [{ id: '2.5.1003', owner: '1.2.100' }]]);
+    assert.strictEqual(callbackErrors, 1, 'callback failure should be reported to onError');
+    assert.strictEqual(retryDeliveries, 2, 'fill should retry once after failed callback and dedupe after success');
+
     assert.ok(dbCalls.some(([method]) => method === 'set_subscribe_callback'), 'subscription RPC should be registered');
     assert.strictEqual(
         dbCalls.some(([method, account, subscribe]) => method === 'get_full_accounts' && account === 'alice' && subscribe === true),

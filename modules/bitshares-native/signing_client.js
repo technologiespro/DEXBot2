@@ -74,7 +74,16 @@ function createSigningClient(chainClient, accountName, privateKey) {
                 await tx.prepare();
                 const keyBuf = wifToBuffer(key);
                 const signed = tx.sign(keyBuf);
-                const result = await client.broadcast.broadcast_transaction_synchronous(signed.signedTxObject);
+                const broadcast = client.broadcast || {};
+                const broadcastFn = typeof broadcast.broadcast_transaction_synchronous === 'function'
+                    ? broadcast.broadcast_transaction_synchronous.bind(broadcast)
+                    : typeof broadcast.broadcast_transaction === 'function'
+                        ? broadcast.broadcast_transaction.bind(broadcast)
+                        : null;
+                if (!broadcastFn) {
+                    throw new Error('Broadcast API does not support transaction broadcast');
+                }
+                const result = await broadcastFn(signed.signedTxObject);
 
                 const opResults = (result && Array.isArray(result.operation_results))
                     ? result.operation_results

@@ -17,7 +17,7 @@ Keep the implementation reference explicit:
 Preferred baseline:
 
 - `Node.js` / CommonJS first
-- `btsdex` for chain connectivity
+- DEXBot2 native BitShares client for chain connectivity
 - shared read connection for market and account state
 - dedicated account client for signing and broadcast
 

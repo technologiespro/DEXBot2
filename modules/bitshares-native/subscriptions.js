@@ -117,7 +117,30 @@ function createSubscriptionManager(chainClient) {
                         trx: entry.trx_id,
                         id: entry.id,
                     });
-                    delivered.add(entry.id);
+                }
+            }
+
+            if (fills.length > 0) {
+                const failed = [];
+                for (const callback of sub.callbacks) {
+                    try {
+                        await Promise.resolve(callback(fills));
+                    } catch (err) {
+                        failed.push(err);
+                    }
+                }
+
+                if (failed.length > 0) {
+                    if (sub.onError) {
+                        for (const err of failed) {
+                            try { sub.onError(err); } catch (_) {}
+                        }
+                    }
+                    return;
+                }
+
+                for (const fill of fills) {
+                    delivered.add(fill.id);
                 }
             }
 
@@ -126,12 +149,6 @@ function createSubscriptionManager(chainClient) {
                 lastDeliveredByAccount.set(accountId, new Set(trimmed));
             } else {
                 lastDeliveredByAccount.set(accountId, delivered);
-            }
-
-            if (fills.length > 0) {
-                for (const callback of sub.callbacks) {
-                    try { callback(fills); } catch (_) {}
-                }
             }
         } catch (_) {}
 
@@ -169,12 +186,14 @@ function createSubscriptionManager(chainClient) {
             };
             subscriptions.set(accountName, entry);
 
-            try {
-                const accounts = await chainClient.db.get_full_accounts([accountName], true);
-                if (accounts && accounts[0] && accounts[0][1] && accounts[0][1].account) {
-                    entry.accountId = accounts[0][1].account.id;
-                }
-            } catch (_) {}
+            const accounts = await chainClient.db.get_full_accounts([accountName], true);
+            if (accounts && accounts[0] && accounts[0][1] && accounts[0][1].account) {
+                entry.accountId = accounts[0][1].account.id;
+            }
+            if (!entry.accountId) {
+                subscriptions.delete(accountName);
+                throw new Error(`Could not resolve subscribed account: ${accountName}`);
+            }
 
             try {
                 await chainClient.db.call('set_subscribe_callback', [
@@ -182,7 +201,10 @@ function createSubscriptionManager(chainClient) {
                     true,
                 ]);
                 entry.active = !!entry.accountId;
-            } catch (_) {}
+            } catch (err) {
+                subscriptions.delete(accountName);
+                throw new Error(`Failed to register subscription callback: ${err.message}`);
+            }
 
             ensureNoticeSubscription();
         }

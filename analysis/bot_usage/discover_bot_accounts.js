@@ -232,14 +232,14 @@ function dexScore(creates, fills, cancels, gridScore, maxBatch) {
 // ─── Account resolution ───────────────────────────────────────────────────────
 
 async function resolveNames(ids) {
-    let BTS;
-    try { BTS = require('btsdex'); } catch { return {}; }
+    const { createReadOnlyClient } = require('../../modules/bitshares-native');
+    const client = createReadOnlyClient({ nodes: [BTS_NODE] });
 
     const map = {};
     try {
-        await BTS.connect(BTS_NODE);
+        await client.connect();
         // BitShares db.get_objects accepts an array of IDs
-        const objects = await BTS.db.get_objects(ids);
+        const objects = await client.db('get_objects', [ids]);
         for (const obj of (objects ?? [])) {
             if (obj?.id && obj?.name) map[obj.id] = obj.name;
         }
@@ -248,7 +248,8 @@ async function resolveNames(ids) {
         const toCheck = ['IOB.XRP', 'HONEST.MONEY', 'XBTSX.XRP', 'XBTSX.USDT', 'USD', 'CNY'];
         for (const sym of toCheck) {
             try {
-                const a = await BTS.assets[sym];
+                const assets = await client.db('lookup_asset_symbols', [[sym]]);
+                const a = Array.isArray(assets) ? assets[0] : null;
                 if (a?.id && !(a.id in ASSET_PRECISION)) {
                     ASSET_PRECISION[a.id] = a.precision;
                 }
@@ -257,7 +258,7 @@ async function resolveNames(ids) {
     } catch (e) {
         console.warn(`  [warn] Name resolution failed: ${e.message}`);
     } finally {
-        try { BTS.disconnect(); } catch (_) {}
+        try { client.disconnect(); } catch (_) {}
     }
     return map;
 }

@@ -82,6 +82,16 @@ function createTransport(config = {}) {
         pendingRequests.clear();
     }
 
+    function scheduleReconnect() {
+        if (intentionalClose || !autoreconnect || nodeList.length === 0 || reconnectTimer) return;
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts) + Math.random() * 1000, 30000);
+        reconnectAttempts++;
+        reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            tryConnect().catch(() => scheduleReconnect());
+        }, delay);
+    }
+
     function connectOne(url) {
         return new Promise((resolve, reject) => {
             try {
@@ -141,11 +151,7 @@ function createTransport(config = {}) {
             setStatus('closed');
             cleanup();
 
-            if (!intentionalClose && autoreconnect && nodeList.length > 0) {
-                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts) + Math.random() * 1000, 30000);
-                reconnectAttempts++;
-                reconnectTimer = setTimeout(() => tryConnect(), delay);
-            }
+            scheduleReconnect();
         };
 
         socket.onerror = () => {};

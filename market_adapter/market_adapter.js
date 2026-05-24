@@ -1444,7 +1444,7 @@ async function main() {
             const started = Date.now();
             log(cfg, `\n[cycle ${new Date(started).toISOString()}]`);
             
-            // Connect for this cycle using the lightweight WS client (no btsdex).
+            // Connect for this cycle using the lightweight native read-only client.
             // Tear down after runOnce so the connection never sits idle.
             try {
                 const { connectClient } = getBitsharesClient();

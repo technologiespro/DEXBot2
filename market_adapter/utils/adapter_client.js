@@ -3,12 +3,9 @@
 /**
  * market_adapter/utils/adapter_client.js — Singleton BitShares WS client
  *
- * Provides the same interface as bitshares_client.js but backed by either the
- * native bitshares-native library or a raw WebSocket + JSON-RPC 2.0 client.
- * No cached promises, no auto-reconnect, no event subscriptions — just
- * connect, query, disconnect.
- *
- * Feature flag: DEXBOT_NATIVE_CHAIN=1 uses native library's createReadOnlyClient.
+ * Provides the same interface as bitshares_client.js but backed by the native
+ * bitshares-native read-only client. No subscriptions — just connect, query,
+ * disconnect, with the native transport's node failover and timeout handling.
  *
  * Exported interface (mirrors bitshares_client.js):
  *   BitShares    — { db, history } JSON-RPC proxies
@@ -21,25 +18,14 @@
 
 const { NODE_MANAGEMENT } = require('../../modules/constants');
 
-const USE_NATIVE = process.env.DEXBOT_NATIVE_CHAIN === '1';
-
-let _client = null;
 let _nativeClient = null;
 
 function _getClient() {
-    if (USE_NATIVE) {
-        if (!_nativeClient) {
-            const { createReadOnlyClient } = require('../../modules/bitshares-native');
-            _nativeClient = createReadOnlyClient({});
-        }
-        return _nativeClient;
-    } else {
-        const { createWsClient } = require('./ws_client');
-        if (!_client) {
-            _client = createWsClient();
-        }
-        return _client;
+    if (!_nativeClient) {
+        const { createReadOnlyClient } = require('../../modules/bitshares-native');
+        _nativeClient = createReadOnlyClient({});
     }
+    return _nativeClient;
 }
 
 async function connectClient(servers) {
@@ -51,25 +37,15 @@ async function connectClient(servers) {
 }
 
 function disconnectClient() {
-    if (USE_NATIVE) {
-        if (_nativeClient) { _nativeClient.disconnect(); _nativeClient = null; }
-    } else {
-        if (_client) _client.disconnect();
-    }
+    if (_nativeClient) { _nativeClient.disconnect(); _nativeClient = null; }
 }
 
 function isConnected() {
-    if (USE_NATIVE) {
-        return _nativeClient ? _nativeClient.isConnected() : false;
-    }
-    return _client ? _client.isConnected() : false;
+    return _nativeClient ? _nativeClient.isConnected() : false;
 }
 
 function getNodeUrl() {
-    if (USE_NATIVE) {
-        return _nativeClient ? _nativeClient.getNodeUrl() : null;
-    }
-    return _client ? _client.getNodeUrl() : null;
+    return _nativeClient ? _nativeClient.getNodeUrl() : null;
 }
 
 function getConnectionStatus() {
@@ -78,17 +54,10 @@ function getConnectionStatus() {
 
 function _call(api, method, args) {
     const c = _getClient();
-    if (USE_NATIVE) {
-        if (!c.isConnected()) {
-            return Promise.reject(new Error('WebSocket is not open'));
-        }
-        return c[api](method, args);
-    } else {
-        if (!c.isConnected()) {
-            return Promise.reject(new Error('WebSocket is not open'));
-        }
-        return c[api](method, args);
+    if (!c.isConnected()) {
+        return Promise.reject(new Error('WebSocket is not open'));
     }
+    return c[api](method, args);
 }
 
 const BitShares = {
@@ -105,14 +74,9 @@ const BitShares = {
 };
 
 function _resetForTests() {
-    if (USE_NATIVE) {
-        if (_nativeClient) {
-            try { _nativeClient.disconnect(); } catch (_) {}
-            _nativeClient = null;
-        }
-    } else {
-        if (_client) _client.disconnect();
-        _client = null;
+    if (_nativeClient) {
+        try { _nativeClient.disconnect(); } catch (_) {}
+        _nativeClient = null;
     }
 }
 

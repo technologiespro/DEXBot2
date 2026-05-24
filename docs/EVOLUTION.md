@@ -397,7 +397,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 ### Modernization & Migration
 - **TypeScript Migration**: Incremental migration from JS to TypeScript, starting with highest-bug-surface modules (COW, accounting, sync engine). *(Analysis complete — see `docs/TYPESCRIPT_MIGRATION_ANALYSIS.md`: ~48K LoC, 158 test files, 1 external dep, 4-5 month estimate with 3-4 developers)*
-- **Dependency Reduction**: Continued minimization of external dependencies. *(Already at 1 dep: btsdex)*
+- **Dependency Reduction**: Continued minimization of external dependencies.
 
 ### Architecture & Code Quality — Detailed Breakdown
 

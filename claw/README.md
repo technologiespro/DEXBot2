@@ -14,15 +14,9 @@ This scaffold follows the same high-level split used in DEXBot2:
 npm install
 ```
 
-This installs:
-
-```bash
-npm install btsdex
-```
-
 ## Files
 
-- Core BitShares runtime: `modules/bitshares_client.js` (loads `modules/btsdex_event_patch` for shared reconnect handling), `modules/chain_queries.js`, `modules/chain_broadcast.js`, `modules/chain_actions.js`
+- Core BitShares runtime: `modules/bitshares_client.js`, `modules/chain_queries.js`, `modules/chain_broadcast.js`, `modules/chain_actions.js`
 - Strategy and state helpers: `modules/short_mpa_strategy.js`, `modules/position_manager.js`, `modules/position_manager_watch.js`
 - Position health: `modules/position_health.js`, `modules/position_discovery.js`, `modules/decision_loop.js`
 - Price sources: `modules/feed_price_source.js`, `modules/kibana_price_source.js`

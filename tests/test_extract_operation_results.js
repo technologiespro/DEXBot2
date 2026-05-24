@@ -59,7 +59,7 @@ function run() {
         console.log('  ✓ Path 3: raw.trx.operation_results fallback');
     }
 
-    // 4. Direct btsdex broadcast: trx.operation_results at result level
+    // 4. Unsupported direct trx.operation_results at result level
     {
         const result = {
             trx: { operation_results: [[1, ORDER_ID]] }
@@ -68,8 +68,8 @@ function run() {
         // It's handled by chain_orders.js extractBatch and daemon's executeOperationsWithClient
         // So it should return null
         const ops = extractBatchOperationResults(result);
-        assert.strictEqual(ops, null, 'Path 4: direct btsdex shape should return null (no top-level or raw)');
-        console.log('  ✓ Path 4: direct btsdex trx.operation_results correctly returns null');
+        assert.strictEqual(ops, null, 'Path 4: direct trx shape should return null (no top-level or raw)');
+        console.log('  ✓ Path 4: direct trx.operation_results correctly returns null');
     }
 
     // 5. Array result with nested trx
