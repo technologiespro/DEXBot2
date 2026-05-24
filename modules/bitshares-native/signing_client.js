@@ -89,7 +89,13 @@ function createSigningClient(chainClient, accountName, privateKey) {
                     ? result.operation_results
                     : (result && result.trx && Array.isArray(result.trx.operation_results))
                         ? result.trx.operation_results
-                        : [];
+                        : (Array.isArray(result) && result[0] && result[0].trx && Array.isArray(result[0].trx.operation_results))
+                            ? result[0].trx.operation_results
+                            : [];
+
+                if (Array.isArray(result)) {
+                    return { raw: result, operation_results: opResults };
+                }
 
                 return { ...result, operation_results: opResults };
             },

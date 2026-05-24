@@ -245,6 +245,29 @@ console.log('  PASS');
     assert.ok(Array.isArray(broadcastPayload.operations), 'broadcast payload should include operations');
     console.log('  PASS');
 
+    console.log('Signing client broadcast array response');
+    const fakeArrayResponseClient = {
+        getConfig: () => ({ chainId: GRAPHENE_CHAIN_ID }),
+        db: fakeChainClient.db,
+        broadcast: {
+            broadcast_transaction_synchronous: async () => [{
+                trx: { operation_results: [[1, '1.7.2']] },
+            }],
+        },
+    };
+    const arrayResponseSigningClient = createSigningClient(fakeArrayResponseClient, 'alice', wif);
+    const arrayResponseTx = arrayResponseSigningClient.newTx();
+    arrayResponseTx.limit_order_cancel({
+        fee: { amount: 0, asset_id: '1.3.0' },
+        fee_paying_account: '1.2.100',
+        order: '1.7.999',
+        extensions: [],
+    });
+    const arrayBroadcastResult = await arrayResponseTx.broadcast();
+    assert.deepStrictEqual(arrayBroadcastResult.operation_results, [[1, '1.7.2']]);
+    assert.ok(Array.isArray(arrayBroadcastResult.raw), 'array broadcast response should be preserved as raw');
+    console.log('  PASS');
+
     console.log('\n=== All tx builder tests passed ===');
 })().catch((err) => {
     console.error(err);
