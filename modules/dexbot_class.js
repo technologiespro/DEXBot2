@@ -731,11 +731,8 @@ class DEXBot {
 
                             // Process this fill through the full rebalance pipeline
                             // This will shift the boundary and place a new order on the filled slot
-                            this._refreshDynamicWeightDistribution('post-reset fill rebalance');
-                            const rebalanceResult = await this.manager.processFilledOrders([gridOrder], new Set());
-
-                            const batchResult = await this._executeBatchIfNeeded(rebalanceResult, `[POST-RESET] fill ${gridOrder.id}`);
-                            if (batchResult?.abortedForIllegalState || batchResult?.abortedForAccountingFailure) {
+                            const result = await this._processFillsWithBatching([gridOrder], new Set(), `[POST-RESET] fill ${gridOrder.id}`);
+                            if (result.aborted) {
                                 this._warn('[POST-RESET] Aborted batch due to illegal state; skipping grid persistence this cycle');
                                 continue;
                             }
@@ -746,9 +743,7 @@ class DEXBot {
                             const postResetChainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
                             const syncResult = await this.manager.syncFromOpenOrders(postResetChainOpenOrders);
                             if (syncResult.filledOrders?.length > 0) {
-                                this._refreshDynamicWeightDistribution('post-reset open-orders fallback');
-                                const rebalanceResult = await this.manager.processFilledOrders(syncResult.filledOrders, new Set());
-                                await this._executeBatchIfNeeded(rebalanceResult, '[POST-RESET] open-orders fallback');
+                                await this._processFillsWithBatching(syncResult.filledOrders, new Set(), '[POST-RESET] open-orders fallback');
                             }
                         }
 
@@ -877,11 +872,12 @@ class DEXBot {
 
                         if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
                             this._log(`Startup sync: ${syncResult.filledOrders.length} grid order(s) found filled. Processing proceeds.`, 'info');
-                            this._refreshDynamicWeightDistribution('startup fill rebalance');
-                            const startupFillRebalance = await this.manager.processFilledOrders(syncResult.filledOrders, new Set(), { skipAccountTotalsUpdate: true });
-                            const batchResult = await this._executeBatchIfNeeded(startupFillRebalance, 'startup sync fill rebalance');
+                            const batchResult = await this._processFillsWithBatching(
+                                syncResult.filledOrders, new Set(), 'startup sync fill rebalance',
+                                { skipAccountTotalsUpdate: true }
+                            );
 
-                            if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure && !batchResult?.skippedNoActions) {
+                            if (!batchResult?.aborted) {
                                 // Refresh open orders so startup reconcile works with post-batch chain reality
                                 // and avoids reconciling against a stale pre-batch snapshot.
                                 startupChainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
@@ -1187,104 +1183,23 @@ class DEXBot {
                     // - 1..MAX_FILL_BATCH_SIZE fills: unified full-set planning
                     // - larger bursts: fixed-size chunking at MAX_FILL_BATCH_SIZE
                     if (allFilledOrders.length > 0) {
-                        const maxBatch = Math.max(1, FILL_PROCESSING.MAX_FILL_BATCH_SIZE || 1);
-                        const totalFills = allFilledOrders.length;
-
-                        const useUnifiedPlan = totalFills <= maxBatch;
-                        const modeLabel = useUnifiedPlan ? 'unified' : 'chunked';
-                        this.manager.logger.log(
-                            `Processing ${totalFills} filled orders (${modeLabel}, baseBatch=${useUnifiedPlan ? totalFills : maxBatch})...`,
-                            'info'
+                        const result = await this._processFillsWithBatching(
+                            allFilledOrders, null, 'fill set'
                         );
+                        let abortedFillCycle = result.aborted;
+                        const anyRotations = result.anyRotations;
 
-                        let anyRotations = false;
-                        let abortedFillCycle = false;
-
-                        this.manager.pauseFundRecalc();
-                        try {
-                            let i = 0;
-                            while (i < totalFills) {
-                                const remaining = totalFills - i;
-                                let currentBatchSize;
-
-                                if (useUnifiedPlan) {
-                                    currentBatchSize = remaining;
-                                } else {
-                                    currentBatchSize = Math.min(maxBatch, remaining);
-                                }
-
-                                const batchEnd = Math.min(i + currentBatchSize, totalFills);
-                                const fillBatch = allFilledOrders.slice(i, batchEnd);
-                                i = batchEnd;
-
-                                const batchIds = fillBatch.map(f => f.id).join(', ');
-                                this.manager.logger.log(
-                                    `>>> Processing fill set [${batchIds}] (${i}/${totalFills})`,
-                                    'info'
-                                );
-
-                                // For chunked mode, exclude fills planned for later chunks to reduce churn.
-                                const batchIdSet = new Set(fillBatch.map(f => f.id));
-                                const fullExcludeSet = new Set();
-                                if (!useUnifiedPlan) {
-                                    for (const other of allFilledOrders) {
-                                        if (batchIdSet.has(other.id)) continue;
-                                        if (other.orderId) fullExcludeSet.add(other.orderId);
-                                        if (other.id) fullExcludeSet.add(other.id);
-                                    }
-                                }
-
-                                this.manager.logger.logFundsStatus(this.manager, `BEFORE fill set processing [${batchIds}]`);
-
-                                this._refreshDynamicWeightDistribution(`fill set [${batchIds}]`);
-                                const rebalanceResult = await this.manager.processFilledOrders(fillBatch, fullExcludeSet);
-
-                                this.manager.logger.logFundsStatus(
-                                    this.manager,
-                                    `AFTER rebalanceOrders calculated for fill set [${batchIds}] (planned: ${rebalanceResult.ordersToPlace?.length || 0} new, ${rebalanceResult.ordersToRotate?.length || 0} rotations)`
-                                );
-
-                                const batchResult = await this._executeBatchIfNeeded(rebalanceResult, `fill set [${batchIds}]`);
-
-                                if (batchResult?.abortedForIllegalState || batchResult?.abortedForAccountingFailure) {
-                                    this.manager.logger.log(
-                                        `[HARD-ABORT] Fill set [${batchIds}] aborted due to critical state. ` +
-                                        'Skipping persistence and ending current fill cycle.',
-                                        'error'
-                                    );
-                                    abortedFillCycle = true;
-                                    break;
-                                }
-
-                                if (batchResult.hadRotation) {
-                                    anyRotations = true;
-                                    this.manager.logger.logFundsStatus(this.manager, `AFTER rotation completed for fill set [${batchIds}]`);
-                                }
-                                const batchFillKeys = new Set(fillBatch.map(filledOrder => buildFillKey({
-                                    orderId: filledOrder?.orderId,
-                                    blockNum: filledOrder?.blockNum,
-                                    historyId: filledOrder?.historyId
-                                })).filter(Boolean));
-                                await this._flushProcessedFillPersistenceForKeys(batchFillKeys, `fill set [${batchIds}]`);
-                                await this.manager.persistGrid();
-                            }
-                         } finally {
-                             await this.manager.resumeFundRecalc();
-                         }
-
-                        if (abortedFillCycle && pendingFillKeysForCurrentCycle.size > 0) {
-                            await this._flushProcessedFillPersistenceForKeys(
-                                pendingFillKeysForCurrentCycle,
-                                'fill-batch-aborted-after-verified-sync'
-                            );
+                        if (!abortedFillCycle) {
+                            const batchFillKeys = new Set(allFilledOrders.map(filledOrder => buildFillKey({
+                                orderId: filledOrder?.orderId,
+                                blockNum: filledOrder?.blockNum,
+                                historyId: filledOrder?.historyId
+                            })).filter(Boolean));
+                            await this._flushProcessedFillPersistenceForKeys(batchFillKeys, 'fill-batch-committed');
+                        } else {
                             this.manager.logger.log(
-                                `[FILL-DEDUP] Persisted verified fill keys after aborted fill cycle; grid persistence remains guarded separately.`,
+                                '[FILL-DEDUP] Fill cycle aborted; fill key persistence guarded under abort path.',
                                 'warn'
-                            );
-                        } else if (pendingFillKeysForCurrentCycle.size > 0) {
-                            await this._flushProcessedFillPersistenceForKeys(
-                                pendingFillKeysForCurrentCycle,
-                                'fill-batch-committed'
                             );
                         }
 
@@ -2062,6 +1977,86 @@ class DEXBot {
             return { executed: false, hadRotation: false, skippedNoActions: true };
         }
         return await this.updateOrdersOnChainBatch(rebalanceResult);
+    }
+
+    /**
+     * Process filled orders in capped batches per FILL_PROCESSING.MAX_FILL_BATCH_SIZE.
+     * Each chunk triggers its own processFilledOrders → COW plan → broadcast cycle.
+     *
+     * @param {Array} fills - Filled order objects to process
+     * @param {Set|null} excl - Exclusion set (order IDs to skip)
+     * @param {string} contextLabel - Label for logging and batch context
+     * @param {Object} [options={}] - Passed through to processFilledOrders
+     * @returns {{aborted: boolean, anyRotations: boolean}}
+     */
+    async _processFillsWithBatching(fills, excl, contextLabel, options = {}) {
+        if (!fills || fills.length === 0) {
+            return { aborted: false, anyRotations: false };
+        }
+
+        const maxBatch = Math.max(1, FILL_PROCESSING.MAX_FILL_BATCH_SIZE || 1);
+        const totalFills = fills.length;
+        const useUnifiedPlan = totalFills <= maxBatch;
+        const modeLabel = useUnifiedPlan ? 'unified' : 'chunked';
+
+        this.manager.logger.log(
+            `Processing ${totalFills} filled orders (${modeLabel}, baseBatch=${useUnifiedPlan ? totalFills : maxBatch})...`,
+            'info'
+        );
+
+        let anyRotations = false;
+
+        this.manager.pauseFundRecalc();
+        try {
+            let i = 0;
+            while (i < totalFills) {
+                const remaining = totalFills - i;
+                const currentBatchSize = useUnifiedPlan ? remaining : Math.min(maxBatch, remaining);
+                const batchEnd = Math.min(i + currentBatchSize, totalFills);
+                const fillBatch = fills.slice(i, batchEnd);
+                i = batchEnd;
+
+                const batchIds = fillBatch.map(f => f.id).join(', ');
+                const label = `${contextLabel} [${batchIds}]`;
+                this.manager.logger.log(
+                    `>>> Processing fill set ${label} (${i}/${totalFills})`,
+                    'info'
+                );
+
+                let fullExcludeSet = excl || new Set();
+                if (!useUnifiedPlan) {
+                    const batchIdSet = new Set(fillBatch.map(f => f.id));
+                    fullExcludeSet = new Set(excl || []);
+                    for (const other of fills) {
+                        if (batchIdSet.has(other.id)) continue;
+                        if (other.orderId) fullExcludeSet.add(other.orderId);
+                        if (other.id) fullExcludeSet.add(other.id);
+                    }
+                }
+
+                this._refreshDynamicWeightDistribution(label);
+                const rebalanceResult = await this.manager.processFilledOrders(
+                    fillBatch, fullExcludeSet, options
+                );
+                const batchResult = await this._executeBatchIfNeeded(rebalanceResult, label);
+
+                if (batchResult?.abortedForIllegalState || batchResult?.abortedForAccountingFailure) {
+                    this.manager.logger.log(
+                        `[HARD-ABORT] ${label} aborted due to critical state. Skipping remaining fills.`,
+                        'error'
+                    );
+                    return { aborted: true, anyRotations };
+                }
+
+                if (batchResult.hadRotation) {
+                    anyRotations = true;
+                }
+            }
+        } finally {
+            await this.manager.resumeFundRecalc();
+        }
+
+        return { aborted: false, anyRotations };
     }
 
     _isCredentialDaemonWriteRequired() {

@@ -717,10 +717,10 @@ function startOpenOrdersSyncLoop() {
 
                                 if (syncResult?.filledOrders && syncResult.filledOrders.length > 0) {
                                     this._log(`Open-orders sync loop: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
-                                    refreshDynamicWeightDistribution.call(this, 'open-orders sync rebalance');
-                                    const rebalanceResult = await this.manager.processFilledOrders(syncResult.filledOrders, new Set());
-                                    const batchResult = await this._executeBatchIfNeeded(rebalanceResult, 'open-orders sync fill rebalance');
-                                    if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure && !batchResult?.skippedNoActions) {
+                                    const batchResult = await this._processFillsWithBatching(
+                                        syncResult.filledOrders, new Set(), 'open-orders sync fill rebalance'
+                                    );
+                                    if (!batchResult?.aborted) {
                                         await this.manager.persistGrid();
                                     }
                                 }
@@ -802,10 +802,10 @@ function setupBlockchainFetchInterval() {
 
                         if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
                             this._log(`Periodic sync: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
-                            refreshDynamicWeightDistribution.call(this, 'periodic blockchain fetch rebalance');
-                            const rebalanceResult = await this.manager.processFilledOrders(syncResult.filledOrders, new Set());
-                            const batchResult = await this._executeBatchIfNeeded(rebalanceResult, 'periodic sync fill rebalance');
-                            if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure && !batchResult?.skippedNoActions) {
+                            const batchResult = await this._processFillsWithBatching(
+                                syncResult.filledOrders, new Set(), 'periodic sync fill rebalance'
+                            );
+                            if (!batchResult?.aborted) {
                                 await this.manager.persistGrid();
                             }
                         }
@@ -1139,10 +1139,14 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
 
     let batchResult = null;
     if (syntheticFills.length > 0) {
-        refreshDynamicWeightDistribution.call(this, 'dust cancel rebalance');
-        const rebalanceResult = await this.manager.processFilledOrders(syntheticFills, new Set());
-        batchResult = await this._executeBatchIfNeeded(rebalanceResult, `dust cancel [${syntheticFills.map(o => o.id).join(', ')}]`);
-        if (!batchResult?.abortedForIllegalState && !batchResult?.abortedForAccountingFailure) {
+        const result = await this._processFillsWithBatching(
+            syntheticFills, new Set(), `dust cancel [${syntheticFills.map(o => o.id).join(', ')}]`
+        );
+        batchResult = {
+            abortedForIllegalState: result.aborted,
+            abortedForAccountingFailure: result.aborted,
+        };
+        if (!result.aborted) {
             await this.manager.persistGrid();
         }
     } else if (cancelledCount > 0) {

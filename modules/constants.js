@@ -42,7 +42,6 @@
  * GRID & ORDER LIMITS:
  *   5. GRID_LIMITS - Grid sizing and scaling constraints
  *      MIN_SPREAD_FACTOR, MIN_SPREAD_ORDERS, MIN_ORDER_COUNT
- *      MAX_GRID_PRICES, MAX_ORDER_IDS_PER_BATCH, MAX_ROTATION_SIZE
  *      FUND_INVARIANT_PERCENT_TOLERANCE
  *      Includes GRID_COMPARISON sub-object for grid divergence metrics
  *

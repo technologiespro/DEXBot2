@@ -114,6 +114,9 @@ async function runTests() {
         bot.manager = {
             _fillProcessingLock: new MockAsyncLock(),
             _recoveryAttempted: true,
+            logger: { log: () => {} },
+            pauseFundRecalc() {},
+            resumeFundRecalc() {},
             fetchAccountTotals: async () => {
                 fetchCalls++;
             },

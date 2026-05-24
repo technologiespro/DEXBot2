@@ -1,0 +1,292 @@
+/**
+ * tests/test_fill_batch_chunking.js
+ *
+ * Tests for _processFillsWithBatching — verifies MAX_FILL_BATCH_SIZE
+ * enforcement across the unified fill-chunking + rebalance + broadcast pipeline.
+ */
+
+const assert = require('assert');
+const DEXBot = require('../modules/dexbot_class');
+const { FILL_PROCESSING } = require('../modules/constants');
+
+const MAX_BATCH = FILL_PROCESSING.MAX_FILL_BATCH_SIZE;
+
+function makeFill(id, orderId = null, type = 'SELL') {
+    return { id, orderId: orderId || `1.7.${id.replace(/\D/g, '')}`, type, price: 0.02, size: 100, isPartial: false, blockNum: 1000 + parseInt(id.replace(/\D/g, ''), 10) || 1 };
+}
+
+function makeBot() {
+    const bot = new DEXBot({
+        name: 'test-fill-batch-chunking',
+        assetA: 'BTS',
+        assetB: 'USD',
+        startPrice: 0.02,
+        minPrice: 0.01,
+        maxPrice: 0.04,
+        botFunds: { buy: 100, sell: 100 },
+        activeOrders: { buy: 2, sell: 2 },
+        incrementPercent: 1,
+        weightDistribution: { buy: 0.5, sell: 0.5 },
+    });
+
+    bot.manager = {
+        logger: {
+            log: (msg, lvl) => { /* silent */ },
+            logFundsStatus: () => {},
+        },
+        _pauseFundRecalc: false,
+        pauseFundRecalc() { this._pauseFundRecalc = true; },
+        resumeFundRecalc() { this._pauseFundRecalc = false; },
+        _clearWorkingGridRef() {},
+        _setRebalanceState() {},
+        startBroadcasting() {},
+        stopBroadcasting() {},
+        lockOrders() {},
+        unlockOrders() {},
+    };
+
+    const callLog = [];
+    bot._callLog = callLog;
+
+    bot.manager.processFilledOrders = async (fills, excl, options) => {
+        callLog.push({ method: 'processFilledOrders', fillCount: fills.length, exclSize: excl?.size || 0, options });
+        return {
+            actions: [{ type: 'create', id: fills[0]?.id || 'x' }],
+            stateUpdates: [],
+            hadRotation: false,
+            workingGrid: { getIndexes: () => ({}), getBoundary: () => 0 },
+            workingIndexes: {},
+            workingBoundary: 0,
+            aborted: false,
+        };
+    };
+
+    bot._executeBatchIfNeeded = async (rebalanceResult, contextLabel) => {
+        callLog.push({ method: '_executeBatchIfNeeded', contextLabel });
+        return { executed: true, hadRotation: false, skippedNoActions: false };
+    };
+
+    bot._refreshDynamicWeightDistribution = (context) => {
+        callLog.push({ method: '_refreshDynamicWeightDistribution', context });
+    };
+
+    return bot;
+}
+
+async function runTests() {
+    console.log('Running test_fill_batch_chunking.js...\n');
+
+    // --- Test 1: empty fills ---
+    {
+        const bot = makeBot();
+        const result = await bot._processFillsWithBatching([], null, 'test-empty');
+        assert.strictEqual(result.aborted, false, 'empty fills should not abort');
+        assert.strictEqual(result.anyRotations, false, 'empty fills should have no rotations');
+        assert.strictEqual(bot._callLog.length, 0, 'empty fills should make no calls');
+        console.log('  ✓ empty fills returns immediately');
+    }
+
+    // --- Test 2: single fill (unified) ---
+    {
+        const bot = makeBot();
+        const fill = makeFill('sell1');
+        const result = await bot._processFillsWithBatching([fill], null, 'test-single');
+        assert.strictEqual(result.aborted, false, 'single fill should not abort');
+        assert.strictEqual(result.anyRotations, false, 'single fill should report rotation status');
+
+        const processCalls = bot._callLog.filter(c => c.method === 'processFilledOrders');
+        assert.strictEqual(processCalls.length, 1, 'single fill: 1 processFilledOrders call');
+        assert.strictEqual(processCalls[0].fillCount, 1, 'single fill: 1 fill in batch');
+
+        const execCalls = bot._callLog.filter(c => c.method === '_executeBatchIfNeeded');
+        assert.strictEqual(execCalls.length, 1, 'single fill: 1 executeBatchIfNeeded call');
+        console.log('  ✓ single fill processed in one batch');
+    }
+
+    // --- Test 3: exactly MAX_BATCH fills (unified) ---
+    {
+        const bot = makeBot();
+        const fills = Array.from({ length: MAX_BATCH }, (_, n) => makeFill(`sell${n + 1}`));
+        const result = await bot._processFillsWithBatching(fills, null, 'test-unified');
+        assert.strictEqual(result.aborted, false, 'MAX_BATCH fills should not abort');
+
+        const processCalls = bot._callLog.filter(c => c.method === 'processFilledOrders');
+        assert.strictEqual(processCalls.length, 1, `MAX_BATCH=${MAX_BATCH} fills: 1 processFilledOrders call`);
+        assert.strictEqual(processCalls[0].fillCount, MAX_BATCH, `MAX_BATCH=${MAX_BATCH} fills in batch`);
+
+        const execCalls = bot._callLog.filter(c => c.method === '_executeBatchIfNeeded');
+        assert.strictEqual(execCalls.length, 1, `MAX_BATCH=${MAX_BATCH} fills: 1 executeBatchIfNeeded call`);
+        console.log(`  ✓ ${MAX_BATCH} fills (unified) processed in one batch`);
+    }
+
+    // --- Test 4: MAX_BATCH + 1 fills (chunked into 2 batches) ---
+    {
+        const bot = makeBot();
+        const totalFills = MAX_BATCH + 2; // e.g. 6 when MAX_BATCH=4
+        const fills = Array.from({ length: totalFills }, (_, n) => makeFill(`sell${n + 1}`));
+        const result = await bot._processFillsWithBatching(fills, null, 'test-chunked');
+        assert.strictEqual(result.aborted, false, 'chunked fills should not abort');
+
+        const processCalls = bot._callLog.filter(c => c.method === 'processFilledOrders');
+        assert.strictEqual(processCalls.length, 2, `${totalFills} fills: 2 processFilledOrders calls`);
+        assert.strictEqual(processCalls[0].fillCount, MAX_BATCH, `first chunk: ${MAX_BATCH} fills`);
+        assert.strictEqual(processCalls[1].fillCount, 2, 'second chunk: 2 fills');
+
+        // In chunked mode, the second chunk should exclude fills from the first chunk
+        // But also the first chunk should exclude fills from the second chunk
+        assert.ok(processCalls[0].exclSize > 0, 'first chunk should have exclude set for future chunks');
+
+        const execCalls = bot._callLog.filter(c => c.method === '_executeBatchIfNeeded');
+        assert.strictEqual(execCalls.length, 2, `${totalFills} fills: 2 executeBatchIfNeeded calls`);
+        console.log(`  ✓ ${totalFills} fills chunked into ${MAX_BATCH} + ${totalFills - MAX_BATCH}`);
+    }
+
+    // --- Test 5: two full batches (e.g. 8 fills when MAX_BATCH=4) ---
+    {
+        const bot = makeBot();
+        const totalFills = MAX_BATCH * 2;
+        const fills = Array.from({ length: totalFills }, (_, n) => makeFill(`sell${n + 1}`));
+        const result = await bot._processFillsWithBatching(fills, null, 'test-double-batch');
+        assert.strictEqual(result.aborted, false);
+
+        const processCalls = bot._callLog.filter(c => c.method === 'processFilledOrders');
+        assert.strictEqual(processCalls.length, 2, `${totalFills} fills: 2 processFilledOrders calls`);
+        assert.strictEqual(processCalls[0].fillCount, MAX_BATCH);
+        assert.strictEqual(processCalls[1].fillCount, MAX_BATCH);
+
+        const execCalls = bot._callLog.filter(c => c.method === '_executeBatchIfNeeded');
+        assert.strictEqual(execCalls.length, 2);
+        console.log(`  ✓ ${totalFills} fills chunked into 2 equal batches of ${MAX_BATCH}`);
+    }
+
+    // --- Test 6: abort on first chunk stops processing ---
+    {
+        const bot = makeBot();
+        const totalFills = MAX_BATCH + 2;
+        const fills = Array.from({ length: totalFills }, (_, n) => makeFill(`sell${n + 1}`));
+
+        bot._executeBatchIfNeeded = async (rebalanceResult, contextLabel) => {
+            bot._callLog.push({ method: '_executeBatchIfNeeded', contextLabel });
+            return { executed: false, hadRotation: false, skippedNoActions: false, abortedForIllegalState: true };
+        };
+
+        const result = await bot._processFillsWithBatching(fills, null, 'test-abort');
+        assert.strictEqual(result.aborted, true, 'aborted batch should return aborted=true');
+
+        const processCalls = bot._callLog.filter(c => c.method === 'processFilledOrders');
+        assert.strictEqual(processCalls.length, 1, 'abort: only first chunk processed');
+        assert.strictEqual(processCalls[0].fillCount, MAX_BATCH, 'abort: first chunk had MAX_BATCH fills');
+
+        const execCalls = bot._callLog.filter(c => c.method === '_executeBatchIfNeeded');
+        assert.strictEqual(execCalls.length, 1, 'abort: only one executeBatchIfNeeded call');
+        console.log('  ✓ abort on first chunk stops processing remaining chunks');
+    }
+
+    // --- Test 7: abort via abortedForAccountingFailure ---
+    {
+        const bot = makeBot();
+        const fills = Array.from({ length: MAX_BATCH + 2 }, (_, n) => makeFill(`sell${n + 1}`));
+
+        bot._executeBatchIfNeeded = async (rebalanceResult, contextLabel) => {
+            bot._callLog.push({ method: '_executeBatchIfNeeded', contextLabel });
+            return { executed: false, hadRotation: false, skippedNoActions: false, abortedForAccountingFailure: true };
+        };
+
+        const result = await bot._processFillsWithBatching(fills, null, 'test-abort-acct');
+        assert.strictEqual(result.aborted, true, 'aborted batch (acct failure) should return aborted=true');
+
+        const processCalls = bot._callLog.filter(c => c.method === 'processFilledOrders');
+        assert.strictEqual(processCalls.length, 1, 'abort acct: only first chunk');
+        console.log('  ✓ abort via abortedForAccountingFailure stops remaining chunks');
+    }
+
+    // --- Test 8: options passed through to processFilledOrders ---
+    {
+        const bot = makeBot();
+        const fill = makeFill('sell1');
+        const options = { skipAccountTotalsUpdate: true };
+        await bot._processFillsWithBatching([fill], null, 'test-opts', options);
+
+        const processCalls = bot._callLog.filter(c => c.method === 'processFilledOrders');
+        assert.strictEqual(processCalls.length, 1);
+        assert.deepStrictEqual(processCalls[0].options, options, 'options passed through to processFilledOrders');
+        console.log('  ✓ options passed through to processFilledOrders');
+    }
+
+    // --- Test 9: exclusion set passed through in unified mode ---
+    {
+        const bot = makeBot();
+        const fill = makeFill('sell1');
+        const excl = new Set(['1.7.999']);
+        await bot._processFillsWithBatching([fill], excl, 'test-excl');
+
+        const processCalls = bot._callLog.filter(c => c.method === 'processFilledOrders');
+        assert.strictEqual(processCalls.length, 1);
+        assert.strictEqual(processCalls[0].exclSize, 1, 'exclusion set passed to processFilledOrders');
+        console.log('  ✓ exclusion set passed in unified mode');
+    }
+
+    // --- Test 10: fund recalc pause/resume wraps the entire operation ---
+    {
+        const bot = makeBot();
+        let wasPaused = false;
+        let wasResumed = false;
+        bot.manager.pauseFundRecalc = () => { wasPaused = true; };
+        bot.manager.resumeFundRecalc = () => { wasResumed = true; };
+
+        const fills = Array.from({ length: MAX_BATCH + 2 }, (_, n) => makeFill(`sell${n + 1}`));
+        await bot._processFillsWithBatching(fills, null, 'test-fund-recalc');
+
+        assert.ok(wasPaused, 'fund recalc should be paused');
+        assert.ok(wasResumed, 'fund recalc should be resumed');
+        console.log('  ✓ fund recalc pause/resume wraps fill processing');
+    }
+
+    // --- Test 11: large burst (20 fills) ---
+    {
+        const bot = makeBot();
+        const totalFills = 20;
+        const fills = Array.from({ length: totalFills }, (_, n) => makeFill(`sell${n + 1}`));
+        const result = await bot._processFillsWithBatching(fills, null, 'test-large-burst');
+        assert.strictEqual(result.aborted, false);
+
+        const expectedChunks = Math.ceil(totalFills / MAX_BATCH);
+        const processCalls = bot._callLog.filter(c => c.method === 'processFilledOrders');
+        assert.strictEqual(processCalls.length, expectedChunks, `20 fills: ${expectedChunks} processFilledOrders calls`);
+
+        const execCalls = bot._callLog.filter(c => c.method === '_executeBatchIfNeeded');
+        assert.strictEqual(execCalls.length, expectedChunks, `20 fills: ${expectedChunks} executeBatchIfNeeded calls`);
+
+        let totalProcessed = 0;
+        for (const call of processCalls) {
+            totalProcessed += call.fillCount;
+        }
+        assert.strictEqual(totalProcessed, totalFills, 'all fills processed across chunks');
+        console.log(`  ✓ 20 fills chunked into ${expectedChunks} batches of max ${MAX_BATCH}`);
+    }
+
+    // --- Test 12: hadRotation propagated ---
+    {
+        const bot = makeBot();
+        const fills = Array.from({ length: MAX_BATCH + 1 }, (_, n) => makeFill(`sell${n + 1}`));
+
+        bot._executeBatchIfNeeded = async (rebalanceResult, contextLabel) => {
+            bot._callLog.push({ method: '_executeBatchIfNeeded', contextLabel });
+            // second chunk reports rotation
+            const isSecond = bot._callLog.filter(c => c.method === '_executeBatchIfNeeded').length === 2;
+            return { executed: true, hadRotation: isSecond, skippedNoActions: false };
+        };
+
+        const result = await bot._processFillsWithBatching(fills, null, 'test-rotation');
+        assert.strictEqual(result.aborted, false);
+        assert.strictEqual(result.anyRotations, true, 'rotation in second chunk should propagate');
+        console.log('  ✓ hadRotation propagated from chunk to result');
+    }
+
+    console.log('\nAll fill batch chunking tests passed.\n');
+}
+
+runTests().catch(err => {
+    console.error('Test failed:', err);
+    process.exit(1);
+});

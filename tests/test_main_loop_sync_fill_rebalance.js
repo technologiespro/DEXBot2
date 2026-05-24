@@ -85,6 +85,9 @@ async function runTests() {
         bot.accountId = '1.2.999';
         bot.manager = {
             _fillProcessingLock: new MockAsyncLock(),
+            logger: { log: () => {} },
+            pauseFundRecalc() {},
+            resumeFundRecalc() {},
             synchronizeWithChain: async () => {
                 syncCalls++;
                 if (syncCalls === 1) {
