@@ -93,6 +93,10 @@ const { normalizeBootstrapCredential } = require('./modules/launcher/credential_
 const Logger = require('./modules/logger');
 const daemonLogger = new Logger('credential-daemon');
 
+// Resolve project root — handles running from dist/ (compiled) vs source
+const DAEMON_DIR = __dirname;
+const PROJECT_ROOT = path.basename(DAEMON_DIR) === 'dist' ? path.dirname(DAEMON_DIR) : DAEMON_DIR;
+
 // Platform check - Unix sockets require Unix-like systems or Windows 10+
 const platform = os.platform();
 if (platform === 'win32') {
@@ -105,9 +109,9 @@ if (platform === 'win32') {
     }
 }
 
-const RUNTIME_DIR = getCredentialRuntimeDir({ root: __dirname });
-const SOCKET_PATH = getCredentialSocketPath({ root: __dirname, runtimeDir: RUNTIME_DIR });
-const READY_FILE = getCredentialReadyFilePath({ root: __dirname, runtimeDir: RUNTIME_DIR });
+const RUNTIME_DIR = getCredentialRuntimeDir({ root: PROJECT_ROOT });
+const SOCKET_PATH = getCredentialSocketPath({ root: PROJECT_ROOT, runtimeDir: RUNTIME_DIR });
+const READY_FILE = getCredentialReadyFilePath({ root: PROJECT_ROOT, runtimeDir: RUNTIME_DIR });
 
 let vaultSecret: any = null;
 let sessionSecret: any = null;
@@ -412,7 +416,7 @@ function getCredentialDaemonNodeRefreshIntervalMs(settings: any) {
 async function initialize() {
     try {
         // Check if profiles/keys.json exists
-        const keysPath = path.join(__dirname, 'profiles', 'keys.json');
+        const keysPath = path.join(PROJECT_ROOT, 'profiles', 'keys.json');
         if (!fs.existsSync(keysPath)) {
             throw new Error('profiles/keys.json not found. Please run: node dexbot.js keys');
         }
@@ -433,11 +437,11 @@ async function initialize() {
         }
 
         // Load policy config
-        const policyConfigPath = path.join(__dirname, 'profiles', 'daemon-policies.json');
+        const policyConfigPath = path.join(PROJECT_ROOT, 'profiles', 'daemon-policies.json');
         policyConfig = credentialPolicy.loadRequiredPolicyConfig(policyConfigPath);
 
         // Set audit log path
-        const auditLogDir = path.join(__dirname, 'profiles', 'logs');
+        const auditLogDir = path.join(PROJECT_ROOT, 'profiles', 'logs');
         if (!fs.existsSync(auditLogDir)) {
             try {
                 fs.mkdirSync(auditLogDir, { recursive: true });
@@ -482,7 +486,7 @@ async function initialize() {
             refreshNodeList();
         });
 
-        ensureCredentialRuntimeDirSync({ root: __dirname, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });
+        ensureCredentialRuntimeDirSync({ root: PROJECT_ROOT, runtimeDir: RUNTIME_DIR, socketPath: SOCKET_PATH, readyFilePath: READY_FILE });
         daemonLogger.log?.(`[credential-daemon] Runtime socket path: ${SOCKET_PATH}`);
         daemonLogger.log?.(`[credential-daemon] Ready file path: ${READY_FILE}`);
 

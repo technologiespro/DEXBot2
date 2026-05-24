@@ -16,7 +16,10 @@ const { BitShares } = require('./bitshares_client');
 const { isPositiveInt } = require('./order/utils/math');
 const { parseJsonWithComments } = require('./order/utils/system');
 
-const BOTS_JSON_PATH = path.join(__dirname, '..', 'profiles', 'bots.json');
+const MODULE_DIR = path.dirname(__dirname);
+const PROJECT_ROOT = path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
+
+const BOTS_JSON_PATH = path.join(PROJECT_ROOT, 'profiles', 'bots.json');
 const ASSET_OBJECT_ID_PATTERN = /^1\.3\.\d+$/;
 
 const POLICY_DENIED_PREFIX = 'POLICY_DENIED: ';
@@ -1306,7 +1309,7 @@ function loadBotHmacSecret(accountName, policyConfigPath, options = {}) {
 
         try {
             // Check if credential daemon is running to reload config via SIGHUP
-            const readyFile = path.join(__dirname, '..', 'profiles', 'runtime', 'credential-daemon.ready');
+            const readyFile = path.join(PROJECT_ROOT, 'profiles', 'runtime', 'credential-daemon.ready');
             if (fs.existsSync(readyFile)) {
                 const daemonInfo = JSON.parse(fs.readFileSync(readyFile, 'utf8'));
                 if (daemonInfo && daemonInfo.pid) {
