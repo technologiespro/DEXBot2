@@ -248,17 +248,9 @@ try {
     run('npm install --prefer-offline');
 
     /**
-     * STEP 8b: Build TypeScript sources
-     * Compiles .ts files to dist/ so runtime scripts (bot.js, pm2.js, etc.)
-     * exist at the paths referenced by the PM2 ecosystem config.
+     * STEP 8b: Build TypeScript sources (already compiled by prepare hook during npm install)
      */
-    log('Building TypeScript sources...');
-    try {
-        run('npm run build');
-        log('TypeScript build complete.');
-    } catch (err) {
-        log(`Warning: TypeScript build failed (${err.message}). Continuing with existing dist/ if available.`);
-    }
+    log('TypeScript sources built during npm install prepare hook.');
 
     /**
      * STEP 8c: Regenerate Ecosystem Config
