@@ -29,6 +29,41 @@ function createSubscriptionManager(chainClient) {
         });
     }
 
+    function decrementObjectId(id) {
+        if (typeof id !== 'string') return null;
+        const match = id.match(/^(.+\.)(\d+)$/);
+        if (!match) return null;
+        const instance = Number(match[2]);
+        if (!Number.isSafeInteger(instance) || instance <= 0) return null;
+        return `${match[1]}${instance - 1}`;
+    }
+
+    function warnSubscription(sub, message, err = null) {
+        const account = sub?.accountName || sub?.accountId || 'unknown';
+        const detail = err?.message ? `: ${err.message}` : '';
+        console.warn(`[subscriptions] ${message} for ${account}${detail}`);
+    }
+
+    async function fetchFullAccountWithRetry(sub, subscribe = false) {
+        const accountRef = sub.accountId || sub.accountName;
+        let lastErr = null;
+
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                const accounts = await chainClient.db.get_full_accounts([accountRef], subscribe);
+                const account = accounts?.[0]?.[1];
+                if (account) return account;
+                warnSubscription(sub, `get_full_accounts returned no account data on attempt ${attempt}`);
+            } catch (err: any) {
+                lastErr = err;
+                warnSubscription(sub, `get_full_accounts failed on attempt ${attempt}`, err);
+            }
+        }
+
+        if (lastErr) throw lastErr;
+        return null;
+    }
+
     async function fetchFillHistoryEntries(accountId, stopHistoryId) {
         const fetchPage = chainClient.history?.getAccountHistoryOperations
             || chainClient.history?.get_account_history_operations
@@ -58,8 +93,9 @@ function createSubscriptionManager(chainClient) {
             if (page.length < SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX) break;
 
             const oldestId = page[page.length - 1]?.id;
-            if (!oldestId || oldestId === startHistoryId || oldestId === stopHistoryId) break;
-            startHistoryId = oldestId;
+            const nextStartHistoryId = decrementObjectId(oldestId);
+            if (!oldestId || !nextStartHistoryId || oldestId === stopHistoryId || nextStartHistoryId === startHistoryId) break;
+            startHistoryId = nextStartHistoryId;
         }
 
         return sortEntriesOldestFirst(entries);
@@ -167,10 +203,8 @@ function createSubscriptionManager(chainClient) {
         if (noticeObjectIds.length === 0) return;
 
         try {
-            const accounts = await chainClient.db.get_full_accounts([sub.accountId || sub.accountName], false);
-            if (!accounts || !accounts[0] || !accounts[0][1]) return;
-
-            const accData = accounts[0][1];
+            const accData = await fetchFullAccountWithRetry(sub, false);
+            if (!accData) return;
             const accountId = accData.account?.id || sub.accountId;
             if (!accountId) return;
             sub.accountId = accountId;

@@ -1,6 +1,7 @@
 // @ts-nocheck
 const { buildFillKey } = require('./order/utils/order');
 const { PROCESSED_FILL_PERSISTENCE_MODES } = require('./order/processed_fill_store');
+const { NATIVE_CLIENT } = require('./constants');
 
 /**
  * Wire processed fill tracking into the manager and processed fill store.
@@ -218,6 +219,12 @@ function createFillCallback(chainOrders) {
         }
 
         if (this.manager && !this.config.dryRun && Array.isArray(fills) && fills.length > 0) {
+            const maxQueueDepth = Number(NATIVE_CLIENT?.SUBSCRIPTIONS?.MAX_INCOMING_FILL_QUEUE || 1000);
+            if (this._incomingFillQueue.length + fills.length > maxQueueDepth) {
+                const message = `Incoming fill queue back-pressure: ${this._incomingFillQueue.length} queued + ${fills.length} incoming exceeds limit ${maxQueueDepth}`;
+                this._warn(message);
+                throw new Error(message);
+            }
             this._markGridActivity?.('fill queued');
             this._incomingFillQueue.push(...fills);
             this._consumeFillQueue(chainOrders).catch(err => {

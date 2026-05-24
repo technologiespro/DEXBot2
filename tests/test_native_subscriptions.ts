@@ -156,7 +156,7 @@ function makeAccountRecord(account) {
             pageOne.push({ id: `1.11.${id}`, block_num: id, trx_id: id, op: [4, { order_id: `1.7.${id}` }] });
         }
         const pageTwo = [];
-        for (let id = 906; id >= 901; id--) {
+        for (let id = 905; id >= 901; id--) {
             pageTwo.push({ id: `1.11.${id}`, block_num: id, trx_id: id, op: [4, { order_id: `1.7.${id}` }] });
         }
         const historyCalls = [];
@@ -178,7 +178,7 @@ function makeAccountRecord(account) {
                         return [{ id: '1.11.900', block_num: 900, trx_id: 900, op: [4, { order_id: '1.7.900' }] }];
                     }
                     if (start === '1.11.0') return pageOne.slice();
-                    if (start === '1.11.906') return pageTwo.slice();
+                    if (start === '1.11.905') return pageTwo.slice();
                     return [];
                 },
             },
@@ -199,10 +199,70 @@ function makeAccountRecord(account) {
             historyCalls.slice(1),
             [
                 ['1.2.100', 4, '1.11.0', '1.11.900', 100],
-                ['1.2.100', 4, '1.11.906', '1.11.900', 100],
+                ['1.2.100', 4, '1.11.905', '1.11.900', 100],
             ],
-            'pagination should continue from the oldest page entry when the first page is full'
+            'pagination should continue before the oldest page entry because BitShares Core treats start as inclusive'
         );
+    }
+
+    console.log(' - Testing get_full_accounts notice failures warn and retry without advancing cursor...');
+    {
+        let noticeHandler = null;
+        let fullAccountCalls = 0;
+        let warningCount = 0;
+        const delivered = [];
+        const originalWarn = console.warn;
+        console.warn = (...args) => {
+            if (String(args[0] || '').includes('[subscriptions] get_full_accounts')) warningCount++;
+        };
+
+        try {
+            const chainClient = {
+                transport: {
+                    addMessageHandler(handler) {
+                        noticeHandler = handler;
+                        return () => { noticeHandler = null; };
+                    },
+                },
+                db: {
+                    get_full_accounts: async ([account], subscribe) => {
+                        if (subscribe) return [makeAccountRecord(account)];
+                        fullAccountCalls++;
+                        if (fullAccountCalls === 1) throw new Error('temporary rpc failure');
+                        if (fullAccountCalls === 2) return [];
+                        return [makeAccountRecord(account)];
+                    },
+                    call: async () => null,
+                },
+                history: {
+                    getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
+                        if (limit === 1) {
+                            return [{ id: '1.11.800', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                        }
+                        if (stop === '1.11.800') {
+                            return [{ id: '1.11.801', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.801' }] }];
+                        }
+                        if (stop === '1.11.801') return [];
+                        return [];
+                    },
+                },
+            };
+
+            const manager = createSubscriptionManager(chainClient);
+            await manager.subscribe('alice', (fills) => {
+                delivered.push(fills);
+            });
+
+            await noticeHandler([1, [{ id: '2.5.3000', owner: '1.2.100' }]]);
+            assert.strictEqual(delivered.length, 0, 'failed account refresh should not deliver fills');
+            assert.strictEqual(warningCount, 2, 'failed and empty account refresh attempts should warn');
+
+            await noticeHandler([1, [{ id: '2.5.3001', owner: '1.2.100' }]]);
+            assert.strictEqual(delivered.length, 1, 'next successful notice should retry the unacknowledged fill');
+            assert.strictEqual(delivered[0][0].id, '1.11.801');
+        } finally {
+            console.warn = originalWarn;
+        }
     }
 
     console.log(' - Testing callback failures retry the same fill until success...');

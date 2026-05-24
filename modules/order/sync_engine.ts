@@ -227,6 +227,15 @@ class SyncEngine {
             return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [] };
         }
 
+        if (!options?.fillLockAlreadyHeld && mgr._fillProcessingLock) {
+            return mgr._fillProcessingLock.acquire(async () => {
+                return this.syncFromOpenOrders(chainOrders, {
+                    ...options,
+                    fillLockAlreadyHeld: true
+                });
+            });
+        }
+
         mgr.logger?.log?.(`[SYNC] Starting synchronization from ${chainOrders?.length || 0} blockchain orders...`, 'info');
 
         // Defense-in-depth: Use AsyncLock to ensure only one full-sync at a time
@@ -884,9 +893,10 @@ class SyncEngine {
      *
      * @param {Object} chainData - Chain event data
      * @param {string} source - Source identifier ('createOrder', 'cancelOrder', 'readOpenOrders', etc.)
+     * @param {Object} [options] - Sync options forwarded to open-order reconciliation
      * @returns {Promise<Object>} { newOrders, ordersNeedingCorrection }
      */
-    async synchronizeWithChain(chainData, source) {
+    async synchronizeWithChain(chainData, source, options = {}) {
         const mgr = this.manager;
         if (!mgr.assets) return { newOrders: [], ordersNeedingCorrection: [] };
 
@@ -1006,14 +1016,20 @@ class SyncEngine {
             case 'readOpenOrders':
                 // Plain open-order syncs do not imply a fresh account balance fetch,
                 // so they still use optimistic accounting deltas.
-                return this.syncFromOpenOrders(chainData, { skipAccounting: false });
+                return this.syncFromOpenOrders(chainData, {
+                    skipAccounting: false,
+                    fillLockAlreadyHeld: options?.fillLockAlreadyHeld
+                });
 
             case 'periodicBlockchainFetch': {
                 // This source is used after fetchAccountTotals() has refreshed
                 // authoritative chain free/locked totals. Applying optimistic
                 // commitment deltas here double-deducts newly adopted or resized
                 // open orders from already-fetched free balances.
-                return this.syncFromOpenOrders(chainData, { skipAccounting: true });
+                return this.syncFromOpenOrders(chainData, {
+                    skipAccounting: true,
+                    fillLockAlreadyHeld: options?.fillLockAlreadyHeld
+                });
             }
         }
         return { newOrders: [], ordersNeedingCorrection: [] };

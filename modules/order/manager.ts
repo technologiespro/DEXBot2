@@ -843,17 +843,17 @@ class OrderManager {
      * @param {string} src - Source identifier
      * @returns {Promise<import('./types').SyncResult>}
      */
-    async synchronizeWithChain(data, src) {
+    async synchronizeWithChain(data, src, options = {}) {
         if (SYNC_SOURCES_MANAGE_OWN_GRID_LOCK.has(src)) {
-            return await this._applySync(data, src);
+            return await this._applySync(data, src, options);
         }
         return await this._gridLock.acquire(async () => {
-            return await this._applySync(data, src);
+            return await this._applySync(data, src, options);
         });
     }
 
-    async _applySync(data, src) {
-        return await this.sync.synchronizeWithChain(data, src);
+    async _applySync(data, src, options = {}) {
+        return await this.sync.synchronizeWithChain(data, src, options);
     }
 
     async _initializeAssets() {

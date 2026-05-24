@@ -244,6 +244,40 @@ async function testIllegalStateAbortResyncAndCooldown() {
     assert.strictEqual(spreadChecks, 0, 'Cooldown cycle should skip spread checks once after hard-abort');
 }
 
+async function testFillCallbackAppliesQueueBackPressure() {
+    const bot = new DEXBot({
+        botKey: 'test_patch17_invariants_queue_backpressure',
+        dryRun: false,
+        startPrice: 1,
+        assetA: 'TEST',
+        assetB: 'BTS',
+        incrementPercent: 0.5
+    });
+
+    let warnings = 0;
+    let consumeCalls = 0;
+    bot._warn = () => { warnings++; };
+    bot._consumeFillQueue = async () => { consumeCalls++; };
+    bot.manager = { logger: { log: () => {} } };
+
+    bot._incomingFillQueue = Array.from({ length: 999 }, (_, index) => ({ id: `queued-${index}` }));
+    const callback = bot._createFillCallback({});
+
+    await assert.rejects(
+        callback([{ id: 'overflow-1' }, { id: 'overflow-2' }]),
+        /Incoming fill queue back-pressure/,
+        'fill callback should reject before accepting fills beyond the queue cap'
+    );
+
+    assert.strictEqual(bot._incomingFillQueue.length, 999, 'back-pressure must leave the queue unchanged for retry');
+    assert.strictEqual(consumeCalls, 0, 'back-pressure must not start a consumer for rejected fills');
+    assert.strictEqual(warnings, 1, 'back-pressure should emit one warning');
+
+    await callback([{ id: 'accepted-1' }]);
+    assert.strictEqual(bot._incomingFillQueue.length, 1000, 'queue should still accept fills up to the configured cap');
+    assert.strictEqual(consumeCalls, 1, 'accepted fills should start the consumer');
+}
+
 async function testRoleAssignmentBlocksOnChainSpreadConversion() {
     const mgr = await createManager();
     mgr.logger.level = 'error';
@@ -525,6 +559,7 @@ async function runTests() {
     await testExtremePlacementOrdering();
     await testPipelineInFlightDefersMaintenance();
     await testIllegalStateAbortResyncAndCooldown();
+    await testFillCallbackAppliesQueueBackPressure();
     await testRoleAssignmentBlocksOnChainSpreadConversion();
     await testGridResizeRespectsBudgetAfterCap();
     await testIllegalBatchAbortArmsMaintenanceCooldown();

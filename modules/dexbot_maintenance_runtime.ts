@@ -840,7 +840,7 @@ function startOpenOrdersSyncLoop() {
                             this._markGridActivity?.('open-orders sync');
                             try {
                                 const chainOpenOrders = await readOpenOrdersFn.call(chainOrders, this.accountId);
-                                const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders');
+                                const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
 
                                 if (syncResult?.filledOrders && syncResult.filledOrders.length > 0) {
                                     this._log(`Open-orders sync loop: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
@@ -935,7 +935,7 @@ function setupBlockchainFetchInterval() {
                     try {
                         this._markGridActivity?.('periodic open-orders sync');
                         chainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
-                        const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'periodicBlockchainFetch');
+                        const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'periodicBlockchainFetch', { fillLockAlreadyHeld: true });
 
                         if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
                             this._log(`Periodic sync: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
@@ -1290,7 +1290,7 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
             if (cancelResult?.verifiedAfterFailure) {
                 const accountRef = this.accountId || this.account;
                 const chainOpenOrders = await chainOrders.readOpenOrders(accountRef);
-                await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders');
+                await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
             } else {
                 await this.manager.synchronizeWithChain({ orderId: order.orderId, clearSize: true }, 'cancelOrder');
             }

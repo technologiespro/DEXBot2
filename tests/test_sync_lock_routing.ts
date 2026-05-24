@@ -76,10 +76,35 @@ async function testSourceBasedLockRouting() {
     console.log('  PASS');
 }
 
+async function testOpenOrdersSyncUsesFillLockContract() {
+    console.log('\n[SYNC-LOCK-003] syncFromOpenOrders acquires fill lock unless caller already holds it...');
+    const manager = createManagerFixture();
+
+    let fillLockAcquireCalls = 0;
+    const realFillLock = manager._fillProcessingLock;
+    manager._fillProcessingLock = {
+        acquire: async (callback) => {
+            fillLockAcquireCalls += 1;
+            return await callback();
+        },
+        isLocked: () => realFillLock.isLocked(),
+        getQueueLength: () => realFillLock.getQueueLength(),
+    };
+
+    await manager.syncFromOpenOrders([]);
+    assert.strictEqual(fillLockAcquireCalls, 1, 'direct open-orders sync should acquire _fillProcessingLock');
+
+    await manager.syncFromOpenOrders([], { fillLockAlreadyHeld: true });
+    assert.strictEqual(fillLockAcquireCalls, 1, 'caller-owned fill lock should bypass reacquisition');
+
+    console.log('  PASS');
+}
+
 async function run() {
     console.log('Running sync lock routing regression tests...');
     await testReadOpenOrdersNoDeadlock();
     await testSourceBasedLockRouting();
+    await testOpenOrdersSyncUsesFillLockContract();
     console.log('\nAll sync lock routing regression tests passed');
 }
 

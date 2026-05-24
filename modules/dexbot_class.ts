@@ -901,7 +901,7 @@ class DEXBot {
                         if (requiresOpenOrdersSync) {
                             this._log('[POST-RESET] Falling back to open-orders sync for fill(s) missing replay-safe history identifiers', 'warn');
                             const postResetChainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
-                            const syncResult = await this.manager.syncFromOpenOrders(postResetChainOpenOrders);
+                            const syncResult = await this.manager.syncFromOpenOrders(postResetChainOpenOrders, { fillLockAlreadyHeld: true });
                             if (syncResult.filledOrders?.length > 0) {
                                 await this._processFillsWithBatching(syncResult.filledOrders, new Set(), '[POST-RESET] open-orders fallback');
                             }
@@ -1008,7 +1008,7 @@ class DEXBot {
                         if (Array.isArray(chainOpenOrders) && chainOpenOrders.length > 0) {
                             this._log('Generating new grid and syncing with existing on-chain orders...');
                             await Grid.initializeGrid(this.manager);
-                            await this.manager.syncFromOpenOrders(chainOpenOrders, { skipAccounting: true });
+                            await this.manager.syncFromOpenOrders(chainOpenOrders, { skipAccounting: true, fillLockAlreadyHeld: true });
                             const rebalanceResult = await reconcileStartupOrders({
                                 manager: this.manager,
                                 config: this.config,
@@ -1016,6 +1016,7 @@ class DEXBot {
                                 privateKey: this.privateKey,
                                 chainOrders,
                                 chainOpenOrders,
+                                fillLockAlreadyHeld: true,
                             });
 
                             await this._executeBatchIfNeeded(rebalanceResult, 'startup reconcile (regenerated grid)');
@@ -1028,7 +1029,7 @@ class DEXBot {
                         this._log('Found active session. Loading and syncing existing grid.');
                         await Grid.loadGrid(this.manager, persistedGrid, persistedBoundaryIdx);
                         let startupChainOpenOrders = chainOpenOrders;
-                        const syncResult = await this.manager.syncFromOpenOrders(startupChainOpenOrders, { skipAccounting: true });
+                        const syncResult = await this.manager.syncFromOpenOrders(startupChainOpenOrders, { skipAccounting: true, fillLockAlreadyHeld: true });
 
                         if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
                             this._log(`Startup sync: ${syncResult.filledOrders.length} grid order(s) found filled. Processing proceeds.`, 'info');
@@ -1041,7 +1042,7 @@ class DEXBot {
                                 // Refresh open orders so startup reconcile works with post-batch chain reality
                                 // and avoids reconciling against a stale pre-batch snapshot.
                                 startupChainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
-                                await this.manager.synchronizeWithChain(startupChainOpenOrders, 'readOpenOrders');
+                                await this.manager.synchronizeWithChain(startupChainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
                             }
                         }
 
@@ -1052,6 +1053,7 @@ class DEXBot {
                             privateKey: this.privateKey,
                             chainOrders,
                             chainOpenOrders: startupChainOpenOrders,
+                            fillLockAlreadyHeld: true,
                         });
 
                         await this._executeBatchIfNeeded(rebalanceResult, 'startup reconcile (loaded grid)');
@@ -1314,7 +1316,7 @@ class DEXBot {
                             }
                             this.manager.logger.log(`Syncing ${fillsToSync.length} fill(s) (open orders mode)`, 'info');
                             const chainOpenOrders = await chainOrders.readOpenOrders(this.account);
-                            const resultOpenOrders = await this.manager.syncFromOpenOrders(chainOpenOrders);
+                            const resultOpenOrders = await this.manager.syncFromOpenOrders(chainOpenOrders, { fillLockAlreadyHeld: true });
                             await this._seedDustTimersFromPartialUpdates(resultOpenOrders.updatedOrders, Date.now());
                             if (resultOpenOrders.filledOrders) resolvedOrders.push(...resultOpenOrders.filledOrders);
                             if (resultOpenOrders.ordersNeedingCorrection) ordersNeedingCorrection.push(...resultOpenOrders.ordersNeedingCorrection);
@@ -1607,7 +1609,7 @@ class DEXBot {
         if (requiresOpenOrdersSync) {
             this._log('[BOOTSTRAP] Falling back to open-orders sync for fill(s) missing replay-safe history identifiers', 'warn');
             const bootstrapChainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
-            const syncResult = await this.manager.syncFromOpenOrders(bootstrapChainOpenOrders);
+            const syncResult = await this.manager.syncFromOpenOrders(bootstrapChainOpenOrders, { fillLockAlreadyHeld: true });
             if (syncResult.filledOrders?.length > 0) {
                 const queuedOrderIds = new Set(validFills.map(fill => fill?.gridOrder?.orderId).filter(Boolean));
                 for (const filledOrder of syncResult.filledOrders) {

@@ -1169,6 +1169,11 @@ let NATIVE_CLIENT = {
         // fills after a subscription notice. The scan pages until it catches up
         // to the per-subscription cursor (lastDeliveredHistoryId).
         HISTORY_LOOKBACK_MAX: 100,
+
+        // Maximum fill events accepted into the in-memory processing queue.
+        // Subscription callbacks throw before acknowledging history when this
+        // limit would be exceeded, so the cursor remains retryable.
+        MAX_INCOMING_FILL_QUEUE: 1000,
     },
 
     // -------------------------------------------------------------------------
