@@ -79,7 +79,7 @@ const unlockStart = require('../unlock-start');
 
 async function runAllBotsTest() {
     resetState();
-    await unlockStart.main({ argv: ['node', 'unlock-start'] });
+    await unlockStart.main({ argv: ['node', 'unlock-start'], startupGraceMs: 0 });
 
     assert.strictEqual(state.ensureCount, 1, 'launcher should unlock the credential daemon once');
     assert.strictEqual(state.waitCount, 0, 'normal startup should not wait on daemon shutdown');
@@ -87,27 +87,27 @@ async function runAllBotsTest() {
     assert.strictEqual(state.calls.length, 1, 'launcher should spawn exactly one bot process');
     assert.deepStrictEqual(
         state.calls[0].args,
-        [path.resolve(__dirname, '..', 'dexbot.js'), 'start'],
+        ['--import', 'tsx', path.resolve(__dirname, '..', 'dexbot.ts'), 'start'],
         'default unlock-start should launch all bots'
     );
 }
 
 async function runSingleBotTest() {
     resetState();
-    await unlockStart.main({ argv: ['node', 'unlock-start', 'XRP-BTS'] });
+    await unlockStart.main({ argv: ['node', 'unlock-start', 'XRP-BTS'], startupGraceMs: 0 });
 
     assert.strictEqual(state.ensureCount, 1, 'launcher should unlock the credential daemon once');
     assert.strictEqual(state.stopCount, 1, 'launcher should clean up its owned daemon');
     assert.deepStrictEqual(
         state.calls[0].args,
-        [path.resolve(__dirname, '..', 'dexbot.js'), 'start', 'XRP-BTS'],
+        ['--import', 'tsx', path.resolve(__dirname, '..', 'dexbot.ts'), 'start', 'XRP-BTS'],
         'single-bot unlock-start should pass the bot name through'
     );
 }
 
 async function runClawOnlyTest() {
     resetState();
-    await unlockStart.main({ argv: ['node', 'unlock-start', '--claw-only'] });
+    await unlockStart.main({ argv: ['node', 'unlock-start', '--claw-only'], startupGraceMs: 0 });
 
     assert.strictEqual(state.ensureCount, 1, 'claw-only mode should unlock the credential daemon');
     assert.strictEqual(state.waitCount, 1, 'claw-only mode should wait for daemon lifecycle');
@@ -117,7 +117,7 @@ async function runClawOnlyTest() {
 
 async function runIsolatedAllBotsTest() {
     resetState();
-    await unlockStart.main({ argv: ['node', 'unlock-start', '--isolated'] });
+    await unlockStart.main({ argv: ['node', 'unlock-start', '--isolated'], startupGraceMs: 0 });
 
     assert.strictEqual(state.ensureCount, 1, 'isolated launcher should unlock the credential daemon once');
     assert.strictEqual(state.stopCount, 1, 'isolated launcher should clean up its owned daemon');
@@ -126,16 +126,38 @@ async function runIsolatedAllBotsTest() {
 
 async function runIsolatedSingleBotTest() {
     resetState();
-    await unlockStart.main({ argv: ['node', 'unlock-start', '--isolated', 'XRP-BTS'] });
+    await unlockStart.main({ argv: ['node', 'unlock-start', '--isolated', 'XRP-BTS'], startupGraceMs: 0 });
 
     assert.strictEqual(state.ensureCount, 1, 'isolated single-bot launcher should unlock the credential daemon');
     assert.strictEqual(state.stopCount, 1, 'isolated single-bot launcher should clean up its owned daemon');
-    const botCalls = state.calls.filter((call) => call.args[0].endsWith('bot.js'));
+    const botCalls = state.calls.filter((call) => call.args.some((arg) => String(arg).endsWith('bot.ts')));
     assert.strictEqual(botCalls.length, 1, 'isolated single-bot launcher should spawn exactly one bot process');
     assert.ok(
-        botCalls[0].args[0].endsWith('bot.js'),
-        'isolated launcher should use bot.js entry point'
+        botCalls[0].args.some((arg) => String(arg).endsWith('bot.ts')),
+        'isolated launcher should use the source bot entry point'
     );
+}
+
+async function runImmediateExitStartupFailureTest() {
+    resetState();
+    await assert.rejects(
+        () => unlockStart.main({ argv: ['node', 'unlock-start'], startupGraceMs: 50 }),
+        /DEXBot exited during startup/,
+        'launcher should reject when the bot exits before the startup grace period elapses'
+    );
+    assert.strictEqual(state.ensureCount, 1, 'launcher should still unlock the credential daemon before startup');
+    assert.strictEqual(state.stopCount, 1, 'launcher should still clean up its owned daemon on startup failure');
+}
+
+async function runMissingIsolatedBotFailsFastTest() {
+    resetState();
+    await assert.rejects(
+        () => unlockStart.main({ argv: ['node', 'unlock-start', '--isolated', 'DOES-NOT-EXIST'], startupGraceMs: 0 }),
+        /Bot 'DOES-NOT-EXIST' not found in bots\.json/,
+        'isolated startup should fail immediately for unknown bots'
+    );
+    assert.strictEqual(state.ensureCount, 0, 'launcher should validate the target bot before unlocking credentials');
+    assert.strictEqual(state.calls.length, 0, 'launcher should not spawn child processes for unknown bots');
 }
 
 (async () => {
@@ -145,6 +167,8 @@ async function runIsolatedSingleBotTest() {
         await runClawOnlyTest();
         await runIsolatedAllBotsTest();
         await runIsolatedSingleBotTest();
+        await runImmediateExitStartupFailureTest();
+        await runMissingIsolatedBotFailsFastTest();
         console.log('unlock-start main tests passed');
         process.exit(0);
     } catch (err) {

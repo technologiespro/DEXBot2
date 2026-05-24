@@ -87,13 +87,17 @@ const unlockStart = require('../unlock-start');
 
 async function runAllBotsTest() {
     resetState();
-    await unlockStart.main({ argv: ['node', 'unlock-start'] });
+    await unlockStart.main({ argv: ['node', 'unlock-start'], startupGraceMs: 0 });
 
     assert.strictEqual(state.ensureCount, 1, 'launcher should unlock the credential daemon once');
     assert.strictEqual(state.waitCount, 0, 'normal startup should not wait on daemon shutdown');
     assert.strictEqual(state.stopCount, 1, 'launcher should clean up its owned daemon');
     assert.strictEqual(state.calls.length, 1, 'launcher should spawn exactly one bot process');
-    assert.deepStrictEqual(state.calls[0].args, ['dexbot.js', 'start'], 'default unlock-start should launch all bots');
+    assert.deepStrictEqual(
+        state.calls[0].args,
+        ['--import', 'tsx', require('path').resolve(__dirname, '..', 'dexbot.ts'), 'start'],
+        'default unlock-start should launch all bots through the source entry point'
+    );
     assert.ok(logs.includes('DEXBot2 Unlock-Start Launcher'), 'launcher should print a banner title');
     assert.ok(logs.includes('Starting all bots'), 'launcher should print the chosen launch mode');
     assert.ok(logs.includes('✓ Authentication successful'), 'launcher should confirm successful authentication');
@@ -103,11 +107,15 @@ async function runAllBotsTest() {
 
 async function runSingleBotTest() {
     resetState();
-    await unlockStart.main({ argv: ['node', 'unlock-start', 'XRP-BTS'] });
+    await unlockStart.main({ argv: ['node', 'unlock-start', 'XRP-BTS'], startupGraceMs: 0 });
 
     assert.strictEqual(state.ensureCount, 1, 'launcher should unlock the credential daemon once');
     assert.strictEqual(state.stopCount, 1, 'launcher should clean up its owned daemon');
-    assert.deepStrictEqual(state.calls[0].args, ['dexbot.js', 'start', 'XRP-BTS'], 'single-bot unlock-start should pass the bot name through');
+    assert.deepStrictEqual(
+        state.calls[0].args,
+        ['--import', 'tsx', require('path').resolve(__dirname, '..', 'dexbot.ts'), 'start', 'XRP-BTS'],
+        'single-bot unlock-start should pass the bot name through'
+    );
     assert.ok(logs.includes('Starting bot: XRP-BTS'), 'launcher should print the selected bot name');
     assert.ok(
         logs.includes('If the bot stops, rerun `node unlock-start XRP-BTS` to unlock it again.'),
@@ -118,7 +126,7 @@ async function runSingleBotTest() {
 async function runReuseDaemonTest() {
     resetState();
     state.ensureResult = false;
-    await unlockStart.main({ argv: ['node', 'unlock-start'] });
+    await unlockStart.main({ argv: ['node', 'unlock-start'], startupGraceMs: 0 });
 
     assert.strictEqual(state.ensureCount, 1, 'launcher should still check daemon availability');
     assert.strictEqual(state.stopCount, 1, 'launcher should still run cleanup');
@@ -127,7 +135,7 @@ async function runReuseDaemonTest() {
 
 async function runClawOnlyTest() {
     resetState();
-    await unlockStart.main({ argv: ['node', 'unlock-start', '--claw-only'] });
+    await unlockStart.main({ argv: ['node', 'unlock-start', '--claw-only'], startupGraceMs: 0 });
 
     assert.strictEqual(state.ensureCount, 1, 'claw-only mode should unlock the credential daemon');
     assert.strictEqual(state.waitCount, 1, 'claw-only mode should wait for daemon lifecycle');
@@ -138,12 +146,25 @@ async function runClawOnlyTest() {
     assert.ok(logs.includes('If the daemon stops, rerun `node unlock-start --claw-only` to unlock it again.'), 'launcher should print the claw-only restart hint');
 }
 
+async function runStartupFailureSuppressesSuccessTest() {
+    resetState();
+    await assert.rejects(
+        () => unlockStart.main({ argv: ['node', 'unlock-start'], startupGraceMs: 50 }),
+        /DEXBot exited during startup/,
+        'launcher should fail when the child exits during the startup grace period'
+    );
+
+    assert.ok(!logs.includes('DEXBot2 started successfully!'), 'launcher should not print the success footer on startup failure');
+    assert.strictEqual(state.stopCount, 1, 'launcher should still clean up the daemon after startup failure');
+}
+
 (async () => {
     try {
         await runAllBotsTest();
         await runSingleBotTest();
         await runReuseDaemonTest();
         await runClawOnlyTest();
+        await runStartupFailureSuppressesSuccessTest();
         restoreStubs();
         process.stdout.write('unlock-start output tests passed\n');
         process.exit(0);

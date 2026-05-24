@@ -1159,22 +1159,15 @@ let NATIVE_CLIENT = {
         // Fill_order virtual operations produce 1.11.x operation history objects.
         // Notice handlers filter incoming object-change notifications by this prefix
         // to isolate fill events from other blockchain activity.
-        FILL_OBJECT_PREFIX: '1.11',
+        OPERATION_HISTORY_PREFIX: '1.11',
 
         // Default operation history object ID used as a fallback starting point
         // when the account's most_recent_op cannot be resolved.
         HISTORY_API_OBJECT: '1.11.0',
 
-        // Delivered fill-ID cache: maximum entries per account before trimming.
-        // Provides deduplication across resubscribe cycles; the cache is trimmed
-        // to TRIM_SIZE (oldest entries first) when MAX is exceeded.
-        DELIVERED_CACHE_MAX:  500,
-        DELIVERED_CACHE_TRIM: 250,
-
-        // History lookback window bounds (number of history entries to fetch).
-        // Scaled by the number of object-change notifications received in a batch.
-        // The actual window = clamp(objectIds × 5, MIN, MAX).
-        HISTORY_LOOKBACK_MIN: 10,
+        // Maximum number of history entries to fetch per page when scanning for
+        // fills after a subscription notice. The scan pages until it catches up
+        // to the per-subscription cursor (lastDeliveredHistoryId).
         HISTORY_LOOKBACK_MAX: 100,
     },
 

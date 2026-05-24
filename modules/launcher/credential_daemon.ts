@@ -11,6 +11,7 @@ const {
 } = require('../credential_runtime');
 const { createPasswordBootstrapServer } = require('./credential_bootstrap');
 const { buildScopedChildEnv } = require('./child_env');
+const { buildRuntimeScriptArgs } = require('./runtime_entry');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_ROOT = path.basename(DEFAULT_CODE_ROOT) === 'dist' ? path.dirname(DEFAULT_CODE_ROOT) : DEFAULT_CODE_ROOT;
@@ -76,9 +77,13 @@ function createCredentialDaemonController({
 
         const vaultSecret = await chainKeys.authenticate();
         const bootstrap = await createPasswordBootstrapServer({ secret: vaultSecret });
+        const daemonArgs = buildRuntimeScriptArgs({
+            codeRoot,
+            scriptSegments: ['credential-daemon'],
+        });
 
         try {
-            daemonProcess = spawn(process.execPath, [path.join(codeRoot, 'credential-daemon.js')], {
+            daemonProcess = spawn(process.execPath, daemonArgs, {
                 cwd: root,
                 env: buildScopedChildEnv({ extra: bootstrap.credentialEnv }),
                 stdio: detached ? 'ignore' : 'inherit',

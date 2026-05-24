@@ -6,13 +6,14 @@ const path = require('path');
 const net = require('net');
 const { spawn, execSync } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
+const { buildRuntimeScriptPath, isDistCodeRoot } = require('./runtime_entry');
 const { normalizeBotEntries, resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
 const { UPDATER } = require('../constants');
 
 const CODE_ROOT = path.resolve(__dirname, '..', '..');
 const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
 const LOGS_DIR = path.join(ROOT, 'profiles', 'logs');
-const BOT_SCRIPT = path.join(CODE_ROOT, 'bot.js');
+const BOT_SCRIPT = buildRuntimeScriptPath(CODE_ROOT, ['bot']);
 const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const SOCKET_PATH = process.env.DEXBOT_SUPERVISOR_SOCKET || path.join(ROOT, 'profiles', 'supervisor.sock');
 
@@ -79,7 +80,7 @@ function buildSupervisedApps(bots) {
         apps.unshift({
             kind: 'service',
             name: 'dexbot-adapter',
-            script: path.join(CODE_ROOT, 'market_adapter', 'market_adapter.js'),
+            script: buildRuntimeScriptPath(CODE_ROOT, ['market_adapter', 'market_adapter']),
             cwd: ROOT,
             max_memory_restart: '150M',
             error_file: path.join(LOGS_DIR, 'dexbot-adapter-error.log'),
@@ -94,7 +95,7 @@ function buildSupervisedApps(bots) {
         apps.push({
             kind: 'job',
             name: 'dexbot-update',
-            script: path.join(CODE_ROOT, 'scripts', 'update.js'),
+            script: buildRuntimeScriptPath(CODE_ROOT, ['scripts', 'update']),
             cwd: ROOT,
             error_file: path.join(LOGS_DIR, 'dexbot-update-error.log'),
             out_file: path.join(LOGS_DIR, 'dexbot-update.log'),
@@ -417,7 +418,10 @@ function createBotSupervisor({
             ...(isBot ? { LIVE_BOT_NAME: appName } : {}),
         };
 
-        const child = spawnFn(process.execPath, [app.script || BOT_SCRIPT, ...normalizeAppArgs(app.args)], {
+        const runtimeArgs = isDistCodeRoot(CODE_ROOT)
+            ? [app.script || BOT_SCRIPT, ...normalizeAppArgs(app.args)]
+            : ['--import', 'tsx', app.script || BOT_SCRIPT, ...normalizeAppArgs(app.args)];
+        const child = spawnFn(process.execPath, runtimeArgs, {
             cwd: app.cwd || ROOT,
             env: buildEnv({ extra: extraEnv }),
             stdio: ['inherit', 'pipe', 'pipe'],
@@ -531,6 +535,40 @@ function createBotSupervisor({
             child.once('spawn', handleSpawn);
             child.once('error', handleError);
         });
+    }
+
+    async function waitForStableStartup({ timeoutMs = 750, pollIntervalMs = 50 } = {}) {
+        const trackedStates = () =>
+            Array.from(botStates.values()).filter((state: any) => state.appEntry && state.appEntry.kind !== 'job');
+
+        if (timeoutMs <= 0 || trackedStates().length === 0) {
+            return;
+        }
+
+        const deadline = nowFn() + timeoutMs;
+        while (nowFn() < deadline) {
+            const states = trackedStates();
+            const failed = states.filter((state: any) => state.status === 'stopped' || state.status === 'crashed');
+            if (failed.length > 0) {
+                const details = failed.map((state: any) => `${state.name} (${state.status})`).join(', ');
+                throw new Error(`supervised startup failed: ${details}`);
+            }
+
+            const remainingMs = Math.max(deadline - nowFn(), 0);
+            await new Promise((resolve) => {
+                const timer = setTimeoutFn(resolve, Math.min(pollIntervalMs, remainingMs || pollIntervalMs));
+                if (timer && typeof timer.unref === 'function') {
+                    timer.unref();
+                }
+            });
+        }
+
+        const states = trackedStates();
+        const notRunning = states.filter((state: any) => state.status !== 'running');
+        if (notRunning.length > 0) {
+            const details = notRunning.map((state: any) => `${state.name} (${state.status})`).join(', ');
+            throw new Error(`supervised startup failed: ${details}`);
+        }
     }
 
     function handleSocketCommand(cmd) {
@@ -885,6 +923,7 @@ function createBotSupervisor({
         restartRunning,
         stopAll,
         hasUserStopped,
+        waitForStableStartup,
     };
 }
 

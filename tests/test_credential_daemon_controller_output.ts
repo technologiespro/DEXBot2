@@ -21,6 +21,7 @@ const logs = [];
 const warns = [];
 const errors = [];
 let spawnCount = 0;
+const spawnCalls = [];
 
 function installStubs() {
     delete require.cache[controllerPath];
@@ -44,6 +45,7 @@ function installStubs() {
 
     childProcess.spawn = (command, args, options) => {
         spawnCount += 1;
+        spawnCalls.push({ command, args, options });
 
         const child = new EventEmitter();
         child.stdout = new EventEmitter();
@@ -97,10 +99,20 @@ const { createCredentialDaemonController } = require('../modules/launcher/creden
             readyFilePath: '/tmp/dexbot2-test/dexbot-cred.ready',
             pollIntervalMs: 1,
         });
+        logs.length = 0;
+        warns.length = 0;
+        errors.length = 0;
+        spawnCalls.length = 0;
+        spawnCount = 0;
 
         await controller.ensureCredentialDaemon();
 
         assert.strictEqual(spawnCount, 1, 'controller should spawn the daemon once');
+        assert.deepStrictEqual(
+            spawnCalls[0].args,
+            ['--import', 'tsx', require('path').resolve(__dirname, '..', 'credential-daemon.ts')],
+            'controller should launch the source credential daemon through tsx'
+        );
         assert.deepStrictEqual(logs, [], 'controller startup should not emit info logs');
         assert.deepStrictEqual(warns, [], 'controller startup should not emit warnings');
         assert.deepStrictEqual(errors, [], 'controller startup should not emit errors');

@@ -5,7 +5,7 @@ const { SUBSCRIPTIONS, OPERATIONS } = NATIVE_CLIENT;
 
 const SUBSCRIBE_CALLBACK_ID = SUBSCRIPTIONS.CALLBACK_ID;
 const OP_FILL_ORDER = OPERATIONS.FILL_ORDER;
-const FILL_OBJECT_REGEX = new RegExp('^' + SUBSCRIPTIONS.FILL_OBJECT_PREFIX.replace('.', '\\.') + '\\.');
+const OP_HISTORY_REGEX = new RegExp('^' + SUBSCRIPTIONS.OPERATION_HISTORY_PREFIX.replace('.', '\\.') + '\\.');
 
 function createSubscriptionManager(chainClient) {
     const subscriptions = new Map();
@@ -128,7 +128,7 @@ function createSubscriptionManager(chainClient) {
             const id = typeof item.id === 'string' ? item.id : null;
             if (!id) continue;
 
-            if (FILL_OBJECT_REGEX.test(id)) {
+            if (OP_HISTORY_REGEX.test(id)) {
                 sawFillObject = true;
                 if (item.owner && item.owner === sub.accountId) {
                     return true;

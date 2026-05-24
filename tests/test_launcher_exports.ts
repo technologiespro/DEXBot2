@@ -8,6 +8,10 @@ const {
     parsePm2Args,
     parseUnlockStartArgs,
 } = require('../modules/launcher/launch_modes');
+const {
+    buildRuntimeScriptArgs,
+    buildRuntimeScriptPath,
+} = require('../modules/launcher/runtime_entry');
 
 assert.strictEqual(typeof unlockStart.main, 'function', 'unlock-start should export main');
 assert.strictEqual(typeof unlockStart.buildDexbotStartArgs, 'function', 'unlock-start should export buildDexbotStartArgs');
@@ -73,16 +77,30 @@ assert.deepStrictEqual(
     { command: 'reload', target: 'dexbot-cred', clawOnly: false },
     'pm2 parser should accept reload commands'
 );
-const expectedDexbotPath = path.join(__dirname, '..', 'dexbot.js');
+const expectedDexbotPath = path.join(__dirname, '..', 'dexbot.ts');
 assert.deepStrictEqual(
     unlockStart.buildDexbotStartArgs('XRP-BTS'),
-    [expectedDexbotPath, 'start', 'XRP-BTS'],
+    ['--import', 'tsx', expectedDexbotPath, 'start', 'XRP-BTS'],
     'launcher should append the requested bot name'
 );
 assert.deepStrictEqual(
     unlockStart.buildDexbotStartArgs(null),
-    [expectedDexbotPath, 'start'],
+    ['--import', 'tsx', expectedDexbotPath, 'start'],
     'launcher should omit the bot arg when starting all bots'
+);
+assert.strictEqual(
+    buildRuntimeScriptPath(path.join(__dirname, '..'), ['dexbot']),
+    expectedDexbotPath,
+    'runtime helper should resolve source entrypoints to .ts paths'
+);
+assert.deepStrictEqual(
+    buildRuntimeScriptArgs({
+        codeRoot: path.join(__dirname, '..', 'dist'),
+        scriptSegments: ['dexbot'],
+        scriptArgs: ['start'],
+    }),
+    [path.join(__dirname, '..', 'dist', 'dexbot.js'), 'start'],
+    'runtime helper should resolve dist entrypoints to .js paths without tsx'
 );
 
 assert.deepStrictEqual(

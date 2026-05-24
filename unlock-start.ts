@@ -28,6 +28,7 @@ const { spawn } = require('child_process');
 const { createCredentialDaemonController } = require('./modules/launcher/credential_daemon');
 const { buildScopedChildEnv } = require('./modules/launcher/child_env');
 const { parseUnlockStartArgs } = require('./modules/launcher/launch_modes');
+const { buildRuntimeScriptArgs } = require('./modules/launcher/runtime_entry');
 const { createBotSupervisor, SOCKET_PATH } = require('./modules/launcher/bot_supervisor');
 const { sendControlCommand } = require('./modules/launcher/supervisor_control');
 const { registerCleanup, setupGracefulShutdown } = require('./modules/graceful_shutdown');
@@ -40,10 +41,7 @@ const LOGS_DIR = path.join(ROOT, 'profiles', 'logs');
 const SUPERVISOR_OUT_LOG = path.join(LOGS_DIR, 'supervisor.log');
 const SUPERVISOR_ERROR_LOG = path.join(LOGS_DIR, 'supervisor-error.log');
 const controller = createCredentialDaemonController({ root: ROOT, codeRoot: CODE_ROOT });
-
-function runtimeScript(...segments: string[]) {
-    return path.join(CODE_ROOT, ...segments);
-}
+const DEFAULT_STARTUP_GRACE_MS = 750;
 
 function forwardSignal(child: any, signal: any) {
     if (!child || child.killed) return;
@@ -115,6 +113,50 @@ function waitForChildSpawn(child: any) {
     });
 }
 
+function waitForStableChildStartup(child: any, { label = 'child process', timeoutMs = DEFAULT_STARTUP_GRACE_MS } = {}) {
+    if (timeoutMs <= 0) {
+        return waitForChildSpawn(child);
+    }
+
+    return new Promise<void>((resolve, reject) => {
+        let settled = false;
+        let timer: NodeJS.Timeout | null = null;
+
+        const finish = (fn: (value?: any) => void, value?: any) => {
+            if (settled) return;
+            settled = true;
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+            }
+            cleanup();
+            fn(value);
+        };
+
+        const handleSpawn = () => {
+            timer = setTimeout(() => finish(resolve), timeoutMs);
+            if (timer && typeof timer.unref === 'function') {
+                timer.unref();
+            }
+        };
+
+        const handleError = (error: any) => finish(reject, error);
+        const handleClose = (code: any, signal: any) => {
+            finish(reject, new Error(`${label} exited during startup (exit ${code}${signal ? `, signal ${signal}` : ''})`));
+        };
+
+        const cleanup = () => {
+            child.off('spawn', handleSpawn);
+            child.off('error', handleError);
+            child.off('close', handleClose);
+        };
+
+        child.once('spawn', handleSpawn);
+        child.once('error', handleError);
+        child.once('close', handleClose);
+    });
+}
+
 function resolveBotEntryForName(botName: string) {
     const { config } = loadSettingsFile(BOTS_FILE);
     const raw = resolveRawBotEntries(config);
@@ -126,22 +168,47 @@ function resolveBotEntryForName(botName: string) {
 }
 
 function buildDexbotStartArgs(botName: string | null = null) {
-    const dexbotArgs = [runtimeScript('dexbot.js'), 'start'];
-    if (botName) {
-        dexbotArgs.push(botName);
-    }
-    return dexbotArgs;
+    const scriptArgs = ['start'];
+    if (botName) scriptArgs.push(botName);
+    return buildRuntimeScriptArgs({
+        codeRoot: CODE_ROOT,
+        scriptSegments: ['dexbot'],
+        scriptArgs,
+    });
 }
 
-async function runIsolated({ botName, stayResident = false }: { botName?: string; stayResident?: boolean } = {}) {
+function buildUnlockStartArgs({ isolated = false, botName = null }: { isolated?: boolean; botName?: string | null } = {}) {
+    const scriptArgs = [];
+    if (isolated) {
+        scriptArgs.push('--isolated');
+    }
+    if (botName) {
+        scriptArgs.push(botName);
+    }
+    return buildRuntimeScriptArgs({
+        codeRoot: CODE_ROOT,
+        scriptSegments: ['unlock-start'],
+        scriptArgs,
+    });
+}
+
+async function runIsolated({
+    botName,
+    botEntry = null,
+    stayResident = false,
+    startupGraceMs = DEFAULT_STARTUP_GRACE_MS,
+}: {
+    botName?: string;
+    botEntry?: any;
+    stayResident?: boolean;
+    startupGraceMs?: number;
+} = {}) {
     let supervisor;
 
     if (botName) {
-        const bot = resolveBotEntryForName(botName);
+        const bot = botEntry || resolveBotEntryForName(botName);
         if (!bot) {
-            console.error(`Bot '${botName}' not found in bots.json`);
-            process.exitCode = 1;
-            return;
+            throw new Error(`Bot '${botName}' not found in bots.json`);
         }
         supervisor = createBotSupervisor({ bots: [bot] });
     } else {
@@ -151,6 +218,7 @@ async function runIsolated({ botName, stayResident = false }: { botName?: string
     registerCleanup('Bot supervisor', () => supervisor.shutdown());
 
     await supervisor.start();
+    await supervisor.waitForStableStartup({ timeoutMs: startupGraceMs });
 
     printLauncherSuccess({ botName, isolated: true });
 
@@ -178,17 +246,57 @@ async function runIsolated({ botName, stayResident = false }: { botName?: string
     });
 }
 
-async function waitForSupervisorReady({ timeoutMs = 15000, intervalMs = 250 } = {}) {
-    const startedAt = Date.now();
-    while ((Date.now() - startedAt) < timeoutMs) {
-        try {
-            await sendControlCommand({ cmd: 'status' });
-            return true;
-        } catch (_) {
-            await new Promise((resolve) => setTimeout(resolve, intervalMs));
+function waitForSupervisorReady({ child = null, timeoutMs = 15000, intervalMs = 250 } = {}) {
+    return new Promise<boolean>((resolve, reject) => {
+        let settled = false;
+        let timer: NodeJS.Timeout | null = null;
+
+        const finish = (fn: (value?: any) => void, value?: any) => {
+            if (settled) return;
+            settled = true;
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+            }
+            cleanup();
+            fn(value);
+        };
+
+        const handleClose = (code: any, signal: any) => {
+            finish(reject, new Error(`supervisor exited before becoming ready (exit ${code}${signal ? `, signal ${signal}` : ''})`));
+        };
+        const handleError = (error: any) => finish(reject, error);
+        const cleanup = () => {
+            if (child) {
+                child.off('close', handleClose);
+                child.off('error', handleError);
+            }
+        };
+
+        const startedAt = Date.now();
+        const poll = async () => {
+            try {
+                await sendControlCommand({ cmd: 'status' });
+                finish(resolve, true);
+            } catch (_) {
+                if ((Date.now() - startedAt) >= timeoutMs) {
+                    finish(resolve, false);
+                    return;
+                }
+                timer = setTimeout(poll, intervalMs);
+                if (timer && typeof timer.unref === 'function') {
+                    timer.unref();
+                }
+            }
+        };
+
+        if (child) {
+            child.once('close', handleClose);
+            child.once('error', handleError);
         }
-    }
-    return false;
+
+        poll().catch((error) => finish(reject, error));
+    });
 }
 
 function ensureSupervisorLogDir() {
@@ -247,11 +355,8 @@ async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = 
     ensureSupervisorLogDir();
     const stdoutFd = fs.openSync(SUPERVISOR_OUT_LOG, 'a', 0o600);
     const stderrFd = fs.openSync(SUPERVISOR_ERROR_LOG, 'a', 0o600);
-    const args = [runtimeScript('unlock-start.js'), '--isolated'];
+    const args = buildUnlockStartArgs({ isolated: true, botName });
     let child = null;
-    if (botName) {
-        args.push(botName);
-    }
 
     try {
         child = spawn(process.execPath, args, {
@@ -267,7 +372,7 @@ async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = 
         });
         child.unref();
 
-        const ready = await waitForSupervisorReady();
+        const ready = await waitForSupervisorReady({ child });
         if (!ready) {
             throw new Error(`supervisor did not become ready. Check ${SUPERVISOR_OUT_LOG} and ${SUPERVISOR_ERROR_LOG}`);
         }
@@ -290,7 +395,7 @@ async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = 
  * @private
  * @returns {Promise<void>}
  */
-async function main({ argv = process.argv } = {}) {
+async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRACE_MS } = {}) {
     const parsed = parseUnlockStartArgs(argv);
     const isDetachedSupervisorChild = process.env.DEXBOT_ISOLATED_CHILD === '1';
     const forceForegroundIsolated = process.env.DEXBOT_ISOLATED_FOREGROUND === '1';
@@ -301,8 +406,13 @@ async function main({ argv = process.argv } = {}) {
     }
 
     const { botName, clawOnly, isolated } = parsed;
+    const selectedBot = botName ? resolveBotEntryForName(botName) : null;
 
     try {
+        if (botName && !selectedBot) {
+            throw new Error(`Bot '${botName}' not found in bots.json`);
+        }
+
         if (!isDetachedSupervisorChild) {
             printLauncherHeader({ botName, clawOnly, isolated });
             const unlockedNow = await controller.ensureCredentialDaemon({ detached: isolated && !forceForegroundIsolated });
@@ -322,7 +432,12 @@ async function main({ argv = process.argv } = {}) {
 
         if (isolated) {
             if (isDetachedSupervisorChild || forceForegroundIsolated) {
-                process.exitCode = (await runIsolated({ botName, stayResident: isDetachedSupervisorChild })) as any;
+                process.exitCode = (await runIsolated({
+                    botName,
+                    botEntry: selectedBot,
+                    stayResident: isDetachedSupervisorChild,
+                    startupGraceMs,
+                })) as any;
                 return;
             }
 
@@ -347,7 +462,7 @@ async function main({ argv = process.argv } = {}) {
             stdio: 'inherit',
         });
 
-        await waitForChildSpawn(botProcess);
+        await waitForStableChildStartup(botProcess, { label: 'DEXBot', timeoutMs: startupGraceMs });
         printLauncherSuccess({ botName });
 
         process.on('SIGINT', () => forwardSignal(botProcess, 'SIGINT'));
@@ -434,6 +549,8 @@ if (require.main === module) {
 
 export = {
     buildDexbotStartArgs,
+    buildUnlockStartArgs,
     main,
     waitForChildSpawn,
+    waitForStableChildStartup,
 };

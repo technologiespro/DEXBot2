@@ -7,6 +7,10 @@ process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET = '1';
 
 const { createBotSupervisor, parseCronExpression, getNextCronDate } = require('../modules/launcher/bot_supervisor');
 
+function getScriptArg(args) {
+    return args.find((arg) => /\.(?:ts|js)$/.test(String(arg))) || '';
+}
+
 function createChild({ closeOnKill = true } = {}) {
     const child = new EventEmitter();
     child.pid = 12345;
@@ -45,11 +49,11 @@ async function testAmaBotsStartAdapterService() {
     await supervisor.shutdown();
 
     assert.ok(
-        calls.some((call) => call.args[0].endsWith('market_adapter.js')),
+        calls.some((call) => getScriptArg(call.args).endsWith('market_adapter.ts')),
         'AMA isolated mode should supervise dexbot-adapter like PM2'
     );
     assert.ok(
-        calls.some((call) => call.args[0].endsWith('bot.js') && call.args[1] === 'AMA-BOT'),
+        calls.some((call) => getScriptArg(call.args).endsWith('bot.ts') && call.args.includes('AMA-BOT')),
         'isolated mode should still supervise the selected bot process'
     );
 }
@@ -73,7 +77,7 @@ async function testMemoryLimitRestartsProcess() {
     await new Promise((resolve) => setTimeout(resolve, 40));
     await supervisor.shutdown();
 
-    const botStarts = calls.filter((call) => call.args[0].endsWith('bot.js') && call.args[1] === 'MEM-BOT');
+    const botStarts = calls.filter((call) => getScriptArg(call.args).endsWith('bot.ts') && call.args.includes('MEM-BOT'));
     assert.ok(botStarts.length >= 2, 'memory limit should restart the bot instead of leaving it stopped');
 }
 
@@ -87,7 +91,7 @@ async function testRestartControlsExcludeUpdaterJob() {
         spawnFn: (command, args, options) => {
             calls.push({ command, args, options });
             const child = createChild();
-            if (args[0].endsWith('update.js')) {
+            if (getScriptArg(args).endsWith('update.ts')) {
                 setImmediate(() => child.emit('close', 0));
             }
             return child;
@@ -107,11 +111,33 @@ async function testRestartControlsExcludeUpdaterJob() {
     await new Promise((resolve) => setTimeout(resolve, 20));
     await supervisor.shutdown();
 
-    const updaterStarts = calls.filter((call) => call.args[0].endsWith('update.js'));
-    const botStarts = calls.filter((call) => call.args[0].endsWith('bot.js') && call.args[1] === 'CTRL-BOT');
+    const updaterStarts = calls.filter((call) => getScriptArg(call.args).endsWith('update.ts'));
+    const botStarts = calls.filter((call) => getScriptArg(call.args).endsWith('bot.ts') && call.args.includes('CTRL-BOT'));
 
     assert.strictEqual(updaterStarts.length, 1, 'restart controls should not relaunch the one-shot updater job');
     assert.ok(botStarts.length >= 3, 'restart controls should still restart the managed bot runtime');
+}
+
+async function testStableStartupRejectsImmediateExit() {
+    const supervisor = createBotSupervisor({
+        bots: [{ name: 'FAIL-BOT', active: true }],
+        controlSocket: false,
+        log: () => {},
+        logError: () => {},
+        spawnFn: () => {
+            const child = createChild();
+            setImmediate(() => child.emit('close', 0));
+            return child;
+        },
+    });
+
+    await supervisor.start();
+    await assert.rejects(
+        () => supervisor.waitForStableStartup({ timeoutMs: 50, pollIntervalMs: 5 }),
+        /supervised startup failed: FAIL-BOT \(stopped\)/,
+        'supervisor should reject startup when a managed bot exits during the grace period'
+    );
+    await supervisor.shutdown();
 }
 
 function testCronSchedulingHelpers() {
@@ -125,6 +151,7 @@ function testCronSchedulingHelpers() {
         await testAmaBotsStartAdapterService();
         await testMemoryLimitRestartsProcess();
         await testRestartControlsExcludeUpdaterJob();
+        await testStableStartupRejectsImmediateExit();
         testCronSchedulingHelpers();
         console.log('bot supervisor tests passed');
         process.exit(0);
