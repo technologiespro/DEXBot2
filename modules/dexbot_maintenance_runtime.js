@@ -1225,7 +1225,7 @@ function scheduleDustMaintenanceCheck() {
 
         this.manager._fillProcessingLock.acquire(async () => {
             if (this._shuttingDown) return;
-            await this._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true });
+            await this._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true, skipIdle: true });
         }).catch(err => {
             this._warn(`Error during dust maintenance timer: ${err.message}`);
         }).finally(() => {
@@ -1264,15 +1264,18 @@ async function runGridMaintenance(context = 'periodic', options = {}) {
         throw new TypeError('Grid maintenance options must be an object');
     }
     const fillLockAlreadyHeld = options.fillLockAlreadyHeld === true;
-    const idleDelayMs = getMaintenanceIdleDelayMs(this);
-    if (idleDelayMs > 0) {
-        this._log(
-            `[MAINT-IDLE] Deferring ${context} grid maintenance until ` +
-            `${Math.ceil(idleDelayMs / 1000)}s of inactivity has passed`,
-            'debug'
-        );
-        scheduleMaintenanceAfterIdle(this, context, options);
-        return;
+    const skipIdle = options.skipIdle === true;
+    if (!skipIdle) {
+        const idleDelayMs = getMaintenanceIdleDelayMs(this);
+        if (idleDelayMs > 0) {
+            this._log(
+                `[MAINT-IDLE] Deferring ${context} grid maintenance until ` +
+                `${Math.ceil(idleDelayMs / 1000)}s of inactivity has passed`,
+                'debug'
+            );
+            scheduleMaintenanceAfterIdle(this, context, options);
+            return;
+        }
     }
 
     try {
