@@ -74,7 +74,7 @@
 const fs = require('fs');
 const path = require('path');
 const { ensureProfilesDirectory, readInput } = require('./order/utils/system');
-const { DEFAULT_CONFIG, GRID_LIMITS, TIMING, LOG_LEVEL, UPDATER, MARKET_ADAPTER } = require('./constants');
+const { DEFAULT_CONFIG, GRID_LIMITS, TIMING, LOG_LEVEL, UPDATER, MARKET_ADAPTER, NODE_MANAGEMENT } = require('./constants');
 const { SETTINGS_FILE, readGeneralSettings, writeGeneralSettings } = require('./general_settings');
 
 const { parseJsonWithComments } = require('./order/utils/system');
@@ -125,6 +125,21 @@ function saveBotsConfig(config, filePath) {
 function loadGeneralSettings() {
     const defaults = {
         LOG_LEVEL: LOG_LEVEL,
+        NODES: {
+            enabled: false,
+            list: NODE_MANAGEMENT.DEFAULT_NODES,
+            healthCheck: {
+                enabled: true,
+                intervalMs: NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS,
+                timeoutMs: NODE_MANAGEMENT.HEALTH_CHECK_TIMEOUT_MS,
+                maxPingMs: NODE_MANAGEMENT.MAX_PING_MS,
+                blacklistThreshold: NODE_MANAGEMENT.BLACKLIST_THRESHOLD,
+            },
+            selection: {
+                strategy: NODE_MANAGEMENT.SELECTION_STRATEGY,
+                preferredNode: null,
+            },
+        },
         GRID_LIMITS: { ...GRID_LIMITS },
         TIMING: { ...TIMING },
         UPDATER: { ...UPDATER },
@@ -175,6 +190,42 @@ function loadGeneralSettings() {
     };
     if (!settings.MARKET_ADAPTER || typeof settings.MARKET_ADAPTER !== 'object') {
         settings.MARKET_ADAPTER = { ...MARKET_ADAPTER };
+    }
+
+    // Merge NODES config, preserving existing settings
+    if (!settings.NODES || typeof settings.NODES !== 'object') {
+        settings.NODES = {
+            enabled: false,
+            list: NODE_MANAGEMENT.DEFAULT_NODES,
+            healthCheck: {
+                enabled: true,
+                intervalMs: NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS,
+                timeoutMs: NODE_MANAGEMENT.HEALTH_CHECK_TIMEOUT_MS,
+                maxPingMs: NODE_MANAGEMENT.MAX_PING_MS,
+                blacklistThreshold: NODE_MANAGEMENT.BLACKLIST_THRESHOLD,
+            },
+            selection: {
+                strategy: NODE_MANAGEMENT.SELECTION_STRATEGY,
+                preferredNode: null,
+            },
+        };
+    } else {
+        // Ensure healthCheck sub-object exists
+        if (!settings.NODES.healthCheck || typeof settings.NODES.healthCheck !== 'object') {
+            settings.NODES.healthCheck = {
+                enabled: true,
+                intervalMs: NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS,
+                timeoutMs: NODE_MANAGEMENT.HEALTH_CHECK_TIMEOUT_MS,
+                maxPingMs: NODE_MANAGEMENT.MAX_PING_MS,
+                blacklistThreshold: NODE_MANAGEMENT.BLACKLIST_THRESHOLD,
+            };
+        }
+        if (!settings.NODES.selection || typeof settings.NODES.selection !== 'object') {
+            settings.NODES.selection = {
+                strategy: NODE_MANAGEMENT.SELECTION_STRATEGY,
+                preferredNode: null,
+            };
+        }
     }
 
     const configuredDeltaPercent = Number(settings.MARKET_ADAPTER.AMA_DELTA_THRESHOLD_PERCENT);
