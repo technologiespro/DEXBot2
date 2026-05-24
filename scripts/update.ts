@@ -28,8 +28,11 @@ const path = require('path');
 const fs = require('fs');
 const { sendControlCommand } = require('../modules/launcher/supervisor_control');
 
-// Project root directory (parent of scripts folder)
-const ROOT = path.join(__dirname, '..');
+// Project root directory — handles running from scripts/ or dist/scripts/
+const SCRIPTS_DIR = __dirname;
+const ROOT = path.basename(path.dirname(SCRIPTS_DIR)) === 'dist'
+    ? path.resolve(SCRIPTS_DIR, '..', '..')
+    : path.resolve(SCRIPTS_DIR, '..');
 
 // Import update configuration from constants
 // Contains: REPOSITORY_URL, BRANCH settings
@@ -216,13 +219,13 @@ try {
 
     /**
      * STEP 6: Prepare Working Directory
-     * Cleans up any uncommitted changes to ensure clean pull
-     * git reset --hard: Discards all local modifications
-     * git clean -fd: Removes untracked files/directories
+     * Stashes local changes to ensure a clean pull.
+     * Uses --include-untracked to capture build artifacts etc.
+     * Ignores gitignored directories (profiles/, dist/) — they are
+     * never touched by stash, so bot configs and keys are safe.
      */
-    log('Cleaning working directory...');
-    run('git reset --hard');
-    run('git clean -fd');
+    log('Stashing local changes before pull...');
+    run('git stash push --include-untracked --message "dexbot-update-auto" 2>/dev/null; true');
 
     /**
      * STEP 7: Pull Latest Code Changes
@@ -245,13 +248,33 @@ try {
     run('npm install --prefer-offline');
 
     /**
-     * STEP 8b: Regenerate Ecosystem Config
+     * STEP 8b: Build TypeScript sources
+     * Compiles .ts files to dist/ so runtime scripts (bot.js, pm2.js, etc.)
+     * exist at the paths referenced by the PM2 ecosystem config.
+     */
+    log('Building TypeScript sources...');
+    try {
+        run('npm run build');
+        log('TypeScript build complete.');
+    } catch (err) {
+        log(`Warning: TypeScript build failed (${err.message}). Continuing with existing dist/ if available.`);
+    }
+
+    /**
+     * STEP 8c: Regenerate Ecosystem Config
      * Ensures profiles/ecosystem.config.js reflects the current bots.json
      * state, including service apps like dexbot-adapter and dexbot-update.
+     * Uses the compiled dist/pm2.js (after TS build) for correct dist/ paths.
      */
     log('Regenerating PM2 ecosystem config...');
     try {
-        const { generateEcosystemConfig } = require('../pm2');
+        // Try loading from compiled dist/ first, then fall back to source dir
+        let generateEcosystemConfig;
+        try {
+            ({ generateEcosystemConfig } = require(path.join(ROOT, 'dist', 'pm2')));
+        } catch (_) {
+            ({ generateEcosystemConfig } = require(path.join(ROOT, 'pm2')));
+        }
         generateEcosystemConfig({ clawOnly: false, exitOnError: false });
         log('Ecosystem config regenerated successfully.');
     } catch (err) {
@@ -323,7 +346,12 @@ try {
                  */
                 const botsToReload = activeInConfig.filter(name => runningProcesses.includes(name));
                 const activeBots = (config.bots || []).filter(b => b.active !== false);
-                const { needsMarketAdapter } = require('../pm2');
+                let needsMarketAdapter;
+                try {
+                    ({ needsMarketAdapter } = require(path.join(ROOT, 'dist', 'pm2')));
+                } catch (_) {
+                    ({ needsMarketAdapter } = require(path.join(ROOT, 'pm2')));
+                }
                 const marketAdapterRequired = needsMarketAdapter(activeBots);
 
                 /**

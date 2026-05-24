@@ -530,7 +530,12 @@ function formatControlUptime(ms: number) {
     return `${s}s`;
 }
 
-if (require.main === module) {
+// Run if called directly or via the root-level unlock-start.js shim
+const isUnlockStartDirectRun = require.main === module || (
+    process.argv[1] &&
+    path.basename(process.argv[1]).replace(/\.js$/, '') === 'unlock-start'
+);
+if (isUnlockStartDirectRun) {
     setupGracefulShutdown();
     if (process.env.DEXBOT_ISOLATED_CHILD === '1') {
         registerCleanup('Credential daemon', () => stopCredentialDaemonPid(process.env.DEXBOT_MANAGED_CRED_PID as string));

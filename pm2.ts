@@ -906,8 +906,12 @@ Examples:
     `);
 }
 
-// Run if called directly
-if (require.main === module) {
+// Run if called directly or via the root-level pm2.js shim
+const isPm2DirectRun = require.main === module || (
+    process.argv[1] &&
+    path.basename(process.argv[1]).replace(/\.js$/, '') === 'pm2'
+);
+if (isPm2DirectRun) {
     // Parse command line arguments
     const { command, target, clawOnly } = parsePm2Args(process.argv);
 

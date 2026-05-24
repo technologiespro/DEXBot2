@@ -721,6 +721,11 @@ async function bootstrap() {
     // Ensure profiles directory exists
     const isNewSetup = ensureProfilesDirectory(PROFILES_DIR);
 
+    // Handle CLI commands early — commands like 'update' must work even
+    // when profiles/ was just cleaned (isNewSetup = true), otherwise the
+    // new-setup wizard would block them before the CLI handler is reached.
+    if (await handleCLICommands()) return;
+
     // If this is a new setup, prompt to set up keys
     if (isNewSetup) {
         // Suppress BitShares connection log during first-time setup
@@ -789,9 +794,6 @@ async function bootstrap() {
         }
         return;
     }
-
-    // Handle CLI commands first (before checking for bots.json)
-    if (await handleCLICommands()) return;
 
     // Check if bots.json exists - if not, guide user
     if (!fs.existsSync(PROFILES_BOTS_FILE)) {
