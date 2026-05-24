@@ -346,13 +346,15 @@ try {
                  */
                 const botsToReload = activeInConfig.filter(name => runningProcesses.includes(name));
                 const activeBots = (config.bots || []).filter(b => b.active !== false);
+                // Only consider running AMA bots when deciding if the adapter is needed
+                const runningActiveBots = activeBots.filter(b => runningProcesses.includes(b.name));
                 let needsMarketAdapter;
                 try {
                     ({ needsMarketAdapter } = require(path.join(ROOT, 'dist', 'pm2')));
                 } catch (_) {
                     ({ needsMarketAdapter } = require(path.join(ROOT, 'pm2')));
                 }
-                const marketAdapterRequired = needsMarketAdapter(activeBots);
+                const marketAdapterRequired = needsMarketAdapter(runningActiveBots);
 
                 /**
                  * Also reload service apps that are part of the ecosystem
