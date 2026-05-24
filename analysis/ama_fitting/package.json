@@ -2,10 +2,10 @@
   "name": "ama_fitting",
   "version": "1.0.0",
   "description": "Tools for fitting AMA parameters to market data",
-  "main": "optimizer_high_resolution.js",
+  "main": "../../dist/analysis/ama_fitting/optimizer_high_resolution.js",
   "scripts": {
-    "optimize": "node optimizer_high_resolution.js",
-    "chart:lp-local": "node generate_unified_comparison_chart.js"
+    "optimize": "npm --prefix ../.. run build && node ../../dist/analysis/ama_fitting/optimizer_high_resolution.js",
+    "chart:lp-local": "npm --prefix ../.. run build && node ../../dist/analysis/ama_fitting/generate_unified_comparison_chart.js"
   },
   "dependencies": {}
 }

@@ -1,0 +1,1142 @@
+// @ts-nocheck
+/**
+ * modules/order/utils/system.js - System and I/O Utilities
+ * 
+ * Price derivation, persistence, grid correction, and UI/interactive utilities.
+ *
+ * ===============================================================================
+ * TABLE OF CONTENTS (17 exported functions)
+ * ===============================================================================
+ *
+ * SECTION 1: PRICE DERIVATION (4 functions)
+ *   - lookupAsset(BitShares, symbol) - Lookup asset metadata from blockchain
+ *   - deriveMarketPrice(BitShares, symA, symB) - Derive price from order book
+ *   - derivePoolPrice(BitShares, symA, symB) - Derive price from liquidity pool
+ *   - derivePrice(BitShares, symA, symB, mode) - Derive price with fallback chain
+ *
+ * SECTION 2: FEE MANAGEMENT (1 function)
+ *   - initializeFeeCache(botsConfig, BitShares) - Initialize fee cache from blockchain
+ *
+ * SECTION 3: GRID STATE MANAGEMENT (3 functions)
+ *   - persistGridSnapshot(manager, accountOrders, botKey) - Persist grid to storage
+ *   - retryPersistenceIfNeeded(manager) - Retry persistence if previous failed
+ *   - applyGridDivergenceCorrections(manager, ...) - Apply grid divergence corrections
+ *
+ * SECTION 4: GRID UTILITIES (1 function)
+ *   - syncBoundaryToFunds(manager) - Sync boundary position to available funds
+ *
+ * SECTION 5: UI & INTERACTIVE UTILITIES (5 functions)
+ *   - ensureProfilesDirectory(profilesDir) - Ensure profiles directory exists
+ *   - sleep(ms) - Pause execution for specified duration
+ *   - readInput(prompt, options) - Read user input from stdin
+ *   - readPassword(prompt) - Read password with masked echo
+ *   - withRetry(fn, options) - Execute async function with exponential backoff
+ *
+ * SECTION 6: GENERAL UTILITIES (5 functions)
+ *   - resolveAccountRef(manager, account) - Resolve best account reference
+ *   - deepFreeze(obj) - Recursively freeze object for immutability
+ *   - cloneMap(map) - Create shallow clone of Map
+ *   - ensureDir(dirPath) - Ensure directory exists, creating recursively
+ *   - parseJsonWithComments(raw) - Parse JSON with comment stripping
+ *
+ * ===============================================================================
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS } = require('../../constants');
+const Format = require('../format');
+const { toFiniteNumber, isValidNumber } = Format;
+const MathUtils = require('./math');
+const OrderUtils = require('./order');
+const CODE_ROOT = path.join(__dirname, '..', '..', '..');
+const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
+
+// ================================================================================
+// SECTION 1: PRICE DERIVATION
+// ================================================================================
+
+const poolIdCache = new Map();
+
+/**
+ * @private Lookup asset by symbol from BitShares blockchain.
+ * Tries cached assets first, then falls back to lookup API methods.
+ * 
+ * @param {Object} BitShares - BitShares client instance
+ * @param {string} s - Asset symbol to lookup
+ * @returns {Promise<Object>} Asset metadata with id, symbol, precision
+ * @throws {Error} If asset cannot be found on blockchain
+ */
+const lookupAsset = async (BitShares, s) => {
+    if (!BitShares) return null;
+    let cached = null;
+    if (BitShares?.assets) {
+        try {
+            cached = await BitShares.assets[s];
+        } catch (_: any) {}
+    }
+
+    if (cached?.id && typeof cached.precision === 'number') {
+        return cached;
+    }
+
+    const methods = [
+        () => BitShares.db.lookup_asset_symbols([s]),
+        () => BitShares.db.get_assets([s])
+    ];
+
+    for (const method of methods) {
+        try {
+            if (typeof method !== 'function') continue;
+            const r = await method();
+            if (r?.[0]?.id && typeof r[0].precision === 'number') {
+                return { ...(cached || {}), ...r[0] };
+            }
+        } catch (e: any) {}
+    }
+
+    throw new Error(`CRITICAL: Cannot fetch asset precision for '${s}'`);
+};
+
+/**
+ * Derive price from BitShares DEX order book.
+ * Returns price in B/A format (units of asset B per 1 unit of asset A).
+ * Uses best bid and ask from order book, with fallback to ticker.
+ * 
+ * @param {Object} BitShares - BitShares client instance
+ * @param {string} symA - First asset symbol
+ * @param {string} symB - Second asset symbol
+ * @returns {Promise<number|null>} Derived market price or null if unavailable
+ */
+const deriveMarketPrice = async (BitShares, symA, symB) => {
+    try {
+        const [aMeta, bMeta] = await Promise.all([
+            lookupAsset(BitShares, symA),
+            lookupAsset(BitShares, symB)
+        ]);
+        if (!aMeta?.id || !bMeta?.id) return null;
+
+        const baseId = aMeta.id;
+        const quoteId = bMeta.id;
+        let mid = null;
+
+        if (typeof BitShares.db?.get_order_book === 'function') {
+            try {
+                const ob = await BitShares.db.get_order_book(baseId, quoteId, API_LIMITS.ORDERBOOK_DEPTH);
+                const bestBid = isValidNumber(ob.bids?.[0]?.price) ? toFiniteNumber(ob.bids[0].price) : null;
+                const bestAsk = isValidNumber(ob.asks?.[0]?.price) ? toFiniteNumber(ob.asks[0].price) : null;
+                if (bestBid !== null && bestAsk !== null) mid = (bestBid + bestAsk) / 2;
+            } catch (e: any) {}
+        }
+
+        if (mid === null && typeof BitShares.db?.get_ticker === 'function') {
+            try {
+                const t = await BitShares.db.get_ticker(baseId, quoteId);
+                mid = isValidNumber(t?.latest) ? toFiniteNumber(t.latest) : (isValidNumber(t?.latest_price) ? toFiniteNumber(t.latest_price) : null);
+            } catch (err: any) {}
+        }
+
+        // Return B/A orientation to match market price format
+        const finalPrice = (mid !== null && mid !== 0) ? 1 / mid : null;
+        if (finalPrice) {
+            console.log(`[DIAGNOSTIC] deriveMarketPrice: ${symA}/${symB} rawMid=${mid?.toFixed(8)} -> finalPrice(B/A)=${finalPrice.toFixed(8)}`);
+        }
+        return finalPrice;
+    } catch (err: any) {
+        console.warn(`[DIAGNOSTIC] deriveMarketPrice failed for ${symA}/${symB}:`, err.message);
+        return null;
+    }
+};
+
+/**
+ * Derive price from BitShares Liquidity Pool (AMM).
+ * Returns price in B/A format (units of asset B per 1 unit of asset A).
+ * Handles internal BitShares ID-based asset ordering (asset_a/asset_b).
+ * 
+ * @param {Object} BitShares - BitShares client instance
+ * @param {string} symA - First asset symbol
+ * @param {string} symB - Second asset symbol
+ * @returns {Promise<number|null>} Derived pool price or null if unavailable
+ */
+const derivePoolPrice = async (BitShares, symA, symB) => {
+    try {
+        const [aMeta, bMeta] = await Promise.all([
+            lookupAsset(BitShares, symA),
+            lookupAsset(BitShares, symB)
+        ]);
+        if (!aMeta?.id || !bMeta?.id) return null;
+
+        let chosen = null;
+        const cacheKey = [aMeta.id, bMeta.id].sort().join(':');
+        const cachedPoolId = poolIdCache.get(cacheKey);
+
+        if (typeof BitShares.db?.get_liquidity_pool_by_asset_ids === 'function') {
+            try {
+                chosen = await BitShares.db.get_liquidity_pool_by_asset_ids(aMeta.id, bMeta.id);
+                if (chosen) poolIdCache.set(cacheKey, chosen.id);
+            } catch (e: any) {}
+        }
+
+        if (!chosen && cachedPoolId && typeof BitShares.db?.get_objects === 'function') {
+            try {
+                const [pool] = await BitShares.db.get_objects([cachedPoolId]);
+                if (pool) chosen = pool;
+            } catch (e: any) {
+                poolIdCache.delete(cacheKey);
+            }
+        }
+
+        if (!chosen) {
+            const listFn = BitShares.db?.list_liquidity_pools || BitShares.db?.get_liquidity_pools;
+            if (typeof listFn === 'function') {
+                try {
+                    let startId = '1.19.0';
+                    const PAGE_SIZE = 100;
+                    const allMatches = [];
+
+                    while (true) {
+                        const pools = await listFn(PAGE_SIZE, startId);
+                        if (!pools || pools.length === 0) break;
+
+                        // BitShares list_liquidity_pools is inclusive of startId.
+                        // Skip the first pool in subsequent pages to avoid duplicate processing.
+                        const effectivePools = (startId === '1.19.0') ? pools : pools.slice(1);
+                        if (effectivePools.length === 0) break;
+
+                        const matches = effectivePools.filter(p => {
+                            const ids = (p.asset_ids || [p.asset_a, p.asset_b]).map(String);
+                            return ids.includes(String(aMeta.id)) && ids.includes(String(bMeta.id));
+                        });
+
+                        if (matches.length) {
+                            allMatches.push(...matches);
+                        }
+
+                        if (pools.length < PAGE_SIZE) {
+                            break;
+                        } else {
+                            startId = pools[pools.length - 1].id;
+                        }
+                    }
+
+                    if (allMatches.length) {
+                        // Select pool with highest balance for our assetA
+                        chosen = allMatches.sort((a, b) => {
+                            const getBal = p => toFiniteNumber(String(p.asset_a) === String(aMeta.id) ? p.balance_a : p.balance_b);
+                            return getBal(b) - getBal(a);
+                        })[0];
+                        poolIdCache.set(cacheKey, chosen.id);
+                    }
+                } catch (e: any) {
+                    console.warn('derivePoolPrice: pool pagination failed:', e.message || e);
+                }
+            }
+        }
+
+        if (!chosen) return null;
+
+        if (!chosen.reserves && !isValidNumber(chosen.balance_a) && typeof BitShares.db?.get_objects === 'function') {
+            try {
+                const [full] = await BitShares.db.get_objects([chosen.id]);
+                if (full) chosen = full;
+            } catch (e: any) {}
+        }
+
+        let amtA = null, amtB = null;
+        if (isValidNumber(chosen.balance_a) && isValidNumber(chosen.balance_b)) {
+            // Pools store assets ordered by ID: lower ID is always first (asset_a)
+            const aIdNum = toFiniteNumber(String(aMeta.id).split('.')[2]);
+            const bIdNum = toFiniteNumber(String(bMeta.id).split('.')[2]);
+            const aIsFirst = aIdNum < bIdNum;
+
+            // If config's assetA has lower ID, it's the pool's first asset (asset_a)
+            // Otherwise, our assetA corresponds to pool's second asset (asset_b)
+            if (aIsFirst) {
+                amtA = toFiniteNumber(chosen.balance_a);
+                amtB = toFiniteNumber(chosen.balance_b);
+            } else {
+                amtA = toFiniteNumber(chosen.balance_b);
+                amtB = toFiniteNumber(chosen.balance_a);
+            }
+        } else if (Array.isArray(chosen.reserves)) {
+            const resA = chosen.reserves.find(r => String(r.asset_id) === String(aMeta.id));
+            const resB = chosen.reserves.find(r => String(r.asset_id) === String(bMeta.id));
+            if (resA && resB) {
+                amtA = resA.amount;
+                amtB = resB.amount;
+            }
+        }
+
+        if (!isValidNumber(amtA) || !isValidNumber(amtB) || toFiniteNumber(amtB) === 0) return null;
+
+        const floatA = MathUtils.blockchainToFloat(amtA, aMeta.precision);
+        const floatB = MathUtils.blockchainToFloat(amtB, bMeta.precision);
+
+        // Return B/A orientation to match market price format
+        const finalPrice = floatB > 0 ? floatB / floatA : null;
+        if (finalPrice) {
+            console.log(`[DIAGNOSTIC] derivePoolPrice: ${symA}/${symB} pool=${chosen.id} amtA=${amtA}(prec=${aMeta.precision}) amtB=${amtB}(prec=${bMeta.precision}) -> finalPrice(B/A)=${finalPrice.toFixed(8)}`);
+        }
+        return finalPrice;
+    } catch (err: any) {
+        console.warn(`[DIAGNOSTIC] derivePoolPrice failed for ${symA}/${symB}:`, err.message);
+        return null;
+    }
+};
+
+/**
+ * Derive price from blockchain using specified mode.
+ * Attempts pool or market derivation based on mode, with fallback chain.
+ * 
+ * @param {Object} BitShares - BitShares client instance
+ * @param {string} symA - First asset symbol
+ * @param {string} symB - Second asset symbol
+ * @param {string} [mode='auto'] - Derivation mode: "pool", "book", or "auto" (pool → book). "market" is a legacy alias for "book".
+ * @returns {Promise<number|null>} Derived price or null if all methods fail
+ */
+const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
+    mode = String(mode).toLowerCase();
+    if (mode === 'market') mode = 'book'; // legacy alias
+    const validModes = new Set(['pool', 'book', 'auto']);
+
+    if (!validModes.has(mode)) {
+        return null;
+    }
+
+    if (mode === 'pool') {
+        return await derivePoolPrice(BitShares, symA, symB).catch(() => null);
+    }
+
+    if (mode === 'book') {
+        return await deriveMarketPrice(BitShares, symA, symB).catch(() => null);
+    }
+
+    // mode === 'auto': pool preferred, market fallback
+    let poolP = null;
+    poolP = await derivePoolPrice(BitShares, symA, symB).catch(() => null);
+    if (poolP > 0) return poolP;
+
+    const m = await deriveMarketPrice(BitShares, symA, symB).catch(() => null);
+    if (m > 0) return m;
+
+    return null;
+};
+
+/**
+ * Resolve a liquidity pool from a share asset reference.
+ * Looks up the share asset, then queries the blockchain for associated pools.
+ *
+ * @param {Object} BitShares - BitShares client instance
+ * @param {string} shareAssetRef - Share asset symbol or reference
+ * @returns {Promise<Object|null>} Object with {shareAsset, pool} or null if not found
+ */
+async function resolveLiquidityPoolByShareAsset(BitShares, shareAssetRef) {
+    if (!BitShares?.db || typeof BitShares.db.get_liquidity_pools_by_share_asset !== 'function') {
+        return null;
+    }
+
+    const shareAsset = await lookupAsset(BitShares, shareAssetRef).catch(() => null);
+    if (!shareAsset?.id) {
+        return null;
+    }
+
+    const response = await BitShares.db.get_liquidity_pools_by_share_asset([shareAsset.id], false, false).catch(() => null);
+    if (!Array.isArray(response)) {
+        return null;
+    }
+
+    const pool = response.find((entry) => entry && (entry.id || entry.pool?.id)) || null;
+    if (!pool) {
+        return null;
+    }
+
+    return {
+        shareAsset,
+        pool: pool.pool || pool,
+    };
+}
+
+async function getAssetCurrentSupply(BitShares, assetRef) {
+    const asset = typeof assetRef === 'object' && assetRef !== null
+        ? assetRef
+        : await lookupAsset(BitShares, assetRef).catch(() => null);
+    if (!asset) {
+        return null;
+    }
+
+    const directSupply = toFiniteNumber(asset.current_supply?.amount ?? asset.current_supply, null);
+    if (Number.isFinite(directSupply) && directSupply >= 0) {
+        return directSupply;
+    }
+
+    const dynamicId = asset.dynamic_asset_data_id || asset.dynamicDataId || asset.dynamic_data_id || null;
+    if (!dynamicId || typeof BitShares?.db?.get_objects !== 'function') {
+        return null;
+    }
+
+    const objects = await BitShares.db.get_objects([dynamicId]).catch(() => null);
+    const dynamicData = Array.isArray(objects) ? objects[0] : null;
+    const supply = toFiniteNumber(
+        dynamicData?.current_supply?.amount
+        ?? dynamicData?.current_supply?.value
+        ?? dynamicData?.current_supply,
+        null
+    );
+    return Number.isFinite(supply) && supply >= 0 ? supply : null;
+}
+
+/**
+ * Derive the value of a liquidity pool share token in a denomination asset.
+ * Resolves the pool, fetches reserves and supply, then prices both pool assets
+ * against the denomination asset to compute total value per share.
+ *
+ * @param {Object} BitShares - BitShares client instance
+ * @param {string} shareAssetRef - Share asset symbol
+ * @param {string} denominationAssetRef - Denomination asset symbol
+ * @param {string} [mode='auto'] - Price derivation mode ("pool", "book", or "auto")
+ * @returns {Promise<number|null>} Value per share in denomination asset, or null
+ */
+async function deriveLiquidityPoolTokenValue(BitShares, shareAssetRef, denominationAssetRef, mode = 'auto') {
+    try {
+        const [shareAsset, denominationAsset] = await Promise.all([
+            lookupAsset(BitShares, shareAssetRef),
+            lookupAsset(BitShares, denominationAssetRef),
+        ]);
+
+        if (!shareAsset?.id || !denominationAsset?.id) {
+            return null;
+        }
+
+        const poolInfo = await resolveLiquidityPoolByShareAsset(BitShares, shareAsset.id);
+        if (!poolInfo?.pool) {
+            return null;
+        }
+
+        const [assetA, assetB, supply] = await Promise.all([
+            lookupAsset(BitShares, poolInfo.pool.asset_a),
+            lookupAsset(BitShares, poolInfo.pool.asset_b),
+            getAssetCurrentSupply(BitShares, shareAsset),
+        ]);
+
+        if (!assetA?.id || !assetB?.id || !Number.isFinite(supply) || supply <= 0) {
+            return null;
+        }
+
+        const reserveA = MathUtils.blockchainToFloat(poolInfo.pool.balance_a, assetA.precision);
+        const reserveB = MathUtils.blockchainToFloat(poolInfo.pool.balance_b, assetB.precision);
+        if (!isValidNumber(reserveA) || !isValidNumber(reserveB)) {
+            return null;
+        }
+
+        const priceA = String(assetA.id) === String(denominationAsset.id)
+            ? 1
+            : await derivePrice(BitShares, assetA.id, denominationAsset.id, mode).catch(() => null);
+        const priceB = String(assetB.id) === String(denominationAsset.id)
+            ? 1
+            : await derivePrice(BitShares, assetB.id, denominationAsset.id, mode).catch(() => null);
+
+        if (!isValidNumber(priceA) || !isValidNumber(priceB) || priceA <= 0 || priceB <= 0) {
+            return null;
+        }
+
+        const supplyFloat = MathUtils.blockchainToFloat(supply, shareAsset.precision);
+        if (!isValidNumber(supplyFloat) || supplyFloat <= 0) {
+            return null;
+        }
+
+        const totalValue = reserveA * priceA + reserveB * priceB;
+        const valuePerShare = totalValue / supplyFloat;
+        return isValidNumber(valuePerShare) && valuePerShare > 0 ? valuePerShare : null;
+    } catch (err: any) {
+        return null;
+    }
+}
+
+/**
+ * Load the full dynamic grid snapshot written by market_adapter for a bot.
+ * The snapshot is stored atomically at profiles/orders/<botKey>.dynamicgrid.json
+ * and is updated every market adapter cycle. It contains the persisted grid
+ * center and, for dynamic-weight-whitelisted bots, any computed effective weight offsets.
+ * On full grid resets the bot may rewrite gridCenterPrice to the latest AMA baseline, but
+ * amaCenterPrice remains the raw AMA output for diagnostics and comparison.
+ * The snapshot may also expose AMA slope diagnostics and a gridPriceOffsetPct
+ * that downstream grid initialization can apply to the raw center price.
+ * Called by initializeGrid() when manager.config.gridPrice uses an AMA keyword,
+ * by performGridResync(), and by refreshDynamicWeightDistribution() before every
+ * rebalance so new orders use live weights — not only on grid reset.
+ * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
+ * @returns {Object|null} Snapshot with center and optional dynamicWeights fields, or null if invalid
+ */
+function loadAmaCenterSnapshot(botKey) {
+    try {
+        const gridPriceFile = path.join(ROOT, 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
+        const raw = fs.readFileSync(gridPriceFile, 'utf8');
+        const data = JSON.parse(raw);
+        const gridCenterPrice = Number(data?.gridCenterPrice ?? data?.centerPrice);
+        const amaCenterPrice = Number(data?.amaCenterPrice);
+        if (!Number.isFinite(gridCenterPrice) || gridCenterPrice <= 0) {
+            return null;
+        }
+        return {
+            gridCenterPrice,
+            centerPrice: gridCenterPrice,
+            amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : null,
+            source: data?.source || null,
+            updatedAt: data?.updatedAt || null,
+            amaSlopePercentMode: data?.amaSlopePercentMode || null,
+            amaSlope: data?.amaSlope ?? null,
+            gridRangeScalingAmaSlope: data?.gridRangeScalingAmaSlope ?? null,
+            gridPriceOffsetPct: Number.isFinite(Number(data?.gridPriceOffsetPct))
+                ? Number(data.gridPriceOffsetPct)
+                : null,
+            amaSlopeDeltaPercent: Number.isFinite(Number(data?.amaSlopeDeltaPercent))
+                ? Number(data.amaSlopeDeltaPercent)
+                : null,
+            amaSlopeThresholdPercent: Number.isFinite(Number(data?.amaSlopeThresholdPercent))
+                ? Number(data.amaSlopeThresholdPercent)
+                : null,
+            dynamicWeights: data?.dynamicWeights || null,
+        };
+    } catch (_: any) {
+        return null;
+    }
+}
+
+/**
+ * Load the AMA grid center price written by market_adapter for a bot.
+ * This is the numeric accessor used by the order engine.
+ * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
+ * @returns {number|null} Grid center price in B/A format, or null if file absent/invalid
+ */
+function loadAmaCenterPrice(botKey) {
+    const snapshot = loadAmaCenterSnapshot(botKey);
+    return snapshot ? snapshot.gridCenterPrice : null;
+}
+
+// ================================================================================
+// SECTION 2: FEE MANAGEMENT (INIT)
+// ================================================================================
+
+/**
+ * Initialize fee cache from blockchain.
+ * Fetches BTS operation fees and asset market fees for all unique assets in config.
+ * Populates internal fee cache used by math.js::getAssetFees.
+ * 
+ * @param {Array<Object>} botsConfig - Array of bot configurations
+ * @param {Object} BitShares - BitShares client instance
+ * @returns {Promise<Object>} Fee cache object keyed by asset symbol
+ */
+async function initializeFeeCache(botsConfig, BitShares) {
+    const uniqueAssets = new Set(['BTS']);
+    for (const bot of botsConfig) {
+        if (bot.assetA) uniqueAssets.add(bot.assetA);
+        if (bot.assetB) uniqueAssets.add(bot.assetB);
+    }
+
+    const cache = {};
+    for (const assetSymbol of uniqueAssets) {
+        try {
+            if (assetSymbol === 'BTS') {
+                const globalProps = await BitShares.db.getGlobalProperties();
+                const currentFees = globalProps.parameters.current_fees.parameters;
+                const findFee = (opCode) => {
+                    const param = currentFees.find(p => p[0] === opCode);
+                    const fee = param?.[1]?.fee;
+                    const feeNum = toFiniteNumber(fee);
+                    return {
+                        raw: feeNum,
+                        satoshis: feeNum,
+                        bts: MathUtils.blockchainToFloat(feeNum, 5)
+                    };
+                };
+                cache.BTS = {
+                    limitOrderCreate: findFee(1),
+                    limitOrderCancel: findFee(2),
+                    limitOrderUpdate: findFee(77)
+                };
+            } else {
+                const fullAsset = await lookupAsset(BitShares, assetSymbol);
+                const options = fullAsset.options || {};
+                cache[assetSymbol] = {
+                    assetId: fullAsset.id,
+                    symbol: assetSymbol,
+                    precision: fullAsset.precision,
+                    marketFee: { percent: (options.market_fee_percent || 0) / 100 },
+                    takerFee: options.taker_fee_percent ? { percent: options.taker_fee_percent / 100 } : null,
+                    maxMarketFee: {
+                        raw: options.max_market_fee || 0,
+                        float: MathUtils.blockchainToFloat(options.max_market_fee || 0, fullAsset.precision)
+                    }
+                };
+            }
+        } catch (error: any) {}
+    }
+
+    MathUtils._setFeeCache(cache);
+    return cache;
+}
+
+// ================================================================================
+// SECTION 3: GRID STATE MANAGEMENT
+// ================================================================================
+
+/**
+ * Persist current grid state to storage.
+ * Saves all orders, cache funds, fees, boundary index, and asset info.
+ * 
+ * @param {Object} manager - OrderManager instance
+ * @param {Object} accountOrders - AccountOrders data accessor
+ * @param {string} botKey - Bot identifier for storage
+ * @returns {Promise<boolean>} True if persistence succeeded, false on error
+ */
+async function persistGridSnapshot(manager, accountOrders, botKey) {
+    if (!manager || !accountOrders || !botKey) return false;
+    try {
+        const orders = Array.from(manager.orders.values());
+        const pricing = manager._lastGridPricingContext || null;
+        let debugConfig = manager.config || null;
+        if (debugConfig && pricing) {
+            const {
+                gridPrice: _gridPrice,
+                configuredMinPrice: _configuredMinPrice,
+                configuredMaxPrice: _configuredMaxPrice,
+                rangeScalingFactor: _rangeScalingFactor,
+                ...restConfig
+            } = debugConfig;
+            debugConfig = {
+                gridPrice: pricing.gridPrice,
+                configuredMinPrice: pricing.configuredMinPrice,
+                configuredMaxPrice: pricing.configuredMaxPrice,
+                rangeScalingFactor: pricing.rangeScalingFactor,
+                ...restConfig
+            };
+        }
+        await accountOrders.storeMasterGrid(
+            botKey,
+            orders,
+            manager.funds.btsFeesOwed,
+            manager.boundaryIdx,
+            manager.assets || null,
+            {
+                persistedAt: new Date().toISOString(),
+                config: debugConfig,
+                accountTotals: manager.accountTotals || null
+            }
+        );
+        return true;
+    } catch (e: any) {
+        return false;
+    }
+}
+
+/**
+ * Retry grid persistence if previous attempt failed.
+ * Clears persistence warning flag if successful.
+ * 
+ * @param {Object} manager - OrderManager instance
+ * @returns {Promise<boolean>} True if persisted successfully or no warning, false on error
+ */
+async function retryPersistenceIfNeeded(manager) {
+    if (!manager || !manager._persistenceWarning) return true;
+    const warning = manager._persistenceWarning;
+    try {
+        const success = typeof manager.persistGrid === 'function' ? await manager.persistGrid() : true;
+        if (success) delete manager._persistenceWarning;
+        return success;
+    } catch (e: any) { return false; }
+}
+
+/**
+ * Apply grid corrections for divergence between calculated and active orders.
+ * Uses COW (Copy-on-Write): builds a working grid, plans updates/cancels/creates,
+ * executes blockchain operations, and commits working grid only on success.
+ *
+ * Surplus on-chain orders are cancelled (not resized to zero).
+ * Size updates are emitted only for committed ACTIVE/PARTIAL orders.
+ * 
+ * @param {Object} manager - OrderManager instance
+ * @param {Object} accountOrders - AccountOrders data accessor
+ * @param {string} botKey - Bot identifier for persistence
+ * @param {Function} updateOrdersOnChainBatchFn - Batch update function for blockchain operations
+ * @returns {Promise<void>}
+ */
+async function applyGridDivergenceCorrections(manager, accountOrders, botKey, updateOrdersOnChainBatchFn) {
+    if (!manager._gridLock) return;
+    const Grid = require('../grid');
+    const { WorkingGrid } = require('../working_grid');
+    const { hasActionForOrder, removeActionsForOrder } = require('./validate');
+
+    // Phase 1: Pre-lock grid resizing using COW
+    // This calculates new sizes from blockchain state but DOES NOT modify master.
+    // pendingBoundaryIdx carries any fund-driven boundary shift through the COW
+    // pipeline so that manager.boundaryIdx is only updated atomically inside
+    // _commitWorkingGrid — never before the slot types are consistent.
+    let resizeCowResult = null;
+    let pendingBoundaryIdx = manager.boundaryIdx;
+    if (manager._gridSidesUpdated && manager._gridSidesUpdated.size > 0) {
+        const hasBuy = manager._gridSidesUpdated.has(ORDER_TYPES.BUY);
+        const hasSell = manager._gridSidesUpdated.has(ORDER_TYPES.SELL);
+        let resizeOrderType = hasBuy && hasSell
+            ? 'both'
+            : hasBuy
+                ? ORDER_TYPES.BUY
+                : ORDER_TYPES.SELL;
+
+        // If out-of-spread correction moves boundary, recompute both sides.
+        // Store the new index in pendingBoundaryIdx — do NOT touch manager.boundaryIdx
+        // here; updateGridFromBlockchainSnapshot will re-assign slot types in the
+        // WorkingGrid and _commitWorkingGrid will update manager.boundaryIdx atomically.
+        const boundarySync = syncBoundaryToFunds(manager);
+        if (manager.outOfSpread > 0 && boundarySync.changed) {
+            pendingBoundaryIdx = boundarySync.newIdx;
+            resizeOrderType = 'both';
+            manager._gridSidesUpdated.add(ORDER_TYPES.BUY);
+            manager._gridSidesUpdated.add(ORDER_TYPES.SELL);
+        }
+
+        resizeCowResult = await Grid.updateGridFromBlockchainSnapshot(manager, resizeOrderType, true, pendingBoundaryIdx);
+    }
+
+    // Phase 2: Create working grid for divergence corrections
+    // Use the resize working grid as starting point if available
+    let cowResult = null;
+    await manager._gridLock.acquire(async () => {
+        if (!manager._gridSidesUpdated || manager._gridSidesUpdated.size === 0) return;
+
+        // Start from resize result if available, otherwise create fresh working grid
+        const workingGrid = resizeCowResult?.workingGrid 
+            ? resizeCowResult.workingGrid 
+            : new WorkingGrid(manager.orders, { baseVersion: manager._gridVersion });
+        
+        const actions = resizeCowResult?.actions ? [...resizeCowResult.actions] : [];
+
+        for (const orderType of manager._gridSidesUpdated) {
+            const sideName = orderType === ORDER_TYPES.BUY ? 'buy' : 'sell';
+            const sidePrecision = MathUtils.getPrecisionByOrderType(manager.assets, orderType);
+            
+            // Get current on-chain orders for this side (from master, not working)
+            const currentOnChainOrders = Array.from(manager.orders.values())
+                .filter(o => o.type === orderType && OrderUtils.isOrderPlaced(o));
+
+            // Get all slots for this side from working grid
+            const allSideSlots = Array.from(workingGrid.values())
+                .filter(o => o.type === orderType)
+                .sort((a, b) => sideName === 'buy' ? b.price - a.price : a.price - b.price);
+
+            // Calculate target count
+            const baseTargetCount = (manager.config.activeOrders && Number.isFinite(manager.config.activeOrders[sideName]))
+                ? Math.max(1, manager.config.activeOrders[sideName])
+                : currentOnChainOrders.length;
+            const targetCount = baseTargetCount;
+            
+            // Determine desired slots (closest to market)
+            const desiredSlots = allSideSlots.slice(0, targetCount);
+            const desiredSlotIds = new Set(desiredSlots.map(s => s.id));
+            const onChainBySlotId = new Map(currentOnChainOrders.map(o => [o.id, o]));
+
+            // Process on-chain orders:
+            // - In desired window: keep/update committed size (if not already queued by Phase 1)
+            // - Outside desired window: cancel surplus order
+            for (const onChainOrder of currentOnChainOrders) {
+                // Get current slot from working grid (may have been updated in Phase 1)
+                const slot = workingGrid.get(onChainOrder.id);
+                const isDesired = desiredSlotIds.has(onChainOrder.id);
+
+                if (!isDesired || !slot || !(toFiniteNumber(slot.size) > 0)) {
+                    removeActionsForOrder(actions, COW_ACTIONS.UPDATE, onChainOrder);
+                    const hasQueuedCancel = hasActionForOrder(actions, COW_ACTIONS.CANCEL, onChainOrder);
+
+                    if (!hasQueuedCancel) {
+                        manager.logger.log(`[DIVERGENCE-COW] Queueing cancel for surplus ${onChainOrder.id} (chain id ${onChainOrder.orderId})`, 'info');
+                        actions.push({
+                            type: COW_ACTIONS.CANCEL,
+                            id: onChainOrder.id,
+                            orderId: onChainOrder.orderId
+                        });
+                    }
+
+                    const current = slot || onChainOrder;
+                    workingGrid.set(onChainOrder.id, OrderUtils.convertToSpreadPlaceholder(current));
+                    continue;
+                }
+
+                // Phase 1 already queued committed size updates. Avoid duplicate UPDATEs.
+                const hasQueuedUpdate = hasActionForOrder(actions, COW_ACTIONS.UPDATE, onChainOrder);
+                const hasQueuedCancel = hasActionForOrder(actions, COW_ACTIONS.CANCEL, onChainOrder);
+
+                if (hasQueuedUpdate || hasQueuedCancel) {
+                    continue;
+                }
+
+                const newSize = toFiniteNumber(slot.size);
+                const currentSize = toFiniteNumber(onChainOrder.size);
+                const sizeChanged = Number.isFinite(sidePrecision)
+                    ? MathUtils.floatToBlockchainInt(newSize, sidePrecision) !== MathUtils.floatToBlockchainInt(currentSize, sidePrecision)
+                    : newSize !== currentSize;
+
+                if (sizeChanged) {
+                    manager.logger.log(`[DIVERGENCE-COW] Queueing size update for ${onChainOrder.id}: ${currentSize} -> ${newSize}`, 'info');
+                    actions.push({
+                        type: COW_ACTIONS.UPDATE,
+                        id: onChainOrder.id,
+                        orderId: onChainOrder.orderId,
+                        newGridId: onChainOrder.id,
+                        newSize,
+                        newPrice: slot.price,
+                        order: {
+                            id: onChainOrder.id,
+                            type: onChainOrder.type,
+                            price: slot.price,
+                            size: newSize
+                        }
+                    });
+                }
+            }
+
+            // Process holes: CREATE new orders for empty desired slots
+            for (const slot of desiredSlots) {
+                const hasCreate = hasActionForOrder(actions, COW_ACTIONS.CREATE, slot);
+                if (!onChainBySlotId.has(slot.id) && slot.size > 0 && !hasCreate) {
+                    manager.logger.log(`[DIVERGENCE-COW] Queueing new placement for slot ${slot.id}`, 'info');
+                    actions.push({
+                        type: COW_ACTIONS.CREATE,
+                        id: slot.id,
+                        order: {
+                            id: slot.id,
+                            price: slot.price,
+                            size: slot.size,
+                            type: slot.type
+                        }
+                    });
+                }
+            }
+        }
+
+        // Build COW result with all actions
+        if (actions.length > 0) {
+            cowResult = {
+                actions,
+                workingGrid,
+                workingIndexes: workingGrid.getIndexes(),
+                workingBoundary: pendingBoundaryIdx,
+                aborted: false
+            };
+        } else if (resizeCowResult?.hasWorkingChanges) {
+            // No on-chain operations required, but working grid changed (typically virtual sizing).
+            // Commit locally to keep master in sync with latest sizing context.
+            cowResult = {
+                actions: [],
+                workingGrid,
+                workingIndexes: workingGrid.getIndexes(),
+                workingBoundary: pendingBoundaryIdx,
+                localOnly: true,
+                aborted: false
+            };
+        }
+    });
+
+    // Phase 3: Execute corrections via COW batch
+    if (cowResult && !cowResult.aborted) {
+        try {
+            let result = null;
+
+            if (cowResult.localOnly) {
+                const committed = await manager._commitWorkingGrid(
+                    cowResult.workingGrid,
+                    cowResult.workingIndexes,
+                    cowResult.workingBoundary
+                );
+
+                if (committed) {
+                    if (typeof manager.persistGrid === 'function') {
+                        await manager.persistGrid();
+                    } else {
+                        await persistGridSnapshot(manager, accountOrders, botKey);
+                    }
+                    result = { executed: true, localOnly: true };
+                    manager.logger.log(`[DIVERGENCE-COW] Applied local-only sizing updates (no blockchain ops)`, 'info');
+                } else {
+                    result = { executed: false, localOnly: true, commitSkipped: true };
+                    manager.logger.log(`[DIVERGENCE-COW] Skipped local-only commit (working grid not committed)`, 'warn');
+                }
+            } else {
+                result = await updateOrdersOnChainBatchFn(cowResult);
+            }
+            
+            if (result && result.executed) {
+                manager.logger.log(`[DIVERGENCE-COW] Successfully applied divergence corrections`, 'info');
+                manager.outOfSpread = 0;
+                manager._gridSidesUpdated.clear();
+                // Grid already persisted via _commitWorkingGrid in updateOrdersOnChainBatch
+            } else {
+                manager.logger.log(`[DIVERGENCE-COW] Divergence corrections not executed (working grid discarded)`, 'warn');
+                manager._gridSidesUpdated.clear();
+            }
+        } catch (err: any) {
+            manager.logger.log(`[DIVERGENCE-COW] Error executing divergence corrections: ${err.message}`, 'error');
+            manager._gridSidesUpdated.clear();
+        }
+    } else {
+        // No actions needed or aborted
+        manager._gridSidesUpdated.clear();
+    }
+}
+
+// ================================================================================
+// SECTION 4: GRID UTILITIES
+// ================================================================================
+
+/**
+ * Synchronize grid boundary position based on available funds.
+ *
+ * Computes a fund-driven boundary index and clamps it to the gap between the
+ * highest on-chain BUY slot and the lowest on-chain SELL slot.  The boundary
+ * may therefore only shift within the existing spread — it can never jump over
+ * a committed order on either side.
+ *
+ * A shift is only produced when the fund ratio is asymmetric enough that the
+ * clamped result differs from the current boundaryIdx.  Balanced available
+ * funds yield a mid-range result that, after clamping, equals the current
+ * boundary and produces no change.
+ *
+ * No master-grid mutation is performed here; the caller is responsible for
+ * updating manager.boundaryIdx and triggering the subsequent COW resize.
+ *
+ * @param {Object} manager - OrderManager instance
+ * @returns {{ changed: boolean, newIdx?: number }}
+ */
+function syncBoundaryToFunds(manager) {
+    const availA = (manager.funds?.available?.sell || 0);
+    const availB = (manager.funds?.available?.buy || 0);
+    const allSlots = Array.from(manager.orders.values()).sort((a, b) => a.price - b.price);
+    const Grid = require('../grid');
+    const gapSlots = Grid.calculateGapSlots(manager.config.incrementPercent, manager.config.targetSpreadPercent);
+
+    // Determine the index range permitted by master-grid slot assignments.
+    // Both virtual and active orders count: the boundary must stay strictly
+    // between the highest BUY slot and the lowest SELL slot so it never
+    // crosses an existing order regardless of whether it is on-chain.
+    let maxBuyIdx  = -1;
+    let minSellIdx = allSlots.length;
+    for (let i = 0; i < allSlots.length; i++) {
+        const slot = allSlots[i];
+        if (slot.type === ORDER_TYPES.BUY  && i > maxBuyIdx)  maxBuyIdx  = i;
+        if (slot.type === ORDER_TYPES.SELL && i < minSellIdx) minSellIdx = i;
+    }
+
+    // Build clamp bounds from whichever sides have typed slots.
+    // If a side has no typed slots there is nothing to protect on that side,
+    // so the boundary is free to move to the corresponding edge of the grid.
+    const lowerBound = maxBuyIdx  >= 0                ? maxBuyIdx  + 1          : 0;
+    const upperBound = minSellIdx < allSlots.length   ? minSellIdx - 1          : allSlots.length - 1;
+
+    // Bounds are contradictory — typed slots leave no gap to shift into.
+    if (lowerBound > upperBound) {
+        return { changed: false };
+    }
+
+    let newIdx = OrderUtils.calculateFundDrivenBoundary(allSlots, availA, availB, manager.config.startPrice, gapSlots);
+
+    // Clamp to the permitted range.
+    newIdx = Math.max(lowerBound, Math.min(newIdx, upperBound));
+
+    if (newIdx !== manager.boundaryIdx) {
+        return { changed: true, newIdx };
+    }
+    return { changed: false };
+}
+
+// ================================================================================
+// SECTION 5: UI & INTERACTIVE UTILITIES
+// ================================================================================
+
+/**
+ * Ensure profiles directory exists, creating if necessary.
+ * 
+ * @param {string} profilesDir - Path to profiles directory
+ * @returns {boolean} True if directory was created, false if it already existed
+ */
+function ensureProfilesDirectory(profilesDir) {
+    if (!fs.existsSync(profilesDir)) { fs.mkdirSync(profilesDir, { recursive: true }); return true; }
+    return false;
+}
+
+/**
+ * Pause execution for a specified duration.
+ * @param {number} ms - Milliseconds to sleep
+ * @returns {Promise<void>}
+ */
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Read user input from stdin with optional masking.
+ * Handles raw terminal mode for interactive prompts.
+ * Supports password masking and backspace handling.
+ * 
+ * @param {string} prompt - Prompt text to display
+ * @param {Object} [options={}] - Input options
+ * @param {boolean} [options.hideEchoBack=false] - Hide input echo (for passwords)
+ * @param {string} [options.mask=''] - Character to display instead of input
+ * @returns {Promise<string>} Trimmed user input
+ */
+function readInput(prompt, options = {}) {
+    return new Promise((resolve) => {
+        const stdin = process.stdin; const stdout = process.stdout;
+        let input = ''; stdout.write(prompt);
+        const isRaw = stdin.isRaw; if (stdin.isTTY) stdin.setRawMode(true);
+        stdin.resume(); stdin.setEncoding('utf8');
+        const onData = (chunk) => {
+            const s = String(chunk);
+            for (let i = 0; i < s.length; i++) {
+                const ch = s[i];
+                if (ch === '\x1b') { if (s.length === 1) { cleanup(); stdout.write('\n'); return resolve('\x1b'); } continue; }
+                if (ch === '\r' || ch === '\n' || ch === '\u0004') { cleanup(); stdout.write('\n'); return resolve(input.trim()); }
+                if (ch === '\u0003') { cleanup(); process.exit(); }
+                if (ch === '\u007f' || ch === '\u0008') { if (input.length > 0) { input = input.slice(0, -1); stdout.write('\b \b'); } continue; }
+                if (ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) <= 126) { input += ch; if (!options.hideEchoBack) stdout.write(options.mask || ch); }
+            }
+        };
+        const cleanup = () => { stdin.removeListener('data', onData); if (stdin.isTTY) stdin.setRawMode(isRaw); };
+        stdin.on('data', onData);
+    });
+}
+
+/**
+ * Read password input from user with masked echo.
+ * 
+ * @param {string} prompt - Prompt text to display
+ * @returns {Promise<string>} User-entered password
+ */
+async function readPassword(prompt) { return readInput(prompt, { mask: '*', hideEchoBack: false }); }
+
+/**
+ * Execute async function with exponential backoff retry logic.
+ * Retries on failure with increasing delays up to maxDelayMs.
+ *
+ * @param {Function} fn - Async function to retry
+ * @param {Object} [options={}] - Retry options
+ * @param {number} [options.maxAttempts=3] - Maximum retry attempts
+ * @param {number} [options.baseDelayMs=1000] - Base delay in milliseconds
+ * @param {number} [options.maxDelayMs=10000] - Maximum delay in milliseconds
+ * @param {Object} [options.logger=null] - Optional logger for retry messages
+ * @param {string} [options.operationName='operation'] - Name for log messages
+ * @returns {Promise<*>} Result of function execution
+ * @throws {Error} If all attempts fail, throws the final error
+ */
+async function withRetry(fn, options = {}) {
+    const { maxAttempts = 3, baseDelayMs = 1000, maxDelayMs = 10000, logger = null, operationName = 'operation' } = options;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            return await fn();
+        } catch (err: any) {
+            if (attempt === maxAttempts) throw err;
+            const delay = Math.min(baseDelayMs * Math.pow(2, attempt - 1), maxDelayMs);
+            logger?.log?.(`${operationName} attempt ${attempt} failed. Retrying in ${delay}ms...`, 'warn');
+            await sleep(delay);
+        }
+    }
+}
+
+// ================================================================================
+// SECTION 6: GENERAL UTILITIES
+// ================================================================================
+
+/**
+ * Resolve the best account reference for blockchain reads.
+ * Prefer account ID when available, fall back to account name.
+ * Used by recovery and startup paths where implicit account context may be unavailable.
+ * @param {Object} manager - OrderManager instance (optional)
+ * @param {string} account - Account name (optional)
+ * @returns {string|null} Resolved account reference or null
+ */
+function resolveAccountRef(manager, account) {
+    if (manager && typeof manager.accountId === 'string' && manager.accountId) {
+        return manager.accountId;
+    }
+    if (manager && typeof manager.account === 'string' && manager.account) {
+        return manager.account;
+    }
+    if (typeof account === 'string' && account) {
+        return account;
+    }
+    return null;
+}
+
+/**
+ * Recursively freezes an object to ensure immutability.
+ * @param {Object} obj 
+ * @returns {Object}
+ */
+function deepFreeze(obj) {
+    if (obj === null || typeof obj !== 'object') return obj;
+    Object.freeze(obj);
+    Object.getOwnPropertyNames(obj).forEach(prop => {
+        if (Object.prototype.hasOwnProperty.call(obj, prop) &&
+            obj[prop] !== null &&
+            (typeof obj[prop] === 'object' || typeof obj[prop] === 'function') &&
+            !Object.isFrozen(obj[prop])) {
+            deepFreeze(obj[prop]);
+        }
+    });
+    return obj;
+}
+
+/**
+ * Creates a shallow clone of a Map.
+ * @param {Map} map 
+ * @returns {Map}
+ */
+function cloneMap(map) {
+    return new Map(map);
+}
+
+/**
+ * Ensure a directory exists, creating it recursively if it doesn't.
+ * Safe to call when the directory already exists.
+ * @param {string} dirPath - Directory path to ensure
+ * @returns {void}
+ */
+function ensureDir(dirPath) {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
+}
+
+/**
+ * Parses JSON content that may contain comments (/* or //).
+ * Strips block comments then line comments before parsing.
+ * @param {string} raw - The raw string content with possible comments.
+ * @returns {Object} The parsed JSON object.
+ */
+function parseJsonWithComments(raw) {
+    const stripped = raw.replace(/\/\*(?:.|[\r\n])*?\*\//g, '').replace(/(^|\s*)\/\/.*$/gm, '');
+    return JSON.parse(stripped);
+}
+
+export = {
+    lookupAsset,
+    deriveMarketPrice,
+    derivePoolPrice,
+    derivePrice,
+    resolveLiquidityPoolByShareAsset,
+    deriveLiquidityPoolTokenValue,
+    loadAmaCenterPrice,
+    loadAmaCenterSnapshot,
+    initializeFeeCache,
+    persistGridSnapshot,
+    retryPersistenceIfNeeded,
+    applyGridDivergenceCorrections,
+    syncBoundaryToFunds,
+    ensureProfilesDirectory,
+    sleep,
+    readInput,
+    readPassword,
+    withRetry,
+    resolveAccountRef,
+    deepFreeze,
+    cloneMap,
+    ensureDir,
+    parseJsonWithComments
+};

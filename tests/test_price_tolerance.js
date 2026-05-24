@@ -2,7 +2,7 @@ const assert = require('assert');
 
 console.log('Running price_tolerance tests');
 
-const { OrderManager, utils } = require('../modules/order/index.js');
+const { OrderManager, utils } = require('../modules/order/index');
 
 const calc = utils.calculatePriceTolerance;
 

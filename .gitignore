@@ -55,3 +55,5 @@ market_adapter/state/
 
 # Claw runtime/user-specific artifacts
 claw/data/
+
+dist/

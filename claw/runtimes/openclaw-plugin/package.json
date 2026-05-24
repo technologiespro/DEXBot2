@@ -2,6 +2,6 @@
   "name": "bitshares-claw-openclaw-plugin",
   "private": true,
   "version": "0.7.5",
-  "type": "module",
+  "type": "commonjs",
   "main": "index.js"
 }

@@ -98,7 +98,7 @@ async function testCenterSnapshotWriterUsesOnlyNewCollateralField() {
       capturedWrites.push({ rename: [src, dst] });
     };
 
-    const { writeCenterSnapshot } = require('../market_adapter/test_helpers.js');
+    const { writeCenterSnapshot } = require('../market_adapter/test_helpers');
     writeCenterSnapshot({
       bots: {
         testBot: {
@@ -163,7 +163,7 @@ async function testCenterSnapshotWriterIgnoresLegacyCollateralInput() {
       capturedWrites.push({ rename: [src, dst] });
     };
 
-    const { writeCenterSnapshot } = require('../market_adapter/test_helpers.js');
+    const { writeCenterSnapshot } = require('../market_adapter/test_helpers');
     writeCenterSnapshot({
       bots: {
         testBot: {
@@ -206,7 +206,7 @@ async function testAdapterStateMergePreservesBotResetMetadata() {
   }, null, 2) + '\n', 'utf8');
 
   try {
-    const { mergeGridResetMetadataFromDynamicGrid } = require('../market_adapter/market_adapter.js');
+    const { mergeGridResetMetadataFromDynamicGrid } = require('../market_adapter/market_adapter');
     const state = {
       bots: {
         [botKey]: {
@@ -248,7 +248,7 @@ async function testDynamicGridWritePreservesExistingResetMetadata() {
   }, null, 2) + '\n', 'utf8');
 
   try {
-    const { writeBotDynamicGrid } = require('../market_adapter/test_helpers.js');
+    const { writeBotDynamicGrid } = require('../market_adapter/test_helpers');
     assert.strictEqual(writeBotDynamicGrid(botKey, 123.45, {
       amaCenterPrice: 130.25,
     }), true);
@@ -282,7 +282,7 @@ async function testDynamicGridWritePreservesNewerResetCenterWhenAdapterStateIsSt
   }, null, 2) + '\n', 'utf8');
 
   try {
-    const { writeBotDynamicGrid } = require('../market_adapter/test_helpers.js');
+    const { writeBotDynamicGrid } = require('../market_adapter/test_helpers');
     assert.strictEqual(writeBotDynamicGrid(botKey, 100, {
       amaCenterPrice: 130.25,
       observedLastGridResetAt: '2026-05-13T18:00:01.190Z',
@@ -322,7 +322,7 @@ async function testGridResetTriggerWriteIsAtomicRename() {
       renames.push({ src: String(src), dst: String(dst) });
     };
 
-    const { writeGridResetTrigger } = require('../market_adapter/test_helpers.js');
+    const { writeGridResetTrigger } = require('../market_adapter/test_helpers');
     const triggerPath = writeGridResetTrigger({
       name: 'Atomic Trigger Bot',
       botKey,

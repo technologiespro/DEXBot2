@@ -7,9 +7,11 @@
  */
 
 const assert = require('assert');
-const { OrderManager } = require('../modules/order/index.js');
-const { ORDER_TYPES, ORDER_STATES, TIMING } = require('../modules/constants.js');
+const path = require('path');
+const { OrderManager } = require('../modules/order/index');
+const { ORDER_TYPES, ORDER_STATES, TIMING } = require('../modules/constants');
 const { createSilentLogger } = require('./helpers/silent_logger');
+const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
 
 // Mock getAssetFees to prevent crashes during recalculateFunds
 const OrderUtils = require('../modules/order/utils/math');
@@ -396,8 +398,15 @@ async function runTests() {
 
         const originalFetchTotals = manager.fetchAccountTotals;
         const originalSyncFromOpenOrders = manager.syncFromOpenOrders;
-        const chainOrders = require('../modules/chain_orders');
-        const originalReadOpenOrders = chainOrders.readOpenOrders;
+        const chainOrdersPath = path.resolve(__dirname, '../modules/chain_orders.js');
+        const chainOrdersSourcePath = path.resolve(__dirname, '../modules/chain_orders.ts');
+        const distChainOrdersPath = path.resolve(__dirname, '../dist/modules/chain_orders.js');
+        const stubbedChainOrders = {
+            readOpenOrders: async () => [],
+        };
+        const originalChainOrders = setCachedModule(chainOrdersPath, stubbedChainOrders);
+        const originalSourceChainOrders = setCachedModule(chainOrdersSourcePath, stubbedChainOrders);
+        const originalDistChainOrders = setCachedModule(distChainOrdersPath, stubbedChainOrders);
 
         let capturedSyncOptions = null;
         manager.fetchAccountTotals = async () => { };
@@ -405,7 +414,6 @@ async function runTests() {
             capturedSyncOptions = options;
             return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [] };
         };
-        chainOrders.readOpenOrders = async () => [];
 
         try {
             const result = await manager.accountant._performStateRecovery(manager);
@@ -415,7 +423,9 @@ async function runTests() {
         } finally {
             manager.fetchAccountTotals = originalFetchTotals;
             manager.syncFromOpenOrders = originalSyncFromOpenOrders;
-            chainOrders.readOpenOrders = originalReadOpenOrders;
+            restoreCachedModule(chainOrdersPath, originalChainOrders);
+            restoreCachedModule(chainOrdersSourcePath, originalSourceChainOrders);
+            restoreCachedModule(distChainOrdersPath, originalDistChainOrders);
         }
     }
 

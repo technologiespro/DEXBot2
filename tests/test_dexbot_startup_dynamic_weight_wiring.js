@@ -32,11 +32,10 @@ setCachedModule(startupReconcilePath, {
     reconcileStartupOrders: async () => ({ actions: [] }),
 });
 
+const chainOrders = require('../modules/chain_orders.js');
+const Grid = require('../modules/order/grid.js');
 delete require.cache[dexbotClassPath];
-
-const DEXBot = require('../modules/dexbot_class');
-const chainOrders = require('../modules/chain_orders');
-const Grid = require('../modules/order/grid');
+const DEXBot = require('../modules/dexbot_class.js');
 
 async function testPlaceInitialOrdersRefreshesAndFallsBack() {
     const botKey = 'test_startup_dynamic_weight_initial';
@@ -159,6 +158,28 @@ async function testFinishStartupSequenceUsesLiveWeightsForStartupFillRebalance()
         bot._runGridMaintenance = async () => {};
         bot._persistAndRecoverIfNeeded = async () => {};
         bot._executeBatchIfNeeded = async () => ({ skippedNoActions: true, hadRotation: false });
+        bot._processFillsWithBatching = async (filledOrders, excludeSet, context, options) => {
+            processCalls++;
+            assert.strictEqual(filledOrders.length, 1, 'startup fill rebalance should receive one detected fill');
+            assert.deepStrictEqual(
+                bot.config.weightDistribution,
+                { sell: 0.47, buy: 0.27 },
+                'startup fill rebalance should refresh bot config to live dynamic weights'
+            );
+            assert.deepStrictEqual(
+                bot.manager.config.weightDistribution,
+                { sell: 0.47, buy: 0.27 },
+                'startup fill rebalance should refresh manager config to live dynamic weights'
+            );
+            assert.strictEqual(context, 'startup sync fill rebalance', 'startup fill rebalance should use the startup sync batching context');
+            assert.strictEqual(
+                options && options.skipAccountTotalsUpdate,
+                true,
+                'startup fill rebalance should preserve existing skipAccountTotalsUpdate behavior'
+            );
+            assert(excludeSet instanceof Set, 'startup fill rebalance should still pass an exclude set');
+            return { aborted: false };
+        };
         bot.shutdown = async () => {};
 
         bot.manager = {
@@ -176,7 +197,7 @@ async function testFinishStartupSequenceUsesLiveWeightsForStartupFillRebalance()
                 isLocked: () => false,
                 getQueueLength: () => 0,
             },
-            synchronizeWithChain: async () => ({
+            syncFromOpenOrders: async () => ({
                 filledOrders: [{
                     id: 'slot-174',
                     orderId: '1.7.777777',
@@ -184,27 +205,7 @@ async function testFinishStartupSequenceUsesLiveWeightsForStartupFillRebalance()
                     isPartial: false,
                 }],
             }),
-            processFilledOrders: async (filledOrders, excludeSet, options) => {
-                processCalls++;
-                assert.strictEqual(filledOrders.length, 1, 'startup fill rebalance should receive one detected fill');
-                assert.deepStrictEqual(
-                    bot.config.weightDistribution,
-                    { sell: 0.47, buy: 0.27 },
-                    'startup fill rebalance should refresh bot config to live dynamic weights'
-                );
-                assert.deepStrictEqual(
-                    bot.manager.config.weightDistribution,
-                    { sell: 0.47, buy: 0.27 },
-                    'startup fill rebalance should refresh manager config to live dynamic weights'
-                );
-                assert.strictEqual(
-                    options && options.skipAccountTotalsUpdate,
-                    true,
-                    'startup fill rebalance should preserve existing skipAccountTotalsUpdate behavior'
-                );
-                assert(excludeSet instanceof Set, 'startup fill rebalance should still pass an exclude set');
-                return { actions: [] };
-            },
+            synchronizeWithChain: async () => ({ filledOrders: [] }),
         };
 
         await bot._finishStartupSequence({

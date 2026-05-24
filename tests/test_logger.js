@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 console.log('Running logger tests');
 
-const Logger = require('../modules/order/index.js').logger;
+const Logger = require('../modules/order/index').logger;
 const { createPm2AwareLogger } = require('../modules/logger');
 
 // Capture console output by stream

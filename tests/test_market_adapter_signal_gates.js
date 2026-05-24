@@ -178,7 +178,7 @@ function testDynamicWeightChartShowsOutputClampGuide() {
 
 function testLiveServiceMatchesChartGainStructure() {
     const serviceSource = fs.readFileSync(
-        path.join(__dirname, '..', 'market_adapter', 'core', 'market_adapter_service.js'),
+        path.join(__dirname, '..', 'market_adapter', 'core', 'market_adapter_service.ts'),
         'utf8'
     );
 

@@ -141,7 +141,7 @@ function restoreStubs() {
 }
 
 installStubs();
-require('../bot.js');
+require('../bot');
 
 (async () => {
     try {

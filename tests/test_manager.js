@@ -1,8 +1,8 @@
 const assert = require('assert');
 console.log('Running manager tests (COW)');
 
-const { OrderManager, grid: Grid } = require('../modules/order/index.js');
-const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants.js');
+const { OrderManager, grid: Grid } = require('../modules/order/index');
+const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 
 // Initialize manager in a deterministic way (no chain lookups)
 const cfg = {

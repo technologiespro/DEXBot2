@@ -2,8 +2,8 @@ const assert = require('assert');
 
 console.log('Running chain_helpers tests');
 
-const orderUtils = require('../modules/order/utils/order.js');
-const mathUtils = require('../modules/order/utils/math.js');
+const orderUtils = require('../modules/order/utils/order');
+const mathUtils = require('../modules/order/utils/math');
 
 // parseChainOrder test (sell case)
 const assets = { assetA: { id: '1.3.1', precision: 4 }, assetB: { id: '1.3.2', precision: 5 } };

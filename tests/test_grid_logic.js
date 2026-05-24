@@ -15,7 +15,13 @@ const { OrderManager } = require('../modules/order/manager');
 const { allocateFundsByWeights, getSingleDustThreshold } = require('../modules/order/utils/math');
 const { shouldFlagOutOfSpread } = require('../modules/order/utils/order');
 const { WHITELIST_FILE, resetMarketAdapterWhitelistCache } = require('../modules/market_adapter_whitelist');
+const _distWhitelist = require('../dist/modules/market_adapter_whitelist.js');
+const _resetBothWhitelistCaches = () => {
+    resetMarketAdapterWhitelistCache();
+    _distWhitelist.resetMarketAdapterWhitelistCache();
+};
 const gridModulePath = require.resolve('../modules/order/grid');
+const managerModulePath = require.resolve('../modules/order/manager');
 
 async function runTests() {
     console.log('Running Grid Logic Tests...');
@@ -239,7 +245,11 @@ async function runTests() {
         fs.writeFileSync(amaFile, JSON.stringify({ centerPrice: 1000, updatedAt: new Date().toISOString() }, null, 2) + '\n', 'utf8');
 
         try {
-            const manager = new OrderManager({
+            delete require.cache[gridModulePath];
+            delete require.cache[managerModulePath];
+            const FreshGrid = require('../modules/order/grid');
+            const { OrderManager: FreshOrderManager } = require('../modules/order/manager');
+            const manager = new FreshOrderManager({
                 assetA: 'TESTA',
                 assetB: 'TESTB',
                 botKey,
@@ -260,7 +270,7 @@ async function runTests() {
             };
             await manager.setAccountTotals({ buy: 5000, sell: 5000, buyFree: 5000, sellFree: 5000 });
 
-            await Grid.initializeGrid(manager);
+            await FreshGrid.initializeGrid(manager);
 
             assert(manager.orders.size > 0, 'initializeGrid should succeed even when configured startPrice is outside resolved bounds');
             assert(manager.config.minPrice > 400 && manager.config.minPrice < 600, 'minPrice should be resolved from AMA center in case-insensitive mode');
@@ -285,7 +295,7 @@ async function runTests() {
                 [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: true }
             }
         }, null, 2) + '\n', 'utf8');
-        resetMarketAdapterWhitelistCache();
+        _resetBothWhitelistCaches();
         fs.writeFileSync(amaFile, JSON.stringify({
             centerPrice: 1100,
             amaCenterPrice: 1000,
@@ -299,7 +309,11 @@ async function runTests() {
         }, null, 2) + '\n', 'utf8');
 
         try {
-            const manager = new OrderManager({
+            delete require.cache[gridModulePath];
+            delete require.cache[managerModulePath];
+            const FreshGrid = require('../modules/order/grid');
+            const { OrderManager: FreshOrderManager } = require('../modules/order/manager');
+            const manager = new FreshOrderManager({
                 assetA: 'TESTA',
                 assetB: 'TESTB',
                 botKey,
@@ -320,7 +334,7 @@ async function runTests() {
             };
             await manager.setAccountTotals({ buy: 5000, sell: 5000, buyFree: 5000, sellFree: 5000 });
 
-            await Grid.initializeGrid(manager);
+            await FreshGrid.initializeGrid(manager);
 
             assert(manager.orders.size > 0, 'initializeGrid should succeed with AMA gridPrice');
             assert.strictEqual(manager._lastGridPricingContext.gridPrice, 1100, 'debug pricing should expose the resolved grid price once');
@@ -343,7 +357,7 @@ async function runTests() {
             } else {
                 fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
             }
-            resetMarketAdapterWhitelistCache();
+            _resetBothWhitelistCaches();
         }
     }
 
@@ -362,7 +376,7 @@ async function runTests() {
                 [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: true }
             }
         }, null, 2) + '\n', 'utf8');
-        resetMarketAdapterWhitelistCache();
+        _resetBothWhitelistCaches();
         fs.writeFileSync(amaFile, JSON.stringify({
             gridCenterPrice: 1000,
             centerPrice: 1000,
@@ -372,7 +386,11 @@ async function runTests() {
         }, null, 2) + '\n', 'utf8');
 
         try {
-            const manager = new OrderManager({
+            delete require.cache[gridModulePath];
+            delete require.cache[managerModulePath];
+            const FreshGrid = require('../modules/order/grid');
+            const { OrderManager: FreshOrderManager } = require('../modules/order/manager');
+            const manager = new FreshOrderManager({
                 assetA: 'TESTA',
                 assetB: 'TESTB',
                 botKey,
@@ -393,7 +411,7 @@ async function runTests() {
             };
             await manager.setAccountTotals({ buy: 5000, sell: 5000, buyFree: 5000, sellFree: 5000 });
 
-            await Grid.initializeGrid(manager);
+            await FreshGrid.initializeGrid(manager);
 
             assert(manager.orders.size > 0, 'initializeGrid should succeed with an offset AMA snapshot');
             assert.strictEqual(manager._lastGridPricingContext.gridPriceOffsetPct, 0.8, 'debug pricing should expose the persisted spread offset');
@@ -407,7 +425,7 @@ async function runTests() {
             } else {
                 fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
             }
-            resetMarketAdapterWhitelistCache();
+            _resetBothWhitelistCaches();
         }
     }
 
@@ -426,7 +444,7 @@ async function runTests() {
                 [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: false }
             }
         }, null, 2) + '\n', 'utf8');
-        resetMarketAdapterWhitelistCache();
+        _resetBothWhitelistCaches();
         fs.writeFileSync(amaFile, JSON.stringify({
             gridCenterPrice: 1000,
             centerPrice: 1000,
@@ -442,7 +460,11 @@ async function runTests() {
         }, null, 2) + '\n', 'utf8');
 
         try {
-            const manager = new OrderManager({
+            delete require.cache[gridModulePath];
+            delete require.cache[managerModulePath];
+            const FreshGrid = require('../modules/order/grid');
+            const { OrderManager: FreshOrderManager } = require('../modules/order/manager');
+            const manager = new FreshOrderManager({
                 assetA: 'TESTA',
                 assetB: 'TESTB',
                 botKey,
@@ -463,7 +485,7 @@ async function runTests() {
             };
             await manager.setAccountTotals({ buy: 5000, sell: 5000, buyFree: 5000, sellFree: 5000 });
 
-            await Grid.initializeGrid(manager);
+            await FreshGrid.initializeGrid(manager);
 
             assert(manager.orders.size > 0, 'initializeGrid should succeed with spread offset disabled');
             assert.strictEqual(manager._lastGridPricingContext.gridPriceOffsetPct, 0, 'debug pricing should hide ignored spread offset');
@@ -477,7 +499,7 @@ async function runTests() {
             } else {
                 fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
             }
-            resetMarketAdapterWhitelistCache();
+            _resetBothWhitelistCaches();
         }
     }
 
@@ -490,8 +512,12 @@ async function runTests() {
             ? fs.readFileSync(WHITELIST_FILE, 'utf8')
             : null;
         const systemModule = require('../modules/order/utils/system');
+        const distSystemModule = require('../dist/modules/order/utils/system.js');
         const originalDerivePrice = systemModule.derivePrice;
+        const originalDistDerivePrice = distSystemModule.derivePrice;
         const originalGridModule = require.cache[gridModulePath];
+        const distGridPath = require.resolve('../dist/modules/order/grid.js');
+        const originalDistGridModule = require.cache[distGridPath];
 
         fs.mkdirSync(ordersDir, { recursive: true });
         fs.writeFileSync(WHITELIST_FILE, JSON.stringify({
@@ -499,7 +525,7 @@ async function runTests() {
                 [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: true }
             }
         }, null, 2) + '\n', 'utf8');
-        resetMarketAdapterWhitelistCache();
+        _resetBothWhitelistCaches();
         fs.writeFileSync(amaFile, JSON.stringify({
             gridCenterPrice: 1000,
             centerPrice: 1000,
@@ -510,7 +536,9 @@ async function runTests() {
 
         try {
             systemModule.derivePrice = async () => 1000;
+            distSystemModule.derivePrice = async () => 1000;
             delete require.cache[gridModulePath];
+            delete require.cache[distGridPath];
             const GridFresh = require('../modules/order/grid');
 
             const manager = new OrderManager({
@@ -543,15 +571,18 @@ async function runTests() {
             assert(Math.abs(manager._lastGridPricingContext.startPrice - 1000) < 1e-9, 'pool gridPrice should not apply the AMA spread offset to placement price');
         } finally {
             systemModule.derivePrice = originalDerivePrice;
+            distSystemModule.derivePrice = originalDistDerivePrice;
             if (originalGridModule) require.cache[gridModulePath] = originalGridModule;
             else delete require.cache[gridModulePath];
+            if (originalDistGridModule) require.cache[distGridPath] = originalDistGridModule;
+            else delete require.cache[distGridPath];
             try { fs.unlinkSync(amaFile); } catch (_) {}
             if (originalWhitelist == null) {
                 try { fs.unlinkSync(WHITELIST_FILE); } catch (_) {}
             } else {
                 fs.writeFileSync(WHITELIST_FILE, originalWhitelist, 'utf8');
             }
-            resetMarketAdapterWhitelistCache();
+            _resetBothWhitelistCaches();
         }
     }
 

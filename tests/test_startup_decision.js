@@ -4,7 +4,7 @@ console.log('Running startup_decision tests');
 
 const { decideStartupGridAction, reconcileStartupOrders } = require('../modules/order/startup_reconcile');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
-const { _setFeeCache } = require('../modules/order/utils/math');
+const { _setFeeCache } = require('../modules/order/utils/math.js');
 
 (async () => {
     // 1) No persisted grid => regenerate

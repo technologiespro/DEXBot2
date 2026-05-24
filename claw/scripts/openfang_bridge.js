@@ -1,8 +1,2 @@
 #!/usr/bin/env node
-
-const { main } = require('./claw_bridge');
-
-main('openfang', 'node scripts/openfang_bridge.js').catch((err) => {
-  console.error(err && err.stack ? err.stack : err.message);
-  process.exit(1);
-});
+module.exports = require('../../dist/claw/scripts/openfang_bridge.js');

@@ -1,0 +1,310 @@
+// @ts-nocheck
+/**
+ * @enum {string}
+ */
+const PROCESSED_FILL_PERSISTENCE_MODES = Object.freeze({
+    IMMEDIATE: 'immediate',
+    BATCHED: 'batched',
+    MANUAL: 'manual'
+});
+
+/**
+ * Resolve the processed fill persistence mode from options.
+ * Falls back to batched if deferPersistence is true, otherwise immediate.
+ * @param {Object} [options] - Options object
+ * @param {string} [options.persistenceMode] - Explicit persistence mode
+ * @param {boolean} [options.deferPersistence] - Defer persistence flag (legacy)
+ * @returns {string} Resolved persistence mode ('immediate', 'batched', or 'manual')
+ */
+function resolveProcessedFillPersistenceMode(options = {}) {
+    if (options?.persistenceMode === PROCESSED_FILL_PERSISTENCE_MODES.BATCHED) {
+        return PROCESSED_FILL_PERSISTENCE_MODES.BATCHED;
+    }
+    if (options?.persistenceMode === PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE) {
+        return PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE;
+    }
+    if (options?.persistenceMode === PROCESSED_FILL_PERSISTENCE_MODES.MANUAL) {
+        return PROCESSED_FILL_PERSISTENCE_MODES.MANUAL;
+    }
+    return options?.deferPersistence === true
+        ? PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
+        : PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE;
+}
+
+/**
+ * @class
+ */
+class ProcessedFillStore {
+    /**
+     * Create a ProcessedFillStore instance.
+     * @param {import('./types').ProcessedFillStoreConfig} [options] - Configuration
+     * @param {number} [options.batchMs] - Batch interval in ms for coalesced writes
+     * @param {number} [options.batchSize] - Max batch size before auto-flush
+     * @param {Function} [options.warn] - Warning logger function
+     */
+    constructor({
+        batchMs,
+        batchSize,
+        warn
+    } = {}) {
+        this.tracker = new Map();
+        this.pendingWrites = new Map();
+        this._batchMs = batchMs;
+        this._batchSize = batchSize;
+        this._warn = typeof warn === 'function' ? warn : () => {};
+        this._persistTimer = null;
+        this._flushPromise = Promise.resolve();
+        this._accountOrders = null;
+        this._botKey = null;
+        this._shuttingDown = false;
+    }
+
+    /**
+     * Configure the store with an AccountOrders instance and bot key.
+     * @param {Object} [options] - Configuration options
+     * @param {Object} [options.accountOrders] - AccountOrders instance for persistence
+     * @param {string} [options.botKey] - Bot identifier key
+     */
+    configure({ accountOrders, botKey } = {}) {
+        this._accountOrders = accountOrders || null;
+        this._botKey = botKey || null;
+    }
+
+    /**
+     * Set the shutting down flag to prevent delayed writes during shutdown.
+     * @param {boolean} value - Shutting down flag
+     */
+    setShuttingDown(value) {
+        this._shuttingDown = value === true;
+    }
+
+    /**
+     * Load persisted fill records from disk into the in-memory tracker.
+     * @param {Object} [options] - Load options
+     * @param {boolean} [options.forceReload=false] - Force reload from disk
+     * @param {number|null} [options.minTimestamp=null] - Minimum timestamp filter
+     * @returns {number} Number of persisted entries loaded
+     */
+    loadPersisted({ forceReload = false, minTimestamp = null } = {}) {
+        if (!this._accountOrders || !this._botKey) return 0;
+
+        const persistedFills = this._accountOrders.loadProcessedFills(this._botKey, {
+            forceReload,
+            minTimestamp
+        });
+
+        for (const [fillKey, timestamp] of persistedFills) {
+            const existing = this.tracker.get(fillKey);
+            if (existing === undefined || timestamp > existing) {
+                this.tracker.set(fillKey, timestamp);
+            }
+        }
+
+        return persistedFills.size;
+    }
+
+    /**
+     * Merge entries from a source Map into the in-memory tracker.
+     * @param {Map<string, number>} sourceTracker - Source fill tracker to merge
+     */
+    mergeTracker(sourceTracker) {
+        if (!(sourceTracker instanceof Map) || sourceTracker === this.tracker) return;
+
+        for (const [fillKey, timestamp] of sourceTracker) {
+            const existing = this.tracker.get(fillKey);
+            if (existing === undefined || timestamp > existing) {
+                this.tracker.set(fillKey, timestamp);
+            }
+        }
+    }
+
+    /**
+     * Persist a single fill key with deduplication.
+     * Queues the write and flushes immediately unless mode is BATCHED or MANUAL.
+     * @param {string} fillKey - Fill deduplication key
+     * @param {number} timestamp - Processing timestamp
+     * @param {Object} [options] - Persist options
+     * @param {string} [options.mode='immediate'] - Persistence mode
+     * @returns {Promise<void>}
+     */
+    async persist(fillKey, timestamp, { mode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE } = {}) {
+        if (!this._accountOrders || !this._botKey || !fillKey) return;
+
+        if (mode === PROCESSED_FILL_PERSISTENCE_MODES.MANUAL) {
+            this._queue(fillKey, timestamp, { schedule: false });
+            return;
+        }
+        this._queue(fillKey, timestamp);
+        if (mode === PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE) {
+            await this.flush('fill-persist', { throwOnError: true });
+        }
+    }
+
+    /**
+     * Discard a pending write from the queue.
+     * @param {string} fillKey - Fill key to discard
+     * @param {number} [timestamp] - Only discard if queued timestamp <= this value
+     */
+    discard(fillKey, timestamp) {
+        const queuedTimestamp = this.pendingWrites.get(fillKey);
+        if (queuedTimestamp === undefined) return;
+        if (timestamp !== undefined && queuedTimestamp > timestamp) return;
+        this.pendingWrites.delete(fillKey);
+    }
+
+    /**
+     * Flush all pending writes to persistent storage.
+     * @param {string} [reason='manual'] - Reason label for logging
+     * @param {Object} [options] - Flush options
+     * @param {boolean} [options.throwOnError=false] - Re-throw on flush failure
+     * @returns {Promise<void>}
+     */
+    async flush(reason = 'manual', { throwOnError = false } = {}) {
+        if (this._persistTimer) {
+            clearTimeout(this._persistTimer);
+            this._persistTimer = null;
+        }
+
+        if (!this._accountOrders || !this._botKey) {
+            await this._flushPromise;
+            return;
+        }
+
+        if (this.pendingWrites.size === 0) {
+            await this._flushPromise;
+            return;
+        }
+
+        const batch = new Map(this.pendingWrites);
+        this.pendingWrites.clear();
+        let flushError = null;
+
+        const flushWork = async () => {
+            try {
+                await this._accountOrders.updateProcessedFillsBatch(this._botKey, batch);
+            } catch (err: any) {
+                flushError = err;
+                for (const [fillKey, timestamp] of batch) {
+                    const queuedTimestamp = this.pendingWrites.get(fillKey);
+                    if (queuedTimestamp === undefined || timestamp > queuedTimestamp) {
+                        this.pendingWrites.set(fillKey, timestamp);
+                    }
+                }
+                this._warn(`[FILL-DEDUP] Failed to flush ${batch.size} processed fill record(s) (${reason}): ${err.message}`);
+                this._schedule();
+            }
+        };
+
+        this._flushPromise = this._flushPromise.then(flushWork, flushWork);
+        await this._flushPromise;
+        if (flushError && throwOnError) {
+            throw flushError;
+        }
+    }
+
+    /**
+     * Flush pending writes for specific fill keys.
+     * @param {string[]|Set<string>} fillKeys - Fill keys to flush
+     * @param {string} [reason='manual-selected'] - Reason label for logging
+     * @param {Object} [options] - Flush options
+     * @param {boolean} [options.throwOnError=false] - Re-throw on flush failure
+     * @returns {Promise<void>}
+     */
+    async flushKeys(fillKeys, reason = 'manual-selected', { throwOnError = false } = {}) {
+        const keySet = fillKeys instanceof Set ? fillKeys : new Set(fillKeys || []);
+        if (keySet.size === 0) return;
+
+        if (!this._accountOrders || !this._botKey) {
+            return;
+        }
+
+        const batch = new Map();
+        for (const fillKey of keySet) {
+            if (!fillKey || !this.pendingWrites.has(fillKey)) continue;
+            batch.set(fillKey, this.pendingWrites.get(fillKey));
+            this.pendingWrites.delete(fillKey);
+        }
+
+        if (batch.size === 0) {
+            await this._flushPromise;
+            return;
+        }
+
+        let flushError = null;
+        const flushWork = async () => {
+            try {
+                await this._accountOrders.updateProcessedFillsBatch(this._botKey, batch);
+            } catch (err: any) {
+                flushError = err;
+                for (const [fillKey, timestamp] of batch) {
+                    const queuedTimestamp = this.pendingWrites.get(fillKey);
+                    if (queuedTimestamp === undefined || timestamp > queuedTimestamp) {
+                        this.pendingWrites.set(fillKey, timestamp);
+                    }
+                }
+                this._warn(`[FILL-DEDUP] Failed to flush ${batch.size} selected processed fill record(s) (${reason}): ${err.message}`);
+                this._schedule();
+            }
+        };
+
+        this._flushPromise = this._flushPromise.then(flushWork, flushWork);
+        await this._flushPromise;
+        if (flushError && throwOnError) {
+            throw flushError;
+        }
+    }
+
+    /**
+     * Discard pending writes for specific fill keys from the queue.
+     * @param {string[]|Set<string>} fillKeys - Fill keys to discard
+     */
+    discardKeys(fillKeys) {
+        const keySet = fillKeys instanceof Set ? fillKeys : new Set(fillKeys || []);
+        for (const fillKey of keySet) {
+            if (fillKey) this.pendingWrites.delete(fillKey);
+        }
+    }
+
+    /**
+     * Queue a fill key for batched persistence.
+     * @param {string} fillKey - Fill deduplication key
+     * @param {number} timestamp - Processing timestamp
+     * @param {Object} [options] - Queue options
+     * @param {boolean} [options.schedule=true] - Schedule auto-flush timer
+     * @private
+     */
+    _queue(fillKey, timestamp, { schedule = true } = {}) {
+        const existing = this.pendingWrites.get(fillKey);
+        if (existing === undefined || timestamp > existing) {
+            this.pendingWrites.set(fillKey, timestamp);
+        }
+
+        if (!schedule) return;
+
+        if (this.pendingWrites.size >= this._batchSize) {
+            void this.flush('batch-size');
+            return;
+        }
+
+        this._schedule();
+    }
+
+    /**
+     * Schedule a delayed flush if not already scheduled.
+     * @private
+     */
+    _schedule() {
+        if (this._persistTimer || this._shuttingDown || this.pendingWrites.size === 0) return;
+
+        this._persistTimer = setTimeout(() => {
+            this._persistTimer = null;
+            void this.flush('timer');
+        }, this._batchMs);
+    }
+}
+
+export = {
+    ProcessedFillStore,
+    PROCESSED_FILL_PERSISTENCE_MODES,
+    resolveProcessedFillPersistenceMode
+};

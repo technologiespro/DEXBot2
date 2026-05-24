@@ -155,7 +155,7 @@ function restoreStubs() {
 }
 
 installStubs();
-require('../dexbot.js');
+require('../dexbot');
 
 (async () => {
     try {

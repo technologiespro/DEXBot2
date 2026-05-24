@@ -1,0 +1,119 @@
+// @ts-nocheck
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs/promises');
+const os = require('os');
+const path = require('path');
+const Module = require('module');
+
+const originalLoad = Module._load;
+const watcherModulePath = require.resolve('../modules/position_manager_watch');
+const positionManagerPath = require.resolve('../modules/position_manager');
+const bitsharesClientPath = require.resolve('../modules/bitshares_client');
+
+function loadWatcherModule(mockPositionManager, waitForConnected) {
+  delete require.cache[watcherModulePath];
+  delete require.cache[positionManagerPath];
+  delete require.cache[bitsharesClientPath];
+
+  Module._load = function(request, parent, isMain) {
+    if (request === './position_manager' && parent?.filename === watcherModulePath) {
+      return {
+        DEFAULT_STATE_PATH: path.join(os.tmpdir(), 'unused-positions.json'),
+        PositionManager: mockPositionManager
+      };
+    }
+    if (request === './bitshares_client' && parent?.filename === watcherModulePath) {
+      return {
+        waitForConnected
+      };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  try {
+    return require('../modules/position_manager_watch');
+  } finally {
+    Module._load = originalLoad;
+  }
+}
+
+async function testHealthWritesStayOrdered() {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pm-watch-'));
+  const healthPath = path.join(tmpDir, 'watcher-health.json');
+
+  let syncCount = 0;
+  class MockPositionManager {
+    constructor() {}
+
+    async syncAllPositions() {
+      syncCount += 1;
+      if (syncCount === 1) {
+        return { ok: true };
+      }
+      if (syncCount === 2) {
+        throw new Error('timer failure');
+      }
+      return { ok: true };
+    }
+
+    async watchAccount() {
+      return async () => {};
+    }
+  }
+
+  const originalWriteFile = fs.writeFile;
+  let delayedFailureWrite = false;
+  fs.writeFile = async (filePath, data, options) => {
+    if (String(filePath).startsWith(healthPath)) {
+      const serialized = String(data);
+      if (!delayedFailureWrite && serialized.includes('"status": "unhealthy"')) {
+        delayedFailureWrite = true;
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+    }
+    return originalWriteFile.call(fs, filePath, data, options);
+  };
+
+  const { createPositionManagerWatcher } = loadWatcherModule(MockPositionManager, async () => {});
+
+  try {
+    const watcher = createPositionManagerWatcher({
+      accountName: 'tester',
+      healthPath,
+      maxConsecutiveFailures: 1,
+      logger: {
+        error: () => {},
+        info: () => {},
+        warn: () => {}
+      },
+      syncIntervalMs: 20
+    });
+
+    const started = await watcher.start();
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    await started.stop();
+
+    const health = JSON.parse(await fs.readFile(healthPath, 'utf8'));
+    assert.strictEqual(health.status, 'healthy', 'latest health write should win');
+    assert.strictEqual(health.consecutiveFailures, 0, 'health should reset after a later success');
+    assert.ok(syncCount >= 3, 'test should exercise the initial sync plus failure and recovery');
+    assert.ok(delayedFailureWrite, 'test should delay the unhealthy write to simulate stale completion');
+  } finally {
+    fs.writeFile = originalWriteFile;
+    delete require.cache[watcherModulePath];
+    delete require.cache[positionManagerPath];
+    delete require.cache[bitsharesClientPath];
+  }
+}
+
+async function main() {
+  await testHealthWritesStayOrdered();
+  console.log('position manager watcher health tests passed');
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

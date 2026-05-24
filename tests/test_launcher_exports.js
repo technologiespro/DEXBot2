@@ -1,4 +1,5 @@
 const assert = require('assert');
+const path = require('path');
 
 console.log('Running launcher export tests');
 
@@ -72,14 +73,15 @@ assert.deepStrictEqual(
     { command: 'reload', target: 'dexbot-cred', clawOnly: false },
     'pm2 parser should accept reload commands'
 );
+const expectedDexbotPath = path.join(__dirname, '..', 'dist', 'dexbot.js');
 assert.deepStrictEqual(
     unlockStart.buildDexbotStartArgs('XRP-BTS'),
-    ['dexbot.js', 'start', 'XRP-BTS'],
+    [expectedDexbotPath, 'start', 'XRP-BTS'],
     'launcher should append the requested bot name'
 );
 assert.deepStrictEqual(
     unlockStart.buildDexbotStartArgs(null),
-    ['dexbot.js', 'start'],
+    [expectedDexbotPath, 'start'],
     'launcher should omit the bot arg when starting all bots'
 );
 

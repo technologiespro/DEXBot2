@@ -1,7 +1,7 @@
 const assert = require('assert');
 console.log('Running rotation available-funds tests');
 
-const { OrderManager, grid: Grid, constants } = require('../modules/order/index.js');
+const { OrderManager, grid: Grid, constants } = require('../modules/order/index');
 const ORDER_TYPES = constants.ORDER_TYPES;
 const ORDER_STATES = constants.ORDER_STATES;
 

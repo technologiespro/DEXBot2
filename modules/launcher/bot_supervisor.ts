@@ -1,0 +1,891 @@
+// @ts-nocheck
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const net = require('net');
+const { spawn, execSync } = require('child_process');
+const { buildScopedChildEnv } = require('./child_env');
+const { normalizeBotEntries, resolveRawBotEntries, loadSettingsFile } = require('../bot_settings');
+const { UPDATER } = require('../constants');
+
+const CODE_ROOT = path.resolve(__dirname, '..', '..');
+const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const LOGS_DIR = path.join(ROOT, 'profiles', 'logs');
+const BOT_SCRIPT = path.join(CODE_ROOT, 'bot.js');
+const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
+const SOCKET_PATH = process.env.DEXBOT_SUPERVISOR_SOCKET || path.join(ROOT, 'profiles', 'supervisor.sock');
+
+const MAX_RESTARTS = 13;
+const MIN_UPTIME_MS = 86400000;
+const RESTART_DELAY_MS = 3000;
+const SHUTDOWN_TIMEOUT_MS = 5000;
+const STAGGER_DELAY_MS = 500;
+
+const MAX_MEMORY_MB = 250;
+const MAX_MEMORY_BYTES = MAX_MEMORY_MB * 1024 * 1024;
+const MEMORY_CHECK_INTERVAL_MS = 60000;
+const STATUS_LOG_INTERVAL_MS = 300000;
+
+const SUPERVISOR_PREFIX = '[supervisor]';
+const MAX_CRON_LOOKAHEAD_MINUTES = 366 * 24 * 60;
+
+function usesAmaGridPrice(bot) {
+    const gridPrice = typeof bot?.gridPrice === 'string' ? bot.gridPrice.trim().toLowerCase() : '';
+    return /^ama(?:[1-4])?$/.test(gridPrice);
+}
+
+function needsMarketAdapter(bots) {
+    return (bots || []).some((bot) => usesAmaGridPrice(bot));
+}
+
+function isServiceApp(app) {
+    const name = String(app?.name || '');
+    return name === 'dexbot-update' || name === 'dexbot-adapter';
+}
+
+function ensureLogDir() {
+    if (!fs.existsSync(LOGS_DIR)) {
+        fs.mkdirSync(LOGS_DIR, { recursive: true });
+    }
+}
+
+function loadActiveBots(explicitBots) {
+    if (explicitBots) return explicitBots;
+    const { config } = loadSettingsFile(BOTS_FILE);
+    const raw = resolveRawBotEntries(config);
+    return normalizeBotEntries(raw).filter((b) => b.active !== false);
+}
+
+function buildSupervisedApps(bots) {
+    const apps = (bots || []).map((bot, index) => {
+        const botName = bot.name || `bot-${index}`;
+        return {
+            kind: 'bot',
+            name: botName,
+            script: BOT_SCRIPT,
+            args: botName,
+            cwd: ROOT,
+            max_memory_restart: '250M',
+            error_file: path.join(LOGS_DIR, `${botName}-error.log`),
+            out_file: path.join(LOGS_DIR, `${botName}.log`),
+            max_restarts: 13,
+            min_uptime: 86400000,
+            restart_delay: 3000,
+        };
+    });
+
+    if (needsMarketAdapter(bots)) {
+        apps.unshift({
+            kind: 'service',
+            name: 'dexbot-adapter',
+            script: path.join(CODE_ROOT, 'market_adapter', 'market_adapter.js'),
+            cwd: ROOT,
+            max_memory_restart: '150M',
+            error_file: path.join(LOGS_DIR, 'dexbot-adapter-error.log'),
+            out_file: path.join(LOGS_DIR, 'dexbot-adapter.log'),
+            max_restarts: 13,
+            min_uptime: 60000,
+            restart_delay: 3000,
+        });
+    }
+
+    if (UPDATER.ACTIVE) {
+        apps.push({
+            kind: 'job',
+            name: 'dexbot-update',
+            script: path.join(CODE_ROOT, 'scripts', 'update.js'),
+            cwd: ROOT,
+            error_file: path.join(LOGS_DIR, 'dexbot-update-error.log'),
+            out_file: path.join(LOGS_DIR, 'dexbot-update.log'),
+            autorestart: false,
+            bulk_control: false,
+            cron_schedule: UPDATER.SCHEDULE,
+        });
+    }
+
+    return apps;
+}
+
+function parseCronField(field, min, max) {
+    const trimmed = String(field || '').trim();
+    if (!trimmed) {
+        throw new Error('empty cron field');
+    }
+    if (trimmed === '*') {
+        return null;
+    }
+
+    const values = new Set();
+    const parts = trimmed.split(',');
+    for (const part of parts) {
+        if (!part) {
+            throw new Error(`invalid cron field: ${field}`);
+        }
+        const stepMatch = part.match(/^(.+)\/(\d+)$/);
+        let base = part;
+        let step = 1;
+        if (stepMatch) {
+            base = stepMatch[1];
+            step = Number(stepMatch[2]);
+            if (!Number.isInteger(step) || step <= 0) {
+                throw new Error(`invalid cron step: ${part}`);
+            }
+        }
+
+        let rangeStart = min;
+        let rangeEnd = max;
+        if (base !== '*') {
+            const rangeMatch = base.match(/^(\d+)-(\d+)$/);
+            if (rangeMatch) {
+                rangeStart = Number(rangeMatch[1]);
+                rangeEnd = Number(rangeMatch[2]);
+            } else {
+                const exact = Number(base);
+                if (!Number.isInteger(exact)) {
+                    throw new Error(`invalid cron value: ${part}`);
+                }
+                rangeStart = exact;
+                rangeEnd = exact;
+            }
+        }
+
+        if (rangeStart < min || rangeEnd > max || rangeStart > rangeEnd) {
+            throw new Error(`cron value out of range: ${part}`);
+        }
+
+        for (let value = rangeStart; value <= rangeEnd; value += step) {
+            values.add(value);
+        }
+    }
+    return values;
+}
+
+function parseCronExpression(expression) {
+    const parts = String(expression || '').trim().split(/\s+/);
+    if (parts.length !== 5) {
+        throw new Error(`invalid cron expression: ${expression}`);
+    }
+    return {
+        minute: parseCronField(parts[0], 0, 59),
+        hour: parseCronField(parts[1], 0, 23),
+        dayOfMonth: parseCronField(parts[2], 1, 31),
+        month: parseCronField(parts[3], 1, 12),
+        dayOfWeek: parseCronField(parts[4], 0, 6),
+    };
+}
+
+function cronFieldMatches(field, value) {
+    return field == null || field.has(value);
+}
+
+function cronMatchesDate(schedule, date) {
+    if (!schedule) return false;
+    const minuteMatch = cronFieldMatches(schedule.minute, date.getMinutes());
+    const hourMatch = cronFieldMatches(schedule.hour, date.getHours());
+    const monthMatch = cronFieldMatches(schedule.month, date.getMonth() + 1);
+    const dayOfMonthMatch = cronFieldMatches(schedule.dayOfMonth, date.getDate());
+    const dayOfWeekMatch = cronFieldMatches(schedule.dayOfWeek, date.getDay());
+    const domRestricted = schedule.dayOfMonth != null;
+    const dowRestricted = schedule.dayOfWeek != null;
+    const dayMatch = domRestricted && dowRestricted
+        ? (dayOfMonthMatch || dayOfWeekMatch)
+        : (dayOfMonthMatch && dayOfWeekMatch);
+    return minuteMatch && hourMatch && monthMatch && dayMatch;
+}
+
+function getNextCronDate(schedule, fromDate = new Date()) {
+    const cursor = new Date(fromDate.getTime());
+    cursor.setSeconds(0, 0);
+    cursor.setMinutes(cursor.getMinutes() + 1);
+
+    for (let i = 0; i < MAX_CRON_LOOKAHEAD_MINUTES; i++) {
+        if (cronMatchesDate(schedule, cursor)) {
+            return new Date(cursor.getTime());
+        }
+        cursor.setMinutes(cursor.getMinutes() + 1);
+    }
+    throw new Error('unable to resolve next cron run');
+}
+
+function parseMemoryLimitBytes(limit) {
+    if (!limit) return null;
+    const match = String(limit || '').trim().match(/^(\d+(?:\.\d+)?)\s*([kmgt]?)(?:b)?$/i);
+    if (!match) return null;
+    const value = Number(match[1]);
+    const unit = match[2].toLowerCase();
+    const factor = unit === 't' ? 1024 ** 4
+        : unit === 'g' ? 1024 ** 3
+            : unit === 'k' ? 1024
+                : 1024 ** 2;
+    return Math.floor(value * factor);
+}
+
+function normalizeAppArgs(args) {
+    if (args == null || args === '') return [];
+    if (Array.isArray(args)) return args.map(String);
+    return [String(args)];
+}
+
+function forwardSignal(child, signal) {
+    if (!child || child.killed) return;
+    try {
+        child.kill(signal);
+    } catch (_: any) {}
+}
+
+function getChildRSS(child) {
+    if (!child || !child.pid) return -1;
+    try {
+        if (process.platform === 'linux') {
+            const statm = fs.readFileSync(`/proc/${child.pid}/statm`, 'utf8');
+            const parts = statm.trim().split(/\s+/);
+            if (parts.length >= 2) {
+                return parseInt(parts[1], 10) * 4096;
+            }
+        } else if (process.platform === 'darwin') {
+            const out = execSync(`ps -o rss= -p ${child.pid}`, { encoding: 'utf8', timeout: 3000 });
+            const rssKB = parseInt(out.trim(), 10);
+            if (rssKB > 0) return rssKB * 1024;
+        }
+    } catch (_: any) {}
+    return -1;
+}
+
+function createBotSupervisor({
+    bots = null,
+    buildEnv = buildScopedChildEnv,
+    spawnFn = spawn,
+    log = (...args) => console.log(SUPERVISOR_PREFIX, ...args),
+    logError = (...args) => console.error(SUPERVISOR_PREFIX, ...args),
+    controlSocket = process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET !== '1',
+    getChildRss = getChildRSS,
+    memoryCheckIntervalMs = MEMORY_CHECK_INTERVAL_MS,
+    statusLogIntervalMs = STATUS_LOG_INTERVAL_MS,
+    setTimeoutFn = setTimeout,
+    clearTimeoutFn = clearTimeout,
+    nowFn = () => Date.now(),
+} = {}) {
+    const botStates = new Map();
+    let shuttingDown = false;
+    let shutdownResolve = null;
+    let memoryCheckTimer = null;
+    let statusLogTimer = null;
+    let socketServer = null;
+    let socketConnections = new Set();
+    let userStopped = false;
+
+    function allStopped() {
+        for (const [, state] of botStates) {
+            if (state.status === 'running' || state.status === 'restarting' || state.status === 'starting') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function checkAllStopped() {
+        if (allStopped() && shutdownResolve) {
+            shutdownResolve();
+            shutdownResolve = null;
+        }
+    }
+
+    function printStatusSummary() {
+        if (shuttingDown) return;
+        const lines = [];
+        for (const [name, state] of botStates) {
+            const pid = state.child?.pid || '-';
+            const uptime = state.lastStartTime && state.status === 'running'
+                ? formatUptime(nowFn() - state.lastStartTime)
+                : '-';
+            let mem = '-';
+            if (state.status === 'running' && state.child) {
+                const rss = getChildRss(state.child);
+                if (rss > 0) mem = `${Math.round(rss / 1024 / 1024)}MB`;
+            }
+            lines.push(`${name} | ${state.status} | pid ${pid} | uptime ${uptime} | rss ${mem}`);
+        }
+        if (lines.length === 0) {
+            log('Status: no bots');
+        } else {
+            log('Status:\n  ' + lines.join('\n  '));
+        }
+    }
+
+    function formatUptime(ms) {
+        const s = Math.floor(ms / 1000);
+        const m = Math.floor(s / 60);
+        const h = Math.floor(m / 60);
+        const d = Math.floor(h / 24);
+        if (d > 0) return `${d}d ${h % 24}h`;
+        if (h > 0) return `${h}h ${m % 60}m`;
+        if (m > 0) return `${m}m ${s % 60}s`;
+        return `${s}s`;
+    }
+
+    function clearScheduledRun(state) {
+        if (state?.scheduledRunTimer) {
+            clearTimeoutFn(state.scheduledRunTimer);
+            state.scheduledRunTimer = null;
+        }
+        if (state) {
+            state.nextScheduledAt = 0;
+        }
+    }
+
+    function scheduleNextRun(state) {
+        clearScheduledRun(state);
+        if (shuttingDown || !state?.cronSchedule) {
+            return;
+        }
+
+        try {
+            const nextRun = getNextCronDate(state.cronSchedule, new Date(nowFn()));
+            const delay = Math.max(nextRun.getTime() - nowFn(), 0);
+            state.nextScheduledAt = nextRun.getTime();
+            state.scheduledRunTimer = setTimeoutFn(async () => {
+                state.scheduledRunTimer = null;
+                state.nextScheduledAt = 0;
+                if (shuttingDown) return;
+
+                if (state.status === 'running' || state.pendingRestart) {
+                    log(`${state.name} scheduled run skipped because the previous run is still active.`);
+                    scheduleNextRun(state);
+                    return;
+                }
+
+                log(`Starting scheduled job: ${state.name}`);
+                try {
+                    const child = spawnApp(state.appEntry);
+                    if (child) {
+                        await waitForChildSpawn(child);
+                    }
+                } catch (err: any) {
+                    logError(`Failed to start scheduled job ${state.name}:`, err.message);
+                    state.status = 'crashed';
+                } finally {
+                    scheduleNextRun(state);
+                }
+            }, delay);
+            if (state.scheduledRunTimer && typeof state.scheduledRunTimer.unref === 'function') {
+                state.scheduledRunTimer.unref();
+            }
+        } catch (err: any) {
+            logError(`Invalid cron schedule for ${state.name}: ${err.message}`);
+        }
+    }
+
+    function runMemoryCheck() {
+        if (shuttingDown) return;
+        for (const [name, state] of botStates) {
+            if (state.status !== 'running' || !state.child) continue;
+            if (!state.memoryLimitBytes) continue;
+            const rss = getChildRss(state.child);
+            if (rss <= 0) continue;
+            const memoryLimitBytes = state.memoryLimitBytes || MAX_MEMORY_BYTES;
+            if (rss > memoryLimitBytes) {
+                const rssMB = Math.round(rss / 1024 / 1024);
+                const limitMB = Math.round(memoryLimitBytes / 1024 / 1024);
+                logError(`${name} exceeded memory limit (${rssMB}MB > ${limitMB}MB). Restarting...`);
+                state.pendingRestart = true;
+                try { state.child.kill('SIGTERM'); } catch (_: any) {}
+            }
+        }
+    }
+
+    function spawnApp(app) {
+        const appName = app.name;
+        const state = botStates.get(appName);
+        if (!state) return null;
+
+        if (shuttingDown) {
+            state.status = 'stopped';
+            checkAllStopped();
+            return null;
+        }
+
+        ensureLogDir();
+        const outFile = app.out_file || path.join(LOGS_DIR, `${appName}.log`);
+        const errorFile = app.error_file || path.join(LOGS_DIR, `${appName}-error.log`);
+        const outStream = fs.createWriteStream(outFile, { flags: 'a' });
+        const errStream = fs.createWriteStream(errorFile, { flags: 'a' });
+        const isBot = !isServiceApp(app);
+        const extraEnv = {
+            ...(app.env || {}),
+            DEXBOT_LAUNCH_MODE: 'isolated',
+            ...(isBot ? { LIVE_BOT_NAME: appName } : {}),
+        };
+
+        const child = spawnFn(process.execPath, [app.script || BOT_SCRIPT, ...normalizeAppArgs(app.args)], {
+            cwd: app.cwd || ROOT,
+            env: buildEnv({ extra: extraEnv }),
+            stdio: ['inherit', 'pipe', 'pipe'],
+        });
+
+        child.stdout.pipe(outStream);
+        child.stdout.pipe(process.stdout);
+        child.stderr.pipe(errStream);
+        child.stderr.pipe(process.stderr);
+
+        child.stdout.on('error', () => {});
+        child.stderr.on('error', () => {});
+        outStream.on('error', () => {});
+        errStream.on('error', () => {});
+
+        state.child = child;
+        state.status = 'running';
+        state.stoppedByUser = false;
+        state.lastStartTime = nowFn();
+
+        child.once('close', (code, signal) => {
+            try { outStream.end(); } catch (_: any) {}
+            try { errStream.end(); } catch (_: any) {}
+
+            if (shuttingDown) {
+                state.status = 'stopped';
+                state.child = null;
+                checkAllStopped();
+                return;
+            }
+
+            if (state.pendingRestart) {
+                state.pendingRestart = false;
+                state.child = null;
+                log(`${appName} restarting...`);
+                spawnApp(app);
+                return;
+            }
+
+            if (code === 0 || signal === 'SIGTERM' || signal === 'SIGINT') {
+                state.status = 'stopped';
+                state.child = null;
+                log(`${appName} stopped cleanly (exit ${code}${signal ? ', signal ' + signal : ''})`);
+                checkAllStopped();
+                return;
+            }
+
+            state.child = null;
+            const now = nowFn();
+            const uptime = now - state.lastStartTime;
+
+            if (state.autorestart === false) {
+                state.status = 'crashed';
+                logError(`${appName} exited unexpectedly (exit ${code}${signal ? ', signal ' + signal : ''}) and autorestart is disabled.`);
+                checkAllStopped();
+                return;
+            }
+
+            const minUptime = state.minUptimeMs || MIN_UPTIME_MS;
+            if (uptime < minUptime) {
+                state.restartCount++;
+            } else {
+                state.restartCount = 0;
+            }
+
+            const maxRestarts = state.maxRestarts || MAX_RESTARTS;
+            if (state.restartCount >= maxRestarts) {
+                logError(`${appName} exceeded max restarts (${maxRestarts}) without stable uptime. Stopping.`);
+                state.status = 'crashed';
+                checkAllStopped();
+                return;
+            }
+
+            const restartDelay = state.restartDelayMs || RESTART_DELAY_MS;
+            log(`${appName} crashed (exit ${code}${signal ? ', signal ' + signal : ''}), restarting in ${restartDelay / 1000}s (attempt ${state.restartCount}/${maxRestarts})...`);
+            state.status = 'restarting';
+
+            setTimeout(() => {
+                if (!shuttingDown) {
+                    spawnApp(app);
+                }
+            }, restartDelay);
+        });
+
+        child.on('error', (err) => {
+            logError(`${appName} spawn error:`, err.message);
+        });
+
+        return child;
+    }
+
+    function waitForChildSpawn(child) {
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            const handleSpawn = () => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                resolve();
+            };
+            const handleError = (error) => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                reject(error);
+            };
+            const cleanup = () => {
+                child.off('spawn', handleSpawn);
+                child.off('error', handleError);
+            };
+            child.once('spawn', handleSpawn);
+            child.once('error', handleError);
+        });
+    }
+
+    function handleSocketCommand(cmd) {
+        try {
+            switch (cmd.cmd) {
+                case 'status': {
+                    const status = getStatus();
+                    return { ok: true, status };
+                }
+                case 'stop': {
+                    if (!cmd.bot) return { error: 'bot name required' };
+                    const state = botStates.get(cmd.bot);
+                    if (!state) return { error: `bot '${cmd.bot}' not found` };
+                    if (state.status !== 'running') return { error: `bot '${cmd.bot}' is not running (${state.status})` };
+                    state.pendingRestart = false;
+                    state.stoppedByUser = true;
+                    try { state.child.kill('SIGTERM'); } catch (_: any) {}
+                    userStopped = true;
+                    log(`stop: ${cmd.bot}`);
+                    return { ok: true };
+                }
+                case 'restart': {
+                    if (!cmd.bot) return { error: 'bot name required' };
+                    const state = botStates.get(cmd.bot);
+                    if (!state) return { error: `bot '${cmd.bot}' not found` };
+                    if (state.status === 'running' && state.child) {
+                        state.pendingRestart = true;
+                        try { state.child.kill('SIGTERM'); } catch (_: any) {}
+                    } else if ((userStopped || state.stoppedByUser) && state.status === 'stopped' && state.appEntry) {
+                        spawnApp(state.appEntry);
+                    } else {
+                        return { error: `bot '${cmd.bot}' is not running (${state.status})` };
+                    }
+                    log(`restart: ${cmd.bot}`);
+                    return { ok: true };
+                }
+                case 'restart-running':
+                    restartRunning();
+                    return { ok: true };
+                case 'stop-all':
+                    stopAll();
+                    return { ok: true };
+                case 'restart-all':
+                    restartAll();
+                    return { ok: true };
+                case 'shutdown':
+                    setImmediate(() => {
+                        shutdown().catch((err) => {
+                            logError(`shutdown failed: ${err.message}`);
+                        });
+                    });
+                    return { ok: true };
+                default:
+                    return { error: `unknown command: ${cmd.cmd}` };
+            }
+        } catch (err: any) {
+            return { error: err.message };
+        }
+    }
+
+    function startSocketServer() {
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            const settle = (fn, value) => {
+                if (settled) return;
+                settled = true;
+                fn(value);
+            };
+            const testSocket = net.createConnection(SOCKET_PATH);
+            testSocket.on('connect', () => {
+                testSocket.end();
+                settle(reject, new Error('Another supervisor instance is already running (socket exists). Stop it first or use a different profile.'));
+            });
+            testSocket.on('error', () => {
+                startSocketServerInternal().then(() => settle(resolve)).catch((err) => settle(reject, err));
+            });
+            testSocket.setTimeout(500, () => {
+                testSocket.destroy();
+                startSocketServerInternal().then(() => settle(resolve)).catch((err) => settle(reject, err));
+            });
+        });
+    }
+
+    function startSocketServerInternal() {
+        return new Promise((resolve, reject) => {
+            try { fs.unlinkSync(SOCKET_PATH); } catch (_: any) {}
+
+            socketServer = net.createServer((socket) => {
+            socketConnections.add(socket);
+            let buffer = '';
+
+            socket.on('data', (data) => {
+                buffer += data.toString();
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    let cmd;
+                    try {
+                        cmd = JSON.parse(line);
+                    } catch (_: any) {
+                        socket.write(JSON.stringify({ error: 'invalid JSON' }) + '\n');
+                        continue;
+                    }
+                    const resp = handleSocketCommand(cmd);
+                    socket.write(JSON.stringify(resp) + '\n');
+                }
+            });
+
+            socket.on('close', () => {
+                socketConnections.delete(socket);
+            });
+
+            socket.on('error', () => {
+                socketConnections.delete(socket);
+            });
+            });
+
+            const onError = (err) => {
+                logError(`Socket server error: ${err.message}`);
+                reject(err);
+            };
+
+            socketServer.once('error', onError);
+            socketServer.listen(SOCKET_PATH, () => {
+                socketServer.off('error', onError);
+                socketServer.on('error', (err) => {
+                    logError(`Socket server error: ${err.message}`);
+                });
+                try { fs.chmodSync(SOCKET_PATH, 0o600); } catch (_: any) {}
+                log(`Control socket: ${SOCKET_PATH}`);
+                resolve();
+            });
+
+            process.once('exit', () => {
+                try { fs.unlinkSync(SOCKET_PATH); } catch (_: any) {}
+            });
+        });
+    }
+
+    function closeSocketServer() {
+        if (socketServer) {
+            try { socketServer.close(); } catch (_: any) {}
+            socketServer = null;
+        }
+        for (const sock of socketConnections) {
+            try { sock.destroy(); } catch (_: any) {}
+        }
+        socketConnections.clear();
+        try { fs.unlinkSync(SOCKET_PATH); } catch (_: any) {}
+    }
+
+    async function start() {
+        const activeBots = loadActiveBots(bots);
+        const activeApps = buildSupervisedApps(activeBots);
+
+        if (activeApps.length === 0) {
+            log('No active apps configured.');
+            return botStates;
+        }
+
+        if (controlSocket) {
+            await startSocketServer();
+        }
+
+        for (const app of activeApps) {
+            const appName = app.name;
+            botStates.set(appName, {
+                name: appName,
+                appEntry: app,
+                child: null,
+                restartCount: 0,
+                lastStartTime: 0,
+                status: 'starting',
+                pendingRestart: false,
+                bulkControl: app.bulk_control !== false,
+                cronExpression: app.cron_schedule || null,
+                cronSchedule: app.cron_schedule ? parseCronExpression(app.cron_schedule) : null,
+                nextScheduledAt: 0,
+                scheduledRunTimer: null,
+                autorestart: app.autorestart,
+                maxRestarts: app.max_restarts || MAX_RESTARTS,
+                minUptimeMs: app.min_uptime || MIN_UPTIME_MS,
+                restartDelayMs: app.restart_delay || RESTART_DELAY_MS,
+                memoryLimitBytes: parseMemoryLimitBytes(app.max_memory_restart),
+                stoppedByUser: false,
+            });
+        }
+
+        memoryCheckTimer = setInterval(runMemoryCheck, memoryCheckIntervalMs);
+        memoryCheckTimer.unref();
+
+        statusLogTimer = setInterval(printStatusSummary, statusLogIntervalMs);
+        statusLogTimer.unref();
+
+        log(`Memory limit: ${MAX_MEMORY_MB}MB per process`);
+
+        for (let i = 0; i < activeApps.length; i++) {
+            const app = activeApps[i];
+            log(`Starting ${app.name}...`);
+            try {
+                const child = spawnApp(app);
+                if (child) {
+                    await waitForChildSpawn(child);
+                }
+            } catch (err: any) {
+                logError(`Failed to start ${app.name}:`, err.message);
+                const state = botStates.get(app.name);
+                if (state) {
+                    state.status = 'crashed';
+                }
+            }
+            if (i < activeApps.length - 1) {
+                await new Promise((r) => setTimeout(r, STAGGER_DELAY_MS));
+            }
+        }
+
+        for (const [, state] of botStates) {
+            if (state.cronSchedule) {
+                scheduleNextRun(state);
+            }
+        }
+
+        printStatusSummary();
+
+        return botStates;
+    }
+
+    function clearTimers() {
+        if (memoryCheckTimer) {
+            clearInterval(memoryCheckTimer);
+            memoryCheckTimer = null;
+        }
+        if (statusLogTimer) {
+            clearInterval(statusLogTimer);
+            statusLogTimer = null;
+        }
+        for (const [, state] of botStates) {
+            clearScheduledRun(state);
+        }
+    }
+
+    function shutdownSignalHandler(signal) {
+        for (const [, state] of botStates) {
+            forwardSignal(state.child, signal);
+        }
+    }
+
+    async function shutdown() {
+        shuttingDown = true;
+        userStopped = false;
+        clearTimers();
+        closeSocketServer();
+
+        shutdownSignalHandler('SIGTERM');
+
+        return new Promise((resolve) => {
+            const done = () => {
+                if (forceKillTimer) clearTimeout(forceKillTimer);
+                if (forceResolveTimer) clearTimeout(forceResolveTimer);
+                resolve();
+            };
+
+            shutdownResolve = () => {
+                if (allStopped()) {
+                    done();
+                }
+            };
+
+            const forceKillTimer = setTimeout(() => {
+                for (const [, state] of botStates) {
+                    if (state.child && state.child.exitCode == null && state.status !== 'stopped') {
+                        try { state.child.kill('SIGKILL'); } catch (_: any) {}
+                        state.status = 'stopped';
+                        state.child = null;
+                    }
+                }
+                done();
+            }, SHUTDOWN_TIMEOUT_MS);
+
+            const forceResolveTimer = setTimeout(() => {
+                done();
+            }, SHUTDOWN_TIMEOUT_MS + 1000);
+
+            checkAllStopped();
+        });
+    }
+
+    function getStatus() {
+        const result = {};
+        for (const [name, state] of botStates) {
+            result[name] = {
+                status: state.status,
+                pid: state.child?.pid || null,
+                restarts: state.restartCount,
+                uptimeMs: state.lastStartTime ? nowFn() - state.lastStartTime : 0,
+                nextScheduledAt: state.nextScheduledAt || 0,
+            };
+        }
+        return result;
+    }
+
+    function stopAll() {
+        userStopped = true;
+        for (const [, state] of botStates) {
+            if (!state.bulkControl) continue;
+            state.pendingRestart = false;
+            if (state.status === 'running' && state.child) {
+                state.stoppedByUser = true;
+                try { state.child.kill('SIGTERM'); } catch (_: any) {}
+            }
+        }
+        log('stop-all');
+    }
+
+    function restartRunning({ logAction = true } = {}) {
+        userStopped = false;
+        for (const [, state] of botStates) {
+            if (!state.bulkControl) continue;
+            if (state.status === 'running' && state.child) {
+                state.pendingRestart = true;
+                try { state.child.kill('SIGTERM'); } catch (_: any) {}
+            }
+        }
+        if (logAction) {
+            log('restart-running');
+        }
+    }
+
+    function restartAll() {
+        restartRunning({ logAction: false });
+        for (const [, state] of botStates) {
+            if (!state.bulkControl) continue;
+            if (state.status === 'stopped' && state.appEntry && state.stoppedByUser) {
+                spawnApp(state.appEntry);
+            }
+        }
+        log('restart-all');
+    }
+
+    function hasUserStopped() {
+        return userStopped;
+    }
+
+    return {
+        start,
+        shutdown,
+        shutdownSignalHandler,
+        getStatus,
+        printStatusSummary,
+        restartAll,
+        restartRunning,
+        stopAll,
+        hasUserStopped,
+    };
+}
+
+export = { createBotSupervisor, SOCKET_PATH, parseCronExpression, getNextCronDate };

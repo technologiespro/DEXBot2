@@ -45,7 +45,7 @@ async function testLiveAdapterLockIsNotStolen() {
     const readyPath = path.join(tmpDir, 'ready');
     const childCode = `
 const fs = require('fs');
-const { acquireFileLockSync, releaseFileLockSync } = require(${JSON.stringify(path.join(root, 'market_adapter/utils/file_lock'))});
+const { acquireFileLockSync, releaseFileLockSync } = require(${JSON.stringify(path.join(root, 'dist/market_adapter/utils/file_lock'))});
 const lock = acquireFileLockSync(process.argv[1], { staleMs: 60000 });
 fs.writeFileSync(process.argv[2], String(process.pid));
 setTimeout(() => {

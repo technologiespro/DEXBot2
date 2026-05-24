@@ -6,8 +6,8 @@
  */
 
 const assert = require('assert');
-const { OrderManager } = require('../modules/order/index.js');
-const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants.js');
+const { OrderManager } = require('../modules/order/index');
+const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 const chainOrders = require('../modules/chain_orders');
 
 const TEST_TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS || 30000);

@@ -1,0 +1,214 @@
+#!/usr/bin/env node
+/**
+ * bot.js - Single Bot Instance Launcher
+ *
+ * PM2-friendly entry point for single grid trading bot.
+ * Standalone launcher executed by PM2 for each configured bot.
+ * Handles bot initialization, authentication, and continuous trading loop.
+ *
+ * ===============================================================================
+ * STARTUP SEQUENCE
+ * ===============================================================================
+ *
+ * 1. BOT CONFIGURATION LOADING
+ *    - Reads bot settings from profiles/bots.json by bot name (from argv)
+ *    - Validates bot exists in configuration
+ *    - Reports market pair and account being used
+ *    - Loads trading parameters (grid size, spread, order count, etc.)
+ *
+ * 2. AUTHENTICATION
+ *    - First attempts credential daemon (Unix socket) for a session-only signing token
+ *    - Falls back to interactive master password prompt if daemon unavailable
+ *    - Master password never stored in environment variables
+ *    - Legacy path still loads a raw private key into bot memory
+ *
+ * 3. BOT INITIALIZATION
+ *    - Waits for BitShares blockchain connection (30 second timeout)
+ *    - Uses pre-decrypted private key for transaction signing
+ *    - Resolves account ID from BitShares
+ *    - Initializes OrderManager with bot configuration
+ *    - Sets up event handlers for fills and blockchain updates
+ *
+ * 4. GRID INITIALIZATION OR RESUME
+ *    - Loads persisted grid snapshot if it exists and matches on-chain orders
+ *    - Validates persisted grid against current blockchain state (reconciliation)
+ *    - Detects offline fills and updates fund accounting automatically
+ *    - Creates fresh grid if no valid persisted state found
+ *    - Synchronizes grid state with BitShares blockchain
+ *    - Places initial orders to reach target count
+ *    - Note: Grid uses Copy-on-Write pattern for safe rebalancing (isolated working copies)
+ *
+ * 5. TRADING LOOP
+ *    - Continuously monitors for fill events via blockchain subscriptions
+ *    - Updates order status from chain data
+ *    - Processes fills and updates fund accounting
+ *    - Regenerates/rebalances grid as needed
+ *    - Runs indefinitely (PM2 manages restart/stop/monitoring)
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { createPm2AwareLogger } = require('./modules/logger');
+const DEXBot = require('./modules/dexbot_class');
+const { normalizeBotEntry } = require('./modules/dexbot_class');
+const { loadSettingsFile, resolveRawBotEntries, selectBotEntry } = require('./modules/bot_settings');
+const { setupGracefulShutdown, registerCleanup } = require('./modules/graceful_shutdown');
+const chainKeys = require('./modules/chain_keys');
+const credentialPolicy = require('./modules/credential_policy');
+
+// Setup graceful shutdown handlers
+setupGracefulShutdown();
+
+const PROFILES_BOTS_FILE = path.join(__dirname, 'profiles', 'bots.json');
+const launcherLogger = createPm2AwareLogger('bot.js');
+
+// Get bot name from args or environment
+// Support both direct names (node bot.js botname) and flag format (node bot.js --botname)
+// Flag format is used by PM2 for consistency with other CLI tools
+let botNameArg = process.argv[2];
+if (botNameArg && botNameArg.startsWith('--')) {
+    // Strip '--' prefix if present (e.g., --mybot becomes mybot)
+    botNameArg = botNameArg.substring(2);
+}
+const botNameEnv = process.env.BOT_NAME || process.env.PREFERRED_ACCOUNT;
+const botName = botNameArg || botNameEnv;
+
+if (!botName) {
+    launcherLogger.error('No bot name provided. Usage: node bot.js <bot-name>');
+    launcherLogger.error('Or set BOT_NAME or PREFERRED_ACCOUNT environment variable');
+    process.exit(1);
+}
+
+/**
+ * Loads the configuration for a specific bot from profiles/bots.json.
+ * @param {string} name - The name of the bot to load.
+ * @returns {Object} The bot configuration entry. Exits process on failure.
+ */
+function loadBotConfig(name: string) {
+    if (!fs.existsSync(PROFILES_BOTS_FILE)) {
+        launcherLogger.error('profiles/bots.json not found. Run: dexbot bots');
+        process.exit(1);
+    }
+
+    try {
+        const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
+        const botEntry = selectBotEntry(config, name);
+
+        if (!botEntry) {
+            const bots = resolveRawBotEntries(config);
+            launcherLogger.error(`Bot '${name}' not found in profiles/bots.json`);
+            launcherLogger.error(`Available bots: ${bots.map((b: any) => b.name).join(', ') || 'none'}`);
+            process.exit(1);
+        }
+
+        return botEntry;
+    } catch (err: any) {
+        launcherLogger.error(`Error loading bot config: ${err.message}`);
+        process.exit(1);
+    }
+}
+
+/**
+ * Get signing secret for account from daemon or interactive prompt.
+ * Tries daemon first (if running), then falls back to interactive master password prompt.
+ * @param {string} accountName - The account name to retrieve key for.
+ * @returns {Promise<string|Object>} A raw private key for legacy mode, or a daemon signing token.
+ * @throws {Error} If both daemon and interactive authentication fail.
+ */
+async function getSigningSecretForAccount(accountName: string) {
+    // Try daemon first
+    if (await chainKeys.isDaemonResponsive()) {
+        try {
+            const sessionId = await chainKeys.probeAccountInDaemon(accountName);
+            const botHmacSecret = credentialPolicy.loadBotHmacSecret(
+                accountName,
+                path.join(__dirname, 'profiles', 'daemon-policies.json'),
+                { quiet: true }
+            );
+            return chainKeys.createDaemonSigningToken(accountName, { sessionId, botHmacSecret });
+        } catch (err) {
+            // Fall back to interactive authentication if the daemon is stale or unresponsive.
+        }
+    }
+
+    // Fallback to interactive master password prompt
+    const originalLog = console.log;
+    try {
+        // Suppress BitShares client logs during password prompt
+        console.log = (...args) => {
+            const msg = args.join(' ');
+            if (!msg.includes('bitshares_client') && !msg.includes('modules/')) {
+                originalLog(...args);
+            }
+        };
+
+        const masterPassword = await chainKeys.authenticate();
+
+        // Restore console before getting key
+        console.log = originalLog;
+
+        // Get the private key using master password
+        return chainKeys.getPrivateKey(accountName, masterPassword);
+    } catch (err: any) {
+        console.log = originalLog;
+        if (err && err.message && err.message.includes('No master password set')) {
+            throw err;
+        }
+        throw err;
+    }
+}
+
+// Main entry point
+(async () => {
+    try {
+        // Load bot configuration
+        const botConfig = loadBotConfig(botName);
+
+         // Load all bots from configuration to prevent pruning other active bots
+          const { config: allBotsConfigData } = loadSettingsFile(PROFILES_BOTS_FILE);
+          const allBotsConfig = resolveRawBotEntries(allBotsConfigData);
+         
+         // Normalize all active bots with their correct indices in the unfiltered array
+         // CRITICAL: Index must be based on position in allBotsConfig, not in filtered array.
+         // The index is embedded in botKey (e.g., "bot-0", "bot-1"), determining file names.
+         // If index changes, the bot loses access to persisted state files.
+         const allActiveBots = allBotsConfig
+             .map((b: any, idx: number) => b.active !== false ? normalizeBotEntry(b, idx) : null)
+             .filter((b: any) => b !== null);
+
+         // Find the current bot's index in the unfiltered bots.json array
+         const botIndex = allBotsConfig.findIndex((b: any) => b.name === botName);
+         if (botIndex === -1) {
+             throw new Error(`Bot "${botName}" not found in ${PROFILES_BOTS_FILE}`);
+         }
+
+         // Normalize config for current bot with correct index from unfiltered array
+         const normalizedConfig = normalizeBotEntry(botConfig, botIndex);
+
+        // Get signing secret from daemon or interactively
+        const preferredAccount = normalizedConfig.preferredAccount;
+        const signingSecret = await getSigningSecretForAccount(preferredAccount);
+
+         // Create and start bot with log prefix for [bot.js] context
+          const bot = new DEXBot(normalizedConfig, { logPrefix: '[bot.js]' });
+          try {
+              // Register bot cleanup on shutdown
+              registerCleanup(`Bot: ${botName}`, () => bot.shutdown());
+
+              await bot.startWithPrivateKey(signingSecret);
+          } catch (err) {
+              // Attempt graceful cleanup before exiting
+              try {
+                  await bot.shutdown();
+              } catch (shutdownErr: any) {
+                  launcherLogger.error(`Error during cleanup: ${shutdownErr.message}`);
+              }
+              throw err;
+          }
+
+     } catch (err: any) {
+         launcherLogger.error(`Failed to start bot: ${err.message}`);
+         process.exit(1);
+     }
+})();
+export {};

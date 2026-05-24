@@ -9,21 +9,28 @@
  */
 
 const assert = require('assert');
+const path = require('path');
+const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
 
 async function runAutoderiveForBot(botCfg) {
     console.log('Running autoderive for bot:', botCfg.name || '(unnamed)');
 
     // Monkeypatch shared BitShares client used by the codebase
     const bsModule = require('../modules/bitshares_client');
-    const originalBitShares = bsModule.BitShares;
+    const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.js');
+    const distBitsharesClientPath = path.resolve(__dirname, '../dist/modules/bitshares_client.js');
+    const systemPath = path.resolve(__dirname, '../modules/order/utils/system.ts');
+    const systemModule = require('../modules/order/utils/system');
 
     // Create a mock BitShares object with db helpers used by derive functions
     const mock = { assets: {}, db: {} };
     const assetA = botCfg.assetA; const assetB = botCfg.assetB;
     if (!assetA || !assetB) throw new Error('Bot configuration missing assetA/assetB');
 
-    mock.assets[assetA.toLowerCase()] = { id: '1.3.100' };
-    mock.assets[assetB.toLowerCase()] = { id: '1.3.101' };
+    mock.assets[assetA] = { id: '1.3.100', precision: 3 };
+    mock.assets[assetB] = { id: '1.3.101', precision: 3 };
+    mock.assets[assetA.toLowerCase()] = { id: '1.3.100', precision: 3 };
+    mock.assets[assetB.toLowerCase()] = { id: '1.3.101', precision: 3 };
 
     // lookup_asset_symbols / get_assets should return ids and precision
     mock.db.lookup_asset_symbols = async (arr) => arr.map(s => ({ id: (s.toLowerCase() === assetA.toLowerCase()) ? '1.3.100' : '1.3.101', precision: 3 }));
@@ -47,7 +54,17 @@ async function runAutoderiveForBot(botCfg) {
     mock.db.get_order_book = async (a, b, limit) => ({ bids: [{ price: 0.0014, size: 5 }], asks: [{ price: 0.0016, size: 3 }] });
     mock.db.get_ticker = async () => ({ latest: 0.0015 });
 
-    bsModule.BitShares = mock;
+    const stubbedBitsharesModule = {
+        ...bsModule,
+        BitShares: mock,
+    };
+    const stubbedSystemModule = {
+        ...systemModule,
+        derivePrice: async () => 150,
+    };
+    const originalBitsharesModule = setCachedModule(bitsharesClientPath, stubbedBitsharesModule);
+    const originalDistBitsharesModule = setCachedModule(distBitsharesClientPath, stubbedBitsharesModule);
+    const originalSystemModule = setCachedModule(systemPath, stubbedSystemModule);
 
     // Create and initialize the OrderManager which triggers auto-derive.
     const { OrderManager, grid: Grid } = require('../modules/order');
@@ -60,6 +77,10 @@ async function runAutoderiveForBot(botCfg) {
     });
 
     const manager = new OrderManager(cfg);
+    manager.assets = {
+        assetA: { id: '1.3.100', symbol: assetA, precision: 3 },
+        assetB: { id: '1.3.101', symbol: assetB, precision: 3 },
+    };
     await Grid.initializeGrid(manager);
 
     try {
@@ -69,7 +90,9 @@ async function runAutoderiveForBot(botCfg) {
         console.log('Autoderive assertion passed for bot', botCfg.name || '(unnamed)');
     } finally {
         // Restore shared BitShares client to original
-        bsModule.BitShares = originalBitShares;
+        restoreCachedModule(bitsharesClientPath, originalBitsharesModule);
+        restoreCachedModule(distBitsharesClientPath, originalDistBitsharesModule);
+        restoreCachedModule(systemPath, originalSystemModule);
     }
 }
 

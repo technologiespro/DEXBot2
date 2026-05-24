@@ -8,14 +8,17 @@ const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache
 console.log('Running dynamic weight override wiring tests');
 
 const marketAdapterPath = require.resolve('../market_adapter/market_adapter.js');
+const distMarketAdapterPath = path.resolve(__dirname, '../dist/market_adapter/market_adapter.js');
 const bitsharesClientPath = require.resolve('../modules/bitshares_client');
 const originalMarketAdapter = require.cache[marketAdapterPath];
+const originalDistMarketAdapter = require.cache[distMarketAdapterPath];
 const originalBitsharesClient = require.cache[bitsharesClientPath];
 const originalExistsSync = fs.existsSync;
 const originalReadFileSync = fs.readFileSync;
 
 function installMarketAdapterStubs(settingsJson) {
     delete require.cache[marketAdapterPath];
+    delete require.cache[distMarketAdapterPath];
 
     fs.existsSync = (filePath) => {
         const text = String(filePath);
@@ -40,6 +43,7 @@ function restoreMarketAdapterStubs() {
     fs.existsSync = originalExistsSync;
     fs.readFileSync = originalReadFileSync;
     restoreCachedModule(marketAdapterPath, originalMarketAdapter);
+    restoreCachedModule(distMarketAdapterPath, originalDistMarketAdapter);
     restoreCachedModule(bitsharesClientPath, originalBitsharesClient);
 }
 
@@ -84,7 +88,7 @@ function testResolveBotCfgWiresMissingPairAndBotOverrides() {
     };
 
     installMarketAdapterStubs(settingsJson);
-    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter');
 
     const bot = {
         name: 'XRP-BTS',
@@ -136,7 +140,7 @@ function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
     };
 
     installMarketAdapterStubs(settingsJson);
-    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter');
 
     const bot = {
         name: 'Different Bot',
@@ -189,7 +193,7 @@ function testResolveBotCfgConvertsUnmarkedLegacyAmaSlopePercents() {
     };
 
     installMarketAdapterStubs(settingsJson);
-    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter');
 
     const bot = {
         name: 'XRP-BTS',
@@ -240,7 +244,7 @@ function testResolveBotCfgKeepsMarkedPerBarAmaSlopePercents() {
     };
 
     installMarketAdapterStubs(settingsJson);
-    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter');
 
     const bot = {
         name: 'XRP-BTS',
@@ -303,7 +307,7 @@ function testResolveBotCfgSanitizesAtrPeriodAndVolatilityClampOverrides() {
     };
 
     installMarketAdapterStubs(settingsJson);
-    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter');
     const { MARKET_ADAPTER } = require('../modules/constants');
 
     const bot = {
@@ -352,7 +356,7 @@ function testResolveBotCfgDoesNotLeakNestedTopLevelOverridesAcrossBots() {
     };
 
     installMarketAdapterStubs(settingsJson);
-    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter');
     const { MARKET_ADAPTER } = require('../modules/constants');
     const globalCfg = { ...DEFAULTS };
 
@@ -425,7 +429,7 @@ function testResolveBotCfgPrefersExactPairOverFlippedFallback() {
     };
 
     installMarketAdapterStubs(settingsJson);
-    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter.js');
+    const { DEFAULTS, resolveBotCfg } = require('../market_adapter/market_adapter');
 
     const bot = {
         name: 'XRP-BTS',

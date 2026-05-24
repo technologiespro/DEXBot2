@@ -12,8 +12,8 @@
  */
 
 const assert = require('assert');
-const { OrderManager } = require('../modules/order/index.js');
-const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants.js');
+const { OrderManager } = require('../modules/order/index');
+const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 
 async function runTest() {
     console.log('Running Phantom Orders Prevention Test...');

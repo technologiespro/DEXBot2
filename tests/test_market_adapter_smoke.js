@@ -13,7 +13,7 @@ const lockPath = path.join(root, 'market_adapter', 'state', 'market_adapter.lock
         fs.unlinkSync(lockPath);
     }
 
-    const res = spawnSync('node', ['market_adapter/market_adapter.js', '--once', '--dryRun', '--quiet'], {
+    const res = spawnSync('node', ['dist/market_adapter/market_adapter.js', '--once', '--dryRun', '--quiet'], {
         cwd: root,
         encoding: 'utf8',
     });
@@ -22,7 +22,7 @@ const lockPath = path.join(root, 'market_adapter', 'state', 'market_adapter.lock
 }
 
 {
-    const res = spawnSync('node', ['market_adapter/market_adapter.js', '--whitelist-all', '--once', '--dryRun', '--quiet'], {
+    const res = spawnSync('node', ['dist/market_adapter/market_adapter.js', '--whitelist-all', '--once', '--dryRun', '--quiet'], {
         cwd: root,
         encoding: 'utf8',
     });
@@ -60,7 +60,7 @@ const lockPath = path.join(root, 'market_adapter', 'state', 'market_adapter.lock
         ],
     };
 
-    const res = spawnSync('node', ['market_adapter/ama_signal_runner.js', '--compact'], {
+    const res = spawnSync('node', ['dist/market_adapter/ama_signal_runner.js', '--compact'], {
         cwd: root,
         encoding: 'utf8',
         env: {

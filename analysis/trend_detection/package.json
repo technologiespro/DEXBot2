@@ -2,9 +2,9 @@
   "name": "trend-detection",
   "version": "2.0.0",
   "description": "Kalman filter trend detection with tactical/modal state tracking",
-  "main": "kalman_trend_analyzer.js",
+  "main": "../../dist/analysis/trend_detection/kalman_trend_analyzer.js",
   "scripts": {
-    "test": "node tests/test_kalman_trend.js && node tests/test_kalman_velocity_smoothing.js"
+    "test": "npm --prefix ../.. run build && node ../../dist/analysis/trend_detection/tests/test_kalman_trend.js && node ../../dist/analysis/trend_detection/tests/test_kalman_velocity_smoothing.js"
   },
   "keywords": [
     "trend-detection",
