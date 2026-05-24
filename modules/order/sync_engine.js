@@ -502,8 +502,13 @@ class SyncEngine {
                             // Merge updated state if size actually changed
                             updatedOrder = { ...updatedOrder, ...nextOrder };
                         }
-                        // Keep existing state — only fill events change ACTIVE → PARTIAL
-                        updatedOrder.state = gridOrder.state;
+                        // Transition to PARTIAL when chain size < grid size (partial fill).
+                        // Real-time fill events set this via syncFromFillHistory, but
+                        // downtime fills detected during open-orders sync must also update
+                        // state so that checkWindowDust can identify dust orders.
+                        updatedOrder.state = (chainSizeInt < currentSizeInt)
+                            ? ORDER_STATES.PARTIAL
+                            : gridOrder.state;
                         await mgr._applyOrderUpdate(updatedOrder, 'sync-pass1-partial', { skipAccounting, fee: 0 });
                     } else {
                         const spreadOrder = convertToSpreadPlaceholder(gridOrder);

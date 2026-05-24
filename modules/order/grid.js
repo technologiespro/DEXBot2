@@ -1464,7 +1464,7 @@ class Grid {
         const topBuyOrder = allOrders
             .filter(o => o.type === ORDER_TYPES.BUY && isLiveOrder(o))
             .sort((a, b) => b.price - a.price)[0];
-        if (topBuyOrder?.state === ORDER_STATES.PARTIAL) {
+        if (topBuyOrder) {
             buyDustOrders = await Grid._getDustOrders(manager, [topBuyOrder], ORDER_TYPES.BUY);
         }
 
@@ -1472,7 +1472,7 @@ class Grid {
         const topSellOrder = allOrders
             .filter(o => o.type === ORDER_TYPES.SELL && isLiveOrder(o))
             .sort((a, b) => a.price - b.price)[0];
-        if (topSellOrder?.state === ORDER_STATES.PARTIAL) {
+        if (topSellOrder) {
             sellDustOrders = await Grid._getDustOrders(manager, [topSellOrder], ORDER_TYPES.SELL);
         }
 
