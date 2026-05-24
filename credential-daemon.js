@@ -356,15 +356,15 @@ async function executeOperationsWithClient(client, operations) {
 
 async function broadcastWithRetry(accountName, privateKey, broadcastFn) {
     for (let attempt = 1; attempt <= 2; attempt++) {
-        if (_nativeChainClient.getStatus() !== 'connected') {
-            _nativeChainClient.setNodes(_nativeNodeList.length > 0 ? _nativeNodeList : NODE_MANAGEMENT.DEFAULT_NODES);
-            await _nativeChainClient.connect();
-        }
-        const { createSigningClient } = require('./modules/bitshares-native');
-        const signingClient = createSigningClient(_nativeChainClient, accountName, privateKey);
-        const client = signingClient.client;
-        await client.initPromise;
         try {
+            if (_nativeChainClient.getStatus() !== 'connected') {
+                _nativeChainClient.setNodes(_nativeNodeList.length > 0 ? _nativeNodeList : NODE_MANAGEMENT.DEFAULT_NODES);
+                await _nativeChainClient.connect();
+            }
+            const { createSigningClient } = require('./modules/bitshares-native');
+            const signingClient = createSigningClient(_nativeChainClient, accountName, privateKey);
+            const client = signingClient.client;
+            await client.initPromise;
             return await broadcastFn(client);
         } catch (err) {
             if (attempt === 2) throw err;

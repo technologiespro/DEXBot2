@@ -730,6 +730,7 @@ async function stopPM2Processes(target) {
 
     if (target === 'all') {
         console.log('');
+        await execPM2CommandIgnoreMissing('stop', CREDENTIAL_DAEMON_APP_NAME);
         if (fs.existsSync(ECOSYSTEM_FILE)) {
             await runManagedAppsPm2Action('stop');
         } else if (fs.existsSync(BOTS_JSON)) {
@@ -739,32 +740,32 @@ async function stopPM2Processes(target) {
                 console.warn(`Skipping managed bot stop: ${err.message}`);
             }
         }
-        await execPM2CommandIgnoreMissing('stop', CREDENTIAL_DAEMON_APP_NAME, { silent: true });
         console.log('');
         console.log('All dexbot PM2 processes stopped.');
-    } else {
-        if (target === CREDENTIAL_DAEMON_APP_NAME) {
-            await execPM2CommandIgnoreMissing('stop', CREDENTIAL_DAEMON_APP_NAME);
-            console.log(`PM2 process '${target}' stopped.`);
-            return;
-        }
-
-        // Validate bot exists in configuration before stopping (with lock protection)
-        try {
-            const { config } = await readBotsFileWithLock(BOTS_JSON, parseJsonWithComments);
-            const botExists = selectActiveBotEntries(config).some((b) => b.name === target);
-
-            if (!botExists) {
-                throw new Error(`Bot '${target}' not found or not active in profiles/bots.json`);
-            }
-        } catch (err) {
-            throw new Error(`Failed to read bots configuration: ${err.message}`);
-        }
-
-        // Stop specific bot by name
-        await execPM2Command('stop', target);
-        console.log(`PM2 process '${target}' stopped.`);
+        return;
     }
+
+    if (target === CREDENTIAL_DAEMON_APP_NAME) {
+        await execPM2CommandIgnoreMissing('stop', CREDENTIAL_DAEMON_APP_NAME);
+        console.log(`PM2 process '${target}' stopped.`);
+        return;
+    }
+
+    // Validate bot exists in configuration before stopping (with lock protection)
+    try {
+        const { config } = await readBotsFileWithLock(BOTS_JSON, parseJsonWithComments);
+        const botExists = selectActiveBotEntries(config).some((b) => b.name === target);
+
+        if (!botExists) {
+            throw new Error(`Bot '${target}' not found or not active in profiles/bots.json`);
+        }
+    } catch (err) {
+        throw new Error(`Failed to read bots configuration: ${err.message}`);
+    }
+
+    // Stop specific bot by name
+    await execPM2Command('stop', target);
+    console.log(`PM2 process '${target}' stopped.`);
 }
 
 /**
@@ -778,6 +779,7 @@ async function deletePM2Processes(target) {
 
     if (target === 'all') {
         console.log('');
+        await execPM2CommandIgnoreMissing('delete', CREDENTIAL_DAEMON_APP_NAME);
         if (fs.existsSync(ECOSYSTEM_FILE)) {
             await runManagedAppsPm2Action('delete');
         } else if (fs.existsSync(BOTS_JSON)) {
@@ -787,7 +789,6 @@ async function deletePM2Processes(target) {
                 console.warn(`Skipping managed bot delete: ${err.message}`);
             }
         }
-        await execPM2CommandIgnoreMissing('delete', CREDENTIAL_DAEMON_APP_NAME, { silent: true });
         console.log('');
         console.log('All dexbot PM2 processes deleted.');
         return;

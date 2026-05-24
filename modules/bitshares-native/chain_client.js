@@ -89,6 +89,7 @@ function createChainClient(config = {}) {
             } catch (_) {}
 
             if (validateChainId && chainId !== expectedChainId) {
+                _dbApiId = null;
                 throw new ChainConfigError(
                     `Chain ID mismatch: expected ${expectedChainId}, got ${chainId}`
                 );

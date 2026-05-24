@@ -183,6 +183,7 @@ async function restartBitsharesConnection(serverList, reason = 'startup') {
         return true;
     } catch (err) {
         lastConnectionError = err;
+        try { _nativeClient.disconnect(); } catch (_) {}
         if (!suppressConnectionLog) {
             console.warn(`[NodeManager] ${reason}: reconnect request failed: ${err.message || err}`);
         }
