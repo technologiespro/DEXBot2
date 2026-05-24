@@ -269,6 +269,7 @@ const time_point_sec = {
         if (typeof v === 'number') return v;
         if (v instanceof Date) return Math.floor(v.getTime() / 1000);
         if (typeof v !== 'string') throw new Error('Unknown date type: ' + v);
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(v)) v += 'Z';
         return Math.floor(new Date(v).getTime() / 1000);
     },
     toObject(v, debug) {

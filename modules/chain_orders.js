@@ -706,7 +706,7 @@ async function buildUpdateOrderOp(accountName, orderId, newParams, cachedOrder =
                     }
                 },
                 ...(deltaSellInt !== 0 ? { delta_amount_to_sell: { amount: deltaSellInt, asset_id: sellAssetId } } : {}),
-                ...(newParams.expiration ? { expiration: newParams.expiration } : {})
+                ...(newParams.expiration ? { new_expiration: newParams.expiration } : {})
             }
         },
         finalInts: { sell: adjustedSellInt, receive: newReceiveInt, sellAssetId, receiveAssetId }

@@ -181,7 +181,7 @@ console.log('  PASS (no optionals)');
 
 console.log('signed_transaction');
 const sig = Buffer.alloc(65, 0x00);
-sig[64] = 0x1f;
+sig[0] = 0x1f;
 const stPayload = {
     ref_block_num: 12345 & 0xFFFF,
     ref_block_prefix: 0xCAFEBABE,

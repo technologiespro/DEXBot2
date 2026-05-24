@@ -73,12 +73,12 @@ const knownPrivateToPub = nativeEcc.privateKeyToPublicKey(knownPrivateKey, true)
 const msg1 = nativeEcc.sha256(Buffer.from('hello world'));
 const sig1 = nativeEcc.sign(msg1, knownPrivateKey);
 assert.strictEqual(sig1.length, 65, 'Signature should be 65 bytes');
-const recoveryId1 = sig1[64] - 31;
+const recoveryId1 = sig1[0] - 31;
 assert.ok(recoveryId1 >= 0 && recoveryId1 <= 3, 'Recovery id should be encoded in compact signature');
 const recoveredPub1 = nativeEcc.recoverPublicKey(
     msg1,
-    sig1.slice(0, 32),
-    sig1.slice(32, 64),
+    sig1.slice(1, 33),
+    sig1.slice(33, 65),
     recoveryId1
 );
 assert.ok(recoveredPub1.equals(knownPrivateToPub), 'Recovered public key should match signer public key');
@@ -93,16 +93,16 @@ const msg3 = nativeEcc.sha256(Buffer.from('different message'));
 const sig3 = nativeEcc.sign(msg3, knownPrivateKey);
 const recoveredPub3 = nativeEcc.recoverPublicKey(
     msg3,
-    sig3.slice(0, 32),
-    sig3.slice(32, 64),
-    sig3[64] - 31
+    sig3.slice(1, 33),
+    sig3.slice(33, 65),
+    sig3[0] - 31
 );
 assert.ok(recoveredPub3.equals(knownPrivateToPub), 'Recovered public key should stay stable across messages');
 assert.ok(nativeEcc.verify(msg3, sig3, knownPrivateToPub), 'sig3 should verify');
 assert.ok(!nativeEcc.verify(msg1, sig3, knownPrivateToPub), 'sig3 should not verify msg1');
 
 // Edge case: low-S enforcement
-const sVal = BigInt('0x' + sig1.slice(32, 64).toString('hex'));
+const sVal = BigInt('0x' + sig1.slice(33, 65).toString('hex'));
 const n = nativeEcc.secp256k1.n;
 assert.ok(sVal <= n >> 1n, 'S value should be low (BIP 62 low-S)');
 console.log('  PASS');

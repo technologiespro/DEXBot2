@@ -296,52 +296,68 @@ function sign(digest, privateKey) {
 
     const d = bigIntFromBuffer(privateKey);
     const e = bigIntFromBuffer(digest) % secp256k1.n;
-    let k = deterministicK(digest, privateKey);
-    let R = ecPointMul(SECP256K1_BASE_POINT, k);
-    let rBig = R ? R.x % secp256k1.n : 0n;
-
-    while (!R || rBig === 0n) {
-        k = mod(k + 1n, secp256k1.n);
-        if (k === 0n) k = 1n;
-        R = ecPointMul(SECP256K1_BASE_POINT, k);
-        rBig = R ? R.x % secp256k1.n : 0n;
-    }
-
-    let sBig = mod(modInverse(k, secp256k1.n) * (e + rBig * d), secp256k1.n);
-    if (sBig === 0n) {
-        throw new Error('Failed to generate non-zero signature scalar');
-    }
-
     const nHalf = secp256k1.n >> 1n;
-    let recoveryId = (R.y & 1n) === 1n ? 1 : 0;
-    if (R.x >= secp256k1.n) {
-        recoveryId |= 2;
-    }
-    if (sBig > nHalf) {
-        sBig = secp256k1.n - sBig;
-        recoveryId ^= 1;
-    }
-
-    const r = bufferFromBigInt(rBig, 32);
-    const finalS = bufferFromBigInt(sBig, 32);
-
     const pubKeyKnown = privateKeyToPublicKey(privateKey, true);
 
-    for (let i = 0; i < 4; i++) {
-        try {
-            const recovered = recoverPublicKey(digest, r, finalS, i);
-            if (Buffer.isBuffer(recovered) && recovered.equals(pubKeyKnown)) {
-                recoveryId = i;
-                break;
-            }
-        } catch (_) {}
-    }
-    if (recoveryId < 0 || recoveryId > 3) {
-        throw new Error('Failed to derive compact signature recovery id');
-    }
+    let nonce = 0;
+    while (true) {
+        let k = deterministicK(digest, privateKey);
+        if (nonce > 0) {
+            k = (k + BigInt(nonce)) % secp256k1.n;
+            if (k === 0n) k = 1n;
+        }
+        let R = ecPointMul(SECP256K1_BASE_POINT, k);
+        let rBig = R ? R.x % secp256k1.n : 0n;
 
-    const compactI = recoveryId + 27 + 4;
-    return Buffer.concat([r, finalS, Buffer.from([compactI])]);
+        if (!R || rBig === 0n) {
+            nonce++;
+            continue;
+        }
+
+        let sBig = mod(modInverse(k, secp256k1.n) * (e + rBig * d), secp256k1.n);
+        if (sBig === 0n) {
+            nonce++;
+            continue;
+        }
+
+        let recoveryId = (R.y & 1n) === 1n ? 1 : 0;
+        if (R.x >= secp256k1.n) {
+            recoveryId |= 2;
+        }
+        if (sBig > nHalf) {
+            sBig = secp256k1.n - sBig;
+            recoveryId ^= 1;
+        }
+
+        const rBuf = bufferFromBigInt(rBig, 32);
+        const sBuf = bufferFromBigInt(sBig, 32);
+
+        if (!(rBuf[0] < 0x80 && (rBuf[0] !== 0 || rBuf[1] >= 0x80))) {
+            nonce++;
+            continue;
+        }
+        if (!(sBuf[0] < 0x80 && (sBuf[0] !== 0 || sBuf[1] >= 0x80))) {
+            nonce++;
+            continue;
+        }
+
+        for (let i = 0; i < 4; i++) {
+            try {
+                const recovered = recoverPublicKey(digest, rBuf, sBuf, i);
+                if (Buffer.isBuffer(recovered) && recovered.equals(pubKeyKnown)) {
+                    recoveryId = i;
+                    break;
+                }
+            } catch (_) {}
+        }
+        if (recoveryId < 0 || recoveryId > 3) {
+            nonce++;
+            continue;
+        }
+
+        const compactI = recoveryId + 27 + 4;
+        return Buffer.concat([Buffer.from([compactI]), rBuf, sBuf]);
+    }
 }
 
 function verify(digest, signature, publicKey) {
@@ -352,8 +368,8 @@ function verify(digest, signature, publicKey) {
     let r;
     let s;
     if (signature.length === 65) {
-        r = signature.slice(0, 32);
-        s = signature.slice(32, 64);
+        r = signature.slice(1, 33);
+        s = signature.slice(33, 65);
     } else if (signature.length === 64) {
         r = signature.slice(0, 32);
         s = signature.slice(32, 64);
@@ -529,10 +545,8 @@ function publicKeyToString(pubKeyBuf, addressPrefix = 'BTS') {
 
 function addressFromPublicKey(pubKeyBuf, addressPrefix = 'BTS') {
     const hash = ripemd160(sha512(pubKeyBuf));
-    const version = Buffer.from([0x35]);
-    const versioned = Buffer.concat([version, hash]);
-    const checksum = hash256(versioned).slice(0, 4);
-    return addressPrefix + base58Encode(Buffer.concat([versioned, checksum]));
+    const checksum = ripemd160(hash).slice(0, 4);
+    return addressPrefix + base58Encode(Buffer.concat([hash, checksum]));
 }
 
 module.exports = {
