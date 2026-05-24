@@ -1158,6 +1158,22 @@ manager.getMetrics()
 
 ---
 
+### Zero-Dependency Policy
+
+DEXBot2 operates under a **zero mandatory production dependency** policy. The only declared dependency (`ws`) is **optional** — the bot works without it (falling back to built-in Node.js HTTP). Every production capability — blockchain client, crypto/signing, serialization, testing, price feeds, credential vault — is implemented natively within the codebase.
+
+**Why:** Trading bots handle real money. Every external dependency is a supply-chain risk surface. Keeping the dependency tree empty means no `npm audit` surprises, no supply-chain attacks on upstream packages, and no version-migration overhead for the core runtime.
+
+**Special case — trading bots:** This level of dependency discipline is rare in open-source trading software. Established projects (Gekko, Freqtrade, Hummingbot) carry 15–20+ production dependencies. DEXBot2's empty dependency tree is a deliberate architectural choice, not an accidental outcome — it reflects the project's priority of operational safety over developer convenience.
+
+**What this means in practice:**
+- Blockchain connectivity (`bitshares-native/`) — hand-rolled from protocol primitives
+- Elliptic curve crypto (secp256k1) — native JS, zero native addons
+- Testing — `node:assert`, no Jest/Mocha/Vitest
+- Persistence — JSON flat files, no SQLite/ORM
+- Price sources — native candle fetching, no CCXT/CoinGecko
+- Process management — PM2 ecosystem or direct Node.js, no Docker requirement
+
 ### Testing Strategy & Quality Assurance
 
 DEXBot2 uses a native Node.js `assert` testing strategy to ensure reliability without heavy dependencies.

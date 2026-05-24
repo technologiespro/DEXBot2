@@ -1,19 +1,19 @@
 # DEXBot2: TypeScript Migration Analysis Report
 
 **Date**: February 2026 *(metrics updated May 2026)*
-**Codebase Version**: 0.7.4 release (v0.7.4 latest tagged release)
+**Codebase Version**: 0.7.5 release (v0.7.5 latest tagged release)
 **Analysis Scope**: JavaScript to TypeScript migration feasibility and effort estimation
 
 ---
 
 ## Executive Summary
 
-The DEXBot2 codebase is **well-positioned for a TypeScript migration**. With ~48,000+ lines of production code across the modules/ tree and 158 test files, plus only 1 external dependency, the project presents a **low-complexity migration with medium-high effort** (estimated hours increased proportionally with codebase growth).
+The DEXBot2 codebase is **well-positioned for a TypeScript migration**. With ~48,000+ lines of production code across the modules/ tree and 158 test files, plus zero mandatory external dependencies, the project presents a **low-complexity migration with medium-high effort** (estimated hours increased proportionally with codebase growth).
 
 ### Quick Stats
 - **Total Production Code**: ~48,000+ lines across modules/ (up from ~21,300 in Feb 2026)
 - **Test Coverage**: 158 test files (down from 171 after cleanup)
-- **External Dependencies**: 1 (btsdex)
+- **External Dependencies**: 0 mandatory (1 optional: `ws`)
 - **Estimated Timeline**: 6-8 months (3-4 developers) | 9-12 months (2 developers) | 14-18 months (1 developer)
 - **Budget Estimate**: $350,000-$450,000 (assuming $120/hour contractors)
 - **Risk Level**: MEDIUM (manageable)

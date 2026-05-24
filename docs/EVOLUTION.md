@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.4 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.5 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
 - **Growth Phase**: 1,326 commits over ~5.5 active months
 - **Code Maturity**: Evolution from basic utilities to a ~48,000+ LoC intelligent system
 - **Stability**: Progression from manual testing to a suite of 158 automated test files
-- **Releases**: 19 tagged releases (v0.1.0 to v0.7.4)
+- **Releases**: 20 tagged releases (v0.1.0 to v0.7.5)
 
 ---
 
@@ -175,6 +175,7 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 - **May 22**: Release v0.7.2 - dynamic-weight Kalman stability patch
 - **May 22**: Release v0.7.3 - adapter packaging and slope helper consolidation
 - **May 22**: Release v0.7.4 - documentation refresh and version bump
+- **May 24**: Release v0.7.5 - zero-dependency policy codification
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -213,6 +214,15 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 | 1. Code cleanup (unused deps, inline helper) | 2 |
 | 2. Documentation refresh | 3 |
 | **Total** | **5** |
+
+### v0.7.4 → v0.7.5 — Zero-Dependency Policy
+
+This release formalizes the project's de facto zero-dependency philosophy as an explicit architectural policy, with a special-case recognition for trading bots where this level of dependency discipline is unique in open source.
+
+| Category | Commits |
+|----------|---------|
+| 1. Zero-dependency policy doc and version bump | 1 |
+| **Total** | **1** |
 
 ---
 
@@ -429,7 +439,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: May 22, 2026
-**Total Commits**: 1373
-**Date Range**: December 2, 2025 - May 22, 2026 (ongoing)
+**Last Updated**: May 24, 2026
+**Total Commits**: 1374
+**Date Range**: December 2, 2025 - May 24, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

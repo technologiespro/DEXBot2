@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.5] - 2026-05-24 - Zero-Dependency Policy
+
+This patch codifies the project's de facto zero-dependency philosophy as an explicit architectural policy, recognizing trading bots as a special case where this level of supply-chain discipline is unique in open source.
+
+### 2026-05-24
+
+#### Zero-Dependency Policy
+- Add "Zero-Dependency Policy" section to `docs/architecture.md` with the policy rationale, trading-bot special-case justification, and practical implications.
+- Update `docs/DEXBOT_COMPARISON.md` to reflect the current zero-mandatory-dependency state (native `bitshares-native/` replaces former `btsdex` dependency).
+- Update `docs/EVOLUTION.md` with v0.7.5 release entry, version history section, and updated metadata.
+- Bump version to 0.7.5 across all package manifests, lockfiles, and documentation references.
+
 ## [0.7.4] - 2026-05-22 - Code Cleanup and Documentation Refresh
 
 This patch cleans up unused code paths, refactors a shared validation helper, refreshes the full documentation set for clarity, completeness, and version alignment, and brings the JSDoc layer up to date across the entire codebase.

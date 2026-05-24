@@ -2,7 +2,7 @@
 
 This directory contains the comprehensive technical documentation for the DEXBot2 trading bot. It is designed to guide developers from high-level architecture down to the nuances of fund accounting and state management.
 
-**Version context:** v0.7.4 is the latest tagged release. This documentation now tracks the released 0.7 line, which includes signal intelligence, strict runtime behavior, credit/debt workflows, credit maintenance hardening, dynamic-weight Kalman stability, and adapter packaging consolidation.
+**Version context:** v0.7.5 is the latest tagged release. This documentation now tracks the released 0.7 line, which includes signal intelligence, strict runtime behavior, credit/debt workflows, credit maintenance hardening, dynamic-weight Kalman stability, adapter packaging consolidation, and the zero-dependency policy.
 
 ---
 
@@ -79,6 +79,7 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Periodic Market Price Refresh**: Background 4-hour price updates
 - **Pipeline Safety & Diagnostics**: 5-minute timeout safeguard and health monitoring
 - **Data Flow**: Visualization of how market data becomes trading operations and then blockchain transactions.
+- **Zero-Dependency Policy**: Formal policy rationale, trading-bot special-case justification, and practical implications (native blockchain client, crypto, testing, persistence)
 - **Market Adapter Signal Pipeline**: AMA center, dynamic weights, regime detection, and collateral advisories
 - **Credit/Debt Runtime**: Native MPA and credit offer workflows with CR planning and grid reset coupling
 

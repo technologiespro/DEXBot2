@@ -1,7 +1,7 @@
 # DEXBot vs DEXBot2 — Detailed Comparison Report
 
 > **Date:** 2026-05-22 *(metrics refreshed against local source trees)*
-> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite). DEXBot2 is on the v0.7.4 release track, with `v0.7.4` as the latest tagged release.
+> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite). DEXBot2 is on the v0.7.5 release track, with `v0.7.5` as the latest tagged release.
 > **Audience:** Developers, contributors, and operators evaluating or migrating between the two projects.
 
 ---
@@ -35,7 +35,7 @@
 
 | Attribute | DEXBot (original) | DEXBot2 |
 |---|---|---|
-| **Release Track** | 1.0.0 | v0.7.4 tagged release |
+| **Release Track** | 1.0.0 | v0.7.5 tagged release |
 | **Language** | Python 3.6+ | Node.js (JavaScript ES2022) |
 | **Status** | Released 1.0.0, unmaintained | Active development |
 | **Last Repo Activity** | May 23, 2020 | 2026-05-22 |
@@ -700,19 +700,20 @@ Where:
 ### DEXBot2
 
 **Production dependencies (package.json):**
-- `btsdex ^0.7.11` — BitShares DEX client
-- Total: **1 package**, minimal footprint
+- `ws ^8.0.0` — **optional** WebSocket transport (bot falls back to native `http` without it)
+- Total: **0 mandatory packages**, minimal footprint
 
 ### Dependency Comparison
 
 | Metric | DEXBot | DEXBot2 |
 |---|---|---|
-| **Production Packages** | ~15-20 | 3 |
-| **Dev Packages** | ~5-8 | 0 (native assert) |
+| **Production Packages** | ~15-20 | 0 mandatory (1 optional) |
+| **Dev Packages** | ~5-8 | 0 (native `node:assert`) |
 | **GUI Framework** | PyQt5 (~80MB) | None |
 | **Database ORM** | SQLAlchemy | None |
 | **External Price APIs** | CoinGecko, CCXT, Waves | None |
-| **Install Size (approx)** | Large (100MB+) | Small core dependency tree; analysis/data assets can be larger |
+| **Blockchain Client** | `bitshares` + `python-bitshares` | Hand-rolled native (`bitshares-native/`) |
+| **Install Size (approx)** | Large (100MB+) | Minimal; analysis/data assets can be larger |
 | **Runtime Requirement** | Python 3.6+ | Node.js LTS |
 
 ---
@@ -756,7 +757,7 @@ Where:
 
 | Metric | DEXBot | DEXBot2 |
 |---|---|---|
-| **Release Track** | 1.0.0 | v0.7.4 tagged release |
+| **Release Track** | 1.0.0 | v0.7.5 tagged release |
 | **Active Since** | ~2018 | December 2025 |
 | **Last Commit** | May 23, 2020 | 2026-05-22 |
 | **Total Commits** | 2281 | 1326 at current HEAD |
@@ -817,7 +818,7 @@ Where:
 | **Accessibility** | ★★★★★ (GUI) | ★★☆☆☆ (CLI only) | DEXBot |
 | **Testing Depth** | ★★★☆☆ | ★★★★★ (171 test files; focused regressions) | DEXBot2 |
 | **Documentation** | ★★★☆☆ | ★★★★★ (architecture/accounting/security/adapter docs) | DEXBot2 |
-| **Dependency Footprint** | ★★☆☆☆ (heavy) | ★★★★★ (3 packages) | DEXBot2 |
+| **Dependency Footprint** | ★★☆☆☆ (heavy) | ★★★★★ (0 mandatory, 1 optional) | DEXBot2 |
 | **Extensibility** | ★★★★★ (plugins) | ★☆☆☆☆ | DEXBot |
 | **Active Maintenance** | ★☆☆☆☆ (unmaintained) | ★★★★★ (active) | DEXBot2 |
 | **Grid Strategy Depth** | ★★★☆☆ (Staggered) | ★★★★★ (engineered) | DEXBot2 |
