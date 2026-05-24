@@ -53,6 +53,7 @@ const { createSubscriptionManager, createResolvers } = native;
 _nativeClient = native.createChainClient({
     onStatusChange: handleConnectionStatus,
     rpcTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS,
+    connectTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS,
 });
 _subscriptionManager = createSubscriptionManager(_nativeClient);
 _nativeClient.onReconnect = () => _subscriptionManager.onReconnect();

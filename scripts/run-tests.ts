@@ -101,6 +101,7 @@ const testFiles = [
   'tests/test_native_transport.ts',
   'tests/test_native_facade.ts',
   'tests/test_native_chain_client.ts',
+  'tests/test_connection_timeout_params.ts',
   'tests/test_adapter_client_native.ts',
 ];
 
