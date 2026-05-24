@@ -1429,8 +1429,29 @@ async function main() {
             return 0;
         }
 
-        const { connectClient } = getBitsharesClient();
-        await connectClient();
+        {
+            const maxRetries = 5;
+            let lastErr = null;
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    const { connectClient } = getBitsharesClient();
+                    await connectClient();
+                    lastErr = null;
+                    break;
+                } catch (err) {
+                    lastErr = err;
+                    if (attempt < maxRetries) {
+                        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 30000);
+                        logger.warn(`Connection attempt ${attempt}/${maxRetries} failed: ${err.message}; retrying in ${delay}ms`);
+                        await sleep(delay);
+                    }
+                }
+            }
+            if (lastErr) {
+                logger.error(`Fatal: BitShares connection failed after ${maxRetries} attempts: ${lastErr.message}`);
+                return 1;
+            }
+        }
         log(cfg, 'Connected to BitShares');
 
         const state = loadJson(STATE_FILE, { meta: {}, bots: {} });

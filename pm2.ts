@@ -182,6 +182,7 @@ function buildEcosystemApps(bots: any, { includeUpdater = true }: { includeUpdat
             log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
             merge_logs: false,
             combine_logs: true,
+            max_size: '100M',
             max_restarts: 13,
             min_uptime: 86400000,
             restart_delay: 3000
@@ -201,6 +202,7 @@ function buildEcosystemApps(bots: any, { includeUpdater = true }: { includeUpdat
             log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
             merge_logs: false,
             combine_logs: true,
+            max_size: '100M',
             max_restarts: 13,
             min_uptime: 60000,
             restart_delay: 3000
@@ -216,7 +218,8 @@ function buildEcosystemApps(bots: any, { includeUpdater = true }: { includeUpdat
             cron_restart: UPDATER.SCHEDULE,
             error_file: path.join(LOGS_DIR, `dexbot-update-error.log`),
             out_file: path.join(LOGS_DIR, `dexbot-update.log`),
-            log_date_format: "YY-MM-DD HH:mm:ss.SSS"
+            log_date_format: "YY-MM-DD HH:mm:ss.SSS",
+            max_size: '100M'
         });
     }
 
@@ -234,6 +237,7 @@ function buildCredentialDaemonApp({ credentialEnv = {} }: { credentialEnv?: any 
         log_date_format: 'YY-MM-DD HH:mm:ss.SSS',
         merge_logs: false,
         combine_logs: true,
+        max_size: '100M',
         env: {
             DEXBOT_CRED_DAEMON_SOCKET: CREDENTIAL_SOCKET_PATH,
             DEXBOT_CRED_DAEMON_READY_FILE: CREDENTIAL_READY_FILE,

@@ -1030,7 +1030,8 @@ function getPendingDustDelayMs(ctx) {
     }
 
     if (!Number.isFinite(nextRunAt)) return delayMs;
-    return Math.max(0, nextRunAt - now);
+    const remaining = Math.max(0, nextRunAt - now);
+    return remaining === 0 ? null : remaining;
 }
 
 /**
@@ -1186,13 +1187,22 @@ async function executeMaintenanceLogic(context) {
         }
         if (this._dustSinceMap?.size > 0) {
             const delayMs = getPendingDustDelayMs(this);
+            if (delayMs !== null) {
+                this._log(
+                    `[DUST-CANCEL] Deferring ${context} structural maintenance until dust timer completes` +
+                    ` (next check in ${Math.ceil(delayMs / 1000)}s)`,
+                    'info'
+                );
+                scheduleDeferredGridResync(this);
+                return;
+            }
+            // All dust timers have expired — stale entries remain in the map but
+            // there is nothing left to wait for. Proceed with structural maintenance.
             this._log(
-                `[DUST-CANCEL] Deferring ${context} structural maintenance until dust timer completes` +
-                (delayMs !== null ? ` (next check in ${Math.ceil(delayMs / 1000)}s)` : ''),
+                `[DUST-CANCEL] Dust timer expired; stale map entries cleared before ${context} structural maintenance`,
                 'info'
             );
-            scheduleDeferredGridResync(this);
-            return;
+            this._dustSinceMap.clear();
         }
 
         try {
