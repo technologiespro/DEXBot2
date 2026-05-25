@@ -561,6 +561,7 @@ async function initializeFeeCache(botsConfig, BitShares) {
                     assetId: fullAsset.id,
                     symbol: assetSymbol,
                     precision: fullAsset.precision,
+                    chargesMarketFees: (Number(options.flags || 0) & 0x01) !== 0,
                     marketFee: { percent: (options.market_fee_percent || 0) / 100 },
                     takerFee: options.taker_fee_percent ? { percent: options.taker_fee_percent / 100 } : null,
                     maxMarketFee: {

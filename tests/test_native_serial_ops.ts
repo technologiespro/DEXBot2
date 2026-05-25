@@ -113,6 +113,15 @@ const CASES = [
         parameters: [],
         scale: 10000,
     }, '0010270000'],
+
+    ['fee_schedule_sorts_parameters', nativeOps.fee_schedule, {
+        parameters: [
+            [77, { fee: 300 }],
+            [1, { fee: 100 }],
+            [2, { fee: 200 }],
+        ],
+        scale: 10000,
+    }, '0301640000000000000002c8000000000000004d2c0100000000000010270000'],
 ];
 
 for (const [name, serializer, payload, expectedHex] of CASES) {

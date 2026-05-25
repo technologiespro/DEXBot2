@@ -68,7 +68,7 @@
  * ===============================================================================
  */
 
-const { ORDER_TYPES, ORDER_STATES, GRID_LIMITS, PIPELINE_TIMING, TIMING } = require('../constants');
+const { ORDER_TYPES, ORDER_STATES, GRID_LIMITS, PIPELINE_TIMING, TIMING, FEE_PARAMETERS } = require('../constants');
 const {
     calculateAvailableFundsValue,
     getAssetFees,
@@ -142,6 +142,124 @@ class Accountant {
                 `${adjustment.operation}-rollback`
             );
         }
+    }
+
+    _getBtsOrderType() {
+        const mgr = this.manager;
+        const btsSide = (mgr.config?.assetA === 'BTS') ? ORDER_TYPES.SELL : (mgr.config?.assetB === 'BTS') ? ORDER_TYPES.BUY : null;
+        return btsSide;
+    }
+
+    _normalizeBtsFeeState(order) {
+        const deferredFee = toFiniteNumber(order?.btsFeeState?.deferredFee, 0);
+        return {
+            deferredFee: Math.max(0, deferredFee)
+        };
+    }
+
+    _getBtsFeeSchedule() {
+        try {
+            const fees = getAssetFees('BTS');
+            return {
+                createFee: Math.max(0, toFiniteNumber(fees?.createFee, 0)),
+                updateFee: Math.max(0, toFiniteNumber(fees?.updateFee, 0)),
+                cancelFee: Math.max(0, toFiniteNumber(fees?.cancelFee, 0))
+            };
+        } catch (_err: any) {
+            return {
+                createFee: 0,
+                updateFee: 0,
+                cancelFee: 0
+            };
+        }
+    }
+
+    _calculateUpdateDeferredCharge(oldDeferredFee, feeSchedule) {
+        const deferred = Math.max(0, toFiniteNumber(oldDeferredFee, 0));
+        const cancelFee = Math.max(0, toFiniteNumber(feeSchedule?.cancelFee, 0));
+        const createFee = Math.max(0, toFiniteNumber(feeSchedule?.createFee, 0));
+        const updateFee = Math.max(0, toFiniteNumber(feeSchedule?.updateFee, 0));
+
+        if (deferred <= 0 || cancelFee <= 0) return 0;
+        let charge = cancelFee;
+        if (createFee > 0) {
+            charge = (cancelFee * updateFee) / createFee;
+        }
+        return Math.min(deferred, Math.max(0, charge));
+    }
+
+    _resolveBtsFeeLifecycle(oldOrder, newOrder, context, explicitFee) {
+        const fee = Math.max(0, toFiniteNumber(explicitFee, 0));
+        const oldActive = !!(oldOrder && (oldOrder.state === ORDER_STATES.ACTIVE || oldOrder.state === ORDER_STATES.PARTIAL) && oldOrder.orderId);
+        const newActive = !!(newOrder && (newOrder.state === ORDER_STATES.ACTIVE || newOrder.state === ORDER_STATES.PARTIAL) && newOrder.orderId);
+        const oldDeferred = this._normalizeBtsFeeState(oldOrder).deferredFee;
+        const sameChainOrder = oldActive && newActive && oldOrder.orderId === newOrder.orderId;
+        const feeSchedule = this._getBtsFeeSchedule();
+        const isFillTransition = typeof context === 'string' && context.startsWith('handle-fill-');
+
+        let balanceDelta = 0;
+        let nextDeferred = newActive ? oldDeferred : 0;
+
+        if (!oldActive && newActive && fee > 0) {
+            // Core stores limit_order_create fees as deferred_fee on the new order.
+            balanceDelta -= fee;
+            nextDeferred = fee;
+        } else if (oldActive && sameChainOrder && fee > 0) {
+            // Core processes the previous deferred fee before deferring the update fee.
+            const oldDeferredCharge = this._calculateUpdateDeferredCharge(oldDeferred, feeSchedule);
+            balanceDelta += oldDeferred - oldDeferredCharge;
+            balanceDelta -= fee;
+            nextDeferred = fee;
+        } else if (oldActive && isFillTransition) {
+            // Core processes deferred fees during fill_order handling, before
+            // the in-memory order is resized or removed.
+            nextDeferred = 0;
+        } else if (oldActive && !newActive && fee > 0) {
+            // A real cancel pays the cancel operation fee and refunds the whole deferred order fee.
+            balanceDelta += oldDeferred;
+            balanceDelta -= fee;
+            nextDeferred = 0;
+        } else if (!newActive) {
+            nextDeferred = 0;
+        }
+
+        if (newOrder && typeof newOrder === 'object') {
+            if (nextDeferred > 0) {
+                newOrder.btsFeeState = {
+                    ...(newOrder.btsFeeState || {}),
+                    deferredFee: nextDeferred
+                };
+            } else if (newOrder.btsFeeState) {
+                delete newOrder.btsFeeState;
+            }
+        }
+
+        if (this.manager?.logger?.level === 'debug' && Math.abs(balanceDelta) > 0) {
+            this.manager.logger.log(
+                `[BTS-FEE] ${context}: oldDeferred=${Format.formatAmount8(oldDeferred)}, fee=${Format.formatAmount8(fee)}, nextDeferred=${Format.formatAmount8(nextDeferred)}, delta=${Format.formatAmount8(balanceDelta)}`,
+                'debug'
+            );
+        }
+
+        return { balanceDelta, nextDeferred };
+    }
+
+    _buildBtsDeferredRefundAdjustment(orderId, isMaker) {
+        const btsOrderType = this._getBtsOrderType();
+        if (!btsOrderType || !orderId) return null;
+
+        const order = Array.from(this.manager.orders?.values?.() || []).find(o => o?.orderId === orderId);
+        const deferredFee = this._normalizeBtsFeeState(order).deferredFee;
+        if (deferredFee <= 0) return null;
+
+        const refund = isMaker ? deferredFee * FEE_PARAMETERS.MAKER_REFUND_PERCENT : 0;
+        if (refund <= 0) return null;
+
+        return {
+            orderType: btsOrderType,
+            delta: refund,
+            operation: 'fill-bts-deferred-fee-refund'
+        };
     }
 
     /**
@@ -765,12 +883,15 @@ class Accountant {
             }
         }
 
-        // 2. Handle Blockchain Fees (Physical reduction of TOTAL balance)
-        // Fees are ALWAYS deducted if provided, even if skipAssetAccounting is true
-        const btsSide = (mgr.config?.assetA === 'BTS') ? 'sell' : (mgr.config?.assetB === 'BTS') ? 'buy' : null;
-        if (fee > 0 && btsSide) {
-            const btsOrderType = (btsSide === 'buy') ? ORDER_TYPES.BUY : ORDER_TYPES.SELL;
-            this.adjustTotalBalance(btsOrderType, -fee, `${context}-fee`);
+        // 2. Handle BTS blockchain fee lifecycle.
+        // BitShares stores create/update fees as order.deferred_fee and later
+        // refunds or charges that deferred fee on fill, update, or cancel.
+        const btsOrderType = this._getBtsOrderType();
+        if (btsOrderType) {
+            const { balanceDelta } = this._resolveBtsFeeLifecycle(oldOrder, newOrder, context, fee);
+            if (Math.abs(balanceDelta) > 0) {
+                this.adjustTotalBalance(btsOrderType, balanceDelta, `${context}-fee`);
+            }
         }
     }
 
@@ -912,25 +1033,11 @@ class Accountant {
     _deductFeesFromProceeds(assetSymbol, rawAmount, isMaker) {
         if (!assetSymbol) return rawAmount;
 
-        // For BTS, project maker refund into proceeds to keep tracked totals aligned
-        // between blockchain snapshots.
+        // BTS has no market fee. Deferred order-fee refunds are handled from
+        // fill_order.order_id in processFillAccounting so they are not tied to
+        // whether BTS was the received asset.
         if (assetSymbol === 'BTS') {
-            // Use shared fee model to keep maker/taker handling consistent.
-            // For makers this includes the projected refund; for takers it is raw amount.
-            try {
-                const feeInfo = getAssetFees('BTS', rawAmount, isMaker);
-                const netProceeds = toFiniteNumber(feeInfo?.netProceeds, null);
-                if (netProceeds === null) {
-                    throw new Error('BTS netProceeds is not finite');
-                }
-                return netProceeds;
-            } catch (err: any) {
-                this.manager?.logger?.log?.(
-                    `[FILL-FEE] Failed to compute BTS proceeds projection: ${err.message}. Using raw proceeds (${Format.formatAmount8(rawAmount)}).`,
-                    'warn'
-                );
-                return rawAmount;
-            }
+            return rawAmount;
         }
 
         // For other assets: apply normal fee calculation (market fee %)
@@ -1007,6 +1114,11 @@ class Accountant {
              const rawAmount = blockchainToFloat(receives.amount, assetBPrecision, true);
              const netAmount = this._deductFeesFromProceeds(assetBSymbol, rawAmount, isMaker);
              balanceAdjustments.push({ orderType: ORDER_TYPES.BUY, delta: netAmount, operation: 'fill-receives' });
+         }
+
+         const btsRefundAdjustment = this._buildBtsDeferredRefundAdjustment(fillOp.order_id, isMaker);
+         if (btsRefundAdjustment) {
+             balanceAdjustments.push(btsRefundAdjustment);
          }
 
          let processedAt = null;

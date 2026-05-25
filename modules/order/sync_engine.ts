@@ -817,7 +817,8 @@ class SyncEngine {
                         historyId: historyId,
                         isMaker: isMaker  // Preserve maker/taker flag for accurate fee calculation
                     };
-                    let updatedOrder = { ...matchedGridOrder, state: ORDER_STATES.PARTIAL };
+                    const { btsFeeState, ...matchedWithoutDeferredFee } = matchedGridOrder;
+                    let updatedOrder = { ...matchedWithoutDeferredFee, state: ORDER_STATES.PARTIAL };
 
                     // Update cached raw order integer instead of deleting it
                     if (updatedOrder.rawOnChain && updatedOrder.rawOnChain.for_sale !== undefined) {

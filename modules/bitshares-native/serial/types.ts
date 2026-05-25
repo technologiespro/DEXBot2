@@ -75,10 +75,10 @@ const firstEl = (el: any): any => Array.isArray(el) ? el[0] : el;
 
 function sortOperation(array: any[], st_operation?: any): any[] {
     if (!st_operation) return array;
-    if (st_operation.nosort) return array;
     if (st_operation.compare) {
         return array.sort((a: any, b: any) => st_operation.compare(firstEl(a), firstEl(b)));
     }
+    if (st_operation.nosort) return array;
     return array.sort((a: any, b: any) => {
         const fa = firstEl(a);
         const fb = firstEl(b);
@@ -317,7 +317,7 @@ const time_point_sec: SerType = {
         if (typeof v === 'number') return v;
         if (v instanceof Date) return Math.floor(v.getTime() / 1000);
         if (typeof v !== 'string') throw new Error('Unknown date type: ' + v);
-        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(v)) v += 'Z';
+        if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}$/.test(v)) v += 'Z';
         return Math.floor(new Date(v).getTime() / 1000);
     },
     toObject(v: any, debug?: any): any {
@@ -647,6 +647,9 @@ function staticVariantType(st_operations: any[]): SerType & { st_operations: any
     return {
         nosort: true,
         st_operations,
+        compare(a: any, b: any): number {
+            return Number(a) - Number(b);
+        },
         fromByteBuffer(b: BufReader): any {
             const type_id = b.readVarint32();
             const st_operation = this.st_operations[type_id];

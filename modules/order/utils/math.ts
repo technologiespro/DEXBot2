@@ -312,13 +312,19 @@ function getAssetFees(assetSymbol, assetAmount = null, isMaker = true) {
         };
     }
 
-    const feePercent = isMaker
+    const chargesMarketFees = cachedFees.chargesMarketFees === true;
+    const feePercent = chargesMarketFees && isMaker
         ? (cachedFees.marketFee?.percent || 0)
-        : (cachedFees.takerFee?.percent || cachedFees.marketFee?.percent || 0);
+        : chargesMarketFees
+            ? (cachedFees.takerFee?.percent || cachedFees.marketFee?.percent || 0)
+            : 0;
 
     if (assetAmount !== null && assetAmount !== undefined) {
         const amount = Number(assetAmount);
-        const feeAmount = (amount * feePercent) / 100;
+        const maxMarketFee = Number.isFinite(Number(cachedFees.maxMarketFee?.float))
+            ? Math.max(0, Number(cachedFees.maxMarketFee.float))
+            : Infinity;
+        const feeAmount = Math.min((amount * feePercent) / 100, maxMarketFee);
         const netProceeds = amount - feeAmount;
         return {
             netProceeds: netProceeds,

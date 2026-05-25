@@ -36,6 +36,19 @@ assert.strictEqual(hash256h.length, 32);
 assert.ok(!hash256h.equals(sha256h), 'hash256 should not equal sha256');
 console.log('  PASS');
 
+// ── BitShares public key strings ────────────────────────────────────────
+
+console.log('BitShares public key strings');
+const knownPubKey = Buffer.from('02f4f01a4ade5f678794d9f486f4728f222d33b85173f6c64a7f6f4c2b01857825', 'hex');
+const keyString = nativeEcc.publicKeyToString(knownPubKey);
+assert.strictEqual(keyString, 'BTS6kMxqkZ7cS6YPK8Sbmb8UBTrLarnj7hfsZE3TwfxoMYosKv8t7');
+const keyPayload = nativeEcc.base58Decode(keyString.slice(3));
+assert.strictEqual(keyPayload.length, 37);
+assert.ok(keyPayload.slice(0, 33).equals(knownPubKey), 'Public key payload should contain the compressed key');
+assert.ok(keyPayload.slice(33).equals(nativeEcc.sha256(knownPubKey).slice(0, 4)), 'Public key checksum should use SHA256');
+assert.ok(!keyPayload.slice(33).equals(nativeEcc.ripemd160(knownPubKey).slice(0, 4)), 'Public key checksum must not use RIPEMD160');
+console.log('  PASS');
+
 // ── Key Generation ───────────────────────────────────────────────────────
 
 console.log('Key generation');

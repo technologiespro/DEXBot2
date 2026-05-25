@@ -168,6 +168,8 @@ const dt = new Date(ts * 1000);
 types.time_point_sec.appendByteBuffer(dtw, dt);
 const dtv = types.time_point_sec.fromByteBuffer(new BufferReader(dtw.toBuffer()));
 assert.strictEqual(dtv, ts);
+assert.strictEqual(types.time_point_sec.fromObject('2026-05-25T12:34:56'), 1779712496);
+assert.strictEqual(types.time_point_sec.fromObject('2026-05-25 12:34:56'), 1779712496);
 console.log('  PASS');
 
 // ── optional ─────────────────────────────────────────────────────────────

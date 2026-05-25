@@ -429,7 +429,8 @@ function resolveConfiguredPriceBound(value, fallback, startPrice, mode) {
  */
 function virtualizeOrder(order) {
     if (!order) return order;
-    return { ...order, state: ORDER_STATES.VIRTUAL, orderId: null, rawOnChain: null };
+    const { btsFeeState, ...rest } = order;
+    return { ...rest, state: ORDER_STATES.VIRTUAL, orderId: null, rawOnChain: null };
 }
 
 /**
