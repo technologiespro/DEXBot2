@@ -1,5 +1,12 @@
 #!/usr/bin/env node
-// Stable shim — routes to compiled dist/dexbot.js
-// TypeScript source: dexbot.ts
+// Shim: prefers compiled dist/dexbot.js, falls back to tsx for direct TS execution
 'use strict';
-require('./dist/dexbot');
+const fs = require('fs');
+const path = require('path');
+const distTarget = path.join(__dirname, 'dist', 'dexbot.js');
+if (fs.existsSync(distTarget)) {
+  require(distTarget);
+} else {
+  require('tsx').register();
+  require('./dexbot.ts');
+}
