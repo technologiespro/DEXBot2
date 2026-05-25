@@ -445,6 +445,11 @@ let FEE_PARAMETERS = {
     // This provides a reasonable default cap so short-duration high-flat-fee offers
     // are rejected while long-duration low-flat-fee offers are accepted.
     DEFAULT_MAX_FEE_RATE_PER_DAY: 1 / 3000,
+
+    // GRAPHENE_COLLATERAL_RATIO_DENOM: Denominator for target_collateral_ratio in call_order_update operations.
+    // Matches the protocol constant in bitshares-core (libraries/protocol/include/graphene/protocol/config.hpp).
+    // On-chain value = human_CR * DENOM. Example: 2.0 CR → 2000 on chain.
+    GRAPHENE_COLLATERAL_RATIO_DENOM: 1000,
 };
 
 // API request limits and batch sizes for blockchain operations

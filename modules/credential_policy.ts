@@ -15,6 +15,7 @@ const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const { isPositiveInt } = require('./order/utils/math');
 const { parseJsonWithComments } = require('./order/utils/system');
+const { FEE_PARAMETERS } = require('./constants');
 
 const MODULE_DIR = path.dirname(__dirname);
 const PROJECT_ROOT = path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
@@ -113,7 +114,8 @@ async function resolveConfiguredAssetRefs(refs, label) {
 function normalizeGrapheneCollateralRatio(value) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric) || numeric <= 0) return null;
-    return numeric >= 100 ? numeric / 100 : numeric;
+    const denom = FEE_PARAMETERS.GRAPHENE_COLLATERAL_RATIO_DENOM;
+    return numeric >= denom ? numeric / denom : numeric;
 }
 
 function createMinimalPolicyConfig() {

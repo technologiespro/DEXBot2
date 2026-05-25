@@ -495,7 +495,7 @@ console.log('[Test 4] Evaluate allowedOps - asset whitelist enforcement');
                 op_data: {
                     delta_collateral: { asset_id: '1.3.0', amount: 500 },
                     delta_debt: { asset_id: '1.3.861', amount: 250 },
-                    extensions: { target_collateral_ratio: 220 },
+                    extensions: { target_collateral_ratio: 2200 },
                 },
             },
         ],

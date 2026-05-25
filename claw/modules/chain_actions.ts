@@ -1,6 +1,6 @@
 const { BitShares } = require('./bitshares_client');
 const { executeOperations } = require('./chain_broadcast');
-const { loadDexbotOrderUtils, requireDexbot2Module } = require('./dexbot_bridge');
+const { loadDexbotOrderUtils, requireDexbot2Module, loadDexbotOrderConstants } = require('./dexbot_bridge');
 const {
   getAsset,
   getBackingAsset,
@@ -32,7 +32,8 @@ function toGrapheneCollateralRatio(value) {
   if (!Number.isFinite(numericValue) || numericValue <= 0) {
     return null;
   }
-  const scaled = Math.round(numericValue * 100);
+  const grapheneCollateralRatioDenom = loadDexbotOrderConstants().FEE_PARAMETERS.GRAPHENE_COLLATERAL_RATIO_DENOM;
+  const scaled = Math.round(numericValue * grapheneCollateralRatioDenom);
   return Number.isInteger(scaled) && scaled > 0 && scaled <= 0xffff ? scaled : null;
 }
 

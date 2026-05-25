@@ -15,15 +15,14 @@ const {
     resolveMinCollateralIncreaseThreshold,
     resolveTargetCollateralRatio,
 } = require('./cr_planner');
+const { FEE_PARAMETERS } = require('./constants');
 
 const CREDIT_FEE_RATE_DENOM = 1_000_000;
 const ZERO_ASSET_ID = '1.3.0';
 const MODULE_DIR = path.dirname(__dirname);
 const PROJECT_ROOT = path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
 const DEFAULT_STATE_DIR = path.join(PROJECT_ROOT, 'profiles', 'credit_runtime');
-// Matches GRAPHENE_COLLATERAL_RATIO_DENOM in bitshares-core (libraries/protocol/include/graphene/protocol/config.hpp)
-// Used for target_collateral_ratio in call_order_update operations.
-const GRAPHENE_COLLATERAL_RATIO_DENOM = 1000;
+const GRAPHENE_COLLATERAL_RATIO_DENOM = FEE_PARAMETERS.GRAPHENE_COLLATERAL_RATIO_DENOM;
 
 const { ensureDir: ensureDirSync } = require('./order/utils/system');
 
@@ -1292,10 +1291,13 @@ class CreditRuntime {
                 if (!price) continue;
                 const debtAssetResolved = await this._resolveAsset(assetId);
                 const collateralAssetResolved = await this._resolveAsset(expectedCollateralId);
-                const baseAmount = blockchainAmountToFloat(price?.base, collateralAssetResolved);
-                const quoteAmount = blockchainAmountToFloat(price?.quote, debtAssetResolved);
+                const orientation = this._creditPriceOrientation(price, debtAssetResolved, collateralAssetResolved);
+                const baseAmount = blockchainAmountToFloat(price?.base, orientation === 'legacy-reversed' ? collateralAssetResolved : debtAssetResolved);
+                const quoteAmount = blockchainAmountToFloat(price?.quote, orientation === 'legacy-reversed' ? debtAssetResolved : collateralAssetResolved);
                 if (!Number.isFinite(baseAmount) || !Number.isFinite(quoteAmount) || baseAmount <= 0) continue;
-                const rate = quoteAmount / baseAmount;
+                const rate = orientation === 'legacy-reversed'
+                    ? quoteAmount / baseAmount
+                    : baseAmount / quoteAmount;
                 if (!Number.isFinite(rate) || rate <= 0) continue;
                 if (!this.state.positions[posKey]) this.state.positions[posKey] = {};
                 this.state.positions[posKey].creditConversionRate = rate;

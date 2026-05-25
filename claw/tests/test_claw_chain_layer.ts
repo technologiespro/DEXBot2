@@ -589,7 +589,7 @@ async function testChainActions() {
     assert.strictEqual(borrowOp.op_data.funding_account, '1.2.345');
     assert.strictEqual(borrowOp.op_data.delta_debt.amount, 120000);
     assert.strictEqual(borrowOp.op_data.delta_collateral.amount, 340000);
-    assert.strictEqual(borrowOp.op_data.extensions.target_collateral_ratio, 220);
+    assert.strictEqual(borrowOp.op_data.extensions.target_collateral_ratio, 2200);
 
     await assert.rejects(
       actions.buildBorrowMpaOperation({

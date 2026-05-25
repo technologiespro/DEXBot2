@@ -143,7 +143,7 @@ async function testWrappedCommentedBotsJsonResolvesDebtConstraints() {
                     op_data: {
                         delta_collateral: { asset_id: '1.3.0', amount: 100 },
                         delta_debt: { asset_id: '1.3.10', amount: 50 },
-                        extensions: { target_collateral_ratio: 220 },
+                        extensions: { target_collateral_ratio: 2200 },
                     },
                 },
             ],
