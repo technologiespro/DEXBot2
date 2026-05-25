@@ -31,10 +31,12 @@
 const fs   = require('fs');
 const path = require('path');
 const kibanaSource = require('./kibana_source');
-const { mergeCandles, toIntervalLabel } = require('../candle_utils');
+const { mergeCandles } = require('../candle_utils');
+const { toIntervalLabel } = require('../interval_utils');
 const { parseJsonWithComments } = require('../../modules/order/utils/system');
 const { MARKET_ADAPTER } = require('../../modules/constants');
-const { resolveAsset, findPoolByAssets } = require('../utils/chain');
+const { normalizePoolId, resolveAsset, findPoolByAssets } = require('../utils/chain');
+const { writeJsonAtomic } = require('../utils/atomic_write');
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -49,9 +51,8 @@ const FETCH_TIMEOUT_MS = MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS;
 const FETCH_MAX_ATTEMPTS = 3;
 const FETCH_MANIFEST_VERSION = 1;
 
-const GRANDPARENT$1 = path.dirname(path.dirname(__dirname));
-const PROJECT_ROOT$1 = path.basename(GRANDPARENT$1) === 'dist' ? path.dirname(GRANDPARENT$1) : GRANDPARENT$1;
-const BOTS_JSON = path.join(PROJECT_ROOT$1, 'profiles', 'bots.json');
+const { PROJECT_ROOT } = require('../utils/paths');
+const BOTS_JSON = path.join(PROJECT_ROOT, 'profiles', 'bots.json');
 
 // ─── CLI ──────────────────────────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ function outputPath(poolId, intervalSeconds, assetA, assetB) {
     const label = toIntervalLabel(intervalSeconds);
     const id  = String(poolId).replace('1.19.', '');
     const pairFolder = pairFolderName(assetA, assetB);
-    return path.join(PROJECT_ROOT$1, 'market_adapter', 'data', 'lp', pairFolder, `lp_pool_${id}_${label}.json`);
+    return path.join(PROJECT_ROOT, 'market_adapter', 'data', 'lp', pairFolder, `lp_pool_${id}_${label}.json`);
 }
 
 function applyPrecisionOverrides(assetA, assetB, precA, precB) {
@@ -116,7 +117,7 @@ function applyPrecisionOverrides(assetA, assetB, precA, precB) {
 }
 
 function pairFolderPath(assetASymbol, assetBSymbol) {
-    return path.join(PROJECT_ROOT$1, 'market_adapter', 'data', 'lp', pairFolderName(
+    return path.join(PROJECT_ROOT, 'market_adapter', 'data', 'lp', pairFolderName(
         { symbol: assetASymbol },
         { symbol: assetBSymbol }
     ));
@@ -131,13 +132,6 @@ function chunkPathFor(outPath, index, window) {
     const start = window.gte.slice(0, 10);
     const end = window.lte.slice(0, 10);
     return path.join(parsed.dir, `${parsed.name}.chunk_${String(index).padStart(2, '0')}_${start}_${end}${parsed.ext}`);
-}
-
-function writeJsonAtomic(targetPath, payload) {
-    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-    const tempPath = `${targetPath}.tmp-${process.pid}-${Date.now()}`;
-    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
-    fs.renameSync(tempPath, targetPath);
 }
 
 function addUtcMonths(date, months) {
@@ -568,7 +562,7 @@ async function run() {
     // ── Mode A: manual --pool override (no blockchain connection needed) ──────
     if (cliPoolId) {
         console.log(`  Mode:     Manual (--pool ${cliPoolId})`);
-        fullPoolId = kibanaSource.normalizePoolId(cliPoolId);
+        fullPoolId = normalizePoolId(cliPoolId);
 
         // Still need to discover asset IDs from Kibana; precisions from CLI or default
         console.log(`  Pool:     ${fullPoolId}`);

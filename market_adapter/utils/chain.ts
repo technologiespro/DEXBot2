@@ -114,6 +114,34 @@ async function findPoolByAssets(assetAId: any, assetBId: any, options: any = {})
     throw new Error(`No liquidity pool found for ${assetAId}/${assetBId}`);
 }
 
+function normalizeAssetSymbol(value: any) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function isExactPair(a: any, b: any, targetA: any, targetB: any) {
+    const na = normalizeAssetSymbol(a);
+    const nb = normalizeAssetSymbol(b);
+    const nta = normalizeAssetSymbol(targetA);
+    const ntb = normalizeAssetSymbol(targetB);
+    return na === nta && nb === ntb;
+}
+
+function isSamePair(a: any, b: any, targetA: any, targetB: any) {
+    return isExactPair(a, b, targetA, targetB) || isExactPair(a, b, targetB, targetA);
+}
+
+function isExactPairIds(aId: any, bId: any, targetAId: any, targetBId: any) {
+    const sa = String(aId || '');
+    const sb = String(bId || '');
+    const sta = String(targetAId || '');
+    const stb = String(targetBId || '');
+    return sa === sta && sb === stb;
+}
+
+function isSamePairIds(aId: any, bId: any, targetAId: any, targetBId: any) {
+    return isExactPairIds(aId, bId, targetAId, targetBId) || isExactPairIds(aId, bId, targetBId, targetAId);
+}
+
 function normalizeMarketSource(raw: any) {
     const value = String(raw || '').trim().toLowerCase();
     if (value === 'pool') return 'pool';
@@ -177,10 +205,16 @@ async function resolveBotContext(bot: any) {
 export = {
     resolveAsset,
     findPoolByAssets,
+    normalizeAssetSymbol,
     normalizeMarketSource,
+    normalizePoolId,
     hasNumericStartPrice,
     resolveMarketSourceForBot,
     resolveBotContext,
+    isExactPair,
+    isSamePair,
+    isExactPairIds,
+    isSamePairIds,
     getBitsharesClient,
     setBitsharesClientForTests,
 };

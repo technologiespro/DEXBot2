@@ -1,6 +1,8 @@
 // @ts-nocheck
 'use strict';
 
+const fs = require('fs');
+
 /**
  * Math utilities for analysis scripts.
  */
@@ -9,6 +11,12 @@ function range(min, max, step, decimals = 4) {
     const out = [];
     for (let v = min; v <= max + 1e-9; v += step) out.push(Number(v.toFixed(decimals)));
     return [...new Set(out)];
+}
+
+function calcStdDev(arr) {
+    const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+    const sqDiffs = arr.reduce((sum, v) => sum + (v - mean) ** 2, 0);
+    return Math.sqrt(sqDiffs / arr.length);
 }
 
 function computeATR(candles, period = 14) {
@@ -90,10 +98,25 @@ function normalizeCandle(candle) {
     return { time: Math.floor(ts / 1000), open, high, low, close, volume: Number.isFinite(volume) ? volume : 0 };
 }
 
+/**
+ * Parse a candle JSON file with format detection:
+ * flat array → {candles: [...]} → {data: [...]}
+ */
+function loadCandleFile(filePath) {
+    if (!filePath || !fs.existsSync(filePath)) return { candles: [], meta: null };
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (Array.isArray(raw)) return { candles: raw, meta: null };
+    if (raw && Array.isArray(raw.candles)) return { candles: raw.candles, meta: raw.meta || raw };
+    if (raw && Array.isArray(raw.data)) return { candles: raw.data, meta: raw };
+    return { candles: [], meta: null };
+}
+
 export = {
     range,
+    calcStdDev,
     computeATR,
     getCandleClose,
     getCandleTimestamp,
     normalizeCandle,
+    loadCandleFile,
 };

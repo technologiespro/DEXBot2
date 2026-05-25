@@ -77,15 +77,22 @@ const kibanaMarketSource = require('./core/kibana_market_candles');
 const { tradesToCandles, detectMissingCandleTimestamps, fillCandleGaps, detectStaleTail, pruneStaleTail, mergeCandles } = require('./candle_utils');
 const { toIntervalLabel } = require('./interval_utils');
 const {
+    normalizeAssetSymbol,
     normalizeMarketSource,
     hasNumericStartPrice,
     resolveMarketSourceForBot,
     resolveAsset,
     findPoolByAssets,
     resolveBotContext,
+    isExactPair,
+    isSamePair,
+    isExactPairIds,
+    isSamePairIds,
     getBitsharesClient,
     setBitsharesClientForTests,
 } = require('./utils/chain');
+const { loadMarketProfiles } = require('../analysis/tradingview/tradingview_uplot_chart_generator');
+const { writeJsonAtomic } = require('./utils/atomic_write');
 const { acquireFileLockSync, releaseFileLockSync } = require('./utils/file_lock');
 const { updateDynamicGridSnapshotSync } = require('./utils/dynamic_grid_snapshot');
 const {
@@ -100,8 +107,7 @@ const {
     buildStartupDefaultsLog,
 } = require('./log_format');
 
-const CODE_ROOT = path.join(__dirname, '..');
-const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const { PROJECT_ROOT: ROOT } = require('./utils/paths');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 const BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
 const DATA_DIR = path.join(ROOT, 'market_adapter', 'data');
@@ -166,38 +172,6 @@ function loadMarketAdapterSettings() {
     } catch (_: any) {
         return null;
     }
-}
-
-function isSamePair(a, b, targetA, targetB) {
-    const na = normalizeAssetSymbol(a);
-    const nb = normalizeAssetSymbol(b);
-    const nta = normalizeAssetSymbol(targetA);
-    const ntb = normalizeAssetSymbol(targetB);
-    return (na === nta && nb === ntb) || (na === ntb && nb === nta);
-}
-
-function isExactPair(a, b, targetA, targetB) {
-    const na = normalizeAssetSymbol(a);
-    const nb = normalizeAssetSymbol(b);
-    const nta = normalizeAssetSymbol(targetA);
-    const ntb = normalizeAssetSymbol(targetB);
-    return na === nta && nb === ntb;
-}
-
-function isSamePairIds(aId, bId, targetAId, targetBId) {
-    const sa = String(aId || '');
-    const sb = String(bId || '');
-    const sta = String(targetAId || '');
-    const stb = String(targetBId || '');
-    return (sa === sta && sb === stb) || (sa === stb && sb === sta);
-}
-
-function isExactPairIds(aId, bId, targetAId, targetBId) {
-    const sa = String(aId || '');
-    const sb = String(bId || '');
-    const sta = String(targetAId || '');
-    const stb = String(targetBId || '');
-    return sa === sta && sb === stb;
 }
 
 function findPairForBot(bot, pairs) {
@@ -380,10 +354,6 @@ function normalizeAmaPreset(raw) {
     return { erPeriod, fastPeriod, slowPeriod };
 }
 
-function normalizeAssetSymbol(value) {
-    return String(value || '').trim().toUpperCase();
-}
-
 function normalizeAmaKey(raw) {
     const s = String(raw || '').trim().toLowerCase();
     if (!AMA_KEYWORDS.has(s)) return DEFAULT_AMA_KEY;
@@ -405,7 +375,7 @@ function usesOrderbookMarketSource(bot) {
 }
 
 function findAmaProfileForBot(bot, ctx = null) {
-    const profiles = loadMarketProfiles();
+    const profiles = loadMarketProfiles()?.profiles || [];
     if (profiles.length === 0) return null;
 
     const botAssetA = normalizeAssetSymbol(bot?.assetA);
@@ -486,16 +456,6 @@ function buildAmaComparisonPresets(bot, ctx = null) {
             };
         })
         .filter(Boolean);
-}
-
-function loadMarketProfiles() {
-    if (!fs.existsSync(MARKET_PROFILES_FILE)) return [];
-    try {
-        const json = JSON.parse(fs.readFileSync(MARKET_PROFILES_FILE, 'utf8'));
-        return Array.isArray(json?.profiles) ? json.profiles : [];
-    } catch (_: any) {
-        return [];
-    }
 }
 
 function getAmaFromProfilesForBot(bot, ctx = null, cfg = null) {
@@ -731,17 +691,7 @@ function loadJson(filePath, defaultValue) {
 }
 
 function saveJson(filePath, data) {
-    ensureDir(path.dirname(filePath));
-    const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-    try {
-        fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
-        fs.renameSync(tmpPath, filePath);
-    } catch (err: any) {
-        try {
-            if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-        } catch (_: any) {}
-        throw err;
-    }
+    writeJsonAtomic(filePath, data);
 }
 
 function parseChainTimeToMs(timeStr) {
@@ -1002,7 +952,6 @@ async function fetchNativeMarketHistorySince(assetA, assetB, sinceMs, untilMs, i
 
 function writeGridResetTrigger(bot, payload) {
     const triggerPath = path.join(PROFILES_DIR, `recalculate.${bot.botKey}.trigger`);
-    const tmpPath = `${triggerPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
     const content = {
         createdAt: new Date().toISOString(),
         source: 'market_adapter/market_adapter.js',
@@ -1010,13 +959,7 @@ function writeGridResetTrigger(bot, payload) {
         botKey: bot.botKey,
         ...payload,
     };
-    try {
-        fs.writeFileSync(tmpPath, JSON.stringify(content, null, 2) + '\n', 'utf8');
-        fs.renameSync(tmpPath, triggerPath);
-    } catch (err: any) {
-        try { fs.unlinkSync(tmpPath); } catch (_: any) {}
-        throw err;
-    }
+    writeJsonAtomic(triggerPath, content);
     return triggerPath;
 }
 

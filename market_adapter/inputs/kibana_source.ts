@@ -30,6 +30,7 @@
 
 const { kibanaSearch, DEFAULT_CONFIG: BASE_CONFIG } = require('../core/kibana_client');
 const { fetchKibanaCandles, fetchKibanaClosePrices } = require('../core/kibana_candles');
+const { normalizePoolId } = require('../utils/chain');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -43,21 +44,6 @@ const DEFAULT_CONFIG = {
     lookbackHours:   500,    // how far back (~20 days at 1h)
     consolidateByTimestamp: true,
 };
-
-// ─── Pool ID normalizer ───────────────────────────────────────────────────────
-
-/**
- * Accept pool IDs as short number (133) or full ID (1.19.133).
- * Always returns full form '1.19.XXX'.
- *
- * @param {string} id – Pool ID in short or full form
- * @returns {string} Full form pool ID (1.19.XXX)
- */
-function normalizePoolId(id: any) {
-    if (id == null) return null;
-    const s = String(id).trim();
-    return s.startsWith('1.19.') ? s : `1.19.${s}`;
-}
 
 /**
  * Build a discovery query: find the asset IDs that have been sold into a pool.
@@ -167,5 +153,4 @@ export = {
 
     // Low-level (testing / custom queries)
     kibanaSearch,
-    normalizePoolId,
 };

@@ -2,12 +2,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const { PROJECT_ROOT } = require('./paths');
 
 function findLatestLpData(options: any = {}) {
     const includePriceSnapshots = options.includePriceSnapshots === true;
-    const GRANDPARENT$1 = path.dirname(path.dirname(__dirname));
-    const PROJECT_ROOT$1 = path.basename(GRANDPARENT$1) === 'dist' ? path.dirname(GRANDPARENT$1) : GRANDPARENT$1;
-    const dataDir = options.dataDir ? path.resolve(options.dataDir) : path.join(PROJECT_ROOT$1, 'market_adapter', 'data', 'lp');
+    const dataDir = options.dataDir ? path.resolve(options.dataDir) : path.join(PROJECT_ROOT, 'market_adapter', 'data', 'lp');
     const out = [];
 
     if (!fs.existsSync(dataDir)) return null;

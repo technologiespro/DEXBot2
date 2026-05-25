@@ -29,7 +29,8 @@
 
 'use strict';
 
-const { toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('./kibana_client');
+const { DEFAULT_CONFIG: BASE_CONFIG } = require('./kibana_client');
+const { toIntervalLabel } = require('../interval_utils');
 const { fetchKibanaCandles, fetchKibanaClosePrices } = require('./kibana_candles');
 
 const OP_FILL_ORDER = 4;
@@ -87,7 +88,7 @@ function buildFillCandleQuery(soldAssetId, receivedAssetId, lookbackHours, inter
       by_time: {
         date_histogram: {
           field:          'block_data.block_time',
-          fixed_interval: toFixedInterval(intervalSeconds),
+          fixed_interval: toIntervalLabel(intervalSeconds),
           min_doc_count:  1,
         },
         aggs: {

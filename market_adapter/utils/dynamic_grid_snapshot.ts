@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { writeJsonAtomic } = require('./atomic_write');
 const { acquirePathLockSync, releaseFileLockSync } = require('./file_lock');
 
 function readJsonOrNull(filePath: any) {
@@ -13,9 +14,7 @@ function readJsonOrNull(filePath: any) {
 }
 
 function writeJsonAtomicSync(filePath: any, payload: any) {
-    const tmpPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-    fs.writeFileSync(tmpPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-    fs.renameSync(tmpPath, filePath);
+    writeJsonAtomic(filePath, payload);
 }
 
 function updateDynamicGridSnapshotSync(filePath: any, mutator: any, options: any = {}) {

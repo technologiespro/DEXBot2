@@ -13,11 +13,11 @@
  * - market_adapter          — Top-level orchestrator (runOnceForAma, DEFAULTS, resolveBotCfg, etc.)
  *
  * CANDLE & INTERVAL UTILITIES:
- * - candle_utils            — Candle gap filling, merging, toIntervalLabel
- * - interval_utils          — Shared interval label helper
+ * - candle_utils            — Candle gap filling, merging
+ * - interval_utils          — Shared interval label helper (toIntervalLabel)
  *
  * KIBANA / DATA SOURCES:
- * - kibana_client           — ES/Kibana search (kibanaSearch, toFixedInterval)
+ * - kibana_client           — ES/Kibana search (kibanaSearch)
  * - kibana_market_candles   — Market candle queries (getMarketCandles, getMarketClosePrices)
  * - kibana_candles          — Lower-level Kibana document query helpers
  * - kibana_source           — LP candle data source from Kibana

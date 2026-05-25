@@ -265,6 +265,7 @@ function generateHTML(data, title = 'ATR Volatility Research') {
             return Math.max(0.1, Math.min(1.0, pos / 1000));
         }
 
+        /* Sync with analysis/math_utils.ts computeATR() — keep in sync when changing ATR logic */
         function computeATRSeries(candles, period = 14) {
             const atrs = [];
             if (!Array.isArray(candles) || candles.length === 0) return atrs;

@@ -6,9 +6,10 @@
 const fs = require('fs');
 const path = require('path');
 const { createSource } = require('../price_sources');
-const { generateHTML } = require('./tradingview_uplot_chart_generator');
+const { generateHTML, loadMarketProfiles } = require('./tradingview_uplot_chart_generator');
 const { MARKET_ADAPTER } = require('../../modules/constants');
-const { toIntervalLabel } = require('../../market_adapter/candle_utils');
+const { toIntervalLabel } = require('../../market_adapter/interval_utils');
+const { loadCandleFile } = require('../math_utils');
 
 const DEFAULT_CHART_DIR = path.join(__dirname, '..', 'charts');
 const DEFAULT_CHART_FILE = path.join(DEFAULT_CHART_DIR, 'tradingview_chart.html');
@@ -64,20 +65,7 @@ function parseArgs() {
 
 function loadJsonMeta(filePath) {
     if (!filePath || !fs.existsSync(filePath)) return { meta: null, candles: null };
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    if (Array.isArray(raw)) return { meta: null, candles: raw };
-    if (raw && Array.isArray(raw.candles)) return { meta: raw.meta || null, candles: raw.candles };
-    if (raw && Array.isArray(raw.data)) return { meta: raw.meta || raw || null, candles: raw.data };
-    return { meta: null, candles: null };
-}
-
-function loadMarketProfiles(filePath = path.join(__dirname, '..', '..', 'profiles', 'market_profiles.json')) {
-    if (!filePath || !fs.existsSync(filePath)) return null;
-    try {
-        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    } catch (err) {
-        return null;
-    }
+    return loadCandleFile(filePath);
 }
 
 function loadBotSettings(filePath = DEFAULT_BOTS_FILE) {
@@ -214,7 +202,6 @@ export = {
     main,
     parseArgs,
     loadJsonMeta,
-    loadMarketProfiles,
     loadBotSettings,
     loadBotMeta,
     inferTitle,

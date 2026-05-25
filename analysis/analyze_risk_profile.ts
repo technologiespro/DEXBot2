@@ -37,11 +37,7 @@ function normSInv(p) {
 function quantileToSigma(q) {
     return normSInv((1 + q) / 2);
 }
-function calcStdDev(arr) {
-    const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-    const sqDiffs = arr.reduce((sum, v) => sum + (v - mean) ** 2, 0);
-    return Math.sqrt(sqDiffs / arr.length);
-}
+const { calcStdDev } = require('./math_utils');
 function getAmaDeltaStdDev(closes, amaConfig, warmup) {
     const amaValues = calculateAMA(closes, amaConfig);
     const deltas = [];

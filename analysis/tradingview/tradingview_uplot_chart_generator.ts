@@ -1464,4 +1464,5 @@ function generateHTML(data, title = 'TradingView Style Research') {
 export = {
     generateHTML,
     normalizeCandle,
+    loadMarketProfiles,
 };

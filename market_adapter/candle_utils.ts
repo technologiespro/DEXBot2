@@ -2,7 +2,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { toIntervalLabel } = require('./interval_utils');
 
 function rawToHuman(rawAmount: any, precision: any) {
     return Number(rawAmount || 0) / Math.pow(10, Number(precision || 0));
@@ -255,7 +254,6 @@ function mergeCandles(a: any, b: any, { onCollision }: any = {}) {
 }
 
 export = {
-    toIntervalLabel,
     tradesToCandles,
     detectMissingCandleTimestamps,
     fillCandleGaps,

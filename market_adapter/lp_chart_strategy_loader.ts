@@ -4,34 +4,17 @@
 const fs = require('fs');
 const path = require('path');
 
-const PARENT_DIR$1 = path.dirname(__dirname);
-const PROJECT_ROOT = path.basename(PARENT_DIR$1) === 'dist' ? path.dirname(PARENT_DIR$1) : PARENT_DIR$1;
+const { normalizeAssetSymbol, isExactPair, isSamePair } = require('./utils/chain');
+const { toIntervalLabel } = require('./interval_utils');
+const { PROJECT_ROOT } = require('./utils/paths');
+
 const ANALYSIS_AMA_FITTING_DIR = path.join(PROJECT_ROOT, 'analysis', 'ama_fitting');
 const MARKET_ADAPTER_DIR = path.join(PROJECT_ROOT, 'market_adapter');
-
-function normalizeAssetSymbol(value) {
-    return String(value || '').trim().toUpperCase();
-}
-
-function isExactPair(a, b, targetA, targetB) {
-    const na = normalizeAssetSymbol(a);
-    const nb = normalizeAssetSymbol(b);
-    const nta = normalizeAssetSymbol(targetA);
-    const ntb = normalizeAssetSymbol(targetB);
-    return na === nta && nb === ntb;
-}
-
-function isSamePair(a, b, targetA, targetB) {
-    return isExactPair(a, b, targetA, targetB) || isExactPair(a, b, targetB, targetA);
-}
 
 function inferIntervalLabel(meta) {
     const sec = Number(meta?.intervalSeconds);
     if (!Number.isFinite(sec) || sec <= 0) return null;
-    if (sec % 86400 === 0) return `${sec / 86400}d`;
-    if (sec % 3600 === 0) return `${sec / 3600}h`;
-    if (sec % 60 === 0) return `${sec / 60}m`;
-    return `${sec}s`;
+    return toIntervalLabel(sec);
 }
 
 function buildAmaStrategy(name, ama, color, dash, lineWidth = 1.5) {

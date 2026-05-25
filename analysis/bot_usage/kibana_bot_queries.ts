@@ -36,7 +36,8 @@
 
 'use strict';
 
-const { kibanaSearch, toFixedInterval, DEFAULT_CONFIG: BASE_CONFIG } = require('../../market_adapter/core/kibana_client');
+const { kibanaSearch, DEFAULT_CONFIG: BASE_CONFIG } = require('../../market_adapter/core/kibana_client');
+const { toIntervalLabel } = require('../../market_adapter/interval_utils');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ function buildOrderCreateQuery(accountId, lookbackHours, intervalSeconds = 3600,
             by_time: {
                 date_histogram: {
                     field:          'block_data.block_time',
-                    fixed_interval: toFixedInterval(intervalSeconds),
+                    fixed_interval: toIntervalLabel(intervalSeconds),
                     min_doc_count:  1,
                 },
             },
@@ -100,7 +101,7 @@ function buildFillOrderQuery(accountId, lookbackHours, intervalSeconds = 3600, p
             by_time: {
                 date_histogram: {
                     field:          'block_data.block_time',
-                    fixed_interval: toFixedInterval(intervalSeconds),
+                    fixed_interval: toIntervalLabel(intervalSeconds),
                     min_doc_count:  1,
                 },
             },
@@ -128,7 +129,7 @@ function buildOrderCancelQuery(accountId, lookbackHours, intervalSeconds = 3600)
             by_time: {
                 date_histogram: {
                     field:          'block_data.block_time',
-                    fixed_interval: toFixedInterval(intervalSeconds),
+                    fixed_interval: toIntervalLabel(intervalSeconds),
                     min_doc_count:  1,
                 },
             },

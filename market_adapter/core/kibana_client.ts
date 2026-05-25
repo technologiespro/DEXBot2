@@ -16,7 +16,6 @@
 'use strict';
 
 const https = require('https');
-const { toIntervalLabel } = require('../interval_utils');
 const { MARKET_ADAPTER } = require('../../modules/constants');
 
 const KIBANA_URL = 'https://kibana.bitshares.dev';
@@ -121,5 +120,4 @@ export = {
   INDEX,
   KIBANA_URL,
   kibanaSearch,
-  toFixedInterval: toIntervalLabel,
 };

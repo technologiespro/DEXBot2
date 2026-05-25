@@ -1,6 +1,6 @@
 'use strict';
 
-const { toIntervalLabel } = require('./candle_utils');
+const { toIntervalLabel } = require('./interval_utils');
 const { escapeHtml, serializeJsonForScript } = require('../analysis/chart_utils');
 
 function formatPct(v: any) {

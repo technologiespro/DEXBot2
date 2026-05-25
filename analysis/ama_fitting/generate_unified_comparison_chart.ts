@@ -20,7 +20,8 @@ const path = require('path');
 
 const { calculateAMA } = require('../../market_adapter/core/strategies/ama');
 const { generateHTML } = require('../../market_adapter/lp_chart_core');
-const { toIntervalLabel } = require('../../market_adapter/candle_utils');
+const { toIntervalLabel } = require('../../market_adapter/interval_utils');
+const { loadCandleFile } = require('../math_utils');
 const { MARKET_ADAPTER } = require('../../modules/constants');
 
 // ── Config ─────────────────────────────────────────────────────────────────────
@@ -84,21 +85,7 @@ function loadCandles(dataFile) {
     const resolved = path.resolve(dataFile);
     if (!fs.existsSync(resolved)) throw new Error(`File not found: ${resolved}`);
 
-    const raw = JSON.parse(fs.readFileSync(resolved, 'utf8'));
-    let meta = null;
-    let candles;
-
-    if (Array.isArray(raw)) {
-        candles = raw;
-    } else if (raw && Array.isArray(raw.candles)) {
-        candles = raw.candles;
-        meta = raw.meta || null;
-    } else if (raw && Array.isArray(raw.data)) {
-        candles = raw.data;
-        meta = raw;
-    } else {
-        throw new Error('Expected JSON array, {candles: [...]}, or {data: [...]}');
-    }
+    const { candles, meta } = loadCandleFile(resolved);
 
     if (!Array.isArray(candles) || candles.length === 0) {
         throw new Error('No candles found in file');

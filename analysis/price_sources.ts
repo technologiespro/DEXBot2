@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { fillCandleGaps } = require('../market_adapter/candle_utils');
-const { getCandleClose, getCandleTimestamp } = require('./math_utils');
+const { getCandleClose, getCandleTimestamp, loadCandleFile } = require('./math_utils');
 
 class JsonFileSource {
     constructor(config = {}) {
@@ -28,20 +28,8 @@ class JsonFileSource {
 
     async fetchCandles() {
         try {
-            const data = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
-
-            let candles = null;
-            let meta = null;
-
-            if (Array.isArray(data)) {
-                candles = data;
-            } else if (data.candles && Array.isArray(data.candles)) {
-                candles = data.candles;
-                meta = data.meta;
-            } else if (data.data && Array.isArray(data.data)) {
-                candles = data.data;
-                meta = data;
-            } else {
+            const { candles, meta } = loadCandleFile(this.filePath);
+            if (!Array.isArray(candles) || candles.length === 0) {
                 throw new Error('Expected JSON array or object with .candles or .data property');
             }
 

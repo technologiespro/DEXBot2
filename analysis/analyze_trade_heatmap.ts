@@ -56,14 +56,7 @@ function parseArgs() {
         verbose: has('verbose'),
     };
 }
-/**
- * Population standard deviation of a numeric array.
- */
-function calcStdDev(arr) {
-    const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-    const sqDiffs = arr.reduce((sum, v) => sum + (v - mean) ** 2, 0);
-    return Math.sqrt(sqDiffs / arr.length);
-}
+const { calcStdDev } = require('./math_utils');
 /**
  * Main entry point.
  * 1. Parse config, load candles, compute AMA

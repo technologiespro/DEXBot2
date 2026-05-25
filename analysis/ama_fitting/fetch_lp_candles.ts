@@ -19,7 +19,7 @@
  */
 const fs   = require('fs');
 const path = require('path');
-const kibanaSource = require('../../market_adapter/inputs/kibana_source');
+const { normalizePoolId } = require('../../market_adapter/utils/chain');
 const { toIntervalLabel } = require('../../market_adapter/interval_utils');
 const { MARKET_ADAPTER } = require('../../modules/constants');
 const DATA_DIR = path.resolve(__dirname, '../../market_adapter/data/lp');
@@ -114,7 +114,7 @@ async function main() {
     };
     const { intervalSeconds } = args;
     const intervalLabel    = toIntervalLabel(intervalSeconds);
-    const poolId           = kibanaSource.normalizePoolId(args.pool);
+    const poolId           = normalizePoolId(args.pool);
     const lookback         = Math.round(args.hours);
     const yearsApprox      = (lookback / (365 * 24)).toFixed(1);
     console.log(`Fetching LP candles from Kibana`);
