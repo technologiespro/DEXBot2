@@ -44,7 +44,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS } = require('../../constants');
+const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS, FEE_PARAMETERS } = require('../../constants');
 const Format = require('../format');
 const { toFiniteNumber, isValidNumber } = Format;
 const MathUtils = require('./math');
@@ -549,10 +549,15 @@ async function initializeFeeCache(botsConfig, BitShares) {
                         bts: MathUtils.blockchainToFloat(feeNum, 5)
                     };
                 };
+                const makerFeeDiscountRaw = toFiniteNumber(
+                    globalProps?.parameters?.extensions?.maker_fee_discount_percent,
+                    FEE_PARAMETERS.MAKER_REFUND_PERCENT * 10000
+                );
                 cache.BTS = {
                     limitOrderCreate: findFee(1),
                     limitOrderCancel: findFee(2),
-                    limitOrderUpdate: findFee(77)
+                    limitOrderUpdate: findFee(77),
+                    makerFeeDiscountPercent: Math.max(0, makerFeeDiscountRaw) / 10000
                 };
             } else {
                 const fullAsset = await lookupAsset(BitShares, assetSymbol);

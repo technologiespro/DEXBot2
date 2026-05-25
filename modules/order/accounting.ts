@@ -163,13 +163,15 @@ class Accountant {
             return {
                 createFee: Math.max(0, toFiniteNumber(fees?.createFee, 0)),
                 updateFee: Math.max(0, toFiniteNumber(fees?.updateFee, 0)),
-                cancelFee: Math.max(0, toFiniteNumber(fees?.cancelFee, 0))
+                cancelFee: Math.max(0, toFiniteNumber(fees?.cancelFee, 0)),
+                makerFeeDiscountPercent: Math.max(0, toFiniteNumber(fees?.makerFeeDiscountPercent, FEE_PARAMETERS.MAKER_REFUND_PERCENT))
             };
         } catch (_err: any) {
             return {
                 createFee: 0,
                 updateFee: 0,
-                cancelFee: 0
+                cancelFee: 0,
+                makerFeeDiscountPercent: FEE_PARAMETERS.MAKER_REFUND_PERCENT
             };
         }
     }
@@ -252,7 +254,8 @@ class Accountant {
         const deferredFee = this._normalizeBtsFeeState(order).deferredFee;
         if (deferredFee <= 0) return null;
 
-        const refund = isMaker ? deferredFee * FEE_PARAMETERS.MAKER_REFUND_PERCENT : 0;
+        const feeSchedule = this._getBtsFeeSchedule();
+        const refund = isMaker ? deferredFee * feeSchedule.makerFeeDiscountPercent : 0;
         if (refund <= 0) return null;
 
         return {

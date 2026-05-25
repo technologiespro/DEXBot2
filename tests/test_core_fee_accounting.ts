@@ -9,6 +9,7 @@ async function createManager() {
             limitOrderCreate: { bts: 1 },
             limitOrderUpdate: { bts: 0.1 },
             limitOrderCancel: { bts: 0.2 },
+            makerFeeDiscountPercent: 0.9,
         },
         USD: {
             chargesMarketFees: true,
@@ -104,6 +105,52 @@ async function main() {
     }
 
     {
+        const mgr = await createManager();
+        MathUtils._setFeeCache({
+            BTS: {
+                limitOrderCreate: { bts: 1 },
+                limitOrderUpdate: { bts: 0.1 },
+                limitOrderCancel: { bts: 0.2 },
+                makerFeeDiscountPercent: 0.25,
+            },
+            USD: {
+                chargesMarketFees: true,
+                marketFee: { percent: 1 },
+                takerFee: { percent: 2 },
+                maxMarketFee: { float: 0.5 },
+            },
+        });
+        await mgr._updateOrder(
+            { id: 's3', type: ORDER_TYPES.SELL, state: ORDER_STATES.ACTIVE, price: 2, size: 10, orderId: '1.7.3', btsFeeState: { deferredFee: 1 } },
+            'seed',
+            { skipAccounting: true }
+        );
+        await mgr.accountant.processFillAccounting({
+            order_id: '1.7.3',
+            pays: { amount: 100000, asset_id: '1.3.0' },
+            receives: { amount: 10000000, asset_id: '1.3.121' },
+            is_maker: true,
+        }, 'fill-core-fee-discount-test');
+        assert(Math.abs(mgr.accountTotals.sell - 999.25) < 1e-12, 'maker fill refund follows cached Core maker_fee_discount_percent');
+
+        const proceeds = MathUtils.getAssetFees('BTS', 10, true);
+        assert.strictEqual(proceeds.refund, 0.25, 'legacy BTS proceeds helper follows cached maker discount');
+    }
+
+    {
+        MathUtils._setFeeCache({
+            BTS: {
+                limitOrderCreate: { bts: 1 },
+                limitOrderUpdate: { bts: 0.1 },
+                limitOrderCancel: { bts: 0.2 },
+            },
+        });
+        const proceeds = MathUtils.getAssetFees('BTS', 10, true);
+        assert.strictEqual(proceeds.refund, 0.9, 'missing Core maker_fee_discount_percent defaults to current 90% behavior');
+    }
+
+    {
+        await createManager();
         const noFee = MathUtils.getAssetFees('NOFEE', 100, false);
         assert.strictEqual(noFee.feeAmount, 0, 'market fees require charge_market_fee flag');
         const capped = MathUtils.getAssetFees('USD', 100, false);

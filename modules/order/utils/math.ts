@@ -284,13 +284,16 @@ function getAssetFees(assetSymbol, assetAmount = null, isMaker = true) {
         const orderCreationFee = cachedFees.limitOrderCreate.bts;
         const orderUpdateFee = cachedFees.limitOrderUpdate.bts;
         const orderCancelFee = cachedFees.limitOrderCancel?.bts || 0;
+        const makerFeeDiscountPercent = Number.isFinite(Number(cachedFees.makerFeeDiscountPercent))
+            ? Math.max(0, Number(cachedFees.makerFeeDiscountPercent))
+            : FEE_PARAMETERS.MAKER_REFUND_PERCENT;
         const makerNetFee = orderCreationFee * FEE_PARAMETERS.MAKER_FEE_PERCENT;
         const takerNetFee = orderCreationFee * FEE_PARAMETERS.TAKER_FEE_PERCENT;
         const netFee = isMaker ? makerNetFee : takerNetFee;
 
         if (assetAmount !== null && assetAmount !== undefined) {
             const amount = Number(assetAmount);
-            const refund = isMaker ? (orderCreationFee * FEE_PARAMETERS.MAKER_REFUND_PERCENT) : 0;
+            const refund = isMaker ? (orderCreationFee * makerFeeDiscountPercent) : 0;
             const netProceeds = amount + refund;
             return {
                 netProceeds: netProceeds,
@@ -305,6 +308,7 @@ function getAssetFees(assetSymbol, assetAmount = null, isMaker = true) {
             createFee: orderCreationFee,
             updateFee: orderUpdateFee,
             cancelFee: orderCancelFee,
+            makerFeeDiscountPercent,
             makerNetFee: makerNetFee,
             takerNetFee: takerNetFee,
             netFee: netFee,
