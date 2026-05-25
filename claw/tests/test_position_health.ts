@@ -1,7 +1,7 @@
 /**
  * Tests for position_health.js
  *
- * Validates the 5-zone CR classification and two-layer action system.
+ * Validates the 3-zone CR classification and two-layer action system.
  */
 
 'use strict';
@@ -12,16 +12,10 @@ const {
   classifyCrZone,
   checkTrendAlignment,
   assessPosition,
-  buildMarginTradingPlan,
   classifyPriceRangeRatio,
-  collateralForTargetCr,
-  collateralDeltaForTargetCr,
   computePriceRangeRatioPlan,
   computeOrderWeightBias,
   crWeight,
-  debtDeltaForTargetCr,
-  debtForTargetCr,
-  planCrAdjustment,
   trendWeight,
 } = require('../modules/position_health');
 const sharedPlanner = require('../../modules/cr_planner');
@@ -201,11 +195,10 @@ function testCollateralForTargetCr() {
   console.log('  collateralForTargetCr...');
 
   // 100 MPA debt * 50 BTS/MPA * 2.0 CR = 10000 BTS
-  assert.strictEqual(collateralForTargetCr(100, 50, 2.0), 10000);
-  assert.strictEqual(collateralForTargetCr(100, 50, 2.5), 12500);
-  assert.strictEqual(collateralForTargetCr(0, 50, 2.0), 0);
-  assert.strictEqual(collateralForTargetCr(-1, 50, 2.0), 0);
-  assert.strictEqual(collateralForTargetCr, sharedPlanner.collateralForTargetCr, 'Claw should reuse the shared collateral formula');
+  assert.strictEqual(sharedPlanner.collateralForTargetCr(100, 50, 2.0), 10000);
+  assert.strictEqual(sharedPlanner.collateralForTargetCr(100, 50, 2.5), 12500);
+  assert.strictEqual(sharedPlanner.collateralForTargetCr(0, 50, 2.0), 0);
+  assert.strictEqual(sharedPlanner.collateralForTargetCr(-1, 50, 2.0), 0);
 
   console.log('    PASS');
 }
@@ -214,12 +207,11 @@ function testCollateralDelta() {
   console.log('  collateralDeltaForTargetCr...');
 
   // Need 10000, have 8000 → add 2000
-  assert.strictEqual(collateralDeltaForTargetCr(8000, 100, 50, 2.0), 2000);
+  assert.strictEqual(sharedPlanner.collateralDeltaForTargetCr(8000, 100, 50, 2.0), 2000);
   // Need 10000, have 12000 → remove 2000
-  assert.strictEqual(collateralDeltaForTargetCr(12000, 100, 50, 2.0), -2000);
+  assert.strictEqual(sharedPlanner.collateralDeltaForTargetCr(12000, 100, 50, 2.0), -2000);
   // Need 10000, have 10000 → no change
-  assert.strictEqual(collateralDeltaForTargetCr(10000, 100, 50, 2.0), 0);
-  assert.strictEqual(collateralDeltaForTargetCr, sharedPlanner.collateralDeltaForTargetCr, 'Claw should reuse the shared collateral delta formula');
+  assert.strictEqual(sharedPlanner.collateralDeltaForTargetCr(10000, 100, 50, 2.0), 0);
 
   console.log('    PASS');
 }
@@ -227,11 +219,10 @@ function testCollateralDelta() {
 function testDebtForTargetCr() {
   console.log('  debtForTargetCr...');
 
-  assert.strictEqual(debtForTargetCr(10000, 50, 2.0), 100);
-  assert.strictEqual(debtForTargetCr(12000, 50, 2.0), 120);
-  assert.strictEqual(debtForTargetCr(0, 50, 2.0), 0);
-  assert.strictEqual(debtForTargetCr(10000, 0, 2.0), 0);
-  assert.strictEqual(debtForTargetCr, sharedPlanner.debtForTargetCr, 'Claw should reuse the shared debt formula');
+  assert.strictEqual(sharedPlanner.debtForTargetCr(10000, 50, 2.0), 100);
+  assert.strictEqual(sharedPlanner.debtForTargetCr(12000, 50, 2.0), 120);
+  assert.strictEqual(sharedPlanner.debtForTargetCr(0, 50, 2.0), 0);
+  assert.strictEqual(sharedPlanner.debtForTargetCr(10000, 0, 2.0), 0);
 
   console.log('    PASS');
 }
@@ -239,10 +230,9 @@ function testDebtForTargetCr() {
 function testDebtDeltaForTargetCr() {
   console.log('  debtDeltaForTargetCr...');
 
-  assert.strictEqual(debtDeltaForTargetCr(8000, 100, 50, 2.0), -20);
-  assert.strictEqual(debtDeltaForTargetCr(12000, 100, 50, 2.0), 20);
-  assert.strictEqual(debtDeltaForTargetCr(10000, 100, 50, 2.0), 0);
-  assert.strictEqual(debtDeltaForTargetCr, sharedPlanner.debtDeltaForTargetCr, 'Claw should reuse the shared debt delta formula');
+  assert.strictEqual(sharedPlanner.debtDeltaForTargetCr(8000, 100, 50, 2.0), -20);
+  assert.strictEqual(sharedPlanner.debtDeltaForTargetCr(12000, 100, 50, 2.0), 20);
+  assert.strictEqual(sharedPlanner.debtDeltaForTargetCr(10000, 100, 50, 2.0), 0);
 
   console.log('    PASS');
 }
@@ -250,20 +240,19 @@ function testDebtDeltaForTargetCr() {
 function testPlanCrAdjustment() {
   console.log('  planCrAdjustment...');
 
-  const lowCr = planCrAdjustment(8000, 100, 50, 2.0);
-  assert.strictEqual(planCrAdjustment, sharedPlanner.planCrAdjustment, 'Claw should reuse the shared CR planner');
+  const lowCr = sharedPlanner.planCrAdjustment(8000, 100, 50, 2.0);
   assert.strictEqual(lowCr.primaryAction, 'reduce_debt');
   assert.strictEqual(lowCr.fallbackAction, 'add_collateral');
   assert.strictEqual(lowCr.debtDelta, -20);
   assert.strictEqual(lowCr.collateralDelta, 2000);
 
-  const highCr = planCrAdjustment(12000, 100, 50, 2.0);
+  const highCr = sharedPlanner.planCrAdjustment(12000, 100, 50, 2.0);
   assert.strictEqual(highCr.primaryAction, 'increase_debt');
   assert.strictEqual(highCr.fallbackAction, 'withdraw_collateral');
   assert.strictEqual(highCr.debtDelta, 20);
   assert.strictEqual(highCr.collateralDelta, -2000);
 
-  const onTarget = planCrAdjustment(10000, 100, 50, 2.0);
+  const onTarget = sharedPlanner.planCrAdjustment(10000, 100, 50, 2.0);
   assert.strictEqual(onTarget.primaryAction, 'hold');
   assert.strictEqual(onTarget.fallbackAction, 'hold');
   assert.strictEqual(onTarget.debtDelta, 0);
@@ -397,117 +386,6 @@ function testComputePriceRangeRatioPlan() {
   console.log('    PASS');
 }
 
-function testBuildMarginTradingPlanDowntrend() {
-  console.log('  buildMarginTradingPlan (downtrend unified plan)...');
-
-  const plan = buildMarginTradingPlan(
-    makePosition(1.6, 100),
-    {
-      confidence: 80,
-      isReady: true,
-      oscillation: { ratio: 2 },
-      priceAnalysis: { inRange: 50 },
-      trend: 'DOWN'
-    },
-    {
-      weightDistribution: { sell: 0.5, buy: 0.5 }
-    },
-    {
-      priceContext: {
-        oscillationRatio: 2,
-        pricePositionInRange: 0.5
-      },
-      rangeContext: {
-        observedMaxPrice: 165,
-        observedMinPrice: 60
-      },
-      referencePrice: 100,
-      resolveTargetCr: () => 2.2
-    }
-  );
-
-  assert.strictEqual(plan.targetCr, 2.2);
-  assert.strictEqual(plan.crPlan.primaryAction, 'reduce_debt');
-  assert.strictEqual(plan.crPlan.fallbackAction, 'add_collateral');
-  assert.strictEqual(plan.gridPlan.finalPriceRangeRatio, 1.83);
-  assert.strictEqual(plan.botPatch.minPrice, '1.83x');
-  assert.strictEqual(plan.botPatch.maxPrice, '1.83x');
-
-  console.log('    PASS');
-}
-
-function testBuildMarginTradingPlanStillPlansWeightsWithoutOffset() {
-  console.log('  buildMarginTradingPlan (still plans weights without offset)...');
-
-  const plan = buildMarginTradingPlan(
-    makePosition(1.6, 100),
-    {
-      confidence: 80,
-      isReady: true,
-      oscillation: { ratio: 2 },
-      priceAnalysis: { inRange: 50 },
-      trend: 'DOWN'
-    },
-    {
-      weightDistribution: { sell: 0.5, buy: 0.5 }
-    },
-    {
-      priceContext: {
-        oscillationRatio: 2,
-        pricePositionInRange: 0.5
-      },
-      rangeContext: {
-        observedMaxPrice: 165,
-        observedMinPrice: 60
-      },
-      referencePrice: 100,
-      resolveTargetCr: () => 2.2
-    }
-  );
-
-  assert.strictEqual(plan.targetCr, 2.2);
-  assert.strictEqual(plan.crPlan.primaryAction, 'reduce_debt');
-  assert.strictEqual(plan.gridPlan.finalPriceRangeRatio, 1.83);
-
-  console.log('    PASS');
-}
-
-function testBuildMarginTradingPlanNeutralKeepsCenter() {
-  console.log('  buildMarginTradingPlan (neutral keeps center)...');
-
-  const plan = buildMarginTradingPlan(
-    makePosition(2.2, 100),
-    {
-      confidence: 90,
-      isReady: true,
-      oscillation: { ratio: 2 },
-      priceAnalysis: { inRange: 50 },
-      trend: 'NEUTRAL'
-    },
-    {
-      weightDistribution: { sell: 0.5, buy: 0.5 }
-    },
-    {
-      priceContext: {
-        oscillationRatio: 2,
-        pricePositionInRange: 0.5
-      },
-      rangeContext: {
-        observedMaxPrice: 130,
-        observedMinPrice: 80
-      },
-      referencePrice: 100
-    }
-  );
-
-  assert.strictEqual(plan.crPlan.primaryAction, 'hold');
-  assert.strictEqual(plan.gridPlan.finalPriceRangeRatio, 1.43);
-  assert.strictEqual(plan.botPatch.minPrice, '1.43x');
-  assert.strictEqual(plan.botPatch.maxPrice, '1.43x');
-
-  console.log('    PASS');
-}
-
 // --- Run all ---
 
 function main() {
@@ -534,11 +412,8 @@ function main() {
   testComputeOrderWeightBias();
   testClassifyPriceRangeRatio();
   testComputePriceRangeRatioPlan();
-  testBuildMarginTradingPlanDowntrend();
-  testBuildMarginTradingPlanStillPlansWeightsWithoutOffset();
-  testBuildMarginTradingPlanNeutralKeepsCenter();
 
-  console.log('\n=== All 24 tests passed ===');
+  console.log('\n=== All 21 tests passed ===');
 }
 
 main();

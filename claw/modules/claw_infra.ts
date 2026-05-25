@@ -9,7 +9,6 @@ const { createHonestEcosystemAdapter } = require('./honest_ecosystem');
 const { loadDexbotOrderSubsystem } = require('./dexbot_bridge');
 const { createDexbotProfileAdapter } = require('./dexbot_profiles');
 const { acquireFileLock } = require('../../market_adapter/utils/file_lock');
-const { tuneBot } = require('./bot_auto_tuner');
 const {
   createPositionManagerWatcher,
   parsePositionManagerWatchArgs,
@@ -289,7 +288,6 @@ function createClawInfrastructure(options: ClawInfrastructureOptions = {}) {
     logger: runtime.logger
   });
   return {
-    autoTuner: { tuneBot },
     bitshares,
     credential,
     honest,

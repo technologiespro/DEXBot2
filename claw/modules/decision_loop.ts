@@ -20,10 +20,9 @@
 const { discoverPositions } = require('./position_discovery');
 const { assessPosition } = require('./position_health');
 const { fetchTrendInput } = require('./feed_price_source');
-const { tuneBot } = require('./bot_auto_tuner');
 
 // Lazy-load KalmanTrendAnalyzer to avoid circular dependency issues at startup
-let KalmanTrendAnalyzer = null;
+let KalmanTrendAnalyzer: any = null;
 function getTrendAnalyzer() {
   if (!KalmanTrendAnalyzer) {
     KalmanTrendAnalyzer = require('../../analysis/trend_detection/kalman_trend_analyzer').KalmanTrendAnalyzer;
@@ -38,13 +37,13 @@ function getTrendAnalyzer() {
 const analyzers = new Map();
 const analyzerConfigs = new Map();
 
-function configChanged(mpaSymbol, config) {
+function configChanged(mpaSymbol: string, config: Record<string, any>) {
   const prev = analyzerConfigs.get(mpaSymbol);
   if (!prev) return true;
   return JSON.stringify(prev) !== JSON.stringify(config);
 }
 
-function getOrCreateAnalyzer(mpaSymbol, config = {}) {
+function getOrCreateAnalyzer(mpaSymbol: string, config: Record<string, any> = {}) {
   if (!analyzers.has(mpaSymbol) || configChanged(mpaSymbol, config)) {
     const TA = getTrendAnalyzer();
     analyzers.set(mpaSymbol, new TA(config));
@@ -62,7 +61,7 @@ function getOrCreateAnalyzer(mpaSymbol, config = {}) {
  * @param {Function} [options.logger]       – Log function (default console.log)
  * @returns {Object} { account, evaluatedAt, positionCount, positions: [...assessments], summary }
  */
-async function evaluate(accountName, options: Record<string, any> = {}) {
+async function evaluate(accountName: string, options: Record<string, any> = {}) {
   const logger = options.logger || console.log;
   const analyzerConfig = options.analyzerConfig || {};
 
@@ -78,8 +77,8 @@ async function evaluate(accountName, options: Record<string, any> = {}) {
   }
 
   // 2–4. For each position: fetch trend, update analyzer, assess health
-  const assessments = [];
-  const marketsSeen = new Set();
+  const assessments: Array<Record<string, any>> = [];
+  const marketsSeen = new Set<string>();
 
   for (const position of positions) {
     const mpa = position.mpaSymbol;
@@ -125,10 +124,10 @@ async function evaluate(accountName, options: Record<string, any> = {}) {
 
   // 5. Sort by action priority: immediate first, then soon, then evaluate
   const priorityOrder = { immediate: 0, soon: 1, evaluate: 2, fallback: 3 };
-  assessments.sort((a, b) => {
-    const aPriority = a.actions[0]?.priority || 'fallback';
-    const bPriority = b.actions[0]?.priority || 'fallback';
-    return (priorityOrder[aPriority] ?? 99) - (priorityOrder[bPriority] ?? 99);
+  assessments.sort((a: any, b: any) => {
+    const aPriority: string = a.actions[0]?.priority || 'fallback';
+    const bPriority: string = b.actions[0]?.priority || 'fallback';
+    return (priorityOrder[aPriority as keyof typeof priorityOrder] ?? 99) - (priorityOrder[bPriority as keyof typeof priorityOrder] ?? 99);
   });
 
   return {
@@ -143,16 +142,16 @@ async function evaluate(accountName, options: Record<string, any> = {}) {
 /**
  * Build a quick summary of the evaluation results.
  */
-function buildSummary(assessments) {
-  const zones = { red_low: 0, green: 0, red_high: 0, unknown: 0 };
+function buildSummary(assessments: Array<Record<string, any>>) {
+  const zones: Record<string, number> = { red_low: 0, green: 0, red_high: 0, unknown: 0 };
   let immediateActions = 0;
   let soonActions = 0;
 
   for (const a of assessments) {
-    const zone = a.collateral?.zone || 'unknown';
+    const zone: string = a.collateral?.zone || 'unknown';
     zones[zone] = (zones[zone] || 0) + 1;
 
-    for (const action of a.actions) {
+    for (const action of a.actions as Array<Record<string, any>>) {
       if (action.priority === 'immediate') immediateActions++;
       if (action.priority === 'soon') soonActions++;
     }
@@ -174,46 +173,8 @@ function resetAnalyzers() {
   analyzerConfigs.clear();
 }
 
-/**
- * Run evaluation and generate tuning recommendations for each position.
- * Returns assessments with tuning suggestions (patch + reasoning) for direct bot application.
- *
- * @param {string} accountName – BitShares account name
- * @param {Object} [bots] – Map of bot configs keyed by botKey
- * @param {Object} [options]
- * @param {Object} [options.analyzerConfig] – TrendAnalyzer config overrides
- * @param {Function} [options.logger] – Log function
- * @returns {Object} { account, evaluatedAt, positionCount, summary, positions: [...with tuning] }
- */
-async function evaluateAndTune(accountName, bots: Record<string, any> = {}, options: Record<string, any> = {}) {
-  // Run standard evaluation
-  const result = await evaluate(accountName, options);
-
-  // Add tuning recommendations to each assessment
-  const positionsWithTuning = result.positions.map((assessment) => {
-    const botKey = assessment.botKey;
-    const bot = botKey && bots[botKey] ? bots[botKey] : null;
-
-    let tuningRecommendation = null;
-    if (bot) {
-      tuningRecommendation = tuneBot(bot, assessment);
-    }
-
-    return {
-      ...assessment,
-      tuning: tuningRecommendation
-    };
-  });
-
-  return {
-    ...result,
-    positions: positionsWithTuning
-  };
-}
-
 export = {
   evaluate,
-  evaluateAndTune,
   getOrCreateAnalyzer,
   resetAnalyzers,
 };

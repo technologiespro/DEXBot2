@@ -8,14 +8,6 @@
 
 'use strict';
 
-const {
-  collateralDeltaForTargetCr,
-  collateralForTargetCr,
-  debtDeltaForTargetCr,
-  debtForTargetCr,
-  planCrAdjustment: sharedPlanCrAdjustment
-} = require('../../modules/cr_planner');
-
 const { CR_ZONES } = require('../../modules/constants');
 
 const DEFAULT_PRICE_RANGE_RATIO = 3.0;
@@ -26,7 +18,7 @@ const DEFAULT_PRICE_RANGE_RATIO = 3.0;
  * @param {number|null} cr – Collateral ratio (e.g. 2.1)
  * @returns {Object} { zone, label, status, cr }
  */
-function classifyCrZone(cr) {
+function classifyCrZone(cr: any) {
   if (!Number.isFinite(cr) || cr <= 0) {
     return { zone: 'unknown', label: 'unknown', status: 'no_data', cr: null };
   }
@@ -46,7 +38,7 @@ function classifyCrZone(cr) {
  * @param {string} trend        – 'UP', 'DOWN', or 'NEUTRAL'
  * @returns {string} 'aligned' | 'opposed' | 'neutral'
  */
-function checkTrendAlignment(positionSide, trend) {
+function checkTrendAlignment(positionSide: string, trend: string) {
   if (trend === 'NEUTRAL') return 'neutral';
   if (positionSide === 'short' && trend === 'DOWN') return 'aligned';
   if (positionSide === 'short' && trend === 'UP') return 'opposed';
@@ -62,7 +54,7 @@ function checkTrendAlignment(positionSide, trend) {
  * @param {Object} [trendSignal] – Optional { trend, confidence, premium } from TrendAnalyzer
  * @returns {Object} Health assessment
  */
-function assessPosition(position, trendSignal = null) {
+function assessPosition(position: any, trendSignal: Record<string, any> | null = null) {
   const cr = position?.onChain?.collateralRatio ?? null;
   const crZone = classifyCrZone(cr);
   const status = position?.status || 'unknown';
@@ -136,13 +128,11 @@ function assessPosition(position, trendSignal = null) {
  * @param {Object} [trendSignal] – Optional trend signal to apply to all
  * @returns {Array} Array of health assessments
  */
-function assessAllPositions(positions, trendSignal = null) {
+function assessAllPositions(positions: any[], trendSignal: Record<string, any> | null = null) {
   return (positions || []).map((p) => assessPosition(p, trendSignal));
 }
 
-const planCrAdjustment = sharedPlanCrAdjustment;
-
-function roundNumber(value, digits = 3) {
+function roundNumber(value: any, digits: number = 3) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
     return 0;
@@ -152,7 +142,7 @@ function roundNumber(value, digits = 3) {
 }
 
 
-function parseRatioValue(value, referencePrice, mode) {
+function parseRatioValue(value: any, referencePrice: any, mode: string) {
   if (typeof value === 'string') {
     const match = value.trim().match(/^([0-9]+(?:\.[0-9]+)?)x$/i);
     if (match) {
@@ -169,12 +159,12 @@ function parseRatioValue(value, referencePrice, mode) {
   return mode === 'min' ? reference / numeric : numeric / reference;
 }
 
-function formatRatioAsMultiplier(ratio) {
+function formatRatioAsMultiplier(ratio: any) {
   const rounded = roundNumber(ratio, 2);
   return `${rounded}x`;
 }
 
-function classifyPriceRangeRatio(ratio) {
+function classifyPriceRangeRatio(ratio: any) {
   const numeric = Number(ratio);
   if (!Number.isFinite(numeric) || numeric <= 0) {
     return 'unknown';
@@ -191,7 +181,7 @@ function classifyPriceRangeRatio(ratio) {
   return 'very_conservative';
 }
 
-function resolveCurrentPriceRangeRatio(botConfig: Record<string, any> = {}, referencePrice, options: Record<string, any> = {}) {
+function resolveCurrentPriceRangeRatio(botConfig: Record<string, any> = {}, referencePrice: any, options: Record<string, any> = {}) {
   const forced = Number(options.currentPriceRangeRatio);
   if (Number.isFinite(forced) && forced > 0) {
     return {
@@ -204,13 +194,13 @@ function resolveCurrentPriceRangeRatio(botConfig: Record<string, any> = {}, refe
 
   const minRatio = parseRatioValue(botConfig.minPrice, referencePrice, 'min');
   const maxRatio = parseRatioValue(botConfig.maxPrice, referencePrice, 'max');
-  const ratioCandidates = [minRatio, maxRatio].filter((value) => Number.isFinite(value) && value > 0);
+  const ratioCandidates: number[] = [minRatio, maxRatio].filter((value: any): value is number => Number.isFinite(value) && value > 0);
   const ratio = ratioCandidates.length > 0 ? Math.max(...ratioCandidates) : DEFAULT_PRICE_RANGE_RATIO;
 
   return {
-    isSymmetric: Number.isFinite(minRatio) && Number.isFinite(maxRatio) && Math.abs(minRatio - maxRatio) < 0.05,
-    maxRatio,
-    minRatio,
+    isSymmetric: Number.isFinite(minRatio) && Number.isFinite(maxRatio) && Math.abs((minRatio || 0) - (maxRatio || 0)) < 0.05,
+    maxRatio: maxRatio ?? null,
+    minRatio: minRatio ?? null,
     ratio
   };
 }
@@ -236,7 +226,7 @@ function computePriceRangeRatioPlan(botConfig: Record<string, any> = {}, options
     ? Math.max(0, Number(options.minRangeRatioDelta))
     : 0.25;
 
-  let observedRatio = null;
+  let observedRatio: number | null = null;
   if (
     Number.isFinite(referencePrice) &&
     referencePrice > 0 &&
@@ -248,7 +238,7 @@ function computePriceRangeRatioPlan(botConfig: Record<string, any> = {}, options
     observedRatio = Math.max(referencePrice / observedMinPrice, observedMaxPrice / referencePrice);
   }
 
-  const recommendedRatio = Number.isFinite(observedRatio)
+  const recommendedRatio = observedRatio !== null && Number.isFinite(observedRatio)
     ? Math.min(maxRatio, Math.max(minRatio, observedRatio * headroomFactor * touchExpansionFactor))
     : current.ratio;
   const roundedRecommendedRatio = roundNumber(recommendedRatio, 2);
@@ -278,19 +268,6 @@ function computePriceRangeRatioPlan(botConfig: Record<string, any> = {}, options
   };
 }
 
-function resolveTargetCr(position, trendSignal, botConfig, assessment, options) {
-  if (typeof options.resolveTargetCr === 'function') {
-    const resolved = options.resolveTargetCr(position, trendSignal, botConfig, assessment);
-    return Number.isFinite(Number(resolved)) && Number(resolved) > 0 ? Number(resolved) : null;
-  }
-  if (Number.isFinite(Number(options.targetCr)) && Number(options.targetCr) > 0) {
-    return Number(options.targetCr);
-  }
-
-  const currentCr = position?.onChain?.collateralRatio;
-  return Number.isFinite(Number(currentCr)) && Number(currentCr) > 0 ? Number(currentCr) : null;
-}
-
 /**
  * Compute trend weight from confidence and trend direction.
  *
@@ -298,7 +275,7 @@ function resolveTargetCr(position, trendSignal, botConfig, assessment, options) 
  * @param {number} confidence  – 0–100
  * @returns {number} Weight multiplier (0.2 – 1.0)
  */
-function trendWeight(trend, confidence) {
+function trendWeight(trend: string, confidence: any) {
   if (trend === 'NEUTRAL') return 0.4;
   const c = Number(confidence) || 0;
   if (c >= 80) return 1.0;
@@ -313,7 +290,7 @@ function trendWeight(trend, confidence) {
  * @param {string} zone – CR zone label from classifyCrZone
  * @returns {number} Weight multiplier (0.0 – 1.5)
  */
-function crWeight(zone) {
+function crWeight(zone: string) {
   switch (zone) {
     case 'red_high': return 1.5;
     case 'green':    return 1.0;
@@ -367,88 +344,15 @@ function computeOrderWeightBias(trend = 'NEUTRAL', confidence = 0) {
   };
 }
 
-/**
- * Build a unified margin-trading plan that combines:
- * - CR adjustment intent (debt first, collateral second)
- * - final weightDistribution values
- *
- * @param {Object} position      – Position object with onChain collateral/debt/feed data
- * @param {Object} [trendSignal=null] – Optional trend signal
- * @param {Object} [botConfig={}]     – Current bot config
- * @param {Object} [options={}]       – Planning options
- * @returns {Object} Unified plan with concrete bot patch outputs
- */
-function buildMarginTradingPlan(position, trendSignal: Record<string, any> | null = null, botConfig: Record<string, any> = {}, options: Record<string, any> = {}) {
-  const assessment = assessPosition(position, trendSignal);
-  const targetCr = resolveTargetCr(position, trendSignal, botConfig, assessment, options);
-  const feedPrice = Number(options.feedPrice ?? trendSignal?.feedPrice ?? position?.onChain?.btsPerMpa);
-  const referencePrice = Number(
-    options.referencePrice ??
-    options.gridReferencePrice ??
-    trendSignal?.marketPrice ??
-    feedPrice
-  );
-  const currentCollateral = Number(position?.onChain?.collateralAmount || 0);
-  const currentDebt = Number(position?.onChain?.debtAmount || 0);
-
-  const trend = trendSignal?.trend || 'NEUTRAL';
-  const confidence = Number(trendSignal?.confidence || 0);
-  const orderWeightBias = computeOrderWeightBias(trend, confidence);
-  const priceRangePlan = computePriceRangeRatioPlan(botConfig, {
-    ...options,
-    referencePrice
-  });
-
-  const crPlan = targetCr && Number.isFinite(feedPrice) && feedPrice > 0
-    ? planCrAdjustment(currentCollateral, currentDebt, feedPrice, targetCr)
-    : {
-      targetCr,
-      targetDebt: null,
-      targetCollateral: null,
-      debtDelta: 0,
-      collateralDelta: 0,
-      primaryAction: 'hold',
-      fallbackAction: 'hold'
-    };
-  const finalPriceRangeRatio = priceRangePlan.shouldUpdate
-    ? priceRangePlan.recommendedRatio
-    : priceRangePlan.currentRatio;
-
-  return {
-    assessment,
-    targetCr,
-    crPlan,
-    marketPlan: {
-      confidence,
-      trend,
-      orderWeightBias
-    },
-    gridPlan: {
-      finalPriceRangeRatio,
-      priceRangePlan
-    },
-    botPatch: {
-      maxPrice: formatRatioAsMultiplier(finalPriceRangeRatio),
-      minPrice: formatRatioAsMultiplier(finalPriceRangeRatio)
-    }
-  };
-}
-
 export = {
   CR_ZONES,
   assessAllPositions,
   assessPosition,
-  buildMarginTradingPlan,
   checkTrendAlignment,
   classifyCrZone,
   classifyPriceRangeRatio,
-  collateralDeltaForTargetCr,
-  collateralForTargetCr,
   computePriceRangeRatioPlan,
   computeOrderWeightBias,
   crWeight,
-  debtDeltaForTargetCr,
-  debtForTargetCr,
-  planCrAdjustment,
   trendWeight,
 };
