@@ -64,7 +64,7 @@ function createSubscriptionManager(chainClient: any): any {
         return null;
     }
 
-    async function fetchFillHistoryEntries(accountId: string, stopHistoryId: string): Promise<any[]> {
+    async function fetchFillHistoryEntries(accountId: string, stopHistoryId: string, options: any = {}): Promise<any[]> {
         const fetchPage = chainClient.history?.getAccountHistoryOperations
             || chainClient.history?.get_account_history_operations
             || ((...args: any[]) => chainClient.history.call('get_account_history_operations', args));
@@ -72,6 +72,8 @@ function createSubscriptionManager(chainClient: any): any {
         const entries = [];
         const seenIds = new Set();
         let startHistoryId = SUBSCRIPTIONS.HISTORY_API_OBJECT;
+        let pagesFetched = 0;
+        const maxPages = Number.isFinite(options.maxPages) ? options.maxPages : null;
 
         while (true) {
             const page = await Promise.resolve(fetchPage(
@@ -81,6 +83,7 @@ function createSubscriptionManager(chainClient: any): any {
                 stopHistoryId,
                 SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX
             ));
+            pagesFetched++;
 
             if (!Array.isArray(page) || page.length === 0) break;
 
@@ -91,6 +94,7 @@ function createSubscriptionManager(chainClient: any): any {
             }
 
             if (page.length < SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX) break;
+            if (maxPages !== null && pagesFetched >= maxPages) break;
 
             const oldestId = page[page.length - 1]?.id;
             const nextStartHistoryId = decrementObjectId(oldestId);
@@ -190,7 +194,7 @@ function createSubscriptionManager(chainClient: any): any {
         return !sawFillObject;
     }
 
-    async function processObjects(sub: any, data: any): Promise<void> {
+    async function processObjects(sub: any, data: any, options: any = {}): Promise<void> {
         if (!data || !Array.isArray(data)) return;
 
         const noticeObjectIds = [];
@@ -215,7 +219,7 @@ function createSubscriptionManager(chainClient: any): any {
                 sub.lastDeliveredHistoryId = await primeLastDeliveredHistoryId(sub);
             }
 
-            const history = await fetchFillHistoryEntries(accountId, sub.lastDeliveredHistoryId);
+            const history = await fetchFillHistoryEntries(accountId, sub.lastDeliveredHistoryId, options);
             if (history.length === 0) return;
 
             const fills = [];
@@ -293,7 +297,6 @@ function createSubscriptionManager(chainClient: any): any {
                 throw new Error(`Could not resolve subscribed account: ${accountName}`);
             }
 
-            entry.lastDeliveredHistoryId = await primeLastDeliveredHistoryId(entry);
         }
 
         entry.callbacks.add(callback);
@@ -307,7 +310,17 @@ function createSubscriptionManager(chainClient: any): any {
                     false,
                 ]);
                 entry.active = !!entry.accountId;
-                await processObjects(entry, [entry.accountId]);
+
+                // Prime once for observability, then fetch only the head page of
+                // fill history. That bounded catch-up includes the latest known
+                // fill plus any fills that land during subscription activation,
+                // without paginating through old account history on every startup.
+                const latestFillId = await primeLastDeliveredHistoryId(entry);
+                entry.lastDeliveredHistoryId = SUBSCRIPTIONS.HISTORY_API_OBJECT;
+                await processObjects(entry, [entry.accountId], { maxPages: 1 });
+                if (entry.lastDeliveredHistoryId === SUBSCRIPTIONS.HISTORY_API_OBJECT) {
+                    entry.lastDeliveredHistoryId = latestFillId;
+                }
             } catch (err: any) {
                 entry.callbacks.delete(callback);
                 if (entry.onError === onError) {

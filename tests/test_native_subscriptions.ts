@@ -50,8 +50,16 @@ function makeAccountRecord(account) {
                     if (limit === 1) {
                         return [{ id: '1.11.499', block_num: 10, trx_id: 1, op: [4, { order_id: '1.7.1' }] }];
                     }
-                    if (stop === '1.11.499') {
-                        return [{ id: '1.11.500', block_num: 11, trx_id: 2, op: [4, { order_id: '1.7.2' }] }];
+                    if (stop === '1.11.0') {
+                        // Initial bounded catch-up includes the primed latest fill
+                        // and a fill that arrived during subscription activation.
+                        return [
+                            { id: '1.11.499', block_num: 10, trx_id: 1, op: [4, { order_id: '1.7.1' }] },
+                            { id: '1.11.500', block_num: 11, trx_id: 2, op: [4, { order_id: '1.7.2' }] },
+                        ];
+                    }
+                    if (stop === '1.11.500') {
+                        return [{ id: '1.11.501', block_num: 12, trx_id: 3, op: [4, { order_id: '1.7.3' }] }];
                     }
                     return [];
                 },
@@ -69,24 +77,36 @@ function makeAccountRecord(account) {
         assert.strictEqual(typeof noticeHandler, 'function', 'notice handler should be registered');
         await noticeHandler([1, [{ id: '2.5.999', owner: '1.2.100' }]]);
 
-        assert.strictEqual(delivered.length, 1, 'matching account should receive one delivery');
+        // Two deliveries: initial bounded catch-up + notice-triggered fetch.
+        assert.strictEqual(delivered.length, 2, 'matching account should receive two deliveries');
+        // First delivery: bounded catch-up delivers latest known fill plus activation-window fills.
         assert.strictEqual(delivered[0][0], 'alice');
-        assert.strictEqual(delivered[0][1].length, 1);
-        assert.strictEqual(delivered[0][1][0].id, '1.11.500');
-        assert.strictEqual(delivered[0][1][0].block_num, 11, 'fill payload should expose block_num');
-        assert.strictEqual(delivered[0][1][0].trx_id, 2, 'fill payload should expose trx_id');
-        assert.strictEqual(delivered[0][1][0].block, undefined, 'legacy block alias should not leak through');
-        assert.strictEqual(delivered[0][1][0].trx, undefined, 'legacy trx alias should not leak through');
+        assert.deepStrictEqual(delivered[0][1].map(fill => fill.id), ['1.11.499', '1.11.500']);
+        // Second delivery: notice-triggered fetch delivers fill newer than the catch-up cursor.
+        assert.strictEqual(delivered[1][0], 'alice');
+        assert.strictEqual(delivered[1][1].length, 1);
+        assert.strictEqual(delivered[1][1][0].id, '1.11.501');
+        assert.strictEqual(delivered[1][1][0].block_num, 12, 'fill payload should expose block_num');
+        assert.strictEqual(delivered[1][1][0].trx_id, 3, 'fill payload should expose trx_id');
+        assert.strictEqual(delivered[1][1][0].block, undefined, 'legacy block alias should not leak through');
+        assert.strictEqual(delivered[1][1][0].trx, undefined, 'legacy trx alias should not leak through');
+        // Startup primes latest first, then performs a bounded overlap fetch.
         assert.deepStrictEqual(
             historyCalls[0],
             ['1.2.100', 4, '1.11.0', '1.11.0', 1],
             'subscription bootstrap should prime from the latest delivered fill id'
         );
-        const aliceNoticeHistoryCall = historyCalls.find(([accountId, , , , limit]) => accountId === '1.2.100' && limit === 100);
+        assert.deepStrictEqual(
+            historyCalls[1],
+            ['1.2.100', 4, '1.11.0', '1.11.0', 100],
+            'initial catch-up should read only the head page after priming'
+        );
+        // The notice-triggered fetch uses the delivered catch-up cursor as exclusive stop.
+        const aliceNoticeHistoryCall = historyCalls.find(([, , , stop, limit]) => stop === '1.11.500' && limit === 100);
         assert.deepStrictEqual(
             aliceNoticeHistoryCall,
-            ['1.2.100', 4, '1.11.0', '1.11.499', 100],
-            'notice processing should fetch only fills newer than the primed cursor'
+            ['1.2.100', 4, '1.11.0', '1.11.500', 100],
+            'notice processing should fetch only fills newer than the catch-up cursor'
         );
         assert.ok(dbCalls.some(([method]) => method === 'set_subscribe_callback'), 'subscription RPC should be registered');
         assert.strictEqual(
@@ -127,7 +147,7 @@ function makeAccountRecord(account) {
                     if (limit === 1) {
                         return [{ id: '1.11.510', block_num: 10, trx_id: 1, op: [4, { order_id: '1.7.510' }] }];
                     }
-                    if (stop === '1.11.510') {
+                    if (stop === '1.11.0') {
                         return [{ id: '1.11.511', block_num: 11, trx_id: 2, op: [4, { order_id: '1.7.511' }] }];
                     }
                     return [];
@@ -142,8 +162,8 @@ function makeAccountRecord(account) {
 
         assert.strictEqual(callbackCountDuringRegister, 1, 'initial subscribe should attach the local callback before remote activation');
         assert.strictEqual(noticeHandlerPresentDuringRegister, true, 'initial subscribe should install the local notice handler before remote activation');
-        assert.strictEqual(delivered.length, 1, 'initial subscribe should catch up fills from the remote activation window');
-        assert.strictEqual(delivered[0][0].id, '1.11.511');
+        assert.strictEqual(delivered.length, 1, 'initial subscribe should catch up fills from the activation window');
+        assert.strictEqual(delivered[0][0].id, '1.11.511', 'bounded catch-up should deliver fills newer than the overlap cursor');
     }
 
     console.log(' - Testing reconnect reattaches notice handler after transport cleanup...');

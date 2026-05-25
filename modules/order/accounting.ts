@@ -1126,7 +1126,6 @@ class Accountant {
 
          let processedAt = null;
          const tracker = fillKey ? this._getProcessedFillTracker() : null;
-         const previousProcessedAt = fillKey ? tracker.get(fillKey) : undefined;
          if (fillKey) {
              processedAt = Date.now();
              const lastProcessed = tracker.get(fillKey);
@@ -1136,6 +1135,27 @@ class Accountant {
                      'warn'
                  );
                  return false;
+             }
+         }
+
+         const processedFillStore = this._getProcessedFillStore();
+
+         // Record/queue the dedup key before applying balance adjustments. In
+         // immediate mode this is durable before funds move; batched/manual modes
+         // still preserve the existing deferred flush behavior for batch commit.
+         if (fillKey && processedFillStore) {
+             try {
+                 await processedFillStore.persist(fillKey, processedAt || Date.now(), { mode: persistenceMode });
+             } catch (err: any) {
+                 if (persistenceMode === PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE) {
+                     // Clean up any pending write that the flush error handler re-queued.
+                     processedFillStore.discard(fillKey, processedAt || Date.now());
+                     throw err;
+                 }
+                 mgr.logger?.log?.(
+                     `[FILL-DEDUP] Failed to persist fill ${fillKey}: ${err.message}`,
+                     'warn'
+                 );
              }
          }
 
@@ -1149,32 +1169,6 @@ class Accountant {
                  for (const [k, ts] of tracker) {
                      if (ts < cutoff) tracker.delete(k);
                  }
-             }
-         }
-
-         const processedFillStore = this._getProcessedFillStore();
-         if (fillKey && processedFillStore) {
-             try {
-                 await processedFillStore.persist(fillKey, processedAt || Date.now(), { mode: persistenceMode });
-             } catch (err: any) {
-                 if (persistenceMode === PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE) {
-                     processedFillStore.discard(fillKey, processedAt || Date.now());
-                     if (previousProcessedAt === undefined) {
-                         tracker.delete(fillKey);
-                     } else {
-                         tracker.set(fillKey, previousProcessedAt);
-                     }
-                     this._rollbackBalanceAdjustments(balanceAdjustments);
-                     mgr.logger?.log?.(
-                         `[FILL-DEDUP] Rolled back fill ${fillKey} after persistence failure: ${err.message}`,
-                         'warn'
-                     );
-                     throw err;
-                 }
-                 mgr.logger?.log?.(
-                     `[FILL-DEDUP] Failed to persist processed fill ${fillKey}: ${err.message}`,
-                     'warn'
-                 );
              }
          }
 

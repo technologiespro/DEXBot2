@@ -209,7 +209,7 @@ let TIMING = {
 
     // Fill processing timing
     FILL_DEDUPE_WINDOW_MS: 5000,    // 5 seconds - window for deduplicating same fill events
-    FILL_RECORD_RETENTION_MS: 3600000, // 1 hour - how long to keep persisted fill records
+    FILL_RECORD_RETENTION_MS: 7 * 24 * 60 * 60 * 1000, // 7 days - how long to keep persisted fill records (was 1h, increased to close double-credit window on restarts >1h apart)
     PROCESSED_FILL_PERSIST_BATCH_MS: 250, // 250ms - coalesce processed-fill persistence writes under burst load
     PROCESSED_FILL_PERSIST_BATCH_SIZE: 25, // Flush immediately once this many processed fills are queued
     AUDIT_LOG_RETENTION_MS: 7 * 24 * 60 * 60 * 1000, // 7 days - retention window for daemon audit logs

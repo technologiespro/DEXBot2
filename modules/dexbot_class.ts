@@ -1063,6 +1063,16 @@ class DEXBot {
                         await this._persistAndRecoverIfNeeded();
                     }
 
+                    // Drain any fills that arrived during startup while still in bootstrap
+                    // mode. This gives them the simple rotation path instead of deferred
+                    // full COW rebalance after the lock is released. Safe to call directly
+                    // since we already hold _fillProcessingLock and _processFillsWithBootstrapMode
+                    // does NOT re-acquire it.
+                    if (this._incomingFillQueue.length > 0) {
+                        this._log(`[STARTUP] Processing ${this._incomingFillQueue.length} queued fill(s) before bootstrap ends`);
+                        await this._processFillsWithBootstrapMode(chainOrders);
+                    }
+
                     this.manager.finishBootstrap();
 
                     // Perform initial grid maintenance (thresholds, divergence, spread, health)
