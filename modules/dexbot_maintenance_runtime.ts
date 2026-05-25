@@ -632,6 +632,10 @@ function performGridResync(options = {}) {
     const centerRefreshContext = options.centerRefreshContext || (refreshCenterPrice ? 'grid reset recenter' : 'grid resync');
     const centerRefreshLabel = options.centerRefreshLabel || (refreshCenterPrice ? 'grid reset' : 'grid resync');
     const resetSource = options.resetSource || (refreshCenterPrice ? 'manual_grid_resync' : 'dexbot_grid_resync');
+    if (self._dustSinceMap?.size > 0 && getPendingDustDelayMs(self) === null) {
+        self._dustSinceMap.clear();
+        self._log('[MAINT-IDLE] Cleared stale dust timer entries (all timers expired).', 'info');
+    }
     const dustDelayMs = getPendingDustDelayMs(self);
     const idleDelayMs = getMaintenanceIdleDelayMs(self);
     if (dustDelayMs !== null || idleDelayMs > 0) {
@@ -837,22 +841,18 @@ function startOpenOrdersSyncLoop() {
                     if (!this.manager._fillProcessingLock.isLocked() &&
                         this.manager._fillProcessingLock.getQueueLength() === 0) {
                         await this.manager._fillProcessingLock.acquire(async () => {
-                            this._markGridActivity?.('open-orders sync');
-                            try {
-                                const chainOpenOrders = await readOpenOrdersFn.call(chainOrders, this.accountId);
-                                const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
+                            const chainOpenOrders = await readOpenOrdersFn.call(chainOrders, this.accountId);
+                            const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
 
-                                if (syncResult?.filledOrders && syncResult.filledOrders.length > 0) {
-                                    this._log(`Open-orders sync loop: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
-                                    const batchResult = await this._processFillsWithBatching(
-                                        syncResult.filledOrders, new Set(), 'open-orders sync fill rebalance'
-                                    );
-                                    if (!batchResult?.aborted) {
-                                        await this.manager.persistGrid();
-                                    }
+                            if (syncResult?.filledOrders && syncResult.filledOrders.length > 0) {
+                                this._log(`Open-orders sync loop: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
+                                this._markGridActivity?.('open-orders sync fill');
+                                const batchResult = await this._processFillsWithBatching(
+                                    syncResult.filledOrders, new Set(), 'open-orders sync fill rebalance'
+                                );
+                                if (!batchResult?.aborted) {
+                                    await this.manager.persistGrid();
                                 }
-                            } finally {
-                                this._markGridActivity?.('open-orders sync end');
                             }
                         });
                     }
