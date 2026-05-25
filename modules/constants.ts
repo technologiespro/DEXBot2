@@ -1070,6 +1070,9 @@ let NATIVE_CLIENT = {
         CALL_ORDER_UPDATE:    3,
         FILL_ORDER:           4,
         ASSET_SETTLE:         17,
+        CREDIT_OFFER_ACCEPT:  72,
+        CREDIT_DEAL_REPAY:    73,
+        CREDIT_DEAL_UPDATE:   76,
         LIMIT_ORDER_UPDATE:   77,
     },
 

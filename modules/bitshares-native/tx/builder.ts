@@ -77,6 +77,15 @@ function createTransactionBuilder(chainClient) {
         transfer(data) {
             return this.addOperation('transfer', data);
         },
+        credit_offer_accept(data) {
+            return this.addOperation('credit_offer_accept', data);
+        },
+        credit_deal_repay(data) {
+            return this.addOperation('credit_deal_repay', data);
+        },
+        credit_deal_update(data) {
+            return this.addOperation('credit_deal_update', data);
+        },
 
         async setRequiredFees(feeAssetId = DEFAULT_FEE_ASSET) {
             if (ops.length === 0) return;
@@ -168,6 +177,9 @@ function createTransactionBuilder(chainClient) {
                 call_order_update: 3,
                 fill_order: 4,
                 asset_settle: 17,
+                credit_offer_accept: 72,
+                credit_deal_repay: 73,
+                credit_deal_update: 76,
                 limit_order_update: 77,
             };
 
@@ -205,6 +217,10 @@ function createTransactionBuilder(chainClient) {
             if (result.amount_to_sell) result.amount_to_sell = { ...result.amount_to_sell };
             if (result.min_to_receive) result.min_to_receive = { ...result.min_to_receive };
             if (result.amount) result.amount = { ...result.amount };
+            if (result.borrow_amount) result.borrow_amount = { ...result.borrow_amount };
+            if (result.collateral) result.collateral = { ...result.collateral };
+            if (result.repay_amount) result.repay_amount = { ...result.repay_amount };
+            if (result.credit_fee) result.credit_fee = { ...result.credit_fee };
 
             return result;
         },

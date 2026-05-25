@@ -43,6 +43,18 @@ const limit_order_update_operation_fee_parameters = new Serializer('limit_order_
     fee: uint64,
 });
 
+const credit_offer_accept_operation_fee_parameters = new Serializer('credit_offer_accept_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const credit_deal_repay_operation_fee_parameters = new Serializer('credit_deal_repay_operation_fee_parameters', {
+    fee: uint64,
+});
+
+const credit_deal_update_operation_fee_parameters = new Serializer('credit_deal_update_operation_fee_parameters', {
+    fee: uint64,
+});
+
 const fee_parameters = staticVariantType([
     transfer_operation_fee_parameters,
     limit_order_create_operation_fee_parameters,
@@ -52,6 +64,9 @@ const fee_parameters = staticVariantType([
 ]);
 
 fee_parameters.st_operations[17] = asset_settle_operation_fee_parameters;
+fee_parameters.st_operations[72] = credit_offer_accept_operation_fee_parameters;
+fee_parameters.st_operations[73] = credit_deal_repay_operation_fee_parameters;
+fee_parameters.st_operations[76] = credit_deal_update_operation_fee_parameters;
 fee_parameters.st_operations[77] = limit_order_update_operation_fee_parameters;
 
 const fee_schedule = new Serializer('fee_schedule', {
@@ -155,6 +170,36 @@ const limit_order_update = new Serializer('limit_order_update', {
     extensions: setType(future_extensions),
 });
 
+const credit_offer_accept = new Serializer('credit_offer_accept', {
+    fee: asset,
+    borrower: protocol_id_type('account'),
+    offer_id: protocol_id_type('credit_offer'),
+    borrow_amount: asset,
+    collateral: asset,
+    max_fee_rate: uint32,
+    min_duration_seconds: uint32,
+    extensions: extensionType([
+        { name: 'auto_repay', type: uint8 },
+    ]),
+});
+
+const credit_deal_repay = new Serializer('credit_deal_repay', {
+    fee: asset,
+    account: protocol_id_type('account'),
+    deal_id: protocol_id_type('credit_deal'),
+    repay_amount: asset,
+    credit_fee: asset,
+    extensions: setType(future_extensions),
+});
+
+const credit_deal_update = new Serializer('credit_deal_update', {
+    fee: asset,
+    account: protocol_id_type('account'),
+    deal_id: protocol_id_type('credit_deal'),
+    auto_repay: uint8,
+    extensions: setType(future_extensions),
+});
+
 operation.st_operations = [
     transfer,
     limit_order_create,
@@ -164,6 +209,9 @@ operation.st_operations = [
 ];
 
 operation.st_operations[17] = asset_settle;
+operation.st_operations[72] = credit_offer_accept;
+operation.st_operations[73] = credit_deal_repay;
+operation.st_operations[76] = credit_deal_update;
 operation.st_operations[77] = limit_order_update;
 
 const generic_operation_result = new Serializer('generic_operation_result', {
@@ -236,6 +284,9 @@ export = {
     fill_order,
     asset_settle,
     limit_order_update,
+    credit_offer_accept,
+    credit_deal_repay,
+    credit_deal_update,
     fee_schedule,
     fee_parameters,
     asset,
@@ -248,4 +299,7 @@ export = {
     fill_order_operation_fee_parameters,
     asset_settle_operation_fee_parameters,
     limit_order_update_operation_fee_parameters,
+    credit_offer_accept_operation_fee_parameters,
+    credit_deal_repay_operation_fee_parameters,
+    credit_deal_update_operation_fee_parameters,
 };

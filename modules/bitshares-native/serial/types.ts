@@ -283,28 +283,25 @@ function arrayType(st_operation: any): SerType {
             for (let i = 0; i < size; i++) {
                 result.push(st_operation.fromByteBuffer(b));
             }
-            return sortOperation(result, st_operation);
+            return result;
         },
         appendByteBuffer(b: BufWriter, v: any): void {
             $required(v, 'array');
-            const sorted = sortOperation(v, st_operation);
-            b.writeVarint32(sorted.length);
-            for (const item of sorted) {
+            b.writeVarint32(v.length);
+            for (const item of v) {
                 st_operation.appendByteBuffer(b, item);
             }
         },
         fromObject(v: any): any {
             $required(v, 'array');
-            const sorted = sortOperation(v, st_operation);
-            return sorted.map((item: any) => st_operation.fromObject(item));
+            return v.map((item: any) => st_operation.fromObject(item));
         },
         toObject(v: any, debug?: any): any {
             if (debug && debug.use_default && v === undefined) {
                 return [st_operation.toObject(undefined, debug)];
             }
             $required(v, 'array');
-            const sorted = sortOperation(v, st_operation);
-            return sorted.map((item: any) => st_operation.toObject(item, debug));
+            return v.map((item: any) => st_operation.toObject(item, debug));
         },
     };
 }
@@ -388,12 +385,11 @@ function fixedArrayType(count: number, st_operation: any): SerType {
             for (let i = 0; i < count; i++) {
                 result.push(st_operation.fromByteBuffer(b));
             }
-            return sortOperation(result, st_operation);
+            return result;
         },
         appendByteBuffer(b: BufWriter, v: any): void {
             if (count !== 0) {
                 $required(v, 'fixed_array');
-                v = sortOperation(v, st_operation);
             }
             for (let i = 0; i < count; i++) {
                 st_operation.appendByteBuffer(b, v ? v[i] : undefined);
