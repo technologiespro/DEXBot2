@@ -19,7 +19,6 @@
     "declarationMap": false,
     "sourceMap": false,
     "moduleResolution": "node",
-    "ignoreDeprecations": "6.0",
     "allowJs": false,
     "types": ["node"]
   },
