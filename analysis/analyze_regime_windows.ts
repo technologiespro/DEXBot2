@@ -74,9 +74,12 @@ function parseArgs() {
     return config;
 }
 
+const H_UPPER = 0.5 + MARKET_ADAPTER.HURST_ZONE_BAND;
+const H_LOWER = 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND;
+
 function regimeBand(H) {
-    if (H > 0.55) return 'TRENDING';
-    if (H < 0.45) return 'MEAN_REVERTING';
+    if (H > H_UPPER) return 'TRENDING';
+    if (H < H_LOWER) return 'MEAN_REVERTING';
     return 'RANDOM';
 }
 
