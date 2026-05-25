@@ -1715,11 +1715,14 @@ class DEXBot {
                 });
             }
 
-            // Broadcast rotation orders
+            // Broadcast rotation orders using the same fixed cap as normal fill handling.
             if (ordersToPlace.length > 0) {
                 const sizes = ordersToPlace.map(o => `${o.type}:${Format.formatAmount8(o.size)}`).join(' ');
                 this._log(`[BOOTSTRAP] Broadcasting ${ordersToPlace.length} rotation order(s) - sizes: ${sizes}`, 'info');
-                await this.updateOrdersOnChainPlan({ ordersToPlace });
+                const maxBatch = this._getMaxFillBatchSize();
+                for (let i = 0; i < ordersToPlace.length; i += maxBatch) {
+                    await this.updateOrdersOnChainPlan({ ordersToPlace: ordersToPlace.slice(i, i + maxBatch) });
+                }
             }
 
             this._metrics.fillsProcessed += validFills.length;
@@ -1878,6 +1881,14 @@ class DEXBot {
             getType: e => e.context.order.type,
             getPrice: e => e.context.order.price,
         });
+    }
+
+    /**
+     * Resolve the centralized fill batch cap.
+     * @returns {number} Positive maximum number of fill-driven rotations per broadcast cycle
+     */
+    _getMaxFillBatchSize() {
+        return Math.max(1, FILL_PROCESSING.MAX_FILL_BATCH_SIZE || 1);
     }
 
     /**
@@ -2206,7 +2217,7 @@ class DEXBot {
         }
 
         const managerLog = this.manager?.logger?.log?.bind(this.manager.logger) || (() => {});
-        const maxBatch = Math.max(1, FILL_PROCESSING.MAX_FILL_BATCH_SIZE || 1);
+        const maxBatch = this._getMaxFillBatchSize();
         const totalFills = fills.length;
         const useUnifiedPlan = totalFills <= maxBatch;
         const modeLabel = useUnifiedPlan ? 'unified' : 'chunked';

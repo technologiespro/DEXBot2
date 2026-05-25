@@ -7,7 +7,8 @@
 
 const assert = require('assert');
 const DEXBot = require('../modules/dexbot_class');
-const { FILL_PROCESSING } = require('../modules/constants');
+const Grid = require('../modules/order/grid');
+const { FILL_PROCESSING, ORDER_STATES, ORDER_TYPES } = require('../modules/constants');
 
 const MAX_BATCH = FILL_PROCESSING.MAX_FILL_BATCH_SIZE;
 
@@ -69,6 +70,85 @@ function makeBot() {
     bot._refreshDynamicWeightDistribution = (context) => {
         callLog.push({ method: '_refreshDynamicWeightDistribution', context });
     };
+
+    return bot;
+}
+
+function makeBootstrapFill(n) {
+    return {
+        id: `1.11.${9000 + n}`,
+        block_num: 9000 + n,
+        op: [4, {
+            order_id: `1.7.${n}`,
+            pays: { asset_id: '1.3.1', amount: 100000 },
+            receives: { asset_id: '1.3.0', amount: 250000 },
+            is_maker: true,
+        }],
+    };
+}
+
+function makeBootstrapBot() {
+    const bot = new DEXBot({
+        name: 'test-bootstrap-fill-batch-chunking',
+        assetA: 'BTS',
+        assetB: 'USD',
+        startPrice: 0.02,
+        minPrice: 0.01,
+        maxPrice: 0.04,
+        botFunds: { buy: 100, sell: 100 },
+        activeOrders: { buy: 6, sell: 6 },
+        incrementPercent: 1,
+        weightDistribution: { buy: 0.5, sell: 0.5 },
+    });
+
+    const orders = new Map();
+    for (let i = 1; i <= 6; i++) {
+        orders.set(`buy-${i}`, {
+            id: `buy-${i}`,
+            orderId: `1.7.${i}`,
+            type: ORDER_TYPES.BUY,
+            state: ORDER_STATES.ACTIVE,
+            price: 0.02 - i * 0.0001,
+            size: 10,
+        });
+        orders.set(`sell-active-${i}`, {
+            id: `sell-active-${i}`,
+            orderId: `1.7.${100 + i}`,
+            type: ORDER_TYPES.SELL,
+            state: ORDER_STATES.ACTIVE,
+            price: 0.021 + i * 0.0001,
+            size: 10,
+        });
+        orders.set(`sell-empty-${i}`, {
+            id: `sell-empty-${i}`,
+            type: ORDER_TYPES.SELL,
+            state: ORDER_STATES.VIRTUAL,
+            price: 0.022 + i * 0.0001,
+            size: 10,
+        });
+    }
+
+    bot.manager = {
+        orders,
+        config: bot.config,
+        logger: {
+            log: () => {},
+        },
+        _updateOrder: async (order) => {
+            orders.set(order.id, order);
+        },
+    };
+
+    bot._refreshDynamicWeightDistribution = () => {};
+    bot._flushProcessedFillPersistence = async () => {};
+    bot._applyReplaySafeTrackedFillAccounting = async (fill) => ({
+        status: 'applied',
+        fillKey: `${fill.op[1].order_id}:${fill.block_num}:${fill.id}`,
+    });
+    bot.updateOrdersOnChainPlan = async (plan) => {
+        bot._broadcastPlans.push(plan);
+    };
+    bot._broadcastPlans = [];
 
     return bot;
 }
@@ -281,6 +361,29 @@ async function runTests() {
         assert.strictEqual(result.aborted, false);
         assert.strictEqual(result.anyRotations, true, 'rotation in second chunk should propagate');
         console.log('  ✓ hadRotation propagated from chunk to result');
+    }
+
+    // --- Test 13: bootstrap fill rotations respect MAX_BATCH broadcast cap ---
+    {
+        const originalSizingContext = Grid._getSizingContext;
+        Grid._getSizingContext = async () => null;
+        try {
+            const bot = makeBootstrapBot();
+            const totalFills = MAX_BATCH + 2;
+            bot._incomingFillQueue.push(...Array.from({ length: totalFills }, (_, n) => makeBootstrapFill(n + 1)));
+
+            await bot._processFillsWithBootstrapMode({
+                readOpenOrders: async () => [],
+                getFillProcessingMode: () => 'history',
+            });
+
+            assert.strictEqual(bot._broadcastPlans.length, 2, `${totalFills} bootstrap fills: 2 broadcast plans`);
+            assert.strictEqual(bot._broadcastPlans[0].ordersToPlace.length, MAX_BATCH, `first bootstrap broadcast: ${MAX_BATCH} orders`);
+            assert.strictEqual(bot._broadcastPlans[1].ordersToPlace.length, 2, 'second bootstrap broadcast: 2 orders');
+            console.log(`  ✓ bootstrap fill rotations chunked into ${MAX_BATCH} + ${totalFills - MAX_BATCH}`);
+        } finally {
+            Grid._getSizingContext = originalSizingContext;
+        }
     }
 
     console.log('\nAll fill batch chunking tests passed.\n');
