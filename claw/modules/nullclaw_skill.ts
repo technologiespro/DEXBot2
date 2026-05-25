@@ -1,4 +1,3 @@
-// @ts-nocheck
 const fs = require('fs/promises');
 const path = require('path');
 const { getNullClawSkillTools } = require('./nullclaw_catalog');

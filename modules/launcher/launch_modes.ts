@@ -1,5 +1,5 @@
-function findFirstPositionalArg(args) {
-    return args.find((arg) => !arg.startsWith('-') && arg !== 'claw-only') || null;
+function findFirstPositionalArg(args: string[]): string | null {
+    return args.find((arg: string) => !arg.startsWith('-') && arg !== 'claw-only') || null;
 }
 
 function parseUnlockStartArgs(argv = process.argv) {

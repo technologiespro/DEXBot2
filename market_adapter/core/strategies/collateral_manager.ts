@@ -23,7 +23,7 @@
  * @param {number}  maxRatio            - Ceiling collateral ratio (e.g. 2.0)
  * @returns {{ targetRatio: number, action: string, adjustment: number }}
  */
-function adjustCollateralRatio(trendData, minRatio = 1.5, maxRatio = 2.0) {
+function adjustCollateralRatio(trendData: any, minRatio = 1.5, maxRatio = 2.0) {
     const min = Number.isFinite(minRatio) && minRatio > 0 ? minRatio : 1.5;
     const max = Number.isFinite(maxRatio) && maxRatio > min ? maxRatio : min + 0.5;
     const midpoint = (min + max) / 2;

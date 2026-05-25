@@ -1,7 +1,6 @@
-// @ts-nocheck
 'use strict';
 
-let _bitsharesClient = null;
+let _bitsharesClient: any = null;
 
 function getBitsharesClient() {
     // lazy require to avoid circular dependencies at module load time
@@ -11,11 +10,11 @@ function getBitsharesClient() {
     return _bitsharesClient;
 }
 
-function setBitsharesClientForTests(client) {
+function setBitsharesClientForTests(client: any) {
     _bitsharesClient = client;
 }
 
-async function resolveAsset(symbol, bitsharesClient = null) {
+async function resolveAsset(symbol: any, bitsharesClient: any = null) {
     if (!symbol || typeof symbol !== 'string') {
         throw new Error(`Cannot resolve asset: invalid or missing symbol "${symbol}"`);
     }
@@ -28,7 +27,7 @@ async function resolveAsset(symbol, bitsharesClient = null) {
     return { id: asset.id, precision: asset.precision, symbol };
 }
 
-async function findPoolByAssets(assetAId, assetBId, options = {}) {
+async function findPoolByAssets(assetAId: any, assetBId: any, options: any = {}) {
     const client = options.bitsharesClient || getBitsharesClient();
     const { BitShares } = client;
     const sortBy = options.sortBy || 'totalBalance'; // 'totalBalance' or 'assetABalance'
@@ -46,8 +45,8 @@ async function findPoolByAssets(assetAId, assetBId, options = {}) {
             if (Array.isArray(pools) && pools.length > 0) {
                 if (sortBy === 'assetABalance') {
                     const idAStr = String(assetAId);
-                    return pools.sort((a, b) => {
-                        const bal = (p) => {
+                    return pools.sort((a: any, b: any) => {
+                        const bal = (p: any) => {
                             const assetA = String(p.asset_a ?? p.asset_ids?.[0] ?? '');
                             const assetB = String(p.asset_b ?? p.asset_ids?.[1] ?? '');
                             const value = assetA === idAStr
@@ -60,8 +59,8 @@ async function findPoolByAssets(assetAId, assetBId, options = {}) {
                         return bal(b) - bal(a);
                     })[0];
                 }
-                return pools.sort((x, y) => {
-                    const bal = (p) => Number(p.balance_a ?? 0) + Number(p.balance_b ?? 0);
+                return pools.sort((x: any, y: any) => {
+                    const bal = (p: any) => Number(p.balance_a ?? 0) + Number(p.balance_b ?? 0);
                     return bal(y) - bal(x);
                 })[0];
             }
@@ -87,8 +86,8 @@ async function findPoolByAssets(assetAId, assetBId, options = {}) {
             if (matches.length > 0) {
                 if (sortBy === 'assetABalance') {
                     const idAStr = String(assetAId);
-                    return matches.sort((a, b) => {
-                        const bal = (p) => {
+                    return matches.sort((a: any, b: any) => {
+                        const bal = (p: any) => {
                             const assetA = String(p.asset_a ?? p.asset_ids?.[0] ?? '');
                             const assetB = String(p.asset_b ?? p.asset_ids?.[1] ?? '');
                             const value = assetA === idAStr
@@ -101,8 +100,8 @@ async function findPoolByAssets(assetAId, assetBId, options = {}) {
                         return bal(b) - bal(a);
                     })[0];
                 }
-                return matches.sort((x, y) => {
-                    const bal = (p) => Number(p.balance_a ?? 0) + Number(p.balance_b ?? 0);
+                return matches.sort((x: any, y: any) => {
+                    const bal = (p: any) => Number(p.balance_a ?? 0) + Number(p.balance_b ?? 0);
                     return bal(y) - bal(x);
                 })[0];
             }
@@ -115,29 +114,29 @@ async function findPoolByAssets(assetAId, assetBId, options = {}) {
     throw new Error(`No liquidity pool found for ${assetAId}/${assetBId}`);
 }
 
-function normalizeMarketSource(raw) {
+function normalizeMarketSource(raw: any) {
     const value = String(raw || '').trim().toLowerCase();
     if (value === 'pool') return 'pool';
     if (value === 'book' || value === 'orderbook' || value === 'market') return 'book';
     return null;
 }
 
-function hasNumericStartPrice(raw) {
+function hasNumericStartPrice(raw: any) {
     return typeof raw === 'number' && Number.isFinite(raw) && raw > 0;
 }
 
-function resolveMarketSourceForBot(bot) {
+function resolveMarketSourceForBot(bot: any) {
     if (hasNumericStartPrice(bot?.startPrice)) return null;
     return normalizeMarketSource(bot?.startPrice) || 'pool';
 }
 
-function normalizePoolId(id) {
+function normalizePoolId(id: any) {
     if (id == null) return null;
     const s = String(id).trim();
     return s.startsWith('1.19.') ? s : `1.19.${s}`;
 }
 
-async function resolveBotContext(bot) {
+async function resolveBotContext(bot: any) {
     if (!bot.assetAId && !bot.assetA) {
         throw new Error(`Bot "${bot.botKey}" config is missing assetA symbol or ID`);
     }

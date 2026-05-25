@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck
 
 // MCP stdio reserves stdout for JSON-RPC frames. Some shared DEXBot2 modules
 // log during require-time initialization, so suppress incidental console logs.

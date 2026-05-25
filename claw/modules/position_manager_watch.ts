@@ -1,4 +1,3 @@
-// @ts-nocheck
 const fsPromises = require('fs/promises');
 const path = require('path');
 const { PositionManager, DEFAULT_STATE_PATH } = require('./position_manager');

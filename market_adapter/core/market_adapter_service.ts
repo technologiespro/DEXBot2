@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use strict';
 
 const { calculateATR } = require('./strategies/atr/calculator');
@@ -30,7 +29,7 @@ const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order
 const AMA_SLOPE_PERCENT_MODE_PER_BAR = 'perBar';
 const AMA_SLOPE_PERCENT_MODE_WINDOW = 'window';
 
-function normalizeAmaSlopePercentMode(value) {
+function normalizeAmaSlopePercentMode(value: any){
     const text = String(value || '').trim().toLowerCase();
     if (['perbar', 'per_bar', 'per-bar', 'averageperbar', 'average_per_bar'].includes(text)) {
         return AMA_SLOPE_PERCENT_MODE_PER_BAR;
@@ -41,13 +40,13 @@ function normalizeAmaSlopePercentMode(value) {
     return null;
 }
 
-function normalizeAmaSlopeLookbackBars(value, fallback = MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS) {
+function normalizeAmaSlopeLookbackBars(value: any, fallback: any = MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS){
     const n = Number(value);
     if (Number.isFinite(n) && n > 0) return Math.ceil(n);
     return fallback;
 }
 
-function convertSlopePercentToPerBar(value, lookbackBars, mode) {
+function convertSlopePercentToPerBar(value: any, lookbackBars: any, mode: any){
     const n = Number(value);
     if (!Number.isFinite(n)) return null;
     return mode === AMA_SLOPE_PERCENT_MODE_PER_BAR
@@ -55,7 +54,7 @@ function convertSlopePercentToPerBar(value, lookbackBars, mode) {
         : n / normalizeAmaSlopeLookbackBars(lookbackBars);
 }
 
-function normalizePersistedAmaSlopeSnapshot(snapshot, lookbackBars, mode) {
+function normalizePersistedAmaSlopeSnapshot(snapshot: any, lookbackBars: any, mode: any){
     if (!snapshot || typeof snapshot !== 'object') return null;
     const normalized = { ...snapshot };
     const slopePct = convertSlopePercentToPerBar(snapshot.slopePct, lookbackBars, mode);
@@ -65,7 +64,7 @@ function normalizePersistedAmaSlopeSnapshot(snapshot, lookbackBars, mode) {
     return normalized;
 }
 
-function normalizePersistedAmaSlopeDiagnostics(data, lookbackBars) {
+function normalizePersistedAmaSlopeDiagnostics(data: any, lookbackBars: any){
     if (!data || typeof data !== 'object') return data;
     const mode = normalizeAmaSlopePercentMode(data.amaSlopePercentMode) || AMA_SLOPE_PERCENT_MODE_WINDOW;
     const normalized = { ...data };
@@ -83,14 +82,14 @@ function normalizePersistedAmaSlopeDiagnostics(data, lookbackBars) {
     return normalized;
 }
 
-function roundTo(value, places = 6) {
+function roundTo(value: any, places: any = 6){
     const n = Number(value);
     const scale = 10 ** Math.max(0, Math.floor(places));
     if (!Number.isFinite(n)) return null;
     return Math.round(n * scale) / scale;
 }
 
-function computeGridPriceOffsetPlan(bot, amaSlope) {
+function computeGridPriceOffsetPlan(bot: any, amaSlope: any){
     const targetSpreadPercentRaw = Number(bot?.targetSpreadPercent);
     const targetSpreadPercent = Number.isFinite(targetSpreadPercentRaw) && targetSpreadPercentRaw > 0
         ? targetSpreadPercentRaw
@@ -121,11 +120,12 @@ function computeGridPriceOffsetPlan(bot, amaSlope) {
 
 
 class MarketAdapterService {
-    constructor(deps = {}) {
+    deps: any;
+    constructor(deps: any = {}) {
         this.deps = deps;
     }
 
-    static isRetryableClosedCandleFailure(reason) {
+    static isRetryableClosedCandleFailure(reason: any) {
         return reason === 'ama_center_persist_failed'
             || reason === 'dynamic_weight_persist_failed'
             || reason === 'ama_slope_persist_failed'
@@ -136,7 +136,7 @@ class MarketAdapterService {
         return typeof this.deps.getNowMs === 'function' ? this.deps.getNowMs() : Date.now();
     }
 
-    selectClosedCandles(candles, intervalSeconds, nowMs = this.getNowMs()) {
+    selectClosedCandles(candles: any, intervalSeconds: any, nowMs: any = this.getNowMs()) {
         const bucketMs = Number(intervalSeconds) * 1000;
         if (!Number.isFinite(bucketMs) || bucketMs <= 0) {
             return {
@@ -152,7 +152,7 @@ class MarketAdapterService {
         return { closedCandles, currentBucketStartMs };
     }
 
-    buildBotContextSignature(bot) {
+    buildBotContextSignature(bot: any){
         return [
             bot?.assetA,
             bot?.assetB,
@@ -165,7 +165,7 @@ class MarketAdapterService {
         ].map((v) => String(v ?? '')).join('|');
     }
 
-    buildGapRepairTimeRange(missingTimestamps, intervalSeconds, maxGapHours = 24) {
+    buildGapRepairTimeRange(missingTimestamps: any, intervalSeconds: any, maxGapHours: any = 24){
         const bucketMs = Number(intervalSeconds) * 1000;
         if (!Array.isArray(missingTimestamps) || missingTimestamps.length === 0) return null;
         if (!Number.isFinite(bucketMs) || bucketMs <= 0) return null;
@@ -181,7 +181,7 @@ class MarketAdapterService {
         };
     }
 
-    getMissingTimestampsWithinTimeRange(missingTimestamps, timeRange) {
+    getMissingTimestampsWithinTimeRange(missingTimestamps: any, timeRange: any){
         if (!Array.isArray(missingTimestamps) || missingTimestamps.length === 0 || !timeRange) return [];
         const gteMs = Date.parse(timeRange.gte);
         const lteMs = Date.parse(timeRange.lte);
@@ -189,7 +189,7 @@ class MarketAdapterService {
         return missingTimestamps.filter((ts) => Number.isFinite(ts) && ts >= gteMs && ts <= lteMs);
     }
 
-    getGapRepairMaxHours(cfg) {
+    getGapRepairMaxHours(cfg: any){
         const intervalSeconds = Number(cfg?.intervalSeconds);
         const intervalHours = Number.isFinite(intervalSeconds) && intervalSeconds > 0
             ? intervalSeconds / 3600
@@ -204,13 +204,13 @@ class MarketAdapterService {
         return Math.max(1, (maxCandles + 2) * intervalHours);
     }
 
-    getTrustedNoTradeGapThresholdCandles(cfg) {
+    getTrustedNoTradeGapThresholdCandles(cfg: any){
         return Number.isFinite(cfg?.maxNativeGapFillCandles)
             ? cfg.maxNativeGapFillCandles
             : MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES;
     }
 
-    fillNativeIncrementalClosedGaps(candles, previousLastTs, intervalSeconds, nowMs = this.getNowMs()) {
+    fillNativeIncrementalClosedGaps(candles: any, previousLastTs: any, intervalSeconds: any, nowMs: any = this.getNowMs()) {
         const deps = this.deps;
         if (typeof deps.fillCandleGaps !== 'function') return candles;
         if (!Array.isArray(candles) || candles.length === 0) return candles;
@@ -234,7 +234,7 @@ class MarketAdapterService {
         return deps.mergeCandles(candles, filledTail);
     }
 
-    buildIncrementalCandleCollision(existing, incoming) {
+    buildIncrementalCandleCollision(existing: any, incoming: any){
         const existingVol = Number(existing?.[5] || 0);
         const incomingVol = Number(incoming?.[5] || 0);
         if (existingVol <= 0 && incomingVol > 0) return incoming;
@@ -255,7 +255,7 @@ class MarketAdapterService {
     // When Kibana also returns no candles for a bounded internal run, we accept
     // that as verified no-trade and synthesize flat candles up to the same
     // trusted no-trade threshold used by live native silence handling.
-    fillVerifiedInternalNoTradeGaps(candles, missingTimestamps, intervalSeconds, maxGapCandles) {
+    fillVerifiedInternalNoTradeGaps(candles: any, missingTimestamps: any, intervalSeconds: any, maxGapCandles: any){
         const deps = this.deps;
         const bucketMs = Number(intervalSeconds) * 1000;
         if (!Array.isArray(candles) || candles.length === 0 || !Array.isArray(missingTimestamps) || missingTimestamps.length === 0) {
@@ -278,12 +278,12 @@ class MarketAdapterService {
         }
 
         const candleByTs = new Map(sortedCandles.map((c) => [c[0], c]));
-        const synthesized = [];
-        const filledTimestamps = [];
+        const synthesized: any[] = [];
+        const filledTimestamps: any[] = [];
 
         let runStart = sortedMissing[0];
         let previousMissingTs = sortedMissing[0];
-        const flushRun = (startTs, endTs) => {
+        const flushRun = (startTs: any, endTs: any) => {
             const runLength = Math.round((endTs - startTs) / bucketMs) + 1;
             if (runLength <= 0 || runLength > maxGapCandles) return;
             const previousCandle = candleByTs.get(startTs - bucketMs);
@@ -315,7 +315,7 @@ class MarketAdapterService {
         };
     }
 
-    getNativeRecentTradeSequences(trades, limit = 8) {
+    getNativeRecentTradeSequences(trades: any, limit: any = 8){
         const seen = new Set();
         return (Array.isArray(trades) ? trades : [])
             .filter((t) => Number.isFinite(Number(t?.sequence)))
@@ -335,7 +335,7 @@ class MarketAdapterService {
             .slice(0, limit);
     }
 
-    filterTimeBasedNativeNewTrades(trades, knownSequences, nativeLastTradeTs, lastCandleTs, intervalSeconds) {
+    filterTimeBasedNativeNewTrades(trades: any, knownSequences: any, nativeLastTradeTs: any, lastCandleTs: any, intervalSeconds: any){
         const seqSet = knownSequences instanceof Set
             ? knownSequences
             : new Set((Array.isArray(knownSequences) ? knownSequences : []).map((seq) => String(seq)));
@@ -351,7 +351,7 @@ class MarketAdapterService {
             const seq = Number(trade?.sequence);
             const seqKey = Number.isFinite(seq) ? String(seq) : null;
             if (seqKey && seqSet.has(seqKey)) return false;
-            if (Number.isFinite(seq) && Number.isFinite(maxKnownSeq)) return seq > maxKnownSeq;
+            if (Number.isFinite(seq) && Number.isFinite(maxKnownSeq)) return seq > (maxKnownSeq as number);
 
             const tsMs = Number(trade?.tsMs);
             if (!Number.isFinite(tsMs)) return true;
@@ -366,7 +366,7 @@ class MarketAdapterService {
         });
     }
 
-    clampGridPriceToBounds(centerPrice, referencePrice, bot) {
+    clampGridPriceToBounds(centerPrice: any, referencePrice: any, bot: any){
         const base = Number(centerPrice);
         const ref = Number(referencePrice);
         if (!Number.isFinite(base) || base <= 0) return centerPrice;
@@ -381,7 +381,7 @@ class MarketAdapterService {
         }
     }
 
-    computeAppliedAsymmetryMetrics(bot, centerPrice, dynamicWeights) {
+    computeAppliedAsymmetryMetrics(bot: any, centerPrice: any, dynamicWeights: any){
         const maxAsymmetryFactor = resolveMaxAsymmetryFactor(
             bot?.asymmetricBounds?.maxAsymmetryFactor,
             dynamicWeights?.maxAsymmetryFactor,
@@ -406,7 +406,7 @@ class MarketAdapterService {
         });
     }
 
-    buildDefaultBotState(bot, overrides = {}) {
+    buildDefaultBotState(bot: any, overrides: any = {}){
         return {
             botName: bot.name,
             botKey: bot.botKey,
@@ -451,7 +451,7 @@ class MarketAdapterService {
         };
     }
 
-    buildDefaultResult(bot, overrides = {}) {
+    buildDefaultResult(bot: any, overrides: any = {}){
         return {
             ok: true,
             dryRunMessages: [],
@@ -499,14 +499,14 @@ class MarketAdapterService {
         };
     }
 
-    resolveAmaSlopeDeltaThresholdPercent(cfg) {
+    resolveAmaSlopeDeltaThresholdPercent(cfg: any){
         const threshold = Number(cfg?.amaSlopeDeltaThresholdPercent);
         return Number.isFinite(threshold) && threshold > 0
             ? threshold
             : MARKET_ADAPTER.AMA_SLOPE_DELTA_THRESHOLD_PERCENT;
     }
 
-    buildAmaSlopeResetDetails(currentAmaSlope, previousAmaSlope, cfg) {
+    buildAmaSlopeResetDetails(currentAmaSlope: any, previousAmaSlope: any, cfg: any){
         const thresholdPercent = this.resolveAmaSlopeDeltaThresholdPercent(cfg);
         const currentSlopePct = Number(currentAmaSlope?.slopePct);
         const previousSlopePct = Number(previousAmaSlope?.slopePct);
@@ -516,7 +516,7 @@ class MarketAdapterService {
         const deltaPercent = currentReady && previousReady
             ? Math.abs(currentSlopePct - previousSlopePct)
             : null;
-        const thresholdCrossed = Number.isFinite(deltaPercent) && deltaPercent >= thresholdPercent;
+        const thresholdCrossed = Number.isFinite(deltaPercent) && (deltaPercent as number) >= thresholdPercent;
 
         return {
             thresholdPercent,
@@ -528,12 +528,12 @@ class MarketAdapterService {
         };
     }
 
-    normalizePersistedBotState(botState, lookbackBars) {
+    normalizePersistedBotState(botState: any, lookbackBars: any){
         if (!botState || typeof botState !== 'object') return {};
         return normalizePersistedAmaSlopeDiagnostics(botState, lookbackBars);
     }
 
-    extractPersistedDynamicGridState(snapshot, lookbackBars) {
+    extractPersistedDynamicGridState(snapshot: any, lookbackBars: any){
         if (!snapshot || typeof snapshot !== 'object') return null;
 
         const gridCenterPrice = Number(snapshot.gridCenterPrice ?? snapshot.centerPrice);
@@ -564,7 +564,7 @@ class MarketAdapterService {
         };
     }
 
-    _computeDynamicWeights(params) {
+    _computeDynamicWeights(params: any){
         const {
             analysisCandles, closes, amaValues, amaWarmupBars, lookbackBars,
             botAma, weightVariance, amaPrice, nowIso, cfg, bot, ctx, deps, atrPeriod
@@ -845,7 +845,7 @@ class MarketAdapterService {
         const staticBuy = bot.weightDistribution.buy;
         const MIN_W = MARKET_ADAPTER.DYNAMIC_WEIGHT_MIN_WEIGHT;
         const MAX_W = MARKET_ADAPTER.DYNAMIC_WEIGHT_MAX_WEIGHT;
-        const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+        const clamp = (v: any, lo: any, hi: any) => Math.max(lo, Math.min(hi, v));
 
         const belowMinOutputThreshold = Math.abs(finalPreGainOff) < outputThreshold;
         const volPenalty = slopeResult.isReady ? (slopeResult.symmetricDelta ?? 0) : 0;
@@ -971,12 +971,12 @@ class MarketAdapterService {
         return { weights, dynamicWeightsPayload, slopeResult, regimeResult, kalmanResult, amaSlope };
     }
 
-    async processBot(bot, state, cfg, contextCache, hooks = {}) {
+    async processBot(bot: any, state: any, cfg: any, contextCache: any, hooks: any = {}){
 
         const deps = this.deps;
         const isDryRun = !!hooks.isDryRun;
         const forceWhitelistAll = !!hooks.forceWhitelistAll;
-        let dryRunMessages = [];
+        let dryRunMessages: any[] = [];
         
         if ((!bot.assetA && !bot.assetAId) || (!bot.assetB && !bot.assetBId)) {
             return { ok: false, reason: 'missing asset pair' };
@@ -1033,7 +1033,7 @@ class MarketAdapterService {
             ? cfg.kibanaRequestTimeoutMs
             : MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS;
 
-        const fetchKibanaCandles = async (options = {}) => {
+        const fetchKibanaCandles = async (options: any = {}) => {
             const kibanaOptions = {
                 timeout: kibanaRequestTimeoutMs,
                 ...options,
@@ -1065,7 +1065,7 @@ class MarketAdapterService {
             return {};
         };
 
-        const verifyAndPruneStaleTail = async (candles, threshold, verifiedRange = {}) => {
+        const verifyAndPruneStaleTail = async (candles: any, threshold: any, verifiedRange: any = {}) => {
             if (typeof deps.pruneStaleTail !== 'function') return { candles };
             const pruned = deps.pruneStaleTail(candles, threshold);
             if (pruned.length === candles.length || candles.length === 0) {
@@ -1119,7 +1119,7 @@ class MarketAdapterService {
             }
         };
 
-        const applyStaleTailVerificationMeta = (verified) => {
+        const applyStaleTailVerificationMeta = (verified: any) => {
             if (Number.isFinite(verified?.keptStaleTailStartTs) && Number.isFinite(verified?.keptStaleTailEndTs)) {
                 existingMeta.staleTailVerifiedStartTs = verified.keptStaleTailStartTs;
                 existingMeta.staleTailVerifiedEndTs = verified.keptStaleTailEndTs;
@@ -1191,7 +1191,7 @@ class MarketAdapterService {
             // - Reuse the same threshold when deciding whether an old internal hole is
             //   small enough to synthesize after Kibana also returns no candles.
             const trustedNoTradeGapThresholdCandles = this.getTrustedNoTradeGapThresholdCandles(cfg);
-            const logGapRepairEvent = (message, level = 'info') => {
+            const logGapRepairEvent = (message: any, level: any = 'info') => {
                 if (typeof deps.logger?.log === 'function') {
                     deps.logger.log(message, level);
                 } else if (level === 'warn' && typeof deps.logger?.warn === 'function') {
@@ -1205,7 +1205,7 @@ class MarketAdapterService {
             const hasKibanaSource = isBookSource
                 ? deps.kibanaMarketSource && typeof deps.kibanaMarketSource.getMarketCandles === 'function'
                 : deps.kibanaSource && typeof deps.kibanaSource.getLpCandlesForPool === 'function';
-            const verifyAndFillLongSilence = async (candles, lastTs, latestClosedBucketTs, sourceLabel, incomingCandles = []) => {
+            const verifyAndFillLongSilence = async (candles: any, lastTs: any, latestClosedBucketTs: any, sourceLabel: any, incomingCandles: any = []) => {
                 const bucketMs = Number(cfg.intervalSeconds) * 1000;
                 const silenceStartTs = Number(lastTs) + bucketMs;
                 const earliestIncomingTs = (Array.isArray(incomingCandles) ? incomingCandles : [])
@@ -1239,18 +1239,18 @@ class MarketAdapterService {
                     if (hasKibanaActivity) {
                         return {
                             candles: deps.mergeCandles(candles, kibanaSilenceCandles, {
-                                onCollision: (existingCandle, incomingCandle) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
+                                onCollision: (existingCandle: any, incomingCandle: any) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
                             }),
                             sourceLabel: `${sourceLabel}+kibana-silence-activity`,
                         };
                     }
 
                     const previousCandle = candles
-                        .filter((c) => Array.isArray(c) && c[0] === lastTs)
+                        .filter((c: any) => Array.isArray(c) && c[0] === lastTs)
                         .slice(-1)[0];
                     const filledSilence = previousCandle
                         ? deps.fillCandleGaps([previousCandle, ...(Array.isArray(incomingCandles) ? incomingCandles : [])], cfg.intervalSeconds, lastTs, silenceEndTs)
-                            .filter((c) => Array.isArray(c) && c[0] > lastTs)
+                            .filter((c: any) => Array.isArray(c) && c[0] > lastTs)
                         : [];
                     if (filledSilence.length === 0) return { candles, sourceLabel };
 
@@ -1275,7 +1275,7 @@ class MarketAdapterService {
                     return { candles, sourceLabel };
                 }
             };
-            const fillBoundedTrailingClosedGap = (candles, latestClosedBucketTs, nowMs, maxNativeGapFill) => {
+            const fillBoundedTrailingClosedGap = (candles: any, latestClosedBucketTs: any, nowMs: any, maxNativeGapFill: any) => {
                 const bucketMs = Number(cfg.intervalSeconds) * 1000;
                 const latestKnownTs = Array.isArray(candles) && candles.length > 0
                     ? candles[candles.length - 1]?.[0]
@@ -1445,7 +1445,7 @@ class MarketAdapterService {
                             }
                             if (trades.length > 0) {
                                 nativeRecentTradeSequences = this.getNativeRecentTradeSequences(trades);
-                                const latestTradeTs = Math.max(...trades.map((t) => Number(t?.tsMs)).filter(Number.isFinite));
+                                const latestTradeTs = Math.max(...trades.map((t: any) => Number(t?.tsMs)).filter(Number.isFinite));
                                 if (Number.isFinite(latestTradeTs)) nativeLastTradeTs = latestTradeTs;
                             }
                             nativeCandles = deps.tradesToCandles(trades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
@@ -1491,7 +1491,7 @@ class MarketAdapterService {
                 const lastTs = existingCandles[existingCandles.length - 1]?.[0] || 0;
 
                 try {
-                    const knownSequences = new Set(nativeRecentTradeSequences.map((seq) => String(seq)));
+                    const knownSequences = new Set(nativeRecentTradeSequences.map((seq: any) => String(seq)));
                     let fetchedTrades = [];
                     let newTrades = [];
                     let overlapUsed = false;
@@ -1513,7 +1513,7 @@ class MarketAdapterService {
                                 nativeOverlapCount = Number(overlapResult?.overlapCount || 0);
                                 nativePagesFetched = Number(overlapResult?.pages || 0);
                                 sourceLabel = 'native-incremental-overlap';
-                                newTrades = fetchedTrades.filter((trade) => {
+                                newTrades = fetchedTrades.filter((trade: any) => {
                                     if (!Number.isFinite(Number(trade?.sequence))) return true;
                                     return !knownSequences.has(String(trade.sequence));
                                 });
@@ -1553,13 +1553,13 @@ class MarketAdapterService {
 
                     if (fetchedTrades.length > 0) {
                         nativeRecentTradeSequences = this.getNativeRecentTradeSequences(fetchedTrades);
-                        const latestTradeTs = Math.max(...fetchedTrades.map((t) => Number(t?.tsMs)).filter(Number.isFinite));
+                        const latestTradeTs = Math.max(...fetchedTrades.map((t: any) => Number(t?.tsMs)).filter(Number.isFinite));
                         if (Number.isFinite(latestTradeTs)) nativeLastTradeTs = latestTradeTs;
                     }
 
                     const incomingCandles = deps.tradesToCandles(newTrades, ctx.assetA, ctx.assetB, cfg.intervalSeconds);
                     nextCandles = deps.mergeCandles(existingCandles, incomingCandles, {
-                        onCollision: (existingCandle, incomingCandle) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
+                        onCollision: (existingCandle: any, incomingCandle: any) => this.buildIncrementalCandleCollision(existingCandle, incomingCandle),
                     });
 
                     // Fill bounded no-trade gaps from native incremental fetch. Ordinary LP
@@ -1631,7 +1631,7 @@ class MarketAdapterService {
                     logGapRepairEvent(
                         `[market_adapter] ${bot.botKey}: detected ${gapAnalysis.gapCount} unresolved candle gap(s); `
                         + `requesting Kibana repair for ${timeRange.gte} -> ${timeRange.lte} `
-                        + `missing=[${gapAnalysis.missingTimestamps.map((ts) => new Date(ts).toISOString()).join(', ')}]`
+                        + `missing=[${gapAnalysis.missingTimestamps.map((ts: any) => new Date(ts).toISOString()).join(', ')}]`
                     );
                     try {
                         const kibanaGapCandles = await deps.withRetries(() => fetchKibanaCandles({
@@ -1649,14 +1649,14 @@ class MarketAdapterService {
                         );
 
                         if (Array.isArray(kibanaGapCandles) && kibanaGapCandles.length > 0) {
-                            const beforeTimestamps = new Set(nextCandles.map((c) => c[0]));
+                            const beforeTimestamps = new Set(nextCandles.map((c: any) => c[0]));
                             nextCandles = deps.mergeCandles(nextCandles, kibanaGapCandles);
-                            const afterTimestamps = new Set(nextCandles.map((c) => c[0]));
-                            kibanaGapRepairTimestamps = gapAnalysis.missingTimestamps.filter((ts) => !beforeTimestamps.has(ts) && afterTimestamps.has(ts));
+                            const afterTimestamps = new Set(nextCandles.map((c: any) => c[0]));
+                            kibanaGapRepairTimestamps = gapAnalysis.missingTimestamps.filter((ts: any) => !beforeTimestamps.has(ts) && afterTimestamps.has(ts));
                             logGapRepairEvent(
                                 `[market_adapter] ${bot.botKey}: Kibana gap repair patched ${kibanaGapRepairTimestamps.length}/${gapAnalysis.gapCount} gap(s)`
                                 + (kibanaGapRepairTimestamps.length > 0
-                                    ? ` [${kibanaGapRepairTimestamps.map((ts) => new Date(ts).toISOString()).join(', ')}]`
+                                    ? ` [${kibanaGapRepairTimestamps.map((ts: any) => new Date(ts).toISOString()).join(', ')}]`
                                     : '')
                             );
                         } else {
@@ -1692,7 +1692,7 @@ class MarketAdapterService {
                 if (gapAnalysis.gapCount > 0) {
                     logGapRepairEvent(
                         `[market_adapter] ${bot.botKey}: ${gapAnalysis.gapCount} candle gap(s) still unresolved after Kibana repair `
-                        + `[${gapAnalysis.missingTimestamps.map((ts) => new Date(ts).toISOString()).join(', ')}]`,
+                        + `[${gapAnalysis.missingTimestamps.map((ts: any) => new Date(ts).toISOString()).join(', ')}]`,
                         'warn'
                     );
                 }
@@ -1730,8 +1730,8 @@ class MarketAdapterService {
             }
 
             nextCandles = deps.pruneCandles(nextCandles, rawKeepCount);
-            const retainedTimestamps = new Set(nextCandles.map((c) => c[0]));
-            const kibanaGapRepairCount = kibanaGapRepairTimestamps.filter((ts) => retainedTimestamps.has(ts)).length;
+            const retainedTimestamps = new Set(nextCandles.map((c: any) => c[0]));
+            const kibanaGapRepairCount = kibanaGapRepairTimestamps.filter((ts: any) => retainedTimestamps.has(ts)).length;
             const retainedGapAnalysis = typeof deps.detectMissingCandleTimestamps === 'function'
                 ? deps.detectMissingCandleTimestamps(nextCandles, cfg.intervalSeconds)
                 : { gapCount: 0, missingTimestamps: [] };
@@ -1754,7 +1754,7 @@ class MarketAdapterService {
         let rawLastCandleTs = null;
         let latestClosedCandle = null;
         let lastClosedCandleTs = null;
-        let botState = {};
+        let botState: any = {};
         let previousClosedCandleTs = 0;
         let hasNewClosedCandle = false;
         let consumedClosedCandleTs = null;
@@ -1962,7 +1962,7 @@ class MarketAdapterService {
         //    trend/Kalman branch stays ATR-free to match the research HTML.
         const atrPeriod = normalizeAtrPeriod(cfg.atrPeriod);
         const atr = calculateATR(analysisCandles, atrPeriod);
-        const warn = (message) => {
+        const warn = (message: any) => {
             if (typeof deps.logger?.log === 'function') {
                 deps.logger.log(message, 'warn');
             } else if (typeof deps.logger?.warn === 'function') {
@@ -2059,10 +2059,10 @@ class MarketAdapterService {
             : null;
 
         let triggered = false;
-        let triggerPath = null;
-        let deltaPercent = null;
-        let triggerCallbackError = null;
-        let triggerSuppressedReason = null;
+        let triggerPath: any = null;
+        let deltaPercent: any = null;
+        let triggerCallbackError: any = null;
+        let triggerSuppressedReason: any = null;
         let snapshotPersistedThisCycle = false;
         let previousCenterPrice = Number(botState.centerPrice || 0);
         const hasUnresolvedCandleGaps = Number.isFinite(unresolvedGapCount) && unresolvedGapCount > 0;
@@ -2070,8 +2070,8 @@ class MarketAdapterService {
             triggerSuppressedReason = 'unresolved_candle_gaps';
         }
 
-        const buildDynamicGridOptions = (options = {}) => {
-            const payload = {
+        const buildDynamicGridOptions = (options: any = {}) => {
+            const payload: any = {
                 gridCenterPrice: options.gridCenterPrice ?? null, // explicit baseline if provided
                 amaCenterPrice: amaPrice,
                 amaSlope: options.amaSlope ?? amaSlope,
@@ -2092,7 +2092,7 @@ class MarketAdapterService {
             return payload;
         };
 
-        const persistDynamicGridSnapshot = (snapshotCenterPrice, options = {}) => {
+        const persistDynamicGridSnapshot = (snapshotCenterPrice: any, options: any = {}) => {
             if (!isDryRun && typeof deps.writeBotDynamicGrid === 'function') {
                 return deps.writeBotDynamicGrid(
                     bot.botKey,
@@ -2106,7 +2106,7 @@ class MarketAdapterService {
             return true;
         };
 
-        const advanceTriggeredBotState = (newCenterPrice, options = {}) => {
+        const advanceTriggeredBotState = (newCenterPrice: any, options: any = {}) => {
             snapshotPersistedThisCycle = true;
             botState.gridCenterPrice = newCenterPrice;
             botState.centerPrice = newCenterPrice;
@@ -2125,7 +2125,7 @@ class MarketAdapterService {
             triggered = true;
         };
 
-        const writeTriggerAndNotify = async ({ triggerPayload, hookPayload, dryRunMessage }) => {
+        const writeTriggerAndNotify = async ({ triggerPayload, hookPayload, dryRunMessage }: any) => {
             if (!isDryRun) {
                 triggerPath = deps.writeGridResetTrigger(bot, triggerPayload);
             } else {
@@ -2290,7 +2290,7 @@ class MarketAdapterService {
         // Weight-only update path: persist fresh weights to dynamicgrid.json without a grid reset.
         // The bot will pick these up on the next recalculation cycle after fills or config reload.
         if (!snapshotPersistedThisCycle && !triggered && !triggerSuppressedReason && !isDryRun && !staleData && canApplyDynamicWeights
-                && dynamicWeightsPayload && persistedCenterPrice > 0
+                && dynamicWeightsPayload && (persistedCenterPrice as number) > 0
                 && typeof deps.writeBotDynamicGrid === 'function') {
             const dynamicWeightsPersisted = deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
                 amaCenterPrice: amaPrice,

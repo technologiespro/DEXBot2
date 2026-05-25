@@ -18,7 +18,7 @@
 
 const { NODE_MANAGEMENT } = require('../../modules/constants');
 
-let _nativeClient = null;
+let _nativeClient: any = null;
 
 function _getClient() {
     if (!_nativeClient) {
@@ -28,7 +28,7 @@ function _getClient() {
     return _nativeClient;
 }
 
-async function connectClient(servers) {
+async function connectClient(servers: any) {
     const c = _getClient();
     const list = Array.isArray(servers) && servers.length > 0
         ? servers
@@ -52,7 +52,7 @@ function getConnectionStatus() {
     return isConnected() ? 'open' : 'closed';
 }
 
-function _call(api, method, args) {
+function _call(api: any, method: any, args: any) {
     const c = _getClient();
     if (!c.isConnected()) {
         return Promise.reject(new Error('WebSocket is not open'));
@@ -63,12 +63,12 @@ function _call(api, method, args) {
 const BitShares = {
     db: new Proxy({}, {
         get(_target, method) {
-            return (...args) => _call('db', method, args);
+            return (...args: any[]) => _call('db', method, args);
         },
     }),
     history: new Proxy({}, {
         get(_target, method) {
-            return (...args) => _call('history', method, args);
+            return (...args: any[]) => _call('history', method, args);
         },
     }),
 };

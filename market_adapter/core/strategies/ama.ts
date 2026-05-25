@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use strict';
 
 const { MARKET_ADAPTER } = require('../../../modules/constants');
@@ -7,7 +6,19 @@ const { MARKET_ADAPTER } = require('../../../modules/constants');
  * Kaufman's Adaptive Moving Average (KAMA/AMA).
  */
 class AMA {
-    constructor(erPeriod, fastPeriod, slowPeriod, erSmoothPeriod) {
+    erPeriod: any;
+    erSmoothPeriod: any;
+    erSmoothAlpha: any;
+    erSmoothValue: any;
+    fastSC: any;
+    slowSC: any;
+    prevAMA: any;
+    history: any;
+    warmedUp: any;
+    smaSum: any;
+    smaCount: any;
+
+    constructor(erPeriod: any, fastPeriod: any, slowPeriod: any, erSmoothPeriod: any) {
         if (!Number.isFinite(erPeriod) || erPeriod <= 0) {
             throw new TypeError(`AMA erPeriod must be a positive finite number, got ${erPeriod}`);
         }
@@ -33,7 +44,7 @@ class AMA {
         this.smaCount = 0;
     }
 
-    update(price) {
+    update(price: any) {
         if (!Number.isFinite(price)) {
             throw new TypeError(`AMA price must be a finite number, got ${price}`);
         }
@@ -82,7 +93,7 @@ class AMA {
     }
 }
 
-function getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars, fastPeriod, erSmoothPeriod = 0) {
+function getAmaWarmupBars(erPeriod: any, slowPeriod: any, lookbackBars: any, fastPeriod: any, erSmoothPeriod = 0) {
     if (!Number.isFinite(erPeriod) || erPeriod <= 0) {
         throw new TypeError(`getAmaWarmupBars erPeriod must be a positive finite number, got ${erPeriod}`);
     }
@@ -120,7 +131,7 @@ function getAmaWarmupBars(erPeriod, slowPeriod, lookbackBars, fastPeriod, erSmoo
     return safeErPeriod + convergenceBars + erSmoothConvergenceBars + safeLookbackBars;
 }
 
-function calculateAMA(closes, params) {
+function calculateAMA(closes: any, params: any) {
     if (!params || typeof params !== 'object') {
         throw new TypeError('calculateAMA params must be an object with erPeriod, fastPeriod, slowPeriod');
     }

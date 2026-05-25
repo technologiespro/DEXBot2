@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { createClawInfrastructure } = require('./claw_infra');
 const {
   adjustMpaCollateral,

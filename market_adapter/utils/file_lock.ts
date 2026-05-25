@@ -1,10 +1,9 @@
-// @ts-nocheck
 'use strict';
 
 const fs = require('fs');
 const fsPromises = require('fs/promises');
 
-function loadLockInfo(lockPath) {
+function loadLockInfo(lockPath: any) {
     try {
         const raw = fs.readFileSync(lockPath, 'utf8');
         const parsed = JSON.parse(raw);
@@ -14,7 +13,7 @@ function loadLockInfo(lockPath) {
     }
 }
 
-function isProcessAlive(pid) {
+function isProcessAlive(pid: any) {
     if (!Number.isInteger(pid) || pid <= 0) return false;
     try {
         process.kill(pid, 0);
@@ -24,7 +23,7 @@ function isProcessAlive(pid) {
     }
 }
 
-function isLikelyMarketAdapterProcess(pid) {
+function isLikelyMarketAdapterProcess(pid: any) {
     if (!isProcessAlive(pid)) return false;
     try {
         const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ');
@@ -34,7 +33,7 @@ function isLikelyMarketAdapterProcess(pid) {
     }
 }
 
-function acquireFileLockSync(lockPath, opts = {}) {
+function acquireFileLockSync(lockPath: any, opts: any = {}) {
     const staleMs = Number.isFinite(opts.staleMs) && opts.staleMs > 0 ? opts.staleMs : (6 * 3600 * 1000);
     const now = Date.now();
 
@@ -81,20 +80,20 @@ function acquireFileLockSync(lockPath, opts = {}) {
     throw new Error(`cannot acquire lock: ${lockPath}`);
 }
 
-function releaseFileLockSync(lock) {
+function releaseFileLockSync(lock: any) {
     if (!lock) return;
     try { if (lock.heartbeat) clearInterval(lock.heartbeat); } catch (_: any) {}
     try { if (typeof lock.fd === 'number') fs.closeSync(lock.fd); } catch (_: any) {}
     try { if (lock.lockPath) fs.unlinkSync(lock.lockPath); } catch (_: any) {}
 }
 
-function sleepSync(ms) {
+function sleepSync(ms: any) {
     const buffer = new SharedArrayBuffer(4);
     const view = new Int32Array(buffer);
     Atomics.wait(view, 0, 0, ms);
 }
 
-function acquirePathLockSync(filePath, opts = {}) {
+function acquirePathLockSync(filePath: any, opts: any = {}) {
     const lockPath = `${filePath}.lock`;
     const staleMs = Number.isFinite(opts.staleMs) && opts.staleMs > 0 ? opts.staleMs : 30000;
     const timeoutMs = Number.isFinite(opts.timeoutMs) && opts.timeoutMs > 0 ? opts.timeoutMs : 5000;
@@ -124,7 +123,7 @@ function acquirePathLockSync(filePath, opts = {}) {
     throw new Error(`Could not acquire lock on ${filePath} within ${timeoutMs}ms`);
 }
 
-async function acquireFileLock(filePath, opts = {}) {
+async function acquireFileLock(filePath: any, opts: any = {}) {
     const lockPath = `${filePath}.lock`;
     const staleMs = Number.isFinite(opts.staleMs) && opts.staleMs > 0 ? opts.staleMs : 30000;
     const deadline = Date.now() + 5000;

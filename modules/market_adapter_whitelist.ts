@@ -8,13 +8,19 @@ const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : COD
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 const WHITELIST_FILE = path.join(PROFILES_DIR, 'market_adapter_whitelist.json');
 
-let _whitelistCache = null; // Map<string, { ama: boolean, dynamicWeight: boolean, asymmetricBounds: boolean }> | false | null
+interface WhitelistFlags {
+    ama: boolean;
+    dynamicWeight: boolean;
+    asymmetricBounds: boolean;
+}
 
-function resetMarketAdapterWhitelistCache() {
+let _whitelistCache: Map<string, WhitelistFlags> | false | null = null;
+
+function resetMarketAdapterWhitelistCache(): void {
     _whitelistCache = null;
 }
 
-function normalizeEntry(entry) {
+function normalizeEntry(entry: any): WhitelistFlags {
     if (entry === true) {
         return { ama: true, dynamicWeight: true, asymmetricBounds: true };
     }
@@ -28,7 +34,7 @@ function normalizeEntry(entry) {
     };
 }
 
-function loadMarketAdapterWhitelist() {
+function loadMarketAdapterWhitelist(): Map<string, WhitelistFlags> | false {
     if (_whitelistCache !== null) return _whitelistCache;
     if (!fs.existsSync(WHITELIST_FILE)) {
         _whitelistCache = false;
@@ -38,7 +44,7 @@ function loadMarketAdapterWhitelist() {
     try {
         const json = JSON.parse(fs.readFileSync(WHITELIST_FILE, 'utf8'));
         const raw = json?.whitelist;
-        const map = new Map();
+        const map = new Map<string, WhitelistFlags>();
 
         if (Array.isArray(raw)) {
             for (const botKey of raw) {
@@ -58,7 +64,7 @@ function loadMarketAdapterWhitelist() {
     }
 }
 
-function getWhitelistFlags(botKey) {
+function getWhitelistFlags(botKey: string): WhitelistFlags {
     const whitelist = loadMarketAdapterWhitelist();
     if (whitelist === false || !botKey) {
         return { ama: false, dynamicWeight: false, asymmetricBounds: false };
@@ -66,19 +72,19 @@ function getWhitelistFlags(botKey) {
     return whitelist.get(String(botKey)) || { ama: false, dynamicWeight: false, asymmetricBounds: false };
 }
 
-function isBotWhitelisted(botKey) {
+function isBotWhitelisted(botKey: string): boolean {
     return getWhitelistFlags(botKey).ama === true;
 }
 
-function isBotDynamicWeightWhitelisted(botKey) {
+function isBotDynamicWeightWhitelisted(botKey: string): boolean {
     return getWhitelistFlags(botKey).dynamicWeight === true;
 }
 
-function isBotAsymmetricBoundsWhitelisted(botKey) {
+function isBotAsymmetricBoundsWhitelisted(botKey: string): boolean {
     return getWhitelistFlags(botKey).asymmetricBounds === true;
 }
 
-function isBotGridRangeScalingWhitelisted(botKey) {
+function isBotGridRangeScalingWhitelisted(botKey: string): boolean {
     return isBotAsymmetricBoundsWhitelisted(botKey);
 }
 

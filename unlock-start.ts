@@ -246,7 +246,7 @@ async function runIsolated({
     });
 }
 
-function waitForSupervisorReady({ child = null, timeoutMs = 15000, intervalMs = 250 } = {}) {
+function waitForSupervisorReady({ child = null, timeoutMs = 15000, intervalMs = 250 }: { child?: any; timeoutMs?: number; intervalMs?: number } = {}): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
         let settled = false;
         let timer: NodeJS.Timeout | null = null;

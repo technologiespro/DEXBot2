@@ -23,7 +23,7 @@ if (!targetVersion) {
 const targets = [
     {
         file: 'package-lock.json',
-        update(json) {
+        update(json: any) {
             json.version = targetVersion;
             if (json.packages && json.packages['']) {
                 json.packages[''].version = targetVersion;
@@ -32,19 +32,19 @@ const targets = [
     },
     {
         file: 'claw/package.json',
-        update(json) {
+        update(json: any) {
             json.version = targetVersion;
         }
     },
     {
         file: 'claw/runtimes/openclaw-plugin/package.json',
-        update(json) {
+        update(json: any) {
             json.version = targetVersion;
         }
     },
     {
         file: 'claw/runtimes/openclaw-plugin/openclaw.plugin.json',
-        update(json) {
+        update(json: any) {
             json.version = targetVersion;
         }
     }
@@ -84,7 +84,7 @@ if (mismatches.length > 0) {
     console.log(`All DEXBot2-owned manifests already match ${targetVersion}.`);
 }
 
-function readJson(filePath) {
+function readJson(filePath: any) {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 export {};

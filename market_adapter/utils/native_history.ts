@@ -10,7 +10,7 @@
 
 const { blockchainToFloat } = require('../../modules/order/utils/math');
 
-function parseNativeMarketHistoryTimestamp(entry) {
+function parseNativeMarketHistoryTimestamp(entry: any) {
     const candidates = [
         entry?.key?.open,
         entry?.key?.time,
@@ -42,7 +42,7 @@ function parseNativeMarketHistoryTimestamp(entry) {
     return null;
 }
 
-function resolvePairOrientation(keyBase, keyQuote, assetA, assetB) {
+function resolvePairOrientation(keyBase: any, keyQuote: any, assetA: any, assetB: any) {
     const baseIsAssetA = keyBase === String(assetA?.id) && keyQuote === String(assetB?.id);
     const baseIsAssetB = keyBase === String(assetB?.id) && keyQuote === String(assetA?.id);
     if (!baseIsAssetA && !baseIsAssetB) return null;
@@ -51,7 +51,7 @@ function resolvePairOrientation(keyBase, keyQuote, assetA, assetB) {
     return { baseIsAssetA, baseIsAssetB, basePrecision, quotePrecision };
 }
 
-function resolveNativeMarketHistoryRatio(entry, field, assetA, assetB) {
+function resolveNativeMarketHistoryRatio(entry: any, field: any, assetA: any, assetB: any) {
     const keyBase = String(entry?.key?.base || '');
     const keyQuote = String(entry?.key?.quote || '');
     const orientation = resolvePairOrientation(keyBase, keyQuote, assetA, assetB);
@@ -85,7 +85,7 @@ function resolveNativeMarketHistoryRatio(entry, field, assetA, assetB) {
     return Number.NaN;
 }
 
-function resolveNativeMarketHistoryVolume(entry, field, assetA, assetB) {
+function resolveNativeMarketHistoryVolume(entry: any, field: any, assetA: any, assetB: any) {
     const keyBase = String(entry?.key?.base || '');
     const keyQuote = String(entry?.key?.quote || '');
     const orientation = resolvePairOrientation(keyBase, keyQuote, assetA, assetB);
@@ -109,7 +109,7 @@ function resolveNativeMarketHistoryVolume(entry, field, assetA, assetB) {
     return Number.NaN;
 }
 
-function normalizeNativeMarketHistoryCandles(history, assetA, assetB, intervalSeconds) {
+function normalizeNativeMarketHistoryCandles(history: any, assetA: any, assetB: any, intervalSeconds: any) {
     const source = Array.isArray(history)
         ? history
         : Array.isArray(history?.buckets)
@@ -136,8 +136,8 @@ function normalizeNativeMarketHistoryCandles(history, assetA, assetB, intervalSe
                 if (![ts, open, high, low, close].every(Number.isFinite)) return null;
                 return [ts, open, high, low, close, Number.isFinite(volume) ? volume : 0];
             })
-            .filter(Boolean)
-            .sort((a, b) => a[0] - b[0]);
+            .filter((c: any) => c !== null)
+            .sort((a: any, b: any) => a[0] - b[0]);
     }
 
     const candles = [];

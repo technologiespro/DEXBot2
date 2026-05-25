@@ -2,14 +2,14 @@
 
 const { createTransactionBuilder } = require('./tx/builder');
 
-function createSigningClient(chainClient, accountName, privateKey) {
+function createSigningClient(chainClient: any, accountName: string, privateKey: any): any {
     if (!chainClient) throw new Error('chainClient is required');
     if (!accountName) throw new Error('accountName is required');
     if (!privateKey) throw new Error('privateKey is required');
 
-    let _accountId = null;
+    let _accountId: any = null;
     let _initResolved = false;
-    let _initPromise = null;
+    let _initPromise: any = null;
 
     _initPromise = (async () => {
         try {
@@ -39,7 +39,7 @@ function createSigningClient(chainClient, accountName, privateKey) {
         return wrapTxForBtsdexCompat(tx, chainClient, privateKey);
     }
 
-    function wifToBuffer(wif) {
+    function wifToBuffer(wif: any): any {
         if (typeof wif !== 'string') return wif;
         try {
             const { wifDecode } = require('./crypto/ecc');
@@ -49,11 +49,11 @@ function createSigningClient(chainClient, accountName, privateKey) {
         }
     }
 
-    function wrapTxForBtsdexCompat(tx, client, key) {
+    function wrapTxForBtsdexCompat(tx: any, client: any, key: any): any {
         const wrapped = {
             initPromise: _initPromise,
 
-            limit_order_create(data) {
+            limit_order_create(data: any): any {
                 if (data.on_fill && Array.isArray(data.on_fill)) {
                     data.extensions = data.extensions || {};
                     data.extensions.on_fill = data.on_fill;
@@ -62,13 +62,13 @@ function createSigningClient(chainClient, accountName, privateKey) {
                 return tx.limit_order_create(data);
             },
 
-            limit_order_cancel(data) { return tx.limit_order_cancel(data); },
-            limit_order_update(data) { return tx.limit_order_update(data); },
-            call_order_update(data) { return tx.call_order_update(data); },
-            asset_settle(data) { return tx.asset_settle(data); },
-            transfer(data) { return tx.transfer(data); },
+            limit_order_cancel(data: any): any { return tx.limit_order_cancel(data); },
+            limit_order_update(data: any): any { return tx.limit_order_update(data); },
+            call_order_update(data: any): any { return tx.call_order_update(data); },
+            asset_settle(data: any): any { return tx.asset_settle(data); },
+            transfer(data: any): any { return tx.transfer(data); },
 
-            addOperation(type, params) { return tx.addOperation(type, params); },
+            addOperation(type: any, params: any): any { return tx.addOperation(type, params); },
 
             async broadcast() {
                 await tx.prepare();
@@ -104,7 +104,7 @@ function createSigningClient(chainClient, accountName, privateKey) {
                 return { ...result, operation_results: [] };
             },
 
-            setRequiredFees(feeAssetId) {
+            setRequiredFees(feeAssetId: any): any {
                 return tx.setRequiredFees(feeAssetId);
             },
 
@@ -112,22 +112,22 @@ function createSigningClient(chainClient, accountName, privateKey) {
         };
 
         return new Proxy(wrapped, {
-            get(target, prop) {
+            get(target: any, prop: any): any {
                 if (prop === 'sign') {
-                    return keyBuf => tx.sign(keyBuf);
+                    return (keyBuf: any) => tx.sign(keyBuf);
                 }
                 if (typeof prop === 'string' && !(prop in target)) {
-                    return (data) => tx.addOperation(prop, data);
+                    return (data: any): any => tx.addOperation(prop, data);
                 }
-                return target[prop];
+                return (target as any)[prop];
             },
         });
     }
 
-    async function broadcast(operation) {
+    async function broadcast(operation: any): Promise<any> {
         const tx = newTx();
-        if (operation && operation.op_name && typeof tx[operation.op_name] === 'function') {
-            tx[operation.op_name](operation.op_data);
+        if (operation && operation.op_name && typeof (tx as any)[operation.op_name] === 'function') {
+            (tx as any)[operation.op_name](operation.op_data);
         } else if (operation && operation.op_name) {
             tx.addOperation(operation.op_name, operation.op_data);
         } else {
@@ -147,7 +147,7 @@ function createSigningClient(chainClient, accountName, privateKey) {
         newTx,
         broadcast,
         accountName,
-        accountId() { return _accountId; },
+        accountId(): any { return _accountId; },
     };
 }
 

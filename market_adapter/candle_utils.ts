@@ -1,15 +1,14 @@
-// @ts-nocheck
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 const { toIntervalLabel } = require('./interval_utils');
 
-function rawToHuman(rawAmount, precision) {
+function rawToHuman(rawAmount: any, precision: any) {
     return Number(rawAmount || 0) / Math.pow(10, Number(precision || 0));
 }
 
-function tradeToBPerA(trade, assetA, assetB) {
+function tradeToBPerA(trade: any, assetA: any, assetB: any) {
     const sell = trade.sell || {};
     const recv = trade.received || {};
     const sellId = sell.asset_id;
@@ -31,9 +30,9 @@ function tradeToBPerA(trade, assetA, assetB) {
     return null;
 }
 
-function tradesToCandles(trades, assetA, assetB, intervalSeconds = 3600) {
+function tradesToCandles(trades: any, assetA: any, assetB: any, intervalSeconds = 3600) {
     const bucketMs = intervalSeconds * 1000;
-    const sorted = trades.slice().sort((a, b) => {
+    const sorted = trades.slice().sort((a: any, b: any) => {
         const tsDelta = a.tsMs - b.tsMs;
         if (tsDelta !== 0) return tsDelta;
         const aSeq = Number(a.sequence);
@@ -68,7 +67,7 @@ function tradesToCandles(trades, assetA, assetB, intervalSeconds = 3600) {
         .map(([ts, c]) => [ts, c.open, c.high, c.low, c.close, c.volumeA]);
 }
 
-function detectMissingCandleTimestamps(candles, intervalSeconds = 3600) {
+function detectMissingCandleTimestamps(candles: any, intervalSeconds = 3600) {
     const bucketMs = Number(intervalSeconds) * 1000;
     if (!Number.isFinite(bucketMs) || bucketMs <= 0) {
         return { gapCount: 0, missingTimestamps: [] };
@@ -114,7 +113,7 @@ function detectMissingCandleTimestamps(candles, intervalSeconds = 3600) {
  * @param {number} [options.baselinePrice] - optional price to use for leading gaps before the first candle
  * @returns {Array} Filled candle array with no gaps
  */
-function fillCandleGaps(candles, intervalSeconds, startTs = null, endTs = null, options = {}) {
+function fillCandleGaps(candles: any, intervalSeconds: any, startTs: any = null, endTs: any = null, options: any = {}) {
     const bucketMs = Number(intervalSeconds) * 1000;
     if (!candles || !Array.isArray(candles)) return [];
     if (!Number.isFinite(bucketMs) || bucketMs <= 0) return candles;
@@ -195,7 +194,7 @@ function fillCandleGaps(candles, intervalSeconds, startTs = null, endTs = null, 
  *          the run length, and the tail close price so the caller can
  *          decide whether to slice.
  */
-function detectStaleTail(candles, threshold) {
+function detectStaleTail(candles: any, threshold: any) {
     if (!Number.isFinite(threshold) || threshold <= 0) throw new Error('detectStaleTail: threshold must be a positive number');
     if (!candles || !Array.isArray(candles) || candles.length === 0) return null;
     const sorted = candles
@@ -231,7 +230,7 @@ function detectStaleTail(candles, threshold) {
  * @param {number} threshold - min consecutive identical closes to prune
  * @returns {Array} candles with stale tail removed
  */
-function pruneStaleTail(candles, threshold) {
+function pruneStaleTail(candles: any, threshold: any) {
     const detected = detectStaleTail(candles, threshold);
     if (!detected) return candles;
     const { sorted, runLength } = detected;
@@ -239,7 +238,7 @@ function pruneStaleTail(candles, threshold) {
     return keepCount > 0 ? sorted.slice(0, keepCount) : [];
 }
 
-function mergeCandles(a, b, { onCollision } = {}) {
+function mergeCandles(a: any, b: any, { onCollision }: any = {}) {
     const map = new Map();
     for (const c of [...(a || []), ...(b || [])]) {
         if (!Array.isArray(c)) continue;

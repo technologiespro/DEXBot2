@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-
+// @ts-nocheck
 /**
  * RISK PROFILE ANALYZER
  *
@@ -9,14 +9,11 @@
  * Also computes the empirical standard deviation of per-bar AMA movement
  * (σ_ama_delta) for calibrating AMA_DELTA_THRESHOLD_PERCENT.
  */
-
 'use strict';
-
 const fs = require('fs');
 const { calculateAMA } = require('../market_adapter/core/strategies/ama');
 const { MARKET_ADAPTER } = require('../modules/constants');
 const { generateHTML } = require('../market_adapter/lp_chart_core');
-
 function normSInv(p) {
     if (p <= 0 || p >= 1) return p <= 0 ? -Infinity : Infinity;
     const a = [-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.383577518672690e2, -3.066479806614716e1, 2.506628277459239];
@@ -37,17 +34,14 @@ function normSInv(p) {
         return -((((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1));
     }
 }
-
 function quantileToSigma(q) {
     return normSInv((1 + q) / 2);
 }
-
 function calcStdDev(arr) {
     const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
     const sqDiffs = arr.reduce((sum, v) => sum + (v - mean) ** 2, 0);
     return Math.sqrt(sqDiffs / arr.length);
 }
-
 function getAmaDeltaStdDev(closes, amaConfig, warmup) {
     const amaValues = calculateAMA(closes, amaConfig);
     const deltas = [];
@@ -59,7 +53,6 @@ function getAmaDeltaStdDev(closes, amaConfig, warmup) {
     }
     return deltas.length ? calcStdDev(deltas) : null;
 }
-
 function getDivergenceDist(closes, amaConfig) {
     const amaValues = calculateAMA(closes, amaConfig);
     const dists = [];
@@ -71,18 +64,15 @@ function getDivergenceDist(closes, amaConfig) {
     }
     return dists.sort((a, b) => a - b);
 }
-
 function main() {
     const args = process.argv.slice(2);
     
     const dataIdx = args.indexOf('--data');
     const dataPath = dataIdx !== -1 ? args[dataIdx + 1] : null;
-
     if (!dataPath) {
         console.error('Usage: node analysis/analyze_risk_profile.js --data <path_to_json> [--ama <AMA_PRESET>] [--output <output_path>]');
         process.exit(1);
     }
-
     const amaIdx = args.indexOf('--ama');
     const selectedAma = amaIdx !== -1 ? args[amaIdx + 1] : 'AMA3';
     
@@ -93,18 +83,15 @@ function main() {
         console.error(`Data file not found: ${dataPath}`);
         process.exit(1);
     }
-
     const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
     if (!data.candles || !Array.isArray(data.candles)) {
         console.error('Invalid data format: Expected "candles" array.');
         process.exit(1);
     }
     const closes = data.candles.map(c => Number(c[4]));
-
     const warmup = 1600;
     const presets = ['AMA1', 'AMA2', 'AMA3', 'AMA4'];
     const quantiles = [0.999, 0.9999, 0.99999];
-
     console.log(`Analyzing: ${dataPath}`);
     const sigmaLabels = quantiles.map(q => `${(q * 100).toFixed(3)}% — ${quantileToSigma(q).toFixed(2)}σ`);
     console.log('Preset, Max_Divergence(x), ' + sigmaLabels.map((l, i) => `${l} (${['Soft','Hard','Emergency'][i]})`).join(', '));
@@ -116,23 +103,19 @@ function main() {
             console.log(`${name}, N/A, N/A, N/A, N/A`);
             return;
         }
-
         const maxDist = allDists[allDists.length - 1];
         const meanDist = allDists.reduce((a, b) => a + b, 0) / allDists.length;
         const stdDist = calcStdDev(allDists);
         const amaDeltaSigma = getAmaDeltaStdDev(closes, config, warmup);
-
         const quantileResults = quantiles.map(q => {
             const val = allDists[Math.min(Math.floor(allDists.length * q), allDists.length - 1)];
             const sigma = quantileToSigma(q);
             const empSigma = (val - meanDist) / stdDist;
             return `${(1 + val).toFixed(3)}x (${sigma.toFixed(2)}σt, ${empSigma.toFixed(2)}σe)`;
         });
-
         console.log(`${name}, ${(1 + maxDist).toFixed(3)}x, ${quantileResults.join(', ')}`);
         console.log(`  σ_div: ${(stdDist * 100).toFixed(3)}% | mean_div: ${(meanDist * 100).toFixed(3)}% | σ_ama_delta: ${amaDeltaSigma !== null ? (amaDeltaSigma * 100).toFixed(3) : 'N/A'}%`);
     });
-
     if (outPath) {
         if (!MARKET_ADAPTER.AMAS[selectedAma]) {
             console.error(`Invalid AMA preset for output: ${selectedAma}. Choose from: ${Object.keys(MARKET_ADAPTER.AMAS).join(', ')}`);
@@ -151,7 +134,6 @@ function main() {
             const val = allDists[Math.min(Math.floor(allDists.length * q), allDists.length - 1)];
             return { quantile: q, multiplier: (1 + val).toFixed(3) };
         });
-
         const amaResult = { 
             name: selectedAma, 
             values: amaValues, 
@@ -165,7 +147,6 @@ function main() {
         // Try to extract symbols from path or metadata if available, otherwise use generic
         const pairMatch = dataPath.match(/\/lp\/([^\/]+)\//);
         const pairName = pairMatch ? pairMatch[1].replace(/_/g, '-') : 'Market';
-
         const meta = { 
             pool: `${pairName} ${selectedAma} Risk Analysis`, 
             assetA: { symbol: 'Base' }, 
@@ -180,6 +161,5 @@ function main() {
         console.log(`\nRisk dashboard generated: ${outPath}`);
     }
 }
-
 main();
 export {};

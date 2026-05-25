@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { clamp } = require('../../../modules/order/utils/math');
 const { MARKET_ADAPTER } = require('../../../modules/constants');
 const {
@@ -14,7 +13,7 @@ const DEFAULT_ER_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].er
 const DEFAULT_SLOW_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].slowPeriod;
 const DEFAULT_FAST_PERIOD = MARKET_ADAPTER.AMAS[MARKET_ADAPTER.DEFAULT_AMA_KEY].fastPeriod;
 
-function computeAverageAmaSlopePct(current, past, lookbackBars) {
+function computeAverageAmaSlopePct(current: any, past: any, lookbackBars: any) {
     const safeLookbackBars = Number.isFinite(lookbackBars) && lookbackBars > 0
         ? Math.ceil(lookbackBars)
         : 1;
@@ -49,7 +48,7 @@ function computeAverageAmaSlopePct(current, past, lookbackBars) {
  * @param {number}   [opts.clipThreshold]                Pre-computed clip threshold from slope history
  * @returns {{ slopeOffset, rawSlopeOffset, symmetricDelta, slopePct, clippedSlopePct, confidence, trend, isReady }}
  */
-function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
+function computeAmaSlopeWeights(amaValues: any, weightVariance: any, opts: any = {}) {
     const lookbackBars = Number.isFinite(opts.lookbackBars) && opts.lookbackBars >= 0
         ? Math.ceil(opts.lookbackBars)
         : MARKET_ADAPTER.DYNAMIC_WEIGHT_AMA_LOOKBACK_BARS;
@@ -110,7 +109,7 @@ function computeAmaSlopeWeights(amaValues, weightVariance, opts = {}) {
     }
 
     // 2b. Percentile clip — symmetric clip on slope magnitude
-    const clippedSlopePct = Math.max(-clipThreshold, Math.min(clipThreshold, slopePct));
+    const clippedSlopePct = Math.max(-(clipThreshold as number), Math.min((clipThreshold as number), slopePct as number));
 
     // 3. Slope offset (asymmetric) — based on clipped slope
     let slopeOffset;

@@ -1,4 +1,3 @@
-// @ts-nocheck
 const assert = require('assert');
 const Module = require('module');
 const path = require('path');

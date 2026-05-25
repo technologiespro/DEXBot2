@@ -1,6 +1,6 @@
 #!/usr/bin/env node
+// @ts-nocheck
 'use strict';
-
 /**
  * Fetch LP pool candles from Kibana for AMA optimizer input.
  *
@@ -17,17 +17,13 @@
  * Defaults: --interval 1h  --hours 26280 (3 years)
  * Output: market_adapter/data/lp/<assetA>_<assetB>/lp_pool_<poolShort>_<interval>.json
  */
-
 const fs   = require('fs');
 const path = require('path');
-
 const kibanaSource = require('../../market_adapter/inputs/kibana_source');
 const { toIntervalLabel } = require('../../market_adapter/interval_utils');
 const { MARKET_ADAPTER } = require('../../modules/constants');
-
 const DATA_DIR = path.resolve(__dirname, '../../market_adapter/data/lp');
 const HOURS_3Y  = 3 * 365 * 24; // 26280
-
 function slugPart(value) {
     return String(value || '')
         .trim()
@@ -35,11 +31,9 @@ function slugPart(value) {
         .replace(/[^a-z0-9]+/g, '_')
         .replace(/^_+|_+$/g, '') || 'unknown';
 }
-
 function slugPairFolder(symbolA, symbolB) {
     return `${slugPart(symbolA)}_${slugPart(symbolB)}`;
 }
-
 function parseArgs() {
     const args = process.argv.slice(2);
     const out = {
@@ -54,9 +48,7 @@ function parseArgs() {
         hours:            HOURS_3Y,
         outFile:          null,
     };
-
     const intervalMap = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
-
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
         const v = args[i + 1];
@@ -79,7 +71,6 @@ function parseArgs() {
     }
     return out;
 }
-
 function printHelp() {
     console.log('fetch_lp_candles.js — fetch LP pool candles from Kibana for AMA optimizer');
     console.log('');
@@ -100,7 +91,6 @@ function printHelp() {
     console.log('  --hours <n>              Lookback hours (default: 26280 = 3 years)');
     console.log('  --out <filename>         Output filename (default: auto-generated in market_adapter/data/lp/)');
 }
-
 function validateArgs(args) {
     if (!args.pool)            throw new Error('--pool is required');
     if (!args.assetAId)        throw new Error('--assetAId is required');
@@ -109,11 +99,9 @@ function validateArgs(args) {
     if (!Number.isFinite(args.assetBPrecision)) throw new Error('--assetBPrecision is required');
     if (!Number.isFinite(args.hours) || args.hours <= 0) throw new Error('--hours must be > 0');
 }
-
 async function main() {
     const args = parseArgs();
     validateArgs(args);
-
     const assetA = {
         id:        args.assetAId,
         precision: args.assetAPrecision,
@@ -124,20 +112,17 @@ async function main() {
         precision: args.assetBPrecision,
         symbol:    args.assetBSymbol || args.assetBId,
     };
-
     const { intervalSeconds } = args;
     const intervalLabel    = toIntervalLabel(intervalSeconds);
     const poolId           = kibanaSource.normalizePoolId(args.pool);
     const lookback         = Math.round(args.hours);
     const yearsApprox      = (lookback / (365 * 24)).toFixed(1);
-
     console.log(`Fetching LP candles from Kibana`);
     console.log(`  Pool:     ${poolId}`);
     console.log(`  Pair:     ${assetA.symbol} / ${assetB.symbol}`);
     console.log(`  Interval: ${intervalLabel}`);
     console.log(`  Lookback: ${lookback}h (~${yearsApprox} years)`);
     console.log('');
-
     const candles = await kibanaSource.getLpCandlesForPool(poolId, assetA, assetB, {
         intervalSeconds,
         lookbackHours:         lookback,
@@ -145,15 +130,12 @@ async function main() {
         apiKey:                null,
         timeout:               60000,
     });
-
     if (!Array.isArray(candles) || candles.length === 0) {
         throw new Error('Kibana returned no candles — check pool ID, asset IDs, and Kibana connectivity');
     }
-
     const firstTs = new Date(candles[0][0]).toISOString();
     const lastTs  = new Date(candles[candles.length - 1][0]).toISOString();
     console.log(`  Received: ${candles.length} candles  (${firstTs} → ${lastTs})`);
-
     const payload = {
         meta: {
             fetchedAt:       new Date().toISOString(),
@@ -168,7 +150,6 @@ async function main() {
         },
         candles,
     };
-
     const poolShort = poolId.replace('1.19.', '');
     const pairFolder = slugPairFolder(assetA.symbol, assetB.symbol);
     const defaultName = `lp_pool_${poolShort}_${intervalLabel}.json`;
@@ -176,17 +157,14 @@ async function main() {
     const outPath = args.outFile && path.isAbsolute(args.outFile)
         ? args.outFile
         : path.join(DATA_DIR, pairFolder, outName);
-
     const outDir = path.dirname(outPath);
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(outPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
-
     console.log(`  Saved:    ${path.relative(process.cwd(), outPath)}`);
     console.log('');
     console.log('Run optimizer:');
     console.log(`  node analysis/ama_fitting/optimizer_high_resolution.js --data ${path.relative(process.cwd(), outPath)}`);
 }
-
 main().catch((err) => {
     console.error('Error:', err.message);
     process.exit(1);

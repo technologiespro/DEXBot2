@@ -62,7 +62,7 @@ const OBJECT_TYPE = {
     credit_deal: 22,
 };
 
-const OBJECT_SPACE_TYPE = {};
+const OBJECT_SPACE_TYPE: { [key: string]: string } = {};
 for (const [name, id] of Object.entries(OBJECT_TYPE)) {
     OBJECT_SPACE_TYPE[`1.${id}`] = name;
 }

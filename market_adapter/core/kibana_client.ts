@@ -28,7 +28,7 @@ const DEFAULT_CONFIG = Object.freeze({
   timeout:    MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS,
 });
 
-const PROXY_PATH = (index) =>
+const PROXY_PATH = (index: any) =>
   `/api/console/proxy?path=${encodeURIComponent(index + '/_search')}&method=POST`;
 
 /**
@@ -40,7 +40,7 @@ const PROXY_PATH = (index) =>
  * @param {Function} reject  – Promise reject callback
  * @param {number} [redirectCount=0] – Redirect counter
  */
-function doKibanaRequest(cfg, esQuery, resolve, reject, redirectCount = 0) {
+function doKibanaRequest(cfg: any, esQuery: any, resolve: any, reject: any, redirectCount = 0) {
   const body = JSON.stringify(esQuery);
   const url  = new URL(cfg.kibanaUrl);
   const signal = cfg.signal;
@@ -57,7 +57,7 @@ function doKibanaRequest(cfg, esQuery, resolve, reject, redirectCount = 0) {
     'kbn-xsrf':       'true',
     'Content-Length': Buffer.byteLength(body),
   };
-  if (cfg.apiKey) headers['Authorization'] = `ApiKey ${cfg.apiKey}`;
+  if (cfg.apiKey) (headers as any)['Authorization'] = `ApiKey ${cfg.apiKey}`;
 
   const req = https.request({
     hostname: url.hostname,
@@ -66,7 +66,7 @@ function doKibanaRequest(cfg, esQuery, resolve, reject, redirectCount = 0) {
     method:   'POST',
     headers,
     timeout:  cfg.timeout,
-  }, (res) => {
+  }, (res: any) => {
     // Follow a single redirect (common with auth or load-balancer rewrites)
     if (redirectCount === 0 && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
       const redirectUrl = new URL(res.headers.location, cfg.kibanaUrl);
@@ -74,7 +74,7 @@ function doKibanaRequest(cfg, esQuery, resolve, reject, redirectCount = 0) {
     }
 
     let raw = '';
-    res.on('data', (c) => { raw += c; });
+    res.on('data', (c: any) => { raw += c; });
     res.on('end', () => {
       if (res.statusCode === 401 || res.statusCode === 403) {
         reject(new Error(
@@ -109,7 +109,7 @@ function doKibanaRequest(cfg, esQuery, resolve, reject, redirectCount = 0) {
   req.end();
 }
 
-function kibanaSearch(config, esQuery) {
+function kibanaSearch(config: any, esQuery: any) {
   return new Promise((resolve, reject) => {
     const cfg = { ...DEFAULT_CONFIG, ...config };
     doKibanaRequest(cfg, esQuery, resolve, reject);

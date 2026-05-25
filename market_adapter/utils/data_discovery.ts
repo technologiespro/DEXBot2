@@ -1,10 +1,9 @@
-// @ts-nocheck
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 
-function findLatestLpData(options = {}) {
+function findLatestLpData(options: any = {}) {
     const includePriceSnapshots = options.includePriceSnapshots === true;
     const GRANDPARENT$1 = path.dirname(path.dirname(__dirname));
     const PROJECT_ROOT$1 = path.basename(GRANDPARENT$1) === 'dist' ? path.dirname(GRANDPARENT$1) : GRANDPARENT$1;

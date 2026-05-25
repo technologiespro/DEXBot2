@@ -67,7 +67,7 @@ const grid = require('./grid');
 export = {
   OrderManager,
   // Lazy-load the calculation runner so tests can require this module without triggering heavy I/O.
-  runOrderManagerCalculation: (...args) => require('./runner').runOrderManagerCalculation(...args),
+  runOrderManagerCalculation: (...args: any[]) => require('./runner').runOrderManagerCalculation(...args),
   utils,
   constants,
   logger,

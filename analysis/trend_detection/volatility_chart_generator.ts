@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use strict';
 
 const { MARKET_ADAPTER } = require('../../modules/constants');

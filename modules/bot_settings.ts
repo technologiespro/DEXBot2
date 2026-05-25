@@ -5,7 +5,7 @@ const { createBotKey } = require('./account_orders');
 const { isPositiveNumber, isPositiveNumberOrPercent } = require('./order/utils/math');
 const { resolveMinCollateralIncreaseThreshold } = require('./cr_planner');
 
-function loadSettingsFile(filePath, { silent = false, exitOnError = true } = {}) {
+function loadSettingsFile(filePath: string, { silent = false, exitOnError = true }: { silent?: boolean; exitOnError?: boolean } = {}): { config: any; filePath: string } {
     if (!fs.existsSync(filePath)) {
         if (!silent) {
             console.error(`${filePath} not found. Run: dexbot bots`);
@@ -27,7 +27,7 @@ function loadSettingsFile(filePath, { silent = false, exitOnError = true } = {})
     }
 }
 
-function saveSettingsFile(config, filePath) {
+function saveSettingsFile(config: any, filePath: string): void {
     try {
         fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf8');
     } catch (err: any) {
@@ -36,33 +36,33 @@ function saveSettingsFile(config, filePath) {
     }
 }
 
-function resolveRawBotEntries(settings) {
+function resolveRawBotEntries(settings: any): any[] {
     if (!settings || typeof settings !== 'object') return [];
     if (Array.isArray(settings.bots)) return settings.bots;
     if (Object.keys(settings).length > 0) return [settings];
     return [];
 }
 
-function normalizeBotEntry(entry, index = 0) {
+function normalizeBotEntry(entry: any, index: number = 0): any {
     const normalized = { active: entry.active === undefined ? true : !!entry.active, ...entry };
     return { ...normalized, botIndex: index, botKey: createBotKey(normalized, index) };
 }
 
-function normalizeBotEntries(rawEntries) {
-    return rawEntries.map((entry, index) => normalizeBotEntry(entry, index));
+function normalizeBotEntries(rawEntries: any[]): any[] {
+    return rawEntries.map((entry: any, index: number) => normalizeBotEntry(entry, index));
 }
 
-function selectBotEntry(settings, botName) {
+function selectBotEntry(settings: any, botName: string): any {
     const entries = resolveRawBotEntries(settings);
     if (!botName) return null;
-    return entries.find((b) => b && b.name === botName) || null;
+    return entries.find((b: any) => b && b.name === botName) || null;
 }
 
-function selectActiveBotEntries(settings) {
-    return resolveRawBotEntries(settings).filter((entry) => entry && entry.active !== false);
+function selectActiveBotEntries(settings: any): any[] {
+    return resolveRawBotEntries(settings).filter((entry: any) => entry && entry.active !== false);
 }
 
-function validateBotEntry(b, i, src) {
+function validateBotEntry(b: any, i: number, src: string): string | null {
     const problems = [];
     const required = ['assetA', 'assetB', 'activeOrders', 'botFunds'];
     for (const k of required) {
@@ -94,7 +94,7 @@ function validateBotEntry(b, i, src) {
             if (!Array.isArray(dp.lending) || dp.lending.length === 0) {
                 problems.push("debtPolicy.lending must be a non-empty array");
             } else {
-                dp.lending.forEach((item, idx) => {
+                dp.lending.forEach((item: any, idx: number) => {
                     if (typeof item !== 'object' || item === null) {
                         problems.push(`debtPolicy.lending[${idx}] must be an object`);
                         return;
@@ -213,10 +213,10 @@ function validateBotEntry(b, i, src) {
     return null;
 }
 
-function collectValidationIssues(entries, sourceName) {
-    const errors = [];
-    const warnings = [];
-    entries.forEach((entry, index) => {
+function collectValidationIssues(entries: any[], sourceName: string): { errors: string[]; warnings: string[] } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    entries.forEach((entry: any, index: number) => {
         const issue = validateBotEntry(entry, index, sourceName);
         if (issue) {
             if (entry.active) errors.push(issue);

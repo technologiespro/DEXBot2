@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Bot Auto-Tuner
  *

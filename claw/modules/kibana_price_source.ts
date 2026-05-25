@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Kibana Price Source
  *

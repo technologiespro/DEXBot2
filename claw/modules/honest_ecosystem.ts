@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { getAsset, getBackingAsset, getBitassetData, getCallOrders, listAssets } = require('./chain_queries');
 const { derivePoolPrice } = require('./liquidity_pools');
 

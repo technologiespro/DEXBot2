@@ -1,6 +1,6 @@
 const chainKeys = require('../chain_keys');
 
-function normalizeBootstrapCredential(credential) {
+function normalizeBootstrapCredential(credential: any): any {
     if (chainKeys.isVaultSecret(credential)) {
         return credential;
     }

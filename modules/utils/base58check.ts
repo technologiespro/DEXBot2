@@ -3,12 +3,12 @@ const crypto = require('crypto');
 const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const ALPHABET_MAP = new Map([...ALPHABET].map((ch, index) => [ch, index]));
 
-function checksum(payload) {
+function checksum(payload: Buffer | string | Uint8Array): Buffer {
     const first = crypto.createHash('sha256').update(payload).digest();
     return crypto.createHash('sha256').update(first).digest().subarray(0, 4);
 }
 
-function base58Encode(buffer) {
+function base58Encode(buffer: Buffer | Uint8Array | number[] | string): string {
     const bytes = Buffer.from(buffer);
     if (bytes.length === 0) return '';
 
@@ -32,7 +32,7 @@ function base58Encode(buffer) {
     return encoded || '1';
 }
 
-function base58Decode(value) {
+function base58Decode(value: string): Buffer {
     if (typeof value !== 'string') throw new TypeError('Base58 value must be a string');
     if (value.length === 0) return Buffer.alloc(0);
 
@@ -57,12 +57,12 @@ function base58Decode(value) {
     return Buffer.from(bytes);
 }
 
-function encode(payload) {
+function encode(payload: Buffer | string | Uint8Array): string {
     const body = Buffer.from(payload);
     return base58Encode(Buffer.concat([body, checksum(body)]));
 }
 
-function decode(value) {
+function decode(value: string): Buffer {
     const decoded = base58Decode(value);
     if (decoded.length < 4) throw new Error('Invalid Base58Check payload');
 

@@ -56,8 +56,8 @@ const SAFE_CHILD_ENV_KEYS = [
     'XDG_RUNTIME_DIR',
 ];
 
-function buildScopedChildEnv({ extra = {} } = {}) {
-    const env = {};
+function buildScopedChildEnv({ extra = {} }: { extra?: Record<string, string> } = {}): Record<string, string | undefined> {
+    const env: Record<string, string | undefined> = {};
     for (const key of SAFE_CHILD_ENV_KEYS) {
         if (process.env[key] !== undefined) {
             env[key] = process.env[key];

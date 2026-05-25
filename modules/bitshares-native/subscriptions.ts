@@ -7,19 +7,19 @@ const SUBSCRIBE_CALLBACK_ID = SUBSCRIPTIONS.CALLBACK_ID;
 const OP_FILL_ORDER = OPERATIONS.FILL_ORDER;
 const OP_HISTORY_REGEX = new RegExp('^' + SUBSCRIPTIONS.OPERATION_HISTORY_PREFIX.replace('.', '\\.') + '\\.');
 
-function createSubscriptionManager(chainClient) {
+function createSubscriptionManager(chainClient: any): any {
     const subscriptions = new Map();
-    let unsubscribeNotice = null;
+    let unsubscribeNotice: any = null;
     let noticeActive = false;
 
-    function parseObjectIdInstance(id) {
+    function parseObjectIdInstance(id: any): number {
         if (typeof id !== 'string') return Number.NaN;
         const match = id.match(/\.(\d+)$/);
         return match ? Number(match[1]) : Number.NaN;
     }
 
-    function sortEntriesOldestFirst(entries) {
-        return entries.sort((left, right) => {
+    function sortEntriesOldestFirst(entries: any[]): any[] {
+        return entries.sort((left: any, right: any) => {
             const leftInstance = parseObjectIdInstance(left?.id);
             const rightInstance = parseObjectIdInstance(right?.id);
             if (!Number.isFinite(leftInstance) || !Number.isFinite(rightInstance)) {
@@ -29,7 +29,7 @@ function createSubscriptionManager(chainClient) {
         });
     }
 
-    function decrementObjectId(id) {
+    function decrementObjectId(id: any): string | null {
         if (typeof id !== 'string') return null;
         const match = id.match(/^(.+\.)(\d+)$/);
         if (!match) return null;
@@ -38,13 +38,13 @@ function createSubscriptionManager(chainClient) {
         return `${match[1]}${instance - 1}`;
     }
 
-    function warnSubscription(sub, message, err = null) {
+    function warnSubscription(sub: any, message: string, err: any = null): void {
         const account = sub?.accountName || sub?.accountId || 'unknown';
         const detail = err?.message ? `: ${err.message}` : '';
         console.warn(`[subscriptions] ${message} for ${account}${detail}`);
     }
 
-    async function fetchFullAccountWithRetry(sub, subscribe = false) {
+    async function fetchFullAccountWithRetry(sub: any, subscribe: boolean = false): Promise<any> {
         const accountRef = sub.accountId || sub.accountName;
         let lastErr = null;
 
@@ -64,10 +64,10 @@ function createSubscriptionManager(chainClient) {
         return null;
     }
 
-    async function fetchFillHistoryEntries(accountId, stopHistoryId) {
+    async function fetchFillHistoryEntries(accountId: string, stopHistoryId: string): Promise<any[]> {
         const fetchPage = chainClient.history?.getAccountHistoryOperations
             || chainClient.history?.get_account_history_operations
-            || ((...args) => chainClient.history.call('get_account_history_operations', args));
+            || ((...args: any[]) => chainClient.history.call('get_account_history_operations', args));
 
         const entries = [];
         const seenIds = new Set();
@@ -101,11 +101,11 @@ function createSubscriptionManager(chainClient) {
         return sortEntriesOldestFirst(entries);
     }
 
-    async function primeLastDeliveredHistoryId(sub) {
+    async function primeLastDeliveredHistoryId(sub: any): Promise<string> {
         if (!sub?.accountId) return SUBSCRIPTIONS.HISTORY_API_OBJECT;
         const fetchPage = chainClient.history?.getAccountHistoryOperations
             || chainClient.history?.get_account_history_operations
-            || ((...args) => chainClient.history.call('get_account_history_operations', args));
+            || ((...args: any[]) => chainClient.history.call('get_account_history_operations', args));
         const latestFillEntries = await Promise.resolve(fetchPage(
             sub.accountId,
             OP_FILL_ORDER,
@@ -132,7 +132,7 @@ function createSubscriptionManager(chainClient) {
         noticeActive = false;
     }
 
-    async function handleNotice(params) {
+    async function handleNotice(params: any): Promise<void> {
         if (!Array.isArray(params) || params.length < 2) return;
 
         const [callbackId, data] = params;
@@ -153,7 +153,7 @@ function createSubscriptionManager(chainClient) {
         }
     }
 
-    function shouldProcessNoticeForSubscription(sub, data) {
+    function shouldProcessNoticeForSubscription(sub: any, data: any): boolean {
         if (!Array.isArray(data) || !sub.accountId) return true;
 
         let sawFillObject = false;
@@ -189,7 +189,7 @@ function createSubscriptionManager(chainClient) {
         return !sawFillObject;
     }
 
-    async function processObjects(sub, data) {
+    async function processObjects(sub: any, data: any): Promise<void> {
         if (!data || !Array.isArray(data)) return;
 
         const noticeObjectIds = [];
@@ -260,7 +260,7 @@ function createSubscriptionManager(chainClient) {
         }
     }
 
-    async function subscribe(accountName, callback, onError = null) {
+    async function subscribe(accountName: string, callback: any, onError: any = null): Promise<any> {
         if (!accountName || typeof accountName !== 'string') {
             throw new Error('accountName is required');
         }
@@ -313,7 +313,7 @@ function createSubscriptionManager(chainClient) {
         return () => unsubscribe(accountName, callback);
     }
 
-    async function unsubscribe(accountName, callback) {
+    async function unsubscribe(accountName: string, callback?: any): Promise<void> {
         const entry = subscriptions.get(accountName);
         if (!entry) return;
 

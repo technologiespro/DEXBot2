@@ -39,10 +39,10 @@ const livePath = path.join(ROOT, 'profiles', 'bots.json');
  * @param {string} s - JSONC string potentially containing comments
  * @returns {string} - Cleaned JSON string ready for JSON.parse()
  */
-function stripComments(s) {
+function stripComments(s: any) {
   return s.replace(/\/\*(?:.|[\r\n])*?\*\//g, '')
     .split('\n')
-    .map(l => l.replace(/(^|\s*)\/\/.*/, ''))
+    .map((l: any) => l.replace(/(^|\s*)\/\/.*/, ''))
     .join('\n');
 }
 
@@ -66,7 +66,7 @@ function stripComments(s) {
  * @param {Object} obj - Parsed configuration object (single bot or {bots: [...]})
  * @param {string} src - Source name for display (e.g., 'examples/bots.json')
  */
-function checkConfig(obj, src) {
+function checkConfig(obj: any, src: any) {
   // Normalize: convert single bot to array format for uniform processing
   const bots = Array.isArray(obj.bots) && obj.bots.length ? obj.bots : [obj];
   console.log(`\n== Checking ${src}: found ${bots.length} bot entries`);
@@ -77,7 +77,7 @@ function checkConfig(obj, src) {
   let anyGridPriceWarnings = false;
 
   // Validate each bot entry
-  bots.forEach((b, i) => {
+  bots.forEach((b: any, i: any) => {
     // Use bot name if available, otherwise use index
     const name = b.name || `<unnamed-${i}>`;
     // Find which required fields are missing from this bot
@@ -130,7 +130,7 @@ try {
   } else {
     console.warn(`template config not found, skipping: ${cfgPath}`);
   }
-} catch (err) {
+} catch (err: any) {
   console.error('template config: parse error ->', err.message);
 }
 
@@ -149,7 +149,7 @@ try {
   } else {
     console.warn(`live config not found, skipping: ${livePath}`);
   }
-} catch (err) {
+} catch (err: any) {
   console.error('live config: parse error ->', err.message);
 }
 

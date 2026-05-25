@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck
 
 const { listClawCommandNames } = require('../modules/claw_catalog');
 const { describeRuntimeManifest, runClawCommand } = require('../modules/claw_bridge');

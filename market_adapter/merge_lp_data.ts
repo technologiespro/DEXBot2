@@ -50,7 +50,7 @@ function parseArgs() {
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
-function validate(a, b) {
+function validate(a: any, b: any) {
     if (a.meta.pool !== b.meta.pool) {
         throw new Error(`Pool mismatch: ${a.meta.pool} vs ${b.meta.pool}`);
     }
@@ -96,7 +96,7 @@ function run() {
     validate(dataA, dataB);
 
     const merged = mergeCandles(dataA.candles, dataB.candles, {
-        onCollision: (existing, incoming) => incoming[5] > existing[5] ? incoming : existing,
+        onCollision: (existing: any, incoming: any) => incoming[5] > existing[5] ? incoming : existing,
     });
 
     const firstTs = new Date(merged[0][0]).toISOString();
@@ -108,8 +108,8 @@ function run() {
     console.log(`  merged:      ${firstTs} → ${lastTs}  (${merged.length} candles)`);
 
     // Overlap check
-    const bTimestamps = new Set(dataB.candles.map(c => c[0]));
-    const overlapCount = dataA.candles.filter(c => bTimestamps.has(c[0])).length;
+    const bTimestamps = new Set(dataB.candles.map((c: any) => c[0]));
+    const overlapCount = dataA.candles.filter((c: any) => bTimestamps.has(c[0])).length;
     if (overlapCount > 0) {
         console.log(`  overlap:     ${overlapCount} candles (deduplicated, higher-volume kept)`);
     }

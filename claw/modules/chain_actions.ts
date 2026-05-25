@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { BitShares } = require('./bitshares_client');
 const { executeOperations } = require('./chain_broadcast');
 const { loadDexbotOrderUtils, requireDexbot2Module } = require('./dexbot_bridge');

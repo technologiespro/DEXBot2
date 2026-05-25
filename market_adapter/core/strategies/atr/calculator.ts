@@ -12,7 +12,7 @@ const { normalizeAtrPeriod } = require('../../config_normalizers');
  * @param {number} period - ATR period
  * @returns {number} Average True Range value
  */
-function calculateATR(candles, period = 14) {
+function calculateATR(candles: any, period = 14) {
   const safePeriod = normalizeAtrPeriod(period);
   if (!Array.isArray(candles)) return Number.NaN;
   if (candles.length < safePeriod + 1) return 0;

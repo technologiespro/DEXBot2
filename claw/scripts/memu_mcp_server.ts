@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck
 
 const { createMemuBridge, describeMemuBridge } = require('../modules/memu_bridge');
 

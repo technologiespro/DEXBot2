@@ -11,7 +11,7 @@ const DEFAULT_STATE_DIR = path.join(DEFAULT_ROOT, 'market_adapter', 'state');
 const DEFAULT_LOCK_FILE = path.join(DEFAULT_STATE_DIR, 'market_adapter.lock');
 const DEFAULT_SCRIPT = path.join(DEFAULT_CODE_ROOT, 'market_adapter', 'market_adapter.js');
 
-function loadLockInfo(lockPath) {
+function loadLockInfo(lockPath: string): any {
     try {
         const raw = fs.readFileSync(lockPath, 'utf8');
         const parsed = JSON.parse(raw);
@@ -21,7 +21,7 @@ function loadLockInfo(lockPath) {
     }
 }
 
-function isProcessAlive(pid) {
+function isProcessAlive(pid: number): boolean {
     if (!Number.isInteger(pid) || pid <= 0) return false;
     try {
         process.kill(pid, 0);
@@ -40,7 +40,7 @@ function isLikelyAdapterRunning(lockPath = DEFAULT_LOCK_FILE) {
     }
 }
 
-function waitForChildExit(child) {
+function waitForChildExit(child: any): Promise<any> {
     return new Promise((resolve, reject) => {
         if (!child) {
             resolve(0);
@@ -48,7 +48,7 @@ function waitForChildExit(child) {
         }
 
         child.once('error', reject);
-        child.once('close', (code) => resolve(code));
+        child.once('close', (code: any) => resolve(code));
     });
 }
 
@@ -59,8 +59,8 @@ function createMarketAdapterRuntime({
     spawnFn = spawn,
     buildEnv = buildScopedChildEnv,
 } = {}) {
-    let child = null;
-    let childExitPromise = null;
+    let child: any = null;
+    let childExitPromise: any = null;
     const desiredBots = new Set();
 
     function isOwnedChildRunning() {
@@ -131,7 +131,7 @@ function createMarketAdapterRuntime({
         return { running: false, stopped: true };
     }
 
-    async function syncBot(botId, shouldRun) {
+    async function syncBot(botId: string, shouldRun: boolean): Promise<any> {
         if (!botId) {
             throw new Error('botId is required');
         }
@@ -153,7 +153,7 @@ function createMarketAdapterRuntime({
         };
     }
 
-    async function releaseBot(botId) {
+    async function releaseBot(botId: string): Promise<any> {
         if (botId) {
             desiredBots.delete(botId);
         }
@@ -193,7 +193,7 @@ function createMarketAdapterRuntime({
     };
 }
 
-let sharedRuntime = null;
+let sharedRuntime: any = null;
 
 function getSharedMarketAdapterRuntime(options = {}) {
     if (!sharedRuntime) {

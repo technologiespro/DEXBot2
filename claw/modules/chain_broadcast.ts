@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { createAccountClient } = require('./bitshares_client');
 const path = require('path');
 const {

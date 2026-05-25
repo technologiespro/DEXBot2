@@ -60,7 +60,7 @@
  * @param {number} value - The value to format
  * @returns {string} Formatted value to 8 decimals
  */
-function formatAmount8(value) {
+function formatAmount8(value: number): string {
 	return safeFormat(value, 8);
 }
 
@@ -71,7 +71,7 @@ function formatAmount8(value) {
  * @param {number} [decimals=8] - Number of decimal places (default 8)
  * @returns {string} Formatted value
  */
-function formatAmount(value, decimals = 8) {
+function formatAmount(value: number, decimals: number = 8): string {
 	return safeFormat(value, decimals);
 }
 
@@ -83,8 +83,8 @@ function formatAmount(value, decimals = 8) {
  * @param {number} [fallbackPrecision=8] - Fallback decimals when precision is invalid
  * @returns {string} Formatted value
  */
-function formatAmountByPrecision(value, precision, fallbackPrecision = 8) {
-	const decimals = Number.isInteger(precision) && precision >= 0 ? precision : fallbackPrecision;
+function formatAmountByPrecision(value: number, precision: number | undefined, fallbackPrecision: number = 8): string {
+	const decimals = precision !== undefined && Number.isInteger(precision) && precision >= 0 ? precision : fallbackPrecision;
 	return safeFormat(value, decimals);
 }
 
@@ -98,7 +98,7 @@ function formatAmountByPrecision(value, precision, fallbackPrecision = 8) {
  * @param {number} [fallbackPrecision=8] - Fallback decimals
  * @returns {string} Formatted value
  */
-function formatSizeByOrderType(value, orderType, assets, fallbackPrecision = 8) {
+function formatSizeByOrderType(value: number, orderType: string, assets: { assetA?: { precision?: number }; assetB?: { precision?: number } }, fallbackPrecision: number = 8): string {
 	const side = String(orderType || '').toLowerCase();
 	const buyPrecision = assets?.assetB?.precision;
 	const sellPrecision = assets?.assetA?.precision;
@@ -114,7 +114,7 @@ function formatSizeByOrderType(value, orderType, assets, fallbackPrecision = 8) 
  * @param {number} precision - Decimal precision
  * @returns {string} Formatted amount or 'N/A'
  */
-function formatAmountStrict(value, precision) {
+function formatAmountStrict(value: any, precision: any): string {
 	if (!Number.isFinite(Number(value)) || !Number.isFinite(Number(precision))) return 'N/A';
 	return formatAmountByPrecision(value, precision);
 }
@@ -130,29 +130,15 @@ function formatAmountStrict(value, precision) {
  * @param {number} value - The price to format
  * @returns {string} Formatted price to 8 decimals
  */
-function formatPrice(value) {
+function formatPrice(value: number): string {
 	return safeFormat(value, 8);
 }
 
-/**
- * Format prices to 6 decimal places
- * Used for: display prices where 8 decimals is excessive
- *
- * @param {number} value - The price to format
- * @returns {string} Formatted price to 6 decimals
- */
-function formatPrice6(value) {
+function formatPrice6(value: number): string {
 	return safeFormat(value, 6);
 }
 
-/**
- * Format prices to 4 decimal places
- * Used for: simplified price display
- *
- * @param {number} value - The price to format
- * @returns {string} Formatted price to 4 decimals
- */
-function formatPrice4(value) {
+function formatPrice4(value: number): string {
 	return safeFormat(value, 4);
 }
 
@@ -167,18 +153,11 @@ function formatPrice4(value) {
  * @param {number} value - The percentage value (0-100 or decimal 0-1)
  * @returns {string} Formatted percentage to 2 decimals
  */
-function formatPercent2(value) {
+function formatPercent2(value: number): string {
 	return safeFormat(value, 2);
 }
 
-/**
- * Format percentages with custom decimal places
- *
- * @param {number} value - The percentage value
- * @param {number} [decimals=2] - Number of decimal places (default 2)
- * @returns {string} Formatted percentage
- */
-function formatPercent(value, decimals = 2) {
+function formatPercent(value: number, decimals: number = 2): string {
 	return safeFormat(value, decimals);
 }
 
@@ -193,29 +172,15 @@ function formatPercent(value, decimals = 2) {
  * @param {number} [decimals=5] - Number of decimal places (default 5)
  * @returns {string} Formatted ratio
  */
-function formatRatio(value, decimals = 5) {
+function formatRatio(value: number, decimals: number = 5): string {
 	return safeFormat(value, decimals);
 }
 
-/**
- * Format metrics to 2 decimal places
- * Used for: timing metrics, performance percentages, simple ratios
- *
- * @param {number} value - The metric value
- * @returns {string} Formatted metric to 2 decimals
- */
-function formatMetric2(value) {
+function formatMetric2(value: number): string {
 	return safeFormat(value, 2);
 }
 
-/**
- * Format metrics to 5 decimal places
- * Used for: detailed metric analysis, precision metrics
- *
- * @param {number} value - The metric value
- * @returns {string} Formatted metric to 5 decimals
- */
-function formatMetric5(value) {
+function formatMetric5(value: number): string {
 	return safeFormat(value, 5);
 }
 
@@ -228,28 +193,15 @@ function formatMetric5(value) {
  * @param {*} value - Value to check
  * @returns {boolean} True if value is defined and finite
  */
-function isValidNumber(value) {
+function isValidNumber(value: any): boolean {
 	return value !== null && value !== undefined && Number.isFinite(Number(value));
 }
 
-/**
- * Check if a value can be converted to a number.
- * Accepts numbers and numeric strings that are not empty or NaN.
- * 
- * @param {*} val - Value to test
- * @returns {boolean} True if val is a number or can be parsed as one
- */
-function isNumeric(val) {
+function isNumeric(val: any): boolean {
 	return typeof val === 'number' || (typeof val === 'string' && val.trim() !== '' && !Number.isNaN(Number(val)));
 }
 
-/**
- * Safely convert a value to a finite number with fallback.
- * @param {*} value - Value to convert
- * @param {number} defaultValue - Fallback if not finite (default: 0)
- * @returns {number} Finite number or default
- */
-function toFiniteNumber(value, defaultValue = 0) {
+function toFiniteNumber(value: any, defaultValue: number = 0): number {
 	const num = Number(value);
 	return Number.isFinite(num) ? num : defaultValue;
 }
@@ -262,7 +214,7 @@ function toFiniteNumber(value, defaultValue = 0) {
  * @param {string} [fallback='N/A'] - Fallback value if format fails
  * @returns {string} Formatted value or fallback string
  */
-function safeFormat(value, decimals, fallback = 'N/A') {
+function safeFormat(value: any, decimals: number, fallback: string = 'N/A'): string {
 	try {
 		if (!isValidNumber(value)) {
 			return fallback;

@@ -49,6 +49,7 @@
   },
   "homepage": "https://github.com/froooze/DEXBot2#readme",
   "optionalDependencies": {
+    "openclaw": "^2026.5.12",
     "ws": "^8.0.0"
   },
   "devDependencies": {

@@ -1,4 +1,3 @@
-// @ts-nocheck
 const crypto = require('crypto');
 const {
   DEFAULT_READY_FILE,

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-
+// @ts-nocheck
 /**
  * TRADE HEATMAP ANALYZER
  *
@@ -22,14 +22,11 @@
  *
  * Options — see --help for full list.
  */
-
 'use strict';
-
 const fs = require('fs');
 const path = require('path');
 const { calculateAMA } = require('../market_adapter/core/strategies/ama');
 const { MARKET_ADAPTER } = require('../modules/constants');
-
 /**
  * Parse CLI arguments. Unknown flags are silently ignored.
  * Supports --flag value and --flag (boolean) conventions.
@@ -59,7 +56,6 @@ function parseArgs() {
         verbose: has('verbose'),
     };
 }
-
 /**
  * Population standard deviation of a numeric array.
  */
@@ -68,7 +64,6 @@ function calcStdDev(arr) {
     const sqDiffs = arr.reduce((sum, v) => sum + (v - mean) ** 2, 0);
     return Math.sqrt(sqDiffs / arr.length);
 }
-
 /**
  * Main entry point.
  * 1. Parse config, load candles, compute AMA
@@ -100,30 +95,25 @@ function main() {
         console.error(`Data file not found: ${cfg.data}`);
         process.exit(1);
     }
-
     const raw = JSON.parse(fs.readFileSync(cfg.data, 'utf8'));
     if (!raw.candles || !Array.isArray(raw.candles)) {
         console.error('Invalid data: expected "candles" array');
         process.exit(1);
     }
-
     const amaCfg = MARKET_ADAPTER.AMAS[cfg.ama];
     if (!amaCfg) {
         console.error(`Unknown AMA preset: ${cfg.ama}. Choose: ${Object.keys(MARKET_ADAPTER.AMAS).join(', ')}`);
         process.exit(1);
     }
-
     const candles = raw.candles;
     const closes = candles.map(c => Number(c[4]));
     const volumes = candles.map(c => Number(c[5]) || 0);
     const timestamps = candles.map(c => Number(c[0]));
-
     if (cfg.warmup === null) {
         cfg.warmup = Math.ceil(amaCfg.erPeriod);
     }
     if (cfg.verbose) console.log(`Computing ${cfg.ama} on ${closes.length} candles (warmup=${cfg.warmup})...`);
     const amaValues = calculateAMA(closes, amaCfg);
-
     const records = [];
     for (let i = cfg.warmup; i < closes.length; i++) {
         const ama = amaValues[i];
@@ -138,7 +128,6 @@ function main() {
         process.exit(1);
     }
     if (cfg.verbose) console.log(`${records.length} volume-bearing candles after warmup`);
-
     const devs = records.map(r => r.devPct);
     const vols = records.map(r => r.vol);
     const totalVol = vols.reduce((a, b) => a + b, 0);
@@ -146,11 +135,9 @@ function main() {
     const stdDev = calcStdDev(devs);
     const sortedDevs = devs.slice().sort((a, b) => a - b);
     const medianDev = sortedDevs[Math.floor(sortedDevs.length / 2)];
-
     let weightedSum = 0;
     for (let i = 0; i < devs.length; i++) weightedSum += devs[i] * vols[i];
     const volWeightedMeanDev = weightedSum / totalVol;
-
     const binSize = cfg.binSize;
     let leftBins, rightBins;
     if (cfg.buckets !== null) {
@@ -172,12 +159,10 @@ function main() {
         const idx = Math.round(dev / binSize) + leftBins;
         return Math.max(0, Math.min(nBins - 1, idx));
     };
-
     const minTs = timestamps[cfg.warmup];
     const maxTs = timestamps[timestamps.length - 1];
     const minDate = new Date(minTs);
     const maxDate = new Date(maxTs);
-
     const sliceMonths = cfg.sliceMonths;
     const slices = [];
     let sliceStart = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
@@ -191,7 +176,6 @@ function main() {
         });
         sliceStart = sliceEnd;
     }
-
     const sliceBuckets = slices.map(() => new Array(nBins).fill(0));
     const sliceTotals = new Array(slices.length).fill(0);
     for (const r of records) {
@@ -201,27 +185,22 @@ function main() {
         sliceBuckets[si][bi] += r.vol;
         sliceTotals[si] += r.vol;
     }
-
     while (slices.length > 0 && sliceTotals[sliceTotals.length - 1] === 0) {
         slices.pop();
         sliceBuckets.pop();
         sliceTotals.pop();
     }
-
     const totalBins = new Array(nBins).fill(0);
     for (const r of records) {
         totalBins[binKey(r.devPct)] += r.vol;
     }
     const maxBinVol = Math.max(...totalBins);
-
     const pctWithin = cfg.thresholds.map(t => {
         const volIn = records.filter(r => Math.abs(r.devPct) <= t).reduce((s, r) => s + r.vol, 0);
         return (volIn / totalVol * 100).toFixed(2);
     });
-
     const peakBinIdx = totalBins.indexOf(maxBinVol);
     const peakDev = binLabels[peakBinIdx];
-
     // Compute color cap from data: 95th percentile of slice-cell percentages
     const allCellPcts = [];
     for (let si = 0; si < slices.length; si++) {
@@ -235,7 +214,6 @@ function main() {
     const colorCap = allCellPcts.length > 0
         ? allCellPcts[Math.floor(allCellPcts.length * 0.95)]
         : 30;
-
     function heatColor(pct) {
         if (pct <= 0) return '#0d1117';
         const n = Math.min(pct / colorCap, 1);
@@ -244,7 +222,6 @@ function main() {
         const b = Math.round(23 + n * (70 - 23));
         return `rgb(${r},${g},${b})`;
     }
-
     function histColor(pct, maxPct) {
         const n = maxPct > 0 ? pct / maxPct : 0;
         const r = Math.round(56 + n * (255 - 56));
@@ -252,7 +229,6 @@ function main() {
         const b = Math.round(73 + n * (70 - 73));
         return `rgb(${r},${g},${b})`;
     }
-
     const heatRows = slices.map((sl, si) => {
         const rowPcts = sliceBuckets[si].map(v => sliceTotals[si] > 0 ? (v / sliceTotals[si]) * 100 : 0);
         const cells = rowPcts.map((p, bi) => {
@@ -261,7 +237,6 @@ function main() {
         }).join('');
         return `<tr><td class="yl">${sl.label}</td>${cells}</tr>`;
     }).join('\n');
-
     const maxBarPct = Math.max(...totalBins);
     const barRows = totalBins.map((v, i) => {
         const barPct = maxBarPct > 0 ? (v / maxBarPct) * 100 : 0;
@@ -269,7 +244,6 @@ function main() {
         const barH = Math.max(barPct * 0.7, 0.5);
         return `<div class="bar" style="height:${barH}px;background:${color}" title="Deviation: ${binLabels[i]}%  Volume: ${v.toFixed(2)}"></div>`;
     }).join('');
-
     const xLabelInterval = Math.max(1, Math.floor(nBins / 11));
     const xLabelsHtml = binLabels.map((l, i) => {
         if (i === 0 || i === nBins - 1 || i % xLabelInterval === 0) {
@@ -277,12 +251,10 @@ function main() {
         }
         return '<span></span>';
     }).join('');
-
     const threshHtml = cfg.thresholds.map(t => {
         const pct = ((leftBins + t / binSize) / nBins) * 100;
         return `<div class="thresh-line" style="left:${Math.min(Math.max(pct, 0), 100)}%"><span class="thresh-label">±${t}%</span></div>`;
     }).join('');
-
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -293,7 +265,6 @@ function main() {
 body { background: #0b0e14; color: #d1d5db; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 24px; }
 h1 { color: #fff; font-size: 18px; margin: 0 0 2px 0; }
 .subtitle { color: #8b949e; font-size: 12px; margin: 0 0 16px 0; }
-
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 24px; }
 .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 10px 12px; }
 .stat-card .lbl { color: #8b949e; font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; }
@@ -301,18 +272,14 @@ h1 { color: #fff; font-size: 18px; margin: 0 0 2px 0; }
 .stat-card .val.green { color: #3fb950; }
 .stat-card .val.orange { color: #f08c00; }
 .stat-card .val.blue { color: #58a6ff; }
-
 .hm-wrap { overflow-x: auto; margin-bottom: 28px; }
 table.heatmap { border-collapse: collapse; font-size: 10px; }
 table.heatmap th { color: #8b949e; font-size: 9px; font-weight: normal; padding: 2px 0; min-width: 32px; text-align: center; }
 table.heatmap td.hm-cell { width: 30px; height: 22px; text-align: center; font-size: 8px; color: rgba(255,255,255,0.6); cursor: default; border: 1px solid #161b22; border-radius: 1px; }
 table.heatmap td.yl { color: #8b949e; font-size: 10px; text-align: right; padding-right: 8px; white-space: nowrap; }
-
 .legend-row { display: flex; align-items: center; gap: 12px; font-size: 10px; color: #8b949e; margin-bottom: 20px; }
 .legend-bar { width: 160px; height: 8px; border-radius: 3px; background: linear-gradient(to right, #0d1117, #1f6f2f, #3fb950, #ffa03e, #f85149); }
-
 .section-title { color: #8b949e; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px 0; border-bottom: 1px solid #30363d; padding-bottom: 4px; }
-
 .hist-wrap { position: relative; margin-bottom: 36px; }
 .hist-bar-container { display: flex; align-items: flex-end; gap: 1px; height: 180px; }
 .hist-bar-container .bar { flex: 1; min-height: 1px; border-radius: 1px; cursor: pointer; transition: opacity 0.15s; }
@@ -322,12 +289,10 @@ table.heatmap td.yl { color: #8b949e; font-size: 10px; text-align: right; paddin
 .thresh-label { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); font-size: 8px; color: #f85149; white-space: nowrap; background: rgba(11,14,20,0.8); padding: 0 3px; line-height: 12px; }
 .x-labels { display: flex; font-size: 9px; color: #8b949e; margin-top: 4px; }
 .x-labels span { flex: 1; text-align: center; white-space: nowrap; }
-
 .pct-table { font-size: 11px; color: #8b949e; margin-bottom: 24px; }
 .pct-table td { padding: 3px 12px 3px 0; }
 .pct-table td:first-child { color: #d1d5db; }
 .pct-table .val-col { text-align: right; font-weight: bold; color: #3fb950; font-family: monospace; }
-
 .bottom { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; margin-top: 8px; }
 .params-table { font-size: 11px; color: #8b949e; }
 .params-table td { padding: 2px 16px 2px 0; }
@@ -335,7 +300,6 @@ table.heatmap td.yl { color: #8b949e; font-size: 10px; text-align: right; paddin
 </style>
 </head>
 <body>
-
 <h1>Trade Heatmap — ${cfg.ama} Deviation</h1>
 <p class="subtitle">
     ${closes.length} candles &middot; ${records.length} with volume &middot;
@@ -344,7 +308,6 @@ table.heatmap td.yl { color: #8b949e; font-size: 10px; text-align: right; paddin
     ${slices.length} time slices &middot;
     ${raw.meta && raw.meta.pool ? raw.meta.pool : path.basename(path.dirname(cfg.data))}
 </p>
-
 <div class="stats-grid">
     <div class="stat-card"><div class="lbl">Mean Deviation</div><div class="val">${meanDev.toFixed(2)}%</div></div>
     <div class="stat-card"><div class="lbl">Median Deviation</div><div class="val">${medianDev.toFixed(2)}%</div></div>
@@ -353,7 +316,6 @@ table.heatmap td.yl { color: #8b949e; font-size: 10px; text-align: right; paddin
     <div class="stat-card"><div class="lbl">Peak Bucket</div><div class="val green">${peakDev}%</div></div>
     <div class="stat-card"><div class="lbl">Max |Dev|</div><div class="val orange">${Math.max(...devs.map(Math.abs)).toFixed(2)}%</div></div>
 </div>
-
 <div class="section-title">Volume Distribution by Time Slice &mdash; % of slice volume per deviation bucket</div>
 <div class="hm-wrap">
     <table class="heatmap">
@@ -366,7 +328,6 @@ table.heatmap td.yl { color: #8b949e; font-size: 10px; text-align: right; paddin
     <div class="legend-bar"></div>
     <span>≥${colorCap.toFixed(0)}% of slice</span>
 </div>
-
 <div class="section-title">Summed Volume Distribution &mdash; total volume per deviation bucket</div>
 <div class="hist-wrap">
     <div class="hist-bar-container">
@@ -375,14 +336,12 @@ table.heatmap td.yl { color: #8b949e; font-size: 10px; text-align: right; paddin
     </div>
     <div class="x-labels">${xLabelsHtml}</div>
 </div>
-
 <div class="section-title">Volume Concentration</div>
 <table class="pct-table">
     ${cfg.thresholds.map((t, i) =>
         `<tr><td>Within ±${t}% of AMA</td><td class="val-col">${pctWithin[i]}%</td></tr>`
     ).join('')}
 </table>
-
 <div class="bottom">
     <table class="params-table">
         <tr><td>AMA Preset</td><td>${cfg.ama}</td></tr>
@@ -396,15 +355,12 @@ table.heatmap td.yl { color: #8b949e; font-size: 10px; text-align: right; paddin
         <tr><td>Data range</td><td>${minDate.toISOString().split('T')[0]} &ndash; ${maxDate.toISOString().split('T')[0]}</td></tr>
     </table>
 </div>
-
 </body>
 </html>`;
-
     const outDir = path.dirname(cfg.output);
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(cfg.output, html, 'utf8');
     console.log(`✓ Heatmap saved to ${cfg.output}`);
 }
-
 main();
 export {};

@@ -1,39 +1,39 @@
 'use strict';
 
-function formatLogNumber(value, digits = 2) {
+function formatLogNumber(value: any, digits = 2) {
     return Number.isFinite(value) ? Number(value).toFixed(digits) : 'n/a';
 }
 
-function formatAdaptiveLogNumber(value, coarseDigits = 2, fineDigits = 4, fineThreshold = 0.1) {
+function formatAdaptiveLogNumber(value: any, coarseDigits = 2, fineDigits = 4, fineThreshold = 0.1) {
     if (!Number.isFinite(value)) return 'n/a';
     return Math.abs(Number(value)) < fineThreshold
         ? Number(value).toFixed(fineDigits)
         : Number(value).toFixed(coarseDigits);
 }
 
-function formatLogPercent(value, digits = 2) {
+function formatLogPercent(value: any, digits = 2) {
     return Number.isFinite(value) ? `${Number(value).toFixed(digits)}%` : 'n/a';
 }
 
-function formatLogPair(first, second, digits = 2) {
+function formatLogPair(first: any, second: any, digits = 2) {
     return `${formatLogNumber(first, digits)}/${formatLogNumber(second, digits)}`;
 }
 
-function formatAmaTuple(ama) {
+function formatAmaTuple(ama: any) {
     if (!ama) return 'n/a';
     const erSmoothPeriod = Number.isFinite(Number(ama.erSmoothPeriod)) ? Number(ama.erSmoothPeriod) : 0;
     return `${formatLogNumber(ama.erPeriod, 0)}/${formatLogNumber(ama.fastPeriod, 1)}/${formatLogNumber(ama.slowPeriod, 1)}/es${formatLogNumber(erSmoothPeriod, 0)}`;
 }
 
-function formatAsymmetryFactor(value, digits = 1) {
+function formatAsymmetryFactor(value: any, digits = 1) {
     return Number.isFinite(value) ? `${(Number(value) * 100).toFixed(digits)}%` : 'n/a';
 }
 
-function buildWeightSummary(weights) {
+function buildWeightSummary(weights: any) {
     return weights ? ` weights(sell/buy)=${formatLogPair(weights.sell, weights.buy, 2)}` : '';
 }
 
-function buildDynamicWeightInputsLog(meta, amaConfig) {
+function buildDynamicWeightInputsLog(meta: any, amaConfig: any) {
     return [
         `ama=${formatAmaTuple(amaConfig)}`,
         `base=${formatLogPair(meta?.staticSell, meta?.staticBuy, 2)}`,
@@ -43,7 +43,7 @@ function buildDynamicWeightInputsLog(meta, amaConfig) {
     ].join(' | ');
 }
 
-function buildDynamicWeightTuningLog(meta) {
+function buildDynamicWeightTuningLog(meta: any) {
     return [
         `slopeMax=${formatAdaptiveLogNumber(meta?.amaSlope?.maxSlopePct, 2, 4)}`,
         `kalmanMax=${formatLogNumber(meta?.kalmanSlope?.maxSlopePct, 2)}`,
@@ -59,11 +59,11 @@ function buildDynamicWeightTuningLog(meta) {
     ].join(' | ');
 }
 
-function buildAsymmetricBoundsLog(meta) {
+function buildAsymmetricBoundsLog(meta: any) {
     return `raw=${formatAsymmetryFactor(meta?.rawAsymmetryFactor, 2)}, applied=${formatAsymmetryFactor(meta?.appliedAsymmetryFactor, 2)}, maxAsym=${formatAsymmetryFactor(meta?.maxAsymmetryFactor, 0)}`;
 }
 
-function buildStartupDefaultsLog(defaultAma, defaultConfig, marketAdapterCfg) {
+function buildStartupDefaultsLog(defaultAma: any, defaultConfig: any, marketAdapterCfg: any) {
     return `  defaults: ama=${formatAmaTuple(defaultAma)} | `
         + `weightFallback=${formatLogPair(defaultConfig?.weightDistribution?.sell, defaultConfig?.weightDistribution?.buy, 2)} | `
         + `dynamicBase=explicit-only | `

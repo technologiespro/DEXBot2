@@ -1,75 +1,29 @@
 /**
- * @file DEXBot2 Central Type Definitions
- *
- * Single source of truth for all domain types across the codebase.
- * Every @typedef uses JSDoc syntax, which is parsed by TypeScript
- * during migration and by IDEs for autocomplete in plain JS.
+ * DEXBot2 Central Type Definitions
  *
  * Where possible, types align with the BitShares C++ protocol headers
  * at https://github.com/bitshares/bitshares-core
  *
- * ============================================================
- * STRING LITERAL ENUMS
- * ============================================================
+ * See libraries/protocol/include/graphene/protocol/ for canonical defs.
  */
 
-/**
- * @typedef {'sell'|'buy'|'spread'} OrderType
- * Side/role of a grid order slot.
- * - sell: quote asset is sold (base received)
- * - buy: base asset is sold (quote received)
- * - spread: neutral slot between buy/sell regions
- */
+// ============================================================
+// STRING LITERAL ENUMS
+// ============================================================
+
+export type OrderType = 'sell' | 'buy' | 'spread';
+export type OrderState = 'virtual' | 'active' | 'partial' | 'filled';
+export type RebalanceState = 'NORMAL' | 'REBALANCING' | 'BROADCASTING';
+export type CowActionType = 'create' | 'cancel' | 'update';
+export type AmaSlopePercentMode = 'perBar' | 'window';
+export type ProcessedFillPersistenceMode = 'immediate' | 'batched' | 'manual';
+export type CreditDealAutoRepay = 'no_auto_repayment' | 'only_full_repayment' | 'allow_partial_repayment';
+export type GridPriceSource = 'pool' | 'book' | 'ama' | 'ama1' | 'ama2' | 'ama3' | 'ama4' | number | null;
+export type StartPriceSource = 'pool' | 'book' | number;
 
 /**
- * @typedef {'virtual'|'active'|'partial'} OrderState
- * Lifecycle state of a grid order.
- * - virtual: not placed on blockchain
- * - active: on-chain, fully sized
- * - partial: on-chain, partially filled
- */
-
-/**
- * @typedef {'NORMAL'|'REBALANCING'|'BROADCASTING'} RebalanceState
- * Pipeline rebalance lifecycle.
- */
-
-/**
- * @typedef {'create'|'cancel'|'update'} CowActionType
- * Copy-on-Write action discriminant.
- */
-
-/**
- * @typedef {'perBar'|'window'} AmaSlopePercentMode
- * AMA slope percentage calculation mode.
- */
-
-/**
- * @typedef {'immediate'|'batched'|'manual'} ProcessedFillPersistenceMode
- * How processed fills are persisted.
- */
-
-/**
- * @typedef {'no_auto_repayment'|'only_full_repayment'|'allow_partial_repayment'} CreditDealAutoRepay
- * Credit deal auto-repayment policy.
- */
-
-/**
- * @typedef {'pool'|'book'|'ama'|'ama1'|'ama2'|'ama3'|'ama4'|number|null} GridPriceSource
- * Price reference source for grid center calculation.
- */
-
-/**
- * @typedef {'pool'|'book'|number} StartPriceSource
- * Bot start price source.
- */
-
-/**
- * @typedef {0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|65|66|67|68|69|70|71|72|73|74|75|76|77} OperationTypeId
  * Blockchain operation type IDs matching the fc::static_variant index.
- * See graphene/protocol/operations.hpp for the canonical list.
- *
- * Key values used by DEXBot:
+ * See graphene/protocol/operations.hpp for the canonical list:
  *   1  = limit_order_create
  *   2  = limit_order_cancel
  *   3  = call_order_update
@@ -82,1672 +36,1405 @@
  *   74 = credit_deal_expired (VIRTUAL)
  *   77 = limit_order_update
  */
-
-/*
- * ============================================================
- * PRIMITIVE BLOCKCHAIN TYPES
- * ============================================================
- */
-
-/**
- * @typedef {Object} Asset
- * An amount of a specific blockchain asset.
- * Matches graphene::protocol::asset (asset.hpp:31-38).
- * @property {number} amount - Integer amount in satoshis (blockchain precision)
- * @property {string} asset_id - Blockchain asset ID, e.g. "1.3.0"
- */
-
-/**
- * @typedef {Object} Price
- * Exchange ratio between two assets.
- * Matches graphene::protocol::price (asset.hpp:108-114).
- * @property {Asset} base - Base asset (being sold)
- * @property {Asset} quote - Quote asset (being purchased)
- */
-
-/**
- * @typedef {Object} PriceFeed
- * Market parameters for margin positions (bitasset feeds).
- * Matches graphene::protocol::price_feed.
- * @property {Price} settlement_price - Forced settlement price
- * @property {Price} core_exchange_rate - CORE exchange rate for fee pool
- * @property {number} maintenance_collateral_ratio - MCR (fixed point, denominator 1000)
- * @property {number} maximum_short_squeeze_ratio - MSSR
- */
-
-/*
- * ============================================================
- * BLOCKCHAIN ORDER STRUCTURES
- * ============================================================
- */
-
-/**
- * @typedef {Object} ChainLimitOrder
- * Raw limit order as returned by the blockchain API.
- * @property {string} id - On-chain object ID, e.g. "1.7.12345"
- * @property {string} seller - Account ID of the order creator
- * @property {number} for_sale - Integer amount for sale
- * @property {Object} sell_price - Price definition
- * @property {Asset} sell_price.base - Base asset
- * @property {Asset} sell_price.quote - Quote asset
- * @property {string} expiration - ISO date string
- * @property {string} [delegated_fee_asset_id]
- * @property {string} [created]
- */
-
-/**
- * @typedef {Object} ParsedChainOrder
- * Normalized order parsed from a chain order object.
- * @property {string} orderId - On-chain order ID
- * @property {number} price - Human-readable float price
- * @property {'buy'|'sell'} type - Inferred order side
- * @property {number} size - Human-readable float size
- */
-
-/**
- * @typedef {Object} FillOperationData
- * Raw fill data from a fill_order_operation (op[1]).
- * Matches graphene::protocol::fill_order_operation (market.hpp:206-233).
- * @property {string} order_id - ID of the order that was filled
- * @property {string} account_id - Account ID of the order owner
- * @property {Asset} pays - What the order paid
- * @property {Asset} receives - What the order received
- * @property {Asset} fee - Fee paid
- * @property {Price} fill_price - Fill price at execution
- * @property {boolean} is_maker - Whether this side was the maker
- */
-
-/**
- * @typedef {Object} FillEvent
- * Raw fill event from blockchain subscription or history query.
- * @property {string} id - History entry ID, e.g. "1.11.xxxxx"
- * @property {number} block_num - Block number where fill occurred
- * @property {[number, FillOperationData]} op - [operation_type, operation_data]
- */
-
-/*
- * ============================================================
- * OPERATION BUILDERS
- * ============================================================
- */
-
-/**
- * @typedef {Object} LimitOrderCreateOp
- * limit_order_create operation builder.
- * Matches graphene::protocol::limit_order_create_operation (market.hpp:72-111).
- * @property {Asset} fee
- * @property {string} seller - Account ID
- * @property {Asset} amount_to_sell
- * @property {Asset} min_to_receive
- * @property {string} expiration - ISO date
- * @property {boolean} fill_or_kill
- * @property {Object} [extensions]
- */
-
-/**
- * @typedef {Object} LimitOrderUpdateOp
- * limit_order_update operation builder.
- * Matches graphene::protocol::limit_order_update_operation (market.hpp:117-136).
- * @property {Asset} fee
- * @property {string} seller - Account ID
- * @property {string} order - Order ID to update
- * @property {Price} [new_price]
- * @property {Asset} [delta_amount_to_sell]
- * @property {string} [new_expiration]
- * @property {Object} [extensions]
- */
-
-/**
- * @typedef {Object} LimitOrderCancelOp
- * limit_order_cancel operation builder.
- * Matches graphene::protocol::limit_order_cancel_operation (market.hpp:145-157).
- * @property {Asset} fee
- * @property {string} fee_paying_account
- * @property {string} order - Order ID to cancel
- * @property {Object} [extensions]
- */
-
-/**
- * @typedef {Object} CallOrderUpdateOp
- * call_order_update operation builder.
- * Matches graphene::protocol::call_order_update_operation (market.hpp:171-197).
- * @property {Asset} fee
- * @property {string} funding_account
- * @property {Asset} delta_collateral
- * @property {Asset} delta_debt
- * @property {Object} [extensions]
- */
-
-/**
- * @typedef {Object} AssetSettleOp
- * asset_settle operation builder.
- * @property {Asset} fee
- * @property {string} account
- * @property {Asset} amount
- * @property {Object} [extensions]
- */
-
-/**
- * @typedef {Object} TransferOp
- * transfer operation builder.
- * @property {Asset} fee
- * @property {string} from
- * @property {string} to
- * @property {Asset} amount
- * @property {Object} [memo]
- * @property {Object} [extensions]
- */
-
-/**
- * @typedef {Object} CreditOfferCreateOp
- * credit_offer_create operation.
- * @property {Asset} fee
- * @property {string} owner_account
- * @property {string} asset_type - Asset ID being offered
- * @property {number} balance - Available amount in satoshis
- * @property {number} fee_rate - Fee rate denominator GRAPHENE_FEE_RATE_DENOM
- * @property {number} max_duration_seconds
- * @property {number} min_deal_amount
- * @property {boolean} enabled
- * @property {number} auto_disable_time - Unix timestamp
- * @property {Object} acceptable_collateral - Map of asset_id -> Price
- * @property {Object} acceptable_borrowers - Map of account_id -> max_amount
- * @property {Object} [extensions]
- */
-
-/**
- * @typedef {Object} CreditOfferAcceptOp
- * credit_offer_accept operation.
- * @property {Asset} fee
- * @property {string} borrower
- * @property {string} offer_id
- * @property {Asset} borrow_amount
- * @property {Asset} collateral
- * @property {number} max_fee_rate
- * @property {number} min_duration_seconds
- * @property {Object} [extensions]
- */
-
-/**
- * @typedef {Object} CreditDealRepayOp
- * credit_deal_repay operation.
- * @property {Asset} fee
- * @property {string} account
- * @property {string} deal_id
- * @property {Asset} repay_amount
- * @property {Asset} credit_fee
- * @property {Object} [extensions]
- */
-
-/**
- * @typedef {Object} CreatedOperation
- * A blockchain operation with name+data for the signing client.
- * @property {string} op_name - Operation type name, e.g. 'limit_order_create'
- * @property {Object} op_data - Operation-type-specific payload
- */
-
-/*
- * ============================================================
- * CHAIN / BROADCAST RESULT TYPES
- * ============================================================
- */
-
-/**
- * @typedef {Object} BroadcastResult
- * Result of a blockchain transaction broadcast.
- * @property {boolean} success
- * @property {*} [raw] - Raw blockchain response
- * @property {Array} [operation_results]
- */
-
-/**
- * @typedef {Object} CreateOrderResult
- * @property {boolean} [success]
- * @property {boolean} [dryRun]
- * @property {Object} [params]
- * @property {boolean} [skipped] - Amounts rounded to 0
- * @property {*} [raw]
- * @property {Array} [operation_results]
- */
-
-/**
- * @typedef {Object} CancelOrderResult
- * @property {boolean} success
- * @property {string} orderId
- * @property {boolean} verified
- * @property {boolean} [verifiedAfterFailure]
- * @property {*} [raw]
- * @property {Array} [operation_results]
- */
-
-/**
- * @typedef {Object} BatchExecutionResult
- * @property {boolean} success
- * @property {*} raw
- * @property {Array} operation_results
- */
-
-/**
- * @typedef {Object} DaemonExecutionResult
- * @property {boolean} success
- * @property {*|null} raw
- * @property {Array} operation_results
- */
-
-/**
- * @typedef {Object} OnChainBalances
- * @property {string} assetId
- * @property {string} symbol
- * @property {number} precision
- * @property {number} freeRaw - Blockchain integer
- * @property {number} lockedRaw - Blockchain integer
- * @property {number} free - Human-readable float
- * @property {number} locked - Human-readable float
- * @property {number} total - Human-readable float
- */
-
-/*
- * ============================================================
- * DOMAIN: ORDER (DISCRIMINATED UNION)
- * ============================================================
- */
-
-/**
- * @typedef {Object} OrderBase
- * Fields common to all order state variants.
- * @property {string} id - Grid slot identifier, e.g. "slot-0"
- * @property {number} price - Geometric price level (float)
- * @property {OrderType} type - buy / sell / spread
- * @property {OrderState} state - virtual / active / partial
- * @property {number} size - Order amount (float)
- * @property {string|null} orderId - On-chain order ID, null/"" when virtual
- * @property {OrderType} [committedSide] - Persisted side hint for spread orders
- * @property {Object} [rawOnChain] - Cached blockchain integer sizes
- * @property {number} [rawOnChain.for_sale]
- * @property {boolean} [isDustRefill] - Flag for dust refill orders
- * @property {Object} [metadata] - Arbitrary metadata
- * @property {number} [gridIndex] - Index for order comparison equality
- * @property {number} [idealSize] - Target-calculated geometric ideal size
- * @property {string} [sideHint] - Legacy side hint for fallback resolution
- */
-
-/**
- * @typedef {OrderBase & {state: 'virtual', orderId: null|''}} VirtualOrder
- * Off-chain order slot — not placed on blockchain.
- */
-
-/**
- * @typedef {OrderBase & {state: 'active', orderId: string, size: number}} ActiveOrder
- * On-chain order at full size.
- */
-
-/**
- * @typedef {OrderBase & {state: 'partial', orderId: string, size: number}} PartialOrder
- * On-chain order that has been partially filled (size < original).
- */
-
-/**
- * @typedef {VirtualOrder|ActiveOrder|PartialOrder} Order
- * Discriminated union of all order lifecycle states.
- * Spread orders must always be VIRTUAL with size=0.
- * ACTIVE/PARTIAL orders must always have a non-empty orderId.
- */
-
-/**
- * @typedef {Object} FilledOrder
- * Order extended with fill event metadata.
- * @property {number} blockNum - Block number of the fill
- * @property {string} historyId - History entry ID
- * @property {boolean} isMaker - Whether this was the maker side
- * @property {boolean} [isPartial] - Present when partial fill
- * @property {number} [filledSize] - Filled amount (partial fills only)
- * @property {boolean} [isDelayedRotationTrigger]
- */
-
-/**
- * @typedef {Object} FilledPortion
- * Partial fill result from sync engine.
- * @property {number} size - Actual filled amount
- * @property {true} isPartial
-
- * @property {number} blockNum
- * @property {string} historyId
- * @property {boolean} isMaker
- */
-
-/**
- * @typedef {Object} OrderValidationError
- * @property {string} code - Error code identifier
- * @property {string} message - Human-readable error message
- * @property {boolean} [isFatal]
- * @property {Object} [autoCorrect] - Suggested auto-correction values
- */
-
-/**
- * @typedef {Object} OrderValidationWarning
- * @property {string} code
- * @property {string} message
- */
-
-/**
- * @typedef {Object} OrderValidationResult
- * @property {boolean} isValid
- * @property {OrderValidationError[]} errors
- * @property {OrderValidationWarning[]} warnings
- * @property {Order|null} normalizedOrder
- */
-
-/**
- * @typedef {Object} PersistenceValidationResult
- * @property {boolean} isValid
- * @property {string|null} reason
- */
-
-/*
- * ============================================================
- * DOMAIN: GRID
- * ============================================================
- */
-
-/**
- * @typedef {Object} GridConfig
- * Configuration passed to createOrderGrid.
- * @property {number} startPrice - Market price / grid center
- * @property {number} minPrice - Lower price bound
- * @property {number} maxPrice - Upper price bound
- * @property {number} incrementPercent - Geometric step percentage (e.g. 0.5 = 0.5%)
- * @property {number} targetSpreadPercent - Target spread width percentage
- * @property {{sell: number, buy: number}} activeOrders - Window size per side
- * @property {{sell: (string|number), buy: (string|number)}} botFunds - "100%" or numeric
- * @property {{sell: number, buy: number}} weightDistribution - Fund allocation ratio
- * @property {GridPriceSource} [gridPrice]
- */
-
-/**
- * @typedef {Object} GridOrderSlot
- * A single slot in the grid before role assignment.
- * @property {string} id
- * @property {number} price
- * @property {OrderType|null} type - Assigned by assignGridRoles
- * @property {'virtual'} state - Always VIRTUAL initially
- * @property {0} size - Always 0 initially
- */
-
-/**
- * @typedef {Object} GridCreationResult
- * @property {GridOrderSlot[]} orders
- * @property {number} boundaryIdx
- * @property {{buy: number, sell: number}} initialSpreadCount
- */
-
-/**
- * @typedef {Object} GridPricingContext
- * Result of grid price initialization.
- * @property {number} gridPrice
- * @property {number} gridPriceOffsetPct
- * @property {number} offsetAdjustedStartPrice
- * @property {number} startPrice
- * @property {number|string} configuredMinPrice
- * @property {number|string} configuredMaxPrice
- * @property {number|null} rangeScalingFactor
- */
-
-/**
- * @typedef {Object} SizingContext
- * @property {number} budget
- * @property {number} precision
- * @property {Object} config
- */
-
-/**
- * @typedef {Object} GridComparisonResult
- * @property {{metric: number, updated: boolean}} buy
- * @property {{metric: number, updated: boolean}} sell
- * @property {number} totalMetric
- */
-
-/**
- * @typedef {Object} DivergenceResult
- * @property {boolean} needsUpdate
- * @property {{updated: boolean, ratio: boolean, rms: boolean, metric: number}} buy
- * @property {{updated: boolean, ratio: boolean, rms: boolean, metric: number}} sell
- * @property {'buy'|'sell'|'both'} orderType
- */
-
-/**
- * @typedef {Object} SpreadCorrectionResult
- * @property {Order[]} ordersToPlace
- * @property {Array<{partialOrder: Order, newSize: number}>} ordersToUpdate
- */
-
-/**
- * @typedef {Object} DustCheckResult
- * @property {boolean} buyDust
- * @property {boolean} sellDust
- * @property {Order[]} buyDustOrders
- * @property {Order[]} sellDustOrders
- */
-
-/**
- * @typedef {Object} SideUpdateFlags
- * @property {boolean} buyUpdated
- * @property {boolean} sellUpdated
- */
-
-/**
- * @typedef {Object} SpreadCheckResult
- * @property {number} ordersPlaced
- * @property {number} partialsMoved
- */
-
-/*
- * ============================================================
- * DOMAIN: FUNDS / ACCOUNTING
- * ============================================================
- */
-
-/**
- * @typedef {Object} SideFunds
- * Per-side fund amounts.
- * @property {number} sell
- * @property {number} buy
- */
-
-/**
- * @typedef {Object} BotFunds
- * Complete fund tracking state from Accountant.
- * @property {SideFunds} chainFree - Free balance on blockchain
- * @property {SideFunds} allocated - Allocated to grid
- * @property {SideFunds} committed - Locked in active orders
- * @property {SideFunds} virtual - Reserved for virtual orders
- * @property {number} btsFeesOwed - Unpaid BTS fees
- */
-
-/**
- * @typedef {Object} AccountTotals
- * Raw account balance totals from blockchain.
- * @property {number|null} buy - Total BUY asset balance
- * @property {number|null} sell - Total SELL asset balance
- * @property {number|null} buyFree - Free BUY (not in any order)
- * @property {number|null} sellFree - Free SELL (not in any order)
- */
-
-/**
- * @typedef {Object} BalanceAdjustment
- * @property {'buy'|'sell'} orderType - Which side was affected
- * @property {number} delta - Change amount
- * @property {string} operation - Operation name, e.g. 'fill-pays', 'fill-receives'
- */
-
-/**
- * @typedef {Object} TargetGridValidation
- * @property {boolean} isValid
- * @property {{buy: number, sell: number}} shortfall
- * @property {{requiredBuy: number, requiredSell: number, totalBuy: number, totalSell: number}} details
- */
-
-/**
- * @typedef {Object} ChainFundsSnapshot
- * @property {number} chainTotalBuy
- * @property {number} chainTotalSell
- * @property {number} allocatedBuy
- * @property {number} allocatedSell
- */
-
-/*
- * ============================================================
- * DOMAIN: COPY-ON-WRITE (COW)
- * ============================================================
- */
-
-/**
- * @typedef {Object} CowCreateAction
- * @property {'create'} type
- * @property {string} id - Grid slot ID
- * @property {Order} order
- */
-
-/**
- * @typedef {Object} CowCancelAction
- * @property {'cancel'} type
- * @property {string} id - Grid slot ID
- * @property {string} orderId - Blockchain order ID
- * @property {string} [reason]
- */
-
-/**
- * @typedef {Object} CowUpdateAction
- * @property {'update'} type
- * @property {string} id - Source grid slot ID (surplus slot)
- * @property {string} orderId - Existing blockchain order ID
- * @property {string} newGridId - Target grid slot ID (hole)
- * @property {number} newSize
- * @property {number} newPrice
- * @property {Order} order
- * @property {boolean} isRotation
- */
-
-/**
- * @typedef {CowCreateAction|CowCancelAction|CowUpdateAction} CowAction
- * Discriminated union of all COW delta actions.
- */
-
-/**
- * @typedef {Object} DeltaAction
- * Simplified delta action from buildDelta.
- * @property {'create'|'cancel'|'update'} type
- * @property {string} id
- * @property {Order} [order]
- * @property {string} [orderId]
- * @property {Order} [prevOrder]
- */
-
-/**
- * @typedef {Object} StateUpdate
- * Modified order fields after a COW action.
- * @property {string} id
- * @property {'virtual'} [state] - For creates, forces VIRTUAL
- * @property {null} [orderId] - For creates, clears orderId
- * @property {'spread'} [type] - For cancels, converts to spread
- * @property {0} [size] - For cancels, zeros size
- * @property {number} [size] - For updates, new size
- */
-
-/**
- * @typedef {Object} ActionSummary
- * @property {number} total
- * @property {number} creates
- * @property {number} cancels
- * @property {number} updates
- */
-
-/**
- * @typedef {Object} CowRebalanceSuccessResult
- * @property {CowAction[]} actions
- * @property {StateUpdate[]} stateUpdates
- * @property {boolean} hadRotation
- * @property {WorkingGrid} workingGrid
- * @property {GridIndexes} workingIndexes
- * @property {number} workingBoundary
- * @property {number} planningDuration
- * @property {false} aborted
- */
-
-/**
- * @typedef {Object} CowRebalanceAbortedResult
- * @property {[]} actions
- * @property {[]} stateUpdates
- * @property {false} hadRotation
- * @property {null} workingGrid
- * @property {null} workingIndexes
- * @property {null} workingBoundary
- * @property {0} planningDuration
- * @property {true} aborted
- * @property {string} reason
- */
-
-/**
- * @typedef {CowRebalanceSuccessResult|CowRebalanceAbortedResult} CowRebalanceResult
- * Result of a COW rebalance evaluation.
- */
-
-/**
- * @typedef {Object} ReconcileResult
- * @property {CowAction[]} actions
- * @property {false} aborted
- * @property {number} boundaryIdx
- * @property {ActionSummary} summary
- */
-
-/**
- * @typedef {Object} CommitEvalResult
- * @property {boolean} canCommit
- * @property {string} [reason]
- * @property {'error'|'warn'|'debug'} [level]
- */
-
-/**
- * @typedef {Object} DriftCheckResult
- * @property {boolean} isValid
- * @property {number} driftBuy
- * @property {number} driftSell
- * @property {number} allowedDriftBuy
- * @property {number} allowedDriftSell
- * @property {string|null} reason
- */
-
-/**
- * @typedef {Object} FundValidationResult
- * @property {boolean} isValid
- * @property {string|null} reason
- * @property {Array<{asset: string, required: number, available: number, deficit: number}>} shortfalls
- * @property {{buyInt: number, sellInt: number, buy: number, sell: number}} required
- * @property {{buy: number, sell: number}} available
- */
-
-/**
- * @typedef {Object} BootstrapResult
- * @property {boolean} hadDrift
- * @property {DriftCheckResult|null} driftInfo
- */
-
-/*
- * ============================================================
- * DOMAIN: WORKING GRID / INDEXES
- * ============================================================
- */
-
-/**
- * @typedef {Object} WorkingGrid
- * Copy-on-Write working copy of the master grid.
- * @property {Map<string, Order>} grid - The working order map
- * @property {Set<string>} modified - Tracked modified order IDs
- * @property {number} baseVersion - Master version at clone time
- * @property {boolean} _stale - Stale flag
- * @property {string|null} _staleReason
- * @property {GridIndexes|null} _indexes - Lazy-built indexes
- */
-
-/**
- * @typedef {Object} GridIndexes
- * Helper index sets for fast order lookups.
- * @property {Set<string>} virtual
- * @property {Set<string>} active
- * @property {Set<string>} partial
- * @property {Set<string>} filled
- * @property {Set<string>} buy
- * @property {Set<string>} sell
- * @property {Set<string>} spread
- */
-
-/**
- * @typedef {Object} MemoryStats
- * @property {number} size - Grid size
- * @property {number} modified - Modified count
- * @property {number} estimatedBytes - Estimated memory usage
- */
-
-/**
- * @typedef {Object} IndexValidationResult
- * @property {boolean} valid
- * @property {string[]} errors
- */
-
-/*
- * ============================================================
- * DOMAIN: STRATEGY / TARGET GRID
- * ============================================================
- */
-
-/**
- * @typedef {Object} TargetGridEntry
- * A strategy-calculated target for a grid slot.
- * @property {string} id
- * @property {number} price
- * @property {OrderType} type
- * @property {number} size
- * @property {number} idealSize - Target geometric ideal size
- * @property {OrderState} state - ACTIVE if size>0, VIRTUAL if 0
- * @property {OrderType} [committedSide]
- */
-
-/*
- * ============================================================
- * DOMAIN: SYNC ENGINE
- * ============================================================
- */
-
-/**
- * @typedef {Object} SyncResult
- * Result from syncFromOpenOrders.
- * @property {Order[]} filledOrders - Orders that completed
- * @property {Order[]} updatedOrders - All modified orders
- * @property {PriceCorrectionEntry[]} ordersNeedingCorrection - Orders with price slippage
- */
-
-/**
- * @typedef {Object} FillHistoryResult
- * Result from syncFromFillHistory.
- * @property {Order[]} filledOrders
- * @property {Order[]} updatedOrders
- * @property {boolean} partialFill
- * @property {boolean} [requiresOpenOrdersSync] - When fillKey was missing
- */
-
-/**
- * @typedef {Object} SynchronizeResult
- * @property {Order[]} newOrders
- * @property {PriceCorrectionEntry[]} ordersNeedingCorrection
- */
-
-/**
- * @typedef {Object} PriceCorrectionEntry
- * @property {Order} gridOrder
- * @property {string} chainOrderId
- * @property {number} expectedPrice
- * @property {number} actualPrice
- * @property {number} size
- * @property {'buy'|'sell'} type
- * @property {boolean} [typeMismatch]
- * @property {boolean} [isSurplus]
- * @property {string} [sideUpdated]
- */
-
-/**
- * @typedef {Object} ChainCreateOrderData
- * @property {string} gridOrderId
- * @property {string} chainOrderId
- * @property {boolean} isPartialPlacement
- * @property {string} [expectedType]
- * @property {number} fee
- * @property {boolean} [skipAccounting]
- */
-
-/**
- * @typedef {Object} ChainCancelOrderData
- * @property {string} orderId
- * @property {boolean} [clearSize]
- */
-
-/*
- * ============================================================
- * DOMAIN: STATE MANAGER / PIPELINE
- * ============================================================
- */
-
-/**
- * @typedef {Object} SignalEntry
- * @property {string} id
- * @property {string} context
- * @property {string} message
- * @property {number} at - Timestamp
- */
-
-/**
- * @typedef {Object} AccountingFailureSignal
- * @property {'ACCOUNTING_COMMITMENT_FAILED'} code
- * @property {'buy'|'sell'} side
- * @property {number} amount
- * @property {string} context
- * @property {number} at
- */
-
-/**
- * @typedef {Object} GridRegenSideState
- * @property {boolean} armed
- * @property {number} lastTriggeredAt
- */
-
-/**
- * @typedef {Object} RebalanceState
- * @property {RebalanceState} state
- * @property {WorkingGrid|null} currentWorkingGrid
- */
-
-/**
- * @typedef {Object} RecoveryState
- * @property {number} attemptCount
- * @property {number} lastAttemptAt
- * @property {boolean} inFlight
- * @property {number} lastFailureAt
- */
-
-/**
- * @typedef {Object} StateManagerState
- * @property {RebalanceState} rebalance
- * @property {RecoveryState} recovery
- * @property {{buy: GridRegenSideState, sell: GridRegenSideState}} gridRegen
- * @property {{isBootstrapping: boolean}} bootstrap
- * @property {{isBroadcasting: boolean}} broadcast
- * @property {{lastIllegalState: SignalEntry|null, lastAccountingFailure: AccountingFailureSignal|null}} signals
- * @property {{blockedSince: number|null, recoveryAttempted: boolean}} pipeline
- */
-
-/**
- * @typedef {Object} Metrics
- * @property {number} fundRecalcCount
- * @property {{buy: number, sell: number}} invariantViolations
- * @property {number} lockAcquisitions
- * @property {number} lockContentionSkips
- * @property {number} spreadRoleConversionBlocked
- * @property {number} lastSyncDurationMs
- * @property {number} metricsStartTime
- * @property {StateManagerState} state
- * @property {number} currentTime
- */
-
-/**
- * @typedef {Object} PipelineHealth
- * @property {boolean} isBlocked
- * @property {number} blockedDurationMs
- * @property {boolean} hasStalled
- * @property {boolean} recoveryAttempted
- * @property {number} correctionsPending
- * @property {number} gridSidesUpdated
- */
-
-/**
- * @typedef {Object} PipelineEmptyResult
- * @property {boolean} isEmpty
- * @property {string[]} reasons
- */
-
-/**
- * @typedef {Object} PipelineSignals
- * @property {number} [incomingFillQueueLength]
- * @property {number} [shadowLocks]
- * @property {boolean} [batchInFlight]
- * @property {boolean} [retryInFlight]
- * @property {boolean} [recoveryInFlight]
- * @property {boolean} [broadcasting]
- */
-
-/**
- * @typedef {Object} OrderUpdateOptions
- * @property {boolean} [skipAccounting]
- * @property {number} [fee]
- */
-
-/**
- * @typedef {Object} CommitOptions
- * @property {boolean} [skipRecalc]
- */
-
-/**
- * @typedef {Object} CowComparePrecisions
- * @property {number} buyPrecision
- * @property {number} sellPrecision
- * @property {number} priceRelativeTolerance
- */
-
-/*
- * ============================================================
- * DOMAIN: STARTUP RECONCILE
- * ============================================================
- */
-
-/**
- * @typedef {Object} StartupGridAction
- * @property {boolean} shouldRegenerate
- * @property {boolean} hasActiveMatch
- * @property {boolean} resumedByPrice
- * @property {number} matchedCount
- */
-
-/**
- * @typedef {Object} PriceMatchResumeResult
- * @property {boolean} resumed
- * @property {number} matchedCount
- */
-
-/**
- * @typedef {Object} StartupReconcileSideResult
- * @property {number} chainCount
- */
-
-/**
- * @typedef {Object} StartupUpdateBatchResult
- * @property {boolean} executed
- * @property {number} prepared
- * @property {boolean} skipped
- */
-
-/**
- * @typedef {Object} StartupSequentialUpdateResult
- * @property {number} executed
- * @property {number} skipped
- * @property {number} failed
- */
-
-/*
- * ============================================================
- * DOMAIN: FILL PROCESSING / RUNTIME
- * ============================================================
- */
-
-/**
- * @typedef {Object} ReplaySafeFillResult
- * @property {'applied'|'duplicate'|'missing_key'|'error'} status
- * @property {string|null} fillKey
- * @property {boolean} [usedFallbackKey]
- * @property {Error} [error]
- */
-
-/**
- * @typedef {Object} SyntheticFill
- * Synthetic fill event from dust cancel / rotation triggers.
- * @property {boolean} isPartial
- * @property {boolean} [isDelayedRotationTrigger]
- * @property {number} [dustCancelTriggeredAt]
- * @property {boolean} [dustRecoveredFromChain]
- */
-
-/**
- * @typedef {Object} BotsConfigSnapshot
- * @property {boolean} exists
- * @property {string|null} fingerprint - SHA1 hex
- * @property {Object} [config] - Parsed bots.json
- * @property {BotConfigEntry[]} activeBots
- * @property {boolean} needsMarketAdapter
- */
-
-/**
- * @typedef {Object} DynamicWeightRefreshResult
- * @property {boolean} applied
- * @property {'static'|'dynamic'} source
- * @property {{sell: number, buy: number}|null} weightDistribution
- * @property {string|null} [snapshotUpdatedAt]
- */
-
-/**
- * @typedef {Object} GridResyncMetadata
- * @property {boolean} shouldRefreshCenterPrice
- * @property {string} centerRefreshContext
- * @property {string} centerRefreshLabel
- * @property {string} resetSource
- * @property {*} [payload]
- */
-
-/**
- * @typedef {Object} GridResyncOptions
- * @property {boolean} refreshCenterPrice
- * @property {string} [centerRefreshContext]
- * @property {string} [centerRefreshLabel]
- * @property {string} [resetSource]
- */
-
-/**
- * @typedef {Object} DustCancelResult
- * @property {number} cancelledCount
- * @property {{abortedForIllegalState: boolean, abortedForAccountingFailure: boolean}|null} batchResult
- */
-
-/**
- * @typedef {Object} MarketAdapterSyncResult
- * @property {boolean} changed
- * @property {boolean} required
- * @property {boolean} running
- * @property {boolean} started
- * @property {boolean} stopped
- * @property {'direct'|'pm2'} mode
- * @property {boolean} [skipped]
- * @property {string} [reason]
- * @property {string} [error]
- */
-
-/**
- * @typedef {Object} MarketAdapterReleaseResult
- * @property {boolean} released
- * @property {'direct'|'pm2'} mode
- * @property {string} [reason]
- * @property {string} [context]
- */
-
-/*
- * ============================================================
- * DOMAIN: ASSET INFO
- * ============================================================
- */
-
-/**
- * @typedef {Object} AssetInfo
- * @property {string} id - Blockchain asset ID, e.g. "1.3.0"
- * @property {string} symbol - Human-readable symbol, e.g. "BTS"
- * @property {number} precision - Decimal places, e.g. 5
- */
-
-/**
- * @typedef {Object} AssetsPair
- * @property {AssetInfo} assetA - Base asset
- * @property {AssetInfo} assetB - Quote asset
- */
-
-/*
- * ============================================================
- * DOMAIN: CONFIGURATION
- * ============================================================
- */
-
-/**
- * @typedef {Object} BotConfigEntry
- * Single bot entry from bots.json.
- * @property {string} name
- * @property {boolean} active
- * @property {boolean} dryRun
- * @property {string} preferredAccount
- * @property {string} assetA
- * @property {string} assetB
- * @property {StartPriceSource} startPrice
- * @property {number|string} minPrice - "Nx" multiplier or numeric
- * @property {number|string} maxPrice - "Nx" multiplier or numeric
- * @property {number} incrementPercent
- * @property {number} targetSpreadPercent
- * @property {{sell: number, buy: number}} weightDistribution
- * @property {{sell: (string|number), buy: (string|number)}} botFunds
- * @property {{sell: number, buy: number}} activeOrders
- * @property {GridPriceSource} gridPrice
- * @property {number} [gridPriceOffsetPct]
- * @property {DebtPolicy} [debtPolicy]
- */
-
-/**
- * @typedef {Object} DEXBotConfig
- * Merged bot configuration with runtime-derived fields.
- * @property {string} botKey
- * @property {number} [botIndex]
- * @property {string} name
- * @property {boolean} active
- * @property {boolean} dryRun
- * @property {string} preferredAccount
- * @property {string} assetA
- * @property {string} assetB
- * @property {StartPriceSource} startPrice
- * @property {number|string} minPrice
- * @property {number|string} maxPrice
- * @property {number} incrementPercent
- * @property {number} targetSpreadPercent
- * @property {{sell: number, buy: number}} weightDistribution
- * @property {{sell: (string|number), buy: (string|number)}} botFunds
- * @property {{sell: number, buy: number}} activeOrders
- * @property {GridPriceSource} gridPrice
- * @property {number} [gridPriceOffsetPct]
- * @property {BotAmaConfig} [ama]
- * @property {DebtPolicy} [debtPolicy]
- * @property {Object} [marketAdapterSettings]
- * @property {Object} [TIMING]
- */
-
-/**
- * @typedef {Object} BotAmaConfig
- * AMA preset overrides per bot.
- * @property {boolean} enabled
- * @property {number} erPeriod
- * @property {number} fastPeriod
- * @property {number} slowPeriod
- * @property {number} erSmoothPeriod
- */
-
-/**
- * @typedef {Object} DebtPolicy
- * Credit offer / lending configuration for a bot.
- * @property {DebtPolicyLendingEntry[]} lending
- */
-
-/**
- * @typedef {Object} DebtPolicyLendingEntry
- * @property {'creditOffer'} type
- * @property {string} asset
- * @property {string} collateralAsset
- * @property {number} ratio
- * @property {boolean} renewOnly
- * @property {number} maxCollateralRatio
- * @property {number} maxFeeRatePerDay
- * @property {boolean} autoReborrow
- * @property {number} autoRepay
- * @property {string[]} allowedOfferIds
- */
-
-/**
- * @typedef {Object} BotsFile
- * @property {BotConfigEntry[]} bots
- */
-
-/**
- * @typedef {Object} GeneralSettings
- * @property {string} [LOG_LEVEL]
- * @property {Object} [GRID_LIMITS]
- * @property {Object} [TIMING]
- * @property {Object} [UPDATER]
- * @property {Object} [MARKET_ADAPTER]
- * @property {Object} [LOGGING_CONFIG]
- * @property {Object} [NATIVE_CLIENT]
- * @property {Object} [FILL_PROCESSING]
- * @property {Object} [PIPELINE_TIMING]
- * @property {Object} [DEFAULT_CONFIG]
- */
-
-/*
- * ============================================================
- * DOMAIN: KEY MANAGEMENT
- * ============================================================
- */
-
-/**
- * @typedef {Object} KeysFile
- * @property {number} vaultVersion
- * @property {string} vaultSalt - Hex-encoded salt
- * @property {string} vaultVerifier - Hex-encoded HMAC verifier
- * @property {string} [masterPasswordHash] - Legacy v1
- * @property {Object<string, {encryptedKey: string}>} accounts
- */
-
-/**
- * @typedef {Object} VaultSecret
- * @property {'dexbot-vault-secret'} kind
- * @property {number} version
- * @property {string} vaultKeyHex
- */
-
-/**
- * @typedef {Object} SessionSecret
- * @property {'dexbot-session-secret'} kind
- * @property {number} version
- * @property {string} sessionSaltHex
- * @property {string} vaultKeyHex
- */
-
-/**
- * @typedef {Object} DaemonSigningToken
- * @property {'dexbot-daemon-signing-token'} kind
- * @property {string} accountName
- * @property {string} socketPath
- * @property {string|null} sessionId
- * @property {string|null} botHmacSecret
- */
-
-/**
- * @typedef {Object} KeyValidationResult
- * @property {boolean} valid
- * @property {string} [reason]
- */
-
-/*
- * ============================================================
- * DOMAIN: MARKET ADAPTER
- * ============================================================
- */
-
-/**
- * @typedef {Object} MarketAdapterConfig
- * @property {number} pollSeconds
- * @property {number} deltaThresholdPercent
- * @property {number} amaSlopeDeltaThresholdPercent
- * @property {number} intervalSeconds
- * @property {number} bootstrapLookbackHours
- * @property {number} nativeBackfillHours
- * @property {number} maxStaleHours
- * @property {number} sourceRetries
- * @property {number} retryDelayMs
- * @property {number} kibanaRequestTimeoutMs
- * @property {boolean} metricsJson
- * @property {boolean} quiet
- * @property {boolean} dryRun
- * @property {boolean} whitelistAll
- * @property {number} maxPages
- * @property {number} pageLimit
- * @property {boolean} once
- * @property {number} maxNativeGapFillCandles
- * @property {number} staleTailThreshold
- * @property {{lookbackBars: number, maxSlopePct: number, neutralZonePct: number}} amaSlope
- * @property {{maxSlopePct: number}} kalmanSlope
- * @property {number} atrPeriod
- * @property {Function} [onTrigger]
- */
-
-/**
- * @typedef {Object} AmaSlopeSnapshot
- * @property {number} slopePct - Raw AMA slope percentage
- * @property {number} amaSlopeGated - Clipped slope
- * @property {number} rawSlopeOffset
- * @property {number} maxSlopeOffset
- * @property {number} slopeRatio - 0..1 normalized
- * @property {'UP'|'DOWN'|'NEUTRAL'} trend
- * @property {1|-1|0} direction
- * @property {number} [smoothedSlopePct]
- * @property {number} [regimeMultiplier]
- * @property {string} [trendLabel]
- * @property {string} [amaSlopePercentMode]
- */
-
-/**
- * @typedef {Object} DynamicWeightsPayload
- * @property {boolean} isReady
- * @property {{sell: number, buy: number}} [effectiveWeights]
- * @property {Object} [meta]
- * @property {number} [meta.finalOffset]
- * @property {number} [meta.slopeOffset]
- * @property {number} [meta.maxSlopeOffset]
- * @property {string} [meta.trend]
- * @property {number} [meta.signalStrength]
- * @property {number} [meta.atr]
- * @property {number} [meta.volatilityPenalty]
- * @property {string} [profile]
- */
-
-/**
- * @typedef {Object} GridPriceOffsetPlan
- * @property {'UP'|'DOWN'|'NEUTRAL'} trend
- * @property {number|null} rawSlopeOffset
- * @property {number|null} maxSlopeOffset
- * @property {number} slopeRatio - 0..1
- * @property {number} targetSpreadPercent
- * @property {number} maxGridPriceOffsetPct
- * @property {number} gridPriceOffsetPct - Final signed offset
- */
-
-/**
- * @typedef {Object} BotState
- * Per-bot state in market_adapter_state.json.
- * @property {string} botName
- * @property {string} botKey
- * @property {'pool'|'book'|null} marketSource
- * @property {'market'|'fixed'|null} priceMode
- * @property {string|null} lastCycleSource
- * @property {string|null} lastCycleAt
- * @property {boolean} pendingClosedCandle
- * @property {string|null} lastTriggerSuppressedReason
- * @property {string|null} poolId
- * @property {string|null} candleFile
- * @property {number} candleCount
- * @property {number} analysisCandleCount
- * @property {number} kibanaGapRepairCount
- * @property {number} kibanaBackfillCount
- * @property {number} unresolvedGapCount
- * @property {number[]} nativeRecentTradeSequences
- * @property {number|null} nativeLastTradeTs
- * @property {number|null} nativeOverlapCount
- * @property {number|null} nativePagesFetched
- * @property {number|null} lastCandleTs
- * @property {number|null} rawLastCandleTs
- * @property {number|null} lastClosedCandleTs
- * @property {number|null} gridCenterPrice
- * @property {number|null} centerPrice
- * @property {number|null} amaCenterPrice
- * @property {{erPeriod: number, fastPeriod: number, slowPeriod: number, erSmoothPeriod: number}|null} amaConfig
- * @property {number|null} atr
- * @property {number|null} weightVariance
- * @property {DynamicWeightsPayload|null} weights
- * @property {{sell: number, buy: number}|null} effectiveWeights
- * @property {*} collateralRecommendation
- * @property {AmaSlopeSnapshot|null} amaSlope
- * @property {number|null} amaSlopeDeltaPercent
- * @property {number|null} amaSlopeThresholdPercent
- * @property {number} rawKeepCount
- * @property {number} analysisKeepCount
- * @property {number} amaWarmupBars
- * @property {boolean} staleData
- * @property {number|null} staleAgeHours
- * @property {boolean} [dynamicWeightWhitelisted]
- * @property {boolean} [gridRangeScalingWhitelisted]
- * @property {boolean} [dynamicWeightReady]
- * @property {string|null} [dynamicWeightProfile]
- * @property {boolean} [dynamicWeightApplied]
- * @property {boolean} [hasExplicitBaseWeights]
- */
-
-/**
- * @typedef {Object} ProcessBotResult
- * Result of a single bot cycle in market_adapter_service.
- * @property {boolean} ok
- * @property {string[]} dryRunMessages
- * @property {string} source
- * @property {'pool'|'book'} marketSource
- * @property {number} intervalSeconds
- * @property {number} candleCount
- * @property {number} analysisCandleCount
- * @property {number} rawKeepCount
- * @property {number} analysisKeepCount
- * @property {number} amaWarmupBars
- * @property {number} kibanaGapRepairCount
- * @property {number} kibanaBackfillCount
- * @property {number} unresolvedGapCount
- * @property {number[]} nativeRecentTradeSequences
- * @property {number|null} nativeLastTradeTs
- * @property {number|null} nativeOverlapCount
- * @property {number|null} nativePagesFetched
- * @property {number|null} amaPrice
- * @property {number|null} previousCenterPrice
- * @property {number|null} deltaPercent
- * @property {number|null} thresholdPercent
- * @property {number|null} referencePrice
- * @property {Array} amaComparison
- * @property {boolean} triggered
- * @property {string|null} triggerPath
- * @property {boolean} staleData
- * @property {number|null} staleAgeHours
- * @property {string|null} triggerCallbackError
- * @property {string|null} triggerSuppressedReason
- * @property {DynamicWeightsPayload|null} weights
- * @property {*} collateralRecommendation
- * @property {AmaSlopeSnapshot|null} amaSlope
- * @property {number|null} amaSlopeDeltaPercent
- * @property {number|null} amaSlopeThresholdPercent
- * @property {boolean} dynamicWeightWhitelisted
- * @property {boolean} gridRangeScalingWhitelisted
- * @property {boolean} dynamicWeightReady
- * @property {string|null} dynamicWeightProfile
- * @property {boolean} dynamicWeightApplied
- * @property {boolean} hasExplicitBaseWeights
- * @property {string|null} poolId
- * @property {string} candleFile
- * @property {number|null} lastCandleTs
- * @property {number|null} rawLastCandleTs
- * @property {number|null} lastClosedCandleTs
- * @property {number|null} lastClosedCandleClose
- * @property {number} centerPrice
- * @property {{erPeriod: number, fastPeriod: number, slowPeriod: number, erSmoothPeriod: number}} amaConfig
- * @property {number|null} atr
- * @property {number|null} weightVariance
- * @property {boolean} pendingClosedCandle
- * @property {string} [reason] - Present when ok === false
- */
-
-/**
- * @typedef {[number, number, number, number, number, number]} Candle
- * OHLCV candle tuple: [timestamp_ms, open, high, low, close, volume]
- */
-
-/**
- * @typedef {Object} TriggerFilePayload
- * @property {string} createdAt - ISO timestamp
- * @property {string} source
- * @property {string} botName
- * @property {string} botKey
- * @property {number} [price]
- * @property {number} [amaPrice]
- * @property {number} [previousCenterPrice]
- * @property {number} [deltaPercent]
- * @property {number} [thresholdPercent]
- * @property {string} [dynamicGridPath]
- */
-
-/**
- * @typedef {Object} DynamicGridSnapshot
- * @property {number} gridCenterPrice
- * @property {number} centerPrice
- * @property {number} amaCenterPrice
- * @property {'perBar'} amaSlopePercentMode
- * @property {string} updatedAt
- * @property {string} source
- * @property {AmaSlopeSnapshot} [amaSlope]
- * @property {AmaSlopeSnapshot} [gridRangeScalingAmaSlope]
- * @property {number} [gridPriceOffsetPct]
- * @property {number} [amaSlopeDeltaPercent]
- * @property {number} [amaSlopeThresholdPercent]
- * @property {DynamicWeightsPayload} [dynamicWeights]
- * @property {string} [lastGridResetAt]
- * @property {string} [lastGridResetSource]
- */
-
-/**
- * @typedef {Object} CenterSnapshot
- * @property {string} updatedAt
- * @property {Object<string, CenterSnapshotBotEntry>} bots
- */
-
-/**
- * @typedef {Object} CenterSnapshotBotEntry
- * @property {string} botName
- * @property {number} gridCenterPrice
- * @property {number} centerPrice
- * @property {number|null} amaCenterPrice
- * @property {string|null} lastGridResetAt
- * @property {string|null} lastGridResetSource
- * @property {number|null} lastAmaPrice
- * @property {number|null} lastDeltaPercent
- * @property {number|null} amaSlopeDeltaPercent
- * @property {number|null} amaSlopeThresholdPercent
- * @property {string} amaSlopePercentMode
- * @property {*} gridRangeScalingAmaSlope
- * @property {*} weights
- * @property {*} effectiveWeights
- * @property {*} collateralRecommendation
- * @property {*} amaSlope
- * @property {*} atr
- */
-
-/*
- * ============================================================
- * DOMAIN: PROCESSED FILL STORE
- * ============================================================
- */
-
-/**
- * @typedef {Object} ProcessedFillStoreConfig
- * @property {number} [batchMs]
- * @property {number} [batchSize]
- * @property {Function} [warn]
- */
-
-/*
- * ============================================================
- * DOMAIN: DEXBot CLASS
- * ============================================================
- */
-
-/**
- * @typedef {Object} DEXBotMetrics
- * @property {number} fillsProcessed
- * @property {number} fillProcessingTimeMs
- * @property {number} batchesExecuted
- * @property {number} lockContentionEvents
- * @property {number} maxQueueDepth
- */
-
-/**
- * @typedef {Object} DEXBotState
- * @property {Object} config
- * @property {string|null} account
- * @property {string|null} accountId
- * @property {*} privateKey
- * @property {*} manager
- * @property {*} accountOrders
- * @property {Map} _recentlyQueuedFills
- * @property {Map} _recentlyProcessedFills
- * @property {Map} _pendingProcessedFillWrites
- * @property {Array} _incomingFillQueue
- * @property {Map} _staleCleanedOrderIds
- * @property {DEXBotMetrics} _metrics
- * @property {boolean} _shuttingDown
- * @property {boolean} _batchInFlight
- * @property {boolean} _batchRetryInFlight
- * @property {boolean} _recoverySyncInFlight
- * @property {number} _maintenanceCooldownCycles
- * @property {number} _lastGridActivityAt
- * @property {Map} _dustSinceMap
- * @property {boolean} _mainLoopActive
- */
-
-/*
- * ============================================================
- * DOMAIN: ACCOUNT ORDERS (PERSISTENCE)
- * ============================================================
- */
-
-/**
- * @typedef {Object} SerializedGridEntry
- * @property {string|null} id
- * @property {string|null} type
- * @property {string|null} state
- * @property {number} price
- * @property {number} size
- * @property {string} orderId - Empty string when no orderId
- */
-
-/**
- * @typedef {Object} BotMeta
- * @property {string} key
- * @property {string|null} name
- * @property {string|null} assetA
- * @property {string|null} assetB
- * @property {boolean} active
- * @property {number|null} index
- * @property {string} createdAt
- * @property {string} updatedAt
- */
-
-/**
- * @typedef {Object} PerBotStorage
- * @property {BotMeta} meta
- * @property {SerializedGridEntry[]} grid
- * @property {number} btsFeesOwed
- * @property {number|null} boundaryIdx
- * @property {AssetsPair|null} assets
- * @property {Object|null} debugInputs
- * @property {Object<string, number>} processedFills - fillKey -> timestamp
- * @property {string} createdAt
- * @property {string} lastUpdated
- */
-
-/**
- * @typedef {Object} DBAssetBalances
- * @property {{active: number, virtual: number}} assetA
- * @property {{active: number, virtual: number}} assetB
- * @property {{key: string, name: string|null, assetA: string|null, assetB: string|null}} meta
- */
-
-/*
- * ============================================================
- * DOMAIN: GRACEFUL SHUTDOWN
- * ============================================================
- */
-
-/**
- * @typedef {Object} CleanupHandler
- * @property {string} name
- * @property {Function} handler
- */
-
-/**
- * @typedef {Object} ShutdownState
- * @property {CleanupHandler[]} cleanupHandlers
- * @property {boolean} shutdownInProgress
- */
-
-/*
- * ============================================================
- * DOMAIN: CREDIT RUNTIME
- * ============================================================
- */
-
-/**
- * @typedef {Object} CreditDeal
- * Blockchain credit deal object.
- * @property {string} id - Deal ID
- * @property {string} offer_id - Credit offer ID
- * @property {string} borrower - Account ID
- * @property {Asset} borrow_amount
- * @property {Asset} collateral
- * @property {number} fee_rate
- * @property {number} expiration - Timestamp
- * @property {number} auto_repay - Auto-repay policy code
- */
-
-/**
- * @typedef {Object} CreditOffer
- * Blockchain credit offer object.
- * @property {string} id
- * @property {string} owner_account
- * @property {string} asset_type
- * @property {number} balance - Available in satoshis
- * @property {number} fee_rate
- * @property {number} max_duration_seconds
- * @property {number} min_deal_amount
- * @property {boolean} enabled
- * @property {number} auto_disable_time
- * @property {Object<string, Price>} acceptable_collateral
- * @property {Object<string, number>} acceptable_borrowers
- */
-
-/*
- * ============================================================
- * DOMAIN: NODE MANAGER
- * ============================================================
- */
-
-/**
- * @typedef {Object} NodeHealth
- * @property {string} url
- * @property {boolean} connected
- * @property {number} latency - Ping latency in ms
- * @property {number} lastChecked - Timestamp
- * @property {number} failCount - Consecutive failure count
- * @property {number} [blacklistedUntil] - Timestamp if blacklisted
- */
-
-/*
- * ============================================================
- * DOMAIN: CHAIN KEYS CRYPTO
- * ============================================================
- */
-
-/**
- * @typedef {Object} DaemonRequest
- * @property {'private-key'|'probe-account'} type
- * @property {string} accountName
- */
-
-/**
- * @typedef {Object} DaemonPrivateKeyResponse
- * @property {boolean} success
- * @property {string} [privateKey]
- * @property {string} [error]
- */
-
-/**
- * @typedef {Object} DaemonProbeResponse
- * @property {boolean} success
- * @property {string} [sessionId]
- * @property {string} [error]
- */
-
-/*
- * ============================================================
- * DOMAIN: UTILITIES
- * ============================================================
- */
-
-/**
- * @typedef {Object} CreateOrderArgs
- * @property {number} amountToSell - Integer blockchain units
- * @property {string} sellAssetId
- * @property {number} minToReceive - Integer blockchain units
- * @property {string} receiveAssetId
- */
-
-/**
- * @typedef {Object} OrderComparisonOptions
- * @property {Object} [precisions]
- * @property {number|string|null} [precisions.buyPrecision]
- * @property {number|string|null} [precisions.sellPrecision]
- * @property {number|string|null} [precisions.defaultPrecision]
- * @property {number} [precisions.priceRelativeTolerance]
- */
-
-/**
- * @typedef {Object} OutsideInPairGroupAccessors
- * @property {Function} [isValid]
- * @property {Function} getType
- * @property {Function} getPrice
- */
-
-/*
- * ============================================================
- * DOMAIN: AMA / KALMAN / SIGNALS
- * ============================================================
- */
-
-/**
- * @typedef {Object} AmaPreset
- * @property {string} name
- * @property {number} erPeriod
- * @property {number} fastPeriod
- * @property {number} slowPeriod
- */
-
-/**
- * @typedef {Object} MarketAdapterRuntimeDefaults
- * @property {number} intervalSeconds
- * @property {string} intervalLabel
- * @property {number} pollSeconds
- * @property {number} bootstrapLookbackHours
- * @property {number} nativeBackfillHours
- * @property {number} maxStaleHours
- * @property {number} sourceRetries
- * @property {number} retryDelayMs
- * @property {number} maxPages
- * @property {number} pageLimit
- * @property {number} minRequiredCandles
- */
-
-export = {};
+export type OperationTypeId =
+  | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16
+  | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32
+  | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48
+  | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56 | 57 | 58 | 59 | 60 | 61 | 62 | 63 | 64
+  | 65 | 66 | 67 | 68 | 69 | 70 | 71 | 72 | 73 | 74 | 75 | 76 | 77;
+
+// ============================================================
+// PRIMITIVE BLOCKCHAIN TYPES
+// Matches graphene::protocol::asset (asset.hpp)
+// ============================================================
+
+export interface Asset {
+  /** Integer amount in satoshis (blockchain precision) */
+  amount: number;
+  /** Blockchain asset ID, e.g. "1.3.0" */
+  asset_id: string;
+}
+
+/** Exchange ratio between two assets. Matches graphene::protocol::price (asset.hpp:108-114) */
+export interface Price {
+  base: Asset;
+  quote: Asset;
+}
+
+/** Market parameters for margin positions (bitasset feeds). Matches graphene::protocol::price_feed */
+export interface PriceFeed {
+  settlement_price: Price;
+  core_exchange_rate: Price;
+  /** MCR (fixed point, denominator 1000) */
+  maintenance_collateral_ratio: number;
+  /** MSSR */
+  maximum_short_squeeze_ratio: number;
+}
+
+// ============================================================
+// BLOCKCHAIN ORDER STRUCTURES
+// ============================================================
+
+/** Raw limit order as returned by the blockchain API */
+export interface ChainLimitOrder {
+  id: string;
+  seller: string;
+  for_sale: number;
+  sell_price: { base: Asset; quote: Asset };
+  expiration: string;
+  delegated_fee_asset_id?: string;
+  created?: string;
+}
+
+/** Normalized order parsed from a chain order object */
+export interface ParsedChainOrder {
+  orderId: string;
+  price: number;
+  type: 'buy' | 'sell';
+  size: number;
+}
+
+/** Raw fill data from a fill_order_operation (op[1]). Matches graphene::protocol::fill_order_operation */
+export interface FillOperationData {
+  order_id: string;
+  account_id: string;
+  pays: Asset;
+  receives: Asset;
+  fee: Asset;
+  fill_price: Price;
+  is_maker: boolean;
+}
+
+/** Raw fill event from blockchain subscription or history query */
+export interface FillEvent {
+  id: string;
+  block_num: number;
+  op: [number, FillOperationData];
+}
+
+// ============================================================
+// OPERATION BUILDERS
+// ============================================================
+
+export interface LimitOrderCreateOp {
+  fee: Asset;
+  seller: string;
+  amount_to_sell: Asset;
+  min_to_receive: Asset;
+  expiration: string;
+  fill_or_kill: boolean;
+  extensions?: Record<string, any>;
+}
+
+export interface LimitOrderUpdateOp {
+  fee: Asset;
+  seller: string;
+  order: string;
+  new_price?: Price;
+  delta_amount_to_sell?: Asset;
+  new_expiration?: string;
+  extensions?: Record<string, any>;
+}
+
+export interface LimitOrderCancelOp {
+  fee: Asset;
+  fee_paying_account: string;
+  order: string;
+  extensions?: Record<string, any>;
+}
+
+export interface CallOrderUpdateOp {
+  fee: Asset;
+  funding_account: string;
+  delta_collateral: Asset;
+  delta_debt: Asset;
+  extensions?: Record<string, any>;
+}
+
+export interface AssetSettleOp {
+  fee: Asset;
+  account: string;
+  amount: Asset;
+  extensions?: Record<string, any>;
+}
+
+export interface TransferOp {
+  fee: Asset;
+  from: string;
+  to: string;
+  amount: Asset;
+  memo?: Record<string, any>;
+  extensions?: Record<string, any>;
+}
+
+export interface CreditOfferCreateOp {
+  fee: Asset;
+  owner_account: string;
+  asset_type: string;
+  balance: number;
+  fee_rate: number;
+  max_duration_seconds: number;
+  min_deal_amount: number;
+  enabled: boolean;
+  auto_disable_time: number;
+  acceptable_collateral: Record<string, Price>;
+  acceptable_borrowers: Record<string, number>;
+  extensions?: Record<string, any>;
+}
+
+export interface CreditOfferAcceptOp {
+  fee: Asset;
+  borrower: string;
+  offer_id: string;
+  borrow_amount: Asset;
+  collateral: Asset;
+  max_fee_rate: number;
+  min_duration_seconds: number;
+  extensions?: Record<string, any>;
+}
+
+export interface CreditDealRepayOp {
+  fee: Asset;
+  account: string;
+  deal_id: string;
+  repay_amount: Asset;
+  credit_fee: Asset;
+  extensions?: Record<string, any>;
+}
+
+export interface CreatedOperation {
+  op_name: string;
+  op_data: Record<string, any>;
+}
+
+// ============================================================
+// CHAIN / BROADCAST RESULT TYPES
+// ============================================================
+
+export interface BroadcastResult {
+  success: boolean;
+  raw?: any;
+  operation_results?: any[];
+}
+
+export interface CreateOrderResult {
+  success?: boolean;
+  dryRun?: boolean;
+  params?: Record<string, any>;
+  skipped?: boolean;
+  raw?: any;
+  operation_results?: any[];
+}
+
+export interface CancelOrderResult {
+  success: boolean;
+  orderId: string;
+  verified: boolean;
+  verifiedAfterFailure?: boolean;
+  raw?: any;
+  operation_results?: any[];
+}
+
+export interface BatchExecutionResult {
+  success: boolean;
+  raw: any;
+  operation_results: any[];
+}
+
+export interface DaemonExecutionResult {
+  success: boolean;
+  raw: any | null;
+  operation_results: any[];
+}
+
+export interface OnChainBalances {
+  assetId: string;
+  symbol: string;
+  precision: number;
+  freeRaw: number;
+  lockedRaw: number;
+  free: number;
+  locked: number;
+  total: number;
+}
+
+// ============================================================
+// DOMAIN: ORDER (DISCRIMINATED UNION)
+// ============================================================
+
+export interface OrderBase {
+  id: string;
+  price: number;
+  type: OrderType;
+  state: OrderState;
+  size: number;
+  orderId: string | null;
+  committedSide?: OrderType;
+  rawOnChain?: { for_sale?: number };
+  isDustRefill?: boolean;
+  metadata?: Record<string, any>;
+  gridIndex?: number;
+  idealSize?: number;
+  sideHint?: string;
+}
+
+export interface VirtualOrder extends OrderBase {
+  state: 'virtual';
+  orderId: null | '';
+}
+
+export interface ActiveOrder extends OrderBase {
+  state: 'active';
+  orderId: string;
+  size: number;
+}
+
+export interface PartialOrder extends OrderBase {
+  state: 'partial';
+  orderId: string;
+  size: number;
+}
+
+export type Order = VirtualOrder | ActiveOrder | PartialOrder;
+
+export interface FilledOrder extends OrderBase {
+  state: 'filled';
+  orderId: string;
+  size: number;
+  blockNum: number;
+  historyId: string;
+  isMaker: boolean;
+  isPartial?: boolean;
+  filledSize?: number;
+  isDelayedRotationTrigger?: boolean;
+}
+
+export interface FilledPortion {
+  size: number;
+  isPartial: true;
+  blockNum: number;
+  historyId: string;
+  isMaker: boolean;
+}
+
+export interface OrderValidationError {
+  code: string;
+  message: string;
+  isFatal?: boolean;
+  autoCorrect?: Record<string, any>;
+}
+
+export interface OrderValidationWarning {
+  code: string;
+  message: string;
+}
+
+export interface OrderValidationResult {
+  isValid: boolean;
+  errors: OrderValidationError[];
+  warnings: OrderValidationWarning[];
+  normalizedOrder: Order | null;
+}
+
+export interface PersistenceValidationResult {
+  isValid: boolean;
+  reason: string | null;
+}
+
+// ============================================================
+// DOMAIN: GRID
+// ============================================================
+
+export interface GridConfig {
+  startPrice: number;
+  minPrice: number;
+  maxPrice: number;
+  incrementPercent: number;
+  targetSpreadPercent: number;
+  activeOrders: { sell: number; buy: number };
+  botFunds: { sell: string | number; buy: string | number };
+  weightDistribution: { sell: number; buy: number };
+  gridPrice?: GridPriceSource;
+}
+
+export interface GridOrderSlot {
+  id: string;
+  price: number;
+  type: OrderType | null;
+  state: 'virtual';
+  size: 0;
+}
+
+export interface GridCreationResult {
+  orders: GridOrderSlot[];
+  boundaryIdx: number;
+  initialSpreadCount: { buy: number; sell: number };
+}
+
+export interface GridPricingContext {
+  gridPrice: number;
+  gridPriceOffsetPct: number;
+  offsetAdjustedStartPrice: number;
+  startPrice: number;
+  configuredMinPrice: number | string;
+  configuredMaxPrice: number | string;
+  rangeScalingFactor: number | null;
+}
+
+export interface SizingContext {
+  budget: number;
+  precision: number;
+  config: Record<string, any>;
+}
+
+export interface GridComparisonResult {
+  buy: { metric: number; updated: boolean };
+  sell: { metric: number; updated: boolean };
+  totalMetric: number;
+}
+
+export interface DivergenceResult {
+  needsUpdate: boolean;
+  buy: { updated: boolean; ratio: boolean; rms: boolean; metric: number };
+  sell: { updated: boolean; ratio: boolean; rms: boolean; metric: number };
+  orderType: 'buy' | 'sell' | 'both';
+}
+
+export interface SpreadCorrectionResult {
+  ordersToPlace: Order[];
+  ordersToUpdate: Array<{ partialOrder: Order; newSize: number }>;
+}
+
+export interface DustCheckResult {
+  buyDust: boolean;
+  sellDust: boolean;
+  buyDustOrders: Order[];
+  sellDustOrders: Order[];
+}
+
+export interface SideUpdateFlags {
+  buyUpdated: boolean;
+  sellUpdated: boolean;
+}
+
+export interface SpreadCheckResult {
+  ordersPlaced: number;
+  partialsMoved: number;
+}
+
+// ============================================================
+// DOMAIN: FUNDS / ACCOUNTING
+// ============================================================
+
+export interface SideFunds {
+  sell: number;
+  buy: number;
+}
+
+export interface BotFunds {
+  chainFree: SideFunds;
+  allocated: SideFunds;
+  committed: SideFunds;
+  virtual: SideFunds;
+  btsFeesOwed: number;
+}
+
+export interface AccountTotals {
+  buy: number | null;
+  sell: number | null;
+  buyFree: number | null;
+  sellFree: number | null;
+}
+
+export interface BalanceAdjustment {
+  orderType: 'buy' | 'sell';
+  delta: number;
+  operation: string;
+}
+
+export interface TargetGridValidation {
+  isValid: boolean;
+  shortfall: { buy: number; sell: number };
+  details: { requiredBuy: number; requiredSell: number; totalBuy: number; totalSell: number };
+}
+
+export interface ChainFundsSnapshot {
+  chainTotalBuy: number;
+  chainTotalSell: number;
+  allocatedBuy: number;
+  allocatedSell: number;
+}
+
+// ============================================================
+// DOMAIN: COPY-ON-WRITE (COW)
+// ============================================================
+
+export interface CowCreateAction {
+  type: 'create';
+  id: string;
+  order: Order;
+}
+
+export interface CowCancelAction {
+  type: 'cancel';
+  id: string;
+  orderId: string;
+  reason?: string;
+}
+
+export interface CowUpdateAction {
+  type: 'update';
+  id: string;
+  orderId: string;
+  newGridId: string;
+  newSize: number;
+  newPrice: number;
+  order: Order;
+  isRotation: boolean;
+}
+
+export type CowAction = CowCreateAction | CowCancelAction | CowUpdateAction;
+
+export interface DeltaAction {
+  type: 'create' | 'cancel' | 'update';
+  id: string;
+  order?: Order;
+  orderId?: string;
+  prevOrder?: Order;
+}
+
+export interface StateUpdate {
+  id: string;
+  state?: 'virtual';
+  orderId?: null;
+  type?: 'spread';
+  size?: 0 | number;
+}
+
+export interface ActionSummary {
+  total: number;
+  creates: number;
+  cancels: number;
+  updates: number;
+}
+
+export interface CowRebalanceSuccessResult {
+  actions: CowAction[];
+  stateUpdates: StateUpdate[];
+  hadRotation: boolean;
+  workingGrid: WorkingGrid;
+  workingIndexes: GridIndexes;
+  workingBoundary: number;
+  planningDuration: number;
+  aborted: false;
+}
+
+export interface CowRebalanceAbortedResult {
+  actions: [];
+  stateUpdates: [];
+  hadRotation: false;
+  workingGrid: null;
+  workingIndexes: null;
+  workingBoundary: null;
+  planningDuration: 0;
+  aborted: true;
+  reason: string;
+}
+
+export type CowRebalanceResult = CowRebalanceSuccessResult | CowRebalanceAbortedResult;
+
+export interface ReconcileResult {
+  actions: CowAction[];
+  aborted: false;
+  boundaryIdx: number;
+  summary: ActionSummary;
+}
+
+export interface CommitEvalResult {
+  canCommit: boolean;
+  reason?: string;
+  level?: 'error' | 'warn' | 'debug';
+}
+
+export interface DriftCheckResult {
+  isValid: boolean;
+  driftBuy: number;
+  driftSell: number;
+  allowedDriftBuy: number;
+  allowedDriftSell: number;
+  reason: string | null;
+}
+
+export interface FundValidationResult {
+  isValid: boolean;
+  reason: string | null;
+  shortfalls: Array<{ asset: string; required: number; available: number; deficit: number }>;
+  required: { buyInt: number; sellInt: number; buy: number; sell: number };
+  available: { buy: number; sell: number };
+}
+
+export interface BootstrapResult {
+  hadDrift: boolean;
+  driftInfo: DriftCheckResult | null;
+}
+
+// ============================================================
+// DOMAIN: WORKING GRID / INDEXES
+// ============================================================
+
+export interface WorkingGrid {
+  grid: Map<string, Order>;
+  modified: Set<string>;
+  baseVersion: number;
+  _stale: boolean;
+  _staleReason: string | null;
+  _indexes: GridIndexes | null;
+}
+
+export interface GridIndexes {
+  virtual: Set<string>;
+  active: Set<string>;
+  partial: Set<string>;
+  filled: Set<string>;
+  buy: Set<string>;
+  sell: Set<string>;
+  spread: Set<string>;
+}
+
+export interface MemoryStats {
+  size: number;
+  modified: number;
+  estimatedBytes: number;
+}
+
+export interface IndexValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+// ============================================================
+// DOMAIN: STRATEGY / TARGET GRID
+// ============================================================
+
+export interface TargetGridEntry {
+  id: string;
+  price: number;
+  type: OrderType;
+  size: number;
+  idealSize: number;
+  state: OrderState;
+  committedSide?: OrderType;
+}
+
+// ============================================================
+// DOMAIN: SYNC ENGINE
+// ============================================================
+
+export interface SyncResult {
+  filledOrders: Order[];
+  updatedOrders: Order[];
+  ordersNeedingCorrection: PriceCorrectionEntry[];
+}
+
+export interface FillHistoryResult {
+  filledOrders: Order[];
+  updatedOrders: Order[];
+  partialFill: boolean;
+  requiresOpenOrdersSync?: boolean;
+}
+
+export interface SynchronizeResult {
+  newOrders: Order[];
+  ordersNeedingCorrection: PriceCorrectionEntry[];
+}
+
+export interface PriceCorrectionEntry {
+  gridOrder: Order;
+  chainOrderId: string;
+  expectedPrice: number;
+  actualPrice: number;
+  size: number;
+  type: 'buy' | 'sell';
+  typeMismatch?: boolean;
+  isSurplus?: boolean;
+  sideUpdated?: string;
+}
+
+export interface ChainCreateOrderData {
+  gridOrderId: string;
+  chainOrderId: string;
+  isPartialPlacement: boolean;
+  expectedType?: string;
+  fee: number;
+  skipAccounting?: boolean;
+}
+
+export interface ChainCancelOrderData {
+  orderId: string;
+  clearSize?: boolean;
+}
+
+// ============================================================
+// DOMAIN: STATE MANAGER / PIPELINE
+// ============================================================
+
+export interface SignalEntry {
+  id: string;
+  context: string;
+  message: string;
+  at: number;
+}
+
+export interface AccountingFailureSignal {
+  code: 'ACCOUNTING_COMMITMENT_FAILED';
+  side: 'buy' | 'sell';
+  amount: number;
+  context: string;
+  at: number;
+}
+
+export interface GridRegenSideState {
+  armed: boolean;
+  lastTriggeredAt: number;
+}
+
+export interface PipelineState {
+  state: RebalanceState;
+  currentWorkingGrid: WorkingGrid | null;
+}
+
+export interface RecoveryState {
+  attemptCount: number;
+  lastAttemptAt: number;
+  inFlight: boolean;
+  lastFailureAt: number;
+}
+
+export interface StateManagerState {
+  rebalance: PipelineState;
+  recovery: RecoveryState;
+  gridRegen: { buy: GridRegenSideState; sell: GridRegenSideState };
+  bootstrap: { isBootstrapping: boolean };
+  broadcast: { isBroadcasting: boolean };
+  signals: { lastIllegalState: SignalEntry | null; lastAccountingFailure: AccountingFailureSignal | null };
+  pipeline: { blockedSince: number | null; recoveryAttempted: boolean };
+}
+
+export interface Metrics {
+  fundRecalcCount: number;
+  invariantViolations: { buy: number; sell: number };
+  lockAcquisitions: number;
+  lockContentionSkips: number;
+  spreadRoleConversionBlocked: number;
+  lastSyncDurationMs: number;
+  metricsStartTime: number;
+  state: StateManagerState;
+  currentTime: number;
+}
+
+export interface PipelineHealth {
+  isBlocked: boolean;
+  blockedDurationMs: number;
+  hasStalled: boolean;
+  recoveryAttempted: boolean;
+  correctionsPending: number;
+  gridSidesUpdated: number;
+}
+
+export interface PipelineEmptyResult {
+  isEmpty: boolean;
+  reasons: string[];
+}
+
+export interface PipelineSignals {
+  incomingFillQueueLength?: number;
+  shadowLocks?: number;
+  batchInFlight?: boolean;
+  retryInFlight?: boolean;
+  recoveryInFlight?: boolean;
+  broadcasting?: boolean;
+}
+
+export interface OrderUpdateOptions {
+  skipAccounting?: boolean;
+  fee?: number;
+}
+
+export interface CommitOptions {
+  skipRecalc?: boolean;
+}
+
+export interface CowComparePrecisions {
+  buyPrecision: number;
+  sellPrecision: number;
+  priceRelativeTolerance: number;
+}
+
+// ============================================================
+// DOMAIN: STARTUP RECONCILE
+// ============================================================
+
+export interface StartupGridAction {
+  shouldRegenerate: boolean;
+  hasActiveMatch: boolean;
+  resumedByPrice: boolean;
+  matchedCount: number;
+}
+
+export interface PriceMatchResumeResult {
+  resumed: boolean;
+  matchedCount: number;
+}
+
+export interface StartupReconcileSideResult {
+  chainCount: number;
+}
+
+export interface StartupUpdateBatchResult {
+  executed: boolean;
+  prepared: number;
+  skipped: boolean;
+}
+
+export interface StartupSequentialUpdateResult {
+  executed: number;
+  skipped: number;
+  failed: number;
+}
+
+// ============================================================
+// DOMAIN: FILL PROCESSING / RUNTIME
+// ============================================================
+
+export interface ReplaySafeFillResult {
+  status: 'applied' | 'duplicate' | 'missing_key' | 'error';
+  fillKey: string | null;
+  usedFallbackKey?: boolean;
+  error?: Error;
+}
+
+export interface SyntheticFill {
+  isPartial: boolean;
+  isDelayedRotationTrigger?: boolean;
+  dustCancelTriggeredAt?: number;
+  dustRecoveredFromChain?: boolean;
+}
+
+export interface BotsConfigSnapshot {
+  exists: boolean;
+  fingerprint: string | null;
+  config?: Record<string, any>;
+  activeBots: BotConfigEntry[];
+  needsMarketAdapter: boolean;
+}
+
+export interface DynamicWeightRefreshResult {
+  applied: boolean;
+  source: 'static' | 'dynamic';
+  weightDistribution: { sell: number; buy: number } | null;
+  snapshotUpdatedAt?: string | null;
+}
+
+export interface GridResyncMetadata {
+  shouldRefreshCenterPrice: boolean;
+  centerRefreshContext: string;
+  centerRefreshLabel: string;
+  resetSource: string;
+  payload?: any;
+}
+
+export interface GridResyncOptions {
+  refreshCenterPrice: boolean;
+  centerRefreshContext?: string;
+  centerRefreshLabel?: string;
+  resetSource?: string;
+}
+
+export interface DustCancelResult {
+  cancelledCount: number;
+  batchResult: { abortedForIllegalState: boolean; abortedForAccountingFailure: boolean } | null;
+}
+
+export interface MarketAdapterSyncResult {
+  changed: boolean;
+  required: boolean;
+  running: boolean;
+  started: boolean;
+  stopped: boolean;
+  mode: 'direct' | 'pm2';
+  skipped?: boolean;
+  reason?: string;
+  error?: string;
+}
+
+export interface MarketAdapterReleaseResult {
+  released: boolean;
+  mode: 'direct' | 'pm2';
+  reason?: string;
+  context?: string;
+}
+
+// ============================================================
+// DOMAIN: ASSET INFO
+// ============================================================
+
+export interface AssetInfo {
+  id: string;
+  symbol: string;
+  precision: number;
+}
+
+export interface AssetsPair {
+  assetA: AssetInfo;
+  assetB: AssetInfo;
+}
+
+// ============================================================
+// DOMAIN: CONFIGURATION
+// ============================================================
+
+export interface BotConfigEntry {
+  name: string;
+  active: boolean;
+  dryRun: boolean;
+  preferredAccount: string;
+  assetA: string;
+  assetB: string;
+  startPrice: StartPriceSource;
+  minPrice: number | string;
+  maxPrice: number | string;
+  incrementPercent: number;
+  targetSpreadPercent: number;
+  weightDistribution: { sell: number; buy: number };
+  botFunds: { sell: string | number; buy: string | number };
+  activeOrders: { sell: number; buy: number };
+  gridPrice: GridPriceSource;
+  gridPriceOffsetPct?: number;
+  debtPolicy?: DebtPolicy;
+}
+
+export interface DEXBotConfig {
+  botKey: string;
+  botIndex?: number;
+  name: string;
+  active: boolean;
+  dryRun: boolean;
+  preferredAccount: string;
+  assetA: string;
+  assetB: string;
+  startPrice: StartPriceSource;
+  minPrice: number | string;
+  maxPrice: number | string;
+  incrementPercent: number;
+  targetSpreadPercent: number;
+  weightDistribution: { sell: number; buy: number };
+  botFunds: { sell: string | number; buy: string | number };
+  activeOrders: { sell: number; buy: number };
+  gridPrice: GridPriceSource;
+  gridPriceOffsetPct?: number;
+  ama?: BotAmaConfig;
+  debtPolicy?: DebtPolicy;
+  marketAdapterSettings?: Record<string, any>;
+  TIMING?: Record<string, any>;
+}
+
+export interface BotAmaConfig {
+  enabled: boolean;
+  erPeriod: number;
+  fastPeriod: number;
+  slowPeriod: number;
+  erSmoothPeriod: number;
+}
+
+export interface DebtPolicy {
+  lending: DebtPolicyLendingEntry[];
+}
+
+export interface DebtPolicyLendingEntry {
+  type: 'creditOffer';
+  asset: string;
+  collateralAsset: string;
+  ratio: number;
+  renewOnly: boolean;
+  maxCollateralRatio: number;
+  maxFeeRatePerDay: number;
+  autoReborrow: boolean;
+  autoRepay: number;
+  allowedOfferIds: string[];
+}
+
+export interface BotsFile {
+  bots: BotConfigEntry[];
+}
+
+export interface GeneralSettings {
+  LOG_LEVEL?: string;
+  GRID_LIMITS?: Record<string, any>;
+  TIMING?: Record<string, any>;
+  UPDATER?: Record<string, any>;
+  MARKET_ADAPTER?: Record<string, any>;
+  LOGGING_CONFIG?: Record<string, any>;
+  NATIVE_CLIENT?: Record<string, any>;
+  FILL_PROCESSING?: Record<string, any>;
+  PIPELINE_TIMING?: Record<string, any>;
+  DEFAULT_CONFIG?: Record<string, any>;
+}
+
+// ============================================================
+// DOMAIN: KEY MANAGEMENT
+// ============================================================
+
+export interface KeysFile {
+  vaultVersion: number;
+  vaultSalt: string;
+  vaultVerifier: string;
+  masterPasswordHash?: string;
+  accounts: Record<string, { encryptedKey: string }>;
+}
+
+export interface VaultSecret {
+  kind: 'dexbot-vault-secret';
+  version: number;
+  vaultKeyHex: string;
+}
+
+export interface SessionSecret {
+  kind: 'dexbot-session-secret';
+  version: number;
+  sessionSaltHex: string;
+  vaultKeyHex: string;
+}
+
+export interface DaemonSigningToken {
+  kind: 'dexbot-daemon-signing-token';
+  accountName: string;
+  socketPath: string;
+  sessionId: string | null;
+  botHmacSecret: string | null;
+}
+
+export interface KeyValidationResult {
+  valid: boolean;
+  reason?: string;
+}
+
+// ============================================================
+// DOMAIN: MARKET ADAPTER
+// ============================================================
+
+export interface MarketAdapterConfig {
+  pollSeconds: number;
+  deltaThresholdPercent: number;
+  amaSlopeDeltaThresholdPercent: number;
+  intervalSeconds: number;
+  bootstrapLookbackHours: number;
+  nativeBackfillHours: number;
+  maxStaleHours: number;
+  sourceRetries: number;
+  retryDelayMs: number;
+  kibanaRequestTimeoutMs: number;
+  metricsJson: boolean;
+  quiet: boolean;
+  dryRun: boolean;
+  whitelistAll: boolean;
+  maxPages: number;
+  pageLimit: number;
+  once: boolean;
+  maxNativeGapFillCandles: number;
+  staleTailThreshold: number;
+  amaSlope: { lookbackBars: number; maxSlopePct: number; neutralZonePct: number };
+  kalmanSlope: { maxSlopePct: number };
+  atrPeriod: number;
+  onTrigger?: Function;
+}
+
+export interface AmaSlopeSnapshot {
+  slopePct: number;
+  amaSlopeGated: number;
+  rawSlopeOffset: number;
+  maxSlopeOffset: number;
+  slopeRatio: number;
+  trend: 'UP' | 'DOWN' | 'NEUTRAL';
+  direction: 1 | -1 | 0;
+  smoothedSlopePct?: number;
+  regimeMultiplier?: number;
+  trendLabel?: string;
+  amaSlopePercentMode?: string;
+}
+
+export interface DynamicWeightsPayload {
+  isReady: boolean;
+  effectiveWeights?: { sell: number; buy: number };
+  meta?: {
+    finalOffset?: number;
+    slopeOffset?: number;
+    maxSlopeOffset?: number;
+    trend?: string;
+    signalStrength?: number;
+    atr?: number;
+    volatilityPenalty?: number;
+  };
+  profile?: string;
+}
+
+export interface GridPriceOffsetPlan {
+  trend: 'UP' | 'DOWN' | 'NEUTRAL';
+  rawSlopeOffset: number | null;
+  maxSlopeOffset: number | null;
+  slopeRatio: number;
+  targetSpreadPercent: number;
+  maxGridPriceOffsetPct: number;
+  gridPriceOffsetPct: number;
+}
+
+export interface BotState {
+  botName: string;
+  botKey: string;
+  marketSource: 'pool' | 'book' | null;
+  priceMode: 'market' | 'fixed' | null;
+  lastCycleSource: string | null;
+  lastCycleAt: string | null;
+  pendingClosedCandle: boolean;
+  lastTriggerSuppressedReason: string | null;
+  poolId: string | null;
+  candleFile: string | null;
+  candleCount: number;
+  analysisCandleCount: number;
+  kibanaGapRepairCount: number;
+  kibanaBackfillCount: number;
+  unresolvedGapCount: number;
+  nativeRecentTradeSequences: number[];
+  nativeLastTradeTs: number | null;
+  nativeOverlapCount: number | null;
+  nativePagesFetched: number | null;
+  lastCandleTs: number | null;
+  rawLastCandleTs: number | null;
+  lastClosedCandleTs: number | null;
+  gridCenterPrice: number | null;
+  centerPrice: number | null;
+  amaCenterPrice: number | null;
+  amaConfig: { erPeriod: number; fastPeriod: number; slowPeriod: number; erSmoothPeriod: number } | null;
+  atr: number | null;
+  weightVariance: number | null;
+  weights: DynamicWeightsPayload | null;
+  effectiveWeights: { sell: number; buy: number } | null;
+  collateralRecommendation: any;
+  amaSlope: AmaSlopeSnapshot | null;
+  amaSlopeDeltaPercent: number | null;
+  amaSlopeThresholdPercent: number | null;
+  rawKeepCount: number;
+  analysisKeepCount: number;
+  amaWarmupBars: number;
+  staleData: boolean;
+  staleAgeHours: number | null;
+  dynamicWeightWhitelisted?: boolean;
+  gridRangeScalingWhitelisted?: boolean;
+  dynamicWeightReady?: boolean;
+  dynamicWeightProfile?: string | null;
+  dynamicWeightApplied?: boolean;
+  hasExplicitBaseWeights?: boolean;
+}
+
+export interface ProcessBotResult {
+  ok: boolean;
+  dryRunMessages: string[];
+  source: string;
+  marketSource: 'pool' | 'book';
+  intervalSeconds: number;
+  candleCount: number;
+  analysisCandleCount: number;
+  rawKeepCount: number;
+  analysisKeepCount: number;
+  amaWarmupBars: number;
+  kibanaGapRepairCount: number;
+  kibanaBackfillCount: number;
+  unresolvedGapCount: number;
+  nativeRecentTradeSequences: number[];
+  nativeLastTradeTs: number | null;
+  nativeOverlapCount: number | null;
+  nativePagesFetched: number | null;
+  amaPrice: number | null;
+  previousCenterPrice: number | null;
+  deltaPercent: number | null;
+  thresholdPercent: number | null;
+  referencePrice: number | null;
+  amaComparison: any[];
+  triggered: boolean;
+  triggerPath: string | null;
+  staleData: boolean;
+  staleAgeHours: number | null;
+  triggerCallbackError: string | null;
+  triggerSuppressedReason: string | null;
+  weights: DynamicWeightsPayload | null;
+  collateralRecommendation: any;
+  amaSlope: AmaSlopeSnapshot | null;
+  amaSlopeDeltaPercent: number | null;
+  amaSlopeThresholdPercent: number | null;
+  dynamicWeightWhitelisted: boolean;
+  gridRangeScalingWhitelisted: boolean;
+  dynamicWeightReady: boolean;
+  dynamicWeightProfile: string | null;
+  dynamicWeightApplied: boolean;
+  hasExplicitBaseWeights: boolean;
+  poolId: string | null;
+  candleFile: string;
+  lastCandleTs: number | null;
+  rawLastCandleTs: number | null;
+  lastClosedCandleTs: number | null;
+  lastClosedCandleClose: number;
+  centerPrice: number;
+  amaConfig: { erPeriod: number; fastPeriod: number; slowPeriod: number; erSmoothPeriod: number };
+  atr: number | null;
+  weightVariance: number | null;
+  pendingClosedCandle: boolean;
+  reason?: string;
+}
+
+export type Candle = [number, number, number, number, number, number];
+
+export interface TriggerFilePayload {
+  createdAt: string;
+  source: string;
+  botName: string;
+  botKey: string;
+  price?: number;
+  amaPrice?: number;
+  previousCenterPrice?: number;
+  deltaPercent?: number;
+  thresholdPercent?: number;
+  dynamicGridPath?: string;
+}
+
+export interface DynamicGridSnapshot {
+  gridCenterPrice: number;
+  centerPrice: number;
+  amaCenterPrice: number;
+  amaSlopePercentMode: 'perBar';
+  updatedAt: string;
+  source: string;
+  amaSlope?: AmaSlopeSnapshot;
+  gridRangeScalingAmaSlope?: AmaSlopeSnapshot;
+  gridPriceOffsetPct?: number;
+  amaSlopeDeltaPercent?: number;
+  amaSlopeThresholdPercent?: number;
+  dynamicWeights?: DynamicWeightsPayload;
+  lastGridResetAt?: string;
+  lastGridResetSource?: string;
+}
+
+export interface CenterSnapshot {
+  updatedAt: string;
+  bots: Record<string, CenterSnapshotBotEntry>;
+}
+
+export interface CenterSnapshotBotEntry {
+  botName: string;
+  gridCenterPrice: number;
+  centerPrice: number;
+  amaCenterPrice: number | null;
+  lastGridResetAt: string | null;
+  lastGridResetSource: string | null;
+  lastAmaPrice: number | null;
+  lastDeltaPercent: number | null;
+  amaSlopeDeltaPercent: number | null;
+  amaSlopeThresholdPercent: number | null;
+  amaSlopePercentMode: string;
+  gridRangeScalingAmaSlope: any;
+  weights: any;
+  effectiveWeights: any;
+  collateralRecommendation: any;
+  amaSlope: any;
+  atr: any;
+}
+
+// ============================================================
+// DOMAIN: PROCESSED FILL STORE
+// ============================================================
+
+export interface ProcessedFillStoreConfig {
+  batchMs?: number;
+  batchSize?: number;
+  warn?: (msg: string) => void;
+}
+
+// ============================================================
+// DOMAIN: DEXBot CLASS
+// ============================================================
+
+export interface DEXBotMetrics {
+  fillsProcessed: number;
+  fillProcessingTimeMs: number;
+  batchesExecuted: number;
+  lockContentionEvents: number;
+  maxQueueDepth: number;
+}
+
+// ============================================================
+// DOMAIN: ACCOUNT ORDERS (PERSISTENCE)
+// ============================================================
+
+export interface SerializedGridEntry {
+  id: string | null;
+  type: string | null;
+  state: string | null;
+  price: number;
+  size: number;
+  orderId: string;
+}
+
+export interface BotMeta {
+  key: string;
+  name: string | null;
+  assetA: string | null;
+  assetB: string | null;
+  active: boolean;
+  index: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PerBotStorage {
+  meta: BotMeta;
+  grid: SerializedGridEntry[];
+  btsFeesOwed: number;
+  boundaryIdx: number | null;
+  assets: AssetsPair | null;
+  debugInputs: Record<string, any> | null;
+  processedFills: Record<string, number>;
+  createdAt: string;
+  lastUpdated: string;
+}
+
+export interface DBAssetBalances {
+  assetA: { active: number; virtual: number };
+  assetB: { active: number; virtual: number };
+  meta: { key: string; name: string | null; assetA: string | null; assetB: string | null };
+}
+
+// ============================================================
+// DOMAIN: GRACEFUL SHUTDOWN
+// ============================================================
+
+export interface CleanupHandler {
+  name: string;
+  handler: () => void | Promise<void>;
+}
+
+export interface ShutdownState {
+  cleanupHandlers: CleanupHandler[];
+  shutdownInProgress: boolean;
+}
+
+// ============================================================
+// DOMAIN: CREDIT RUNTIME
+// ============================================================
+
+export interface CreditDeal {
+  id: string;
+  offer_id: string;
+  borrower: string;
+  borrow_amount: Asset;
+  collateral: Asset;
+  fee_rate: number;
+  expiration: number;
+  auto_repay: number;
+}
+
+export interface CreditOffer {
+  id: string;
+  owner_account: string;
+  asset_type: string;
+  balance: number;
+  fee_rate: number;
+  max_duration_seconds: number;
+  min_deal_amount: number;
+  enabled: boolean;
+  auto_disable_time: number;
+  acceptable_collateral: Record<string, Price>;
+  acceptable_borrowers: Record<string, number>;
+}
+
+// ============================================================
+// DOMAIN: NODE MANAGER
+// ============================================================
+
+export interface NodeHealth {
+  url: string;
+  connected: boolean;
+  latency: number;
+  lastChecked: number;
+  failCount: number;
+  blacklistedUntil?: number;
+}
+
+// ============================================================
+// DOMAIN: CHAIN KEYS CRYPTO
+// ============================================================
+
+export interface DaemonRequest {
+  type: 'private-key' | 'probe-account';
+  accountName: string;
+}
+
+export interface DaemonPrivateKeyResponse {
+  success: boolean;
+  privateKey?: string;
+  error?: string;
+}
+
+export interface DaemonProbeResponse {
+  success: boolean;
+  sessionId?: string;
+  error?: string;
+}
+
+// ============================================================
+// DOMAIN: UTILITIES
+// ============================================================
+
+export interface CreateOrderArgs {
+  amountToSell: number;
+  sellAssetId: string;
+  minToReceive: number;
+  receiveAssetId: string;
+}
+
+export interface OrderComparisonOptions {
+  precisions?: {
+    buyPrecision?: number | string | null;
+    sellPrecision?: number | string | null;
+    defaultPrecision?: number | string | null;
+    priceRelativeTolerance?: number;
+  };
+}
+
+export interface OutsideInPairGroupAccessors {
+  isValid?: (order: Order) => boolean;
+  getType: (order: Order) => OrderType;
+  getPrice: (order: Order) => number;
+}
+
+// ============================================================
+// DOMAIN: AMA / KALMAN / SIGNALS
+// ============================================================
+
+export interface AmaPreset {
+  name: string;
+  erPeriod: number;
+  fastPeriod: number;
+  slowPeriod: number;
+}
+
+export interface MarketAdapterRuntimeDefaults {
+  intervalSeconds: number;
+  intervalLabel: string;
+  pollSeconds: number;
+  bootstrapLookbackHours: number;
+  nativeBackfillHours: number;
+  maxStaleHours: number;
+  sourceRetries: number;
+  retryDelayMs: number;
+  maxPages: number;
+  pageLimit: number;
+  minRequiredCandles: number;
+}

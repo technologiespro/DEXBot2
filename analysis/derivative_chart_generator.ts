@@ -1,10 +1,9 @@
 #!/usr/bin/env node
+// @ts-nocheck
 'use strict';
-
 const fs = require('fs');
 const path = require('path');
 const { escapeHtml, serializeJsonForScript, toEpochSeconds, UPLOT_SHARED_SCRIPT } = require('./chart_utils');
-
 function parseArgs(argv = process.argv.slice(2)) {
     const cfg = {
         inputFile: null,
@@ -12,7 +11,6 @@ function parseArgs(argv = process.argv.slice(2)) {
         title: 'Derivative Trend Analysis',
         quiet: false,
     };
-
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i];
         if (arg === '--input') cfg.inputFile = argv[++i];
@@ -24,36 +22,29 @@ function parseArgs(argv = process.argv.slice(2)) {
             process.exit(0);
         }
     }
-
     if (!cfg.inputFile) {
         console.error('Error: --input required');
         showHelp();
         process.exit(1);
     }
-
     return cfg;
 }
-
 function showHelp() {
     console.log(`
 Derivative Chart Generator (uPlot)
-
 Usage:
   node analysis/derivative_chart_generator.js --input <file.json> [options]
-
 Options:
   --output FILE   Output HTML (default: analysis/charts/derivative_chart.html)
   --title TEXT    Chart title
   --quiet         Suppress output
     `);
 }
-
 function trendToNum(trend) {
     if (trend === 'UP') return 1;
     if (trend === 'DOWN') return -1;
     return 0;
 }
-
 function countTrend(arr) {
     return arr.reduce((acc, v) => {
         acc.total += 1;
@@ -63,7 +54,6 @@ function countTrend(arr) {
         return acc;
     }, { total: 0, up: 0, down: 0, neutral: 0 });
 }
-
 function countStates(arr, positive, negative) {
     return arr.reduce((acc, v) => {
         acc.total += 1;
@@ -73,11 +63,9 @@ function countStates(arr, positive, negative) {
         return acc;
     }, { total: 0, positive: 0, negative: 0, neutral: 0 });
 }
-
 function generateHTML(data, title) {
     const results = data.allResults || [];
     if (results.length === 0) throw new Error('No analysis results in input');
-
     const source = data.config?.source || 'Unknown';
     const smaPeriod = data.config?.slowSmaPeriod || 'N/A';
     const fastSmaPeriod = data.config?.fastSmaPeriod || null;
@@ -88,30 +76,24 @@ function generateHTML(data, title) {
     const rsiPeriod = data.config?.rsiPeriod ?? 14;
     const rsiOB = data.config?.rsiExtreme ?? 90;
     const rsiOS = 100 - rsiOB;
-
     const dates = results.map((r, idx) => toEpochSeconds(r.timestamp || Date.now(), idx));
     const prices = results.map((r) => r.price);
     const smaValues = results.map((r) => r.slowSma);
     const fastSmaValues = results.map((r) => r.fastSmaValue);
-
     const smaNum = results.map((r) => trendToNum(r.smaRawTrend));
     const smaUp = smaNum.map((v) => (v > 0 ? 1 : 0));
     const smaDown = smaNum.map((v) => (v < 0 ? -1 : 0));
     const smaConf = results.map((r) => r.smaConfidence ?? 0);
-
     const fastSmaNum = results.map((r) => trendToNum(r.fastSmaRawTrend));
     const fastSmaUp = fastSmaNum.map((v) => (v > 0 ? 1 : 0));
     const fastSmaDown = fastSmaNum.map((v) => (v < 0 ? -1 : 0));
     const fastSmaConf = results.map((r) => r.fastSmaConfidence || 0);
-
     const macdHistogram = results.map((r) => r.macdHistogram ?? null);
     const macdLine = results.map((r) => r.macdLine ?? null);
     const macdSignal = results.map((r) => r.macdSignal ?? null);
     const macdHistUp = macdHistogram.map((v) => (v !== null && v > 0 ? v : null));
     const macdHistDown = macdHistogram.map((v) => (v !== null && v < 0 ? v : null));
-
     const rsiValues = results.map((r) => r.rsi ?? null);
-
     const interpState = results.map((r) => r.interpretation || 'NEUTRAL');
     const interpBars = results.map((r) => r.interpretationBars ?? 0);
     const interpValues = interpState.map((s) => (
@@ -171,7 +153,6 @@ function generateHTML(data, title) {
     const bearWeakEntryMarkers = results.map((r) => (r.isBearWeakEntry ? -0.38 : null));
     const bearConfirmationMarkers = results.map((r) => (r.isBearConfirmation ? -0.88 : null));
     const lateBearMarkers = results.map((r) => (r.isLateBearWithoutWeak ? -0.88 : null));
-
     const priceSeries = prices.filter((v) => Number.isFinite(v));
     const priceStart = priceSeries.length ? priceSeries[0] : null;
     const priceEnd = priceSeries.length ? priceSeries[priceSeries.length - 1] : null;
@@ -181,7 +162,6 @@ function generateHTML(data, title) {
     const priceChangePct = priceStart !== null && priceEnd !== null && priceStart !== 0
         ? ((priceEnd - priceStart) / priceStart) * 100
         : null;
-
     const smaTotals = countTrend(smaNum);
     const fastSmaTotals = countTrend(fastSmaNum);
     const macdTotals = countTrend(results.map((r) => (r.macdTrend === 'BULL' ? 1 : r.macdTrend === 'BEAR' ? -1 : 0)));
@@ -201,19 +181,16 @@ function generateHTML(data, title) {
         return { up, down };
     })();
     const candleCount = results.length;
-
     const fmtPrice = (v) => (v === null ? 'n/a' : Number(v).toFixed(6));
     const fmtSignedPrice = (v) => (v === null ? 'n/a' : `${v >= 0 ? '+' : ''}${Math.round(Number(v))}`);
     const fmtPct = (v) => (v === null ? 'n/a' : `${v >= 0 ? '+' : ''}${Math.round(Number(v))}%`);
     const fmtShare = (count) => (candleCount > 0 ? `${Math.round((count / candleCount) * 100)}%` : 'n/a');
-
     const headerParts = [];
     if (smaPeriod !== 'N/A') headerParts.push(`SMA(${smaPeriod})`);
     if (hasFastSma) headerParts.push(`fastSMA(${fastSmaPeriod})`);
     headerParts.push(`MACD(${macdFast},${macdSlow},${macdSig})`);
     headerParts.push(`RSI(${rsiPeriod})`);
     const headerSub = headerParts.join(' &middot; ');
-
     const statsPanel = `
     <div><span class="label">Candles</span> <span class="val">${results.length}</span></div>
     <div style="margin-top:6px"><span class="label">&#x2500;&#x2500; Price summary &#x2500;&#x2500;</span></div>
@@ -234,9 +211,7 @@ function generateHTML(data, title) {
     <div style="margin-top:4px"></div>
     <div><span class="label">Signals</span> <span class="val"><span class="pos">&#x25B2;</span>${signalTotals.up} <span class="neg">&#x25BC;</span>${signalTotals.down}</span></div>
 `;
-
     const chartId = `deriv-uplot-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -359,7 +334,6 @@ function generateHTML(data, title) {
 </head>
 <body>
 <div id="global-tooltip"></div>
-
 <div id="header">
     <h1>&#x1F4CA; ${escapeHtml(title)}</h1>
     <span class="sub">Source: ${escapeHtml(source)}</span>
@@ -367,9 +341,7 @@ function generateHTML(data, title) {
     <button id="reset-zoom-btn" onclick="resetZoom()" title="Reset x-axis zoom on all panels" style="background:#1e2330;color:#ccc;border:1px solid #2a2e3e;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;white-space:nowrap;">&#x21BA; Reset Zoom</button>
     <span class="sub" style="margin-left:auto">Generated: ${new Date().toLocaleString()}</span>
 </div>
-
 <div id="stats">${statsPanel}</div>
-
 <div id="charts">
     <div id="price-chart" class="chart" data-panel-title="Price / AMA"></div>
     <div id="deriv-chart" class="chart" data-panel-title="Trend Blocks"></div>
@@ -377,7 +349,6 @@ function generateHTML(data, title) {
     <div id="macd-chart" class="chart" data-panel-title="MACD"></div>
     <div id="rsi-chart" class="chart" data-panel-title="RSI"></div>
 </div>
-
 <script type="application/json" id="deriv-payload">${serializeJsonForScript({
     dates,
     prices,
@@ -424,7 +395,6 @@ function generateHTML(data, title) {
     rsiOB,
     rsiOS,
 })}</script>
-
 <script>
 const payload = JSON.parse(document.getElementById('deriv-payload').textContent);
 const dates = payload.dates;
@@ -473,7 +443,6 @@ const fastSmaNum = payload.fastSmaNum || [];
 const rsiOB = payload.rsiOB;
 const rsiOS = payload.rsiOS;
 const chartGroupId = ${JSON.stringify(chartId)};
-
 const THEME = {
     text: '#ccc',
     muted: '#888',
@@ -481,14 +450,12 @@ const THEME = {
     grid: '#1e2330',
     axis: '#2a2e3e',
 };
-
 const SIGNAL_GREEN = 'rgba(38,166,154,0.45)';
 const SIGNAL_GREEN_WEAK = 'rgba(38,166,154,0.22)';
 const SIGNAL_GREEN_LIGHT = 'rgba(38,166,154,0.18)';
 const SIGNAL_RED = 'rgba(239,83,80,0.45)';
 const SIGNAL_RED_WEAK = 'rgba(239,83,80,0.22)';
 const SIGNAL_RED_LIGHT = 'rgba(239,83,80,0.18)';
-
 function initChart(domId, opts, data) {
     if (typeof uPlot === 'undefined') throw new Error('uPlot library did not load');
     const el = document.getElementById(domId);
@@ -501,12 +468,10 @@ function initChart(domId, opts, data) {
     chart.root.style.background = THEME.background;
     return chart;
 }
-
 function fmtShortDate(sec) {
     const d = new Date(sec * 1000);
     return d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });
 }
-
 function padRange(min, max, lower = 0.04, upper = 0.04) {
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
     if (min === max) {
@@ -516,7 +481,6 @@ function padRange(min, max, lower = 0.04, upper = 0.04) {
     const span = max - min;
     return [min - span * lower, max + span * upper];
 }
-
 function makeAxis(show, type) {
     return {
         show,
@@ -531,7 +495,6 @@ function makeAxis(show, type) {
         values: show ? (u, splits) => splits.map((v) => fmtShortDate(v)) : () => [],
     };
 }
-
 function makeYAxis(show, formatter, size = 58, label = '') {
     return {
         show,
@@ -549,7 +512,6 @@ function makeYAxis(show, formatter, size = 58, label = '') {
         labelFont: '10px Segoe UI, sans-serif',
     };
 }
-
 function makeCursor() {
     return {
         show: true,
@@ -561,7 +523,6 @@ function makeCursor() {
         focus: { prox: -1 },
     };
 }
-
 function makePlotBase(showX, yFormatter, yScale) {
     return {
         width: 0,
@@ -591,7 +552,6 @@ function makePlotBase(showX, yFormatter, yScale) {
         },
     };
 }
-
 function lineSeries(name, color, width, extra = {}) {
     return {
         label: name,
@@ -602,7 +562,6 @@ function lineSeries(name, color, width, extra = {}) {
         ...extra,
     };
 }
-
 function barSeries(name, color, fill) {
     return {
         label: name,
@@ -613,7 +572,6 @@ function barSeries(name, color, fill) {
         paths: uPlot.paths.bars({ align: 0, gap: 1, size: [0.72, 14, 1] }),
     };
 }
-
 function blockSeries(name, color, fill) {
     return {
         label: name,
@@ -624,7 +582,6 @@ function blockSeries(name, color, fill) {
         paths: uPlot.paths.bars({ align: 0, gap: 0, size: [0.96, 18, 1] }),
     };
 }
-
 function markerSeries(name, color, size = 7) {
     return {
         label: name,
@@ -633,20 +590,16 @@ function markerSeries(name, color, size = 7) {
         points: { show: true, size, space: 0, fill: color, stroke: color },
     };
 }
-
 function tooltipPlugin() {
     const tooltip = document.getElementById('global-tooltip');
     let lastIdx = -1;
-
     function updateTooltip(u) {
         const idx = u.cursor.idx;
         if (idx == null || idx === lastIdx) return;
         lastIdx = idx;
-
         const d = new Date(dates[idx] * 1000);
         const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
             + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-
         const priceVal = prices[idx];
         const smaVal = smaValues[idx];
         const fsVal = hasFastSma ? fastSmaValues[idx] : null;
@@ -657,11 +610,9 @@ function tooltipPlugin() {
         const state = interpState[idx];
         const entry = entryBiasLabel[idx];
         const bars = interpBars[idx];
-
         const rows = [
             '<div class="tt-head">' + dateStr + '</div>',
         ];
-
         if (Number.isFinite(priceVal)) {
             rows.push('<div class="tt-row"><span class="tt-label">Price</span><span class="tt-val">' + priceVal.toFixed(6) + '</span></div>');
         }
@@ -671,9 +622,7 @@ function tooltipPlugin() {
         if (hasFastSma && Number.isFinite(fsVal)) {
             rows.push('<div class="tt-row"><span class="tt-label">fastSMA</span><span class="tt-val">' + fsVal.toFixed(6) + '</span></div>');
         }
-
         rows.push('<div class="tt-sep"></div>');
-
         if (entry && entry !== 'No fresh entry') {
             const entryColor = entry.includes('Long') ? '#26a69a' : entry.includes('Short') ? '#ef5350' : '#ccc';
             rows.push('<div class="tt-row"><span class="tt-label">Entry</span><span class="tt-val" style="color:' + entryColor + '">' + entry + '</span></div>');
@@ -682,9 +631,7 @@ function tooltipPlugin() {
             const stateColor = state.startsWith('BULL') || state === 'OVERBOUGHT' ? '#26a69a' : state.startsWith('BEAR') || state === 'OVERSOLD' ? '#ef5350' : '#ccc';
             rows.push('<div class="tt-row"><span class="tt-label">State</span><span class="tt-val" style="color:' + stateColor + '">' + state + (bars > 0 ? ' (' + bars + ' bars)' : '') + '</span></div>');
         }
-
         rows.push('<div class="tt-sep"></div>');
-
         if (Number.isFinite(macdL) && Number.isFinite(macdS)) {
             rows.push('<div class="tt-row"><span class="tt-label">MACD</span><span class="tt-val">' + macdL.toFixed(4) + '</span></div>');
             rows.push('<div class="tt-row"><span class="tt-label">Signal</span><span class="tt-val">' + macdS.toFixed(4) + '</span></div>');
@@ -693,10 +640,8 @@ function tooltipPlugin() {
         if (Number.isFinite(rsiVal)) {
             rows.push('<div class="tt-row"><span class="tt-label">RSI</span><span class="tt-val">' + rsiVal.toFixed(1) + '</span></div>');
         }
-
         tooltip.innerHTML = rows.join('');
     }
-
     return {
         hooks: {
             init: [(u) => {
@@ -719,7 +664,6 @@ function tooltipPlugin() {
         },
     };
 }
-
 function applyChartHeights() {
     const available = Math.max(window.innerHeight - 44, 300);
     const specs = [
@@ -733,7 +677,6 @@ function applyChartHeights() {
     const extraAvailable = Math.max(0, available - (minHeight * specs.length));
     const totalWeight = specs.reduce((sum, [, weight]) => sum + weight, 0);
     let assignedExtra = 0;
-
     specs.forEach(([id, weight], idx) => {
         const extra = idx === specs.length - 1
             ? extraAvailable - assignedExtra
@@ -742,13 +685,11 @@ function applyChartHeights() {
         document.getElementById(id).style.height = (minHeight + extra) + 'px';
     });
 }
-
 function syncHoverState(chart) {
     const root = chart.root;
     root.addEventListener('mouseenter', () => root.classList.add('is-hovered'));
     root.addEventListener('mouseleave', () => root.classList.remove('is-hovered'));
 }
-
 let priceChart;
 let derivChart;
 let interpChart;
@@ -758,7 +699,6 @@ let charts = [];
 let pendingRange = null;
 let pendingRangeRaf = 0;
 const [xMin, xMax] = [dates[0], dates[dates.length - 1]];
-
 try {
 priceChart = initChart('price-chart', {
     ...makePlotBase(false, (u, vals) => vals.map((v) => Number(v).toFixed(6)), {
@@ -784,7 +724,6 @@ priceChart = initChart('price-chart', {
         ${hasFastSma ? `lineSeries('fastSMA(${fastSmaPeriod})', '#ff9d4d', 1.9),` : ''}
     ],
 }, [dates, prices, smaValues${hasFastSma ? ', fastSmaValues' : ''}]);
-
 derivChart = initChart('deriv-chart', {
     ...makePlotBase(false, (u, vals) => vals.map((v) => (v === 1 ? 'UP' : v === -1 ? 'DOWN' : '—')), {
         auto: true,
@@ -803,7 +742,6 @@ derivChart = initChart('deriv-chart', {
         lineSeries('Zero', 'rgba(255,255,255,0.20)', 1),
     ],
 }, [dates, smaUp, smaDown, ${hasFastSma ? 'fastSmaUp, fastSmaDown, ' : ''}dates.map(() => 0)]);
-
 interpChart = initChart('interp-chart', {
     ...makePlotBase(false, (u, vals) => vals.map((v) => {
         if (v === 1) return 'BULL';
@@ -847,7 +785,6 @@ interpChart = initChart('interp-chart', {
         markerSeries('Late Short', '#fb7185', 8),
     ],
 }, [dates, interpBullBlock, interpBullWeakBlock, interpOBBlock, interpBearBlock, interpBearWeakBlock, interpOSBlock, interpValues, bullWeakEntryMarkers, bullConfirmationMarkers, lateBullMarkers, bearWeakEntryMarkers, bearConfirmationMarkers, lateBearMarkers]);
-
 macdChart = initChart('macd-chart', {
     ...makePlotBase(false, (u, vals) => vals.map((v) => Number(v).toFixed(4)), {
         auto: true,
@@ -869,7 +806,6 @@ macdChart = initChart('macd-chart', {
         lineSeries('Zero', 'rgba(255,255,255,0.22)', 1),
     ],
 }, [dates, macdHistUp, macdHistDown, macdLine, macdSignal, dates.map(() => 0)]);
-
 rsiChart = initChart('rsi-chart', {
     ...makePlotBase(true, (u, vals) => vals.map((v) => Number(v).toFixed(1)), {
         range: (u, min, max) => [0, 100],
@@ -891,21 +827,16 @@ rsiChart = initChart('rsi-chart', {
     document.getElementById('charts').innerHTML = '<div style="padding:20px;color:#ef5350;white-space:pre-wrap;">' + String(err && err.message ? err.message : err) + '</div>';
     throw err;
 }
-
 charts = [priceChart, derivChart, interpChart, macdChart, rsiChart];
-
 ${UPLOT_SHARED_SCRIPT}
-
 function bindHoverState(chart) {
     const root = chart.root;
     root.addEventListener('mouseenter', () => root.classList.add('is-hovered'));
     root.addEventListener('mouseleave', () => root.classList.remove('is-hovered'));
 }
-
 function resetZoom() {
     syncXRange(xMin, xMax);
 }
-
 function sizeCharts() {
     applyChartHeights();
     for (const chart of charts) {
@@ -913,25 +844,21 @@ function sizeCharts() {
         chart.setSize({ width: Math.max(320, Math.floor(rect.width)), height: Math.max(100, Math.floor(rect.height)) });
     }
 }
-
 window.addEventListener('resize', sizeCharts);
 window.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === '0') resetZoom();
 });
-
 charts.forEach((chart) => {
     bindWheelZoom(chart);
     bindPan(chart);
     bindHoverState(chart);
 });
-
 const raf = window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : (fn) => setTimeout(fn, 0);
 raf(() => sizeCharts());
 </script>
 </body>
 </html>`;
 }
-
 async function main() {
     const cfg = parseArgs();
     const data = JSON.parse(fs.readFileSync(cfg.inputFile, 'utf8'));
@@ -940,12 +867,10 @@ async function main() {
     fs.writeFileSync(cfg.outputFile, html, 'utf8');
     if (!cfg.quiet) console.log(`Chart written to ${cfg.outputFile}`);
 }
-
 if (require.main === module) {
     main().catch((err) => {
         console.error(err);
         process.exit(1);
     });
 }
-
 export = { generateHTML, parseArgs, showHelp, trendToNum };

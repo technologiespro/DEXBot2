@@ -53,7 +53,7 @@ const DEFAULT_CONFIG = {
  * @param {string} id – Pool ID in short or full form
  * @returns {string} Full form pool ID (1.19.XXX)
  */
-function normalizePoolId(id) {
+function normalizePoolId(id: any) {
     if (id == null) return null;
     const s = String(id).trim();
     return s.startsWith('1.19.') ? s : `1.19.${s}`;
@@ -63,7 +63,7 @@ function normalizePoolId(id) {
  * Build a discovery query: find the asset IDs that have been sold into a pool.
  * Returns a terms aggregation on amount_to_sell.asset_id — should yield exactly 2 buckets.
  */
-function buildDiscoveryQuery(poolId, lookbackHours) {
+function buildDiscoveryQuery(poolId: any, lookbackHours: any) {
     return {
         size: 0,
         query: {
@@ -96,13 +96,13 @@ function buildDiscoveryQuery(poolId, lookbackHours) {
  * @param {Object}        [config]
  * @returns {Promise<string[]>}       - the 2 asset IDs found in this pool
  */
-async function discoverPoolAssets(poolId, config = {}) {
+async function discoverPoolAssets(poolId: any, config: any = {}) {
     const cfg      = { ...DEFAULT_CONFIG, ...config };
     const fullId   = normalizePoolId(poolId);
     const query    = buildDiscoveryQuery(fullId, cfg.lookbackHours);
     const result   = await kibanaSearch(cfg, query);
     const buckets  = result.aggregations?.sold_assets?.buckets ?? [];
-    return buckets.map((b) => b.key);
+    return buckets.map((b: any) => b.key);
 }
 
 const LP_FIELD_MAP = {
@@ -126,7 +126,7 @@ const LP_FIELD_MAP = {
  * @param {Object}        [config]
  * @returns {Promise<Array>}      OHLCV candles
  */
-async function getLpCandlesForPool(poolId, assetA, assetB, config = {}) {
+async function getLpCandlesForPool(poolId: any, assetA: any, assetB: any, config: any = {}) {
     const fullId = normalizePoolId(poolId);
     return fetchKibanaCandles({
         opType: OP_TYPE_LP,
@@ -147,7 +147,7 @@ async function getLpCandlesForPool(poolId, assetA, assetB, config = {}) {
  * @param {Object}        [config]
  * @returns {Promise<number[]>}
  */
-async function getLpClosePricesForPool(poolId, assetA, assetB, config = {}) {
+async function getLpClosePricesForPool(poolId: any, assetA: any, assetB: any, config: any = {}) {
     const fullId = normalizePoolId(poolId);
     return fetchKibanaClosePrices({
         opType: OP_TYPE_LP,

@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { DEFAULT_STATE_PATH, PositionManager } = require('../modules/position_manager');
 
 function parseArgs(argv) {

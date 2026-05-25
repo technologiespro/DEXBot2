@@ -31,7 +31,7 @@ async function main() {
     }
 
     // Count unique close prices
-    const uniqueCloses = new Set(candles.map(c => c[4]));
+    const uniqueCloses = new Set(candles.map((c: any) => c[4]));
     console.log(`Unique close prices: ${uniqueCloses.size}`);
 
     // Show first and last
@@ -58,22 +58,22 @@ async function main() {
     console.log(`\nLongest run of identical closes: ${maxRun} candles @ ${maxRunPrice}`);
 
     // Show candles with non-zero volume
-    const withVolume = candles.filter(c => c[5] > 0);
+    const withVolume = candles.filter((c: any) => c[5] > 0);
     console.log(`Candles with volume > 0: ${withVolume.length}`);
 
-    const trueOhlc = candles.filter(c => c[5] > 0 && (c[1] !== c[2] || c[1] !== c[3] || c[1] !== c[4]));
+    const trueOhlc = candles.filter((c: any) => c[5] > 0 && (c[1] !== c[2] || c[1] !== c[3] || c[1] !== c[4]));
     console.log(`Candles with non-flat OHLC: ${trueOhlc.length}`);
 
     // Show a few recent candles
     console.log('\nLast 10 candles:');
-    candles.slice(-10).forEach((c, i) => {
+    candles.slice(-10).forEach((c: any, i: any) => {
         const idx = candles.length - 10 + i;
         console.log(`  [${idx}] ${new Date(c[0]).toISOString()} O=${c[1].toFixed(6)} H=${c[2].toFixed(6)} L=${c[3].toFixed(6)} C=${c[4].toFixed(6)} vol=${c[5].toFixed(2)}`);
     });
 
     if (trueOhlc.length > 0) {
         console.log('\nRecent non-flat OHLC candles:');
-        trueOhlc.slice(-10).forEach((c) => {
+        trueOhlc.slice(-10).forEach((c: any) => {
             console.log(`  ${new Date(c[0]).toISOString()} O=${c[1].toFixed(6)} H=${c[2].toFixed(6)} L=${c[3].toFixed(6)} C=${c[4].toFixed(6)} vol=${c[5].toFixed(2)}`);
         });
     }

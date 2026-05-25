@@ -9,7 +9,7 @@ const ROOT = path.basename(PARENT) === 'dist' ? path.dirname(PARENT) : PARENT;
 const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const WHITELIST_FILE = path.join(ROOT, 'profiles', 'market_adapter_whitelist.json');
 
-function isAmaGridPrice(value) {
+function isAmaGridPrice(value: any) {
     if (typeof value !== 'string') return false;
     return /^ama(?:[1-4])?$/i.test(value.trim());
 }
@@ -20,7 +20,7 @@ function loadBotsConfig() {
     return Array.isArray(json?.bots) ? json.bots : [];
 }
 
-function buildWhitelist(bots) {
+function buildWhitelist(bots: any) {
     const dynamicWeight = process.argv.includes('--dynamic-weight=false')
         || process.argv.includes('--no-dynamic-weight')
         ? false
@@ -37,7 +37,7 @@ function buildWhitelist(bots) {
         entries.push([String(botKey), { ama: true, dynamicWeight, asymmetricBounds }]);
     }
 
-    entries.sort((a, b) => a[0].localeCompare(b[0]));
+    entries.sort((a: any, b: any) => a[0].localeCompare(b[0]));
 
     return {
         whitelist: Object.fromEntries(entries),

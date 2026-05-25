@@ -1,11 +1,10 @@
-// @ts-nocheck
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 const { acquirePathLockSync, releaseFileLockSync } = require('./file_lock');
 
-function readJsonOrNull(filePath) {
+function readJsonOrNull(filePath: any) {
     try {
         return JSON.parse(fs.readFileSync(filePath, 'utf8'));
     } catch (_: any) {
@@ -13,13 +12,13 @@ function readJsonOrNull(filePath) {
     }
 }
 
-function writeJsonAtomicSync(filePath, payload) {
+function writeJsonAtomicSync(filePath: any, payload: any) {
     const tmpPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
     fs.writeFileSync(tmpPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
     fs.renameSync(tmpPath, filePath);
 }
 
-function updateDynamicGridSnapshotSync(filePath, mutator, options = {}) {
+function updateDynamicGridSnapshotSync(filePath: any, mutator: any, options: any = {}) {
     if (typeof mutator !== 'function') {
         throw new TypeError('updateDynamicGridSnapshotSync requires a mutator function');
     }

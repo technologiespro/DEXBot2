@@ -3,13 +3,13 @@
 const { toIntervalLabel } = require('./candle_utils');
 const { escapeHtml, serializeJsonForScript } = require('../analysis/chart_utils');
 
-function formatPct(v) {
+function formatPct(v: any) {
     const num = Number(v);
     if (!Number.isFinite(num)) return 'n/a';
     return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`;
 }
 
-function padRange(min, max, lower = 0.04, upper = 0.04) {
+function padRange(min: any, max: any, lower = 0.04, upper = 0.04) {
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
     if (min === max) {
         const delta = Math.abs(min) * 0.03 || 1;
@@ -19,7 +19,7 @@ function padRange(min, max, lower = 0.04, upper = 0.04) {
     return [min - span * lower, max + span * upper];
 }
 
-function generateHTML(meta, candles, amaResults) {
+function generateHTML(meta: any, candles: any, amaResults: any) {
     const { assetA = {}, assetB = {}, intervalSeconds, fetchedAt, pool, thresholds = [], sigmaAmaDelta } = meta || {};
     if (!Array.isArray(candles) || candles.length === 0) {
         throw new Error('No candles supplied to LP uPlot renderer');
@@ -204,7 +204,7 @@ function generateHTML(meta, candles, amaResults) {
         ${amaStats.map((s) => `<div><span style="color:${s.color}">● </span><span class="label" style="font-size:11px">${escapeHtml(String(s.name || '').padEnd(22))}</span><span class="${s.dev >= 0 ? 'pos' : 'neg'}">${formatPct(s.dev)}</span></div>`).join('\n    ')}
         <div style="margin-top:6px"><span class="label">Max |dev|   </span><span class="val">${maxDev.toFixed(3)}% (primary)</span></div>
         ${thresholds.length ? `<div style="margin-top:4px; margin-bottom:2px"><span class="label" style="font-size:10px">── Clamping Thresholds ──</span></div>
-        ${thresholds.map(t => `<div><span class="label" style="font-size:11px">${(t.quantile * 100).toFixed(3)}%</span><span class="val" style="margin-left:8px">${t.multiplier}x</span></div>`).join('')}` : ''}
+        ${thresholds.map((t: any) => `<div><span class="label" style="font-size:11px">${(t.quantile * 100).toFixed(3)}%</span><span class="val" style="margin-left:8px">${t.multiplier}x</span></div>`).join('')}` : ''}
         ${sigmaAmaDelta !== null && sigmaAmaDelta !== undefined ? `<div><span class="label">σ_ama_delta </span><span class="val">${sigmaAmaDelta}% (hourly)</span></div>` : ''}
         <div style="margin-top:6px"><span class="label">Candles     </span><span class="val">${candles.length}</span></div>
         <div><span class="label">Source      </span><span class="label" style="font-size:10px">Kibana LP (op_type 63)</span></div>
@@ -231,7 +231,7 @@ function generateHTML(meta, candles, amaResults) {
     closes,
     volumes,
     amaMeta,
-    amaArrays: amaResults.map((a) => (Array.isArray(a.values) ? a.values.map((v) => Math.round(Number(v) * 1e6) / 1e6) : [])),
+    amaArrays: amaResults.map((a: any) => (Array.isArray(a.values) ? a.values.map((v: any) => Math.round(Number(v) * 1e6) / 1e6) : [])),
 })}</script>
 
 <script>

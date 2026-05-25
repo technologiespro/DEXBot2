@@ -1,6 +1,6 @@
 #!/usr/bin/env node
+// @ts-nocheck
 'use strict';
-
 /**
  * AMA CONVERGENCE ER CALIBRATION
  *
@@ -20,15 +20,12 @@
  *   node analysis/ama_fitting/calibrate_convergence_er.js --data <lp-file.json>
  *   node analysis/ama_fitting/calibrate_convergence_er.js --data <lp-file.json> --amas AMA3
  */
-
 const fs   = require('fs');
 const path = require('path');
 const { MARKET_ADAPTER } = require('../../modules/constants');
-
 const DEFAULT_DATA = path.join(__dirname, '..', '..', 'market_adapter', 'data', 'lp',
     '1_3_5537_1_3_0', 'lp_pool_133_1h.json');
 const FALLBACK_ER_PERIOD = 781;
-
 function parseArgs() {
     const args = process.argv.slice(2);
     const opts = { data: DEFAULT_DATA, amas: null };
@@ -38,7 +35,6 @@ function parseArgs() {
     }
     return opts;
 }
-
 /**
  * Compute per-bar SC values and return { scAvg, erValues, avgER }.
  * scAvg = mean of (ER × deltaSC + slowSC)² across all bars.
@@ -47,10 +43,8 @@ function computeSCstats(closes, erPeriod, fastPeriod, slowPeriod) {
     const fastSC = 2 / (fastPeriod + 1);
     const slowSC = 2 / (slowPeriod + 1);
     const deltaSC = fastSC - slowSC;
-
     let sumSC = 0;
     const erValues = [];
-
     for (let i = erPeriod; i < closes.length; i++) {
         const dir = Math.abs(closes[i] - closes[i - erPeriod]);
         let vol = 0;
@@ -61,14 +55,11 @@ function computeSCstats(closes, erPeriod, fastPeriod, slowPeriod) {
         erValues.push(er);
         sumSC += (er * deltaSC + slowSC) ** 2;
     }
-
     const count = erValues.length;
     const scAvg = count > 0 ? sumSC / count : 0;
     const avgER = count > 0 ? erValues.reduce((a, b) => a + b) / count : 0;
-
     return { scAvg, erValues, avgER, count };
 }
-
 /**
  * Format a column-aligned markdown table row.
  */
@@ -79,10 +70,8 @@ function row(cells, widths) {
     });
     return `| ${parts.join(' | ')} |`;
 }
-
 function main() {
     const opts = parseArgs();
-
     // ── Load and validate data ──────────────────────────────────────────
     let data;
     try {
@@ -100,23 +89,18 @@ function main() {
         }
         process.exit(1);
     }
-
     const closes = (data.candles || []).map(c => Number(c[4]))
         .filter(v => Number.isFinite(v) && v > 0);
-
     if (closes.length < 100) {
         console.error(`Not enough candles (need > 100, got ${closes.length})`);
         process.exit(1);
     }
-
     const amas = MARKET_ADAPTER.AMAS;
     const keys = opts.amas || Object.keys(amas);
     const eps = MARKET_ADAPTER.AMA_CONVERGENCE_EPSILON;
-
     console.log(`Data:    ${opts.data}`);
     console.log(`Candles: ${closes.length}  |  EPSILON: ${eps}`);
     console.log('');
-
     // ── ER distribution display (using first AMA's erPeriod) ──────────
     const refKey = keys[0];
     const refCfg = amas[refKey];
@@ -127,14 +111,11 @@ function main() {
     const p5  = erValues[Math.floor(0.05 * n)].toFixed(4);
     const p50 = erValues[Math.floor(0.50 * n)].toFixed(4);
     const p95 = erValues[Math.floor(0.95 * n)].toFixed(4);
-
     console.log(`--- ER distribution (erPeriod=${erP}) ---`);
     console.log(`  p5 ${p5}  p50 ${p50}  p95 ${p95}  avg ${refAvgER.toFixed(4)}`);
     console.log('');
-
     // ── Per-AMA analysis (compute once, cache results) ─────────────────
     const results = [];
-
     // Validate erPeriod / fastPeriod consistency for meaningful naiveSC comparison
     const erPeriods = new Set();
     const fastPeriods = new Set();
@@ -145,23 +126,18 @@ function main() {
         }
     }
     const consistentER = erPeriods.size === 1 && fastPeriods.size === 1;
-
     for (const key of keys) {
         const cfg = amas[key];
         if (!cfg) continue;
-
         const { scAvg, avgER, count } = computeSCstats(closes, cfg.erPeriod, cfg.fastPeriod, cfg.slowPeriod);
         const fastSC = 2 / (cfg.fastPeriod + 1);
         const slowSC = 2 / (cfg.slowPeriod + 1);
         const deltaSC = fastSC - slowSC;
-
         const naiveSC = (avgER * deltaSC + slowSC) ** 2;
         const impliedER = Math.max(0, Math.min(1, (Math.sqrt(scAvg) - slowSC) / deltaSC));
         const convBars = Math.ceil(Math.log(eps) / Math.log(1 - scAvg));
-
         results.push({ key, cfg, fastSC, slowSC, deltaSC, scAvg, avgER, naiveSC, impliedER, convBars, count });
     }
-
     // ── Print analysis table ───────────────────────────────────────────
     console.log('--- Per-AMA SC analysis ---');
     if (!consistentER) {
@@ -173,7 +149,6 @@ function main() {
         [5, 8, 8, 11, 17, 11, 10]);
     console.log(hdr);
     console.log(sep);
-
     for (const r of results) {
         console.log(row([
             r.key,
@@ -185,11 +160,9 @@ function main() {
             r.convBars,
         ], [5, 8, 8, 11, 17, 11, 10]));
     }
-
     // ── Recommended constant ───────────────────────────────────────────
     const avgImpliedER = results.reduce((a, r) => a + r.impliedER, 0) / results.length;
     const recRounded = Math.round(avgImpliedER * 1000) / 1000;
-
     console.log('');
     console.log('--- Recommended constant ---');
     console.log(`  Average implied ER: ${avgImpliedER.toFixed(4)}`);
@@ -197,7 +170,6 @@ function main() {
     console.log('');
     console.log(`  Current in constants.js: AMA_CONVERGENCE_ER_AVG = ${MARKET_ADAPTER.AMA_CONVERGENCE_ER_AVG}`);
     console.log(`  Suggested update:        AMA_CONVERGENCE_ER_AVG = ${recRounded.toFixed(3)}`);
-
     // ── Convergence bars comparison (using cached results) ─────────────
     console.log('');
     console.log('--- Convergence bars comparison (current vs recommended ER) ---');
@@ -207,14 +179,11 @@ function main() {
         [5, 14, 14, 10]);
     console.log(cmpHdr);
     console.log(cmpSep);
-
     for (const r of results) {
         const curSC = (MARKET_ADAPTER.AMA_CONVERGENCE_ER_AVG * r.deltaSC + r.slowSC) ** 2;
         const curBars = Math.ceil(Math.log(eps) / Math.log(1 - curSC));
-
         const recSC = (recRounded * r.deltaSC + r.slowSC) ** 2;
         const recBars = Math.ceil(Math.log(eps) / Math.log(1 - recSC));
-
         console.log(row([
             r.key,
             curBars + r.cfg.erPeriod,
@@ -223,6 +192,5 @@ function main() {
         ], [5, 14, 14, 10]));
     }
 }
-
 main();
 export {};

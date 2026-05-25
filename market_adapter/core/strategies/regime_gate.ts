@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use strict';
 
 const { HurstAnalyzer } = require('../../../analysis/trend_detection/hurst_analyzer');
@@ -12,21 +11,21 @@ function resolveHNodes(hurstZoneBand = null) {
     return [0.5 + band, 0.5, 0.5 - band];
 }
 
-function resolvePeNodes(peNodes = null) {
+function resolvePeNodes(peNodes: any = null) {
     if (Array.isArray(peNodes) && peNodes.length === 3 && peNodes.every(Number.isFinite)) {
         return peNodes;
     }
     return MARKET_ADAPTER.PE_NODES;
 }
 
-function classifyHurstRegime(h, hurstZoneBand = null) {
+function classifyHurstRegime(h: any, hurstZoneBand: any = null) {
     const [upper, , lower] = resolveHNodes(hurstZoneBand);
     if (h >= upper) return 'TRENDING';
     if (h <= lower) return 'MEAN_REVERTING';
     return 'RANDOM';
 }
 
-function classifyPeRegime(pe, peNodes = null) {
+function classifyPeRegime(pe: any, peNodes: any = null) {
     const [low, , high] = resolvePeNodes(peNodes);
     if (pe < low) return 'STRUCTURED';
     if (pe > high) return 'NOISE';
@@ -48,7 +47,7 @@ function classifyPeRegime(pe, peNodes = null) {
  * @param {Array}  [opts.peNodes]       – Override entropy thresholds
  * @returns {number}  - Interpolated multiplier
  */
-function bilinearInterpolate(h, pe, regimeTable = null, opts = {}) {
+function bilinearInterpolate(h: any, pe: any, regimeTable: any = null, opts: any = {}) {
     const table = regimeTable ?? MARKET_ADAPTER.REGIME_TABLE;
     const H_NODES = resolveHNodes(opts.hurstZoneBand);
     const PE_NODES = resolvePeNodes(opts.peNodes);
@@ -110,7 +109,7 @@ function bilinearInterpolate(h, pe, regimeTable = null, opts = {}) {
  *             hurstRegime: string|null, peRegime: string|null, isReady: boolean,
  *             series: number[] }}
  */
-function computeRegimeMultiplier(closes, opts = {}) {
+function computeRegimeMultiplier(closes: any, opts: any = {}) {
     const sensitivity = Number.isFinite(opts.regimeSensitivity) ? opts.regimeSensitivity : 1.0;
     const regimeTable = opts.regimeTable ?? null;
     const hurstZoneBand = Number.isFinite(opts.hurstZoneBand) ? opts.hurstZoneBand : null;

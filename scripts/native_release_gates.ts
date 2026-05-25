@@ -9,7 +9,7 @@ const ROOT_DEPTH_1 = path.dirname(__dirname);
 const root = path.basename(ROOT_DEPTH_1) === 'dist' ? path.dirname(ROOT_DEPTH_1) : ROOT_DEPTH_1;
 const nodeBin = process.execPath;
 
-function run(label, args, env = {}) {
+function run(label: any, args: any, env: any = {}) {
     console.log(`\n=== ${label} ===`);
     const result = spawnSync(nodeBin, args, {
         cwd: root,
@@ -35,7 +35,7 @@ function assertMainnetCorpusReport() {
     let report;
     try {
         report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
-    } catch (err) {
+    } catch (err: any) {
         console.error(`\nInvalid mainnet corpus report JSON: ${err.message}`);
         process.exit(1);
     }

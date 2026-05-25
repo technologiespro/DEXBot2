@@ -1,6 +1,6 @@
 'use strict';
 
-function resolveMaxAsymmetryFactor(primaryValue, secondaryValue, defaultValue) {
+function resolveMaxAsymmetryFactor(primaryValue: any, secondaryValue: any, defaultValue: any) {
     if (Number.isFinite(primaryValue)) return Number(primaryValue);
     if (Number.isFinite(secondaryValue)) return Number(secondaryValue);
     return Number.isFinite(defaultValue) ? Number(defaultValue) : null;
@@ -14,7 +14,7 @@ function computeAsymmetricBoundsMetrics({
     slopeOffset,
     maxSlopeOffset,
     maxAsymmetryFactor,
-}) {
+}: any) {
     const gp = Number(centerPrice);
     const minP = Number(minPrice);
     const maxP = Number(maxPrice);
@@ -64,7 +64,7 @@ function computeAsymmetricBoundsMetrics({
     };
 }
 
-function applyAsymmetricBounds(params) {
+function applyAsymmetricBounds(params: any) {
     const metrics = computeAsymmetricBoundsMetrics(params);
     const gp = Number(params?.centerPrice);
     const minP = Number(params?.minPrice);
@@ -81,7 +81,7 @@ function applyAsymmetricBounds(params) {
             && (trend === 'UP' || trend === 'DOWN')) {
         const baseMinDiv = gp / minP;
         const baseMaxMult = maxP / gp;
-        const asymmetry = metrics.appliedAsymmetryFactor;
+        const asymmetry = metrics.appliedAsymmetryFactor as number;
 
         if (trend === 'DOWN') {
             resolvedMinPrice = gp / (baseMinDiv * (1 + asymmetry));

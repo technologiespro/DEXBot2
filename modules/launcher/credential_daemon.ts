@@ -17,10 +17,10 @@ const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_ROOT = path.basename(DEFAULT_CODE_ROOT) === 'dist' ? path.dirname(DEFAULT_CODE_ROOT) : DEFAULT_CODE_ROOT;
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 
-function waitForExit(child) {
+function waitForExit(child: any): Promise<any> {
     return new Promise((resolve, reject) => {
         child.on('error', reject);
-        child.on('close', (code) => resolve(code));
+        child.on('close', (code: any) => resolve(code));
     });
 }
 
@@ -31,8 +31,8 @@ function createCredentialDaemonController({
     readyFilePath = getCredentialReadyFilePath({ root }),
     pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
 } = {}) {
-    let daemonProcess = null;
-    let daemonExitPromise = null;
+    let daemonProcess: any = null;
+    let daemonExitPromise: any = null;
 
     async function isDaemonReady() {
         return chainKeys.isDaemonResponsive({ socketPath, readyFilePath });
@@ -58,7 +58,7 @@ function createCredentialDaemonController({
         }
     }
 
-    function forwardSignal(signal) {
+    function forwardSignal(signal: string): void {
         if (!daemonProcess || daemonProcess.killed) return;
         try {
             daemonProcess.kill(signal);

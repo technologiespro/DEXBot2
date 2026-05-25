@@ -110,7 +110,7 @@ function loadBotsConfig() {
  * @param {string} filePath - The path to the file.
  * @throws {Error} If saving fails.
  */
-function saveBotsConfig(config, filePath) {
+function saveBotsConfig(config: any, filePath: string): void {
     try {
         ensureProfilesDirectory(PROFILES_DIR);
         fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf8');
@@ -150,7 +150,7 @@ function loadGeneralSettings() {
 
     const settings = readGeneralSettings({
         fallback: null,
-        onError: (err) => {
+        onError: (err: any) => {
             console.error('Failed to load general settings:', err.message);
         }
     });
@@ -243,7 +243,7 @@ function loadGeneralSettings() {
  * Saves general settings to profiles/general.settings.json.
  * @param {Object} settings - The settings object to save.
  */
-function saveGeneralSettings(settings) {
+function saveGeneralSettings(settings: any): void {
     try {
         writeGeneralSettings(settings);
         console.log(`\n✓ General settings saved to ${path.basename(SETTINGS_FILE)}`);
@@ -256,12 +256,12 @@ function saveGeneralSettings(settings) {
  * Lists the configured bots to the console.
  * @param {Array<Object>} bots - The list of bot configuration objects.
  */
-function listBots(bots) {
+function listBots(bots: any[]): void {
     if (!bots.length) {
         console.log('  (no bot entries defined yet)');
         return;
     }
-    bots.forEach((bot, index) => {
+    bots.forEach((bot: any, index: number) => {
         const name = bot.name || `<unnamed-${index + 1}>`;
         const inactiveSuffix = bot.active === false ? ' [inactive]' : '';
         const dryRunSuffix = bot.dryRun ? ' (dryRun)' : '';
@@ -275,7 +275,7 @@ function listBots(bots) {
  * @param {string} promptMessage - The message to display.
  * @returns {Promise<number|string|null>} The selected index, '\x1b' if ESC, or null if invalid.
  */
-async function selectBotIndex(bots, promptMessage) {
+async function selectBotIndex(bots: any[], promptMessage: string): Promise<any> {
     if (!bots.length) return null;
     listBots(bots);
     const raw = (await readInput(`${promptMessage} [1-${bots.length}]: `)).trim();
@@ -294,7 +294,7 @@ async function selectBotIndex(bots, promptMessage) {
  * @param {string} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<string>} The user input or default value.
  */
-async function askString(promptText, defaultValue) {
+async function askString(promptText: string, defaultValue?: any): Promise<any> {
     const suffix = defaultValue !== undefined && defaultValue !== null ? ` [${defaultValue}]` : '';
     const answer = await readInput(`${promptText}${suffix}: `);
     if (answer === '\x1b') return '\x1b';
@@ -308,7 +308,7 @@ async function askString(promptText, defaultValue) {
  * @param {string} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<string>} The user input.
  */
-async function askRequiredString(promptText, defaultValue) {
+async function askRequiredString(promptText: string, defaultValue?: any): Promise<any> {
     while (true) {
         const value = await askString(promptText, defaultValue);
         if (value === '\x1b') return '\x1b';
@@ -323,7 +323,7 @@ async function askRequiredString(promptText, defaultValue) {
  * @param {string} defaultValue - The default value to use if input is empty.
  * @returns {Promise<string>} The user input.
  */
-async function askCronSchedule(promptText, defaultValue) {
+async function askCronSchedule(promptText: string, defaultValue: string): Promise<any> {
     const current = parseCronToDelta(defaultValue);
 
     // Interval Prompt
@@ -351,7 +351,7 @@ async function askCronSchedule(promptText, defaultValue) {
  * @param {string} defaultValue - The default value to use if input is empty.
  * @returns {Promise<string>} The user input.
  */
-async function askUpdaterBranch(promptText, defaultValue) {
+async function askUpdaterBranch(promptText: string, defaultValue: string): Promise<any> {
     const validBranches = ['main', 'dev', 'test', 'auto'];
     while (true) {
         const value = await askString(promptText, defaultValue);
@@ -368,7 +368,7 @@ async function askUpdaterBranch(promptText, defaultValue) {
  * @param {string} defaultValue - The default value to use if input is empty.
  * @returns {Promise<string>} The user input.
  */
-async function askLogLevel(promptText, defaultValue) {
+async function askLogLevel(promptText: string, defaultValue: string): Promise<any> {
     const validLevels = ['debug', 'info', 'warn', 'error'];
     while (true) {
         console.log(`Available levels: ${validLevels.join(', ')}`);
@@ -386,7 +386,7 @@ async function askLogLevel(promptText, defaultValue) {
  * @param {string} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<string>} The asset symbol in uppercase.
  */
-async function askAsset(promptText, defaultValue) {
+async function askAsset(promptText: string, defaultValue?: any): Promise<any> {
     while (true) {
         const displayDefault = defaultValue ? String(defaultValue).toUpperCase() : undefined;
         const suffix = displayDefault !== undefined && displayDefault !== null ? ` [${displayDefault}]` : '';
@@ -411,7 +411,7 @@ async function askAsset(promptText, defaultValue) {
  * @param {string} assetA - The symbol of Asset A.
  * @returns {Promise<string>} The asset symbol in uppercase.
  */
-async function askAssetB(promptText, defaultValue, assetA) {
+async function askAssetB(promptText: string, defaultValue?: any, assetA?: string): Promise<any> {
     while (true) {
         const displayDefault = defaultValue ? String(defaultValue).toUpperCase() : undefined;
         const suffix = displayDefault !== undefined && displayDefault !== null ? ` [${displayDefault}]` : '';
@@ -443,7 +443,7 @@ async function askAssetB(promptText, defaultValue, assetA) {
  * @param {number} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<number|string>} The numeric value or '\x1b' if ESC.
  */
-async function askNumber(promptText, defaultValue) {
+async function askNumber(promptText: string, defaultValue?: any): Promise<any> {
     const suffix = defaultValue !== undefined && defaultValue !== null ? ` [${defaultValue}]` : '';
     const raw = (await readInput(`${promptText}${suffix}: `)).trim();
     if (raw === '\x1b') return '\x1b';
@@ -467,7 +467,7 @@ async function askNumber(promptText, defaultValue) {
  * @param {number} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<number|string>} The numeric value or '\x1b' if ESC.
  */
-async function askWeightDistribution(promptText, defaultValue) {
+async function askWeightDistribution(promptText: string, defaultValue?: any): Promise<any> {
     const MIN_WEIGHT = -1;
     const MAX_WEIGHT = 2;
     console.log('  \x1b[38;5;45m-1=SuperValley\x1b[0m ←→ \x1b[38;5;39m0=Valley\x1b[0m ←→ \x1b[38;5;250m0.5=Neutral\x1b[0m ←→ \x1b[38;5;208m1=Mountain\x1b[0m ←→ \x1b[38;5;196m2=SuperMountain\x1b[0m');
@@ -493,7 +493,7 @@ async function askWeightDistribution(promptText, defaultValue) {
  * @param {number} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<number|string>} The numeric value or '\x1b' if ESC.
  */
-async function askWeightDistributionNoLegend(promptText, defaultValue) {
+async function askWeightDistributionNoLegend(promptText: string, defaultValue?: any): Promise<any> {
     const MIN_WEIGHT = -1;
     const MAX_WEIGHT = 2;
     const suffix = defaultValue !== undefined && defaultValue !== null ? ` [${defaultValue}]` : '';
@@ -517,7 +517,7 @@ async function askWeightDistributionNoLegend(promptText, defaultValue) {
  * @param {*} value - The value to check.
  * @returns {boolean} True if it's a multiplier string.
  */
-function isMultiplierString(value) {
+function isMultiplierString(value: any): boolean {
     return typeof value === 'string' && /^[-￿]*[0-9]+(?:\.[0-9]+)?x[-￿]*$/i.test(value);
 }
 
@@ -526,7 +526,7 @@ function isMultiplierString(value) {
  * @param {string} cron - The cron string to validate.
  * @returns {boolean} True if valid.
  */
-function isValidCron(cron) {
+function isValidCron(cron: string): boolean {
     const cronRegex = /^((\*(\/\d+)?)|(\d+(-\d+)?(,\d+(-\d+)?)*))( ((\*(\/\d+)?)|(\d+(-\d+)?(,\d+(-\d+)?)*))){4}$/;
     return cronRegex.test(cron.trim());
 }
@@ -537,7 +537,7 @@ function isValidCron(cron) {
  * @param {string} cron
  * @returns {Object} { days, time }
  */
-function parseCronToDelta(cron) {
+function parseCronToDelta(cron: string): { days: number; time: string } {
     const parts = cron.trim().split(/\s+/);
     if (parts.length !== 5) return { days: 1, time: '00:00' };
 
@@ -560,8 +560,8 @@ function parseCronToDelta(cron) {
  * @param {string} time - format "HH:mm"
  * @returns {string} cron string
  */
-function deltaToCron(days, time) {
-    const [hour, min] = time.split(':').map(s => parseInt(s));
+function deltaToCron(days: number, time: string): string {
+    const [hour, min] = time.split(':').map((s: string) => parseInt(s));
     const dayPart = days > 1 ? `*/${days}` : '*';
     return `${min} ${hour} ${dayPart} * *`;
 }
@@ -574,7 +574,7 @@ function deltaToCron(days, time) {
  * @param {number} maxVal - The maximum allowed value.
  * @returns {Promise<number|string>} The numeric value or '\x1b' if ESC.
  */
-async function askNumberWithBounds(promptText, defaultValue, minVal, maxVal) {
+async function askNumberWithBounds(promptText: string, defaultValue?: any, minVal: number = 0, maxVal: number = 100): Promise<any> {
     const suffix = defaultValue !== undefined && defaultValue !== null ? ` [${defaultValue}]` : '';
     const raw = (await readInput(`${promptText}${suffix}: `)).trim();
     if (raw === '\x1b') return '\x1b';
@@ -609,7 +609,7 @@ async function askNumberWithBounds(promptText, defaultValue, minVal, maxVal) {
  * @param {number} minSpreadFactor - The minimum spread factor from GRID_LIMITS.
  * @returns {Promise<number|string>} The spread percentage or '\x1b' if ESC.
  */
-async function askTargetSpreadPercent(promptText, defaultValue, incrementPercent, minSpreadFactor = 2.1) {
+async function askTargetSpreadPercent(promptText: string, defaultValue?: any, incrementPercent: number = 0, minSpreadFactor: number = 2.1): Promise<any> {
     const safeIncrement = Number.isFinite(incrementPercent) ? incrementPercent : 0;
     const safeMinSpreadFactor = Number.isFinite(minSpreadFactor) ? minSpreadFactor : 2.1;
     const minRequired = safeIncrement * safeMinSpreadFactor;
@@ -650,7 +650,7 @@ async function askTargetSpreadPercent(promptText, defaultValue, incrementPercent
  * @param {number} maxVal - The maximum allowed value.
  * @returns {Promise<number|string>} The integer or '\x1b' if ESC.
  */
-async function askIntegerInRange(promptText, defaultValue, minVal, maxVal) {
+async function askIntegerInRange(promptText: string, defaultValue?: any, minVal: number = 0, maxVal: number = 100): Promise<any> {
     const suffix = defaultValue !== undefined && defaultValue !== null ? ` [${defaultValue}]` : '';
     const raw = (await readInput(`${promptText}${suffix}: `)).trim();
     if (raw === '\x1b') return '\x1b';
@@ -679,7 +679,7 @@ async function askIntegerInRange(promptText, defaultValue, minVal, maxVal) {
  * @param {number|string} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<number|string>} The value or '\x1b' if ESC.
  */
-async function askNumberOrMultiplier(promptText, defaultValue) {
+async function askNumberOrMultiplier(promptText: string, defaultValue?: any): Promise<any> {
     const suffix = defaultValue !== undefined && defaultValue !== null ? ` [${defaultValue}]` : '';
     const raw = (await readInput(`${promptText}${suffix}: `)).trim();
     if (raw === '\x1b') return '\x1b';
@@ -713,7 +713,7 @@ async function askNumberOrMultiplier(promptText, defaultValue) {
  * @param {number|string} minPrice - The minimum price.
  * @returns {Promise<number|string>} The value or '\x1b' if ESC.
  */
-async function askMaxPrice(promptText, defaultValue, minPrice) {
+async function askMaxPrice(promptText: string, defaultValue?: any, minPrice?: any): Promise<any> {
     const suffix = defaultValue !== undefined && defaultValue !== null ? ` [${defaultValue}]` : '';
     const raw = (await readInput(`${promptText}${suffix}: `)).trim();
     if (raw === '\x1b') return '\x1b';
@@ -751,7 +751,7 @@ async function askMaxPrice(promptText, defaultValue, minPrice) {
  * @param {string} value - The input string.
  * @returns {string|null} The normalized percentage string or null if invalid.
  */
-function normalizePercentageInput(value) {
+function normalizePercentageInput(value: string): string | null {
     if (typeof value !== 'string') return null;
     const trimmed = value.trim();
     if (!trimmed.endsWith('%')) return null;
@@ -766,7 +766,7 @@ function normalizePercentageInput(value) {
  * @param {number|string} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<number|string>} The value or '\x1b' if ESC.
  */
-async function askNumberOrPercentage(promptText, defaultValue) {
+async function askNumberOrPercentage(promptText: string, defaultValue?: any): Promise<any> {
     const suffix = defaultValue !== undefined && defaultValue !== null ? ` [${defaultValue}]` : '';
     const raw = (await readInput(`${promptText}${suffix}: `)).trim();
     if (raw === '\x1b') return '\x1b';
@@ -787,7 +787,7 @@ async function askNumberOrPercentage(promptText, defaultValue) {
  * @param {boolean} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<boolean|string>} The boolean value or '\x1b' if ESC.
  */
-async function askBoolean(promptText, defaultValue) {
+async function askBoolean(promptText: string, defaultValue?: any): Promise<any> {
     const label = defaultValue ? 'Y/n' : 'y/N';
     const raw = (await readInput(`${promptText} (${label}): `)).trim().toLowerCase();
     if (raw === '\x1b') return '\x1b';
@@ -801,7 +801,7 @@ async function askBoolean(promptText, defaultValue) {
  * @param {number|string} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<number|string>} The start price or '\x1b' if ESC.
  */
-async function askStartPrice(promptText, defaultValue) {
+async function askStartPrice(promptText: string, defaultValue?: any): Promise<any> {
     while (true) {
         const suffix = defaultValue !== undefined && defaultValue !== null ? ` [${defaultValue}]` : '';
         const raw = (await readInput(`${promptText}${suffix}: `)).trim();
@@ -836,7 +836,7 @@ async function askStartPrice(promptText, defaultValue) {
  * @param {string} [defaultValue] - The default value to use if input is empty.
  * @returns {Promise<string>} The grid price mode or '\x1b' if ESC.
  */
-async function askGridPriceMode(promptText, defaultValue) {
+async function askGridPriceMode(promptText: string, defaultValue?: any): Promise<any> {
     while (true) {
         const shownDefault = defaultValue === null || defaultValue === undefined ? 'startPrice' : defaultValue;
         const raw = (await readInput(`${promptText} [${shownDefault}]: `)).trim();
@@ -909,7 +909,7 @@ async function promptBotData(base = {}) {
         }
 
         const choice = (await readInput('Select section to edit or action: ', {
-            validate: (input) => ['1', '2', '3', '4', '5', 's', 'c'].includes(input.toLowerCase())
+            validate: (input: string) => ['1', '2', '3', '4', '5', 's', 'c'].includes(input.toLowerCase())
         })).trim().toLowerCase();
 
         if (choice === '\x1b') {
@@ -1072,7 +1072,7 @@ async function promptGeneralSettings() {
           console.log('\x1b[37mC) Cancel (Discard changes)\x1b[0m');
 
          const choice = (await readInput('Select section to edit or action: ', {
-             validate: (input) => ['1', '2', '3', '4', '5', '6', 's', 'c'].includes(input)
+             validate: (input: string) => ['1', '2', '3', '4', '5', '6', 's', 'c'].includes(input)
          })).trim().toLowerCase();
 
         if (choice === '\x1b') {

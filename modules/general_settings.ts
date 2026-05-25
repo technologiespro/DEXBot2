@@ -24,7 +24,7 @@ const SETTINGS_FILE = path.join(PROFILES_DIR, 'general.settings.json');
  * @param {Function} [options.onError=null] - Optional error callback (err, filePath)
  * @returns {Object|*} Parsed settings object or fallback value
  */
-function readGeneralSettings({ fallback = null, onError = null } = {}) {
+function readGeneralSettings({ fallback = null, onError = null }: { fallback?: any; onError?: ((err: Error, filePath: string) => void) | null } = {}): any {
     if (!fs.existsSync(SETTINGS_FILE)) return fallback;
 
     try {
@@ -45,7 +45,7 @@ function readGeneralSettings({ fallback = null, onError = null } = {}) {
  * @param {Object} settings - Settings object to write
  * @throws {Error} If write operation fails
  */
-function writeGeneralSettings(settings) {
+function writeGeneralSettings(settings: any): void {
     if (!fs.existsSync(PROFILES_DIR)) {
         fs.mkdirSync(PROFILES_DIR, { recursive: true });
     }
