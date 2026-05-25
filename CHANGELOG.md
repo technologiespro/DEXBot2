@@ -2,37 +2,107 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.5] - 2026-05-25 - Zero-Dependency Policy & TypeScript Migration
+## [0.7.5] - 2026-05-25 - Removal of All Dependencies & TypeScript Migration
 
-This release codifies the project's de facto zero-dependency philosophy as an explicit architectural policy and transitions the entire codebase from JavaScript to TypeScript. All source files, test files, and entry points are now `.ts` with strict mode enabled, compiled through `tsc` and run via `tsx` for development/testing. Thin `.js` shims at the root serve as stable entry points that route to compiled `dist/` output.
+This release completes the removal of all external runtime dependencies and transitions the entire codebase from JavaScript to TypeScript. All source files, test files, and entry points are now `.ts` with strict mode enabled, compiled through `tsc` and run via `tsx` for development/testing. Thin `.js` shims at the root serve as stable entry points that route to compiled `dist/` output. The project's de facto zero-dependency philosophy is codified as an explicit architectural policy — no remaining npm dependencies at runtime, making the bot fully self-contained.
+
+### 2026-05-23
+
+#### Pre-Release Groundwork
+- Document Injectable Module Interfaces plan, replacing the Event Bus in the Phase 6 roadmap (`45a0184`).
+- Add optional AMA ER smoothing parameter for adaptive moving average tuning (`14b59d9`).
+- Improve bot usage finder with retry logic, export, and help flags (`526413e`).
 
 ### 2026-05-24
 
-#### Zero-Dependency Policy
-- Add "Zero-Dependency Policy" section to `docs/architecture.md` with the policy rationale, trading-bot special-case justification, and practical implications.
-- Update `docs/DEXBOT_COMPARISON.md` to reflect the current zero-mandatory-dependency state (native `bitshares-native/` replaces former `btsdex` dependency).
-- Update `docs/EVOLUTION.md` with v0.7.5 release entry, version history section, and updated metadata.
-- Bump version to 0.7.5 across all package manifests, lockfiles, and documentation references.
+#### Native BitShares Integration
+- Replace `btsdex` npm dependency with native BitShares integration — inline chain operations, types, and broadcast logic (`52a2f8b`).
+- Fix connection state leaks and PM2 credential daemon visibility in native client (`72b3a53`).
+- Correct chain ID from testnet to real BitShares mainnet (`38d7248`).
+- Fix chain ID, transport autoreconnect, and asset lookup crashes (`ae64038`).
+- Fix broadcast expiration sent as Unix timestamp instead of ISO string (`fd47cd8`).
+- Fix native ECC compatibility with BitShares chain — signature format, canonical enforcement, address spec (`9622254`).
+- Fix `chainOrderId` extraction failure after daemon-mediated order creation (`4ddbbc2`).
+- Remove `btsdex` npm dependency from Claw module (`9380e86`).
+- Complete native BitShares cleanup of remaining `btsdex` references (`e8cf933`).
+- Stabilize native reconnect and subscription lifecycle (`ae752ea`).
 
-### 2026-05-24 to 2026-05-25
+#### Stability & Foundation
+- Normalize native broadcast array results for consistent return types (`e8f3e08`).
+- Stabilize startup accounting and websocket idle connections (`6d50074`).
+- Centralize native BitShares constants into `NATIVE_CLIENT` constants (`9ac2199`).
+- Harden native fill detection under edge conditions (`32852fa`).
+- Add zero-dependency isolated process management (`--isolated` mode) (`c3e6aa9`).
+- Extract `_processFillsWithBatching` to consolidate fill-chunking pipeline (`4902f55`).
+- Detect dust orders regardless of `ACTIVE`/`PARTIAL` state (`b7921f8`).
+- Bypass idle check for dust-timer maintenance to prevent stalls (`0a06338`).
+
+#### Zero-Dependency Policy
+- Add "Zero-Dependency Policy" section to `docs/architecture.md` with rationale, trading-bot special-case justification, and implications (`187c403`).
+- Update `docs/DEXBOT_COMPARISON.md` to reflect zero-mandatory-dependency state (native `bitshares-native/` replaces `btsdex`) (`187c403`).
+- Update `docs/EVOLUTION.md` with v0.7.5 release entry, version history, and metadata (`187c403`).
+- Bump version to 0.7.5 across manifests, lockfiles, and documentation references (`187c403`).
 
 #### Complete TypeScript Transition
-- Migrate all 48K+ lines of production JavaScript source to TypeScript (`.js` → `.ts`) across `modules/`, `market_adapter/`, `claw/`, `scripts/`, `analysis/`, and root entry points (`733994b`).
+- Migrate all 48K+ lines of production JavaScript to TypeScript across `modules/`, `market_adapter/`, `claw/`, `scripts/`, `analysis/`, and root entry points (`733994b`).
 - Convert all 158 test files from `.js` to `.ts` (`db2e4fc`).
-- Enable strict TypeScript for `modules/`, `market_adapter/`, and `scripts/` with full `noImplicitAny` / `strictNullChecks` coverage (`1cc79b9`).
-- Fix post-migration regressions: timeout wiring, idle blocking, adapter gating, and Claw type signatures (`13d1fff`).
-- Resolve `__dirname` path resolution in compiled `dist/` output (`86bb663`).
-- Repair update flow shims, bootstrap paths, safe-git entry guards after TS migration (`ad21d37`).
-- Harden `unlock-start` runtime launching for compiled mode (`5121fae`).
+- Fix review findings — type safety, native TypeScript correctness, entry points (`25dba97`).
+- Address 13 review findings — ECC, test resolution, serialization, transport (`8b5149a`).
+- Address comprehensive review — all findings fixed, verified against `bitshares-core` (`2e5356b`).
+- Repair Docker and native release gates to reference compiled `dist/` output (`84c81dc`).
+- Harden native fill subscriptions against missed history gaps (`2247c5b`).
+- Update all `.md` references from `.js` → `.ts`, `btsdex` → `native`, `node` → `tsx` (`45ed4f0`).
 
 #### Infrastructure & Build
 - Add `tsconfig.json` with strict settings, `tsx` for test/script runners, `tsc` for production builds (`733994b`).
-- Remove redundant double-build from the update script (`ea9932e`).
+- Remove redundant double-build from update script (`ea9932e`).
 - Wire `connectTimeoutMs` into `createChainClient` to match `TIMING.CONNECTION_TIMEOUT_MS` (`cf2319e`).
 
-#### Documentation & Consistency
-- Update all `.md` references from `.js` → `.ts`, `btsdex` → `native`, `node` → `tsx` (`45ed4f0`).
-- Repair Docker and native release gates to reference compiled output (`84c81dc`).
+#### Post-Migration Fixes
+- Harden `unlock-start` runtime launching for compiled mode (`5121fae`).
+- Harden fill sync delivery and locking to prevent race conditions (`82a15f3`).
+- Fix connection retry, dust gate, and log rotation config alignment (`d89a8ff`).
+
+### 2026-05-25
+
+#### Post-Migration Stabilization
+- Repair update flow shims, bootstrap paths, safe-git entry guards after TS migration (`ad21d37`).
+- Restore `NODES` key to `general.settings.json` defaults in `loadGeneralSettings` (`b6afedb`).
+- Restore main branch retry behavior in `waitForConnected` (`d4117c9`).
+- Only start `dexbot-adapter` when an AMA bot is actually running (`162ad31`).
+
+#### TypeScript Strictness & Build
+- Enable strict TypeScript for `modules/`, `market_adapter/`, and `scripts/` — full `noImplicitAny` / `strictNullChecks` (`1cc79b9`).
+- Enable strict TypeScript for `claw/` with full coverage, resolving 594 type errors (`a863511`).
+- Migrate `moduleResolution` from deprecated `"node"` to `"node16"` across all `tsconfig.json` files (`4875ff6`).
+- Remove deprecated `ignoreDeprecations` from all `tsconfig.json` files (`1f6b213`).
+- Make entry point `.js` shims work without pre-running `tsc` build (`55422a2`).
+- Resolve `__dirname` path resolution bug in compiled `dist/` output (`86bb663`).
+- Resolve post-migration regressions — timeout wiring, idle blocking, adapter gating, Claw types (`13d1fff`).
+
+#### Zero-Dependency Enforcement
+- Remove `openclaw` optional dependency to maintain strict zero-dep policy (`06587a3`).
+- Remove dead file `modules/load_dist_with_mirrors.js` (`045f211`).
+- Remove dead claw-side CR tuning code (`bot_auto_tuner`, `buildMarginTradingPlan`, `evaluateAndTune`) (`a50f369`).
+
+#### Stability & Recovery Hardening
+- Harden fill replay handling for robustness under edge cases (`168f4a1`).
+- Harden native fill subscriptions across activation gaps to prevent missed fills (`9d0ee98`).
+- Prevent re-entrant `_fillProcessingLock` deadlock in recovery and grid reset paths (`7f32b60`).
+- Prevent open-orders sync loop from blocking trigger reset and maintenance (`3710377`).
+- Resolve credential daemon startup hang — use correct project root from `dist/` (`2469b76`).
+- Cap bootstrap fill rotation batches to prevent excessive chain calls (`e7dd9c6`).
+
+#### Accounting & Chain Corrections
+- Honor Core asset maker fee discount in BTS fee accounting (`8acc6f1`).
+- Align native keys and fee accounting with BitShares Core chain behavior (`56eb96c`).
+- Centralize CR_ZONES, simplify MPA zone model, adjust fee rate constants (`90f6db7`).
+- Consolidate graphene collateral ratio denominator into `constants.ts` (`1b9bebe`).
+- Register credit operation serializers and fix `arrayType` sorting (`4792a78`).
+- Resolve `setType` `object_id_type` sort order mismatch in transaction building (`d5ad1e4`).
+
+#### Documentation
+- Fold TypeScript migration into v0.7.5 release entry, remove from Phase 6 planned (`eaf79cc`).
 
 ## [0.7.4] - 2026-05-22 - Code Cleanup and Documentation Refresh
 

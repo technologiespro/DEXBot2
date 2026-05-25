@@ -6,10 +6,10 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,391 commits over ~5.5 active months
-- **Code Maturity**: Evolution from basic utilities to a ~48,000+ LoC intelligent TypeScript system
-- **Stability**: Progression from manual testing to a suite of 158 automated test files
-- **Releases**: 20 tagged releases (v0.1.0 to v0.7.5)
+- **Growth Phase**: 1,403 commits over ~6 active months
+- **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
+- **Stability**: Progression from manual testing to a suite of 181 automated test files
+- **Releases**: 20 tagged releases (v0.1.0 to v0.7.4)
 
 ---
 
@@ -175,9 +175,10 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 - **May 22**: Release v0.7.2 - dynamic-weight Kalman stability patch
 - **May 22**: Release v0.7.3 - adapter packaging and slope helper consolidation
 - **May 22**: Release v0.7.4 - documentation refresh and version bump
-- **May 24**: Release v0.7.5 - zero-dependency policy codification
-- **May 24-25**: Complete TypeScript migration — all 48K+ lines, 158 tests, and entry points converted from JS to TS
-- **May 25**: Strict TypeScript enforcement for modules, market_adapter, and scripts; post-migration regression fixes, build infrastructure, and Docker/release gate repairs
+- **May 23-24**: Native BitShares integration (replace `btsdex` dependency), zero-dependency isolated mode, stability and fill processing groundwork (pre-v0.7.5-bump)
+- **May 24**: Zero-dependency policy codification and v0.7.5 version bump; complete TypeScript migration — all 48K+ lines, 158 tests, and entry points converted from JS to TS with strict mode enabled for modules, market_adapter, scripts, and claw. Release v0.7.5
+- **May 24-25**: Post-migration regression fixes — Docker release gates, update flow, path resolution, adapter gating
+- **May 25**: Build infrastructure hardening, zero-dependency enforcement (remove openclaw, dead files), stability hardening (fill replay, deadlock prevention, credential daemon startup), accounting/chain corrections
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -195,7 +196,7 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 13. **Credential Daemon Resilience**: Broadcast retry, stale socket handling, node list mirroring, PM2 restart loop prevention
 14. **Credit Maintenance Hardening**: Collateral-gated credit increases, renew-only policy, deal renewal with fallback safety, startup credit maintenance, autoRepay state synchronization
 15. **Grid Reset Metadata**: Centralized reset metadata handling with dynamic reset state preservation
-16. **Complete TypeScript Migration**: All 48K+ lines of production code, 158 test files, scripts, and entry points converted from JS to TS with strict mode; `tsc` build pipeline, `tsx` runtime, thin `.js` shims for dist routing
+16. **Zero-Dependency Policy & TypeScript Migration**: Removal of all external runtime dependencies codified as explicit architectural policy; full codebase conversion from JS to TS (48K+ lines, 158 tests, all entry points) with strict mode, `tsc` build pipeline, `tsx` runtime, and thin `.js` shims for dist routing
 
 ---
 
@@ -205,11 +206,28 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 - **Phase 1-2**: Loose modules for order/account management, basic grid trading.
 - **Phase 3-4**: Copy-on-Write grid with atomic modifications, Market Adapter decoupling signals from execution.
 - **Phase 5**: Multi-layered runtime — COW core execution, signal pipeline (AMA/Kalman/regime), credit/debt MPA runtime, credit maintenance hardening, credential daemon.
-- **Post-5: TypeScript Migration**: Full codebase migration from JavaScript to TypeScript with strict mode, `tsc` build pipeline, and zero-dependency runtime via `tsx`.
+- **Post-5: Zero-Dependency & TypeScript Migration**: Full codebase migration from JavaScript to TypeScript with strict mode, `tsc` build pipeline, zero-dependency runtime via `tsx`, and explicit architectural policy removing all external runtime dependencies.
 
 ---
 
 ## Version History
+
+### v0.7.4 → v0.7.5 — Removal of All Dependencies & TypeScript Migration
+
+This release completes the removal of all external runtime dependencies and transitions the full codebase from JavaScript to TypeScript. All production sources, 158 test files, scripts, and entry points now compile through `tsc` with strict mode and run via `tsx` for development/testing, with thin `.js` shims routing to compiled `dist/` output for production. The project's de facto zero-dependency philosophy is codified as an explicit architectural policy — no remaining npm dependencies at runtime, making the bot fully self-contained.
+
+| Category | Commits |
+|----------|---------|
+| 1. Zero-dependency policy codification and version bump | 1 |
+| 2. Native BitShares integration (replace `btsdex` dependency) | 10 |
+| 3. Pre-release groundwork, stability and fill processing | 12 |
+| 4. JS-to-TS migration (sources, tests, strict mode) | 4 |
+| 5. Type safety review and native TS entry-point fixes | 3 |
+| 6. Post-migration regression fixes (Docker, release gates, update flow, paths) | 10 |
+| 7. General hardening (fill locking, credential daemon, reconnect, dead code removal) | 13 |
+| 8. Accounting and chain corrections | 6 |
+| 9. Documentation alignment (`.md` refs, constants, changelog) | 3 |
+| **Total** | **62** |
 
 ### v0.7.3 → v0.7.4 (5 commits)
 
@@ -218,20 +236,6 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 | 1. Code cleanup (unused deps, inline helper) | 2 |
 | 2. Documentation refresh | 3 |
 | **Total** | **5** |
-
-### v0.7.4 → v0.7.5 — Zero-Dependency Policy & TypeScript Migration
-
-This release codifies the project's de facto zero-dependency philosophy as an explicit architectural policy and transitions the full codebase from JavaScript to TypeScript. All production sources, 158 test files, scripts, and entry points now compile through `tsc` with strict mode and run via `tsx` for development/testing, with thin `.js` shims routing to compiled `dist/` output for production.
-
-| Category | Commits |
-|----------|---------|
-| 1. Zero-dependency policy doc and version bump | 1 |
-| 2. JS-to-TS migration (sources, tests, strict mode, build pipeline) | 3 |
-| 3. Type safety review and entry-point fixes | 3 |
-| 4. Post-migration regression fixes (Docker, release gates, update flow, paths) | 10 |
-| 5. General hardening alongside migration (fill locking, credential daemon, reconnect, native sync) | 11 |
-| 6. Documentation alignment (`.md` refs, constants, changelog) | 3 |
-| **Total** | **31** |
 
 ---
 
@@ -366,7 +370,7 @@ This release codifies the project's de facto zero-dependency philosophy as an ex
 
 ## Development Statistics
 
-158 automated tests (all TypeScript), 19 tagged releases. See **Version History** for commit breakdown by release.
+181 automated tests (all TypeScript), 20 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -385,13 +389,13 @@ This release codifies the project's de facto zero-dependency philosophy as an ex
 
 ## Documentation Evolution
 
-Evolved from basic README + inline comments to a comprehensive framework: 23 docs/ entries (architecture map, COW invariants, fund accounting, credential security, developer guide, TypeScript migration analysis), 80%+ JSDoc coverage, 137+ documentation commits (10.4% of total), and an `AGENTS.md` for AI-assisted development.
+Evolved from basic README + inline comments to a comprehensive framework: 20 docs/ entries (architecture map, COW invariants, fund accounting, credential security, developer guide, TypeScript migration analysis), 80%+ JSDoc coverage, 174+ documentation commits (12.4% of total), and an `AGENTS.md` for AI-assisted development.
 
 ---
 
 ## Testing Strategy
 
-Evolved from manual blockchain testing → Jest unit tests → lightweight Node.js assert (zero test dependencies for the 158-file suite). Multi-layered verification: unit/integration for accounting/sync/grid, complex market scenario simulations, edge-case coverage, COW architectural guards (invariants, mutation detection), and signal/credit runtime validation.
+Evolved from manual blockchain testing → Jest unit tests → lightweight Node.js assert (zero test dependencies for the 181-file suite). Multi-layered verification: unit/integration for accounting/sync/grid, complex market scenario simulations, edge-case coverage, COW architectural guards (invariants, mutation detection), and signal/credit runtime validation.
 
 
 ---
@@ -415,7 +419,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 - **Performance Analytics**: PnL tracking, grid efficiency metrics, risk assessment, and HTML report generation.
 
 ### Modernization & Migration
-- **Dependency Reduction**: Continued minimization of external dependencies.
+- ~~**Dependency Reduction**: Continued minimization of external dependencies.~~ ✅ **Completed in v0.7.5** — all external runtime dependencies removed, zero-dependency policy codified.
 
 ### Architecture & Code Quality — Detailed Breakdown
 
@@ -446,6 +450,6 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 **Report Originally Generated**: February 19, 2026
 **Last Updated**: May 25, 2026
-**Total Commits**: 1391
+**Total Commits**: 1403
 **Date Range**: December 2, 2025 - May 25, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)
