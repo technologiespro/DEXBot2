@@ -117,10 +117,11 @@ function createSubscriptionManager(chainClient: any): any {
     }
 
     function ensureNoticeSubscription() {
-        if (noticeActive) return;
-        if (!unsubscribeNotice) {
-            unsubscribeNotice = chainClient.transport.addMessageHandler(handleNotice);
+        if (unsubscribeNotice) {
+            if (typeof unsubscribeNotice.isActive !== 'function' || unsubscribeNotice.isActive()) return;
+            unsubscribeNotice = null;
         }
+        unsubscribeNotice = chainClient.transport.addMessageHandler(handleNotice);
         noticeActive = true;
     }
 
@@ -269,6 +270,7 @@ function createSubscriptionManager(chainClient: any): any {
         }
 
         let entry = subscriptions.get(accountName);
+        const createdEntry = !entry;
         if (!entry) {
             entry = {
                 accountName,
@@ -292,23 +294,35 @@ function createSubscriptionManager(chainClient: any): any {
             }
 
             entry.lastDeliveredHistoryId = await primeLastDeliveredHistoryId(entry);
+        }
 
+        entry.callbacks.add(callback);
+        if (onError) entry.onError = onError;
+
+        if (createdEntry) {
             try {
+                ensureNoticeSubscription();
                 await chainClient.db.call('set_subscribe_callback', [
                     SUBSCRIBE_CALLBACK_ID,
                     false,
                 ]);
                 entry.active = !!entry.accountId;
+                await processObjects(entry, [entry.accountId]);
             } catch (err: any) {
-                subscriptions.delete(accountName);
+                entry.callbacks.delete(callback);
+                if (entry.onError === onError) {
+                    entry.onError = null;
+                }
+                if (entry.callbacks.size === 0) {
+                    entry.active = false;
+                    subscriptions.delete(accountName);
+                    if (subscriptions.size === 0) {
+                        removeNoticeSubscription();
+                    }
+                }
                 throw new Error(`Failed to register subscription callback: ${err.message}`);
             }
-
-            ensureNoticeSubscription();
         }
-
-        entry.callbacks.add(callback);
-        if (onError) entry.onError = onError;
 
         return () => unsubscribe(accountName, callback);
     }
@@ -352,6 +366,7 @@ function createSubscriptionManager(chainClient: any): any {
                     false,
                 ]);
                 ensureNoticeSubscription();
+                await processObjects(entry, [entry.accountId]);
             } catch (err: any) {
                 console.warn('[subscriptions] Failed to resubscribe', entry.accountName, err.message);
             }

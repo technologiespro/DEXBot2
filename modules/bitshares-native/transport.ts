@@ -326,10 +326,12 @@ function createTransport(config = {}) {
 
     function addMessageHandler(handler) {
         onMessageHandlers.push(handler);
-        return () => {
+        const unsubscribe = () => {
             const idx = onMessageHandlers.indexOf(handler);
             if (idx !== -1) onMessageHandlers.splice(idx, 1);
         };
+        unsubscribe.isActive = () => onMessageHandlers.includes(handler);
+        return unsubscribe;
     }
 
     function getStatus() {
