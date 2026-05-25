@@ -465,7 +465,14 @@ function protocolIdType(name: string): SerType & { compare?: (a: any, b: any) =>
     return idType(RESERVED_SPACES.protocol_ids, name);
 }
 
-const object_id_type: SerType = {
+const object_id_type: SerType & { compare?: (a: any, b: any) => number } = {
+    compare(a: ObjectId, b: ObjectId): number {
+        if (a.space !== b.space) return a.space - b.space;
+        if (a.type !== b.type) return a.type - b.type;
+        const ai = typeof a.instance === 'bigint' ? a.instance : BigInt(a.instance);
+        const bi = typeof b.instance === 'bigint' ? b.instance : BigInt(b.instance);
+        return ai < bi ? -1 : ai > bi ? 1 : 0;
+    },
     fromByteBuffer(b: BufReader): any {
         const long = b.readUint64();
         return ObjectId.fromLong(long);

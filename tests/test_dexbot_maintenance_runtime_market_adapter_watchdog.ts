@@ -110,7 +110,7 @@ async function testWatchdogStartsAdapterWhenMissing() {
         }),
         _getPm2ProcessNames: async () => {
             queried = true;
-            return [];
+            return ['AMA Bot'];
         },
         _startMarketAdapterPm2: async () => {
             started = true;
