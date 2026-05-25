@@ -421,7 +421,7 @@ class DEXBot {
             this.manager.logger.log(`Triggering state recovery sync (${reason})...`, 'info');
             await this.manager.fetchAccountTotals(this.accountId);
             const openOrders = await chainOrders.readOpenOrders(this.accountId);
-            await this.manager.syncFromOpenOrders(openOrders, { skipAccounting: true });
+            await this.manager.syncFromOpenOrders(openOrders, { skipAccounting: true, fillLockAlreadyHeld: true });
             if (typeof this.manager.persistGrid === 'function') {
                 await this.manager.persistGrid();
             }

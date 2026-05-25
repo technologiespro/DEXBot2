@@ -396,7 +396,7 @@ class Accountant {
         // from chain. During this pass we only want to reconcile grid structure/order
         // mapping against open orders; re-applying optimistic accounting deltas here
         // double-counts commitment changes and can amplify invariant drift.
-        await mgr.syncFromOpenOrders(openOrders, { skipAccounting: true });
+        await mgr.syncFromOpenOrders(openOrders, { skipAccounting: true, fillLockAlreadyHeld: true });
 
         // 3. Validate recovery. Persistence validation catches structural
         // corruption; drift validation catches accounting mismatches that are

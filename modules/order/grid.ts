@@ -772,7 +772,7 @@ class Grid {
         // and shouldn't be part of the fresh regenerated grid structure
         const activeOrders = chainOpenOrders.filter(o => o.state !== ORDER_STATES.PARTIAL);
 
-        await manager.syncFromOpenOrders(activeOrders, { skipAccounting: true });
+        await manager.syncFromOpenOrders(activeOrders, { skipAccounting: true, fillLockAlreadyHeld: true });
         manager.resetFunds();
 
         await manager.persistGrid();
@@ -782,7 +782,7 @@ class Grid {
 
         // FIX: Add error context for debugging grid recalculation issues
         try {
-            await reconcileStartupOrders({ manager, config: manager.config, account, privateKey, chainOrders, chainOpenOrders });
+            await reconcileStartupOrders({ manager, config: manager.config, account, privateKey, chainOrders, chainOpenOrders, fillLockAlreadyHeld: true });
         } catch (err: any) {
             manager.logger?.log?.(`Error during startup order reconciliation: ${err.message}`, 'error');
             throw new Error(`Grid recalculation failed during order reconciliation: ${err.message}`);
