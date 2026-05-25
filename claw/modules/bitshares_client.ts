@@ -14,6 +14,7 @@ const native = require('../../modules/bitshares-native');
 _nativeClient = native.createChainClient({
     onStatusChange: handleConnectionStatus,
     rpcTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS,
+    connectTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS,
 });
 _nativeClient.setNodes(NODE_MANAGEMENT.DEFAULT_NODES);
 

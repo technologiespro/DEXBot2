@@ -74,7 +74,7 @@ let _nativeChainClient: any = null;
 let _nativeNodeList: any[] = [];
 
 const native = require('./modules/bitshares-native');
-_nativeChainClient = native.createChainClient({ rpcTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS });
+_nativeChainClient = native.createChainClient({ rpcTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS, connectTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS });
 _nativeNodeList = [];
 const { execSync } = require('child_process');
 const {

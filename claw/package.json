@@ -19,7 +19,7 @@
     ]
   },
   "scripts": {
-    "build": "npm --prefix .. run build",
+    "build": "tsc -p tsconfig.json",
     "example:connection": "npm run build && node ../dist/claw/examples/connection_test.js",
     "example:claw-infra": "npm run build && node ../dist/claw/examples/claw_infra_example.js",
     "example:claw-consumer": "npm run build && node ../dist/claw/examples/claw_consumer_example.js",

@@ -17,6 +17,8 @@ const { listenForFills } = require('./chain_actions');
 const { writeJsonFileAtomic } = require('./dexbot_profiles');
 const { loadDexbotOrderUtils } = require('./dexbot_bridge');
 
+import type { ShortPositionOptions, PositionManagerOptions, PositionData, AssetData, ChainPosition } from './types';
+
 function getBlockchainToFloat() {
   return loadDexbotOrderUtils().blockchainToFloat;
 }
@@ -60,7 +62,7 @@ function toNumberOrNull(value) {
   return Number.isFinite(numericValue) ? numericValue : null;
 }
 
-function extractOrderIds(operationResults = []) {
+function extractOrderIds(operationResults: any[] = []) {
   const orderIds = [];
 
   for (const result of operationResults) {
@@ -324,7 +326,10 @@ function normalizeCallPosition(callOrder, mpaAsset, backingAsset, bitassetData) 
 }
 
 class PositionManager {
-  constructor(options = {}) {
+  statePath: string;
+  state: any;
+
+  constructor(options: PositionManagerOptions = {}) {
     this.statePath = options.statePath || DEFAULT_STATE_PATH;
     this.state = null;
   }
@@ -370,7 +375,7 @@ class PositionManager {
     return clone(state.positions);
   }
 
-  async getPosition(positionId) {
+  async getPosition(positionId: string) {
     const state = await this.loadState();
     const position = state.positions.find((entry) => entry.id === positionId);
     if (!position) {
@@ -379,7 +384,7 @@ class PositionManager {
     return clone(position);
   }
 
-  async createShortPosition(options = {}) {
+  async createShortPosition(options: Partial<ShortPositionOptions> = {}) {
     const state = await this.loadState();
     const accountName = requireString(options.accountName || process.env.BITSHARES_ACCOUNT, 'accountName');
     const mpaInput = requireString(options.mpaAsset, 'mpaAsset');
@@ -455,7 +460,7 @@ class PositionManager {
     return clone(position);
   }
 
-  async openShort(positionId, options = {}) {
+  async openShort(positionId: string, options: Partial<ShortPositionOptions> = {}) {
     const state = await this.loadState();
     const position = this.#findMutablePosition(state, positionId);
     if (position.status !== 'planned') {
@@ -494,7 +499,7 @@ class PositionManager {
     return this.getPosition(positionId);
   }
 
-  async placeTakeProfit(positionId, options = {}) {
+  async placeTakeProfit(positionId: string, options: Partial<ShortPositionOptions> = {}) {
     const state = await this.loadState();
     const position = this.#findMutablePosition(state, positionId);
     const amountToCover = requirePositiveNumber(options.amountToCover ?? position.debt.amount, 'amountToCover');
@@ -541,7 +546,7 @@ class PositionManager {
     return clone(position);
   }
 
-  async closePosition(positionId, options = {}) {
+  async closePosition(positionId: string, options: Partial<ShortPositionOptions> = {}) {
     const state = await this.loadState();
     const position = this.#findMutablePosition(state, positionId);
     const amountToRepay = requirePositiveNumber(options.amountToRepay ?? position.debt.amount, 'amountToRepay');
@@ -571,7 +576,7 @@ class PositionManager {
     return this.getPosition(positionId);
   }
 
-  async syncPosition(positionId) {
+  async syncPosition(positionId: string) {
     const state = await this.loadState();
     const position = this.#findMutablePosition(state, positionId);
     const fullAccount = await getFullAccount(position.accountName);
@@ -652,14 +657,14 @@ class PositionManager {
     return synced;
   }
 
-  async watchAccount(accountName, onFill) {
+  async watchAccount(accountName: string, onFill?: (position: any, fill: any) => void | Promise<void>) {
     requireString(accountName, 'accountName');
 
-      return listenForFills(accountName, async (fills = []) => {
+      return listenForFills(accountName, async (fills: any[] = []) => {
       const state = await this.loadState();
       const relatedPositions = state.positions.filter((position) => position.accountName === accountName);
       let changed = false;
-      const matchedPositionIds = new Set();
+      const matchedPositionIds = new Set<string>();
 
       for (const fill of fills) {
         const payload = Array.isArray(fill?.op) ? fill.op[1] : null;
@@ -712,7 +717,7 @@ class PositionManager {
     });
   }
 
-  #estimateGrossPnl(position, amountToCover, buyPriceInBts) {
+  #estimateGrossPnl(position: any, amountToCover: number, buyPriceInBts: number) {
     const entryPrice = position?.entry?.sellPriceInBts;
     if (!Number.isFinite(entryPrice)) {
       return null;
@@ -720,7 +725,7 @@ class PositionManager {
     return (entryPrice - buyPriceInBts) * amountToCover;
   }
 
-  #findMutablePosition(state, positionId) {
+  #findMutablePosition(state: any, positionId: string) {
     const position = state.positions.find((entry) => entry.id === positionId);
     if (!position) {
       throw new Error(`Position not found: ${positionId}`);

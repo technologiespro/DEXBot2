@@ -4,14 +4,14 @@ function shellQuote(value) {
 
 const SUPPORTED_RUNTIMES = ['openclaw', 'hermes', 'openfang', 'nanobot', 'picoclaw', 'nanoclaw', 'zeroclaw', 'nullclaw', 'memu'];
 
-function stringSchema(description) {
+function stringSchema(description?: string) {
   return {
     type: 'string',
     ...(description ? { description } : {})
   };
 }
 
-function numberSchema(description) {
+function numberSchema(description?: string) {
   return {
     type: 'number',
     ...(description ? { description } : {})

@@ -25,7 +25,7 @@ function requireNonNegativeNumber(value, fieldName) {
   return numericValue;
 }
 
-function resolveAccountName(options = {}, { required = true } = {}) {
+function resolveAccountName(options: Record<string, any> = {}, { required = true }: Record<string, any> = {}) {
   const accountName = options.accountName || process.env.BITSHARES_ACCOUNT || null;
   if (required && !accountName) {
     throw new Error('accountName is required');
@@ -33,8 +33,8 @@ function resolveAccountName(options = {}, { required = true } = {}) {
   return accountName;
 }
 
-function withSigningOptions(options = {}) {
-  const signingOptions = {
+function withSigningOptions(options: Record<string, any> = {}) {
+  const signingOptions: Record<string, any> = {
     accountName: resolveAccountName(options)
   };
 
@@ -45,7 +45,7 @@ function withSigningOptions(options = {}) {
   return signingOptions;
 }
 
-async function buildOpenShortPlan(options = {}) {
+async function buildOpenShortPlan(options: Record<string, any> = {}) {
   const accountName = resolveAccountName(options, { required: false });
   const debtAmount = requirePositiveNumber(options.debtAmount, 'debtAmount');
   const collateralAmount = requirePositiveNumber(options.collateralAmount, 'collateralAmount');
@@ -71,7 +71,7 @@ async function buildOpenShortPlan(options = {}) {
   };
 }
 
-async function openShortOnBts(options = {}) {
+async function openShortOnBts(options: Record<string, any> = {}) {
   const plan = await buildOpenShortPlan(options);
   const signingOptions = withSigningOptions(options);
 
@@ -101,7 +101,7 @@ async function openShortOnBts(options = {}) {
   };
 }
 
-async function buildTakeProfitPlan(options = {}) {
+async function buildTakeProfitPlan(options: Record<string, any> = {}) {
   const accountName = resolveAccountName(options, { required: false });
   const amountToCover = requirePositiveNumber(options.amountToCover, 'amountToCover');
   const buyPriceInBts = requirePositiveNumber(options.buyPriceInBts, 'buyPriceInBts');
@@ -124,7 +124,7 @@ async function buildTakeProfitPlan(options = {}) {
   };
 }
 
-async function placeTakeProfitBuyOrderOnBts(options = {}) {
+async function placeTakeProfitBuyOrderOnBts(options: Record<string, any> = {}) {
   const plan = await buildTakeProfitPlan(options);
   const signingOptions = withSigningOptions(options);
 
@@ -145,7 +145,7 @@ async function placeTakeProfitBuyOrderOnBts(options = {}) {
   };
 }
 
-async function buildCloseShortPlan(options = {}) {
+async function buildCloseShortPlan(options: Record<string, any> = {}) {
   const accountName = resolveAccountName(options, { required: false });
   const amountToRepay = requirePositiveNumber(options.amountToRepay, 'amountToRepay');
   const releaseCollateralDelta = options.releaseCollateralDelta === undefined
@@ -165,7 +165,7 @@ async function buildCloseShortPlan(options = {}) {
   };
 }
 
-async function closeShortOnBts(options = {}) {
+async function closeShortOnBts(options: Record<string, any> = {}) {
   const plan = await buildCloseShortPlan(options);
   const signingOptions = withSigningOptions(options);
 

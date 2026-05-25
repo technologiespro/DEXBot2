@@ -27,7 +27,7 @@ function getCredentialPolicy() {
  * Resolve sessionId and botHmacSecret for an account.
  * Probes the daemon for a session and loads the HMAC secret from DEXBot2 profiles.
  */
-async function resolveSessionCredentials(accountName, options = {}) {
+async function resolveSessionCredentials(accountName, options: Record<string, any> = {}) {
   let sessionId = options.sessionId || null;
   let botHmacSecret = options.botHmacSecret || null;
 
@@ -60,11 +60,11 @@ async function createSigningClient(accountName, privateKey) {
   return createAccountClient(accountName, privateKey);
 }
 
-function resolveAccountName(options = {}) {
+function resolveAccountName(options: Record<string, any> = {}) {
   return options.accountName || process.env.BITSHARES_ACCOUNT || null;
 }
 
-async function createSigningClientFromCredentialDaemon(options = {}) {
+async function createSigningClientFromCredentialDaemon(options: Record<string, any> = {}) {
   const accountName = resolveAccountName(options);
   if (!accountName) {
     throw new Error('accountName is required');
@@ -85,7 +85,7 @@ async function createSigningClientFromCredentialDaemon(options = {}) {
   return createSigningClient(accountName, privateKey);
 }
 
-async function getSigningClient(options = {}) {
+async function getSigningClient(options: Record<string, any> = {}) {
   const accountName = resolveAccountName(options);
   if (!accountName) {
     throw new Error('accountName is required');
@@ -110,7 +110,7 @@ function normalizeOperations(operations) {
   return ops.filter(Boolean);
 }
 
-async function executeOperations(operations, options = {}) {
+async function executeOperations(operations, options: Record<string, any> = {}) {
   const ops = normalizeOperations(operations);
   if (ops.length === 0) {
     return { success: true, operation_results: [], raw: null };
@@ -182,7 +182,7 @@ async function executeOperations(operations, options = {}) {
   };
 }
 
-async function broadcastOperation(operation, options = {}) {
+async function broadcastOperation(operation, options: Record<string, any> = {}) {
   if (operation && operation.op_name && operation.op_data) {
     return executeOperations([operation], options);
   }

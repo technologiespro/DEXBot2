@@ -16,14 +16,17 @@
  *   getConnectionStatus()   — 'open' | 'closed' | 'connecting'
  */
 
-const { NODE_MANAGEMENT } = require('../../modules/constants');
+const { NODE_MANAGEMENT, TIMING } = require('../../modules/constants');
 
 let _nativeClient: any = null;
 
 function _getClient() {
     if (!_nativeClient) {
         const { createReadOnlyClient } = require('../../modules/bitshares-native');
-        _nativeClient = createReadOnlyClient({});
+        _nativeClient = createReadOnlyClient({
+            rpcTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS,
+            connectTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS,
+        });
     }
     return _nativeClient;
 }

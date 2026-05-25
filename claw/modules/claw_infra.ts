@@ -16,6 +16,15 @@ const {
   runPositionManagerWatch
 } = require('./position_manager_watch');
 
+import type {
+  RuntimeContextOptions,
+  CredentialClientOptions,
+  StateStoreOptions,
+  BitsharesClientOptions,
+  BroadcastOptions,
+  ClawInfrastructureOptions,
+} from './types';
+
 const CI_PARENT_DIR = path.dirname(path.dirname(__dirname));
 const CI_PROJECT_ROOT = path.basename(CI_PARENT_DIR) === 'dist' ? path.dirname(CI_PARENT_DIR) : CI_PARENT_DIR;
 const CLAW_ROOT = path.join(CI_PROJECT_ROOT, 'claw');
@@ -24,7 +33,7 @@ const DEFAULT_STATE_DIR = path.join(DEFAULT_DATA_DIR, 'state');
 
 const { clone } = require('./utils');
 
-function createRuntimeContext(options = {}) {
+function createRuntimeContext(options: RuntimeContextOptions = {}) {
   const dataDir = options.dataDir || DEFAULT_DATA_DIR;
   const stateDir = options.stateDir || path.join(dataDir, 'state');
 
@@ -43,14 +52,14 @@ function createRuntimeContext(options = {}) {
   };
 }
 
-function createStateStore(options = {}) {
+function createStateStore(options: StateStoreOptions = {}) {
   const dataDir = options.dataDir || DEFAULT_DATA_DIR;
   const stateDir = options.stateDir || path.join(dataDir, 'state');
   const filePath = options.filePath || path.join(stateDir, 'claw-state.json');
   const defaultValue = clone(options.defaultValue);
-  let writeQueue = Promise.resolve();
+  let writeQueue: Promise<any> = Promise.resolve();
 
-  async function readFromDisk() {
+  async function readFromDisk(): Promise<any> {
     try {
       const raw = await fs.readFile(filePath, 'utf8');
       if (!raw.trim()) {
@@ -65,7 +74,7 @@ function createStateStore(options = {}) {
     }
   }
 
-  async function writeUnlocked(value) {
+  async function writeUnlocked(value: any): Promise<void> {
     const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
     const serialized = JSON.stringify(value === undefined ? null : value, null, 2);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -78,7 +87,7 @@ function createStateStore(options = {}) {
     }
   }
 
-  async function withFileLock(operation) {
+  async function withFileLock<T>(operation: () => Promise<T>): Promise<T> {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     const release = await acquireFileLock(filePath);
     try {
@@ -88,24 +97,24 @@ function createStateStore(options = {}) {
     }
   }
 
-  async function writeUnsafe(value) {
+  async function writeUnsafe(value: any): Promise<any> {
     await withFileLock(async () => {
       await writeUnlocked(value);
     });
     return value;
   }
 
-  function serializeWrite(operation) {
+  function serializeWrite<T>(operation: () => Promise<T>): Promise<T> {
     const queued = writeQueue.then(operation, operation);
     writeQueue = queued.catch(() => {});
     return queued;
   }
 
-  async function write(value) {
+  async function write(value: any): Promise<any> {
     return serializeWrite(() => writeUnsafe(value));
   }
 
-  async function patch(partial) {
+  async function patch(partial: any): Promise<any> {
     return serializeWrite(async () => {
       return withFileLock(async () => {
         const current = await readFromDisk();
@@ -120,7 +129,7 @@ function createStateStore(options = {}) {
     });
   }
 
-  async function update(updater) {
+  async function update(updater: (state: any) => any): Promise<any> {
     if (typeof updater !== 'function') {
       throw new Error('update(updater) requires a function');
     }
@@ -135,7 +144,7 @@ function createStateStore(options = {}) {
     });
   }
 
-  async function clear() {
+  async function clear(): Promise<any> {
     return serializeWrite(() => writeUnsafe(clone(defaultValue)));
   }
 
@@ -149,19 +158,19 @@ function createStateStore(options = {}) {
   };
 }
 
-function createCredentialClient(options = {}) {
+function createCredentialClient(options: CredentialClientOptions = {}) {
   const socketPath = options.socketPath || credentialClient.DEFAULT_SOCKET_PATH;
   const readyFilePath = options.readyFilePath || credentialClient.DEFAULT_READY_FILE;
 
   return {
     isReady: () => credentialClient.isCredentialDaemonReady({ socketPath, readyFilePath }),
     readyFilePath,
-    requestPrivateKey: (accountName, requestOptions = {}) => credentialClient.requestPrivateKeyFromCredentialDaemon(accountName, {
+    requestPrivateKey: (accountName: string, requestOptions: { timeoutMs?: number } = {}) => credentialClient.requestPrivateKeyFromCredentialDaemon(accountName, {
       socketPath,
       timeoutMs: requestOptions.timeoutMs
     }),
     socketPath,
-    waitForReady: (timeoutMs) => credentialClient.waitForCredentialDaemon(timeoutMs, {
+    waitForReady: (timeoutMs?: number) => credentialClient.waitForCredentialDaemon(timeoutMs, {
       pollIntervalMs: options.pollIntervalMs,
       readyFilePath,
       socketPath
@@ -169,26 +178,26 @@ function createCredentialClient(options = {}) {
   };
 }
 
-function createBitsharesClient(options = {}) {
+function createBitsharesClient(options: BitsharesClientOptions = {}) {
   const accountName = options.accountName || null;
   const socketPath = options.socketPath || credentialClient.DEFAULT_SOCKET_PATH;
   const readyFilePath = options.readyFilePath || credentialClient.DEFAULT_READY_FILE;
 
   return {
     accountName,
-    createAccountClient: (name = accountName, privateKey) => bitsharesClient.createAccountClient(name, privateKey),
+    createAccountClient: (name: string = accountName, privateKey?: string) => bitsharesClient.createAccountClient(name, privateKey),
     credentials: {
       readyFilePath,
       socketPath
     },
     dbCall: chainQueries.dbCall,
-    executeOperations: (operations, broadcastOptions = {}) => chainBroadcast.executeOperations(operations, {
+    executeOperations: (operations: any, broadcastOptions: BroadcastOptions = {}) => chainBroadcast.executeOperations(operations, {
       ...broadcastOptions,
       accountName: broadcastOptions.accountName || accountName,
       readyFilePath,
       socketPath
     }),
-    getSigningClient: (broadcastOptions = {}) => chainBroadcast.getSigningClient({
+    getSigningClient: (broadcastOptions: BroadcastOptions = {}) => chainBroadcast.getSigningClient({
       ...broadcastOptions,
       accountName: broadcastOptions.accountName || accountName,
       readyFilePath,
@@ -201,8 +210,8 @@ function createBitsharesClient(options = {}) {
   };
 }
 
-function createMarketAdapter(options = {}) {
-  const readAccountSnapshot = async (accountRef) => {
+function createMarketAdapter(options: Record<string, any> = {}) {
+  const readAccountSnapshot = async (accountRef: string) => {
     const [account, balances, openOrders] = await Promise.all([
       chainQueries.getFullAccount(accountRef),
       chainQueries.getBalances(accountRef),
@@ -216,7 +225,7 @@ function createMarketAdapter(options = {}) {
     };
   };
 
-  const readMarketSnapshot = async (baseSymbol, quoteSymbol, limit = 10) => {
+  const readMarketSnapshot = async (baseSymbol: string, quoteSymbol: string, limit: number = 10) => {
     const [dynamicGlobalProperties, orderBook, ticker] = await Promise.all([
       chainQueries.getDynamicGlobalProperties(),
       chainQueries.getOrderBook(baseSymbol, quoteSymbol, limit),
@@ -252,11 +261,11 @@ function createOrderTools() {
   return loadDexbotOrderSubsystem();
 }
 
-function createClawInfrastructure(options = {}) {
+function createClawInfrastructure(options: ClawInfrastructureOptions = {}) {
   const runtime = createRuntimeContext({
     ...options,
     ...(options.runtime || {})
-  });
+  } as RuntimeContextOptions);
   const stateStore = createStateStore({
     ...(options.stateStore || {}),
     dataDir: (options.stateStore && options.stateStore.dataDir) || runtime.dataDir,
@@ -264,7 +273,7 @@ function createClawInfrastructure(options = {}) {
     filePath: (options.stateStore && options.stateStore.filePath) || options.stateFilePath,
     stateDir: (options.stateStore && options.stateStore.stateDir) || runtime.stateDir
   });
-  const credential = createCredentialClient(options.credential || options);
+  const credential = createCredentialClient((options.credential || options) as CredentialClientOptions);
   const bitshares = createBitsharesClient({
     ...(options.bitshares || {}),
     accountName: (options.bitshares && options.bitshares.accountName) || runtime.accountName,

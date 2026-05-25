@@ -30,7 +30,7 @@ const LP_PARENT_DIR = path.dirname(path.dirname(__dirname));
 const LP_PROJECT_ROOT = path.basename(LP_PARENT_DIR) === 'dist' ? path.dirname(LP_PARENT_DIR) : LP_PARENT_DIR;
 const DEFAULT_ROOT = findDexbot2Root(LP_PROJECT_ROOT);
 
-function normalizeRoot(options = {}) {
+function normalizeRoot(options: Record<string, any> = {}) {
   if (options.profileRoot) {
     const resolved = path.resolve(options.profileRoot);
     let candidate = path.dirname(resolved);
@@ -48,7 +48,7 @@ function normalizeRoot(options = {}) {
   return DEFAULT_ROOT;
 }
 
-function normalizeProfileDir(options = {}) {
+function normalizeProfileDir(options: Record<string, any> = {}) {
   if (options.profileRoot) {
     return path.resolve(options.profileRoot);
   }

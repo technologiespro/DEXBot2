@@ -9,7 +9,7 @@ function normalizeRepoRoot(repoRoot) {
   return path.resolve(repoRoot || path.join(CM_PROJECT_ROOT, 'claw'));
 }
 
-function normalizeProfileRoot(options = {}, repoRoot) {
+function normalizeProfileRoot(options: Record<string, any> = {}, repoRoot) {
   if (options.profileRoot) {
     return path.resolve(options.profileRoot);
   }
@@ -242,7 +242,7 @@ function buildRuntimeWorkflow(runtime) {
   ].join('\n');
 }
 
-function buildRuntimeSkillMarkdown(runtimeName, options = {}) {
+function buildRuntimeSkillMarkdown(runtimeName, options: Record<string, any> = {}) {
   const runtime = getSupportedClawRuntime(runtimeName);
   if (!runtime) {
     throw new Error(`Unsupported runtime: ${runtimeName}`);
@@ -292,7 +292,7 @@ function buildRuntimeSkillMarkdown(runtimeName, options = {}) {
   ].join('\n');
 }
 
-async function writeRuntimeSkillMarkdown(outputPath, runtimeName, options = {}) {
+async function writeRuntimeSkillMarkdown(outputPath, runtimeName, options: Record<string, any> = {}) {
   const content = buildRuntimeSkillMarkdown(runtimeName, options);
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, content, 'utf8');

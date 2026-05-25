@@ -25,7 +25,7 @@ const {
  * @param {Object} [options={}] - Options including profileRoot
  * @returns {Promise<Object>} { started: true, botName, pid, command }
  */
-async function launcherStart(botName, options = {}) {
+async function launcherStart(botName, options: Record<string, any> = {}) {
   const ROOT = normalizeRoot(options);
   const dexbotPath = resolveRuntimeScript(ROOT, 'dexbot.js');
 
@@ -56,7 +56,7 @@ async function launcherStart(botName, options = {}) {
  * @param {Object} [options={}] - Options
  * @returns {Promise<Object>} { started: true, botName, pid, command, dryRun: true }
  */
-async function launcherDrystart(botName, options = {}) {
+async function launcherDrystart(botName, options: Record<string, any> = {}) {
   const ROOT = normalizeRoot(options);
   const dexbotPath = resolveRuntimeScript(ROOT, 'dexbot.js');
 
@@ -88,7 +88,7 @@ async function launcherDrystart(botName, options = {}) {
  * @param {Object} [options={}] - Options
  * @returns {Promise<Object>} { reset: true, targets: [...] }
  */
-async function launcherReset(botName, options = {}) {
+async function launcherReset(botName, options: Record<string, any> = {}) {
   const PROFILES_DIR = normalizeProfileDir(options);
   const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
 
@@ -128,7 +128,7 @@ async function launcherReset(botName, options = {}) {
  * @param {Object} [options={}] - Options
  * @returns {Promise<Object>} { disabled: true, targets: [...] } or { disabled: false, reason: '...' }
  */
-async function launcherDisable(botName, options = {}) {
+async function launcherDisable(botName, options: Record<string, any> = {}) {
   const PROFILES_DIR = normalizeProfileDir(options);
   const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
 
@@ -181,7 +181,7 @@ async function launcherDisable(botName, options = {}) {
  * @param {Object} [options={}] - Options
  * @returns {Promise<Object>} { started: true, targets: [{ botName, pm2: true }] }
  */
-async function launcherPm2Start(botName, options = {}) {
+async function launcherPm2Start(botName, options: Record<string, any> = {}) {
   const ROOT = normalizeRoot(options);
   const PROFILES_DIR = normalizeProfileDir(options);
   const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
@@ -231,7 +231,7 @@ async function launcherPm2Start(botName, options = {}) {
  * @param {Object} [options={}] - Options
  * @returns {Promise<Object>} { stopped: true, target }
  */
-async function launcherPm2Stop(target, options = {}) {
+async function launcherPm2Stop(target, options: Record<string, any> = {}) {
   await stopPM2Processes(target || 'all');
   return {
     stopped: true,
@@ -245,7 +245,7 @@ async function launcherPm2Stop(target, options = {}) {
  * @param {Object} [options={}] - Options
  * @returns {Promise<Object>} { deleted: true, target }
  */
-async function launcherPm2Delete(target, options = {}) {
+async function launcherPm2Delete(target, options: Record<string, any> = {}) {
   await deletePM2Processes(target || 'all');
   return {
     deleted: true,
@@ -259,7 +259,7 @@ async function launcherPm2Delete(target, options = {}) {
  * @param {Object} [options={}] - Options
  * @returns {Promise<Object>} { restarted: true, target }
  */
-async function launcherPm2Restart(target, options = {}) {
+async function launcherPm2Restart(target, options: Record<string, any> = {}) {
   await restartPM2Processes(target || 'all');
   return {
     restarted: true,
@@ -273,7 +273,7 @@ async function launcherPm2Restart(target, options = {}) {
  * @param {Object} [options={}] - Options
  * @returns {Promise<Object>} { reloaded: true, target }
  */
-async function launcherPm2Reload(target, options = {}) {
+async function launcherPm2Reload(target, options: Record<string, any> = {}) {
   await reloadPM2Processes(target || 'all');
   return {
     reloaded: true,
@@ -300,7 +300,7 @@ async function launcherPm2Reload(target, options = {}) {
  *   Mode present in claw-only / unlock-start; absent in dexbot-direct / pm2.
  *   No-mode: { needsChoice: true, reason, choices: [{ mode, description }], message }
  */
-async function launcherRun(botName, options = {}) {
+async function launcherRun(botName, options: Record<string, any> = {}) {
   const detection = detectMode(options);
 
   // User is overriding the mode
@@ -321,7 +321,7 @@ async function launcherRun(botName, options = {}) {
     }
 
     // Delegate to appropriate implementation
-    const result = await (async () => {
+    const result: Record<string, any> = await (async () => {
       switch (options.deploymentMode) {
         case 'dexbot-direct':
           return launcherStart(botName, options);
@@ -368,7 +368,7 @@ async function launcherRun(botName, options = {}) {
  * @param {Object} [options={}]
  * @returns {Promise<Object>}
  */
-async function launcherClawOnly(options = {}) {
+async function launcherClawOnly(options: Record<string, any> = {}) {
   const ROOT = normalizeRoot(options);
   const pm2ScriptPath = resolveRuntimeScript(ROOT, 'pm2.js');
 
@@ -395,7 +395,7 @@ async function launcherClawOnly(options = {}) {
  * @param {Object} [options={}]
  * @returns {Promise<Object>}
  */
-async function launcherUnlockStart(botName, options = {}) {
+async function launcherUnlockStart(botName, options: Record<string, any> = {}) {
   const ROOT = normalizeRoot(options);
   const unlockStartPath = resolveRuntimeScript(ROOT, 'unlock-start.js');
 

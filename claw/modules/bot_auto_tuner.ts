@@ -28,7 +28,7 @@
  * @param {Object} [assessment={}] - Health assessment from assessPosition / decision_loop
  * @returns {Object}
  */
-function tuneBot(bot, assessment = {}) {
+function tuneBot(bot, assessment: Record<string, any> = {}) {
   if (!bot || typeof bot !== 'object') {
     return { canTune: false, patch: {}, crAction: null, confidence: 0, reasoning: ['Invalid bot configuration'] };
   }

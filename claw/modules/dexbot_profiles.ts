@@ -5,6 +5,8 @@ const { DEFAULT_CONFIG, GRID_LIMITS, INCREMENT_BOUNDS } = require('../../modules
 const { resolveRelativePrice } = require('../../modules/order/utils/math');
 const { acquireFileLock } = require('../../market_adapter/utils/file_lock');
 
+import type { BotSettings, ProfileOptions, Logger, ClawProfileBundle } from './types';
+
 const DEFAULT_MANIFEST_FILE = 'config.json';
 const DEFAULT_BOTS_FILE = 'bots.json';
 const DEFAULT_GENERAL_SETTINGS_FILE = 'general.settings.json';
@@ -193,7 +195,7 @@ function cloneBotSettings(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function normalizeBotSettings(bot = {}) {
+function normalizeBotSettings(bot: Partial<BotSettings> = {}) {
   const normalized = cloneBotSettings(bot) || {};
 
   normalized.active = normalizeBooleanField(normalized.active, DEFAULT_CONFIG.active);
@@ -223,7 +225,7 @@ function normalizeBotSettings(bot = {}) {
   return normalized;
 }
 
-function mergeBotSettingsPatch(currentBot = {}, patch = {}) {
+function mergeBotSettingsPatch(currentBot: Record<string, any> = {}, patch: Record<string, any> = {}) {
   const next = cloneBotSettings(currentBot) || {};
   const patchKeys = Object.keys(patch || {});
 
@@ -402,7 +404,7 @@ function validateBotSettingsValue(field, value, errors) {
   }
 }
 
-function validateBotSettingsState(bot = {}) {
+function validateBotSettingsState(bot: Record<string, any> = {}) {
   const errors = [];
   const warnings = [];
 
@@ -467,7 +469,7 @@ function validateBotSettingsState(bot = {}) {
   };
 }
 
-function validateBotSettingsPatch(patch = {}, currentBot = {}, options = {}) {
+function validateBotSettingsPatch(patch: Record<string, any> = {}, currentBot: Record<string, any> = {}, options: Partial<ProfileOptions> = {}) {
   const errors = [];
   const warnings = [];
   const patchKeys = Object.keys(patch || {});
@@ -524,16 +526,17 @@ function validateBotSettingsPatch(patch = {}, currentBot = {}, options = {}) {
   };
 }
 
-function buildBotSettingsView(bot, bundle = null, options = {}) {
+function buildBotSettingsView(bot: Record<string, any> | null, bundle: ClawProfileBundle | null, options: Record<string, any> = {}) {
   const current = cloneBotSettings(bot) || null;
   const effective = current ? normalizeBotSettings(current) : null;
   const currentValidation = current ? validateBotSettingsState(current) : { errors: [], warnings: [], valid: true };
   const effectiveValidation = effective ? validateBotSettingsState(effective) : { errors: [], warnings: [], valid: true };
   const mutability = describeBotSettingMutability();
+  const b = bundle as any;
   const selectedBotFiles = current && bundle ? {
-    gridPriceSnapshot: path.join(bundle.ordersDir || path.join(bundle.profilesDir, DEFAULT_ORDERS_DIR), `${current.botKey}.dynamicgrid.json`),
-    orderSnapshot: path.join(bundle.ordersDir || path.join(bundle.profilesDir, DEFAULT_ORDERS_DIR), `${current.botKey}.json`),
-    trigger: path.join(bundle.profilesDir, `recalculate.${current.botKey}.trigger`)
+    gridPriceSnapshot: path.join(b.ordersDir || path.join(b.profilesDir, DEFAULT_ORDERS_DIR), `${current.botKey}.dynamicgrid.json`),
+    orderSnapshot: path.join(b.ordersDir || path.join(b.profilesDir, DEFAULT_ORDERS_DIR), `${current.botKey}.json`),
+    trigger: path.join(b.profilesDir, `recalculate.${current.botKey}.trigger`)
   } : null;
 
   return {
@@ -608,15 +611,15 @@ function validateBotEntry(entry, index, logger) {
   return warnings;
 }
 
-function normalizeBotEntries(rawEntries, options = {}) {
+function normalizeBotEntries(rawEntries: Record<string, any>[], options: Partial<ProfileOptions> = {}) {
   const logger = options.logger || null;
-  return rawEntries.map((entry, index) => {
+  return rawEntries.map((entry: any, index: number) => {
     if (logger) {
       validateBotEntry(entry, index, logger);
     }
     const normalized = { active: entry.active === undefined ? true : !!entry.active, ...entry };
     return { ...normalized, botIndex: index, botKey: createBotKey(normalized, index) };
-  });
+  }) as any[];
 }
 
 const { clone } = require('./utils');
@@ -840,7 +843,7 @@ function findAmaProfile(bundle, bot) {
   return match ? clone(match) : null;
 }
 
-function buildClawProfileContext(bundle, options = {}) {
+function buildClawProfileContext(bundle: Record<string, any>, options: Partial<ProfileOptions> = {}) {
   if (!bundle || typeof bundle !== 'object') {
     return null;
   }
@@ -902,7 +905,7 @@ function buildClawProfileContext(bundle, options = {}) {
   };
 }
 
-async function loadDexbotProfileBundle(profileRoot, options = {}) {
+async function loadDexbotProfileBundle(profileRoot: string, options: Partial<ProfileOptions> = {}) {
   const profilesDir = resolveProfilesDir(profileRoot || options.profileRoot);
   const ordersDir = path.join(profilesDir, DEFAULT_ORDERS_DIR);
   const manifestFile = options.manifestFile || path.join(profilesDir, DEFAULT_MANIFEST_FILE);
@@ -947,7 +950,7 @@ async function loadDexbotProfileBundle(profileRoot, options = {}) {
   };
 }
 
-function createDexbotProfileAdapter(profileRoot, options = {}) {
+function createDexbotProfileAdapter(profileRoot: string, options: Partial<ProfileOptions> = {}) {
   let cachedBundle = null;
 
   async function loadBundle(forceReload = false) {
@@ -1013,7 +1016,7 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
     });
   }
 
-  async function previewBotSettingsUpdate(identifier, patch, options = {}) {
+  async function previewBotSettingsUpdate(identifier: any, patch: any, options: Record<string, any> = {}) {
     const bundle = await loadBundle(Boolean(options.forceReload));
     const bot = identifier
       ? bundle.bots.find((entry) => matchBotIdentifier(entry, identifier)) || null
@@ -1039,7 +1042,7 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
     };
   }
 
-  async function applyBotSettingsPatch(identifier, patch, options = {}) {
+  async function applyBotSettingsPatch(identifier: any, patch: any, options: Record<string, any> = {}) {
     if (!isPlainObject(patch)) {
       throw new Error('patch must be a non-null object');
     }
@@ -1064,7 +1067,7 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
 
       const validation = validateBotSettingsPatch(patch, currentRawEntries[bot.botIndex], options);
       if (!validation.valid) {
-        const error = new Error(`Bot settings validation failed:\n${validation.errors.map((entry) => `  - ${entry}`).join('\n')}`);
+        const error: any = new Error(`Bot settings validation failed:\n${validation.errors.map((entry) => `  - ${entry}`).join('\n')}`);
         error.validation = validation;
         throw error;
       }
@@ -1127,7 +1130,7 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
   }
 
 
-  async function getClawProfileContext(identifier, options = {}) {
+  async function getClawProfileContext(identifier: any, options: Record<string, any> = {}) {
     const bundle = await loadBundle(Boolean(options.forceReload));
     const bot = identifier ? bundle.bots.find((entry) => matchBotIdentifier(entry, identifier)) || null : null;
     const selectedBot = options.selectedBot || bot || bundle.activeBots[0] || bundle.bots[0] || null;
@@ -1197,7 +1200,7 @@ function createDexbotProfileAdapter(profileRoot, options = {}) {
 
       const validation = validateBotSettingsPatch(patch, currentRawEntries[bot.botIndex], {});
       if (!validation.valid) {
-        const error = new Error(`Bot settings validation failed:\n${validation.errors.map((entry) => `  - ${entry}`).join('\n')}`);
+        const error: any = new Error(`Bot settings validation failed:\n${validation.errors.map((entry) => `  - ${entry}`).join('\n')}`);
         error.validation = validation;
         throw error;
       }

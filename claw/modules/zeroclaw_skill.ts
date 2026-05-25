@@ -12,7 +12,7 @@ function normalizeRepoRoot(repoRoot) {
   return path.resolve(repoRoot || path.join(ZC_PROJECT_ROOT, 'claw'));
 }
 
-function normalizeProfileRoot(options = {}, repoRoot) {
+function normalizeProfileRoot(options: Record<string, any> = {}, repoRoot: string) {
   if (options.profileRoot) {
     return path.resolve(options.profileRoot);
   }
@@ -44,7 +44,7 @@ function createTool(name, description, command, args = null) {
   };
 }
 
-function buildZeroClawSkillToml(options = {}) {
+function buildZeroClawSkillToml(options: Record<string, any> = {}) {
   const repoRoot = normalizeRepoRoot(options.repoRoot);
   const profileRoot = normalizeProfileRoot(options, repoRoot);
   const bridgeScript = path.join(repoRoot, 'scripts', 'zeroclaw_bridge.js').replace(/\\/g, '/');
@@ -83,7 +83,7 @@ function buildZeroClawSkillToml(options = {}) {
   return lines.join('\n');
 }
 
-async function writeZeroClawSkillFile(outputPath, options = {}) {
+async function writeZeroClawSkillFile(outputPath: string, options: Record<string, any> = {}) {
   if (!outputPath) {
     throw new Error('outputPath is required');
   }
@@ -94,7 +94,7 @@ async function writeZeroClawSkillFile(outputPath, options = {}) {
   return content;
 }
 
-function describeZeroClawSkill(options = {}) {
+function describeZeroClawSkill(options: Record<string, any> = {}) {
   const repoRoot = normalizeRepoRoot(options.repoRoot);
   const profileRoot = normalizeProfileRoot(options, repoRoot);
   const bridgeScript = path.join(repoRoot, 'scripts', 'zeroclaw_bridge.js').replace(/\\/g, '/');

@@ -9,7 +9,7 @@ function getBlockchainToFloat() {
   return loadDexbotOrderUtils().blockchainToFloat;
 }
 
-async function dbCall(method, args = []) {
+async function dbCall(method, args: any[] = []) {
   await waitForConnected();
 
   if (BitShares?.db && typeof BitShares.db[method] === 'function') {
@@ -23,7 +23,7 @@ async function dbCall(method, args = []) {
   throw new Error(`BitShares database method not available: ${method}`);
 }
 
-function toAssetMap(assetList = []) {
+function toAssetMap(assetList: any[] = []) {
   const assetMap = new Map();
   for (const asset of assetList) {
     if (asset && asset.id) {

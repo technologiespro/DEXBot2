@@ -42,10 +42,10 @@ function normalizeScopeWhere(where = null, user = null) {
   return where || user || null;
 }
 
-function runMemuPython(args, options = {}) {
+function runMemuPython(args: string[], options: Record<string, any> = {}) {
   return new Promise((resolve, reject) => {
     const python = options.python || DEFAULT_PYTHON;
-    const script = resolveMemuScript('memu_runner');
+    const script = resolveMemuScript();
     const timeout = options.timeout || 60000;
 
     const child = spawn(python, [script, ...args], {
@@ -106,7 +106,7 @@ function runMemuPython(args, options = {}) {
   });
 }
 
-function createMemuBridge(options = {}) {
+function createMemuBridge(options: Record<string, any> = {}) {
   const memuDir = ensureMemuDir(options.memuDir || DEFAULT_MEMU_DIR);
   const stateDir = ensureMemuDir(path.join(memuDir, 'state'));
 
@@ -370,7 +370,7 @@ function createMemuBridge(options = {}) {
   };
 }
 
-function describeMemuBridge(options = {}) {
+function describeMemuBridge(options: Record<string, any> = {}) {
   return {
     runtime: 'memu',
     version: '0.1.0',
@@ -400,7 +400,7 @@ function describeMemuBridge(options = {}) {
   };
 }
 
-async function runMemuCommand(command, options = {}) {
+async function runMemuCommand(command: string, options: Record<string, any> = {}) {
   const bridge = createMemuBridge(options);
 
   switch (command) {

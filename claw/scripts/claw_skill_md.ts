@@ -10,7 +10,7 @@ const CS_PARENT_DIR = path.dirname(path.dirname(__dirname));
 const CS_PROJECT_ROOT = path.basename(CS_PARENT_DIR) === 'dist' ? path.dirname(CS_PARENT_DIR) : CS_PARENT_DIR;
 
 function parseArgs(argv) {
-  const options = {
+  const options: Record<string, any> = {
     outputPath: null,
     profileRoot: null,
     repoRoot: path.join(CS_PROJECT_ROOT, 'claw'),

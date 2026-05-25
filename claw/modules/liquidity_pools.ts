@@ -22,10 +22,10 @@ export = {
   createDexbotPoolHelper,
   derivePoolPrice: (assetA, assetB) => getDexbotSystem().derivePoolPrice(BitShares, assetA, assetB),
   derivePrice: (assetA, assetB, mode) => getDexbotSystem().derivePrice(BitShares, assetA, assetB, mode),
-  deepFreeze: (...args) => getDexbotSystem().deepFreeze(...args),
+  deepFreeze: (...args: any[]) => getDexbotSystem().deepFreeze(...args),
   getDexbot2Root,
-  loadAmaCenterSnapshot: (...args) => getDexbotSystem().loadAmaCenterSnapshot(...args),
-  loadAmaCenterPrice: (...args) => getDexbotSystem().loadAmaCenterPrice(...args),
-  lookupAsset: (...args) => getDexbotSystem().lookupAsset(...args),
+  loadAmaCenterSnapshot: (...args: any[]) => getDexbotSystem().loadAmaCenterSnapshot(...args),
+  loadAmaCenterPrice: (...args: any[]) => getDexbotSystem().loadAmaCenterPrice(...args),
+  lookupAsset: (...args: any[]) => getDexbotSystem().lookupAsset(...args),
   requireDexbot2Module
 };

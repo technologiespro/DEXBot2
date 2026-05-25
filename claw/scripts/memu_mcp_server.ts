@@ -3,7 +3,7 @@
 const { createMemuBridge, describeMemuBridge } = require('../modules/memu_bridge');
 
 function parseArgs(argv) {
-  const options = {};
+  const options: Record<string, any> = {};
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -41,8 +41,8 @@ function parseArgs(argv) {
   return options;
 }
 
-function writeMessage(message) {
-  return new Promise((resolve, reject) => {
+function writeMessage(message: any) {
+  return new Promise<void>((resolve, reject) => {
     try {
       process.stdout.write(`${JSON.stringify(message)}\n`, (error) => {
         if (error) {

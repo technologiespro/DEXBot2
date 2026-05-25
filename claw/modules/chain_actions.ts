@@ -82,7 +82,7 @@ async function buildCreateLimitOrderOperation({
   };
 }
 
-function normalizeUpdateParams(options = {}) {
+function normalizeUpdateParams(options: Record<string, any> = {}) {
   if (options.newParams && typeof options.newParams === 'object' && !Array.isArray(options.newParams)) {
     return options.newParams;
   }
@@ -112,7 +112,7 @@ async function buildCancelLimitOrderOperation({ accountName, orderId }) {
   };
 }
 
-async function buildUpdateLimitOrderOperation(options = {}) {
+async function buildUpdateLimitOrderOperation(options: Record<string, any> = {}) {
   const rootChainOrders = loadRootChainOrders();
   const newParams = normalizeUpdateParams(options);
   return rootChainOrders.buildUpdateOrderOp(
@@ -153,7 +153,7 @@ async function buildBorrowMpaOperation({
     throw new Error('At least one of debtDelta or collateralDelta must be non-zero');
   }
 
-  const extensions = {};
+  const extensions: Record<string, any> = {};
   const grapheneTargetCollateralRatio = toGrapheneCollateralRatio(targetCollateralRatio);
   if (grapheneTargetCollateralRatio !== null) {
     extensions.target_collateral_ratio = grapheneTargetCollateralRatio;
@@ -290,7 +290,7 @@ async function listenForFills(accountNameOrId, callback) {
   }
 
   if (!accountSubscriptions.has(accountName)) {
-    const callbacks = new Set();
+    const callbacks: Set<Function> = new Set();
     const bsCallback = (updates = []) => {
       const fills = updates.filter((update) => update?.op && update.op[0] === FILL_ORDER_OPERATION_TYPE);
       if (fills.length === 0) {

@@ -62,7 +62,7 @@ function getOrCreateAnalyzer(mpaSymbol, config = {}) {
  * @param {Function} [options.logger]       – Log function (default console.log)
  * @returns {Object} { account, evaluatedAt, positionCount, positions: [...assessments], summary }
  */
-async function evaluate(accountName, options = {}) {
+async function evaluate(accountName, options: Record<string, any> = {}) {
   const logger = options.logger || console.log;
   const analyzerConfig = options.analyzerConfig || {};
 
@@ -185,7 +185,7 @@ function resetAnalyzers() {
  * @param {Function} [options.logger] – Log function
  * @returns {Object} { account, evaluatedAt, positionCount, summary, positions: [...with tuning] }
  */
-async function evaluateAndTune(accountName, bots = {}, options = {}) {
+async function evaluateAndTune(accountName, bots: Record<string, any> = {}, options: Record<string, any> = {}) {
   // Run standard evaluation
   const result = await evaluate(accountName, options);
 

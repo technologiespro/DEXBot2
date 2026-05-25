@@ -11,7 +11,7 @@ const ZS_PARENT_DIR = path.dirname(path.dirname(__dirname));
 const ZS_PROJECT_ROOT = path.basename(ZS_PARENT_DIR) === 'dist' ? path.dirname(ZS_PARENT_DIR) : ZS_PARENT_DIR;
 
 function parseArgs(argv) {
-  const options = {
+  const options: Record<string, any> = {
     outputPath: null,
     profileRoot: null,
     repoRoot: path.join(ZS_PROJECT_ROOT, 'claw')

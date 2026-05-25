@@ -44,7 +44,7 @@ function parsePositionManagerWatchArgs(argv = [], env = process.env) {
   return options;
 }
 
-async function main(argv = process.argv.slice(2), env = process.env, logger = console) {
+async function main(argv = process.argv.slice(2), env = process.env, logger: Record<string, any> = console) {
   const options = parsePositionManagerWatchArgs(argv, env);
   const watcher = await runPositionManagerWatch({
     ...options,
@@ -68,7 +68,7 @@ function resolveLogger(logger) {
   };
 }
 
-function createPositionManagerWatcher(options = {}) {
+function createPositionManagerWatcher(options: Record<string, any> = {}) {
   const logger = resolveLogger(options.logger);
   const resolvedOptions = {
     accountName: options.accountName || process.env.BITSHARES_ACCOUNT || null,
@@ -220,7 +220,7 @@ function createPositionManagerWatcher(options = {}) {
   };
 }
 
-async function runPositionManagerWatch(options = {}) {
+async function runPositionManagerWatch(options: Record<string, any> = {}) {
   const watcher = createPositionManagerWatcher(options);
   return watcher.start();
 }

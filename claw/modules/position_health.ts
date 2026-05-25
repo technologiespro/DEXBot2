@@ -83,7 +83,7 @@ function assessPosition(position, trendSignal = null) {
   const status = position?.status || 'unknown';
   const hasDebt = (position?.onChain?.debtAmount || 0) > 0;
 
-  const assessment = {
+  const assessment: Record<string, any> = {
     positionId: position?.id || null,
     status,
     hasDebt,
@@ -228,7 +228,7 @@ function classifyPriceRangeRatio(ratio) {
   return 'very_conservative';
 }
 
-function resolveCurrentPriceRangeRatio(botConfig = {}, referencePrice, options = {}) {
+function resolveCurrentPriceRangeRatio(botConfig: Record<string, any> = {}, referencePrice, options: Record<string, any> = {}) {
   const forced = Number(options.currentPriceRangeRatio);
   if (Number.isFinite(forced) && forced > 0) {
     return {
@@ -252,7 +252,7 @@ function resolveCurrentPriceRangeRatio(botConfig = {}, referencePrice, options =
   };
 }
 
-function computePriceRangeRatioPlan(botConfig = {}, options = {}) {
+function computePriceRangeRatioPlan(botConfig: Record<string, any> = {}, options: Record<string, any> = {}) {
   const referencePrice = Number(options.referencePrice);
   const current = resolveCurrentPriceRangeRatio(botConfig, referencePrice, options);
   const rangeContext = options.rangeContext && typeof options.rangeContext === 'object' ? options.rangeContext : {};
@@ -417,7 +417,7 @@ function computeOrderWeightBias(trend = 'NEUTRAL', confidence = 0) {
  * @param {Object} [options={}]       – Planning options
  * @returns {Object} Unified plan with concrete bot patch outputs
  */
-function buildMarginTradingPlan(position, trendSignal = null, botConfig = {}, options = {}) {
+function buildMarginTradingPlan(position, trendSignal: Record<string, any> | null = null, botConfig: Record<string, any> = {}, options: Record<string, any> = {}) {
   const assessment = assessPosition(position, trendSignal);
   const targetCr = resolveTargetCr(position, trendSignal, botConfig, assessment, options);
   const feedPrice = Number(options.feedPrice ?? trendSignal?.feedPrice ?? position?.onChain?.btsPerMpa);

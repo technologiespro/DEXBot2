@@ -20,7 +20,7 @@ function parseJson(value, fieldName) {
 }
 
 function parseArgs(argv) {
-  const options = {
+  const options: Record<string, any> = {
     command: null,
     payload: {}
   };

@@ -25,7 +25,7 @@ function getConfigPath(options = {}) {
  * @param {Object} [options={}]
  * @returns {Object} { preferredMode, lastUsed, history: [...] }
  */
-function loadConfig(options = {}) {
+function loadConfig(options: Record<string, any> = {}) {
   const configPath = getConfigPath(options);
 
   try {
@@ -49,7 +49,7 @@ function loadConfig(options = {}) {
  * @param {Object} config - Config object
  * @param {Object} [options={}]
  */
-function saveConfig(config, options = {}) {
+function saveConfig(config, options: Record<string, any> = {}) {
   const configPath = getConfigPath(options);
   const PROFILES_DIR = path.dirname(configPath);
 
@@ -66,7 +66,7 @@ function saveConfig(config, options = {}) {
  * @param {Object} [options={}]
  * @returns {boolean} True if at least one active bot exists
  */
-function hasActiveBots(options = {}) {
+function hasActiveBots(options: Record<string, any> = {}) {
   const PROFILES_DIR = normalizeProfileDir(options);
   const BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
 
@@ -92,7 +92,7 @@ function hasActiveBots(options = {}) {
  * @param {Object} [options={}]
  * @returns {Object} { mode, reason, suggested: boolean, choices: [] }
  */
-function detectMode(options = {}) {
+function detectMode(options: Record<string, any> = {}) {
   const config = loadConfig(options);
 
   // If user has set a preference, use it
@@ -133,7 +133,7 @@ function detectMode(options = {}) {
  * @throws {Error} if mode is invalid
  * @returns {{set: boolean, mode: string, timestamp: string}}
  */
-function setPreferredMode(mode, options = {}) {
+function setPreferredMode(mode, options: Record<string, any> = {}) {
   const valid = ['claw-only', 'dexbot-direct', 'pm2', 'unlock-start'];
   if (!valid.includes(mode)) {
     throw new Error(`Invalid launcher mode: ${mode}. Must be one of: ${valid.join(', ')}`);

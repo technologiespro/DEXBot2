@@ -36,13 +36,15 @@ const { runMemuCommand } = require('./memu_bridge');
 
 const { clone } = require('./utils');
 
-function stripPrivateKey(options = {}) {
+import type { ClawBridgeOptions, VariantBridgeOptions, Logger } from './types';
+
+function stripPrivateKey(options: ClawBridgeOptions = {}): ClawBridgeOptions {
   const sanitized = { ...options };
   delete sanitized.privateKey;
   return sanitized;
 }
 
-function splitPair(pairValue) {
+function splitPair(pairValue: string) {
   if (typeof pairValue !== 'string' || !pairValue.includes('/')) {
     throw new Error('pair must be provided as BASE/QUOTE');
   }
@@ -58,11 +60,11 @@ function splitPair(pairValue) {
   };
 }
 
-function getProfileContextRef(options = {}) {
+function getProfileContextRef(options: ClawBridgeOptions = {}): string | null {
   return options.botRef || options.identifier || options.botId || options.pair || null;
 }
 
-function getBotSettingsPatch(options = {}) {
+function getBotSettingsPatch(options: ClawBridgeOptions = {}): Record<string, any> {
   if (!options.patch || typeof options.patch !== 'object' || Array.isArray(options.patch)) {
     throw new Error('bot-settings-preview and bot-settings-apply require a patch object');
   }
@@ -70,7 +72,7 @@ function getBotSettingsPatch(options = {}) {
   return options.patch;
 }
 
-function createClawBridge(options = {}) {
+function createClawBridge(options: ClawBridgeOptions = {}): any {
   const sanitizedOptions = stripPrivateKey(options);
   const runtimeName = sanitizedOptions.runtimeName
     || sanitizedOptions.runtime?.name
@@ -85,7 +87,7 @@ function createClawBridge(options = {}) {
   });
 }
 
-function describeRuntimeManifest(options = {}) {
+function describeRuntimeManifest(options: ClawBridgeOptions = {}): any {
   const effectiveRuntimeName = options.runtimeName || options.runtime?.name || options.runtime || null;
   const normalizedRuntimeName = effectiveRuntimeName
     ? String(effectiveRuntimeName).trim().toLowerCase()
@@ -115,7 +117,7 @@ function describeRuntimeManifest(options = {}) {
   }
 }
 
-function describeCommandManifest(options = {}) {
+function describeCommandManifest(options: ClawBridgeOptions = {}): any {
   const effectiveRuntimeName = options.runtimeName || options.runtime?.name || options.runtime || null;
   const normalizedRuntimeName = effectiveRuntimeName
     ? String(effectiveRuntimeName).trim().toLowerCase()
@@ -131,7 +133,7 @@ function describeCommandManifest(options = {}) {
   }
 }
 
-async function runClawCommand(command, options = {}) {
+async function runClawCommand(command: string, options: ClawBridgeOptions = {}): Promise<any> {
   const safeOptions = stripPrivateKey(options);
   if (command === 'manifest') {
     return describeCommandManifest(safeOptions);
@@ -422,12 +424,12 @@ export = {
   describeClawBridge,
   describeRuntimeManifest,
   runClawCommand,
-  createVariantBridgeModule(runtimeName, displayName, trustModel) {
+  createVariantBridgeModule(runtimeName: string, displayName: string, trustModel: string): any {
     const scriptPath = `node scripts/${runtimeName}_bridge.js`;
     const describeFn = createVariantDescribeFn(runtimeName, displayName, scriptPath, trustModel);
 
     return {
-      [`create${displayName}Bridge`]: function (options = {}) {
+      [`create${displayName}Bridge`]: function (options: VariantBridgeOptions = {}): any {
         return createClawBridge({
           ...options,
           runtime: {
@@ -437,7 +439,7 @@ export = {
         });
       },
       [`describe${displayName}Bridge`]: describeFn,
-      [`run${displayName}Command`]: function (command, options = {}) {
+      [`run${displayName}Command`]: function (command: string, options: VariantBridgeOptions = {}): any {
         if (command === 'manifest') {
           return describeFn(options);
         }

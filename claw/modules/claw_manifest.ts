@@ -16,7 +16,7 @@ function groupCommandsByRisk(tools) {
   }, {});
 }
 
-function describeClawBridge(options = {}) {
+function describeClawBridge(options: Record<string, any> = {}) {
   const tools = getClawToolCatalog();
   const focusedRuntime = getSupportedClawRuntime(options.runtimeName || options.runtime);
 
@@ -54,7 +54,7 @@ function describeClawBridge(options = {}) {
 }
 
 function createVariantDescribeFn(runtimeName, displayName, scriptPath, trustModel) {
-  return function describeVariantBridge(options = {}) {
+  return function describeVariantBridge(options: Record<string, any> = {}) {
     const manifest = describeClawBridge({
       ...options,
       runtimeName,

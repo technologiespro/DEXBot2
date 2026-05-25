@@ -329,7 +329,14 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             this._warn(`Could not query PM2 for ${MARKET_ADAPTER_APP_NAME}: ${err.message}. Using a direct PM2 action.`);
         }
 
-        if (!snapshot.exists || !snapshot.needsMarketAdapter) {
+        // Cross-reference config-active bots against actually running PM2 processes
+        // so we don't start the adapter for configured AMA bots that aren't running.
+        const runningActiveBots = pm2QueryFailed
+            ? snapshot.activeBots
+            : snapshot.activeBots.filter((b) => processNames.includes(b.name));
+        const needsAdapterForRunningBots = runningActiveBots.some(usesAmaGridPrice);
+
+        if (!snapshot.exists || !needsAdapterForRunningBots) {
             const shouldStop = pm2QueryFailed || processNames.includes(MARKET_ADAPTER_APP_NAME);
             if (!shouldStop) {
                 return {
@@ -343,7 +350,7 @@ async function syncMarketAdapterOnPeriodicConfigCheck(context = 'periodic') {
             }
 
             await stopMarketAdapterFn();
-            this._log(`Stopped ${MARKET_ADAPTER_APP_NAME} because no AMA grid bots are active.`, 'info');
+            this._log(`Stopped ${MARKET_ADAPTER_APP_NAME} because no AMA grid bots are running.`, 'info');
             return {
                 changed,
                 required: false,
@@ -926,19 +933,17 @@ function setupBlockchainFetchInterval() {
                     this.manager._recoveryAttempted = false;
                 }
                 this._log(`Fetching blockchain account values (interval: every ${intervalMin}min)`);
-                this._markGridActivity?.('periodic account fetch');
                 await this.manager.fetchAccountTotals(this.accountId);
-                this._markGridActivity?.('periodic account fetch end');
 
                 let chainOpenOrders = [];
                 if (!this.config.dryRun) {
                     try {
-                        this._markGridActivity?.('periodic open-orders sync');
                         chainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
                         const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'periodicBlockchainFetch', { fillLockAlreadyHeld: true });
 
                         if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
                             this._log(`Periodic sync: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
+                            this._markGridActivity?.('periodic sync fill rebalance');
                             const batchResult = await this._processFillsWithBatching(
                                 syncResult.filledOrders, new Set(), 'periodic sync fill rebalance'
                             );
@@ -952,8 +957,6 @@ function setupBlockchainFetchInterval() {
                         }
                     } catch (err: any) {
                         this._warn(`Error reading open orders during periodic fetch: ${err.message}`);
-                    } finally {
-                        this._markGridActivity?.('periodic open-orders sync end');
                     }
                 }
 

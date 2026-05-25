@@ -83,7 +83,7 @@ function resolveHardcodedHonestMoneyPrice(assetA, assetB) {
   return null;
 }
 
-async function resolveHonestPairPrice(assetA, assetB, options = {}) {
+async function resolveHonestPairPrice(assetA, assetB, options: Record<string, any> = {}) {
   const hardcoded = resolveHardcodedHonestMoneyPrice(assetA, assetB);
   if (hardcoded !== null) {
     return hardcoded;
@@ -92,7 +92,7 @@ async function resolveHonestPairPrice(assetA, assetB, options = {}) {
   return derivePoolPrice(assetA, assetB, options);
 }
 
-async function resolveHonestPairContext(assetA, assetB, options = {}) {
+async function resolveHonestPairContext(assetA, assetB, options: Record<string, any> = {}) {
   const pairPrice = await resolveHonestPairPrice(assetA, assetB, options).catch(() => null);
   const assetASymbol = assetA && typeof assetA === 'object' ? assetA.symbol : assetA;
   const assetBSymbol = assetB && typeof assetB === 'object' ? assetB.symbol : assetB;
@@ -136,7 +136,7 @@ async function resolveHonestPairContext(assetA, assetB, options = {}) {
   };
 }
 
-async function loadHonestAssets({ prefix = DEFAULT_PREFIX, batchSize = 100, maxPages = 100, startSymbol = DEFAULT_PREFIX } = {}) {
+async function loadHonestAssets({ prefix = DEFAULT_PREFIX, batchSize = 100, maxPages = 100, startSymbol = DEFAULT_PREFIX }: Record<string, any> = {}) {
   const all = [];
   let lowerBound = startSymbol;
   let previousLastSymbol = null;
@@ -196,7 +196,7 @@ async function loadHonestAssets({ prefix = DEFAULT_PREFIX, batchSize = 100, maxP
   };
 }
 
-async function buildHonestEcosystemContext(options = {}) {
+async function buildHonestEcosystemContext(options: Record<string, any> = {}) {
   const prefix = options.prefix || DEFAULT_PREFIX;
   const [coreAsset, referenceAsset] = await Promise.all([
     getAsset(CORE_SYMBOL),
@@ -253,7 +253,7 @@ async function buildHonestEcosystemContext(options = {}) {
   };
 }
 
-function createHonestEcosystemAdapter(options = {}) {
+function createHonestEcosystemAdapter(options: Record<string, any> = {}) {
   return {
     buildContext: (contextOptions = {}) => buildHonestEcosystemContext({
       ...options,
