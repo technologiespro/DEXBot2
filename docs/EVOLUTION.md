@@ -6,8 +6,8 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,326 commits over ~5.5 active months
-- **Code Maturity**: Evolution from basic utilities to a ~48,000+ LoC intelligent system
+- **Growth Phase**: 1,391 commits over ~5.5 active months
+- **Code Maturity**: Evolution from basic utilities to a ~48,000+ LoC intelligent TypeScript system
 - **Stability**: Progression from manual testing to a suite of 158 automated test files
 - **Releases**: 20 tagged releases (v0.1.0 to v0.7.5)
 
@@ -176,6 +176,8 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 - **May 22**: Release v0.7.3 - adapter packaging and slope helper consolidation
 - **May 22**: Release v0.7.4 - documentation refresh and version bump
 - **May 24**: Release v0.7.5 - zero-dependency policy codification
+- **May 24-25**: Complete TypeScript migration — all 48K+ lines, 158 tests, and entry points converted from JS to TS
+- **May 25**: Strict TypeScript enforcement for modules, market_adapter, and scripts; post-migration regression fixes, build infrastructure, and Docker/release gate repairs
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -193,6 +195,7 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 13. **Credential Daemon Resilience**: Broadcast retry, stale socket handling, node list mirroring, PM2 restart loop prevention
 14. **Credit Maintenance Hardening**: Collateral-gated credit increases, renew-only policy, deal renewal with fallback safety, startup credit maintenance, autoRepay state synchronization
 15. **Grid Reset Metadata**: Centralized reset metadata handling with dynamic reset state preservation
+16. **Complete TypeScript Migration**: All 48K+ lines of production code, 158 test files, scripts, and entry points converted from JS to TS with strict mode; `tsc` build pipeline, `tsx` runtime, thin `.js` shims for dist routing
 
 ---
 
@@ -202,6 +205,7 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 - **Phase 1-2**: Loose modules for order/account management, basic grid trading.
 - **Phase 3-4**: Copy-on-Write grid with atomic modifications, Market Adapter decoupling signals from execution.
 - **Phase 5**: Multi-layered runtime — COW core execution, signal pipeline (AMA/Kalman/regime), credit/debt MPA runtime, credit maintenance hardening, credential daemon.
+- **Post-5: TypeScript Migration**: Full codebase migration from JavaScript to TypeScript with strict mode, `tsc` build pipeline, and zero-dependency runtime via `tsx`.
 
 ---
 
@@ -215,14 +219,19 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 | 2. Documentation refresh | 3 |
 | **Total** | **5** |
 
-### v0.7.4 → v0.7.5 — Zero-Dependency Policy
+### v0.7.4 → v0.7.5 — Zero-Dependency Policy & TypeScript Migration
 
-This release formalizes the project's de facto zero-dependency philosophy as an explicit architectural policy, with a special-case recognition for trading bots where this level of dependency discipline is unique in open source.
+This release codifies the project's de facto zero-dependency philosophy as an explicit architectural policy and transitions the full codebase from JavaScript to TypeScript. All production sources, 158 test files, scripts, and entry points now compile through `tsc` with strict mode and run via `tsx` for development/testing, with thin `.js` shims routing to compiled `dist/` output for production.
 
 | Category | Commits |
 |----------|---------|
 | 1. Zero-dependency policy doc and version bump | 1 |
-| **Total** | **1** |
+| 2. JS-to-TS migration (sources, tests, strict mode, build pipeline) | 3 |
+| 3. Type safety review and entry-point fixes | 3 |
+| 4. Post-migration regression fixes (Docker, release gates, update flow, paths) | 10 |
+| 5. General hardening alongside migration (fill locking, credential daemon, reconnect, native sync) | 11 |
+| 6. Documentation alignment (`.md` refs, constants, changelog) | 3 |
+| **Total** | **31** |
 
 ---
 
@@ -357,7 +366,7 @@ This release formalizes the project's de facto zero-dependency philosophy as an 
 
 ## Development Statistics
 
-158 automated tests, 19 tagged releases. See **Version History** for commit breakdown by release.
+158 automated tests (all TypeScript), 19 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -406,40 +415,37 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 - **Performance Analytics**: PnL tracking, grid efficiency metrics, risk assessment, and HTML report generation.
 
 ### Modernization & Migration
-- **TypeScript Migration**: Incremental migration from JS to TypeScript, starting with highest-bug-surface modules (COW, accounting, sync engine). *(Analysis complete — see `docs/TYPESCRIPT_MIGRATION_ANALYSIS.md`: ~48K LoC, 158 test files, 1 external dep, 4-5 month estimate with 3-4 developers)*
 - **Dependency Reduction**: Continued minimization of external dependencies.
 
 ### Architecture & Code Quality — Detailed Breakdown
 
 #### Tier 1 — High Impact
 
-1. **Monorepo & Packages** — Split into `@dexbot/core`, `@dexbot/bitshares`, `@dexbot/strategies`, `@dexbot/indicators`. Enables incremental TypeScript migration and parallelized builds/testing.
+1. **Monorepo & Packages** — Split into `@dexbot/core`, `@dexbot/bitshares`, `@dexbot/strategies`, `@dexbot/indicators`. Enables parallelized builds/testing and cleaner dependency boundaries.
 
 2. **Injectable Module Interfaces** — Extract narrow interfaces at existing call boundaries (FillCallback, Accounting, SyncEngine, chain_orders) to enable mock injection during tests. The sequential pipeline should remain direct calls — they are the correct pattern for this pipeline. Testability is achieved through dependency inversion, not an event bus.
 
 3. **Unified Indicator Library** — Centralize scattered signal code (AMA, Kalman, dynamic weight, regime detection) into `@dexbot/indicators`. Add standard indicators (SMA, MACD, RSI, BB) for non-grid strategies.
 
-4. **Incremental TypeScript** — Migrate in package order: `core` (COW + accounting) → `indicators` → `bitshares` → `strategies`.
-
 #### Tier 2 — Medium Impact
 
-5. **Strategy Effects Pattern** — Strategies return declarative action objects (`{ action: 'CREATE_ORDER', price, amount }`) instead of calling `manager.ts` directly. Strategy logic becomes a pure function — unit-testable without blockchain.
+4. **Strategy Effects Pattern** — Strategies return declarative action objects (`{ action: 'CREATE_ORDER', price, amount }`) instead of calling `manager.ts` directly. Strategy logic becomes a pure function — unit-testable without blockchain.
 
-6. **Database (Prisma/SQLite) + Zod Validation** — Replace JSON file persistence with SQLite. Validate all blockchain objects at the `bitshares_client` boundary via Zod schemas.
+5. **Database (Prisma/SQLite) + Zod Validation** — Replace JSON file persistence with SQLite. Validate all blockchain objects at the `bitshares_client` boundary via Zod schemas.
 
-7. **Vitest Migration** — Wrap 158 test files in Vitest for parallel execution, watch mode, and coverage reporting.
+6. **Vitest Migration** — Wrap 158 test files in Vitest for parallel execution, watch mode, and coverage reporting.
 
 #### Tier 3 — Nice-to-Have
 
-8. **Exchange Abstraction** — `IExchange` interface over `chain_orders.ts` + `bitshares_client.ts`.
-9. **tRPC API** — Type-safe API layer for remote bot management and dashboard integration.
-10. **Pino Logger** — Structured JSON logging with level filtering and composable transports.
-11. **Commander.js CLI** — Better `dexbot.ts` argument parsing with subcommands and auto-generated help.
+7. **Exchange Abstraction** — `IExchange` interface over `chain_orders.ts` + `bitshares_client.ts`.
+8. **tRPC API** — Type-safe API layer for remote bot management and dashboard integration.
+9. **Pino Logger** — Structured JSON logging with level filtering and composable transports.
+10. **Commander.js CLI** — Better `dexbot.ts` argument parsing with subcommands and auto-generated help.
 
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: May 24, 2026
-**Total Commits**: 1374
-**Date Range**: December 2, 2025 - May 24, 2026 (ongoing)
+**Last Updated**: May 25, 2026
+**Total Commits**: 1391
+**Date Range**: December 2, 2025 - May 25, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

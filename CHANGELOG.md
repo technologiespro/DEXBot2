@@ -2,9 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.5] - 2026-05-24 - Zero-Dependency Policy
+## [0.7.5] - 2026-05-25 - Zero-Dependency Policy & TypeScript Migration
 
-This patch codifies the project's de facto zero-dependency philosophy as an explicit architectural policy, recognizing trading bots as a special case where this level of supply-chain discipline is unique in open source.
+This release codifies the project's de facto zero-dependency philosophy as an explicit architectural policy and transitions the entire codebase from JavaScript to TypeScript. All source files, test files, and entry points are now `.ts` with strict mode enabled, compiled through `tsc` and run via `tsx` for development/testing. Thin `.js` shims at the root serve as stable entry points that route to compiled `dist/` output.
 
 ### 2026-05-24
 
@@ -13,6 +13,26 @@ This patch codifies the project's de facto zero-dependency philosophy as an expl
 - Update `docs/DEXBOT_COMPARISON.md` to reflect the current zero-mandatory-dependency state (native `bitshares-native/` replaces former `btsdex` dependency).
 - Update `docs/EVOLUTION.md` with v0.7.5 release entry, version history section, and updated metadata.
 - Bump version to 0.7.5 across all package manifests, lockfiles, and documentation references.
+
+### 2026-05-24 to 2026-05-25
+
+#### Complete TypeScript Transition
+- Migrate all 48K+ lines of production JavaScript source to TypeScript (`.js` → `.ts`) across `modules/`, `market_adapter/`, `claw/`, `scripts/`, `analysis/`, and root entry points (`733994b`).
+- Convert all 158 test files from `.js` to `.ts` (`db2e4fc`).
+- Enable strict TypeScript for `modules/`, `market_adapter/`, and `scripts/` with full `noImplicitAny` / `strictNullChecks` coverage (`1cc79b9`).
+- Fix post-migration regressions: timeout wiring, idle blocking, adapter gating, and Claw type signatures (`13d1fff`).
+- Resolve `__dirname` path resolution in compiled `dist/` output (`86bb663`).
+- Repair update flow shims, bootstrap paths, safe-git entry guards after TS migration (`ad21d37`).
+- Harden `unlock-start` runtime launching for compiled mode (`5121fae`).
+
+#### Infrastructure & Build
+- Add `tsconfig.json` with strict settings, `tsx` for test/script runners, `tsc` for production builds (`733994b`).
+- Remove redundant double-build from the update script (`ea9932e`).
+- Wire `connectTimeoutMs` into `createChainClient` to match `TIMING.CONNECTION_TIMEOUT_MS` (`cf2319e`).
+
+#### Documentation & Consistency
+- Update all `.md` references from `.js` → `.ts`, `btsdex` → `native`, `node` → `tsx` (`45ed4f0`).
+- Repair Docker and native release gates to reference compiled output (`84c81dc`).
 
 ## [0.7.4] - 2026-05-22 - Code Cleanup and Documentation Refresh
 
