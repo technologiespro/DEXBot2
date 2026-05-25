@@ -10,7 +10,7 @@ const {
 const NS_PARENT_DIR = path.dirname(path.dirname(__dirname));
 const NS_PROJECT_ROOT = path.basename(NS_PARENT_DIR) === 'dist' ? path.dirname(NS_PARENT_DIR) : NS_PARENT_DIR;
 
-function parseArgs(argv) {
+function parseArgs(argv: any) {
   const options: Record<string, any> = {
     outputPath: null,
     profileRoot: null,

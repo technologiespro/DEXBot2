@@ -7,7 +7,7 @@ const {
 
 const CORE_SYMBOL = 'BTS';
 
-async function requireBtsBackedMpa(mpaSymbolOrId) {
+async function requireBtsBackedMpa(mpaSymbolOrId: any) {
   const mpaAsset = await getAsset(mpaSymbolOrId);
   if (!mpaAsset) {
     throw new Error(`Asset not found: ${mpaSymbolOrId}`);

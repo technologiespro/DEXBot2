@@ -3,13 +3,13 @@ const path = require('path');
 const { getClawToolCatalog } = require('./claw_catalog');
 const { getSupportedClawRuntime } = require('./claw_runtime_matrix');
 
-function normalizeRepoRoot(repoRoot) {
+function normalizeRepoRoot(repoRoot: string) {
   const CM_PARENT_DIR = path.dirname(path.dirname(__dirname));
   const CM_PROJECT_ROOT = path.basename(CM_PARENT_DIR) === 'dist' ? path.dirname(CM_PARENT_DIR) : CM_PARENT_DIR;
   return path.resolve(repoRoot || path.join(CM_PROJECT_ROOT, 'claw'));
 }
 
-function normalizeProfileRoot(options: Record<string, any> = {}, repoRoot) {
+function normalizeProfileRoot(options: Record<string, any> = {}, repoRoot: string) {
   if (options.profileRoot) {
     return path.resolve(options.profileRoot);
   }
@@ -21,9 +21,9 @@ function normalizeProfileRoot(options: Record<string, any> = {}, repoRoot) {
   return path.resolve(repoRoot, '..');
 }
 
-function buildToolSummary(runtimeName) {
-  const tools = getClawToolCatalog().filter((tool) => tool.runtimes.includes(runtimeName));
-  const byRisk = tools.reduce((groups, tool) => {
+function buildToolSummary(runtimeName: string) {
+  const tools = getClawToolCatalog().filter((tool: any) => tool.runtimes.includes(runtimeName));
+  const byRisk = tools.reduce((groups: Record<string, any>, tool: any) => {
     const risk = tool.risk || 'read';
     if (!groups[risk]) {
       groups[risk] = [];
@@ -39,7 +39,7 @@ function buildToolSummary(runtimeName) {
     .join('\n');
 }
 
-function buildRuntimeSetup(runtime, repoRoot, profileRoot) {
+function buildRuntimeSetup(runtime: any, repoRoot: string, profileRoot: string) {
   const mcpScriptPath = path.join(repoRoot, 'scripts', 'claw_mcp_server.js').replace(/\\/g, '/');
   const mcpCommand = `node ${mcpScriptPath}`;
   const mcpArgs = `["${mcpScriptPath}", "--profile-root", "${profileRoot}"]`;
@@ -225,7 +225,7 @@ function buildRuntimeSetup(runtime, repoRoot, profileRoot) {
   }
 }
 
-function buildRuntimeWorkflow(runtime) {
+function buildRuntimeWorkflow(runtime: any) {
   if (runtime.runtime === 'hermes') {
     return [
       '- Start with `claw_manifest`, `claw_runtime`, `claw_profile_context`, `claw_market_snapshot`, `claw_account_snapshot`, or `claw_open_orders`.',
@@ -242,7 +242,7 @@ function buildRuntimeWorkflow(runtime) {
   ].join('\n');
 }
 
-function buildRuntimeSkillMarkdown(runtimeName, options: Record<string, any> = {}) {
+function buildRuntimeSkillMarkdown(runtimeName: string, options: Record<string, any> = {}) {
   const runtime = getSupportedClawRuntime(runtimeName);
   if (!runtime) {
     throw new Error(`Unsupported runtime: ${runtimeName}`);
@@ -292,7 +292,7 @@ function buildRuntimeSkillMarkdown(runtimeName, options: Record<string, any> = {
   ].join('\n');
 }
 
-async function writeRuntimeSkillMarkdown(outputPath, runtimeName, options: Record<string, any> = {}) {
+async function writeRuntimeSkillMarkdown(outputPath: string, runtimeName: string, options: Record<string, any> = {}) {
   const content = buildRuntimeSkillMarkdown(runtimeName, options);
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, content, 'utf8');

@@ -78,15 +78,15 @@ const BOT_SETTINGS_STATE_FIELDS = Object.freeze({
   ]
 });
 
-function isPlainObject(value) {
+function isPlainObject(value: any) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function isFiniteNumber(value) {
+function isFiniteNumber(value: any) {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function isNumericString(value) {
+function isNumericString(value: any) {
   if (typeof value !== 'string') {
     return false;
   }
@@ -95,7 +95,7 @@ function isNumericString(value) {
   return trimmed !== '' && Number.isFinite(Number(trimmed));
 }
 
-function isPositiveNumericString(value) {
+function isPositiveNumericString(value: any) {
   if (!isNumericString(value)) {
     return false;
   }
@@ -103,7 +103,7 @@ function isPositiveNumericString(value) {
   return Number(value.trim()) > 0;
 }
 
-function isPositiveMultiplierString(value) {
+function isPositiveMultiplierString(value: any) {
   if (typeof value !== 'string') {
     return false;
   }
@@ -116,7 +116,7 @@ function isPositiveMultiplierString(value) {
   return parseFloat(trimmed) > 0;
 }
 
-function isPositivePriceLike(value) {
+function isPositivePriceLike(value: any) {
   return (
     (typeof value === 'number' && Number.isFinite(value) && value > 0) ||
     isPositiveNumericString(value) ||
@@ -124,7 +124,7 @@ function isPositivePriceLike(value) {
   );
 }
 
-function resolveComparablePriceValue(value, startPrice = null, mode = 'min') {
+function resolveComparablePriceValue(value: any, startPrice: any = null, mode: string = 'min') {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
   }
@@ -141,8 +141,8 @@ function resolveComparablePriceValue(value, startPrice = null, mode = 'min') {
   return null;
 }
 
-function validateNestedBotSettingKeys(field, value, errors) {
-  const allowedKeys = BOT_SETTINGS_NESTED_KEYS[field];
+function validateNestedBotSettingKeys(field: any, value: any, errors: any[]) {
+  const allowedKeys = (BOT_SETTINGS_NESTED_KEYS as any)[field];
   if (!allowedKeys || !isPlainObject(value)) {
     return;
   }
@@ -153,7 +153,7 @@ function validateNestedBotSettingKeys(field, value, errors) {
   }
 }
 
-function normalizeBooleanField(value, fallback) {
+function normalizeBooleanField(value: any, fallback: any) {
   if (value === undefined || value === null) {
     return fallback;
   }
@@ -168,12 +168,12 @@ function normalizeBooleanField(value, fallback) {
   return fallback;
 }
 
-function normalizeNumberField(value, fallback) {
+function normalizeNumberField(value: any, fallback: any) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
-function isPercentageString(value) {
+function isPercentageString(value: any) {
   if (typeof value !== 'string') {
     return false;
   }
@@ -187,7 +187,7 @@ function isPercentageString(value) {
   return Number.isFinite(numeric);
 }
 
-function cloneBotSettings(value) {
+function cloneBotSettings(value: any) {
   if (value === undefined) {
     return undefined;
   }
@@ -260,8 +260,8 @@ function describeBotSettingMutability() {
   };
 }
 
-function validateBotSettingsValue(field, value, errors) {
-  const push = (message) => errors.push(message);
+function validateBotSettingsValue(field: any, value: any, errors: any[]) {
+  const push = (message: any) => errors.push(message);
 
   switch (field) {
     case 'active':
@@ -405,7 +405,7 @@ function validateBotSettingsValue(field, value, errors) {
 }
 
 function validateBotSettingsState(bot: Record<string, any> = {}) {
-  const errors = [];
+  const errors: string[] = [];
   const warnings = [];
 
   for (const field of Object.keys(BOT_SETTINGS_NESTED_KEYS)) {
@@ -418,13 +418,13 @@ function validateBotSettingsState(bot: Record<string, any> = {}) {
     ...BOT_SETTINGS_STATE_FIELDS.boolean,
     ...BOT_SETTINGS_STATE_FIELDS.numeric,
     ...BOT_SETTINGS_STATE_FIELDS.priceLike
-  ].filter((field) => !BOT_SETTINGS_NESTED_KEYS[field])) {
+  ].filter((field) => !(BOT_SETTINGS_NESTED_KEYS as any)[field])) {
     if (bot[field] !== undefined) {
       validateBotSettingsValue(field, bot[field], errors);
     }
   }
 
-  for (const field of BOT_SETTINGS_STATE_FIELDS.string.filter((field) => !BOT_SETTINGS_NESTED_KEYS[field])) {
+  for (const field of BOT_SETTINGS_STATE_FIELDS.string.filter((field) => !(BOT_SETTINGS_NESTED_KEYS as any)[field])) {
     if (bot[field] !== undefined) {
       validateBotSettingsValue(field, bot[field], errors);
     }
@@ -470,7 +470,7 @@ function validateBotSettingsState(bot: Record<string, any> = {}) {
 }
 
 function validateBotSettingsPatch(patch: Record<string, any> = {}, currentBot: Record<string, any> = {}, options: Partial<ProfileOptions> = {}) {
-  const errors = [];
+  const errors: string[] = [];
   const warnings = [];
   const patchKeys = Object.keys(patch || {});
   const allowUnknownKeys = Boolean(options.allowUnknownKeys);
@@ -551,7 +551,7 @@ function buildBotSettingsView(bot: Record<string, any> | null, bundle: ClawProfi
   };
 }
 
-function sanitizeKey(source) {
+function sanitizeKey(source: any) {
   if (!source) return 'bot';
   return String(source)
     .trim()
@@ -560,7 +560,7 @@ function sanitizeKey(source) {
     .replace(/^-+|-+$/g, '') || 'bot';
 }
 
-function createBotKey(bot, index) {
+function createBotKey(bot: any, index: any) {
   const identifier = bot && bot.name
     ? bot.name
     : bot && bot.assetA && bot.assetB
@@ -571,14 +571,14 @@ function createBotKey(bot, index) {
   return `${sanitizeKey(identifier)}-${index}`;
 }
 
-function resolveRawBotEntries(settings) {
+function resolveRawBotEntries(settings: any) {
   if (!settings || typeof settings !== 'object') return [];
   if (Array.isArray(settings.bots)) return settings.bots;
   if (Object.keys(settings).length > 0) return [settings];
   return [];
 }
 
-function validateBotEntry(entry, index, logger) {
+function validateBotEntry(entry: any, index: any, logger: any) {
   const warnings = [];
 
   for (const [label, aliases] of Object.entries(REQUIRED_BOT_KEY_ALIASES)) {
@@ -624,7 +624,7 @@ function normalizeBotEntries(rawEntries: Record<string, any>[], options: Partial
 
 const { clone } = require('./utils');
 
-function isFileLike(targetPath) {
+function isFileLike(targetPath: any) {
   try {
     return fs.existsSync(targetPath) && fs.statSync(targetPath).isFile();
   } catch {
@@ -632,7 +632,7 @@ function isFileLike(targetPath) {
   }
 }
 
-function isDirectoryLike(targetPath) {
+function isDirectoryLike(targetPath: any) {
   try {
     return fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory();
   } catch {
@@ -640,7 +640,7 @@ function isDirectoryLike(targetPath) {
   }
 }
 
-function resolveProfilesDir(profileRoot) {
+function resolveProfilesDir(profileRoot: any) {
   const candidates = [];
   const root = profileRoot ? path.resolve(profileRoot) : null;
 
@@ -691,7 +691,7 @@ function resolveProfilesDir(profileRoot) {
   return path.resolve(process.cwd(), 'profiles');
 }
 
-async function readJsonFile(filePath) {
+async function readJsonFile(filePath: any) {
   try {
     const raw = await fsPromises.readFile(filePath, 'utf8');
     if (!raw.trim()) {
@@ -706,7 +706,7 @@ async function readJsonFile(filePath) {
   }
 }
 
-async function writeJsonPayload(filePath, data) {
+async function writeJsonPayload(filePath: any, data: any) {
   const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
   try {
     await fsPromises.writeFile(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
@@ -717,7 +717,7 @@ async function writeJsonPayload(filePath, data) {
   }
 }
 
-async function writeTextPayload(filePath, content) {
+async function writeTextPayload(filePath: any, content: any) {
   const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
   try {
     await fsPromises.writeFile(tmpPath, `${content}\n`, 'utf8');
@@ -728,7 +728,7 @@ async function writeTextPayload(filePath, content) {
   }
 }
 
-async function writeJsonFileAtomic(filePath, data) {
+async function writeJsonFileAtomic(filePath: any, data: any) {
   const release = await acquireFileLock(filePath);
   try {
     await writeJsonPayload(filePath, data);
@@ -737,7 +737,7 @@ async function writeJsonFileAtomic(filePath, data) {
   }
 }
 
-async function readTriggerFile(triggerPath) {
+async function readTriggerFile(triggerPath: any) {
   try {
     const raw = await fsPromises.readFile(triggerPath, 'utf8');
     const trimmed = raw.trim();
@@ -753,10 +753,10 @@ async function readTriggerFile(triggerPath) {
   }
 }
 
-async function listFiles(dirPath) {
+async function listFiles(dirPath: any) {
   try {
     const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
-    return entries.filter((entry) => entry.isFile()).map((entry) => entry.name).sort();
+    return entries.filter((entry: any) => entry.isFile()).map((entry: any) => entry.name).sort();
   } catch (error: any) {
     if (error && error.code === 'ENOENT') {
       return [];
@@ -765,7 +765,7 @@ async function listFiles(dirPath) {
   }
 }
 
-function matchBotIdentifier(bot, identifier) {
+function matchBotIdentifier(bot: any, identifier: any) {
   if (!bot || identifier === null || identifier === undefined) {
     return false;
   }
@@ -820,7 +820,7 @@ function matchBotIdentifier(bot, identifier) {
   return sanitizeKey(bot.name) === sanitizeKey(value);
 }
 
-function findAmaProfile(bundle, bot) {
+function findAmaProfile(bundle: any, bot: any) {
   const profiles = Array.isArray(bundle?.amaProfiles?.profiles) ? bundle.amaProfiles.profiles : [];
   if (profiles.length === 0 || !bot) {
     return null;
@@ -829,7 +829,7 @@ function findAmaProfile(bundle, bot) {
   const botAssetA = bot.assetAId || bot.assetA || null;
   const botAssetB = bot.assetBId || bot.assetB || null;
 
-  const match = profiles.find((profile) => {
+  const match = profiles.find((profile: any) => {
     if (!profile || typeof profile !== 'object') {
       return false;
     }
@@ -851,7 +851,7 @@ function buildClawProfileContext(bundle: Record<string, any>, options: Partial<P
   const botIdentifier = options.botIdentifier || options.botRef || options.botKey || options.name || null;
   const selectedBot =
     options.selectedBot ||
-    (botIdentifier ? bundle.bots.find((bot) => matchBotIdentifier(bot, botIdentifier)) : null) ||
+    (botIdentifier ? bundle.bots.find((bot: any) => matchBotIdentifier(bot, botIdentifier)) : null) ||
     bundle.activeBots[0] ||
     bundle.bots[0] ||
     null;
@@ -951,7 +951,7 @@ async function loadDexbotProfileBundle(profileRoot: string, options: Partial<Pro
 }
 
 function createDexbotProfileAdapter(profileRoot: string, options: Partial<ProfileOptions> = {}) {
-  let cachedBundle = null;
+  let cachedBundle: any = null;
 
   async function loadBundle(forceReload = false) {
     if (!cachedBundle || forceReload) {
@@ -969,14 +969,14 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
     return activeOnly ? bundle.activeBots : bundle.bots;
   }
 
-  async function findBot(identifier, forceReload = false) {
+  async function findBot(identifier: any, forceReload = false) {
     const bundle = await loadBundle(forceReload);
-    return bundle.bots.find((bot) => matchBotIdentifier(bot, identifier)) || null;
+    return bundle.bots.find((bot: any) => matchBotIdentifier(bot, identifier)) || null;
   }
 
-  async function getBotBundle(identifier, forceReload = false) {
+  async function getBotBundle(identifier: any, forceReload = false) {
     const bundle = await loadBundle(forceReload);
-    const bot = bundle.bots.find((entry) => matchBotIdentifier(entry, identifier)) || null;
+    const bot = bundle.bots.find((entry: any) => matchBotIdentifier(entry, identifier)) || null;
     if (!bot) {
       return null;
     }
@@ -1005,10 +1005,10 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
     };
   }
 
-  async function getBotSettings(identifier, forceReload = false) {
+  async function getBotSettings(identifier: any, forceReload = false) {
     const bundle = await loadBundle(forceReload);
     const bot = identifier
-      ? bundle.bots.find((entry) => matchBotIdentifier(entry, identifier)) || null
+      ? bundle.bots.find((entry: any) => matchBotIdentifier(entry, identifier)) || null
       : bundle.activeBots[0] || bundle.bots[0] || null;
 
     return buildBotSettingsView(bot, bundle, {
@@ -1019,7 +1019,7 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
   async function previewBotSettingsUpdate(identifier: any, patch: any, options: Record<string, any> = {}) {
     const bundle = await loadBundle(Boolean(options.forceReload));
     const bot = identifier
-      ? bundle.bots.find((entry) => matchBotIdentifier(entry, identifier)) || null
+      ? bundle.bots.find((entry: any) => matchBotIdentifier(entry, identifier)) || null
       : bundle.activeBots[0] || bundle.bots[0] || null;
     if (!bot) {
       throw new Error(`Bot not found: ${identifier}`);
@@ -1055,8 +1055,8 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
       const currentRawEntries = resolveRawBotEntries(currentBotsConfig);
       const currentBots = normalizeBotEntries(currentRawEntries, { logger: options.logger });
       const bot = identifier
-        ? currentBots.find((entry) => matchBotIdentifier(entry, identifier))
-        : currentBots.find((entry) => entry.active !== false) || currentBots[0] || null;
+        ? currentBots.find((entry: any) => matchBotIdentifier(entry, identifier))
+        : currentBots.find((entry: any) => entry.active !== false) || currentBots[0] || null;
       if (!bot) {
         throw new Error(`Bot not found: ${identifier}`);
       }
@@ -1109,7 +1109,7 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
 
       cachedBundle = null;
       const freshBundle = await loadBundle(true);
-      const updatedBot = freshBundle.bots.find((entry) => entry.botIndex === bot.botIndex) || null;
+      const updatedBot = freshBundle.bots.find((entry: any) => entry.botIndex === bot.botIndex) || null;
 
       return {
         changedKeys: validation.patchKeys,
@@ -1132,7 +1132,7 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
 
   async function getClawProfileContext(identifier: any, options: Record<string, any> = {}) {
     const bundle = await loadBundle(Boolean(options.forceReload));
-    const bot = identifier ? bundle.bots.find((entry) => matchBotIdentifier(entry, identifier)) || null : null;
+    const bot = identifier ? bundle.bots.find((entry: any) => matchBotIdentifier(entry, identifier)) || null : null;
     const selectedBot = options.selectedBot || bot || bundle.activeBots[0] || bundle.bots[0] || null;
     const selectedBotBundle = selectedBot ? await getBotBundle(selectedBot.botKey, Boolean(options.forceReload)) : null;
     return buildClawProfileContext(bundle, {
@@ -1147,7 +1147,7 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
 
   async function listOrderArtifacts(forceReload = false) {
     const bundle = await loadBundle(forceReload);
-    return Promise.all(bundle.orderFiles.map(async (fileName) => {
+    return Promise.all(bundle.orderFiles.map(async (fileName: any) => {
       const fullPath = path.join(bundle.ordersDir, fileName);
       if (fileName.endsWith('.json')) {
         return { fileName, fullPath, json: await readJsonFile(fullPath) };
@@ -1156,7 +1156,7 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
     }));
   }
 
-  async function consumeTrigger(botKey) {
+  async function consumeTrigger(botKey: any) {
     const triggerPath = path.join(getProfilesDir(), `recalculate.${botKey}.trigger`);
     const trigger = await readTriggerFile(triggerPath);
     if (!trigger.exists) {
@@ -1166,14 +1166,14 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
     return { consumed: true, payload: trigger.payload };
   }
 
-  async function writeTrigger(botKey, payload = null) {
+  async function writeTrigger(botKey: any, payload: any = null) {
     const triggerPath = path.join(getProfilesDir(), `recalculate.${botKey}.trigger`);
     const content = payload ? JSON.stringify(payload, null, 2) : '';
     await fsPromises.mkdir(path.dirname(triggerPath), { recursive: true });
     await writeTextPayload(triggerPath, content);
   }
 
-  async function updateBotSettings(identifier, patch) {
+  async function updateBotSettings(identifier: any, patch: any) {
     if (!isPlainObject(patch)) {
       throw new Error('patch must be a non-null object');
     }
@@ -1187,8 +1187,8 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
       const currentRawEntries = resolveRawBotEntries(currentBotsConfig);
       const currentBots = normalizeBotEntries(currentRawEntries, { logger: options.logger });
       const bot = identifier
-        ? currentBots.find((entry) => matchBotIdentifier(entry, identifier))
-        : currentBots.find((entry) => entry.active !== false) || currentBots[0] || null;
+        ? currentBots.find((entry: any) => matchBotIdentifier(entry, identifier))
+        : currentBots.find((entry: any) => entry.active !== false) || currentBots[0] || null;
       if (!bot) {
         throw new Error(`Bot not found: ${identifier}`);
       }
@@ -1222,11 +1222,11 @@ function createDexbotProfileAdapter(profileRoot: string, options: Partial<Profil
 
     cachedBundle = null;
     const freshBundle = await loadBundle(true);
-    return freshBundle.bots.find((entry) => entry.botIndex === selectedBotIndex) || null;
+    return freshBundle.bots.find((entry: any) => entry.botIndex === selectedBotIndex) || null;
   }
 
   return {
-    buildClawProfileContext: (bundle, contextOptions = {}) => buildClawProfileContext(bundle, contextOptions),
+    buildClawProfileContext: (bundle: any, contextOptions = {}) => buildClawProfileContext(bundle, contextOptions),
     applyBotSettingsPatch,
     consumeTrigger,
     findBot,

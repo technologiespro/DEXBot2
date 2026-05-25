@@ -9,7 +9,7 @@ function getBlockchainToFloat() {
   return loadDexbotOrderUtils().blockchainToFloat;
 }
 
-async function dbCall(method, args: any[] = []) {
+async function dbCall(method: any, args: any[] = []) {
   await waitForConnected();
 
   if (BitShares?.db && typeof BitShares.db[method] === 'function') {
@@ -37,7 +37,7 @@ async function getDynamicGlobalProperties() {
   return dbCall('get_dynamic_global_properties');
 }
 
-async function getAsset(symbolOrId) {
+async function getAsset(symbolOrId: any) {
   if (/^1\.3\.\d+$/.test(symbolOrId)) {
     const assets = await dbCall('get_assets', [[symbolOrId]]);
     return assets[0] || null;
@@ -51,11 +51,11 @@ async function getAsset(symbolOrId) {
   }
 }
 
-async function getObjects(objectIds) {
+async function getObjects(objectIds: any) {
   return dbCall('get_objects', [objectIds]);
 }
 
-async function getAssetPrecision(symbolOrId) {
+async function getAssetPrecision(symbolOrId: any) {
   const asset = await getAsset(symbolOrId);
   if (!asset || typeof asset.precision !== 'number') {
     throw new Error(`Could not resolve asset precision for ${symbolOrId}`);
@@ -63,7 +63,7 @@ async function getAssetPrecision(symbolOrId) {
   return asset.precision;
 }
 
-async function getBitassetData(symbolOrId) {
+async function getBitassetData(symbolOrId: any) {
   const asset = await getAsset(symbolOrId);
   if (!asset || !asset.bitasset_data_id) {
     return null;
@@ -73,7 +73,7 @@ async function getBitassetData(symbolOrId) {
   return objects[0] || null;
 }
 
-async function getBackingAsset(symbolOrId) {
+async function getBackingAsset(symbolOrId: any) {
   const bitassetData = await getBitassetData(symbolOrId);
   const backingAssetId = bitassetData?.options?.short_backing_asset;
 
@@ -84,12 +84,12 @@ async function getBackingAsset(symbolOrId) {
   return getAsset(backingAssetId);
 }
 
-async function getFullAccount(accountNameOrId) {
+async function getFullAccount(accountNameOrId: any) {
   const result = await dbCall('get_full_accounts', [[accountNameOrId], false]);
   return result[0] ? result[0][1] : null;
 }
 
-async function resolveAccountId(accountNameOrId) {
+async function resolveAccountId(accountNameOrId: any) {
   if (/^1\.2\.\d+$/.test(accountNameOrId)) {
     return accountNameOrId;
   }
@@ -98,7 +98,7 @@ async function resolveAccountId(accountNameOrId) {
   return full && full.account ? full.account.id : null;
 }
 
-async function resolveAccountName(accountNameOrId) {
+async function resolveAccountName(accountNameOrId: any) {
   if (!/^1\.2\.\d+$/.test(accountNameOrId)) {
     return accountNameOrId;
   }
@@ -107,23 +107,23 @@ async function resolveAccountName(accountNameOrId) {
   return full && full.account ? full.account.name : null;
 }
 
-async function readOpenOrders(accountNameOrId) {
+async function readOpenOrders(accountNameOrId: any) {
   const full = await getFullAccount(accountNameOrId);
   return full && Array.isArray(full.limit_orders) ? full.limit_orders : [];
 }
 
-async function getBalances(accountNameOrId) {
+async function getBalances(accountNameOrId: any) {
   const full = await getFullAccount(accountNameOrId);
   if (!full || !Array.isArray(full.balances) || full.balances.length === 0) {
     return {};
   }
 
-  const assetIds = full.balances.map((entry) => entry.asset_type).filter(Boolean);
+  const assetIds = full.balances.map((entry: any) => entry.asset_type).filter(Boolean);
   const assets = await dbCall('get_assets', [assetIds]);
   const assetMap = toAssetMap(assets);
   const blockchainToFloat = getBlockchainToFloat();
 
-  const balances = {};
+  const balances: Record<string, any> = {};
   for (const balance of full.balances) {
     const asset = assetMap.get(balance.asset_type);
     if (!asset) {
@@ -135,19 +135,19 @@ async function getBalances(accountNameOrId) {
   return balances;
 }
 
-async function getOrderBook(baseSymbol, quoteSymbol, limit = 10) {
+async function getOrderBook(baseSymbol: any, quoteSymbol: any, limit = 10) {
   return dbCall('get_order_book', [baseSymbol, quoteSymbol, limit]);
 }
 
-async function getTicker(baseSymbol, quoteSymbol) {
+async function getTicker(baseSymbol: any, quoteSymbol: any) {
   return dbCall('get_ticker', [baseSymbol, quoteSymbol]);
 }
 
-async function getCallOrders(assetSymbolOrId, limit = 20) {
+async function getCallOrders(assetSymbolOrId: any, limit = 20) {
   return dbCall('get_call_orders', [assetSymbolOrId, limit]);
 }
 
-async function listAssets(lowerBoundSymbol = 'A', limit = 100) {
+async function listAssets(lowerBoundSymbol: any = 'A', limit = 100) {
   return dbCall('list_assets', [lowerBoundSymbol, limit]);
 }
 

@@ -15,7 +15,7 @@ const { normalizeProfileDir } = require('./launcher_paths');
  *   - unlock-start: Single-prompt startup (no PM2)
  */
 
-function getConfigPath(options = {}) {
+function getConfigPath(options: Record<string, any> = {}) {
   const PROFILES_DIR = normalizeProfileDir(options);
   return path.join(PROFILES_DIR, 'launcher.config.json');
 }
@@ -49,7 +49,7 @@ function loadConfig(options: Record<string, any> = {}) {
  * @param {Object} config - Config object
  * @param {Object} [options={}]
  */
-function saveConfig(config, options: Record<string, any> = {}) {
+function saveConfig(config: Record<string, any>, options: Record<string, any> = {}) {
   const configPath = getConfigPath(options);
   const PROFILES_DIR = path.dirname(configPath);
 
@@ -78,7 +78,7 @@ function hasActiveBots(options: Record<string, any> = {}) {
 
     const { config } = loadSettingsFile(BOTS_FILE);
     const entries = resolveRawBotEntries(config);
-    return entries.some(b => b.active !== false);
+    return entries.some((b: any) => b.active !== false);
   } catch (err: any) {
     return false;
   }
@@ -133,7 +133,7 @@ function detectMode(options: Record<string, any> = {}) {
  * @throws {Error} if mode is invalid
  * @returns {{set: boolean, mode: string, timestamp: string}}
  */
-function setPreferredMode(mode, options: Record<string, any> = {}) {
+function setPreferredMode(mode: string, options: Record<string, any> = {}) {
   const valid = ['claw-only', 'dexbot-direct', 'pm2', 'unlock-start'];
   if (!valid.includes(mode)) {
     throw new Error(`Invalid launcher mode: ${mode}. Must be one of: ${valid.join(', ')}`);
@@ -170,8 +170,8 @@ function setPreferredMode(mode, options: Record<string, any> = {}) {
  * @param {string} mode
  * @returns {string} Human-readable description
  */
-function describeModeChoice(mode) {
-  const descriptions = {
+function describeModeChoice(mode: string) {
+  const descriptions: Record<string, string> = {
     'claw-only': 'Start credential daemon only (no bots)',
     'dexbot-direct': 'Run bot directly (foreground, testing/debugging)',
     'pm2': 'Deploy via PM2 (production, persistent, monitored)',

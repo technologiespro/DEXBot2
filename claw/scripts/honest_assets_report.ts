@@ -13,7 +13,7 @@ const DEFAULT_MAX_PAGES = 100;
 const REFERENCE_SYMBOL = 'HONEST.MONEY';
 const DEFAULT_PREFIX = 'HONEST.';
 
-function parseArgs(argv) {
+function parseArgs(argv: any) {
   const options = {
     allMpas: false,
     batchSize: DEFAULT_BATCH_SIZE,
@@ -49,19 +49,19 @@ function parseArgs(argv) {
   return options;
 }
 
-function toPositiveInteger(value, fallback) {
+function toPositiveInteger(value: any, fallback: any) {
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-function isMpa(asset) {
+function isMpa(asset: any) {
   return Boolean(asset && asset.bitasset_data_id);
 }
 
-function isHonestAsset(asset) {
+function isHonestAsset(asset: any) {
   return typeof asset?.symbol === 'string' && asset.symbol.startsWith('HONEST.');
 }
 
-async function fetchAllAssets({ batchSize, maxPages, startSymbol }) {
+async function fetchAllAssets({ batchSize, maxPages, startSymbol }: { batchSize: any; maxPages: any; startSymbol: any }) {
   const results = [];
   let lowerBound = startSymbol;
   let previousLastSymbol = null;
@@ -93,7 +93,7 @@ async function fetchAllAssets({ batchSize, maxPages, startSymbol }) {
   return results;
 }
 
-async function fetchAssetsByPrefix({ batchSize, maxPages, prefix, startSymbol }) {
+async function fetchAssetsByPrefix({ batchSize, maxPages, prefix, startSymbol }: { batchSize: any; maxPages: any; prefix: any; startSymbol: any }) {
   const results = [];
   let lowerBound = startSymbol;
   let previousLastSymbol = null;
@@ -143,7 +143,7 @@ async function fetchAssetsByPrefix({ batchSize, maxPages, prefix, startSymbol })
   return results;
 }
 
-async function mapWithConcurrency(items, concurrency, mapper) {
+async function mapWithConcurrency(items: any, concurrency: any, mapper: any) {
   const safeConcurrency = Math.max(1, concurrency);
   const results = new Array(items.length);
   let index = 0;
@@ -160,7 +160,7 @@ async function mapWithConcurrency(items, concurrency, mapper) {
   return results;
 }
 
-function computeBasePerQuote(priceObject, assetMap) {
+function computeBasePerQuote(priceObject: any, assetMap: any) {
   const base = priceObject?.base;
   const quote = priceObject?.quote;
   if (!base || !quote) {
@@ -182,7 +182,7 @@ function computeBasePerQuote(priceObject, assetMap) {
   return baseUnits / quoteUnits;
 }
 
-async function getHonestMoneyPerBts(referenceAsset, coreAsset) {
+async function getHonestMoneyPerBts(referenceAsset: any, coreAsset: any) {
   const bridge = getHardcodedHonestMoneyBridge();
   const coreSide = [bridge.liquidityPool.reserves[0], bridge.liquidityPool.reserves[1]].find((asset) => asset.symbol === coreAsset.symbol);
   const referenceSide = [bridge.liquidityPool.reserves[0], bridge.liquidityPool.reserves[1]].find((asset) => asset.symbol === referenceAsset.symbol);
@@ -213,7 +213,7 @@ async function getHonestMoneyPerBts(referenceAsset, coreAsset) {
   };
 }
 
-async function getReferenceFeedData(asset, referenceAsset, coreAsset, honestMoneyPerBts, assetMap) {
+async function getReferenceFeedData(asset: any, referenceAsset: any, coreAsset: any, honestMoneyPerBts: any, assetMap: any) {
   if (asset.id === referenceAsset.id) {
     return {
       latestInHonestMoney: 1,
@@ -263,7 +263,7 @@ async function getReferenceFeedData(asset, referenceAsset, coreAsset, honestMone
   };
 }
 
-async function buildAssetRecord(asset, referenceAsset, coreAsset, honestMoneyPerBts, assetMap) {
+async function buildAssetRecord(asset: any, referenceAsset: any, coreAsset: any, honestMoneyPerBts: any, assetMap: any) {
   const backingAsset = isMpa(asset) ? await getBackingAsset(asset.id).catch(() => null) : null;
   const callOrders = isMpa(asset) ? await getCallOrders(asset.id, 20).catch(() => []) : [];
   const referenceMarket = await getReferenceFeedData(asset, referenceAsset, coreAsset, honestMoneyPerBts, assetMap);
@@ -280,7 +280,7 @@ async function buildAssetRecord(asset, referenceAsset, coreAsset, honestMoneyPer
   };
 }
 
-function printSummary(report) {
+function printSummary(report: any) {
   console.log(report.scopeLabel);
   console.log(`Generated: ${report.generatedAt}`);
   console.log(`Head block: ${report.chain.headBlockNumber}`);
@@ -294,7 +294,7 @@ function printSummary(report) {
 
   console.log(`${report.scopeLabel} assets`);
   console.table(
-    report.scopedAssets.map((asset) => ({
+    report.scopedAssets.map((asset: any) => ({
       backing: asset.backingAsset || '-',
       callOrders: asset.callOrdersCount,
       id: asset.id,
@@ -306,7 +306,7 @@ function printSummary(report) {
 
   console.log('MPA overview');
   console.table(
-    report.mpas.map((asset) => ({
+    report.mpas.map((asset: any) => ({
       backing: asset.backingAsset || '-',
       callOrders: asset.callOrdersCount,
       id: asset.id,
@@ -352,10 +352,10 @@ async function main() {
   const mpas = scopedAssets.filter(isMpa);
   const assetMap = new Map([coreAsset, referenceAsset, ...scopedAssets].filter(Boolean).map((asset) => [asset.id, asset]));
 
-  const scopedAssetRecords = await mapWithConcurrency(scopedAssets, 4, async (asset) => {
+  const scopedAssetRecords = await mapWithConcurrency(scopedAssets, 4, async (asset: any) => {
     try {
       return await buildAssetRecord(asset, referenceAsset, coreAsset, honestMoneyPerBts, assetMap);
-    } catch (err) {
+    } catch (err: any) {
       return {
         backingAsset: null,
         callOrdersCount: 0,

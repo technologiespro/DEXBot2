@@ -22,14 +22,14 @@ function resolveMemuScript() {
   return candidates[0];
 }
 
-function ensureMemuDir(dir) {
+function ensureMemuDir(dir: any) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
   return dir;
 }
 
-function defaultDatabaseConfig(memuDir) {
+function defaultDatabaseConfig(memuDir: any) {
   return {
     metadata_store: {
       provider: 'sqlite',
@@ -57,11 +57,11 @@ function runMemuPython(args: string[], options: Record<string, any> = {}) {
     let stdout = '';
     let stderr = '';
 
-    child.stdout.on('data', (chunk) => {
+    child.stdout.on('data', (chunk: any) => {
       stdout += chunk.toString();
     });
 
-    child.stderr.on('data', (chunk) => {
+    child.stderr.on('data', (chunk: any) => {
       stderr += chunk.toString();
     });
 
@@ -70,7 +70,7 @@ function runMemuPython(args: string[], options: Record<string, any> = {}) {
       reject(new Error(`memU operation timed out after ${timeout}ms`));
     }, timeout);
 
-    child.on('close', (code) => {
+    child.on('close', (code: any) => {
       clearTimeout(timer);
       if (code !== 0) {
         reject(new Error(`memU Python process exited with code ${code}: ${stderr.trim()}`));
@@ -90,7 +90,7 @@ function runMemuPython(args: string[], options: Record<string, any> = {}) {
       }
     });
 
-    child.on('error', (error) => {
+    child.on('error', (error: any) => {
       clearTimeout(timer);
       if (error.code === 'ENOENT') {
         reject(new Error(`Python interpreter not found: ${python}. Set MEMU_PYTHON env var or install Python 3.13+.`));
@@ -119,7 +119,7 @@ function createMemuBridge(options: Record<string, any> = {}) {
     llmProfiles,
     databaseConfig,
 
-    async memorize(resourceUrl, modality, user = null) {
+    async memorize(resourceUrl: any, modality: any, user: any = null) {
       const args = [
         'memorize',
         '--resource-url', resourceUrl,
@@ -142,8 +142,8 @@ function createMemuBridge(options: Record<string, any> = {}) {
       return runMemuPython(args, { timeout: options.memorizeTimeout || 120000 });
     },
 
-    async retrieve(queries, where = null, method = 'rag') {
-      const normalizedQueries = queries.map((q) => {
+    async retrieve(queries: any, where: any = null, method: any = 'rag') {
+      const normalizedQueries = queries.map((q: any) => {
         if (typeof q === 'string') {
           return { role: 'user', content: { text: q } };
         }
@@ -214,7 +214,7 @@ function createMemuBridge(options: Record<string, any> = {}) {
       return runMemuPython(args);
     },
 
-    async createMemoryItem(categoryRef, summary, memoryType = 'knowledge', user = null) {
+    async createMemoryItem(categoryRef: any, summary: any, memoryType: any = 'knowledge', user: any = null) {
       const args = [
         'create-item',
         '--category-id', categoryRef,
@@ -238,7 +238,7 @@ function createMemuBridge(options: Record<string, any> = {}) {
       return runMemuPython(args);
     },
 
-    async updateMemoryItem(itemId, updates) {
+    async updateMemoryItem(itemId: any, updates: any) {
       const args = [
         'update-item',
         '--item-id', itemId,
@@ -257,7 +257,7 @@ function createMemuBridge(options: Record<string, any> = {}) {
       return runMemuPython(args);
     },
 
-    async deleteMemoryItem(itemId) {
+    async deleteMemoryItem(itemId: any) {
       const args = [
         'delete-item',
         '--item-id', itemId,
@@ -313,8 +313,8 @@ function createMemuBridge(options: Record<string, any> = {}) {
       return runMemuPython(args);
     },
 
-    async memorizeConversation(messages, user = null) {
-      const formatted = messages.map((m) => {
+    async memorizeConversation(messages: any, user: any = null) {
+      const formatted = messages.map((m: any) => {
         const role = m.role || 'user';
         const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
         return `[${role}]: ${content}`;
@@ -337,7 +337,7 @@ function createMemuBridge(options: Record<string, any> = {}) {
       }
     },
 
-    async memorizeTradingContext(context, user = null) {
+    async memorizeTradingContext(context: any, user: any = null) {
       const formatted = typeof context === 'string'
         ? context
         : JSON.stringify(context, null, 2);
@@ -359,8 +359,8 @@ function createMemuBridge(options: Record<string, any> = {}) {
       }
     },
 
-    async retrieveTradingContext(query, user = null) {
-      const where = user ? { user_id: user.user_id || user } : null;
+    async retrieveTradingContext(query: any, user: any = null) {
+      const where: any = user ? { user_id: user.user_id || user } : null;
       return this.retrieve(
         [{ role: 'user', content: { text: query } }],
         where,

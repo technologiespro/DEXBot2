@@ -22,7 +22,7 @@ function getBlockchainToFloat() {
  * Replicates the logic in position_manager.computeBtsPerMpaFromSettlement
  * but as a standalone utility.
  */
-function parseBtsPerMpa(settlementPrice, mpaAsset, backingAsset) {
+function parseBtsPerMpa(settlementPrice: any, mpaAsset: any, backingAsset: any) {
   const base = settlementPrice?.base;
   const quote = settlementPrice?.quote;
   if (!base || !quote) return null;
@@ -55,7 +55,7 @@ function parseBtsPerMpa(settlementPrice, mpaAsset, backingAsset) {
  * @returns {Object} { feedPrice, mpaSymbol, mpaAssetId, backingSymbol, publicationTime }
  *   feedPrice is in BTS-per-MPA units.
  */
-async function fetchFeedPrice(mpaSymbol) {
+async function fetchFeedPrice(mpaSymbol: string) {
   const mpaAsset = await getAsset(mpaSymbol);
   if (!mpaAsset) throw new Error(`Asset not found: ${mpaSymbol}`);
 
@@ -86,7 +86,7 @@ async function fetchFeedPrice(mpaSymbol) {
  * @returns {number|null} Mid-price (average of best bid and best ask) in base-per-quote,
  *          or null if no orders exist.
  */
-async function fetchMidPrice(baseSymbol, quoteSymbol, depth = 1) {
+async function fetchMidPrice(baseSymbol: string, quoteSymbol: string, depth: number = 1) {
   const baseAsset = await getAsset(baseSymbol);
   const quoteAsset = await getAsset(quoteSymbol);
   if (!baseAsset || !quoteAsset) return null;
@@ -110,12 +110,12 @@ async function fetchMidPrice(baseSymbol, quoteSymbol, depth = 1) {
  *   Both prices in BTS-per-MPA units.
  *   premium = ((market - feed) / feed) * 100
  */
-async function fetchTrendInput(mpaSymbol) {
+async function fetchTrendInput(mpaSymbol: string) {
   const feedData = await fetchFeedPrice(mpaSymbol);
   const marketPrice = await fetchMidPrice('BTS', mpaSymbol);
 
-  let premium = null;
-  if (Number.isFinite(marketPrice) && Number.isFinite(feedData.feedPrice) && feedData.feedPrice > 0) {
+  let premium: number | null = null;
+  if (marketPrice != null && feedData.feedPrice != null && Number.isFinite(marketPrice) && Number.isFinite(feedData.feedPrice) && feedData.feedPrice > 0) {
     premium = ((marketPrice - feedData.feedPrice) / feedData.feedPrice) * 100;
   }
 

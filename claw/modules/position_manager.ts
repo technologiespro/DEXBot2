@@ -38,14 +38,14 @@ function createPositionId() {
   return `pos_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function requireString(value, fieldName) {
+function requireString(value: any, fieldName: string) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${fieldName} is required`);
   }
   return value.trim();
 }
 
-function requirePositiveNumber(value, fieldName) {
+function requirePositiveNumber(value: any, fieldName: string) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue) || numericValue <= 0) {
     throw new Error(`${fieldName} must be a positive number`);
@@ -53,17 +53,17 @@ function requirePositiveNumber(value, fieldName) {
   return numericValue;
 }
 
-function almostZero(value, epsilon = 1e-12) {
+function almostZero(value: any, epsilon: number = 1e-12) {
   return Math.abs(Number(value) || 0) <= epsilon;
 }
 
-function toNumberOrNull(value) {
+function toNumberOrNull(value: any) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : null;
 }
 
 function extractOrderIds(operationResults: any[] = []) {
-  const orderIds = [];
+  const orderIds: string[] = [];
 
   for (const result of operationResults) {
     if (!Array.isArray(result) || result.length < 2) {
@@ -85,7 +85,7 @@ function extractOrderIds(operationResults: any[] = []) {
   return orderIds;
 }
 
-function createOrderTracking({ sellAsset, receiveAsset, targetSellAmount, targetReceiveAmount, priceInBts = null }) {
+function createOrderTracking({ sellAsset, receiveAsset, targetSellAmount, targetReceiveAmount, priceInBts = null }: { sellAsset: any; receiveAsset: any; targetSellAmount: number; targetReceiveAmount: number; priceInBts?: number | null }): any {
   return {
     averageExecutionPriceInBts: null,
     fillCount: 0,
@@ -119,11 +119,11 @@ function createPositionPnl() {
   };
 }
 
-function toTrackedAsset(asset) {
+function toTrackedAsset(asset: any) {
   return asset ? { id: asset.id, precision: asset.precision, symbol: asset.symbol } : null;
 }
 
-function resolvePositionAssets(position) {
+function resolvePositionAssets(position: any) {
   const tracked = position?.assets || {};
   return {
     collateral: tracked.collateral || null,
@@ -131,11 +131,11 @@ function resolvePositionAssets(position) {
   };
 }
 
-function getOrderTracking(position, side) {
+function getOrderTracking(position: any, side: string) {
   return side === 'entry' ? position.entry : position.exit;
 }
 
-function getAssetPrecisionFromTracking(orderTracking, assetId) {
+function getAssetPrecisionFromTracking(orderTracking: any, assetId: string) {
   if (orderTracking?.sellAsset?.id === assetId) {
     return orderTracking.sellAsset.precision;
   }
@@ -145,7 +145,7 @@ function getAssetPrecisionFromTracking(orderTracking, assetId) {
   return null;
 }
 
-function classifyFillAgainstOrder(orderTracking, payload) {
+function classifyFillAgainstOrder(orderTracking: any, payload: any) {
   const paysAssetId = payload?.pays?.asset_id;
   const receivesAssetId = payload?.receives?.asset_id;
   if (!paysAssetId || !receivesAssetId) {
@@ -163,7 +163,7 @@ function classifyFillAgainstOrder(orderTracking, payload) {
   };
 }
 
-function updateOrderTrackingFromFill(orderTracking, fill) {
+function updateOrderTrackingFromFill(orderTracking: any, fill: any) {
   const payload = Array.isArray(fill?.op) ? fill.op[1] : null;
   const classification = classifyFillAgainstOrder(orderTracking, payload);
   if (!classification) {
@@ -198,7 +198,7 @@ function updateOrderTrackingFromFill(orderTracking, fill) {
   return true;
 }
 
-function updateOrderTrackingFromOpenOrder(orderTracking, openOrder) {
+function updateOrderTrackingFromOpenOrder(orderTracking: any, openOrder: any) {
   if (!orderTracking) {
     return;
   }
@@ -232,7 +232,7 @@ function updateOrderTrackingFromOpenOrder(orderTracking, openOrder) {
   refreshOrderFillState(orderTracking);
 }
 
-function refreshOrderFillState(orderTracking) {
+function refreshOrderFillState(orderTracking: any) {
   const hasFills = (orderTracking?.fillCount || 0) > 0;
   const remainingSell = orderTracking?.sellAmountRemaining || 0;
   const orderOpen = Boolean(orderTracking?.orderOpen);
@@ -250,7 +250,7 @@ function refreshOrderFillState(orderTracking) {
   orderTracking.fillStatus = orderOpen ? 'open' : 'unfilled';
 }
 
-function refreshPositionPnl(position) {
+function refreshPositionPnl(position: any) {
   const entryFilledMpa = position?.entry?.filledSellAmount || 0;
   const entryReceivedBts = position?.entry?.filledReceiveAmount || 0;
   const exitCoveredMpa = position?.exit?.filledReceiveAmount || 0;
@@ -271,7 +271,7 @@ function refreshPositionPnl(position) {
   position.pnl.updatedAt = nowIso();
 }
 
-function computeBtsPerMpaFromSettlement(settlementPrice, mpaAsset, backingAsset) {
+function computeBtsPerMpaFromSettlement(settlementPrice: any, mpaAsset: any, backingAsset: any) {
   const base = settlementPrice?.base;
   const quote = settlementPrice?.quote;
   if (!base || !quote) {
@@ -296,7 +296,7 @@ function computeBtsPerMpaFromSettlement(settlementPrice, mpaAsset, backingAsset)
   return null;
 }
 
-function normalizeCallPosition(callOrder, mpaAsset, backingAsset, bitassetData) {
+function normalizeCallPosition(callOrder: any, mpaAsset: any, backingAsset: any, bitassetData: any) {
   if (!callOrder) {
     return {
       collateralAmount: 0,
@@ -377,7 +377,7 @@ class PositionManager {
 
   async getPosition(positionId: string) {
     const state = await this.loadState();
-    const position = state.positions.find((entry) => entry.id === positionId);
+    const position = state.positions.find((entry: any) => entry.id === positionId);
     if (!position) {
       throw new Error(`Position not found: ${positionId}`);
     }
@@ -586,13 +586,13 @@ class PositionManager {
     const mpaAsset = await getAsset(position.debt.asset);
     const backingAsset = await getBackingAsset(position.debt.asset);
     const bitassetData = await getBitassetData(position.debt.asset);
-    const callOrder = callOrders.find((entry) => entry?.call_price?.quote?.asset_id === mpaAsset?.id) || null;
+    const callOrder = callOrders.find((entry: any) => entry?.call_price?.quote?.asset_id === mpaAsset?.id) || null;
     const debtState = normalizeCallPosition(callOrder, mpaAsset, backingAsset, bitassetData);
-    const openOrderIds = openOrders.map((entry) => entry?.id).filter(Boolean);
+    const openOrderIds = openOrders.map((entry: any) => entry?.id).filter(Boolean);
     const entryOrderOpen = position.entry.orderId ? openOrderIds.includes(position.entry.orderId) : false;
     const exitOrderOpen = position.exit.orderId ? openOrderIds.includes(position.exit.orderId) : false;
-    const entryOpenOrder = position.entry.orderId ? openOrders.find((entry) => entry?.id === position.entry.orderId) || null : null;
-    const exitOpenOrder = position.exit.orderId ? openOrders.find((entry) => entry?.id === position.exit.orderId) || null : null;
+    const entryOpenOrder = position.entry.orderId ? openOrders.find((entry: any) => entry?.id === position.entry.orderId) || null : null;
+    const exitOpenOrder = position.exit.orderId ? openOrders.find((entry: any) => entry?.id === position.exit.orderId) || null : null;
 
     updateOrderTrackingFromOpenOrder(position.entry, entryOpenOrder);
     updateOrderTrackingFromOpenOrder(position.exit, exitOpenOrder);
@@ -648,7 +648,7 @@ class PositionManager {
 
   async syncAllPositions() {
     const positions = await this.listPositions();
-    const synced = [];
+    const synced: any[] = [];
 
     for (const position of positions) {
       synced.push(await this.syncPosition(position.id));
@@ -662,7 +662,7 @@ class PositionManager {
 
       return listenForFills(accountName, async (fills: any[] = []) => {
       const state = await this.loadState();
-      const relatedPositions = state.positions.filter((position) => position.accountName === accountName);
+      const relatedPositions = state.positions.filter((position: any) => position.accountName === accountName);
       let changed = false;
       const matchedPositionIds = new Set<string>();
 
@@ -726,7 +726,7 @@ class PositionManager {
   }
 
   #findMutablePosition(state: any, positionId: string) {
-    const position = state.positions.find((entry) => entry.id === positionId);
+    const position = state.positions.find((entry: any) => entry.id === positionId);
     if (!position) {
       throw new Error(`Position not found: ${positionId}`);
     }

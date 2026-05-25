@@ -10,7 +10,7 @@ const DEFAULT_MAX_CONSECUTIVE_FAILURES = 5;
 
 const { clone } = require('./utils');
 
-function parsePositionManagerWatchArgs(argv = [], env = process.env) {
+function parsePositionManagerWatchArgs(argv: string[] = [], env = process.env) {
   const options = {
     accountName: env.BITSHARES_ACCOUNT || null,
     healthPath: DEFAULT_HEALTH_PATH,
@@ -59,7 +59,7 @@ async function main(argv = process.argv.slice(2), env = process.env, logger: Rec
   process.on('SIGTERM', handleSignal);
 }
 
-function resolveLogger(logger) {
+function resolveLogger(logger: any) {
   const fallback = console;
   return {
     info: typeof logger?.info === 'function' ? logger.info.bind(logger) : fallback.log.bind(fallback),
@@ -84,15 +84,15 @@ function createPositionManagerWatcher(options: Record<string, any> = {}) {
 
   const manager = new PositionManager({ statePath: resolvedOptions.statePath });
   let running = false;
-  let syncTimer = null;
-  let unsubscribe = null;
+  let syncTimer: any = null;
+  let unsubscribe: any = null;
 
   // Health tracking state
   let consecutiveFailures = 0;
-  let lastSuccessAt = null;
-  let lastFailureAt = null;
-  let lastFailureMessage = null;
-  let healthWriteChain = Promise.resolve();
+  let lastSuccessAt: string | null = null;
+  let lastFailureAt: string | null = null;
+  let lastFailureMessage: string | null = null;
+  let healthWriteChain: Promise<any> = Promise.resolve();
 
   function getHealth() {
     return {
@@ -130,7 +130,7 @@ function createPositionManagerWatcher(options: Record<string, any> = {}) {
     await queueHealthWrite();
   }
 
-  async function recordSyncFailure(err) {
+  async function recordSyncFailure(err: any) {
     consecutiveFailures += 1;
     lastFailureAt = new Date().toISOString();
     lastFailureMessage = err.message || String(err);
@@ -177,15 +177,15 @@ function createPositionManagerWatcher(options: Record<string, any> = {}) {
     running = true;
     logger.info(`[position-manager-watch] starting for ${resolvedOptions.accountName}`);
 
-    await waitForConnected().catch((err) => {
+    await waitForConnected().catch((err: any) => {
       throw new Error(`BitShares connection not ready: ${err.message}`);
     });
 
     await manager.syncAllPositions()
       .then(() => recordSyncSuccess())
-      .catch((err) => recordSyncFailure(err));
+      .catch((err: any) => recordSyncFailure(err));
 
-    unsubscribe = await manager.watchAccount(resolvedOptions.accountName, async (position) => {
+    unsubscribe = await manager.watchAccount(resolvedOptions.accountName, async (position: any) => {
       logger.info(`[position-manager-watch] fill observed for ${position.id}`);
       if (typeof options.onFill === 'function') {
         await options.onFill(clone(position));
@@ -199,7 +199,7 @@ function createPositionManagerWatcher(options: Record<string, any> = {}) {
 
       manager.syncAllPositions()
         .then(() => recordSyncSuccess())
-        .catch((err) => recordSyncFailure(err));
+        .catch((err: any) => recordSyncFailure(err));
     }, resolvedOptions.syncIntervalMs);
 
     logger.info('[position-manager-watch] running');

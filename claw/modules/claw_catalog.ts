@@ -1,4 +1,4 @@
-function shellQuote(value) {
+function shellQuote(value: any) {
   return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
 }
 
@@ -18,7 +18,7 @@ function numberSchema(description?: string) {
   };
 }
 
-function numberOrStringSchema(description = null) {
+function numberOrStringSchema(description: string | null = null) {
   return {
     oneOf: [
       numberSchema(),
@@ -28,7 +28,7 @@ function numberOrStringSchema(description = null) {
   };
 }
 
-function numberOrStringOrNullSchema(description = null) {
+function numberOrStringOrNullSchema(description: string | null = null) {
   return {
     oneOf: [
       { type: 'null' },
@@ -39,21 +39,21 @@ function numberOrStringOrNullSchema(description = null) {
   };
 }
 
-function integerSchema(description) {
+function integerSchema(description: any) {
   return {
     type: 'integer',
     ...(description ? { description } : {})
   };
 }
 
-function booleanSchema(description) {
+function booleanSchema(description: any) {
   return {
     type: 'boolean',
     ...(description ? { description } : {})
   };
 }
 
-function stringArraySchema(description) {
+function stringArraySchema(description: any) {
   return {
     type: 'array',
     items: { type: 'string' },
@@ -61,7 +61,7 @@ function stringArraySchema(description) {
   };
 }
 
-function pairArraySchema(description) {
+function pairArraySchema(description: any) {
   return {
     type: 'array',
     items: {
@@ -74,7 +74,7 @@ function pairArraySchema(description) {
   };
 }
 
-function objectSchema(properties = {}, required = [], description = null) {
+function objectSchema(properties: any = {}, required: string[] = [], description: string | null = null) {
   return {
     type: 'object',
     additionalProperties: true,
@@ -84,21 +84,21 @@ function objectSchema(properties = {}, required = [], description = null) {
   };
 }
 
-function strictObjectSchema(properties = {}, required = [], description = null) {
+function strictObjectSchema(properties: any = {}, required: string[] = [], description: string | null = null) {
   return {
     ...objectSchema(properties, required, description),
     additionalProperties: false
   };
 }
 
-function memuScopeSchema(description = null) {
+function memuScopeSchema(description: string | null = null) {
   return objectSchema({
     user_id: stringSchema('Optional memU user scope id')
   }, [], description || 'Optional memU scope filter');
 }
 
 
-function botSettingsSelectorSchema(description = null) {
+function botSettingsSelectorSchema(description: string | null = null) {
   return objectSchema({
     botId: stringSchema('Explicit bot id'),
     botRef: stringSchema('Bot reference in DEXBot2 profiles'),
@@ -109,7 +109,7 @@ function botSettingsSelectorSchema(description = null) {
   }, [], description);
 }
 
-function botSettingsPatchSchema(description = null) {
+function botSettingsPatchSchema(description: string | null = null) {
   return objectSchema({
     patch: strictObjectSchema({
       active: booleanSchema('Whether the bot is active'),
@@ -152,7 +152,7 @@ function botSettingsPatchSchema(description = null) {
   }, ['patch'], description);
 }
 
-function createToolDefinition(definition) {
+function createToolDefinition(definition: any) {
   return Object.freeze({
     risk: 'read',
     runtimes: SUPPORTED_RUNTIMES,
@@ -953,7 +953,7 @@ const CLAW_TOOL_CATALOG = Object.freeze([
   }),
 ]);
 
-function cloneTool(tool) {
+function cloneTool(tool: any) {
   return {
     ...tool,
     args: tool.args ? { ...tool.args } : null,
@@ -978,16 +978,16 @@ function buildClawCommandExamples(scriptPath = 'node scripts/claw_bridge.js') {
     .map((tool) => [
       scriptPath,
       tool.command,
-      ...tool.exampleArgs.map((arg) => (String(arg).startsWith('--') ? String(arg) : shellQuote(arg)))
+      ...tool.exampleArgs.map((arg: any) => (String(arg).startsWith('--') ? String(arg) : shellQuote(arg)))
     ].join(' '));
 }
 
-function getClawToolByCommand(command) {
+function getClawToolByCommand(command: any) {
   const match = CLAW_TOOL_CATALOG.find((tool) => tool.command === command);
   return match ? cloneTool(match) : null;
 }
 
-function getClawToolByName(toolName) {
+function getClawToolByName(toolName: any) {
   const match = CLAW_TOOL_CATALOG.find((tool) => tool.toolName === toolName);
   return match ? cloneTool(match) : null;
 }

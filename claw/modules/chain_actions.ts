@@ -27,7 +27,7 @@ function nextYearExpirationIso() {
   return `${now.toISOString().slice(0, 10)}T23:59:59`;
 }
 
-function toGrapheneCollateralRatio(value) {
+function toGrapheneCollateralRatio(value: any) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue) || numericValue <= 0) {
     return null;
@@ -37,7 +37,7 @@ function toGrapheneCollateralRatio(value) {
   return Number.isInteger(scaled) && scaled > 0 && scaled <= 0xffff ? scaled : null;
 }
 
-async function resolveAssetMeta(symbolOrId) {
+async function resolveAssetMeta(symbolOrId: any) {
   const asset = await getAsset(symbolOrId);
   if (!asset) {
     throw new Error(`Asset not found: ${symbolOrId}`);
@@ -53,7 +53,7 @@ async function buildCreateLimitOrderOperation({
   receiveAsset,
   expiration = nextYearExpirationIso(),
   fillOrKill = false
-}) {
+}: any) {
   const accountId = await resolveAccountId(accountName);
   if (!accountId) {
     throw new Error(`Account not found: ${accountName}`);
@@ -97,7 +97,7 @@ function normalizeUpdateParams(options: Record<string, any> = {}) {
   };
 }
 
-async function buildCancelLimitOrderOperation({ accountName, orderId }) {
+async function buildCancelLimitOrderOperation({ accountName, orderId }: any) {
   const accountId = await resolveAccountId(accountName);
   if (!accountId) {
     throw new Error(`Account not found: ${accountName}`);
@@ -130,7 +130,7 @@ async function buildBorrowMpaOperation({
   debtDelta,
   collateralDelta,
   targetCollateralRatio
-}) {
+}: any) {
   const accountId = await resolveAccountId(accountName);
   if (!accountId) {
     throw new Error(`Account not found: ${accountName}`);
@@ -172,7 +172,7 @@ async function buildBorrowMpaOperation({
   };
 }
 
-async function buildSettleMpaOperation({ accountName, mpaAsset, amount }) {
+async function buildSettleMpaOperation({ accountName, mpaAsset, amount }: any) {
   const accountId = await resolveAccountId(accountName);
   if (!accountId) {
     throw new Error(`Account not found: ${accountName}`);
@@ -200,17 +200,17 @@ async function buildSettleMpaOperation({ accountName, mpaAsset, amount }) {
   };
 }
 
-async function createLimitOrder(options) {
+async function createLimitOrder(options: any) {
   const operation = await buildCreateLimitOrderOperation(options);
   return executeOperations([operation], options);
 }
 
-async function cancelLimitOrder(options) {
+async function cancelLimitOrder(options: any) {
   const operation = await buildCancelLimitOrderOperation(options);
   return executeOperations([operation], options);
 }
 
-async function updateLimitOrder(options) {
+async function updateLimitOrder(options: any) {
   const buildResult = await buildUpdateLimitOrderOperation(options);
   if (!buildResult) {
     return { skipped: true };
@@ -219,17 +219,17 @@ async function updateLimitOrder(options) {
   return executeOperations([buildResult.op], options);
 }
 
-async function executeBatch(options) {
+async function executeBatch(options: any) {
   const operations = Array.isArray(options?.operations) ? options.operations : [];
   return executeOperations(operations, options);
 }
 
-async function borrowMpa(options) {
+async function borrowMpa(options: any) {
   const operation = await buildBorrowMpaOperation(options);
   return executeOperations([operation], options);
 }
 
-async function repayMpaDebt(options) {
+async function repayMpaDebt(options: any) {
   const debtAmount = Math.abs(Number(options.amountToRepay));
   if (!Number.isFinite(debtAmount) || debtAmount <= 0) {
     throw new Error('amountToRepay must be a positive number');
@@ -247,7 +247,7 @@ async function repayMpaDebt(options) {
   return executeOperations([operation], options);
 }
 
-async function adjustMpaCollateral(options) {
+async function adjustMpaCollateral(options: any) {
   const collateralDelta = Number(options.collateralDelta);
   if (!Number.isFinite(collateralDelta) || collateralDelta === 0) {
     throw new Error('collateralDelta must be a non-zero number');
@@ -264,23 +264,23 @@ async function adjustMpaCollateral(options) {
   return executeOperations([operation], options);
 }
 
-async function settleMpa(options) {
+async function settleMpa(options: any) {
   const operation = await buildSettleMpaOperation(options);
   return executeOperations([operation], options);
 }
 
-async function getOpenOrders(accountNameOrId) {
+async function getOpenOrders(accountNameOrId: any) {
   return readOpenOrders(accountNameOrId);
 }
 
-async function getMpaPosition(accountNameOrId, mpaAsset) {
+async function getMpaPosition(accountNameOrId: any, mpaAsset: any) {
   const fullAccount = await getFullAccount(accountNameOrId);
   const mpaMeta = await resolveAssetMeta(mpaAsset);
   const callOrders = Array.isArray(fullAccount?.call_orders) ? fullAccount.call_orders : [];
-  return callOrders.find((entry) => entry.call_price?.quote?.asset_id === mpaMeta.id) || null;
+  return callOrders.find((entry: any) => entry.call_price?.quote?.asset_id === mpaMeta.id) || null;
 }
 
-async function listenForFills(accountNameOrId, callback) {
+async function listenForFills(accountNameOrId: any, callback: any) {
   if (typeof callback !== 'function') {
     throw new Error('listenForFills requires a callback');
   }
@@ -292,7 +292,7 @@ async function listenForFills(accountNameOrId, callback) {
 
   if (!accountSubscriptions.has(accountName)) {
     const callbacks: Set<Function> = new Set();
-    const bsCallback = (updates = []) => {
+    const bsCallback = (updates: any[] = []) => {
       const fills = updates.filter((update) => update?.op && update.op[0] === FILL_ORDER_OPERATION_TYPE);
       if (fills.length === 0) {
         return;
@@ -312,6 +312,9 @@ async function listenForFills(accountNameOrId, callback) {
   }
 
   const entry = accountSubscriptions.get(accountName);
+  if (!entry) {
+    throw new Error(`Subscription entry not found for ${accountName}`);
+  }
   entry.callbacks.add(callback);
 
   return async () => {

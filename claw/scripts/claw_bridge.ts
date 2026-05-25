@@ -3,7 +3,7 @@
 const { listClawCommandNames } = require('../modules/claw_catalog');
 const { describeRuntimeManifest, runClawCommand } = require('../modules/claw_bridge');
 
-function parseJson(value, fieldName) {
+function parseJson(value: any, fieldName: any) {
   if (value === undefined || value === null || value === '') {
     return {};
   }
@@ -19,7 +19,7 @@ function parseJson(value, fieldName) {
   }
 }
 
-function parseArgs(argv) {
+function parseArgs(argv: any) {
   const options: Record<string, any> = {
     command: null,
     payload: {}
@@ -92,7 +92,7 @@ function parseArgs(argv) {
 }
 
 function printHelp(scriptPath = 'node scripts/claw_bridge.js') {
-  const commandLines = listClawCommandNames().map((command) => `  ${command}`);
+  const commandLines = listClawCommandNames().map((command: any) => `  ${command}`);
 
   console.log([
     'Usage:',
@@ -103,7 +103,7 @@ function printHelp(scriptPath = 'node scripts/claw_bridge.js') {
   ].join('\n'));
 }
 
-function describeScriptRuntimeManifest(runtimeName, payload = {}) {
+function describeScriptRuntimeManifest(runtimeName: any, payload = {}) {
   return describeRuntimeManifest(runtimeName ? { ...payload, runtimeName } : payload);
 }
 

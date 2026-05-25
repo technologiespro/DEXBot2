@@ -21,7 +21,7 @@ const { getAsset } = require('./chain_queries');
 /**
  * Resolve a symbol or asset ID to a { id, precision, symbol } object.
  */
-async function resolveAsset(symbolOrId) {
+async function resolveAsset(symbolOrId: string) {
   const asset = await getAsset(symbolOrId);
   if (!asset) throw new Error(`Asset not found: ${symbolOrId}`);
   return { id: asset.id, precision: asset.precision, symbol: asset.symbol };
@@ -39,7 +39,7 @@ async function resolveAsset(symbolOrId) {
  * @returns {Promise<Array>} OHLCV candles [[ts, o, h, l, c, vol], ...]
  *   Price in BTS-per-MPA units.
  */
-async function fetchMarketCandles(mpaSymbol, config: Record<string, any> = {}) {
+async function fetchMarketCandles(mpaSymbol: string, config: Record<string, any> = {}) {
   const btsAsset = await resolveAsset('BTS');
   const mpaAsset = await resolveAsset(mpaSymbol);
   return getMarketCandles(btsAsset, mpaAsset, config);
@@ -52,7 +52,7 @@ async function fetchMarketCandles(mpaSymbol, config: Record<string, any> = {}) {
  * @param {Object} [config]
  * @returns {Promise<number[]>} Array of close prices (BTS-per-MPA)
  */
-async function fetchMarketClosePrices(mpaSymbol, config: Record<string, any> = {}) {
+async function fetchMarketClosePrices(mpaSymbol: string, config: Record<string, any> = {}) {
   const btsAsset = await resolveAsset('BTS');
   const mpaAsset = await resolveAsset(mpaSymbol);
   return getMarketClosePrices(btsAsset, mpaAsset, config);
@@ -69,7 +69,7 @@ async function fetchMarketClosePrices(mpaSymbol, config: Record<string, any> = {
  * @param {Object}        [config]
  * @returns {Promise<Array>} OHLCV candles [[ts, o, h, l, c, vol], ...]
  */
-async function fetchLpCandles(poolId, assetASymbol, assetBSymbol, config: Record<string, any> = {}) {
+async function fetchLpCandles(poolId: any, assetASymbol: string, assetBSymbol: string, config: Record<string, any> = {}) {
   const assetA = await resolveAsset(assetASymbol);
   const assetB = await resolveAsset(assetBSymbol);
   return getLpCandlesForPool(poolId, assetA, assetB, config);
@@ -84,7 +84,7 @@ async function fetchLpCandles(poolId, assetASymbol, assetBSymbol, config: Record
  * @param {Object}        [config]
  * @returns {Promise<Object>} LP close prices
  */
-async function fetchLpClosePrices(poolId, assetASymbol, assetBSymbol, config: Record<string, any> = {}) {
+async function fetchLpClosePrices(poolId: any, assetASymbol: string, assetBSymbol: string, config: Record<string, any> = {}) {
   const assetA = await resolveAsset(assetASymbol);
   const assetB = await resolveAsset(assetBSymbol);
   return getLpClosePricesForPool(poolId, assetA, assetB, config);
@@ -97,7 +97,7 @@ async function fetchLpClosePrices(poolId, assetASymbol, assetBSymbol, config: Re
  * @param {Object}        [config]
  * @returns {Promise<string[]>} Array of asset IDs in the pool
  */
-async function fetchPoolAssets(poolId, config: Record<string, any> = {}) {
+async function fetchPoolAssets(poolId: any, config: Record<string, any> = {}) {
   return discoverPoolAssets(poolId, config);
 }
 
@@ -115,9 +115,9 @@ async function fetchPoolAssets(poolId, config: Record<string, any> = {}) {
  * @param {Object} [config]
  * @returns {Promise<Object>} { candles, closePrices, candleCount, mpaSymbol, intervalSeconds, lookbackHours }
  */
-async function fetchTrendHistoryCandles(mpaSymbol, config: Record<string, any> = {}) {
-  const candles = await fetchMarketCandles(mpaSymbol, config);
-  const closePrices = candles.map(([, , , , close]) => close);
+async function fetchTrendHistoryCandles(mpaSymbol: string, config: Record<string, any> = {}) {
+  const candles: any = await fetchMarketCandles(mpaSymbol, config);
+  const closePrices = candles.map(([, , , , close]: [number, number, number, number, number]) => close);
 
   return {
     candles,

@@ -25,7 +25,7 @@ function getBlockchainToFloat() {
 /**
  * Compute BTS-per-MPA from settlement price.
  */
-function computeBtsPerMpa(settlementPrice, mpaAsset, backingAsset) {
+function computeBtsPerMpa(settlementPrice: any, mpaAsset: any, backingAsset: any) {
   const base = settlementPrice?.base;
   const quote = settlementPrice?.quote;
   if (!base || !quote) return null;
@@ -60,7 +60,7 @@ function computeBtsPerMpa(settlementPrice, mpaAsset, backingAsset) {
  * @param {Object} bitassetData – Resolved bitasset data object
  * @returns {Object} Normalized position
  */
-function normalizeCallOrder(callOrder, mpaAsset, backingAsset, bitassetData) {
+function normalizeCallOrder(callOrder: any, mpaAsset: any, backingAsset: any, bitassetData: any) {
   const blockchainToFloat = getBlockchainToFloat();
   const debtAmount = blockchainToFloat(callOrder.debt, mpaAsset.precision);
   const collateralAmount = blockchainToFloat(callOrder.collateral, backingAsset.precision);
@@ -94,16 +94,16 @@ function normalizeCallOrder(callOrder, mpaAsset, backingAsset, bitassetData) {
  * @param {string} accountName – BitShares account name or ID
  * @returns {Promise<Array>} Array of normalized position objects
  */
-async function discoverPositions(accountName) {
+async function discoverPositions(accountName: string) {
   const fullAccount = await getFullAccount(accountName);
   if (!fullAccount) throw new Error(`Account not found: ${accountName}`);
 
   const callOrders = Array.isArray(fullAccount.call_orders) ? fullAccount.call_orders : [];
-  if (callOrders.length === 0) return [];
+  if (callOrders.length === 0) return [] as any[];
 
   // Collect unique debt asset IDs
   const debtAssetIds = [...new Set(
-    callOrders.map(co => co?.call_price?.quote?.asset_id).filter(Boolean)
+    callOrders.map((co: any) => co?.call_price?.quote?.asset_id).filter(Boolean)
   )];
 
   // Resolve all assets in parallel
@@ -123,7 +123,7 @@ async function discoverPositions(accountName) {
   }
 
   // Normalize each call order
-  const positions = [];
+  const positions: any[] = [];
   for (const callOrder of callOrders) {
     const debtAssetId = callOrder?.call_price?.quote?.asset_id;
     if (!debtAssetId) continue;
@@ -145,7 +145,7 @@ async function discoverPositions(accountName) {
  * @param {string} accountName – BitShares account name or ID
  * @returns {Promise<Object>} { account, positionCount, discoveredAt, positions: [...summary] }
  */
-async function discoverPositionsSummary(accountName) {
+async function discoverPositionsSummary(accountName: string) {
   const positions = await discoverPositions(accountName);
   return {
     account: accountName,

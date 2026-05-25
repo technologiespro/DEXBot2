@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-function isDexbot2Root(candidate) {
+function isDexbot2Root(candidate: string) {
   return !!candidate && (
     fs.existsSync(path.join(candidate, 'dist', 'dexbot.js')) ||
     fs.existsSync(path.join(candidate, 'dexbot.js')) ||
@@ -11,7 +11,7 @@ function isDexbot2Root(candidate) {
   );
 }
 
-function findDexbot2Root(startDir) {
+function findDexbot2Root(startDir?: string) {
   let candidate = path.resolve(startDir || __dirname);
   for (let i = 0; i < 8; i++) {
     if (isDexbot2Root(candidate)) {
@@ -55,7 +55,7 @@ function normalizeProfileDir(options: Record<string, any> = {}) {
   return path.join(DEFAULT_ROOT, 'profiles');
 }
 
-function resolveRuntimeScript(root, ...segments) {
+function resolveRuntimeScript(root: string, ...segments: string[]) {
   const sourcePath = path.join(root, ...segments);
   if (fs.existsSync(sourcePath)) {
     return sourcePath;

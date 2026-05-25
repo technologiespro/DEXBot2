@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 
-function candidateExists(candidatePath) {
+function candidateExists(candidatePath: string) {
   if (fs.existsSync(candidatePath)) {
     return true;
   }
@@ -32,7 +32,7 @@ function getDexbot2Root() {
   throw new Error('Unable to resolve DEXBot2 root. Set DEXBOT2_ROOT or run from a DEXBot2 checkout.');
 }
 
-function resolveDexbot2Path(relativePath) {
+function resolveDexbot2Path(relativePath: string) {
   const root = getDexbot2Root();
   const normalizedPath = String(relativePath || '');
   const candidates = [path.join(root, normalizedPath)];
@@ -52,7 +52,7 @@ function resolveDexbot2Path(relativePath) {
   return candidates[candidates.length - 1];
 }
 
-function requireDexbot2Module(relativePath) {
+function requireDexbot2Module(relativePath: string) {
   return require(resolveDexbot2Path(relativePath));
 }
 

@@ -21,11 +21,11 @@ const HARDCODED_HONEST_MONEY_BTS_POOL = {
 
 const { clone } = require('./utils');
 
-function isMpa(asset) {
+function isMpa(asset: any) {
   return Boolean(asset && asset.bitasset_data_id);
 }
 
-function isHonestAsset(asset) {
+function isHonestAsset(asset: any) {
   return typeof asset?.symbol === 'string' && asset.symbol.startsWith(DEFAULT_PREFIX);
 }
 
@@ -52,7 +52,7 @@ function getHardcodedHonestMoneyBridge() {
   };
 }
 
-function isHardcodedHonestMoneyBtsPair(assetA, assetB) {
+function isHardcodedHonestMoneyBtsPair(assetA: any, assetB: any) {
   const assetASymbol = assetA && typeof assetA === 'object' ? assetA.symbol : assetA;
   const assetBSymbol = assetB && typeof assetB === 'object' ? assetB.symbol : assetB;
 
@@ -62,13 +62,13 @@ function isHardcodedHonestMoneyBtsPair(assetA, assetB) {
   );
 }
 
-function resolveHardcodedHonestMoneyPrice(assetA, assetB) {
+function resolveHardcodedHonestMoneyPrice(assetA: any, assetB: any) {
   const assetASymbol = assetA && typeof assetA === 'object' ? assetA.symbol : assetA;
   const assetBSymbol = assetB && typeof assetB === 'object' ? assetB.symbol : assetB;
   const bridge = getHardcodedHonestMoneyBridge();
   const bridgePrice = bridge.latestHonestMoneyPerBts;
 
-  if (!Number.isFinite(bridgePrice) || bridgePrice <= 0) {
+  if (bridgePrice === null || !Number.isFinite(bridgePrice) || bridgePrice <= 0) {
     return null;
   }
 
@@ -83,7 +83,7 @@ function resolveHardcodedHonestMoneyPrice(assetA, assetB) {
   return null;
 }
 
-async function resolveHonestPairPrice(assetA, assetB, options: Record<string, any> = {}) {
+async function resolveHonestPairPrice(assetA: any, assetB: any, options: Record<string, any> = {}) {
   const hardcoded = resolveHardcodedHonestMoneyPrice(assetA, assetB);
   if (hardcoded !== null) {
     return hardcoded;
@@ -92,7 +92,7 @@ async function resolveHonestPairPrice(assetA, assetB, options: Record<string, an
   return derivePoolPrice(assetA, assetB, options);
 }
 
-async function resolveHonestPairContext(assetA, assetB, options: Record<string, any> = {}) {
+async function resolveHonestPairContext(assetA: any, assetB: any, options: Record<string, any> = {}) {
   const pairPrice = await resolveHonestPairPrice(assetA, assetB, options).catch(() => null);
   const assetASymbol = assetA && typeof assetA === 'object' ? assetA.symbol : assetA;
   const assetBSymbol = assetB && typeof assetB === 'object' ? assetB.symbol : assetB;
@@ -264,11 +264,11 @@ function createHonestEcosystemAdapter(options: Record<string, any> = {}) {
       ...options,
       ...assetOptions
     }),
-    resolvePairContext: (assetA, assetB, contextOptions = {}) => resolveHonestPairContext(assetA, assetB, {
+    resolvePairContext: (assetA: any, assetB: any, contextOptions = {}) => resolveHonestPairContext(assetA, assetB, {
       ...options,
       ...contextOptions
     }),
-    resolvePairPrice: (assetA, assetB, priceOptions = {}) => resolveHonestPairPrice(assetA, assetB, {
+    resolvePairPrice: (assetA: any, assetB: any, priceOptions = {}) => resolveHonestPairPrice(assetA, assetB, {
       ...options,
       ...priceOptions
     }),

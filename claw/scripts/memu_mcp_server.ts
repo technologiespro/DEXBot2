@@ -2,7 +2,7 @@
 
 const { createMemuBridge, describeMemuBridge } = require('../modules/memu_bridge');
 
-function parseArgs(argv) {
+function parseArgs(argv: any) {
   const options: Record<string, any> = {};
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -57,7 +57,7 @@ function writeMessage(message: any) {
   });
 }
 
-function success(id, result) {
+function success(id: any, result: any) {
   return writeMessage({
     jsonrpc: '2.0',
     id,
@@ -65,7 +65,7 @@ function success(id, result) {
   });
 }
 
-function failure(id, code, message, data = undefined) {
+function failure(id: any, code: any, message: any, data = undefined) {
   return writeMessage({
     jsonrpc: '2.0',
     id,
@@ -309,7 +309,7 @@ function listMcpTools() {
   ];
 }
 
-async function handleRequest(message, defaults) {
+async function handleRequest(message: any, defaults: any) {
   const { id, method, params } = message;
 
   switch (method) {
@@ -435,7 +435,7 @@ async function handleRequest(message, defaults) {
           ],
           structuredContent: result
         });
-      } catch (error) {
+      } catch (error: any) {
         return success(id, {
           content: [
             {
@@ -455,12 +455,12 @@ async function handleRequest(message, defaults) {
   }
 }
 
-async function runMemuTool(command, args, defaults) {
+async function runMemuTool(command: any, args: any, defaults: any) {
   const { runMemuCommand } = require('../modules/memu_bridge');
   return runMemuCommand(command, { ...defaults, ...args });
 }
 
-function createMessageParser(onMessage) {
+function createMessageParser(onMessage: any) {
   let buffer = Buffer.alloc(0);
   let queue = Promise.resolve();
 
@@ -492,7 +492,7 @@ function createMessageParser(onMessage) {
   }
 
   return {
-    push(chunk) {
+    push(chunk: any) {
       buffer = Buffer.concat([buffer, chunk]);
       processBuffer();
       return queue;
@@ -502,7 +502,7 @@ function createMessageParser(onMessage) {
 
 async function main() {
   const defaults = parseArgs(process.argv.slice(2));
-  const parser = createMessageParser((message) => handleRequest(message, defaults));
+  const parser = createMessageParser((message: any) => handleRequest(message, defaults));
   let lastQueue = Promise.resolve();
 
   process.stdin.on('data', (chunk) => {

@@ -7,7 +7,7 @@ const {
   requireBtsBackedMpa
 } = require('./mpa_utils');
 
-function requirePositiveNumber(value, fieldName) {
+function requirePositiveNumber(value: any, fieldName: string) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue) || numericValue <= 0) {
     throw new Error(`${fieldName} must be a positive number`);
@@ -16,7 +16,7 @@ function requirePositiveNumber(value, fieldName) {
   return numericValue;
 }
 
-function requireNonNegativeNumber(value, fieldName) {
+function requireNonNegativeNumber(value: any, fieldName: string) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue) || numericValue < 0) {
     throw new Error(`${fieldName} must be zero or a positive number`);

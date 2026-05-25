@@ -2,7 +2,7 @@ const { definePluginEntry } = require("openclaw/plugin-sdk/plugin-entry");
 const { getClawToolCatalog } = require("../../modules/claw_catalog");
 const { runClawCommand } = require("../../modules/claw_bridge");
 
-function formatResult(result) {
+function formatResult(result: any) {
   return JSON.stringify(result, null, 2);
 }
 
@@ -10,13 +10,13 @@ const plugin = definePluginEntry({
   id: "bitshares-claw",
   name: "BitShares Claw",
   description: "Native BitShares tools from DEXBot2/claw",
-  register(api) {
-    for (const tool of getClawToolCatalog().filter((entry) => entry.runtimes.includes("openclaw"))) {
+  register(api: any) {
+    for (const tool of getClawToolCatalog().filter((entry: any) => entry.runtimes.includes("openclaw"))) {
       api.registerTool({
         name: tool.toolName,
         description: `[${tool.risk}] ${tool.description}`,
         parameters: tool.inputSchema,
-        async execute(_id, params) {
+        async execute(_id: any, params: any) {
           const result = await runClawCommand(tool.command, { ...params, runtimeName: 'openclaw' });
           return {
             content: [

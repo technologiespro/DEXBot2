@@ -505,6 +505,9 @@ function createActionsHarness() {
   });
 
   registerMock(dexbotBridgePath, {
+    loadDexbotOrderConstants: () => ({
+      FEE_PARAMETERS: { GRAPHENE_COLLATERAL_RATIO_DENOM: 1000 }
+    }),
     loadDexbotOrderUtils: () => ({
       floatToBlockchainInt: (value, precision) => Math.round(Number(value) * (10 ** precision))
     }),

@@ -2,11 +2,11 @@ const fs = require('fs/promises');
 const path = require('path');
 const { getNullClawSkillTools } = require('./nullclaw_catalog');
 
-function tomlString(value) {
+function tomlString(value: any) {
   return JSON.stringify(String(value));
 }
 
-function normalizeRepoRoot(repoRoot) {
+function normalizeRepoRoot(repoRoot?: string) {
   const NC_PARENT_DIR = path.dirname(path.dirname(__dirname));
   const NC_PROJECT_ROOT = path.basename(NC_PARENT_DIR) === 'dist' ? path.dirname(NC_PARENT_DIR) : NC_PARENT_DIR;
   return path.resolve(repoRoot || path.join(NC_PROJECT_ROOT, 'claw'));
@@ -24,17 +24,17 @@ function normalizeProfileRoot(options: Record<string, any> = {}, repoRoot: strin
   return path.resolve(repoRoot, '..');
 }
 
-function shellQuote(value) {
+function shellQuote(value: any) {
   return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
 }
 
-function buildBridgeCommand(bridgeScript, profileRoot, command, extraArgs = []) {
+function buildBridgeCommand(bridgeScript: string, profileRoot: string, command: string, extraArgs: any[] = []) {
   return ['node', bridgeScript, command, '--profile-root', profileRoot, ...extraArgs]
     .map((part, index) => (index === 0 ? String(part) : shellQuote(part)))
     .join(' ');
 }
 
-function createTool(name, description, command, args = null) {
+function createTool(name: string, description: string, command: string, args: any = null) {
   return {
     name,
     description,
@@ -49,7 +49,7 @@ function buildNullClawSkillToml(options: Record<string, any> = {}) {
   const profileRoot = normalizeProfileRoot(options, repoRoot);
   const bridgeScript = path.join(repoRoot, 'scripts', 'nullclaw_bridge.js').replace(/\\/g, '/');
 
-  const tools = getNullClawSkillTools().map((tool) => createTool(
+  const tools = getNullClawSkillTools().map((tool: any) => createTool(
     tool.toolName,
     tool.description,
     buildBridgeCommand(bridgeScript, profileRoot, tool.command, tool.extraArgs),

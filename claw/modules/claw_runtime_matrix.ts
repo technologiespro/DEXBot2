@@ -64,7 +64,7 @@ const SUPPORTED_CLAW_RUNTIMES = Object.freeze([
   }
 ]);
 
-function cloneRuntime(runtime) {
+function cloneRuntime(runtime: any) {
   return { ...runtime };
 }
 
@@ -72,7 +72,7 @@ function listSupportedClawRuntimes() {
   return SUPPORTED_CLAW_RUNTIMES.map(cloneRuntime);
 }
 
-function getSupportedClawRuntime(runtimeName) {
+function getSupportedClawRuntime(runtimeName: string) {
   if (!runtimeName) {
     return null;
   }

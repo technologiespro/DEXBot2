@@ -5,7 +5,7 @@ const {
 } = require('./claw_catalog');
 
 function getZeroClawSkillTools() {
-  return getClawToolCatalog().filter((tool) => Array.isArray(tool.runtimes) && tool.runtimes.includes('zeroclaw'));
+  return getClawToolCatalog().filter((tool: any) => Array.isArray(tool.runtimes) && tool.runtimes.includes('zeroclaw'));
 }
 
 function listZeroClawCommandNames() {

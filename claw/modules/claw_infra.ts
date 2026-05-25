@@ -184,7 +184,7 @@ function createBitsharesClient(options: BitsharesClientOptions = {}) {
 
   return {
     accountName,
-    createAccountClient: (name: string = accountName, privateKey?: string) => bitsharesClient.createAccountClient(name, privateKey),
+    createAccountClient: (name?: string, privateKey?: string) => bitsharesClient.createAccountClient(name ?? accountName, privateKey),
     credentials: {
       readyFilePath,
       socketPath
@@ -275,7 +275,7 @@ function createClawInfrastructure(options: ClawInfrastructureOptions = {}) {
   const credential = createCredentialClient((options.credential || options) as CredentialClientOptions);
   const bitshares = createBitsharesClient({
     ...(options.bitshares || {}),
-    accountName: (options.bitshares && options.bitshares.accountName) || runtime.accountName,
+    accountName: (options.bitshares && options.bitshares.accountName) || (runtime.accountName ?? undefined),
     readyFilePath: (options.bitshares && options.bitshares.readyFilePath) || credential.readyFilePath,
     socketPath: (options.bitshares && options.bitshares.socketPath) || credential.socketPath
   });

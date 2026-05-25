@@ -1,4 +1,4 @@
-function clone(value) {
+function clone(value: any) {
   if (value === undefined) {
     return undefined;
   }

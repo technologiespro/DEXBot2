@@ -5,8 +5,8 @@ const {
 } = require('./claw_catalog');
 const { getSupportedClawRuntime, listSupportedClawRuntimes } = require('./claw_runtime_matrix');
 
-function groupCommandsByRisk(tools) {
-  return tools.reduce((groups, tool) => {
+function groupCommandsByRisk(tools: any[]) {
+  return tools.reduce((groups: Record<string, string[]>, tool: any) => {
     const risk = tool.risk || 'read';
     if (!groups[risk]) {
       groups[risk] = [];
@@ -53,7 +53,7 @@ function describeClawBridge(options: Record<string, any> = {}) {
   };
 }
 
-function createVariantDescribeFn(runtimeName, displayName, scriptPath, trustModel) {
+function createVariantDescribeFn(runtimeName: string, displayName: string, scriptPath: string, trustModel: string) {
   return function describeVariantBridge(options: Record<string, any> = {}) {
     const manifest = describeClawBridge({
       ...options,

@@ -9,8 +9,8 @@ function createDexbotPoolHelper() {
   const system = getDexbotSystem();
   return {
     cloneMap: system.cloneMap,
-    derivePoolPrice: (assetA, assetB) => system.derivePoolPrice(BitShares, assetA, assetB),
-    derivePrice: (assetA, assetB, mode) => system.derivePrice(BitShares, assetA, assetB, mode),
+    derivePoolPrice: (assetA: any, assetB: any) => system.derivePoolPrice(BitShares, assetA, assetB),
+    derivePrice: (assetA: any, assetB: any, mode: any) => system.derivePrice(BitShares, assetA, assetB, mode),
     deepFreeze: system.deepFreeze,
     loadAmaCenterSnapshot: system.loadAmaCenterSnapshot,
     loadAmaCenterPrice: system.loadAmaCenterPrice,
@@ -20,8 +20,8 @@ function createDexbotPoolHelper() {
 
 export = {
   createDexbotPoolHelper,
-  derivePoolPrice: (assetA, assetB) => getDexbotSystem().derivePoolPrice(BitShares, assetA, assetB),
-  derivePrice: (assetA, assetB, mode) => getDexbotSystem().derivePrice(BitShares, assetA, assetB, mode),
+  derivePoolPrice: (assetA: any, assetB: any) => getDexbotSystem().derivePoolPrice(BitShares, assetA, assetB),
+  derivePrice: (assetA: any, assetB: any, mode: any) => getDexbotSystem().derivePrice(BitShares, assetA, assetB, mode),
   deepFreeze: (...args: any[]) => getDexbotSystem().deepFreeze(...args),
   getDexbot2Root,
   loadAmaCenterSnapshot: (...args: any[]) => getDexbotSystem().loadAmaCenterSnapshot(...args),

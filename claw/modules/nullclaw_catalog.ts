@@ -5,7 +5,7 @@ const {
 } = require('./claw_catalog');
 
 function getNullClawSkillTools() {
-  return getClawToolCatalog().filter((tool) => Array.isArray(tool.runtimes) && tool.runtimes.includes('nullclaw'));
+  return getClawToolCatalog().filter((tool: any) => Array.isArray(tool.runtimes) && tool.runtimes.includes('nullclaw'));
 }
 
 function listNullClawCommandNames() {

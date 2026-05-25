@@ -7,8 +7,8 @@ const DEFAULT_CHECK_INTERVAL_MS = TIMING.CHECK_INTERVAL_MS;
 
 let connected = false;
 let suppressConnectionLog = false;
-let _nativeClient = null;
-let _connectPromise = null;
+let _nativeClient: any = null;
+let _connectPromise: any = null;
 
 const native = require('../../modules/bitshares-native');
 _nativeClient = native.createChainClient({
@@ -18,7 +18,7 @@ _nativeClient = native.createChainClient({
 });
 _nativeClient.setNodes(NODE_MANAGEMENT.DEFAULT_NODES);
 
-function handleConnectionStatus(status) {
+function handleConnectionStatus(status: any) {
     const effectiveStatus = status === 'connected' ? 'open' : status;
     if (effectiveStatus === 'open') {
         connected = true;
@@ -34,7 +34,7 @@ function handleConnectionStatus(status) {
     }
 }
 
-function setSuppressConnectionLog(suppress) {
+function setSuppressConnectionLog(suppress: any) {
     suppressConnectionLog = Boolean(suppress);
 }
 
@@ -67,7 +67,7 @@ async function waitForConnected(timeoutMs = DEFAULT_TIMEOUT_MS) {
     }
 }
 
-async function createAccountClient(accountName, privateKey) {
+async function createAccountClient(accountName: any, privateKey: any) {
     if (!accountName) throw new Error('accountName is required');
     if (!privateKey) throw new Error('privateKey is required');
 
@@ -81,7 +81,7 @@ async function createAccountClient(accountName, privateKey) {
 export = {
     BitShares: _nativeClient ? {
         get connect() {
-            return (servers) => {
+            return (servers: any) => {
                 if (Array.isArray(servers) && servers.length > 0) {
                     _nativeClient.setNodes(servers);
                 }
@@ -99,8 +99,8 @@ export = {
         get chain() { return { get coreAsset() { return _nativeClient.getCoreAsset(); } }; },
         get db() { return _nativeClient.db; },
         get history() { return _nativeClient.history; },
-        subscribe(...args) { return _nativeClient.subscribe ? _nativeClient.subscribe(...args) : undefined; },
-        unsubscribe(...args) { if (_nativeClient.unsubscribe) _nativeClient.unsubscribe(...args); },
+        subscribe(...args: any[]) { return _nativeClient.subscribe ? _nativeClient.subscribe(...args) : undefined; },
+        unsubscribe(...args: any[]) { if (_nativeClient.unsubscribe) _nativeClient.unsubscribe(...args); },
     } : null,
     createAccountClient,
     isConnected: () => connected,
