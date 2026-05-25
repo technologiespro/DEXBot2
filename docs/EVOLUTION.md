@@ -6,7 +6,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,403 commits over ~6 active months
+- **Growth Phase**: 1,407 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
 - **Stability**: Progression from manual testing to a suite of 181 automated test files
 - **Releases**: 20 tagged releases (v0.1.0 to v0.7.4)
@@ -178,7 +178,7 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 - **May 23-24**: Native BitShares integration (replace `btsdex` dependency), zero-dependency isolated mode, stability and fill processing groundwork (pre-v0.7.5-bump)
 - **May 24**: Zero-dependency policy codification and v0.7.5 version bump; complete TypeScript migration — all 48K+ lines, 158 tests, and entry points converted from JS to TS with strict mode enabled for modules, market_adapter, scripts, and claw. Release v0.7.5
 - **May 24-25**: Post-migration regression fixes — Docker release gates, update flow, path resolution, adapter gating
-- **May 25**: Build infrastructure hardening, zero-dependency enforcement (remove openclaw, dead files), stability hardening (fill replay, deadlock prevention, credential daemon startup), accounting/chain corrections
+- **May 25**: Build infrastructure hardening, zero-dependency enforcement (remove openclaw, dead files), stability hardening (fill replay, deadlock prevention, credential daemon startup), accounting/chain corrections, utility deduplication and barrel export refactoring, regime threshold alignment in analysis tools, final dead code and stale docs cleanup
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -227,7 +227,10 @@ This release completes the removal of all external runtime dependencies and tran
 | 7. General hardening (fill locking, credential daemon, reconnect, dead code removal) | 13 |
 | 8. Accounting and chain corrections | 6 |
 | 9. Documentation alignment (`.md` refs, constants, changelog) | 3 |
-| **Total** | **62** |
+| 10. Code quality & refactoring (utility deduplication) | 1 |
+| 11. Dead code & stale docs cleanup | 2 |
+| 12. Analysis tooling fix | 1 |
+| **Total** | **66** |
 
 ### v0.7.3 → v0.7.4 (5 commits)
 
@@ -450,6 +453,6 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 **Report Originally Generated**: February 19, 2026
 **Last Updated**: May 25, 2026
-**Total Commits**: 1403
+**Total Commits**: 1407
 **Date Range**: December 2, 2025 - May 25, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

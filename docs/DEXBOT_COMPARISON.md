@@ -1,7 +1,7 @@
 # DEXBot vs DEXBot2 — Detailed Comparison Report
 
-> **Date:** 2026-05-22 *(metrics refreshed against local source trees)*
-> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (Node.js rewrite). DEXBot2 is on the v0.7.5 release track, with `v0.7.5` as the latest tagged release.
+> **Date:** 2026-05-26 *(metrics refreshed against local source trees)*
+> **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (TypeScript, v0.7.5).
 > **Audience:** Developers, contributors, and operators evaluating or migrating between the two projects.
 
 ---
@@ -35,22 +35,22 @@
 
 | Attribute | DEXBot (original) | DEXBot2 |
 |---|---|---|
-| **Release Track** | 1.0.0 | v0.7.5 tagged release |
-| **Language** | Python 3.6+ | Node.js (JavaScript ES2022) |
+| **Release Track** | 1.0.0 | v0.7.5 |
+| **Language** | Python 3.6+ | TypeScript 5.x |
 | **Status** | Released 1.0.0, unmaintained | Active development |
-| **Last Repo Activity** | May 23, 2020 | 2026-05-22 |
+| **Last Repo Activity** | May 23, 2020 | 2026-05-25 |
 | **License** | MIT | MIT |
 | **Origin** | BitShares worker-proposal funded, Codaone Oy | Private rewrite by froooze |
 | **Primary Goal** | Multi-strategy, extensible trading framework | Hardened adaptive grid runtime with operator/AI tooling |
 | **Target Exchange** | BitShares DEX | BitShares DEX |
 | **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large JS codebase; core runtime, adapter, analysis, Claw, and test modules |
-| **Source Files** | 72 Python files in `dexbot/` | 150+ runtime/test JS files in active modules |
+| **Source Files** | 72 Python files in `dexbot/` | 424 JS/TS files across the repo |
 
 ### Summary
 
 DEXBot (original) is a community-governed, multi-strategy trading framework built in Python with a full GUI and plugin system. It was designed to be user-friendly and extensible, supporting multiple strategies and external price feeds out of the box.
 
-DEXBot2 is a ground-up rewrite in Node.js that prioritizes production correctness over the original project's GUI/plugin breadth. The core trading runtime is still centered on one deeply engineered boundary-crawl grid strategy, but the surrounding system has expanded significantly: Copy-on-Write order state, replay-safe fill accounting, two-pass startup and runtime reconciliation, dynamic AMA/Kalman market adaptation, credential-daemon key handling, PM2 orchestration, Claw automation APIs, credit/MPA support, and a broad regression suite.
+DEXBot2 is a ground-up rewrite in TypeScript that prioritizes production correctness over the original project's GUI/plugin breadth. The core trading runtime is still centered on one deeply engineered boundary-crawl grid strategy, but the surrounding system has expanded significantly: Copy-on-Write order state, replay-safe fill accounting, two-pass startup and runtime reconciliation, dynamic AMA/Kalman market adaptation, credential-daemon key handling, PM2 orchestration, Claw automation APIs, credit/MPA support, and a broad regression suite.
 
 ---
 
@@ -58,7 +58,7 @@ DEXBot2 is a ground-up rewrite in Node.js that prioritizes production correctnes
 
 | Layer | DEXBot | DEXBot2 |
 |---|---|---|
-| **Language** | Python 3.6+ | Node.js LTS (JavaScript) |
+| **Language** | Python 3.6+ | TypeScript 5.x |
 | **GUI** | PyQt5 (desktop GUI) | None (CLI only) |
 | **CLI Framework** | Click | Custom native async prompts |
 | **Blockchain Client** | `bitshares` Python library | `modules/bitshares-native/` (native) |
@@ -69,7 +69,7 @@ DEXBot2 is a ground-up rewrite in Node.js that prioritizes production correctnes
 | **External APIs** | CoinGecko, CCXT, Waves | No CEX APIs; adapter can consume on-chain/pool/Kibana candle inputs |
 | **Container** | Docker (Ubuntu 18.04) | Docker (multi-stage) |
 | **Dashboard** | PyQt5 GUI | CLI/PM2 logs; Claw/runtime automation surface |
-| **Testing** | pytest + Docker testnet | Native Node.js assert (171 `test_*.ts` files; 93 scripts in `npm test`) |
+| **Testing** | pytest + Docker testnet | Native Node assert (190 `test_*.ts` files; 100 entries in `scripts/run-tests.ts`) |
 | **CI/CD** | Travis CI, AppVeyor | GitHub Actions / local deterministic script suite |
 | **Packaging** | PyInstaller (Win/Mac/Linux binaries) | npm / PM2 ecosystem |
 
@@ -101,12 +101,12 @@ DEXBot brings a full Python desktop GUI and a strategy plugin model. DEXBot2 is 
 ```
 
 - **Single thread** manages all workers
-- Workers react to **blockchain events** (blocks, market updates, account changes)
+- Workers receive generic **push notifications** (on_block, on_market, on_account), then **fetch** all orders + balances from chain and **diff** to detect fills and state changes
 - Each worker is a **plugin** implementing a Strategy interface
 - State persisted in **SQLite** (orders, balances, config)
 - GUI runs separately in the **main thread**
 
-**Pattern:** Event-driven, callback-based, plugin architecture.
+**Pattern:** Event-triggered fetch + diff, plugin architecture.
 
 ---
 
@@ -139,12 +139,12 @@ DEXBot brings a full Python desktop GUI and a strategy plugin model. DEXBot2 is 
 
 - **Four specialized engines** (Accountant, StrategyEngine, Grid, SyncEngine) coordinate through OrderManager
 - **Copy-on-Write** grid: planning happens on isolated `WorkingGrid`; committed atomically or discarded on failure
-- **No event callbacks**: polling-based loop with fixed-cap fill batching (max 4 fills per cycle)
+- **Targeted fill subscription** via `set_subscribe_callback` → `get_account_history_operations` filtered for `OP_FILL_ORDER` fill operations; push-triggered fixed-cap fill batching (max 4 fills per batch)
 - **Market Adapter**: AMA-based price tracking, dynamic buy/sell weighting, Kalman confirmation, ATR/regime dampening, asymmetric grid bounds, and configurable delta triggers
 - State in **JSON flat files** (no database dependency)
 - Each PM2 process manages **one bot**
 
-**Pattern:** Layered engines, polling with fixed-cap batching, immutable/COW state management.
+**Pattern:** Layered engines, targeted fill subscription + fixed-cap batch processing + periodic reconciliation, immutable/COW state management.
 
 ---
 
@@ -152,8 +152,8 @@ DEXBot brings a full Python desktop GUI and a strategy plugin model. DEXBot2 is 
 
 | Dimension | DEXBot | DEXBot2 |
 |---|---|---|
-| **Core Pattern** | Event-driven callbacks | Polling + fixed-cap batching |
-| **Concurrency Model** | Python threading (GIL-bound) | Node.js async + AsyncLock semaphores |
+| **Core Pattern** | Event-triggered fetch + diff (generic notifications → fetch all state → diff) | Targeted subscription + incremental scan (fill-specific history stream → push) |
+| **Concurrency Model** | Python threading (GIL-bound) | TypeScript async + AsyncLock semaphores |
 | **State Storage** | SQLite (relational, queryable) | JSON flat files (simple, no dependency) |
 | **State Safety** | Mutable shared state per worker | Copy-on-Write immutable master grid |
 | **Multi-bot Scaling** | Single thread, multiple workers | One PM2 process per bot |
@@ -443,7 +443,7 @@ Where:
 
 ### DEXBot2
 
-- **Node.js async/await** (single-threaded event loop, no GIL)
+- **TypeScript async/await** (Node.js event loop, no GIL)
 - **AsyncLock** semaphores guard all critical sections:
   - `_gridLock`: serializes grid mutations
   - `_syncLock`: ensures one full sync at a time
@@ -459,7 +459,7 @@ Where:
 
 | Feature | DEXBot | DEXBot2 |
 |---|---|---|
-| **Threading Model** | Python threads (GIL) | Node.js async (event loop) |
+| **Threading Model** | Python threads (GIL) | TypeScript async (Node.js event loop) |
 | **Shared State Protection** | `threading.Lock` | AsyncLock semaphores (hierarchy) |
 | **Atomic State Commits** | No | Yes (COW pattern) |
 | **Stale State Detection** | No | Yes (version epochs) |
@@ -600,8 +600,8 @@ Where:
 
 ### DEXBot2
 
-- **Framework:** Native Node.js `assert` module (no external test framework)
-- **171 `test_*.ts` files** in the repository, with **93 scripts in `npm test`** covering:
+- **Framework:** Native Node `assert` module (no external test framework)
+- **190 `test_*.ts` files** in the repository, with **100 entries in `scripts/run-tests.ts`** covering:
   - Unit tests: accounting, strategy, grid, manager logic
   - Copy-on-Write semantics: COW commits, guards, concurrent fills
   - Edge cases: ghost orders, partial fills, BTS fee accounting, precision
@@ -618,8 +618,8 @@ Where:
 
 | Feature | DEXBot | DEXBot2 |
 |---|---|---|
-| **Framework** | pytest | Native Node.js assert |
-| **Test Count** | 32 Python test files | 171 `test_*.ts` files; 93 scripts in `npm test` |
+| **Framework** | pytest | Native Node assert |
+| **Test Count** | 16 Python test files | 190 `test_*.ts` files; 100 entries in `scripts/run-tests.ts` |
 | **Test Types** | Unit + integration | Unit + integration + edge-case + runtime regression |
 | **Testnet Integration** | Yes (Docker) | No (mocks) |
 | **External Dependency** | pytest, Docker | None |
@@ -659,9 +659,18 @@ Where:
 | `docs/COW_INVARIANTS.md` | 4 KB | Non-negotiable COW behavioral invariants |
 | `docs/CREDENTIAL_SECURITY.md` | 8 KB | Credential daemon, key policy, and security model |
 | `docs/MPA_CREDIT_USAGE.md` | 20 KB | Credit runtime and MPA usage guidance |
+| `claw/docs/AI_BOT_LIBRARY_API.md` | — | Claw API boundary and responsibility split |
+| `claw/docs/DEXBOT2_TUNING_CHEAT_SHEET.md` | — | Grid tuning reference |
+| `claw/docs/POSITION_HEALTH.md` | — | Position health monitoring guide |
+| `claw/docs/RUNTIME_COMPARISON.md` | — | Claw runtime comparison |
+| `dashboard/README.md` | — | Dashboard overview |
+| `dashboard/tui_dashboard_spec.md` | — | TUI dashboard specification |
 | `docs/TYPESCRIPT_MIGRATION_ANALYSIS.md` | 23 KB | Future TypeScript migration roadmap |
+| `docs/crash_report_jan_mar_2026.md` | 7 KB | Production incident analysis |
+| `docs/docker.md` | 3 KB | Docker deployment guide |
+| `docs/README.md` | 2 KB | Docs index |
 | `AGENTS.md` | 6.5 KB | AI development context |
-| `CHANGELOG.md` | Very large | Full version history (1250 commits at current HEAD) |
+| `CHANGELOG.md` | Very large | Full version history (1407 commits at current HEAD) |
 
 ### Documentation Comparison
 
@@ -700,15 +709,14 @@ Where:
 ### DEXBot2
 
 **Production dependencies (package.json):**
-- `ws ^8.0.0` — **optional** WebSocket transport (bot falls back to native `http` without it)
-- Total: **0 mandatory packages**, minimal footprint
+- Total: **0 packages** (zero runtime dependencies)
 
 ### Dependency Comparison
 
 | Metric | DEXBot | DEXBot2 |
 |---|---|---|
-| **Production Packages** | ~15-20 | 0 mandatory (1 optional) |
-| **Dev Packages** | ~5-8 | 0 (native `node:assert`) |
+| **Production Packages** | ~15-20 | 0 |
+| **Dev Packages** | ~5-8 | 3 (TypeScript, tsx, @types/node) |
 | **GUI Framework** | PyQt5 (~80MB) | None |
 | **Database ORM** | SQLAlchemy | None |
 | **External Price APIs** | CoinGecko, CCXT, Waves | None |
@@ -757,14 +765,14 @@ Where:
 
 | Metric | DEXBot | DEXBot2 |
 |---|---|---|
-| **Release Track** | 1.0.0 | v0.7.5 tagged release |
+| **Release Track** | 1.0.0 | v0.7.5 |
 | **Active Since** | ~2018 | December 2025 |
-| **Last Commit** | May 23, 2020 | 2026-05-22 |
-| **Total Commits** | 2281 | 1326 at current HEAD |
+| **Last Commit** | May 23, 2020 | 2026-05-25 |
+| **Total Commits** | 2281 | 1407 at current HEAD |
 | **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large JS runtime + adapter + Claw + analysis + tests |
-| **Source Files** | 72 Python files in `dexbot/` | 370 JS files across the repo |
-| **Test Files** | 32 Python test files | 171 `test_*.ts` files |
-| **Documentation** | Sphinx docs + README | 18+ Markdown docs plus Claw/analysis docs |
+| **Source Files** | 72 Python files in `dexbot/` | 424 JS/TS files across the repo |
+| **Test Files** | 16 Python test files | 190 `test_*.ts` files |
+| **Documentation** | Sphinx docs + README | 30+ Markdown docs plus Claw skills/references |
 | **Strategies** | 3 + plugins | 1 |
 | **Max Concurrent Bots** | Many (one process) | Many (one process per bot, PM2) |
 | **Primary Developer** | Codaone Oy (team) | froooze (individual, 99.1% commits) |
@@ -816,9 +824,9 @@ Where:
 | **Security** | ★★★☆☆ | ★★★★★ (AES-256-GCM, RAM-only) | DEXBot2 |
 | **Ease of Setup** | ★★★★★ (GUI wizard) | ★★☆☆☆ (manual JSON) | DEXBot |
 | **Accessibility** | ★★★★★ (GUI) | ★★☆☆☆ (CLI only) | DEXBot |
-| **Testing Depth** | ★★★☆☆ | ★★★★★ (171 test files; focused regressions) | DEXBot2 |
+| **Testing Depth** | ★★★☆☆ | ★★★★★ (190 test files; focused regressions) | DEXBot2 |
 | **Documentation** | ★★★☆☆ | ★★★★★ (architecture/accounting/security/adapter docs) | DEXBot2 |
-| **Dependency Footprint** | ★★☆☆☆ (heavy) | ★★★★★ (0 mandatory, 1 optional) | DEXBot2 |
+| **Dependency Footprint** | ★★☆☆☆ (heavy) | ★★★★★ (0 runtime deps) | DEXBot2 |
 | **Extensibility** | ★★★★★ (plugins) | ★☆☆☆☆ | DEXBot |
 | **Active Maintenance** | ★☆☆☆☆ (unmaintained) | ★★★★★ (active) | DEXBot2 |
 | **Grid Strategy Depth** | ★★★☆☆ (Staggered) | ★★★★★ (engineered) | DEXBot2 |
@@ -849,4 +857,4 @@ The practical migration path is to treat DEXBot2 as a new runtime: recreate bot 
 
 ---
 
-*Report generated 2026-05-13. Metrics refreshed 2026-05-13 from local DEXBot-master and DEXBot2 source trees.*
+*Report generated 2026-05-13. Metrics refreshed 2026-05-26 from local DEXBot-master and DEXBot2 source trees.*

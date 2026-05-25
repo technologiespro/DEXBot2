@@ -84,6 +84,9 @@ This release completes the removal of all external runtime dependencies and tran
 - Remove `openclaw` optional dependency to maintain strict zero-dep policy (`06587a3`).
 - Remove dead file `modules/load_dist_with_mirrors.js` (`045f211`).
 - Remove dead claw-side CR tuning code (`bot_auto_tuner`, `buildMarginTradingPlan`, `evaluateAndTune`) (`a50f369`).
+- Remove unused `market_adapter/utils/ws_client.ts` wrapper (`4e67e4e`).
+- Remove `export {}` from 11 CLI-only analysis runners and 2 market_adapter CLI scripts (`4e67e4e`).
+- Remove compiled artifacts, old bot config backup, orphaned scripts, and empty directories (`372e83b`).
 
 #### Stability & Recovery Hardening
 - Harden fill replay handling for robustness under edge cases (`168f4a1`).
@@ -103,6 +106,16 @@ This release completes the removal of all external runtime dependencies and tran
 
 #### Documentation
 - Fold TypeScript migration into v0.7.5 release entry, remove from Phase 6 planned (`eaf79cc`).
+- Fix stale `cli_utils.ts` reference in `analysis/README.md` (`4e67e4e`).
+- Remove stale docs for completed migrations — `FALLBACK_ANALYSIS.md`, `FALLBACK_REMOVAL_SUMMARY.md`, `TYPESCRIPT_MIGRATION_ANALYSIS.md` (`372e83b`).
+
+#### Refactoring & Code Quality
+- Deduplicate utility functions across analysis and `market_adapter` — extract `writeJsonAtomic`, `PROJECT_ROOT`, `normalizePoolId`/`normalizeAssetSymbol`/pair helpers, `calcStdDev`, `loadCandleFile`, consolidate `toIntervalLabel` into canonical shared locations (`3781ef2`).
+- Create `market_adapter/index.ts` barrel export for clean public API surface, following `modules/order/index.ts` pattern (`4e67e4e`).
+- Fix schema in `backtest_bot_fitting.ts` — `loadAmaStrategies` now reads from correct `meta.amas.AMA1..4` keys (`4e67e4e`).
+
+#### Analysis Tooling
+- Derive regime thresholds from `HURST_ZONE_BAND` constant in `analyze_regime_windows.ts`, replacing hardcoded 0.55/0.45 to match runtime behavior (`bae01df`).
 
 ## [0.7.4] - 2026-05-22 - Code Cleanup and Documentation Refresh
 
