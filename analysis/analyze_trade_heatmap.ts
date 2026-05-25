@@ -363,4 +363,3 @@ table.heatmap td.yl { color: #8b949e; font-size: 10px; text-align: right; paddin
     console.log(`✓ Heatmap saved to ${cfg.output}`);
 }
 main();
-export {};

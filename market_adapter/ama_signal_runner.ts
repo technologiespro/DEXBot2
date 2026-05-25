@@ -170,4 +170,3 @@ main().catch((err) => {
     fs.writeFileSync(1, `${JSON.stringify(out, null, 2)}\n`, 'utf8');
     process.exit(1);
 });
-export {};

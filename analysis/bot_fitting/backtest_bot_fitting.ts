@@ -108,28 +108,24 @@ function parseArgs() {
 
 function loadAmaStrategies(resultsPath) {
     const json = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
-    const meta = json.meta ?? {};
+    const amas = json.meta?.amas ?? {};
+    const labels = { AMA1: 'AMA1', AMA2: 'AMA2', AMA3: 'AMA3', AMA4: 'AMA4' };
 
     const out = [];
-    function add(key, label) {
-        const r = meta[key];
-        if (!r) return;
+    for (const [key, val] of Object.entries(amas)) {
+        const a = val;
+        if (!a || !Number.isFinite(a.er) || !Number.isFinite(a.fast) || !Number.isFinite(a.slow)) continue;
         out.push({
             id: key,
-            name: label,
-            er: r.er,
-            fast: r.fast,
-            slow: r.slow,
+            name: labels[key] ?? key,
+            er: a.er,
+            fast: a.fast,
+            slow: a.slow,
         });
     }
 
-    add('bestAreaMaxDist', 'MAX AREA/MAXDIST');
-    add('bestProdMaxDist', 'MAX PROD/MAXDIST');
-    add('bestAreaMaxDistCapped', 'MAX AREA/MAXDIST (capped)');
-    add('bestProdMaxDistCapped', 'MAX PROD/MAXDIST (capped)');
-
     if (out.length !== 4) {
-        throw new Error(`Expected 4 AMA strategies in results meta, found ${out.length}`);
+        throw new Error(`Expected 4 AMA strategies in results meta.amas, found ${out.length}`);
     }
     return out;
 }
@@ -379,4 +375,3 @@ function run() {
 }
 
 run();
-export {};

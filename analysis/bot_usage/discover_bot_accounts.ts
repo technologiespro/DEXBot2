@@ -540,4 +540,3 @@ run().then(() => process.exit(0)).catch(e => {
     if (process.env.DEBUG) console.error(e.stack);
     process.exit(1);
 });
-export {};

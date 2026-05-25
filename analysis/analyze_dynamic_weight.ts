@@ -207,7 +207,4 @@ async function main() {
     }
 }
 
-if (require.main === module) {
-    main();
-}
-export {};
+main().catch(err => { console.error(err); process.exit(1); });

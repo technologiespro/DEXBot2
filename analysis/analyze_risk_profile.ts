@@ -162,4 +162,3 @@ function main() {
     }
 }
 main();
-export {};

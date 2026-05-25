@@ -144,4 +144,3 @@ try {
     console.error('\n[error]', e.message);
     process.exit(1);
 }
-export {};

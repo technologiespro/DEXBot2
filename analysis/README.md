@@ -255,7 +255,6 @@ Generates a standalone TradingView-style HTML chart. See [tradingview/README.md]
 |------|---------|
 | `price_sources.ts` | Unified candle source abstraction (`json`, `market_adapter`) |
 | `chart_utils.ts` | Shared chart rendering utilities |
-| `cli_utils.ts` | CLI argument parsing helpers |
 | `math_utils.ts` | Shared math utilities |
 
 ## npm Script Shortcuts
