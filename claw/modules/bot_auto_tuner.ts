@@ -11,6 +11,8 @@
 
 'use strict';
 
+const { DEFAULT_TARGET_CR } = require('../../modules/constants');
+
 /**
  * Generate a universal tuning recommendation for a bot position.
  *
@@ -56,13 +58,12 @@ function tuneBot(bot, assessment: Record<string, any> = {}) {
   const reasoning = [];
   let baseConfidence = 0.5;
 
-  // CR actions: only for non-green zones
-  if (zone !== 'green') {
+  // CR actions: only for red zones
+  if (zone === 'red_low' || zone === 'red_high') {
     const primaryAction = assessment.actions?.[0] || null;
 
     if (primaryAction) {
-      // Target CR: for low zones aim for green floor (2.0); for high zones aim for green ceiling (2.5)
-      const targetCr = (zone === 'red_low' || zone === 'orange_low') ? 2.0 : 2.5;
+      const targetCr = DEFAULT_TARGET_CR;
 
       crAction = {
         action: primaryAction.action,

@@ -144,7 +144,7 @@ async function evaluate(accountName, options: Record<string, any> = {}) {
  * Build a quick summary of the evaluation results.
  */
 function buildSummary(assessments) {
-  const zones = { red_low: 0, orange_low: 0, green: 0, orange_high: 0, red_high: 0, unknown: 0 };
+  const zones = { red_low: 0, green: 0, red_high: 0, unknown: 0 };
   let immediateActions = 0;
   let soonActions = 0;
 

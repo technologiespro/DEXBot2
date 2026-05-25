@@ -441,16 +441,27 @@ let FEE_PARAMETERS = {
     GRAPHENE_FEE_RATE_DENOM: 1000000,
 
     // DEFAULT_MAX_FEE_RATE_PER_DAY: Default maximum daily fee rate for credit offers.
-    // 1/3000 ≈ 0.0003333 = 0.03333% per day = ~1% per month.
+    // 1/2900 ≈ 0.0003448 = 0.03448% per day = ~1.034% per month.
     // This provides a reasonable default cap so short-duration high-flat-fee offers
     // are rejected while long-duration low-flat-fee offers are accepted.
-    DEFAULT_MAX_FEE_RATE_PER_DAY: 1 / 3000,
+    DEFAULT_MAX_FEE_RATE_PER_DAY: 1 / 2900,
 
     // GRAPHENE_COLLATERAL_RATIO_DENOM: Denominator for target_collateral_ratio in call_order_update operations.
     // Matches the protocol constant in bitshares-core (libraries/protocol/include/graphene/protocol/config.hpp).
     // On-chain value = human_CR * DENOM. Example: 2.0 CR → 2000 on chain.
     GRAPHENE_COLLATERAL_RATIO_DENOM: 1000,
 };
+
+// Collateral ratio health zones for MPA position management.
+// Only the red boundaries are stored; everything between is green (acceptable).
+let CR_ZONES = Object.freeze({
+    RED_HIGH: 3.0,
+    RED_LOW:  1.7,
+});
+
+// Default target collateral ratio when returning to green zone.
+// Computed as the midpoint of the green band.
+const DEFAULT_TARGET_CR = (CR_ZONES.RED_LOW + CR_ZONES.RED_HIGH) / 2;
 
 // API request limits and batch sizes for blockchain operations
 let API_LIMITS = {
@@ -1359,6 +1370,7 @@ Object.freeze(GRID_LIMITS);
 Object.freeze(GRID_LIMITS.GRID_COMPARISON);
 Object.freeze(INCREMENT_BOUNDS);
 Object.freeze(FEE_PARAMETERS);
+Object.freeze(CR_ZONES);
 Object.freeze(API_LIMITS);
 Object.freeze(FILL_PROCESSING);
 Object.freeze(MAINTENANCE);
@@ -1384,4 +1396,4 @@ Object.freeze(MARKET_ADAPTER.AMAS.AMA4);
 Object.freeze(MARKET_ADAPTER.AMAS);
 Object.freeze(MARKET_ADAPTER);
 
-export = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE, NATIVE_CLIENT, MARKET_ADAPTER };
+export = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, CR_ZONES, DEFAULT_TARGET_CR, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE, NATIVE_CLIENT, MARKET_ADAPTER };

@@ -3,6 +3,7 @@
 
 const { toFiniteNumber } = require('./order/format');
 const { resolveConfigValue } = require('./order/utils/math');
+const { DEFAULT_TARGET_CR } = require('./constants');
 
 function positiveOrNull(value) {
     const num = toFiniteNumber(value, null);
@@ -88,7 +89,7 @@ function calculateCollateralRatio(currentCollateralAmount, currentDebtAmount, fe
     return collateral / (debt * price);
 }
 
-function collateralForTargetCr(debtAmount, feedPrice, targetCr = 2.0) {
+function collateralForTargetCr(debtAmount, feedPrice, targetCr = DEFAULT_TARGET_CR) {
     const debt = Number(debtAmount);
     const price = Number(feedPrice);
     const target = Number(targetCr);
@@ -101,11 +102,11 @@ function collateralForTargetCr(debtAmount, feedPrice, targetCr = 2.0) {
     return debt * price * target;
 }
 
-function collateralDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, targetCr = 2.0) {
+function collateralDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, targetCr = DEFAULT_TARGET_CR) {
     return collateralForTargetCr(debtAmount, feedPrice, targetCr) - (Number(currentCollateral) || 0);
 }
 
-function debtForTargetCr(currentCollateral, feedPrice, targetCr = 2.0) {
+function debtForTargetCr(currentCollateral, feedPrice, targetCr = DEFAULT_TARGET_CR) {
     const collateral = Number(currentCollateral);
     const price = Number(feedPrice);
     const target = Number(targetCr);
@@ -118,7 +119,7 @@ function debtForTargetCr(currentCollateral, feedPrice, targetCr = 2.0) {
     return collateral / (price * target);
 }
 
-function debtDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, targetCr = 2.0) {
+function debtDeltaForTargetCr(currentCollateral, debtAmount, feedPrice, targetCr = DEFAULT_TARGET_CR) {
     return debtForTargetCr(currentCollateral, feedPrice, targetCr) - (Number(debtAmount) || 0);
 }
 
@@ -280,7 +281,7 @@ function buildCollateralFallbackPlan({
     };
 }
 
-function planCrAdjustment(currentCollateral, debtAmount, feedPrice, targetCr = 2.0) {
+function planCrAdjustment(currentCollateral, debtAmount, feedPrice, targetCr = DEFAULT_TARGET_CR) {
     const collateral = positiveOrNull(currentCollateral);
     const debt = positiveOrNull(debtAmount);
     const price = positiveOrNull(feedPrice);

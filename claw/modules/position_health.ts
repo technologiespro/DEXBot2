@@ -16,18 +16,9 @@ const {
   planCrAdjustment: sharedPlanCrAdjustment
 } = require('../../modules/cr_planner');
 
-const DEFAULT_PRICE_RANGE_RATIO = 3.0;
+const { CR_ZONES } = require('../../modules/constants');
 
-// CR Zone boundaries for HONEST.Assets (MCR = 1.4)
-// Low zones: under-collateralized (liquidation risk)
-// High zones: over-collateralized (capital inefficiency)
-const CR_ZONES = Object.freeze({
-  RED_HIGH:    Object.freeze({ min: 3.0,  label: 'red_high',    status: 'over_collateralized' }),
-  ORANGE_HIGH: Object.freeze({ min: 2.5,  label: 'orange_high', status: 'excess_collateral' }),
-  GREEN:       Object.freeze({ min: 2.0,  label: 'green',       status: 'safe' }),
-  ORANGE_LOW:  Object.freeze({ min: 1.7,  label: 'orange_low',  status: 'temporary' }),
-  RED_LOW:     Object.freeze({ min: 0,    label: 'red_low',     status: 'not_acceptable' }),
-});
+const DEFAULT_PRICE_RANGE_RATIO = 3.0;
 
 /**
  * Classify a collateral ratio into a zone.
@@ -39,19 +30,13 @@ function classifyCrZone(cr) {
   if (!Number.isFinite(cr) || cr <= 0) {
     return { zone: 'unknown', label: 'unknown', status: 'no_data', cr: null };
   }
-  if (cr >= CR_ZONES.RED_HIGH.min) {
-    return { zone: 'red_high', label: CR_ZONES.RED_HIGH.label, status: CR_ZONES.RED_HIGH.status, cr };
+  if (cr >= CR_ZONES.RED_HIGH) {
+    return { zone: 'red_high', label: 'red_high', status: 'over_collateralized', cr };
   }
-  if (cr >= CR_ZONES.ORANGE_HIGH.min) {
-    return { zone: 'orange_high', label: CR_ZONES.ORANGE_HIGH.label, status: CR_ZONES.ORANGE_HIGH.status, cr };
+  if (cr >= CR_ZONES.RED_LOW) {
+    return { zone: 'green', label: 'green', status: 'safe', cr };
   }
-  if (cr >= CR_ZONES.GREEN.min) {
-    return { zone: 'green', label: CR_ZONES.GREEN.label, status: CR_ZONES.GREEN.status, cr };
-  }
-  if (cr >= CR_ZONES.ORANGE_LOW.min) {
-    return { zone: 'orange_low', label: CR_ZONES.ORANGE_LOW.label, status: CR_ZONES.ORANGE_LOW.status, cr };
-  }
-  return { zone: 'red_low', label: CR_ZONES.RED_LOW.label, status: CR_ZONES.RED_LOW.status, cr };
+  return { zone: 'red_low', label: 'red_low', status: 'not_acceptable', cr };
 }
 
 /**
@@ -95,51 +80,29 @@ function assessPosition(position, trendSignal = null) {
     actions: [],
   };
 
-  // CR zone actions
+  // CR zone actions — only red zones (over/under collateralized) trigger action
   if (hasDebt) {
     if (crZone.zone === 'red_low') {
       assessment.actions.push({
         priority: 'immediate',
         action: 'reduce_debt',
-        reason: 'CR below 1.7 — reduce debt to restore CR (layer 1)',
+        reason: `CR below ${CR_ZONES.RED_LOW} — reduce debt to restore CR (layer 1)`,
       });
       assessment.actions.push({
         priority: 'fallback',
         action: 'add_collateral',
-        reason: 'CR below 1.7 — add collateral if debt reduction insufficient (layer 2)',
-      });
-    } else if (crZone.zone === 'orange_low') {
-      assessment.actions.push({
-        priority: 'soon',
-        action: 'reduce_debt',
-        reason: 'CR between 1.7 and 2.0 — reduce debt to restore CR (layer 1)',
-      });
-      assessment.actions.push({
-        priority: 'fallback',
-        action: 'add_collateral',
-        reason: 'CR between 1.7 and 2.0 — add collateral if needed (layer 2)',
+        reason: `CR below ${CR_ZONES.RED_LOW} — add collateral if debt reduction insufficient (layer 2)`,
       });
     } else if (crZone.zone === 'red_high') {
       assessment.actions.push({
         priority: 'immediate',
         action: 'increase_debt',
-        reason: 'CR above 3.0 — increase debt to put capital to work (layer 1)',
+        reason: `CR above ${CR_ZONES.RED_HIGH} — increase debt to put capital to work (layer 1)`,
       });
       assessment.actions.push({
         priority: 'fallback',
         action: 'withdraw_collateral',
-        reason: 'CR above 3.0 — withdraw collateral if debt increase insufficient (layer 2)',
-      });
-    } else if (crZone.zone === 'orange_high') {
-      assessment.actions.push({
-        priority: 'soon',
-        action: 'increase_debt',
-        reason: 'CR between 2.5 and 3.0 — consider increasing debt (layer 1)',
-      });
-      assessment.actions.push({
-        priority: 'fallback',
-        action: 'withdraw_collateral',
-        reason: 'CR between 2.5 and 3.0 — withdraw collateral if needed (layer 2)',
+        reason: `CR above ${CR_ZONES.RED_HIGH} — withdraw collateral if debt increase insufficient (layer 2)`,
       });
     }
   }
@@ -352,12 +315,10 @@ function trendWeight(trend, confidence) {
  */
 function crWeight(zone) {
   switch (zone) {
-    case 'red_high':    return 1.5;
-    case 'orange_high': return 1.2;
-    case 'green':       return 1.0;
-    case 'orange_low':  return 0.5;
-    case 'red_low':     return 0.0;
-    default:            return 1.0;
+    case 'red_high': return 1.5;
+    case 'green':    return 1.0;
+    case 'red_low':  return 0.0;
+    default:         return 1.0;
   }
 }
 

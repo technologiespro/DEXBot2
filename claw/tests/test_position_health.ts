@@ -36,20 +36,14 @@ function testCrZoneBoundaries() {
   assert.strictEqual(classifyCrZone(1.4).zone, 'red_low');
   assert.strictEqual(classifyCrZone(1.69).zone, 'red_low');
 
-  // Orange low: 1.7 – 2.0
-  assert.strictEqual(classifyCrZone(1.7).zone, 'orange_low');
-  assert.strictEqual(classifyCrZone(1.85).zone, 'orange_low');
-  assert.strictEqual(classifyCrZone(1.99).zone, 'orange_low');
-
-  // Green: 2.0 – 2.5
+  // Green: 1.7 – 3.0 (acceptable range)
+  assert.strictEqual(classifyCrZone(1.7).zone, 'green');
+  assert.strictEqual(classifyCrZone(1.85).zone, 'green');
   assert.strictEqual(classifyCrZone(2.0).zone, 'green');
   assert.strictEqual(classifyCrZone(2.25).zone, 'green');
-  assert.strictEqual(classifyCrZone(2.49).zone, 'green');
-
-  // Orange high: 2.5 – 3.0
-  assert.strictEqual(classifyCrZone(2.5).zone, 'orange_high');
-  assert.strictEqual(classifyCrZone(2.75).zone, 'orange_high');
-  assert.strictEqual(classifyCrZone(2.99).zone, 'orange_high');
+  assert.strictEqual(classifyCrZone(2.5).zone, 'green');
+  assert.strictEqual(classifyCrZone(2.75).zone, 'green');
+  assert.strictEqual(classifyCrZone(2.99).zone, 'green');
 
   // Red high: above 3.0
   assert.strictEqual(classifyCrZone(3.0).zone, 'red_high');
@@ -70,9 +64,10 @@ function testCrZoneStatuses() {
   console.log('  classifyCrZone statuses...');
 
   assert.strictEqual(classifyCrZone(3.5).status, 'over_collateralized');
-  assert.strictEqual(classifyCrZone(2.7).status, 'excess_collateral');
+  assert.strictEqual(classifyCrZone(2.7).status, 'safe');
   assert.strictEqual(classifyCrZone(2.2).status, 'safe');
-  assert.strictEqual(classifyCrZone(1.8).status, 'temporary');
+  assert.strictEqual(classifyCrZone(2.0).status, 'safe');
+  assert.strictEqual(classifyCrZone(1.8).status, 'safe');
   assert.strictEqual(classifyCrZone(1.5).status, 'not_acceptable');
   assert.strictEqual(classifyCrZone(null).status, 'no_data');
 
@@ -123,40 +118,18 @@ function testAssessRedLow() {
   console.log('    PASS');
 }
 
-function testAssessOrangeLow() {
-  console.log('  assessPosition orange_low (two-layer)...');
+function testAssessGreen() {
+  console.log('  assessPosition green (acceptable range, no actions)...');
 
   const result = assessPosition(makePosition(1.85));
-  assert.strictEqual(result.collateral.zone, 'orange_low');
-  assert.strictEqual(result.actions.length, 2);
-  assert.strictEqual(result.actions[0].action, 'reduce_debt');
-  assert.strictEqual(result.actions[0].priority, 'soon');
-  assert.strictEqual(result.actions[1].action, 'add_collateral');
-  assert.strictEqual(result.actions[1].priority, 'fallback');
-
-  console.log('    PASS');
-}
-
-function testAssessGreen() {
-  console.log('  assessPosition green (no actions)...');
-
-  const result = assessPosition(makePosition(2.2));
   assert.strictEqual(result.collateral.zone, 'green');
   assert.strictEqual(result.actions.length, 0);
-
-  console.log('    PASS');
-}
-
-function testAssessOrangeHigh() {
-  console.log('  assessPosition orange_high (two-layer)...');
-
-  const result = assessPosition(makePosition(2.7));
-  assert.strictEqual(result.collateral.zone, 'orange_high');
-  assert.strictEqual(result.actions.length, 2);
-  assert.strictEqual(result.actions[0].action, 'increase_debt');
-  assert.strictEqual(result.actions[0].priority, 'soon');
-  assert.strictEqual(result.actions[1].action, 'withdraw_collateral');
-  assert.strictEqual(result.actions[1].priority, 'fallback');
+  const result2 = assessPosition(makePosition(2.0));
+  assert.strictEqual(result2.collateral.zone, 'green');
+  assert.strictEqual(result2.actions.length, 0);
+  const result3 = assessPosition(makePosition(2.7));
+  assert.strictEqual(result3.collateral.zone, 'green');
+  assert.strictEqual(result3.actions.length, 0);
 
   console.log('    PASS');
 }
@@ -204,7 +177,7 @@ function testAssessTrendAligned() {
   console.log('  assessPosition trend aligned no extra action...');
 
   const trend = { trend: 'DOWN', confidence: 80, premium: -1.0 };
-  const result = assessPosition(makePosition(2.2), trend);
+  const result = assessPosition(makePosition(2.0), trend);
   assert.strictEqual(result.trend.alignment, 'aligned');
   assert.strictEqual(result.actions.length, 0);
 
@@ -215,7 +188,7 @@ function testAssessTrendLowConfidence() {
   console.log('  assessPosition trend opposed but low confidence...');
 
   const trend = { trend: 'UP', confidence: 30, premium: 0.5 };
-  const result = assessPosition(makePosition(2.2), trend);
+  const result = assessPosition(makePosition(2.0), trend);
   assert.strictEqual(result.trend.alignment, 'opposed');
   assert.strictEqual(result.actions.length, 0, 'low confidence should not trigger review');
 
@@ -304,14 +277,11 @@ function testPlanCrAdjustment() {
 function testCrZonesConstant() {
   console.log('  CR_ZONES constant values...');
 
-  assert.strictEqual(CR_ZONES.RED_HIGH.min, 3.0);
-  assert.strictEqual(CR_ZONES.ORANGE_HIGH.min, 2.5);
-  assert.strictEqual(CR_ZONES.GREEN.min, 2.0);
-  assert.strictEqual(CR_ZONES.ORANGE_LOW.min, 1.7);
-  assert.strictEqual(CR_ZONES.RED_LOW.min, 0);
+  assert.strictEqual(CR_ZONES.RED_HIGH, 3.0);
+  assert.strictEqual(CR_ZONES.RED_LOW, 1.7);
 
   // Deep frozen
-  assert.throws(() => { CR_ZONES.GREEN.min = 999; }, TypeError);
+  assert.throws(() => { CR_ZONES.RED_HIGH = 999; }, TypeError);
 
   console.log('    PASS');
 }
@@ -340,9 +310,7 @@ function testCrWeight() {
   console.log('  crWeight...');
 
   assert.strictEqual(crWeight('red_high'), 1.5);
-  assert.strictEqual(crWeight('orange_high'), 1.2);
   assert.strictEqual(crWeight('green'), 1.0);
-  assert.strictEqual(crWeight('orange_low'), 0.5);
   assert.strictEqual(crWeight('red_low'), 0.0);
   assert.strictEqual(crWeight('unknown'), 1.0);
 
@@ -550,9 +518,7 @@ function main() {
   testCrZoneStatuses();
   testTrendAlignment();
   testAssessRedLow();
-  testAssessOrangeLow();
   testAssessGreen();
-  testAssessOrangeHigh();
   testAssessRedHigh();
   testAssessNoDebt();
   testAssessTrendOpposed();
@@ -572,7 +538,7 @@ function main() {
   testBuildMarginTradingPlanStillPlansWeightsWithoutOffset();
   testBuildMarginTradingPlanNeutralKeepsCenter();
 
-  console.log('\n=== All 26 tests passed ===');
+  console.log('\n=== All 24 tests passed ===');
 }
 
 main();
