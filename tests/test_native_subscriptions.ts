@@ -8,11 +8,12 @@ const { createSubscriptionManager } = require('../modules/bitshares-native/subsc
 console.log('=== Native Subscription Tests ===\n');
 
 function makeAccountRecord(account) {
+    const name = account === '1.2.200' ? 'bob' : account === '1.2.100' ? 'alice' : account;
     return [account, {
         account: {
-            id: account === 'bob' ? '1.2.200' : '1.2.100',
-            name: account,
-            statistics: account === 'bob' ? '2.6.200' : '2.6.100',
+            id: name === 'bob' ? '1.2.200' : '1.2.100',
+            name,
+            statistics: name === 'bob' ? '2.6.200' : '2.6.100',
         },
     }];
 }
@@ -50,7 +51,7 @@ function makeAccountRecord(account) {
                     if (limit === 1) {
                         return [{ id: '1.11.499', block_num: 10, trx_id: 1, op: [4, { order_id: '1.7.1' }] }];
                     }
-                    if (stop === '1.11.0') {
+                    if (stop === '1.11.498') {
                         // Initial bounded catch-up includes the primed latest fill
                         // and a fill that arrived during subscription activation.
                         return [
@@ -98,7 +99,7 @@ function makeAccountRecord(account) {
         );
         assert.deepStrictEqual(
             historyCalls[1],
-            ['1.2.100', 4, '1.11.0', '1.11.0', 100],
+            ['1.2.100', 4, '1.11.0', '1.11.498', 100],
             'initial catch-up should read only the head page after priming'
         );
         // The notice-triggered fetch uses the delivered catch-up cursor as exclusive stop.
@@ -147,7 +148,7 @@ function makeAccountRecord(account) {
                     if (limit === 1) {
                         return [{ id: '1.11.510', block_num: 10, trx_id: 1, op: [4, { order_id: '1.7.510' }] }];
                     }
-                    if (stop === '1.11.0') {
+                    if (stop === '1.11.509') {
                         return [{ id: '1.11.511', block_num: 11, trx_id: 2, op: [4, { order_id: '1.7.511' }] }];
                     }
                     return [];
@@ -201,6 +202,9 @@ function makeAccountRecord(account) {
                     if (limit === 1) {
                         return [{ id: '1.11.900', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                     }
+                    if (stop === '1.11.899') {
+                        return [{ id: '1.11.900', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                    }
                     if (stop === '1.11.900') {
                         return [{ id: '1.11.901', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.901' }] }];
                     }
@@ -213,6 +217,7 @@ function makeAccountRecord(account) {
         await manager.subscribe('alice', (fills) => {
             delivered.push(fills);
         });
+        delivered.length = 0;
 
         assert.strictEqual(handlers.length, 1, 'initial subscription should register one notice handler');
 
@@ -258,7 +263,7 @@ function makeAccountRecord(account) {
                     if (limit === 1) {
                         return [{ id: '1.11.650', block_num: 9, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                     }
-                    if (subscriptionComplete && stop === '1.11.650') {
+                    if (subscriptionComplete && stop === '1.11.649') {
                         return [{ id: '1.11.700', block_num: 12, trx_id: 3, op: [4, { order_id: '1.7.3' }] }];
                     }
                     return [];
@@ -345,8 +350,8 @@ function makeAccountRecord(account) {
         assert.deepStrictEqual(
             historyCalls,
             [
-                ['1.2.100', 4, '1.11.0', '1.11.900', 100],
-                ['1.2.100', 4, '1.11.905', '1.11.900', 100],
+                ['1.2.100', 4, '1.11.0', '1.11.899', 100],
+                ['1.2.100', 4, '1.11.905', '1.11.899', 100],
             ],
             'pagination should continue before the oldest page entry because BitShares Core treats start as inclusive'
         );
@@ -389,7 +394,7 @@ function makeAccountRecord(account) {
                             return [{ id: '1.11.800', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                         }
                         if (!subscriptionComplete) return [];
-                        if (stop === '1.11.800') {
+                        if (stop === '1.11.799') {
                             return [{ id: '1.11.801', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.801' }] }];
                         }
                         if (stop === '1.11.801') return [];
@@ -445,7 +450,7 @@ function makeAccountRecord(account) {
                         return [{ id: '1.11.600', block_num: 11, trx_id: 2, op: [4, { order_id: '1.7.bootstrap' }] }];
                     }
                     if (!subscriptionComplete) return [];
-                    if (stop === '1.11.600') {
+                    if (stop === '1.11.599') {
                         return [{ id: '1.11.601', block_num: 12, trx_id: 3, op: [4, { order_id: '1.7.2' }] }];
                     }
                     if (stop === '1.11.601') {
@@ -481,8 +486,8 @@ function makeAccountRecord(account) {
         assert.deepStrictEqual(
             retryHistoryCalls,
             [
-                ['1.2.100', '1.11.600', 100],
-                ['1.2.100', '1.11.600', 100],
+                ['1.2.100', '1.11.599', 100],
+                ['1.2.100', '1.11.599', 100],
                 ['1.2.100', '1.11.601', 100],
             ],
             'cursor should only advance after successful callback delivery'
@@ -535,9 +540,9 @@ function makeAccountRecord(account) {
 
         assert.strictEqual(reconnectHistoryPages, 12, 'reconnect catch-up should keep scanning until the previous cursor is reached');
         assert.strictEqual(delivered.length, 1, 'reconnect catch-up should deliver recovered fills once');
-        assert.strictEqual(delivered[0].length, 1100, 'all missed fills newer than the previous cursor should be delivered');
-        assert.strictEqual(delivered[0][0].id, '1.11.901', 'oldest missed fill should be preserved');
-        assert.strictEqual(delivered[0][1099].id, '1.11.2000', 'newest missed fill should be preserved');
+        assert.strictEqual(delivered[0].length, 1101, 'all missed fills newer than the previous cursor should be delivered');
+        assert.strictEqual(delivered[0][0].id, '1.11.900', 'oldest missed fill should be preserved');
+        assert.strictEqual(delivered[0][1100].id, '1.11.2000', 'newest missed fill should be preserved');
     }
 
     console.log(' - Testing async callback failures keep reconnect cursor retryable...');
@@ -564,7 +569,7 @@ function makeAccountRecord(account) {
                     }
                     if (!subscriptionComplete) return [];
                     historyStops.push(stop);
-                    if (stop === '1.11.300') {
+                    if (stop === '1.11.299') {
                         return [{ id: '1.11.301', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.async-retry' }] }];
                     }
                     return [];
@@ -594,7 +599,7 @@ function makeAccountRecord(account) {
         assert.strictEqual(deliveries, 2, 'async callback failure should redeliver the same fill on retry');
         assert.deepStrictEqual(
             historyStops,
-            ['1.11.300', '1.11.300'],
+            ['1.11.299', '1.11.299'],
             'cursor must not advance after failed async callback delivery'
         );
     }
@@ -633,7 +638,7 @@ function makeAccountRecord(account) {
                             return [{ id: '1.11.700', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                         }
                         if (!subscriptionComplete) return [];
-                        if (stop === '1.11.700') {
+                        if (stop === '1.11.699') {
                             return [{ id: '1.11.701', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.retry' }] }];
                         }
                         return [];
@@ -709,7 +714,7 @@ function makeAccountRecord(account) {
                         }
                         if (!subscriptionComplete) return [];
                         historyStops.push(stop);
-                        if (stop === '1.11.400') {
+                        if (stop === '1.11.399') {
                             return [{ id: '1.11.401', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.live-retry' }] }];
                         }
                         return [];
@@ -744,7 +749,7 @@ function makeAccountRecord(account) {
             assert.strictEqual(deliveries, 2, 'retry should redeliver the failed live notice fill');
             assert.deepStrictEqual(
                 historyStops,
-                ['1.11.400', '1.11.400'],
+                ['1.11.399', '1.11.399'],
                 'cursor must remain retryable after failed live notice delivery'
             );
         } finally {
@@ -791,7 +796,7 @@ function makeAccountRecord(account) {
                             return [{ id: '1.11.500', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                         }
                         if (!subscriptionComplete) return [];
-                        if (stop === '1.11.500') {
+                        if (stop === '1.11.499') {
                             return [{ id: '1.11.501', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.account-retry' }] }];
                         }
                         return [];

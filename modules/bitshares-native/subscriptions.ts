@@ -78,6 +78,8 @@ function createSubscriptionManager(chainClient: any): any {
         let pagesFetched = 0;
         const maxPages = Number.isFinite(options.maxPages) ? options.maxPages : null;
 
+        console.log(`[subscriptions] fetchFillHistoryEntries: account=${accountId}, stop=${stopHistoryId}, start=${startHistoryId}, maxPages=${maxPages}`);
+
         while (true) {
             const page = await Promise.resolve(fetchPage(
                 accountId,
@@ -88,6 +90,9 @@ function createSubscriptionManager(chainClient: any): any {
             ));
             pagesFetched++;
 
+            const pageLen = Array.isArray(page) ? page.length : 0;
+            console.log(`[subscriptions] fetchFillHistoryEntries: page ${pagesFetched} returned ${pageLen} entries (start=${startHistoryId}, stop=${stopHistoryId})`);
+
             if (!Array.isArray(page) || page.length === 0) break;
 
             for (const entry of page) {
@@ -96,8 +101,14 @@ function createSubscriptionManager(chainClient: any): any {
                 entries.push(entry);
             }
 
-            if (page.length < SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX) break;
-            if (maxPages !== null && pagesFetched >= maxPages) break;
+            if (page.length < SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX) {
+                console.log(`[subscriptions] fetchFillHistoryEntries: last page (${page.length} < ${SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX})`);
+                break;
+            }
+            if (maxPages !== null && pagesFetched >= maxPages) {
+                console.log(`[subscriptions] fetchFillHistoryEntries: maxPages (${maxPages}) reached`);
+                break;
+            }
 
             const oldestId = page[page.length - 1]?.id;
             const nextStartHistoryId = decrementObjectId(oldestId);
@@ -105,22 +116,55 @@ function createSubscriptionManager(chainClient: any): any {
             startHistoryId = nextStartHistoryId;
         }
 
+        console.log(`[subscriptions] fetchFillHistoryEntries: returning ${entries.length} fill entries across ${pagesFetched} page(s) for ${accountId}`);
         return sortEntriesOldestFirst(entries);
     }
 
     async function primeLastDeliveredHistoryId(sub: any): Promise<string> {
         if (!sub?.accountId) return SUBSCRIPTIONS.HISTORY_API_OBJECT;
-        const fetchPage = chainClient.history?.getAccountHistoryOperations
+
+        // Primary: use get_account_history_operations filtered to fills
+        const fetchFillPage = chainClient.history?.getAccountHistoryOperations
             || chainClient.history?.get_account_history_operations
             || ((...args: any[]) => chainClient.history.call('get_account_history_operations', args));
-        const latestFillEntries = await Promise.resolve(fetchPage(
+        const latestFillEntries = await Promise.resolve(fetchFillPage(
             sub.accountId,
             OP_FILL_ORDER,
             SUBSCRIPTIONS.HISTORY_API_OBJECT,
             SUBSCRIPTIONS.HISTORY_API_OBJECT,
             1
         ));
-        return latestFillEntries?.[0]?.id || SUBSCRIPTIONS.HISTORY_API_OBJECT;
+        const latestFillId = latestFillEntries?.[0]?.id;
+        if (latestFillId) {
+            console.log(`[subscriptions] primeLastDeliveredHistoryId: resolved via get_account_history_operations to ${latestFillId} for ${sub.accountName}`);
+            return latestFillId;
+        }
+
+        // Fallback: use get_account_history (any operation type) to find the most
+        // recent history entry. This seeds the cursor past "1.11.0" so that
+        // fetchFillHistoryEntries can scan from the latest entry forward.
+        console.log(`[subscriptions] primeLastDeliveredHistoryId: get_account_history_operations returned no fills, trying get_account_history fallback for ${sub.accountName}`);
+        try {
+            const fetchAnyPage = chainClient.history?.getAccountHistory
+                || chainClient.history?.get_account_history
+                || ((...args: any[]) => chainClient.history.call('get_account_history', args));
+            const entries = await Promise.resolve(fetchAnyPage(
+                sub.accountId,
+                SUBSCRIPTIONS.HISTORY_API_OBJECT,
+                1,
+                SUBSCRIPTIONS.HISTORY_API_OBJECT
+            ));
+            const fallbackId = entries?.[0]?.id;
+            if (fallbackId) {
+                console.log(`[subscriptions] primeLastDeliveredHistoryId: fallback resolved to ${fallbackId} for ${sub.accountName}`);
+                return fallbackId;
+            }
+        } catch (err: any) {
+            console.warn(`[subscriptions] primeLastDeliveredHistoryId: get_account_history fallback failed for ${sub.accountName}: ${err.message}`);
+        }
+
+        console.log(`[subscriptions] primeLastDeliveredHistoryId: no history found, using HISTORY_API_OBJECT for ${sub.accountName}`);
+        return SUBSCRIPTIONS.HISTORY_API_OBJECT;
     }
 
     function ensureNoticeSubscription() {
@@ -141,19 +185,30 @@ function createSubscriptionManager(chainClient: any): any {
     }
 
     async function handleNotice(params: any): Promise<void> {
-        if (!Array.isArray(params) || params.length < 2) return;
+        if (!Array.isArray(params) || params.length < 2) {
+            console.log('[subscriptions] handleNotice: skipping (invalid params)');
+            return;
+        }
 
         const [callbackId, data] = params;
 
-        if (callbackId !== SUBSCRIBE_CALLBACK_ID) return;
+        if (callbackId !== SUBSCRIBE_CALLBACK_ID) {
+            return;
+        }
+
+        const activeCount = Array.from(subscriptions.values()).filter(s => s.active).length;
+        console.log(`[subscriptions] handleNotice: received notice (callbackId=${callbackId}, activeSubs=${activeCount}, dataLen=${Array.isArray(data) ? data.length : 'N/A'})`);
 
         for (const [, sub] of subscriptions) {
             if (!sub.active) continue;
             if (!shouldProcessNoticeForSubscription(sub, data)) continue;
 
+            console.log(`[subscriptions] handleNotice: processing for ${sub.accountName} (accountId=${sub.accountId})`);
+
             try {
                 await processObjects(sub, data, { throwOnError: true });
             } catch (err: any) {
+                console.warn(`[subscriptions] handleNotice: processObjects failed for ${sub.accountName}: ${err?.message}`);
                 if (sub.onError && !err?.subscriptionErrorReported) {
                     try { sub.onError(err); } catch (_: any) {}
                 }
@@ -195,7 +250,11 @@ function createSubscriptionManager(chainClient: any): any {
 
         if (sawKnownAccountObject) return true;
         if (sawAccountScopedObject) return false;
-        return !sawFillObject;
+        // History objects (1.11.x) may arrive as thin notices without full op data
+        // (no `owner` or `op` fields). We cannot reliably determine the account from
+        // the notice alone, so always trigger a history scan to avoid missing fills.
+        if (sawFillObject) return true;
+        return true;
     }
 
     async function processObjects(sub: any, data: any, options: any = {}): Promise<void> {
@@ -214,6 +273,7 @@ function createSubscriptionManager(chainClient: any): any {
         try {
             const accData = await fetchFullAccountWithRetry(sub, false);
             if (!accData) {
+                console.warn(`[subscriptions] processObjects: get_full_accounts returned no data for ${sub.accountName}`);
                 if (options.throwOnError) {
                     throw new Error('get_full_accounts returned no account data');
                 }
@@ -221,6 +281,7 @@ function createSubscriptionManager(chainClient: any): any {
             }
             const accountId = accData.account?.id || sub.accountId;
             if (!accountId) {
+                console.warn(`[subscriptions] processObjects: no account id after fetch for ${sub.accountName}`);
                 if (options.throwOnError) {
                     throw new Error('get_full_accounts returned no account id');
                 }
@@ -231,10 +292,14 @@ function createSubscriptionManager(chainClient: any): any {
 
             if (!sub.lastDeliveredHistoryId) {
                 sub.lastDeliveredHistoryId = await primeLastDeliveredHistoryId(sub);
+                console.log(`[subscriptions] processObjects: primed lastDeliveredHistoryId=${sub.lastDeliveredHistoryId} for ${sub.accountName}`);
             }
 
             const history = await fetchFillHistoryEntries(accountId, sub.lastDeliveredHistoryId, options);
-            if (history.length === 0) return;
+            if (history.length === 0) {
+                console.log(`[subscriptions] processObjects: no fill history entries for ${sub.accountName} (cursor=${sub.lastDeliveredHistoryId})`);
+                return;
+            }
 
             const fills = [];
             for (const entry of history) {
@@ -252,11 +317,13 @@ function createSubscriptionManager(chainClient: any): any {
             }
 
             if (fills.length > 0) {
+                console.log(`[subscriptions] processObjects: dispatching ${fills.length} fill(s) to ${sub.callbacks.size} callback(s) for ${sub.accountName}`);
                 const failed = [];
                 for (const callback of sub.callbacks) {
                     try {
                         await Promise.resolve(callback(fills));
                     } catch (err: any) {
+                        console.warn(`[subscriptions] processObjects: callback error for ${sub.accountName}: ${err?.message}`);
                         failed.push(err);
                     }
                 }
@@ -275,8 +342,12 @@ function createSubscriptionManager(chainClient: any): any {
                 }
 
                 sub.lastDeliveredHistoryId = fills[fills.length - 1]?.id || sub.lastDeliveredHistoryId;
+                console.log(`[subscriptions] processObjects: advanced cursor to ${sub.lastDeliveredHistoryId} for ${sub.accountName}`);
+            } else {
+                console.log(`[subscriptions] processObjects: history had entries but none were FILL_ORDER operations for ${sub.accountName}`);
             }
         } catch (err: any) {
+            console.warn(`[subscriptions] processObjects: error for ${sub.accountName}: ${err?.message}`);
             if (sub.onError && !err?.subscriptionErrorReported) {
                 try { sub.onError(err); } catch (_: any) {}
             }
@@ -307,6 +378,31 @@ function createSubscriptionManager(chainClient: any): any {
         warnSubscription(entry, `scheduled reconnect retry in ${reconnectRetryDelayMs}ms`, err);
     }
 
+    /**
+     * Centralized subscription refresh: set_subscribe_callback then re-subscribe ALL active accounts.
+     * cancel_all_subscriptions(false, false) inside set_subscribe_callback clears
+     * _subscribed_accounts for every account. Every active entry must be re-subscribed after
+     * every call, not just the current one.
+     */
+    async function refreshSubscriptions(): Promise<any[]> {
+        const failures = [];
+        ensureNoticeSubscription();
+        await chainClient.db.call('set_subscribe_callback', [
+            SUBSCRIBE_CALLBACK_ID,
+            false,
+        ]);
+        for (const [, subEntry] of subscriptions) {
+            if (!subEntry.active) continue;
+            try {
+                await chainClient.db.get_full_accounts([subEntry.accountName], true);
+            } catch (err: any) {
+                console.warn('[subscriptions] Failed to re-subscribe account after set_subscribe_callback for', subEntry.accountName, err.message);
+                failures.push({ entry: subEntry, err });
+            }
+        }
+        return failures;
+    }
+
     async function resubscribeEntry(entry: any, reason: string = 'reconnect') {
         if (!entry?.active) return;
 
@@ -320,11 +416,13 @@ function createSubscriptionManager(chainClient: any): any {
             console.warn('[subscriptions] Failed to refresh account data for', entry.accountName, err.message);
         }
 
-        await chainClient.db.call('set_subscribe_callback', [
-            SUBSCRIBE_CALLBACK_ID,
-            false,
-        ]);
-        ensureNoticeSubscription();
+        const refreshFailures = await refreshSubscriptions();
+        const entryRefreshFailure = refreshFailures.find((failure: any) => failure.entry === entry);
+        if (entryRefreshFailure) throw entryRefreshFailure.err;
+        for (const failure of refreshFailures) {
+            scheduleReconnectRetry(failure.entry, failure.err);
+        }
+
         await processObjects(entry, [entry.accountId], {
             throwOnError: true,
         });
@@ -374,23 +472,26 @@ function createSubscriptionManager(chainClient: any): any {
 
         if (createdEntry) {
             try {
-                ensureNoticeSubscription();
-                await chainClient.db.call('set_subscribe_callback', [
-                    SUBSCRIBE_CALLBACK_ID,
-                    false,
-                ]);
+                // Prime the cursor BEFORE remote activation. Any fill that lands between
+                // primeLastDeliveredHistoryId and set_subscribe_callback has an ID > latestFillId
+                // and will be caught by the catch-up below. The cursor is decremented so that
+                // the catch-up includes the primed fill itself (as an exclusive stop boundary).
+                const latestFillId = await primeLastDeliveredHistoryId(entry);
+                entry.lastDeliveredHistoryId = latestFillId
+                    ? (decrementObjectId(latestFillId) || latestFillId)
+                    : SUBSCRIPTIONS.HISTORY_API_OBJECT;
+
                 entry.active = !!entry.accountId;
 
-                // Prime once for observability, then fetch only the head page of
-                // fill history. That bounded catch-up includes the latest known
-                // fill plus any fills that land during subscription activation,
-                // without paginating through old account history on every startup.
-                const latestFillId = await primeLastDeliveredHistoryId(entry);
-                entry.lastDeliveredHistoryId = SUBSCRIPTIONS.HISTORY_API_OBJECT;
-                await processObjects(entry, [entry.accountId], { maxPages: 1 });
-                if (entry.lastDeliveredHistoryId === SUBSCRIPTIONS.HISTORY_API_OBJECT) {
-                    entry.lastDeliveredHistoryId = latestFillId;
+                const refreshFailures = await refreshSubscriptions();
+                const entryRefreshFailure = refreshFailures.find((failure: any) => failure.entry === entry);
+                if (entryRefreshFailure) throw entryRefreshFailure.err;
+                for (const failure of refreshFailures) {
+                    scheduleReconnectRetry(failure.entry, failure.err);
                 }
+
+                // Catch up on fills that landed during the activation window.
+                await processObjects(entry, [entry.accountId], { maxPages: 1 });
             } catch (err: any) {
                 entry.callbacks.delete(callback);
                 if (entry.onError === onError) {
@@ -432,11 +533,37 @@ function createSubscriptionManager(chainClient: any): any {
     }
 
     async function resubscribeAll() {
+        // Refresh account data for every active entry first (before any RPC calls
+        // that might race with each other on the same connection).
         for (const [, entry] of subscriptions) {
             if (!entry.active) continue;
-
             try {
-                await resubscribeEntry(entry);
+                const accounts = await chainClient.db.get_full_accounts([entry.accountName], true);
+                if (accounts && accounts[0] && accounts[0][1] && accounts[0][1].account) {
+                    entry.accountId = accounts[0][1].account.id;
+                    entry.statisticsId = accounts[0][1].account.statistics || null;
+                }
+            } catch (err: any) {
+                console.warn('[subscriptions] Failed to refresh account data for', entry.accountName, err.message);
+            }
+        }
+
+        // Centralized subscription setup — one set_subscribe_callback + re-subscribe all.
+        const refreshFailures = await refreshSubscriptions();
+        const refreshFailureEntries = new Set(refreshFailures.map((failure: any) => failure.entry));
+        for (const failure of refreshFailures) {
+            scheduleReconnectRetry(failure.entry, failure.err);
+        }
+
+        // Catch-up scan for each entry.
+        for (const [, entry] of subscriptions) {
+            if (!entry.active) continue;
+            if (refreshFailureEntries.has(entry)) continue;
+            try {
+                await processObjects(entry, [entry.accountId], {
+                    throwOnError: true,
+                });
+                clearReconnectRetry(entry);
             } catch (err: any) {
                 console.warn('[subscriptions] Failed to resubscribe', entry.accountName, err.message);
                 scheduleReconnectRetry(entry, err);

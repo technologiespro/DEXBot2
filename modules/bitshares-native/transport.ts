@@ -71,7 +71,9 @@ function createTransport(config = {}) {
 
     function setStatus(newStatus) {
         if (status !== newStatus) {
+            const prevStatus = status;
             status = newStatus;
+            console.log(`[transport] status change: ${prevStatus} -> ${newStatus} (node=${nodeUrl})`);
             if (onStatusChange) {
                 try { onStatusChange(newStatus, nodeUrl); } catch (_: any) {}
             }
@@ -192,6 +194,10 @@ function createTransport(config = {}) {
         };
 
         socket.onclose = (evt) => {
+            const code = evt?.code;
+            const reason = evt?.reason || '';
+            const wasClean = evt?.wasClean !== false;
+            console.warn(`[transport] WebSocket closed on ${nodeUrl}: code=${code}, wasClean=${wasClean}, reason="${reason}"`);
             setStatus('closed');
             cleanup();
 
