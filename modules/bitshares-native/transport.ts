@@ -236,7 +236,11 @@ function createTransport(config = {}) {
                 setStatus('connected');
                 startKeepAlive();
                 if (wasReconnect && onReconnect) {
-                    Promise.resolve(onReconnect(nodeUrl)).catch(() => {});
+                    try {
+                        await onReconnect(nodeUrl);
+                    } catch (err: any) {
+                        console.warn('[transport] Reconnect callback (subscription re-establishment) failed:', err?.message || err);
+                    }
                 }
                 return;
             } catch (err: any) {

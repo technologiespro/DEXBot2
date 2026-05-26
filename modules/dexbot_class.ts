@@ -86,7 +86,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { BitShares, waitForConnected } = require('./bitshares_client');
+const { BitShares, waitForConnected, onReconnect: registerReconnectHook } = require('./bitshares_client');
 const chainKeys = require('./chain_keys');
 const credentialPolicy = require('./credential_policy');
 const chainOrders = require('./chain_orders');
@@ -833,6 +833,30 @@ class DEXBot {
                 this._fillsUnsubscribe = null;
             }
             this._log('Fill listener activated (ready to process fills during startup)');
+
+            // Register reconnection callback for safety-net sync after websocket reconnect
+            if (!this._reconnectUnregister) {
+                this._reconnectUnregister = registerReconnectHook(() => {
+                    this._log('Blockchain connection re-established; scheduling safety-net sync');
+                    setImmediate(async () => {
+                        try {
+                            if (this.manager && this.accountId && !this._shuttingDown && !this.config.dryRun) {
+                                await this.manager._fillProcessingLock.acquire(async () => {
+                                    const chainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
+                                    const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
+                                    if (syncResult?.filledOrders?.length > 0) {
+                                        this._log(`Post-reconnect sync: ${syncResult.filledOrders.length} grid order(s) found filled.`, 'info');
+                                        await this._processFillsWithBatching(syncResult.filledOrders, new Set(), 'post-reconnect sync fill');
+                                        await this.manager.persistGrid();
+                                    }
+                                });
+                            }
+                        } catch (err) {
+                            this._warn('Post-reconnect safety-net sync failed:' + (err?.message || err));
+                        }
+                    });
+                });
+            }
 
             // CRITICAL: Handle any pending trigger file reset FIRST before any other startup operations
             const hadTriggerReset = await this._handlePendingTriggerReset();
@@ -3744,6 +3768,13 @@ class DEXBot {
             } finally {
                 this._fillsUnsubscribe = null;
             }
+        }
+
+        if (typeof this._reconnectUnregister === 'function') {
+            try { this._reconnectUnregister(); } catch (err: any) {
+                this._warn(`Error unregistering reconnect callback: ${err.message}`);
+            }
+            this._reconnectUnregister = null;
         }
 
         try {

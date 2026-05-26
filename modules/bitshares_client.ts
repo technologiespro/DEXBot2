@@ -43,6 +43,35 @@ let startupNodeRefreshPromise = null;
 let failoverAssessmentPromise = null;
 let reconnectInProgress = false;
 
+// Reconnection callbacks registered by consumers (e.g. DEXBot)
+const _reconnectCallbacks = new Set();
+
+/**
+ * Register a callback to be called after a successful reconnection.
+ * @param {Function} callback - Called with no arguments after subscription re-establishment
+ * @returns {Function} Unregister function
+ */
+function onReconnect(callback) {
+    if (typeof callback !== 'function') {
+        console.warn('[bitshares_client] onReconnect requires a function, got', typeof callback);
+        return () => {};
+    }
+    _reconnectCallbacks.add(callback);
+    return () => { _reconnectCallbacks.delete(callback); };
+}
+function removeOnReconnect(callback) {
+    _reconnectCallbacks.delete(callback);
+}
+
+async function notifyReconnectCallbacks() {
+    if (_reconnectCallbacks.size === 0) return;
+    for (const cb of Array.from(_reconnectCallbacks)) {
+        try { await Promise.resolve(cb()); } catch (err: any) {
+            console.warn('[bitshares_client] Reconnect callback error:', err?.message || err);
+        }
+    }
+}
+
 // Native client references
 let _nativeClient = null;
 let _subscriptionManager = null;
@@ -56,7 +85,10 @@ _nativeClient = native.createChainClient({
     connectTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS,
 });
 _subscriptionManager = createSubscriptionManager(_nativeClient);
-_nativeClient.onReconnect = () => _subscriptionManager.onReconnect();
+_nativeClient.onReconnect = async () => {
+    await _subscriptionManager.onReconnect();
+    await notifyReconnectCallbacks();
+};
 const _resolvers = createResolvers(_nativeClient);
 
 _nativeBitSharesProxy = {
@@ -186,8 +218,13 @@ async function restartBitsharesConnection(serverList, reason = 'startup') {
         _nativeClient.setNodes(servers);
         await _nativeClient.connect();
         if (_subscriptionManager) {
-            try { await _subscriptionManager.onReconnect(); } catch (_: any) {}
+            try { await _subscriptionManager.onReconnect(); } catch (err: any) {
+                console.warn('[bitshares_client] Subscription re-establishment after reconnect failed:', err?.message || err);
+            }
         }
+
+        // Notify registered reconnection callbacks (e.g. DEXBot safety-net sync)
+        await notifyReconnectCallbacks();
 
         if (!suppressConnectionLog) {
             console.log(`[NodeManager] ${reason}: reconnect requested across ${servers.length} node(s)`);
@@ -451,6 +488,8 @@ export = {
     getNodeStats: () => nodeManager?.getStats(),
     getNodeSummary: () => nodeManager?.getSummary(),
     getConnectionError: () => lastConnectionError,
+    onReconnect,
+    removeOnReconnect,
     _assessFailover: assessFailover,
     _internal: {
         get connected() {
