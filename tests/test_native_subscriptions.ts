@@ -489,6 +489,338 @@ function makeAccountRecord(account) {
         );
     }
 
+    console.log(' - Testing reconnect catch-up scans back to the last delivered cursor...');
+    {
+        let reconnectHistoryPages = 0;
+        let subscriptionComplete = false;
+        const delivered = [];
+        const chainClient = {
+            transport: {
+                addMessageHandler() {
+                    return () => {};
+                },
+            },
+            db: {
+                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
+                call: async () => null,
+            },
+            history: {
+                getAccountHistoryOperations: async (_accountId, _opType, start, stop, limit) => {
+                    if (limit === 1) {
+                        return [{ id: '1.11.900', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                    }
+                    if (!subscriptionComplete) return [];
+                    reconnectHistoryPages += 1;
+                    const startInstance = Number(String(start).split('.').pop());
+                    const newest = startInstance === 0 ? 2000 : startInstance;
+                    const stopInstance = Number(String(stop).split('.').pop());
+                    return Array.from({ length: limit }, (_, idx) => ({
+                        id: `1.11.${newest - idx}`,
+                        block_num: newest - idx,
+                        trx_id: idx,
+                        op: [4, { order_id: `1.7.${newest - idx}` }],
+                    })).filter(entry => Number(String(entry.id).split('.').pop()) > stopInstance);
+                },
+            },
+        };
+
+        const manager = createSubscriptionManager(chainClient);
+        await manager.subscribe('alice', (fills) => {
+            delivered.push(fills);
+        });
+        subscriptionComplete = true;
+        delivered.length = 0;
+
+        await manager.resubscribeAll();
+
+        assert.strictEqual(reconnectHistoryPages, 12, 'reconnect catch-up should keep scanning until the previous cursor is reached');
+        assert.strictEqual(delivered.length, 1, 'reconnect catch-up should deliver recovered fills once');
+        assert.strictEqual(delivered[0].length, 1100, 'all missed fills newer than the previous cursor should be delivered');
+        assert.strictEqual(delivered[0][0].id, '1.11.901', 'oldest missed fill should be preserved');
+        assert.strictEqual(delivered[0][1099].id, '1.11.2000', 'newest missed fill should be preserved');
+    }
+
+    console.log(' - Testing async callback failures keep reconnect cursor retryable...');
+    {
+        let subscriptionComplete = false;
+        let failOnce = false;
+        let deliveries = 0;
+        let callbackErrors = 0;
+        const historyStops = [];
+        const chainClient = {
+            transport: {
+                addMessageHandler() {
+                    return () => {};
+                },
+            },
+            db: {
+                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
+                call: async () => null,
+            },
+            history: {
+                getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
+                    if (limit === 1) {
+                        return [{ id: '1.11.300', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                    }
+                    if (!subscriptionComplete) return [];
+                    historyStops.push(stop);
+                    if (stop === '1.11.300') {
+                        return [{ id: '1.11.301', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.async-retry' }] }];
+                    }
+                    return [];
+                },
+            },
+        };
+
+        const manager = createSubscriptionManager(chainClient);
+        await manager.subscribe('alice', async () => {
+            deliveries += 1;
+            if (failOnce) {
+                failOnce = false;
+                throw new Error('async delivery failed');
+            }
+        }, () => {
+            callbackErrors += 1;
+        });
+        subscriptionComplete = true;
+        failOnce = true;
+        deliveries = 0;
+        callbackErrors = 0;
+
+        await manager.resubscribeAll();
+        await manager.resubscribeAll();
+
+        assert.strictEqual(callbackErrors, 1, 'async callback failure should be reported once');
+        assert.strictEqual(deliveries, 2, 'async callback failure should redeliver the same fill on retry');
+        assert.deepStrictEqual(
+            historyStops,
+            ['1.11.300', '1.11.300'],
+            'cursor must not advance after failed async callback delivery'
+        );
+    }
+
+    console.log(' - Testing failed reconnect catch-up schedules an automatic retry...');
+    {
+        const originalSetTimeout = global.setTimeout;
+        const originalClearTimeout = global.clearTimeout;
+        const retryDelays = [];
+        let retryCallback = null;
+        global.setTimeout = (fn, delay) => {
+            retryDelays.push(delay);
+            retryCallback = fn;
+            return { retryTimer: true };
+        };
+        global.clearTimeout = () => {};
+
+        try {
+            let subscriptionComplete = false;
+            let failReconnectDelivery = false;
+            let deliveredCount = 0;
+            let callbackErrors = 0;
+            const chainClient = {
+                transport: {
+                    addMessageHandler() {
+                        return () => {};
+                    },
+                },
+                db: {
+                    get_full_accounts: async ([account]) => [makeAccountRecord(account)],
+                    call: async () => null,
+                },
+                history: {
+                    getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
+                        if (limit === 1) {
+                            return [{ id: '1.11.700', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                        }
+                        if (!subscriptionComplete) return [];
+                        if (stop === '1.11.700') {
+                            return [{ id: '1.11.701', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.retry' }] }];
+                        }
+                        return [];
+                    },
+                },
+            };
+
+            const manager = createSubscriptionManager(chainClient);
+            await manager.subscribe('alice', () => {
+                deliveredCount += 1;
+                if (failReconnectDelivery) {
+                    failReconnectDelivery = false;
+                    throw new Error('transient reconnect delivery failure');
+                }
+            }, () => {
+                callbackErrors += 1;
+            });
+            subscriptionComplete = true;
+            failReconnectDelivery = true;
+            deliveredCount = 0;
+            callbackErrors = 0;
+
+            await manager.resubscribeAll();
+            assert.strictEqual(callbackErrors, 1, 'failed reconnect delivery should report callback error');
+            assert.strictEqual(retryDelays.length, 1, 'failed reconnect catch-up should schedule one retry');
+            assert.strictEqual(typeof retryCallback, 'function', 'retry callback should be scheduled');
+
+            retryCallback();
+            await new Promise(resolve => setImmediate(resolve));
+
+            assert.strictEqual(deliveredCount, 2, 'retry should redeliver the unacknowledged reconnect fill');
+        } finally {
+            global.setTimeout = originalSetTimeout;
+            global.clearTimeout = originalClearTimeout;
+        }
+    }
+
+    console.log(' - Testing live notice callback failures schedule retry without advancing cursor...');
+    {
+        const originalSetTimeout = global.setTimeout;
+        const originalClearTimeout = global.clearTimeout;
+        const retryDelays = [];
+        let retryCallback = null;
+        global.setTimeout = (fn, delay) => {
+            retryDelays.push(delay);
+            retryCallback = fn;
+            return { retryTimer: true };
+        };
+        global.clearTimeout = () => {};
+
+        try {
+            let noticeHandler = null;
+            let subscriptionComplete = false;
+            let failNoticeDelivery = false;
+            let deliveries = 0;
+            let callbackErrors = 0;
+            const historyStops = [];
+            const chainClient = {
+                transport: {
+                    addMessageHandler(handler) {
+                        noticeHandler = handler;
+                        return () => { noticeHandler = null; };
+                    },
+                },
+                db: {
+                    get_full_accounts: async ([account]) => [makeAccountRecord(account)],
+                    call: async () => null,
+                },
+                history: {
+                    getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
+                        if (limit === 1) {
+                            return [{ id: '1.11.400', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                        }
+                        if (!subscriptionComplete) return [];
+                        historyStops.push(stop);
+                        if (stop === '1.11.400') {
+                            return [{ id: '1.11.401', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.live-retry' }] }];
+                        }
+                        return [];
+                    },
+                },
+            };
+
+            const manager = createSubscriptionManager(chainClient);
+            await manager.subscribe('alice', async () => {
+                deliveries += 1;
+                if (failNoticeDelivery) {
+                    failNoticeDelivery = false;
+                    throw new Error('live notice queue full');
+                }
+            }, () => {
+                callbackErrors += 1;
+            });
+            subscriptionComplete = true;
+            failNoticeDelivery = true;
+            deliveries = 0;
+            callbackErrors = 0;
+
+            await noticeHandler([1, [{ id: '2.5.401', owner: '1.2.100' }]]);
+
+            assert.strictEqual(callbackErrors, 1, 'live notice delivery failure should report callback error');
+            assert.strictEqual(retryDelays.length, 1, 'live notice delivery failure should schedule retry');
+            assert.strictEqual(typeof retryCallback, 'function', 'live notice retry callback should be scheduled');
+
+            retryCallback();
+            await new Promise(resolve => setImmediate(resolve));
+
+            assert.strictEqual(deliveries, 2, 'retry should redeliver the failed live notice fill');
+            assert.deepStrictEqual(
+                historyStops,
+                ['1.11.400', '1.11.400'],
+                'cursor must remain retryable after failed live notice delivery'
+            );
+        } finally {
+            global.setTimeout = originalSetTimeout;
+            global.clearTimeout = originalClearTimeout;
+        }
+    }
+
+    console.log(' - Testing reconnect missing account data remains retryable...');
+    {
+        const originalSetTimeout = global.setTimeout;
+        const originalClearTimeout = global.clearTimeout;
+        const retryDelays = [];
+        let retryCallback = null;
+        global.setTimeout = (fn, delay) => {
+            retryDelays.push(delay);
+            retryCallback = fn;
+            return { retryTimer: true };
+        };
+        global.clearTimeout = () => {};
+
+        try {
+            let subscriptionComplete = false;
+            let reconnectAttempts = 0;
+            const delivered = [];
+            const chainClient = {
+                transport: {
+                    addMessageHandler() {
+                        return () => {};
+                    },
+                },
+                db: {
+                    get_full_accounts: async ([account], subscribe) => {
+                        if (subscribe || !subscriptionComplete) return [makeAccountRecord(account)];
+                        reconnectAttempts += 1;
+                        if (reconnectAttempts <= 2) return [];
+                        return [makeAccountRecord(account)];
+                    },
+                    call: async () => null,
+                },
+                history: {
+                    getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
+                        if (limit === 1) {
+                            return [{ id: '1.11.500', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                        }
+                        if (!subscriptionComplete) return [];
+                        if (stop === '1.11.500') {
+                            return [{ id: '1.11.501', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.account-retry' }] }];
+                        }
+                        return [];
+                    },
+                },
+            };
+
+            const manager = createSubscriptionManager(chainClient);
+            await manager.subscribe('alice', (fills) => {
+                delivered.push(fills);
+            });
+            subscriptionComplete = true;
+
+            await manager.resubscribeAll();
+
+            assert.strictEqual(delivered.length, 0, 'missing account data should not silently skip catch-up');
+            assert.strictEqual(retryDelays.length, 1, 'missing account data should schedule reconnect retry');
+
+            retryCallback();
+            await new Promise(resolve => setImmediate(resolve));
+
+            assert.strictEqual(delivered.length, 1, 'retry after missing account data should perform catch-up');
+            assert.strictEqual(delivered[0][0].id, '1.11.501');
+        } finally {
+            global.setTimeout = originalSetTimeout;
+            global.clearTimeout = originalClearTimeout;
+        }
+    }
+
     console.log('\n=== All subscription tests passed ===');
 })().catch((err) => {
     console.error(err);

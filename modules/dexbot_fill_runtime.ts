@@ -185,14 +185,14 @@ async function applyReplaySafeTrackedFillAccounting(fill, fillOp, {
  * @param {string} [options.context] - Context label for log messages
  * @param {Object} [options.logger] - Logger instance
  * @param {Function} [options.replayMessage] - Callback to generate log message on duplicate fill
- * @param {string} [options.persistenceMode='batched'] - Processed fill persistence mode
+ * @param {string} [options.persistenceMode='immediate'] - Processed fill persistence mode
  * @returns {Promise<import('./types').ReplaySafeFillResult>}
  */
 async function applyReplaySafeOrphanFillAccounting(fill, fillOp, {
     context,
     logger = this.manager?.logger,
     replayMessage,
-    persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
+    persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE
 } = {}) {
     return applyReplaySafeFillAccounting.call(this, fill, fillOp, {
         logger,

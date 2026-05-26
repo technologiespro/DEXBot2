@@ -282,7 +282,7 @@ async function _ensureAccountSubscriber(accountName) {
         const userCallbacks = new Set();
 
         // BitShares callback that receives raw updates and dispatches to user callbacks
-        const bsCallback = (updates) => {
+        const bsCallback = async (updates) => {
             // Filter for fill-related operations
             const fills = updates.filter(update => {
                 const op = update.op;
@@ -291,17 +291,24 @@ async function _ensureAccountSubscriber(accountName) {
 
             if (fills.length > 0) {
                 // Call each registered user callback with the fills array
+                const failures = [];
                 for (const c of Array.from(userCallbacks)) {
-                    try { c(fills); } catch (e: any) { console.error('chain_orders listener error', e.message); }
+                    try {
+                        await Promise.resolve(c(fills));
+                    } catch (e: any) {
+                        failures.push(e);
+                        console.error('chain_orders listener error', e.message);
+                    }
+                }
+                if (failures.length > 0) {
+                    const err = new Error(`Fill listener delivery failed for ${failures.length} callback(s): ${failures.map(e => e.message || String(e)).join('; ')}`);
+                    err.causes = failures;
+                    throw err;
                 }
             }
         };
 
-        try {
-            await BitShares.subscribe('account', bsCallback, accountName);
-        } catch (e: any) {
-            console.warn(`[chain_orders] Failed to subscribe to account '${accountName}': ${e.message}`);
-        }
+        await BitShares.subscribe('account', bsCallback, accountName);
 
         const entry = { userCallbacks, bsCallback };
         accountSubscriptions.set(accountName, entry);

@@ -226,7 +226,14 @@ class AccountOrders {
    */
   _persist() {
     ensureDirExists(this.profilesPath);
-    fs.writeFileSync(this.profilesPath, JSON.stringify(this.data, null, 2) + '\n', 'utf8');
+    const tmpPath = `${this.profilesPath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}`;
+    const content = JSON.stringify(this.data, null, 2) + '\n';
+    fs.writeFileSync(tmpPath, content, 'utf8');
+    try {
+      const fd = fs.openSync(tmpPath, 'r');
+      try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    } catch (_) {}
+    fs.renameSync(tmpPath, this.profilesPath);
   }
 
   /**

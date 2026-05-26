@@ -782,14 +782,14 @@ class DEXBot {
      * @param {string} [options.context]
      * @param {Object} [options.logger]
      * @param {string} [options.replayMessage]
-     * @param {string} [options.persistenceMode='batched']
+     * @param {string} [options.persistenceMode='immediate']
      * @returns {Promise<import('./types').ReplaySafeFillResult>}
      */
     async _applyReplaySafeOrphanFillAccounting(fill, fillOp, {
         context,
         logger = this.manager?.logger,
         replayMessage,
-        persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
+        persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE
     } = {}) {
         return DexbotFillRuntime.applyReplaySafeOrphanFillAccounting.call(this, fill, fillOp, {
             context,
@@ -1305,7 +1305,7 @@ class DEXBot {
                             this.manager.logger.log(`Syncing ${fillsToSync.length} fill(s) (history mode)`, 'info');
                             for (const fill of fillsToSync) {
                                 const resultHistory = await this.manager.syncFromFillHistory(fill, {
-                                    persistenceMode: PROCESSED_FILL_PERSISTENCE_MODES.MANUAL
+                                    persistenceMode: PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE
                                 });
                                 const fillKey = buildFillKey({
                                     orderId: fill?.op?.[1]?.order_id,

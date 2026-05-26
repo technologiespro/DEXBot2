@@ -11,6 +11,9 @@ function createSubscriptionManager(chainClient: any): any {
     const subscriptions = new Map();
     let unsubscribeNotice: any = null;
     let noticeActive = false;
+    const reconnectRetryDelayMs = Number.isFinite(SUBSCRIPTIONS.RECONNECT_RETRY_DELAY_MS)
+        ? Math.max(1000, SUBSCRIPTIONS.RECONNECT_RETRY_DELAY_MS)
+        : 5000;
 
     function parseObjectIdInstance(id: any): number {
         if (typeof id !== 'string') return Number.NaN;
@@ -149,11 +152,12 @@ function createSubscriptionManager(chainClient: any): any {
             if (!shouldProcessNoticeForSubscription(sub, data)) continue;
 
             try {
-                await processObjects(sub, data);
+                await processObjects(sub, data, { throwOnError: true });
             } catch (err: any) {
-                if (sub.onError) {
+                if (sub.onError && !err?.subscriptionErrorReported) {
                     try { sub.onError(err); } catch (_: any) {}
                 }
+                scheduleReconnectRetry(sub, err);
             }
         }
     }
@@ -209,9 +213,19 @@ function createSubscriptionManager(chainClient: any): any {
 
         try {
             const accData = await fetchFullAccountWithRetry(sub, false);
-            if (!accData) return;
+            if (!accData) {
+                if (options.throwOnError) {
+                    throw new Error('get_full_accounts returned no account data');
+                }
+                return;
+            }
             const accountId = accData.account?.id || sub.accountId;
-            if (!accountId) return;
+            if (!accountId) {
+                if (options.throwOnError) {
+                    throw new Error('get_full_accounts returned no account id');
+                }
+                return;
+            }
             sub.accountId = accountId;
             sub.statisticsId = accData.account?.statistics || sub.statisticsId || null;
 
@@ -253,15 +267,70 @@ function createSubscriptionManager(chainClient: any): any {
                             try { sub.onError(err); } catch (_: any) {}
                         }
                     }
+                    if (options.throwOnError) {
+                        failed[0].subscriptionErrorReported = true;
+                        throw failed[0];
+                    }
                     return;
                 }
 
                 sub.lastDeliveredHistoryId = fills[fills.length - 1]?.id || sub.lastDeliveredHistoryId;
             }
         } catch (err: any) {
-            if (sub.onError) {
+            if (sub.onError && !err?.subscriptionErrorReported) {
                 try { sub.onError(err); } catch (_: any) {}
             }
+            if (options.throwOnError) throw err;
+        }
+    }
+
+    function clearReconnectRetry(entry: any): void {
+        if (!entry?.reconnectRetryTimer) return;
+        clearTimeout(entry.reconnectRetryTimer);
+        entry.reconnectRetryTimer = null;
+    }
+
+    function scheduleReconnectRetry(entry: any, err: any): void {
+        if (!entry || entry.reconnectRetryTimer || !entry.active || entry.callbacks?.size === 0) return;
+
+        entry.reconnectRetryTimer = setTimeout(() => {
+            entry.reconnectRetryTimer = null;
+            resubscribeEntry(entry, 'retry').catch((retryErr: any) => {
+                console.warn('[subscriptions] Failed to resubscribe', entry.accountName, retryErr.message);
+                scheduleReconnectRetry(entry, retryErr);
+            });
+        }, reconnectRetryDelayMs);
+        if (typeof entry.reconnectRetryTimer.unref === 'function') {
+            entry.reconnectRetryTimer.unref();
+        }
+
+        warnSubscription(entry, `scheduled reconnect retry in ${reconnectRetryDelayMs}ms`, err);
+    }
+
+    async function resubscribeEntry(entry: any, reason: string = 'reconnect') {
+        if (!entry?.active) return;
+
+        try {
+            const accounts = await chainClient.db.get_full_accounts([entry.accountName], true);
+            if (accounts && accounts[0] && accounts[0][1] && accounts[0][1].account) {
+                entry.accountId = accounts[0][1].account.id;
+                entry.statisticsId = accounts[0][1].account.statistics || null;
+            }
+        } catch (err: any) {
+            console.warn('[subscriptions] Failed to refresh account data for', entry.accountName, err.message);
+        }
+
+        await chainClient.db.call('set_subscribe_callback', [
+            SUBSCRIBE_CALLBACK_ID,
+            false,
+        ]);
+        ensureNoticeSubscription();
+        await processObjects(entry, [entry.accountId], {
+            throwOnError: true,
+        });
+        clearReconnectRetry(entry);
+        if (reason === 'retry') {
+            console.warn('[subscriptions] Reconnect retry restored subscription', entry.accountName);
         }
     }
 
@@ -284,6 +353,7 @@ function createSubscriptionManager(chainClient: any): any {
                 active: false,
                 callbacks: new Set(),
                 onError: null,
+                reconnectRetryTimer: null,
             };
             subscriptions.set(accountName, entry);
 
@@ -352,6 +422,7 @@ function createSubscriptionManager(chainClient: any): any {
 
         if (entry.callbacks.size === 0) {
             entry.active = false;
+            clearReconnectRetry(entry);
             subscriptions.delete(accountName);
 
             if (subscriptions.size === 0) {
@@ -365,23 +436,10 @@ function createSubscriptionManager(chainClient: any): any {
             if (!entry.active) continue;
 
             try {
-                const accounts = await chainClient.db.get_full_accounts([entry.accountName], true);
-                if (accounts && accounts[0] && accounts[0][1] && accounts[0][1].account) {
-                    entry.accountId = accounts[0][1].account.id;
-                    entry.statisticsId = accounts[0][1].account.statistics || null;
-                    entry.active = true;
-                }
-            } catch (_: any) {}
-
-            try {
-                await chainClient.db.call('set_subscribe_callback', [
-                    SUBSCRIBE_CALLBACK_ID,
-                    false,
-                ]);
-                ensureNoticeSubscription();
-                await processObjects(entry, [entry.accountId]);
+                await resubscribeEntry(entry);
             } catch (err: any) {
                 console.warn('[subscriptions] Failed to resubscribe', entry.accountName, err.message);
+                scheduleReconnectRetry(entry, err);
             }
         }
     }

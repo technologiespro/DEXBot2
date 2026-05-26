@@ -1189,6 +1189,9 @@ let NATIVE_CLIENT = {
         // to the per-subscription cursor (lastDeliveredHistoryId).
         HISTORY_LOOKBACK_MAX: 100,
 
+        // Delay before retrying a failed reconnect catch-up for a subscription.
+        RECONNECT_RETRY_DELAY_MS: 5000,
+
         // Maximum fill events accepted into the in-memory processing queue.
         // Subscription callbacks throw before acknowledging history when this
         // limit would be exceeded, so the cursor remains retryable.
