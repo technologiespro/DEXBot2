@@ -957,12 +957,14 @@ class OrderManager {
             }
         }
 
-        let nextOrder = validation.normalizedOrder;
+        // Ensure a mutable copy before passing to updateOptimisticFreeBalance.
+        // validation.normalizedOrder may reference a frozen master-grid order,
+        // and _resolveBtsFeeLifecycle mutates btsFeeState on the order object.
+        let nextOrder = { ...validation.normalizedOrder };
 
         // Apply phantom order auto-correction to the normalized order
         const phantomError = validation.errors.find(e => e.code === 'PHANTOM_ORDER');
         if (phantomError && phantomError.autoCorrect) {
-            this.logger.log(phantomError.message, 'error');
             nextOrder = { ...nextOrder, ...phantomError.autoCorrect };
         }
 

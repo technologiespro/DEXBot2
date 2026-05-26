@@ -823,6 +823,12 @@ class Accountant {
         const mgr = this.manager;
         if (!oldOrder || !newOrder) return;
 
+        // Ensure a mutable copy: _resolveBtsFeeLifecycle mutates btsFeeState on
+        // newOrder (line 230), but the caller may pass a frozen master-grid order.
+        if (Object.isFrozen(newOrder)) {
+            newOrder = { ...newOrder };
+        }
+
         if (!skipAssetAccounting) {
             const oldIsActive = (oldOrder.state === ORDER_STATES.ACTIVE || oldOrder.state === ORDER_STATES.PARTIAL);
             const newIsActive = (newOrder.state === ORDER_STATES.ACTIVE || newOrder.state === ORDER_STATES.PARTIAL);
