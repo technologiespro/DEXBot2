@@ -49,18 +49,18 @@ function makeAccountRecord(account) {
                     historyCalls.push([accountId, opType, start, stop, limit]);
                     if (accountId !== '1.2.100') return [];
                     if (limit === 1) {
-                        return [{ id: '1.11.499', block_num: 10, trx_id: 1, op: [4, { order_id: '1.7.1' }] }];
+                        return [{ id: '1.11.499', block_num: 10, trx_in_block: 1, op: [4, { order_id: '1.7.1' }] }];
                     }
                     if (stop === '1.11.498') {
                         // Initial bounded catch-up includes the primed latest fill
                         // and a fill that arrived during subscription activation.
                         return [
-                            { id: '1.11.499', block_num: 10, trx_id: 1, op: [4, { order_id: '1.7.1' }] },
-                            { id: '1.11.500', block_num: 11, trx_id: 2, op: [4, { order_id: '1.7.2' }] },
+                            { id: '1.11.499', block_num: 10, trx_in_block: 1, op: [4, { order_id: '1.7.1' }] },
+                            { id: '1.11.500', block_num: 11, trx_in_block: 2, op: [4, { order_id: '1.7.2' }] },
                         ];
                     }
                     if (stop === '1.11.500') {
-                        return [{ id: '1.11.501', block_num: 12, trx_id: 3, op: [4, { order_id: '1.7.3' }] }];
+                        return [{ id: '1.11.501', block_num: 12, trx_in_block: 3, op: [4, { order_id: '1.7.3' }] }];
                     }
                     return [];
                 },
@@ -76,19 +76,25 @@ function makeAccountRecord(account) {
         });
 
         assert.strictEqual(typeof noticeHandler, 'function', 'notice handler should be registered');
-        await noticeHandler([1, [{ id: '2.5.999', owner: '1.2.100' }]]);
 
-        // Two deliveries: initial bounded catch-up + notice-triggered fetch.
+        // Non-fill notice should be silently skipped (no history scan — matches btsdex behavior)
+        await noticeHandler([1, [{ id: '2.5.999', owner: '1.2.100' }]]);
+        assert.strictEqual(delivered.length, 1, 'non-fill notice should not trigger delivery');
+
+        // Notice with direct fill object should be dispatched immediately to matching account
+        await noticeHandler([1, [{ id: '1.11.501', block_num: 12, trx_in_block: 3, op: [4, { order_id: '1.7.3', account_id: '1.2.100' }] }]]);
+
+        // Two deliveries: bounded catch-up + direct notice fill.
         assert.strictEqual(delivered.length, 2, 'matching account should receive two deliveries');
         // First delivery: bounded catch-up delivers latest known fill plus activation-window fills.
         assert.strictEqual(delivered[0][0], 'alice');
         assert.deepStrictEqual(delivered[0][1].map(fill => fill.id), ['1.11.499', '1.11.500']);
-        // Second delivery: notice-triggered fetch delivers fill newer than the catch-up cursor.
+        // Second delivery: direct from notice data (no history scan).
         assert.strictEqual(delivered[1][0], 'alice');
         assert.strictEqual(delivered[1][1].length, 1);
         assert.strictEqual(delivered[1][1][0].id, '1.11.501');
         assert.strictEqual(delivered[1][1][0].block_num, 12, 'fill payload should expose block_num');
-        assert.strictEqual(delivered[1][1][0].trx_id, 3, 'fill payload should expose trx_id');
+        assert.strictEqual(delivered[1][1][0].trx_in_block, 3, 'fill payload should expose trx_in_block');
         assert.strictEqual(delivered[1][1][0].block, undefined, 'legacy block alias should not leak through');
         assert.strictEqual(delivered[1][1][0].trx, undefined, 'legacy trx alias should not leak through');
         // Startup primes latest first, then performs a bounded overlap fetch.
@@ -102,13 +108,13 @@ function makeAccountRecord(account) {
             ['1.2.100', 4, '1.11.0', '1.11.498', 100],
             'initial catch-up should read only the head page after priming'
         );
-        // The notice-triggered fetch uses the delivered catch-up cursor as exclusive stop.
-        const aliceNoticeHistoryCall = historyCalls.find(([, , , stop, limit]) => stop === '1.11.500' && limit === 100);
-        assert.deepStrictEqual(
-            aliceNoticeHistoryCall,
-            ['1.2.100', 4, '1.11.0', '1.11.500', 100],
-            'notice processing should fetch only fills newer than the catch-up cursor'
-        );
+        // Direct notice delivery should not produce additional history calls beyond initial catch-up.
+        const aliceHistoryCalls = historyCalls.filter(([account]) => account === '1.2.100');
+        assert.strictEqual(aliceHistoryCalls.length, 2, 'no history scans for alice after initial catch-up');
+        const bobHistoryCalls = historyCalls.filter(([account]) => account === '1.2.200');
+        assert.strictEqual(bobHistoryCalls.length, 2, 'bob also gets initial catch-up');
+        // Fill sent via direct notice should dispatch to all active subscriptions
+        assert.strictEqual(delivered.length, 2, 'alice should get catch-up + direct notice fill');
         assert.ok(dbCalls.some(([method]) => method === 'set_subscribe_callback'), 'subscription RPC should be registered');
         assert.strictEqual(
             dbCalls.some(([method, account, subscribe]) => method === 'get_full_accounts' && account === 'alice' && subscribe === true),
@@ -146,10 +152,10 @@ function makeAccountRecord(account) {
             history: {
                 getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
                     if (limit === 1) {
-                        return [{ id: '1.11.510', block_num: 10, trx_id: 1, op: [4, { order_id: '1.7.510' }] }];
+                        return [{ id: '1.11.510', block_num: 10, trx_in_block: 1, op: [4, { order_id: '1.7.510' }] }];
                     }
                     if (stop === '1.11.509') {
-                        return [{ id: '1.11.511', block_num: 11, trx_id: 2, op: [4, { order_id: '1.7.511' }] }];
+                        return [{ id: '1.11.511', block_num: 11, trx_in_block: 2, op: [4, { order_id: '1.7.511' }] }];
                     }
                     return [];
                 },
@@ -200,13 +206,13 @@ function makeAccountRecord(account) {
             history: {
                 getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
                     if (limit === 1) {
-                        return [{ id: '1.11.900', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                        return [{ id: '1.11.900', block_num: 1, trx_in_block: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                     }
                     if (stop === '1.11.899') {
-                        return [{ id: '1.11.900', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                        return [{ id: '1.11.900', block_num: 1, trx_in_block: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                     }
                     if (stop === '1.11.900') {
-                        return [{ id: '1.11.901', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.901' }] }];
+                        return [{ id: '1.11.901', block_num: 2, trx_in_block: 2, op: [4, { order_id: '1.7.901' }] }];
                     }
                     return [];
                 },
@@ -261,10 +267,10 @@ function makeAccountRecord(account) {
                     historyAccounts.push(accountId);
                     if (accountId !== '1.2.100') return [];
                     if (limit === 1) {
-                        return [{ id: '1.11.650', block_num: 9, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                        return [{ id: '1.11.650', block_num: 9, trx_in_block: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                     }
                     if (subscriptionComplete && stop === '1.11.649') {
-                        return [{ id: '1.11.700', block_num: 12, trx_id: 3, op: [4, { order_id: '1.7.3' }] }];
+                        return [{ id: '1.11.700', block_num: 12, trx_in_block: 3, op: [4, { order_id: '1.7.3' }] }];
                     }
                     return [];
                 },
@@ -275,39 +281,30 @@ function makeAccountRecord(account) {
         await manager.subscribe('alice', (fills) => {
             accountNoticeDelivered.push(fills);
         });
-        await manager.subscribe('bob', () => {
-            throw new Error('bob should not receive alice statistics notices');
-        });
+        await manager.subscribe('bob', () => {});
         subscriptionComplete = true;
         accountNoticeDelivered.length = 0;
         historyAccounts.length = 0;
 
+        // Non-fill notice (statistics object) should be silently skipped — no history scan.
         await noticeHandler([1, [{ id: '2.6.100' }]]);
-        assert.strictEqual(accountNoticeDelivered.length, 1, 'account/statistics notices should trigger history fill scan');
+        assert.strictEqual(accountNoticeDelivered.length, 0, 'non-fill notice should not trigger delivery');
+
+        // Fill object in notice should be dispatched directly to matching account.
+        await noticeHandler([1, [{ id: '1.11.700', block_num: 12, trx_in_block: 3, op: [4, { order_id: '1.7.3', account_id: '1.2.100' }] }]]);
+        assert.strictEqual(accountNoticeDelivered.length, 1, 'direct fill notice should dispatch');
         assert.strictEqual(accountNoticeDelivered[0][0].id, '1.11.700');
 
+        // Bob's callback should not fire for alice's fill.
         accountNoticeDelivered.length = 0;
-        historyAccounts.length = 0;
-        await noticeHandler([1, [{ id: '2.6.100' }]]);
-        assert.strictEqual(accountNoticeDelivered.length, 0, 'duplicate alice statistics fill should stay deduped by cursor');
-        assert.ok(historyAccounts.length > 0, 'alice statistics notices should scan alice history');
-        assert.ok(historyAccounts.every((accountId) => accountId === '1.2.100'), 'alice statistics notices should not wake bob history scans');
+        await noticeHandler([1, [{ id: '1.11.701', block_num: 13, trx_in_block: 4, op: [4, { order_id: '1.7.4', account_id: '1.2.200' }] }]]);
+        assert.strictEqual(accountNoticeDelivered.length, 0, 'bob fill should not deliver to alice callback');
     }
 
-    console.log(' - Testing pagination catches bursts larger than the BitShares Core page limit...');
+    console.log(' - Testing multiple fill objects in a single notice are dispatched together...');
     {
         let noticeHandler = null;
         const delivered = [];
-        const pageOne = [];
-        for (let id = 1005; id >= 906; id--) {
-            pageOne.push({ id: `1.11.${id}`, block_num: id, trx_id: id, op: [4, { order_id: `1.7.${id}` }] });
-        }
-        const pageTwo = [];
-        for (let id = 905; id >= 901; id--) {
-            pageTwo.push({ id: `1.11.${id}`, block_num: id, trx_id: id, op: [4, { order_id: `1.7.${id}` }] });
-        }
-        const historyCalls = [];
-        let subscriptionComplete = false;
         const chainClient = {
             transport: {
                 addMessageHandler(handler) {
@@ -320,14 +317,10 @@ function makeAccountRecord(account) {
                 call: async () => null,
             },
             history: {
-                getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
-                    historyCalls.push([accountId, opType, start, stop, limit]);
+                getAccountHistoryOperations: async (accountId, _opType, _start, stop, limit) => {
                     if (limit === 1) {
-                        return [{ id: '1.11.900', block_num: 900, trx_id: 900, op: [4, { order_id: '1.7.900' }] }];
+                        return [{ id: '1.11.900', block_num: 900, trx_in_block: 900, op: [4, { order_id: '1.7.900' }] }];
                     }
-                    if (!subscriptionComplete) return [];
-                    if (start === '1.11.0') return pageOne.slice();
-                    if (start === '1.11.905') return pageTwo.slice();
                     return [];
                 },
             },
@@ -337,37 +330,28 @@ function makeAccountRecord(account) {
         await manager.subscribe('alice', (fills) => {
             delivered.push(fills);
         });
-        subscriptionComplete = true;
-        delivered.length = 0;
-        historyCalls.length = 0;
 
-        await noticeHandler([1, [{ id: '2.5.2000', owner: '1.2.100' }]]);
+        // Send multiple fill objects in a single WebSocket notice.
+        await noticeHandler([1, [
+            { id: '1.11.901', block_num: 901, trx_in_block: 901, op: [4, { order_id: '1.7.901', account_id: '1.2.100' }] },
+            { id: '1.11.902', block_num: 902, trx_in_block: 902, op: [4, { order_id: '1.7.902', account_id: '1.2.100' }] },
+            { id: '1.11.903', block_num: 903, trx_in_block: 903, op: [4, { order_id: '1.7.903', account_id: '1.2.100' }] },
+        ]]);
 
-        assert.strictEqual(delivered.length, 1, 'burst notice should still emit a single delivery batch');
-        assert.strictEqual(delivered[0].length, 105, 'pagination should recover every new fill beyond the first 100');
-        assert.strictEqual(delivered[0][0].id, '1.11.901', 'fills should be delivered oldest-first for deterministic downstream processing');
-        assert.strictEqual(delivered[0][104].id, '1.11.1005');
-        assert.deepStrictEqual(
-            historyCalls,
-            [
-                ['1.2.100', 4, '1.11.0', '1.11.899', 100],
-                ['1.2.100', 4, '1.11.905', '1.11.899', 100],
-            ],
-            'pagination should continue before the oldest page entry because BitShares Core treats start as inclusive'
-        );
+        assert.strictEqual(delivered.length, 1, 'fills in a single notice should batch into one delivery');
+        assert.strictEqual(delivered[0].length, 3, 'all three fills should be in the same batch');
+        assert.strictEqual(delivered[0][0].id, '1.11.901', 'first fill should match');
+        assert.strictEqual(delivered[0][1].id, '1.11.902', 'second fill should match');
+        assert.strictEqual(delivered[0][2].id, '1.11.903', 'third fill should match');
     }
 
-    console.log(' - Testing get_full_accounts notice failures warn and retry without advancing cursor...');
+    console.log(' - Testing direct fill notice with full account_id dispatches correctly...');
     {
         let noticeHandler = null;
-        let fullAccountCalls = 0;
-        let warningCount = 0;
         const delivered = [];
         let subscriptionComplete = false;
         const originalWarn = console.warn;
-        console.warn = (...args) => {
-            if (String(args[0] || '').includes('[subscriptions] get_full_accounts')) warningCount++;
-        };
+        console.warn = (...args) => {};
 
         try {
             const chainClient = {
@@ -378,26 +362,14 @@ function makeAccountRecord(account) {
                     },
                 },
                 db: {
-                    get_full_accounts: async ([account], subscribe) => {
-                        if (subscribe) return [makeAccountRecord(account)];
-                        if (!subscriptionComplete) return [makeAccountRecord(account)];
-                        fullAccountCalls++;
-                        if (fullAccountCalls === 1) throw new Error('temporary rpc failure');
-                        if (fullAccountCalls === 2) return [];
-                        return [makeAccountRecord(account)];
-                    },
+                    get_full_accounts: async ([account]) => [makeAccountRecord(account)],
                     call: async () => null,
                 },
                 history: {
                     getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
                         if (limit === 1) {
-                            return [{ id: '1.11.800', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                            return [{ id: '1.11.800', block_num: 1, trx_in_block: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                         }
-                        if (!subscriptionComplete) return [];
-                        if (stop === '1.11.799') {
-                            return [{ id: '1.11.801', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.801' }] }];
-                        }
-                        if (stop === '1.11.801') return [];
                         return [];
                     },
                 },
@@ -407,18 +379,12 @@ function makeAccountRecord(account) {
             await manager.subscribe('alice', (fills) => {
                 delivered.push(fills);
             });
-            subscriptionComplete = true;
-            fullAccountCalls = 0;
-            warningCount = 0;
-            delivered.length = 0;
 
-            await noticeHandler([1, [{ id: '2.5.3000', owner: '1.2.100' }]]);
-            assert.strictEqual(delivered.length, 0, 'failed account refresh should not deliver fills');
-            assert.strictEqual(warningCount, 2, 'failed and empty account refresh attempts should warn');
-
-            await noticeHandler([1, [{ id: '2.5.3001', owner: '1.2.100' }]]);
-            assert.strictEqual(delivered.length, 1, 'next successful notice should retry the unacknowledged fill');
+            // Direct fill notice — no get_full_accounts call, no history scan.
+            await noticeHandler([1, [{ id: '1.11.801', block_num: 2, trx_in_block: 2, op: [4, { order_id: '1.7.801', account_id: '1.2.100' }] }]]);
+            assert.strictEqual(delivered.length, 1, 'direct fill notice should deliver');
             assert.strictEqual(delivered[0][0].id, '1.11.801');
+            assert.strictEqual(delivered[0][0].op[1].account_id, '1.2.100', 'fill should have matching account_id');
         } finally {
             console.warn = originalWarn;
         }
@@ -430,8 +396,6 @@ function makeAccountRecord(account) {
         let failedOnce = false;
         let retryDeliveries = 0;
         let callbackErrors = 0;
-        const retryHistoryCalls = [];
-        let subscriptionComplete = false;
         const retryChainClient = {
             transport: {
                 addMessageHandler(handler) {
@@ -444,17 +408,9 @@ function makeAccountRecord(account) {
                 call: async () => null,
             },
             history: {
-                getAccountHistoryOperations: async (accountId, _opType, _start, stop, limit) => {
-                    retryHistoryCalls.push([accountId, stop, limit]);
+                getAccountHistoryOperations: async (_accountId, _opType, _start, _stop, limit) => {
                     if (limit === 1) {
-                        return [{ id: '1.11.600', block_num: 11, trx_id: 2, op: [4, { order_id: '1.7.bootstrap' }] }];
-                    }
-                    if (!subscriptionComplete) return [];
-                    if (stop === '1.11.599') {
-                        return [{ id: '1.11.601', block_num: 12, trx_id: 3, op: [4, { order_id: '1.7.2' }] }];
-                    }
-                    if (stop === '1.11.601') {
-                        return [];
+                        return [{ id: '1.11.600', block_num: 11, trx_in_block: 2, op: [4, { order_id: '1.7.bootstrap' }] }];
                     }
                     return [];
                 },
@@ -468,30 +424,16 @@ function makeAccountRecord(account) {
                 failedOnce = true;
                 throw new Error('transient callback failure');
             }
-        }, () => {
-            callbackErrors += 1;
         });
-        subscriptionComplete = true;
         failedOnce = false;
         retryDeliveries = 0;
-        callbackErrors = 0;
-        retryHistoryCalls.length = 0;
 
-        await noticeHandler([1, [{ id: '2.5.1001', owner: '1.2.100' }]]);
-        await noticeHandler([1, [{ id: '2.5.1002', owner: '1.2.100' }]]);
-        await noticeHandler([1, [{ id: '2.5.1003', owner: '1.2.100' }]]);
+        // First fill notice: callback throws (logged, not retried — btsdex parity)
+        await noticeHandler([1, [{ id: '1.11.601', block_num: 12, trx_in_block: 3, op: [4, { order_id: '1.7.2', account_id: '1.2.100' }] }]]);
+        // Second fill notice: callback succeeds
+        await noticeHandler([1, [{ id: '1.11.602', block_num: 13, trx_in_block: 4, op: [4, { order_id: '1.7.3', account_id: '1.2.100' }] }]]);
 
-        assert.strictEqual(callbackErrors, 1, 'callback failure should be reported to onError');
-        assert.strictEqual(retryDeliveries, 2, 'fill should retry once after failed callback and dedupe after success');
-        assert.deepStrictEqual(
-            retryHistoryCalls,
-            [
-                ['1.2.100', '1.11.599', 100],
-                ['1.2.100', '1.11.599', 100],
-                ['1.2.100', '1.11.601', 100],
-            ],
-            'cursor should only advance after successful callback delivery'
-        );
+        assert.strictEqual(retryDeliveries, 2, 'first callback fails (logged), second succeeds');
     }
 
     console.log(' - Testing reconnect catch-up scans back to the last delivered cursor...');
@@ -512,7 +454,7 @@ function makeAccountRecord(account) {
             history: {
                 getAccountHistoryOperations: async (_accountId, _opType, start, stop, limit) => {
                     if (limit === 1) {
-                        return [{ id: '1.11.900', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                        return [{ id: '1.11.900', block_num: 1, trx_in_block: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                     }
                     if (!subscriptionComplete) return [];
                     reconnectHistoryPages += 1;
@@ -522,7 +464,7 @@ function makeAccountRecord(account) {
                     return Array.from({ length: limit }, (_, idx) => ({
                         id: `1.11.${newest - idx}`,
                         block_num: newest - idx,
-                        trx_id: idx,
+                        trx_in_block: idx,
                         op: [4, { order_id: `1.7.${newest - idx}` }],
                     })).filter(entry => Number(String(entry.id).split('.').pop()) > stopInstance);
                 },
@@ -565,12 +507,12 @@ function makeAccountRecord(account) {
             history: {
                 getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
                     if (limit === 1) {
-                        return [{ id: '1.11.300', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                        return [{ id: '1.11.300', block_num: 1, trx_in_block: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                     }
                     if (!subscriptionComplete) return [];
                     historyStops.push(stop);
                     if (stop === '1.11.299') {
-                        return [{ id: '1.11.301', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.async-retry' }] }];
+                        return [{ id: '1.11.301', block_num: 2, trx_in_block: 2, op: [4, { order_id: '1.7.async-retry' }] }];
                     }
                     return [];
                 },
@@ -635,11 +577,11 @@ function makeAccountRecord(account) {
                 history: {
                     getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
                         if (limit === 1) {
-                            return [{ id: '1.11.700', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                            return [{ id: '1.11.700', block_num: 1, trx_in_block: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                         }
                         if (!subscriptionComplete) return [];
                         if (stop === '1.11.699') {
-                            return [{ id: '1.11.701', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.retry' }] }];
+                            return [{ id: '1.11.701', block_num: 2, trx_in_block: 2, op: [4, { order_id: '1.7.retry' }] }];
                         }
                         return [];
                     },
@@ -676,86 +618,50 @@ function makeAccountRecord(account) {
         }
     }
 
-    console.log(' - Testing live notice callback failures schedule retry without advancing cursor...');
+    console.log(' - Testing live notice callback failure is logged without retry...');
     {
-        const originalSetTimeout = global.setTimeout;
-        const originalClearTimeout = global.clearTimeout;
-        const retryDelays = [];
-        let retryCallback = null;
-        global.setTimeout = (fn, delay) => {
-            retryDelays.push(delay);
-            retryCallback = fn;
-            return { retryTimer: true };
+        let noticeHandler = null;
+        let deliveries = 0;
+        let failOnce = false;
+        const chainClient = {
+            transport: {
+                addMessageHandler(handler) {
+                    noticeHandler = handler;
+                    return () => { noticeHandler = null; };
+                },
+            },
+            db: {
+                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
+                call: async () => null,
+            },
+            history: {
+                getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
+                    if (limit === 1) {
+                        return [{ id: '1.11.400', block_num: 1, trx_in_block: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                    }
+                    return [];
+                },
+            },
         };
-        global.clearTimeout = () => {};
 
-        try {
-            let noticeHandler = null;
-            let subscriptionComplete = false;
-            let failNoticeDelivery = false;
-            let deliveries = 0;
-            let callbackErrors = 0;
-            const historyStops = [];
-            const chainClient = {
-                transport: {
-                    addMessageHandler(handler) {
-                        noticeHandler = handler;
-                        return () => { noticeHandler = null; };
-                    },
-                },
-                db: {
-                    get_full_accounts: async ([account]) => [makeAccountRecord(account)],
-                    call: async () => null,
-                },
-                history: {
-                    getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
-                        if (limit === 1) {
-                            return [{ id: '1.11.400', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
-                        }
-                        if (!subscriptionComplete) return [];
-                        historyStops.push(stop);
-                        if (stop === '1.11.399') {
-                            return [{ id: '1.11.401', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.live-retry' }] }];
-                        }
-                        return [];
-                    },
-                },
-            };
+        const manager = createSubscriptionManager(chainClient);
+        await manager.subscribe('alice', async (fills) => {
+            deliveries += fills.length;
+            if (failOnce) {
+                failOnce = false;
+                throw new Error('transient callback error');
+            }
+        });
+        failOnce = true;
+        deliveries = 0;
 
-            const manager = createSubscriptionManager(chainClient);
-            await manager.subscribe('alice', async () => {
-                deliveries += 1;
-                if (failNoticeDelivery) {
-                    failNoticeDelivery = false;
-                    throw new Error('live notice queue full');
-                }
-            }, () => {
-                callbackErrors += 1;
-            });
-            subscriptionComplete = true;
-            failNoticeDelivery = true;
-            deliveries = 0;
-            callbackErrors = 0;
+        // A failing callback increments deliveries (before throw) but doesn't block future deliveries
+        await noticeHandler([1, [{ id: '1.11.401', block_num: 2, trx_in_block: 2, op: [4, { order_id: '1.7.live-fail', account_id: '1.2.100' }] }]]);
+        assert.strictEqual(deliveries, 1, 'failing callback increments before throw');
 
-            await noticeHandler([1, [{ id: '2.5.401', owner: '1.2.100' }]]);
-
-            assert.strictEqual(callbackErrors, 1, 'live notice delivery failure should report callback error');
-            assert.strictEqual(retryDelays.length, 1, 'live notice delivery failure should schedule retry');
-            assert.strictEqual(typeof retryCallback, 'function', 'live notice retry callback should be scheduled');
-
-            retryCallback();
-            await new Promise(resolve => setImmediate(resolve));
-
-            assert.strictEqual(deliveries, 2, 'retry should redeliver the failed live notice fill');
-            assert.deepStrictEqual(
-                historyStops,
-                ['1.11.399', '1.11.399'],
-                'cursor must remain retryable after failed live notice delivery'
-            );
-        } finally {
-            global.setTimeout = originalSetTimeout;
-            global.clearTimeout = originalClearTimeout;
-        }
+        // Next fill notice dispatches normally
+        await noticeHandler([1, [{ id: '1.11.402', block_num: 3, trx_in_block: 3, op: [4, { order_id: '1.7.live-ok', account_id: '1.2.100' }] }]]);
+        assert.strictEqual(deliveries, 2, 'next fill should dispatch normally after previous failure');
     }
 
     console.log(' - Testing reconnect missing account data remains retryable...');
@@ -793,11 +699,11 @@ function makeAccountRecord(account) {
                 history: {
                     getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
                         if (limit === 1) {
-                            return [{ id: '1.11.500', block_num: 1, trx_id: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                            return [{ id: '1.11.500', block_num: 1, trx_in_block: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
                         }
                         if (!subscriptionComplete) return [];
                         if (stop === '1.11.499') {
-                            return [{ id: '1.11.501', block_num: 2, trx_id: 2, op: [4, { order_id: '1.7.account-retry' }] }];
+                            return [{ id: '1.11.501', block_num: 2, trx_in_block: 2, op: [4, { order_id: '1.7.account-retry' }] }];
                         }
                         return [];
                     },

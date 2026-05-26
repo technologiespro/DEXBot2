@@ -2,10 +2,15 @@
  * tests/test_websocket_subscription_flow.ts
  *
  * End-to-end websocket subscription flow test.
- * Verifies the full lifecycle: notice → handleNotice → processObjects →
- * fetchFillHistoryEntries → callback dispatch, with realistic notice data
- * formats including thin 1.11.x objects (no owner/op), full objects, and
- * account-scoped objects for other accounts.
+ * Verifies the full lifecycle: notice -> handleNotice -> direct fill dispatch,
+ * with realistic notice data formats including thin 1.11.x objects (no op),
+ * full fill objects, and account-scoped objects for other accounts.
+ *
+ * handleNotice extracts fill objects directly from notice data (1.11.x items
+ * with op[0] === OP_FILL_ORDER and op[1].account_id). Non-fill notices (no op
+ * field, or op is not a fill_order) are silently skipped. The initial subscribe
+ * still does a bounded history scan (cursor catch-up). Reconnect catch-up still
+ * works via resubscribeAll().
  */
 
 const assert = require('assert');
@@ -36,10 +41,10 @@ function makeAccountRecord(account) {
         totalTests++;
         try {
             fn();
-            console.log(`  ✓ ${name}`);
+            console.log(`  \u2713 ${name}`);
             passedTests++;
         } catch (err) {
-            console.log(`  ✗ ${name}: ${err.message}`);
+            console.log(`  \u2717 ${name}: ${err.message}`);
         }
     }
 
@@ -54,9 +59,9 @@ function makeAccountRecord(account) {
     console.log('=== WebSocket Subscription Flow Test ===\n');
 
     // -----------------------------------------------------------------------
-    // 1. Thin notice with only 1.11.x IDs (no owner, no op) triggers history scan
+    // 1. Thin notices without fill op + direct fill dispatch
     // -----------------------------------------------------------------------
-    console.log('\n--- Thin notice (1.11.x IDs without owner/op) ---');
+    console.log('\n--- Thin notice (1.11.x IDs without op) and direct fill dispatch ---');
     {
         let noticeHandler = null;
         const historyPages = [];
@@ -74,13 +79,13 @@ function makeAccountRecord(account) {
                 getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
                     historyPages.push({ accountId, opType, start, stop, limit });
                     if (limit === 1) {
-                        return [{ id: '1.11.100', block_num: 10, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.1' }] }];
+                        return [{ id: '1.11.100', block_num: 10, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.1' }] }];
                     }
                     if (stop === '1.11.99') {
-                        return [{ id: '1.11.100', block_num: 10, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.1' }] }];
+                        return [{ id: '1.11.100', block_num: 10, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.1' }] }];
                     }
                     if (stop === '1.11.100') {
-                        return [{ id: '1.11.101', block_num: 11, trx_id: 2, op: [OP_FILL_ORDER, { order_id: '1.7.2' }] }];
+                        return [{ id: '1.11.101', block_num: 11, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.2' }] }];
                     }
                     if (stop === '1.11.101') return [];
                     return [];
@@ -96,38 +101,44 @@ function makeAccountRecord(account) {
             delivered.length = 0;
             historyPages.length = 0;
 
+            // Thin notice without op field -- should be silently skipped
             await noticeHandler([1, [
-                { id: '1.11.101', block_num: 11, trx_id: 2 },
+                { id: '1.11.101', block_num: 11, trx_in_block: 2 },
             ]]);
 
-            test('thin 1.11.x notice should trigger history scan', () => {
-                assert.strictEqual(delivered.length, 1, 'should deliver fills from history scan');
-                assert.strictEqual(delivered[0][0].id, '1.11.101', 'should deliver the new fill');
+            test('thin 1.11.x notice without fill op should be skipped silently', () => {
+                assert.strictEqual(delivered.length, 0, 'should not deliver fills for non-fill notice');
             });
 
-            test('history scan should be called for thin notice', () => {
-                const historyCall = historyPages.find(p => p.limit > 1 && p.stop === '1.11.100');
-                assert.ok(historyCall, 'fetchFillHistoryEntries should be triggered by thin notice');
+            test('non-fill notice should not trigger history scan', () => {
+                assert.strictEqual(historyPages.length, 0, 'should not call getAccountHistoryOperations');
             });
 
-            historyPages.length = 0;
+            // Fill object in notice data -- should be dispatched directly
             await noticeHandler([1, [
-                { id: '1.11.102' },
+                { id: '1.11.102', block_num: 12, trx_in_block: 3, op: [OP_FILL_ORDER, { account_id: ALICE_ID, order_id: '1.7.101' }] },
             ]]);
 
-            test('consecutive thin notice with no new fills should not redeliver', () => {
-                assert.strictEqual(delivered.length, 1, 'should not redeliver when no new fills');
+            test('fill object in notice data is dispatched directly', () => {
+                assert.strictEqual(delivered.length, 1, 'should deliver fill directly from notice');
+                assert.strictEqual(delivered[0][0].id, '1.11.102', 'should deliver the correct fill');
+                assert.strictEqual(delivered[0][0].op[0], OP_FILL_ORDER, 'fill should have correct op type');
             });
 
-            test('history scan should run and find zero new entries', () => {
-                const call = historyPages.find(p => p.limit > 1);
-                assert.ok(call, 'fetchFillHistoryEntries should be called for every thin notice');
+            // Same fill object in a second notice -- should dispatch again
+            await noticeHandler([1, [
+                { id: '1.11.102', block_num: 12, trx_in_block: 3, op: [OP_FILL_ORDER, { account_id: ALICE_ID, order_id: '1.7.101' }] },
+            ]]);
+
+            test('same fill object in different notices should dispatch each time', () => {
+                assert.strictEqual(delivered.length, 2, 'same fill in second notice should dispatch again');
+                assert.strictEqual(delivered[1][0].id, '1.11.102', 'second delivery should contain the same fill object');
             });
         })();
     }
 
     // -----------------------------------------------------------------------
-    // 2. Full object notice (with owner matching account) - fast path
+    // 2. Full fill object notice (with op matching account) -- direct dispatch
     // -----------------------------------------------------------------------
     console.log('\n--- Full object notice with matching owner ---');
     {
@@ -146,9 +157,9 @@ function makeAccountRecord(account) {
             history: {
                 getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
                     historyPages.push({ accountId, opType, start, stop, limit });
-                    if (limit === 1) return [{ id: '1.11.200', block_num: 20, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.10' }] }];
-                    if (stop === '1.11.199') return [{ id: '1.11.200', block_num: 20, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.10' }] }];
-                    if (stop === '1.11.200') return [{ id: '1.11.201', block_num: 21, trx_id: 2, op: [OP_FILL_ORDER, { order_id: '1.7.11' }] }];
+                    if (limit === 1) return [{ id: '1.11.200', block_num: 20, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.10' }] }];
+                    if (stop === '1.11.199') return [{ id: '1.11.200', block_num: 20, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.10' }] }];
+                    if (stop === '1.11.200') return [{ id: '1.11.201', block_num: 21, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.11' }] }];
                     return [];
                 },
             },
@@ -162,19 +173,17 @@ function makeAccountRecord(account) {
             delivered.length = 0;
             historyPages.length = 0;
 
-            // Full object with owner field matching the account - fast path (shouldProcessNoticeForSubscription returns true immediately)
+            // Full fill object with owner and op matching account -- direct dispatch via handleNotice
             await noticeHandler([1, [
-                { id: '1.11.201', owner: ALICE_ID, block_num: 21, trx_id: 2, op: [OP_FILL_ORDER, { order_id: '1.7.11', account_id: ALICE_ID }] },
+                { id: '1.11.201', owner: ALICE_ID, block_num: 21, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.11', account_id: ALICE_ID }] },
             ]]);
 
-            test('full object with matching owner should trigger history scan', () => {
-                assert.strictEqual(delivered.length, 1, 'should deliver fills');
+            test('full object with matching owner should deliver fills', () => {
+                assert.strictEqual(delivered.length, 1, 'should deliver fills directly from notice');
             });
 
-            test('history should be fetched via getAccountHistoryOperations', () => {
-                const call = historyPages.find(p => p.limit > 1);
-                assert.ok(call, 'should call getAccountHistoryOperations');
-                assert.strictEqual(call.accountId, ALICE_ID, 'should use correct account id');
+            test('direct fill notice should not trigger history API calls', () => {
+                assert.strictEqual(historyPages.length, 0, 'should not call getAccountHistoryOperations for direct fill notice');
             });
         })();
     }
@@ -200,8 +209,8 @@ function makeAccountRecord(account) {
             history: {
                 getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
                     historyAccounts.push(accountId);
-                    if (limit === 1) return [{ id: '1.11.300', block_num: 30, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.20' }] }];
-                    if (stop === '1.11.299') return [{ id: '1.11.300', block_num: 30, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.20' }] }];
+                    if (limit === 1) return [{ id: '1.11.300', block_num: 30, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.20' }] }];
+                    if (stop === '1.11.299') return [{ id: '1.11.300', block_num: 30, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.20' }] }];
                     if (accountId !== ALICE_ID) return [];
                     return [];
                 },
@@ -249,13 +258,13 @@ function makeAccountRecord(account) {
             history: {
                 getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
                     historyCalls.push({ start, stop, limit });
-                    if (limit === 1) return [{ id: '1.11.500', block_num: 50, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.50' }] }];
+                    if (limit === 1) return [{ id: '1.11.500', block_num: 50, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.50' }] }];
                     if (stop === '1.11.499') {
                         // Return entries at cursor, before cursor, and after cursor
                         return [
-                            { id: '1.11.499', block_num: 49, trx_id: 0, op: [OP_FILL_ORDER, { order_id: '1.7.49' }] },
-                            { id: '1.11.500', block_num: 50, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.50' }] },
-                            { id: '1.11.501', block_num: 51, trx_id: 2, op: [OP_FILL_ORDER, { order_id: '1.7.51' }] },
+                            { id: '1.11.499', block_num: 49, trx_in_block: 0, op: [OP_FILL_ORDER, { order_id: '1.7.49' }] },
+                            { id: '1.11.500', block_num: 50, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.50' }] },
+                            { id: '1.11.501', block_num: 51, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.51' }] },
                         ];
                     }
                     if (stop === '1.11.501') return [];
@@ -274,7 +283,7 @@ function makeAccountRecord(account) {
 
             // Bootstrap catch-up: cursor = decrement(500) = 499
             // Page returns [499, 500, 501]
-            // Instance > 499 → keep 500, 501
+            // Instance > 499 -> keep 500, 501
             // Wait for bootstrap to complete first
 
             // Give bootstrap time to settle, then send a notice
@@ -284,8 +293,8 @@ function makeAccountRecord(account) {
             historyCalls.length = 0;
 
             await noticeHandler([1, [
-                { id: '1.11.501', block_num: 51, trx_id: 2 },
-                { id: '1.11.502', block_num: 52, trx_id: 3 },
+                { id: '1.11.501', block_num: 51, trx_in_block: 2 },
+                { id: '1.11.502', block_num: 52, trx_in_block: 3 },
             ]]);
 
             // After bootstrap, cursor = 501 (latest fill delivered).
@@ -324,14 +333,14 @@ function makeAccountRecord(account) {
             history: {
                 getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
                     historyCalls.push({ start, stop, limit });
-                    if (limit === 1) return [{ id: '1.11.800', block_num: 80, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.80' }] }];
+                    if (limit === 1) return [{ id: '1.11.800', block_num: 80, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.80' }] }];
                     // Bootstrap: stop = decrement(800) = 799
                     if (stop === '1.11.799') {
-                        return [{ id: '1.11.800', block_num: 80, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.80' }] }];
+                        return [{ id: '1.11.800', block_num: 80, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.80' }] }];
                     }
                     // Reconnect: stop = 800 (cursor after bootstrap)
                     if (stop === '1.11.800') {
-                        return [{ id: '1.11.801', block_num: 81, trx_id: 2, op: [OP_FILL_ORDER, { order_id: '1.7.81' }] }];
+                        return [{ id: '1.11.801', block_num: 81, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.81' }] }];
                     }
                     if (stop === '1.11.801') return [];
                     return [];
@@ -363,14 +372,13 @@ function makeAccountRecord(account) {
     }
 
     // -----------------------------------------------------------------------
-    // 6. Multiple rapid notices with interleaved fills
+    // 6. Multiple rapid notices with direct fill dispatch
     // -----------------------------------------------------------------------
     console.log('\n--- Multiple rapid notices with interleaved fills ---');
     {
         let noticeHandler = null;
         const delivered = [];
         const historyCalls = [];
-        let noticeCount = 0;
 
         const chainClient = {
             transport: {
@@ -383,12 +391,12 @@ function makeAccountRecord(account) {
             history: {
                 getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
                     historyCalls.push({ start, stop, limit });
-                    if (limit === 1) return [{ id: '1.11.900', block_num: 90, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.90' }] }];
+                    if (limit === 1) return [{ id: '1.11.900', block_num: 90, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.90' }] }];
                     if (stop === '1.11.899') {
-                        return [{ id: '1.11.900', block_num: 90, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.90' }] }];
+                        return [{ id: '1.11.900', block_num: 90, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.90' }] }];
                     }
-                    if (stop === '1.11.900') return [{ id: '1.11.901', block_num: 91, trx_id: 2, op: [OP_FILL_ORDER, { order_id: '1.7.91' }] }];
-                    if (stop === '1.11.901') return [{ id: '1.11.902', block_num: 92, trx_id: 3, op: [OP_FILL_ORDER, { order_id: '1.7.92' }] }];
+                    if (stop === '1.11.900') return [{ id: '1.11.901', block_num: 91, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.91' }] }];
+                    if (stop === '1.11.901') return [{ id: '1.11.902', block_num: 92, trx_in_block: 3, op: [OP_FILL_ORDER, { order_id: '1.7.92' }] }];
                     if (stop === '1.11.902') return [];
                     return [];
                 },
@@ -403,14 +411,13 @@ function makeAccountRecord(account) {
             delivered.length = 0;
             historyCalls.length = 0;
 
-            // Rapid notices (simulating multiple blockchain updates)
-            await noticeHandler([1, [{ id: '1.11.901' }]]);
-            await noticeHandler([1, [{ id: '1.11.901' }]]); // duplicate
-            await noticeHandler([1, [{ id: '1.11.902' }]]);
+            // Rapid notices with fill objects -- each should dispatch directly
+            await noticeHandler([1, [{ id: '1.11.901', block_num: 91, trx_in_block: 2, op: [OP_FILL_ORDER, { account_id: ALICE_ID, order_id: '1.7.91' }] }]]);
+            await noticeHandler([1, [{ id: '1.11.902', block_num: 92, trx_in_block: 3, op: [OP_FILL_ORDER, { account_id: ALICE_ID, order_id: '1.7.92' }] }]]);
+            await noticeHandler([1, [{ id: '1.11.903', block_num: 93, trx_in_block: 4, op: [OP_FILL_ORDER, { account_id: ALICE_ID, order_id: '1.7.93' }] }]]);
 
-            test('rapid notices should each trigger history scan', () => {
-                const noticeScans = historyCalls.filter(c => c.limit > 1);
-                assert.ok(noticeScans.length >= 3, 'each notice should trigger a history scan');
+            test('rapid notices each dispatch their fill objects', () => {
+                assert.strictEqual(delivered.length, 3, 'each notice should dispatch its fill objects');
             });
 
             test('duplicate notices should not redeliver same fill', () => {
@@ -441,7 +448,7 @@ function makeAccountRecord(account) {
             history: {
                 getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
                     historyScanCount++;
-                    if (limit === 1) return [{ id: '1.11.400', block_num: 40, trx_id: 1, op: [OP_FILL_ORDER, { order_id: '1.7.40' }] }];
+                    if (limit === 1) return [{ id: '1.11.400', block_num: 40, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.40' }] }];
                     return [];
                 },
             },
@@ -464,13 +471,13 @@ function makeAccountRecord(account) {
             };
 
             try {
-                // Objects without .id field - should log diagnostic and skip
+                // Objects without .id field -- no op field so handleNotice silently skips them
                 await noticeHandler([1, [{ someField: 'no id here' }]]);
                 await noticeHandler([1, [{ id: null }]]);
                 await noticeHandler([1, [{ id: 12345 }]]); // numeric id, not string
 
-                test('objects without string .id should log diagnostic message', () => {
-                    assert.ok(loggedMessages.length > 0, 'should log diagnostic for unrecognized notice data');
+                test('objects without string .id should be silently skipped', () => {
+                    assert.strictEqual(loggedMessages.length, 0, 'should not log diagnostic for non-fill notice data');
                 });
 
                 test('malformed notices should not crash the subscription manager', () => {

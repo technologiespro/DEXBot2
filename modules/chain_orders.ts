@@ -269,10 +269,12 @@ const accountSubscriptions = new Map();
 /**
  * Ensure a per-account BitShares subscription exists so we only subscribe once.
  * @param {string} accountName - The name of the account to subscribe to.
+ * @param {Function} [userCallback] - Optional user callback to register before the native
+ *   subscription's initial catch-up runs. Prevents initial catch-up fills from being lost.
  * @returns {Promise<Object>} The subscription entry { userCallbacks, bsCallback }.
  * @private
  */
-async function _ensureAccountSubscriber(accountName) {
+async function _ensureAccountSubscriber(accountName, userCallback = null) {
     return await _subscriptionLock.acquire(async () => {
         // Check again inside lock to prevent duplicate subscriptions
         if (accountSubscriptions.has(accountName)) {
@@ -280,6 +282,9 @@ async function _ensureAccountSubscriber(accountName) {
         }
 
         const userCallbacks = new Set();
+        if (typeof userCallback === 'function') {
+            userCallbacks.add(userCallback);
+        }
 
         // BitShares callback that receives raw updates and dispatches to user callbacks
         const bsCallback = async (updates) => {
@@ -499,9 +504,14 @@ async function listenForFills(accountRef, callback) {
         console.warn('Unable to derive account id before listening for fills; skipping open-order prefetch.');
     }
 
-    const entry = await _ensureAccountSubscriber(accountName);
+    // Pass userCallback to _ensureAccountSubscriber so the native subscription's
+    // initial catch-up fills are dispatched to the caller (not lost).
+    // If the subscription already exists, the callback is added below instead.
+    const entry = await _ensureAccountSubscriber(accountName, userCallback);
 
-    // Add callback inside lock to prevent race with concurrent listenForFills calls
+    // Add callback inside lock to prevent race with concurrent listenForFills calls.
+    // If _ensureAccountSubscriber already added it (new subscription), this is a no-op
+    // (Set.add deduplicates by reference).
     const listenerCount = await _subscriptionLock.acquire(async () => {
         entry.userCallbacks.add(userCallback);
         return entry.userCallbacks.size;

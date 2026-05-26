@@ -98,6 +98,7 @@ const testFiles = [
   'tests/test_native_ecc.ts',
   'tests/test_native_tx_builder.ts',
   'tests/test_native_subscriptions.ts',
+  'tests/test_websocket_subscription_flow.ts',
   'tests/test_native_transport.ts',
   'tests/test_native_facade.ts',
   'tests/test_native_chain_client.ts',

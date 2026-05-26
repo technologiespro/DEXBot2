@@ -5,12 +5,10 @@ const { SUBSCRIPTIONS, OPERATIONS } = NATIVE_CLIENT;
 
 const SUBSCRIBE_CALLBACK_ID = SUBSCRIPTIONS.CALLBACK_ID;
 const OP_FILL_ORDER = OPERATIONS.FILL_ORDER;
-const OP_HISTORY_REGEX = new RegExp('^' + SUBSCRIPTIONS.OPERATION_HISTORY_PREFIX.replace('.', '\\.') + '\\.');
 
 function createSubscriptionManager(chainClient: any): any {
     const subscriptions = new Map();
     let unsubscribeNotice: any = null;
-    let noticeActive = false;
     const reconnectRetryDelayMs = Number.isFinite(SUBSCRIPTIONS.RECONNECT_RETRY_DELAY_MS)
         ? Math.max(1000, SUBSCRIPTIONS.RECONNECT_RETRY_DELAY_MS)
         : 5000;
@@ -187,7 +185,6 @@ function createSubscriptionManager(chainClient: any): any {
             unsubscribeNotice = null;
         }
         unsubscribeNotice = chainClient.transport.addMessageHandler(handleNotice);
-        noticeActive = true;
     }
 
     function removeNoticeSubscription() {
@@ -195,7 +192,16 @@ function createSubscriptionManager(chainClient: any): any {
             unsubscribeNotice();
             unsubscribeNotice = null;
         }
-        noticeActive = false;
+    }
+
+    /**
+     * Check if a fill object's account_id matches the given account ID.
+     * Each fill_order_operation has an `account_id` field identifying
+     * the account whose order was filled.
+     */
+    function fillMatchesAccount(fill: any, accountId: string): boolean {
+        const fillAccountId = fill?.op?.[1]?.account_id;
+        return fillAccountId === accountId;
     }
 
     async function handleNotice(params: any): Promise<void> {
@@ -205,68 +211,47 @@ function createSubscriptionManager(chainClient: any): any {
         }
 
         const [callbackId, data] = params;
+        if (callbackId !== SUBSCRIBE_CALLBACK_ID) return;
 
-        if (callbackId !== SUBSCRIBE_CALLBACK_ID) {
-            return;
-        }
+        if (!Array.isArray(data) || data.length === 0) return;
 
-        const activeCount = Array.from(subscriptions.values()).filter(s => s.active).length;
-        console.log(`[subscriptions] handleNotice: received notice (callbackId=${callbackId}, activeSubs=${activeCount}, dataLen=${Array.isArray(data) ? data.length : 'N/A'})`);
-
-        for (const [, sub] of subscriptions) {
-            if (!sub.active) continue;
-            if (!shouldProcessNoticeForSubscription(sub, data)) continue;
-
-            console.log(`[subscriptions] handleNotice: processing for ${sub.accountName} (accountId=${sub.accountId})`);
-
-            try {
-                await processObjects(sub, data, { throwOnError: true });
-            } catch (err: any) {
-                console.warn(`[subscriptions] handleNotice: processObjects failed for ${sub.accountName}: ${err?.message}`);
-                if (sub.onError && !err?.subscriptionErrorReported) {
-                    try { sub.onError(err); } catch (_: any) {}
-                }
-                scheduleReconnectRetry(sub, err);
-            }
-        }
-    }
-
-    function shouldProcessNoticeForSubscription(sub: any, data: any): boolean {
-        if (!Array.isArray(data) || !sub.accountId) return true;
-
-        let sawFillObject = false;
-        let sawKnownAccountObject = false;
-        let sawAccountScopedObject = false;
+        // Extract fill objects directly from notice data (mirrors btsdex behavior).
+        // The BitShares node sends full 1.11.x operation history objects in the
+        // notice when a fill occurs. We pass them straight to callbacks — no
+        // history scan, no cursor tracking needed for live fills.
+        const fillObjects: any[] = [];
         for (const item of data) {
             if (!item || typeof item !== 'object') continue;
-            const id = typeof item.id === 'string' ? item.id : null;
-            if (!id) continue;
-
-            if (OP_HISTORY_REGEX.test(id)) {
-                sawFillObject = true;
-                if (item.op && Array.isArray(item.op) && item.op[0] === OP_FILL_ORDER && item.op[1] && item.op[1].account_id === sub.accountId) {
-                    return true;
-                }
-                continue;
-            }
-
-            if (/^(1\.2|2\.6)\.\d+$/.test(id)) {
-                sawAccountScopedObject = true;
-            }
-
-            if (id === sub.accountId || id === sub.statisticsId) {
-                sawKnownAccountObject = true;
+            const op = item.op;
+            if (Array.isArray(op) && op[0] === OP_FILL_ORDER) {
+                fillObjects.push({
+                    type: 'fill',
+                    op: op,
+                    block_num: item.block_num,
+                    trx_in_block: item.trx_in_block,
+                    id: item.id,
+                });
             }
         }
 
-        if (sawKnownAccountObject) return true;
-        // History objects (1.11.x) may arrive as thin notices without full op data,
-        // making it impossible to determine the account from the notice alone.
-        // Always trigger a history scan when fill objects are present, regardless
-        // of other account-scoped objects in the same notice batch.
-        if (sawFillObject) return true;
-        if (sawAccountScopedObject) return false;
-        return true;
+        if (fillObjects.length === 0) return;
+
+        console.log(`[subscriptions] handleNotice: dispatching ${fillObjects.length} fill(s) directly from notice data`);
+
+        // Batch fills per-subscription and dispatch all at once (mirrors btsdex behavior
+        // where a single callback receives all fills from one notice).
+        for (const [, sub] of subscriptions) {
+            if (!sub.active) continue;
+            const subFills = fillObjects.filter((fill) => fillMatchesAccount(fill, sub.accountId));
+            if (subFills.length === 0) continue;
+            for (const callback of sub.callbacks) {
+                try {
+                    await Promise.resolve(callback(subFills));
+                } catch (err: any) {
+                    console.warn(`[subscriptions] handleNotice: callback error for ${sub.accountName}: ${err?.message}`);
+                }
+            }
+        }
     }
 
     async function processObjects(sub: any, data: any, options: any = {}): Promise<void> {
@@ -282,7 +267,10 @@ function createSubscriptionManager(chainClient: any): any {
 
         if (noticeObjectIds.length === 0) {
             console.log(`[subscriptions] processObjects: no identifiable object IDs in notice data for ${sub.accountName} (dataLen=${data?.length}, types=${data.map((d: any) => typeof d).join(',')})`);
-            return;
+            // NOTE: Do NOT return early here. The notice data is just a trigger signal;
+            // we must always scan fill history to catch actual fills, because the node
+            // may send objects without string `id` fields (e.g. bare account/statistics objects).
+            // Fall through to the account fetch + history scan below.
         }
 
         try {
@@ -325,7 +313,7 @@ function createSubscriptionManager(chainClient: any): any {
                         type: 'fill',
                         op: opData,
                         block_num: entry.block_num,
-                        trx_id: entry.trx_id,
+                        trx_in_block: entry.trx_in_block,
                         id: entry.id,
                     });
                 }
