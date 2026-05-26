@@ -244,9 +244,6 @@ function createSubscriptionManager(chainClient: any): any {
 
             if (OP_HISTORY_REGEX.test(id)) {
                 sawFillObject = true;
-                if (item.owner && item.owner === sub.accountId) {
-                    return true;
-                }
                 if (item.op && Array.isArray(item.op) && item.op[0] === OP_FILL_ORDER && item.op[1] && item.op[1].account_id === sub.accountId) {
                     return true;
                 }
