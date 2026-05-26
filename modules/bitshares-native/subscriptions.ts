@@ -104,16 +104,23 @@ function createSubscriptionManager(chainClient: any): any {
             if (!Array.isArray(page) || page.length === 0) break;
 
             let allEntriesAtOrBeforeCursor = true;
+            let skippedCount = 0;
             for (const entry of page) {
                 if (!entry || !entry.id || seenIds.has(entry.id)) continue;
                 seenIds.add(entry.id);
 
                 // Only keep entries strictly newer than the cursor (already-delivered).
                 const entryInstance = parseObjectIdInstance(entry.id);
-                if (Number.isFinite(cursorInstance) && Number.isFinite(entryInstance) && entryInstance <= cursorInstance) continue;
+                if (Number.isFinite(cursorInstance) && Number.isFinite(entryInstance) && entryInstance <= cursorInstance) {
+                    skippedCount++;
+                    continue;
+                }
 
                 allEntriesAtOrBeforeCursor = false;
                 entries.push(entry);
+            }
+            if (skippedCount > 0) {
+                console.log(`[subscriptions] fetchFillHistoryEntries: skipped ${skippedCount} entries at/before cursor (cursor=${cursorHistoryId})`);
             }
 
             if (page.length < SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX) {
@@ -307,6 +314,11 @@ function createSubscriptionManager(chainClient: any): any {
                 return;
             }
 
+            const historyRange = history.length > 0
+                ? `${history[0]?.id}..${history[history.length - 1]?.id}`
+                : 'empty';
+            console.log(`[subscriptions] processObjects: ${history.length} history entries for ${sub.accountName} range=${historyRange} cursor=${sub.lastDeliveredHistoryId}`);
+
             const fills = [];
             for (const entry of history) {
                 if (!entry || !entry.op || !entry.id) continue;
@@ -322,13 +334,15 @@ function createSubscriptionManager(chainClient: any): any {
                 }
             }
 
-            // btsdex parity: advance cursor to the LATEST history entry in this
-            // batch (any operation type), not just the latest fill. This prevents
-            // re-fetching non-fill operations on subsequent scans.
+            // Advance cursor to the NEWEST history entry in this batch (any operation type).
+            // This prevents re-fetching already-scanned operations on subsequent scans.
+            // Future get_account_history calls use this cursor as the exclusive stop,
+            // returning only entries with IDs > cursor (i.e., genuinely new entries).
             sub.lastDeliveredHistoryId = history[history.length - 1]?.id || sub.lastDeliveredHistoryId;
 
             if (fills.length > 0) {
-                console.log(`[subscriptions] processObjects: dispatching ${fills.length} fill(s) to ${sub.callbacks.size} callback(s) for ${sub.accountName} (cursor=${sub.lastDeliveredHistoryId})`);
+                const fillIds = fills.map(f => f.id).join(', ');
+                console.log(`[subscriptions] processObjects: dispatching ${fills.length} fill(s) to ${sub.callbacks.size} callback(s) for ${sub.accountName} cursor=${sub.lastDeliveredHistoryId} fills=[${fillIds}]`);
                 const failed = [];
                 for (const callback of sub.callbacks) {
                     try {
@@ -498,8 +512,10 @@ function createSubscriptionManager(chainClient: any): any {
                     scheduleReconnectRetry(failure.entry, failure.err);
                 }
 
-                // Catch up on fills that landed during the activation window.
-                await processObjects(entry, [entry.accountId], { maxPages: 1 });
+                // NOTE: No initial catch-up scan here — matching main+btsdex behavior.
+                // The startup sync (synchronizeWithChain) handles all fills from downtime.
+                // processObjects is called on reconnect (resubscribeEntry/resubscribeAll)
+                // to catch fills missed during disconnect, at which point the grid is loaded.
             } catch (err: any) {
                 entry.callbacks.delete(callback);
                 if (entry.onError === onError) {
