@@ -183,6 +183,47 @@ function instance(id) {
         assertEqual(cursorInst >= 101, true, 'cursor should be >= 101 after live fill');
     });
 
+    await test('handleNotice scans history for BitShares Core object-change notices', async () => {
+        let noticeHandler = null;
+        let delivered = [];
+        const historyCalls = [];
+
+        const client = {
+            transport: {
+                addMessageHandler: h => { noticeHandler = h; return () => { noticeHandler = null; }; },
+            },
+            db: {
+                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
+                call: async () => null,
+            },
+            history: {
+                get_account_history: async (accountId, stop, limit, start) => {
+                    historyCalls.push({ accountId, stop, limit, start });
+                    if (limit === 1) {
+                        return [{ id: '1.11.500', block_num: 1, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.0', account_id: ALICE_ID }] }];
+                    }
+                    return [
+                        makeFill('1.11.501', 50, 1, '1.7.501', ALICE_ID),
+                    ];
+                },
+            },
+        };
+
+        const manager = createSubscriptionManager(client);
+        await manager.subscribe('alice', (fills) => { delivered.push(fills); });
+        historyCalls.length = 0;
+
+        // BitShares Core account subscriptions may notify with changed/removed
+        // object IDs or ordinary full objects, not the 1.11.x fill object itself.
+        await makeNotice(noticeHandler, 1, ['1.7.501']);
+
+        assertEqual(delivered.length, 1, 'object-change notice should trigger a history scan delivery');
+        assertEqual(delivered[0].length, 1, 'history scan should deliver one fill');
+        assertEqual(delivered[0][0].id, '1.11.501', 'history fill ID should match');
+        assertEqual(historyCalls.length, 1, 'notice should perform one catch-up history scan');
+        assertEqual(historyCalls[0].stop, '1.11.499', 'scan should start from current exclusive cursor');
+    });
+
     // -----------------------------------------------------------------------
     // Test 3: handleNotice routes fills only to matching account
     // -----------------------------------------------------------------------

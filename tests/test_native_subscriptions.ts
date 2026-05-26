@@ -97,22 +97,23 @@ function makeAccountRecord(account) {
         assert.strictEqual(delivered[1][1][0].trx_in_block, 3, 'fill payload should expose trx_in_block');
         assert.strictEqual(delivered[1][1][0].block, undefined, 'legacy block alias should not leak through');
         assert.strictEqual(delivered[1][1][0].trx, undefined, 'legacy trx alias should not leak through');
-        // Startup primes latest first, then performs a bounded overlap fetch.
+        const aliceHistoryCalls = historyCalls.filter(([account]) => account === '1.2.100');
+        const bobHistoryCalls = historyCalls.filter(([account]) => account === '1.2.200');
+        // Startup primes latest first; non-fill object-change notices now trigger
+        // a catch-up scan because BitShares Core may notify impacted accounts with
+        // changed object IDs rather than full 1.11.x fill objects.
         assert.deepStrictEqual(
-            historyCalls[0],
+            aliceHistoryCalls[0],
             ['1.2.100', 4, '1.11.0', '1.11.0', 1],
             'subscription bootstrap should prime from the latest delivered fill id'
         );
         assert.deepStrictEqual(
-            historyCalls[1],
+            aliceHistoryCalls[1],
             ['1.2.100', 4, '1.11.0', '1.11.498', 100],
-            'initial catch-up should read only the head page after priming'
+            'object-change notice should read the head page after priming'
         );
-        // Direct notice delivery should not produce additional history calls beyond initial catch-up.
-        const aliceHistoryCalls = historyCalls.filter(([account]) => account === '1.2.100');
-        assert.strictEqual(aliceHistoryCalls.length, 2, 'no history scans for alice after initial catch-up');
-        const bobHistoryCalls = historyCalls.filter(([account]) => account === '1.2.200');
-        assert.strictEqual(bobHistoryCalls.length, 2, 'bob also gets initial catch-up');
+        assert.strictEqual(aliceHistoryCalls.length, 2, 'direct fill notice should not add an alice history scan');
+        assert.strictEqual(bobHistoryCalls.length, 2, 'bob prime plus object-change catch-up');
         // Fill sent via direct notice should dispatch to all active subscriptions
         assert.strictEqual(delivered.length, 2, 'alice should get catch-up + direct notice fill');
         assert.ok(dbCalls.some(([method]) => method === 'set_subscribe_callback'), 'subscription RPC should be registered');
@@ -234,10 +235,11 @@ function makeAccountRecord(account) {
 
         assert.strictEqual(handlers.length, 1, 'resubscribe should reattach a live notice handler after reconnect cleanup');
         assert.strictEqual(delivered.length, 1, 'resubscribe should catch up fills missed during the reconnect gap');
-        assert.strictEqual(delivered[0][0].id, '1.11.901');
+        assert.strictEqual(delivered[0][0].id, '1.11.900');
 
         await handlers[0]([1, [{ id: '2.5.4000', owner: '1.2.100' }]]);
-        assert.strictEqual(delivered.length, 1, 'reattached notice handler should not redeliver the reconnect catch-up fill');
+        assert.strictEqual(delivered.length, 2, 'reattached object-change notice should scan and deliver newer fills');
+        assert.strictEqual(delivered[1][0].id, '1.11.901');
         assert.ok(
             dbCalls.filter(([method]) => method === 'set_subscribe_callback').length >= 2,
             'subscription callback should be registered again during reconnect'
@@ -286,18 +288,23 @@ function makeAccountRecord(account) {
         accountNoticeDelivered.length = 0;
         historyAccounts.length = 0;
 
-        // Non-fill notice (statistics object) should be silently skipped — no history scan.
+        // Non-fill notice (statistics object) triggers a history scan because BitShares Core
+        // may notify impacted accounts with changed object IDs rather than full 1.11.x fill objects.
+        // The scan finds the fill at 1.11.700 from the mock.
         await noticeHandler([1, [{ id: '2.6.100' }]]);
-        assert.strictEqual(accountNoticeDelivered.length, 0, 'non-fill notice should not trigger delivery');
+        assert.strictEqual(accountNoticeDelivered.length, 1, 'object-change notice should trigger history scan and deliver fill');
+        assert.strictEqual(accountNoticeDelivered[0][0].id, '1.11.700', 'history scan should deliver fill 1.11.700');
 
-        // Fill object in notice should be dispatched directly to matching account.
-        await noticeHandler([1, [{ id: '1.11.700', block_num: 12, trx_in_block: 3, op: [4, { order_id: '1.7.3', account_id: '1.2.100' }] }]]);
-        assert.strictEqual(accountNoticeDelivered.length, 1, 'direct fill notice should dispatch');
-        assert.strictEqual(accountNoticeDelivered[0][0].id, '1.11.700');
+        // Fill object in notice should also be dispatched directly to matching account
+        // (handleNotice does not deduplicate against cursor — the downstream bot's fill
+        // deduplication layer handles that).
+        await noticeHandler([1, [{ id: '1.11.701', block_num: 13, trx_in_block: 3, op: [4, { order_id: '1.7.3', account_id: '1.2.100' }] }]]);
+        assert.strictEqual(accountNoticeDelivered.length, 2, 'direct fill notice should add a second delivery');
+        assert.strictEqual(accountNoticeDelivered[1][0].id, '1.11.701', 'direct notice should deliver fill 1.11.701');
 
         // Bob's callback should not fire for alice's fill.
         accountNoticeDelivered.length = 0;
-        await noticeHandler([1, [{ id: '1.11.701', block_num: 13, trx_in_block: 4, op: [4, { order_id: '1.7.4', account_id: '1.2.200' }] }]]);
+        await noticeHandler([1, [{ id: '1.11.702', block_num: 14, trx_in_block: 4, op: [4, { order_id: '1.7.4', account_id: '1.2.200' }] }]]);
         assert.strictEqual(accountNoticeDelivered.length, 0, 'bob fill should not deliver to alice callback');
     }
 
