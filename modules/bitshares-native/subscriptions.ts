@@ -67,37 +67,48 @@ function createSubscriptionManager(chainClient: any): any {
         return null;
     }
 
-    async function fetchFillHistoryEntries(accountId: string, stopHistoryId: string, options: any = {}): Promise<any[]> {
+    async function fetchFillHistoryEntries(accountId: string, cursorHistoryId: string, options: any = {}): Promise<any[]> {
         const fetchPage = chainClient.history?.getAccountHistoryOperations
             || chainClient.history?.get_account_history_operations
             || ((...args: any[]) => chainClient.history.call('get_account_history_operations', args));
 
         const entries = [];
         const seenIds = new Set();
+        const cursorInstance = parseObjectIdInstance(cursorHistoryId);
+        // Scan the fill history range [start = oldest, stop = cursor] and return
+        // entries whose instance is strictly greater than the cursor's instance.
+        // The BitShares API returns entries from stop (newest) down to start (oldest).
         let startHistoryId = SUBSCRIPTIONS.HISTORY_API_OBJECT;
         let pagesFetched = 0;
         const maxPages = Number.isFinite(options.maxPages) ? options.maxPages : null;
 
-        console.log(`[subscriptions] fetchFillHistoryEntries: account=${accountId}, stop=${stopHistoryId}, start=${startHistoryId}, maxPages=${maxPages}`);
+        console.log(`[subscriptions] fetchFillHistoryEntries: account=${accountId}, cursor=${cursorHistoryId}, start=${startHistoryId}, maxPages=${maxPages}`);
 
         while (true) {
             const page = await Promise.resolve(fetchPage(
                 accountId,
                 OP_FILL_ORDER,
                 startHistoryId,
-                stopHistoryId,
+                cursorHistoryId,
                 SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX
             ));
             pagesFetched++;
 
             const pageLen = Array.isArray(page) ? page.length : 0;
-            console.log(`[subscriptions] fetchFillHistoryEntries: page ${pagesFetched} returned ${pageLen} entries (start=${startHistoryId}, stop=${stopHistoryId})`);
+            console.log(`[subscriptions] fetchFillHistoryEntries: page ${pagesFetched} returned ${pageLen} entries (start=${startHistoryId}, stop=${cursorHistoryId})`);
 
             if (!Array.isArray(page) || page.length === 0) break;
 
+            let allEntriesAtOrBeforeCursor = true;
             for (const entry of page) {
-                if (!entry || !entry.id || seenIds.has(entry.id) || entry.id === stopHistoryId) continue;
+                if (!entry || !entry.id || seenIds.has(entry.id)) continue;
                 seenIds.add(entry.id);
+
+                // Only keep entries strictly newer than the cursor (already-delivered fills).
+                const entryInstance = parseObjectIdInstance(entry.id);
+                if (Number.isFinite(cursorInstance) && Number.isFinite(entryInstance) && entryInstance <= cursorInstance) continue;
+
+                allEntriesAtOrBeforeCursor = false;
                 entries.push(entry);
             }
 
@@ -109,10 +120,13 @@ function createSubscriptionManager(chainClient: any): any {
                 console.log(`[subscriptions] fetchFillHistoryEntries: maxPages (${maxPages}) reached`);
                 break;
             }
+            // Stop if all entries on this page are at or before the cursor —
+            // we've caught up to the latest delivered fill, no need to scan further into history.
+            if (allEntriesAtOrBeforeCursor) break;
 
             const oldestId = page[page.length - 1]?.id;
             const nextStartHistoryId = decrementObjectId(oldestId);
-            if (!oldestId || !nextStartHistoryId || oldestId === stopHistoryId || nextStartHistoryId === startHistoryId) break;
+            if (!oldestId || !nextStartHistoryId || nextStartHistoryId === startHistoryId) break;
             startHistoryId = nextStartHistoryId;
         }
 
@@ -268,7 +282,10 @@ function createSubscriptionManager(chainClient: any): any {
             noticeObjectIds.push(id);
         }
 
-        if (noticeObjectIds.length === 0) return;
+        if (noticeObjectIds.length === 0) {
+            console.log(`[subscriptions] processObjects: no identifiable object IDs in notice data for ${sub.accountName} (dataLen=${data?.length}, types=${data.map((d: any) => typeof d).join(',')})`);
+            return;
+        }
 
         try {
             const accData = await fetchFullAccountWithRetry(sub, false);
