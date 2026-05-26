@@ -471,13 +471,19 @@ async function _finalizeStartupUpdate({ manager, preparedUpdate }) {
         await manager.accountant.addToChainFree(plan.gridOrder.type, parsedChain.size, 'startup-align');
     }
 
+    // Extract deferred_fee from the raw chain order object so the fee
+    // lifecycle (cancel refunds, fill maker discounts) reconstructs
+    // the correct btsFeeState after a grid reset.
+    const rawDeferredFee = Format.toFiniteNumber(plan.chainOrderObj?.deferred_fee, null);
+
     const btsFeeData = getAssetFees('BTS');
     await manager._applySync({
         gridOrderId: plan.gridOrder.id,
         chainOrderId: plan.chainOrderId,
         isPartialPlacement: false,
         fee: btsFeeData.updateFee,
-        skipAccounting: false
+        skipAccounting: false,
+        deferredFee: rawDeferredFee,
     }, 'createOrder');
 }
 

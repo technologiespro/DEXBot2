@@ -584,6 +584,25 @@ class SyncEngine {
                 bestMatch.rawOnChain = rawChainOrders.get(chainOrderId);
                 matchedGridOrderIds.add(bestMatch.id);
 
+                // Reconstruct btsFeeState from raw chain order's deferred_fee.
+                // After a grid reset, in-memory orders lose btsFeeState. The chain's
+                // limit_order_object stores the original deferred_fee (or 0 after a
+                // partial fill). Restoring it ensures correct fee lifecycle accounting
+                // (cancel refunds, fill maker discounts) on the reconciled order.
+                // Only set btsFeeState when deferred_fee > 0 — _resolveBtsFeeLifecycle
+                // deletes btsFeeState when nextDeferred is 0, so setting it to 0 here
+                // would be an unnecessary set-then-delete cycle.
+                if (bestMatch.rawOnChain) {
+                    const rawDeferredFee = toFiniteNumber(bestMatch.rawOnChain.deferred_fee, null);
+                    if (rawDeferredFee !== null && rawDeferredFee > 0) {
+                        bestMatch.btsFeeState = { deferredFee: rawDeferredFee };
+                    } else if (wasVirtual && rawDeferredFee !== null && rawDeferredFee <= 0 && bestMatch.rawOnChain.for_sale > 0) {
+                        // Core zeros deferred_fee on every fill (fill_limit_order db_market.cpp:1895).
+                        // If deferred_fee is 0 while for_sale > 0, the order was partially filled.
+                        bestMatch.state = ORDER_STATES.PARTIAL;
+                    }
+                }
+
                 const precision = (bestMatch.type === ORDER_TYPES.SELL) ? assetAPrecision : assetBPrecision;
                 const targetInt = floatToBlockchainInt(match.size, precision);
                 const chainInt = floatToBlockchainInt(chainOrder.size, precision);
@@ -593,7 +612,11 @@ class SyncEngine {
 
                     if (chainInt > 0) {
                         if (wasVirtual) {
-                            bestMatch.state = ORDER_STATES.ACTIVE;
+                            // Only override to ACTIVE if partial-fill check above didn't already
+                            // set PARTIAL via deferred_fee === 0. Skip override to preserve signal.
+                            if (bestMatch.state !== ORDER_STATES.PARTIAL) {
+                                bestMatch.state = ORDER_STATES.ACTIVE;
+                            }
                         } else if (chainInt < targetInt) {
                             bestMatch.state = ORDER_STATES.PARTIAL;
                         } else if (wasPartial) {
@@ -639,14 +662,21 @@ class SyncEngine {
                 if (adoptedSlot && !matchedGridOrderIds.has(adoptedSlot.id) && !adoptedSlot.orderId) {
                     const precision = (chainOrder.type === ORDER_TYPES.SELL) ? assetAPrecision : assetBPrecision;
                     const chainInt = floatToBlockchainInt(chainOrder.size, precision);
+                    const adoptedRaw = rawChainOrders.get(chainOrderId);
+                    const adoptedState = chainInt > 0 ? ORDER_STATES.PARTIAL : ORDER_STATES.VIRTUAL;
+                    const adoptedBtsFeeState = (adoptedRaw) ? (() => {
+                        const rawFee = toFiniteNumber(adoptedRaw.deferred_fee, null);
+                        return rawFee !== null && rawFee > 0 ? { deferredFee: rawFee } : undefined;
+                    })() : undefined;
                     const adoptedOrder = {
                         ...adoptedSlot,
                         orderId: chainOrderId,
                         type: chainOrder.type,
-                        state: chainInt > 0 ? ORDER_STATES.PARTIAL : ORDER_STATES.VIRTUAL,
+                        state: adoptedState,
                         size: chainOrder.size,
                         price: chainOrder.price,
-                        rawOnChain: rawChainOrders.get(chainOrderId),
+                        rawOnChain: adoptedRaw,
+                        ...(adoptedBtsFeeState ? { btsFeeState: adoptedBtsFeeState } : {}),
                     };
                     matchedGridOrderIds.add(adoptedSlot.id);
                     chainOrderIdsOnGrid.add(chainOrderId);
@@ -947,6 +977,14 @@ class SyncEngine {
                             state: newState,
                             orderId: chainOrderId
                         };
+                        // Restore btsFeeState from raw chain order data if provided.
+                        // After a grid reset, in-memory orders have no fee state but the
+                        // chain's limit_order_object stores deferred_fee. Passing it through
+                        // chainData.deferredFee allows reconstructing btsFeeState so the fee
+                        // lifecycle (cancel refunds, fill maker discounts) uses correct values.
+                        if (chainData.deferredFee !== undefined && chainData.deferredFee !== null) {
+                            updatedOrder.btsFeeState = { deferredFee: Math.max(0, chainData.deferredFee) };
+                        }
                         // Deduced fee (createFee or updateFee) must always be applied to reflect blockchain cost
                         const actualFee = fee;
                         await mgr._applyOrderUpdate(updatedOrder, 'fill-place', {
