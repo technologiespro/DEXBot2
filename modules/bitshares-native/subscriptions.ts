@@ -260,11 +260,12 @@ function createSubscriptionManager(chainClient: any): any {
         }
 
         if (sawKnownAccountObject) return true;
-        if (sawAccountScopedObject) return false;
-        // History objects (1.11.x) may arrive as thin notices without full op data
-        // (no `owner` or `op` fields). We cannot reliably determine the account from
-        // the notice alone, so always trigger a history scan to avoid missing fills.
+        // History objects (1.11.x) may arrive as thin notices without full op data,
+        // making it impossible to determine the account from the notice alone.
+        // Always trigger a history scan when fill objects are present, regardless
+        // of other account-scoped objects in the same notice batch.
         if (sawFillObject) return true;
+        if (sawAccountScopedObject) return false;
         return true;
     }
 
