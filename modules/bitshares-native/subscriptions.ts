@@ -65,17 +65,24 @@ function createSubscriptionManager(chainClient: any): any {
         return null;
     }
 
+    // btsdex parity: use get_account_history (unfiltered) instead of
+    // get_account_history_operations (type-filtered). The type-filtered API
+    // walks a per-account linked list and may miss fill_order operations even
+    // when they exist on chain for the account. The unfiltered API uses the
+    // efficient by_op index and returns ALL operation types. We filter for
+    // OP_FILL_ORDER client-side in processObjects.
     async function fetchFillHistoryEntries(accountId: string, cursorHistoryId: string, options: any = {}): Promise<any[]> {
-        const fetchPage = chainClient.history?.getAccountHistoryOperations
-            || chainClient.history?.get_account_history_operations
-            || ((...args: any[]) => chainClient.history.call('get_account_history_operations', args));
+        const fetchPage = chainClient.history?.getAccountHistory
+            || chainClient.history?.get_account_history
+            || ((...args: any[]) => chainClient.history.call('get_account_history', args));
 
         const entries = [];
         const seenIds = new Set();
         const cursorInstance = parseObjectIdInstance(cursorHistoryId);
-        // Scan the fill history range [start = oldest, stop = cursor] and return
-        // entries whose instance is strictly greater than the cursor's instance.
-        // The BitShares API returns entries from stop (newest) down to start (oldest).
+        // Scan history using get_account_history (unfiltered, uses by_op index).
+        // Parameters: (accountId, stop, limit, start)
+        // API returns entries from start (newest) down to stop (cursor), with
+        // start=0 being replaced by the server with the max/head operation ID.
         let startHistoryId = SUBSCRIPTIONS.HISTORY_API_OBJECT;
         let pagesFetched = 0;
         const maxPages = Number.isFinite(options.maxPages) ? options.maxPages : null;
@@ -85,10 +92,9 @@ function createSubscriptionManager(chainClient: any): any {
         while (true) {
             const page = await Promise.resolve(fetchPage(
                 accountId,
-                OP_FILL_ORDER,
-                startHistoryId,
                 cursorHistoryId,
-                SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX
+                SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX,
+                startHistoryId
             ));
             pagesFetched++;
 
@@ -102,7 +108,7 @@ function createSubscriptionManager(chainClient: any): any {
                 if (!entry || !entry.id || seenIds.has(entry.id)) continue;
                 seenIds.add(entry.id);
 
-                // Only keep entries strictly newer than the cursor (already-delivered fills).
+                // Only keep entries strictly newer than the cursor (already-delivered).
                 const entryInstance = parseObjectIdInstance(entry.id);
                 if (Number.isFinite(cursorInstance) && Number.isFinite(entryInstance) && entryInstance <= cursorInstance) continue;
 
@@ -118,8 +124,7 @@ function createSubscriptionManager(chainClient: any): any {
                 console.log(`[subscriptions] fetchFillHistoryEntries: maxPages (${maxPages}) reached`);
                 break;
             }
-            // Stop if all entries on this page are at or before the cursor —
-            // we've caught up to the latest delivered fill, no need to scan further into history.
+            // Stop if all entries on this page are at or before the cursor.
             if (allEntriesAtOrBeforeCursor) break;
 
             const oldestId = page[page.length - 1]?.id;
@@ -128,51 +133,33 @@ function createSubscriptionManager(chainClient: any): any {
             startHistoryId = nextStartHistoryId;
         }
 
-        console.log(`[subscriptions] fetchFillHistoryEntries: returning ${entries.length} fill entries across ${pagesFetched} page(s) for ${accountId}`);
+        console.log(`[subscriptions] fetchFillHistoryEntries: returning ${entries.length} operation(s) across ${pagesFetched} page(s) for ${accountId}`);
         return sortEntriesOldestFirst(entries);
     }
 
     async function primeLastDeliveredHistoryId(sub: any): Promise<string> {
         if (!sub?.accountId) return SUBSCRIPTIONS.HISTORY_API_OBJECT;
 
-        // Primary: use get_account_history_operations filtered to fills
-        const fetchFillPage = chainClient.history?.getAccountHistoryOperations
-            || chainClient.history?.get_account_history_operations
-            || ((...args: any[]) => chainClient.history.call('get_account_history_operations', args));
-        const latestFillEntries = await Promise.resolve(fetchFillPage(
-            sub.accountId,
-            OP_FILL_ORDER,
-            SUBSCRIPTIONS.HISTORY_API_OBJECT,
-            SUBSCRIPTIONS.HISTORY_API_OBJECT,
-            1
-        ));
-        const latestFillId = latestFillEntries?.[0]?.id;
-        if (latestFillId) {
-            console.log(`[subscriptions] primeLastDeliveredHistoryId: resolved via get_account_history_operations to ${latestFillId} for ${sub.accountName}`);
-            return latestFillId;
-        }
-
-        // Fallback: use get_account_history (any operation type) to find the most
-        // recent history entry. This seeds the cursor past "1.11.0" so that
-        // fetchFillHistoryEntries can scan from the latest entry forward.
-        console.log(`[subscriptions] primeLastDeliveredHistoryId: get_account_history_operations returned no fills, trying get_account_history fallback for ${sub.accountName}`);
+        // btsdex parity: use get_account_history (unfiltered) to find the
+        // single most recent history entry. This seeds the cursor past "1.11.0"
+        // so fetchFillHistoryEntries can scan from the latest entry forward.
+        const fetchAnyPage = chainClient.history?.getAccountHistory
+            || chainClient.history?.get_account_history
+            || ((...args: any[]) => chainClient.history.call('get_account_history', args));
         try {
-            const fetchAnyPage = chainClient.history?.getAccountHistory
-                || chainClient.history?.get_account_history
-                || ((...args: any[]) => chainClient.history.call('get_account_history', args));
             const entries = await Promise.resolve(fetchAnyPage(
                 sub.accountId,
                 SUBSCRIPTIONS.HISTORY_API_OBJECT,
                 1,
                 SUBSCRIPTIONS.HISTORY_API_OBJECT
             ));
-            const fallbackId = entries?.[0]?.id;
-            if (fallbackId) {
-                console.log(`[subscriptions] primeLastDeliveredHistoryId: fallback resolved to ${fallbackId} for ${sub.accountName}`);
-                return fallbackId;
+            const latestId = entries?.[0]?.id;
+            if (latestId) {
+                console.log(`[subscriptions] primeLastDeliveredHistoryId: resolved to ${latestId} for ${sub.accountName}`);
+                return latestId;
             }
         } catch (err: any) {
-            console.warn(`[subscriptions] primeLastDeliveredHistoryId: get_account_history fallback failed for ${sub.accountName}: ${err.message}`);
+            console.warn(`[subscriptions] primeLastDeliveredHistoryId: get_account_history failed for ${sub.accountName}: ${err.message}`);
         }
 
         console.log(`[subscriptions] primeLastDeliveredHistoryId: no history found, using HISTORY_API_OBJECT for ${sub.accountName}`);
@@ -244,6 +231,22 @@ function createSubscriptionManager(chainClient: any): any {
             if (!sub.active) continue;
             const subFills = fillObjects.filter((fill) => fillMatchesAccount(fill, sub.accountId));
             if (subFills.length === 0) continue;
+
+            // Advance cursor to the latest fill in this batch so startup/refresh
+            // processObjects does not re-fetch already-delivered fills.
+            let latestId: string | null = null;
+            let latestInstance = -1;
+            for (const fill of subFills) {
+                const inst = parseObjectIdInstance(fill.id);
+                if (Number.isFinite(inst) && inst > latestInstance) {
+                    latestInstance = inst;
+                    latestId = fill.id;
+                }
+            }
+            if (latestId && (!sub.lastDeliveredHistoryId || parseObjectIdInstance(latestId) > parseObjectIdInstance(sub.lastDeliveredHistoryId))) {
+                sub.lastDeliveredHistoryId = latestId;
+            }
+
             for (const callback of sub.callbacks) {
                 try {
                     await Promise.resolve(callback(subFills));
@@ -300,7 +303,7 @@ function createSubscriptionManager(chainClient: any): any {
 
             const history = await fetchFillHistoryEntries(accountId, sub.lastDeliveredHistoryId, options);
             if (history.length === 0) {
-                console.log(`[subscriptions] processObjects: no fill history entries for ${sub.accountName} (cursor=${sub.lastDeliveredHistoryId})`);
+                console.log(`[subscriptions] processObjects: no history entries for ${sub.accountName} (cursor=${sub.lastDeliveredHistoryId})`);
                 return;
             }
 
@@ -319,8 +322,13 @@ function createSubscriptionManager(chainClient: any): any {
                 }
             }
 
+            // btsdex parity: advance cursor to the LATEST history entry in this
+            // batch (any operation type), not just the latest fill. This prevents
+            // re-fetching non-fill operations on subsequent scans.
+            sub.lastDeliveredHistoryId = history[history.length - 1]?.id || sub.lastDeliveredHistoryId;
+
             if (fills.length > 0) {
-                console.log(`[subscriptions] processObjects: dispatching ${fills.length} fill(s) to ${sub.callbacks.size} callback(s) for ${sub.accountName}`);
+                console.log(`[subscriptions] processObjects: dispatching ${fills.length} fill(s) to ${sub.callbacks.size} callback(s) for ${sub.accountName} (cursor=${sub.lastDeliveredHistoryId})`);
                 const failed = [];
                 for (const callback of sub.callbacks) {
                     try {
@@ -343,9 +351,6 @@ function createSubscriptionManager(chainClient: any): any {
                     }
                     return;
                 }
-
-                sub.lastDeliveredHistoryId = fills[fills.length - 1]?.id || sub.lastDeliveredHistoryId;
-                console.log(`[subscriptions] processObjects: advanced cursor to ${sub.lastDeliveredHistoryId} for ${sub.accountName}`);
             } else {
                 console.log(`[subscriptions] processObjects: history had entries but none were FILL_ORDER operations for ${sub.accountName}`);
             }
