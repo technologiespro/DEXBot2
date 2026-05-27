@@ -450,6 +450,11 @@ let FEE_PARAMETERS = {
     // Matches the protocol constant in bitshares-core (libraries/protocol/include/graphene/protocol/config.hpp).
     // On-chain value = human_CR * DENOM. Example: 2.0 CR → 2000 on chain.
     GRAPHENE_COLLATERAL_RATIO_DENOM: 1000,
+
+    // GRAPHENE_100_PERCENT: Denominator for Core's percentage arithmetic.
+    // Matches bitshares-core GRAPHENE_100_PERCENT (libraries/protocol/include/graphene/protocol/config.hpp).
+    // Used for maker fee discount and other percent calculations: (a * pct + DIV - 1) / DIV
+    GRAPHENE_100_PERCENT: 10000,
 };
 
 // Collateral ratio health zones for MPA position management.
@@ -462,6 +467,11 @@ let CR_ZONES = Object.freeze({
 // Default target collateral ratio when returning to green zone.
 // Computed as the midpoint of the green band.
 const DEFAULT_TARGET_CR = (CR_ZONES.RED_LOW + CR_ZONES.RED_HIGH) / 2;
+
+// BTS blockchain precision constant.
+// Number of decimal places for BTS on BitShares (5 decimals → 1 satoshi = 0.00001 BTS).
+// Used for converting raw chain deferred_fee to float BTS in sync/reconcile paths.
+let BTS_PRECISION = 5;
 
 // API request limits and batch sizes for blockchain operations
 let API_LIMITS = {
@@ -1399,4 +1409,4 @@ Object.freeze(MARKET_ADAPTER.AMAS.AMA4);
 Object.freeze(MARKET_ADAPTER.AMAS);
 Object.freeze(MARKET_ADAPTER);
 
-export = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, CR_ZONES, DEFAULT_TARGET_CR, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE, NATIVE_CLIENT, MARKET_ADAPTER };
+export = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, CR_ZONES, DEFAULT_TARGET_CR, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE, NATIVE_CLIENT, MARKET_ADAPTER, BTS_PRECISION };

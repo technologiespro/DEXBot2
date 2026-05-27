@@ -153,7 +153,8 @@ class Accountant {
     _normalizeBtsFeeState(order) {
         const deferredFee = toFiniteNumber(order?.btsFeeState?.deferredFee, 0);
         return {
-            deferredFee: Math.max(0, deferredFee)
+            deferredFee: Math.max(0, deferredFee),
+            deferredPaidFee: order?.btsFeeState?.deferredPaidFee || null
         };
     }
 
@@ -183,6 +184,10 @@ class Accountant {
         const updateFee = Math.max(0, toFiniteNumber(feeSchedule?.updateFee, 0));
 
         if (deferred <= 0 || cancelFee <= 0) return 0;
+
+        // Core's formula (process_deferred_fee market_evaluator.cpp:294-296):
+        //   charge = cancel_fee * update_fee / create_fee  (integer division)
+        // Cap at deferred_fee. All amounts are already in float BTS units.
         let charge = cancelFee;
         if (createFee > 0) {
             charge = (cancelFee * updateFee) / createFee;
@@ -217,9 +222,9 @@ class Accountant {
             // the in-memory order is resized or removed.
             nextDeferred = 0;
         } else if (oldActive && !newActive && fee > 0) {
-            // A real cancel pays the cancel operation fee and refunds the whole deferred order fee.
-            balanceDelta += oldDeferred;
-            balanceDelta -= fee;
+            // A real cancel pays the cancel operation fee and refunds the remaining deferred fee.
+            // Core caps the cancel fee at deferred_fee (cancel_limit_order db_market.cpp:551-554).
+            balanceDelta += Math.max(0, oldDeferred - fee);
             nextDeferred = 0;
         } else if (!newActive) {
             nextDeferred = 0;
@@ -232,6 +237,10 @@ class Accountant {
                     deferredFee: nextDeferred
                 };
             } else if (newOrder.btsFeeState) {
+                // nextDeferred is 0: the deferred fee is consumed on-chain
+                // (fill, cancel, or order removed). Core zeros both
+                // deferred_fee and deferred_paid_fee on the order at this
+                // point, so clear the entire btsFeeState.
                 delete newOrder.btsFeeState;
             }
         }
@@ -255,7 +264,14 @@ class Accountant {
         if (deferredFee <= 0) return null;
 
         const feeSchedule = this._getBtsFeeSchedule();
-        const refund = isMaker ? deferredFee * feeSchedule.makerFeeDiscountPercent : 0;
+        if (!isMaker) return null;
+
+        // Core's BSIP85 maker refund (fill_order db_market.cpp:1856):
+        //   refund = round_up(deferred_fee * maker_discount_percent / 10000)
+        // Float arithmetic is used here; 1-satoshi rounding differences are
+        // negligible at BTS precision 5 and consistent with the rest of the
+        // float-based accounting system.
+        const refund = deferredFee * feeSchedule.makerFeeDiscountPercent;
         if (refund <= 0) return null;
 
         return {

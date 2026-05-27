@@ -44,7 +44,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS, FEE_PARAMETERS } = require('../../constants');
+const { API_LIMITS, TIMING, ORDER_TYPES, ORDER_STATES, COW_ACTIONS, FEE_PARAMETERS, BTS_PRECISION } = require('../../constants');
 const Format = require('../format');
 const { toFiniteNumber, isValidNumber } = Format;
 const MathUtils = require('./math');
@@ -546,7 +546,7 @@ async function initializeFeeCache(botsConfig, BitShares) {
                     return {
                         raw: feeNum,
                         satoshis: feeNum,
-                        bts: MathUtils.blockchainToFloat(feeNum, 5)
+                        bts: MathUtils.blockchainToFloat(feeNum, BTS_PRECISION)
                     };
                 };
                 const makerFeeDiscountRaw = toFiniteNumber(

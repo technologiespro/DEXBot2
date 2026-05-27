@@ -59,8 +59,8 @@
  * ===============================================================================
  */
 
-const { ORDER_TYPES, ORDER_STATES, TIMING } = require('../constants');
-const { getMinAbsoluteOrderSize, getAssetFees } = require('./utils/math');
+const { ORDER_TYPES, ORDER_STATES, TIMING, BTS_PRECISION } = require('../constants');
+const { getMinAbsoluteOrderSize, getAssetFees, blockchainToFloat } = require('./utils/math');
 const { isOrderPlaced, parseChainOrder, buildCreateOrderArgs, isOrderOnChain, buildOutsideInPairGroups, extractBatchOperationResults } = require('./utils/order');
 const { resolveAccountRef } = require('./utils/system');
 const Format = require('./format');
@@ -474,7 +474,16 @@ async function _finalizeStartupUpdate({ manager, preparedUpdate }) {
     // Extract deferred_fee from the raw chain order object so the fee
     // lifecycle (cancel refunds, fill maker discounts) reconstructs
     // the correct btsFeeState after a grid reset.
+    // deferred_fee from chain is in raw satoshis (BTS precision 5).
+    // The fee lifecycle operates in float BTS units, so convert here.
     const rawDeferredFee = Format.toFiniteNumber(plan.chainOrderObj?.deferred_fee, null);
+    const deferredFeeFloat = rawDeferredFee !== null ? blockchainToFloat(rawDeferredFee, BTS_PRECISION) : null;
+
+    // Also extract deferred_paid_fee metadata (original fee asset) if available.
+    const rawPaidFee = plan.chainOrderObj?.deferred_paid_fee;
+    const deferredPaidFee = rawPaidFee && typeof rawPaidFee === 'object'
+        ? { amount: Format.toFiniteNumber(rawPaidFee.amount, 0), asset_id: String(rawPaidFee.asset_id || '') }
+        : null;
 
     const btsFeeData = getAssetFees('BTS');
     await manager._applySync({
@@ -483,7 +492,8 @@ async function _finalizeStartupUpdate({ manager, preparedUpdate }) {
         isPartialPlacement: false,
         fee: btsFeeData.updateFee,
         skipAccounting: false,
-        deferredFee: rawDeferredFee,
+        deferredFee: deferredFeeFloat,
+        deferredPaidFee,
     }, 'createOrder');
 }
 

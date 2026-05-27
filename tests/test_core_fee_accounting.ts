@@ -75,7 +75,7 @@ async function main() {
             { fee: 0.2 }
         );
         assert.strictEqual(mgr.orders.get('s1').btsFeeState, undefined);
-        assert(Math.abs(mgr.accountTotals.sell - 999.78) < 1e-12, 'cancel refunds deferred update fee and pays cancel fee');
+        assert(Math.abs(mgr.accountTotals.sell - 999.88) < 1e-12, 'cancel refunds remaining deferred fee after cap (deferred_fee < cancel_fee → 0 refund)');
     }
 
     {

@@ -89,7 +89,7 @@
  * ===============================================================================
  */
 
-const { ORDER_TYPES, ORDER_STATES, TIMING } = require('../constants');
+const { ORDER_TYPES, ORDER_STATES, TIMING, BTS_PRECISION } = require('../constants');
 const Format = require('./format');
 const { toFiniteNumber } = Format;
 const {
@@ -594,8 +594,16 @@ class SyncEngine {
                 // would be an unnecessary set-then-delete cycle.
                 if (bestMatch.rawOnChain) {
                     const rawDeferredFee = toFiniteNumber(bestMatch.rawOnChain.deferred_fee, null);
+                    const rawDeferredPaidFee = rawDeferredFee !== null ? bestMatch.rawOnChain.deferred_paid_fee : undefined;
+                    const deferredPaidFee = rawDeferredPaidFee && typeof rawDeferredPaidFee === 'object'
+                        ? { amount: toFiniteNumber(rawDeferredPaidFee.amount, 0), asset_id: String(rawDeferredPaidFee.asset_id || '') }
+                        : null;
                     if (rawDeferredFee !== null && rawDeferredFee > 0) {
-                        bestMatch.btsFeeState = { deferredFee: rawDeferredFee };
+                        bestMatch.btsFeeState = { deferredFee: blockchainToFloat(rawDeferredFee, BTS_PRECISION), deferredPaidFee };
+                    } else if (rawDeferredFee !== null && rawDeferredFee <= 0 && deferredPaidFee) {
+                        // deferred_paid_fee may persist even when deferred_fee is zeroed
+                        // (e.g., after partial fill). Preserve it as metadata.
+                        bestMatch.btsFeeState = { deferredFee: 0, deferredPaidFee };
                     } else if (wasVirtual && rawDeferredFee !== null && rawDeferredFee <= 0 && bestMatch.rawOnChain.for_sale > 0) {
                         // Core zeros deferred_fee on every fill (fill_limit_order db_market.cpp:1895).
                         // If deferred_fee is 0 while for_sale > 0, the order was partially filled.
@@ -666,7 +674,17 @@ class SyncEngine {
                     const adoptedState = chainInt > 0 ? ORDER_STATES.PARTIAL : ORDER_STATES.VIRTUAL;
                     const adoptedBtsFeeState = (adoptedRaw) ? (() => {
                         const rawFee = toFiniteNumber(adoptedRaw.deferred_fee, null);
-                        return rawFee !== null && rawFee > 0 ? { deferredFee: rawFee } : undefined;
+                        const rawPaidFee = rawFee !== null ? adoptedRaw.deferred_paid_fee : undefined;
+                        const paidFee = rawPaidFee && typeof rawPaidFee === 'object'
+                            ? { amount: toFiniteNumber(rawPaidFee.amount, 0), asset_id: String(rawPaidFee.asset_id || '') }
+                            : null;
+                        if (rawFee !== null && rawFee > 0) {
+                            return { deferredFee: blockchainToFloat(rawFee, BTS_PRECISION), deferredPaidFee: paidFee };
+                        }
+                        if (rawFee !== null && rawFee <= 0 && paidFee) {
+                            return { deferredFee: 0, deferredPaidFee: paidFee };
+                        }
+                        return undefined;
                     })() : undefined;
                     const adoptedOrder = {
                         ...adoptedSlot,
@@ -983,7 +1001,10 @@ class SyncEngine {
                         // chainData.deferredFee allows reconstructing btsFeeState so the fee
                         // lifecycle (cancel refunds, fill maker discounts) uses correct values.
                         if (chainData.deferredFee !== undefined && chainData.deferredFee !== null) {
-                            updatedOrder.btsFeeState = { deferredFee: Math.max(0, chainData.deferredFee) };
+                            updatedOrder.btsFeeState = {
+                                deferredFee: Math.max(0, chainData.deferredFee),
+                                ...(chainData.deferredPaidFee ? { deferredPaidFee: chainData.deferredPaidFee } : {})
+                            };
                         }
                         // Deduced fee (createFee or updateFee) must always be applied to reflect blockchain cost
                         const actualFee = fee;
