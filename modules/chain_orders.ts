@@ -1105,6 +1105,30 @@ async function getOnChainAssetBalances(accountRef, assets) {
 }
 
 /**
+ * Build a liquidity_pool_exchange operation for swapping assets via AMM pool.
+ * @param {string} accountId - The blockchain account ID (1.2.x)
+ * @param {string} poolId - The liquidity pool ID (1.19.x)
+ * @param {number} sellAmountInt - Amount to sell (blockchain integer, not float)
+ * @param {string} sellAssetId - Asset ID to sell
+ * @param {number} minReceiveInt - Minimum amount to receive (blockchain integer)
+ * @param {string} receiveAssetId - Asset ID to receive
+ * @returns {Object} The operation object with op_name and op_data
+ */
+function buildLiquidityPoolExchangeOp(accountId, poolId, sellAmountInt, sellAssetId, minReceiveInt, receiveAssetId) {
+    return {
+        op_name: 'liquidity_pool_exchange',
+        op_data: {
+            fee: { amount: 0, asset_id: NATIVE_CLIENT.CHAIN.CORE_ASSET_ID },
+            account: accountId,
+            pool: poolId,
+            amount_to_sell: { amount: sellAmountInt, asset_id: sellAssetId },
+            min_to_receive: { amount: minReceiveInt, asset_id: receiveAssetId },
+            extensions: []
+        }
+    };
+}
+
+/**
  * Get the current fill processing mode.
  * @returns {string} 'history' or 'open'
  */
@@ -1128,6 +1152,7 @@ export = {
     buildUpdateOrderOp,
     buildCreateOrderOp,
     buildCancelOrderOp,
+    buildLiquidityPoolExchangeOp,
     executeBatch,
 
     // Note: authentication and key retrieval moved to modules/chain_keys.js

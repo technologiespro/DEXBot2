@@ -55,9 +55,10 @@
  *   - calculateRotationOrderSizes(manager, orderType, fillAmount) - Calculate rotation sizes
  *   - calculateGridSideDivergenceMetric(manager, orderType, threshold) - Calculate divergence
  *
- * SECTION 8: FEE DEDUCTION (2 functions)
+ * SECTION 8: FEE DEDUCTION (3 functions)
  *   - calculateOrderCreationFees(count, btsFeeData) - Calculate total creation fees
  *   - deductOrderFeesFromFunds(available, count, btsFeeData, btsSide) - Deduct fees from funds
+ *   - calculateSwapInAmount(targetReceive, poolReserveOut, poolReserveIn) - AMM swap math
  *
  * SECTION 9: GRID UTILITIES (1 function)
  *   - calculateGapSlots(incrementPercent, targetSpreadPercent) - Calculate gap slots count
@@ -65,7 +66,7 @@
  * ===============================================================================
  */
 
-const { ORDER_TYPES, FEE_PARAMETERS, DEFAULT_CONFIG } = require('../../constants');
+const { ORDER_TYPES, FEE_PARAMETERS, DEFAULT_CONFIG, BTS_PRECISION } = require('../../constants');
 const Format = require('../format');
 const { isValidNumber, toFiniteNumber, isNumeric } = Format;
 
@@ -358,7 +359,7 @@ function getAssetFees(assetSymbol, assetAmount = null, isMaker = true) {
  * @param {Object} [activeOrders=null] - Active order counts {buy, sell} for BTS reservation calculation
  * @returns {number} Available funds for the side (0 if side invalid or insufficient funds)
  */
-function calculateAvailableFundsValue(side, accountTotals, funds, assetA, assetB, activeOrders = null) {
+function calculateAvailableFundsValue(side, accountTotals, funds, assetA, assetB, activeOrders = null, configMinBtsValue = null) {
     if (side !== 'buy' && side !== 'sell') return 0;
 
     const chainFree = toFiniteNumber(side === 'buy' ? accountTotals?.buyFree : accountTotals?.sellFree);
@@ -375,6 +376,27 @@ function calculateAvailableFundsValue(side, accountTotals, funds, assetA, assetB
     }
 
     const currentFeesOwed = (btsSide === side) ? btsFeesOwed : 0;
+
+    // Non-BTS pair: reserve proportional share for BTS fee budget
+    if (!btsSide && activeOrders) {
+        const targetBuy = Math.max(0, toFiniteNumber(activeOrders?.buy, 1));
+        const targetSell = Math.max(0, toFiniteNumber(activeOrders?.sell, 1));
+        const totalTargetOrders = targetBuy + targetSell;
+        const formulaBudget = calculateOrderCreationFees(assetA, assetB, totalTargetOrders, FEE_PARAMETERS.BTS_RESERVATION_MULTIPLIER);
+        const effectiveMin = (configMinBtsValue > 0) ? configMinBtsValue : formulaBudget;
+        const btsFree = toFiniteNumber(funds?.btsBalance?.free, 0);
+        const btsDeficit = Math.max(0, effectiveMin - btsFree);
+        if (btsDeficit > 0) {
+            const totalFree = toFiniteNumber(accountTotals?.buyFree, 0)
+                            + toFiniteNumber(accountTotals?.sellFree, 0);
+            if (totalFree > 0) {
+                const sideFree = toFiniteNumber(side === 'buy' ? accountTotals?.buyFree : accountTotals?.sellFree, 0);
+                const share = sideFree / totalFree;
+                return Math.max(0, chainFree - virtualReservation - btsDeficit * share);
+            }
+        }
+    }
+
     return Math.max(0, chainFree - virtualReservation - currentFeesOwed - btsFeesReservation);
 }
 
@@ -973,16 +995,15 @@ function calculateGridSideDivergenceMetric(calculatedOrders, persistedOrders, si
 
 /**
  * Calculate estimated BTS order creation fees for a number of orders.
- * Only applies if BTS is involved in the trading pair.
+ * Works for all pairs — returns the BTS fee budget needed for order operations.
  * 
  * @param {string} assetA - First asset symbol
- * @param {string} assetB - Second asset symbol
+ * @param {string} assetB - Second asset symbol (unused in calculation, kept for signature compat)
  * @param {number} totalOrders - Number of orders to create
- * @param {number} [feeMultiplier=BTS_RESERVATION_MULTIPLIER] - Multiplier for reservation (typically 1.5x)
- * @returns {number} Total fee amount (0 if BTS not involved, fallback if fee lookup fails)
+ * @param {number} [feeMultiplier=BTS_RESERVATION_MULTIPLIER] - Multiplier for reservation (typically 5x)
+ * @returns {number} Total fee amount (fallback if fee lookup fails)
  */
 function calculateOrderCreationFees(assetA, assetB, totalOrders, feeMultiplier = FEE_PARAMETERS.BTS_RESERVATION_MULTIPLIER) {
-    if (assetA !== 'BTS' && assetB !== 'BTS') return 0;
     try {
         if (totalOrders > 0) {
             const btsFeeData = getAssetFees('BTS');
@@ -1016,6 +1037,35 @@ function deductOrderFeesFromFunds(buyFunds, sellFunds, fees, config, logger = nu
         }
     }
     return { buyFunds: finalBuy, sellFunds: finalSell };
+}
+
+/**
+ * Calculate how much input asset to swap into a constant-product AMM pool
+ * to receive a target amount of output asset.
+ *
+ * Formula: k = reserveIn * reserveOut
+ *          newReserveOut = reserveOut - targetReceive
+ *          newReserveIn = k / newReserveOut
+ *          sellAmount = newReserveIn - reserveIn
+ *
+ * Caps swap at 50% of pool reserves to prevent extreme slippage.
+ *
+ * @param {number} targetReceive - Desired amount of output asset
+ * @param {number} poolReserveOut - Pool reserve of output asset
+ * @param {number} poolReserveIn - Pool reserve of input asset
+ * @returns {number} Amount of input asset to sell
+ */
+function calculateSwapInAmount(targetReceive, poolReserveOut, poolReserveIn) {
+    if (targetReceive <= 0 || poolReserveOut <= 0 || poolReserveIn <= 0) return 0;
+    let effectiveTarget = targetReceive;
+    if (effectiveTarget >= poolReserveOut * 0.5) {
+        effectiveTarget = poolReserveOut * 0.5;
+    }
+    const k = poolReserveIn * poolReserveOut;
+    const newReserveOut = poolReserveOut - effectiveTarget;
+    if (newReserveOut <= 0) return 0;
+    const newReserveIn = k / newReserveOut;
+    return newReserveIn - poolReserveIn;
 }
 
 /**
@@ -1079,6 +1129,7 @@ export = {
     calculateGridSideDivergenceMetric,
     calculateOrderCreationFees,
     deductOrderFeesFromFunds,
+    calculateSwapInAmount,
     _setFeeCache,
     cloneWeightDistribution,
     clamp

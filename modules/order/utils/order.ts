@@ -1023,6 +1023,25 @@ function getSideBudget(side, funds, config, totalTarget) {
         );
         return Math.max(0, allocated - btsFees);
     }
+
+    // Non-BTS pair: reserve proportional share for BTS fee budget
+    if (!isBtsSide && allocated > 0 && funds.btsBalance) {
+        const formulaBudget = MathUtils.calculateOrderCreationFees(
+            config.assetA, config.assetB, totalTarget,
+            FEE_PARAMETERS.BTS_RESERVATION_MULTIPLIER
+        );
+        const configMin = config.min_BTS_value;
+        const effectiveMin = (configMin > 0) ? configMin : formulaBudget;
+        const btsFree = funds.btsBalance.free || 0;
+        const btsDeficit = Math.max(0, effectiveMin - btsFree);
+        if (btsDeficit > 0) {
+            const sideFree = isBuy ? (funds.chainFreeBuy || 0) : (funds.chainFreeSell || 0);
+            const totalFree = (funds.chainFreeBuy || 0) + (funds.chainFreeSell || 0);
+            const share = totalFree > 0 ? sideFree / totalFree : 0.5;
+            return Math.max(0, allocated - btsDeficit * share);
+        }
+    }
+
     return allocated;
 }
 

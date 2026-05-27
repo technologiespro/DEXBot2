@@ -290,7 +290,8 @@ class Accountant {
             total: { chain: { buy: 0, sell: 0 }, grid: { buy: 0, sell: 0 } },
             virtual: { buy: 0, sell: 0 },
             committed: { chain: { buy: 0, sell: 0 }, grid: { buy: 0, sell: 0 } },
-            btsFeesOwed: 0                         // Unpaid BTS fees
+            btsFeesOwed: 0,                        // Unpaid BTS fees
+            btsBalance: { free: 0, total: 0, locked: 0 } // BTS balance for non-BTS pairs
         };
     }
 
@@ -329,6 +330,11 @@ class Accountant {
          const mgr = this.manager;
          if (mgr._pauseFundRecalc) return;
          if (!mgr.funds) this.resetFunds();
+
+         // Sync btsBalance from manager into funds for non-BTS pairs
+         if (mgr.btsBalance) {
+             mgr.funds.btsBalance = { ...mgr.funds.btsBalance, ...mgr.btsBalance };
+         }
 
          // No lock needed for read-only access to frozen orders (COW pattern)
          const orderSnapshot = Array.from(mgr.orders.values());
@@ -384,9 +390,9 @@ class Accountant {
          mgr.funds.total.grid = { buy: gridBuy + virtualBuy, sell: gridSell + virtualSell };
 
          // STEP 6: Calculate available funds (what we can spend right now)
-         // Uses utils::calculateAvailableFundsValue which deducts committe amounts
-         mgr.funds.available.buy = calculateAvailableFundsValue('buy', mgr.accountTotals, mgr.funds, mgr.config.assetA, mgr.config.assetB, mgr.config.activeOrders);
-         mgr.funds.available.sell = calculateAvailableFundsValue('sell', mgr.accountTotals, mgr.funds, mgr.config.assetA, mgr.config.assetB, mgr.config.activeOrders);
+          // Uses utils::calculateAvailableFundsValue which deducts committe amounts
+          mgr.funds.available.buy = calculateAvailableFundsValue('buy', mgr.accountTotals, mgr.funds, mgr.config.assetA, mgr.config.assetB, mgr.config.activeOrders, mgr.config.min_BTS_value);
+          mgr.funds.available.sell = calculateAvailableFundsValue('sell', mgr.accountTotals, mgr.funds, mgr.config.assetA, mgr.config.assetB, mgr.config.activeOrders, mgr.config.min_BTS_value);
 
          // Ensure percentage-based allocations are applied to the newly calculated totals
          if (typeof mgr.applyBotFundsAllocation === 'function') {

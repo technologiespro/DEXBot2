@@ -651,11 +651,13 @@ class DEXBot {
 
         const persistedBtsFeesOwed = this.accountOrders.loadBtsFeesOwed(this.config.botKey);
         const persistedBoundaryIdx = this.accountOrders.loadBoundaryIdx(this.config.botKey);
+        const persistedBtsBalance = this.accountOrders.loadBtsBalance(this.config.botKey);
 
         return {
             persistedGrid: repairedGrid,
             persistedBtsFeesOwed,
-            persistedBoundaryIdx
+            persistedBoundaryIdx,
+            persistedBtsBalance
         };
     }
 
@@ -818,7 +820,8 @@ class DEXBot {
         let {
             persistedGrid,
             persistedBtsFeesOwed,
-            persistedBoundaryIdx
+            persistedBoundaryIdx,
+            persistedBtsBalance
         } = startupState;
 
         try {
@@ -974,6 +977,16 @@ class DEXBot {
             // CRITICAL FIX: Restore BTS fees owed from persistence
             if (persistedBtsFeesOwed && persistedBtsFeesOwed > 0) {
                 this.manager.funds.btsFeesOwed = Number(persistedBtsFeesOwed);
+            }
+            // Restore BTS balance for non-BTS pairs
+            if (this.config.assetA !== 'BTS' && this.config.assetB !== 'BTS') {
+                if (persistedBtsBalance && typeof persistedBtsBalance === 'object') {
+                    this.manager.btsBalance = {
+                        free: persistedBtsBalance.free || 0,
+                        total: persistedBtsBalance.total || 0,
+                        locked: persistedBtsBalance.locked || 0
+                    };
+                }
             }
 
             if (!this.config.dryRun && !this.accountId) {

@@ -617,6 +617,10 @@ async function persistGridSnapshot(manager, accountOrders, botKey) {
                 ...restConfig
             };
         }
+        const btsBalance = (manager.config?.assetA !== 'BTS' && manager.config?.assetB !== 'BTS')
+            ? (manager.btsBalance || { free: 0, total: 0, locked: 0 })
+            : null;
+
         await accountOrders.storeMasterGrid(
             botKey,
             orders,
@@ -626,7 +630,8 @@ async function persistGridSnapshot(manager, accountOrders, botKey) {
             {
                 persistedAt: new Date().toISOString(),
                 config: debugConfig,
-                accountTotals: manager.accountTotals || null
+                accountTotals: manager.accountTotals || null,
+                btsBalance: btsBalance
             }
         );
         return true;

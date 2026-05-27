@@ -6,7 +6,7 @@ const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const Grid = require('./order/grid');
-const { ORDER_STATES, TIMING, GRID_LIMITS } = require('./constants');
+const { ORDER_STATES, TIMING, GRID_LIMITS, FEE_PARAMETERS, BTS_PRECISION, NATIVE_CLIENT } = require('./constants');
 const { applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
 const { isPm2Runtime } = require('./order/logger');
 const { getSharedMarketAdapterRuntime } = require('./launcher/market_adapter_runtime');
@@ -16,7 +16,7 @@ const {
 } = require('./market_adapter_whitelist');
 const Format = require('./order/format');
 const { parseJsonWithComments } = require('./order/utils/system');
-const { cloneWeightDistribution } = require('./order/utils/math');
+const { cloneWeightDistribution, calculateOrderCreationFees, calculateSwapInAmount, floatToBlockchainInt, blockchainToFloat } = require('./order/utils/math');
 const { updateDynamicGridSnapshotSync } = require('../market_adapter/utils/dynamic_grid_snapshot');
 
 const CODE_ROOT = path.join(__dirname, '..');
@@ -1162,6 +1162,7 @@ function scheduleDeferredGridResync(ctx, options = {}) {
  */
 async function executeMaintenanceLogic(context) {
     await this.manager.recalculateFunds();
+    await checkBtsBalanceAndAcquire.call(this);
     this.manager.clearStalePipelineOperations();
 
     if (this._maintenanceCooldownCycles > 0) {
@@ -1531,6 +1532,130 @@ async function runGridMaintenance(context = 'periodic', options = {}) {
     }
 }
 
+const _lastBtsAcquisitionTimestamps = new Map();
+
+/**
+ * Check if the bot's BTS balance is below the minimum threshold and trigger acquisition.
+ * Only applies to non-BTS pairs. Uses hysteresis: triggers at 1× min_BTS_value,
+ * fills to BTS_ACQUIRE_TARGET_MULTIPLIER × min_BTS_value.
+ * @this {import('./dexbot_class').DEXBot}
+ * @returns {Promise<void>}
+ */
+async function checkBtsBalanceAndAcquire() {
+    if (this.config.dryRun) return;
+    if (this.config.assetA === 'BTS' || this.config.assetB === 'BTS') return;
+
+    const cooldownMs = (TIMING.BTS_ACQUIRE_COOLDOWN_MIN || 60) * 60 * 1000;
+    const botKey = this.config.botKey || this.config.name;
+    const lastAcq = _lastBtsAcquisitionTimestamps.get(botKey);
+    if (lastAcq && (Date.now() - lastAcq) < cooldownMs) return;
+
+    if (!this.manager || !this.manager.btsBalance) return;
+
+    const targetBuy = Math.max(0, this.config.activeOrders?.buy || 1);
+    const targetSell = Math.max(0, this.config.activeOrders?.sell || 1);
+    const totalTarget = targetBuy + targetSell;
+
+    const minBtsVal = calculateOrderCreationFees(
+        this.config.assetA, this.config.assetB, totalTarget,
+        FEE_PARAMETERS.BTS_RESERVATION_MULTIPLIER
+    );
+    if (minBtsVal <= 0) return;
+
+    const effectiveMin = (this.config.min_BTS_value > 0) ? this.config.min_BTS_value : minBtsVal;
+    const btsFree = this.manager.btsBalance.free || 0;
+    const triggerAt = effectiveMin * FEE_PARAMETERS.BTS_ACQUIRE_THRESHOLD;
+    if (btsFree >= triggerAt) return;
+
+    const target = effectiveMin * FEE_PARAMETERS.BTS_ACQUIRE_TARGET_MULTIPLIER;
+    const deficit = Math.max(0, target - btsFree);
+    this._log(
+        `[BTS-ACQ] BTS balance ${Format.formatAmount8(btsFree)} below threshold ${Format.formatAmount8(triggerAt)}. ` +
+        `Acquiring ${Format.formatAmount8(deficit)} BTS (target: ${Format.formatAmount8(target)})`,
+        'info'
+    );
+    await acquireBts.call(this, deficit);
+}
+
+/**
+ * Acquire BTS by swapping one of the trading pair assets through an AMM pool.
+ * Tries both assets for a BTS pool, picks the best (lowest price impact).
+ * @this {import('./dexbot_class').DEXBot}
+ * @param {number} deficit - Amount of BTS needed (float)
+ * @returns {Promise<void>}
+ */
+async function acquireBts(deficit) {
+    if (deficit <= 0) return;
+    const { BitShares } = require('./bitshares_client');
+    if (!BitShares || !BitShares.db) return;
+
+    const coreAssetId = NATIVE_CLIENT.CHAIN.CORE_ASSET_ID;
+    const assets = [
+        { id: this.assets?.assetA?.id, free: this.manager.accountTotals?.sellFree || 0, precision: this.assets?.assetA?.precision, symbol: this.config.assetA },
+        { id: this.assets?.assetB?.id, free: this.manager.accountTotals?.buyFree || 0, precision: this.assets?.assetB?.precision, symbol: this.config.assetB }
+    ];
+
+    const candidates = [];
+    for (const asset of assets) {
+        if (!asset.id || asset.free <= 0) continue;
+        try {
+            const poolData = await BitShares.db.get_liquidity_pool_by_asset_ids(asset.id, coreAssetId);
+            if (!poolData) continue;
+
+            const isAssetA = String(poolData.asset_a) === String(asset.id) || String(poolData.asset_ids?.[0]) === String(asset.id);
+            const assetReserveRaw = isAssetA ? (poolData.balance_a || poolData.reserves?.[0]?.amount) : (poolData.balance_b || poolData.reserves?.[1]?.amount);
+            const btsReserveRaw = isAssetA ? (poolData.balance_b || poolData.reserves?.[1]?.amount) : (poolData.balance_a || poolData.reserves?.[0]?.amount);
+            if (!assetReserveRaw || !btsReserveRaw) continue;
+
+            const assetReserve = blockchainToFloat(assetReserveRaw, asset.precision);
+            const btsReserve = blockchainToFloat(btsReserveRaw, BTS_PRECISION);
+            const sellAmount = calculateSwapInAmount(deficit, btsReserve, assetReserve);
+            if (sellAmount <= 0 || sellAmount > asset.free) continue;
+
+            candidates.push({ asset, poolId: poolData.id, sellAmount, priceImpact: sellAmount / assetReserve });
+        } catch (e) { /* pool not found */ }
+    }
+
+    if (candidates.length === 0) {
+        this._log(`[BTS-ACQ] CRITICAL: No BTS pool with sufficient liquidity for ${this.config.assetA} or ${this.config.assetB}`, 'error');
+        return;
+    }
+
+    candidates.sort((a, b) => a.priceImpact - b.priceImpact);
+    const best = candidates[0];
+
+    const minReceive = deficit * (1 - FEE_PARAMETERS.POOL_SLIPPAGE_TOLERANCE);
+    const sellInt = floatToBlockchainInt(best.sellAmount, best.asset.precision);
+    const minReceiveInt = floatToBlockchainInt(minReceive, BTS_PRECISION);
+    const op = chainOrders.buildLiquidityPoolExchangeOp(this.accountId, best.poolId, sellInt, best.asset.id, minReceiveInt, coreAssetId);
+
+    try {
+        if (this.privateKey) {
+            await chainOrders.executeBatch(this.account, this.privateKey, [op]);
+        } else {
+            this._log('[BTS-ACQ] CRITICAL: No signing method available', 'error');
+            return;
+        }
+    } catch (err) {
+        this._log(`[BTS-ACQ] Swap broadcast failed: ${err.message}`, 'error');
+        return;
+    }
+
+    const botKey = this.config.botKey || this.config.name;
+    _lastBtsAcquisitionTimestamps.set(botKey, Date.now());
+
+    const orderType = (best.asset.id === this.assets?.assetA?.id) ? 'sell' : 'buy';
+    if (this.manager.accountant) {
+        this.manager.accountant.adjustTotalBalance(orderType, -best.sellAmount, 'bts-acquisition-swap-sell');
+    }
+    if (this.manager.btsBalance) {
+        this.manager.btsBalance.free = (this.manager.btsBalance.free || 0) + deficit;
+        this.manager.btsBalance.total = (this.manager.btsBalance.total || 0) + deficit;
+    }
+
+    this._log(`[BTS-ACQ] Acquired ~${Format.formatAmount8(deficit)} BTS: sold ${Format.formatAmount8(best.sellAmount)} ${best.asset.symbol} via pool ${best.poolId}`, 'info');
+}
+
 export = {
     loadBotsConfigSnapshot,
     refreshDynamicWeightDistribution,
@@ -1557,4 +1682,6 @@ export = {
     findSnapshotBotForRuntimeConfig,
     runtimeConfigNeedsMarketAdapter,
     usesAmaGridPrice,
+    checkBtsBalanceAndAcquire,
+    acquireBts,
 };

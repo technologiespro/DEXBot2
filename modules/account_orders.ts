@@ -381,6 +381,7 @@ class AccountOrders {
           meta,
           grid: snapshot,
           btsFeesOwed: Number.isFinite(btsFeesOwed) ? btsFeesOwed : 0,
+          btsBalance: (debugSnapshot && debugSnapshot.btsBalance) || null,
           boundaryIdx: Number.isFinite(boundaryIdx) ? boundaryIdx : null,
           assets: assets || null,
           debugInputs: debugSnapshot,
@@ -405,6 +406,11 @@ class AccountOrders {
 
         if (debugSnapshot) {
           this.data.bots[botKey].debugInputs = debugSnapshot;
+        }
+
+        // Persist btsBalance for non-BTS pairs (passed via debugInputs)
+        if (debugSnapshot && debugSnapshot.btsBalance) {
+          this.data.bots[botKey].btsBalance = debugSnapshot.btsBalance;
         }
 
         // Initialize processedFills if missing (backward compat)
@@ -473,6 +479,26 @@ class AccountOrders {
       const idx = botData.boundaryIdx;
       if (typeof idx === 'number' && Number.isFinite(idx)) {
         return idx;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Load persisted BTS balance for a bot (non-BTS pairs only).
+   * @param {string} botKey - Bot identifier key
+   * @param {boolean} forceReload - If true, reload from disk
+   * @returns {Object|null} BTS balance { free, total, locked } or null if not found
+   */
+  loadBtsBalance(botKey, forceReload = false) {
+    if (forceReload) {
+      this.data = this._loadData() || { bots: {}, lastUpdated: nowIso() };
+    }
+
+    if (this.data && this.data.bots && this.data.bots[botKey]) {
+      const botData = this.data.bots[botKey];
+      if (botData.btsBalance && typeof botData.btsBalance === 'object') {
+        return botData.btsBalance;
       }
     }
     return null;

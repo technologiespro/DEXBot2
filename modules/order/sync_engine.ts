@@ -1138,12 +1138,28 @@ class SyncEngine {
             if (!assetAId || !assetBId) return;
 
             const { getOnChainAssetBalances } = require('../chain_orders');
-            const lookup = await getOnChainAssetBalances(accountIdOrName, [assetAId, assetBId]);
+            const { NATIVE_CLIENT } = require('../constants');
+            const assetList = [assetAId, assetBId];
+
+            // For non-BTS pairs, also fetch core asset (BTS) balance for fee management
+            if (mgr.config.assetA !== 'BTS' && mgr.config.assetB !== 'BTS') {
+                assetList.push(NATIVE_CLIENT.CHAIN.CORE_ASSET_ID);
+            }
+
+            const lookup = await getOnChainAssetBalances(accountIdOrName, assetList);
             const aInfo = lookup?.[assetAId] || lookup?.[mgr.config.assetA];
             const bInfo = lookup?.[assetBId] || lookup?.[mgr.config.assetB];
 
              if (aInfo && bInfo) {
                  await mgr.setAccountTotals({ sell: aInfo.total, sellFree: aInfo.free, buy: bInfo.total, buyFree: bInfo.free });
+             }
+
+             // Store BTS balance for non-BTS pairs
+             if (mgr.config.assetA !== 'BTS' && mgr.config.assetB !== 'BTS') {
+                 const btsInfo = lookup?.[NATIVE_CLIENT.CHAIN.CORE_ASSET_ID];
+                 if (btsInfo) {
+                     mgr.btsBalance = { free: btsInfo.free, total: btsInfo.total, locked: 0 };
+                 }
              }
         } catch (err: any) {
             mgr.logger.log(`Failed to fetch on-chain balances: ${err.message}`, 'warn');

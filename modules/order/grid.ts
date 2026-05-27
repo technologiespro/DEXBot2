@@ -201,6 +201,30 @@ class Grid {
             budget = Math.max(0, budget - btsFees);
         }
 
+        // Non-BTS pair: reserve proportional share for BTS fee budget
+        if (!isBtsSide && budget > 0) {
+            const targetBuy = Math.max(0, manager.config.activeOrders?.buy || 1);
+            const targetSell = Math.max(0, manager.config.activeOrders?.sell || 1);
+            const totalTarget = targetBuy + targetSell;
+            const formulaBudget = calculateOrderCreationFees(
+                manager.config.assetA,
+                manager.config.assetB,
+                totalTarget,
+                FEE_PARAMETERS.BTS_RESERVATION_MULTIPLIER
+            );
+            const configMin = manager.config.min_BTS_value;
+            const effectiveMin = (configMin > 0) ? configMin : formulaBudget;
+            const btsFree = toFiniteNumber(manager.funds?.btsBalance?.free, 0);
+            const btsDeficit = Math.max(0, effectiveMin - btsFree);
+            if (btsDeficit > 0) {
+                const sideFree = toFiniteNumber(isBuy ? manager.accountTotals?.buyFree : manager.accountTotals?.sellFree, 0);
+                const totalFree = toFiniteNumber(manager.accountTotals?.buyFree, 0)
+                                + toFiniteNumber(manager.accountTotals?.sellFree, 0);
+                const share = totalFree > 0 ? sideFree / totalFree : 0.5;
+                budget = Math.max(0, budget - btsDeficit * share);
+            }
+        }
+
         return {
             budget,
             precision: getPrecisionByOrderType(manager.assets, type),

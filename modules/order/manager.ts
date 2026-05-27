@@ -501,6 +501,7 @@ class OrderManager {
         };
 
         this.resetFunds();
+        this.btsBalance = { free: 0, total: 0, locked: 0 };
         this.targetSpreadCount = 0;
         this.currentSpreadCount = 0;
         this.outOfSpread = 0;
@@ -666,7 +667,10 @@ class OrderManager {
         const totals = computeChainFundTotals(this.accountTotals, this.funds?.committed?.chain);
         const allocatedBuy = toFiniteNumber(this.funds?.allocated?.buy, totals.chainTotalBuy);
         const allocatedSell = toFiniteNumber(this.funds?.allocated?.sell, totals.chainTotalSell);
-        return { ...totals, allocatedBuy, allocatedSell };
+        const btsBalance = (this.config.assetA !== 'BTS' && this.config.assetB !== 'BTS')
+            ? (this.btsBalance || { free: 0, total: 0, locked: 0 })
+            : null;
+        return { ...totals, allocatedBuy, allocatedSell, btsBalance };
     }
 
     /**

@@ -195,6 +195,9 @@ let DEFAULT_CONFIG = {
     weightDistribution: { sell: 1, buy: 1 },  // Geometric weight for order sizing (1 = ~1:2 center/outer split, 0.5 = linear)
     botFunds: { sell: "100%", buy: "100%" },      // Percentage of wallet balance to allocate ("100%" or numeric value)
     activeOrders: { sell: 20, buy: 20 },          // Number of orders to maintain closest to market on each side
+
+    // BTS fee management for non-BTS pairs
+    min_BTS_value: null,          // Minimum BTS balance to maintain (null = auto from activeOrders × fees × multiplier)
 };
 
 // Timing constants used by OrderManager and helpers
@@ -206,6 +209,9 @@ let TIMING = {
     // Blockchain fetch interval: how often to refresh blockchain account values (in minutes)
     // Default: 240 minutes (4 hours). Set to 0 or non-number to disable periodic fetches.
     BLOCKCHAIN_FETCH_INTERVAL_MIN: 240,
+
+    // BTS acquisition for non-BTS pairs: min cooldown between acquisition attempts (minutes)
+    BTS_ACQUIRE_COOLDOWN_MIN: 60,
 
     // Fill processing timing
     FILL_DEDUPE_WINDOW_MS: 5000,    // 5 seconds - window for deduplicating same fill events
@@ -450,6 +456,19 @@ let FEE_PARAMETERS = {
     // Matches the protocol constant in bitshares-core (libraries/protocol/include/graphene/protocol/config.hpp).
     // On-chain value = human_CR * DENOM. Example: 2.0 CR → 2000 on chain.
     GRAPHENE_COLLATERAL_RATIO_DENOM: 1000,
+
+    // BTS_ACQUIRE_THRESHOLD: Trigger acquisition when BTS free drops below min_BTS_value × this factor.
+    // At 1.0, acquisition fires exactly when BTS hits min_BTS_value.
+    BTS_ACQUIRE_THRESHOLD: 1,
+
+    // BTS_ACQUIRE_TARGET_MULTIPLIER: Target BTS after acquisition = min_BTS_value × this factor.
+    // At 3.0, fills to 3× min_BTS_value, creating a hysteresis band.
+    // The bot won't re-acquire until it burns through 2× min_BTS_value in fees.
+    BTS_ACQUIRE_TARGET_MULTIPLIER: 3,
+
+    // POOL_SLIPPAGE_TOLERANCE: Max slippage for pool swaps (decimal fraction).
+    // min_to_receive = expectedAmount × (1 - tolerance).
+    POOL_SLIPPAGE_TOLERANCE: 0.02,
 
 };
 
