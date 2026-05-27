@@ -524,13 +524,24 @@ class DEXBot {
         );
 
         const updates = [];
-        for (const orderId of staleIds) {
-            this._staleCleanedOrderIds.set(orderId, Date.now());
+
+        for (const [gridId, gridOrder] of this.manager.orders.entries()) {
+            if (!gridOrder?.orderId || !staleOrderIds.has(gridOrder.orderId)) continue;
+            this._staleCleanedOrderIds.set(gridOrder.orderId, {
+                markedAt: Date.now(),
+                gridId,
+            });
+            updates.push({ ...virtualizeOrder(gridOrder), size: 0 });
         }
 
-        for (const gridOrder of this.manager.orders.values()) {
-            if (!gridOrder?.orderId || !staleOrderIds.has(gridOrder.orderId)) continue;
-            updates.push({ ...virtualizeOrder(gridOrder), size: 0 });
+        // Register any stale IDs that had no matching grid slot
+        for (const orderId of staleIds) {
+            if (!this._staleCleanedOrderIds.has(orderId)) {
+                this._staleCleanedOrderIds.set(orderId, {
+                    markedAt: Date.now(),
+                    gridId: null,
+                });
+            }
         }
 
         if (updates.length > 0) {
@@ -555,7 +566,31 @@ class DEXBot {
      * @param {Error} err - The size drift error
      * @returns {Promise<{executed: boolean, hadRotation: boolean, recoveredBySync: boolean, reason: string}>}
      */
-    async _recoverBatchSizeDrift(err) {
+    async _recoverBatchSizeDrift(err, opContexts = []) {
+        // Try a targeted fix first: extract the affected order IDs from the
+        // operation contexts and correct them directly from chain.  This
+        // avoids a full state recovery sync in the common single-order case.
+        const affectedOrderIds = this._extractSizeDriftOrderIds(opContexts);
+        if (affectedOrderIds.length > 0) {
+            this.manager.logger.log(
+                `[COW] Targeted size-drift repair for ${affectedOrderIds.length} order(s): ${affectedOrderIds.join(', ')}`,
+                'debug'
+            );
+            const repaired = await this._targetedOrderRepair(affectedOrderIds);
+            if (repaired) {
+                return {
+                    executed: false,
+                    hadRotation: false,
+                    recoveredBySync: true,
+                    reason: 'ORDER_SIZE_DRIFT_TARGETED'
+                };
+            }
+            this.manager.logger.log(
+                '[COW] Targeted repair failed, falling back to full state recovery sync.',
+                'warn'
+            );
+        }
+
         const reason = `recoverable size drift during COW batch: ${err.message}`;
         this.manager.logger.log(
             `[COW] Recovering from on-chain size drift via recovery sync: ${err.message}`,
@@ -568,6 +603,81 @@ class DEXBot {
             recoveredBySync: true,
             reason: 'ORDER_SIZE_DRIFT'
         };
+    }
+
+    /**
+     * Extract chain order IDs from opContexts for operations that could
+     * trigger a size-drift error (size-update and rotation update).
+     * @param {Array<Object>} opContexts
+     * @returns {string[]} Unique chain order IDs
+     */
+    _extractSizeDriftOrderIds(opContexts) {
+        if (!Array.isArray(opContexts)) return [];
+        const ids = new Set();
+        for (const ctx of opContexts) {
+            if (ctx?.kind === 'size-update' && ctx?.updateInfo?.partialOrder?.orderId) {
+                ids.add(ctx.updateInfo.partialOrder.orderId);
+            } else if (ctx?.kind === 'rotation' && ctx?.rotation?.oldOrder?.orderId) {
+                ids.add(ctx.rotation.oldOrder.orderId);
+            }
+        }
+        return Array.from(ids);
+    }
+
+    /**
+     * Attempt to repair size-drift for specific order IDs by reading their
+     * current on-chain state and correcting the local grid directly.
+     * Falls back gracefully (returns false) on any error.
+     * @param {string[]} orderIds
+     * @returns {Promise<boolean>} True if all affected orders were repaired
+     */
+    async _targetedOrderRepair(orderIds) {
+        const { BitShares } = require('./bitshares_client');
+        const { virtualizeOrder } = require('./order/utils/order');
+        try {
+            const objects = await BitShares.db.get_objects(orderIds);
+            if (!Array.isArray(objects) || objects.length !== orderIds.length) return false;
+
+            const updates = [];
+            for (let i = 0; i < orderIds.length; i++) {
+                const chainOrder = objects[i];
+                const gridOrder = Array.from(this.manager.orders.values())
+                    .find(o => o.orderId === orderIds[i]);
+                if (!gridOrder) continue;
+
+                if (!chainOrder || typeof chainOrder.for_sale === 'undefined') {
+                    // Order no longer exists on chain -> fully filled.
+                    updates.push({ ...virtualizeOrder(gridOrder), size: 0 });
+                } else {
+                    const chainUnits = Number(chainOrder.for_sale);
+                    if (Number.isFinite(chainUnits)) {
+                        const { blockchainToFloat } = require('./order/utils/math');
+                        const prec = gridOrder.type === ORDER_TYPES.SELL
+                            ? this.manager.assets.assetA.precision
+                            : this.manager.assets.assetB.precision;
+                        const floatSize = blockchainToFloat(chainUnits, prec);
+                        if (floatSize !== gridOrder.size) {
+                            updates.push({
+                                id: gridOrder.id,
+                                size: floatSize,
+                                rawOnChain: chainOrder,
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (updates.length > 0) {
+                await this._applyRecoverableGridUpdates(updates, 'targeted-size-drift-repair');
+            }
+            return true;
+        } catch (err) {
+            this.manager.logger.log(
+                `[COW] Targeted order repair failed: ${err.message}`,
+                'debug'
+            );
+            return false;
+        }
     }
 
     /**
@@ -1235,19 +1345,39 @@ class DEXBot {
                                 // When a batch fails due to a stale order reference, the cleanup converts the
                                 // slot to VIRTUAL/SPREAD, releasing committed funds to chainFree. If we also
                                 // credit the fill proceeds here, we double-count the capital.
-                                const staleMarkedAt = this._staleCleanedOrderIds.get(fillOp.order_id);
-                                const staleAgeMs = Date.now() - staleMarkedAt;
-                                if (Number.isFinite(staleMarkedAt) && staleAgeMs <= this._staleCleanupRetentionMs) {
-                                    this.manager.logger.log(
-                                        `[ORPHAN-FILL] Skipping double-credit for stale-cleaned order ${fillOp.order_id} ` +
-                                        `(funds already freed by batch cleanup, age=${staleAgeMs}ms)`,
-                                        'warn'
-                                    );
-                                    continue;
-                                }
+                                const staleEntry = this._staleCleanedOrderIds.get(fillOp.order_id);
+                                if (staleEntry && Number.isFinite(staleEntry.markedAt)) {
+                                    const staleAgeMs = Date.now() - staleEntry.markedAt;
+                                    if (staleAgeMs <= this._staleCleanupRetentionMs) {
+                                        this.manager.logger.log(
+                                            `[ORPHAN-FILL] Skipping double-credit for stale-cleaned order ${fillOp.order_id} ` +
+                                            `(funds already freed by batch cleanup, age=${staleAgeMs}ms)`,
+                                            'warn'
+                                        );
+                                        continue;
+                                    }
 
-                                // Entry exists but expired: remove and process as normal orphan fill.
-                                if (this._staleCleanedOrderIds.has(fillOp.order_id)) {
+                                    // Entry expired. Check whether the grid slot was recycled.
+                                    // If the slot now holds a different order, the freed funds
+                                    // have already been re-deployed — crediting this fill would
+                                    // double-count.
+                                    if (staleEntry.gridId) {
+                                        const currentOrder = this.manager.orders.get(staleEntry.gridId);
+                                        if (currentOrder && currentOrder.orderId && currentOrder.orderId !== fillOp.order_id) {
+                                            this.manager.logger.log(
+                                                `[ORPHAN-FILL] Skipping credit for expired stale-cleaned order ${fillOp.order_id} ` +
+                                                `(slot ${staleEntry.gridId} recycled to ${currentOrder.orderId}, funds already freed)`,
+                                                'warn'
+                                            );
+                                            // Keep the tombstone entry — without it a delayed orphan
+                                            // fill after the cleanup TTL would miss the recycled-slot
+                                            // check and double-credit freed funds.
+                                            continue;
+                                        }
+                                    }
+
+                                    // Expired and slot not recycled — clean up the tracking entry
+                                    // and process as normal orphan fill below.
                                     this._staleCleanedOrderIds.delete(fillOp.order_id);
                                 }
 
@@ -1497,11 +1627,21 @@ class DEXBot {
                     if (this._staleCleanedOrderIds.size > 0) {
                         const now = Date.now();
                         let prunedCount = 0;
-                        for (const [orderId, markedAt] of this._staleCleanedOrderIds) {
-                            if (!Number.isFinite(markedAt) || now - markedAt > this._staleCleanupRetentionMs) {
+                        for (const [orderId, entry] of this._staleCleanedOrderIds) {
+                            if (!entry || !Number.isFinite(entry.markedAt)) {
+                                this._staleCleanedOrderIds.delete(orderId);
+                                prunedCount++;
+                            } else if (entry.gridId === null && now - entry.markedAt > this._staleCleanupRetentionMs) {
+                                // Entries without a gridId cannot use the recycled-slot
+                                // check (orphan fill → credit).  Prune them after TTL.
                                 this._staleCleanedOrderIds.delete(orderId);
                                 prunedCount++;
                             }
+                            // Entries with a gridId are kept indefinitely as recycled-slot
+                            // tombstones.  They are tiny (a few bytes) and few (only when
+                            // a COW batch fails due to a stale order).  Without them a
+                            // delayed orphan fill after TTL would miss the slot-recycling
+                            // check and double-credit freed funds.
                         }
                         if (prunedCount > 0) {
                             this.manager.logger.log(
@@ -2360,7 +2500,7 @@ class DEXBot {
 
         const token = this.privateKey;
         try {
-            await chainKeys.probeAccountInDaemon(
+            await chainKeys.pingDaemon(
                 token.accountName,
                 Math.min(5000, TIMING.DAEMON_STARTUP_TIMEOUT_MS || 5000),
                 { socketPath: token.socketPath }
@@ -2449,7 +2589,7 @@ class DEXBot {
             if (this._shuttingDown || !this._isCredentialDaemonWriteRequired()) return;
             const token = this.privateKey;
             try {
-                await chainKeys.probeAccountInDaemon(
+                await chainKeys.pingDaemon(
                     token.accountName,
                     2000,
                     { socketPath: token.socketPath }

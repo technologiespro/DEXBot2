@@ -255,13 +255,51 @@ async function resolveVaultSecret() {
         return normalizeBootstrapCredential(envSecret);
     }
 
+    // Try the bootstrap path file first (stable path, no PM2 env leak).
+    // The launcher writes the one-shot bootstrap socket path to this file
+    // before starting the daemon.  We read it, connect, get the secret,
+    // and delete the file.  Future restarts will not find the file and
+    // will fall through to the env-var path below (which will also be
+    // absent, landing on interactive auth).
+    const bootstrapPathFile = process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
+    if (bootstrapPathFile) {
+        try {
+            const bootstrapSocket = fs.readFileSync(bootstrapPathFile, 'utf-8').trim();
+            if (bootstrapSocket) {
+                delete process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
+                try { fs.unlinkSync(bootstrapPathFile); } catch (_) {}
+                daemonLogger.log?.(`[credential-daemon] Resolving vault secret from bootstrap path file: ${bootstrapSocket}`);
+                const secret = await fetchBootstrapPassword({ socketPath: bootstrapSocket, retries: 2 });
+                daemonLogger.log?.('[credential-daemon] Bootstrap secret transfer completed');
+                return normalizeBootstrapCredential(secret);
+            }
+        } catch (err: any) {
+            // Bootstrap path file was consumed on a previous run (or never
+            // written).  This is normal for a PM2 restart/resurrect — the
+            // daemon is locked and needs re-authentication.
+            try { fs.unlinkSync(bootstrapPathFile); } catch (_) {}
+            if (!process.stdin || !process.stdin.isTTY) {
+                daemonLogger.log?.(
+                    '[credential-daemon] Credential daemon is locked — no bootstrap path file and no TTY. ' +
+                    'Run \'node pm2\' to unlock.'
+                );
+                delete process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
+                process.exit(0);
+            }
+            daemonLogger.log?.(
+                `[credential-daemon] Bootstrap path file not available (${err.message}), falling back to interactive auth.`
+            );
+        }
+        delete process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE;
+    }
+
     const bootstrapSocket = process.env.DEXBOT_CRED_BOOTSTRAP_SOCKET;
     delete process.env.DEXBOT_CRED_BOOTSTRAP_SOCKET;
 
     if (bootstrapSocket) {
         daemonLogger.log?.(`[credential-daemon] Resolving vault secret from one-shot bootstrap socket: ${bootstrapSocket}`);
         try {
-            const secret = await fetchBootstrapPassword({ socketPath: bootstrapSocket });
+            const secret = await fetchBootstrapPassword({ socketPath: bootstrapSocket, retries: 2 });
             daemonLogger.log?.('[credential-daemon] Bootstrap secret transfer completed');
             return normalizeBootstrapCredential(secret);
         } catch (err: any) {
@@ -600,6 +638,14 @@ function processRequest(requestStr: string, socket: any) {
 
         if (!accountName) {
             return sendError(socket, 'Missing "accountName" field');
+        }
+
+        if (type === 'ping') {
+            // Lightweight health check — no session created, no audit log entry.
+            // Used by the credential daemon watchdog and pre-write probes where
+            // we only need to verify the daemon is alive, not establish a session.
+            sendSuccess(socket, { pong: true });
+            return;
         }
 
         if (type === 'probe-account') {

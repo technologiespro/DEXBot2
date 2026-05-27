@@ -992,7 +992,6 @@ function getPrivateKeyFromDaemon(accountName, timeout = 5000, options = {}) {
 
     return new Promise((resolve, reject) => {
         const socket = net.createConnection(socketPath, () => {
-            // Send request
             socket.write(JSON.stringify({ type: 'private-key', accountName }) + '\n');
         });
 
@@ -1041,7 +1040,73 @@ function getPrivateKeyFromDaemon(accountName, timeout = 5000, options = {}) {
 }
 
 /**
- * Probe the credential daemon for a specific account without fetching the key.
+ * Lightweight daemon health check.  Does NOT create a session or write
+ * an audit log entry — used by the credential daemon watchdog and
+ * pre-write probes where only liveness matters.
+ * @param {string} accountName - Ignored for ping; included for API consistency
+ * @param {number} timeout - Timeout in milliseconds (default 5000)
+ * @param {Object} options - Optional socket path overrides
+ * @returns {Promise<boolean>} Resolves with true if daemon responds
+ */
+function pingDaemon(accountName, timeout = 5000, options = {}) {
+    const net = require('net');
+    const socketPath = getCredentialSocketPath(options);
+
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const socket = net.createConnection(socketPath, () => {
+            socket.write(JSON.stringify({ type: 'ping', accountName }) + '\n');
+        });
+
+        let responseBuffer = '';
+        const timer = setTimeout(() => {
+            socket.destroy();
+            if (!settled) { settled = true; reject(new Error('Daemon ping timeout')); }
+        }, timeout);
+
+        socket.on('data', (data) => {
+            responseBuffer += data.toString();
+            const lines = responseBuffer.split('\n');
+            responseBuffer = lines.pop();
+
+            for (const line of lines) {
+                if (line.trim()) {
+                    clearTimeout(timer);
+                    socket.end();
+                    if (!settled) {
+                        settled = true;
+                        try {
+                            const response = JSON.parse(line);
+                            if (response.success && response.pong) {
+                                resolve(true);
+                            } else {
+                                reject(new Error(response.error || 'Daemon ping failed'));
+                            }
+                        } catch (err: any) {
+                            reject(new Error('Invalid daemon ping response'));
+                        }
+                    }
+                    return;
+                }
+            }
+        });
+
+        socket.on('error', (error) => {
+            clearTimeout(timer);
+            if (!settled) { settled = true; reject(new Error(`Daemon connection failed: ${error.message}`)); }
+        });
+
+        socket.on('end', () => {
+            clearTimeout(timer);
+            if (!settled && !responseBuffer.trim()) {
+                settled = true;
+                reject(new Error('Daemon closed connection unexpectedly'));
+            }
+        });
+    });
+}
+
+/**
  * Verifies the account exists in the daemon's session cache.
  * @param {string} accountName - Name of the account to probe
  * @param {number} timeout - Timeout in milliseconds (default 5000)
@@ -1130,4 +1195,5 @@ export = {
     waitForDaemon,
     getPrivateKeyFromDaemon,
     probeAccountInDaemon,
+    pingDaemon,
 };

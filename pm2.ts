@@ -529,7 +529,33 @@ function startCredentialDaemonPM2({ credentialEnv = {} }: { credentialEnv?: any 
 async function startManagedRuntimePM2({ apps, bootstrap = null }: { apps?: any; bootstrap?: any } = {}) {
     if (bootstrap) {
         await execPM2CommandIgnoreMissing('delete', CREDENTIAL_DAEMON_APP_NAME);
-        await startCredentialDaemonPM2({ credentialEnv: bootstrap.credentialEnv });
+
+        // Write the bootstrap socket path to a stable file in the runtime dir.
+        // The credential daemon reads this file instead of relying on a
+        // PM2-persisted env var.  Once consumed the file is deleted, so a
+        // future `pm2 restart dexbot-cred` or `pm2 resurrect` will not
+        // find it and will fall through to interactive auth.
+        const bootstrapPathFile = path.join(
+            path.dirname(CREDENTIAL_SOCKET_PATH),
+            '.dexbot-cred-bootstrap-path'
+        );
+        try {
+            fs.writeFileSync(bootstrapPathFile, bootstrap.socketPath, { mode: 0o600 });
+        } catch (err: any) {
+            throw new Error(
+                `Cannot write bootstrap path file at ${bootstrapPathFile}: ${err.message}. ` +
+                `The daemon needs this file to find the bootstrap socket.`
+            );
+        }
+
+        // Start the daemon WITHOUT DEXBOT_CRED_BOOTSTRAP_SOCKET so PM2 never
+        // persists the one-shot temp socket path.
+        const daemonEnv = {
+            DEXBOT_CRED_DAEMON_SOCKET: CREDENTIAL_SOCKET_PATH,
+            DEXBOT_CRED_DAEMON_READY_FILE: CREDENTIAL_READY_FILE,
+            DEXBOT_CRED_BOOTSTRAP_PATH_FILE: bootstrapPathFile,
+        };
+        await startCredentialDaemonPM2({ credentialEnv: daemonEnv });
         await Promise.all([
             bootstrap.waitForTransfer(),
             chainKeys.waitForDaemon(TIMING.DAEMON_STARTUP_TIMEOUT_MS, {

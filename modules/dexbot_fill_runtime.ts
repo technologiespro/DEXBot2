@@ -73,10 +73,16 @@ function buildOrphanFillFallbackKey(fill) {
     const receivesAssetId = fillOp?.receives?.asset_id;
     const receivesAmount = fillOp?.receives?.amount;
     const makerRole = fillOp?.is_maker === false ? 'taker' : 'maker';
+    // Include operation-type ID, transaction-in-block index, and
+    // operation-in-transaction index to reduce collision risk when
+    // multiple fills match on order + amounts + block number.
+    const opType = fill?.op?.[0];
+    const trxInBlock = fill?.trx_in_block;
+    const opInTrx = fill?.op_in_trx;
     if (!orderId || blockNum == null || !paysAssetId || paysAmount == null || !receivesAssetId || receivesAmount == null) {
         return null;
     }
-    return `orphan:${orderId}:${blockNum}:${paysAssetId}:${paysAmount}:${receivesAssetId}:${receivesAmount}:${makerRole}`;
+    return `orphan:${orderId}:${blockNum}:${paysAssetId}:${paysAmount}:${receivesAssetId}:${receivesAmount}:${makerRole}:${opType ?? ''}:${trxInBlock ?? ''}:${opInTrx ?? ''}`;
 }
 
 /**
