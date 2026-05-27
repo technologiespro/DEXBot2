@@ -1372,14 +1372,8 @@ export interface NodeHealth {
 // ============================================================
 
 export interface DaemonRequest {
-  type: 'private-key' | 'probe-account';
+  type: 'ping' | 'probe-account' | 'broadcast-operation' | 'execute-operations';
   accountName: string;
-}
-
-export interface DaemonPrivateKeyResponse {
-  success: boolean;
-  privateKey?: string;
-  error?: string;
 }
 
 export interface DaemonProbeResponse {

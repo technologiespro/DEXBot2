@@ -202,7 +202,6 @@ function createBroadcastHarness() {
     daemon: {
       broadcast: [],
       execute: [],
-      request: [],
       wait: []
     },
     daemonReady: false,
@@ -274,10 +273,6 @@ function createBroadcastHarness() {
         source: 'daemon-execute'
       };
     },
-    requestPrivateKeyFromCredentialDaemon: async (accountName, options) => {
-      calls.daemon.request.push({ accountName, options });
-      return 'daemon-secret';
-    },
     waitForCredentialDaemon: async (timeoutMs, options) => {
       calls.daemon.wait.push({ options, timeoutMs });
     }
@@ -338,7 +333,6 @@ async function testChainBroadcast() {
       /Credential daemon is not ready/
     );
     assert.strictEqual(calls.daemon.wait.length, 0);
-    assert.strictEqual(calls.daemon.request.length, 0);
 
     calls.daemonReady = true;
     const daemonTxResult = await broadcast.executeOperations([
@@ -351,7 +345,6 @@ async function testChainBroadcast() {
     });
 
     assert.strictEqual(calls.daemon.execute.length, 1, 'daemon-backed execute should use the daemon RPC');
-    assert.strictEqual(calls.daemon.request.length, 0, 'daemon-backed execute should not request a raw private key');
     assert.strictEqual(daemonTxResult.raw.source, 'daemon-execute');
 
     const rawResult = await broadcast.broadcastOperation(

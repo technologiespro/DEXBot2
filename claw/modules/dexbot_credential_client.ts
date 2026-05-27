@@ -14,24 +14,6 @@ function getSocketPath(options: Record<string, any> = {}) {
   return options.socketPath || DEFAULT_SOCKET_PATH;
 }
 
-function requestPrivateKeyFromCredentialDaemon(accountName: any, options: Record<string, any> = {}) {
-  if (!accountName) {
-    return Promise.reject(new Error('accountName is required to request a private key'));
-  }
-
-  const socketPath = getSocketPath(options);
-  const timeoutMs = Number.isFinite(Number(options.timeoutMs))
-    ? Number(options.timeoutMs)
-    : DEFAULT_REQUEST_TIMEOUT_MS;
-
-  return sendCredentialDaemonRequest(socketPath, { type: 'private-key', accountName }, timeoutMs).then((response: any) => {
-    if (response.success) {
-      return response.privateKey;
-    }
-    throw new Error(response.error || 'Unknown credential daemon error');
-  });
-}
-
 function broadcastOperationViaCredentialDaemon(accountName: any, operation: any, options: Record<string, any> = {}) {
   if (!accountName) {
     return Promise.reject(new Error('accountName is required to broadcast operations'));
@@ -71,6 +53,5 @@ export = {
   broadcastOperationViaCredentialDaemon,
   executeOperationsViaCredentialDaemon,
   isCredentialDaemonReady,
-  requestPrivateKeyFromCredentialDaemon,
   waitForCredentialDaemon
 };

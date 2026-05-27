@@ -4,7 +4,6 @@ const {
   isCredentialDaemonReady,
   broadcastOperationViaCredentialDaemon,
   executeOperationsViaCredentialDaemon,
-  requestPrivateKeyFromCredentialDaemon,
   waitForCredentialDaemon
 } = require('./dexbot_credential_client');
 const { getDexbot2Root, requireDexbot2Module } = require('./dexbot_bridge');
@@ -65,24 +64,11 @@ function resolveAccountName(options: Record<string, any> = {}) {
 }
 
 async function createSigningClientFromCredentialDaemon(options: Record<string, any> = {}) {
-  const accountName = resolveAccountName(options);
-  if (!accountName) {
-    throw new Error('accountName is required');
-  }
-
-  const daemonTimeoutMs = Number.isFinite(Number(options.daemonTimeoutMs))
-    ? Number(options.daemonTimeoutMs)
-    : undefined;
-  const requestTimeoutMs = Number.isFinite(Number(options.daemonRequestTimeoutMs))
-    ? Number(options.daemonRequestTimeoutMs)
-    : undefined;
-
-  await waitForCredentialDaemon(daemonTimeoutMs, options);
-  const privateKey = await requestPrivateKeyFromCredentialDaemon(accountName, {
-    socketPath: options.socketPath,
-    timeoutMs: requestTimeoutMs
-  });
-  return createSigningClient(accountName, privateKey);
+  throw new Error(
+    'The credential daemon no longer exports raw private keys. ' +
+    'Use broadcastOperationViaCredentialDaemon() or executeOperationsViaCredentialDaemon() ' +
+    'to have the daemon sign and broadcast operations directly.'
+  );
 }
 
 async function getSigningClient(options: Record<string, any> = {}) {

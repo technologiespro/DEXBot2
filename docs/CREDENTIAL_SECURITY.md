@@ -27,11 +27,13 @@ batch orders do not overwhelm the daemon's internal state.
 
 ### Memory Safety & Zeroing
 To minimize the window of exposure for sensitive key material, the credential
-daemon implements explicit memory scrubbing on a best-effort basis. All sensitive buffers—
-including vault secrets, session secrets, and cached account keys—are 
-explicitly overwritten with zeros (via `Buffer.fill(0)`) upon process 
-termination, ensuring no plaintext material persists in RAM after the 
-daemon exits.
+daemon implements explicit memory scrubbing on a best-effort basis. Upon process
+termination, the `shutdown()` handler iterates all sensitive objects (vault
+secrets, session secrets, and cached account keys), calls `Buffer.fill(0)` on
+any Buffer properties, and nulls all references. Hex-string key properties
+(`vaultKeyHex`, `sessionSaltHex`) are immutable in V8 and cannot be zeroed
+in place — they are dropped via reference nulling and reclaimed by the garbage
+collector.
 
 ---
 
@@ -39,11 +41,9 @@ daemon exits.
 
 DEXBot2 keeps private keys out of the bot process entirely. A dedicated
 **credential daemon** holds the vault secret in memory and serves signing
-requests over a local socket. The primary bot flow uses a *signing token* to
-tell the daemon which account to use; the daemon signs or broadcasts operations
-internally and returns results. A `private-key` compatibility path still exists
-for legacy clients, so the stronger guarantee is that the raw key does not leave
-the daemon process unless that compatibility path is used.
+requests over a local socket. The bot uses a *signing token* to tell the daemon
+which account to use; the daemon signs or broadcasts operations internally and
+returns results. Raw private keys never leave the daemon process.
 
 The full chain from user password to on-chain operation looks like this:
 
@@ -130,15 +130,19 @@ domain socket; the main signing flow never hands raw key bytes to the bot.
 ### Startup sequence
 
 1. Launcher creates a **one-shot bootstrap socket** in a freshly created
-   `mkdtemp` directory (chmod 0700) and passes its path to the daemon child
-   process via the `DEXBOT_CRED_BOOTSTRAP_SOCKET` environment variable.
-2. The daemon reads the variable, **immediately deletes it from `process.env`**
-   to reduce exposure to child processes and later inspection, then connects
-   back and requests the secret.
-3. Once the secret is transferred the bootstrap server closes, the socket and
+   `mkdtemp` directory (chmod 0700) and writes the socket path to a stable
+   **bootstrap path file** (`.dexbot-cred-bootstrap-path`, mode 0600) in the
+   runtime directory.
+2. The launcher passes `DEXBOT_CRED_BOOTSTRAP_PATH_FILE` (pointing to the
+   path file) to the daemon child process — **not** the socket path directly.
+   This prevents PM2 from persisting the one-shot socket path across restarts.
+3. The daemon reads the env var, **immediately deletes it from `process.env`**,
+   reads the path file, connects to the bootstrap socket, requests the secret,
+   and deletes the path file from disk.
+4. Once the secret is transferred the bootstrap server closes, the socket and
    temp directory are removed, and the bootstrap path becomes unreachable.
-4. Daemon loads `keys.json` into memory, builds the session cache (see §3).
-5. Daemon writes a *ready file* and begins accepting signing requests on the main
+5. Daemon loads `keys.json` into memory, builds the session cache (see §3).
+6. Daemon writes a *ready file* and begins accepting signing requests on the main
    socket. The bootstrap socket no longer exists at this point.
 
 A configurable timeout (default: a few seconds) aborts the entire bootstrap if
@@ -149,14 +153,13 @@ left open indefinitely.
 
 | Request type          | What it does |
 |-----------------------|-------------|
-| `probe-account`       | Confirms an account is available (no key material returned) |
+| `ping`                | Lightweight health check (no session created, no audit log entry) |
+| `probe-account`       | Confirms an account is available and creates a session (no key material returned) |
 | `broadcast-operation` | Signs and broadcasts a single operation; returns result |
 | `execute-operations`  | Signs and broadcasts a batch; returns result |
-| `private-key`         | Legacy compatibility path for older clients |
 
-The primary bot flow only calls `probe-account`, `broadcast-operation`, or
-`execute-operations`. Older clients can still request `private-key` directly
-when they need a compatibility path.
+The daemon **never** exports raw private keys. All signing happens internally;
+callers receive only operation results.
 
 ### Daemon signing token
 
@@ -234,6 +237,15 @@ A stale socket that fails any of these checks is not removed, preventing a
 malicious process from placing a rogue socket at the expected path and having the
 daemon silently unlink it and take over.
 
+### Bootstrap directory cleanup
+
+During stale bootstrap directory cleanup, the code additionally probes any
+`bootstrap.sock` file found inside a temp directory with a short connection
+attempt (`probeBootstrapSocket`, 300ms timeout). If the connection succeeds,
+the socket is live and its parent directory is preserved — even if the directory
+mtime suggests it is stale. This prevents accidentally removing a bootstrap
+directory that is actively being used by a concurrent launcher.
+
 ---
 
 ## 5. Authentication Failure Handling
@@ -297,11 +309,12 @@ development and recovery.
 | HMAC-SHA256 | Vault verifier | Unlock check without storing the password |
 | `crypto.timingSafeEqual` | Verifier comparison | Prevents timing-based password oracle |
 | Batch limit (200) | `execute-operations` | Prevents resource exhaustion |
-| Signing token (no key export) | Bot ↔ daemon IPC | Private key never leaves daemon boundary |
+| Signing token (no key export) | Bot ↔ daemon IPC | Private key never leaves daemon boundary; raw key export removed |
 | `lstat` + owner/mode/type checks | Runtime socket & ready file | Prevents symlink attacks and rogue sockets |
 | 0700 runtime dir / 0600 sockets | Filesystem | OS-level access restriction |
 | Random session salt (not persisted) | Session cache | Memory snapshot from one run is useless in another |
 | One-shot bootstrap socket (mkdtemp 0700, auto-cleanup) | Secret handoff to daemon | Secret is never written to disk; socket destroyed after first use |
-| `delete process.env.DEXBOT_CRED_BOOTSTRAP_SOCKET` | Daemon startup | Socket path cannot be inherited by child processes or read from /proc |
+| `probeBootstrapSocket` (live probe before cleanup) | Bootstrap dir cleanup | Prevents removing a live bootstrap directory |
+| `delete process.env.DEXBOT_CRED_BOOTSTRAP_PATH_FILE` | Daemon startup | Bootstrap path cannot be inherited by child processes or read from /proc |
 | Attempt limit (3) + immediate exit | Interactive auth | Limits online brute-force window |
 | SHA-256 hash deleted after migration | Legacy vault upgrade | Weak verifier removed on first successful unlock |

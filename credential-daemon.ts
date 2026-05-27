@@ -25,10 +25,13 @@
  * - Windows 10+: Supported; earlier Windows not supported
  *
  * REQUEST FORMAT:
- *   {"type": "private-key", "accountName": "account-name"}
+ *   {"type": "ping", "accountName": "account-name"}
+ *   {"type": "probe-account", "accountName": "account-name"}
+ *   {"type": "broadcast-operation", "accountName": "account-name", "operation": {...}}
+ *   {"type": "execute-operations", "accountName": "account-name", "operations": [...]}
  *
  * RESPONSE FORMAT:
- *   Success:  {"success": true, "privateKey": "5K..."}
+ *   Success:  {"success": true, ...}
  *   Failure:  {"success": false, "error": "Error message"}
  *
  * ===============================================================================
@@ -832,13 +835,6 @@ function processRequest(requestStr: string, socket: any) {
             return;
         }
 
-        if (type === 'private-key') {
-            loadCurrentPrivateKey(accountName)
-                .then((privateKey: any) => sendSuccess(socket, { privateKey }))
-                .catch((error: any) => sendError(socket, error.message));
-            return;
-        }
-
         return sendError(socket, `Unknown credential type: ${type}`);
     } catch (error: any) {
         sendError(socket, error.message);
@@ -849,7 +845,7 @@ function processRequest(requestStr: string, socket: any) {
  * Send successful credential response to client.
  * 
  * @param {net.Socket} socket - Client socket
- * @param {Object} data - Response data (e.g., {privateKey: "5K..."})
+ * @param {Object} data - Response data
  */
 function sendSuccess(socket: any, data: any) {
     const response = JSON.stringify({
@@ -884,13 +880,32 @@ function shutdown(exitCode = 0, reason = 'shutdown') {
     daemonShuttingDown = true;
     daemonLogger.log?.(`[credential-daemon] Shutdown requested (${reason}, exitCode=${exitCode})`);
 
-    // Clear derived vault secret from memory
+    // Clear derived vault secret from memory.  Vault and session secrets are
+    // plain objects ({ kind, version, vaultKeyHex }) — not Buffers — so we
+    // iterate their properties, zero any Buffer values, and null everything.
+    // Hex-string properties (vaultKeyHex, sessionSaltHex) are immutable in V8
+    // and cannot be zeroed in place; they will be reclaimed by GC after the
+    // object reference is dropped.
     if (vaultSecret) {
-        if (Buffer.isBuffer(vaultSecret)) vaultSecret.fill(0);
+        if (Buffer.isBuffer(vaultSecret)) {
+            vaultSecret.fill(0);
+        } else if (typeof vaultSecret === 'object') {
+            for (const key of Object.keys(vaultSecret)) {
+                if (Buffer.isBuffer(vaultSecret[key])) vaultSecret[key].fill(0);
+                vaultSecret[key] = null;
+            }
+        }
         vaultSecret = null;
     }
     if (sessionSecret) {
-        if (Buffer.isBuffer(sessionSecret)) sessionSecret.fill(0);
+        if (Buffer.isBuffer(sessionSecret)) {
+            sessionSecret.fill(0);
+        } else if (typeof sessionSecret === 'object') {
+            for (const key of Object.keys(sessionSecret)) {
+                if (Buffer.isBuffer(sessionSecret[key])) sessionSecret[key].fill(0);
+                sessionSecret[key] = null;
+            }
+        }
         sessionSecret = null;
     }
     if (sessionAccountKeys) {

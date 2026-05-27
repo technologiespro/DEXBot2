@@ -164,10 +164,6 @@ function createCredentialClient(options: CredentialClientOptions = {}) {
   return {
     isReady: () => credentialClient.isCredentialDaemonReady({ socketPath, readyFilePath }),
     readyFilePath,
-    requestPrivateKey: (accountName: string, requestOptions: { timeoutMs?: number } = {}) => credentialClient.requestPrivateKeyFromCredentialDaemon(accountName, {
-      socketPath,
-      timeoutMs: requestOptions.timeoutMs
-    }),
     socketPath,
     waitForReady: (timeoutMs?: number) => credentialClient.waitForCredentialDaemon(timeoutMs, {
       pollIntervalMs: options.pollIntervalMs,

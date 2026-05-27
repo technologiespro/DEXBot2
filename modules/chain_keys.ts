@@ -53,13 +53,14 @@
  *  11. saveAccounts(data) - Save accounts to keys.json
  *  12. createVaultSecret(...) - Build a serializable derived secret object
  *
- * DAEMON (3 functions)
+ * DAEMON (4 functions)
  *  10. isDaemonReady() - Check if credential daemon is ready
  *  11. waitForDaemon(timeoutMs) - Wait for daemon to become ready (async)
- *  12. getPrivateKeyFromDaemon(accountName) - Request key via daemon socket (async)
+ *  12. probeAccountInDaemon(accountName) - Probe daemon for account (async)
+ *  13. pingDaemon(accountName) - Lightweight daemon health check (async)
  *
  * ERROR HANDLING (1 error class)
- *  13. MasterPasswordError - Thrown when authentication fails
+ *  14. MasterPasswordError - Thrown when authentication fails
  *
  * ===============================================================================
  *
@@ -1052,21 +1053,6 @@ function sendDaemonRequest(requestType, accountName, timeout = 5000, options = {
 }
 
 /**
- * Request private key from dexbot-cred daemon via Unix socket
- * @param {string} accountName - Name of the account
- * @param {number} timeout - Timeout in milliseconds (default 5000)
- * @param {Object} [options] - Optional socket/ready-file path overrides
- * @returns {Promise<string>} Decrypted private key
- * @throws {Error} If daemon unavailable or request fails
- */
-function getPrivateKeyFromDaemon(accountName, timeout = 5000, options = {}) {
-    return sendDaemonRequest('private-key', accountName, timeout, options, 'request', (response) => {
-        if (response.success) return response.privateKey;
-        throw new Error(response.error || 'Unknown error');
-    });
-}
-
-/**
  * Lightweight daemon health check.  Does NOT create a session or write
  * an audit log entry — used by the credential daemon watchdog and
  * pre-write probes where only liveness matters.
@@ -1118,7 +1104,6 @@ export = {
     isDaemonReady,
     isDaemonResponsive,
     waitForDaemon,
-    getPrivateKeyFromDaemon,
     probeAccountInDaemon,
     pingDaemon,
 };
