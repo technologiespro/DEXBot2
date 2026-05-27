@@ -28,7 +28,7 @@ cargo check --manifest-path dashboard/Cargo.toml
 
 ## Included Actions
 
-- `scripts/check-update.sh`
+- `tsx scripts/update.ts`
 - `scripts/validate_bots.ts`
 - `scripts/analyze-orders.ts`
 - `scripts/analyze-git.ts`

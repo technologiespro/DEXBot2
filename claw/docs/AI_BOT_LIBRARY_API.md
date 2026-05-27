@@ -404,10 +404,16 @@ The bridge exposed by [../modules/claw_bridge.ts](../modules/claw_bridge.ts) sup
 The barrel export in `claw/index.ts` spreads every module into one flat namespace. Several modules define functions with the same name but different semantics. The barrel resolves these collisions with explicit trailing overrides:
 
 | Export name | Source module | Purpose |
-|---|---|---|
+|---|---|---|---|
 | `resolveAccountName` | `chain_queries` | Async lookup — returns the account name string for an ID, or passes through the original name |
 | `resolveSigningAccountName` | `chain_broadcast` | Sync extraction — returns the signing account name string from a context object |
-| `describeZeroClawBridge` | `zeroclaw_manifest` | Returns the ZeroClaw manifest descriptor (runtime name, command examples) |
+| `describeHermesBridge` | `hermesManifest` | Returns the Hermes manifest descriptor |
+| `describeOpenClawBridge` | `openclawManifest` | Returns the OpenClaw manifest descriptor |
+| `describeOpenFangBridge` | `openfangBridge` | Returns the OpenFang bridge descriptor |
+| `describeNanoClawBridge` | `nanoclawBridge` | Returns the NanoClaw bridge descriptor |
+| `describeNullClawBridge` | `nullclawManifest` | Returns the NullClaw manifest descriptor |
+| `describeZeroClawBridge` | `zeroclawManifest` | Returns the ZeroClaw manifest descriptor (runtime name, command examples) |
+| `describeMemuBridge` | `memuBridge` | Returns the memU bridge descriptor |
 
 When consuming `claw/index.ts` as a library, use the disambiguated names above. The non-prefixed `resolveAccountName` and `describeZeroClawBridge` point to the query/manifest variants by default.
 

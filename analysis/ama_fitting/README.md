@@ -9,10 +9,10 @@ parameters into `profiles/market_profiles.json` for the market adapter.
 ## Workflow Overview
 
 ```
-1. fetch_lp_candles.js   →   market_adapter/data/<pool>_1h.json
-2. optimizer_high_resolution.js   →   optimization_results_*.json
-                                  →   profiles/market_profiles.json  (only with --write-profiles)
-3. scripts/generate_lp_chart.js   →   market chart + comparison chart  (visual review)
+1. fetch_lp_candles.ts   →   market_adapter/data/<pool>_1h.json
+2. optimizer_high_resolution.ts   →   optimization_results_*.json
+                                   →   profiles/market_profiles.json  (only with --write-profiles)
+3. scripts/generate_lp_chart.ts   →   market chart + comparison chart  (visual review)
    - LP chart: `npm run lp:chart -- --data <lp-export.json>`
    - Local LP comparison alias: `npm run ama:chart:lp-local -- --data <lp-export.json>`
 ```
@@ -21,7 +21,7 @@ parameters into `profiles/market_profiles.json` for the market adapter.
 
 ## Step 1 — Fetch LP Candles
 
-`fetch_lp_candles.js` fetches bidirectional LP swap data from Kibana and saves
+`fetch_lp_candles.ts` fetches bidirectional LP swap data from Kibana and saves
 a full uncut candle file. Uses the same `kibana_source` as the market adapter
 bootstrap (gaps filled via `candle_utils.fillCandleGaps`), but without pruning.
 
@@ -35,7 +35,7 @@ bootstrap (gaps filled via `candle_utils.fillCandleGaps`), but without pruning.
 
 **`<ASSET_A>`/`<ASSET_B>` pool (3 years):**
 ```bash
-node analysis/ama_fitting/fetch_lp_candles.js \
+tsx analysis/ama_fitting/fetch_lp_candles.ts \
   --pool 1.19.133 \
   --assetA <ASSET_A> --assetAId <asset_a_id> --assetAPrecision <n> \
   --assetB <ASSET_B>     --assetBId <asset_b_id>    --assetBPrecision <n> \
@@ -62,7 +62,7 @@ Output: `market_adapter/data/lp/<pair_folder>/lp_pool_<poolShort>_<interval>.jso
 
 ## Step 2 — Run the Optimizer
 
-`optimizer_high_resolution.js` runs a parallel geometric grid search over
+`optimizer_high_resolution.ts` runs a parallel geometric grid search over
 ER × Fast × Slow combinations. Produces four AMA winners (AMA1–AMA4) using
 different distance-cap quantiles and writes results to a JSON file.
 
@@ -72,13 +72,13 @@ to `profiles/market_profiles.json`.
 
 **Run on the fetched LP data:**
 ```bash
-node analysis/ama_fitting/optimizer_high_resolution.js \
+tsx analysis/ama_fitting/optimizer_high_resolution.ts \
   --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json
 ```
 
 **Export winners to the market adapter profile file:**
 ```bash
-node analysis/ama_fitting/optimizer_high_resolution.js \
+tsx analysis/ama_fitting/optimizer_high_resolution.ts \
   --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
   --write-profiles
 ```
@@ -93,7 +93,7 @@ node analysis/ama_fitting/optimizer_high_resolution.js \
 
 Override ranges via CLI:
 ```bash
-node analysis/ama_fitting/optimizer_high_resolution.js \
+tsx analysis/ama_fitting/optimizer_high_resolution.ts \
   --data market_adapter/data/lp/<pair>/lp_pool_<id>_<interval>.json \
   --erMin 100 --erMax 600 \
   --slowMin 800 --slowMax 6000
@@ -160,7 +160,7 @@ This generates both:
 - `analysis/charts/lp_chart_1h_UNIFIED_COMPARISON.html` — unified comparison chart, with the interval derived from LP metadata
 
 Under the hood, LP-data chart generation now delegates into the shared runner in
-`market_adapter/lp_chart_runner.js`. The analysis script keeps only:
+`market_adapter/lp_chart_runner.ts`. The analysis script keeps only:
 - the local LP comparison mode used for analysis-only review
 
 Local LP comparison entrypoint:

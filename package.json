@@ -1,7 +1,7 @@
 {
   "name": "dexbot2",
   "version": "0.7.5",
-  "description": "A sophisticated market making bot for the BitShares Decentralized Exchange (DEX), implementing optimized staggered order strategies for automated trading.",
+  "description": "The first open source trading bot with zero runtime dependencies and a fully adaptive market making strategy.",
   "main": "dist/modules/chain_orders.js",
   "bin": {
     "dexbot": "./dist/dexbot.js",

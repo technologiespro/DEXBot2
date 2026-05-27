@@ -156,11 +156,7 @@ bash scripts/git-viewer.sh
 ## 💻 DEVELOPMENT UTILITIES
 
 ### Test Suite Setup
-**File:** `dev-install.sh`
-**Purpose:** Install Jest, ESLint, and other dev-only dependencies.
-```bash
-bash scripts/dev-install.sh
-```
+Tests run with native Node `assert` — no test framework needed. See [tests/README.md](../tests/README.md) for details.
 
 ---
 

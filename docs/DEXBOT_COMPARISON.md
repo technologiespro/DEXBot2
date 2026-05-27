@@ -44,7 +44,7 @@
 | **Primary Goal** | Multi-strategy, extensible trading framework | Hardened adaptive grid runtime with operator/AI tooling |
 | **Target Exchange** | BitShares DEX | BitShares DEX |
 | **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large JS codebase; core runtime, adapter, analysis, Claw, and test modules |
-| **Source Files** | 72 Python files in `dexbot/` | 424 JS/TS files across the repo |
+| **Source Files** | 72 Python files in `dexbot/` | 1012 TS files across the repo |
 
 ### Summary
 
@@ -69,7 +69,7 @@ DEXBot2 is a ground-up rewrite in TypeScript that prioritizes production correct
 | **External APIs** | CoinGecko, CCXT, Waves | No CEX APIs; adapter can consume on-chain/pool/Kibana candle inputs |
 | **Container** | Docker (Ubuntu 18.04) | Docker (multi-stage) |
 | **Dashboard** | PyQt5 GUI | CLI/PM2 logs; Claw/runtime automation surface |
-| **Testing** | pytest + Docker testnet | Native Node assert (190 `test_*.ts` files; 100 entries in `scripts/run-tests.ts`) |
+| **Testing** | pytest + Docker testnet | Native Node assert (172 `test_*.ts` files; 101 entries in `scripts/run-tests.ts`) |
 | **CI/CD** | Travis CI, AppVeyor | GitHub Actions / local deterministic script suite |
 | **Packaging** | PyInstaller (Win/Mac/Linux binaries) | npm / PM2 ecosystem |
 
@@ -601,7 +601,7 @@ Where:
 ### DEXBot2
 
 - **Framework:** Native Node `assert` module (no external test framework)
-- **190 `test_*.ts` files** in the repository, with **100 entries in `scripts/run-tests.ts`** covering:
+- **172 `test_*.ts` files** in the repository, with **101 entries in `scripts/run-tests.ts`** covering:
   - Unit tests: accounting, strategy, grid, manager logic
   - Copy-on-Write semantics: COW commits, guards, concurrent fills
   - Edge cases: ghost orders, partial fills, BTS fee accounting, precision
@@ -619,7 +619,7 @@ Where:
 | Feature | DEXBot | DEXBot2 |
 |---|---|---|
 | **Framework** | pytest | Native Node assert |
-| **Test Count** | 16 Python test files | 190 `test_*.ts` files; 100 entries in `scripts/run-tests.ts` |
+| **Test Count** | 16 Python test files | 172 `test_*.ts` files; 101 entries in `scripts/run-tests.ts` |
 | **Test Types** | Unit + integration | Unit + integration + edge-case + runtime regression |
 | **Testnet Integration** | Yes (Docker) | No (mocks) |
 | **External Dependency** | pytest, Docker | None |
@@ -654,7 +654,7 @@ Where:
 | `docs/EVOLUTION.md` | 18 KB | Project history, 3-phase development |
 | `docs/LOGGING.md` | 21 KB | Logging categories and configuration |
 | `docs/WORKFLOW.md` | 7 KB | Branch strategy, commit standards |
-| `docs/TEST_UPDATES_SUMMARY.md` | 14 KB | Test suite coverage and improvements |
+| `tests/TEST_UPDATES_SUMMARY.md` | 14 KB | Test suite coverage and improvements |
 | `docs/GRID_RECALCULATION.md` | 11 KB | Three independent grid recalculation triggers |
 | `docs/COW_INVARIANTS.md` | 4 KB | Non-negotiable COW behavioral invariants |
 | `docs/CREDENTIAL_SECURITY.md` | 8 KB | Credential daemon, key policy, and security model |
@@ -665,12 +665,12 @@ Where:
 | `claw/docs/RUNTIME_COMPARISON.md` | — | Claw runtime comparison |
 | `dashboard/README.md` | — | Dashboard overview |
 | `dashboard/tui_dashboard_spec.md` | — | TUI dashboard specification |
-| `docs/TYPESCRIPT_MIGRATION_ANALYSIS.md` | 23 KB | Future TypeScript migration roadmap |
+| ~~`docs/TYPESCRIPT_MIGRATION_ANALYSIS.md`~~ | ~~23 KB~~ | ~~Removed — migration complete~~ |
 | `docs/crash_report_jan_mar_2026.md` | 7 KB | Production incident analysis |
 | `docs/docker.md` | 3 KB | Docker deployment guide |
 | `docs/README.md` | 2 KB | Docs index |
 | `AGENTS.md` | 6.5 KB | AI development context |
-| `CHANGELOG.md` | Very large | Full version history (1407 commits at current HEAD) |
+| `CHANGELOG.md` | Very large | Full version history (1424 commits at current HEAD) |
 
 ### Documentation Comparison
 
@@ -768,10 +768,10 @@ Where:
 | **Release Track** | 1.0.0 | v0.7.5 |
 | **Active Since** | ~2018 | December 2025 |
 | **Last Commit** | May 23, 2020 | 2026-05-25 |
-| **Total Commits** | 2281 | 1407 at current HEAD |
+| **Total Commits** | 2281 | 1424 at current HEAD |
 | **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large JS runtime + adapter + Claw + analysis + tests |
-| **Source Files** | 72 Python files in `dexbot/` | 424 JS/TS files across the repo |
-| **Test Files** | 16 Python test files | 190 `test_*.ts` files |
+| **Source Files** | 72 Python files in `dexbot/` | 1012 TS files across the repo |
+| **Test Files** | 16 Python test files | 172 `test_*.ts` files |
 | **Documentation** | Sphinx docs + README | 30+ Markdown docs plus Claw skills/references |
 | **Strategies** | 3 + plugins | 1 |
 | **Max Concurrent Bots** | Many (one process) | Many (one process per bot, PM2) |
@@ -857,4 +857,4 @@ The practical migration path is to treat DEXBot2 as a new runtime: recreate bot 
 
 ---
 
-*Report generated 2026-05-13. Metrics refreshed 2026-05-26 from local DEXBot-master and DEXBot2 source trees.*
+*Report generated 2026-05-13. Metrics refreshed 2026-05-27 from local DEXBot-master and DEXBot2 source trees.*

@@ -253,7 +253,7 @@ for (let i = 0; i < 5; i++) {
 }
 
 // ✅ CORRECT - Quantized to precision
-const { quantizeFloat } = require('./modules/order/utils/math');
+import { quantizeFloat } from '../order/utils/math';
 const sizes = [];
 const precision = 8;
 const base = 0.995;
@@ -269,7 +269,7 @@ for (let i = 0; i < 5; i++) {
 ### Import Pattern
 
 ```javascript
-const { quantizeFloat, normalizeInt } = require('../order/utils/math');
+import { quantizeFloat, normalizeInt } from '../order/utils/math';
 
 // Quantize a float value (e.g., 45.123456789 → 45.12345679)
 const correctedPrice = quantizeFloat(derivedPrice, 8);

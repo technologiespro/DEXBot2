@@ -1,6 +1,6 @@
 # DEXBot2 TUI Dashboard Spec (Ratatui + Crossterm)
 
-> **Status (March 2026):** PLANNED — Dashboard scaffolding was started in Feb 2026 but implementation is not yet complete. This spec remains the target design.
+> **Status:** IMPLEMENTED — Dashboard is implemented in Rust (ratatui + crossterm) under `dashboard/src/`. This spec documents the target design.
 
 ## Purpose
 
@@ -66,7 +66,6 @@ Badges shown in list/detail views:
 Maintenance:
 
 - `tsx scripts/update.ts`
-- `bash scripts/check-update.sh`
 - `bash scripts/create-bot-symlinks.sh`
 
 Diagnostics:

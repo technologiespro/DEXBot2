@@ -59,7 +59,6 @@ Tests for order lifecycle: placement, open order tracking, and fill processing.
 
 *   `test_open_orders.ts` - Tests retrieval and management of open orders.
 *   `test_fills.ts` - interactive test for processing order fills.
-*   `test_fill_queue_logic.ts` - Verifies the logic for the fill processing queue.
 *   `test_trade_history.ts` - Tests retrieval of account trade history.
 *   `test_blockchain_fill_history.ts` - Verifies fill history against blockchain data.
 
@@ -68,14 +67,9 @@ Tests for the core trading strategies, specifically the grid logic.
 
 *   `test_order_grid.ts` - Core grid order generation and logic.
 *   `test_grid_comparison.ts` - Compares different grid strategy configurations.
-*   `test_grid_funding_manual.ts` - Tests manual funding scenarios for grids.
-*   `test_rebalance_orders.ts` - Tests logic for rebalancing orders within a grid.
 *   `test_rotation_order_sizing.ts` - Verifies order sizing logic for rotation strategies.
 *   `test_rotation_available_funds.ts` - Tests available-funds budget in rotation strategies.
-*   `test_conditional_rotation.ts` - Tests conditional rotation logic.
-*   `test_crossed_rotation.ts` - Tests scenarios where rotation orders might cross.
 *   `test_strategy_edge_cases.ts` - Tests various edge cases in strategy execution.
-*   `test_templates_ordering.ts` - Verifies correct ordering of order templates.
 
 ### 6. Fees & Accounting
 Tests for fee calculations, fund management, and asset precision.
@@ -83,18 +77,13 @@ Tests for fee calculations, fund management, and asset precision.
 *   `test_funds.ts` - specific tests for fund management logic.
 *   `test_fee_cache.ts` - Tests the fee caching mechanism.
 *   `test_fee_cache_twentix.ts` - Fee caching tests specific to complex assets (e.g. Twentix).
-*   `test_fee_refinement.ts` - Tests refinement of fee calculations.
 *   `test_market_fee_deduction.ts` - Verifies deduction of market fees from orders.
-*   `test_fix_proceeds_fee_deduction.ts` - Verification for proceeds fee deduction logic.
 
 ### 7. Integration & Workflows
 Complex tests that simulate larger workflows or system integration.
 
 *   `test_engine_integration.ts` - Integration tests for the core engine.
 *   `test_market_scenarios.ts` - Realistic market simulation (Pumps, Dumps, V-Shape recovery).
-*   `test_anchor_refill_integration.ts` - Integration tests for the anchor refill mechanism.
-*   `test_anchor_refill_endtoend.ts` - End-to-end tests for anchor refill.
-*   `test_anchor_refill_strategy.ts` - Strategy logic tests for anchor refill.
 *   `test_integration_partial_complex.ts` - Tests complex partial fill integration.
 *   `test_integration_pending_proceeds.ts` - Integration tests for pending proceeds handling.
 *   `test_startup_reconcile.ts` - Tests the reconciliation process at bot startup.

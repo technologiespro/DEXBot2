@@ -67,16 +67,11 @@ When a trend signal is available, the assessor checks whether the position direc
 
 ## CR Adjustment Planning
 
-The `planCrAdjustment()` function now delegates to the shared planner in `modules/cr_planner.ts` so Claw and the debt runtime use the same CR math:
+CR math is handled by the shared planner at `modules/cr_planner.ts` (root level, not claw), which provides `debtDeltaForTargetCr()` and `collateralDeltaForTargetCr()`. Claw's position health module consumes these through the planner interface. Any executed CR adjustment should be followed by a grid rebuild, because the available-funds baseline is no longer valid after the debt or collateral leg changes.
 
-- `debtDeltaForTargetCr()` — how much debt to add or remove to reach target CR.
-- `collateralDeltaForTargetCr()` — how much collateral to add or remove to reach target CR.
-- The shared plan picks a primary action (debt first) and a fallback action (collateral second).
-- Any executed CR adjustment should be followed by a grid rebuild, because the available-funds baseline is no longer valid after the debt or collateral leg changes.
+## Decision Loop Planning
 
-## Margin Trading Plan
-
-`buildMarginTradingPlan()` combines all signals into a unified plan:
+The decision loop in `modules/decision_loop.ts` combines all signals into a unified assessment:
 
 - CR adjustment intent (debt first, collateral second)
 - grid price offset percentage derived from trend direction and confidence
@@ -120,7 +115,7 @@ npm run service:position-watch -- --account your-account
 
 The executable behavior lives in the modules. This document should be kept aligned with:
 
-- `modules/cr_planner.ts`
+- `../cr_planner.ts` (root level)
 - `modules/position_health.ts`
 - `modules/position_discovery.ts`
 - `modules/decision_loop.ts`

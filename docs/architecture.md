@@ -1052,22 +1052,22 @@ graph LR
     end
 
     subgraph "Persisted State"
-        ACCOUNT_JSON[account.json<br/>Grid snapshot<br/>feesOwed, boundaryIdx]
+        ORDERS_JSON[<botKey>.json<br/>Grid snapshot<br/>feesOwed, boundaryIdx, btsBalance]
         BOTS_JSON[bots.json<br/>Bot config]
     end
 
-    ORDERS --> ACCOUNT_JSON
-    FUNDS --> ACCOUNT_JSON
+    ORDERS --> ORDERS_JSON
+    FUNDS --> ORDERS_JSON
 
-    ACCOUNT_JSON -.->|Load on startup| ORDERS
-    ACCOUNT_JSON -.->|Load on startup| FUNDS
+    ORDERS_JSON -.->|Load on startup| ORDERS
+    ORDERS_JSON -.->|Load on startup| FUNDS
 
     BOTS_JSON -.->|Load on startup| CONFIG[Bot Config]
 ```
 
 ### Persistence Strategy
 
-- **Grid state**: Persisted after every rebalance to `account.json`
+- **Grid state**: Persisted after every rebalance to `<botKey>.json` in `profiles/orders/`
 - **Fund state**: Available funds derived from blockchain balances at runtime (no separate persistence needed)
 - **Retry logic**: 3 attempts with exponential backoff
 - **Graceful degradation**: Bot continues if persistence fails (in-memory only)

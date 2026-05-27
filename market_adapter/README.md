@@ -86,10 +86,10 @@ cause abrupt grid-center changes.
 
 ### Empirical Divergence Risk Management
 
-The adapter uses tiered clamping thresholds to manage inventory risk during extreme price divergence from the AMA trend center. These thresholds are derived from historical pool volatility and replace static 'fit cap' multipliers. The specific clamping limits and exit parameters are calculated per pair and preset using:
+The adapter uses tiered clamping thresholds to manage inventory risk during extreme price divergence from the AMA trend center. These thresholds are derived from historical pool volatility and replace static 'fit cap' multipliers. The specific clamping limits and exit parameters are calculated per pair and preset using the AMA fitting toolchain:
 
 ```bash
-tsx analysis/ama_fitting/calculate_clamping_limits.ts
+tsx analysis/ama_fitting/optimizer_high_resolution.ts --data <lp-file.json>
 ```
 
 Source: pool 133 `IOB.XRP/BTS`, 1h candles, 2023-05-05 22:00 UTC through
@@ -447,7 +447,6 @@ market_adapter/
 |   `-- fetch_lp_data.ts           historical LP candle exporter
 |-- utils/
 |   |-- chain.ts                   blockchain query helpers
-|   |-- ws_client.ts               lightweight BitShares WebSocket client
 |   |-- adapter_client.ts          inter-process credential daemon client
 |   |-- native_history.ts          native BitShares market history fetch
 |   |-- file_lock.ts               single-instance file lock

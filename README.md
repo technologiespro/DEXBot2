@@ -1,6 +1,6 @@
 # DEXBot2
 
-DEXBot2 is a grid-based market maker for the BitShares decentralized exchange.
+DEXBot2 is the first open source trading bot with zero runtime dependencies and a fully adaptive market making strategy.
 
 <p align="center">
   <img src="docs/media/DEXBot2.webp" alt="DEXBot2 hero banner" width="1200">

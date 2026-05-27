@@ -88,8 +88,7 @@ and mutates an order object in-place). The COW layer provides the transactional 
 ## Implementation Status
 
 ### Phase 0: Dependencies ✅
-- Created `modules/order/utils/order_comparison.ts` - Epsilon-based order comparison
-- Created `modules/order/utils/grid_indexes.ts` - Index building utilities (used by WorkingGrid)
+- *(Dependency utilities were merged into `modules/order/utils/order.ts` during v0.6.0-patch.19 consolidation)*
 
 ### Phase 1: Infrastructure ✅
 - Created `modules/order/working_grid.ts` - WorkingGrid class
@@ -401,8 +400,7 @@ NEW FILL ARRIVES
 
 ## Files Created
 
-- `modules/order/utils/order_comparison.ts` - Epsilon-based order comparison, delta building
-- `modules/order/utils/grid_indexes.ts` - Index building and validation utilities
+- *(Consolidated into `modules/order/utils/order.ts` during v0.6.0-patch.19)*
 - `modules/order/working_grid.ts` - WorkingGrid class (COW wrapper with clone/delta/stale tracking)
 - `tests/test_cow_master_plan.ts` - Core COW tests
 - `tests/test_cow_commit_guards.ts` - Commit guard regression tests

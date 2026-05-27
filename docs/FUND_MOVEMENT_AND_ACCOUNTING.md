@@ -582,10 +582,9 @@ For BTS fees, the system returns a structured object (not a simple number) with 
 getAssetFees('BTS', amount)
 // Returns:
 {
-    total: 500,              // Old field: total fee (preserved for compatibility)
-    createFee: 500,          // Old field: single create fee (preserved)
-    netFee: 450,             // Old field: net fee after processing
-    netProceeds: 45500,      // proceeds after fee deduction
+    netProceeds: 45500,      // proceeds after fee deduction (amount + refund)
+    total: 45500,            // aliased to netProceeds for downstream use
+    refund: 450,             // maker refund amount (0 for taker)
     isMaker: true            // Flag: is this a maker fee?
 }
 ```
@@ -695,7 +694,7 @@ For BUY orders that are makers:
 
 ### 5.5.1 Core Quantization Functions
 
-**Location**: `modules/order/utils/math.ts` (lines 77-102)
+**Location**: `modules/order/utils/math.ts` (line 235)
 
 #### `quantizeFloat(value, precision)` - Eliminate Accumulation Errors
 

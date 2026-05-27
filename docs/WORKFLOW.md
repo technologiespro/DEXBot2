@@ -86,13 +86,7 @@ git push origin v0.X.Y
 
 ## Current Branch Status
 
-| Branch | Commits Ahead | Remote Sync |
-|--------|---|--------|
-| test | 100 | ✓ Synced with origin/test |
-| dev | 100 | ✓ Synced with origin/dev |
-| main | - | Separate release channel |
-
-**Status**: All branches synchronized and ready for development (Jan 10, 2026).
+Run `git branch -vv` and `git log --oneline main..test | wc -l` / `git log --oneline main..dev | wc -l` for live commit counts.
 
 ## Architectural Safety: Copy-on-Write
 
@@ -143,7 +137,7 @@ git branch -vv
 echo "test:" && git log --oneline main..test | wc -l
 echo "dev:" && git log --oneline main..dev | wc -l
 
-# Both should show the same number (currently 100)
+# Both should show the same number
 ```
 
 ### Sync test with dev

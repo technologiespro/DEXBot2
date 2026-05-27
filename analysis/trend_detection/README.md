@@ -1,6 +1,6 @@
 # Trend Detection
 
-This folder contains the AMA, Kalman, Hurst, Permutation Entropy, and regime analysis code used by the analysis runners. The legacy SMA/MACD/RSI derivative signal layer is in `derivative_analyzer.js`.
+This folder contains the AMA, Kalman, Hurst, Permutation Entropy, and regime analysis code used by the analysis runners. The legacy SMA/MACD/RSI derivative signal layer is in `derivative_analyzer.ts`.
 
 ## Docs
 
@@ -13,12 +13,12 @@ This folder contains the AMA, Kalman, Hurst, Permutation Entropy, and regime ana
 
 ## Modules
 
-- `derivative_analyzer.js`
-- `dynamic_weight_chart_generator.js`
-- `hurst_analyzer.js`
-- `kalman_chart_generator.js`
-- `kalman_trend_analyzer.js`
-- `kalman_velocity_smoothing.js`
-- `permutation_entropy_analyzer.js`
-- `regime_chart_generator.js`
-- `volatility_chart_generator.js`
+- `derivative_analyzer.ts`
+- `dynamic_weight_chart_generator.ts`
+- `hurst_analyzer.ts`
+- `kalman_chart_generator.ts`
+- `kalman_trend_analyzer.ts`
+- `kalman_velocity_smoothing.ts`
+- `permutation_entropy_analyzer.ts`
+- `regime_chart_generator.ts`
+- `volatility_chart_generator.ts`

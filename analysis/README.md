@@ -192,7 +192,7 @@ AMA parameter optimization and comparison tools.
 
 | Script | Purpose |
 |--------|---------|
-| `ama.ts` | Kaufman Adaptive Moving Average implementation |
+| *(in `market_adapter/core/strategies/`)* | Kaufman Adaptive Moving Average implementation |
 | `optimizer_high_resolution.ts` | AMA parameter optimizer (erPeriod, fast/slow bounds) |
 | `generate_unified_comparison_chart.ts` | AMA comparison chart across multiple parameter sets |
 | `analyze_ama_price_changes.ts` | AMA price-change analysis |

@@ -1,6 +1,6 @@
 # Claw Runtime Comparison
 
-This note compares the eight runtime families supported by the Claw bridge layer:
+This note compares the nine runtime families supported by the Claw bridge layer (the eight listed below plus memU):
 
 - OpenClaw
 - Hermes
@@ -47,7 +47,7 @@ Strengths:
 
 - Richest runtime surface.
 - Native plugin model is a strong fit for extension-heavy workflows.
-- Broadest assistant-style experience among the seven.
+- Broadest assistant-style experience among the eight core runtimes (excluding memU).
 - Best when the bridge needs to live inside a feature-rich product rather than a small runtime shim.
 
 Tradeoffs:
