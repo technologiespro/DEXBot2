@@ -1,5 +1,12 @@
 #!/usr/bin/env node
-// Stable shim — routes to compiled dist/scripts/update.js
-// TypeScript source: scripts/update.ts
+// Shim: prefers compiled dist/scripts/update.js, falls back to tsx for direct TS execution
 'use strict';
-require('../dist/scripts/update');
+const fs = require('fs');
+const path = require('path');
+const distTarget = path.join(__dirname, '..', 'dist', 'scripts', 'update.js');
+if (fs.existsSync(distTarget)) {
+  require(distTarget);
+} else {
+  require('tsx').register();
+  require('./update.ts');
+}

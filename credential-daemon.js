@@ -1,5 +1,12 @@
 #!/usr/bin/env node
-// Stable shim — routes to compiled dist/credential-daemon.js
-// TypeScript source: credential-daemon.ts
+// Shim: prefers compiled dist/credential-daemon.js, falls back to tsx for direct TS execution
 'use strict';
-require('./dist/credential-daemon');
+const fs = require('fs');
+const path = require('path');
+const distTarget = path.join(__dirname, 'dist', 'credential-daemon.js');
+if (fs.existsSync(distTarget)) {
+  require(distTarget);
+} else {
+  require('tsx').register();
+  require('./credential-daemon.ts');
+}

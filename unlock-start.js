@@ -1,5 +1,12 @@
 #!/usr/bin/env node
-// Stable shim — routes to compiled dist/unlock-start.js
-// TypeScript source: unlock-start.ts
+// Shim: prefers compiled dist/unlock-start.js, falls back to tsx for direct TS execution
 'use strict';
-require('./dist/unlock-start');
+const fs = require('fs');
+const path = require('path');
+const distTarget = path.join(__dirname, 'dist', 'unlock-start.js');
+if (fs.existsSync(distTarget)) {
+  require(distTarget);
+} else {
+  require('tsx').register();
+  require('./unlock-start.ts');
+}
