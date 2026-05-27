@@ -234,9 +234,31 @@ function createSubscriptionManager(chainClient: any): any {
         }
 
         if (fillObjects.length === 0) {
+            // No fills in this notice — skip the full history scan for subs whose
+            // cursor already covers the notice data. This avoids redundant RPCs
+            // (get_full_accounts + get_account_history) on frequent non-fill notices.
+            let noticeMaxInstance = -1;
+            let hasHistoryEntries = false;
+            for (const item of data) {
+                if (!item || typeof item !== 'object') continue;
+                const id = item.id;
+                if (typeof id !== 'string' || !id.startsWith('1.11.')) continue;
+                hasHistoryEntries = true;
+                const inst = parseObjectIdInstance(id);
+                if (Number.isFinite(inst) && inst > noticeMaxInstance) {
+                    noticeMaxInstance = inst;
+                }
+            }
             const scans = [];
             for (const [, sub] of subscriptions) {
                 if (!sub.active) continue;
+                // Only skip when the notice contains 1.11.x history IDs that we can
+                // compare against the cursor. Core object-change notices (bare 1.7.x
+                // order IDs) have no 1.11.x entries — always scan those.
+                if (hasHistoryEntries) {
+                    const subCursorInstance = parseObjectIdInstance(sub.lastDeliveredHistoryId);
+                    if (Number.isFinite(subCursorInstance) && Number.isFinite(noticeMaxInstance) && subCursorInstance >= noticeMaxInstance) continue;
+                }
                 scans.push(processObjects(sub, data));
             }
             await Promise.all(scans);
@@ -255,13 +277,17 @@ function createSubscriptionManager(chainClient: any): any {
             // Compute cursor for this batch but do NOT advance until callbacks succeed.
             // On failure the cursor stays unchanged so the next processObjects scan
             // (triggered by the next notice or reconnect) will re-fetch these fills.
+            // Scan ALL notice entries (not just fills) to prevent re-fetching non-fill
+            // operations on subsequent processObjects scans. Non-fill ops may have
+            // higher IDs than fills in the same block.
             let latestId: string | null = null;
             let latestInstance = -1;
-            for (const fill of subFills) {
-                const inst = parseObjectIdInstance(fill.id);
+            for (const item of data) {
+                if (!item || typeof item !== 'object') continue;
+                const inst = parseObjectIdInstance(item.id);
                 if (Number.isFinite(inst) && inst > latestInstance) {
                     latestInstance = inst;
-                    latestId = fill.id;
+                    latestId = item.id;
                 }
             }
 
@@ -308,24 +334,30 @@ function createSubscriptionManager(chainClient: any): any {
         }
 
         try {
-            const accData = await fetchFullAccountWithRetry(sub, false);
-            if (!accData) {
-                console.warn(`[subscriptions] processObjects: get_full_accounts returned no data for ${sub.accountName}`);
-                if (options.throwOnError) {
-                    throw new Error('get_full_accounts returned no account data');
-                }
-                return;
-            }
-            const accountId = accData.account?.id || sub.accountId;
+            // Skip get_full_accounts (heavy RPC) when accountId is already known.
+            // All callers (handleNotice, resubscribeEntry, resubscribeAll) either
+            // set it during subscribe or refresh it in their preamble.
+            let accountId = sub.accountId;
             if (!accountId) {
-                console.warn(`[subscriptions] processObjects: no account id after fetch for ${sub.accountName}`);
-                if (options.throwOnError) {
-                    throw new Error('get_full_accounts returned no account id');
+                const accData = await fetchFullAccountWithRetry(sub, false);
+                if (!accData) {
+                    console.warn(`[subscriptions] processObjects: get_full_accounts returned no data for ${sub.accountName}`);
+                    if (options.throwOnError) {
+                        throw new Error('get_full_accounts returned no account data');
+                    }
+                    return;
                 }
-                return;
+                accountId = accData.account?.id || sub.accountId;
+                if (!accountId) {
+                    console.warn(`[subscriptions] processObjects: no account id after fetch for ${sub.accountName}`);
+                    if (options.throwOnError) {
+                        throw new Error('get_full_accounts returned no account id');
+                    }
+                    return;
+                }
+                sub.accountId = accountId;
+                sub.statisticsId = accData.account?.statistics || sub.statisticsId || null;
             }
-            sub.accountId = accountId;
-            sub.statisticsId = accData.account?.statistics || sub.statisticsId || null;
 
             if (!sub.lastDeliveredHistoryId) {
                 sub.lastDeliveredHistoryId = await primeLastDeliveredHistoryId(sub);
@@ -590,18 +622,21 @@ function createSubscriptionManager(chainClient: any): any {
     async function resubscribeAll() {
         // Refresh account data for every active entry first (before any RPC calls
         // that might race with each other on the same connection).
+        const refreshTasks: Promise<void>[] = [];
         for (const [, entry] of subscriptions) {
             if (!entry.active) continue;
-            try {
-                const accounts = await chainClient.db.get_full_accounts([entry.accountName], true);
-                if (accounts && accounts[0] && accounts[0][1] && accounts[0][1].account) {
-                    entry.accountId = accounts[0][1].account.id;
-                    entry.statisticsId = accounts[0][1].account.statistics || null;
-                }
-            } catch (err: any) {
-                console.warn('[subscriptions] Failed to refresh account data for', entry.accountName, err.message);
-            }
+            refreshTasks.push(
+                chainClient.db.get_full_accounts([entry.accountName], true).then((accounts: any) => {
+                    if (accounts && accounts[0] && accounts[0][1] && accounts[0][1].account) {
+                        entry.accountId = accounts[0][1].account.id;
+                        entry.statisticsId = accounts[0][1].account.statistics || null;
+                    }
+                }).catch((err: any) => {
+                    console.warn('[subscriptions] Failed to refresh account data for', entry.accountName, err.message);
+                })
+            );
         }
+        await Promise.all(refreshTasks);
 
         // Centralized subscription setup — one set_subscribe_callback + re-subscribe all.
         const refreshFailures = await refreshSubscriptions();
@@ -610,20 +645,21 @@ function createSubscriptionManager(chainClient: any): any {
             scheduleReconnectRetry(failure.entry, failure.err);
         }
 
-        // Catch-up scan for each entry.
+        // Catch-up scan for each entry (parallelized for multi-account setups).
+        const scanTasks: Promise<void>[] = [];
         for (const [, entry] of subscriptions) {
             if (!entry.active) continue;
             if (refreshFailureEntries.has(entry)) continue;
-            try {
-                await processObjects(entry, [entry.accountId], {
-                    throwOnError: true,
-                });
-                clearReconnectRetry(entry);
-            } catch (err: any) {
-                console.warn('[subscriptions] Failed to resubscribe', entry.accountName, err.message);
-                scheduleReconnectRetry(entry, err);
-            }
+            scanTasks.push(
+                processObjects(entry, [entry.accountId], { throwOnError: true })
+                    .then(() => clearReconnectRetry(entry))
+                    .catch((err: any) => {
+                        console.warn('[subscriptions] Failed to resubscribe', entry.accountName, err.message);
+                        scheduleReconnectRetry(entry, err);
+                    })
+            );
         }
+        await Promise.all(scanTasks);
     }
 
     async function onReconnect() {
