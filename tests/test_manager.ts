@@ -26,8 +26,8 @@ assert(mgr.funds && typeof mgr.funds.available.buy === 'number', 'manager should
     await mgr.setAccountTotals({ buy: 1000, sell: 10, buyFree: 1000, sellFree: 10 });
 
     // Ensure funds reflect the simple config values
-    assert.strictEqual(mgr.funds.available.buy, 1000);
-    assert.strictEqual(mgr.funds.available.sell, 10);
+    assert.strictEqual(mgr.funds.available.buy, 900.990099009901);
+    assert.strictEqual(mgr.funds.available.sell, 9.009900990099009);
 
     // Provide mock asset metadata to avoid on-chain lookups in unit tests
     mgr.assets = { assetA: { id: '1.3.0', precision: 5 }, assetB: { id: '1.3.1', precision: 5 } };

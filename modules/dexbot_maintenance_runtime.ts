@@ -1574,6 +1574,7 @@ async function checkBtsBalanceAndAcquire() {
         `Acquiring ${Format.formatAmount8(deficit)} BTS (target: ${Format.formatAmount8(target)})`,
         'info'
     );
+    _lastBtsAcquisitionTimestamps.set(botKey, Date.now());
     await acquireBts.call(this, deficit);
 }
 
@@ -1609,10 +1610,11 @@ async function acquireBts(deficit) {
 
             const assetReserve = blockchainToFloat(assetReserveRaw, asset.precision);
             const btsReserve = blockchainToFloat(btsReserveRaw, BTS_PRECISION);
+            const expectedReceive = Math.min(deficit, btsReserve * 0.5);
             const sellAmount = calculateSwapInAmount(deficit, btsReserve, assetReserve);
             if (sellAmount <= 0 || sellAmount > asset.free) continue;
 
-            candidates.push({ asset, poolId: poolData.id, sellAmount, priceImpact: sellAmount / assetReserve });
+            candidates.push({ asset, poolId: poolData.id, sellAmount, expectedReceive, priceImpact: sellAmount / assetReserve });
         } catch (e) { /* pool not found */ }
     }
 
@@ -1624,7 +1626,7 @@ async function acquireBts(deficit) {
     candidates.sort((a, b) => a.priceImpact - b.priceImpact);
     const best = candidates[0];
 
-    const minReceive = deficit * (1 - FEE_PARAMETERS.POOL_SLIPPAGE_TOLERANCE);
+    const minReceive = best.expectedReceive * (1 - FEE_PARAMETERS.POOL_SLIPPAGE_TOLERANCE);
     const sellInt = floatToBlockchainInt(best.sellAmount, best.asset.precision);
     const minReceiveInt = floatToBlockchainInt(minReceive, BTS_PRECISION);
     const op = chainOrders.buildLiquidityPoolExchangeOp(this.accountId, best.poolId, sellInt, best.asset.id, minReceiveInt, coreAssetId);
@@ -1641,19 +1643,16 @@ async function acquireBts(deficit) {
         return;
     }
 
-    const botKey = this.config.botKey || this.config.name;
-    _lastBtsAcquisitionTimestamps.set(botKey, Date.now());
-
     const orderType = (best.asset.id === this.assets?.assetA?.id) ? 'sell' : 'buy';
     if (this.manager.accountant) {
         this.manager.accountant.adjustTotalBalance(orderType, -best.sellAmount, 'bts-acquisition-swap-sell');
     }
     if (this.manager.btsBalance) {
-        this.manager.btsBalance.free = (this.manager.btsBalance.free || 0) + deficit;
-        this.manager.btsBalance.total = (this.manager.btsBalance.total || 0) + deficit;
+        this.manager.btsBalance.free = (this.manager.btsBalance.free || 0) + best.expectedReceive;
+        this.manager.btsBalance.total = (this.manager.btsBalance.total || 0) + best.expectedReceive;
     }
 
-    this._log(`[BTS-ACQ] Acquired ~${Format.formatAmount8(deficit)} BTS: sold ${Format.formatAmount8(best.sellAmount)} ${best.asset.symbol} via pool ${best.poolId}`, 'info');
+    this._log(`[BTS-ACQ] Acquired ~${Format.formatAmount8(best.expectedReceive)} BTS: sold ${Format.formatAmount8(best.sellAmount)} ${best.asset.symbol} via pool ${best.poolId}`, 'info');
 }
 
 export = {

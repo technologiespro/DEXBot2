@@ -86,6 +86,9 @@ function createTransactionBuilder(chainClient) {
         credit_deal_update(data) {
             return this.addOperation('credit_deal_update', data);
         },
+        liquidity_pool_exchange(data) {
+            return this.addOperation('liquidity_pool_exchange', data);
+        },
 
         async setRequiredFees(feeAssetId = DEFAULT_FEE_ASSET) {
             if (ops.length === 0) return;
@@ -181,6 +184,7 @@ function createTransactionBuilder(chainClient) {
                 credit_deal_repay: 73,
                 credit_deal_update: 76,
                 limit_order_update: 77,
+                liquidity_pool_exchange: 63,
             };
 
             const typeId = opTypeIds[type];

@@ -123,6 +123,10 @@ async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
         TIMING: {},
         MAINTENANCE: {},
         GRID_LIMITS: {},
+        LOGGING_CONFIG: {},
+        FEE_PARAMETERS: { BTS_RESERVATION_MULTIPLIER: 5, BTS_FALLBACK_FEE: 100 },
+        BTS_PRECISION: 8,
+        NATIVE_CLIENT: {},
     });
     setCachedModule(systemPath, {
         retryPersistenceIfNeeded: async () => {},
@@ -939,6 +943,7 @@ async function testRmsDivergenceRunsFullGridResync() {
         GRID_LIMITS: {
             DUST_CANCEL_DELAY_SEC: -1,
         },
+        LOGGING_CONFIG: {},
     });
     setCachedModule(systemPath, {
         retryPersistenceIfNeeded: async () => {},
@@ -1083,6 +1088,7 @@ async function testDexbotClassPerformGridResyncForwardsOptions() {
         MAINTENANCE: {},
         GRID_LIMITS: {},
         FILL_PROCESSING: {},
+        LOGGING_CONFIG: {},
     });
     setCachedModule(startupReconcilePath, {
         attemptResumePersistedGridByPriceMatch: async () => null,

@@ -380,7 +380,7 @@ function calculateAvailableFundsValue(side, accountTotals, funds, assetA, assetB
     const currentFeesOwed = (btsSide === side) ? btsFeesOwed : 0;
 
     // Non-BTS pair: reserve proportional share for BTS fee budget
-    if (!btsSide && activeOrders) {
+    if (!btsSide && activeOrders && funds?.btsBalance != null) {
         const targetBuy = Math.max(0, toFiniteNumber(activeOrders?.buy, 1));
         const targetSell = Math.max(0, toFiniteNumber(activeOrders?.sell, 1));
         const totalTargetOrders = targetBuy + targetSell;

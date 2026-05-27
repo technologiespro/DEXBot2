@@ -1038,7 +1038,7 @@ function getSideBudget(side, funds, config, totalTarget) {
             const sideFree = isBuy ? (funds.chainFreeBuy || 0) : (funds.chainFreeSell || 0);
             const totalFree = (funds.chainFreeBuy || 0) + (funds.chainFreeSell || 0);
             const share = totalFree > 0 ? sideFree / totalFree : 0.5;
-            return Math.max(0, allocated - btsDeficit * share);
+            return Math.max(0, Math.min(allocated, sideFree - btsDeficit * share));
         }
     }
 

@@ -214,12 +214,12 @@ class Grid {
             );
             const configMin = manager.config.min_BTS_value;
             const effectiveMin = (configMin > 0) ? configMin : formulaBudget;
-            const btsFree = toFiniteNumber(manager.funds?.btsBalance?.free, 0);
+            const btsFree = Format.toFiniteNumber(manager.funds?.btsBalance?.free, 0);
             const btsDeficit = Math.max(0, effectiveMin - btsFree);
             if (btsDeficit > 0) {
-                const sideFree = toFiniteNumber(isBuy ? manager.accountTotals?.buyFree : manager.accountTotals?.sellFree, 0);
-                const totalFree = toFiniteNumber(manager.accountTotals?.buyFree, 0)
-                                + toFiniteNumber(manager.accountTotals?.sellFree, 0);
+                const sideFree = Format.toFiniteNumber(isBuy ? manager.accountTotals?.buyFree : manager.accountTotals?.sellFree, 0);
+                const totalFree = Format.toFiniteNumber(manager.accountTotals?.buyFree, 0)
+                                + Format.toFiniteNumber(manager.accountTotals?.sellFree, 0);
                 const share = totalFree > 0 ? sideFree / totalFree : 0.5;
                 budget = Math.max(0, budget - btsDeficit * share);
             }

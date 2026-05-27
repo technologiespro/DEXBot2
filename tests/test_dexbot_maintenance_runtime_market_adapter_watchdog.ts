@@ -46,6 +46,7 @@ function loadRuntimeWithStubs({ marketAdapterRuntimeStub } = {}) {
         TIMING: {},
         MAINTENANCE: {},
         GRID_LIMITS: {},
+        LOGGING_CONFIG: {},
     });
     setCachedModule(systemPath, {
         retryPersistenceIfNeeded: async () => {},

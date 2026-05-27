@@ -24,6 +24,7 @@ setCachedModule(bitsharesClientPath, {
     getNodeStats: () => null,
     getNodeSummary: () => null,
     _internal: { connected: true },
+    onReconnect: () => () => {},
 });
 
 setCachedModule(startupReconcilePath, {
