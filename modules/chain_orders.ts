@@ -109,6 +109,9 @@ const {
     executeOperationsViaCredentialDaemon,
 } = require('./dexbot_credential_client');
 
+const Logger = require('./logger');
+const chainOrdersLogger = new Logger('ChainOrders');
+
 // Key/auth helpers provided by modules/chain_keys.js
 // (authenticate(), getPrivateKey(), MasterPasswordError)
 
@@ -302,7 +305,7 @@ async function _ensureAccountSubscriber(accountName, userCallback = null) {
                         await Promise.resolve(c(fills));
                     } catch (e: any) {
                         failures.push(e);
-                        console.error('chain_orders listener error', e.message);
+                        chainOrdersLogger.error(`chain_orders listener error ${e.message}`);
                     }
                 }
                 if (failures.length > 0) {
@@ -399,7 +402,7 @@ async function executeViaDaemonToken(accountName, signingToken, operations) {
         };
     } catch (err: any) {
         if (err.message && err.message.includes('invalid or expired session')) {
-            console.warn(`[chain_orders] Session expired for ${accountName}, automatically renegotiating...`);
+            chainOrdersLogger.warn(`Session expired for ${accountName}, automatically renegotiating...`);
             // Probe daemon for a new session
             const newSessionId = await chainKeys.probeAccountInDaemon(accountName);
             // Update token in-place so future calls use the fresh session
@@ -445,11 +448,11 @@ async function readOpenOrders(accountId = null, timeoutMs = TIMING.CONNECTION_TI
         const orders = fullAccount[0][1].limit_orders || [];
 
         if (!suppress_log) {
-            console.log(`Found ${orders.length} open orders for account ${accId}`);
+            chainOrdersLogger.info(`Found ${orders.length} open orders for account ${accId}`);
         }
         return orders;
     } catch (error: any) {
-        console.error('Error reading open orders:', error.message);
+        chainOrdersLogger.error(`Error reading open orders: ${error.message}`);
         throw error;
     }
 }
@@ -474,7 +477,7 @@ async function listenForFills(accountRef, callback) {
     }
 
     if (typeof userCallback !== 'function') {
-        console.error('listenForFills requires a callback function');
+        chainOrdersLogger.error('listenForFills requires a callback function');
         return () => { };
     }
 
@@ -489,7 +492,7 @@ async function listenForFills(accountRef, callback) {
     }
 
     if (!accountName) {
-        console.error('listenForFills requires an account name or a preferredAccount to be set');
+        chainOrdersLogger.error('listenForFills requires an account name or a preferredAccount to be set');
         return () => { };
     }
 
@@ -499,9 +502,9 @@ async function listenForFills(accountRef, callback) {
     }
 
     if (accountId) {
-        readOpenOrders(accountId, 30000, true).catch(error => console.error('Error loading account for listening:', error.message));
+        readOpenOrders(accountId, 30000, true).catch(error => chainOrdersLogger.error(`Error loading account for listening: ${error.message}`));
     } else {
-        console.warn('Unable to derive account id before listening for fills; skipping open-order prefetch.');
+        chainOrdersLogger.warn('Unable to derive account id before listening for fills; skipping open-order prefetch.');
     }
 
     // Pass userCallback to _ensureAccountSubscriber so the native subscription's
@@ -517,7 +520,7 @@ async function listenForFills(accountRef, callback) {
         return entry.userCallbacks.size;
     });
 
-    console.log(`Listening for fills on account: ${accountName} (total listeners: ${listenerCount})`);
+    chainOrdersLogger.info(`Listening for fills on account: ${accountName} (total listeners: ${listenerCount})`);
 
     // Return an unsubscribe function that atomically removes the listener
     return async function unsubscribe() {
@@ -534,7 +537,7 @@ async function listenForFills(accountRef, callback) {
                 }
             });
         } catch (e: any) {
-            console.error('Error unsubscribing listenForFills', e.message);
+            chainOrdersLogger.error(`Error unsubscribing listenForFills ${e.message}`);
         }
     };
 }
@@ -756,14 +759,14 @@ async function updateOrder(accountName, privateKey, orderId, newParams) {
     try {
         const buildResult = await buildUpdateOrderOp(accountName, orderId, newParams);
         if (!buildResult) {
-            console.log(`Delta is 0; skipping limit_order_update (no change to amount_to_sell)`);
+            chainOrdersLogger.info(`Delta is 0; skipping limit_order_update (no change to amount_to_sell)`);
             return null;
         }
 
         const { op } = buildResult;
         if (isDaemonSigningToken(privateKey)) {
             const result = await executeViaDaemonToken(accountName, privateKey, [op]);
-            console.log(`Order ${orderId} updated successfully`);
+            chainOrdersLogger.info(`Order ${orderId} updated successfully`);
             return { success: true, orderId, raw: result.raw, operation_results: result.operation_results };
         }
 
@@ -779,10 +782,10 @@ async function updateOrder(accountName, privateKey, orderId, newParams) {
         }
         await tx.broadcast();
 
-        console.log(`Order ${orderId} updated successfully`);
+        chainOrdersLogger.info(`Order ${orderId} updated successfully`);
         return { success: true, orderId };
     } catch (error: any) {
-        console.error('Error updating order:', error.message);
+        chainOrdersLogger.error(`Error updating order: ${error.message}`);
         throw error;
     }
 }
@@ -818,8 +821,8 @@ async function buildCreateOrderOp(accountName, amountToSell, sellAssetId, minToR
     // when order sizes are too small and round to 0 after precision conversion
     // Returns null instead of throwing to allow caller to skip invalid orders gracefully
     if (!validateOrderAmountsWithinLimits(amountToSell, minToReceive, sellPrecision, receivePrecision)) {
-        console.warn(
-            `[buildCreateOrderOp] Order skipped: amounts would round to 0 on blockchain\n` +
+        chainOrdersLogger.warn(
+            `Order skipped: amounts would round to 0 on blockchain\n` +
             `  Float values: sell=${amountToSell}, receive=${minToReceive}\n` +
             `  Blockchain integers: sell=${amountToSellInt} (prec ${sellPrecision}), receive=${minToReceiveInt} (prec ${receivePrecision})\n` +
             `  Required: both > 0`
@@ -865,13 +868,13 @@ async function createOrder(accountName, privateKey, amountToSell, sellAssetId, m
         const { op } = buildResult;
 
         if (dryRun) {
-            console.log(`Dry run: Limit order prepared for account ${accountName} (not broadcasted)`);
+            chainOrdersLogger.info(`Dry run: Limit order prepared for account ${accountName} (not broadcasted)`);
             return { dryRun: true, params: op.op_data };
         }
 
         if (isDaemonSigningToken(privateKey)) {
             const result = await executeViaDaemonToken(accountName, privateKey, [op]);
-            console.log(`Limit order created successfully for account ${accountName}`);
+            chainOrdersLogger.info(`Limit order created successfully for account ${accountName}`);
             return result;
         }
 
@@ -881,10 +884,10 @@ async function createOrder(accountName, privateKey, amountToSell, sellAssetId, m
         // Invoke standard method directly
         tx.limit_order_create(op.op_data);
         const result = await tx.broadcast();
-        console.log(`Limit order created successfully for account ${accountName}`);
+        chainOrdersLogger.info(`Limit order created successfully for account ${accountName}`);
         return result;
     } catch (error: any) {
-        console.error('Error creating limit order:', error.message);
+        chainOrdersLogger.error(`Error creating limit order: ${error.message}`);
         throw error;
     }
 }
@@ -926,7 +929,7 @@ async function cancelOrder(accountName, privateKey, orderId) {
 
         if (isDaemonSigningToken(privateKey)) {
             const result = await executeViaDaemonToken(accountName, privateKey, [op]);
-            console.log(`Order ${orderId} cancelled successfully`);
+            chainOrdersLogger.info(`Order ${orderId} cancelled successfully`);
             return { success: true, orderId, verified: true, raw: result.raw, operation_results: result.operation_results };
         }
 
@@ -937,7 +940,7 @@ async function cancelOrder(accountName, privateKey, orderId) {
         tx.limit_order_cancel(op.op_data);
         await tx.broadcast();
 
-        console.log(`Order ${orderId} cancelled successfully`);
+        chainOrdersLogger.info(`Order ${orderId} cancelled successfully`);
         return { success: true, orderId, verified: true };
     } catch (error: any) {
         if (accountId) {
@@ -945,14 +948,14 @@ async function cancelOrder(accountName, privateKey, orderId) {
                 const openOrders = await readOpenOrders(accountId, TIMING.CONNECTION_TIMEOUT_MS, true);
                 const stillPresent = Array.isArray(openOrders) && openOrders.some(order => String(order?.id ?? '') === String(orderId));
                 if (!stillPresent) {
-                    console.log(`Order ${orderId} cancellation confirmed after broadcast failure`);
+                    chainOrdersLogger.info(`Order ${orderId} cancellation confirmed after broadcast failure`);
                     return { success: true, orderId, verified: true, verifiedAfterFailure: true };
                 }
             } catch (_: any) {
                 // Fall through to the original error.
             }
         }
-        console.error('Error cancelling order:', error.message);
+        chainOrdersLogger.error(`Error cancelling order: ${error.message}`);
         throw error;
     }
 }
@@ -980,7 +983,7 @@ async function executeBatch(accountName, privateKey, operations) {
             if (typeof tx[op.op_name] === 'function') {
                 tx[op.op_name](op.op_data);
             } else {
-                console.warn(`Transaction builder missing method for ${op.op_name}`);
+                chainOrdersLogger.warn(`Transaction builder missing method for ${op.op_name}`);
                 throw new Error(`Transaction builder does not support ${op.op_name}`);
             }
         }
@@ -1000,7 +1003,7 @@ async function executeBatch(accountName, privateKey, operations) {
             operation_results: operationResults
         };
     } catch (error: any) {
-        console.error('Error executing batch transaction:', error.message);
+        chainOrdersLogger.error(`Error executing batch transaction: ${error.message}`);
         throw error;
     }
 }
@@ -1083,11 +1086,11 @@ async function getOnChainAssetBalances(accountRef, assets) {
                     symbol = am[0].symbol || symbol;
                 }
             } catch (e: any) { 
-                console.warn(`[chain_orders.js] Failed to fetch asset data for ${aid}:`, e.message);
+                chainOrdersLogger.warn(`Failed to fetch asset data for ${aid}: ${e.message}`);
             }
 
             if (precision === null) {
-                console.error(`[chain_orders.js] CRITICAL: Could not determine precision for asset ${aid}. Skipping balance entry to prevent massive scaling errors.`);
+                chainOrdersLogger.error(`CRITICAL: Could not determine precision for asset ${aid}. Skipping balance entry to prevent massive scaling errors.`);
                 continue;
             }
 

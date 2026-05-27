@@ -2,6 +2,9 @@
 
 const { createTransactionBuilder } = require('./tx/builder');
 
+const Logger = require('../logger');
+const signingClientLogger = new Logger('SigningClient');
+
 function createSigningClient(chainClient: any, accountName: string, privateKey: any): any {
     if (!chainClient) throw new Error('chainClient is required');
     if (!accountName) throw new Error('accountName is required');
@@ -21,7 +24,7 @@ function createSigningClient(chainClient: any, accountName: string, privateKey: 
             }
             _initResolved = true;
         } catch (err: any) {
-            console.warn(`[signing_client] Failed to resolve account ${accountName}: ${err.message}`);
+            signingClientLogger.warn(`Failed to resolve account ${accountName}: ${err.message}`);
             _initResolved = true;
         }
     })();
@@ -98,7 +101,7 @@ function createSigningClient(chainClient: any, accountName: string, privateKey: 
                 }
 
                 if (typeof result === 'object' && result !== null && result.id && !result.operation_results) {
-                    console.warn('[signing_client] Async broadcast returned no operation_results — tx may not have been processed');
+                    signingClientLogger.warn('Async broadcast returned no operation_results — tx may not have been processed');
                 }
 
                 return { ...result, operation_results: [] };

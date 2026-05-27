@@ -5,6 +5,9 @@ const WebSocket = globalThis.WebSocket || require('ws');
 const { NATIVE_CLIENT } = require('../constants');
 const { TRANSPORT } = NATIVE_CLIENT;
 
+const Logger = require('../logger');
+const transportLogger = new Logger('Transport');
+
 const CONNECT_TIMEOUT_MS = TRANSPORT.CONNECT_TIMEOUT_MS;
 const RPC_TIMEOUT_MS = TRANSPORT.RPC_TIMEOUT_MS;
 const KEEPALIVE_INTERVAL_MS = TRANSPORT.KEEPALIVE_INTERVAL_MS;
@@ -73,7 +76,7 @@ function createTransport(config = {}) {
         if (status !== newStatus) {
             const prevStatus = status;
             status = newStatus;
-            console.log(`[transport] status change: ${prevStatus} -> ${newStatus} (node=${nodeUrl})`);
+            transportLogger.info(`status change: ${prevStatus} -> ${newStatus} (node=${nodeUrl})`);
             if (onStatusChange) {
                 try { onStatusChange(newStatus, nodeUrl); } catch (_: any) {}
             }
@@ -101,7 +104,7 @@ function createTransport(config = {}) {
     function scheduleReconnect() {
         if (intentionalClose || !autoreconnect || nodeList.length === 0 || reconnectTimer) return;
         if (reconnectAttempts >= maxReconnectAttempts) {
-            console.warn(`[transport] Max reconnection attempts (${maxReconnectAttempts}) reached, giving up`);
+            transportLogger.warn(`Max reconnection attempts (${maxReconnectAttempts}) reached, giving up`);
             setStatus('closed');
             return;
         }
@@ -197,7 +200,7 @@ function createTransport(config = {}) {
             const code = evt?.code;
             const reason = evt?.reason || '';
             const wasClean = evt?.wasClean !== false;
-            console.warn(`[transport] WebSocket closed on ${nodeUrl}: code=${code}, wasClean=${wasClean}, reason="${reason}"`);
+            transportLogger.warn(`WebSocket closed on ${nodeUrl}: code=${code}, wasClean=${wasClean}, reason="${reason}"`);
             setStatus('closed');
             cleanup();
 
@@ -206,7 +209,7 @@ function createTransport(config = {}) {
 
         socket.onerror = (evt) => {
             const msg = evt && evt.message ? evt.message : 'WebSocket connection error';
-            console.warn('[transport] WebSocket error on', nodeUrl, msg);
+            transportLogger.warn(`WebSocket error on ${nodeUrl}: ${msg}`);
         };
     }
 
@@ -245,7 +248,7 @@ function createTransport(config = {}) {
                     try {
                         await onReconnect(nodeUrl);
                     } catch (err: any) {
-                        console.warn('[transport] Reconnect callback (subscription re-establishment) failed:', err?.message || err);
+                        transportLogger.warn(`Reconnect callback (subscription re-establishment) failed: ${err?.message || err}`);
                     }
                 }
                 return;

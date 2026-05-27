@@ -599,13 +599,14 @@ function validateBotEntry(entry: any, index: any, logger: any) {
   }
 
   if (logger && warnings.length > 0) {
+    const warnFn = (typeof logger?.warn === 'function' ? logger.warn : typeof logger?.log === 'function' ? logger.log : console.warn);
     for (const warning of warnings) {
-      (logger.warn || logger.log || console.warn).call(logger, `[dexbot-profiles] ${warning}`);
+      warnFn.call(logger, `[dexbot-profiles] ${warning}`);
     }
   }
   if (logger && unrecognizedKeys.length > 0) {
-    const logDebug = logger.debug || logger.log || console.debug;
-    logDebug.call(logger, `[dexbot-profiles] bot[${index}]: unrecognized keys: ${unrecognizedKeys.join(', ')}`);
+    const debugFn = (typeof logger?.debug === 'function' ? logger.debug : typeof logger?.log === 'function' ? logger.log : console.debug);
+    debugFn.call(logger, `[dexbot-profiles] bot[${index}]: unrecognized keys: ${unrecognizedKeys.join(', ')}`);
   }
 
   return warnings;

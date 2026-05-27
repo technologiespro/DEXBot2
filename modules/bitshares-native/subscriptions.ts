@@ -6,6 +6,9 @@ const { SUBSCRIPTIONS, OPERATIONS } = NATIVE_CLIENT;
 const SUBSCRIBE_CALLBACK_ID = SUBSCRIPTIONS.CALLBACK_ID;
 const OP_FILL_ORDER = OPERATIONS.FILL_ORDER;
 
+const Logger = require('../logger');
+const subscriptionsLogger = new Logger('Subscriptions');
+
 function createSubscriptionManager(chainClient: any): any {
     const subscriptions = new Map();
     let unsubscribeNotice: any = null;
@@ -42,7 +45,7 @@ function createSubscriptionManager(chainClient: any): any {
     function warnSubscription(sub: any, message: string, err: any = null): void {
         const account = sub?.accountName || sub?.accountId || 'unknown';
         const detail = err?.message ? `: ${err.message}` : '';
-        console.warn(`[subscriptions] ${message} for ${account}${detail}`);
+        subscriptionsLogger.warn(`${message} for ${account}${detail}`);
     }
 
     function getAccountHistoryFetcher(): any {
@@ -94,7 +97,7 @@ function createSubscriptionManager(chainClient: any): any {
         let pagesFetched = 0;
         const maxPages = Number.isFinite(options.maxPages) ? options.maxPages : null;
 
-        console.log(`[subscriptions] fetchFillHistoryEntries: account=${accountId}, cursor=${cursorHistoryId}, start=${startHistoryId}, maxPages=${maxPages}`);
+        subscriptionsLogger.info(`fetchFillHistoryEntries: account=${accountId}, cursor=${cursorHistoryId}, start=${startHistoryId}, maxPages=${maxPages}`);
 
         while (true) {
             const page = await Promise.resolve(fetchPage(
@@ -106,7 +109,7 @@ function createSubscriptionManager(chainClient: any): any {
             pagesFetched++;
 
             const pageLen = Array.isArray(page) ? page.length : 0;
-            console.log(`[subscriptions] fetchFillHistoryEntries: page ${pagesFetched} returned ${pageLen} entries (start=${startHistoryId}, stop=${cursorHistoryId})`);
+            subscriptionsLogger.info(`fetchFillHistoryEntries: page ${pagesFetched} returned ${pageLen} entries (start=${startHistoryId}, stop=${cursorHistoryId})`);
 
             if (!Array.isArray(page) || page.length === 0) break;
 
@@ -127,15 +130,15 @@ function createSubscriptionManager(chainClient: any): any {
                 entries.push(entry);
             }
             if (skippedCount > 0) {
-                console.log(`[subscriptions] fetchFillHistoryEntries: skipped ${skippedCount} entries at/before cursor (cursor=${cursorHistoryId})`);
+                subscriptionsLogger.info(`fetchFillHistoryEntries: skipped ${skippedCount} entries at/before cursor (cursor=${cursorHistoryId})`);
             }
 
             if (page.length < SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX) {
-                console.log(`[subscriptions] fetchFillHistoryEntries: last page (${page.length} < ${SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX})`);
+                subscriptionsLogger.info(`fetchFillHistoryEntries: last page (${page.length} < ${SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX})`);
                 break;
             }
             if (maxPages !== null && pagesFetched >= maxPages) {
-                console.log(`[subscriptions] fetchFillHistoryEntries: maxPages (${maxPages}) reached`);
+                subscriptionsLogger.info(`fetchFillHistoryEntries: maxPages (${maxPages}) reached`);
                 break;
             }
             // Stop if all entries on this page are at or before the cursor.
@@ -147,7 +150,7 @@ function createSubscriptionManager(chainClient: any): any {
             startHistoryId = nextStartHistoryId;
         }
 
-        console.log(`[subscriptions] fetchFillHistoryEntries: returning ${entries.length} operation(s) across ${pagesFetched} page(s) for ${accountId}`);
+        subscriptionsLogger.info(`fetchFillHistoryEntries: returning ${entries.length} operation(s) across ${pagesFetched} page(s) for ${accountId}`);
         return sortEntriesOldestFirst(entries);
     }
 
@@ -167,14 +170,14 @@ function createSubscriptionManager(chainClient: any): any {
             ));
             const latestId = entries?.[0]?.id;
             if (latestId) {
-                console.log(`[subscriptions] primeLastDeliveredHistoryId: resolved to ${latestId} for ${sub.accountName}`);
+                subscriptionsLogger.info(`primeLastDeliveredHistoryId: resolved to ${latestId} for ${sub.accountName}`);
                 return latestId;
             }
         } catch (err: any) {
-            console.warn(`[subscriptions] primeLastDeliveredHistoryId: get_account_history failed for ${sub.accountName}: ${err.message}`);
+            subscriptionsLogger.warn(`primeLastDeliveredHistoryId: get_account_history failed for ${sub.accountName}: ${err.message}`);
         }
 
-        console.log(`[subscriptions] primeLastDeliveredHistoryId: no history found, using HISTORY_API_OBJECT for ${sub.accountName}`);
+        subscriptionsLogger.info(`primeLastDeliveredHistoryId: no history found, using HISTORY_API_OBJECT for ${sub.accountName}`);
         return SUBSCRIPTIONS.HISTORY_API_OBJECT;
     }
 
@@ -205,7 +208,7 @@ function createSubscriptionManager(chainClient: any): any {
 
     async function handleNotice(params: any): Promise<void> {
         if (!Array.isArray(params) || params.length < 2) {
-            console.log('[subscriptions] handleNotice: skipping (invalid params)');
+            subscriptionsLogger.info('handleNotice: skipping (invalid params)');
             return;
         }
 
@@ -265,7 +268,7 @@ function createSubscriptionManager(chainClient: any): any {
             return;
         }
 
-        console.log(`[subscriptions] handleNotice: dispatching ${fillObjects.length} fill(s) directly from notice data`);
+        subscriptionsLogger.info(`handleNotice: dispatching ${fillObjects.length} fill(s) directly from notice data`);
 
         // Batch fills per-subscription and dispatch all at once (mirrors btsdex behavior
         // where a single callback receives all fills from one notice).
@@ -296,7 +299,7 @@ function createSubscriptionManager(chainClient: any): any {
                 try {
                     await Promise.resolve(callback(subFills));
                 } catch (err: any) {
-                    console.warn(`[subscriptions] handleNotice: callback error for ${sub.accountName}: ${err?.message}`);
+                    subscriptionsLogger.warn(`handleNotice: callback error for ${sub.accountName}: ${err?.message}`);
                     failed.push(err);
                 }
             }
@@ -326,7 +329,7 @@ function createSubscriptionManager(chainClient: any): any {
         }
 
         if (noticeObjectIds.length === 0) {
-            console.log(`[subscriptions] processObjects: no identifiable object IDs in notice data for ${sub.accountName} (dataLen=${data?.length}, types=${data.map((d: any) => typeof d).join(',')})`);
+            subscriptionsLogger.info(`processObjects: no identifiable object IDs in notice data for ${sub.accountName} (dataLen=${data?.length}, types=${data.map((d: any) => typeof d).join(',')})`);
             // NOTE: Do NOT return early here. The notice data is just a trigger signal;
             // we must always scan fill history to catch actual fills, because the node
             // may send objects without string `id` fields (e.g. bare account/statistics objects).
@@ -341,7 +344,7 @@ function createSubscriptionManager(chainClient: any): any {
             if (!accountId) {
                 const accData = await fetchFullAccountWithRetry(sub, false);
                 if (!accData) {
-                    console.warn(`[subscriptions] processObjects: get_full_accounts returned no data for ${sub.accountName}`);
+                    subscriptionsLogger.warn(`processObjects: get_full_accounts returned no data for ${sub.accountName}`);
                     if (options.throwOnError) {
                         throw new Error('get_full_accounts returned no account data');
                     }
@@ -349,7 +352,7 @@ function createSubscriptionManager(chainClient: any): any {
                 }
                 accountId = accData.account?.id || sub.accountId;
                 if (!accountId) {
-                    console.warn(`[subscriptions] processObjects: no account id after fetch for ${sub.accountName}`);
+                    subscriptionsLogger.warn(`processObjects: no account id after fetch for ${sub.accountName}`);
                     if (options.throwOnError) {
                         throw new Error('get_full_accounts returned no account id');
                     }
@@ -361,19 +364,19 @@ function createSubscriptionManager(chainClient: any): any {
 
             if (!sub.lastDeliveredHistoryId) {
                 sub.lastDeliveredHistoryId = await primeLastDeliveredHistoryId(sub);
-                console.log(`[subscriptions] processObjects: primed lastDeliveredHistoryId=${sub.lastDeliveredHistoryId} for ${sub.accountName}`);
+                subscriptionsLogger.info(`processObjects: primed lastDeliveredHistoryId=${sub.lastDeliveredHistoryId} for ${sub.accountName}`);
             }
 
             const history = await fetchFillHistoryEntries(accountId, sub.lastDeliveredHistoryId, options);
             if (history.length === 0) {
-                console.log(`[subscriptions] processObjects: no history entries for ${sub.accountName} (cursor=${sub.lastDeliveredHistoryId})`);
+                subscriptionsLogger.info(`processObjects: no history entries for ${sub.accountName} (cursor=${sub.lastDeliveredHistoryId})`);
                 return;
             }
 
             const historyRange = history.length > 0
                 ? `${history[0]?.id}..${history[history.length - 1]?.id}`
                 : 'empty';
-            console.log(`[subscriptions] processObjects: ${history.length} history entries for ${sub.accountName} range=${historyRange} cursor=${sub.lastDeliveredHistoryId}`);
+            subscriptionsLogger.info(`processObjects: ${history.length} history entries for ${sub.accountName} range=${historyRange} cursor=${sub.lastDeliveredHistoryId}`);
 
             const fills = [];
             for (const entry of history) {
@@ -393,13 +396,13 @@ function createSubscriptionManager(chainClient: any): any {
             if (fills.length > 0) {
                 const fillIds = fills.map(f => f.id).join(', ');
                 const newCursor = history[history.length - 1]?.id || sub.lastDeliveredHistoryId;
-                console.log(`[subscriptions] processObjects: dispatching ${fills.length} fill(s) to ${sub.callbacks.size} callback(s) for ${sub.accountName} cursor=${newCursor} fills=[${fillIds}]`);
+                subscriptionsLogger.info(`processObjects: dispatching ${fills.length} fill(s) to ${sub.callbacks.size} callback(s) for ${sub.accountName} cursor=${newCursor} fills=[${fillIds}]`);
                 const failed = [];
                 for (const callback of sub.callbacks) {
                     try {
                         await Promise.resolve(callback(fills));
                     } catch (err: any) {
-                        console.warn(`[subscriptions] processObjects: callback error for ${sub.accountName}: ${err?.message}`);
+                        subscriptionsLogger.warn(`processObjects: callback error for ${sub.accountName}: ${err?.message}`);
                         failed.push(err);
                     }
                 }
@@ -429,10 +432,10 @@ function createSubscriptionManager(chainClient: any): any {
                 // No fills in this batch — advance cursor past history to avoid
                 // re-scanning non-fill operations on subsequent calls.
                 sub.lastDeliveredHistoryId = history[history.length - 1]?.id || sub.lastDeliveredHistoryId;
-                console.log(`[subscriptions] processObjects: history had entries but none were FILL_ORDER operations for ${sub.accountName}`);
+                subscriptionsLogger.info(`processObjects: history had entries but none were FILL_ORDER operations for ${sub.accountName}`);
             }
         } catch (err: any) {
-            console.warn(`[subscriptions] processObjects: error for ${sub.accountName}: ${err?.message}`);
+            subscriptionsLogger.warn(`processObjects: error for ${sub.accountName}: ${err?.message}`);
             if (sub.onError && !err?.subscriptionErrorReported) {
                 try { sub.onError(err); } catch (_: any) {}
             }
@@ -452,7 +455,7 @@ function createSubscriptionManager(chainClient: any): any {
         entry.reconnectRetryTimer = setTimeout(() => {
             entry.reconnectRetryTimer = null;
             resubscribeEntry(entry, 'retry').catch((retryErr: any) => {
-                console.warn('[subscriptions] Failed to resubscribe', entry.accountName, retryErr.message);
+                subscriptionsLogger.warn(`Failed to resubscribe ${entry.accountName}: ${retryErr.message}`);
                 scheduleReconnectRetry(entry, retryErr);
             });
         }, reconnectRetryDelayMs);
@@ -481,7 +484,7 @@ function createSubscriptionManager(chainClient: any): any {
             try {
                 await chainClient.db.get_full_accounts([subEntry.accountName], true);
             } catch (err: any) {
-                console.warn('[subscriptions] Failed to re-subscribe account after set_subscribe_callback for', subEntry.accountName, err.message);
+                subscriptionsLogger.warn(`Failed to re-subscribe account after set_subscribe_callback for ${subEntry.accountName}: ${err.message}`);
                 failures.push({ entry: subEntry, err });
             }
         }
@@ -498,7 +501,7 @@ function createSubscriptionManager(chainClient: any): any {
                 entry.statisticsId = accounts[0][1].account.statistics || null;
             }
         } catch (err: any) {
-            console.warn('[subscriptions] Failed to refresh account data for', entry.accountName, err.message);
+            subscriptionsLogger.warn(`Failed to refresh account data for ${entry.accountName}: ${err.message}`);
         }
 
         const refreshFailures = await refreshSubscriptions();
@@ -513,7 +516,7 @@ function createSubscriptionManager(chainClient: any): any {
         });
         clearReconnectRetry(entry);
         if (reason === 'retry') {
-            console.warn('[subscriptions] Reconnect retry restored subscription', entry.accountName);
+            subscriptionsLogger.warn(`Reconnect retry restored subscription ${entry.accountName}`);
         }
     }
 
@@ -632,7 +635,7 @@ function createSubscriptionManager(chainClient: any): any {
                         entry.statisticsId = accounts[0][1].account.statistics || null;
                     }
                 }).catch((err: any) => {
-                    console.warn('[subscriptions] Failed to refresh account data for', entry.accountName, err.message);
+                    subscriptionsLogger.warn(`Failed to refresh account data for ${entry.accountName}: ${err.message}`);
                 })
             );
         }
@@ -654,7 +657,7 @@ function createSubscriptionManager(chainClient: any): any {
                 processObjects(entry, [entry.accountId], { throwOnError: true })
                     .then(() => clearReconnectRetry(entry))
                     .catch((err: any) => {
-                        console.warn('[subscriptions] Failed to resubscribe', entry.accountName, err.message);
+                        subscriptionsLogger.warn(`Failed to resubscribe ${entry.accountName}: ${err.message}`);
                         scheduleReconnectRetry(entry, err);
                     })
             );

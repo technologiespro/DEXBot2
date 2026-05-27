@@ -66,6 +66,8 @@ const path = require('path');
 const readline = require('readline');
 const Format = require('./format');
 const { TIMING } = require('../constants');
+const Logger = require('../logger');
+const exportLogger = new Logger('Export');
 const EXPORT_PARENT = path.dirname(path.dirname(__dirname));
 const EXPORT_ROOT = path.basename(EXPORT_PARENT) === 'dist' ? path.dirname(EXPORT_PARENT) : EXPORT_PARENT;
 
@@ -178,7 +180,7 @@ async function parseLogFile(logFilePath) {
 
         return fills;
     } catch (err: any) {
-        console.error(`[EXPORT] Failed to parse log file ${logFilePath}: ${err.message}`);
+        exportLogger.error(`Failed to parse log file ${logFilePath}: ${err.message}`);
         return [];
     }
 }
@@ -217,11 +219,11 @@ async function writeTradesCSV(trades, outputPath) {
             .join('\n');
 
         await fsPromises.writeFile(outputPath, csv + '\n', 'utf8');
-        console.log(`✓ Exported ${trades.length} trades to ${outputPath}`);
+        exportLogger.info(`✓ Exported ${trades.length} trades to ${outputPath}`);
 
         return { success: true, count: trades.length };
     } catch (err: any) {
-        console.error(`[EXPORT] Failed to write CSV: ${err.message}`);
+        exportLogger.error(`Failed to write CSV: ${err.message}`);
         return { success: false, error: err.message };
     }
 }
@@ -260,11 +262,11 @@ async function writeSettingsJSON(botConfig, botName, outputPath) {
         };
 
         await fsPromises.writeFile(outputPath, JSON.stringify(sanitized, null, 2) + '\n', 'utf8');
-        console.log(`✓ Exported settings to ${outputPath}`);
+        exportLogger.info(`✓ Exported settings to ${outputPath}`);
 
         return { success: true };
     } catch (err: any) {
-        console.error(`[EXPORT] Failed to write settings JSON: ${err.message}`);
+        exportLogger.error(`Failed to write settings JSON: ${err.message}`);
         return { success: false, error: err.message };
     }
 }
@@ -295,14 +297,14 @@ async function exportBotTrades(botKey, botConfig, outputDir = './exports') {
                 logFilePath = path.join(logsDir, matchingLog);
             }
         } catch (err: any) {
-            console.warn(`[EXPORT] Could not read logs directory: ${err.message}`);
+            exportLogger.warn(`Could not read logs directory: ${err.message}`);
         }
 
         // Parse trades from log file
         const trades = logFilePath ? await parseLogFile(logFilePath) : [];
 
         if (trades.length === 0) {
-            console.warn(`[EXPORT] No trades found in log file for ${botKey}`);
+            exportLogger.warn(`No trades found in log file for ${botKey}`);
         }
 
         // Write trades CSV
@@ -322,7 +324,7 @@ async function exportBotTrades(botKey, botConfig, outputDir = './exports') {
             timestamp: new Date().toISOString()
         };
     } catch (err: any) {
-        console.error(`[EXPORT] Export failed for ${botKey}: ${err.message}`);
+        exportLogger.error(`Export failed for ${botKey}: ${err.message}`);
         return {
             success: false,
             error: err.message,

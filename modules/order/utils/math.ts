@@ -69,6 +69,8 @@
 const { ORDER_TYPES, FEE_PARAMETERS, DEFAULT_CONFIG, BTS_PRECISION } = require('../../constants');
 const Format = require('../format');
 const { isValidNumber, toFiniteNumber, isNumeric } = Format;
+const Logger = require('../../logger');
+const mathLogger = new Logger('Math');
 
 const MAX_INT64 = 9223372036854775807;
 const MIN_INT64 = -9223372036854775808;
@@ -507,7 +509,7 @@ function floatToBlockchainInt(floatValue, precision) {
     const scaled = Math.round(v * Math.pow(10, p));
 
     if (scaled > MAX_INT64 || scaled < MIN_INT64) {
-        console.warn(`[floatToBlockchainInt] Overflow detected: ${floatValue} with precision ${p} resulted in ${scaled}. Clamping to safe limits.`);
+        mathLogger.warn(`Overflow detected: ${floatValue} with precision ${p} resulted in ${scaled}. Clamping to safe limits.`);
         return scaled > 0 ? MAX_INT64 : MIN_INT64;
     }
 
@@ -529,7 +531,7 @@ function getPrecisionByOrderType(assets, orderType) {
 
     if (typeof asset?.precision !== 'number') {
         const errorMsg = `CRITICAL: Asset precision missing for ${side} orders. Asset: ${asset?.symbol || '(unknown)'}. Cannot determine blockchain precision.`;
-        console.error(`[getPrecisionByOrderType] ${errorMsg}`);
+        mathLogger.error(`${errorMsg}`);
         throw new Error(errorMsg);
     }
 
@@ -550,7 +552,7 @@ function getPrecisionForSide(assets, side) {
 
     if (typeof asset?.precision !== 'number') {
         const errorMsg = `CRITICAL: Asset precision missing for ${sideUpper} side. Asset: ${asset?.symbol || '(unknown)'}. Cannot determine blockchain precision.`;
-        console.error(`[getPrecisionForSide] ${errorMsg}`);
+        mathLogger.error(`${errorMsg}`);
         throw new Error(errorMsg);
     }
 
@@ -567,13 +569,13 @@ function getPrecisionForSide(assets, side) {
 function getPrecisionsForManager(assets) {
     if (typeof assets?.assetA?.precision !== 'number') {
         const errorMsg = `CRITICAL: Asset precision missing for assetA (${assets?.assetA?.symbol || '(unknown)'}). Cannot determine blockchain precision.`;
-        console.error(`[getPrecisionsForManager] ${errorMsg}`);
+        mathLogger.error(`${errorMsg}`);
         throw new Error(errorMsg);
     }
 
     if (typeof assets?.assetB?.precision !== 'number') {
         const errorMsg = `CRITICAL: Asset precision missing for assetB (${assets?.assetB?.symbol || '(unknown)'}). Cannot determine blockchain precision.`;
-        console.error(`[getPrecisionsForManager] ${errorMsg}`);
+        mathLogger.error(`${errorMsg}`);
         throw new Error(errorMsg);
     }
 
@@ -685,7 +687,7 @@ function validateOrderAmountsWithinLimits(amountToSell, minToReceive, sellPrecis
     const withinLimits = sellInt <= MAX_INT64 && receiveInt <= MAX_INT64 && sellInt > 0 && receiveInt > 0;
 
     if (!withinLimits) {
-        console.warn(`[validateOrderAmountsWithinLimits] Order amounts exceed safe limits or are invalid. Sell: ${amountToSell} = ${sellInt}, Receive: ${minToReceive} = ${receiveInt}. Max allowed: ${MAX_INT64}`);
+        mathLogger.warn(`Order amounts exceed safe limits or are invalid. Sell: ${amountToSell} = ${sellInt}, Receive: ${minToReceive} = ${receiveInt}. Max allowed: ${MAX_INT64}`);
     }
 
     return withinLimits;

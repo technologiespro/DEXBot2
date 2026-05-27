@@ -25,6 +25,8 @@ const {
 } = require('./asymmetric_bounds');
 const { DEFAULT_CONFIG, MARKET_ADAPTER } = require('../../modules/constants');
 const { resolveConfiguredPriceBound } = require('../../modules/order/utils/order');
+const Logger = require('../../modules/logger');
+const marketAdapterServiceLogger = new Logger('MarketAdapterService');
 
 const AMA_SLOPE_PERCENT_MODE_PER_BAR = 'perBar';
 const AMA_SLOPE_PERCENT_MODE_WINDOW = 'window';
@@ -1968,11 +1970,11 @@ class MarketAdapterService {
             } else if (typeof deps.logger?.warn === 'function') {
                 deps.logger.warn(message);
             } else {
-                console.warn(message);
+                marketAdapterServiceLogger.warn(message);
             }
         };
         if (!Number.isFinite(atr)) {
-            warn(`[market_adapter] ATR calculation failed for ${bot.botKey}; disabling volatility penalty for this cycle.`);
+            warn(`ATR calculation failed for ${bot.botKey}; disabling volatility penalty for this cycle.`);
         }
         const weightVariance = Number.isFinite(atr) && amaPrice > 0 ? (atr / amaPrice) : 0;
 
@@ -1994,7 +1996,7 @@ class MarketAdapterService {
         const shouldComputeDynamicWeights = isAmaGridBot && hasExplicitBaseWeights;
         const canApplyDynamicWeights = isDynamicWeightWhitelisted && shouldComputeDynamicWeights;
         if (!hasExplicitBaseWeights && isAmaGridBot) {
-            warn(`[market_adapter] ${bot.botKey} is missing explicit weightDistribution; skipping dynamic volatility weights for this cycle.`);
+            warn(`${bot.botKey} is missing explicit weightDistribution; skipping dynamic volatility weights for this cycle.`);
         }
 
         let slopeResult = null;

@@ -54,36 +54,30 @@ class Logger {
 
     /**
      * Create a new Logger instance.
-     *
-     * BACKWARD COMPATIBLE signatures:
-     * - new Logger(level) - Old interface for tests (level='debug'|'info'|'warn'|'error')
-     * - new Logger(level, configOverride) - Old interface with config override
-     * - new Logger(category, options) - New interface for market_adapter
-     *   - category: Logger prefix ('MarketAdapter', 'DEXBot', etc.)
-     *   - options: { quiet, logFile, level, configOverride }
+     * Auto-quiets console output under PM2 when PM2 log paths are configured
+     * (PM2 captures stdout/stderr, so console output would duplicate file logs).
+     * @param {string} [category='DEXBot'] - Logger category/prefix
+     * @param {Object} [options={}] - Logger options
+     * @param {boolean} [options.quiet] - Suppress console output
+     * @param {boolean} [options.quietUnderPm2=true] - Auto-quiet under PM2 (default true)
+     * @param {string} [options.logFile] - Optional path to log file
+     * @param {string} [options.level='info'] - Log level (debug, info, warn, error)
+     * @param {Object} [options.configOverride] - Override LOGGING_CONFIG
      */
-    constructor(firstArg = 'DEXBot', secondArg = null) {
-        const logLevels = ['debug', 'info', 'warn', 'error'];
+    constructor(category = 'DEXBot', options = {}) {
+        this.category = category;
 
-        // Detect old vs. new interface
-        const isOldInterface = logLevels.includes(firstArg);
+        // Auto-quiet under PM2 when PM2 log paths are configured to prevent
+        // duplicate output (PM2 captures stdout/stderr to files already).
+        const isUnderPm2 = !!process.env.pm_exec_path;
+        const hasPm2Logging = !!(process.env.pm_out_log_path || process.env.pm_err_log_path);
+        const pm2AutoQuiet = isUnderPm2 && hasPm2Logging;
+        const quietUnderPm2 = options.quietUnderPm2 !== false;
 
-        if (isOldInterface) {
-            // Old interface: new Logger(level, configOverride)
-            this.level = firstArg;
-            this.config = secondArg || LOGGING_CONFIG;
-            this.category = 'DEXBot';
-            this.quiet = false;
-            this.logFile = null;
-        } else {
-            // New interface: new Logger(category, options)
-            this.category = firstArg;
-            const options = secondArg || {};
-            this.quiet = options.quiet || false;
-            this.logFile = options.logFile || null;
-            this.level = options.level || 'info';
-            this.config = options.configOverride || LOGGING_CONFIG;
-        }
+        this.quiet = options.quiet || (quietUnderPm2 && pm2AutoQuiet);
+        this.logFile = options.logFile || null;
+        this.level = options.level || 'info';
+        this.config = options.configOverride || LOGGING_CONFIG;
 
         // Initialize change tracking
         this.state = new LoggerState();
@@ -569,24 +563,15 @@ function isPm2LoggingEnabled() {
 }
 
 /**
- * Create a logger that is automatically quiet under PM2 when PM2 logging is enabled.
+ * Create a Logger instance with PM2 awareness (auto-quiets under PM2).
+ * The constructor already handles this by default; this function exists
+ * for backward compatibility.
  * @param {string} category - Logger category/prefix
- * @param {Object} [options] - Logger options
- * @param {boolean} [options.quietUnderPm2] - Auto-quiet under PM2
+ * @param {Object} [options] - Logger options (quietUnderPm2 is consumed here)
  * @returns {Logger} Configured Logger instance
  */
 function createPm2AwareLogger(category, options = {}) {
-    const nextOptions = { ...options };
-    if (
-        nextOptions.quiet == null &&
-        nextOptions.quietUnderPm2 === true &&
-        isPm2Runtime() &&
-        isPm2LoggingEnabled()
-    ) {
-        nextOptions.quiet = true;
-    }
-    delete nextOptions.quietUnderPm2;
-    return new Logger(category, nextOptions);
+    return new Logger(category, { ...options });
 }
 
 export = Object.assign(Logger, {

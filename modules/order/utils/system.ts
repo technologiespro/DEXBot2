@@ -51,6 +51,8 @@ const MathUtils = require('./math');
 const OrderUtils = require('./order');
 const CODE_ROOT = path.join(__dirname, '..', '..', '..');
 const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const Logger = require('../../logger');
+const systemLogger = new Logger('System');
 
 // ================================================================================
 // SECTION 1: PRICE DERIVATION
@@ -139,11 +141,11 @@ const deriveMarketPrice = async (BitShares, symA, symB) => {
         // Return B/A orientation to match market price format
         const finalPrice = (mid !== null && mid !== 0) ? 1 / mid : null;
         if (finalPrice) {
-            console.log(`[DIAGNOSTIC] deriveMarketPrice: ${symA}/${symB} rawMid=${mid?.toFixed(8)} -> finalPrice(B/A)=${finalPrice.toFixed(8)}`);
+            systemLogger.info(`deriveMarketPrice: ${symA}/${symB} rawMid=${mid?.toFixed(8)} -> finalPrice(B/A)=${finalPrice.toFixed(8)}`);
         }
         return finalPrice;
     } catch (err: any) {
-        console.warn(`[DIAGNOSTIC] deriveMarketPrice failed for ${symA}/${symB}:`, err.message);
+        systemLogger.warn(`deriveMarketPrice failed for ${symA}/${symB}: ${err.message}`);
         return null;
     }
 };
@@ -228,7 +230,7 @@ const derivePoolPrice = async (BitShares, symA, symB) => {
                         poolIdCache.set(cacheKey, chosen.id);
                     }
                 } catch (e: any) {
-                    console.warn('derivePoolPrice: pool pagination failed:', e.message || e);
+                    systemLogger.warn(`derivePoolPrice: pool pagination failed: ${e.message || e}`);
                 }
             }
         }
@@ -275,11 +277,11 @@ const derivePoolPrice = async (BitShares, symA, symB) => {
         // Return B/A orientation to match market price format
         const finalPrice = floatB > 0 ? floatB / floatA : null;
         if (finalPrice) {
-            console.log(`[DIAGNOSTIC] derivePoolPrice: ${symA}/${symB} pool=${chosen.id} amtA=${amtA}(prec=${aMeta.precision}) amtB=${amtB}(prec=${bMeta.precision}) -> finalPrice(B/A)=${finalPrice.toFixed(8)}`);
+            systemLogger.info(`derivePoolPrice: ${symA}/${symB} pool=${chosen.id} amtA=${amtA}(prec=${aMeta.precision}) amtB=${amtB}(prec=${bMeta.precision}) -> finalPrice(B/A)=${finalPrice.toFixed(8)}`);
         }
         return finalPrice;
     } catch (err: any) {
-        console.warn(`[DIAGNOSTIC] derivePoolPrice failed for ${symA}/${symB}:`, err.message);
+        systemLogger.warn(`derivePoolPrice failed for ${symA}/${symB}: ${err.message}`);
         return null;
     }
 };

@@ -62,7 +62,9 @@ function getOrCreateAnalyzer(mpaSymbol: string, config: Record<string, any> = {}
  * @returns {Object} { account, evaluatedAt, positionCount, positions: [...assessments], summary }
  */
 async function evaluate(accountName: string, options: Record<string, any> = {}) {
-  const logger = options.logger || console.log;
+  const logger = options.logger 
+    ? (typeof options.logger.info === 'function' ? options.logger : { info: options.logger, warn: options.logger, error: options.logger })
+    : console;
   const analyzerConfig = options.analyzerConfig || {};
 
   // 1. Discover positions
@@ -99,7 +101,7 @@ async function evaluate(accountName: string, options: Record<string, any> = {}) 
           };
         }
       } catch (err: any) {
-        logger(`[decision_loop] trend fetch failed for ${mpa}: ${err.message}`);
+        logger.info(`[decision_loop] trend fetch failed for ${mpa}: ${err.message}`);
       }
     } else {
       // Reuse last trend signal for same market

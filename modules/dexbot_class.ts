@@ -1299,20 +1299,11 @@ class DEXBot {
                             // Log info
                             const paysAmount = fillOp.pays ? fillOp.pays.amount : '?';
                             const receivesAmount = fillOp.receives ? fillOp.receives.amount : '?';
-                            const fillLogger = this.manager?.logger;
-                            if (fillLogger && typeof fillLogger.log === 'function') {
-                                fillLogger.log(`\n===== FILL DETECTED =====`, 'info');
-                                fillLogger.log(`Order ID: ${fillOp.order_id}`, 'info');
-                                fillLogger.log(`Pays: ${paysAmount}, Receives: ${receivesAmount}`, 'info');
-                                fillLogger.log(`Block: ${fill.block_num} (History ID: ${fill.id || 'N/A'})`, 'info');
-                                fillLogger.log(`=========================\n`, 'info');
-                            } else {
-                                console.log(`\n===== FILL DETECTED =====`);
-                                console.log(`Order ID: ${fillOp.order_id}`);
-                                console.log(`Pays: ${paysAmount}, Receives: ${receivesAmount}`);
-                                console.log(`Block: ${fill.block_num} (History ID: ${fill.id || 'N/A'})`);
-                                console.log(`=========================\n`);
-                            }
+                            this._log(`\n===== FILL DETECTED =====`);
+                            this._log(`Order ID: ${fillOp.order_id}`);
+                            this._log(`Pays: ${paysAmount}, Receives: ${receivesAmount}`);
+                            this._log(`Block: ${fill.block_num} (History ID: ${fill.id || 'N/A'})`);
+                            this._log(`=========================\n`);
                         }
                     }
 
@@ -1563,13 +1554,8 @@ class DEXBot {
                 this._suspendGridPersistenceForCredentialOutage(`credential outage during fill processing: ${err.message}`);
             }
             this._log(`Error processing fills: ${err.message}`);
-            const logger = this.manager?.logger;
-            if (logger && typeof logger.log === 'function') {
-                logger.log(`Error processing fills: ${err.message}`, 'error');
-                if (err.stack) logger.log(err.stack, 'error');
-            } else {
-                console.error('CRITICAL: Error processing fills (logger unavailable):', err);
-            }
+            this._log(`Error processing fills: ${err.message}`, 'error');
+            if (err.stack) this._log(err.stack, 'error');
         }
 
         // Post-processing: If new fills arrived while processing, schedule another cycle
@@ -1578,9 +1564,7 @@ class DEXBot {
             // Schedule consumer restart asynchronously (not in finally block)
             setImmediate(() => this._consumeFillQueue(chainOrders).catch(err => {
                 this._log(`Error in deferred consumer restart: ${err.message}`);
-                if (this.manager && this.manager.logger) {
-                    this.manager.logger.log(`Deferred consumer restart failed: ${err.message}`, 'error');
-                }
+                this._log(`Deferred consumer restart failed: ${err.message}`, 'error');
             }));
         }
     }

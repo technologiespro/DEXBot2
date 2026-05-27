@@ -18,7 +18,7 @@ console.log = (...args) => { captured.push(args.join(' ')); };
 console.warn = (...args) => { capturedWarn.push(args.join(' ')); };
 console.error = (...args) => { capturedError.push(args.join(' ')); };
 
-const logger = new Logger('debug');
+const logger = new Logger('Test', { level: 'debug' });
 logger.marketName = 'TEST/PAIR';
 
 // Should log when level is debug (and info > debug)
@@ -75,12 +75,12 @@ const originalPmOutLogPath = process.env.pm_out_log_path;
 const originalPmErrLogPath = process.env.pm_err_log_path;
 process.env.pm_exec_path = 'pm2';
 process.env.pm_out_log_path = '/tmp/dexbot-test.log';
-assert.strictEqual(createPm2AwareLogger('default').quiet, false, 'PM2-aware logger should not suppress output by default');
-assert.strictEqual(createPm2AwareLogger('quiet', { quietUnderPm2: true }).quiet, true, 'PM2 quieting should be explicit');
+assert.strictEqual(createPm2AwareLogger('default').quiet, true, 'PM2-aware logger should auto-quiet when PM2 log paths are configured');
+assert.strictEqual(createPm2AwareLogger('verbose', { quietUnderPm2: false }).quiet, false, 'PM2 quieting can be disabled with quietUnderPm2=false');
 
 const pm2DirectLogFile = path.join(os.tmpdir(), `dexbot-logger-pm2-${process.pid}.log`);
 try { fs.unlinkSync(pm2DirectLogFile); } catch (err) {}
-const pm2Logger = new Logger('pm2-direct-file', { logFile: pm2DirectLogFile });
+const pm2Logger = new Logger('pm2-direct-file', { logFile: pm2DirectLogFile, quietUnderPm2: false });
 let pm2Captured = [];
 console.log = (...args) => { pm2Captured.push(args.join(' ')); };
 pm2Logger.info('pm2 stdout should remain visible');
