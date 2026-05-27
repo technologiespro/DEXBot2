@@ -979,26 +979,30 @@ async function waitForDaemon(maxWaitMs = TIMING.DAEMON_STARTUP_TIMEOUT_MS, optio
 }
 
 /**
- * Request private key from dexbot-cred daemon via Unix socket
- * @param {string} accountName - Name of the account
+ * Send a single-line JSON request to the credential daemon and return
+ * the parsed response via extractResult.
+ * @param {string} requestType - The "type" field sent to the daemon
+ * @param {string} accountName - Account name included in the request
  * @param {number} timeout - Timeout in milliseconds (default 5000)
- * @param {Object} [options] - Optional socket/ready-file path overrides
- * @returns {Promise<string>} Decrypted private key
- * @throws {Error} If daemon unavailable or request fails
+ * @param {Object} options - Optional socket path overrides
+ * @param {string} label - Human label for error messages (e.g. 'request', 'ping', 'probe')
+ * @param {function} extractResult - Callback: (response) => resolved value; throw to reject
+ * @returns {Promise<*>} Resolved value from extractResult
  */
-function getPrivateKeyFromDaemon(accountName, timeout = 5000, options = {}) {
+function sendDaemonRequest(requestType, accountName, timeout = 5000, options = {}, label = 'request', extractResult = null) {
     const net = require('net');
     const socketPath = getCredentialSocketPath(options);
 
     return new Promise((resolve, reject) => {
+        let settled = false;
         const socket = net.createConnection(socketPath, () => {
-            socket.write(JSON.stringify({ type: 'private-key', accountName }) + '\n');
+            socket.write(JSON.stringify({ type: requestType, accountName }) + '\n');
         });
 
         let responseBuffer = '';
         const timer = setTimeout(() => {
             socket.destroy();
-            reject(new Error('Daemon request timeout'));
+            if (!settled) { settled = true; reject(new Error(`Daemon ${label} timeout`)); }
         }, timeout);
 
         socket.on('data', (data) => {
@@ -1010,32 +1014,55 @@ function getPrivateKeyFromDaemon(accountName, timeout = 5000, options = {}) {
                 if (line.trim()) {
                     clearTimeout(timer);
                     socket.end();
-
-                    try {
-                        const response = JSON.parse(line);
-                        if (response.success) {
-                            return resolve(response.privateKey);
-                        } else {
-                            return reject(new Error(response.error || 'Unknown error'));
+                    if (!settled) {
+                        settled = true;
+                        let parsed: any;
+                        try {
+                            parsed = JSON.parse(line);
+                        } catch {
+                            reject(new Error(`Invalid daemon ${label} response`));
+                            return;
                         }
-                    } catch (err: any) {
-                        return reject(new Error('Invalid daemon response'));
+                        if (extractResult) {
+                            resolve(extractResult(parsed));
+                        } else if (parsed.success) {
+                            resolve(parsed);
+                        } else {
+                            reject(new Error(parsed.error || `Daemon ${label} failed`));
+                        }
                     }
+                    return;
                 }
             }
         });
 
         socket.on('error', (error) => {
             clearTimeout(timer);
-            reject(new Error(`Daemon connection failed: ${error.message}`));
+            if (!settled) { settled = true; reject(new Error(`Daemon connection failed: ${error.message}`)); }
         });
 
         socket.on('end', () => {
             clearTimeout(timer);
-            if (!responseBuffer.trim()) {
+            if (!settled && !responseBuffer.trim()) {
+                settled = true;
                 reject(new Error('Daemon closed connection unexpectedly'));
             }
         });
+    });
+}
+
+/**
+ * Request private key from dexbot-cred daemon via Unix socket
+ * @param {string} accountName - Name of the account
+ * @param {number} timeout - Timeout in milliseconds (default 5000)
+ * @param {Object} [options] - Optional socket/ready-file path overrides
+ * @returns {Promise<string>} Decrypted private key
+ * @throws {Error} If daemon unavailable or request fails
+ */
+function getPrivateKeyFromDaemon(accountName, timeout = 5000, options = {}) {
+    return sendDaemonRequest('private-key', accountName, timeout, options, 'request', (response) => {
+        if (response.success) return response.privateKey;
+        throw new Error(response.error || 'Unknown error');
     });
 }
 
@@ -1049,60 +1076,9 @@ function getPrivateKeyFromDaemon(accountName, timeout = 5000, options = {}) {
  * @returns {Promise<boolean>} Resolves with true if daemon responds
  */
 function pingDaemon(accountName, timeout = 5000, options = {}) {
-    const net = require('net');
-    const socketPath = getCredentialSocketPath(options);
-
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const socket = net.createConnection(socketPath, () => {
-            socket.write(JSON.stringify({ type: 'ping', accountName }) + '\n');
-        });
-
-        let responseBuffer = '';
-        const timer = setTimeout(() => {
-            socket.destroy();
-            if (!settled) { settled = true; reject(new Error('Daemon ping timeout')); }
-        }, timeout);
-
-        socket.on('data', (data) => {
-            responseBuffer += data.toString();
-            const lines = responseBuffer.split('\n');
-            responseBuffer = lines.pop();
-
-            for (const line of lines) {
-                if (line.trim()) {
-                    clearTimeout(timer);
-                    socket.end();
-                    if (!settled) {
-                        settled = true;
-                        try {
-                            const response = JSON.parse(line);
-                            if (response.success && response.pong) {
-                                resolve(true);
-                            } else {
-                                reject(new Error(response.error || 'Daemon ping failed'));
-                            }
-                        } catch (err: any) {
-                            reject(new Error('Invalid daemon ping response'));
-                        }
-                    }
-                    return;
-                }
-            }
-        });
-
-        socket.on('error', (error) => {
-            clearTimeout(timer);
-            if (!settled) { settled = true; reject(new Error(`Daemon connection failed: ${error.message}`)); }
-        });
-
-        socket.on('end', () => {
-            clearTimeout(timer);
-            if (!settled && !responseBuffer.trim()) {
-                settled = true;
-                reject(new Error('Daemon closed connection unexpectedly'));
-            }
-        });
+    return sendDaemonRequest('ping', accountName, timeout, options, 'ping', (response) => {
+        if (response.success && response.pong) return true;
+        throw new Error(response.error || 'Daemon ping failed');
     });
 }
 
@@ -1114,60 +1090,9 @@ function pingDaemon(accountName, timeout = 5000, options = {}) {
  * @returns {Promise<string|null>} Resolves with sessionId if account is available, rejects otherwise
  */
 function probeAccountInDaemon(accountName, timeout = 5000, options = {}) {
-    const net = require('net');
-    const socketPath = getCredentialSocketPath(options);
-
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const socket = net.createConnection(socketPath, () => {
-            socket.write(JSON.stringify({ type: 'probe-account', accountName }) + '\n');
-        });
-
-        let responseBuffer = '';
-        const timer = setTimeout(() => {
-            socket.destroy();
-            if (!settled) { settled = true; reject(new Error('Daemon probe timeout')); }
-        }, timeout);
-
-        socket.on('data', (data) => {
-            responseBuffer += data.toString();
-            const lines = responseBuffer.split('\n');
-            responseBuffer = lines.pop();
-
-            for (const line of lines) {
-                if (line.trim()) {
-                    clearTimeout(timer);
-                    socket.end();
-                    if (!settled) {
-                        settled = true;
-                        try {
-                            const response = JSON.parse(line);
-                            if (response.success) {
-                                resolve(response.sessionId || null);
-                            } else {
-                                reject(new Error(response.error || 'Daemon probe failed'));
-                            }
-                        } catch (err: any) {
-                            reject(new Error('Invalid daemon probe response'));
-                        }
-                    }
-                    return;
-                }
-            }
-        });
-
-        socket.on('error', (error) => {
-            clearTimeout(timer);
-            if (!settled) { settled = true; reject(new Error(`Daemon connection failed: ${error.message}`)); }
-        });
-
-        socket.on('end', () => {
-            clearTimeout(timer);
-            if (!settled && !responseBuffer.trim()) {
-                settled = true;
-                reject(new Error('Daemon closed connection unexpectedly'));
-            }
-        });
+    return sendDaemonRequest('probe-account', accountName, timeout, options, 'probe', (response) => {
+        if (response.success) return response.sessionId || null;
+        throw new Error(response.error || 'Daemon probe failed');
     });
 }
 

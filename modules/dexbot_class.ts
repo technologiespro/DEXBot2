@@ -646,7 +646,7 @@ class DEXBot {
                 if (!gridOrder) continue;
 
                 if (!chainOrder || typeof chainOrder.for_sale === 'undefined') {
-                    // Order no longer exists on chain -> fully filled.
+                    // Order no longer exists on chain -> fully filled or cancelled.
                     updates.push({ ...virtualizeOrder(gridOrder), size: 0 });
                 } else {
                     const chainUnits = Number(chainOrder.for_sale);
