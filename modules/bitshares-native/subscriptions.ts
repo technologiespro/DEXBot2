@@ -252,8 +252,9 @@ function createSubscriptionManager(chainClient: any): any {
             const subFills = fillObjects.filter((fill) => fillMatchesAccount(fill, sub.accountId));
             if (subFills.length === 0) continue;
 
-            // Advance cursor to the latest fill in this batch so startup/refresh
-            // processObjects does not re-fetch already-delivered fills.
+            // Compute cursor for this batch but do NOT advance until callbacks succeed.
+            // On failure the cursor stays unchanged so the next processObjects scan
+            // (triggered by the next notice or reconnect) will re-fetch these fills.
             let latestId: string | null = null;
             let latestInstance = -1;
             for (const fill of subFills) {
@@ -263,16 +264,26 @@ function createSubscriptionManager(chainClient: any): any {
                     latestId = fill.id;
                 }
             }
-            if (latestId && (!sub.lastDeliveredHistoryId || parseObjectIdInstance(latestId) > parseObjectIdInstance(sub.lastDeliveredHistoryId))) {
-                sub.lastDeliveredHistoryId = latestId;
-            }
 
+            const failed: any[] = [];
             for (const callback of sub.callbacks) {
                 try {
                     await Promise.resolve(callback(subFills));
                 } catch (err: any) {
                     console.warn(`[subscriptions] handleNotice: callback error for ${sub.accountName}: ${err?.message}`);
+                    failed.push(err);
                 }
+            }
+
+            if (failed.length > 0) {
+                if (sub.onError) {
+                    for (const err of failed) {
+                        try { sub.onError(err); } catch (_: any) {}
+                    }
+                }
+                // Cursor NOT advanced — retry on next scan.
+            } else if (latestId && (!sub.lastDeliveredHistoryId || parseObjectIdInstance(latestId) > parseObjectIdInstance(sub.lastDeliveredHistoryId))) {
+                sub.lastDeliveredHistoryId = latestId;
             }
         }
     }
@@ -374,9 +385,9 @@ function createSubscriptionManager(chainClient: any): any {
                         failed[0].subscriptionErrorReported = true;
                         throw failed[0];
                     }
-                    // Non-throwing path: advance cursor anyway (fills were partially
-                    // delivered and won't be re-fetched).
-                    sub.lastDeliveredHistoryId = newCursor;
+                    // Non-throwing path (e.g. handleNotice fallback scan): also do NOT
+                    // advance cursor. The next notice-triggered scan or reconnect will
+                    // re-fetch these fills, giving callbacks another chance.
                     return;
                 }
 
