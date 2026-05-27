@@ -6,9 +6,9 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,407 commits over ~6 active months
+- **Growth Phase**: 1,422 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
-- **Stability**: Progression from manual testing to a suite of 181 automated test files
+- **Stability**: Progression from manual testing to a suite of 179 automated test files
 - **Releases**: 20 tagged releases (v0.1.0 to v0.7.4)
 
 ---
@@ -178,7 +178,9 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 - **May 23-24**: Native BitShares integration (replace `btsdex` dependency), zero-dependency isolated mode, stability and fill processing groundwork (pre-v0.7.5-bump)
 - **May 24**: Zero-dependency policy codification and v0.7.5 version bump; complete TypeScript migration — all 48K+ lines, 158 tests, and entry points converted from JS to TS with strict mode enabled for modules, market_adapter, scripts, and claw. Release v0.7.5
 - **May 24-25**: Post-migration regression fixes — Docker release gates, update flow, path resolution, adapter gating
-- **May 25**: Build infrastructure hardening, zero-dependency enforcement (remove openclaw, dead files), stability hardening (fill replay, deadlock prevention, credential daemon startup), accounting/chain corrections, utility deduplication and barrel export refactoring, regime threshold alignment in analysis tools, final dead code and stale docs cleanup
+- **May 25**: Build infrastructure hardening, zero-dependency enforcement (remove openclaw, dead files), stability hardening (fill replay, deadlock prevention, credential daemon startup), accounting/chain corrections, utility deduplication and barrel export refactoring, regime threshold alignment in analysis tools, final dead code, stale docs and obsolete shell scripts cleanup
+- **May 26**: Fill detection & subscription overhaul — subscription reconnect retry, reconnect fill-detection safety net, websocket fill detection repair, instance-based cursor filtering, direct-notice dispatch replacing history-scan, btsFeeState hardening
+- **May 27**: Fill detection optimization — unfiltered `get_account_history`, deferred cursor advancement on callback failure, redundant RPC skip, multi-account reconnect parallelization, btsFeeState unit mismatch and cancel refund cap fix
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -197,6 +199,7 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 14. **Credit Maintenance Hardening**: Collateral-gated credit increases, renew-only policy, deal renewal with fallback safety, startup credit maintenance, autoRepay state synchronization
 15. **Grid Reset Metadata**: Centralized reset metadata handling with dynamic reset state preservation
 16. **Zero-Dependency Policy & TypeScript Migration**: Removal of all external runtime dependencies codified as explicit architectural policy; full codebase conversion from JS to TS (48K+ lines, 158 tests, all entry points) with strict mode, `tsc` build pipeline, `tsx` runtime, and thin `.js` shims for dist routing
+17. **Fill Detection & Subscription Overhaul**: Complete rewrite of native BitShares fill detection — replaced history-scan with direct-notice dispatch, instance-based cursor filtering, subscription reconnect retry with cursor-safe error propagation, deferred cursor advancement on callback failure, unfiltered `get_account_history`, redundant RPC elimination, and parallelized multi-account reconnect. Combined with btsFeeState hardening across frozen objects and grid reset paths
 
 ---
 
@@ -207,6 +210,7 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 - **Phase 3-4**: Copy-on-Write grid with atomic modifications, Market Adapter decoupling signals from execution.
 - **Phase 5**: Multi-layered runtime — COW core execution, signal pipeline (AMA/Kalman/regime), credit/debt MPA runtime, credit maintenance hardening, credential daemon.
 - **Post-5: Zero-Dependency & TypeScript Migration**: Full codebase migration from JavaScript to TypeScript with strict mode, `tsc` build pipeline, zero-dependency runtime via `tsx`, and explicit architectural policy removing all external runtime dependencies.
+- **Post-5.1: Fill Detection Overhaul**: Complete rewrite of native BitShares fill detection subsystem — direct-notice dispatch replaces history scanning, instance-based cursor filtering, subscription reconnect retry, deferred cursor advancement on callback failure, unfiltered `get_account_history`, and btsFeeState hardening
 
 ---
 
@@ -228,9 +232,11 @@ This release completes the removal of all external runtime dependencies and tran
 | 8. Accounting and chain corrections | 6 |
 | 9. Documentation alignment (`.md` refs, constants, changelog) | 3 |
 | 10. Code quality & refactoring (utility deduplication) | 1 |
-| 11. Dead code & stale docs cleanup | 2 |
+| 11. Dead code, stale docs & obsolete scripts cleanup | 3 |
 | 12. Analysis tooling fix | 1 |
-| **Total** | **66** |
+| 13. Fill detection & subscription overhaul (reconnect, cursor, notice dispatch, btsFeeState) | 9 |
+| 14. Fill detection optimization (history source, parallel reconnect, fee cap fix) | 6 |
+| **Total** | **82** |
 
 ### v0.7.3 → v0.7.4 (5 commits)
 
@@ -373,7 +379,7 @@ This release completes the removal of all external runtime dependencies and tran
 
 ## Development Statistics
 
-181 automated tests (all TypeScript), 20 tagged releases. See **Version History** for commit breakdown by release.
+179 automated tests (all TypeScript), 20 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -392,13 +398,13 @@ This release completes the removal of all external runtime dependencies and tran
 
 ## Documentation Evolution
 
-Evolved from basic README + inline comments to a comprehensive framework: 20 docs/ entries (architecture map, COW invariants, fund accounting, credential security, developer guide, TypeScript migration analysis), 80%+ JSDoc coverage, 174+ documentation commits (12.4% of total), and an `AGENTS.md` for AI-assisted development.
+Evolved from basic README + inline comments to a comprehensive framework: 20 docs/ entries (architecture map, COW invariants, fund accounting, credential security, developer guide), 80%+ JSDoc coverage, 175+ documentation commits, and an `AGENTS.md` for AI-assisted development.
 
 ---
 
 ## Testing Strategy
 
-Evolved from manual blockchain testing → Jest unit tests → lightweight Node.js assert (zero test dependencies for the 181-file suite). Multi-layered verification: unit/integration for accounting/sync/grid, complex market scenario simulations, edge-case coverage, COW architectural guards (invariants, mutation detection), and signal/credit runtime validation.
+Evolved from manual blockchain testing → Jest unit tests → lightweight Node.js assert (zero test dependencies for the 179-file suite). Multi-layered verification: unit/integration for accounting/sync/grid, complex market scenario simulations, edge-case coverage, COW architectural guards (invariants, mutation detection), fill subscription lifecycle, and signal/credit runtime validation.
 
 
 ---
@@ -452,7 +458,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: May 25, 2026
-**Total Commits**: 1407
-**Date Range**: December 2, 2025 - May 25, 2026 (ongoing)
+**Last Updated**: May 27, 2026
+**Total Commits**: 1422
+**Date Range**: December 2, 2025 - May 27, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

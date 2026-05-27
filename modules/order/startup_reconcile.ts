@@ -479,12 +479,6 @@ async function _finalizeStartupUpdate({ manager, preparedUpdate }) {
     const rawDeferredFee = Format.toFiniteNumber(plan.chainOrderObj?.deferred_fee, null);
     const deferredFeeFloat = rawDeferredFee !== null ? blockchainToFloat(rawDeferredFee, BTS_PRECISION) : null;
 
-    // Also extract deferred_paid_fee metadata (original fee asset) if available.
-    const rawPaidFee = plan.chainOrderObj?.deferred_paid_fee;
-    const deferredPaidFee = rawPaidFee && typeof rawPaidFee === 'object'
-        ? { amount: Format.toFiniteNumber(rawPaidFee.amount, 0), asset_id: String(rawPaidFee.asset_id || '') }
-        : null;
-
     const btsFeeData = getAssetFees('BTS');
     await manager._applySync({
         gridOrderId: plan.gridOrder.id,
@@ -493,7 +487,6 @@ async function _finalizeStartupUpdate({ manager, preparedUpdate }) {
         fee: btsFeeData.updateFee,
         skipAccounting: false,
         deferredFee: deferredFeeFloat,
-        deferredPaidFee,
     }, 'createOrder');
 }
 

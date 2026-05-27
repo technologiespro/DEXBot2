@@ -117,6 +117,32 @@ This release completes the removal of all external runtime dependencies and tran
 #### Analysis Tooling
 - Derive regime thresholds from `HURST_ZONE_BAND` constant in `analyze_regime_windows.ts`, replacing hardcoded 0.55/0.45 to match runtime behavior (`bae01df`).
 
+#### Dead Code & Stale Docs Cleanup
+- Remove stale docs (`FALLBACK_ANALYSIS.md`, `FALLBACK_REMOVAL_SUMMARY.md`, `TYPESCRIPT_MIGRATION_ANALYSIS.md`) and obsolete shell scripts (`check-update.sh`, `dev-install.sh`, `setup-aliases.sh`) (`79ffbb7`).
+
+### 2026-05-26
+
+#### Fill Detection & Subscription Overhaul
+- Add subscription reconnect retry with cursor-safe error propagation (`6f1b1ff`).
+- Add reconnect fill-detection safety net — await subscription restore + post-reconnect sync (`6f6a2c8`).
+- Fix websocket fill detection — subscription was silently dropping fills; rewrite notice handling with instance-based tracking and multi-account dispatch (`5ae4f04`).
+- Harden fill detection with instance-based cursor filtering and diagnostic logging (`d0f7286`).
+- Remove dead owner check in `shouldProcessNoticeForSubscription` (`8f79e31`).
+- Fix notice-filter skip by reordering `shouldProcessNoticeForSubscription` checks (`46ca63f`).
+- Replace history-scan fill detection with direct-notice dispatch for btsdex parity (`5dfa152`).
+- Prevent `btsFeeState` mutation on frozen order object across all paths (`6860b05`).
+- Restore `btsFeeState` and detect partial fills after grid reset (`e90ffa9`).
+
+### 2026-05-27
+
+#### Fill Detection Optimization & Fee Accounting
+- Switch fill detection to unfiltered `get_account_history` for btsdex parity (`ddf22e0`).
+- Add logging to `fetchFillHistoryEntries` and `processObjects`; skip initial catch-up in `subscribe()` (`0f4bef0`).
+- Trigger history scan from `handleNotice` for Core-style object-change notices; defer cursor advance on callback failure (`7749bea`).
+- Defer cursor advancement on callback failure across all fill delivery paths (`46accd6`).
+- Optimize fill subscription — skip redundant RPCs, parallelize multi-account reconnect (`c88ff98`).
+- Fix `btsFeeState` unit mismatch and correct cancel refund cap (`591f80c`).
+
 ## [0.7.4] - 2026-05-22 - Code Cleanup and Documentation Refresh
 
 This patch cleans up unused code paths, refactors a shared validation helper, refreshes the full documentation set for clarity, completeness, and version alignment, and brings the JSDoc layer up to date across the entire codebase.

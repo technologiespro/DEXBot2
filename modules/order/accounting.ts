@@ -153,8 +153,7 @@ class Accountant {
     _normalizeBtsFeeState(order) {
         const deferredFee = toFiniteNumber(order?.btsFeeState?.deferredFee, 0);
         return {
-            deferredFee: Math.max(0, deferredFee),
-            deferredPaidFee: order?.btsFeeState?.deferredPaidFee || null
+            deferredFee: Math.max(0, deferredFee)
         };
     }
 
@@ -266,11 +265,7 @@ class Accountant {
         const feeSchedule = this._getBtsFeeSchedule();
         if (!isMaker) return null;
 
-        // Core's BSIP85 maker refund (fill_order db_market.cpp:1856):
-        //   refund = round_up(deferred_fee * maker_discount_percent / 10000)
-        // Float arithmetic is used here; 1-satoshi rounding differences are
-        // negligible at BTS precision 5 and consistent with the rest of the
-        // float-based accounting system.
+        // Core's BSIP85 maker refund: deferred_fee * maker_discount_percent / GRAPHENE_100_PERCENT
         const refund = deferredFee * feeSchedule.makerFeeDiscountPercent;
         if (refund <= 0) return null;
 

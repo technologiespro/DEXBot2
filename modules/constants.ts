@@ -451,10 +451,6 @@ let FEE_PARAMETERS = {
     // On-chain value = human_CR * DENOM. Example: 2.0 CR → 2000 on chain.
     GRAPHENE_COLLATERAL_RATIO_DENOM: 1000,
 
-    // GRAPHENE_100_PERCENT: Denominator for Core's percentage arithmetic.
-    // Matches bitshares-core GRAPHENE_100_PERCENT (libraries/protocol/include/graphene/protocol/config.hpp).
-    // Used for maker fee discount and other percent calculations: (a * pct + DIV - 1) / DIV
-    GRAPHENE_100_PERCENT: 10000,
 };
 
 // Collateral ratio health zones for MPA position management.
