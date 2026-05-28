@@ -1,4 +1,6 @@
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const { EventEmitter } = require('events');
 const childProcess = require('child_process');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
@@ -17,6 +19,7 @@ const originalTestSecret = process.env.TEST_PM2_SECRET;
 const events = [];
 const spawnCalls = [];
 const consoleErrors = [];
+const originalWriteFileSync = fs.writeFileSync;
 
 function installStubs() {
     delete require.cache[pm2Path];
@@ -27,6 +30,14 @@ function installStubs() {
             events.push('wait-ready-done');
         },
     });
+
+    fs.writeFileSync = (filePath, data, options) => {
+        if (String(filePath).includes('.dexbot-cred-bootstrap-path')) {
+            events.push('write-bootstrap-path');
+            return;
+        }
+        return originalWriteFileSync(filePath, data, options);
+    };
 
     childProcess.spawn = (command, args, options) => {
         spawnCalls.push({ command, args, options });
@@ -59,6 +70,7 @@ function installStubs() {
 
 function restoreStubs() {
     childProcess.spawn = originalSpawn;
+    fs.writeFileSync = originalWriteFileSync;
     console.error = originalConsoleError;
     if (originalTestSecret === undefined) delete process.env.TEST_PM2_SECRET;
     else process.env.TEST_PM2_SECRET = originalTestSecret;
@@ -79,9 +91,11 @@ const { startManagedRuntimePM2 } = require('../pm2');
 
 (async () => {
     try {
+        const bootstrapSocketPath = '/tmp/test-bootstrap.sock';
         const bootstrap = {
+            socketPath: bootstrapSocketPath,
             credentialEnv: {
-                DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/bootstrap.sock',
+                DEXBOT_CRED_BOOTSTRAP_SOCKET: bootstrapSocketPath,
             },
             waitForTransfer: async () => {
                 events.push('wait-transfer-start');
@@ -102,7 +116,7 @@ const { startManagedRuntimePM2 } = require('../pm2');
         assert.ok(appStartIndex > events.indexOf('wait-transfer-done'), 'apps should start after password transfer completes');
         assert.ok(appStartIndex > events.indexOf('wait-ready-done'), 'apps should start after daemon readiness completes');
         assert.strictEqual(credSpawn.options.env.TEST_PM2_SECRET, undefined, 'credential daemon PM2 launch should not inherit arbitrary parent secrets');
-        assert.strictEqual(credSpawn.options.env.DEXBOT_CRED_BOOTSTRAP_SOCKET, '/tmp/bootstrap.sock', 'credential daemon PM2 launch should keep explicit bootstrap env');
+        assert.strictEqual(credSpawn.options.env.DEXBOT_CRED_BOOTSTRAP_SOCKET, undefined, 'credential daemon PM2 launch should not receive bootstrap socket env');
         assert.strictEqual(appSpawn.options.env.TEST_PM2_SECRET, undefined, 'ecosystem PM2 launch should not inherit arbitrary parent secrets');
         assert.strictEqual(appSpawn.options.env.DEXBOT_CRED_BOOTSTRAP_SOCKET, undefined, 'ecosystem PM2 launch should not receive bootstrap env');
         assert.ok(

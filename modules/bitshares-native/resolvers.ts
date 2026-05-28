@@ -1,23 +1,31 @@
-// @ts-nocheck
 'use strict';
 
 const { NATIVE_CLIENT } = require('../constants');
 const { RESOLVERS } = NATIVE_CLIENT;
 
-const ASSET_TTL_MS = RESOLVERS.ASSET_TTL_MS;
-const ACCOUNT_TTL_MS = RESOLVERS.ACCOUNT_TTL_MS;
-const MAX_ASSETS = RESOLVERS.MAX_ASSETS;
-const MAX_ACCOUNTS = RESOLVERS.MAX_ACCOUNTS;
-const LRU_DEFAULT_SIZE = RESOLVERS.LRU_DEFAULT_SIZE;
+const ASSET_TTL_MS: number = RESOLVERS.ASSET_TTL_MS;
+const ACCOUNT_TTL_MS: number = RESOLVERS.ACCOUNT_TTL_MS;
+const MAX_ASSETS: number = RESOLVERS.MAX_ASSETS;
+const MAX_ACCOUNTS: number = RESOLVERS.MAX_ACCOUNTS;
+const LRU_DEFAULT_SIZE: number = RESOLVERS.LRU_DEFAULT_SIZE;
+
+interface CacheEntry {
+    value: any;
+    ts: number;
+}
 
 class LRUCache {
-    constructor(maxSize = LRU_DEFAULT_SIZE, ttlMs = null) {
+    maxSize: number;
+    ttlMs: number | null;
+    cache: Map<string, CacheEntry>;
+
+    constructor(maxSize: number = LRU_DEFAULT_SIZE, ttlMs: number | null = null) {
         this.maxSize = maxSize;
         this.ttlMs = ttlMs;
         this.cache = new Map();
     }
 
-    get(key) {
+    get(key: string): any | undefined {
         const entry = this.cache.get(key);
         if (!entry) return undefined;
 
@@ -31,40 +39,51 @@ class LRUCache {
         return entry.value;
     }
 
-    set(key, value) {
+    set(key: string, value: any): void {
         if (this.cache.has(key)) {
             this.cache.delete(key);
         } else if (this.cache.size >= this.maxSize) {
             const firstKey = this.cache.keys().next().value;
-            this.cache.delete(firstKey);
+            if (firstKey !== undefined) this.cache.delete(firstKey);
         }
         this.cache.set(key, { value, ts: Date.now() });
     }
 
-    delete(key) {
+    delete(key: string): void {
         this.cache.delete(key);
     }
 
-    clear() {
+    clear(): void {
         this.cache.clear();
     }
 
-    get size() { return this.cache.size; }
+    get size(): number { return this.cache.size; }
 }
 
-function createResolvers(chainClient) {
+interface ChainClientDb {
+    get_assets(ids: string[]): Promise<any[]>;
+    lookup_asset_symbols(symbols: string[]): Promise<any[]>;
+    get_full_accounts(ids: string[], subscribe: boolean): Promise<any[][]>;
+    [key: string]: (...args: any[]) => Promise<any>;
+}
+
+interface ChainClient {
+    db: ChainClientDb;
+}
+
+function createResolvers(chainClient: ChainClient) {
     const assetCache = new LRUCache(MAX_ASSETS, ASSET_TTL_MS);
     const accountCache = new LRUCache(MAX_ACCOUNTS, ACCOUNT_TTL_MS);
     const accountIdCache = new LRUCache(MAX_ACCOUNTS, ACCOUNT_TTL_MS);
 
-    async function resolveAsset(idOrSymbol) {
+    async function resolveAsset(idOrSymbol: string): Promise<any> {
         if (!idOrSymbol) throw new Error('asset id or symbol required');
 
         const cacheKey = `asset:${idOrSymbol}`;
         const cached = assetCache.get(cacheKey);
         if (cached) return cached;
 
-        let asset;
+        let asset: any;
         try {
             if (/^1\.3\./.test(String(idOrSymbol))) {
                 const assets = await chainClient.db.get_assets([idOrSymbol]);
@@ -86,7 +105,7 @@ function createResolvers(chainClient) {
         return asset;
     }
 
-    async function resolveAccount(nameOrId) {
+    async function resolveAccount(nameOrId: string): Promise<any> {
         if (!nameOrId) throw new Error('account name or id required');
 
         const cacheKey = `account:${nameOrId}`;
@@ -113,7 +132,7 @@ function createResolvers(chainClient) {
         }
     }
 
-    async function resolveAccountId(name) {
+    async function resolveAccountId(name: string): Promise<string> {
         if (!name) throw new Error('account name required');
         if (/^1\.2\./.test(String(name))) return name;
 
@@ -129,7 +148,7 @@ function createResolvers(chainClient) {
         throw new Error(`Could not resolve account ID for: ${name}`);
     }
 
-    async function resolveAccountName(id) {
+    async function resolveAccountName(id: string): Promise<string> {
         if (!id) throw new Error('account id required');
         if (!/^1\.2\./.test(String(id))) return id;
 
@@ -145,11 +164,11 @@ function createResolvers(chainClient) {
         throw new Error(`Could not resolve account name for: ${id}`);
     }
 
-    function invalidateAsset(assetId) {
+    function invalidateAsset(assetId: string): void {
         assetCache.delete(`asset:${assetId}`);
     }
 
-    function invalidateAccount(accountId) {
+    function invalidateAccount(accountId: string): void {
         accountCache.delete(`account:${accountId}`);
         accountIdCache.delete(`name:${accountId}`);
     }

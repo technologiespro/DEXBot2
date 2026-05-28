@@ -179,6 +179,18 @@ assert.ok(brainPrivateKey2.equals(brainPrivateKey), 'Brain key derivation should
 const brainPrivateKey3 = nativeEcc.brainKeyToPrivateKey(brainKey, 1);
 assert.ok(!brainPrivateKey3.equals(brainPrivateKey), 'Different sequence should produce different key');
 
+// Golden-vector: BitShares-compatible derivation for ('alice', 'owner', 'secret password')
+// If this test breaks, existing user credentials will fail to derive matching keys.
+const expectedBrainKey = 'b8baa63ff19840ae80d91d3eddbbd5381383207e53533567474696e9c4640e97';
+const expectedPrivKey0 = '756f68d3a94e00d8264d2b6eab58ce690c352444346555458d9565bbe86881b5';
+const expectedPrivKey1 = 'c71b0f608c64492ef5caa4e64e99b040a72bb301d94db7e2dc60206d5dca1562';
+const expectedPubKey = 'BTS5sZVaFoKfrqmcateaqgBEyV8DVvUmtNNBXrMs2aQ6bnfLMx2WH';
+assert.strictEqual(brainKey.toString('hex'), expectedBrainKey, 'brainKey golden vector');
+assert.strictEqual(brainPrivateKey.toString('hex'), expectedPrivKey0, 'brainKeyToPrivateKey(seq=0) golden vector');
+assert.strictEqual(brainPrivateKey3.toString('hex'), expectedPrivKey1, 'brainKeyToPrivateKey(seq=1) golden vector');
+const derivedPubKey = nativeEcc.privateKeyToPublicKey(brainPrivateKey, true);
+assert.strictEqual(nativeEcc.publicKeyToString(derivedPubKey), expectedPubKey, 'public key golden vector');
+
 console.log('  PASS');
 
 // ── Base58 ───────────────────────────────────────────────────────────────

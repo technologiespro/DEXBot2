@@ -1,7 +1,16 @@
-// @ts-nocheck
 'use strict';
 
-const crypto = require('crypto');
+import * as crypto from 'crypto';
+
+interface EcPoint {
+    x: bigint;
+    y: bigint;
+}
+
+interface WifDecodeResult {
+    privateKey: Buffer;
+    compressed: boolean;
+}
 
 const secp256k1 = {
     p: BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F'),
@@ -16,40 +25,40 @@ const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvw
 
 const SEC1_DER_PREFIX = Buffer.from('302e0201010420', 'hex');
 const SEC1_DER_SUFFIX = Buffer.from('a00706052b8104000a', 'hex');
-const SECP256K1_BASE_POINT = {
+const SECP256K1_BASE_POINT: EcPoint = {
     x: secp256k1.Gx,
     y: secp256k1.Gy,
 };
 
-function sha256(data) {
+function sha256(data: Buffer): Buffer {
     return crypto.createHash('sha256').update(data).digest();
 }
 
-function hmacSha256(key, data) {
+function hmacSha256(key: Buffer, data: Buffer): Buffer {
     return crypto.createHmac('sha256', key).update(data).digest();
 }
 
-function sha512(data) {
+function sha512(data: Buffer | string): Buffer {
     return crypto.createHash('sha512').update(data).digest();
 }
 
-function ripemd160(data) {
+function ripemd160(data: Buffer): Buffer {
     return crypto.createHash('ripemd160').update(data).digest();
 }
 
-function hash160(data) {
+function hash160(data: Buffer): Buffer {
     return ripemd160(sha256(data));
 }
 
-function hash256(data) {
+function hash256(data: Buffer): Buffer {
     return sha256(sha256(data));
 }
 
-function randomBytes(length) {
+function randomBytes(length: number): Buffer {
     return crypto.randomBytes(length);
 }
 
-function privateKeyFromRaw(rawKey) {
+function privateKeyFromRaw(rawKey: Buffer): crypto.KeyObject {
     const keyData = Buffer.concat([SEC1_DER_PREFIX, rawKey, SEC1_DER_SUFFIX]);
     return crypto.createPrivateKey({
         key: keyData,
@@ -58,21 +67,21 @@ function privateKeyFromRaw(rawKey) {
     });
 }
 
-function generatePrivateKey() {
-    let key;
+function generatePrivateKey(): Buffer {
+    let key: Buffer;
     do {
         key = randomBytes(32);
     } while (!isValidPrivateKey(key));
     return key;
 }
 
-function isValidPrivateKey(rawKey) {
+function isValidPrivateKey(rawKey: Buffer): boolean {
     if (!Buffer.isBuffer(rawKey) || rawKey.length !== 32) return false;
     const keyInt = BigInt('0x' + rawKey.toString('hex'));
     return keyInt > 0n && keyInt < secp256k1.n;
 }
 
-function privateKeyToPublicKey(rawKey, compressed = true) {
+function privateKeyToPublicKey(rawKey: Buffer, compressed = true): Buffer {
     if (!Buffer.isBuffer(rawKey) || rawKey.length !== 32) {
         throw new Error('Invalid private key: must be 32 bytes');
     }
@@ -81,7 +90,7 @@ function privateKeyToPublicKey(rawKey, compressed = true) {
     return ecdh.getPublicKey(null, compressed ? 'compressed' : 'uncompressed');
 }
 
-function sigFromDer(derSig) {
+function sigFromDer(derSig: Buffer): { r: Buffer; s: Buffer } {
     if (derSig.length < 8 || derSig[0] !== 0x30) {
         throw new Error('Invalid DER signature: missing sequence tag');
     }
@@ -113,11 +122,11 @@ function sigFromDer(derSig) {
     return { r, s };
 }
 
-function bigIntFromBuffer(buf) {
+function bigIntFromBuffer(buf: Buffer): bigint {
     return BigInt('0x' + buf.toString('hex'));
 }
 
-function bufferFromBigInt(bn, length = 32) {
+function bufferFromBigInt(bn: bigint, length = 32): Buffer {
     let hex = bn.toString(16);
     if (hex.length % 2) hex = '0' + hex;
     if (hex.length > length * 2) {
@@ -127,24 +136,24 @@ function bufferFromBigInt(bn, length = 32) {
     return Buffer.from(hex, 'hex');
 }
 
-function mod(value, modulus) {
+function mod(value: bigint, modulus: bigint): bigint {
     return ((value % modulus) + modulus) % modulus;
 }
 
-function publicKeyFromBuffer(pubKeyBuffer) {
+function publicKeyFromBuffer(pubKeyBuffer: Buffer): Buffer {
     if (!Buffer.isBuffer(pubKeyBuffer)) {
         throw new Error('public key must be a Buffer');
     }
     return pubKeyBuffer;
 }
 
-function publicKeyFromPoint(point) {
+function publicKeyFromPoint(point: EcPoint): Buffer {
     const prefix = (point.y & 1n) === 1n ? 0x03 : 0x02;
     const xBuf = bufferFromBigInt(point.x, 32);
     return Buffer.concat([Buffer.from([prefix]), xBuf]);
 }
 
-function pointFromPublicKey(pubKeyBuffer) {
+function pointFromPublicKey(pubKeyBuffer: Buffer): EcPoint {
     if (!Buffer.isBuffer(pubKeyBuffer)) {
         throw new Error('public key must be a Buffer');
     }
@@ -176,12 +185,12 @@ function pointFromPublicKey(pubKeyBuffer) {
     throw new Error('Unsupported public key length: ' + pubKeyBuffer.length);
 }
 
-function deterministicK(digest, privateKey, counter = 0) {
+function deterministicK(digest: Buffer, privateKey: Buffer, counter = 0): bigint {
     const x = bufferFromBigInt(bigIntFromBuffer(privateKey), 32);
     const h1 = bufferFromBigInt(bigIntFromBuffer(digest) % secp256k1.n, 32);
 
-    let K = Buffer.alloc(32, 0x00);
-    let V = Buffer.alloc(32, 0x01);
+    let K: Buffer<ArrayBufferLike> = Buffer.alloc(32, 0x00);
+    let V: Buffer<ArrayBufferLike> = Buffer.alloc(32, 0x01);
 
     K = hmacSha256(K, Buffer.concat([V, Buffer.from([0x00]), x, h1]));
     V = hmacSha256(K, V);
@@ -190,7 +199,7 @@ function deterministicK(digest, privateKey, counter = 0) {
 
     let retry = false;
 
-    function rfc6979Generate() {
+    function rfc6979Generate(): Buffer<ArrayBufferLike> {
         if (retry) {
             K = hmacSha256(K, Buffer.concat([V, Buffer.from([0x00])]));
             V = hmacSha256(K, V);
@@ -201,24 +210,20 @@ function deterministicK(digest, privateKey, counter = 0) {
         return output;
     }
 
-    // C++ extended_nonce_function pre-increments counter 0→1, then calls
-    // nonce_function_rfc6979 which issues counter+1 generate() calls.
-    // counter=0 (first attempt): 2 generate calls, use 2nd output
-    // counter=N (retry N): N+2 generate calls, use (N+2)th output
     const total = counter + 2;
-    let lastOutput;
+    let lastOutput: Buffer<ArrayBufferLike>;
     for (let i = 0; i < total; i++) {
         lastOutput = rfc6979Generate();
     }
 
-    const candidate = bigIntFromBuffer(lastOutput);
+    const candidate = bigIntFromBuffer(lastOutput!);
     if (candidate > 0n && candidate < secp256k1.n) {
         return candidate;
     }
     return 0n;
 }
 
-function recoverPublicKey(digest, r, s, recoveryId) {
+function recoverPublicKey(digest: Buffer, r: Buffer, s: Buffer, recoveryId: number): Buffer {
     const n = secp256k1.n;
     const rBig = bigIntFromBuffer(r);
     const sBig = bigIntFromBuffer(s);
@@ -242,7 +247,7 @@ function recoverPublicKey(digest, r, s, recoveryId) {
         y = secp256k1.p - y;
     }
 
-    const R = { x, y };
+    const R: EcPoint = { x, y };
 
     const rInv = modInverse(rBig, n);
     const eNeg = (n - (e % n)) % n;
@@ -262,7 +267,7 @@ function recoverPublicKey(digest, r, s, recoveryId) {
     return publicKeyFromPoint(Q);
 }
 
-function modPow(base, exp, mod) {
+function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
     let result = 1n;
     base = base % mod;
     while (exp > 0n) {
@@ -273,7 +278,7 @@ function modPow(base, exp, mod) {
     return result;
 }
 
-function modInverse(a, n) {
+function modInverse(a: bigint, n: bigint): bigint {
     let [t, newT] = [0n, 1n];
     let [r, newR] = [n, a];
     while (newR !== 0n) {
@@ -286,27 +291,27 @@ function modInverse(a, n) {
     return t;
 }
 
-function ecPointMul(point, scalar) {
+function ecPointMul(point: EcPoint, scalar: bigint): EcPoint | null {
     if (scalar === 0n) return null;
     if (scalar < 0n) {
         return ecPointMul({ x: point.x, y: secp256k1.p - point.y }, -scalar);
     }
 
-    let result = null;
-    let addend = { x: point.x, y: point.y };
+    let result: EcPoint | null = null;
+    let addend: EcPoint = { x: point.x, y: point.y };
     let s = scalar;
 
     while (s > 0n) {
         if (s & 1n) {
             result = result ? ecPointAdd(result, addend) : addend;
         }
-        addend = ecPointAdd(addend, addend);
+        addend = ecPointAdd(addend, addend)!;
         s >>= 1n;
     }
     return result;
 }
 
-function ecPointAdd(a, b) {
+function ecPointAdd(a: EcPoint | null, b: EcPoint | null): EcPoint | null {
     if (!a) return b;
     if (!b) return a;
     if (a.x === b.x && a.y === b.y) {
@@ -322,7 +327,7 @@ function ecPointAdd(a, b) {
     return { x, y };
 }
 
-function ecPointDouble(point) {
+function ecPointDouble(point: EcPoint): EcPoint {
     const p = secp256k1.p;
     const lam = mod((3n * point.x * point.x + secp256k1.a) * modInverse(mod(2n * point.y, p), p), p);
     const x = mod(lam * lam - 2n * point.x, p);
@@ -331,7 +336,7 @@ function ecPointDouble(point) {
     return { x, y };
 }
 
-function sign(digest, privateKey) {
+function sign(digest: Buffer, privateKey: Buffer): Buffer {
     if (!Buffer.isBuffer(digest) || digest.length !== 32) {
         throw new Error('Digest must be 32 bytes');
     }
@@ -348,8 +353,8 @@ function sign(digest, privateKey) {
     let nonce = 0;
     while (nonce < MAX_SIGN_RETRIES) {
         const k = deterministicK(digest, privateKey, nonce);
-        let R = ecPointMul(SECP256K1_BASE_POINT, k);
-        let rBig = R ? R.x % secp256k1.n : 0n;
+        const R = ecPointMul(SECP256K1_BASE_POINT, k);
+        const rBig = R ? R.x % secp256k1.n : 0n;
 
         if (!R || rBig === 0n) {
             nonce++;
@@ -403,13 +408,13 @@ function sign(digest, privateKey) {
     throw new Error(`Failed to produce valid signature after ${MAX_SIGN_RETRIES} retries`);
 }
 
-function verify(digest, signature, publicKey) {
+function verify(digest: Buffer, signature: Buffer, publicKey: Buffer | string): boolean {
     if (!Buffer.isBuffer(digest) || digest.length !== 32) {
         throw new Error('Digest must be 32 bytes');
     }
 
-    let r;
-    let s;
+    let r: Buffer;
+    let s: Buffer;
     if (signature.length === 65) {
         r = signature.slice(1, 33);
         s = signature.slice(33, 65);
@@ -444,8 +449,8 @@ function verify(digest, signature, publicKey) {
     return mod(point.x, secp256k1.n) === rBig;
 }
 
-function buildPublicKeyDer(compressedPub) {
-    let point;
+function buildPublicKeyDer(compressedPub: Buffer): Buffer {
+    let point: Buffer;
     if (compressedPub.length === 64) {
         point = Buffer.concat([Buffer.from([0x04]), compressedPub]);
     } else if (compressedPub.length === 33) {
@@ -473,8 +478,8 @@ function buildPublicKeyDer(compressedPub) {
     return Buffer.concat([seqHeader, point]);
 }
 
-function buildSignatureDer(r, s) {
-    const encodeInt = (buf) => {
+function buildSignatureDer(r: Buffer, s: Buffer): Buffer {
+    const encodeInt = (buf: Buffer): Buffer => {
         let data = buf;
         if (data[0] & 0x80) {
             data = Buffer.concat([Buffer.from([0x00]), data]);
@@ -495,7 +500,7 @@ function buildSignatureDer(r, s) {
     ]);
 }
 
-function wifEncode(privateKey, compressed = true) {
+function wifEncode(privateKey: Buffer, compressed = true): string {
     if (!Buffer.isBuffer(privateKey) || privateKey.length !== 32) {
         throw new Error('Private key must be 32 bytes');
     }
@@ -507,7 +512,7 @@ function wifEncode(privateKey, compressed = true) {
     return base58CheckEncode(payload);
 }
 
-function wifDecode(wif) {
+function wifDecode(wif: string): WifDecodeResult {
     const payload = base58CheckDecode(wif);
     if (!payload || payload.length < 33) {
         throw new Error('Invalid WIF: too short');
@@ -523,7 +528,7 @@ function wifDecode(wif) {
     return { privateKey, compressed };
 }
 
-function base58Encode(buf) {
+function base58Encode(buf: Buffer): string {
     let num = BigInt('0x' + buf.toString('hex'));
     let encoded = '';
     while (num > 0n) {
@@ -537,7 +542,7 @@ function base58Encode(buf) {
     return encoded;
 }
 
-function base58Decode(str) {
+function base58Decode(str: string): Buffer {
     let num = 0n;
     for (let i = 0; i < str.length; i++) {
         const c = str[i];
@@ -556,12 +561,12 @@ function base58Decode(str) {
     return Buffer.from('00'.repeat(leadingZeros) + hex, 'hex');
 }
 
-function base58CheckEncode(payload) {
+function base58CheckEncode(payload: Buffer): string {
     const checksum = hash256(payload).slice(0, 4);
     return base58Encode(Buffer.concat([payload, checksum]));
 }
 
-function base58CheckDecode(str) {
+function base58CheckDecode(str: string): Buffer {
     const decoded = base58Decode(str);
     if (decoded.length < 4) throw new Error('Invalid base58check: too short');
     const payload = decoded.slice(0, -4);
@@ -571,22 +576,22 @@ function base58CheckDecode(str) {
     return payload;
 }
 
-function normalizeBrainKey(name, role, password) {
+function normalizeBrainKey(name: string, role: string, password: string): Buffer {
     const combined = `${name} ${role} ${password}`.replace(/\s+/g, ' ').trim();
     return sha256(sha512(combined));
 }
 
-function brainKeyToPrivateKey(brainKey, sequence = 0) {
+function brainKeyToPrivateKey(brainKey: Buffer | string, sequence = 0): Buffer {
     const seq = ` ${sequence}`;
     return sha256(sha512(brainKey + seq));
 }
 
-function publicKeyToString(pubKeyBuf, addressPrefix = 'BTS') {
+function publicKeyToString(pubKeyBuf: Buffer, addressPrefix = 'BTS'): string {
     const checksum = sha256(pubKeyBuf).slice(0, 4);
     return addressPrefix + base58Encode(Buffer.concat([pubKeyBuf, checksum]));
 }
 
-function addressFromPublicKey(pubKeyBuf, addressPrefix = 'BTS') {
+function addressFromPublicKey(pubKeyBuf: Buffer, addressPrefix = 'BTS'): string {
     const hash = ripemd160(sha512(pubKeyBuf));
     const checksum = ripemd160(hash).slice(0, 4);
     return addressPrefix + base58Encode(Buffer.concat([hash, checksum]));

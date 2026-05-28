@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use strict';
 
 const { NATIVE_CLIENT } = require('../../constants');
@@ -6,29 +5,53 @@ const { TRANSACTION, CHAIN } = NATIVE_CLIENT;
 const { ops: serialOps } = require('../serial');
 const { sha256, sign } = require('../crypto/ecc');
 
-const MAX_TX_SIZE = TRANSACTION.MAX_SIZE_BYTES;
-const MAX_OPS_PER_TX = TRANSACTION.MAX_OPS_PER_TX;
-const DEFAULT_EXPIRE_SEC = TRANSACTION.DEFAULT_EXPIRE_SEC;
-const TX_EXPIRATION_MAX_SEC = TRANSACTION.MAX_EXPIRE_SEC;
-const DEFAULT_FEE_ASSET = CHAIN.CORE_ASSET_ID;
-const GRAPHENE_CHAIN_ID = CHAIN.CHAIN_ID;
+const MAX_TX_SIZE: number = TRANSACTION.MAX_SIZE_BYTES;
+const MAX_OPS_PER_TX: number = TRANSACTION.MAX_OPS_PER_TX;
+const DEFAULT_EXPIRE_SEC: number = TRANSACTION.DEFAULT_EXPIRE_SEC;
+const TX_EXPIRATION_MAX_SEC: number = TRANSACTION.MAX_EXPIRE_SEC;
+const DEFAULT_FEE_ASSET: string = CHAIN.CORE_ASSET_ID;
+const GRAPHENE_CHAIN_ID: string = CHAIN.CHAIN_ID;
 
 class TransactionTooLargeError extends Error {
-    constructor(message) {
+    code: string;
+    constructor(message: string) {
         super(message);
         this.code = 'TX_TOO_LARGE';
     }
 }
 
 class BroadcastError extends Error {
-    constructor(message, result) {
+    code: string;
+    result: any;
+    constructor(message: string, result: any) {
         super(message);
         this.code = 'BROADCAST_ERROR';
         this.result = result;
     }
 }
 
-function getChainIdBuffer(chainClient) {
+interface SerializerInstance {
+    toBuffer(obj: any): Buffer;
+    toObject(obj: any, debug?: any): Record<string, any>;
+}
+
+interface SerialOps {
+    transaction: SerializerInstance;
+    signed_transaction: SerializerInstance;
+    [key: string]: SerializerInstance | undefined;
+}
+
+interface ChainClientRef {
+    getConfig?(): { chainId: string } | null;
+    db: {
+        call(method: string, args: any[]): Promise<any>;
+        get_objects(ids: string[]): Promise<any[]>;
+        get_dynamic_global_properties(): Promise<any>;
+        [key: string]: (...args: any[]) => Promise<any>;
+    };
+}
+
+function getChainIdBuffer(chainClient: ChainClientRef | null): Buffer {
     const chainId = chainClient?.getConfig?.()?.chainId || GRAPHENE_CHAIN_ID;
     if (typeof chainId !== 'string' || !/^[0-9a-fA-F]{64}$/.test(chainId)) {
         throw new Error(`Invalid chain id for transaction signing: ${chainId}`);
@@ -36,61 +59,59 @@ function getChainIdBuffer(chainClient) {
     return Buffer.from(chainId, 'hex');
 }
 
-function assertTxSize(buffer) {
+function assertTxSize(buffer: Buffer): void {
     if (buffer.length > MAX_TX_SIZE) {
         throw new TransactionTooLargeError(`Serialized transaction size ${buffer.length} exceeds max ${MAX_TX_SIZE}`);
     }
 }
 
-function createTransactionBuilder(chainClient) {
-    const ops = [];
+function createTransactionBuilder(chainClient: ChainClientRef) {
+    const ops: Array<{ type: string; params: any }> = [];
     let refBlockNum = 0;
     let refBlockPrefix = 0;
-    let expiration = null;
-    let feesSet = false;
+    let expiration: number | null = null;
 
-    const tx = {
-        addOperation(type, params) {
+    const tx: any = {
+        addOperation(type: string, params: any) {
             if (ops.length >= MAX_OPS_PER_TX) {
                 throw new TransactionTooLargeError(`Max operations per tx (${MAX_OPS_PER_TX}) exceeded`);
             }
             ops.push({ type, params });
-            feesSet = false;
             return this;
         },
 
-        limit_order_create(data) {
+        limit_order_create(data: any) {
             return this.addOperation('limit_order_create', data);
         },
-        limit_order_cancel(data) {
+        limit_order_cancel(data: any) {
             return this.addOperation('limit_order_cancel', data);
         },
-        limit_order_update(data) {
+        limit_order_update(data: any) {
             return this.addOperation('limit_order_update', data);
         },
-        call_order_update(data) {
+        call_order_update(data: any) {
             return this.addOperation('call_order_update', data);
         },
-        asset_settle(data) {
+        asset_settle(data: any) {
             return this.addOperation('asset_settle', data);
         },
-        transfer(data) {
+        transfer(data: any) {
             return this.addOperation('transfer', data);
         },
-        credit_offer_accept(data) {
+        credit_offer_accept(data: any) {
             return this.addOperation('credit_offer_accept', data);
         },
-        credit_deal_repay(data) {
+        credit_deal_repay(data: any) {
             return this.addOperation('credit_deal_repay', data);
         },
-        credit_deal_update(data) {
+        credit_deal_update(data: any) {
             return this.addOperation('credit_deal_update', data);
         },
-        liquidity_pool_exchange(data) {
+        liquidity_pool_exchange(data: any) {
             return this.addOperation('liquidity_pool_exchange', data);
         },
 
-        async setRequiredFees(feeAssetId = DEFAULT_FEE_ASSET) {
+        async setRequiredFees(feeAssetId: string = DEFAULT_FEE_ASSET) {
             if (ops.length === 0) return;
 
             try {
@@ -101,7 +122,6 @@ function createTransactionBuilder(chainClient) {
                         ops[i].params.fee = fees[i];
                     }
                 }
-                feesSet = true;
             } catch (err: any) {
                 throw new Error(`Failed to fetch required fees: ${err.message}`);
             }
@@ -138,13 +158,13 @@ function createTransactionBuilder(chainClient) {
             throw new Error('Failed to fetch reference block for transaction (head_block_id via get_objects and get_dynamic_global_properties both failed)');
         },
 
-        setExpiration(seconds = DEFAULT_EXPIRE_SEC) {
+        setExpiration(seconds: number = DEFAULT_EXPIRE_SEC) {
             const expireSeconds = Math.min(seconds, TX_EXPIRATION_MAX_SEC);
             const expireDate = new Date(Date.now() + expireSeconds * 1000);
             expiration = Math.floor(expireDate.getTime() / 1000);
         },
 
-        async prepare(feeAssetId = DEFAULT_FEE_ASSET) {
+        async prepare(feeAssetId: string = DEFAULT_FEE_ASSET) {
             await this.fetchRefBlock();
             if (!expiration) this.setExpiration();
             await this.setRequiredFees(feeAssetId);
@@ -154,7 +174,7 @@ function createTransactionBuilder(chainClient) {
 
 
         _serializeUnsigned() {
-            const unsignedOps = [];
+            const unsignedOps: Array<[number, any]> = [];
             for (const { type, params } of ops) {
                 unsignedOps.push(this._buildSerializedOp(type, params));
             }
@@ -167,13 +187,13 @@ function createTransactionBuilder(chainClient) {
                 extensions: [],
             };
 
-            const buffer = serialOps.transaction.toBuffer(txData);
+            const buffer = (serialOps as SerialOps).transaction.toBuffer(txData);
             assertTxSize(buffer);
             return buffer;
         },
 
-        _buildSerializedOp(type, params) {
-            const opTypeIds = {
+        _buildSerializedOp(type: string, params: any): [number, any] {
+            const opTypeIds: Record<string, number> = {
                 transfer: 0,
                 limit_order_create: 1,
                 limit_order_cancel: 2,
@@ -188,7 +208,7 @@ function createTransactionBuilder(chainClient) {
             };
 
             const typeId = opTypeIds[type];
-            const serializer = serialOps[type];
+            const serializer = (serialOps as SerialOps)[type];
 
             if (!serializer) {
                 throw new Error(`Unknown operation type: ${type}`);
@@ -199,8 +219,8 @@ function createTransactionBuilder(chainClient) {
             return [typeId, castFn];
         },
 
-        _castParamsToSerializable(type, params) {
-            const result = { ...params };
+        _castParamsToSerializable(type: string, params: any): any {
+            const result: any = { ...params };
 
             result.fee = result.fee || { amount: 0, asset_id: DEFAULT_FEE_ASSET };
 
@@ -229,13 +249,13 @@ function createTransactionBuilder(chainClient) {
             return result;
         },
 
-        sign(privateKey) {
+        sign(privateKey: Buffer) {
             const unsignedTx = this._serializeUnsigned();
             const digest = sha256(Buffer.concat([getChainIdBuffer(chainClient), unsignedTx]));
 
             const sig = sign(digest, privateKey);
 
-            const opList = [];
+            const opList: Array<[number, any]> = [];
             for (const { type, params } of ops) {
                 opList.push(this._buildSerializedOp(type, params));
             }
@@ -249,14 +269,14 @@ function createTransactionBuilder(chainClient) {
                 signatures: [sig],
             };
 
-            const signedTx = serialOps.signed_transaction.toBuffer(txData);
+            const signedTx = (serialOps as SerialOps).signed_transaction.toBuffer(txData);
             assertTxSize(signedTx);
 
             const txDataForJson = {
                 ...txData,
                 signatures: [sig.toString('hex')],
             };
-            const signedTxObject = serialOps.signed_transaction.toObject(txDataForJson);
+            const signedTxObject = (serialOps as SerialOps).signed_transaction.toObject(txDataForJson);
 
             return {
                 signedTx,
@@ -270,12 +290,12 @@ function createTransactionBuilder(chainClient) {
             throw new Error('TransactionBuilder.broadcast() not implemented; use createSigningClient wrapper');
         },
 
-        _getSerializedOps() {
+        _getSerializedOps(): Array<[number, any]> {
             return ops.map(o => this._buildSerializedOp(o.type, o.params));
         },
 
-        getOperationCount() { return ops.length; },
-        getOperations() { return [...ops]; },
+        getOperationCount(): number { return ops.length; },
+        getOperations(): Array<{ type: string; params: any }> { return [...ops]; },
     };
 
     return tx;

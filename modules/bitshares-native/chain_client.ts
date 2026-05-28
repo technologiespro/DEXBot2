@@ -1,24 +1,40 @@
-// @ts-nocheck
 'use strict';
 
 const { createTransport, ConnectionError } = require('./transport');
 const { GRAPHENE_CHAIN_ID, GRAPHENE_ADDRESS_PREFIX } = require('./serial/chain_constants');
 const { NATIVE_CLIENT } = require('../constants');
 const { CHAIN } = NATIVE_CLIENT;
-const DEFAULT_CORE_ASSET = CHAIN.CORE_ASSET_ID;
+const DEFAULT_CORE_ASSET: string = CHAIN.CORE_ASSET_ID;
 
 class ChainConfigError extends Error {
-    constructor(message) {
+    code: string;
+    constructor(message: string) {
         super(message);
         this.code = 'CHAIN_CONFIG_ERROR';
     }
 }
 
-function toRpcMethodName(method) {
-    return String(method).replace(/([A-Z])/g, (_, ch) => `_${ch.toLowerCase()}`);
+function toRpcMethodName(method: string): string {
+    return String(method).replace(/([A-Z])/g, (_: string, ch: string) => `_${ch.toLowerCase()}`);
 }
 
-function createChainClient(config = {}) {
+interface ChainClientConfig {
+    nodes?: string[];
+    onStatusChange?: ((status: string, nodeUrl: string | null) => void) | null;
+    rpcTimeoutMs?: number;
+    connectTimeoutMs?: number;
+    autoreconnect?: boolean;
+    validateChainId?: boolean;
+    expectedChainId?: string;
+}
+
+interface ChainConfig {
+    chainId: string;
+    addressPrefix: string;
+    coreAsset: string;
+}
+
+function createChainClient(config: ChainClientConfig = {}) {
     const {
         nodes = [],
         onStatusChange = null,
@@ -29,7 +45,7 @@ function createChainClient(config = {}) {
         expectedChainId = GRAPHENE_CHAIN_ID,
     } = config;
 
-    const wrappedOnStatusChange = (status, nodeUrl) => {
+    const wrappedOnStatusChange = (status: string, nodeUrl: string | null) => {
         if (status === 'closed') {
             _dbApiId = null;
             _historyApiId = null;
@@ -52,16 +68,16 @@ function createChainClient(config = {}) {
             }
         },
     });
-    let _dbApiId = null;
-    let _historyApiId = null;
-    let _broadcastApiId = null;
-    let _chainConfig = null;
-    let _loginPromise = null;
+    let _dbApiId: number | null = null;
+    let _historyApiId: number | null = null;
+    let _broadcastApiId: number | null = null;
+    let _chainConfig: ChainConfig | null = null;
+    let _loginPromise: Promise<ChainConfig | undefined> | null = null;
     if (Array.isArray(nodes) && nodes.length > 0) {
         transport._setNodes(nodes);
     }
 
-    async function login() {
+    async function login(): Promise<ChainConfig | undefined> {
         if (_loginPromise) return _loginPromise;
 
         _loginPromise = (async () => {
@@ -74,7 +90,7 @@ function createChainClient(config = {}) {
                 _dbApiId = await registerApi('database');
             }
 
-            const chainId = await transport.call('call', [_dbApiId, 'get_chain_id', []]);
+            const chainId: string = await transport.call('call', [_dbApiId, 'get_chain_id', []]);
             let addressPrefix = GRAPHENE_ADDRESS_PREFIX;
             let coreAsset = CHAIN.CORE_ASSET_ID;
 
@@ -112,37 +128,37 @@ function createChainClient(config = {}) {
         return _loginPromise;
     }
 
-    async function registerApi(apiName) {
+    async function registerApi(apiName: string): Promise<number> {
         const apiId = await transport.call('call', [1, apiName, []]);
         return apiId;
     }
 
-    async function dbCall(method, args) {
+    async function dbCall(method: string, args?: any[]): Promise<any> {
         if (_dbApiId == null) {
             _dbApiId = await registerApi('database');
         }
         return transport.call('call', [_dbApiId, toRpcMethodName(method), args || []]);
     }
 
-    async function historyCall(method, args) {
+    async function historyCall(method: string, args?: any[]): Promise<any> {
         if (_historyApiId == null) {
             _historyApiId = await registerApi('history');
         }
         return transport.call('call', [_historyApiId, toRpcMethodName(method), args || []]);
     }
 
-    async function broadcastCall(method, args) {
+    async function broadcastCall(method: string, args?: any[]): Promise<any> {
         if (_broadcastApiId == null) {
             _broadcastApiId = await registerApi('network_broadcast');
         }
         return transport.call('call', [_broadcastApiId, method, args || []]);
     }
 
-    async function broadcastTx(signedTx) {
+    async function broadcastTx(signedTx: any): Promise<any> {
         return broadcastCall('broadcast_transaction', [signedTx]);
     }
 
-    async function connect(servers) {
+    async function connect(servers?: string[]): Promise<void> {
         if (Array.isArray(servers)) {
             setNodes(servers);
         } else if (transport._getNodes().length === 0 && Array.isArray(nodes) && nodes.length > 0) {
@@ -151,7 +167,7 @@ function createChainClient(config = {}) {
         await transport.connect(undefined, autoreconnect);
     }
 
-    function disconnect() {
+    function disconnect(): void {
         _dbApiId = null;
         _historyApiId = null;
         _broadcastApiId = null;
@@ -159,16 +175,16 @@ function createChainClient(config = {}) {
         transport.disconnect();
     }
 
-    function setNodes(servers) {
+    function setNodes(servers: string[]): void {
         transport._setNodes(servers);
     }
 
-    function getNodes() { return transport._getNodes(); }
-    function getStatus() { return transport.getStatus(); }
-    function getConfig() { return _chainConfig; }
-    function getCoreAsset() { return _chainConfig ? _chainConfig.coreAsset : CHAIN.CORE_ASSET_ID; }
+    function getNodes(): string[] { return transport._getNodes(); }
+    function getStatus(): string { return transport.getStatus(); }
+    function getConfig(): ChainConfig | null { return _chainConfig; }
+    function getCoreAsset(): string { return _chainConfig ? _chainConfig.coreAsset : CHAIN.CORE_ASSET_ID; }
 
-    const db = {};
+    const db: Record<string, (...args: any[]) => Promise<any>> = {};
 
     const DB_METHODS = [
         'get_assets', 'getAssets', 'lookup_asset_symbols', 'lookupAssetSymbols',
@@ -181,12 +197,12 @@ function createChainClient(config = {}) {
     ];
 
     for (const method of DB_METHODS) {
-        db[method] = (...args) => dbCall(method, args);
+        db[method] = (...args: any[]) => dbCall(method, args);
     }
 
     db.call = dbCall;
 
-    const history = {};
+    const history: Record<string, (...args: any[]) => Promise<any>> = {};
 
     const HISTORY_METHODS = [
         'getMarketHistory', 'get_market_history', 'getMarketHistoryBuckets', 'get_market_history_buckets',
@@ -197,18 +213,18 @@ function createChainClient(config = {}) {
     ];
 
     for (const method of HISTORY_METHODS) {
-        history[method] = (...args) => historyCall(method, args);
+        history[method] = (...args: any[]) => historyCall(method, args);
     }
 
     history.call = historyCall;
 
-    const broadcast = {
+    const broadcast: Record<string, (...args: any[]) => Promise<any>> = {
         call: broadcastCall,
-        broadcast_transaction: (tx) => broadcastTx(tx),
-        broadcast_transaction_synchronous: (tx) => broadcastCall('broadcast_transaction_synchronous', [tx]),
+        broadcast_transaction: (tx: any) => broadcastTx(tx),
+        broadcast_transaction_synchronous: (tx: any) => broadcastCall('broadcast_transaction_synchronous', [tx]),
     };
 
-    const client = {
+    const client: any = {
         transport,
         connect,
         disconnect,
@@ -221,12 +237,21 @@ function createChainClient(config = {}) {
         history,
         broadcast,
         login,
+        onReconnect: null as (() => Promise<void>) | null,
     };
 
     return client;
 }
 
-function createReadOnlyClient(config = {}) {
+interface ReadOnlyClientConfig {
+    nodes?: string[];
+    rpcTimeoutMs?: number;
+    connectTimeoutMs?: number;
+    validateChainId?: boolean;
+    expectedChainId?: string;
+}
+
+function createReadOnlyClient(config: ReadOnlyClientConfig = {}) {
     const {
         nodes = [],
         validateChainId = true,
@@ -238,10 +263,10 @@ function createReadOnlyClient(config = {}) {
         connectTimeoutMs: config.connectTimeoutMs,
     });
 
-    let _dbApiId = null;
-    let _historyApiId = null;
+    let _dbApiId: number | null = null;
+    let _historyApiId: number | null = null;
 
-    async function connect(servers) {
+    async function connect(servers?: string[]): Promise<void> {
         const effectiveNodes = Array.isArray(servers) && servers.length > 0
             ? servers
             : nodes;
@@ -252,7 +277,7 @@ function createReadOnlyClient(config = {}) {
         _historyApiId = await transport.call('call', [1, 'history', []]);
 
         if (validateChainId) {
-            const chainId = await transport.call('call', [_dbApiId, 'get_chain_id', []]);
+            const chainId: string = await transport.call('call', [_dbApiId, 'get_chain_id', []]);
             if (chainId !== expectedChainId) {
                 disconnect();
                 throw new ChainConfigError(
@@ -262,27 +287,27 @@ function createReadOnlyClient(config = {}) {
         }
     }
 
-    function disconnect() {
+    function disconnect(): void {
         _dbApiId = null;
         _historyApiId = null;
         transport.disconnect();
     }
 
-    async function db(method, args) {
+    async function db(method: string, args?: any[]): Promise<any> {
         if (_dbApiId == null) throw new Error('Not connected');
         return transport.call('call', [_dbApiId, toRpcMethodName(method), args || []]);
     }
 
-    async function history(method, args) {
+    async function history(method: string, args?: any[]): Promise<any> {
         if (_historyApiId == null) throw new Error('Not connected');
         return transport.call('call', [_historyApiId, toRpcMethodName(method), args || []]);
     }
 
-    function setNodes(servers) {
+    function setNodes(servers: string[]): void {
         transport._setNodes(servers);
     }
 
-    function getNodes() {
+    function getNodes(): string[] {
         return transport._getNodes();
     }
 

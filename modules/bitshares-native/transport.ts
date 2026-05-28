@@ -1,21 +1,38 @@
-// @ts-nocheck
 'use strict';
 
-const WebSocket = globalThis.WebSocket || require('ws');
+// Ambient WebSocket declaration for the ws module (no @types/ws installed)
+declare class _WebSocket {
+    readyState: number;
+    onopen: ((evt: any) => void) | null;
+    onmessage: ((evt: any) => void) | null;
+    onclose: ((evt: any) => void) | null;
+    onerror: ((evt: any) => void) | null;
+    send(data: string): void;
+    close(): void;
+    constructor(url: string);
+}
+
+type WebSocketLike = _WebSocket;
+
+const WebSocketConstructor: new (url: string) => WebSocketLike =
+    (globalThis as any).WebSocket || require('ws');
+
 const { NATIVE_CLIENT } = require('../constants');
 const { TRANSPORT } = NATIVE_CLIENT;
 
 const Logger = require('../logger');
 const transportLogger = new Logger('Transport');
 
-const CONNECT_TIMEOUT_MS = TRANSPORT.CONNECT_TIMEOUT_MS;
-const RPC_TIMEOUT_MS = TRANSPORT.RPC_TIMEOUT_MS;
-const KEEPALIVE_INTERVAL_MS = TRANSPORT.KEEPALIVE_INTERVAL_MS;
+const CONNECT_TIMEOUT_MS: number = TRANSPORT.CONNECT_TIMEOUT_MS;
+const RPC_TIMEOUT_MS: number = TRANSPORT.RPC_TIMEOUT_MS;
+const KEEPALIVE_INTERVAL_MS: number = TRANSPORT.KEEPALIVE_INTERVAL_MS;
 
 let _rpcId = 0;
 
 class RpcTimeoutError extends Error {
-    constructor(method, timeoutMs) {
+    code: string;
+    method: string;
+    constructor(method: string, timeoutMs: number) {
         super(`RPC timeout ${timeoutMs}ms for ${method}`);
         this.code = 'RPC_TIMEOUT';
         this.method = method;
@@ -23,14 +40,17 @@ class RpcTimeoutError extends Error {
 }
 
 class ConnectionError extends Error {
-    constructor(message) {
+    code: string;
+    constructor(message: string) {
         super(message);
         this.code = 'CONNECTION_ERROR';
     }
 }
 
 class AllNodesFailed extends Error {
-    constructor(errors) {
+    code: string;
+    errors: Error[];
+    constructor(errors: Error[]) {
         const msgs = errors.map(e => e.message).join('; ');
         super(`All nodes unreachable: ${msgs}`);
         this.code = 'ALL_NODES_FAILED';
@@ -39,7 +59,10 @@ class AllNodesFailed extends Error {
 }
 
 class RpcError extends Error {
-    constructor(message, code, method, params) {
+    code: string;
+    method: string;
+    params: any[];
+    constructor(message: string, code: string | undefined, method: string, params: any[]) {
         super(message);
         this.code = code || 'RPC_ERROR';
         this.method = method;
@@ -47,7 +70,26 @@ class RpcError extends Error {
     }
 }
 
-function createTransport(config = {}) {
+interface PendingRequest {
+    resolve: (value: any) => void;
+    reject: (reason: any) => void;
+    timer: ReturnType<typeof setTimeout>;
+    method: string;
+    params: any[];
+}
+
+type TransportStatus = 'closed' | 'connecting' | 'connected';
+
+interface TransportConfig {
+    connectTimeoutMs?: number;
+    rpcTimeoutMs?: number;
+    onStatusChange?: ((status: string, nodeUrl: string | null) => void) | null;
+    onReconnect?: ((nodeUrl: string) => Promise<void>) | null;
+    validateNode?: (() => Promise<void>) | null;
+    keepAliveIntervalMs?: number;
+}
+
+function createTransport(config: TransportConfig = {}) {
     const {
         connectTimeoutMs = CONNECT_TIMEOUT_MS,
         rpcTimeoutMs = RPC_TIMEOUT_MS,
@@ -57,22 +99,22 @@ function createTransport(config = {}) {
         keepAliveIntervalMs = KEEPALIVE_INTERVAL_MS,
     } = config;
 
-    let ws = null;
-    let nodeUrl = null;
-    let reconnectTimer = null;
-    let keepAliveTimer = null;
+    let ws: WebSocketLike | null = null;
+    let nodeUrl: string | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
     let keepAliveInFlight = false;
-    let nodeList = [];
+    let nodeList: string[] = [];
     let nodeIndex = 0;
     let autoreconnect = false;
     let intentionalClose = false;
     let reconnectAttempts = 0;
-    let maxReconnectAttempts = 20;
-    let pendingRequests = new Map();
-    let onMessageHandlers = [];
-    let status = 'closed';
+    const maxReconnectAttempts = 20;
+    let pendingRequests = new Map<string, PendingRequest>();
+    let onMessageHandlers: Array<(params: any) => void> = [];
+    let status: TransportStatus = 'closed';
 
-    function setStatus(newStatus) {
+    function setStatus(newStatus: TransportStatus): void {
         if (status !== newStatus) {
             const prevStatus = status;
             status = newStatus;
@@ -83,7 +125,7 @@ function createTransport(config = {}) {
         }
     }
 
-    function cleanup() {
+    function cleanup(): void {
         if (reconnectTimer) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
@@ -101,7 +143,7 @@ function createTransport(config = {}) {
         pendingRequests.clear();
     }
 
-    function scheduleReconnect() {
+    function scheduleReconnect(): void {
         if (intentionalClose || !autoreconnect || nodeList.length === 0 || reconnectTimer) return;
         if (reconnectAttempts >= maxReconnectAttempts) {
             transportLogger.warn(`Max reconnection attempts (${maxReconnectAttempts}) reached, giving up`);
@@ -116,7 +158,7 @@ function createTransport(config = {}) {
         }, delay);
     }
 
-    function startKeepAlive() {
+    function startKeepAlive(): void {
         if (!Number.isFinite(keepAliveIntervalMs) || keepAliveIntervalMs <= 0 || keepAliveTimer) return;
         keepAliveTimer = setInterval(() => {
             if (!ws || ws.readyState !== 1) return;
@@ -132,15 +174,15 @@ function createTransport(config = {}) {
                     keepAliveInFlight = false;
                 });
         }, keepAliveIntervalMs);
-        if (typeof keepAliveTimer.unref === 'function') {
-            keepAliveTimer.unref();
+        if (typeof keepAliveTimer!.unref === 'function') {
+            keepAliveTimer!.unref();
         }
     }
 
-    function connectOne(url) {
+    function connectOne(url: string): Promise<WebSocketLike> {
         return new Promise((resolve, reject) => {
             try {
-                const socket = new WebSocket(url);
+                const socket = new WebSocketConstructor(url);
                 const timer = setTimeout(() => {
                     try { socket.close(); } catch (_: any) {}
                     reject(new ConnectionError(`handshake timeout ${connectTimeoutMs}ms for ${url}`));
@@ -150,12 +192,12 @@ function createTransport(config = {}) {
                     clearTimeout(timer);
                     resolve(socket);
                 };
-                socket.onerror = (evt) => {
+                socket.onerror = (evt: any) => {
                     clearTimeout(timer);
                     const msg = evt && evt.message ? evt.message : 'WebSocket connection error';
                     reject(new ConnectionError(msg));
                 };
-                socket.onclose = (evt) => {
+                socket.onclose = (evt: any) => {
                     clearTimeout(timer);
                     reject(new ConnectionError(`handshake closed code=${evt.code} for ${url}`));
                 };
@@ -165,9 +207,9 @@ function createTransport(config = {}) {
         });
     }
 
-    function setupMessageHandler(socket) {
-        socket.onmessage = (raw) => {
-            let msg;
+    function setupMessageHandler(socket: WebSocketLike): void {
+        socket.onmessage = (raw: any) => {
+            let msg: any;
             try { msg = JSON.parse(raw.data); } catch (_: any) { return; }
 
             if (typeof msg.id !== 'undefined') {
@@ -196,7 +238,7 @@ function createTransport(config = {}) {
             }
         };
 
-        socket.onclose = (evt) => {
+        socket.onclose = (evt: any) => {
             const code = evt?.code;
             const reason = evt?.reason || '';
             const wasClean = evt?.wasClean !== false;
@@ -207,13 +249,13 @@ function createTransport(config = {}) {
             scheduleReconnect();
         };
 
-        socket.onerror = (evt) => {
+        socket.onerror = (evt: any) => {
             const msg = evt && evt.message ? evt.message : 'WebSocket connection error';
             transportLogger.warn(`WebSocket error on ${nodeUrl}: ${msg}`);
         };
     }
 
-    async function tryConnect() {
+    async function tryConnect(): Promise<void> {
         intentionalClose = false;
         const list = [...nodeList];
         if (list.length === 0) {
@@ -221,7 +263,7 @@ function createTransport(config = {}) {
             return;
         }
 
-        const errors = [];
+        const errors: Error[] = [];
 
         for (let i = 0; i < list.length; i++) {
             const idx = (nodeIndex + i) % list.length;
@@ -267,7 +309,7 @@ function createTransport(config = {}) {
         throw new AllNodesFailed(errors);
     }
 
-    async function connect(servers, autoReconnect = false) {
+    async function connect(servers?: string[], autoReconnect = false): Promise<void> {
         if (Array.isArray(servers)) {
             nodeList = servers.filter(s => s && typeof s === 'string');
         }
@@ -283,7 +325,7 @@ function createTransport(config = {}) {
         await tryConnect();
     }
 
-    function disconnect() {
+    function disconnect(): void {
         intentionalClose = true;
         autoreconnect = false;
 
@@ -302,7 +344,7 @@ function createTransport(config = {}) {
         setStatus('closed');
     }
 
-    function call(method, params, timeoutMs = rpcTimeoutMs) {
+    function call(method: string, params: any[], timeoutMs: number = rpcTimeoutMs): Promise<any> {
         if (!ws || ws.readyState !== 1) {
             return Promise.reject(new ConnectionError('WebSocket not open'));
         }
@@ -323,7 +365,7 @@ function createTransport(config = {}) {
             });
 
             try {
-                ws.send(JSON.stringify({
+                ws!.send(JSON.stringify({
                     id: Number(id),
                     jsonrpc: '2.0',
                     method,
@@ -337,25 +379,25 @@ function createTransport(config = {}) {
         });
     }
 
-    function addMessageHandler(handler) {
+    function addMessageHandler(handler: (params: any) => void): (() => void) & { isActive: () => boolean } {
         onMessageHandlers.push(handler);
-        const unsubscribe = () => {
+        const unsubscribe = (() => {
             const idx = onMessageHandlers.indexOf(handler);
             if (idx !== -1) onMessageHandlers.splice(idx, 1);
-        };
+        }) as (() => void) & { isActive: () => boolean };
         unsubscribe.isActive = () => onMessageHandlers.includes(handler);
         return unsubscribe;
     }
 
-    function getStatus() {
+    function getStatus(): string {
         return ws && ws.readyState === 1 ? 'connected' : status;
     }
 
-    function getNodeUrl() { return nodeUrl; }
-    function _setNodes(nodes) { nodeList = Array.isArray(nodes) ? [...nodes] : []; }
-    function _getNodes() { return [...nodeList]; }
-    function _setAutoReconnect(flag) { autoreconnect = !!flag; }
-    function isConnected() { return !!(ws && ws.readyState === 1); }
+    function getNodeUrl(): string | null { return nodeUrl; }
+    function _setNodes(nodes: string[]): void { nodeList = Array.isArray(nodes) ? [...nodes] : []; }
+    function _getNodes(): string[] { return [...nodeList]; }
+    function _setAutoReconnect(flag: boolean): void { autoreconnect = !!flag; }
+    function isConnected(): boolean { return !!(ws && ws.readyState === 1); }
 
     return {
         connect,
