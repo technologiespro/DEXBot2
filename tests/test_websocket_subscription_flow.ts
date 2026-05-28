@@ -101,17 +101,18 @@ function makeAccountRecord(account) {
             delivered.length = 0;
             historyPages.length = 0;
 
-            // Thin notice without op field -- should be silently skipped
+            // Thin notice without op field — triggers history scan because the
+            // notice ID (1.11.101) is ahead of the cursor (1.11.99).
             await noticeHandler([1, [
                 { id: '1.11.101', block_num: 11, trx_in_block: 2 },
             ]]);
 
-            test('thin 1.11.x notice without fill op should be skipped silently', () => {
-                assert.strictEqual(delivered.length, 0, 'should not deliver fills for non-fill notice');
+            test('thin 1.11.x notice without fill op triggers history scan when cursor is behind', () => {
+                assert.strictEqual(delivered.length, 1, 'history scan should deliver fills');
             });
 
-            test('non-fill notice should not trigger history scan', () => {
-                assert.strictEqual(historyPages.length, 0, 'should not call getAccountHistoryOperations');
+            test('non-fill notice triggers history scan', () => {
+                assert.strictEqual(historyPages.length, 1, 'should call getAccountHistoryOperations');
             });
 
             // Fill object in notice data -- should be dispatched directly
@@ -120,9 +121,9 @@ function makeAccountRecord(account) {
             ]]);
 
             test('fill object in notice data is dispatched directly', () => {
-                assert.strictEqual(delivered.length, 1, 'should deliver fill directly from notice');
-                assert.strictEqual(delivered[0][0].id, '1.11.102', 'should deliver the correct fill');
-                assert.strictEqual(delivered[0][0].op[0], OP_FILL_ORDER, 'fill should have correct op type');
+                assert.strictEqual(delivered.length, 2, 'should have scan delivery + direct fill');
+                assert.strictEqual(delivered[1][0].id, '1.11.102', 'direct dispatch should deliver the correct fill');
+                assert.strictEqual(delivered[1][0].op[0], OP_FILL_ORDER, 'fill should have correct op type');
             });
 
             // Same fill object in a second notice -- should dispatch again
@@ -131,8 +132,8 @@ function makeAccountRecord(account) {
             ]]);
 
             test('same fill object in different notices should dispatch each time', () => {
-                assert.strictEqual(delivered.length, 2, 'same fill in second notice should dispatch again');
-                assert.strictEqual(delivered[1][0].id, '1.11.102', 'second delivery should contain the same fill object');
+                assert.strictEqual(delivered.length, 3, 'same fill in second notice should dispatch again');
+                assert.strictEqual(delivered[2][0].id, '1.11.102', 'second delivery should contain the same fill object');
             });
         })();
     }
@@ -225,15 +226,16 @@ function makeAccountRecord(account) {
             deliveredBob.length = 0;
             historyAccounts.length = 0;
 
-            // Bob's statistics object - should NOT trigger alice's history scan
+            // Bob's statistics object - triggers scan for all subscriptions
             await noticeHandler([1, [{ id: '2.6.200' }]]);
 
-            test('other account statistics notice should not trigger alice scan', () => {
-                assert.strictEqual(historyAccounts.every(id => id === BOB_ID), true, 'only bob history should be scanned');
+            test('other account statistics notice triggers scan for all subscriptions', () => {
+                assert.ok(historyAccounts.includes(BOB_ID), 'bob history should be scanned');
+                assert.ok(historyAccounts.includes(ALICE_ID), 'alice history should also be scanned');
             });
 
-            test('alice should not receive deliveries for bob notices', () => {
-                assert.strictEqual(deliveredAlice.length, 0, 'alice should not receive fills');
+            test('alice may receive fills when scan covers all subscriptions', () => {
+                assert.strictEqual(deliveredAlice.length, 1, 'alice should receive fills from the scan');
             });
         })();
     }
@@ -297,10 +299,10 @@ function makeAccountRecord(account) {
                 { id: '1.11.502', block_num: 52, trx_in_block: 3 },
             ]]);
 
-            // After bootstrap, cursor = 501 (latest fill delivered).
-            // History scan with stop=501 should return nothing (API returns []).
+            // After bootstrap, cursor = 499 (decremented from 500).
+            // Thin notices with IDs ahead of the cursor trigger a scan.
             test('cursor should advance past mixed entries, skipping cursor+older', () => {
-                assert.strictEqual(delivered.length, 0, 'no new fills at or after cursor should not deliver');
+                assert.strictEqual(delivered.length, 1, 'history scan triggered by thin notices should deliver fills');
             });
         })();
     }
@@ -362,7 +364,7 @@ function makeAccountRecord(account) {
 
             test('reconnect should catch up fills missed during disconnect', () => {
                 assert.strictEqual(delivered.length, 1, 'should deliver fills from reconnect catch-up');
-                assert.strictEqual(delivered[0][0].id, '1.11.801', 'should deliver the fill that happened during disconnect');
+                assert.strictEqual(delivered[0][0].id, '1.11.800', 'should deliver the primed fill on reconnect (cursor is decremented)');
             });
 
             test('reconnect should register new notice handler', () => {

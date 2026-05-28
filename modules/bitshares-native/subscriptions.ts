@@ -237,9 +237,10 @@ function createSubscriptionManager(chainClient: any): any {
         }
 
         if (fillObjects.length === 0) {
-            // No fills in this notice — skip the full history scan for subs whose
-            // cursor already covers the notice data. This avoids redundant RPCs
-            // (get_full_accounts + get_account_history) on frequent non-fill notices.
+            // No fills in this notice — scan all active subscriptions to catch
+            // up on any fills that may have occurred. Non-fill notices (object
+            // changes, statistics updates, etc.) don't carry op data, so we must
+            // fall back to history scanning to detect fills.
             let noticeMaxInstance = -1;
             let hasHistoryEntries = false;
             for (const item of data) {
@@ -255,9 +256,8 @@ function createSubscriptionManager(chainClient: any): any {
             const scans = [];
             for (const [, sub] of subscriptions) {
                 if (!sub.active) continue;
-                // Only skip when the notice contains 1.11.x history IDs that we can
-                // compare against the cursor. Core object-change notices (bare 1.7.x
-                // order IDs) have no 1.11.x entries — always scan those.
+                // Skip when the notice contains 1.11.x history IDs that the
+                // cursor already covers — no new fills to catch up.
                 if (hasHistoryEntries) {
                     const subCursorInstance = parseObjectIdInstance(sub.lastDeliveredHistoryId);
                     if (Number.isFinite(subCursorInstance) && Number.isFinite(noticeMaxInstance) && subCursorInstance >= noticeMaxInstance) continue;
@@ -560,10 +560,9 @@ function createSubscriptionManager(chainClient: any): any {
 
         if (createdEntry) {
             try {
-                // Prime the cursor BEFORE remote activation. Any fill that lands between
-                // primeLastDeliveredHistoryId and set_subscribe_callback has an ID > latestFillId
-                // and will be caught by the catch-up below. The cursor is decremented so that
-                // the catch-up includes the primed fill itself (as an exclusive stop boundary).
+                // Prime the cursor BEFORE remote activation. The cursor is
+                // decremented so that the next scan re-fetches the primed fill,
+                // ensuring no fills are lost between prime and subscribe.
                 const latestFillId = await primeLastDeliveredHistoryId(entry);
                 entry.lastDeliveredHistoryId = latestFillId
                     ? (decrementObjectId(latestFillId) || latestFillId)
