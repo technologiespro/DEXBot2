@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.6] - 2026-05-30 - Launcher Hardening, Legacy Code Cleanup & Documentation Sweep
+
+This patch release hardens the unlock-start launcher against signal-handler leaks and polling hangs, removes deprecated legacy migration code across the vault, config, and price-mode layers, fixes broken script references and hardcoded machine paths, and sweeps documentation for stale line numbers, broken paths, and outdated counts.
+
+### 2026-05-29
+
+#### Docker Build Fix
+- Skip npm prepare script during Docker `npm ci` to prevent tsc failure before source COPY (`7142871`).
+
+#### Unlock-Start Isolated Mode Hardening
+- Clean up leaked SIGINT/SIGTERM/SIGUSR1/SIGUSR2 signal handlers from `runIsolated`, `main`, and `forwardSignal` paths; store named handler references, extract `cleanupSignalHandlers()`/`cleanupBotHandlers()`, and call on all exit paths (normal close, error, polling rejection). Fix unguarded `setInterval` callback in `runIsolated` — wrap in try/catch, `reject(err)` on exception, clear interval and clean up signal handlers before rejecting. Add `Promise<number>` return type and remove `as any` cast. Add `settled` guard in `waitForSupervisorReady` poll loop to prevent post-settlement timer scheduling. Add regression test `test_unlock_start_isolated_poll_reject.ts` asserting `main()` settles (no hang) when `getStatus()` throws (`e6e114a`).
+
+### 2026-05-30
+
+#### Unlock-Start Launcher Hardening
+- **Daemon ownership**: Add `daemonReleased` flag in `main()`; `finally` block only calls `stopManagedDaemon()` when ownership was not explicitly released, preventing redundant no-op after detached-supervisor path releases the daemon. **Direct-run detection**: Replace fragile `.replace(/\.js$/, '')` with `path.parse().name` for correct `.ts` execution via ts-node. **Supervisor transient-error routing**: Add `isSupervisorTransientError()` helper; `waitForSupervisorReady` poll loop retries only on "No supervisor socket found" and "Connection timed out", surfacing unexpected errors immediately. **Signal forwarding**: Both `forwardSignal` and `credential_daemon.ts` `forwardSignal` now filter for `ESRCH` (process already gone) and rethrow unexpected errors. **Usage documentation**: Add bare `claw-only` alias and `BOT_NAME` environment variable to doc comment (`b9dbe36`).
+
+#### Deprecated Pattern Removal & Broken Reference Fixes
+- **Price mode aliases**: Remove `market` and `orderbook` legacy aliases across `system.ts`, `grid.ts`, `dexbot_class.ts`, `account_bots.ts`, `dexbot_profiles.ts`. Only `pool`/`book` accepted. **SHA-256 vault format**: Remove `hashPassword()`, `decryptLegacyRecord()`, `migrateLegacyVault()`. `unlockWithPassword()` and `verifyCurrentPassword()` now require scrypt v2. `main()` in `chain_keys.ts` no longer checks for `masterPasswordHash`. **DUST_CANCEL_DELAY_MIN** migration removed from `constants.ts` and `account_bots.ts`; legacy minute key is now ignored. **staleTailVerifiedTs** single-timestamp → range migration removed from `market_adapter_service.ts`. **deferPersistence** flag removed from `processed_fill_store.ts`. **AMA slope mode** `window`/`cumulative`/`legacy` recognition preserved with division-by-lookback intact for backward compatibility; new writes default to `perBar`. **AMA_SLOPE_PERCENT_MODE_WINDOW** export removed; `market_adapter.ts` fallback now uses `AMA_SLOPE_PERCENT_MODE_PER_BAR`. **Broken references**: `dashboard/src/actions.rs` — remove nonexistent `check-update.sh` action, change `node` → `npx tsx` + `.js` → `.ts`. `claw/package.json` — all `node scripts/*.js` → `npx tsx scripts/*.ts`. Updated `test_chain_keys_vault.ts` (remove legacy vault test, add `testLegacyVaultRejected`), `test_price_derive.ts` (remove legacy market alias test), `test_market_adapter_service.ts` (update legacy stale tail test for range format), `test_dust_cancel_delay_config_migration.ts` (test legacy minute key is ignored) (`ecc1c8d`).
+
+#### Documentation Sweep
+- **Stale line numbers** in `docs/architecture.md`: update `Object.freeze`, `deepFreeze`, `_gridVersion`, `_gridLock`, and encapsulation references to current positions. **Broken file paths**: `docs/FUND_MOVEMENT_AND_ACCOUNTING.md` — `utils.ts` → `utils/` and `utils/system.ts`. `docs/LOGGING.md` — `utils.ts` → `utils/`. **Hardcoded machine paths**: `claw/docs/AI_BOT_LIBRARY_API.md` — 6 occurrences of `/home/alex/BTS/Git/DEXBot2` → `/path/to/DEXBot2`. 6 test files — replace `/home/alex/BTS/DEXBot2/{dexbot,bot}.js` with `require.resolve()` variable. **Legacy labels**: `analysis/trend_detection/SIGNAL_DOCUMENTATION.md` — add "(Legacy)" title suffix and note pointing to `kalman_trend_analyzer.ts`. **Stale test counts**: `docs/EVOLUTION.md` — 172→173 across 3 locations. `docs/DEXBOT_COMPARISON.md` — 172→173, 101→102 across 5 locations, "JS codebase" → "TypeScript codebase". **Test count clarity**: `docs/LOGGING.md` — "25 tests" clarified as "logging-specific" throughout. **Misc**: `docs/PLAN_MIN_BTS_VALUE.md` — corrected claim that `test_non_bts_fee_handling.ts` exists (never created) (`4514af6`).
+
 ## [0.7.5] - 2026-05-25 - Removal of All Dependencies & TypeScript Migration
 
 This release completes the removal of all external runtime dependencies and transitions the entire codebase from JavaScript to TypeScript. All source files, test files, and entry points are now `.ts` with strict mode enabled, compiled through `tsc` and run via `tsx` for development/testing. Thin `.js` shims at the root serve as stable entry points that route to compiled `dist/` output. The project's de facto zero-dependency philosophy is codified as an explicit architectural policy — no remaining npm dependencies at runtime, making the bot fully self-contained.

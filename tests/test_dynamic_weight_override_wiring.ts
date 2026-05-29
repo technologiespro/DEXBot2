@@ -166,7 +166,7 @@ function testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride() {
     assert.strictEqual(merged.kalmanSlope.maxSlopePct, 1.15, 'pair override should apply for kalmanSlope.maxSlopePct');
 }
 
-function testResolveBotCfgConvertsUnmarkedLegacyAmaSlopePercents() {
+function testResolveBotCfgPassesThroughUnmarkedAmaSlopePercents() {
     const settingsJson = {
         globals: {
             amaSlope: {
@@ -205,13 +205,13 @@ function testResolveBotCfgConvertsUnmarkedLegacyAmaSlopePercents() {
 
     const merged = resolveBotCfg(bot, { ...DEFAULTS });
 
-    assert.strictEqual(merged.amaSlope.lookbackBars, 18, 'pair lookback should apply before conversion');
-    assert.strictEqual(merged.amaSlope.maxSlopePct, 0.1, 'legacy cumulative max slope should convert to per-bar');
-    assert.strictEqual(merged.amaSlope.neutralZonePct, 0.02, 'legacy cumulative neutral zone should convert to per-bar');
+    assert.strictEqual(merged.amaSlope.lookbackBars, 18, 'pair lookback should apply');
+    assert.strictEqual(merged.amaSlope.maxSlopePct, 1.8, 'unmarked per-bar max slope should pass through');
+    assert.strictEqual(merged.amaSlope.neutralZonePct, 0.18, 'unmarked per-bar neutral zone should pass through');
     assert.strictEqual(
         merged.amaSlopeDeltaThresholdPercent,
-        0.01,
-        'legacy cumulative slope delta threshold should convert to per-bar'
+        0.18,
+        'unmarked per-bar slope delta threshold should pass through'
     );
 }
 
@@ -451,7 +451,7 @@ async function main() {
         testResolveBotCfgWiresMissingPairOverridesWithoutBotOverride();
         restoreMarketAdapterStubs();
 
-        testResolveBotCfgConvertsUnmarkedLegacyAmaSlopePercents();
+        testResolveBotCfgPassesThroughUnmarkedAmaSlopePercents();
         restoreMarketAdapterStubs();
 
         testResolveBotCfgKeepsMarkedPerBarAmaSlopePercents();
