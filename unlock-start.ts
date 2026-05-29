@@ -202,7 +202,7 @@ async function runIsolated({
     botEntry?: any;
     stayResident?: boolean;
     startupGraceMs?: number;
-} = {}) {
+} = {}): Promise<number> {
     let supervisor;
 
     if (botName) {
@@ -222,25 +222,43 @@ async function runIsolated({
 
     printLauncherSuccess({ botName, isolated: true });
 
-    process.on('SIGINT', () => supervisor.shutdownSignalHandler('SIGINT'));
-    process.on('SIGTERM', () => supervisor.shutdownSignalHandler('SIGTERM'));
-    process.on('SIGUSR1', () => supervisor.printStatusSummary());
-    process.on('SIGUSR2', () => supervisor.restartRunning());
+    const sigintHandler = () => supervisor.shutdownSignalHandler('SIGINT');
+    const sigtermHandler = () => supervisor.shutdownSignalHandler('SIGTERM');
+    const sigusr1Handler = () => supervisor.printStatusSummary();
+    const sigusr2Handler = () => supervisor.restartRunning();
+    process.on('SIGINT', sigintHandler);
+    process.on('SIGTERM', sigtermHandler);
+    process.on('SIGUSR1', sigusr1Handler);
+    process.on('SIGUSR2', sigusr2Handler);
+
+    const cleanupSignalHandlers = () => {
+        process.off('SIGINT', sigintHandler);
+        process.off('SIGTERM', sigtermHandler);
+        process.off('SIGUSR1', sigusr1Handler);
+        process.off('SIGUSR2', sigusr2Handler);
+    };
 
     if (stayResident) {
         return new Promise(() => {});
     }
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const interval = setInterval(async () => {
-            const status = supervisor.getStatus();
-            const running = Object.values(status).some(
-                (s: any) => s.status === 'running' || s.status === 'restarting' || s.status === 'starting'
-            );
-            if (!running && !supervisor.hasUserStopped()) {
+            try {
+                const status = supervisor.getStatus();
+                const running = Object.values(status).some(
+                    (s: any) => s.status === 'running' || s.status === 'restarting' || s.status === 'starting'
+                );
+                if (!running && !supervisor.hasUserStopped()) {
+                    clearInterval(interval);
+                    cleanupSignalHandlers();
+                    await supervisor.shutdown();
+                    resolve(0);
+                }
+            } catch (err) {
                 clearInterval(interval);
-                await supervisor.shutdown();
-                resolve(0);
+                cleanupSignalHandlers();
+                reject(err);
             }
         }, 1000);
     });
@@ -275,10 +293,12 @@ function waitForSupervisorReady({ child = null, timeoutMs = 15000, intervalMs = 
 
         const startedAt = Date.now();
         const poll = async () => {
+            if (settled) return;
             try {
                 await sendControlCommand({ cmd: 'status' });
-                finish(resolve, true);
+                if (!settled) finish(resolve, true);
             } catch (_) {
+                if (settled) return;
                 if ((Date.now() - startedAt) >= timeoutMs) {
                     finish(resolve, false);
                     return;
@@ -432,12 +452,12 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
         if (isolated) {
             if (isDetachedSupervisorChild || forceForegroundIsolated) {
-                process.exitCode = (await runIsolated({
+                process.exitCode = await runIsolated({
                     botName,
                     botEntry: selectedBot,
                     stayResident: isDetachedSupervisorChild,
                     startupGraceMs,
-                })) as any;
+                });
                 return;
             }
 
@@ -465,13 +485,24 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
         await waitForStableChildStartup(botProcess, { label: 'DEXBot', timeoutMs: startupGraceMs });
         printLauncherSuccess({ botName });
 
-        process.on('SIGINT', () => forwardSignal(botProcess, 'SIGINT'));
-        process.on('SIGTERM', () => forwardSignal(botProcess, 'SIGTERM'));
+        const onSigint = () => forwardSignal(botProcess, 'SIGINT');
+        const onSigterm = () => forwardSignal(botProcess, 'SIGTERM');
+        process.on('SIGINT', onSigint);
+        process.on('SIGTERM', onSigterm);
+
+        const cleanupBotHandlers = () => {
+            process.off('SIGINT', onSigint);
+            process.off('SIGTERM', onSigterm);
+        };
 
         const exitCode = await new Promise((resolve, reject) => {
             botProcess.on('error', reject);
             botProcess.on('close', (code: any) => resolve(code));
+        }).catch((err) => {
+            cleanupBotHandlers();
+            throw err;
         });
+        cleanupBotHandlers();
         process.exitCode = (exitCode as any) || 0;
     } finally {
         if (!isDetachedSupervisorChild) {
