@@ -63,6 +63,8 @@ function createCredentialDaemonController({
         try {
             daemonProcess.kill(signal);
         } catch (err: any) {
+            if (err.code === 'ESRCH') return;
+            throw err;
         }
     }
 

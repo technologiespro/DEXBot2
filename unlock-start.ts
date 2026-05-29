@@ -4,11 +4,10 @@
  * unlock-start.js - Credential Daemon Launcher
  *
  * Starts credential daemon with master password and launches the bot process.
- * Use --claw-only to run credential daemon only, without bot startup.
- * Use --isolated to run each bot in its own process with auto-restart and log files.
  *
  * Usage:
  *   node unlock-start [botName]
+ *   node unlock-start claw-only
  *   node unlock-start --claw-only
  *   node unlock-start --isolated
  *   node unlock-start --isolated <botName>
@@ -18,6 +17,9 @@
  *   node unlock-start control stop-all
  *   node unlock-start control restart-all
  *   node unlock-start control shutdown
+ *
+ * Environment:
+ *   BOT_NAME              Fallback bot name when none is given as positional arg
  */
 
 process.umask(0o077);
@@ -47,7 +49,9 @@ function forwardSignal(child: any, signal: any) {
     if (!child || child.killed) return;
     try {
         child.kill(signal);
-    } catch (err) {
+    } catch (err: any) {
+        if (err.code === 'ESRCH') return;
+        throw err;
     }
 }
 
@@ -264,6 +268,11 @@ async function runIsolated({
     });
 }
 
+function isSupervisorTransientError(err: any): boolean {
+    const msg = String(err && err.message || '');
+    return msg.includes('No supervisor socket found') || msg.includes('Connection timed out');
+}
+
 function waitForSupervisorReady({ child = null, timeoutMs = 15000, intervalMs = 250 }: { child?: any; timeoutMs?: number; intervalMs?: number } = {}): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
         let settled = false;
@@ -297,8 +306,12 @@ function waitForSupervisorReady({ child = null, timeoutMs = 15000, intervalMs = 
             try {
                 await sendControlCommand({ cmd: 'status' });
                 if (!settled) finish(resolve, true);
-            } catch (_) {
+            } catch (err: any) {
                 if (settled) return;
+                if (!isSupervisorTransientError(err)) {
+                    finish(reject, err);
+                    return;
+                }
                 if ((Date.now() - startedAt) >= timeoutMs) {
                     finish(resolve, false);
                     return;
@@ -427,6 +440,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
     const { botName, clawOnly, isolated } = parsed;
     const selectedBot = botName ? resolveBotEntryForName(botName) : null;
+    let daemonReleased = false;
 
     try {
         if (botName && !selectedBot) {
@@ -466,6 +480,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
                 credentialDaemonPid: controller.getManagedDaemonPid(),
             });
             controller.releaseManagedDaemon();
+            daemonReleased = true;
             printLauncherSuccess({ botName, isolated: true });
             console.log(`Supervisor PID: ${supervisorPid}`);
             console.log(`Control socket: ${process.env.DEXBOT_SUPERVISOR_SOCKET || SOCKET_PATH}`);
@@ -505,7 +520,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
         cleanupBotHandlers();
         process.exitCode = (exitCode as any) || 0;
     } finally {
-        if (!isDetachedSupervisorChild) {
+        if (!isDetachedSupervisorChild && !daemonReleased) {
             await controller.stopManagedDaemon();
         }
     }
@@ -564,7 +579,7 @@ function formatControlUptime(ms: number) {
 // Run if called directly or via the root-level unlock-start.js shim
 const isUnlockStartDirectRun = require.main === module || (
     process.argv[1] &&
-    path.basename(process.argv[1]).replace(/\.js$/, '') === 'unlock-start'
+    path.parse(process.argv[1]).name === 'unlock-start'
 );
 if (isUnlockStartDirectRun) {
     setupGracefulShutdown();
