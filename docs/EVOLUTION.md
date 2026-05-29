@@ -6,10 +6,10 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,422 commits over ~6 active months
+- **Growth Phase**: 1,470 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
 - **Stability**: Progression from manual testing to a suite of 179 automated test files
-- **Releases**: 20 tagged releases (v0.1.0 to v0.7.4)
+- **Releases**: 21 tagged releases (v0.1.0 to v0.7.5)
 
 ---
 
@@ -180,7 +180,8 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 - **May 24-25**: Post-migration regression fixes — Docker release gates, update flow, path resolution, adapter gating
 - **May 25**: Build infrastructure hardening, zero-dependency enforcement (remove openclaw, dead files), stability hardening (fill replay, deadlock prevention, credential daemon startup), accounting/chain corrections, utility deduplication and barrel export refactoring, regime threshold alignment in analysis tools, final dead code, stale docs and obsolete shell scripts cleanup
 - **May 26**: Fill detection & subscription overhaul — subscription reconnect retry, reconnect fill-detection safety net, websocket fill detection repair, instance-based cursor filtering, direct-notice dispatch replacing history-scan, btsFeeState hardening
-- **May 27**: Fill detection optimization — unfiltered `get_account_history`, deferred cursor advancement on callback failure, redundant RPC skip, multi-account reconnect parallelization, btsFeeState unit mismatch and cancel refund cap fix
+- **May 27**: Fill detection optimization — unfiltered `get_account_history`, deferred cursor advancement on callback failure, redundant RPC skip, multi-account reconnect parallelization, btsFeeState unit mismatch and cancel refund cap fix. BTS fee acquisition via AMM pool (`min_BTS_value`), centralized logging (9 modules migrated to Logger), tsx fallback for pm2/credential-daemon/unlock-start, docs sweep across 25 files, deferredPaidFee cleanup
+- **May 28**: Security & credential daemon hardening — private-key export removal, memory zeroing, daemon error message preservation, bootstrap env leak fix, session churn prevention, orphan double-credit fix, size-drift precision, orphan dedup key entropy. Native module type safety (`@ts-nocheck` removal from 5 modules), PM2 test hang fix, brain-key golden vectors, subscription test expectation corrections
 
 #### Major Changes
 1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
@@ -200,6 +201,9 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 15. **Grid Reset Metadata**: Centralized reset metadata handling with dynamic reset state preservation
 16. **Zero-Dependency Policy & TypeScript Migration**: Removal of all external runtime dependencies codified as explicit architectural policy; full codebase conversion from JS to TS (48K+ lines, 158 tests, all entry points) with strict mode, `tsc` build pipeline, `tsx` runtime, and thin `.js` shims for dist routing
 17. **Fill Detection & Subscription Overhaul**: Complete rewrite of native BitShares fill detection — replaced history-scan with direct-notice dispatch, instance-based cursor filtering, subscription reconnect retry with cursor-safe error propagation, deferred cursor advancement on callback failure, unfiltered `get_account_history`, redundant RPC elimination, and parallelized multi-account reconnect. Combined with btsFeeState hardening across frozen objects and grid reset paths
+18. **BTS Fee Acquisition via AMM Pool**: `min_BTS_value` parameter enables non-BTS paired bots to acquire BTS fees through AMM pool swaps
+19. **Centralized Logging**: Removed dual constructor pattern, migrated 9 modules from `console.*` to Logger for consistent structured output
+20. **Credential Daemon Security Hardening**: Private-key export removal, memory zeroing, daemon error message preservation, bootstrap env leak fix, session churn prevention, orphan double-credit fix, and orphan dedup key entropy
 
 ---
 
@@ -218,7 +222,7 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 
 ### v0.7.4 → v0.7.5 — Removal of All Dependencies & TypeScript Migration
 
-This release completes the removal of all external runtime dependencies and transitions the full codebase from JavaScript to TypeScript. All production sources, 158 test files, scripts, and entry points now compile through `tsc` with strict mode and run via `tsx` for development/testing, with thin `.js` shims routing to compiled `dist/` output for production. The project's de facto zero-dependency philosophy is codified as an explicit architectural policy — no remaining npm dependencies at runtime, making the bot fully self-contained.
+This release completes the removal of all external runtime dependencies and transitions the full codebase from JavaScript to TypeScript. All production sources, 158 test files, scripts, and entry points now compile through `tsc` with strict mode and run via `tsx` for development/testing, with thin `.js` shims routing to compiled `dist/` output for production. The project's de facto zero-dependency philosophy is codified as an explicit architectural policy — no remaining npm dependencies at runtime, making the bot fully self-contained. Subsequent post-release stabilization adds BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening, and native module type safety improvements.
 
 | Category | Commits |
 |----------|---------|
@@ -236,7 +240,14 @@ This release completes the removal of all external runtime dependencies and tran
 | 12. Analysis tooling fix | 1 |
 | 13. Fill detection & subscription overhaul (reconnect, cursor, notice dispatch, btsFeeState) | 9 |
 | 14. Fill detection optimization (history source, parallel reconnect, fee cap fix) | 6 |
-| **Total** | **82** |
+| 15. BTS fee acquisition via AMM pool | 1 |
+| 16. Logging centralization (9 modules to Logger) | 1 |
+| 17. Post-migration fixes (tsx fallback, shim updates) | 1 |
+| 18. Security & credential daemon hardening (private-key removal, memory zeroing, bootstrap leak, orphan dedup) | 3 |
+| 19. Type safety (remove @ts-nocheck from 5 native modules, brain-key vectors) | 1 |
+| 20. Test corrections (subscription expectations) | 1 |
+| 21. Cleanup (deferredPaidFee complexity removal) | 1 |
+| **Total** | **93** |
 
 ### v0.7.3 → v0.7.4 (5 commits)
 
@@ -379,7 +390,7 @@ This release completes the removal of all external runtime dependencies and tran
 
 ## Development Statistics
 
-172 automated tests (all TypeScript), 20 tagged releases. See **Version History** for commit breakdown by release.
+172 automated tests (all TypeScript), 21 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -458,7 +469,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: May 27, 2026
-**Total Commits**: 1424
-**Date Range**: December 2, 2025 - May 27, 2026 (ongoing)
+**Last Updated**: May 28, 2026
+**Total Commits**: 1470
+**Date Range**: December 2, 2025 - May 28, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

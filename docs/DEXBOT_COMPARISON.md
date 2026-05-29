@@ -1,6 +1,6 @@
 # DEXBot vs DEXBot2 — Detailed Comparison Report
 
-> **Date:** 2026-05-26 *(metrics refreshed against local source trees)*
+> **Date:** 2026-05-28 *(metrics refreshed against local source trees)*
 > **Scope:** Full architectural, functional, and operational comparison between the original [DEXBot](https://github.com/Codaone/DEXBot) (Python, v1.0.0) and DEXBot2 (TypeScript, v0.7.5).
 > **Audience:** Developers, contributors, and operators evaluating or migrating between the two projects.
 
@@ -670,7 +670,7 @@ Where:
 | `docs/docker.md` | 3 KB | Docker deployment guide |
 | `docs/README.md` | 2 KB | Docs index |
 | `AGENTS.md` | 6.5 KB | AI development context |
-| `CHANGELOG.md` | Very large | Full version history (1424 commits at current HEAD) |
+| `CHANGELOG.md` | Very large | Full version history (1470 commits at current HEAD) |
 
 ### Documentation Comparison
 
@@ -767,9 +767,9 @@ Where:
 |---|---|---|
 | **Release Track** | 1.0.0 | v0.7.5 |
 | **Active Since** | ~2018 | December 2025 |
-| **Last Commit** | May 23, 2020 | 2026-05-25 |
-| **Total Commits** | 2281 | 1424 at current HEAD |
-| **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large JS runtime + adapter + Claw + analysis + tests |
+| **Last Commit** | May 23, 2020 | 2026-05-28 |
+| **Total Commits** | 2281 | 1470 at current HEAD |
+| **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large TypeScript runtime + adapter + Claw + analysis + tests |
 | **Source Files** | 72 Python files in `dexbot/` | 1012 TS files across the repo |
 | **Test Files** | 16 Python test files | 172 `test_*.ts` files |
 | **Documentation** | Sphinx docs + README | 30+ Markdown docs plus Claw skills/references |

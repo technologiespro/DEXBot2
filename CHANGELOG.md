@@ -143,6 +143,37 @@ This release completes the removal of all external runtime dependencies and tran
 - Optimize fill subscription — skip redundant RPCs, parallelize multi-account reconnect (`c88ff98`).
 - Fix `btsFeeState` unit mismatch and correct cancel refund cap (`591f80c`).
 
+#### BTS Fee Acquisition & AMM Pool Integration
+- Add `min_BTS_value` for non-BTS paired bots — BTS fee acquisition via AMM pool (`34c4d06`).
+
+#### Logging Centralization
+- Centralize logging — remove dual constructor, migrate 9 modules from `console.*` to Logger (`2819d76`).
+
+#### Post-Migration Fixes
+- Add `tsx` fallback to pm2, credential-daemon, unlock-start, and update shims (`9f1e967`).
+
+#### Stability & Recovery Hardening
+- Fix BTS acquisition bugs, fee budget deduction, Logger test stubs, and `toFiniteNumber` import (`da2a2f8`).
+
+#### Cleanup
+- Strip deferredPaidFee complexity and unused constant (`7013d04`).
+
+#### Documentation
+- Sweep stale metrics, dead references, and `.js` remnants across 25 docs files (`75ad651`).
+
+### 2026-05-28
+
+#### Security & Credential Daemon Hardening
+- Remove private-key export from daemon, fix memory zeroing, update security paper (`ba8905e`).
+- Preserve daemon error messages in `sendDaemonRequest` (`47e2de8`).
+- Fix bootstrap env leak, session churn, orphan double-credit, stale socket cleanup, size-drift precision, orphan dedup key entropy (`d7dc699`).
+
+#### Type Safety & Native Module Cleanup
+- Remove `@ts-nocheck` from 5 native modules, fix PM2 test hang, add brain-key golden vectors (`38ee843`).
+
+#### Test Fixes
+- Correct subscription test expectations to match production behavior (`408649e`).
+
 ## [0.7.4] - 2026-05-22 - Code Cleanup and Documentation Refresh
 
 This patch cleans up unused code paths, refactors a shared validation helper, refreshes the full documentation set for clarity, completeness, and version alignment, and brings the JSDoc layer up to date across the entire codebase.
