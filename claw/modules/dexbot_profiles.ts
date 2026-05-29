@@ -313,16 +313,16 @@ function validateBotSettingsValue(field: any, value: any, errors: any[]) {
 
     case 'startPrice':
       if (!isPositivePriceLike(value)
-        && !(typeof value === 'string' && ['pool', 'book', 'market'].includes(value.toLowerCase()))) {
-        push('startPrice must be a positive number or one of pool/book (or legacy: market)');
+        && !(typeof value === 'string' && ['pool', 'book'].includes(value.toLowerCase()))) {
+        push('startPrice must be a positive number, "pool", or "book"');
       }
       break;
 
     case 'gridPrice':
       if (value !== null
         && !isPositivePriceLike(value)
-        && !(typeof value === 'string' && /^(pool|book|market|ama(?:[1-4])?)$/i.test(value))) {
-        push('gridPrice must be null, a positive number, or one of pool/book/ama/ama1..ama4 (or legacy: market)');
+        && !(typeof value === 'string' && /^(pool|book|ama(?:[1-4])?)$/i.test(value))) {
+        push('gridPrice must be null, a positive number, or one of pool/book/ama/ama1..ama4');
       }
       break;
 

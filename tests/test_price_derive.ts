@@ -65,10 +65,6 @@ async function main() {
         assert(Number.isFinite(derivedForcePool) && Math.abs(derivedForcePool - poolP) < 1e-9, `derivePrice(mode=pool) should return pool price when available (got ${derivedForcePool}, expected ${poolP})`);
         const derivedForceBook = await derivePrice(mock, assetA, assetB, 'book');
         assert(Number.isFinite(derivedForceBook) && Math.abs(derivedForceBook - marketP) < 1e-9, `derivePrice(mode=book) should return book price when available (got ${derivedForceBook}, expected ${marketP})`);
-        // Legacy alias: 'market' must behave identically to 'book'
-        const derivedForceLegacy = await derivePrice(mock, assetA, assetB, 'market');
-        assert(Number.isFinite(derivedForceLegacy) && Math.abs(derivedForceLegacy - marketP) < 1e-9, `derivePrice(mode=market legacy) should return book price (got ${derivedForceLegacy}, expected ${marketP})`);
-
          // Now test strict behavior: remove pools so pool resolution returns null and derivePrice(auto) still prefers pool but falls back to book
          mock.db.get_liquidity_pools = async () => [];
          mock.db.get_objects = async () => [];

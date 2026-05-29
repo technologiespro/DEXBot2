@@ -3587,7 +3587,8 @@ async function testLegacyStaleTailVerificationTimestampIsHonored() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_legacy-stale-meta_1h.json`),
         loadJson: () => ({
             meta: {
-                staleTailVerifiedTs: baseTs + hour,
+                staleTailVerifiedStartTs: baseTs + hour,
+                staleTailVerifiedEndTs: baseTs + (3 * hour),
             },
             candles: [
                 [baseTs, 100, 100, 100, 100, 1],
@@ -3642,8 +3643,8 @@ async function testLegacyStaleTailVerificationTimestampIsHonored() {
     }, new Map(), {});
 
     assert.strictEqual(savedPayload.candles.length, 4, 'legacy verified stale tail should be kept without revalidation');
-    assert.strictEqual(savedPayload.meta.staleTailVerifiedStartTs, baseTs + hour, 'legacy timestamp should migrate to range start');
-    assert.strictEqual(savedPayload.meta.staleTailVerifiedEndTs, baseTs + (3 * hour), 'legacy timestamp should migrate to range end');
+    assert.strictEqual(savedPayload.meta.staleTailVerifiedStartTs, baseTs + hour, 'verified range start should be preserved');
+    assert.strictEqual(savedPayload.meta.staleTailVerifiedEndTs, baseTs + (3 * hour), 'verified range end should cover the full stale tail');
 }
 
 async function testSourceMismatchClearsPersistedStaleTailVerificationRange() {

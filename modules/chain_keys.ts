@@ -43,15 +43,14 @@
  *
  *   4. validatePrivateKey(key) - Validate private key format
  *
- * CRYPTO HELPERS (8 functions)
+ * CRYPTO HELPERS (7 functions)
  *   5. encrypt(text, secret) - AES-256-GCM encryption
  *   6. decrypt(encryptedHex, secret) - AES-256-GCM decryption
- *   7. hashPassword(password) - SHA-256 hash for legacy verification
- *   8. deriveVaultKey(password, vaultSalt) - Derive the session vault key
- *   9. deriveSessionSecret(vaultSecret, sessionSalt) - Derive a session-only signing key
- *  10. loadAccounts() - Load accounts from keys.json
- *  11. saveAccounts(data) - Save accounts to keys.json
- *  12. createVaultSecret(...) - Build a serializable derived secret object
+ *   7. deriveVaultKey(password, vaultSalt) - Derive the session vault key
+ *   8. deriveSessionSecret(vaultSecret, sessionSalt) - Derive a session-only signing key
+ *   9. loadAccounts() - Load accounts from keys.json
+ *  10. saveAccounts(data) - Save accounts to keys.json
+ *  11. createVaultSecret(...) - Build a serializable derived secret object
  *
  * DAEMON (4 functions)
  *  10. isDaemonReady() - Check if credential daemon is ready
@@ -432,10 +431,6 @@ function loadAccounts() {
     }
 }
 
-function hashPassword(password) {
-    return crypto.createHash('sha256').update(password).digest('hex');
-}
-
 function setupModernVault(accountsData, password) {
     const vaultSalt = crypto.randomBytes(VAULT_SALT_BYTES);
     const vaultKey = deriveVaultKey(password, vaultSalt);
@@ -446,47 +441,9 @@ function setupModernVault(accountsData, password) {
     return createVaultSecret(vaultKey);
 }
 
-function decryptLegacyRecord(encrypted, password) {
-    const parts = String(encrypted || '').split(':');
-    if (parts.length !== 4) {
-        throw new Error('Invalid legacy encrypted payload');
-    }
-
-    const salt = toBuffer(parts[0]);
-    const iv = toBuffer(parts[1]);
-    const authTag = toBuffer(parts[2]);
-    const encryptedText = parts[3];
-    if (!salt || !iv || !authTag || typeof encryptedText !== 'string') {
-        throw new Error('Invalid legacy encrypted payload');
-    }
-
-    const key = crypto.scryptSync(password, salt, VAULT_KEY_BYTES);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-}
-
-function migrateLegacyVault(accountsData, password) {
-    const decryptedKeys = {};
-    for (const [name, account] of Object.entries(accountsData.accounts)) {
-        decryptedKeys[name] = decryptLegacyRecord(account.encryptedKey, password);
-    }
-
-    const secret = setupModernVault(accountsData, password);
-    for (const [name, account] of Object.entries(accountsData.accounts)) {
-        account.encryptedKey = encrypt(decryptedKeys[name], secret);
-    }
-
-    saveAccounts(accountsData);
-    return secret;
-}
-
 /**
  * Unlock the key vault with a master password.
- * Supports both modern (v2) and legacy (SHA-256) vault formats.
- * Modern vaults verify via scrypt-derived key + HMAC; legacy vaults auto-migrate.
+ * Uses modern scrypt v2 vault format with HMAC verification.
  * @param {string} password - Master password
  * @param {import('./types').KeysFile} [accountsData=loadAccounts()] - Accounts data object
  * @returns {import('./types').VaultSecret} Derived vault secret
@@ -494,32 +451,21 @@ function migrateLegacyVault(accountsData, password) {
  * @throws {Error} If vault format is unsupported
  */
 function unlockWithPassword(password, accountsData = loadAccounts()) {
-    if (hasModernVault(accountsData)) {
-        if (!verifyModernPassword(password, accountsData)) {
-            throw new MasterPasswordError('Incorrect master password.');
+    if (!hasModernVault(accountsData)) {
+        if (Object.keys(accountsData.accounts || {}).length > 0) {
+            throw new Error('Unsupported key vault format. Recreate profiles/keys.json with the current key manager.');
         }
-        return deriveModernSecretFromPassword(password, accountsData);
+        throw new Error('No master password set. Please run modules/chain_keys.js first.');
     }
 
-    if (accountsData.masterPasswordHash) {
-        if (hashPassword(password) !== accountsData.masterPasswordHash) {
-            throw new MasterPasswordError('Incorrect master password.');
-        }
-        return migrateLegacyVault(accountsData, password);
+    if (!verifyModernPassword(password, accountsData)) {
+        throw new MasterPasswordError('Incorrect master password.');
     }
-
-    if (Object.keys(accountsData.accounts || {}).length > 0) {
-        throw new Error('Unsupported key vault format. Recreate profiles/keys.json with the current key manager.');
-    }
-
-    throw new Error('No master password set. Please run modules/chain_keys.js first.');
+    return deriveModernSecretFromPassword(password, accountsData);
 }
 
 function verifyCurrentPassword(password, accountsData) {
-    if (hasModernVault(accountsData)) {
-        return verifyModernPassword(password, accountsData);
-    }
-    return !!accountsData.masterPasswordHash && hashPassword(password) === accountsData.masterPasswordHash;
+    return hasModernVault(accountsData) && verifyModernPassword(password, accountsData);
 }
 
 class MasterPasswordError extends Error {
@@ -756,7 +702,7 @@ async function main() {
     let vaultSecret = null;
 
     // Check if master password is set
-    if (!hasModernVault(accountsData) && !accountsData.masterPasswordHash) {
+    if (!hasModernVault(accountsData)) {
         console.log('No master password set. Please set one:');
         const password1 = await readPassword('Enter master password:   ');
         const password2 = await readPassword('Confirm master password: ');
@@ -1088,7 +1034,6 @@ export = {
     saveAccounts,
     encrypt,
     decrypt,
-    hashPassword,
     deriveVaultKey,
     createDaemonSigningToken,
     createSessionSecret,

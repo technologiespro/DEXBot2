@@ -224,7 +224,7 @@ function applyAmaSlopeOverrides(target, overrides) {
         ?? overrides.amaSlope?.units
     );
     if (explicitMode) target.amaSlopePercentMode = explicitMode;
-    const mode = explicitMode || target.amaSlopePercentMode || AMA_SLOPE_PERCENT_MODE_WINDOW;
+    const mode = explicitMode || target.amaSlopePercentMode || AMA_SLOPE_PERCENT_MODE_PER_BAR;
 
     if (overrides.amaSlopeDeltaThresholdPercent != null) {
         target.amaSlopeDeltaThresholdPercent = convertSlopePercentToPerBar(
@@ -1054,7 +1054,7 @@ function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
 const {
     MarketAdapterService,
     AMA_SLOPE_PERCENT_MODE_PER_BAR,
-    AMA_SLOPE_PERCENT_MODE_WINDOW,
+
     normalizeAmaSlopePercentMode,
     normalizeAmaSlopeLookbackBars,
     convertSlopePercentToPerBar,

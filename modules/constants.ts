@@ -118,26 +118,6 @@
 
 const { readGeneralSettings } = require('./general_settings');
 
-/**
- * Migrate legacy DUST_CANCEL_DELAY_MIN (minutes) to DUST_CANCEL_DELAY_SEC (seconds).
- * @param {Object} [gridSettings={}] - Grid settings object
- * @returns {Object} Cleaned grid settings with migrated dust cancel delay
- */
-function migrateDustCancelDelaySettings(gridSettings = {}) {
-    const cleanGridSettings = { ...gridSettings };
-
-    // Migrate old DUST_CANCEL_DELAY_MIN (minutes) → DUST_CANCEL_DELAY_SEC (seconds).
-    if ('DUST_CANCEL_DELAY_MIN' in cleanGridSettings && !('DUST_CANCEL_DELAY_SEC' in cleanGridSettings)) {
-        const oldMin = Number(cleanGridSettings.DUST_CANCEL_DELAY_MIN);
-        if (Number.isFinite(oldMin)) {
-            cleanGridSettings.DUST_CANCEL_DELAY_SEC = oldMin < 0 ? oldMin : oldMin * 60;
-        }
-    }
-
-    delete cleanGridSettings.DUST_CANCEL_DELAY_MIN;
-    return cleanGridSettings;
-}
-
 // Order categories used by the OrderManager when classifying grid entries.
 const ORDER_TYPES = Object.freeze({
     SELL: 'sell',
@@ -1308,12 +1288,10 @@ if (settings) {
         const filteredGridSettings = Object.fromEntries(
             Object.entries(gridSettings).filter(([key]) => !key.startsWith('_'))
         );
-        const cleanGridSettings = migrateDustCancelDelaySettings(filteredGridSettings);
-
         GRID_LIMITS = {
             ...GRID_LIMITS,
-            ...cleanGridSettings,
-            GRID_COMPARISON: { ...GRID_LIMITS.GRID_COMPARISON, ...(cleanGridSettings.GRID_COMPARISON || {}) }
+            ...filteredGridSettings,
+            GRID_COMPARISON: { ...GRID_LIMITS.GRID_COMPARISON, ...(filteredGridSettings.GRID_COMPARISON || {}) }
         };
     }
 
@@ -1337,8 +1315,7 @@ if (settings) {
             const filteredExpertGridSettings = Object.fromEntries(
                 Object.entries(settings.EXPERT.GRID_LIMITS).filter(([key]) => !key.startsWith('_'))
             );
-            const expertGridSettings = migrateDustCancelDelaySettings(filteredExpertGridSettings);
-            GRID_LIMITS = { ...GRID_LIMITS, ...expertGridSettings };
+            GRID_LIMITS = { ...GRID_LIMITS, ...filteredExpertGridSettings };
         }
         if (settings.EXPERT.TIMING) {
             const expertTimingSettings = Object.fromEntries(

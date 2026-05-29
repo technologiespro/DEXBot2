@@ -1059,11 +1059,6 @@ class MarketAdapterService {
             if (Number.isFinite(startTs) && Number.isFinite(endTs)) {
                 return { startTs, endTs };
             }
-
-            const legacyStartTs = Number(existingMeta.staleTailVerifiedTs);
-            if (Number.isFinite(legacyStartTs)) {
-                return { startTs: legacyStartTs, endTs: Number.POSITIVE_INFINITY };
-            }
             return {};
         };
 
@@ -1152,7 +1147,6 @@ class MarketAdapterService {
             existingCandles = [];
             existingMeta.nativeRecentTradeSequences = [];
             existingMeta.nativeLastTradeTs = null;
-            existingMeta.staleTailVerifiedTs = null;
             existingMeta.staleTailVerifiedStartTs = null;
             existingMeta.staleTailVerifiedEndTs = null;
         }
@@ -2478,7 +2472,6 @@ class MarketAdapterService {
 export = {
     MarketAdapterService,
     AMA_SLOPE_PERCENT_MODE_PER_BAR,
-    AMA_SLOPE_PERCENT_MODE_WINDOW,
     normalizeAmaSlopePercentMode,
     normalizeAmaSlopeLookbackBars,
     convertSlopePercentToPerBar,

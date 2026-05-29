@@ -24,30 +24,25 @@ function loadConstantsWithSettings(mockSettings) {
     }
 }
 
-function testTopLevelLegacyMinutesMigration() {
+function testTopLevelSecondsSetting() {
     const constants = loadConstantsWithSettings({
         GRID_LIMITS: {
-            DUST_CANCEL_DELAY_MIN: 5
+            DUST_CANCEL_DELAY_SEC: 300
         }
     });
 
     assert.strictEqual(
         constants.GRID_LIMITS.DUST_CANCEL_DELAY_SEC,
         300,
-        'Top-level legacy DUST_CANCEL_DELAY_MIN should migrate to seconds'
-    );
-    assert.strictEqual(
-        Object.prototype.hasOwnProperty.call(constants.GRID_LIMITS, 'DUST_CANCEL_DELAY_MIN'),
-        false,
-        'Top-level legacy DUST_CANCEL_DELAY_MIN should not survive the merge'
+        'Top-level DUST_CANCEL_DELAY_SEC should pass through'
     );
 }
 
-function testExpertLegacyMinutesMigration() {
+function testExpertSecondsSetting() {
     const constants = loadConstantsWithSettings({
         EXPERT: {
             GRID_LIMITS: {
-                DUST_CANCEL_DELAY_MIN: 7
+                DUST_CANCEL_DELAY_SEC: 420
             }
         }
     });
@@ -55,20 +50,14 @@ function testExpertLegacyMinutesMigration() {
     assert.strictEqual(
         constants.GRID_LIMITS.DUST_CANCEL_DELAY_SEC,
         420,
-        'Expert legacy DUST_CANCEL_DELAY_MIN should migrate to seconds'
-    );
-    assert.strictEqual(
-        Object.prototype.hasOwnProperty.call(constants.GRID_LIMITS, 'DUST_CANCEL_DELAY_MIN'),
-        false,
-        'Expert legacy DUST_CANCEL_DELAY_MIN should not survive the merge'
+        'Expert DUST_CANCEL_DELAY_SEC should pass through'
     );
 }
 
-function testExplicitSecondsOverrideWins() {
+function testExplicitSecondsOverride() {
     const constants = loadConstantsWithSettings({
         EXPERT: {
             GRID_LIMITS: {
-                DUST_CANCEL_DELAY_MIN: 7,
                 DUST_CANCEL_DELAY_SEC: 45
             }
         }
@@ -77,14 +66,31 @@ function testExplicitSecondsOverrideWins() {
     assert.strictEqual(
         constants.GRID_LIMITS.DUST_CANCEL_DELAY_SEC,
         45,
-        'Explicit DUST_CANCEL_DELAY_SEC should win over legacy minute migration'
+        'Explicit DUST_CANCEL_DELAY_SEC should pass through'
+    );
+}
+
+function testLegacyMinuteIgnored() {
+    const constants = loadConstantsWithSettings({
+        GRID_LIMITS: {
+            DUST_CANCEL_DELAY_MIN: 5
+        }
+    });
+
+    // Legacy DUST_CANCEL_DELAY_MIN is no longer migrated;
+    // DUST_CANCEL_DELAY_SEC should remain at its default
+    assert.strictEqual(
+        constants.GRID_LIMITS.DUST_CANCEL_DELAY_SEC,
+        30,
+        'Legacy DUST_CANCEL_DELAY_MIN should be ignored; default DUST_CANCEL_DELAY_SEC should remain'
     );
 }
 
 try {
-    testTopLevelLegacyMinutesMigration();
-    testExpertLegacyMinutesMigration();
-    testExplicitSecondsOverrideWins();
+    testTopLevelSecondsSetting();
+    testExpertSecondsSetting();
+    testExplicitSecondsOverride();
+    testLegacyMinuteIgnored();
     console.log('Dust cancel delay config migration tests passed');
 } catch (err) {
     console.error('Dust cancel delay config migration tests failed');

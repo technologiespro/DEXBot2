@@ -10,10 +10,8 @@ const PROCESSED_FILL_PERSISTENCE_MODES = Object.freeze({
 
 /**
  * Resolve the processed fill persistence mode from options.
- * Falls back to batched if deferPersistence is true, otherwise immediate.
  * @param {Object} [options] - Options object
  * @param {string} [options.persistenceMode] - Explicit persistence mode
- * @param {boolean} [options.deferPersistence] - Defer persistence flag (legacy)
  * @returns {string} Resolved persistence mode ('immediate', 'batched', or 'manual')
  */
 function resolveProcessedFillPersistenceMode(options = {}) {
@@ -26,9 +24,7 @@ function resolveProcessedFillPersistenceMode(options = {}) {
     if (options?.persistenceMode === PROCESSED_FILL_PERSISTENCE_MODES.MANUAL) {
         return PROCESSED_FILL_PERSISTENCE_MODES.MANUAL;
     }
-    return options?.deferPersistence === true
-        ? PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
-        : PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE;
+    return PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE;
 }
 
 /**

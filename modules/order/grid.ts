@@ -540,7 +540,7 @@ class Grid {
         // Derive gridPrice — separate reference for x-factor bounds (may differ from startPrice).
         // Supported modes:
         //   - numeric: fixed value
-        //   - "pool" / "book": live blockchain price for the pair ("market" is a legacy alias for "book")
+        //   - "pool" / "book": live blockchain price for the pair
         //   - "ama"/"ama1".."ama4": center from profiles/orders/<botKey>.dynamicgrid.json
         //   - null/anything else: fallback to startPrice (backward-compatible)
         let gp = mp;
@@ -550,8 +550,7 @@ class Grid {
         const isGridRangeScalingWhitelisted = whitelistFlags.asymmetricBounds === true;
         let gridPriceOffsetPct = 0;
         const gpRaw = manager.config.gridPrice;
-        const gpModeRaw = (typeof gpRaw === 'string') ? gpRaw.trim().toLowerCase() : null;
-        const gpMode = gpModeRaw === 'market' ? 'book' : gpModeRaw; // normalize legacy alias
+        const gpMode = (typeof gpRaw === 'string') ? gpRaw.trim().toLowerCase() : null;
         if (typeof gpRaw === 'number' && Number.isFinite(gpRaw) && gpRaw > 0) {
             gp = gpRaw;
             gpSource = 'numeric';

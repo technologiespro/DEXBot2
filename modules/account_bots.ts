@@ -171,16 +171,6 @@ function loadGeneralSettings() {
         },
     };
 
-    // Migrate legacy DUST_CANCEL_DELAY_MIN (minutes) → DUST_CANCEL_DELAY_SEC (seconds).
-    // If the user had customised the old key but the new key is absent, convert minutes → seconds.
-    if ('DUST_CANCEL_DELAY_MIN' in incomingGridLimits && !('DUST_CANCEL_DELAY_SEC' in incomingGridLimits)) {
-        const legacyMin = Number(incomingGridLimits.DUST_CANCEL_DELAY_MIN);
-        if (Number.isFinite(legacyMin)) {
-            settings.GRID_LIMITS.DUST_CANCEL_DELAY_SEC = legacyMin < 0 ? legacyMin : legacyMin * 60;
-        }
-    }
-    delete settings.GRID_LIMITS.DUST_CANCEL_DELAY_MIN;
-
     settings.TIMING = {
         ...TIMING,
         ...((settings.TIMING && typeof settings.TIMING === 'object') ? settings.TIMING : {}),
@@ -816,9 +806,8 @@ async function askStartPrice(promptText: string, defaultValue?: any): Promise<an
         }
 
         const lower = raw.toLowerCase();
-        // Accept 'pool' or 'book' strings; 'market' accepted as legacy alias for 'book'
         if (lower === 'pool') return lower;
-        if (lower === 'book' || lower === 'market') return 'book';
+        if (lower === 'book') return 'book';
 
         // Accept numeric values (including decimals)
         const num = Number(raw);
@@ -846,7 +835,7 @@ async function askGridPriceMode(promptText: string, defaultValue?: any): Promise
         const lower = raw.toLowerCase();
         if (lower === 'none' || lower === 'null' || lower === 'start' || lower === 'startprice') return null;
         if (lower === 'pool') return lower;
-        if (lower === 'book' || lower === 'market') return 'book'; // 'market' is a legacy alias
+        if (lower === 'book') return 'book';
         if (/^ama(?:[1-4])?$/.test(lower)) return lower;
 
         const num = Number(raw);

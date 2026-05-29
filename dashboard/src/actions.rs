@@ -59,27 +59,21 @@ impl DashboardAction {
 pub fn dashboard_actions() -> Vec<DashboardAction> {
     vec![
         DashboardAction {
-            name: "Check Update Status",
-            command: "bash",
-            args: &["scripts/check-update.sh"],
-            risk: Risk::Safe,
-        },
-        DashboardAction {
             name: "Validate Bots Config",
-            command: "node",
-            args: &["scripts/validate_bots.js"],
+            command: "npx",
+            args: &["tsx", "scripts/validate_bots.ts"],
             risk: Risk::Safe,
         },
         DashboardAction {
             name: "Analyze Orders",
-            command: "node",
-            args: &["scripts/analyze-orders.js"],
+            command: "npx",
+            args: &["tsx", "scripts/analyze-orders.ts"],
             risk: Risk::Safe,
         },
         DashboardAction {
             name: "Analyze Repo",
-            command: "node",
-            args: &["scripts/analyze-git.js"],
+            command: "npx",
+            args: &["tsx", "scripts/analyze-git.ts"],
             risk: Risk::Safe,
         },
         DashboardAction {

@@ -33,32 +33,7 @@ function writeModernVault(keysFile, password, accounts = {}) {
     return secret;
 }
 
-function writeLegacyVault(keysFile, password, accounts = {}) {
-    const data = {
-        masterPasswordHash: chainKeys.hashPassword(password),
-        accounts: {},
-    };
 
-    for (const [name, privateKey] of Object.entries(accounts)) {
-        const salt = Buffer.from('00112233445566778899aabbccddeeff', 'hex');
-        const iv = Buffer.from('0102030405060708090a0b0c0d0e0f10', 'hex');
-        const key = require('crypto').scryptSync(password, salt, 32);
-        const cipher = require('crypto').createCipheriv('aes-256-gcm', key, iv);
-        let encrypted = cipher.update(privateKey, 'utf8', 'hex');
-        encrypted += cipher.final('hex');
-        const authTag = cipher.getAuthTag();
-        data.accounts[name] = {
-            encryptedKey: [
-                salt.toString('hex'),
-                iv.toString('hex'),
-                authTag.toString('hex'),
-                encrypted,
-            ].join(':'),
-        };
-    }
-
-    fs.writeFileSync(keysFile, JSON.stringify(data, null, 2));
-}
 
 async function withTempKeysFile(runTest) {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-chain-keys-'));
@@ -153,53 +128,15 @@ function testLegacyPayloadRejected() {
     );
 }
 
-async function testAuthenticateRetriesAndMigratesLegacyVault() {
-    await withTempKeysFile(async (keysFile) => {
-        const password = 'modern-password';
-        const privateKey = 'd'.repeat(64);
-        writeLegacyVault(keysFile, password, { alice: privateKey });
-
-        const readPasswordResponses = ['wrong-password', password];
-        const prompts = [];
-        const logs = [];
-        const originalLog = console.log;
-        const { chainKeys: isolatedChainKeys, restore } = loadIsolatedChainKeys({
-            readInput: async () => '',
-            readPassword: async (prompt) => {
-                prompts.push(prompt);
-                return readPasswordResponses.shift() ?? '';
-            },
-        });
-
-        try {
-            console.log = (...args) => logs.push(args.join(' '));
-            const secret = await isolatedChainKeys.authenticate();
-
-            assert.strictEqual(
-                prompts.filter((prompt) => prompt === 'Enter master password: ').length,
-                2,
-                'legacy vault unlock should reprompt after a wrong password'
-            );
-            assert.ok(
-                logs.includes('Master password not correct. Please try again.'),
-                'wrong legacy password should emit the normal retry message'
-            );
-            assert.strictEqual(
-                isolatedChainKeys.getPrivateKey('alice', secret),
-                privateKey,
-                'successful legacy unlock should migrate and decrypt stored keys'
-            );
-
-            const persisted = JSON.parse(fs.readFileSync(keysFile, 'utf8'));
-            assert.strictEqual(persisted.masterPasswordHash, undefined, 'legacy hash should be removed after migration');
-            assert.strictEqual(persisted.vaultVersion, 2, 'legacy vault should be upgraded in place');
-            assert.ok(persisted.accounts.alice.encryptedKey.startsWith('v2:'), 'migrated records should use v2 encryption');
-        } finally {
-            console.log = originalLog;
-            restore();
-        }
-    });
+function testLegacyVaultRejected() {
+    assert.throws(
+        () => chainKeys.unlockWithPassword('any-password', { accounts: { alice: { encryptedKey: 'x:x:x:x' } } }),
+        /Unsupported key vault format/,
+        'legacy vault without v2 metadata should be rejected'
+    );
 }
+
+
 
 async function testUnlockWithPasswordOnModernVault() {
     await withTempKeysFile(async (keysFile) => {
@@ -305,8 +242,8 @@ async function testChangePasswordRequiresCurrentPasswordPrompt() {
 
 testDerivedVaultRoundtrip();
 testLegacyPayloadRejected();
+testLegacyVaultRejected();
 Promise.resolve()
-    .then(testAuthenticateRetriesAndMigratesLegacyVault)
     .then(testUnlockWithPasswordOnModernVault)
     .then(testInteractiveSessionPersistsModernState)
     .then(testChangePasswordRequiresCurrentPasswordPrompt)
