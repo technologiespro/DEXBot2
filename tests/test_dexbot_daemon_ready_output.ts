@@ -126,7 +126,7 @@ function installStubs() {
         waitForConnected: async () => {},
     });
 
-    process.argv = ['node', '/home/alex/BTS/DEXBot2/dexbot.js', 'start'];
+    process.argv = ['node', dexbotPath, 'start'];
 
     console.log = (...args) => {
         const line = args.map((part) => String(part)).join(' ').trim();

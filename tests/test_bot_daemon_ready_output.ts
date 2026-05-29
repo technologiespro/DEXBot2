@@ -125,7 +125,7 @@ function installStubs() {
         waitForConnected: async () => {},
     });
 
-    process.argv = ['node', '/home/alex/BTS/DEXBot2/bot.js', 'XRP-BTS'];
+    process.argv = ['node', botPath, 'XRP-BTS'];
 
     console.log = (...args) => {
         const line = args.map((part) => String(part)).join(' ').trim();

@@ -43,7 +43,7 @@
 | **Origin** | BitShares worker-proposal funded, Codaone Oy | Private rewrite by froooze |
 | **Primary Goal** | Multi-strategy, extensible trading framework | Hardened adaptive grid runtime with operator/AI tooling |
 | **Target Exchange** | BitShares DEX | BitShares DEX |
-| **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large JS codebase; core runtime, adapter, analysis, Claw, and test modules |
+| **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large TypeScript codebase; core runtime, adapter, analysis, Claw, and test modules |
 | **Source Files** | 72 Python files in `dexbot/` | 1012 TS files across the repo |
 
 ### Summary
@@ -69,7 +69,7 @@ DEXBot2 is a ground-up rewrite in TypeScript that prioritizes production correct
 | **External APIs** | CoinGecko, CCXT, Waves | No CEX APIs; adapter can consume on-chain/pool/Kibana candle inputs |
 | **Container** | Docker (Ubuntu 18.04) | Docker (multi-stage) |
 | **Dashboard** | PyQt5 GUI | CLI/PM2 logs; Claw/runtime automation surface |
-| **Testing** | pytest + Docker testnet | Native Node assert (172 `test_*.ts` files; 101 entries in `scripts/run-tests.ts`) |
+| **Testing** | pytest + Docker testnet | Native Node assert (173 `test_*.ts` files; 102 entries in `scripts/run-tests.ts`) |
 | **CI/CD** | Travis CI, AppVeyor | GitHub Actions / local deterministic script suite |
 | **Packaging** | PyInstaller (Win/Mac/Linux binaries) | npm / PM2 ecosystem |
 
@@ -601,7 +601,7 @@ Where:
 ### DEXBot2
 
 - **Framework:** Native Node `assert` module (no external test framework)
-- **172 `test_*.ts` files** in the repository, with **101 entries in `scripts/run-tests.ts`** covering:
+- **173 `test_*.ts` files** in the repository, with **102 entries in `scripts/run-tests.ts`** covering:
   - Unit tests: accounting, strategy, grid, manager logic
   - Copy-on-Write semantics: COW commits, guards, concurrent fills
   - Edge cases: ghost orders, partial fills, BTS fee accounting, precision
@@ -619,7 +619,7 @@ Where:
 | Feature | DEXBot | DEXBot2 |
 |---|---|---|
 | **Framework** | pytest | Native Node assert |
-| **Test Count** | 16 Python test files | 172 `test_*.ts` files; 101 entries in `scripts/run-tests.ts` |
+| **Test Count** | 16 Python test files | 173 `test_*.ts` files; 102 entries in `scripts/run-tests.ts` |
 | **Test Types** | Unit + integration | Unit + integration + edge-case + runtime regression |
 | **Testnet Integration** | Yes (Docker) | No (mocks) |
 | **External Dependency** | pytest, Docker | None |
@@ -771,7 +771,7 @@ Where:
 | **Total Commits** | 2281 | 1470 at current HEAD |
 | **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large TypeScript runtime + adapter + Claw + analysis + tests |
 | **Source Files** | 72 Python files in `dexbot/` | 1012 TS files across the repo |
-| **Test Files** | 16 Python test files | 172 `test_*.ts` files |
+| **Test Files** | 16 Python test files | 173 `test_*.ts` files |
 | **Documentation** | Sphinx docs + README | 30+ Markdown docs plus Claw skills/references |
 | **Strategies** | 3 + plugins | 1 |
 | **Max Concurrent Bots** | Many (one process) | Many (one process per bot, PM2) |

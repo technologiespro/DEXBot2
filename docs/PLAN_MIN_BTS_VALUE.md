@@ -1,6 +1,6 @@
 # Plan: `min_BTS_value` for Non-BTS Paired Bots (✅ COMPLETED)
 
-**Status:** All implementation phases (1–5) are complete. Only Phase 6 (tests) remains as `tests/test_non_bts_fee_handling.ts`. This document is preserved for historical reference.
+**Status:** All implementation phases (1–5) are complete. Phase 6 (tests) was not created — `tests/test_non_bts_fee_handling.ts` does not exist on disk. This document is preserved for historical reference.
 
 ## Problem
 

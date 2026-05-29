@@ -81,7 +81,7 @@ Recommended trust boundary:
 To generate the skill file from Claw, run:
 
 ```bash
-npm run zeroclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.zeroclaw/workspace/skills/ai-bots/SKILL.toml
+npm run zeroclaw:skill -- --profile-root /path/to/DEXBot2 --output ~/.zeroclaw/workspace/skills/ai-bots/SKILL.toml
 ```
 
 ## NullClaw Compatibility
@@ -96,7 +96,7 @@ NullClaw uses the same bridge surface, with a native skill path centered on `SKI
 To generate the skill file from Claw, run:
 
 ```bash
-npm run nullclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.nullclaw/workspace/skills/bitshares-claw/SKILL.toml
+npm run nullclaw:skill -- --profile-root /path/to/DEXBot2 --output ~/.nullclaw/workspace/skills/bitshares-claw/SKILL.toml
 ```
 
 ## NanoClaw Compatibility
@@ -110,7 +110,7 @@ NanoClaw uses the same bridge surface, with a native `SKILL.md` path in the work
 To generate the skill file from Claw, run:
 
 ```bash
-npm run nanoclaw:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output /path/to/nanoclaw/.claude/skills/bitshares-claw/SKILL.md
+npm run nanoclaw:skill -- --profile-root /path/to/DEXBot2 --output /path/to/nanoclaw/.claude/skills/bitshares-claw/SKILL.md
 ```
 
 ## OpenFang Compatibility
@@ -124,7 +124,7 @@ OpenFang uses the same bridge surface through a CLI-first wrapper and a workspac
 To generate the skill file from Claw, run:
 
 ```bash
-npm run openfang:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.openfang/skills/bitshares-claw/SKILL.md
+npm run openfang:skill -- --profile-root /path/to/DEXBot2 --output ~/.openfang/skills/bitshares-claw/SKILL.md
 ```
 
 ## Hermes Compatibility
@@ -139,7 +139,7 @@ Hermes should consume Claw through the shared MCP server, with an optional local
 To generate the Hermes skill file from Claw, run:
 
 ```bash
-npm run hermes:skill -- --profile-root /home/alex/BTS/Git/DEXBot2 --output ~/.hermes/skills/bitshares-claw/SKILL.md
+npm run hermes:skill -- --profile-root /path/to/DEXBot2 --output ~/.hermes/skills/bitshares-claw/SKILL.md
 ```
 
 Add the MCP server to `~/.hermes/config.yaml`:
@@ -148,7 +148,7 @@ Add the MCP server to `~/.hermes/config.yaml`:
 mcp_servers:
   claw:
     command: "tsx"
-    args: ["/absolute/path/to/claw/scripts/claw_mcp_server.ts", "--profile-root", "/home/alex/BTS/Git/DEXBot2"]
+    args: ["/absolute/path/to/claw/scripts/claw_mcp_server.ts", "--profile-root", "/path/to/DEXBot2"]
 ```
 
 ## Core Types

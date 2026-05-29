@@ -80,7 +80,7 @@ if (sellOrders.length > 0) {
 
 ### Helper Reference
 
-For checking order types and states, use centralized helpers from `modules/order/utils.ts`:
+For checking order types and states, use centralized helpers from `modules/order/utils/`:
 - `isOrderOnChain()` - Check if ACTIVE or PARTIAL
 - `isOrderPlaced()` - Check if safely placed (on-chain with ID)
 - `isOrderVirtual()` - Check if VIRTUAL state
@@ -574,7 +574,7 @@ These are deducted from the *proceeds* of a fill.
 
 For BTS fees, the system returns a structured object (not a simple number) with multiple fields for accounting precision.
 
-**Location**: `modules/order/utils.ts::getAssetFees()`
+**Location**: `modules/order/utils/system.ts::getAssetFees()`
 
 ### BTS Fee Object (Always Object)
 

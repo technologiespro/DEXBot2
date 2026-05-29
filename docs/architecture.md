@@ -242,11 +242,11 @@ The master grid (`this.orders`) is **immutable** - it can only be replaced atomi
 
 | Mechanism | Location | Purpose |
 |-----------|----------|---------|
-| `Object.freeze()` | `manager.ts:416` | Master Map is frozen at initialization |
-| `deepFreeze()` | `manager.ts:825` | Individual order objects are deep-frozen |
-| `_gridVersion` | `manager.ts:466` | Version counter for staleness detection |
-| `_gridLock` | `manager.ts:456` | AsyncLock serializes grid mutations |
-| Encapsulation | `manager.ts:429-434` | Index Sets are private; mutations only via `_applyOrderUpdate()` |
+| `Object.freeze()` | `manager.ts:479` | Master Map is frozen at initialization |
+| `deepFreeze()` | `manager.ts:979` | Individual order objects are deep-frozen |
+| `_gridVersion` | `manager.ts:464` | Version counter for staleness detection |
+| `_gridLock` | `manager.ts:455` | AsyncLock serializes grid mutations |
+| Encapsulation | `manager.ts:489` | Index Sets are private; mutations only via `_applyOrderUpdate()` |
 
 ### Master Grid Update Pattern
 

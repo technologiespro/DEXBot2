@@ -1,4 +1,6 @@
-# Signal & Indicator Documentation
+# Signal & Indicator Documentation (Legacy)
+
+**Note:** This documents the legacy SMA/MACD/RSI derivative signal layer. See `kalman_trend_analyzer.ts` for the current trend detection implementation.
 
 ## Overview
 

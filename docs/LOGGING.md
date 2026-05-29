@@ -51,7 +51,7 @@ npm start
 ### Run Tests
 
 ```bash
-npm test  # All 25 tests should pass
+npm test  # All tests should pass (logging-specific: 25)
 ```
 
 ---
@@ -421,7 +421,7 @@ logger.log('[FUND] available: 100.50000000', 'debug')  // ✓ LOGGED (change det
 
 **Step 6: Testing & Validation** ✅
 - Fixed test_logger.ts to use forceDetailed/forceOutput parameters
-- All 25 automated tests passing (100%)
+- All logging-specific automated tests passing (25/25)
 - Comprehensive coverage of all logging paths
 
 **Step 7: Comprehensive Documentation** ✅
@@ -461,7 +461,7 @@ logger.log('[FUND] available: 100.50000000', 'debug')  // ✓ LOGGED (change det
 - `modules/dexbot_class.ts` - 45 logger.log() calls
 - `modules/order/accounting.ts` - 8 logger.log() calls
 - `modules/order/startup_reconcile.ts` - 37 logger.log() calls
-- `modules/order/utils.ts` - 8 logger.log() calls
+- `modules/order/utils/` - 8 logger.log() calls
 - `modules/order/runner.ts` - 1 logger.log() call
 - All test files - All compatible
 
@@ -594,7 +594,7 @@ The logging system has been completely refactored with:
 - ✅ Configuration-driven behavior (no code changes needed)
 - ✅ 40-50% output reduction (standard), up to 90% (production)
 - ✅ 100% backward compatibility
-- ✅ 25/25 tests passing
+- ✅ 25/25 logging-specific tests passing
 - ✅ 48 lines of legacy code removed
 - ✅ Comprehensive documentation
 
@@ -608,7 +608,7 @@ The logging system has been completely refactored with:
 | Lines removed | 48 (legacy code) |
 | Breaking changes | 0 (100% backward compatible) |
 | Call site changes needed | 0 (all compatible) |
-| Test files passing | 25/25 (100%) |
+| Logging test files passing | 25/25 (100%) |
 | Output reduction | 40-50% (standard), 90%+ (production) |
 
 ### Deployment Checklist
@@ -618,7 +618,7 @@ The logging system has been completely refactored with:
 - ✅ Logger refactored and tested
 - ✅ Call sites verified (backward compatible)
 - ✅ Redundant code removed
-- ✅ All 25 automated tests passing
+- ✅ All logging-specific automated tests passing
 - ✅ Zero breaking changes
 - ✅ Production-ready
 

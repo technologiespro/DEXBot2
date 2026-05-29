@@ -176,7 +176,7 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 - **May 22**: Release v0.7.3 - adapter packaging and slope helper consolidation
 - **May 22**: Release v0.7.4 - documentation refresh and version bump
 - **May 23-24**: Native BitShares integration (replace `btsdex` dependency), zero-dependency isolated mode, stability and fill processing groundwork (pre-v0.7.5-bump)
-- **May 24**: Zero-dependency policy codification and v0.7.5 version bump; complete TypeScript migration — all 48K+ lines, 172 tests, and entry points converted from JS to TS with strict mode enabled for modules, market_adapter, scripts, and claw. Release v0.7.5
+- **May 24**: Zero-dependency policy codification and v0.7.5 version bump; complete TypeScript migration — all 48K+ lines, 173 tests, and entry points converted from JS to TS with strict mode enabled for modules, market_adapter, scripts, and claw. Release v0.7.5
 - **May 24-25**: Post-migration regression fixes — Docker release gates, update flow, path resolution, adapter gating
 - **May 25**: Build infrastructure hardening, zero-dependency enforcement (remove openclaw, dead files), stability hardening (fill replay, deadlock prevention, credential daemon startup), accounting/chain corrections, utility deduplication and barrel export refactoring, regime threshold alignment in analysis tools, final dead code, stale docs and obsolete shell scripts cleanup
 - **May 26**: Fill detection & subscription overhaul — subscription reconnect retry, reconnect fill-detection safety net, websocket fill detection repair, instance-based cursor filtering, direct-notice dispatch replacing history-scan, btsFeeState hardening
@@ -390,7 +390,7 @@ This release completes the removal of all external runtime dependencies and tran
 
 ## Development Statistics
 
-172 automated tests (all TypeScript), 21 tagged releases. See **Version History** for commit breakdown by release.
+173 automated tests (all TypeScript), 21 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -457,7 +457,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 5. **Database (Prisma/SQLite) + Zod Validation** — Replace JSON file persistence with SQLite. Validate all blockchain objects at the `bitshares_client` boundary via Zod schemas.
 
-6. **Vitest Migration** — Wrap 172 test files in Vitest for parallel execution, watch mode, and coverage reporting.
+6. **Vitest Migration** — Wrap 173 test files in Vitest for parallel execution, watch mode, and coverage reporting.
 
 #### Tier 3 — Nice-to-Have
 
