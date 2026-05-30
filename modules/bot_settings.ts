@@ -162,6 +162,9 @@ function validateBotEntry(b: any, i: number, src: string): string | null {
                                 problems.push(`debtPolicy.lending[${idx}].minCollateralRatio cannot exceed maxCollateralRatio`);
                             }
                         }
+                        if ('debtOnly' in item && typeof item.debtOnly !== 'boolean') {
+                            problems.push(`debtPolicy.lending[${idx}].debtOnly must be a boolean`);
+                        }
                     } else if (item.type === 'creditOffer') {
                         // Credit offer-specific validation (maxCollateralRatio is required)
                         if (!('maxCollateralRatio' in item)) {
@@ -186,9 +189,6 @@ function validateBotEntry(b: any, i: number, src: string): string | null {
                         }
                         if ('renewOnly' in item && typeof item.renewOnly !== 'boolean') {
                             problems.push(`debtPolicy.lending[${idx}].renewOnly must be a boolean`);
-                        }
-                        if ('reborrowOnly' in item && typeof item.reborrowOnly !== 'boolean') {
-                            problems.push(`debtPolicy.lending[${idx}].reborrowOnly must be a boolean`);
                         }
                         if ('allowedOfferIds' in item) {
                             if (!Array.isArray(item.allowedOfferIds)) {

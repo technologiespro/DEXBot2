@@ -213,6 +213,45 @@ function testCompatibilityPlanner() {
   assert.strictEqual(plan.needsGridReset, true);
 }
 
+function testDebtOnlyWithLowCr() {
+  const plan = buildDebtFirstCrPlan({
+    currentCollateralAmount: 250,
+    currentDebtAmount: 100,
+    feedPrice: 2,
+    minCollateralRatio: 2,
+    maxCollateralRatio: 2.5,
+    targetCollateralRatio: 2.2,
+    maxBorrowAmount: 10,
+    maxCollateralAmount: 10000,
+    debtOnly: true,
+  });
+
+  assert(plan, 'plan should be produced for low CR');
+  assert.strictEqual(plan.action, 'reduce_debt', 'low CR should reduce debt');
+  assert.strictEqual(plan.fallbackAction, null, 'debtOnly should clear fallbackAction');
+  assert.strictEqual(plan.debtDelta, -37.5, 'debt reduction should not be capped');
+  assert.strictEqual(plan.collateralDelta, 0, 'debtOnly should keep collateral constant');
+}
+
+function testDebtOnlyWithHighCr() {
+  const plan = buildDebtFirstCrPlan({
+    currentCollateralAmount: 600,
+    currentDebtAmount: 100,
+    feedPrice: 2,
+    minCollateralRatio: 2,
+    maxCollateralRatio: 2.5,
+    maxBorrowAmount: 110,
+    maxCollateralAmount: 10000,
+    debtOnly: true,
+  });
+
+  assert(plan, 'plan should be produced for high CR');
+  assert.strictEqual(plan.action, 'increase_debt', 'high CR should increase debt');
+  assert.strictEqual(plan.fallbackAction, null, 'debtOnly should clear fallbackAction');
+  assert.strictEqual(plan.debtDelta, 10, 'debt increase capped by maxBorrowAmount');
+  assert.strictEqual(plan.collateralDelta, 0, 'debtOnly should keep collateral constant');
+}
+
 testSharedFormulas();
 testDebtFirstPlanner();
 testDebtCeilingOnIncrease();
@@ -227,5 +266,7 @@ testCollateralFallbackPlannerClamped();
 testCollateralFallbackPlannerAtCeiling();
 testCollateralFallbackPlannerUsesReferenceAmount();
 testCompatibilityPlanner();
+testDebtOnlyWithLowCr();
+testDebtOnlyWithHighCr();
 
 console.log('cr planner tests passed');

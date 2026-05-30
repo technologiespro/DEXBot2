@@ -62,29 +62,35 @@ Every item in `lending` must have:
 | `type` | `string` | Yes | `"mpa"` (BitShares MPA call order) or `"creditOffer"` (credit offer deal). |
 | `ratio` | `number` | No | Output weight for this asset. Defaults to `1`. See **Collateral Distribution** below. |
 
+#### Shared Optional Fields
+
+Fields available for both `"mpa"` and `"creditOffer"` types:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `maxBorrowAmount` | `number` | No | **Fixed** total debt ceiling. Must be a positive number (not a percentage). |
+| `maxCollateralAmount` | `number \| percentage string` | No | Total collateral ceiling. Use a number for an absolute collateral amount, e.g. `5000`, or a percentage string of total available collateral, e.g. `"80%"`. |
+| `minCollateralIncreaseThreshold` | `number \| percentage string` | No | Minimum unused collateral allocation before increasing debt. Use a number for an absolute collateral amount, e.g. `25`, or a percentage string of assigned collateral budget, e.g. `"5%"`. `0` means no minimum. |
+| `maxCollateralRatio` | `number` | No\* | Behavior differs by type: MPA — hard CR ceiling above which debt is increased first; creditOffer — maximum effective ratio when accepting offers. **Required** for `creditOffer`. |
+
 #### MPA-Specific Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `targetCollateralRatio` | `number` | No | Preferred operating CR. If omitted, midpoint of min/max is used. |
 | `minCollateralRatio` | `number` | No | Hard minimum CR floor. Below this, debt is reduced first. |
-| `maxCollateralRatio` | `number` | No | Hard maximum CR ceiling. Above this, debt is increased first. |
-| `maxBorrowAmount` | `number` | No | **Fixed** total debt ceiling. Must be a positive number (not a percentage). |
-| `maxCollateralAmount` | `number \| percentage string` | No | Total collateral ceiling. Use a number for an absolute collateral amount, e.g. `5000`, or a percentage string of total available collateral, e.g. `"80%"`. |
-| `minCollateralIncreaseThreshold` | `number \| percentage string` | No | Minimum unused collateral allocation before increasing MPA debt. Use a number for an absolute collateral amount, e.g. `25`, or a percentage string of assigned collateral budget, e.g. `"5%"`. `0` means no minimum. |
+| `debtOnly` | `boolean` | No | If `true`, the bot only adjusts debt to manage the collateral ratio — collateral is never added or withdrawn. Combined with `minCollateralRatio`/`maxCollateralRatio`, this keeps the position size constant while maintaining CR bounds. |
 
 #### Credit-Offer-Specific Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `maxCollateralRatio` | `number` | **Yes** | Maximum effective collateral ratio when accepting a credit offer. |
-| `maxBorrowAmount` | `number` | No | **Fixed** total debt ceiling across all active credit deals for this asset. |
-| `maxCollateralAmount` | `number \| percentage string` | No | Total collateral ceiling. Use a number for an absolute collateral amount, e.g. `5000`, or a percentage string of total available collateral, e.g. `"80%"`. |
 | `maxFeeRatePerDay` | `number` | No | Maximum acceptable daily fee rate. Defaults to `1/3000` (~0.033%/day). |
 | `autoReborrow` | `boolean` | No | If `true`, the bot reborrows from the same offer after repayment. |
 | `autoRepay` | `number` | No | On-chain auto-repay mode: `0` (off), `1` (full only), `2` (partial allowed). |
 | `allowedOfferIds` | `string[]` | No | Whitelist of credit offer object IDs the bot may accept. |
-| `minCollateralIncreaseThreshold` | `number \| percentage string` | No | Minimum unused collateral allocation before accepting more credit. Use a number for an absolute collateral amount, e.g. `25`, or a percentage string of assigned collateral budget, e.g. `"5%"`. `0` means no minimum. Omit to keep proactive credit increases disabled. |
+| `renewOnly` | `boolean` | No | If `true`, the bot only reborrows existing deals — standalone credit borrows are refused. Default `false`. |
+| `minDurationSeconds` | `number` | No | Minimum acceptable offer duration in seconds. Offers with `duration_seconds` below this value are skipped. |
 
 ### Global Fields
 
@@ -182,6 +188,8 @@ For each `type: "creditOffer"` lending item, the runtime:
 `maxBorrowAmount` is always a **fixed number** (no percentages). `maxCollateralAmount` may be a fixed number or a percentage.
 
 ### Credit Deal Renewal
+
+When `renewOnly` is `true`, the bot refuses standalone credit borrows and only renews existing deals via repay+reborrow. This is useful when you want the bot to maintain existing positions but not open new ones.
 
 When a deal's `latest_repay_time` is within `CREDIT_DEAL_EXPIRY_THRESHOLD_HOURS`:
 

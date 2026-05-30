@@ -950,18 +950,35 @@ export interface DebtPolicy {
   lending: DebtPolicyLendingEntry[];
 }
 
-export interface DebtPolicyLendingEntry {
-  type: 'creditOffer';
+export interface LendingEntryBase {
   asset: string;
   collateralAsset: string;
-  ratio: number;
-  renewOnly: boolean;
-  maxCollateralRatio: number;
-  maxFeeRatePerDay: number;
-  autoReborrow: boolean;
-  autoRepay: number;
-  allowedOfferIds: string[];
+  ratio?: number;
+  maxBorrowAmount?: number;
+  maxCollateralAmount?: number | string;
+  minCollateralIncreaseThreshold?: number | string;
+  maxCollateralRatio?: number;
 }
+
+export interface MpaLendingEntry extends LendingEntryBase {
+  type: 'mpa';
+  targetCollateralRatio?: number;
+  minCollateralRatio?: number;
+  debtOnly?: boolean;
+}
+
+export interface CreditOfferLendingEntry extends LendingEntryBase {
+  type: 'creditOffer';
+  maxCollateralRatio: number;
+  maxFeeRatePerDay?: number;
+  autoReborrow?: boolean;
+  autoRepay?: number;
+  allowedOfferIds?: string[];
+  renewOnly?: boolean;
+  minDurationSeconds?: number;
+}
+
+export type DebtPolicyLendingEntry = MpaLendingEntry | CreditOfferLendingEntry;
 
 export interface BotsFile {
   bots: BotConfigEntry[];

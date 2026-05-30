@@ -343,9 +343,10 @@ class CreditRuntime {
         return dp.lending.find((item) => item.type === type) || null;
     }
 
-    async _findLendingItemForAsset(assetId) {
+    async _findLendingItemForAsset(assetId, typeFilter) {
         if (!assetId || !this.debtPolicy?.lending) return null;
         for (const item of this.debtPolicy.lending) {
+            if (typeFilter && item.type !== typeFilter) continue;
             let cached = this._assetCache.get(String(item.asset));
             if (!cached && item.asset) {
                 cached = await this._resolveAsset(item.asset);
@@ -1399,6 +1400,7 @@ class CreditRuntime {
             maxCollateralAmount: posState.assignedCollateralBudget ?? lendingItem.maxCollateralAmount,
             collateralLimitReferenceAmount: posState.currentCollateralFundsTotal,
             minCollateralIncreaseThreshold: lendingItem.minCollateralIncreaseThreshold,
+            debtOnly: lendingItem.debtOnly,
         });
 
         if (!plan) return null;
@@ -1492,7 +1494,7 @@ class CreditRuntime {
         if (!policy) {
             throw new Error('creditOffer policy missing');
         }
-        const renewOnly = policy.renewOnly === true || policy.reborrowOnly === true;
+        const renewOnly = policy.renewOnly === true;
         const isReborrowContext = pendingRepayAmount !== null && pendingRepayAmount !== undefined
             || pendingReleaseCollateralAmount !== null && pendingReleaseCollateralAmount !== undefined;
         if (renewOnly && !isReborrowContext) {
@@ -1827,7 +1829,7 @@ class CreditRuntime {
 
         const repayOp = await this.buildCreditDealRepayOperation(dealSummary, repayAmount);
         const operations = [repayOp];
-        const reborrowPolicy = options.specificPolicy || await this._findLendingItemForAsset(dealSummary.debtAssetId) || {};
+        const reborrowPolicy = options.specificPolicy || await this._findLendingItemForAsset(dealSummary.debtAssetId, 'creditOffer') || {};
         const shouldAutoReborrow = options.autoReborrow !== false && !!reborrowPolicy.autoReborrow;
         let deferredReborrowRequest = null;
         let inlineReborrowPlanned = false;
@@ -2402,6 +2404,10 @@ class CreditRuntime {
                 this.warn(`credit runtime: MPA combined operation failed; attempting collateral fallback: ${err.message}`);
                 await this.refreshMpaState(lendingItem);
 
+                if (lendingItem.debtOnly) {
+                    throw err;
+                }
+
                 // Combined op failed for debt balance, so a debt-only retry would fail too.
                 // Try collateral-only repair; if unavailable, surface the original broadcast failure.
                 const configuredCollateralAsset = await this._resolveAsset(lendingItem.collateralAsset);
@@ -2543,7 +2549,7 @@ class CreditRuntime {
 
         // Phase 3: If collateral distribution assigns more credit capacity than current deals use,
         // accept an additional deal to move the asset back toward its target output ratio.
-        if (lendingItem.renewOnly !== true && lendingItem.reborrowOnly !== true) {
+        if (lendingItem.renewOnly !== true) {
             const increasePlan = await this._buildCreditIncreasePlan(lendingItem, assetId, posState);
             if (increasePlan) {
                 const offer = await this._selectCreditOfferForIncrease({

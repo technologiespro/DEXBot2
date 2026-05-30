@@ -510,5 +510,44 @@ assert.strictEqual(
     'validateBotEntry should accept percentage global maxCollateralAmount'
 );
 
+// Test: valid MPA debtOnly is accepted
+const validMpaDebtOnly = {
+    name: 'O',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            { asset: 'USD', collateralAsset: 'BTS', type: 'mpa', debtOnly: true, maxCollateralRatio: 2.0 },
+        ],
+    },
+};
+
+assert.strictEqual(
+    validateBotEntry(validMpaDebtOnly, 0, 'test'),
+    null,
+    'validateBotEntry should accept MPA with debtOnly'
+);
+
+// Test: invalid MPA debtOnly non-boolean is rejected
+const invalidMpaDebtOnly = {
+    name: 'O2',
+    assetA: 'BTS',
+    assetB: 'USD',
+    activeOrders: { sell: 20, buy: 20 },
+    botFunds: { sell: '100%', buy: '100%' },
+    debtPolicy: {
+        lending: [
+            { asset: 'USD', collateralAsset: 'BTS', type: 'mpa', debtOnly: 'yes' },
+        ],
+    },
+};
+
+assert(
+    validateBotEntry(invalidMpaDebtOnly, 0, 'test').includes('debtOnly must be a boolean'),
+    'validateBotEntry should reject non-boolean MPA debtOnly'
+);
+
 console.log('bot settings tests passed');
 process.exit(0);

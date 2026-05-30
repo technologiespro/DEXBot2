@@ -143,6 +143,7 @@ function buildDebtFirstCrPlan({
     maxCollateralAmount,
     collateralLimitReferenceAmount,
     minCollateralIncreaseThreshold,
+    debtOnly,
 } = {}) {
     const currentCr = calculateCollateralRatio(currentCollateralAmount, currentDebtAmount, feedPrice);
     const policy = {
@@ -214,6 +215,12 @@ function buildDebtFirstCrPlan({
         } else {
             collateralDelta = Math.min(collateralDelta, remaining);
         }
+    }
+
+    // debtOnly: keep collateral constant, only adjust debt
+    if (debtOnly) {
+        collateralDelta = 0;
+        fallbackAction = null;
     }
 
     return {
