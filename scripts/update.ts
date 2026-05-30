@@ -202,7 +202,7 @@ try {
             log('DEXBot2 is now tracking the correct branch.');
         }
         log('DEXBot2 is already up to date (local is equal or ahead of remote).');
-        process.exit(0);
+        process.exit(2);
     }
 
     log(`${incomingCommits} update(s) available. Proceeding with update process...`);
@@ -284,121 +284,83 @@ try {
      */
     log('Reloading active runtime processes...');
     try {
-        if (await reloadActiveIsolatedProcesses()) {
+        if (process.env.DEXBOT_UPDATE_SKIP_RELOAD === '1') {
+            log('Reload skipped (managed by launcher).');
+        } else if (await reloadActiveIsolatedProcesses()) {
             log('Isolated supervisor runtime restarted.');
-            log('DEXBot2 update completed successfully.');
-            process.exit(0);
-        }
+        } else {
+            const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
+            if (fs.existsSync(BOTS_FILE)) {
+                const raw = fs.readFileSync(BOTS_FILE, 'utf8');
+                const stripped = raw.replace(/\/\*(?:.|[\r\n])*?\*\//g, '').replace(/(^|\s*)\/\/.*$/gm, '');
+                const config = JSON.parse(stripped);
 
-        const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
-        if (fs.existsSync(BOTS_FILE)) {
-            // Read and parse bots configuration
-            const raw = fs.readFileSync(BOTS_FILE, 'utf8');
-            // Strip JSONC comments (/* */ and // style) for JSON parsing
-            const stripped = raw.replace(/\/\*(?:.|[\r\n])*?\*\//g, '').replace(/(^|\s*)\/\/.*$/gm, '');
-            const config = JSON.parse(stripped);
+                const activeInConfig = (config.bots || [])
+                    .filter(b => b.active !== false)
+                    .map(b => b.name)
+                    .filter(name => !!name);
 
-            // Extract list of active bots from config
-            // Filter: only bots where active !== false (null/undefined defaults to active)
-            const activeInConfig = (config.bots || [])
-                .filter(b => b.active !== false)
-                .map(b => b.name)
-                .filter(name => !!name);
-
-            if (activeInConfig.length > 0) {
-                /**
-                 * Get list of running PM2 processes
-                 * pm2 jlist outputs JSON array of process info
-                 * Parse and extract process names to compare with active config
-                 */
-                let runningProcesses = [];
-                try {
-                    const output = execSync('pm2 jlist').toString().trim();
-                    // pm2 jlist may output text before JSON, find [ to locate JSON start
-                    const jsonStart = output.indexOf('[');
-                    if (jsonStart !== -1) {
-                        const jsonPart = output.substring(jsonStart);
-                        const parsed = JSON.parse(jsonPart);
-                        // Extract just the process names
-                        runningProcesses = parsed.map(p => p.name);
-                    } else {
-                        log('Warning: PM2 jlist output did not contain JSON array.');
+                if (activeInConfig.length > 0) {
+                    let runningProcesses = [];
+                    try {
+                        const output = execSync('pm2 jlist').toString().trim();
+                        const jsonStart = output.indexOf('[');
+                        if (jsonStart !== -1) {
+                            const jsonPart = output.substring(jsonStart);
+                            const parsed = JSON.parse(jsonPart);
+                            runningProcesses = parsed.map(p => p.name);
+                        } else {
+                            log('Warning: PM2 jlist output did not contain JSON array.');
+                        }
+                    } catch (e) {
+                        log('Warning: Could not fetch PM2 process list. Falling back to config-only detection.');
+                        runningProcesses = activeInConfig;
                     }
-                } catch (e) {
-                    // PM2 query failed - fall back to config list
-                    log('Warning: Could not fetch PM2 process list. Falling back to config-only detection.');
-                    runningProcesses = activeInConfig; // Fallback: assume all config bots are running
-                }
 
-                /**
-                 * Find intersection of running processes and active config
-                 * Only reload bots that are both:
-                 * 1. Marked active in config
-                 * 2. Actually running in PM2
-                 */
-                const botsToReload = activeInConfig.filter(name => runningProcesses.includes(name));
-                const activeBots = (config.bots || []).filter(b => b.active !== false);
-                // Only consider running AMA bots when deciding if the adapter is needed
-                const runningActiveBots = activeBots.filter(b => runningProcesses.includes(b.name));
-                let needsMarketAdapter;
-                try {
-                    ({ needsMarketAdapter } = require(path.join(ROOT, 'dist', 'pm2')));
-                } catch (_) {
-                    ({ needsMarketAdapter } = require(path.join(ROOT, 'pm2')));
-                }
-                const marketAdapterRequired = needsMarketAdapter(runningActiveBots);
+                    const botsToReload = activeInConfig.filter(name => runningProcesses.includes(name));
+                    const activeBots = (config.bots || []).filter(b => b.active !== false);
+                    const runningActiveBots = activeBots.filter(b => runningProcesses.includes(b.name));
+                    let needsMarketAdapter;
+                    try {
+                        ({ needsMarketAdapter } = require(path.join(ROOT, 'dist', 'pm2')));
+                    } catch (_) {
+                        ({ needsMarketAdapter } = require(path.join(ROOT, 'pm2')));
+                    }
+                    const marketAdapterRequired = needsMarketAdapter(runningActiveBots);
 
-                /**
-                 * Also reload service apps that are part of the ecosystem
-                 * if they are currently running. dexbot-adapter follows AMA
-                 * grid activity and is only reloaded when an active AMA bot
-                 * requires it.
-                 */
-                const serviceAppsToReload = marketAdapterRequired ? ['dexbot-adapter'] : [];
-                const servicesToReload = serviceAppsToReload.filter(name => runningProcesses.includes(name));
-                const allToReload = [...botsToReload, ...servicesToReload];
+                    const serviceAppsToReload = marketAdapterRequired ? ['dexbot-adapter'] : [];
+                    const servicesToReload = serviceAppsToReload.filter(name => runningProcesses.includes(name));
+                    const allToReload = [...botsToReload, ...servicesToReload];
 
-                if (allToReload.length > 0) {
-                    log(`Active processes detected: ${allToReload.join(', ')}`);
-                    // Reload each process individually to pick up code changes
-                    for (const name of allToReload) {
+                    if (allToReload.length > 0) {
+                        log(`Active processes detected: ${allToReload.join(', ')}`);
+                        for (const name of allToReload) {
+                            try {
+                                run(`pm2 reload "${name}"`);
+                            } catch (e) {
+                                log(`Warning: Failed to reload process "${name}" (it might not be running).`);
+                            }
+                        }
+                    } else {
+                        log('No active processes currently running in PM2. Skipping reload.');
+                    }
+
+                    if (marketAdapterRequired && !runningProcesses.includes('dexbot-adapter')) {
+                        log('dexbot-adapter is required by an AMA-grid bot but not running. Starting from ecosystem...');
                         try {
-                            run(`pm2 reload "${name}"`);
+                            run('pm2 start profiles/ecosystem.config.js --only dexbot-adapter');
                         } catch (e) {
-                            // Individual reload failed - log warning but continue
-                            log(`Warning: Failed to reload process "${name}" (it might not be running).`);
+                            log('Warning: Failed to start dexbot-adapter from ecosystem config.');
                         }
                     }
                 } else {
-                    // Config has active bots but none are running
-                    log('No active processes currently running in PM2. Skipping reload.');
-                }
-
-                /**
-                 * Start newly-added service apps that are not yet running.
-                 * Regenerating ecosystem.config.js may introduce apps (e.g.
-                 * dexbot-adapter) that were not present in the previous config.
-                 * Individual reloads only touch existing processes; starting from
-                 * the ecosystem file materializes missing apps.
-                 */
-                if (marketAdapterRequired && !runningProcesses.includes('dexbot-adapter')) {
-                    log('dexbot-adapter is required by an AMA-grid bot but not running. Starting from ecosystem...');
-                    try {
-                        run('pm2 start profiles/ecosystem.config.js --only dexbot-adapter');
-                    } catch (e) {
-                        log('Warning: Failed to start dexbot-adapter from ecosystem config.');
-                    }
+                    log('No active bots found in config.');
                 }
             } else {
-                // Config exists but has no active bots
-                log('No active bots found in config.');
+                log('Warning: profiles/bots.json not found, skipping selective reload.');
             }
-        } else {
-            // bots.json not found - skip bulk reload to avoid touching dexbot-cred
-            log('Warning: profiles/bots.json not found, skipping selective reload.');
         }
     } catch (err) {
-        // Avoid pm2 reload all because dexbot-cred must only be restarted through node pm2
         log(`Warning: runtime reload logic failed (${err.message}). Skipping bulk reload to avoid touching dexbot-cred.`);
     }
 

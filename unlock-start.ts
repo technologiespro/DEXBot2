@@ -453,7 +453,7 @@ function scheduleMonolithicUpdateJob(botProcessRef: { current: any }) {
                 const updateChild = spawn(process.execPath, updateArgs, {
                     cwd: ROOT,
                     stdio: 'inherit',
-                    env: buildScopedChildEnv(),
+                    env: buildScopedChildEnv({ extra: { DEXBOT_UPDATE_SKIP_RELOAD: '1' } }),
                 });
                 const code = await new Promise<number>((resolve) => {
                     updateChild.on('close', resolve);
