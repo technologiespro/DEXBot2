@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.5 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.7 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,470 commits over ~6 active months
+- **Growth Phase**: 1,446 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
-- **Stability**: Progression from manual testing to a suite of 179 automated test files
-- **Releases**: 21 tagged releases (v0.1.0 to v0.7.5)
+- **Stability**: Progression from manual testing to a suite of 173 automated test files
+- **Releases**: 23 tagged releases (v0.1.0 to v0.7.7)
 
 ---
 
@@ -30,180 +30,34 @@ Production bot by Codaone Oy (worker proposal funded). PyQt5 GUI, three strategi
 ## Timeline Overview
 
 ### Phase 1: Foundation & Core Architecture (December 2025)
-**Duration**: December 2 - December 31, 2025
-**Focus**: Establishing core trading infrastructure, order management, and fund accounting
-
-#### Key Milestones
-- **Dec 2**: Project initialization from DEXBot (Python) concepts; JavaScript rewrite from scratch
-- **Dec 3**: BitShares client integration and order broadcast handling
-- **Dec 4**: Grid calculation system with exact step multipliers
-- **Dec 5**: Utility function extraction and price helper consolidation
-- **Dec 7-8**: Fund calculation and PARTIAL order state implementation
-- **Dec 9-10**: PM2 process management and multi-bot support
-- **Dec 10**: First release (v0.1.0) - Alpha stage
-- **Dec 11-12**: BTS fee accounting system
-- **Dec 12**: Release v0.2.0 with fee caching
-- **Dec 12**: Release v0.3.0 with grid regeneration threshold
-- **Dec 13-15**: Grid divergence detection and automatic recalculation
-- **Dec 14-31**: Stability improvements, logging enhancements, and partial fill handling
-
-#### Architecture Decisions
-1. **Modular Architecture**: Separation into chain_orders, account_orders, account_bots
-2. **Grid System**: OrderGridGenerator (later renamed to Grid) with precise spacing
-3. **Fund Management**: Centralized fund calculation with available-funds tracking
-4. **State Management**: Introduction of PARTIAL state for partial fills
-5. **Process Management**: PM2 integration for production deployment
-
----
+Started Dec 2 with a JavaScript rewrite from the Python DEXBot. Built core trading infrastructure (BitShares client, grid calculation system, fund accounting, order management) and released v0.1.0–v0.3.0 within the first month, establishing the modular architecture, PARTIAL order state, and PM2 process management that underpin the entire project.
 
 ### Phase 2: Stabilization & Advanced Features (January 2026)
-**Duration**: January 1 - January 31, 2026
-**Focus**: Bug fixes, race condition resolution, advanced trading strategies, and system hardening
-
-#### Key Milestones
-- **Jan 1-5**: AMA (Adaptive Moving Average) trend detection system
-- **Jan 6-8**: Asset precision handling and integer-based calculations
-- **Jan 9-12**: Comprehensive test suite development
-- **Jan 13-15**: Fund accounting improvements and BTS fee settlement
-- **Jan 16-18**: Ghost order detection and full-fill handling
-- **Jan 19-22**: Native test porting from Jest to Node.js assert
-- **Jan 23-26**: Layer 1 & Layer 2 defenses against rapid-restart cascades
-- **Jan 27-28**: Startup auto-recovery and trigger reset stabilization
-- **Jan 29-31**: Documentation consolidation and cross-platform improvements
-
-#### Major Features
-1. **AMA Optimization Suite**: High-resolution parameter tuning for trend detection
-2. **Precision System**: Blockchain integer-based calculations (satoshi integers)
-3. **Ghost Order Prevention**: Robust full-fill detection for tiny remainders
-4. **Native Test Suite**: Ported from Jest to eliminate heavy dependencies
-5. **BTS Fee Settlement**: Complete fee accounting with maker refunds
-6. **Self-Healing Recovery**: Layer 2 stabilization with automatic recovery
-7. **Fund-Driven Boundary Sync**: Align grid with inventory distribution
-
-#### Critical Fixes
-- **Jan 6**: Resolved 100,000x order size multiplier bug
-- **Jan 14**: Fixed high available funds and duplicate cleanup
-- **Jan 15**: Eliminated 12 critical race conditions in fill processing
-- **Jan 22**: Fixed ghost orders causing doubled funds
-- **Jan 26**: Resolved critical fund tracking corruption
-- **Jan 30**: Fixed phantom fund losses during boundary-crawl
-
----
+Added AMA trend detection, blockchain integer-based precision system, comprehensive test suite, ghost order prevention, self-healing recovery layers, and fund-driven boundary sync. Ported the test suite from Jest to native Node.js assert to eliminate heavy dependencies. Resolved 12+ critical race conditions in fill processing.
 
 ### Phase 3: Architecture Refinement & COW Pattern (February 2026)
-**Duration**: February 1 - February 18, 2026
-**Focus**: Copy-on-Write architecture, code quality, and production hardening
-
-#### Key Milestones
-- **Feb 1**: Order analysis script for grid trading metrics
-- **Feb 2**: Pipeline timeout safeguard and comprehensive documentation
-- **Feb 3**: Spread correction redesign with edge-based strategy
-- **Feb 4-5**: Price orientation standardization (B/A format)
-- **Feb 5**: Robust full-fill detection with integer-based rounding
-- **Feb 6**: Multi-node management with health checking
-- **Feb 7**: Dashboard scaffolding with ratatui operations
-- **Feb 8-9**: Fill pipeline hardening and readline-sync replacement
-- **Feb 10**: Immutable Master Grid Architecture (Phase 1-4)
-- **Feb 14**: Copy-on-Write (COW) grid architecture implementation
-- **Feb 15-16**: COW deadlocks resolution and lock routing
-- **Feb 17**: Hybrid COW pattern with static mutation detection
-- **Feb 18**: Atomic boundary shifts and patch20 documentation
-
-#### Architecture Evolution
-1. **Immutable Master Grid**: Transactional rollback and logic decomposition
-2. **Copy-on-Write Pattern**: Safe concurrent grid modifications
-3. **Atomic Service Pattern**: Safe concurrency without race conditions
-4. **State Manager**: Centralized state management for grid operations
-5. **COW Rebalance Engine**: Dedicated engine for safe rebalancing
-6. **Atomic Boundary Shifts**: Prevent boundary index corruption during divergence
-
----
+Implemented Copy-on-Write grid architecture with immutable master grid, atomic boundary shifts, and deadlock resolution. Added multi-node health checking, dashboard scaffolding (Rust/ratatui), and spread correction redesign with edge-based strategy.
 
 ### Phase 4: Market Adapter & Production Hardening (Late Feb - March 2026)
-**Duration**: February 19 - March 3, 2026
-**Focus**: AMA integration, market adapter consolidation, fill processing finalization, credential daemon hardening
-
-#### Key Milestones
-- **Feb 19-22**: COW invariant sealing and stable-theory contract (`COW_INVARIANTS.md`)
-- **Feb 22-26**: Spread correction simplification and doubled-side removal
-- **Feb 26-28**: Market adapter refactor — split data sources, retire monitors, add adapter regressions
-- **Mar 1**: Grid recalculation documentation, AMA and market-adapter config semantics
-- **Mar 1-3**: Shard-parallel cap-based AMA fitting and profile sync
-- **Mar 3**: Fixed-cap batching finalized, adaptive-tier references removed
-- **Mar 3**: Release v0.6.0 — gridPrice merge and market adapter foundation
-
-#### Major Changes
-1. **Fixed-Cap Fill Batching**: Finalized at 4-fill cap; adaptive-tier system fully removed
-2. **Market Adapter Consolidation**: Split data sources (Kibana, native API), removed whitelist fallback
-3. **AMA Grid Integration**: AMA-derived grid center during initialization
-4. **Shard-Parallel AMA Fitting**: Cap-based AMA fitting with profile sync across shards
-5. **Doubled-Side Removal**: Removed doubled-side replacement flow from sync engine
-6. **CacheFunds Removal**: Eliminated cacheFunds tracking in favor of real-time commitment accounting
-7. **Credential Daemon Hardening**: Strict daemon policy, session hardening, signing cache, memory safety
-8. **Claw Expansion**: Hermes runtime manifest, launcher command bridge, skill packs
+Consolidated the market adapter with split data sources (Kibana, native API), AMA-derived grid center, fixed-cap fill batching, and credential daemon hardening. Removed cacheFunds tracking in favor of real-time commitment accounting. Expanded the Claw runtime. Released v0.6.0.
 
 ---
 
 ### Phase 5: Signal Intelligence & Debt Runtime (March - May 2026)
-**Duration**: March 4 - May 18, 2026
-**Focus**: Market adapter offset groundwork, Claw/credential hardening, SMA derivative signals, dynamic-weight/Kalman research, regime filtering, credit/debt runtime, and production stabilization
+**Duration**: March 4 - May 31, 2026
+**Focus**: Market adapter signal pipeline, dynamic-weight/Kalman research, credit/debt runtime, TypeScript migration, and production stabilization
 
-#### Key Milestones
-- **Mar 4-10**: AMA and adapter research tooling — AMA3 defaults, expanded candle history, Kibana date-range/merge tools
-- **Mar 20-24**: Dust-cancel delay, settings/analyze-orders cleanup, README refresh
-- **Mar 28-31**: Claw bridge/runtime expansion, feed-anchored trend research, AMA grid-price offset state, dynamic weight policy scaffolding
-- **Apr 1-5**: Fill replay hardening, runtime extraction, Claw bridge expansion, credential daemon strict policy/session hardening
-- **Apr 6-8**: Market adapter modularization, PM2/dry-run logging cleanup, orphaned-grid-slot recovery
-- **Apr 9-10**: Derivative signal engine and market-profile offset controls — SMA/fastSMA/MACD/RSI, momentum gate, dry-run output separation
-- **Apr 11-13**: Fallback removal and analysis chart cleanup — legacy input/runtime removal, AMA preset refresh, uPlot chart paths
-- **Apr 14**: Dynamic grid and dynamic-weight groundwork — AMA slope weight adjustment, ATR volatility scaling, Kalman-AMA research chart
-- **Apr 15-16**: Regime detection and production parity — Hurst/PE analyzers, regime gate, percentile clip, weight-only updates
-- **Apr 17-20**: Dynamic weight runtime alignment — volatility chart, Kalman echo latching, research-to-production parity
-- **Apr 20**: Credit/debt runtime — MPA borrowing, credit offer accept/repay, auto-reborrow
-- **Apr 21-22**: Dynamic weight snapshot persistence, warmup/closed-candle alignment, rebalance refresh wiring
-- **Apr 23-28**: Credit-offer hardening, direct market adapter runtime management, whitelist generator, and documentation hub reorganization
-- **May 1-2**: Market adapter stabilization — fixed-price/orderbook candle modes, test suite repair, node failover hardening, stale dynamic weight rejection
-- **May 8-10**: AMA warmup rework — SMA-based progressive warmup replaces first-price and full-convergence approaches. Market adapter lifecycle stability, candle merge robustness
-- **May 11**: AMA delta threshold refresh and constants update
-- **May 12**: Analysis expansion — trade heatmap (volume distribution by AMA deviation), risk profile analyzer with sigma metrics
-- **May 13**: Credential daemon hardening sprint — broadcast retry, node list mirroring, bootstrap resilience, PM2 restart loop prevention, stale socket exit. AMA slope market price offset applied
-- **May 14-15**: Credit runtime fixes — MPA target CR encoding, pair-scoped pricing, reborrow policy preservation. Documentation finalization for 0.7.0
-- **May 16-18**: Credit maintenance hardening — collateral-gated credit increases, renew-only credit offer policy, credit deal renewal with fallback safety, startup credit maintenance, autoRepay state sync, centralized grid reset metadata handling, dynamic grid reset state preservation, empirical table source documentation
-- **May 18**: Release v0.7.0 - final 0.7 hardening and signal refinement
-- **May 21-22**: AMA strategy sharing, slope readiness warmup logic, and release v0.7.1
-- **May 22**: Release v0.7.1 - share AMA strategy and readiness fix
-- **May 22**: Release v0.7.2 - dynamic-weight Kalman stability patch
-- **May 22**: Release v0.7.3 - adapter packaging and slope helper consolidation
-- **May 22**: Release v0.7.4 - documentation refresh and version bump
-- **May 23-24**: Native BitShares integration (replace `btsdex` dependency), zero-dependency isolated mode, stability and fill processing groundwork (pre-v0.7.5-bump)
-- **May 24**: Zero-dependency policy codification and v0.7.5 version bump; complete TypeScript migration — all 48K+ lines, 173 tests, and entry points converted from JS to TS with strict mode enabled for modules, market_adapter, scripts, and claw. Release v0.7.5
-- **May 24-25**: Post-migration regression fixes — Docker release gates, update flow, path resolution, adapter gating
-- **May 25**: Build infrastructure hardening, zero-dependency enforcement (remove openclaw, dead files), stability hardening (fill replay, deadlock prevention, credential daemon startup), accounting/chain corrections, utility deduplication and barrel export refactoring, regime threshold alignment in analysis tools, final dead code, stale docs and obsolete shell scripts cleanup
-- **May 26**: Fill detection & subscription overhaul — subscription reconnect retry, reconnect fill-detection safety net, websocket fill detection repair, instance-based cursor filtering, direct-notice dispatch replacing history-scan, btsFeeState hardening
-- **May 27**: Fill detection optimization — unfiltered `get_account_history`, deferred cursor advancement on callback failure, redundant RPC skip, multi-account reconnect parallelization, btsFeeState unit mismatch and cancel refund cap fix. BTS fee acquisition via AMM pool (`min_BTS_value`), centralized logging (9 modules migrated to Logger), tsx fallback for pm2/credential-daemon/unlock-start, docs sweep across 25 files, deferredPaidFee cleanup
-- **May 28**: Security & credential daemon hardening — private-key export removal, memory zeroing, daemon error message preservation, bootstrap env leak fix, session churn prevention, orphan double-credit fix, size-drift precision, orphan dedup key entropy. Native module type safety (`@ts-nocheck` removal from 5 modules), PM2 test hang fix, brain-key golden vectors, subscription test expectation corrections
+**Mar–Apr**: Added derivative signal engine (SMA/MACD/RSI), dynamic-weight system with Kalman confirmation and ATR volatility scaling, Hurst/PE regime detection, and credit/debt runtime for MPA borrow/repay and credit offers.
 
-#### Major Changes
-1. **Derivative Signals**: SMA/fastSMA/MACD/RSI signal traps, momentum gate, fast-SMA commitment tracking
-2. **Dynamic Weight System**: Live AMA slope, ATR volatility scaling, Kalman confirmation, and weight-only updates
-3. **Regime Detection**: Hurst/PE-based dampening for trending, mean-reverting, and noisy states
-4. **Market Adapter Signal Pipeline**: Full weight output, collateral recommendation, trend/atr export
-5. **Credit/Debt Runtime**: Native MPA and credit-offer workflows with `modules/credit_runtime.ts`
-6. **Bot Auto-Tuner**: Direct tuning and reasoning bridge for parameter optimization
-7. **Fallback Removal**: Strict precision, explicit price derivation modes, no orphan lax matching
-8. **Credential/Claw Hardening**: Strict daemon policy, daemon signing cache, secure credential runtime, Claw bridge/runtime support
-9. **Analysis Tooling**: TradingView uPlot exporter, volatility research chart, regime window analyzer, simplified chart entrypoints, trade heatmap, risk profile analyzer
-10. **Maintenance Safety**: Grid maintenance defers structural work during active fills and dust-cancel windows
-11. **AMA Warmup Rework**: SMA-based progressive warmup replaces first-price initialization and full-convergence warmup
-12. **AMA Slope Price Offset**: Asymmetric market price offset driven by live AMA slope, applied at grid recalculation
-13. **Credential Daemon Resilience**: Broadcast retry, stale socket handling, node list mirroring, PM2 restart loop prevention
-14. **Credit Maintenance Hardening**: Collateral-gated credit increases, renew-only policy, deal renewal with fallback safety, startup credit maintenance, autoRepay state synchronization
-15. **Grid Reset Metadata**: Centralized reset metadata handling with dynamic reset state preservation
-16. **Zero-Dependency Policy & TypeScript Migration**: Removal of all external runtime dependencies codified as explicit architectural policy; full codebase conversion from JS to TS (48K+ lines, 158 tests, all entry points) with strict mode, `tsc` build pipeline, `tsx` runtime, and thin `.js` shims for dist routing
-17. **Fill Detection & Subscription Overhaul**: Complete rewrite of native BitShares fill detection — replaced history-scan with direct-notice dispatch, instance-based cursor filtering, subscription reconnect retry with cursor-safe error propagation, deferred cursor advancement on callback failure, unfiltered `get_account_history`, redundant RPC elimination, and parallelized multi-account reconnect. Combined with btsFeeState hardening across frozen objects and grid reset paths
-18. **BTS Fee Acquisition via AMM Pool**: `min_BTS_value` parameter enables non-BTS paired bots to acquire BTS fees through AMM pool swaps
-19. **Centralized Logging**: Removed dual constructor pattern, migrated 9 modules from `console.*` to Logger for consistent structured output
-20. **Credential Daemon Security Hardening**: Private-key export removal, memory zeroing, daemon error message preservation, bootstrap env leak fix, session churn prevention, orphan double-credit fix, and orphan dedup key entropy
+**May 1–18**: Stabilized market adapter (fixed-price/orderbook modes, node failover), reworked AMA warmup to SMA-based progressive, hardened credential daemon (broadcast retry, stale socket handling), applied AMA slope as market price offset, hardened credit maintenance (collateral gating, renew-only policy, startup validation). Released v0.7.0.
+
+**May 21–22**: Shared AMA strategy with market adapter runtime, Kalman stability patch, adapter packaging consolidation, documentation refresh. Released v0.7.1–v0.7.4.
+
+**May 23–25**: Replaced `btsdex` npm dependency with native BitShares integration, codified zero-dependency policy, completed full TypeScript migration (48K+ lines, 173 tests). Released v0.7.5.
+
+**May 26–28**: Overhauled fill detection (direct-notice dispatch, instance-based cursor, subscription reconnect), BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening (private-key removal, memory zeroing, bootstrap leak fix).
+
+**May 29–31**: Hardened unlock-start (signal handler cleanup, polling guards), removed deprecated legacy migration patterns, swept 14 documentation files. Released v0.7.6. Then added default background daemon + crash restart, auto-update for monolithic path, per-bot log files, MPA `debtOnly` flag, and simplified CLI. Released v0.7.7.
 
 ---
 
@@ -220,165 +74,44 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 
 ## Version History
 
-### v0.7.4 → v0.7.5 — Removal of All Dependencies & TypeScript Migration
+### v0.7.4 → v0.7.5 (93 commits)
+Removal of all external runtime dependencies and full TypeScript migration (48K+ lines, 173 tests). Native BitShares integration replaces `btsdex`, fill detection overhaul with direct-notice dispatch, BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening.
 
-This release completes the removal of all external runtime dependencies and transitions the full codebase from JavaScript to TypeScript. All production sources, 158 test files, scripts, and entry points now compile through `tsc` with strict mode and run via `tsx` for development/testing, with thin `.js` shims routing to compiled `dist/` output for production. The project's de facto zero-dependency philosophy is codified as an explicit architectural policy — no remaining npm dependencies at runtime, making the bot fully self-contained. Subsequent post-release stabilization adds BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening, and native module type safety improvements.
+### v0.7.5 → v0.7.6 (5 commits)
+Unlock-start launcher hardening (signal handler cleanup, polling guards), deprecated legacy migration code removal, broken reference fixes, 14-file documentation sweep.
 
-| Category | Commits |
-|----------|---------|
-| 1. Zero-dependency policy codification and version bump | 1 |
-| 2. Native BitShares integration (replace `btsdex` dependency) | 10 |
-| 3. Pre-release groundwork, stability and fill processing | 12 |
-| 4. JS-to-TS migration (sources, tests, strict mode) | 4 |
-| 5. Type safety review and native TS entry-point fixes | 3 |
-| 6. Post-migration regression fixes (Docker, release gates, update flow, paths) | 10 |
-| 7. General hardening (fill locking, credential daemon, reconnect, dead code removal) | 13 |
-| 8. Accounting and chain corrections | 6 |
-| 9. Documentation alignment (`.md` refs, constants, changelog) | 3 |
-| 10. Code quality & refactoring (utility deduplication) | 1 |
-| 11. Dead code, stale docs & obsolete scripts cleanup | 3 |
-| 12. Analysis tooling fix | 1 |
-| 13. Fill detection & subscription overhaul (reconnect, cursor, notice dispatch, btsFeeState) | 9 |
-| 14. Fill detection optimization (history source, parallel reconnect, fee cap fix) | 6 |
-| 15. BTS fee acquisition via AMM pool | 1 |
-| 16. Logging centralization (9 modules to Logger) | 1 |
-| 17. Post-migration fixes (tsx fallback, shim updates) | 1 |
-| 18. Security & credential daemon hardening (private-key removal, memory zeroing, bootstrap leak, orphan dedup) | 3 |
-| 19. Type safety (remove @ts-nocheck from 5 native modules, brain-key vectors) | 1 |
-| 20. Test corrections (subscription expectations) | 1 |
-| 21. Cleanup (deferredPaidFee complexity removal) | 1 |
-| **Total** | **93** |
+### v0.7.6 → v0.7.7 (6 commits)
+Default background daemon + crash restart for unlock-start, auto-update for monolithic path, per-bot log files with daemon output redirect, MPA `debtOnly` flag with discriminated-union types, CLI simplification.
 
 ### v0.7.3 → v0.7.4 (5 commits)
-
-| Category | Commits |
-|----------|---------|
-| 1. Code cleanup (unused deps, inline helper) | 2 |
-| 2. Documentation refresh | 3 |
-| **Total** | **5** |
-
----
+Code cleanup (unused deps, inline helper), documentation refresh.
 
 ### v0.7.2 → v0.7.3 (3 commits)
-
-| Category | Commits |
-|----------|---------|
-| 1. Docker launcher and adapter state docs alignment | 1 |
-| 2. Centralized AMA slope conversion helpers | 1 |
-| 3. Release metadata | 1 |
-| **Total** | **3** |
-
----
+Docker launcher docs alignment, centralized AMA slope conversion helpers.
 
 ### v0.7.1 → v0.7.2 (2 commits)
-
-| Category | Commits |
-|----------|---------|
-| 1. Dynamic-weight Kalman stability | 1 |
-| 2. Dynamic-weight chart slope floor | 1 |
-| **Total** | **2** |
-
----
+Dynamic-weight Kalman stability patch, chart slope floor adjustment.
 
 ### v0.7.0 → v0.7.1 (2 commits)
-
-| Category | Commits |
-|----------|---------|
-| 1. Share AMA strategy with market adapter | 1 |
-| 2. Expand version history docs | 1 |
-| **Total** | **2** |
-
----
+Share AMA strategy with market adapter, version history docs.
 
 ### v0.6.0 → v0.7.0 (325 commits)
-
-| Category | Commits |
-|----------|---------|
-| 1. AMA-based market adapter | ~120 |
-| 2. Startup & credential hardening | ~35 |
-| 3. Connection resilience | ~9 |
-| 4. Credit/MPA debt runtime | ~19 |
-| 5. Safer grid lifecycle | ~23 |
-| 6. Expanded analysis suite | ~25 |
-| Docs-only commits (not listed) | ~94 |
-| **Total** | **325** |
-
----
+AMA-based market adapter with signal pipeline, credential daemon hardening, connection resilience, credit/MPA debt runtime, safer grid lifecycle, expanded analysis suite.
 
 ### v0.5.0 → v0.6.0 (598 commits)
-
-| Category | Commits |
-|----------|---------|
-| 1. Fund accounting overhaul | ~80 |
-| 2. Bug fixes & hardening | ~100 |
-| 3. Strategy engine refactoring | ~60 |
-| 4. Documentation | ~60 |
-| 5. Order manager modularization | ~50 |
-| 6. COW (Copy-on-Write) architecture | ~40 |
-| 7. Fill processing hardening | ~40 |
-| 8. Testing | ~40 |
-| 9. Sync engine improvements | ~30 |
-| 10. AMA/market adapter | ~30 |
-| 11. Refactoring & code quality | ~48 |
-| 12. Credential daemon & security | ~15 |
-| 13. Dashboard | ~5 |
-| **Total** | **598** |
-
----
+Fund accounting overhaul, COW architecture, strategy engine refactoring, sync engine improvements, fill processing hardening, credential daemon, dashboard scaffolding, AMA prototype, comprehensive documentation and testing.
 
 ### v0.4.0 → v0.5.0 (92 commits)
-
-| Category | Commits |
-|----------|---------|
-| 1. Critical bug fixes | ~15 |
-| 2. Race condition prevention (AsyncLock) | ~15 |
-| 3. Fund management centralization | ~15 |
-| 4. Spread correction | ~10 |
-| 5. Fill processing & deduplication | ~10 |
-| 6. Grid health & dust recovery | ~10 |
-| 7. Documentation | ~10 |
-| 8. Testing | ~7 |
-| **Total** | **92** |
-
----
+Critical bug fixes, race condition prevention (AsyncLock), fund management centralization, spread correction, fill processing & deduplication, grid health & dust recovery.
 
 ### v0.3.0 → v0.4.0 (18 commits)
-
-| Category | Commits |
-|----------|---------|
-| 1. Fund management consolidation | ~5 |
-| 2. Grid sizing & quantization | ~4 |
-| 3. Market fees & RMS threshold | ~3 |
-| 4. Partial order handling | ~3 |
-| 5. Documentation | ~3 |
-| **Total** | **18** |
-
----
+Fund management consolidation, grid sizing & quantization, market fees & RMS threshold, partial order handling.
 
 ### v0.2.0 → v0.3.0 (155 commits)
-
-| Category | Commits |
-|----------|---------|
-| 1. Fund management & BTS fees | ~30 |
-| 2. Grid divergence detection | ~25 |
-| 3. Persistence & race conditions | ~25 |
-| 4. Order rotation & sizing | ~20 |
-| 5. Documentation | ~20 |
-| 6. Refactoring & code quality | ~20 |
-| 7. Scripts & tooling | ~15 |
-| **Total** | **155** |
-
----
+Fund management & BTS fees, grid divergence detection, persistence & race conditions, order rotation & sizing, refactoring.
 
 ### v0.1.0 → v0.2.0 (29 commits)
-
-| Category | Commits |
-|----------|---------|
-| 1. Core order/fund management | ~10 |
-| 2. Documentation | ~10 |
-| 3. Scripts & tooling | ~5 |
-| 4. Release & chore | ~4 |
-| **Total** | **29** |
+Core order/fund management, documentation, scripts & tooling.
 
 ---
 
@@ -390,7 +123,7 @@ This release completes the removal of all external runtime dependencies and tran
 
 ## Development Statistics
 
-173 automated tests (all TypeScript), 21 tagged releases. See **Version History** for commit breakdown by release.
+173 automated tests (all TypeScript), 23 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -407,16 +140,9 @@ This release completes the removal of all external runtime dependencies and tran
 
 ---
 
-## Documentation Evolution
+## Documentation & Testing
 
-Evolved from basic README + inline comments to a comprehensive framework: 20 docs/ entries (architecture map, COW invariants, fund accounting, credential security, developer guide), 80%+ JSDoc coverage, 175+ documentation commits, and an `AGENTS.md` for AI-assisted development.
-
----
-
-## Testing Strategy
-
-Evolved from manual blockchain testing → Jest unit tests → lightweight Node.js assert (zero test dependencies for the 172-file suite). Multi-layered verification: unit/integration for accounting/sync/grid, complex market scenario simulations, edge-case coverage, COW architectural guards (invariants, mutation detection), fill subscription lifecycle, and signal/credit runtime validation.
-
+Evolved from a basic README to a comprehensive framework (20+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 173-file suite covering unit, integration, simulation, and COW architectural guard tests.
 
 ---
 
@@ -426,50 +152,20 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 ---
 
-## Phase 6: Technical Modernization & Growth (Planned)
+## Phase 6: Planned
 
-### UX, Education & Services
-- **Web & Terminal UI**: Browser-based and TUI dashboards for bot monitoring, manual intervention, and parameter tuning live. *(TUI dashboard scaffolded in `dashboard/` — Rust/ratatui sidecar)*
-- **Content Creation**: Instructional videos, tutorials, and onboarding material for user onboarding.
-- **Marketing**: Strategic advertisement and outreach to expand the BitShares trading community.
-- **Hosting Service**: Managed deployment for users who want bot operation without infrastructure management.
-
-### Backtesting & Statistics
-- **Simulation Engine**: Replay historical candles through the core `OrderManager`/COW engine via a `MemoryExchange` (drop-in at the `bitshares_client` boundary). Same strategy code, same grid, same fill processing — zero changes needed for backtest mode.
-- **Performance Analytics**: PnL tracking, grid efficiency metrics, risk assessment, and HTML report generation.
-
-### Modernization & Migration
-- ~~**Dependency Reduction**: Continued minimization of external dependencies.~~ ✅ **Completed in v0.7.5** — all external runtime dependencies removed, zero-dependency policy codified.
-
-### Architecture & Code Quality — Detailed Breakdown
-
-#### Tier 1 — High Impact
-
-1. **Monorepo & Packages** — Split into `@dexbot/core`, `@dexbot/bitshares`, `@dexbot/strategies`, `@dexbot/indicators`. Enables parallelized builds/testing and cleaner dependency boundaries.
-
-2. **Injectable Module Interfaces** — Extract narrow interfaces at existing call boundaries (FillCallback, Accounting, SyncEngine, chain_orders) to enable mock injection during tests. The sequential pipeline should remain direct calls — they are the correct pattern for this pipeline. Testability is achieved through dependency inversion, not an event bus.
-
-3. **Unified Indicator Library** — Centralize scattered signal code (AMA, Kalman, dynamic weight, regime detection) into `@dexbot/indicators`. Add standard indicators (SMA, MACD, RSI, BB) for non-grid strategies.
-
-#### Tier 2 — Medium Impact
-
-4. **Strategy Effects Pattern** — Strategies return declarative action objects (`{ action: 'CREATE_ORDER', price, amount }`) instead of calling `manager.ts` directly. Strategy logic becomes a pure function — unit-testable without blockchain.
-
-5. **Database (Prisma/SQLite) + Zod Validation** — Replace JSON file persistence with SQLite. Validate all blockchain objects at the `bitshares_client` boundary via Zod schemas.
-
-6. **Vitest Migration** — Wrap 173 test files in Vitest for parallel execution, watch mode, and coverage reporting.
-
-#### Tier 3 — Nice-to-Have
-
-7. **Exchange Abstraction** — `IExchange` interface over `chain_orders.ts` + `bitshares_client.ts`.
-8. **tRPC API** — Type-safe API layer for remote bot management and dashboard integration.
-9. **Pino Logger** — Structured JSON logging with level filtering and composable transports.
-10. **Commander.js CLI** — Better `dexbot.ts` argument parsing with subcommands and auto-generated help.
+- **Web & Terminal UI**: Browser-based and TUI dashboards for monitoring and tuning (TUI scaffolded in `dashboard/` — Rust/ratatui)
+- **Backtesting Engine**: Replay historical candles through `OrderManager`/COW via a `MemoryExchange` drop-in at the `bitshares_client` boundary
+- **Performance Analytics**: PnL tracking, grid efficiency metrics, HTML report generation
+- **Monorepo Split**: Package into `@dexbot/core`, `@dexbot/bitshares`, `@dexbot/indicators` for parallelized builds
+- **Injectable Module Interfaces**: Dependency inversion at call boundaries for testability (no event bus)
+- **Database (SQLite) + Zod Validation**: Replace JSON persistence, validate blockchain objects at the client boundary
+- ~~**Dependency Reduction**~~ ✅ Completed in v0.7.5
 
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: May 28, 2026
-**Total Commits**: 1470
-**Date Range**: December 2, 2025 - May 28, 2026 (ongoing)
+**Last Updated**: May 31, 2026
+**Total Commits**: 1446
+**Date Range**: December 2, 2025 - May 31, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)
