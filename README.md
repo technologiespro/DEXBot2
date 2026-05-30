@@ -246,12 +246,12 @@ node unlock-start --isolated
 node unlock-start --isolated <bot-name>
 
 # Runtime control
-node unlock-start control status
-node unlock-start control stop <bot-name>
-node unlock-start control restart <bot-name>
-node unlock-start control stop-all
-node unlock-start control restart-all
-node unlock-start control shutdown
+node unlock-start status
+node unlock-start stop <bot-name>
+node unlock-start restart <bot-name>
+node unlock-start stop-all
+node unlock-start restart-all
+node unlock-start shutdown
 ```
 
 The supervisor detaches and returns to the shell. It supports `SIGTERM` (graceful shutdown), `SIGUSR1` (print status), and `SIGUSR2` (restart all). Bot logs go to `profiles/logs/<name>.log`, supervisor output to `profiles/logs/supervisor.log`.

@@ -11,12 +11,12 @@
  *   node unlock-start --claw-only
  *   node unlock-start --isolated
  *   node unlock-start --isolated <botName>
- *   node unlock-start control status
- *   node unlock-start control stop <botName>
- *   node unlock-start control restart <botName>
- *   node unlock-start control stop-all
- *   node unlock-start control restart-all
- *   node unlock-start control shutdown
+ *   node unlock-start status
+ *   node unlock-start stop <botName>
+ *   node unlock-start restart <botName>
+ *   node unlock-start stop-all
+ *   node unlock-start restart-all
+ *   node unlock-start shutdown
  *
  * Environment:
  *   BOT_NAME              Fallback bot name when none is given as positional arg

@@ -104,34 +104,34 @@ assert.deepStrictEqual(
 );
 
 assert.deepStrictEqual(
-    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'status']),
+    parseUnlockStartArgs(['node', 'unlock-start', 'status']),
     { botName: null, clawOnly: false, isolated: false, control: { cmd: 'status', target: null } },
-    'unlock-start parser should parse control status'
+    'unlock-start parser should parse status'
 );
 assert.deepStrictEqual(
-    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'stop', 'XRP-BTS']),
+    parseUnlockStartArgs(['node', 'unlock-start', 'stop', 'XRP-BTS']),
     { botName: null, clawOnly: false, isolated: false, control: { cmd: 'stop', target: 'XRP-BTS' } },
-    'unlock-start parser should parse control stop <name>'
+    'unlock-start parser should parse stop <name>'
 );
 assert.deepStrictEqual(
-    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'restart', 'XRP-BTS']),
+    parseUnlockStartArgs(['node', 'unlock-start', 'restart', 'XRP-BTS']),
     { botName: null, clawOnly: false, isolated: false, control: { cmd: 'restart', target: 'XRP-BTS' } },
-    'unlock-start parser should parse control restart <name>'
+    'unlock-start parser should parse restart <name>'
 );
 assert.deepStrictEqual(
-    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'stop-all']),
+    parseUnlockStartArgs(['node', 'unlock-start', 'stop-all']),
     { botName: null, clawOnly: false, isolated: false, control: { cmd: 'stop-all', target: null } },
-    'unlock-start parser should parse control stop-all'
+    'unlock-start parser should parse stop-all'
 );
 assert.deepStrictEqual(
-    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'restart-all']),
+    parseUnlockStartArgs(['node', 'unlock-start', 'restart-all']),
     { botName: null, clawOnly: false, isolated: false, control: { cmd: 'restart-all', target: null } },
-    'unlock-start parser should parse control restart-all'
+    'unlock-start parser should parse restart-all'
 );
 assert.deepStrictEqual(
-    parseUnlockStartArgs(['node', 'unlock-start', 'control', 'shutdown']),
+    parseUnlockStartArgs(['node', 'unlock-start', 'shutdown']),
     { botName: null, clawOnly: false, isolated: false, control: { cmd: 'shutdown', target: null } },
-    'unlock-start parser should parse control shutdown'
+    'unlock-start parser should parse shutdown'
 );
 
 console.log('launcher export tests passed');
