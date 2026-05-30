@@ -474,7 +474,8 @@ class OrderManager {
     constructor(config = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
         this.marketName = this.config.market || (this.config.assetA && this.config.assetB ? `${this.config.assetA}/${this.config.assetB}` : null);
-        this.logger = new Logger('DEXBot', { level: LOG_LEVEL });
+        const logFile = config.logFile || undefined;
+        this.logger = new Logger('DEXBot', { level: LOG_LEVEL, logFile });
         this.logger.marketName = this.marketName;
         this.orders = Object.freeze(new Map());
         this.boundaryIdx = null;

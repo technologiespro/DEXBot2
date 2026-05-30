@@ -710,7 +710,8 @@ class DEXBot {
         await this.accountOrders.ensureBotEntries(allActiveBots);
 
         if (!this.manager) {
-            this.manager = new OrderManager(this.config || {});
+            const mgrLogFile = this.config?.name ? path.join(PROFILES_DIR, 'logs', `${this.config.name}.log`) : undefined;
+            this.manager = new OrderManager({ ...this.config, logFile: mgrLogFile });
             this.manager.account = this.account;
             this.manager.accountId = this.accountId;
             this.manager.accountOrders = this.accountOrders;
@@ -1989,7 +1990,8 @@ class DEXBot {
      */
     async placeInitialOrders() {
         if (!this.manager) {
-            this.manager = new OrderManager(this.config);
+            const mgrLogFile = this.config?.name ? path.join(PROFILES_DIR, 'logs', `${this.config.name}.log`) : undefined;
+            this.manager = new OrderManager({ ...this.config, logFile: mgrLogFile });
             this.manager.accountOrders = this.accountOrders;
         }
         try {

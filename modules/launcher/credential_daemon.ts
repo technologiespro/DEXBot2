@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+import type { StdioOptions } from 'child_process';
 const chainKeys = require('../chain_keys');
 const credentialPolicy = require('../credential_policy');
 const {
@@ -68,7 +69,7 @@ function createCredentialDaemonController({
         }
     }
 
-    async function ensureCredentialDaemon({ detached = false } = {}) {
+    async function ensureCredentialDaemon({ detached = false, stdio: stdioOption = undefined } = {}) {
         if (await isDaemonReady()) {
             return false;
         }
@@ -85,10 +86,11 @@ function createCredentialDaemonController({
         });
 
         try {
+            const childStdio: StdioOptions = stdioOption ?? (detached ? 'ignore' : 'inherit');
             daemonProcess = spawn(process.execPath, daemonArgs, {
                 cwd: root,
                 env: buildScopedChildEnv({ extra: bootstrap.credentialEnv }),
-                stdio: detached ? 'ignore' : 'inherit',
+                stdio: childStdio,
                 detached,
             });
             daemonExitPromise = waitForExit(daemonProcess);

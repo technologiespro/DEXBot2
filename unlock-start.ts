@@ -47,6 +47,7 @@ const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const LOGS_DIR = path.join(ROOT, 'profiles', 'logs');
 const SUPERVISOR_OUT_LOG = path.join(LOGS_DIR, 'supervisor.log');
 const SUPERVISOR_ERROR_LOG = path.join(LOGS_DIR, 'supervisor-error.log');
+
 const controller = createCredentialDaemonController({ root: ROOT, codeRoot: CODE_ROOT });
 const DEFAULT_STARTUP_GRACE_MS = 750;
 
@@ -533,9 +534,34 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
         if (!isDetachedSupervisorChild) {
             printLauncherHeader({ botName, clawOnly, isolated });
-            const unlockedNow = await controller.ensureCredentialDaemon({ detached: isolated && !forceForegroundIsolated });
-            if (unlockedNow) {
-                console.log('✓ Authentication successful');
+
+            const daemonOpts: any = { detached: isolated && !forceForegroundIsolated };
+            let daemonOutFd: number | null = null;
+            let daemonErrFd: number | null = null;
+
+            // In default monolithic background mode, redirect credential daemon
+            // output to log files (like PM2 does) instead of polluting the terminal
+            if (!clawOnly && !isolated && !forceForeground) {
+                ensureMonolithicLogDir();
+                daemonOutFd = fs.openSync(MONOLITHIC_OUT_LOG, 'a', 0o600);
+                try {
+                    daemonErrFd = fs.openSync(MONOLITHIC_ERROR_LOG, 'a', 0o600);
+                } catch (_e) {
+                    try { fs.closeSync(daemonOutFd); } catch (_) {}
+                    daemonOutFd = null;
+                    throw _e;
+                }
+                daemonOpts.stdio = ['ignore', daemonOutFd, daemonErrFd];
+            }
+
+            try {
+                const unlockedNow = await controller.ensureCredentialDaemon(daemonOpts);
+                if (unlockedNow) {
+                    console.log('✓ Authentication successful');
+                }
+            } finally {
+                if (daemonOutFd !== null) try { fs.closeSync(daemonOutFd); } catch (_) {}
+                if (daemonErrFd !== null) try { fs.closeSync(daemonErrFd); } catch (_) {}
             }
         } else if (!(await controller.isDaemonReady())) {
             throw new Error('credential daemon is not ready for isolated supervisor startup');
@@ -564,7 +590,13 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
             ensureMonolithicLogDir();
             const stdoutFd = fs.openSync(MONOLITHIC_OUT_LOG, 'a', 0o600);
-            const stderrFd = fs.openSync(MONOLITHIC_ERROR_LOG, 'a', 0o600);
+            let stderrFd;
+            try {
+                stderrFd = fs.openSync(MONOLITHIC_ERROR_LOG, 'a', 0o600);
+            } catch (_e) {
+                try { fs.closeSync(stdoutFd); } catch (_) {}
+                throw _e;
+            }
 
             const child = spawn(process.execPath, [__filename, ...process.argv.slice(2)], {
                 cwd: ROOT,

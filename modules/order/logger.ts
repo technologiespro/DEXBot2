@@ -74,8 +74,8 @@ class Logger {
         const pm2AutoQuiet = isUnderPm2 && hasPm2Logging;
         const quietUnderPm2 = options.quietUnderPm2 !== false;
 
-        this.quiet = options.quiet || (quietUnderPm2 && pm2AutoQuiet);
         this.logFile = options.logFile || null;
+        this.quiet = options.quiet ?? (!!this.logFile || (quietUnderPm2 && pm2AutoQuiet));
         this.level = options.level || 'info';
         this.config = options.configOverride || LOGGING_CONFIG;
 
