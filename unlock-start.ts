@@ -30,8 +30,9 @@ const { spawn } = require('child_process');
 const { createCredentialDaemonController } = require('./modules/launcher/credential_daemon');
 const { buildScopedChildEnv } = require('./modules/launcher/child_env');
 const { parseUnlockStartArgs } = require('./modules/launcher/launch_modes');
+const { UPDATER } = require('./modules/constants');
 const { buildRuntimeScriptArgs } = require('./modules/launcher/runtime_entry');
-const { createBotSupervisor, SOCKET_PATH } = require('./modules/launcher/bot_supervisor');
+const { createBotSupervisor, SOCKET_PATH, parseCronExpression, getNextCronDate } = require('./modules/launcher/bot_supervisor');
 const { sendControlCommand } = require('./modules/launcher/supervisor_control');
 const { registerCleanup, setupGracefulShutdown } = require('./modules/graceful_shutdown');
 const { normalizeBotEntry, resolveRawBotEntries, loadSettingsFile } = require('./modules/bot_settings');
@@ -421,6 +422,68 @@ async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = 
     }
 }
 
+let _updateTimer: NodeJS.Timeout | null = null;
+let _pendingRestart = false;
+
+function clearMonolithicUpdateTimer() {
+    if (_updateTimer) {
+        clearTimeout(_updateTimer);
+        _updateTimer = null;
+    }
+}
+
+function scheduleMonolithicUpdateJob(botProcessRef: { current: any }) {
+    if (!UPDATER.ACTIVE) return () => {};
+
+    let cancelled = false;
+
+    const scheduleNext = () => {
+        if (cancelled) return;
+        try {
+            const parsed = parseCronExpression(UPDATER.SCHEDULE);
+            const nextDate = getNextCronDate(parsed);
+            const delay = Math.max(0, nextDate.getTime() - Date.now());
+            _updateTimer = setTimeout(async () => {
+                if (cancelled) return;
+                const updateArgs = buildRuntimeScriptArgs({
+                    codeRoot: CODE_ROOT,
+                    scriptSegments: ['scripts', 'update'],
+                    scriptArgs: [],
+                });
+                const updateChild = spawn(process.execPath, updateArgs, {
+                    cwd: ROOT,
+                    stdio: 'inherit',
+                    env: buildScopedChildEnv(),
+                });
+                const code = await new Promise<number>((resolve) => {
+                    updateChild.on('close', resolve);
+                });
+                if (code === 0 && !cancelled) {
+                    _pendingRestart = true;
+                    const bot = botProcessRef.current;
+                    if (bot && !bot.killed) {
+                        forwardSignal(bot, 'SIGTERM');
+                    }
+                }
+                if (!cancelled) scheduleNext();
+            }, delay);
+            if (_updateTimer && typeof _updateTimer.unref === 'function') {
+                _updateTimer.unref();
+            }
+        } catch (err: any) {
+            console.warn(`Update scheduler: ${err.message}`);
+            _updateTimer = setTimeout(scheduleNext, 3600000);
+            if (_updateTimer && typeof _updateTimer.unref === 'function') {
+                _updateTimer.unref();
+            }
+        }
+    };
+
+    scheduleNext();
+
+    return () => { cancelled = true; clearMonolithicUpdateTimer(); };
+}
+
 /**
  * Main entry point.
  * Starts daemon, then launches bot process(es) via monolithic or isolated mode.
@@ -489,36 +552,58 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             return;
         }
 
-        const dexbotArgs = buildDexbotStartArgs(botName);
+        const botProcessRef: { current: any } = { current: null };
+        const cancelUpdateScheduler = scheduleMonolithicUpdateJob(botProcessRef);
+        let restartLoop = false;
 
-        const botProcess = spawn(process.execPath, dexbotArgs, {
-            cwd: ROOT,
-            env: process.env,
-            stdio: 'inherit',
-        });
+        do {
+            restartLoop = false;
+            const dexbotArgs = buildDexbotStartArgs(botName);
 
-        await waitForStableChildStartup(botProcess, { label: 'DEXBot', timeoutMs: startupGraceMs });
-        printLauncherSuccess({ botName });
+            const botProcess = spawn(process.execPath, dexbotArgs, {
+                cwd: ROOT,
+                env: process.env,
+                stdio: 'inherit',
+            });
+            botProcessRef.current = botProcess;
 
-        const onSigint = () => forwardSignal(botProcess, 'SIGINT');
-        const onSigterm = () => forwardSignal(botProcess, 'SIGTERM');
-        process.on('SIGINT', onSigint);
-        process.on('SIGTERM', onSigterm);
+            await waitForStableChildStartup(botProcess, { label: 'DEXBot', timeoutMs: startupGraceMs });
 
-        const cleanupBotHandlers = () => {
-            process.off('SIGINT', onSigint);
-            process.off('SIGTERM', onSigterm);
-        };
+            if (!_pendingRestart) {
+                printLauncherSuccess({ botName });
+            } else {
+                console.log('✓ Bot restarted after update');
+            }
 
-        const exitCode = await new Promise((resolve, reject) => {
-            botProcess.on('error', reject);
-            botProcess.on('close', (code: any) => resolve(code));
-        }).catch((err) => {
+            const onSigint = () => forwardSignal(botProcess, 'SIGINT');
+            const onSigterm = () => forwardSignal(botProcess, 'SIGTERM');
+            process.on('SIGINT', onSigint);
+            process.on('SIGTERM', onSigterm);
+
+            const cleanupBotHandlers = () => {
+                process.off('SIGINT', onSigint);
+                process.off('SIGTERM', onSigterm);
+            };
+
+            const exitCode: any = await new Promise((resolve, reject) => {
+                botProcess.on('error', reject);
+                botProcess.on('close', (code: any) => resolve(code));
+            }).catch((err) => {
+                cleanupBotHandlers();
+                throw err;
+            });
             cleanupBotHandlers();
-            throw err;
-        });
-        cleanupBotHandlers();
-        process.exitCode = (exitCode as any) || 0;
+
+            if (_pendingRestart) {
+                _pendingRestart = false;
+                restartLoop = true;
+                console.log('Update applied, restarting bot...');
+            } else {
+                process.exitCode = exitCode || 0;
+            }
+        } while (restartLoop);
+
+        cancelUpdateScheduler();
     } finally {
         if (!isDetachedSupervisorChild && !daemonReleased) {
             await controller.stopManagedDaemon();
