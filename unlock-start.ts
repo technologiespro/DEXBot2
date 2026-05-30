@@ -5,14 +5,18 @@
  *
  * Starts credential daemon with master password and launches the bot process.
  *
+ * Default mode: daemonizes to background and auto-restarts on crash.
+ * Use --foreground to run in terminal (no auto-restart).
+ *
  * Usage:
- *   node unlock-start [botName]
+ *   node unlock-start [botName]       Background + auto-restart (default)
+ *   node unlock-start --foreground    Terminal mode (no auto-restart)
  *   node unlock-start claw-only
  *   node unlock-start --claw-only
  *   node unlock-start --isolated
  *   node unlock-start --isolated <botName>
  *   node unlock-start status
- *   node unlock-start stop <botName>
+ *   node unlock-start stop
  *   node unlock-start restart <botName>
  *   node unlock-start stop-all
  *   node unlock-start restart-all
@@ -45,6 +49,15 @@ const SUPERVISOR_OUT_LOG = path.join(LOGS_DIR, 'supervisor.log');
 const SUPERVISOR_ERROR_LOG = path.join(LOGS_DIR, 'supervisor-error.log');
 const controller = createCredentialDaemonController({ root: ROOT, codeRoot: CODE_ROOT });
 const DEFAULT_STARTUP_GRACE_MS = 750;
+
+// Monolithic background process supervision
+const MONOLITHIC_PID_FILE = path.join(ROOT, 'profiles', 'monolithic.pid');
+const MONOLITHIC_OUT_LOG = path.join(LOGS_DIR, 'dexbot.log');
+const MONOLITHIC_ERROR_LOG = path.join(LOGS_DIR, 'dexbot-error.log');
+const MONOLITHIC_MAX_RESTARTS = 13;
+const MONOLITHIC_MIN_UPTIME_MS = 86400000;
+const MONOLITHIC_RESTART_DELAY_MS = 3000;
+const botProcessRef: { current: any } = { current: null };
 
 function forwardSignal(child: any, signal: any) {
     if (!child || child.killed) return;
@@ -160,6 +173,12 @@ function waitForStableChildStartup(child: any, { label = 'child process', timeou
         child.once('error', handleError);
         child.once('close', handleClose);
     });
+}
+
+function ensureMonolithicLogDir() {
+    if (!fs.existsSync(LOGS_DIR)) {
+        fs.mkdirSync(LOGS_DIR, { recursive: true });
+    }
 }
 
 function resolveBotEntryForName(botName: string) {
@@ -495,6 +514,8 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
     const parsed = parseUnlockStartArgs(argv);
     const isDetachedSupervisorChild = process.env.DEXBOT_ISOLATED_CHILD === '1';
     const forceForegroundIsolated = process.env.DEXBOT_ISOLATED_FOREGROUND === '1';
+    const isMonolithicBgChild = process.env.DEXBOT_MONOLITHIC_BG === '1';
+    const forceForeground = process.argv.includes('--foreground');
 
     if (parsed.control) {
         await handleControl(parsed.control);
@@ -518,6 +539,49 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             }
         } else if (!(await controller.isDaemonReady())) {
             throw new Error('credential daemon is not ready for isolated supervisor startup');
+        }
+
+        // Background daemonization for monolithic mode (default)
+        if (!clawOnly && !isolated && !isDetachedSupervisorChild && !isMonolithicBgChild && !forceForeground) {
+            // Check old PID file before overwriting
+            try {
+                if (fs.existsSync(MONOLITHIC_PID_FILE)) {
+                    const oldPid = Number(fs.readFileSync(MONOLITHIC_PID_FILE, 'utf8').trim());
+                    if (Number.isInteger(oldPid) && oldPid > 0) {
+                        try { process.kill(oldPid, 0); throw new Error('already running'); } catch (e: any) {
+                            if (e.message === 'already running') {
+                                throw new Error(`background instance already running (PID ${oldPid})`);
+                            }
+                        }
+                    }
+                }
+            } catch (e: any) {
+                if (e.message.includes('already running')) throw e;
+            }
+
+            controller.releaseManagedDaemon();
+            daemonReleased = true;
+
+            ensureMonolithicLogDir();
+            const stdoutFd = fs.openSync(MONOLITHIC_OUT_LOG, 'a', 0o600);
+            const stderrFd = fs.openSync(MONOLITHIC_ERROR_LOG, 'a', 0o600);
+
+            const child = spawn(process.execPath, [__filename, ...process.argv.slice(2)], {
+                cwd: ROOT,
+                detached: true,
+                env: { ...process.env, DEXBOT_MONOLITHIC_BG: '1' },
+                stdio: ['ignore', stdoutFd, stderrFd],
+            });
+            child.unref();
+            fs.writeFileSync(MONOLITHIC_PID_FILE, String(child.pid), { mode: 0o600 });
+
+            console.log('='.repeat(50));
+            console.log('DEXBot2 started in background');
+            console.log(`PID: ${child.pid}`);
+            console.log(`Logs: ${MONOLITHIC_OUT_LOG}`);
+            console.log(`Stop: node unlock-start stop`);
+            console.log('='.repeat(50));
+            process.exit(0);
         }
 
         if (clawOnly) {
@@ -552,27 +616,42 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             return;
         }
 
-        const botProcessRef: { current: any } = { current: null };
         const cancelUpdateScheduler = scheduleMonolithicUpdateJob(botProcessRef);
-        let restartLoop = false;
+        let restartCount = 0;
+        let lastStartTime = 0;
+        let keepRunning = true;
 
         do {
-            restartLoop = false;
             const dexbotArgs = buildDexbotStartArgs(botName);
 
             const botProcess = spawn(process.execPath, dexbotArgs, {
                 cwd: ROOT,
                 env: process.env,
-                stdio: 'inherit',
+                stdio: isMonolithicBgChild ? 'pipe' : 'inherit',
             });
             botProcessRef.current = botProcess;
 
+            // Pipe output to log files in background mode
+            if (isMonolithicBgChild && botProcess.stdout) {
+                const outStream = fs.createWriteStream(MONOLITHIC_OUT_LOG, { flags: 'a' });
+                const errStream = fs.createWriteStream(MONOLITHIC_ERROR_LOG, { flags: 'a' });
+                botProcess.stdout.pipe(outStream);
+                botProcess.stderr.pipe(errStream);
+                botProcess.stdout.on('error', () => {});
+                botProcess.stderr.on('error', () => {});
+                botProcess.once('close', () => {
+                    try { outStream.end(); } catch (_) {}
+                    try { errStream.end(); } catch (_) {}
+                });
+            }
+
+            lastStartTime = Date.now();
             await waitForStableChildStartup(botProcess, { label: 'DEXBot', timeoutMs: startupGraceMs });
 
             if (!_pendingRestart) {
-                printLauncherSuccess({ botName });
-            } else {
-                console.log('✓ Bot restarted after update');
+                if (!isMonolithicBgChild) {
+                    printLauncherSuccess({ botName });
+                }
             }
 
             const onSigint = () => forwardSignal(botProcess, 'SIGINT');
@@ -596,12 +675,26 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
             if (_pendingRestart) {
                 _pendingRestart = false;
-                restartLoop = true;
                 console.log('Update applied, restarting bot...');
+            } else if (exitCode !== 0) {
+                const uptime = Date.now() - lastStartTime;
+                if (uptime >= MONOLITHIC_MIN_UPTIME_MS) {
+                    restartCount = 0;
+                }
+                restartCount++;
+                if (restartCount > MONOLITHIC_MAX_RESTARTS) {
+                    console.error(`Bot crashed ${MONOLITHIC_MAX_RESTARTS} times without stable uptime. Exiting.`);
+                    process.exitCode = exitCode || 1;
+                    keepRunning = false;
+                } else {
+                    console.log(`Bot crashed (exit ${exitCode}), restarting in ${MONOLITHIC_RESTART_DELAY_MS / 1000}s (attempt ${restartCount}/${MONOLITHIC_MAX_RESTARTS})...`);
+                    await new Promise((r) => setTimeout(r, MONOLITHIC_RESTART_DELAY_MS));
+                }
             } else {
-                process.exitCode = exitCode || 0;
+                process.exitCode = 0;
+                keepRunning = false;
             }
-        } while (restartLoop);
+        } while (keepRunning);
 
         cancelUpdateScheduler();
     } finally {
@@ -612,12 +705,50 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 }
 
 async function handleControl({ cmd, target }: { cmd: string; target?: string }) {
-    const controlCmd: any = {
-        cmd,
-    };
-    if (target) {
-        controlCmd.bot = target;
+    // Try monolithic PID file first for stop/status/shutdown (no bot target)
+    if ((cmd === 'stop' || cmd === 'shutdown' || cmd === 'status') && !target && fs.existsSync(MONOLITHIC_PID_FILE)) {
+        let pid = 0;
+        try {
+            const raw = fs.readFileSync(MONOLITHIC_PID_FILE, 'utf8').trim();
+            pid = Number(raw);
+            if (!Number.isInteger(pid) || pid <= 0) pid = 0;
+        } catch (_) {
+            try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
+        }
+
+        if (pid > 0) {
+            try {
+                process.kill(pid, 0);
+            } catch (_) {
+                console.log('Monolithic bot not running (stale PID file)');
+                try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
+                return;
+            }
+
+            if (cmd === 'status') {
+                console.log(`Monolithic bot running (PID: ${pid})`);
+                return;
+            }
+
+            try {
+                process.kill(pid, 'SIGTERM');
+                console.log('Stop signal sent to monolithic bot');
+                const started = Date.now();
+                while (Date.now() - started < 5000) {
+                    try { process.kill(pid, 0); await new Promise((r) => setTimeout(r, 200)); } catch (_) { break; }
+                }
+            } catch (err: any) {
+                if (err.code !== 'ESRCH') throw err;
+            } finally {
+                try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
+            }
+            return;
+        }
     }
+
+    // No monolithic PID file or target-specific control — fall through to isolated supervisor socket
+    const controlCmd: any = { cmd };
+    if (target) controlCmd.bot = target;
 
     try {
         const resp = await sendControlCommand(controlCmd);
@@ -670,6 +801,18 @@ if (isUnlockStartDirectRun) {
     setupGracefulShutdown();
     if (process.env.DEXBOT_ISOLATED_CHILD === '1') {
         registerCleanup('Credential daemon', () => stopCredentialDaemonPid(process.env.DEXBOT_MANAGED_CRED_PID as string));
+    } else if (process.env.DEXBOT_MONOLITHIC_BG === '1') {
+        registerCleanup('PID file', () => { try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {} });
+        registerCleanup('Bot process', async () => {
+            const bot = botProcessRef.current;
+            if (bot && !bot.killed) {
+                forwardSignal(bot, 'SIGTERM');
+                await Promise.race([
+                    new Promise((resolve) => bot.once('close', resolve)),
+                    new Promise((resolve) => setTimeout(resolve, 10000)),
+                ]);
+            }
+        });
     } else {
         registerCleanup('Credential daemon', () => controller.stopManagedDaemon());
     }
