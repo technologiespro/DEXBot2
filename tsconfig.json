@@ -31,7 +31,7 @@
     "dexbot.ts",
     "bot.ts",
     "pm2.ts",
-    "unlock-start.ts",
+    "unlock.ts",
     "credential-daemon.ts"
   ],
   "exclude": [

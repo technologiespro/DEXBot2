@@ -6,7 +6,7 @@ const path = require('path');
 const { loadSettingsFile, resolveRawBotEntries } = require('../modules/bot_settings');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
 
-console.log('Running unlock-start control output tests');
+console.log('Running unlock control output tests');
 
 const controllerPath = require.resolve('../modules/launcher/credential_daemon');
 const supervisorControlPath = require.resolve('../modules/launcher/supervisor_control');
@@ -62,7 +62,7 @@ function installStubs() {
     setCachedModule(supervisorControlPath, {
         sendControlCommand: async (cmd) => {
             if (cmd.cmd === 'delete' && state.supervisorDeleteTransient) {
-                throw new Error('No supervisor socket found. Start bots with: node unlock-start --isolated');
+                throw new Error('No supervisor socket found. Start bots with: node unlock --isolated');
             }
             state.controlCalls.push(cmd);
             return { ok: true };
@@ -129,11 +129,11 @@ function restoreStubs() {
 
 installStubs();
 
-const unlockStart = require('../unlock-start');
+const unlock = require('../unlock');
 
 async function runControl(args) {
     resetState();
-    await unlockStart.main({ argv: ['node', 'unlock-start', ...args], startupGraceMs: 0 });
+    await unlock.main({ argv: ['node', 'unlock', ...args], startupGraceMs: 0 });
 }
 
 async function assertTargetControl(command, actionWord, botName) {
@@ -182,7 +182,7 @@ async function assertStaleControl(command, actionWord) {
         await assertStaleControl('shutdown', 'shutting down');
 
         restoreStubs();
-        process.stdout.write('unlock-start control output tests passed\n');
+        process.stdout.write('unlock control output tests passed\n');
         process.exit(0);
     } catch (err) {
         restoreStubs();

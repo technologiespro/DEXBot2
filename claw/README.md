@@ -139,7 +139,7 @@ The `skills/` tree is intentionally split by responsibility:
 
 - `bitshares-guide` is presentation-only and should stay free of operational instructions.
 - `margin-trading` is concept-reference only and should stay free of launcher or deployment content.
-- `launcher-ops` owns PM2 startup, `unlock-start`, `--claw-only`, Docker-friendly startup, and launcher validation.
+- `launcher-ops` owns PM2 startup, `unlock`, `--claw-only`, Docker-friendly startup, and launcher validation.
 
 Shared boundary notes live in `skills/shared/references/skill-boundaries.md`.
 

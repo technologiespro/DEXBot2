@@ -53,8 +53,8 @@
  *   node credential-daemon.js
  *
  * Via PM2 (recommended):
- *   npm run pm2:unlock-start
- *   or: node dexbot.js pm2
+ *   npm run unlock
+ *   or: node unlock
  *
  * Bot processes then access keys automatically via socket connection.
  *

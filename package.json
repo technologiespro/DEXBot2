@@ -10,8 +10,10 @@
   "scripts": {
     "pm2:unlock-start": "npm run build && node dist/pm2.js",
     "pm2:claw-only": "npm run build && node dist/pm2.js claw-only",
-    "unlock:start": "npm run build && node dist/unlock-start.js",
-    "claw:start": "npm run build && node dist/unlock-start.js --claw-only",
+    "unlock": "npm run build && node dist/unlock.js",
+    "unlock:start": "npm run unlock",
+    "claw:unlock": "npm run build && node dist/unlock.js --claw-only",
+    "claw:start": "npm run claw:unlock",
     "pm2:start": "pm2 start profiles/ecosystem.config.js",
     "pm2:stop": "pm2 stop profiles/ecosystem.config.js",
     "pm2:reload": "pm2 reload profiles/ecosystem.config.js",

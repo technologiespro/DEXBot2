@@ -27,9 +27,9 @@ node dexbot bots
 # 3. Start with PM2 or directly
 node pm2           # For production (PM2)
 node pm2 claw-only  # PM2-managed credential daemon only
-node unlock-start  # Single prompt, no PM2 (monolithic)
-node unlock-start --isolated  # No PM2, isolated processes (production-grade)
-node unlock-start --claw-only  # Credential daemon only for claw workflows
+node unlock  # Single prompt, no PM2 (monolithic)
+node unlock --isolated  # No PM2, isolated processes (production-grade)
+node unlock --claw-only  # Credential daemon only for claw workflows
 node dexbot start  # For testing
 ```
 
@@ -147,7 +147,7 @@ market volatility instead of using an unnecessarily wide range.
    npm run market-adapter:whitelist
    ```
 
-6. Start DEXBot2 normally with `node pm2` or `node unlock-start`.
+6. Start DEXBot2 normally with `node pm2` or `node unlock`.
 7. Then tune `minPrice` / `maxPrice` for the market's volatility range.
 
 ### Bot Options Reference
@@ -236,22 +236,22 @@ Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local boo
 
 ## 🎯 Zero-Dependency Process Management
 
-`node unlock-start --isolated` runs each bot in its own process with auto-restart, memory limits, and log files — no PM2 required.
+`node unlock --isolated` runs each bot in its own process with auto-restart, memory limits, and log files — no PM2 required.
 
 ```bash
 # Start all active bots
-node unlock-start --isolated
+node unlock --isolated
 
 # Start a specific bot
-node unlock-start --isolated <bot-name>
+node unlock --isolated <bot-name>
 
 # Runtime control
-node unlock-start status
-node unlock-start stop <bot-name>
-node unlock-start restart <bot-name>
-node unlock-start stop-all
-node unlock-start restart-all
-node unlock-start delete
+node unlock status
+node unlock stop <bot-name>
+node unlock restart <bot-name>
+node unlock stop-all
+node unlock restart-all
+node unlock delete
 ```
 
 The supervisor detaches and returns to the shell. `stop-all` leaves the supervisor available for `restart-all`; `delete` gracefully terminates the supervisor runtime. It supports `SIGTERM` (graceful shutdown), `SIGUSR1` (print status), and `SIGUSR2` (restart all). Bot logs go to `profiles/logs/<name>.log`, supervisor output to `profiles/logs/supervisor.log`.

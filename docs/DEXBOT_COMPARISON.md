@@ -491,7 +491,7 @@ Where:
 - `dexbot.ts`: multi-bot management, config viewing, log tailing
 - `bot.ts`: single bot launcher
 - `pm2.ts`: PM2 orchestration (start, stop, restart, status, logs)
-- `unlock-start.ts`: single-prompt startup helper
+- `unlock.ts`: single-prompt startup helper
 - Claw scripts and modules expose automation-friendly operations for profiles, chain actions, position health, and launcher workflows
 - Designed for operators comfortable with terminal, JSON config, and service logs
 

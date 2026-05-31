@@ -4,12 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.7] - 2026-05-31 - Default Daemonization, Auto-Update, Per-Bot Logs & MPA debtOnly
 
-This release makes `node unlock-start` background-daemon mode the default with crash restart, adds auto-update to the monolithic path, introduces per-bot log files with credential daemon output redirect, adds the `debtOnly` MPA lending flag with tightened discriminated-union types, and cleans up the unlock-start CLI by removing the redundant `control` subcommand.
+This release makes `node unlock` background-daemon mode the default with crash restart, adds auto-update to the monolithic path, introduces per-bot log files with credential daemon output redirect, adds the `debtOnly` MPA lending flag with tightened discriminated-union types, and cleans up the unlock CLI by removing the redundant `control` subcommand.
 
 ### 2026-05-30
 
-#### Unlock-Start CLI Simplification
-- Remove redundant `control` subcommand from unlock-start CLI — `node unlock-start status` now works directly instead of `node unlock-start control status`. Updated `launch_modes.ts`, `unlock-start.ts` doc comment, `README.md` usage examples, and launcher export tests (`4af92bf`).
+#### Unlock CLI Simplification
+- Remove redundant `control` subcommand from unlock CLI — `node unlock status` now works directly instead of `node unlock control status`. Updated `launch_modes.ts`, `unlock.ts` doc comment, `README.md` usage examples, and launcher export tests (`4af92bf`).
 
 #### MPA debtOnly Flag & Type Tightening
 - Add `debtOnly` boolean on MPA lending items in `cr_planner.ts` and `credit_runtime.ts`: keeps collateral constant, adjusts only debt to manage CR bands; planner zeros `collateralDelta` and clears `fallbackAction` when set; runtime skips collateral-only fallback on combined-op failure (`83f9052`).
@@ -20,21 +20,21 @@ This release makes `node unlock-start` background-daemon mode the default with c
 - Add 2 debtOnly planner tests and 2 bot settings validation tests (`83f9052`).
 
 #### Auto-Update for Monolithic Path
-- Add cron-based auto-update to unlock-start monolithic (default) path — previously only `--isolated` mode (via `bot_supervisor`) and `pm2` had this capability (`c2a6160`).
+- Add cron-based auto-update to unlock monolithic (default) path — previously only `--isolated` mode (via `bot_supervisor`) and `pm2` had this capability (`c2a6160`).
 - Import `UPDATER` from constants, `parseCronExpression`/`getNextCronDate` from `bot_supervisor`; `scheduleMonolithicUpdateJob()` spawns `scripts/update.js` on configured `UPDATER.SCHEDULE` (`c2a6160`).
 - Wrap monolithic bot spawn in restart loop: on successful update (exit 0), old bot receives SIGTERM and loop re-spawns with new code (`c2a6160`).
 - Timer is `.unref()`'d to not block process exit; cancels cleanly on shutdown (`c2a6160`).
 
 #### Auto-Update Bugfix: Prevent Unnecessary Restarts & PM2 Double-Reload
-- Fix exit code 0 used for both "already up to date" and "update applied" — changed to exit 2 for no-updates, so unlock-start doesn't SIGTERM the bot on every cron tick when nothing changed (`3a0f465`).
+- Fix exit code 0 used for both "already up to date" and "update applied" — changed to exit 2 for no-updates, so unlock doesn't SIGTERM the bot on every cron tick when nothing changed (`3a0f465`).
 - Add `DEXBOT_UPDATE_SKIP_RELOAD` guard in `scripts/update.ts` so update script skips PM2 reload when the launcher manages restart itself (`3a0f465`).
-- Pass `DEXBOT_UPDATE_SKIP_RELOAD=1` to update child process from unlock-start via `buildScopedChildEnv({ extra })`, delegating reload coordination to the launcher lifecycle (`3a0f465`).
+- Pass `DEXBOT_UPDATE_SKIP_RELOAD=1` to update child process from unlock via `buildScopedChildEnv({ extra })`, delegating reload coordination to the launcher lifecycle (`3a0f465`).
 
 #### Background Daemon + Crash Restart
-- Default `node unlock-start` monolithic mode now auto-daemonizes to background, writes PID file, and auto-restarts bot process on crash (13 attempts, 24h stable-uptime reset, 3s delay) (`e3a43f4`).
+- Default `node unlock` monolithic mode now auto-daemonizes to background, writes PID file, and auto-restarts bot process on crash (13 attempts, 24h stable-uptime reset, 3s delay) (`e3a43f4`).
 - Add `--foreground` flag for users who want terminal-attached mode with crash restart (same restart policy, no daemonization) (`e3a43f4`).
 - Background logging pipes child stdout/stderr to `profiles/logs/dexbot.log`/`dexbot-error.log`; WriteStreams closed on child `close` event to prevent FD leaks across restarts (`e3a43f4`).
-- Graceful shutdown: registers cleanup handler forwarding SIGTERM to dexbot child, waits up to 10s before `process.exit(0)`; prevents orphaned bots on `node unlock-start stop` (`e3a43f4`).
+- Graceful shutdown: registers cleanup handler forwarding SIGTERM to dexbot child, waits up to 10s before `process.exit(0)`; prevents orphaned bots on `node unlock stop` (`e3a43f4`).
 - `handleControl` restructuring flattens PID-file logic; corrupt/missing PID file falls through to existing isolated-supervisor socket path (`e3a43f4`).
 
 ### 2026-05-31
@@ -47,19 +47,19 @@ This release makes `node unlock-start` background-daemon mode the default with c
 
 ## [0.7.6] - 2026-05-30 - Launcher Hardening, Legacy Code Cleanup & Documentation Sweep
 
-This patch release hardens the unlock-start launcher against signal-handler leaks and polling hangs, removes deprecated legacy migration code across the vault, config, and price-mode layers, fixes broken script references and hardcoded machine paths, and sweeps documentation for stale line numbers, broken paths, and outdated counts.
+This patch release hardens the unlock launcher against signal-handler leaks and polling hangs, removes deprecated legacy migration code across the vault, config, and price-mode layers, fixes broken script references and hardcoded machine paths, and sweeps documentation for stale line numbers, broken paths, and outdated counts.
 
 ### 2026-05-29
 
 #### Docker Build Fix
 - Skip npm prepare script during Docker `npm ci` to prevent tsc failure before source COPY (`7142871`).
 
-#### Unlock-Start Isolated Mode Hardening
-- Clean up leaked SIGINT/SIGTERM/SIGUSR1/SIGUSR2 signal handlers from `runIsolated`, `main`, and `forwardSignal` paths; store named handler references, extract `cleanupSignalHandlers()`/`cleanupBotHandlers()`, and call on all exit paths (normal close, error, polling rejection). Fix unguarded `setInterval` callback in `runIsolated` — wrap in try/catch, `reject(err)` on exception, clear interval and clean up signal handlers before rejecting. Add `Promise<number>` return type and remove `as any` cast. Add `settled` guard in `waitForSupervisorReady` poll loop to prevent post-settlement timer scheduling. Add regression test `test_unlock_start_isolated_poll_reject.ts` asserting `main()` settles (no hang) when `getStatus()` throws (`e6e114a`).
+#### Unlock Isolated Mode Hardening
+- Clean up leaked SIGINT/SIGTERM/SIGUSR1/SIGUSR2 signal handlers from `runIsolated`, `main`, and `forwardSignal` paths; store named handler references, extract `cleanupSignalHandlers()`/`cleanupBotHandlers()`, and call on all exit paths (normal close, error, polling rejection). Fix unguarded `setInterval` callback in `runIsolated` — wrap in try/catch, `reject(err)` on exception, clear interval and clean up signal handlers before rejecting. Add `Promise<number>` return type and remove `as any` cast. Add `settled` guard in `waitForSupervisorReady` poll loop to prevent post-settlement timer scheduling. Add regression test `test_unlock_isolated_poll_reject.ts` asserting `main()` settles (no hang) when `getStatus()` throws (`e6e114a`).
 
 ### 2026-05-30
 
-#### Unlock-Start Launcher Hardening
+#### Unlock Launcher Hardening
 - **Daemon ownership**: Add `daemonReleased` flag in `main()`; `finally` block only calls `stopManagedDaemon()` when ownership was not explicitly released, preventing redundant no-op after detached-supervisor path releases the daemon. **Direct-run detection**: Replace fragile `.replace(/\.js$/, '')` with `path.parse().name` for correct `.ts` execution via ts-node. **Supervisor transient-error routing**: Add `isSupervisorTransientError()` helper; `waitForSupervisorReady` poll loop retries only on "No supervisor socket found" and "Connection timed out", surfacing unexpected errors immediately. **Signal forwarding**: Both `forwardSignal` and `credential_daemon.ts` `forwardSignal` now filter for `ESRCH` (process already gone) and rethrow unexpected errors. **Usage documentation**: Add bare `claw-only` alias and `BOT_NAME` environment variable to doc comment (`b9dbe36`).
 
 #### Deprecated Pattern Removal & Broken Reference Fixes
@@ -125,7 +125,7 @@ This release completes the removal of all external runtime dependencies and tran
 - Wire `connectTimeoutMs` into `createChainClient` to match `TIMING.CONNECTION_TIMEOUT_MS` (`cf2319e`).
 
 #### Post-Migration Fixes
-- Harden `unlock-start` runtime launching for compiled mode (`5121fae`).
+- Harden `unlock` runtime launching for compiled mode (`5121fae`).
 - Harden fill sync delivery and locking to prevent race conditions (`82a15f3`).
 - Fix connection retry, dust gate, and log rotation config alignment (`d89a8ff`).
 
@@ -216,7 +216,7 @@ This release completes the removal of all external runtime dependencies and tran
 - Centralize logging — remove dual constructor, migrate 9 modules from `console.*` to Logger (`2819d76`).
 
 #### Post-Migration Fixes
-- Add `tsx` fallback to pm2, credential-daemon, unlock-start, and update shims (`9f1e967`).
+- Add `tsx` fallback to pm2, credential-daemon, unlock, and update shims (`9f1e967`).
 
 #### Stability & Recovery Hardening
 - Fix BTS acquisition bugs, fee budget deduction, Logger test stubs, and `toFiniteNumber` import (`da2a2f8`).

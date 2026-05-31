@@ -50,11 +50,10 @@
  *
  * PM2 ORCHESTRATION:
  *   node dexbot pm2                  - Start all bots via PM2 with daemon
- *   node dexbot pm2 unlock-start     - Same as above (explicit)
- *   node dexbot pm2 stop all         - Stop all PM2 bot processes
- *   node dexbot pm2 stop <bot-name>  - Stop specific bot
- *   node dexbot pm2 delete all       - Delete all bots from PM2
- *   node dexbot pm2 delete <bot-name>- Delete specific bot from PM2
+  *   node dexbot pm2 stop all         - Stop all PM2 bot processes
+  *   node dexbot pm2 stop <bot-name>  - Stop specific bot
+  *   node dexbot pm2 delete all       - Delete all bots from PM2
+  *   node dexbot pm2 delete <bot-name>- Delete specific bot from PM2
  *   node dexbot pm2 help             - Show PM2 command help
  *
  * MAINTENANCE:
@@ -63,7 +62,6 @@
  *   node dexbot help                 - Show this help message
  *
  * NPM SCRIPTS (alternative invocation):
- *   npm run pm2:unlock-start         - Same as 'node dexbot pm2'
  *   npm run pm2:start                - Start bots (requires ecosystem.config.js pre-generated)
  *   npm run pm2:stop                 - Stop all PM2 bots
  *   npm run pm2:reload               - Reload all PM2 bots

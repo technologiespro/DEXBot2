@@ -120,7 +120,7 @@ graph TB
         CLI[dexbot.ts]
         BOT[bot.ts]
         PM2[pm2.ts]
-        UNLOCK[unlock-start.ts]
+        UNLOCK[unlock.ts]
         CRED_DAEMON[credential-daemon.ts]
     end
 

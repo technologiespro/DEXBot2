@@ -5,7 +5,7 @@
 | `bitshares-guide` | presentation-only | Pack presentation, onboarding copy, and guide structure | Operational instructions or source dumps |
 | `trend-detection` | service-control-plane | Candle-driven signal monitoring, parameter tuning, and bot-setting updates | Order placement or margin-trading policy |
 | `margin-trading` | concept-reference | Trading concepts, HONEST.Asset properties, position lifecycle, available operations | Prescribing specific parameter values as optimal, strategy recommendations, profit/loss predictions |
-| `launcher-ops` | operational-orchestration | PM2 startup, unlock-start, claw-only mode, Docker-friendly launcher flow, launcher validation | Trading advice, credential disclosure, or bridge internals |
+| `launcher-ops` | operational-orchestration | PM2 startup, unlock, claw-only mode, Docker-friendly launcher flow, launcher validation | Trading advice, credential disclosure, or bridge internals |
 
 ## Non-Goals
 

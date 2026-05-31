@@ -68,7 +68,7 @@ The bridge surface currently includes:
 - BTS-backed short open, take-profit, close, and plan builders
 - MPA position lookup
 
-Launcher behavior such as `tsx unlock-start --claw-only` and `tsx pm2 claw-only` is documented and maintained separately under `skills/launcher-ops/`.
+Launcher behavior such as `tsx unlock --claw-only` and `tsx pm2 claw-only` is documented and maintained separately under `skills/launcher-ops/`.
 
 Recommended trust boundary:
 

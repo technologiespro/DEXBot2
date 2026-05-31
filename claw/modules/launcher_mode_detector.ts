@@ -5,6 +5,16 @@ const path = require('path');
 const { loadSettingsFile, resolveRawBotEntries } = require('../../modules/bot_settings');
 const { normalizeProfileDir } = require('./launcher_paths');
 
+const LEGACY_MODE_ALIASES = {
+  'unlock-start': 'unlock',
+};
+
+function normalizeMode(mode: string | null | undefined) {
+  const value = typeof mode === 'string' ? mode.trim() : '';
+  if (!value) return value;
+  return LEGACY_MODE_ALIASES[value as keyof typeof LEGACY_MODE_ALIASES] || value;
+}
+
 /**
  * Launcher mode configuration detector and manager.
  *
@@ -12,7 +22,7 @@ const { normalizeProfileDir } = require('./launcher_paths');
  *   - claw-only: Credential daemon only (no bots configured)
  *   - dexbot-direct: node dexbot start (testing/debugging)
  *   - pm2: PM2 production service (monitored, auto-restart)
- *   - unlock-start: Single-prompt startup (no PM2)
+ *   - unlock: Single-prompt startup (no PM2)
  */
 
 function getConfigPath(options: Record<string, any> = {}) {
@@ -98,7 +108,7 @@ function detectMode(options: Record<string, any> = {}) {
   // If user has set a preference, use it
   if (config.preferredMode) {
     return {
-      mode: config.preferredMode,
+      mode: normalizeMode(config.preferredMode),
       reason: 'User preference (stored in launcher.config.json)',
       suggested: false,
       choices: []
@@ -122,32 +132,33 @@ function detectMode(options: Record<string, any> = {}) {
     mode: null,  // needs user input
     reason: 'Active bots found; awaiting user deployment preference',
     suggested: true,
-    choices: ['dexbot-direct', 'pm2', 'unlock-start']
+    choices: ['dexbot-direct', 'pm2', 'unlock']
   };
 }
 
 /**
  * Set user's preferred mode and persist it.
- * @param {string} mode - One of: claw-only, dexbot-direct, pm2, unlock-start
+ * @param {string} mode - One of: claw-only, dexbot-direct, pm2, unlock
  * @param {Object} [options={}]
  * @throws {Error} if mode is invalid
  * @returns {{set: boolean, mode: string, timestamp: string}}
  */
 function setPreferredMode(mode: string, options: Record<string, any> = {}) {
-  const valid = ['claw-only', 'dexbot-direct', 'pm2', 'unlock-start'];
-  if (!valid.includes(mode)) {
+  const normalizedMode = normalizeMode(mode);
+  const valid = ['claw-only', 'dexbot-direct', 'pm2', 'unlock'];
+  if (!valid.includes(normalizedMode)) {
     throw new Error(`Invalid launcher mode: ${mode}. Must be one of: ${valid.join(', ')}`);
   }
 
   const config = loadConfig(options);
-  config.preferredMode = mode;
+  config.preferredMode = normalizedMode;
   config.lastUsed = new Date().toISOString();
 
   if (!Array.isArray(config.history)) {
     config.history = [];
   }
   config.history.push({
-    mode,
+    mode: normalizedMode,
     timestamp: config.lastUsed
   });
 
@@ -160,7 +171,7 @@ function setPreferredMode(mode: string, options: Record<string, any> = {}) {
 
   return {
     set: true,
-    mode,
+    mode: normalizedMode,
     timestamp: config.lastUsed
   };
 }
@@ -175,12 +186,14 @@ function describeModeChoice(mode: string) {
     'claw-only': 'Start credential daemon only (no bots)',
     'dexbot-direct': 'Run bot directly (foreground, testing/debugging)',
     'pm2': 'Deploy via PM2 (production, persistent, monitored)',
-    'unlock-start': 'Start with single password prompt (no PM2)'
+    'unlock': 'Start with single password prompt (no PM2)',
+    'unlock-start': 'Start with single password prompt (legacy alias)'
   };
   return descriptions[mode] || mode;
 }
 
 export = {
+  normalizeMode,
   detectMode,
   setPreferredMode,
   loadConfig,

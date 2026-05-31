@@ -6,7 +6,7 @@ const path = require('path');
 const { loadSettingsFile, resolveRawBotEntries } = require('../modules/bot_settings');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
 
-console.log('Running unlock-start output tests');
+console.log('Running unlock output tests');
 
 const controllerPath = require.resolve('../modules/launcher/credential_daemon');
 const originalControllerModule = require.cache[controllerPath];
@@ -155,7 +155,7 @@ function getActiveBotNames() {
 
 async function runUnlockStart(args, startupGraceMs = 0) {
     try {
-        await unlockStart.main({ argv: args, startupGraceMs });
+        await unlock.main({ argv: args, startupGraceMs });
     } catch (err) {
         if (err && err.code === 'TEST_PROCESS_EXIT') {
             return;
@@ -166,18 +166,18 @@ async function runUnlockStart(args, startupGraceMs = 0) {
 
 installStubs();
 
-const unlockStart = require('../unlock-start');
+const unlock = require('../unlock');
 
 async function runAllBotsTest() {
     resetState();
-    await runUnlockStart(['node', 'unlock-start']);
+    await runUnlockStart(['node', 'unlock']);
     const activeBotNames = getActiveBotNames();
 
     assert.strictEqual(state.ensureCount, 1, 'launcher should unlock the credential daemon once');
     assert.strictEqual(state.waitCount, 0, 'normal startup should not wait on daemon shutdown');
     assert.strictEqual(state.stopCount, 0, 'background startup should hand daemon ownership to the child');
     assert.strictEqual(state.calls.length, 1, 'launcher should spawn the background child once');
-    assert.ok(logs.includes('DEXBot2 Unlock-Start Launcher'), 'launcher should print a banner title');
+    assert.ok(logs.includes('DEXBot2 Unlock Launcher'), 'launcher should print a banner title');
     assert.ok(logs.includes('Starting all bots'), 'launcher should print the chosen launch mode');
     assert.ok(logs.includes('✓ Authentication successful'), 'launcher should confirm successful authentication');
     assert.ok(
@@ -191,7 +191,7 @@ async function runAllBotsTest() {
 
 async function runSingleBotTest() {
     resetState();
-    await runUnlockStart(['node', 'unlock-start', 'XRP-BTS']);
+    await runUnlockStart(['node', 'unlock', 'XRP-BTS']);
 
     assert.strictEqual(state.ensureCount, 1, 'launcher should unlock the credential daemon once');
     assert.strictEqual(state.stopCount, 0, 'background startup should hand daemon ownership to the child');
@@ -203,7 +203,7 @@ async function runSingleBotTest() {
 
 async function runForegroundTest() {
     resetState();
-    await runUnlockStart(['node', 'unlock-start', '--foreground']);
+    await runUnlockStart(['node', 'unlock', '--foreground']);
     const activeBotNames = getActiveBotNames();
 
     assert.strictEqual(state.ensureCount, 1, 'foreground mode should unlock the credential daemon once');
@@ -221,7 +221,7 @@ async function runForegroundTest() {
 async function runReuseDaemonTest() {
     resetState();
     state.ensureResult = false;
-    await runUnlockStart(['node', 'unlock-start']);
+    await runUnlockStart(['node', 'unlock']);
 
     assert.strictEqual(state.ensureCount, 1, 'launcher should still check daemon availability');
     assert.strictEqual(state.stopCount, 0, 'background startup should hand daemon ownership to the child');
@@ -230,7 +230,7 @@ async function runReuseDaemonTest() {
 
 async function runClawOnlyTest() {
     resetState();
-    await runUnlockStart(['node', 'unlock-start', '--claw-only']);
+    await runUnlockStart(['node', 'unlock', '--claw-only']);
 
     assert.strictEqual(state.ensureCount, 1, 'claw-only mode should unlock the credential daemon');
     assert.strictEqual(state.waitCount, 1, 'claw-only mode should wait for daemon lifecycle');
@@ -238,7 +238,7 @@ async function runClawOnlyTest() {
     assert.strictEqual(state.stopCount, 1, 'claw-only mode should still clean up owned daemons');
     assert.ok(logs.includes('Starting credential daemon only'), 'launcher should print the claw-only mode');
     assert.ok(logs.includes('DEXBot2 credential daemon started successfully!'), 'launcher should print the claw-only success footer');
-    assert.ok(logs.includes('If the daemon stops, rerun `node unlock-start --claw-only` to unlock it again.'), 'launcher should print the claw-only restart hint');
+    assert.ok(logs.includes('If the daemon stops, rerun `node unlock --claw-only` to unlock it again.'), 'launcher should print the claw-only restart hint');
 }
 
 async function runStartupFailureSuppressesSuccessTest() {
@@ -247,7 +247,7 @@ async function runStartupFailureSuppressesSuccessTest() {
     process.env.DEXBOT_MONOLITHIC_BG = '1';
     try {
         await assert.rejects(
-            () => unlockStart.main({ argv: ['node', 'unlock-start'], startupGraceMs: 50 }),
+            () => unlock.main({ argv: ['node', 'unlock'], startupGraceMs: 50 }),
             /DEXBot exited during startup/,
             'launcher should fail when the child exits during the startup grace period'
         );
@@ -272,7 +272,7 @@ async function runStartupFailureSuppressesSuccessTest() {
         await runClawOnlyTest();
         await runStartupFailureSuppressesSuccessTest();
         restoreStubs();
-        process.stdout.write('unlock-start output tests passed\n');
+        process.stdout.write('unlock output tests passed\n');
         process.exit(0);
     } catch (err) {
         restoreStubs();

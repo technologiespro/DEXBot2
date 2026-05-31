@@ -107,11 +107,11 @@ function restartMonolithicRuntime(monolithic) {
         monolithic.botNames.length ? `bots: ${monolithic.botNames.join(', ')}` : null,
     ].filter(Boolean).join('; ');
 
-    log(`Monolithic runtime detected (${details}). Restarting via unlock-start control...`);
-    const unlockStartPath = fs.existsSync(path.join(ROOT, 'dist', 'unlock-start.js'))
-        ? path.join(ROOT, 'dist', 'unlock-start.js')
-        : path.join(ROOT, 'unlock-start.js');
-    run(`node "${unlockStartPath}" restart-all`);
+    log(`Monolithic runtime detected (${details}). Restarting via unlock control...`);
+    const unlockPath = fs.existsSync(path.join(ROOT, 'dist', 'unlock.js'))
+        ? path.join(ROOT, 'dist', 'unlock.js')
+        : path.join(ROOT, 'unlock.js');
+    run(`node "${unlockPath}" restart-all`);
 }
 
 async function detectIsolatedSupervisor() {

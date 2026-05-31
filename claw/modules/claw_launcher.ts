@@ -5,7 +5,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const chainKeys = require('../../modules/chain_keys');
 const { loadSettingsFile, resolveRawBotEntries, saveSettingsFile, normalizeBotEntries } = require('../../modules/bot_settings');
-const { detectMode, setPreferredMode, describeModeChoice } = require('./launcher_mode_detector');
+const { normalizeMode, detectMode, setPreferredMode, describeModeChoice } = require('./launcher_mode_detector');
 const { normalizeRoot, normalizeProfileDir, resolveRuntimeScript } = require('./launcher_paths');
 
 const {
@@ -199,7 +199,7 @@ async function launcherPm2Start(botName: string | null, options: Record<string, 
   // Then check if daemon is ready
   if (!(await chainKeys.isDaemonResponsive())) {
     throw new Error(
-      'Credential daemon is not running. Start it first with: node pm2 or node unlock-start'
+      'Credential daemon is not running. Start it first with: node pm2 or node unlock'
     );
   }
 
@@ -292,42 +292,43 @@ async function launcherPm2Reload(target: string, options: Record<string, any> = 
  *
  * @param {string|null} botName - Bot name or null for default/all
  * @param {Object} [options={}] - Options
- * @param {string} [options.deploymentMode] - Override mode: dexbot-direct, pm2, unlock-start, claw-only
+ * @param {string} [options.deploymentMode] - Override mode: dexbot-direct, pm2, unlock, claw-only
  * @param {boolean} [options.setPreference] - If true, save deploymentMode as preferred
  * @param {string} [options.profileRoot] - Optional profile root
  * @returns {Promise<Object>}
  *   Delegated modes: { started: true, mode?, botName?, pid?, command?, targets?, message?, warning? }
- *   Mode present in claw-only / unlock-start; absent in dexbot-direct / pm2.
+ *   Mode present in claw-only / unlock; absent in dexbot-direct / pm2.
  *   No-mode: { needsChoice: true, reason, choices: [{ mode, description }], message }
  */
 async function launcherRun(botName: string | null, options: Record<string, any> = {}) {
   const detection = detectMode(options);
+  const deploymentMode = options.deploymentMode ? normalizeMode(options.deploymentMode) : null;
 
   // User is overriding the mode
   if (options.deploymentMode) {
-    const validModes = ['dexbot-direct', 'pm2', 'unlock-start', 'claw-only'];
-    if (!validModes.includes(options.deploymentMode)) {
+    const validModes = ['dexbot-direct', 'pm2', 'unlock', 'claw-only'];
+    if (!validModes.includes(deploymentMode)) {
       throw new Error(`Invalid deploymentMode: ${options.deploymentMode}. Must be one of: ${validModes.join(', ')}`);
     }
 
     // Note if botName is provided for claw-only mode (will be ignored)
-    const clawOnlyWarning = (options.deploymentMode === 'claw-only' && botName)
+    const clawOnlyWarning = (deploymentMode === 'claw-only' && botName)
       ? `botName '${botName}' is ignored in claw-only mode (daemon does not target specific bots)`
       : null;
 
     // Save as preference if requested
     if (options.setPreference) {
-      setPreferredMode(options.deploymentMode, options);
+      setPreferredMode(deploymentMode, options);
     }
 
     // Delegate to appropriate implementation
     const result = await (async (): Promise<Record<string, any>> => {
-      switch (options.deploymentMode) {
+      switch (deploymentMode) {
         case 'dexbot-direct':
           return launcherStart(botName, options);
         case 'pm2':
           return launcherPm2Start(botName, options);
-        case 'unlock-start':
+        case 'unlock':
           return launcherUnlockStart(botName, options);
         case 'claw-only':
           return launcherClawOnly(options);
@@ -346,7 +347,7 @@ async function launcherRun(botName: string | null, options: Record<string, any> 
         return launcherStart(botName, options);
       case 'pm2':
         return launcherPm2Start(botName, options);
-      case 'unlock-start':
+      case 'unlock':
         return launcherUnlockStart(botName, options);
       case 'claw-only':
         return launcherClawOnly(options);
@@ -392,21 +393,21 @@ async function launcherClawOnly(options: Record<string, any> = {}) {
 }
 
 /**
- * Start via unlock-start (single password prompt, no PM2).
+ * Start via unlock (single password prompt, no PM2).
  * @param {string|null} botName - Bot name or null for default
  * @param {Object} [options={}]
  * @returns {Promise<Object>}
  */
 async function launcherUnlockStart(botName: string | null, options: Record<string, any> = {}) {
   const ROOT = normalizeRoot(options);
-  const unlockStartPath = resolveRuntimeScript(ROOT, 'unlock-start.js');
+  const unlockPath = resolveRuntimeScript(ROOT, 'unlock.js');
 
   const args = [];
   if (botName) {
     args.push(botName);
   }
 
-  const child = spawn('node', [unlockStartPath, ...args], {
+  const child = spawn('node', [unlockPath, ...args], {
     detached: true,
     stdio: 'ignore',
     cwd: ROOT
@@ -416,11 +417,11 @@ async function launcherUnlockStart(botName: string | null, options: Record<strin
 
   return {
     started: true,
-    mode: 'unlock-start',
+    mode: 'unlock',
     botName: botName || 'default',
     pid: child.pid,
-    command: `node unlock-start ${botName || '(default)'}`,
-    message: 'Bots started via unlock-start (single password prompt, no PM2)'
+    command: `node unlock ${botName || '(default)'}`,
+    message: 'Bots started via unlock (single password prompt, no PM2)'
   };
 }
 

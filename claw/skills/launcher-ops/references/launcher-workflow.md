@@ -4,8 +4,8 @@ Use this reference for DEXBot2 startup and PM2 orchestration work.
 
 ## Commands
 
-- `tsx unlock-start` - single-prompt local startup.
-- `tsx unlock-start --claw-only` - credential daemon only, no bot startup.
+- `tsx unlock` - single-prompt local startup.
+- `tsx unlock --claw-only` - credential daemon only, no bot startup.
 - `tsx pm2` - PM2 startup for all active bots.
 - `tsx pm2 <bot-name>` - PM2 startup for one active bot.
 - `tsx pm2 claw-only` - PM2 credential daemon only.

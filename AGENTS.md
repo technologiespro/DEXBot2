@@ -117,7 +117,7 @@ File: <path>
 - `dexbot.ts` - Main CLI entry point
 - `bot.ts` - Alternative bot starter
 - `pm2.ts` - PM2 process management
-- `unlock-start.ts` - Single-prompt starter (no PM2)
+- `unlock.ts` - Single-prompt starter (no PM2)
 - `credential-daemon.ts` - Credential daemon
 
 ### Core Bot

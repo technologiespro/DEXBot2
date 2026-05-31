@@ -3,7 +3,7 @@ const { EventEmitter } = require('events');
 const childProcess = require('child_process');
 const { setCachedModule } = require('./helpers/module_cache_stub');
 
-console.log('Running unlock-start isolated poll rejection tests');
+console.log('Running unlock isolated poll rejection tests');
 
 const controllerPath = require.resolve('../modules/launcher/credential_daemon');
 const supervisorPath = require.resolve('../modules/launcher/bot_supervisor');
@@ -68,12 +68,12 @@ process.env.DEXBOT_ISOLATED_FOREGROUND = '1';
 process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET = '1';
 process.env.DEXBOT_SUPERVISOR_SOCKET = '/tmp/dexbot-test-poll.sock';
 
-const unlockStart = require('../unlock-start');
+const unlock = require('../unlock');
 
 async function runPollExceptionRejectionTest() {
     const result = await Promise.race([
-        unlockStart.main({
-            argv: ['node', 'unlock-start', '--isolated'],
+        unlock.main({
+            argv: ['node', 'unlock', '--isolated'],
             startupGraceMs: 0,
         })
             .then(() => ({ settled: true, reason: 'resolved' }))
@@ -88,7 +88,7 @@ async function runPollExceptionRejectionTest() {
 (async () => {
     try {
         await runPollExceptionRejectionTest();
-        console.log('unlock-start isolated poll rejection tests passed');
+        console.log('unlock isolated poll rejection tests passed');
         process.exit(0);
     } catch (err) {
         console.error(err);

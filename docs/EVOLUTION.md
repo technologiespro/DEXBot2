@@ -57,7 +57,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **May 26–28**: Overhauled fill detection (direct-notice dispatch, instance-based cursor, subscription reconnect), BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening (private-key removal, memory zeroing, bootstrap leak fix).
 
-**May 29–31**: Hardened unlock-start (signal handler cleanup, polling guards), removed deprecated legacy migration patterns, swept 14 documentation files. Released v0.7.6. Then added default background daemon + crash restart, auto-update for monolithic path, per-bot log files, MPA `debtOnly` flag, and simplified CLI. Released v0.7.7.
+**May 29–31**: Hardened unlock (signal handler cleanup, polling guards), removed deprecated legacy migration patterns, swept 14 documentation files. Released v0.7.6. Then added default background daemon + crash restart, auto-update for monolithic path, per-bot log files, MPA `debtOnly` flag, and simplified CLI. Released v0.7.7.
 
 ---
 
@@ -81,7 +81,7 @@ Removal of all external runtime dependencies and full TypeScript migration (48K+
 Unlock-start launcher hardening (signal handler cleanup, polling guards), deprecated legacy migration code removal, broken reference fixes, 14-file documentation sweep.
 
 ### v0.7.6 → v0.7.7 (6 commits)
-Default background daemon + crash restart for unlock-start, auto-update for monolithic path, per-bot log files with daemon output redirect, MPA `debtOnly` flag with discriminated-union types, CLI simplification.
+Default background daemon + crash restart for unlock, auto-update for monolithic path, per-bot log files with daemon output redirect, MPA `debtOnly` flag with discriminated-union types, CLI simplification.
 
 ### v0.7.3 → v0.7.4 (5 commits)
 Code cleanup (unused deps, inline helper), documentation refresh.

@@ -47,7 +47,7 @@ function sendControlCommand(cmd) {
         socket.on('error', (err) => {
             clearTimeout(timeout);
             if (err.code === 'ENOENT' || err.code === 'ECONNREFUSED') {
-                done(new Error('No supervisor socket found. Start bots with: node unlock-start --isolated'));
+                done(new Error('No supervisor socket found. Start bots with: node unlock --isolated'));
             } else {
                 done(err);
             }

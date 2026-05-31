@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * unlock-start.js - Credential Daemon Launcher
+ * unlock.js - Credential Daemon Launcher
  *
  * Starts credential daemon with master password and launches the bot process.
  *
@@ -9,18 +9,18 @@
  * Use --foreground to run in terminal (no auto-restart).
  *
  * Usage:
- *   node unlock-start [botName]       Background + auto-restart (default)
- *   node unlock-start --foreground    Terminal mode (no auto-restart)
- *   node unlock-start claw-only
- *   node unlock-start --claw-only
- *   node unlock-start --isolated
- *   node unlock-start --isolated <botName>
- *   node unlock-start status
- *   node unlock-start stop
- *   node unlock-start restart <botName>
- *   node unlock-start stop-all
- *   node unlock-start restart-all
- *   node unlock-start delete
+ *   node unlock [botName]       Background + auto-restart (default)
+ *   node unlock --foreground    Terminal mode (no auto-restart)
+ *   node unlock claw-only
+ *   node unlock --claw-only
+ *   node unlock --isolated
+ *   node unlock --isolated <botName>
+ *   node unlock status
+ *   node unlock stop
+ *   node unlock restart <botName>
+ *   node unlock stop-all
+ *   node unlock restart-all
+ *   node unlock delete
  *
  * Environment:
  *   BOT_NAME              Fallback bot name when none is given as positional arg
@@ -33,7 +33,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { createCredentialDaemonController } = require('./modules/launcher/credential_daemon');
 const { buildScopedChildEnv } = require('./modules/launcher/child_env');
-const { parseUnlockStartArgs } = require('./modules/launcher/launch_modes');
+const { parseUnlockArgs } = require('./modules/launcher/launch_modes');
 const { UPDATER } = require('./modules/constants');
 const { buildRuntimeScriptArgs } = require('./modules/launcher/runtime_entry');
 const { createBotSupervisor, SOCKET_PATH, parseCronExpression, getNextCronDate } = require('./modules/launcher/bot_supervisor');
@@ -85,7 +85,7 @@ function forwardSignal(child: any, signal: any) {
 
 function printLauncherHeader({ botName = null, clawOnly = false, isolated = false }: { botName?: string | null; clawOnly?: boolean; isolated?: boolean } = {}) {
     console.log('='.repeat(50));
-    console.log('DEXBot2 Unlock-Start Launcher');
+    console.log('DEXBot2 Unlock Launcher');
     if (isolated) console.log('Mode: isolated (per-bot processes)');
     if (clawOnly) {
         console.log('Starting credential daemon only');
@@ -119,14 +119,14 @@ function printLauncherSuccess({ botName = null, clawOnly = false, isolated = fal
     console.log('='.repeat(50));
     if (clawOnly) {
         console.log('DEXBot2 credential daemon started successfully!');
-        console.log('If the daemon stops, rerun `node unlock-start --claw-only` to unlock it again.');
+        console.log('If the daemon stops, rerun `node unlock --claw-only` to unlock it again.');
     } else if (botName) {
         console.log('DEXBot2 started successfully!');
-        const cmd = isolated ? `node unlock-start --isolated ${botName}` : `node unlock-start ${botName}`;
+        const cmd = isolated ? `node unlock --isolated ${botName}` : `node unlock ${botName}`;
         console.log(`If the bot stops, rerun \`${cmd}\` to unlock it again.`);
     } else {
         console.log('DEXBot2 started successfully!');
-        const cmd = isolated ? 'node unlock-start --isolated' : 'node unlock-start';
+        const cmd = isolated ? 'node unlock --isolated' : 'node unlock';
         console.log(`If the bot stops, rerun \`${cmd}\` to unlock it again.`);
     }
     console.log('='.repeat(50));
@@ -231,7 +231,7 @@ function buildDexbotStartArgs(botName: string | null = null) {
     });
 }
 
-function buildUnlockStartArgs({ isolated = false, botName = null }: { isolated?: boolean; botName?: string | null } = {}) {
+function buildUnlockArgs({ isolated = false, botName = null }: { isolated?: boolean; botName?: string | null } = {}) {
     const scriptArgs = [];
     if (isolated) {
         scriptArgs.push('--isolated');
@@ -241,7 +241,7 @@ function buildUnlockStartArgs({ isolated = false, botName = null }: { isolated?:
     }
     return buildRuntimeScriptArgs({
         codeRoot: CODE_ROOT,
-        scriptSegments: ['unlock-start'],
+        scriptSegments: ['unlock'],
         scriptArgs,
     });
 }
@@ -499,7 +499,7 @@ async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = 
     ensureSupervisorLogDir();
     const stdoutFd = fs.openSync(SUPERVISOR_OUT_LOG, 'a', 0o600);
     const stderrFd = fs.openSync(SUPERVISOR_ERROR_LOG, 'a', 0o600);
-    const args = buildUnlockStartArgs({ isolated: true, botName });
+    const args = buildUnlockArgs({ isolated: true, botName });
     let child = null;
 
     try {
@@ -602,7 +602,7 @@ function scheduleMonolithicUpdateJob(botProcessRef: { current: any }) {
  * @returns {Promise<void>}
  */
 async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRACE_MS } = {}) {
-    const parsed = parseUnlockStartArgs(argv);
+    const parsed = parseUnlockArgs(argv);
     const isDetachedSupervisorChild = process.env.DEXBOT_ISOLATED_CHILD === '1';
     const forceForegroundIsolated = process.env.DEXBOT_ISOLATED_FOREGROUND === '1';
     const isMonolithicBgChild = process.env.DEXBOT_MONOLITHIC_BG === '1';
@@ -1025,7 +1025,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
     const actionLabel = getControlActionLabel(cmd);
 
     if (effectiveCmd === 'restart' && !target) {
-        console.error('Usage: node unlock-start restart <botName> or node unlock-start restart-all');
+        console.error('Usage: node unlock restart <botName> or node unlock restart-all');
         process.exitCode = 1;
         return;
     }
@@ -1206,10 +1206,10 @@ function formatControlUptime(ms: number) {
     return `${s}s`;
 }
 
-// Run if called directly or via the root-level unlock-start.js shim
+// Run if called directly or via the root-level unlock.js shim
 const isUnlockStartDirectRun = require.main === module || (
     process.argv[1] &&
-    path.parse(process.argv[1]).name === 'unlock-start'
+    path.parse(process.argv[1]).name === 'unlock'
 );
 if (isUnlockStartDirectRun) {
     setupGracefulShutdown();
@@ -1234,7 +1234,7 @@ if (isUnlockStartDirectRun) {
         try {
             await main();
         } catch (err: any) {
-            console.error('unlock-start failed:', err.message || err);
+            console.error('unlock failed:', err.message || err);
             process.exitCode = 1;
         }
     })();
@@ -1242,7 +1242,7 @@ if (isUnlockStartDirectRun) {
 
 export = {
     buildDexbotStartArgs,
-    buildUnlockStartArgs,
+    buildUnlockArgs,
     main,
     waitForChildSpawn,
     waitForStableChildStartup,
