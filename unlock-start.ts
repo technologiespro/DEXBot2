@@ -53,12 +53,20 @@ const DEFAULT_STARTUP_GRACE_MS = 750;
 
 // Monolithic background process supervision
 const MONOLITHIC_PID_FILE = path.join(ROOT, 'profiles', 'monolithic.pid');
+const MONOLITHIC_BOT_PID_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.pid');
+const MONOLITHIC_BOT_INFO_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.json');
 const MONOLITHIC_OUT_LOG = path.join(LOGS_DIR, 'dexbot.log');
 const MONOLITHIC_ERROR_LOG = path.join(LOGS_DIR, 'dexbot-error.log');
 const MONOLITHIC_MAX_RESTARTS = 13;
 const MONOLITHIC_MIN_UPTIME_MS = 86400000;
 const MONOLITHIC_RESTART_DELAY_MS = 3000;
 const botProcessRef: { current: any } = { current: null };
+
+function cleanupMonolithicStateFiles() {
+    try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
+    try { fs.unlinkSync(MONOLITHIC_BOT_PID_FILE); } catch (_) {}
+    try { fs.unlinkSync(MONOLITHIC_BOT_INFO_FILE); } catch (_) {}
+}
 
 function forwardSignal(child: any, signal: any) {
     if (!child || child.killed) return;
@@ -663,6 +671,21 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             });
             botProcessRef.current = botProcess;
 
+            if (isMonolithicBgChild) {
+                try { fs.writeFileSync(MONOLITHIC_BOT_PID_FILE, String(botProcess.pid), { mode: 0o600 }); } catch (_) {}
+                const launchedBotNames = botName
+                    ? [botName]
+                    : listConfiguredBots().filter((b) => b.active).map((b) => b.name);
+                const botStat = botProcess.pid ? readProcStat(botProcess.pid) : null;
+                try {
+                    fs.writeFileSync(
+                        MONOLITHIC_BOT_INFO_FILE,
+                        JSON.stringify({ botName, botNames: launchedBotNames, pid: botProcess.pid, starttime: botStat?.starttime ?? null }),
+                        { mode: 0o600 }
+                    );
+                } catch (_) {}
+            }
+
             // Pipe output to log files in background mode
             if (isMonolithicBgChild && botProcess.stdout) {
                 const outStream = fs.createWriteStream(MONOLITHIC_OUT_LOG, { flags: 'a' });
@@ -730,9 +753,111 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
         cancelUpdateScheduler();
     } finally {
+        if (isMonolithicBgChild) {
+            cleanupMonolithicStateFiles();
+        }
         if (!isDetachedSupervisorChild && !daemonReleased) {
             await controller.stopManagedDaemon();
         }
+    }
+}
+
+function readProcStat(pid: number): { utime: number; stime: number; starttime: number } | null {
+    try {
+        const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+        const lastParen = stat.lastIndexOf(')');
+        if (lastParen === -1) return null;
+        const fields = stat.slice(lastParen + 2).split(/\s+/);
+        return {
+            utime: parseInt(fields[11], 10) || 0,
+            stime: parseInt(fields[12], 10) || 0,
+            starttime: parseInt(fields[19], 10) || 0,
+        };
+    } catch { return null; }
+}
+
+function readProcMemMB(pid: number): string {
+    try {
+        const status = fs.readFileSync(`/proc/${pid}/status`, 'utf8');
+        const match = status.match(/^VmRSS:\s+(\d+)\s+kB/m);
+        if (match) {
+            const mb = Math.round(parseInt(match[1], 10) / 1024);
+            return `${mb}MB`;
+        }
+    } catch {}
+    return '-';
+}
+
+function readProcCpuTotal(pid: number): number | null {
+    try {
+        const stat = readProcStat(pid);
+        if (!stat) return null;
+        return (stat.utime + stat.stime) / 100;
+    } catch { return null; }
+}
+
+function readProcCpuTime(pid: number): string {
+    try {
+        const totalSec = readProcCpuTotal(pid);
+        if (totalSec == null) return '-';
+        if (totalSec < 60) return `${totalSec.toFixed(1)}s`;
+        const m = Math.floor(totalSec / 60);
+        const s = Math.floor(totalSec % 60);
+        if (m < 60) return `${m}m ${s}s`;
+        const h = Math.floor(m / 60);
+        return `${h}h ${m % 60}m`;
+    } catch { return '-'; }
+}
+
+async function readProcCpuPercent(pid: number, samples: number = 2, intervalMs: number = 400): Promise<string> {
+    try {
+        const snap = () => {
+            const stat = readProcStat(pid);
+            if (!stat) return null;
+            return { pidCpu: stat.utime + stat.stime, ts: Date.now() };
+        };
+        let prev = snap();
+        if (!prev) return '-';
+        for (let i = 0; i < samples - 1; i++) {
+            await new Promise(r => setTimeout(r, intervalMs));
+        }
+        const cur = snap();
+        if (!cur) return '-';
+        const dt = (cur.ts - prev.ts) / 1000;
+        const dcpu = (cur.pidCpu - prev.pidCpu) / 100;
+        if (dt <= 0) return '-';
+        const pct = (dcpu / dt) * 100;
+        return `${pct.toFixed(1)}%`;
+    } catch { return '-'; }
+}
+
+function readProcUptime(pid: number): string {
+    try {
+        const stat = readProcStat(pid);
+        if (!stat) return '-';
+        const uptimeSec = parseFloat(fs.readFileSync('/proc/uptime', 'utf8').split(/\s+/)[0]);
+        const clkTck = 100;
+        const processStartSec = stat.starttime / clkTck;
+        const uptimeMs = (uptimeSec - processStartSec) * 1000;
+        return formatControlUptime(uptimeMs);
+    } catch { return '-'; }
+}
+
+function listConfiguredBots(): { name: string; active: boolean }[] {
+    try {
+        const { config } = loadSettingsFile(BOTS_FILE);
+        const raw = resolveRawBotEntries(config);
+        return raw.map((b: any) => ({ name: b.name, active: b.active !== false }));
+    } catch { return []; }
+}
+
+function readMonolithicBotInfo(): { botName?: string | null; botNames?: string[]; pid?: number; starttime?: number | null } | null {
+    try {
+        const infoRaw = fs.readFileSync(MONOLITHIC_BOT_INFO_FILE, 'utf8');
+        const info = JSON.parse(infoRaw);
+        return info && typeof info === 'object' ? info : null;
+    } catch (_) {
+        return null;
     }
 }
 
@@ -758,7 +883,51 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
             }
 
             if (cmd === 'status') {
-                console.log(`Monolithic bot running (PID: ${pid})`);
+                const botInfo = readMonolithicBotInfo();
+
+                // Read actual bot PID from companion file (fallback to wrapper PID)
+                let targetPid = pid;
+                let botPidRaw: string | null = null;
+                try { botPidRaw = fs.readFileSync(MONOLITHIC_BOT_PID_FILE, 'utf8').trim(); } catch (_) {}
+                if (botPidRaw) {
+                    const bp = Number(botPidRaw);
+                    if (Number.isInteger(bp) && bp > 0) {
+                        try {
+                            process.kill(bp, 0);
+                            const stat = readProcStat(bp);
+                            const expectedStarttime = botInfo?.pid === bp ? botInfo.starttime : undefined;
+                            if (stat && (botInfo == null || (typeof expectedStarttime === 'number' && stat.starttime === expectedStarttime))) {
+                                targetPid = bp;
+                            }
+                        } catch (_) {}
+                    }
+                }
+
+                const mem = readProcMemMB(targetPid);
+                const cpuTime = readProcCpuTime(targetPid);
+                const cpuPct = await readProcCpuPercent(targetPid);
+                const uptime = readProcUptime(targetPid);
+
+                // No info file means backward compatibility with an older running wrapper.
+                let displayedBots: { name: string }[];
+                if (Array.isArray(botInfo?.botNames)) {
+                    displayedBots = botInfo.botNames.map((name) => ({ name: String(name) }));
+                } else if (botInfo?.botName) {
+                    displayedBots = [{ name: String(botInfo.botName) }];
+                } else {
+                    const allBots = listConfiguredBots();
+                    displayedBots = allBots.filter(b => b.active);
+                }
+
+                console.log('Monolithic bot');
+                console.log(`  PID:     ${targetPid}`);
+                console.log(`  Uptime:  ${uptime}`);
+                console.log(`  Memory:  ${mem}`);
+                console.log(`  CPU:     ${cpuPct}  (cumulative: ${cpuTime})`);
+                console.log(`  Bots:    ${displayedBots.length} active`);
+                for (const b of displayedBots) {
+                    console.log(`    - ${b.name}`);
+                }
                 return;
             }
 
@@ -772,7 +941,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
             } catch (err: any) {
                 if (err.code !== 'ESRCH') throw err;
             } finally {
-                try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
+                cleanupMonolithicStateFiles();
             }
             return;
         }
@@ -834,7 +1003,7 @@ if (isUnlockStartDirectRun) {
     if (process.env.DEXBOT_ISOLATED_CHILD === '1') {
         registerCleanup('Credential daemon', () => stopCredentialDaemonPid(process.env.DEXBOT_MANAGED_CRED_PID as string));
     } else if (process.env.DEXBOT_MONOLITHIC_BG === '1') {
-        registerCleanup('PID file', () => { try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {} });
+        registerCleanup('PID files', cleanupMonolithicStateFiles);
         registerCleanup('Bot process', async () => {
             const bot = botProcessRef.current;
             if (bot && !bot.killed) {
