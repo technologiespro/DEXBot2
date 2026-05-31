@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.8] - 2026-05-31 - Rename unlock-start to unlock, Unify Launcher & Docs Polish
+
+This release renames `unlock-start` to the simpler `unlock` command, unifies startup and control summaries under a single entry point, hardens monolithic runtime restart after auto-update, cleans up stale rename artifacts from the build, and adds a Performance & Speed section to the DEXBot comparison document.
+
+### 2026-05-31
+
+#### Launcher Command Consolidation
+- Rename `unlock-start` to `unlock` — the primary start command is now simply `node unlock` instead of `node unlock-start`. Backward-compatible shim retained for existing scripts (`2ef1a11`).
+- Unify startup and control summaries under the same `unlock` entry point — `node unlock` prints a combined status/help summary, `node unlock start` lauches the bot, `node unlock stop` sends graceful shutdown (`48e6bd7`).
+- Align `unlock-start delete` flow with monolithic controls — the delete path now correctly stops monolithic (non-isolated) runtimes instead of bypassing them (`5617fbc`).
+- Improve monolithic status reporting with clearer running/stopped state indicators (`09bf18b`).
+- Fix monolithic runtime restart after auto-update — ensures the restart loop re-spawns the bot after the update script exits (`b204170`).
+- Clean `dist/` before build to drop stale `unlock-start` compiled artifacts after the rename (`37f675b`).
+
+#### Documentation
+- Add **Performance & Speed** section to `docs/DEXBOT_COMPARISON.md` covering fill processing benchmarks, blockchain interaction efficiency, and resource usage characteristics (`62fef57`).
+
 ## [0.7.7] - 2026-05-31 - Default Daemonization, Auto-Update, Per-Bot Logs & MPA debtOnly
 
 This release makes `node unlock` background-daemon mode the default with crash restart, adds auto-update to the monolithic path, introduces per-bot log files with credential daemon output redirect, adds the `debtOnly` MPA lending flag with tightened discriminated-union types, and cleans up the unlock CLI by removing the redundant `control` subcommand.

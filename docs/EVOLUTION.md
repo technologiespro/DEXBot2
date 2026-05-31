@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.7 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.8 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
 - **Growth Phase**: 1,446 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
-- **Stability**: Progression from manual testing to a suite of 173 automated test files
-- **Releases**: 23 tagged releases (v0.1.0 to v0.7.7)
+- **Stability**: Progression from manual testing to a suite of 174 automated test files
+- **Releases**: 24 tagged releases (v0.1.0 to v0.7.8)
 
 ---
 
@@ -57,7 +57,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **May 26–28**: Overhauled fill detection (direct-notice dispatch, instance-based cursor, subscription reconnect), BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening (private-key removal, memory zeroing, bootstrap leak fix).
 
-**May 29–31**: Hardened unlock (signal handler cleanup, polling guards), removed deprecated legacy migration patterns, swept 14 documentation files. Released v0.7.6. Then added default background daemon + crash restart, auto-update for monolithic path, per-bot log files, MPA `debtOnly` flag, and simplified CLI. Released v0.7.7.
+**May 29–31**: Hardened unlock (signal handler cleanup, polling guards), removed deprecated legacy migration patterns, swept 14 documentation files. Released v0.7.6. Then added default background daemon + crash restart, auto-update for monolithic path, per-bot log files, MPA `debtOnly` flag, and simplified CLI. Released v0.7.7. Renamed `unlock-start` → `unlock`, unified launcher summaries, hardened monolithic restart after auto-update, cleaned stale build artifacts, and polished DEXBot comparison docs. Released v0.7.8.
 
 ---
 
@@ -82,6 +82,9 @@ Unlock-start launcher hardening (signal handler cleanup, polling guards), deprec
 
 ### v0.7.6 → v0.7.7 (6 commits)
 Default background daemon + crash restart for unlock, auto-update for monolithic path, per-bot log files with daemon output redirect, MPA `debtOnly` flag with discriminated-union types, CLI simplification.
+
+### v0.7.7 → v0.7.8 (7 commits)
+Rename `unlock-start` → `unlock`, unify launcher startup/control summaries, harden monolithic restart after auto-update, clean stale build artifacts, add Performance & Speed section to DEXBot comparison doc.
 
 ### v0.7.3 → v0.7.4 (5 commits)
 Code cleanup (unused deps, inline helper), documentation refresh.
@@ -123,7 +126,7 @@ Core order/fund management, documentation, scripts & tooling.
 
 ## Development Statistics
 
-173 automated tests (all TypeScript), 23 tagged releases. See **Version History** for commit breakdown by release.
+174 automated tests (all TypeScript), 24 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -142,7 +145,7 @@ Core order/fund management, documentation, scripts & tooling.
 
 ## Documentation & Testing
 
-Evolved from a basic README to a comprehensive framework (20+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 173-file suite covering unit, integration, simulation, and COW architectural guard tests.
+Evolved from a basic README to a comprehensive framework (20+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 174-file suite covering unit, integration, simulation, and COW architectural guard tests.
 
 ---
 
@@ -166,6 +169,6 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 **Report Originally Generated**: February 19, 2026
 **Last Updated**: May 31, 2026
-**Total Commits**: 1446
+**Total Commits**: 1455
 **Date Range**: December 2, 2025 - May 31, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)
