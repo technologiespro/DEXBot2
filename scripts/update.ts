@@ -37,6 +37,9 @@ const ROOT = path.basename(path.dirname(SCRIPTS_DIR)) === 'dist'
 // Import update configuration from constants
 // Contains: REPOSITORY_URL, BRANCH settings
 const { UPDATER } = require('../modules/constants');
+const MONOLITHIC_PID_FILE = path.join(ROOT, 'profiles', 'monolithic.pid');
+const MONOLITHIC_BOT_PID_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.pid');
+const MONOLITHIC_BOT_INFO_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.json');
 
 /**
  * log: Output timestamped update log message
@@ -66,6 +69,49 @@ function run(cmd) {
         console.error(`[ERROR] Command failed: ${cmd}`);
         throw err;
     }
+}
+
+function readLivePidFile(filePath) {
+    if (!fs.existsSync(filePath)) return 0;
+
+    try {
+        const pid = Number(fs.readFileSync(filePath, 'utf8').trim());
+        if (!Number.isInteger(pid) || pid <= 0) return 0;
+        process.kill(pid, 0);
+        return pid;
+    } catch (_) {
+        return 0;
+    }
+}
+
+function detectMonolithicRuntime() {
+    const wrapperPid = readLivePidFile(MONOLITHIC_PID_FILE);
+    if (!wrapperPid) return null;
+
+    const detected = { wrapperPid, botPid: readLivePidFile(MONOLITHIC_BOT_PID_FILE), botNames: [] };
+    try {
+        const info = JSON.parse(fs.readFileSync(MONOLITHIC_BOT_INFO_FILE, 'utf8'));
+        if (Array.isArray(info.botNames)) {
+            detected.botNames = info.botNames.map((name) => String(name));
+        } else if (info.botName) {
+            detected.botNames = [String(info.botName)];
+        }
+    } catch (_) {}
+    return detected;
+}
+
+function restartMonolithicRuntime(monolithic) {
+    const details = [
+        `wrapper PID ${monolithic.wrapperPid}`,
+        monolithic.botPid ? `bot PID ${monolithic.botPid}` : null,
+        monolithic.botNames.length ? `bots: ${monolithic.botNames.join(', ')}` : null,
+    ].filter(Boolean).join('; ');
+
+    log(`Monolithic runtime detected (${details}). Restarting via unlock-start control...`);
+    const unlockStartPath = fs.existsSync(path.join(ROOT, 'dist', 'unlock-start.js'))
+        ? path.join(ROOT, 'dist', 'unlock-start.js')
+        : path.join(ROOT, 'unlock-start.js');
+    run(`node "${unlockStartPath}" restart-all`);
 }
 
 async function detectIsolatedSupervisor() {
@@ -286,78 +332,83 @@ try {
     try {
         if (process.env.DEXBOT_UPDATE_SKIP_RELOAD === '1') {
             log('Reload skipped (managed by launcher).');
-        } else if (await reloadActiveIsolatedProcesses()) {
-            log('Isolated supervisor runtime restarted.');
         } else {
-            const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
-            if (fs.existsSync(BOTS_FILE)) {
-                const raw = fs.readFileSync(BOTS_FILE, 'utf8');
-                const stripped = raw.replace(/\/\*(?:.|[\r\n])*?\*\//g, '').replace(/(^|\s*)\/\/.*$/gm, '');
-                const config = JSON.parse(stripped);
+            const monolithic = detectMonolithicRuntime();
+            if (monolithic) {
+                restartMonolithicRuntime(monolithic);
+            } else if (await reloadActiveIsolatedProcesses()) {
+                log('Isolated supervisor runtime restarted.');
+            } else {
+                const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
+                if (fs.existsSync(BOTS_FILE)) {
+                    const raw = fs.readFileSync(BOTS_FILE, 'utf8');
+                    const stripped = raw.replace(/\/\*(?:.|[\r\n])*?\*\//g, '').replace(/(^|\s*)\/\/.*$/gm, '');
+                    const config = JSON.parse(stripped);
 
-                const activeInConfig = (config.bots || [])
-                    .filter(b => b.active !== false)
-                    .map(b => b.name)
-                    .filter(name => !!name);
+                    const activeInConfig = (config.bots || [])
+                        .filter(b => b.active !== false)
+                        .map(b => b.name)
+                        .filter(name => !!name);
 
-                if (activeInConfig.length > 0) {
-                    let runningProcesses = [];
-                    try {
-                        const output = execSync('pm2 jlist').toString().trim();
-                        const jsonStart = output.indexOf('[');
-                        if (jsonStart !== -1) {
-                            const jsonPart = output.substring(jsonStart);
-                            const parsed = JSON.parse(jsonPart);
-                            runningProcesses = parsed.map(p => p.name);
-                        } else {
-                            log('Warning: PM2 jlist output did not contain JSON array.');
+                    if (activeInConfig.length > 0) {
+                        let runningProcesses = [];
+                        try {
+                            const output = execSync('pm2 jlist').toString().trim();
+                            const jsonStart = output.indexOf('[');
+                            if (jsonStart !== -1) {
+                                const jsonPart = output.substring(jsonStart);
+                                const parsed = JSON.parse(jsonPart);
+                                runningProcesses = parsed.map(p => p.name);
+                            } else {
+                                log('Warning: PM2 jlist output did not contain JSON array.');
+                            }
+                        } catch (e) {
+                            log('Warning: Could not fetch PM2 process list. Falling back to config-only detection.');
+                            runningProcesses = activeInConfig;
                         }
-                    } catch (e) {
-                        log('Warning: Could not fetch PM2 process list. Falling back to config-only detection.');
-                        runningProcesses = activeInConfig;
-                    }
 
-                    const botsToReload = activeInConfig.filter(name => runningProcesses.includes(name));
-                    const activeBots = (config.bots || []).filter(b => b.active !== false);
-                    const runningActiveBots = activeBots.filter(b => runningProcesses.includes(b.name));
-                    let needsMarketAdapter;
-                    try {
-                        ({ needsMarketAdapter } = require(path.join(ROOT, 'dist', 'pm2')));
-                    } catch (_) {
-                        ({ needsMarketAdapter } = require(path.join(ROOT, 'pm2')));
-                    }
-                    const marketAdapterRequired = needsMarketAdapter(runningActiveBots);
+                        const botsToReload = activeInConfig.filter(name => runningProcesses.includes(name));
+                        const activeBots = (config.bots || []).filter(b => b.active !== false);
+                        const runningActiveBots = activeBots.filter(b => runningProcesses.includes(b.name));
+                        let needsMarketAdapter;
+                        try {
+                            ({ needsMarketAdapter } = require(path.join(ROOT, 'dist', 'pm2')));
+                        } catch (_) {
+                            ({ needsMarketAdapter } = require(path.join(ROOT, 'pm2')));
+                        }
+                        const marketAdapterRequired = needsMarketAdapter(runningActiveBots);
 
-                    const serviceAppsToReload = marketAdapterRequired ? ['dexbot-adapter'] : [];
-                    const servicesToReload = serviceAppsToReload.filter(name => runningProcesses.includes(name));
-                    const allToReload = [...botsToReload, ...servicesToReload];
+                        const serviceAppsToReload = marketAdapterRequired ? ['dexbot-adapter'] : [];
+                        const servicesToReload = serviceAppsToReload.filter(name => runningProcesses.includes(name));
+                        const allToReload = [...botsToReload, ...servicesToReload];
 
-                    if (allToReload.length > 0) {
-                        log(`Active processes detected: ${allToReload.join(', ')}`);
-                        for (const name of allToReload) {
+                        if (allToReload.length > 0) {
+                            log(`Active processes detected: ${allToReload.join(', ')}`);
+                            for (const name of allToReload) {
+                                try {
+                                    run(`pm2 reload "${name}"`);
+                                } catch (e) {
+                                    log(`Warning: Failed to reload process "${name}" (it might not be running).`);
+                                }
+                            }
+                        } else {
+                            log('No active processes currently running in PM2. Skipping reload.');
+                        }
+
+                        if (marketAdapterRequired && !runningProcesses.includes('dexbot-adapter')) {
+                            log('dexbot-adapter is required by an AMA-grid bot but not running. Starting from ecosystem...');
                             try {
-                                run(`pm2 reload "${name}"`);
+                                run('pm2 start profiles/ecosystem.config.js --only dexbot-adapter');
                             } catch (e) {
-                                log(`Warning: Failed to reload process "${name}" (it might not be running).`);
+                                log('Warning: Failed to start dexbot-adapter from ecosystem config.');
                             }
                         }
                     } else {
-                        log('No active processes currently running in PM2. Skipping reload.');
-                    }
-
-                    if (marketAdapterRequired && !runningProcesses.includes('dexbot-adapter')) {
-                        log('dexbot-adapter is required by an AMA-grid bot but not running. Starting from ecosystem...');
-                        try {
-                            run('pm2 start profiles/ecosystem.config.js --only dexbot-adapter');
-                        } catch (e) {
-                            log('Warning: Failed to start dexbot-adapter from ecosystem config.');
-                        }
+                        log('No active bots found in config.');
                     }
                 } else {
-                    log('No active bots found in config.');
+                    log('Warning: profiles/bots.json not found, skipping selective reload.');
                 }
-            } else {
-                log('Warning: profiles/bots.json not found, skipping selective reload.');
             }
         }
     } catch (err) {

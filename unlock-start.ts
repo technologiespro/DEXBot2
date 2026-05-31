@@ -660,98 +660,110 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
         let restartCount = 0;
         let lastStartTime = 0;
         let keepRunning = true;
+        let monolithicRestartSignalRegistered = false;
+        const onSigusr2 = () => {
+            _pendingRestart = true;
+            forwardSignal(botProcessRef.current, 'SIGTERM');
+        };
+        process.on('SIGUSR2', onSigusr2);
+        monolithicRestartSignalRegistered = true;
 
-        do {
-            const dexbotArgs = buildDexbotStartArgs(botName);
+        try {
+            do {
+                const dexbotArgs = buildDexbotStartArgs(botName);
 
-            const botProcess = spawn(process.execPath, dexbotArgs, {
-                cwd: ROOT,
-                env: process.env,
-                stdio: isMonolithicBgChild ? 'pipe' : 'inherit',
-            });
-            botProcessRef.current = botProcess;
-
-            if (isMonolithicBgChild) {
-                try { fs.writeFileSync(MONOLITHIC_BOT_PID_FILE, String(botProcess.pid), { mode: 0o600 }); } catch (_) {}
-                const launchedBotNames = botName
-                    ? [botName]
-                    : listConfiguredBots().filter((b) => b.active).map((b) => b.name);
-                const botStat = botProcess.pid ? readProcStat(botProcess.pid) : null;
-                try {
-                    fs.writeFileSync(
-                        MONOLITHIC_BOT_INFO_FILE,
-                        JSON.stringify({ botName, botNames: launchedBotNames, pid: botProcess.pid, starttime: botStat?.starttime ?? null }),
-                        { mode: 0o600 }
-                    );
-                } catch (_) {}
-            }
-
-            // Pipe output to log files in background mode
-            if (isMonolithicBgChild && botProcess.stdout) {
-                const outStream = fs.createWriteStream(MONOLITHIC_OUT_LOG, { flags: 'a' });
-                const errStream = fs.createWriteStream(MONOLITHIC_ERROR_LOG, { flags: 'a' });
-                botProcess.stdout.pipe(outStream);
-                botProcess.stderr.pipe(errStream);
-                botProcess.stdout.on('error', () => {});
-                botProcess.stderr.on('error', () => {});
-                botProcess.once('close', () => {
-                    try { outStream.end(); } catch (_) {}
-                    try { errStream.end(); } catch (_) {}
+                const botProcess = spawn(process.execPath, dexbotArgs, {
+                    cwd: ROOT,
+                    env: process.env,
+                    stdio: isMonolithicBgChild ? 'pipe' : 'inherit',
                 });
-            }
+                botProcessRef.current = botProcess;
 
-            lastStartTime = Date.now();
-            await waitForStableChildStartup(botProcess, { label: 'DEXBot', timeoutMs: startupGraceMs });
-
-            if (!_pendingRestart) {
-                if (!isMonolithicBgChild) {
-                    printLauncherSuccess({ botName });
+                if (isMonolithicBgChild) {
+                    try { fs.writeFileSync(MONOLITHIC_BOT_PID_FILE, String(botProcess.pid), { mode: 0o600 }); } catch (_) {}
+                    const launchedBotNames = botName
+                        ? [botName]
+                        : listConfiguredBots().filter((b) => b.active).map((b) => b.name);
+                    const botStat = botProcess.pid ? readProcStat(botProcess.pid) : null;
+                    try {
+                        fs.writeFileSync(
+                            MONOLITHIC_BOT_INFO_FILE,
+                            JSON.stringify({ botName, botNames: launchedBotNames, pid: botProcess.pid, starttime: botStat?.starttime ?? null }),
+                            { mode: 0o600 }
+                        );
+                    } catch (_) {}
                 }
-            }
 
-            const onSigint = () => forwardSignal(botProcess, 'SIGINT');
-            const onSigterm = () => forwardSignal(botProcess, 'SIGTERM');
-            process.on('SIGINT', onSigint);
-            process.on('SIGTERM', onSigterm);
+                // Pipe output to log files in background mode
+                if (isMonolithicBgChild && botProcess.stdout) {
+                    const outStream = fs.createWriteStream(MONOLITHIC_OUT_LOG, { flags: 'a' });
+                    const errStream = fs.createWriteStream(MONOLITHIC_ERROR_LOG, { flags: 'a' });
+                    botProcess.stdout.pipe(outStream);
+                    botProcess.stderr.pipe(errStream);
+                    botProcess.stdout.on('error', () => {});
+                    botProcess.stderr.on('error', () => {});
+                    botProcess.once('close', () => {
+                        try { outStream.end(); } catch (_) {}
+                        try { errStream.end(); } catch (_) {}
+                    });
+                }
 
-            const cleanupBotHandlers = () => {
-                process.off('SIGINT', onSigint);
-                process.off('SIGTERM', onSigterm);
-            };
+                lastStartTime = Date.now();
+                await waitForStableChildStartup(botProcess, { label: 'DEXBot', timeoutMs: startupGraceMs });
 
-            const exitCode: any = await new Promise((resolve, reject) => {
-                botProcess.on('error', reject);
-                botProcess.on('close', (code: any) => resolve(code));
-            }).catch((err) => {
+                if (!_pendingRestart) {
+                    if (!isMonolithicBgChild) {
+                        printLauncherSuccess({ botName });
+                    }
+                }
+
+                const onSigint = () => forwardSignal(botProcess, 'SIGINT');
+                const onSigterm = () => forwardSignal(botProcess, 'SIGTERM');
+                process.on('SIGINT', onSigint);
+                process.on('SIGTERM', onSigterm);
+
+                const cleanupBotHandlers = () => {
+                    process.off('SIGINT', onSigint);
+                    process.off('SIGTERM', onSigterm);
+                };
+
+                const exitCode: any = await new Promise((resolve, reject) => {
+                    botProcess.on('error', reject);
+                    botProcess.on('close', (code: any) => resolve(code));
+                }).catch((err) => {
+                    cleanupBotHandlers();
+                    throw err;
+                });
                 cleanupBotHandlers();
-                throw err;
-            });
-            cleanupBotHandlers();
 
-            if (_pendingRestart) {
-                _pendingRestart = false;
-                console.log('Update applied, restarting bot...');
-            } else if (exitCode !== 0) {
-                const uptime = Date.now() - lastStartTime;
-                if (uptime >= MONOLITHIC_MIN_UPTIME_MS) {
-                    restartCount = 0;
-                }
-                restartCount++;
-                if (restartCount > MONOLITHIC_MAX_RESTARTS) {
-                    console.error(`Bot crashed ${MONOLITHIC_MAX_RESTARTS} times without stable uptime. Exiting.`);
-                    process.exitCode = exitCode || 1;
-                    keepRunning = false;
+                if (_pendingRestart) {
+                    _pendingRestart = false;
+                    console.log('Update applied, restarting bot...');
+                } else if (exitCode !== 0) {
+                    const uptime = Date.now() - lastStartTime;
+                    if (uptime >= MONOLITHIC_MIN_UPTIME_MS) {
+                        restartCount = 0;
+                    }
+                    restartCount++;
+                    if (restartCount > MONOLITHIC_MAX_RESTARTS) {
+                        console.error(`Bot crashed ${MONOLITHIC_MAX_RESTARTS} times without stable uptime. Exiting.`);
+                        process.exitCode = exitCode || 1;
+                        keepRunning = false;
+                    } else {
+                        console.log(`Bot crashed (exit ${exitCode}), restarting in ${MONOLITHIC_RESTART_DELAY_MS / 1000}s (attempt ${restartCount}/${MONOLITHIC_MAX_RESTARTS})...`);
+                        await new Promise((r) => setTimeout(r, MONOLITHIC_RESTART_DELAY_MS));
+                    }
                 } else {
-                    console.log(`Bot crashed (exit ${exitCode}), restarting in ${MONOLITHIC_RESTART_DELAY_MS / 1000}s (attempt ${restartCount}/${MONOLITHIC_MAX_RESTARTS})...`);
-                    await new Promise((r) => setTimeout(r, MONOLITHIC_RESTART_DELAY_MS));
+                    process.exitCode = 0;
+                    keepRunning = false;
                 }
-            } else {
-                process.exitCode = 0;
-                keepRunning = false;
+            } while (keepRunning);
+        } finally {
+            if (monolithicRestartSignalRegistered) {
+                process.off('SIGUSR2', onSigusr2);
             }
-        } while (keepRunning);
-
-        cancelUpdateScheduler();
+            cancelUpdateScheduler();
+        }
     } finally {
         if (isMonolithicBgChild) {
             cleanupMonolithicStateFiles();
@@ -861,24 +873,49 @@ function readMonolithicBotInfo(): { botName?: string | null; botNames?: string[]
     }
 }
 
+function readLiveMonolithicPid(): { pid: number; stale: boolean } {
+    if (!fs.existsSync(MONOLITHIC_PID_FILE)) return { pid: 0, stale: false };
+
+    let pid = 0;
+    try {
+        const raw = fs.readFileSync(MONOLITHIC_PID_FILE, 'utf8').trim();
+        pid = Number(raw);
+        if (!Number.isInteger(pid) || pid <= 0) pid = 0;
+    } catch (_) {
+        try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
+        return { pid: 0, stale: true };
+    }
+
+    if (pid <= 0) return { pid: 0, stale: true };
+
+    try {
+        process.kill(pid, 0);
+        return { pid, stale: false };
+    } catch (_) {
+        try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
+        return { pid: 0, stale: true };
+    }
+}
+
 async function handleControl({ cmd, target }: { cmd: string; target?: string }) {
-    // Try monolithic PID file first for stop/status/shutdown (no bot target)
-    if ((cmd === 'stop' || cmd === 'shutdown' || cmd === 'status') && !target && fs.existsSync(MONOLITHIC_PID_FILE)) {
-        let pid = 0;
-        try {
-            const raw = fs.readFileSync(MONOLITHIC_PID_FILE, 'utf8').trim();
-            pid = Number(raw);
-            if (!Number.isInteger(pid) || pid <= 0) pid = 0;
-        } catch (_) {
-            try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
-        }
+    if (cmd === 'restart' && !target) {
+        console.error('Usage: node unlock-start restart <botName> or node unlock-start restart-all');
+        process.exitCode = 1;
+        return;
+    }
+
+    // Try monolithic PID file first for whole-runtime controls.
+    if ((cmd === 'stop' || cmd === 'shutdown' || cmd === 'status' || cmd === 'restart-all') && !target) {
+        const { pid, stale } = readLiveMonolithicPid();
 
         if (pid > 0) {
-            try {
-                process.kill(pid, 0);
-            } catch (_) {
-                console.log('Monolithic bot not running (stale PID file)');
-                try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
+            if (cmd === 'restart-all') {
+                try {
+                    process.kill(pid, 'SIGUSR2');
+                    console.log('Restart signal sent to monolithic bot');
+                } catch (err: any) {
+                    if (err.code !== 'ESRCH') throw err;
+                }
                 return;
             }
 
@@ -943,6 +980,9 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
             } finally {
                 cleanupMonolithicStateFiles();
             }
+            return;
+        } else if (stale) {
+            console.log('Monolithic bot not running (stale PID file)');
             return;
         }
     }
