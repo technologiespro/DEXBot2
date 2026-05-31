@@ -12,6 +12,7 @@ const originalSpawn = childProcess.spawn;
 const originalSupervisorSocket = process.env.DEXBOT_SUPERVISOR_SOCKET;
 const originalDisableSupervisorSocket = process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET;
 const originalIsolatedForeground = process.env.DEXBOT_ISOLATED_FOREGROUND;
+const originalMonolithicBg = process.env.DEXBOT_MONOLITHIC_BG;
 
 const state = {
     calls: [],
@@ -74,6 +75,7 @@ installStubs();
 process.env.DEXBOT_SUPERVISOR_SOCKET = `/tmp/dexbot-supervisor-test-${process.pid}.sock`;
 process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET = '1';
 process.env.DEXBOT_ISOLATED_FOREGROUND = '1';
+process.env.DEXBOT_MONOLITHIC_BG = '1';
 
 const unlockStart = require('../unlock-start');
 
@@ -190,6 +192,11 @@ async function runMissingIsolatedBotFailsFastTest() {
             delete process.env.DEXBOT_ISOLATED_FOREGROUND;
         } else {
             process.env.DEXBOT_ISOLATED_FOREGROUND = originalIsolatedForeground;
+        }
+        if (originalMonolithicBg === undefined) {
+            delete process.env.DEXBOT_MONOLITHIC_BG;
+        } else {
+            process.env.DEXBOT_MONOLITHIC_BG = originalMonolithicBg;
         }
     }
 })();

@@ -1,0 +1,192 @@
+const assert = require('assert');
+const { EventEmitter } = require('events');
+const childProcess = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { loadSettingsFile, resolveRawBotEntries } = require('../modules/bot_settings');
+const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
+
+console.log('Running unlock-start control output tests');
+
+const controllerPath = require.resolve('../modules/launcher/credential_daemon');
+const supervisorControlPath = require.resolve('../modules/launcher/supervisor_control');
+const originalControllerModule = require.cache[controllerPath];
+const originalSupervisorControlModule = require.cache[supervisorControlPath];
+const originalSpawn = childProcess.spawn;
+const originalExistsSync = fs.existsSync;
+const originalReadFileSync = fs.readFileSync;
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+
+const monolithicPidPath = path.resolve(__dirname, '..', 'profiles', 'monolithic.pid');
+const monolithicCredPidPath = path.resolve(__dirname, '..', 'profiles', 'monolithic-cred.pid');
+const monolithicBotInfoPath = path.resolve(__dirname, '..', 'profiles', 'monolithic-bot.json');
+const botsFile = path.resolve(__dirname, '..', 'profiles', 'bots.json');
+
+const logs = [];
+const errors = [];
+const state = {
+    controlCalls: [],
+    staleMonolithicPid: false,
+    supervisorDeleteTransient: false,
+};
+
+const controller = {
+    ensureCredentialDaemon: async () => false,
+    getManagedDaemonPid: () => null,
+    releaseManagedDaemon: () => {},
+    isDaemonReady: async () => true,
+    stopManagedDaemon: async () => {},
+};
+
+function resetState() {
+    logs.length = 0;
+    errors.length = 0;
+    state.controlCalls.length = 0;
+    state.staleMonolithicPid = false;
+    state.supervisorDeleteTransient = false;
+}
+
+function getActiveBotNames() {
+    const { config } = loadSettingsFile(botsFile, { silent: true, exitOnError: false });
+    return resolveRawBotEntries(config)
+        .filter((bot) => bot && bot.active !== false)
+        .map((bot) => String(bot.name));
+}
+
+function installStubs() {
+    setCachedModule(controllerPath, {
+        createCredentialDaemonController: () => controller,
+    });
+
+    setCachedModule(supervisorControlPath, {
+        sendControlCommand: async (cmd) => {
+            if (cmd.cmd === 'delete' && state.supervisorDeleteTransient) {
+                throw new Error('No supervisor socket found. Start bots with: node unlock-start --isolated');
+            }
+            state.controlCalls.push(cmd);
+            return { ok: true };
+        },
+    });
+
+    childProcess.spawn = (command, args, options) => {
+        const child = new EventEmitter();
+        child.killed = false;
+        child.pid = 9999;
+        child.kill = () => {
+            child.killed = true;
+        };
+        child.unref = () => {};
+        process.nextTick(() => {
+            child.emit('spawn');
+            setImmediate(() => child.emit('close', 0));
+        });
+        return child;
+    };
+
+    fs.existsSync = (filePath) => {
+        const normalized = String(filePath);
+        if (normalized === monolithicPidPath) {
+            return state.staleMonolithicPid;
+        }
+        if (normalized === monolithicCredPidPath) {
+            return false;
+        }
+        return originalExistsSync(filePath);
+    };
+
+    fs.readFileSync = (filePath, options) => {
+        if (String(filePath) === monolithicPidPath && state.staleMonolithicPid) {
+            return '999999';
+        }
+        if (String(filePath) === monolithicBotInfoPath) {
+            const err = new Error('ENOENT: no such file or directory');
+            err.code = 'ENOENT';
+            throw err;
+        }
+        return originalReadFileSync(filePath, options);
+    };
+
+    console.log = (...args) => {
+        const line = args.map((part) => String(part)).join(' ').trim();
+        if (line) logs.push(line);
+    };
+    console.error = (...args) => {
+        const line = args.map((part) => String(part)).join(' ').trim();
+        if (line) errors.push(line);
+    };
+}
+
+function restoreStubs() {
+    childProcess.spawn = originalSpawn;
+    fs.existsSync = originalExistsSync;
+    fs.readFileSync = originalReadFileSync;
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
+    restoreCachedModule(controllerPath, originalControllerModule);
+    restoreCachedModule(supervisorControlPath, originalSupervisorControlModule);
+}
+
+installStubs();
+
+const unlockStart = require('../unlock-start');
+
+async function runControl(args) {
+    resetState();
+    await unlockStart.main({ argv: ['node', 'unlock-start', ...args], startupGraceMs: 0 });
+}
+
+async function assertTargetControl(command, actionWord, botName) {
+    await runControl([command, botName]);
+    assert.deepStrictEqual(state.controlCalls[0], { cmd: command, bot: botName });
+    assert.ok(logs.includes(`DEXBot2 ${actionWord} 1 bot(s)`), `should print the ${actionWord} summary`);
+    assert.ok(logs.includes(`- ${botName}`), 'should list the affected bot');
+}
+
+async function assertWholeRuntimeControl(command, actionWord) {
+    const activeBotNames = getActiveBotNames();
+    await runControl([command]);
+    assert.deepStrictEqual(state.controlCalls[0], { cmd: command === 'shutdown' ? 'delete' : command });
+    assert.ok(logs.includes(`DEXBot2 ${actionWord} ${activeBotNames.length} bot(s)`), `should print the ${actionWord} summary`);
+    for (const botName of activeBotNames) {
+        assert.ok(logs.includes(`- ${botName}`), `should list active bot ${botName}`);
+    }
+}
+
+async function assertStaleControl(command, actionWord) {
+    resetState();
+    state.staleMonolithicPid = true;
+    state.supervisorDeleteTransient = true;
+    const activeBotNames = getActiveBotNames();
+    await runControl([command]);
+
+    assert.ok(logs.includes(`DEXBot2 ${actionWord} ${activeBotNames.length} bot(s)`), 'stale control should print the shared summary');
+    for (const botName of activeBotNames) {
+        assert.ok(logs.includes(`- ${botName}`), `stale control should list active bot ${botName}`);
+    }
+    assert.ok(!logs.some((line) => line.includes('stale PID file')), 'stale control should not fall back to the legacy stale message');
+}
+
+(async () => {
+    try {
+        const activeBotNames = getActiveBotNames();
+        assert.ok(activeBotNames.length > 0, 'test requires at least one active bot');
+
+        await assertTargetControl('stop', 'stopping', activeBotNames[0]);
+        await assertTargetControl('restart', 'restarting', activeBotNames[0]);
+        await assertWholeRuntimeControl('stop-all', 'stopping');
+        await assertWholeRuntimeControl('restart-all', 'restarting');
+        await assertWholeRuntimeControl('delete', 'shutting down');
+        await assertWholeRuntimeControl('shutdown', 'shutting down');
+        await assertStaleControl('delete', 'shutting down');
+        await assertStaleControl('shutdown', 'shutting down');
+
+        restoreStubs();
+        process.stdout.write('unlock-start control output tests passed\n');
+        process.exit(0);
+    } catch (err) {
+        restoreStubs();
+        console.error(err);
+        process.exit(1);
+    }
+})();

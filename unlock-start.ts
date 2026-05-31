@@ -98,6 +98,22 @@ function printLauncherHeader({ botName = null, clawOnly = false, isolated = fals
     console.log();
 }
 
+function printLauncherStartupSummary({
+    botNames,
+    mode,
+}: {
+    botNames: string[];
+    mode: 'background' | 'foreground' | 'isolated';
+}) {
+    console.log('='.repeat(50));
+    console.log(`DEXBot2 started ${botNames.length} bot(s) in ${mode}`);
+    console.log();
+    for (const botName of botNames) {
+        console.log(`- ${botName}`);
+    }
+    console.log('='.repeat(50));
+}
+
 function printLauncherSuccess({ botName = null, clawOnly = false, isolated = false }: { botName?: string | null; clawOnly?: boolean; isolated?: boolean } = {}) {
     console.log();
     console.log('='.repeat(50));
@@ -258,7 +274,7 @@ async function runIsolated({
     await supervisor.start();
     await supervisor.waitForStableStartup({ timeoutMs: startupGraceMs });
 
-    printLauncherSuccess({ botName, isolated: true });
+    printLauncherStartupSummary({ botNames: getLaunchedBotNames(botName || null), mode: 'isolated' });
 
     const sigintHandler = () => supervisor.shutdownSignalHandler('SIGINT');
     const sigtermHandler = () => supervisor.shutdownSignalHandler('SIGTERM');
@@ -590,7 +606,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
     const isDetachedSupervisorChild = process.env.DEXBOT_ISOLATED_CHILD === '1';
     const forceForegroundIsolated = process.env.DEXBOT_ISOLATED_FOREGROUND === '1';
     const isMonolithicBgChild = process.env.DEXBOT_MONOLITHIC_BG === '1';
-    const forceForeground = process.argv.includes('--foreground');
+    const forceForeground = argv.includes('--foreground');
 
     if (parsed.control) {
         await handleControl(parsed.control);
@@ -599,6 +615,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
     const { botName, clawOnly, isolated } = parsed;
     const selectedBot = botName ? resolveBotEntryForName(botName) : null;
+    const launchedBotNames = getLaunchedBotNames(botName);
     let daemonReleased = false;
 
     try {
@@ -676,7 +693,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
                 throw _e;
             }
 
-            const child = spawn(process.execPath, [__filename, ...process.argv.slice(2)], {
+            const child = spawn(process.execPath, [__filename, ...argv.slice(2)], {
                 cwd: ROOT,
                 detached: true,
                 env: {
@@ -689,12 +706,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             child.unref();
             fs.writeFileSync(MONOLITHIC_PID_FILE, String(child.pid), { mode: 0o600 });
 
-            console.log('='.repeat(50));
-            console.log('DEXBot2 started in background');
-            console.log(`PID: ${child.pid}`);
-            console.log(`Logs: ${MONOLITHIC_OUT_LOG}`);
-            console.log(`Stop: node unlock-start stop`);
-            console.log('='.repeat(50));
+            printLauncherStartupSummary({ botNames: launchedBotNames, mode: 'background' });
             process.exit(0);
         }
 
@@ -722,7 +734,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             });
             controller.releaseManagedDaemon();
             daemonReleased = true;
-            printLauncherSuccess({ botName, isolated: true });
+            printLauncherStartupSummary({ botNames: launchedBotNames, mode: 'isolated' });
             console.log(`Supervisor PID: ${supervisorPid}`);
             console.log(`Control socket: ${process.env.DEXBOT_SUPERVISOR_SOCKET || SOCKET_PATH}`);
             console.log(`Supervisor logs: ${SUPERVISOR_OUT_LOG}`);
@@ -755,9 +767,6 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
                 if (isMonolithicBgChild) {
                     try { fs.writeFileSync(MONOLITHIC_BOT_PID_FILE, String(botProcess.pid), { mode: 0o600 }); } catch (_) {}
-                    const launchedBotNames = botName
-                        ? [botName]
-                        : listConfiguredBots().filter((b) => b.active).map((b) => b.name);
                     const botStat = botProcess.pid ? readProcStat(botProcess.pid) : null;
                     try {
                         fs.writeFileSync(
@@ -787,7 +796,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
                 if (!_pendingRestart) {
                     if (!isMonolithicBgChild) {
-                        printLauncherSuccess({ botName });
+                        printLauncherStartupSummary({ botNames: launchedBotNames, mode: 'foreground' });
                     }
                 }
 
@@ -937,6 +946,46 @@ function listConfiguredBots(): { name: string; active: boolean }[] {
     } catch { return []; }
 }
 
+function getLaunchedBotNames(botName: string | null): string[] {
+    return botName
+        ? [botName]
+        : listConfiguredBots().filter((b) => b.active).map((b) => b.name);
+}
+
+function getAllControlBotNames(): string[] {
+    const botInfo = readMonolithicBotInfo();
+    if (Array.isArray(botInfo?.botNames) && botInfo.botNames.length > 0) {
+        return botInfo.botNames.map((name) => String(name));
+    }
+    if (botInfo?.botName) {
+        return [String(botInfo.botName)];
+    }
+    return listConfiguredBots().filter((b) => b.active).map((b) => b.name);
+}
+
+function getControlBotNames(target?: string, wholeRuntime = false): string[] {
+    if (target) return [target];
+    if (wholeRuntime) return getAllControlBotNames();
+    return [];
+}
+
+function getControlActionLabel(cmd: string): string {
+    if (cmd === 'restart' || cmd === 'restart-all') return 'restarting';
+    if (cmd === 'shutdown' || cmd === 'delete') return 'shutting down';
+    return 'stopping';
+}
+
+function printControlActionSummary(action: string, botNames: string[]) {
+    console.log('='.repeat(50));
+    console.log(`DEXBot2 ${action} ${botNames.length} bot(s)`);
+    console.log();
+    for (const botName of botNames) {
+        console.log(`- ${botName}`);
+    }
+    console.log('='.repeat(50));
+    console.log();
+}
+
 function readMonolithicBotInfo(): { botName?: string | null; botNames?: string[]; pid?: number; starttime?: number | null } | null {
     try {
         const infoRaw = fs.readFileSync(MONOLITHIC_BOT_INFO_FILE, 'utf8');
@@ -972,34 +1021,33 @@ function readLiveMonolithicPid(): { pid: number; stale: boolean } {
 }
 
 async function handleControl({ cmd, target }: { cmd: string; target?: string }) {
-    if (cmd === 'shutdown') {
-        console.error('`shutdown` has been replaced by `delete`. Use: node unlock-start delete');
-        process.exitCode = 1;
-        return;
-    }
+    const effectiveCmd = cmd === 'shutdown' ? 'delete' : cmd;
+    const actionLabel = getControlActionLabel(cmd);
 
-    if (cmd === 'restart' && !target) {
+    if (effectiveCmd === 'restart' && !target) {
         console.error('Usage: node unlock-start restart <botName> or node unlock-start restart-all');
         process.exitCode = 1;
         return;
     }
 
     // Try monolithic PID file first for whole-runtime controls.
-    if ((cmd === 'stop' || cmd === 'stop-all' || cmd === 'delete' || cmd === 'status' || cmd === 'restart-all') && !target) {
+    if ((effectiveCmd === 'stop' || effectiveCmd === 'stop-all' || effectiveCmd === 'delete' || effectiveCmd === 'status' || effectiveCmd === 'restart-all') && !target) {
         const { pid, stale } = readLiveMonolithicPid();
 
         if (pid > 0) {
-            if (cmd === 'restart-all') {
+            const summaryBotNames = getControlBotNames(undefined, true);
+
+            if (effectiveCmd === 'restart-all') {
                 try {
                     process.kill(pid, 'SIGUSR2');
-                    console.log('Restart signal sent to monolithic bot');
                 } catch (err: any) {
                     if (err.code !== 'ESRCH') throw err;
                 }
+                printControlActionSummary(actionLabel, summaryBotNames);
                 return;
             }
 
-            if (cmd === 'status') {
+            if (effectiveCmd === 'status') {
                 const botInfo = readMonolithicBotInfo();
 
                 // Read actual bot PID from companion file (fallback to wrapper PID)
@@ -1051,17 +1099,16 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
             let monolithicExited = false;
             try {
                 process.kill(pid, 'SIGTERM');
-                console.log('Stop signal sent to monolithic bot');
-                const timeoutMs = cmd === 'delete' ? MONOLITHIC_CONTROL_STOP_TIMEOUT_MS : 5000;
+                const timeoutMs = effectiveCmd === 'delete' ? MONOLITHIC_CONTROL_STOP_TIMEOUT_MS : 5000;
                 monolithicExited = await waitForPidExit(pid, timeoutMs);
-                if (!monolithicExited && cmd === 'delete') {
+                if (!monolithicExited && effectiveCmd === 'delete') {
                     process.kill(pid, 'SIGKILL');
                     monolithicExited = await waitForPidExit(pid, 2000);
                     if (!monolithicExited) {
                         throw new Error(`monolithic wrapper PID ${pid} did not exit after SIGKILL`);
                     }
                 }
-                if (cmd === 'delete') {
+                if (effectiveCmd === 'delete') {
                     const credResult = await stopMonolithicCredentialDaemon();
                     if (credResult.signaled) {
                         console.log('Stop signal sent to credential daemon');
@@ -1071,38 +1118,42 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 if (err.code !== 'ESRCH') throw err;
                 monolithicExited = true;
             } finally {
-                if (cmd !== 'delete' || monolithicExited) {
+                if (effectiveCmd !== 'delete' || monolithicExited) {
                     cleanupMonolithicStateFiles();
                 }
             }
+            printControlActionSummary(actionLabel, summaryBotNames);
             return;
         } else if (stale) {
-            if (cmd === 'delete') {
+            if (effectiveCmd === 'delete') {
+                const summaryBotNames = getControlBotNames(undefined, true);
                 const isolatedDeleted = await sendIsolatedDeleteIfAvailable();
                 const credResult = await stopMonolithicCredentialDaemon();
                 if (credResult.signaled) {
                     console.log('Stop signal sent to credential daemon');
                 }
-                if (isolatedDeleted) {
-                    return;
-                }
+                printControlActionSummary(actionLabel, summaryBotNames);
+                if (isolatedDeleted || credResult.cleaned) return;
             }
-            console.log(cmd === 'delete' ? 'Removed stale monolithic PID file' : 'Monolithic bot not running (stale PID file)');
+            console.log(effectiveCmd === 'delete' ? 'Removed stale monolithic PID file' : 'Monolithic bot not running (stale PID file)');
             return;
         }
     }
 
-    if (cmd === 'delete' && !target && fs.existsSync(MONOLITHIC_CRED_PID_FILE)) {
+    if (effectiveCmd === 'delete' && !target && fs.existsSync(MONOLITHIC_CRED_PID_FILE)) {
         await sendIsolatedDeleteIfAvailable();
         const credResult = await stopMonolithicCredentialDaemon();
         if (credResult.signaled) {
             console.log('Stop signal sent to credential daemon');
         }
-        if (credResult.cleaned) return;
+        if (credResult.cleaned) {
+            printControlActionSummary(actionLabel, getControlBotNames(undefined, true));
+            return;
+        }
     }
 
     // No monolithic PID file or target-specific control — fall through to isolated supervisor socket
-    const controlCmd: any = { cmd };
+    const controlCmd: any = { cmd: effectiveCmd };
     if (target) controlCmd.bot = target;
 
     try {
@@ -1110,10 +1161,14 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
         if (resp.ok && resp.status) {
             printControlStatus(resp.status);
         } else {
+            if (target || effectiveCmd === 'stop-all' || effectiveCmd === 'restart-all' || effectiveCmd === 'delete') {
+                const summaryBotNames = getControlBotNames(target, !target && (effectiveCmd === 'stop-all' || effectiveCmd === 'restart-all' || effectiveCmd === 'delete'));
+                printControlActionSummary(actionLabel, summaryBotNames);
+            }
             console.log('OK');
         }
     } catch (err: any) {
-        if (cmd === 'delete' && !target && isSupervisorTransientError(err)) {
+        if (effectiveCmd === 'delete' && !target && isSupervisorTransientError(err)) {
             console.log('No runtime processes found.');
             return;
         }

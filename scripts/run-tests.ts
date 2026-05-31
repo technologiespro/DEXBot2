@@ -70,6 +70,7 @@ const testFiles = [
   'tests/test_market_adapter_service.ts',
   'tests/test_launcher_exports.ts',
   'tests/test_unlock_start_main.ts',
+  'tests/test_unlock_start_control_output.ts',
   'tests/test_unlock_start_isolated_poll_reject.ts',
   'tests/test_bot_daemon_ready_output.ts',
   'tests/test_bot_daemon_probe_fallback.ts',
