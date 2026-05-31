@@ -27,6 +27,8 @@ function parseUnlockArgs(argv = process.argv) {
     };
 }
 
+const parseUnlockStartArgs = parseUnlockArgs;
+
 function parsePm2Args(argv = process.argv) {
     const args = argv.slice(2);
     const command = args[0] || null;
@@ -59,4 +61,5 @@ export = {
     findFirstPositionalArg,
     parsePm2Args,
     parseUnlockArgs,
+    parseUnlockStartArgs,
 };
