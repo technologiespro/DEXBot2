@@ -571,7 +571,7 @@ function createBotSupervisor({
         }
     }
 
-    function handleSocketCommand(cmd) {
+    async function handleSocketCommand(cmd) {
         try {
             switch (cmd.cmd) {
                 case 'status': {
@@ -614,12 +614,8 @@ function createBotSupervisor({
                 case 'restart-all':
                     restartAll();
                     return { ok: true };
-                case 'shutdown':
-                    setImmediate(() => {
-                        shutdown().catch((err) => {
-                            logError(`shutdown failed: ${err.message}`);
-                        });
-                    });
+                case 'delete':
+                    await shutdown({ preserveSockets: cmd.preserveSockets || [] });
                     return { ok: true };
                 default:
                     return { error: `unknown command: ${cmd.cmd}` };
@@ -659,22 +655,50 @@ function createBotSupervisor({
             socketServer = net.createServer((socket) => {
             socketConnections.add(socket);
             let buffer = '';
+            let commandQueue = Promise.resolve();
+            let deleteQueued = false;
+
+            const enqueueSocketResponse = (handler) => {
+                commandQueue = commandQueue
+                    .then(handler)
+                    .catch((err) => {
+                        try {
+                            socket.write(JSON.stringify({ error: err.message }) + '\n');
+                        } catch (_: any) {}
+                    });
+                return commandQueue;
+            };
 
             socket.on('data', (data) => {
+                if (deleteQueued) return;
                 buffer += data.toString();
                 const lines = buffer.split('\n');
                 buffer = lines.pop();
                 for (const line of lines) {
+                    if (deleteQueued) break;
                     if (!line.trim()) continue;
                     let cmd;
                     try {
                         cmd = JSON.parse(line);
                     } catch (_: any) {
-                        socket.write(JSON.stringify({ error: 'invalid JSON' }) + '\n');
+                        enqueueSocketResponse(() => new Promise((resolve) => {
+                            socket.write(JSON.stringify({ error: 'invalid JSON' }) + '\n', resolve);
+                        }));
                         continue;
                     }
-                    const resp = handleSocketCommand(cmd);
-                    socket.write(JSON.stringify(resp) + '\n');
+                    if (cmd.cmd === 'delete') {
+                        deleteQueued = true;
+                        buffer = '';
+                    }
+                    enqueueSocketResponse(async () => {
+                        const resp = await handleSocketCommand({ ...cmd, preserveSockets: [socket] });
+                        await new Promise((resolve) => {
+                            socket.write(JSON.stringify(resp) + '\n', resolve);
+                        });
+                        if (cmd.cmd === 'delete') {
+                            socket.end();
+                        }
+                    });
                 }
             });
 
@@ -709,15 +733,17 @@ function createBotSupervisor({
         });
     }
 
-    function closeSocketServer() {
+    function closeSocketServer({ preserveSockets = [] } = {}) {
+        const preserved = new Set(preserveSockets);
         if (socketServer) {
             try { socketServer.close(); } catch (_: any) {}
             socketServer = null;
         }
         for (const sock of socketConnections) {
+            if (preserved.has(sock)) continue;
             try { sock.destroy(); } catch (_: any) {}
         }
-        socketConnections.clear();
+        socketConnections = new Set([...socketConnections].filter((sock) => preserved.has(sock)));
         try { fs.unlinkSync(SOCKET_PATH); } catch (_: any) {}
     }
 
@@ -817,11 +843,11 @@ function createBotSupervisor({
         }
     }
 
-    async function shutdown() {
+    async function shutdown({ preserveSockets = [] } = {}) {
         shuttingDown = true;
         userStopped = false;
         clearTimers();
-        closeSocketServer();
+        closeSocketServer({ preserveSockets });
 
         shutdownSignalHandler('SIGTERM');
 

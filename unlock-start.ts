@@ -20,7 +20,7 @@
  *   node unlock-start restart <botName>
  *   node unlock-start stop-all
  *   node unlock-start restart-all
- *   node unlock-start shutdown
+ *   node unlock-start delete
  *
  * Environment:
  *   BOT_NAME              Fallback bot name when none is given as positional arg
@@ -39,6 +39,7 @@ const { buildRuntimeScriptArgs } = require('./modules/launcher/runtime_entry');
 const { createBotSupervisor, SOCKET_PATH, parseCronExpression, getNextCronDate } = require('./modules/launcher/bot_supervisor');
 const { sendControlCommand } = require('./modules/launcher/supervisor_control');
 const { registerCleanup, setupGracefulShutdown } = require('./modules/graceful_shutdown');
+const { getCredentialReadyFilePath, getCredentialSocketPath } = require('./modules/credential_runtime');
 const { normalizeBotEntry, resolveRawBotEntries, loadSettingsFile } = require('./modules/bot_settings');
 
 const CODE_ROOT = __dirname;
@@ -55,11 +56,15 @@ const DEFAULT_STARTUP_GRACE_MS = 750;
 const MONOLITHIC_PID_FILE = path.join(ROOT, 'profiles', 'monolithic.pid');
 const MONOLITHIC_BOT_PID_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.pid');
 const MONOLITHIC_BOT_INFO_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.json');
+const MONOLITHIC_CRED_PID_FILE = path.join(ROOT, 'profiles', 'monolithic-cred.pid');
+const CREDENTIAL_SOCKET_FILE = getCredentialSocketPath({ root: ROOT });
+const CREDENTIAL_READY_FILE = getCredentialReadyFilePath({ root: ROOT });
 const MONOLITHIC_OUT_LOG = path.join(LOGS_DIR, 'dexbot.log');
 const MONOLITHIC_ERROR_LOG = path.join(LOGS_DIR, 'dexbot-error.log');
 const MONOLITHIC_MAX_RESTARTS = 13;
 const MONOLITHIC_MIN_UPTIME_MS = 86400000;
 const MONOLITHIC_RESTART_DELAY_MS = 3000;
+const MONOLITHIC_CONTROL_STOP_TIMEOUT_MS = 12000;
 const botProcessRef: { current: any } = { current: null };
 
 function cleanupMonolithicStateFiles() {
@@ -404,6 +409,67 @@ async function stopCredentialDaemonPid(pid: string | number) {
     }
 }
 
+function isPidAlive(pid: number) {
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+async function waitForPidExit(pid: number, timeoutMs: number) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+        if (!isPidAlive(pid)) return true;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    return !isPidAlive(pid);
+}
+
+function cleanupCredentialRuntimeFiles() {
+    try { fs.unlinkSync(CREDENTIAL_SOCKET_FILE); } catch (_) {}
+    try { fs.unlinkSync(CREDENTIAL_READY_FILE); } catch (_) {}
+}
+
+async function stopMonolithicCredentialDaemon(): Promise<{ signaled: boolean; cleaned: boolean }> {
+    let pidRaw: string | null = null;
+    try {
+        pidRaw = fs.readFileSync(MONOLITHIC_CRED_PID_FILE, 'utf8').trim();
+    } catch (_) {}
+
+    const daemonPid = Number(pidRaw);
+    if (!pidRaw || !Number.isInteger(daemonPid) || daemonPid <= 0) {
+        cleanupCredentialRuntimeFiles();
+        try { fs.unlinkSync(MONOLITHIC_CRED_PID_FILE); } catch (_) {}
+        return { signaled: false, cleaned: true };
+    }
+
+    const signaled = isPidAlive(daemonPid);
+    await stopCredentialDaemonPid(daemonPid);
+    cleanupCredentialRuntimeFiles();
+    try { fs.unlinkSync(MONOLITHIC_CRED_PID_FILE); } catch (_) {}
+    return { signaled, cleaned: true };
+}
+
+async function sendIsolatedDeleteIfAvailable() {
+    try {
+        const resp = await sendControlCommand({ cmd: 'delete' });
+        if (resp.ok && resp.status) {
+            printControlStatus(resp.status);
+        } else if (resp.ok) {
+            console.log('OK');
+        }
+        return !!resp.ok;
+    } catch (err: any) {
+        if (isSupervisorTransientError(err)) {
+            return false;
+        }
+        throw err;
+    }
+}
+
 async function launchDetachedSupervisor({ botName = null, credentialDaemonPid = null } = {}) {
     try {
         await sendControlCommand({ cmd: 'status' });
@@ -593,6 +659,10 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
                 if (e.message.includes('already running')) throw e;
             }
 
+            const credentialDaemonPid = controller.getManagedDaemonPid();
+            if (credentialDaemonPid) {
+                try { fs.writeFileSync(MONOLITHIC_CRED_PID_FILE, String(credentialDaemonPid), { mode: 0o600 }); } catch (_) {}
+            }
             controller.releaseManagedDaemon();
             daemonReleased = true;
 
@@ -609,7 +679,11 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             const child = spawn(process.execPath, [__filename, ...process.argv.slice(2)], {
                 cwd: ROOT,
                 detached: true,
-                env: { ...process.env, DEXBOT_MONOLITHIC_BG: '1' },
+                env: {
+                    ...process.env,
+                    DEXBOT_MONOLITHIC_BG: '1',
+                    ...(credentialDaemonPid ? { DEXBOT_MANAGED_CRED_PID: String(credentialDaemonPid) } : {}),
+                },
                 stdio: ['ignore', stdoutFd, stderrFd],
             });
             child.unref();
@@ -898,6 +972,12 @@ function readLiveMonolithicPid(): { pid: number; stale: boolean } {
 }
 
 async function handleControl({ cmd, target }: { cmd: string; target?: string }) {
+    if (cmd === 'shutdown') {
+        console.error('`shutdown` has been replaced by `delete`. Use: node unlock-start delete');
+        process.exitCode = 1;
+        return;
+    }
+
     if (cmd === 'restart' && !target) {
         console.error('Usage: node unlock-start restart <botName> or node unlock-start restart-all');
         process.exitCode = 1;
@@ -905,7 +985,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
     }
 
     // Try monolithic PID file first for whole-runtime controls.
-    if ((cmd === 'stop' || cmd === 'shutdown' || cmd === 'status' || cmd === 'restart-all') && !target) {
+    if ((cmd === 'stop' || cmd === 'stop-all' || cmd === 'delete' || cmd === 'status' || cmd === 'restart-all') && !target) {
         const { pid, stale } = readLiveMonolithicPid();
 
         if (pid > 0) {
@@ -968,23 +1048,57 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 return;
             }
 
+            let monolithicExited = false;
             try {
                 process.kill(pid, 'SIGTERM');
                 console.log('Stop signal sent to monolithic bot');
-                const started = Date.now();
-                while (Date.now() - started < 5000) {
-                    try { process.kill(pid, 0); await new Promise((r) => setTimeout(r, 200)); } catch (_) { break; }
+                const timeoutMs = cmd === 'delete' ? MONOLITHIC_CONTROL_STOP_TIMEOUT_MS : 5000;
+                monolithicExited = await waitForPidExit(pid, timeoutMs);
+                if (!monolithicExited && cmd === 'delete') {
+                    process.kill(pid, 'SIGKILL');
+                    monolithicExited = await waitForPidExit(pid, 2000);
+                    if (!monolithicExited) {
+                        throw new Error(`monolithic wrapper PID ${pid} did not exit after SIGKILL`);
+                    }
+                }
+                if (cmd === 'delete') {
+                    const credResult = await stopMonolithicCredentialDaemon();
+                    if (credResult.signaled) {
+                        console.log('Stop signal sent to credential daemon');
+                    }
                 }
             } catch (err: any) {
                 if (err.code !== 'ESRCH') throw err;
+                monolithicExited = true;
             } finally {
-                cleanupMonolithicStateFiles();
+                if (cmd !== 'delete' || monolithicExited) {
+                    cleanupMonolithicStateFiles();
+                }
             }
             return;
         } else if (stale) {
-            console.log('Monolithic bot not running (stale PID file)');
+            if (cmd === 'delete') {
+                const isolatedDeleted = await sendIsolatedDeleteIfAvailable();
+                const credResult = await stopMonolithicCredentialDaemon();
+                if (credResult.signaled) {
+                    console.log('Stop signal sent to credential daemon');
+                }
+                if (isolatedDeleted) {
+                    return;
+                }
+            }
+            console.log(cmd === 'delete' ? 'Removed stale monolithic PID file' : 'Monolithic bot not running (stale PID file)');
             return;
         }
+    }
+
+    if (cmd === 'delete' && !target && fs.existsSync(MONOLITHIC_CRED_PID_FILE)) {
+        await sendIsolatedDeleteIfAvailable();
+        const credResult = await stopMonolithicCredentialDaemon();
+        if (credResult.signaled) {
+            console.log('Stop signal sent to credential daemon');
+        }
+        if (credResult.cleaned) return;
     }
 
     // No monolithic PID file or target-specific control — fall through to isolated supervisor socket
@@ -999,6 +1113,10 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
             console.log('OK');
         }
     } catch (err: any) {
+        if (cmd === 'delete' && !target && isSupervisorTransientError(err)) {
+            console.log('No runtime processes found.');
+            return;
+        }
         console.error(`control ${cmd}: ${err.message}`);
         process.exitCode = 1;
     }

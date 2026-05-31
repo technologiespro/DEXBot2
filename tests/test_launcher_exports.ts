@@ -129,9 +129,14 @@ assert.deepStrictEqual(
     'unlock-start parser should parse restart-all'
 );
 assert.deepStrictEqual(
+    parseUnlockStartArgs(['node', 'unlock-start', 'delete']),
+    { botName: null, clawOnly: false, isolated: false, control: { cmd: 'delete', target: null } },
+    'unlock-start parser should parse delete'
+);
+assert.deepStrictEqual(
     parseUnlockStartArgs(['node', 'unlock-start', 'shutdown']),
     { botName: null, clawOnly: false, isolated: false, control: { cmd: 'shutdown', target: null } },
-    'unlock-start parser should parse shutdown'
+    'unlock-start parser should reject shutdown in control handling instead of treating it as a bot name'
 );
 
 console.log('launcher export tests passed');

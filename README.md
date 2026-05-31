@@ -251,10 +251,10 @@ node unlock-start stop <bot-name>
 node unlock-start restart <bot-name>
 node unlock-start stop-all
 node unlock-start restart-all
-node unlock-start shutdown
+node unlock-start delete
 ```
 
-The supervisor detaches and returns to the shell. It supports `SIGTERM` (graceful shutdown), `SIGUSR1` (print status), and `SIGUSR2` (restart all). Bot logs go to `profiles/logs/<name>.log`, supervisor output to `profiles/logs/supervisor.log`.
+The supervisor detaches and returns to the shell. `stop-all` leaves the supervisor available for `restart-all`; `delete` gracefully terminates the supervisor runtime. It supports `SIGTERM` (graceful shutdown), `SIGUSR1` (print status), and `SIGUSR2` (restart all). Bot logs go to `profiles/logs/<name>.log`, supervisor output to `profiles/logs/supervisor.log`.
 
 ## 📚 Documentation
 
