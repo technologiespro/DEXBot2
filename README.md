@@ -24,13 +24,11 @@ git clone https://github.com/froooze/DEXBot2.git && cd DEXBot2 && npm install
 node dexbot keys
 node dexbot bots
 
-# 3. Start with PM2 or directly
-node pm2           # For production (PM2)
-node pm2 claw-only  # PM2-managed credential daemon only
-node unlock  # Single prompt, no PM2 (monolithic)
-node unlock --isolated  # No PM2, isolated processes (production-grade)
-node unlock --claw-only  # Credential daemon only for claw workflows
-node dexbot start  # For testing
+# 3. Start DEXBot2
+node unlock           # Default — single prompt, no setup needed
+node unlock --isolated  # Per-process isolation with auto-restart
+node pm2              # PM2 process management
+node dexbot start     # For testing
 ```
 
 For detailed setup, see [Installation](#installation) or [Updating](#updating-dexbot2) sections below.
@@ -109,7 +107,7 @@ node dexbot update
 The update script automatically:
 - Fetches and pulls the latest code
 - Installs any new dependencies
-- Reloads active PM2 bot processes if running
+- Restarts active PM2 bot processes if running
 - Ensures your `profiles/` directory is protected and unchanged
 - Logs all operations to `update.log`
 
@@ -183,66 +181,17 @@ Global settings via `node dexbot bots`, stored in `profiles/general.settings.jso
 - **Log Level**: `debug`, `info`, `warn`, `error`. Fine-grained category control via `LOGGING_CONFIG` (see [Logging](docs/LOGGING.md))
 - **Updater**: Active (default `ON`), Branch (`auto`/`main`/`dev`/`test`), Interval (default `1 day`), Time (default `00:00`)
 
-## 🎯 PM2 Process Management
-
-For production use with automatic restart and monitoring. Run `node pm2` to start — it handles connection, authentication, and PM2 startup automatically.
-
-```bash
-# Start all active bots with PM2
-node pm2
-
-# Start a specific bot
-node pm2 <bot-name>
-
-# Start only the credential daemon
-node pm2 claw-only
-
-# Or via CLI
-node dexbot pm2
-
-# View status and resource usage
-pm2 status
-
-# View real-time logs
-pm2 logs [<bot-name>]
-
-# Safe restart/reload path for DEXBot-managed PM2 apps
-node pm2 restart {all|<bot-name>|dexbot-cred}
-node pm2 reload {all|<bot-name>|dexbot-cred}
-
-# Stop processes
-pm2 stop {all|<bot-name>}
-
-# Delete processes
-pm2 delete {all|<bot-name>}
-
-# Stop/delete only dexbot processes (via wrapper)
-node pm2 stop {all|<bot-name>}
-node pm2 delete {all|<bot-name>}
-
-# Reset grid (regenerate orders)
-node dexbot reset {all|<bot-name>}
-
-# Disable a bot in config
-node dexbot disable {all|<bot-name>}
-
-# Show PM2 wrapper usage
-node pm2 help
-```
-
-Bot logs are written to `profiles/logs/<bot-name>.log` (errors to `<bot-name>-error.log`).
-
-Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local bootstrap channel instead of exporting the master password to every PM2 app. Use `node pm2 restart ...` or `node pm2 reload ...` for DEXBot-managed PM2 actions. Avoid raw `pm2 restart all` / `pm2 reload all`, because `dexbot-cred` must only be re-unlocked through the wrapper. If `dexbot-cred` stops, rerun `node pm2` or `node pm2 restart dexbot-cred`.
-
 ## 🎯 Zero-Dependency Process Management
 
-`node unlock --isolated` runs each bot in its own process with auto-restart, memory limits, and log files — no PM2 required.
+Run without PM2. `node unlock` starts all bots in a single process. Add `--isolated` for per-process isolation with auto-restart, memory limits, and log files.
 
 ```bash
 # Start all active bots
-node unlock --isolated
+node unlock
+node unlock --isolated    # Per-process isolation (auto-restart)
 
 # Start a specific bot
+node unlock <bot-name>
 node unlock --isolated <bot-name>
 
 # Runtime control
@@ -255,6 +204,49 @@ node unlock delete
 ```
 
 The supervisor detaches and returns to the shell. `stop-all` leaves the supervisor available for `restart-all`; `delete` gracefully terminates the supervisor runtime. It supports `SIGTERM` (graceful shutdown), `SIGUSR1` (print status), and `SIGUSR2` (restart all). Bot logs go to `profiles/logs/<name>.log`, supervisor output to `profiles/logs/supervisor.log`.
+
+## 🛠️ Bot Management
+
+```bash
+# Reset grid (regenerate orders)
+node dexbot reset {all|<bot-name>}
+
+# Disable a bot in config
+node dexbot disable {all|<bot-name>}
+```
+
+## 🎯 PM2 Process Management
+
+For production use with automatic restart and monitoring. Run `node pm2` to start — it handles connection, authentication, and PM2 startup automatically.
+
+```bash
+# Start all active bots with PM2
+node pm2
+
+# Start a specific bot
+node pm2 <bot-name>
+
+# View status and resource usage
+pm2 status
+
+# View real-time logs
+pm2 logs [<bot-name>]
+
+# Safe restart path for DEXBot-managed PM2 apps
+node pm2 restart {all|<bot-name>|dexbot-cred}
+
+# Stop processes
+pm2 stop {all|<bot-name>}
+
+# Delete processes
+pm2 delete {all|<bot-name>}
+
+# Stop/delete only dexbot processes (via wrapper)
+node pm2 stop {all|<bot-name>}
+node pm2 delete {all|<bot-name>}
+```
+
+Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local bootstrap channel instead of exporting the master password to every PM2 app. Use `node pm2 restart` for DEXBot-managed PM2 actions. Avoid raw `pm2 restart all`, because `dexbot-cred` must only be re-unlocked through the wrapper. If `dexbot-cred` stops, rerun `node pm2` or `node pm2 restart dexbot-cred`.
 
 ## 📚 Documentation
 

@@ -16,7 +16,6 @@
     "claw:start": "npm run claw:unlock",
     "pm2:start": "pm2 start profiles/ecosystem.config.js",
     "pm2:stop": "pm2 stop profiles/ecosystem.config.js",
-    "pm2:reload": "pm2 reload profiles/ecosystem.config.js",
     "pmain": "bash scripts/pmain.sh",
     "pdev": "bash scripts/pdev.sh",
     "ptest": "bash scripts/ptest.sh",

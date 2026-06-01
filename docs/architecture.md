@@ -1330,7 +1330,7 @@ DEXBot2 uses a hardened credential daemon (`credential-daemon.ts`) for key manag
 
 ### PM2 Integration
 
-`node pm2` unlocks `dexbot-cred` through a one-shot local bootstrap channel instead of exporting the master password to every PM2 app. Use `node pm2 restart ...` or `node pm2 reload ...` for DEXBot-managed PM2 actions.
+`node pm2` unlocks `dexbot-cred` through a one-shot local bootstrap channel instead of exporting the master password to every PM2 app. Use `node pm2 restart ...` for DEXBot-managed PM2 actions.
 
 ---
 

@@ -253,7 +253,7 @@ Treat this file as runtime state, not primary configuration. The source of truth
 - Use conservative CR bands. `minCollateralRatio` is a hard safety floor, not a target.
 - Keep `maxFeeRatePerDay` explicit for credit offers.
 - Credit-offer collateral ratio and MPA call-order CR are validated in separate paths.
-- After editing `profiles/bots.json`, restart or reload the bot so the runtime picks up the new policy.
+- After editing `profiles/bots.json`, restart the bot so the runtime picks up the new policy.
 - Review `profiles/credit_runtime/<botKey>.json` when diagnosing pending reborrow or renewal behavior.
 
 ## Related Files

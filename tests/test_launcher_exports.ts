@@ -72,11 +72,6 @@ assert.deepStrictEqual(
     { command: 'restart', target: 'all', clawOnly: false },
     'pm2 parser should accept restart commands'
 );
-assert.deepStrictEqual(
-    parsePm2Args(['node', 'pm2.js', 'reload', 'dexbot-cred']),
-    { command: 'reload', target: 'dexbot-cred', clawOnly: false },
-    'pm2 parser should accept reload commands'
-);
 const expectedDexbotPath = path.join(__dirname, '..', 'dexbot.ts');
 assert.deepStrictEqual(
     unlock.buildDexbotStartArgs('XRP-BTS'),

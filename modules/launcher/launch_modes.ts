@@ -32,7 +32,7 @@ const parseUnlockStartArgs = parseUnlockArgs;
 function parsePm2Args(argv = process.argv) {
     const args = argv.slice(2);
     const command = args[0] || null;
-    const knownCommands = new Set(['claw-only', '--claw-only', 'update', 'stop', 'delete', 'restart', 'reload', 'help']);
+    const knownCommands = new Set(['claw-only', '--claw-only', 'update', 'stop', 'delete', 'restart', 'help']);
 
     if (command === 'claw-only' || command === '--claw-only') {
         return {

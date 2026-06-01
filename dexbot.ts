@@ -64,7 +64,6 @@
  * NPM SCRIPTS (alternative invocation):
  *   npm run pm2:start                - Start bots (requires ecosystem.config.js pre-generated)
  *   npm run pm2:stop                 - Stop all PM2 bots
- *   npm run pm2:reload               - Reload all PM2 bots
  *
  * ===============================================================================
  * CONFIGURATION
@@ -118,7 +117,7 @@ const CLI_EXAMPLES = [
     { title: 'Manage keys', command: 'dexbot keys', notes: 'Runs modules/chain_keys.js to add or update master passwords.' },
     { title: 'Edit bot definitions', command: 'dexbot bots', notes: 'Launches the interactive modules/account_bots.js helper for the JSON config.' },
     { title: 'Start bots with PM2', command: 'dexbot pm2', notes: 'Generates ecosystem config, authenticates, and starts PM2.' },
-    { title: 'Update DEXBot2', command: 'node dexbot update', notes: 'Fetches latest code, updates dependencies, and reloads PM2.' },
+    { title: 'Update DEXBot2', command: 'node dexbot update', notes: 'Fetches latest code, updates dependencies, and restarts PM2.' },
     { title: 'Export bot trades for QTradeX', command: 'dexbot export bot-name', notes: 'Exports trading history and settings to CSV/JSON for backtesting.' }
 ];
 const cliArgs = process.argv.slice(2);
@@ -139,7 +138,7 @@ function printCLIUsage() {
     console.log('  keys              Launch the chain key helper (modules/chain_keys.js).');
     console.log('  bots              Launch the interactive bot configurator (modules/account_bots.js).');
     console.log('  pm2               Start all active bots with PM2 (authenticate + generate config + start).');
-    console.log('  update            Update DEXBot2 from the repository and reload active bots.');
+    console.log('  update            Update DEXBot2 from the repository and restart active bots.');
     console.log('Options:');
     console.log('  --cli-examples    Print curated CLI snippets.');
     console.log('  -h, --help        Show this help text.');

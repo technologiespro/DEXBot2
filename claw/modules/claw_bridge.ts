@@ -30,7 +30,6 @@ const {
   launcherPm2Stop,
   launcherPm2Delete,
   launcherPm2Restart,
-  launcherPm2Reload,
 } = require('./claw_launcher');
 const { runMemuCommand } = require('./memu_bridge');
 
@@ -339,9 +338,6 @@ async function runClawCommand(command: string, options: ClawBridgeOptions = {}):
 
     case 'launcher-pm2-restart':
       return launcherPm2Restart(safeOptions.botName || 'all', safeOptions);
-
-    case 'launcher-pm2-reload':
-      return launcherPm2Reload(safeOptions.botName || 'all', safeOptions);
 
     case 'memu-manifest':
       return require('./memu_bridge').describeMemuBridge(safeOptions);

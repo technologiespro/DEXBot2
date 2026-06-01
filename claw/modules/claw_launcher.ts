@@ -12,7 +12,6 @@ const {
   stopPM2Processes,
   deletePM2Processes,
   restartPM2Processes,
-  reloadPM2Processes,
   generateEcosystemConfig,
   startManagedRuntimePM2,
   buildEcosystemApps,
@@ -268,20 +267,6 @@ async function launcherPm2Restart(target: string, options: Record<string, any> =
 }
 
 /**
- * Reload bot processes via PM2 (zero-downtime).
- * @param {string} target - Bot name or 'all'
- * @param {Object} [options={}] - Options
- * @returns {Promise<Object>} { reloaded: true, target }
- */
-async function launcherPm2Reload(target: string, options: Record<string, any> = {}) {
-  await reloadPM2Processes(target || 'all');
-  return {
-    reloaded: true,
-    target: target || 'all',
-  };
-}
-
-/**
  * Unified launcher command: auto-detects deployment mode and runs accordingly.
  *
  * Flow:
@@ -435,7 +420,6 @@ export = {
   launcherPm2Stop,
   launcherPm2Delete,
   launcherPm2Restart,
-  launcherPm2Reload,
   launcherClawOnly,
   launcherUnlockStart,
 };

@@ -20,8 +20,7 @@
  * node pm2 delete <bot-name>     - Delete specific bot from PM2
  * node pm2 restart all           - Restart managed apps; re-unlock dexbot-cred only if needed
  * node pm2 restart <target>      - Restart a bot or safely re-unlock dexbot-cred
- * node pm2 reload all            - Reload managed apps without touching dexbot-cred
- * node pm2 reload <target>       - Reload a bot, or safely re-unlock dexbot-cred
+
  * node pm2 help                  - Show help message
  *
  * ===============================================================================
@@ -688,7 +687,7 @@ async function installPM2() {
  */
 async function execPM2Command(action: any, target: any, { suppressStderrOnError = false, silent = false }: { suppressStderrOnError?: boolean; silent?: boolean } = {}) {
     // Validate action to prevent injection
-    const validActions = ['start', 'stop', 'delete', 'restart', 'reload'];
+    const validActions = ['start', 'stop', 'delete', 'restart'];
     if (!validActions.includes(action)) {
         throw new Error(`Invalid PM2 action: ${action}`);
     }
@@ -873,29 +872,6 @@ async function restartPM2Processes(target: any) {
     console.log(`PM2 process '${target}' restarted.`);
 }
 
-async function reloadPM2Processes(target: any) {
-    console.log(`Reloading PM2 processes: ${target}`);
-
-    if (target === 'all') {
-        generateEcosystemConfig({ clawOnly: false, exitOnError: false });
-        await ensureCredentialDaemonPM2({ logReuse: false });
-        await runManagedAppsPm2Action('reload');
-        console.log('Managed dexbot PM2 apps reloaded. dexbot-cred was not reloaded.');
-        return;
-    }
-
-    if (target === CREDENTIAL_DAEMON_APP_NAME) {
-        await ensureCredentialDaemonPM2({ forceRefresh: true, logReuse: false });
-        console.log(`Credential daemon '${target}' re-unlocked via safe restart flow.`);
-        return;
-    }
-
-    await assertActiveBotTarget(target);
-    await ensureCredentialDaemonPM2({ logReuse: false });
-    await execPM2Command('reload', target);
-    console.log(`PM2 process '${target}' reloaded.`);
-}
-
 /**
  * Show help text for PM2 CLI usage.
  */
@@ -911,8 +887,7 @@ Commands:
   delete <bot-name|all>     Delete PM2 process(es) - only dexbot processes
   restart <bot-name|all|dexbot-cred>
                             Restart managed apps safely; dexbot-cred uses fresh unlock flow
-  reload <bot-name|all|dexbot-cred>
-                            Reload managed apps safely; dexbot-cred uses fresh unlock flow
+
   help                      Show this help message
 
 Examples:
@@ -925,7 +900,7 @@ Examples:
   node pm2 delete XRP-BTS       # Delete specific bot from PM2
   node pm2 restart all          # Safe restart path for managed apps
   node pm2 restart dexbot-cred  # Re-unlock credential daemon
-  node pm2 reload XRP-BTS       # Safe reload path for a specific bot
+
   node pm2 help                 # Show help
     `);
 }
@@ -996,19 +971,6 @@ if (isPm2DirectRun) {
                     console.error(`Failed to restart processes: ${err.message}`);
                     process.exit(1);
                 }
-            } else if (command === 'reload') {
-                if (!target) {
-                    console.error('Error: Target required. Specify bot name, "dexbot-cred", or "all".');
-                    showPM2Help();
-                    process.exit(1);
-                }
-                try {
-                    await reloadPM2Processes(target);
-                    process.exit(0);
-                } catch (err: any) {
-                    console.error(`Failed to reload processes: ${err.message}`);
-                    process.exit(1);
-                }
             } else if (command === 'help') {
                 showPM2Help();
                 process.exit(0);
@@ -1035,7 +997,6 @@ export = {
     isServiceApp,
     main,
     needsMarketAdapter,
-    reloadPM2Processes,
     restartPM2Processes,
     stopPM2Processes,
     startManagedRuntimePM2,

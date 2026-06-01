@@ -709,20 +709,6 @@ const CLAW_TOOL_CATALOG = Object.freeze([
     toolName: 'claw_launcher_pm2_restart'
   }),
   createToolDefinition({
-    command: 'launcher-pm2-reload',
-    description: 'Reload a bot process via PM2 (zero-downtime). Synonyms: reload, hot-reload, refresh, apply changes, refresh config',
-    args: {
-      payload_json: 'JSON object with botName (optional, defaults to all), profileRoot (optional)'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      botName: stringSchema('Bot name or "all". Omit defaults to "all".'),
-      profileRoot: stringSchema('Optional DEXBot2 profile root')
-    }, []),
-    risk: 'execute',
-    toolName: 'claw_launcher_pm2_reload'
-  }),
-  createToolDefinition({
     command: 'memu-manifest',
     description: 'Inspect the memU memory bridge surface',
     inputSchema: objectSchema({

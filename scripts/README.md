@@ -10,7 +10,7 @@ This guide provides a terminal-focused reference for the maintenance and diagnos
 **File:** `update.ts`
 **Purpose:** Perform a safe, production-ready update.
 ```bash
-# Pull latest code, install deps, and reload PM2
+# Pull latest code, install deps, and restart PM2
 node dexbot update
 ```
 *Note: Protects your `profiles/` directory and logs all changes to `profiles/logs/update.log`.*

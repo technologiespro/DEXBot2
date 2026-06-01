@@ -80,7 +80,7 @@ assert.strictEqual(createPm2AwareLogger('verbose', { quietUnderPm2: false }).qui
 
 const pm2DirectLogFile = path.join(os.tmpdir(), `dexbot-logger-pm2-${process.pid}.log`);
 try { fs.unlinkSync(pm2DirectLogFile); } catch (err) {}
-const pm2Logger = new Logger('pm2-direct-file', { logFile: pm2DirectLogFile, quietUnderPm2: false });
+const pm2Logger = new Logger('pm2-direct-file', { logFile: pm2DirectLogFile, quietUnderPm2: false, quiet: false });
 let pm2Captured = [];
 console.log = (...args) => { pm2Captured.push(args.join(' ')); };
 pm2Logger.info('pm2 stdout should remain visible');

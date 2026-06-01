@@ -122,7 +122,6 @@ installStubs();
 
 const {
     deletePM2Processes,
-    reloadPM2Processes,
     restartPM2Processes,
     stopPM2Processes,
 } = require('../pm2');
@@ -170,20 +169,6 @@ const {
         );
         assert.deepStrictEqual(errors, [], 'single-target restart should not write stderr on success');
         assert.deepStrictEqual(spawnCalls.map((args) => [args[0], args[1]]), [['restart', targetBot]], 'single-target restart should only invoke pm2 restart for the bot when dexbot-cred is already ready');
-
-        resetCaptured();
-        await reloadPM2Processes(targetBot);
-        assert.deepStrictEqual(
-            logs,
-            [
-                `Reloading PM2 processes: ${targetBot}`,
-                `[PM2] [${targetBot}](63) ✓`,
-                `PM2 process '${targetBot}' reloaded.`,
-            ],
-            'single-target reload should emit compact PM2 output without helper noise when dexbot-cred is already ready'
-        );
-        assert.deepStrictEqual(errors, [], 'single-target reload should not write stderr on success');
-        assert.deepStrictEqual(spawnCalls.map((args) => [args[0], args[1]]), [['reload', targetBot]], 'single-target reload should only invoke pm2 reload for the bot when dexbot-cred is already ready');
 
         restoreStubs();
         console.log('PM2 single-target output tests passed');

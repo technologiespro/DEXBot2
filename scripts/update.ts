@@ -386,9 +386,9 @@ try {
                             log(`Active processes detected: ${allToReload.join(', ')}`);
                             for (const name of allToReload) {
                                 try {
-                                    run(`pm2 reload "${name}"`);
+                                    run(`pm2 restart "${name}"`);
                                 } catch (e) {
-                                    log(`Warning: Failed to reload process "${name}" (it might not be running).`);
+                                    log(`Warning: Failed to restart process "${name}" (it might not be running).`);
                                 }
                             }
                         } else {
