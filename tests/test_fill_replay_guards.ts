@@ -70,6 +70,26 @@ function buildFill(fillId) {
 async function runTests() {
     console.log('Running Fill Replay Guard Tests...');
 
+    console.log(' - Testing fills are deferred while order batch pipeline is active...');
+    {
+        const { bot } = await createBotFixture('test_fill_replay_defer_batch_active');
+        const fill = buildFill('1.11.776');
+        const sellBefore = bot.manager.accountTotals.sell;
+
+        bot._batchInFlight = true;
+        bot._incomingFillQueue.push(fill);
+        await bot._consumeFillQueue({ getFillProcessingMode: () => 'history' });
+
+        assert.strictEqual(bot._incomingFillQueue.length, 1, 'Active batch must leave queued fills untouched');
+        assert.strictEqual(bot.manager.accountTotals.sell, sellBefore, 'Deferred fill must not credit proceeds yet');
+
+        bot._batchInFlight = false;
+        await bot._consumeFillQueue({ getFillProcessingMode: () => 'history' });
+
+        assert.strictEqual(bot._incomingFillQueue.length, 0, 'Queued fill should drain after batch clears');
+        assert.strictEqual(bot.manager.accountTotals.sell, sellBefore + 2.5, 'Deferred fill should credit proceeds after batch clears');
+    }
+
     console.log(' - Testing bootstrap orphan fill persists accepted key and blocks delayed replay...');
     {
         const { bot, persistedFills } = await createBotFixture('test_fill_replay_bootstrap');

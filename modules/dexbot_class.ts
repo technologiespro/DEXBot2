@@ -1296,6 +1296,14 @@ class DEXBot {
             return;
         }
 
+        if (this._batchInFlight || this._batchRetryInFlight || this._recoverySyncInFlight) {
+            this.manager?.logger?.log?.(
+                `Fill processing deferred: order pipeline active (${this._incomingFillQueue.length} queued)`,
+                'debug'
+            );
+            return;
+        }
+
         let pendingFillKeysForCurrentCycle = new Set();
         try {
             // BOOTSTRAP OPTIMIZATION: During bootstrap, prioritize fill processing over grid-wide checks
@@ -3237,6 +3245,13 @@ class DEXBot {
             this._batchInFlight = false;
             this._markGridActivity('batch end');
             this.manager.unlockOrders(idsToLock);
+
+            if (!this._shuttingDown && this._incomingFillQueue.length > 0) {
+                setImmediate(() => this._consumeFillQueue(chainOrders).catch(err => {
+                    this._log(`Error in post-batch fill consumer restart: ${err.message}`);
+                    this._log(`Post-batch fill consumer restart failed: ${err.message}`, 'error');
+                }));
+            }
         }
     }
 
