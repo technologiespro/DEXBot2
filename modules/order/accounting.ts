@@ -101,6 +101,23 @@ class Accountant {
         this.manager = manager;
         this._isVerifyingInvariants = false;  // Prevents overlapping invariant checks
         this._pendingInvariantSnapshot = null;  // Coalesces latest request while one is running
+        this._logThrottleState = new Map();
+    }
+
+    _logThrottled(key, message, level = 'warn', intervalMs = 30000) {
+        const now = Date.now();
+        const state = this._logThrottleState.get(key) || { lastAt: 0, suppressed: 0, lastMessage: null };
+
+        if (!state.lastAt || (now - state.lastAt) >= intervalMs) {
+            const suffix = state.suppressed > 0 ? ` (suppressed ${state.suppressed} repeated log(s))` : '';
+            this.manager?.logger?.log?.(`${message}${suffix}`, level);
+            this._logThrottleState.set(key, { lastAt: now, suppressed: 0, lastMessage: message });
+            return true;
+        }
+
+        state.suppressed += 1;
+        this._logThrottleState.set(key, state);
+        return false;
     }
 
     /**
@@ -482,7 +499,12 @@ class Accountant {
             // CRITICAL FIX: Log as ERROR instead of WARN
             // Invariant violations indicate serious fund tracking corruption and must not be silent
             // This triggers immediate recovery attempt
-            mgr.logger?.log?.(`CRITICAL: Fund invariant violation (BUY): blockchainTotal (${Format.formatAmountByPrecision(actualBuy, buyPrecision)}) != trackedTotal (${Format.formatAmountByPrecision(expectedBuy, buyPrecision)}) (diff: ${Format.formatAmountByPrecision(diffBuy, buyPrecision)}, allowed: ${Format.formatAmountByPrecision(allowedBuyTolerance, buyPrecision)})`, 'error');
+            this._logThrottled(
+                'fund-invariant-buy',
+                `CRITICAL: Fund invariant violation (BUY): blockchainTotal (${Format.formatAmountByPrecision(actualBuy, buyPrecision)}) != trackedTotal (${Format.formatAmountByPrecision(expectedBuy, buyPrecision)}) (diff: ${Format.formatAmountByPrecision(diffBuy, buyPrecision)}, allowed: ${Format.formatAmountByPrecision(allowedBuyTolerance, buyPrecision)})`,
+                'error',
+                30000
+            );
         }
 
         const expectedSell = chainFreeSell + chainSell;
@@ -493,7 +515,12 @@ class Accountant {
         if (actualSell !== null && actualSell !== undefined && diffSell > allowedSellTolerance) {
             hasViolation = true;
             // CRITICAL FIX: Log as ERROR instead of WARN
-            mgr.logger?.log?.(`CRITICAL: Fund invariant violation (SELL): blockchainTotal (${Format.formatAmountByPrecision(actualSell, sellPrecision)}) != trackedTotal (${Format.formatAmountByPrecision(expectedSell, sellPrecision)}) (diff: ${Format.formatAmountByPrecision(diffSell, sellPrecision)}, allowed: ${Format.formatAmountByPrecision(allowedSellTolerance, sellPrecision)})`, 'error');
+            this._logThrottled(
+                'fund-invariant-sell',
+                `CRITICAL: Fund invariant violation (SELL): blockchainTotal (${Format.formatAmountByPrecision(actualSell, sellPrecision)}) != trackedTotal (${Format.formatAmountByPrecision(expectedSell, sellPrecision)}) (diff: ${Format.formatAmountByPrecision(diffSell, sellPrecision)}, allowed: ${Format.formatAmountByPrecision(allowedSellTolerance, sellPrecision)})`,
+                'error',
+                30000
+            );
         }
 
         // NEW: Attempt immediate recovery if violation detected
@@ -534,19 +561,38 @@ class Accountant {
         // from chain. During this pass we only want to reconcile grid structure/order
         // mapping against open orders; re-applying optimistic accounting deltas here
         // double-counts commitment changes and can amplify invariant drift.
-        await mgr.syncFromOpenOrders(openOrders, { skipAccounting: true, fillLockAlreadyHeld: true });
+        const syncResult = await mgr.syncFromOpenOrders(openOrders, { skipAccounting: true, fillLockAlreadyHeld: true });
+        const unmatchedChainOrders = Array.isArray(syncResult?.unmatchedChainOrders)
+            ? syncResult.unmatchedChainOrders
+            : [];
 
         // 3. Validate recovery. Persistence validation catches structural
         // corruption; drift validation catches accounting mismatches that are
         // otherwise masked while bootstrap suppression is active.
         const persistenceValidation = mgr.validateGridStateForPersistence({ allowBootstrapTransient: false });
         if (!persistenceValidation.isValid) {
+            if (unmatchedChainOrders.length > 0) {
+                return {
+                    ...persistenceValidation,
+                    structuralGridResyncRequired: true,
+                    unmatchedChainOrders,
+                    reason: `${persistenceValidation.reason}; ${unmatchedChainOrders.length} unmatched chain order(s) require structural grid resync`
+                };
+            }
             return persistenceValidation;
         }
 
         if (typeof mgr.checkFundDriftAfterFills === 'function') {
             const driftValidation = mgr.checkFundDriftAfterFills();
             if (driftValidation && driftValidation.isValid === false) {
+                if (unmatchedChainOrders.length > 0) {
+                    return {
+                        ...driftValidation,
+                        structuralGridResyncRequired: true,
+                        unmatchedChainOrders,
+                        reason: `${driftValidation.reason}; ${unmatchedChainOrders.length} unmatched chain order(s) require structural grid resync`
+                    };
+                }
                 return driftValidation;
             }
         }
@@ -595,9 +641,11 @@ class Accountant {
           }
 
           if (hasAttemptLimit && state.attemptCount >= maxAttemptsRaw) {
-              mgr.logger?.log?.(
+              this._logThrottled(
+                  'recovery-max-attempts',
                   `[RECOVERY] Skipping recovery: max attempts reached (${state.attemptCount}/${maxAttemptsRaw})`,
-                  'warn'
+                  'warn',
+                  30000
               );
               return false;
           }
@@ -627,6 +675,7 @@ class Accountant {
 
               if (validation.isValid) {
                   mgr.logger?.log?.('[RECOVERY] State recovery succeeded', 'info');
+                  state.structuralResyncRequested = false;
                   // NOTE: Do NOT reset attemptCount here. The fund invariant check will
                   // run again after recovery returns. If the invariant is still violated,
                   // we want the counter to increment properly (2/5, 3/5, etc.) rather
@@ -636,6 +685,43 @@ class Accountant {
               }
 
               state.lastFailureAt = Date.now();
+              if (validation.structuralGridResyncRequired && typeof mgr.requestStructuralGridResync === 'function') {
+                  const unmatchedCount = Array.isArray(validation.unmatchedChainOrders)
+                      ? validation.unmatchedChainOrders.length
+                      : 0;
+                  if (!state.structuralResyncRequested) {
+                      state.structuralResyncRequested = true;
+                      mgr.logger?.log?.(
+                          `[RECOVERY] Structural drift detected (${unmatchedCount} unmatched chain order(s)); scheduling full grid resync.`,
+                          'warn'
+                      );
+                      Promise.resolve()
+                          .then(async () => {
+                              const scheduleResult = await mgr.requestStructuralGridResync('fund invariant structural drift', {
+                                  unmatchedChainOrders: validation.unmatchedChainOrders || [],
+                                  source: 'fund-invariant-recovery'
+                              });
+                              if (scheduleResult?.skipped) {
+                                  state.structuralResyncRequested = false;
+                                  mgr.logger?.log?.(
+                                      `[RECOVERY] Structural grid resync not scheduled: ${scheduleResult.reason || 'request skipped'}`,
+                                      'warn'
+                                  );
+                              }
+                          })
+                          .catch(err => {
+                              state.structuralResyncRequested = false;
+                              mgr.logger?.log?.(`[RECOVERY] Structural grid resync scheduling failed: ${err.message}`, 'error');
+                          });
+                  } else {
+                      this._logThrottled(
+                          'structural-resync-already-requested',
+                          '[RECOVERY] Structural grid resync already scheduled; suppressing duplicate request.',
+                          'warn',
+                          30000
+                      );
+                  }
+              }
               mgr.logger?.log?.(`[RECOVERY] State recovery failed: ${validation.reason}`, 'error');
               return false;
           } catch (err: any) {

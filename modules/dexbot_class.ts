@@ -716,6 +716,7 @@ class DEXBot {
             this.manager.accountId = this.accountId;
             this.manager.accountOrders = this.accountOrders;
         }
+        this._wireStructuralGridResyncRequest();
         this._wireProcessedFillTracking();
         this.manager.startBootstrap();
 
@@ -1994,6 +1995,7 @@ class DEXBot {
             this.manager = new OrderManager({ ...this.config, logFile: mgrLogFile });
             this.manager.accountOrders = this.accountOrders;
         }
+        this._wireStructuralGridResyncRequest();
         try {
             const botFunds = this.config && this.config.botFunds ? this.config.botFunds : {};
             const needsPercent = (v) => typeof v === 'string' && v.includes('%');
@@ -2537,6 +2539,22 @@ class DEXBot {
      */
     async _runCredentialRecoveryAfterDaemonRestored() {
         if (this._credentialRecoveryInFlight || !this._credentialRecoveryNeeded || this._shuttingDown) {
+            return;
+        }
+
+        if (this.manager?._state?.isBootstrapping?.() || this.manager?._state?.isBroadcastingActive?.()) {
+            if (!this._credentialRecoveryDeferredTimer) {
+                this.manager?.logger?.log?.(
+                    '[CREDENTIAL] Deferring credential recovery until startup/broadcast activity is idle.',
+                    'info'
+                );
+                this._credentialRecoveryDeferredTimer = setTimeout(() => {
+                    this._credentialRecoveryDeferredTimer = null;
+                    this._runCredentialRecoveryAfterDaemonRestored().catch(err => {
+                        this.manager?.logger?.log?.(`[CREDENTIAL] Deferred recovery failed: ${err.message}`, 'error');
+                    });
+                }, 1000);
+            }
             return;
         }
 
@@ -3718,6 +3736,51 @@ class DEXBot {
         return this.manager._fillProcessingLock.acquire(async () => this._performGridResync(resetOptions));
     }
 
+    _wireStructuralGridResyncRequest() {
+        if (!this.manager || this.manager.requestStructuralGridResync) return;
+
+        this.manager.requestStructuralGridResync = async (reason = 'structural recovery', details = {}) => {
+            if (this._shuttingDown) {
+                return { skipped: true, reason: 'shutting down' };
+            }
+
+            if (this._structuralGridResyncInFlight || this._structuralGridResyncTimer) {
+                return { skipped: true, reason: 'structural grid resync already scheduled' };
+            }
+
+            const unmatchedCount = Array.isArray(details?.unmatchedChainOrders)
+                ? details.unmatchedChainOrders.length
+                : 0;
+            this._structuralGridResyncTimer = setTimeout(async () => {
+                this._structuralGridResyncTimer = null;
+                if (this._shuttingDown) return;
+
+                this._structuralGridResyncInFlight = true;
+                try {
+                    const suffix = unmatchedCount > 0 ? ` (${unmatchedCount} unmatched chain order(s))` : '';
+                    this._warn(`[RECOVERY] Running structural full grid resync for ${reason}${suffix}`);
+                    const resetResult = await this.requestGridReset('rms_structural_grid_resync', {
+                        refreshCenterPrice: true,
+                    });
+                    if (resetResult && this.manager?._recoveryState) {
+                        this.manager._recoveryState.attemptCount = 0;
+                        this.manager._recoveryState.lastAttemptAt = 0;
+                        this.manager._recoveryState.lastFailureAt = 0;
+                    }
+                } catch (err: any) {
+                    this._warn(`[RECOVERY] Structural full grid resync failed: ${err.message}`);
+                } finally {
+                    this._structuralGridResyncInFlight = false;
+                    if (this.manager?._recoveryState) {
+                        this.manager._recoveryState.structuralResyncRequested = false;
+                    }
+                }
+            }, 0);
+
+            return { scheduled: true };
+        };
+    }
+
     /**
      * Get current metrics for monitoring and debugging.
      * @returns {Object} Metrics snapshot
@@ -3874,6 +3937,16 @@ class DEXBot {
         if (this._maintenanceIdleTimer) {
             clearTimeout(this._maintenanceIdleTimer);
             this._maintenanceIdleTimer = null;
+        }
+
+        if (this._credentialRecoveryDeferredTimer) {
+            clearTimeout(this._credentialRecoveryDeferredTimer);
+            this._credentialRecoveryDeferredTimer = null;
+        }
+
+        if (this._structuralGridResyncTimer) {
+            clearTimeout(this._structuralGridResyncTimer);
+            this._structuralGridResyncTimer = null;
         }
 
         this._clearDustMaintenanceTimer();

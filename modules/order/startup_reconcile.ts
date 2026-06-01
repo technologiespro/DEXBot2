@@ -1371,8 +1371,23 @@ async function reconcileStartupOrders({
             fillLockAlreadyHeld,
         });
 
+        let finalChainSellCount = chainSellCount;
+        let finalChainBuyCount = chainBuyCount;
+        if (!dryRun) {
+            try {
+                const freshOpenOrders = await chainOrders.readOpenOrders(account);
+                const freshParsed = (Array.isArray(freshOpenOrders) ? freshOpenOrders : [])
+                    .map(co => ({ parsed: parseChainOrder(co, manager.assets) }))
+                    .filter(x => x.parsed);
+                finalChainSellCount = freshParsed.filter(x => x.parsed.type === ORDER_TYPES.SELL).length;
+                finalChainBuyCount = freshParsed.filter(x => x.parsed.type === ORDER_TYPES.BUY).length;
+            } catch (err: any) {
+                logger?.log?.(`Startup: Failed to refresh final chain counts: ${err.message}`, 'warn');
+            }
+        }
+
         logger && logger.log && logger.log(
-            `Startup reconcile complete: target(sell=${targetSell}, buy=${targetBuy}), chain(sell=${chainSellCount}, buy=${chainBuyCount}), ` +
+            `Startup reconcile complete: target(sell=${targetSell}, buy=${targetBuy}), chain(sell=${finalChainSellCount}, buy=${finalChainBuyCount}), ` +
             `gridActive(sell=${_countActiveOnGrid(manager, ORDER_TYPES.SELL)}, buy=${_countActiveOnGrid(manager, ORDER_TYPES.BUY)})`,
             'info'
         );

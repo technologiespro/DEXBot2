@@ -224,7 +224,7 @@ class SyncEngine {
         }
         if (!mgr._syncLock) {
             mgr.logger?.log?.('Error: syncLock not initialized', 'error');
-            return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [] };
+            return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [], unmatchedChainOrders: [] };
         }
 
         if (!options?.fillLockAlreadyHeld && mgr._fillProcessingLock) {
@@ -316,15 +316,15 @@ class SyncEngine {
         }
 
         if (!chainOrders || !Array.isArray(chainOrders)) {
-            return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [] };
+            return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [], unmatchedChainOrders: [] };
         }
         if (!mgr.orders || !(mgr.orders instanceof Map)) {
             mgr.logger?.log?.('Error: manager.orders is not initialized as a Map', 'error');
-            return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [] };
+            return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [], unmatchedChainOrders: [] };
         }
         if (mgr.assets?.assetA?.precision === undefined || mgr.assets?.assetB?.precision === undefined) {
             mgr.logger?.log?.('Error: manager.assets precision missing', 'error');
-            return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [] };
+            return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [], unmatchedChainOrders: [] };
         }
 
         const assetAPrecision = mgr.assets.assetA.precision;
@@ -334,7 +334,7 @@ class SyncEngine {
 
         if (!assetAId || !assetBId) {
             mgr.logger?.log?.('Error: manager.assets asset IDs missing', 'error');
-            return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [] };
+            return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [], unmatchedChainOrders: [] };
         }
 
         // Use separate maps: parsed (floats) and raw (blockchain integers)
@@ -377,6 +377,7 @@ class SyncEngine {
         const filledOrders = [];
         const updatedOrders = [];
         const ordersNeedingCorrection = [];
+        const unmatchedChainOrders = [];
 
         // Lock orders before reconciliation
         mgr.lockOrders([...orderIdsToLock]);
@@ -409,6 +410,7 @@ class SyncEngine {
                         filledOrders,
                         updatedOrders,
                         ordersNeedingCorrection,
+                        unmatchedChainOrders,
                         options
                     );
                 } finally {
@@ -427,7 +429,7 @@ class SyncEngine {
             mgr.unlockOrders([...orderIdsToLock]);
         }
 
-        return { filledOrders, updatedOrders, ordersNeedingCorrection };
+        return { filledOrders, updatedOrders, ordersNeedingCorrection, unmatchedChainOrders };
     }
 
     /**
@@ -442,11 +444,12 @@ class SyncEngine {
      * @param {Array<Object>} filledOrders - Output array: orders detected as filled
      * @param {Array<Object>} updatedOrders - Output array: orders updated during sync
      * @param {Array<Object>} ordersNeedingCorrection - Output array: orders flagged for price correction
+     * @param {Array<Object>} unmatchedChainOrders - Output array: open chain orders with no adoptable grid slot
      * @param {Object} options - Sync options (skipAccounting, etc.)
-     * @returns {Promise<{filledOrders: Array, updatedOrders: Array, ordersNeedingCorrection: Array}>}
+     * @returns {Promise<{filledOrders: Array, updatedOrders: Array, ordersNeedingCorrection: Array, unmatchedChainOrders: Array}>}
      */
     async _performSyncFromOpenOrders(mgr, assetAPrecision, assetBPrecision, parsedChainOrders, rawChainOrders,
-        chainOrderIdsOnGrid, matchedGridOrderIds, filledOrders, updatedOrders, ordersNeedingCorrection, options) {
+        chainOrderIdsOnGrid, matchedGridOrderIds, filledOrders, updatedOrders, ordersNeedingCorrection, unmatchedChainOrders, options) {
         const skipAccounting = Boolean(options?.skipAccounting);
 
         const queueCorrection = (entry) => {
@@ -688,6 +691,13 @@ class SyncEngine {
                         'warn'
                     );
                 } else {
+                    unmatchedChainOrders.push({
+                        chainOrderId,
+                        type: chainOrder.type,
+                        price: chainOrder.price,
+                        size: chainOrder.size,
+                        raw: rawChainOrders.get(chainOrderId)
+                    });
                     mgr.logger?.log?.(
                         `[SYNC] Unmatched chain order ${chainOrderId} (${chainOrder.type}, price=${chainOrder.price}, ` +
                         `size=${chainOrder.size}): no adoptable slot found within price tolerance`,
@@ -697,7 +707,7 @@ class SyncEngine {
             }
         }
 
-        return { filledOrders, updatedOrders, ordersNeedingCorrection };
+        return { filledOrders, updatedOrders, ordersNeedingCorrection, unmatchedChainOrders };
     }
 
     /**
