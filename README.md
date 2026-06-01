@@ -203,7 +203,7 @@ node unlock restart-all
 node unlock delete
 ```
 
-The supervisor detaches and returns to the shell. `stop-all` leaves the supervisor available for `restart-all`; `delete` gracefully terminates the supervisor runtime. It supports `SIGTERM` (graceful shutdown), `SIGUSR1` (print status), and `SIGUSR2` (restart all). Bot logs go to `profiles/logs/<name>.log`, supervisor output to `profiles/logs/supervisor.log`.
+The supervisor runs in the background. Use `node unlock status` to check, `node unlock stop-all` to pause, and `node unlock delete` to fully stop.
 
 ## 🛠️ Bot Management
 
@@ -246,7 +246,9 @@ node pm2 stop {all|<bot-name>}
 node pm2 delete {all|<bot-name>}
 ```
 
-Security note: `node pm2` now unlocks `dexbot-cred` through a one-shot local bootstrap channel instead of exporting the master password to every PM2 app. Use `node pm2 restart` for DEXBot-managed PM2 actions. Avoid raw `pm2 restart all`, because `dexbot-cred` must only be re-unlocked through the wrapper. If `dexbot-cred` stops, rerun `node pm2` or `node pm2 restart dexbot-cred`.
+Always use `node pm2 restart` instead of raw `pm2 restart all` — the wrapper safely handles the credential daemon. If the credential daemon stops, rerun `node pm2`.
+
+Logs are written to `profiles/logs/<bot-name>.log` (errors to `<bot-name>-error.log`) in all modes.
 
 ## 📚 Documentation
 
