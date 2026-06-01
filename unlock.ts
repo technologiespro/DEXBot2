@@ -1084,6 +1084,17 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                     displayedBots = allBots.filter(b => b.active);
                 }
 
+                let credPid: number | null = null;
+                try {
+                    const raw = fs.readFileSync(MONOLITHIC_CRED_PID_FILE, 'utf8').trim();
+                    const n = Number(raw);
+                    if (Number.isInteger(n) && n > 0) credPid = n;
+                } catch (_) {}
+
+                const credAlive = credPid && isPidAlive(credPid);
+                const credReady = fs.existsSync(CREDENTIAL_READY_FILE);
+                const credSocket = fs.existsSync(CREDENTIAL_SOCKET_FILE);
+
                 console.log('Monolithic bot');
                 console.log(`  PID:     ${targetPid}`);
                 console.log(`  Uptime:  ${uptime}`);
@@ -1093,6 +1104,16 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 for (const b of displayedBots) {
                     console.log(`    - ${b.name}`);
                 }
+                console.log('  Credential daemon:');
+                console.log(`    PID:   ${credPid || '-'}`);
+                if (credAlive) {
+                    const credUptime = readProcUptime(credPid!);
+                    console.log(`    Alive: yes  (uptime: ${credUptime})`);
+                } else {
+                    console.log(`    Alive: no`);
+                }
+                console.log(`    Ready: ${credReady ? 'yes' : 'no'}`);
+                console.log(`    Socket: ${credSocket ? 'yes' : 'no'}`);
                 return;
             }
 
