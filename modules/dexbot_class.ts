@@ -1056,16 +1056,58 @@ class DEXBot {
                         await this.manager.persistGrid();
                     }
 
-                    // STEP 2: Spread check AFTER fills are processed
+                    // STEP 2: Refresh chain truth before spread correction. Trigger
+                    // reset can create/cancel orders and fills can arrive while the
+                    // reset is running; spread decisions must not use stale local grid.
+                    let skipPostResetSpreadCheck = false;
+                    if (!this.config.dryRun) {
+                        try {
+                            const postResetOpenOrders = await chainOrders.readOpenOrders(this.accountId);
+                            const postResetSync = await this.manager.synchronizeWithChain(
+                                postResetOpenOrders,
+                                'readOpenOrders',
+                                { fillLockAlreadyHeld: true }
+                            );
+
+                            if (postResetSync.filledOrders?.length > 0) {
+                                this._log(`[POST-RESET] ${postResetSync.filledOrders.length} filled order(s) found before spread check`, 'info');
+                                const batchResult = await this._processFillsWithBatching(
+                                    postResetSync.filledOrders,
+                                    new Set(),
+                                    '[POST-RESET] pre-spread open-orders sync'
+                                );
+                                if (!batchResult?.aborted) {
+                                    const refreshedOpenOrders = await chainOrders.readOpenOrders(this.accountId);
+                                    await this.manager.synchronizeWithChain(refreshedOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
+                                } else {
+                                    skipPostResetSpreadCheck = true;
+                                }
+                            }
+
+                            if (postResetSync.unmatchedChainOrders?.length > 0) {
+                                this._warn(
+                                    `[POST-RESET] Skipping spread correction: ${postResetSync.unmatchedChainOrders.length} unmatched chain order(s) require maintenance reconciliation`
+                                );
+                                skipPostResetSpreadCheck = true;
+                            }
+                        } catch (err: any) {
+                            this._warn(`[POST-RESET] Open-orders sync before spread check failed: ${err.message}`);
+                            skipPostResetSpreadCheck = true;
+                        }
+                    }
+
+                    // STEP 3: Spread check AFTER fills are processed and chain truth refreshed
                     await this.manager.recalculateFunds();
-                    this._refreshDynamicWeightDistribution('post-reset spread check');
-                    const spreadResult = await this.manager.checkSpreadCondition(
-                        BitShares,
-                        this.updateOrdersOnChainPlan.bind(this)
-                    );
-                    if (spreadResult && spreadResult.ordersPlaced > 0) {
-                        this._log(`✓ Spread correction after trigger reset: ${spreadResult.ordersPlaced} order(s) placed`);
-                        await this._persistAndRecoverIfNeeded();
+                    if (!skipPostResetSpreadCheck) {
+                        this._refreshDynamicWeightDistribution('post-reset spread check');
+                        const spreadResult = await this.manager.checkSpreadCondition(
+                            BitShares,
+                            this.updateOrdersOnChainPlan.bind(this)
+                        );
+                        if (spreadResult && spreadResult.ordersPlaced > 0) {
+                            this._log(`✓ Spread correction after trigger reset: ${spreadResult.ordersPlaced} order(s) placed`);
+                            await this._persistAndRecoverIfNeeded();
+                        }
                     }
                     this._log('Bootstrap phase complete - fill processing resumed', 'info');
                 });

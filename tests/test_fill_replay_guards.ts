@@ -1,6 +1,7 @@
 const assert = require('assert');
 
 const DEXBot = require('../modules/dexbot_class');
+const chainOrders = require('../modules/chain_orders');
 const { OrderManager } = require('../modules/order');
 const { ORDER_STATES, ORDER_TYPES, TIMING } = require('../modules/constants');
 const { buildFillKey } = require('../modules/order/utils/order');
@@ -556,6 +557,61 @@ async function runTests() {
 
         assert.strictEqual(result.status, 'missing_key', 'Post-reset path should get missing_key status for fill without history id');
         assert.strictEqual(bot.manager.accountTotals.sell, sellBefore, 'Missing-key fill should not apply unguarded accounting');
+    }
+
+    console.log(' - Testing post-reset spread check is skipped when pre-spread sync finds unmatched chain orders...');
+    {
+        const { bot } = await createBotFixture('test_fill_replay_postreset_spread_guard');
+        const originalListenForFills = chainOrders.listenForFills;
+        const originalReadOpenOrders = chainOrders.readOpenOrders;
+
+        let spreadChecks = 0;
+        let readOpenOrdersCalls = 0;
+        let setupCalls = 0;
+
+        chainOrders.listenForFills = async () => async () => {};
+        chainOrders.readOpenOrders = async () => {
+            readOpenOrdersCalls++;
+            return [{ id: '1.7.999999' }];
+        };
+
+        bot.accountId = '1.2.345';
+        bot.account = { id: '1.2.345' };
+        bot.privateKey = 'test-key';
+        bot._handlePendingTriggerReset = async () => true;
+        bot._setupTriggerFileDetection = async () => { setupCalls++; };
+        bot._setupCreditRuntime = async () => {};
+        bot._refreshAndSyncCreditRuntime = async () => {};
+        bot._setupBlockchainFetchInterval = () => {};
+        bot._setupCreditWatchdogInterval = () => {};
+        bot._setupCredentialDaemonWatchdogInterval = () => {};
+        bot._isOpenOrdersSyncLoopEnabled = () => false;
+        bot._startOpenOrdersSyncLoop = () => {};
+        bot._refreshDynamicWeightDistribution = () => null;
+        bot.manager.synchronizeWithChain = async () => ({
+            filledOrders: [],
+            unmatchedChainOrders: [{ chainOrderId: '1.7.999999', type: ORDER_TYPES.BUY }],
+        });
+        bot.manager.checkSpreadCondition = async () => {
+            spreadChecks++;
+            return { ordersPlaced: 1 };
+        };
+
+        try {
+            await bot._finishStartupSequence({
+                persistedGrid: [],
+                persistedBtsFeesOwed: 0,
+                persistedBoundaryIdx: 0,
+                persistedBtsBalance: null,
+            });
+        } finally {
+            chainOrders.listenForFills = originalListenForFills;
+            chainOrders.readOpenOrders = originalReadOpenOrders;
+        }
+
+        assert.strictEqual(readOpenOrdersCalls, 1, 'Post-reset path should refresh open orders before spread check');
+        assert.strictEqual(spreadChecks, 0, 'Unmatched chain orders should block post-reset spread correction');
+        assert.strictEqual(setupCalls, 1, 'Trigger-reset startup path should still complete setup');
     }
 
     console.log(' - Testing buildFillKey requires history id to avoid degraded dedupe keys...');
