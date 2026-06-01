@@ -1363,7 +1363,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 }
                 console.log(`    ${statusLabel('Active:')}  ${amaBots.length} bot(s)`);
                 for (const b of amaBots) {
-                    console.log(`      - ${b.name} (${b.gridPrice})`);
+                    console.log(`      - ${colorStatus(b.name, STATUS_COLORS.ok)} (${b.gridPrice})`);
                 }
                 return;
             }

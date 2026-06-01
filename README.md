@@ -206,6 +206,9 @@ node dexbot reset {all|<bot-name>}
 
 # Disable a bot in config
 node dexbot disable {all|<bot-name>}
+
+# Analyze persisted order grids in profiles/orders/
+node dexbot order
 ```
 
 ## 🎯 PM2 Process Management

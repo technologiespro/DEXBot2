@@ -38,14 +38,14 @@
  *   node dexbot start <bot-name>     - Start single bot directly (live trading)
  *   node dexbot drystart <bot-name>  - Start bot in dry-run mode (no transactions)
  *
- * BOT MANAGEMENT:
+ * 🛠️ BOT MANAGEMENT:
  *   node dexbot reset all            - Reset all active bot grids (full regeneration)
  *   node dexbot reset <bot-name>     - Reset bot grid (full regeneration)
  *   node dexbot disable all          - Mark all bots inactive in config
  *   node dexbot disable <bot-name>   - Mark bot inactive in config
  *
  * CONFIGURATION:
- *   node dexbot keys                 - Manage encryption keys and master password
+ *   node dexbot keys                 - Set up master password and keyring
  *   node dexbot bots                 - Interactive editor for bot definitions
  *
  * PM2 ORCHESTRATION:
@@ -59,6 +59,7 @@
  * MAINTENANCE:
  *   node dexbot update               - Update to latest version (pull + install + restart)
  *   node dexbot export <bot-name>    - Export trading history to CSV/JSON for QTradeX
+ *   node dexbot order                - Analyze persisted order grids in profiles/orders/
  *   node dexbot help                 - Show this help message
  *
  * NPM SCRIPTS (alternative invocation):
@@ -92,6 +93,7 @@ const {
     resolveRawBotEntries,
     saveSettingsFile,
 } = require('./modules/bot_settings');
+const { buildRuntimeScriptArgs } = require('./modules/launcher/runtime_entry');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
@@ -105,7 +107,7 @@ const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 
 
-const CLI_COMMANDS = ['start', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export'];
+const CLI_COMMANDS = ['start', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order'];
 const CLI_HELP_FLAGS = ['-h', '--help'];
 const CLI_EXAMPLES_FLAG = '--cli-examples';
 const CLI_EXAMPLES = [
@@ -118,7 +120,8 @@ const CLI_EXAMPLES = [
     { title: 'Edit bot definitions', command: 'dexbot bots', notes: 'Launches the interactive modules/account_bots.js helper for the JSON config.' },
     { title: 'Start bots with PM2', command: 'dexbot pm2', notes: 'Generates ecosystem config, authenticates, and starts PM2.' },
     { title: 'Update DEXBot2', command: 'node dexbot update', notes: 'Fetches latest code, updates dependencies, and restarts PM2.' },
-    { title: 'Export bot trades for QTradeX', command: 'dexbot export bot-name', notes: 'Exports trading history and settings to CSV/JSON for backtesting.' }
+    { title: 'Export bot trades for QTradeX', command: 'dexbot export bot-name', notes: 'Exports trading history and settings to CSV/JSON for backtesting.' },
+    { title: 'Analyze persisted order grids', command: 'dexbot order', notes: 'Runs the order analyzer across profiles/orders/ and prints spread/increment/funds/distribution metrics.' }
 ];
 const cliArgs = process.argv.slice(2);
 
@@ -139,6 +142,7 @@ function printCLIUsage() {
     console.log('  bots              Launch the interactive bot configurator (modules/account_bots.js).');
     console.log('  pm2               Start all active bots with PM2 (authenticate + generate config + start).');
     console.log('  update            Update DEXBot2 from the repository and restart active bots.');
+    console.log('  order             Analyze persisted order grids in profiles/orders/ (spread, increment, funds).');
     console.log('Options:');
     console.log('  --cli-examples    Print curated CLI snippets.');
     console.log('  -h, --help        Show this help text.');
@@ -689,6 +693,24 @@ async function handleCLICommands() {
             await exportBotTrades(target);
             process.exit(0);
             return true;
+        case 'order': {
+            const { spawnSync } = require('child_process');
+            const scriptArgs = buildRuntimeScriptArgs({
+                codeRoot: __dirname,
+                scriptSegments: ['scripts', 'analyze-orders'],
+                scriptArgs: [],
+            });
+            const result = spawnSync(process.execPath, scriptArgs, {
+                cwd: ROOT,
+                stdio: 'inherit',
+            });
+            if (result.error) {
+                console.error(`order: ${result.error.message}`);
+                process.exit(1);
+            }
+            process.exit(result.status ?? 0);
+            return true;
+        }
         default:
             printCLIUsage();
             process.exit(1);
