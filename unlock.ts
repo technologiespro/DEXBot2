@@ -885,6 +885,35 @@ function readProcMemMB(pid: number): string {
     return '-';
 }
 
+const STATUS_COLORS = {
+    reset: '\x1b[0m',
+    title: '\x1b[1;33m',
+    label: '\x1b[38;5;208m',
+    ok: '\x1b[1;32m',
+    warn: '\x1b[1;31m',
+    muted: '\x1b[37m',
+};
+
+function colorStatus(text: string, color: string): string {
+    return process.stdout.isTTY && !process.env.NO_COLOR ? `${color}${text}${STATUS_COLORS.reset}` : text;
+}
+
+function statusTitle(text: string): string {
+    return colorStatus(text, STATUS_COLORS.title);
+}
+
+function statusLabel(text: string): string {
+    return colorStatus(text, STATUS_COLORS.label);
+}
+
+function statusBool(value: boolean): string {
+    return colorStatus(value ? 'yes' : 'no', value ? STATUS_COLORS.ok : STATUS_COLORS.warn);
+}
+
+function formatMemoryWithUptime(memory: string, uptime: string): string {
+    return uptime && uptime !== '-' ? `${memory} (${uptime})` : memory;
+}
+
 function readProcCpuTotal(pid: number): number | null {
     try {
         const stat = readProcStat(pid);
@@ -1300,39 +1329,39 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
 
                 const credStatus = await readCredentialDaemonStatus(credPid);
 
-                console.log('Monolithic bot');
-                console.log(`  PID:     ${targetPid}`);
-                console.log(`  Uptime:  ${uptime}`);
-                console.log(`  Memory:  ${mem}`);
-                console.log(`  CPU:     ${cpuPct}  (cumulative: ${cpuTime})`);
-                console.log(`  Bots:    ${displayedBots.length} active`);
+                console.log(statusTitle('Monolithic bot'));
+                console.log(`  ${statusLabel('PID:')}     ${targetPid}`);
+                console.log(`  ${statusLabel('Memory:')}  ${formatMemoryWithUptime(mem, uptime)}`);
+                console.log(`  ${statusLabel('CPU:')}     ${cpuPct}  (${statusLabel('cumulative:')} ${cpuTime})`);
+                console.log(`  ${statusLabel('Bots:')}    ${displayedBots.length} active`);
                 for (const b of displayedBots) {
                     console.log(`    - ${b.name}`);
                 }
-                console.log('  Credential daemon:');
-                console.log(`    PID:   ${credPid || '-'}`);
+                console.log(`  ${statusTitle('Credential daemon:')}`);
+                console.log(`    ${statusLabel('PID:')}   ${credPid || '-'}`);
                 if (credStatus.alive) {
                     const credUptime = readProcUptime(credPid!);
-                    console.log(`    Alive: yes  (uptime: ${credUptime})`);
+                    const credMem = readProcMemMB(credPid!);
+                    console.log(`    ${statusLabel('Memory:')}  ${formatMemoryWithUptime(credMem, credUptime)}`);
+                    console.log(`    ${statusLabel('Alive:')} ${statusBool(true)}`);
                 } else {
-                    console.log(`    Alive: no`);
+                    console.log(`    ${statusLabel('Alive:')} ${statusBool(false)}`);
                 }
-                console.log(`    Ready: ${credStatus.ready ? 'yes' : 'no'}`);
-                console.log(`    Socket: ${credStatus.socket ? 'yes' : 'no'}`);
+                console.log(`    ${statusLabel('Ready:')} ${statusBool(credStatus.ready)}`);
+                console.log(`    ${statusLabel('Socket:')} ${statusBool(credStatus.socket)}`);
 
                 const adapterStatus = readMarketAdapterStatus();
                 const amaBots = listConfiguredBots().filter(b => b.active && usesAmaGridPrice(b));
-                console.log('  Market adapter:');
+                console.log(`  ${statusTitle('Market adapter:')}`);
                 if (adapterStatus.alive) {
-                    console.log(`    PID:     ${adapterStatus.pid}`);
-                    console.log(`    Uptime:  ${adapterStatus.uptime}`);
-                    console.log(`    Memory:  ${adapterStatus.mem}`);
+                    console.log(`    ${statusLabel('PID:')}     ${adapterStatus.pid}`);
+                    console.log(`    ${statusLabel('Memory:')}  ${formatMemoryWithUptime(adapterStatus.mem, adapterStatus.uptime)}`);
                 } else if (adapterStatus.pid) {
-                    console.log(`    PID:     ${adapterStatus.pid} (not alive)`);
+                    console.log(`    ${statusLabel('PID:')}     ${adapterStatus.pid} ${colorStatus('(not alive)', STATUS_COLORS.warn)}`);
                 } else {
-                    console.log('    (not running)');
+                    console.log(`    ${colorStatus('(not running)', STATUS_COLORS.muted)}`);
                 }
-                console.log(`    Active:  ${amaBots.length} bot(s)`);
+                console.log(`    ${statusLabel('Active:')}  ${amaBots.length} bot(s)`);
                 for (const b of amaBots) {
                     console.log(`      - ${b.name} (${b.gridPrice})`);
                 }
