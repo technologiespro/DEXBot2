@@ -181,6 +181,8 @@ class DEXBot {
     _batchInFlight: boolean;
     _batchRetryInFlight: boolean;
     _recoverySyncInFlight: boolean;
+    _lastTargetedDriftSyncAt: number;
+    _targetedDriftSyncCooldownMs: number;
     _maintenanceCooldownCycles: number;
     _lastGridActivityAt: number;
     _dustSinceMap: Map<any, any>;
@@ -264,6 +266,8 @@ class DEXBot {
         this._batchInFlight = false;
         this._batchRetryInFlight = false;
         this._recoverySyncInFlight = false;
+        this._lastTargetedDriftSyncAt = 0;
+        this._targetedDriftSyncCooldownMs = 60_000;
         this._maintenanceCooldownCycles = 0;
         this._lastGridActivityAt = 0;
 

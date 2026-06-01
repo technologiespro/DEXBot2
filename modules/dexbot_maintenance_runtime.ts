@@ -6,7 +6,7 @@ const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const Grid = require('./order/grid');
-const { ORDER_STATES, TIMING, GRID_LIMITS, FEE_PARAMETERS, BTS_PRECISION, NATIVE_CLIENT } = require('./constants');
+const { ORDER_STATES, ORDER_TYPES, TIMING, GRID_LIMITS, FEE_PARAMETERS, BTS_PRECISION, NATIVE_CLIENT } = require('./constants');
 const { applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
 const { isPm2Runtime } = require('./order/logger');
 const { getSharedMarketAdapterRuntime } = require('./launcher/market_adapter_runtime');
@@ -18,6 +18,7 @@ const Format = require('./order/format');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { cloneWeightDistribution, calculateOrderCreationFees, calculateSwapInAmount, floatToBlockchainInt, blockchainToFloat } = require('./order/utils/math');
 const { updateDynamicGridSnapshotSync } = require('../market_adapter/utils/dynamic_grid_snapshot');
+const { reconcileStartupOrders } = require('./order/startup_reconcile');
 
 const CODE_ROOT = path.join(__dirname, '..');
 const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
@@ -106,6 +107,116 @@ function runtimeConfigNeedsMarketAdapter(snapshot, config) {
         return usesAmaGridPrice(snapshotBot);
     }
     return usesAmaGridPrice(config);
+}
+
+function countLiveGridOrders(manager, type) {
+    if (!manager || !manager.orders) return 0;
+    return Array.from(manager.orders.values()).filter(order =>
+        order &&
+        order.type === type &&
+        order.orderId &&
+        (order.state === ORDER_STATES.ACTIVE || order.state === ORDER_STATES.PARTIAL)
+    ).length;
+}
+
+function getTargetActiveOrders(config, side) {
+    const configured = Number(config?.activeOrders?.[side]);
+    return Math.max(0, Number.isFinite(configured) ? configured : 1);
+}
+
+function getTargetedSyncReason() {
+    if (!this.manager || this.config?.dryRun) return null;
+
+    const targetBuy = getTargetActiveOrders(this.config, 'buy');
+    const targetSell = getTargetActiveOrders(this.config, 'sell');
+    const liveBuy = countLiveGridOrders(this.manager, ORDER_TYPES.BUY);
+    const liveSell = countLiveGridOrders(this.manager, ORDER_TYPES.SELL);
+    const shortfalls = [];
+
+    if (liveBuy < targetBuy) shortfalls.push(`buy ${liveBuy}/${targetBuy}`);
+    if (liveSell < targetSell) shortfalls.push(`sell ${liveSell}/${targetSell}`);
+
+    const drift = this.manager.checkFundDriftAfterFills?.();
+    if (drift && drift.isValid === false) {
+        return { reason: `fund drift: ${drift.reason}`, targetBuy, targetSell, liveBuy, liveSell, drift };
+    }
+
+    if (shortfalls.length > 0) {
+        return { reason: `active order shortfall: ${shortfalls.join(', ')}`, targetBuy, targetSell, liveBuy, liveSell, drift };
+    }
+
+    return null;
+}
+
+async function maybeRunTargetedDriftReconciliation(context) {
+    const trigger = getTargetedSyncReason.call(this);
+    if (!trigger) return false;
+
+    const now = Date.now();
+    const cooldownMs = Number.isFinite(Number(this._targetedDriftSyncCooldownMs))
+        ? Number(this._targetedDriftSyncCooldownMs)
+        : 60_000;
+    const lastSyncAt = Number(this._lastTargetedDriftSyncAt || 0);
+    if (lastSyncAt > 0 && now - lastSyncAt < cooldownMs) {
+        this._log(
+            `[TARGETED-SYNC] Deferring ${context} reconciliation for ${Math.ceil((cooldownMs - (now - lastSyncAt)) / 1000)}s: ${trigger.reason}`,
+            'debug'
+        );
+        return false;
+    }
+
+    if (!this.accountId || typeof chainOrders.readOpenOrders !== 'function') {
+        this._warn(`[TARGETED-SYNC] Cannot reconcile ${context}: missing account id or readOpenOrders`);
+        return false;
+    }
+
+    this._lastTargetedDriftSyncAt = now;
+    this._log(`[TARGETED-SYNC] Fetching open orders during ${context}: ${trigger.reason}`, 'warn');
+
+    try {
+        await this.manager.fetchAccountTotals?.(this.accountId);
+        let openOrders = await chainOrders.readOpenOrders(this.accountId);
+        const syncResult = await this.manager.synchronizeWithChain(openOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
+
+        if (syncResult?.filledOrders?.length > 0) {
+            this._log(`[TARGETED-SYNC] ${syncResult.filledOrders.length} filled grid order(s) detected during ${context}`, 'info');
+            const batchResult = await this._processFillsWithBatching(
+                syncResult.filledOrders,
+                new Set(),
+                `targeted ${context} reconciliation`
+            );
+            if (!batchResult?.aborted) {
+                openOrders = await chainOrders.readOpenOrders(this.accountId);
+                await this.manager.synchronizeWithChain(openOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
+            }
+        }
+
+        const remaining = getTargetedSyncReason.call(this);
+        const unmatchedCount = Number(syncResult?.unmatchedChainOrders?.length || 0);
+        if (remaining || unmatchedCount > 0) {
+            this._log(
+                `[TARGETED-SYNC] Running startup-style reconcile during ${context}: ` +
+                `${remaining ? remaining.reason : `${unmatchedCount} unmatched chain order(s)`}`,
+                'warn'
+            );
+            const reconcileResult = await reconcileStartupOrders({
+                manager: this.manager,
+                config: this.config,
+                account: this.account,
+                privateKey: this.privateKey,
+                chainOrders,
+                chainOpenOrders: openOrders,
+                fillLockAlreadyHeld: true,
+            });
+            await this._executeBatchIfNeeded(reconcileResult, `targeted ${context} reconcile`);
+        }
+
+        await this.manager.persistGrid?.();
+        return true;
+    } catch (err) {
+        this._warn(`[TARGETED-SYNC] Failed during ${context}: ${err.message}`);
+        return false;
+    }
 }
 
 /**
@@ -1176,6 +1287,9 @@ async function executeMaintenanceLogic(context) {
 
     const pipelineStatus = this.manager.isPipelineEmpty(this._getPipelineSignals());
     if (pipelineStatus.isEmpty) {
+        const repairedFromChain = await maybeRunTargetedDriftReconciliation.call(this, context);
+        if (repairedFromChain) return;
+
         // Refresh live dynamic weights before any structural checks that may create or
         // resize orders (dust detection, divergence correction, spread correction).
         refreshDynamicWeightDistribution.call(this, context);
