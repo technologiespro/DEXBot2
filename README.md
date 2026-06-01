@@ -12,7 +12,7 @@ DEXBot2 is the first open source trading bot with zero runtime dependencies and 
 - **Adaptive Signals** — AMA and trend inputs tune grid placement
 - **Credit & MPA** — credit offer and debt workflows
 - **Runtime Safety** — replay-safe fills, sync recovery, and cleanup
-- **Secure Ops** — encrypted keys, a credential daemon, and PM2 control
+- **Secure Ops** — encrypted keys and credential daemon
 
 ## 🔥 Quick Start
 
@@ -107,7 +107,7 @@ node dexbot update
 The update script automatically:
 - Fetches and pulls the latest code
 - Installs any new dependencies
-- Restarts active PM2 bot processes if running
+- Restarts active bot processes if running
 - Ensures your `profiles/` directory is protected and unchanged
 - Logs all operations to `update.log`
 
@@ -145,7 +145,7 @@ market volatility instead of using an unnecessarily wide range.
    npm run market-adapter:whitelist
    ```
 
-6. Start DEXBot2 normally with `node pm2` or `node unlock`.
+6. Start DEXBot2 with `node unlock` (or `node pm2` for PM2).
 7. Then tune `minPrice` / `maxPrice` for the market's volatility range.
 
 ### Bot Options Reference
@@ -183,12 +183,12 @@ Global settings via `node dexbot bots`, stored in `profiles/general.settings.jso
 
 ## 🎯 Zero-Dependency Process Management
 
-Run without PM2. `node unlock` starts all bots in a single process. Add `--isolated` for per-process isolation with auto-restart, memory limits, and log files.
+Run without PM2. `node unlock` runs all bots in a single process. Add `--isolated` for per-process isolation with auto-restart, memory limits, and log files.
 
 ```bash
 # Start all active bots
-node unlock
-node unlock --isolated    # Per-process isolation (auto-restart)
+node unlock              # Single process
+node unlock --isolated   # Per-process isolation
 
 # Start a specific bot
 node unlock <bot-name>
