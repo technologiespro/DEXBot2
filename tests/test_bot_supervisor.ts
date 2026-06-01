@@ -15,12 +15,14 @@ function createChild({ closeOnKill = true } = {}) {
     const child = new EventEmitter();
     child.pid = 12345;
     child.killed = false;
+    child.killSignals = [];
     child.stdout = new EventEmitter();
     child.stdout.pipe = (dest) => dest;
     child.stderr = new EventEmitter();
     child.stderr.pipe = (dest) => dest;
     child.kill = (signal) => {
         child.killed = true;
+        child.killSignals.push(signal);
         if (closeOnKill) {
             setImmediate(() => child.emit('close', null, signal));
         }
@@ -118,6 +120,50 @@ async function testRestartControlsExcludeUpdaterJob() {
     assert.ok(botStarts.length >= 3, 'restart controls should still restart the managed bot runtime');
 }
 
+async function testAdapterRestartDoesNotKillReplacementChild() {
+    let nextPid = 20000;
+    let originalAdapter = null;
+    let replacementAdapter = null;
+
+    const supervisor = createBotSupervisor({
+        bots: [{ name: 'AMA-RACE-BOT', gridPrice: 'ama', active: true }],
+        controlSocket: false,
+        log: () => {},
+        logError: () => {},
+        spawnFn: (command, args) => {
+            const child = createChild();
+            child.pid = nextPid++;
+            if (getScriptArg(args).endsWith('market_adapter.ts')) {
+                if (!originalAdapter) {
+                    originalAdapter = child;
+                } else {
+                    replacementAdapter = child;
+                }
+            }
+            return child;
+        },
+        stopMarketAdapter: async () => {
+            originalAdapter.emit('close', null, 'SIGTERM');
+            await new Promise((resolve) => setImmediate(resolve));
+            return { pid: originalAdapter.pid, stopped: true };
+        },
+    });
+
+    await supervisor.start();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    await supervisor.restartRunning();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await supervisor.shutdown();
+
+    assert.ok(replacementAdapter, 'adapter close during lock-file stop should spawn a replacement');
+    assert.deepStrictEqual(
+        replacementAdapter.killSignals,
+        ['SIGTERM'],
+        'replacement adapter should only be signaled by final supervisor shutdown, not by restart-running'
+    );
+}
+
 async function testStableStartupRejectsImmediateExit() {
     const supervisor = createBotSupervisor({
         bots: [{ name: 'FAIL-BOT', active: true }],
@@ -151,6 +197,7 @@ function testCronSchedulingHelpers() {
         await testAmaBotsStartAdapterService();
         await testMemoryLimitRestartsProcess();
         await testRestartControlsExcludeUpdaterJob();
+        await testAdapterRestartDoesNotKillReplacementChild();
         await testStableStartupRejectsImmediateExit();
         testCronSchedulingHelpers();
         console.log('bot supervisor tests passed');

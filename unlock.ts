@@ -1086,6 +1086,28 @@ function readMarketAdapterStatus(): { pid: number | null; alive: boolean; uptime
     }
 }
 
+async function stopMarketAdapterFromLock(timeoutMs = 5000): Promise<{ pid: number | null; stopped: boolean }> {
+    const status = readMarketAdapterStatus();
+    if (!status.pid || !status.alive) {
+        return { pid: status.pid, stopped: false };
+    }
+
+    try {
+        process.kill(status.pid, 'SIGTERM');
+        let stopped = await waitForPidExit(status.pid, timeoutMs);
+        if (!stopped && isLikelyMarketAdapterProcess(status.pid)) {
+            process.kill(status.pid, 'SIGKILL');
+            stopped = await waitForPidExit(status.pid, 2000);
+        }
+        return { pid: status.pid, stopped };
+    } catch (err: any) {
+        if (err.code === 'ESRCH') {
+            return { pid: status.pid, stopped: true };
+        }
+        throw err;
+    }
+}
+
 function readProcUptime(pid: number): string {
     try {
         const stat = readProcStat(pid);
@@ -1206,6 +1228,10 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
             const summaryBotNames = getControlBotNames(undefined, true);
 
             if (effectiveCmd === 'restart-all') {
+                const adapterResult = await stopMarketAdapterFromLock();
+                if (adapterResult.stopped) {
+                    console.log(`Stop signal sent to market adapter PID ${adapterResult.pid}`);
+                }
                 try {
                     process.kill(pid, 'SIGUSR2');
                 } catch (err: any) {

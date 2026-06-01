@@ -16,6 +16,7 @@ const LOGS_DIR = path.join(ROOT, 'profiles', 'logs');
 const BOT_SCRIPT = buildRuntimeScriptPath(CODE_ROOT, ['bot']);
 const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const SOCKET_PATH = process.env.DEXBOT_SUPERVISOR_SOCKET || path.join(ROOT, 'profiles', 'supervisor.sock');
+const MARKET_ADAPTER_LOCK_FILE = path.join(ROOT, 'market_adapter', 'state', 'market_adapter.lock');
 
 const MAX_RESTARTS = 13;
 const MIN_UPTIME_MS = 86400000;
@@ -235,6 +236,116 @@ function forwardSignal(child, signal) {
     } catch (_: any) {}
 }
 
+function isPidAlive(pid) {
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (_: any) {
+        return false;
+    }
+}
+
+async function waitForPidExit(pid, timeoutMs) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+        if (!isPidAlive(pid)) return true;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    return !isPidAlive(pid);
+}
+
+function readProcArgs(pid) {
+    if (!isPidAlive(pid)) return [];
+    try {
+        return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
+    } catch (_: any) {
+        return [];
+    }
+}
+
+function readProcCwd(pid) {
+    try {
+        return fs.realpathSync(`/proc/${pid}/cwd`);
+    } catch (_: any) {
+        return '';
+    }
+}
+
+function normalizeProcScriptArg(arg, cwd) {
+    if (!arg || String(arg).startsWith('-')) return '';
+    if (!/\.(?:[cm]?js|ts)$/i.test(String(arg))) return '';
+    return path.isAbsolute(arg)
+        ? path.normalize(arg)
+        : path.resolve(cwd || ROOT, arg);
+}
+
+function scriptPathForRoot(root, scriptSegments, ext) {
+    const segments = [...scriptSegments];
+    const last = segments.pop();
+    segments.push(String(last).replace(/\.(?:[cm]?js|ts)$/i, '') + ext);
+    return path.join(root, ...segments);
+}
+
+function candidateRuntimeScriptPaths(scriptSegments) {
+    return new Set([
+        buildRuntimeScriptPath(CODE_ROOT, scriptSegments),
+        scriptPathForRoot(ROOT, scriptSegments, '.ts'),
+        scriptPathForRoot(path.join(ROOT, 'dist'), scriptSegments, '.js'),
+    ]);
+}
+
+function isNodeProcessWithExactScript(pid, scriptSegments) {
+    const args = readProcArgs(pid);
+    if (!args.some((arg) => path.basename(String(arg)).includes('node'))) {
+        return false;
+    }
+
+    const expected = candidateRuntimeScriptPaths(scriptSegments);
+    const cwd = readProcCwd(pid);
+    for (const arg of args.slice(1)) {
+        const scriptPath = normalizeProcScriptArg(arg, cwd);
+        if (scriptPath && expected.has(scriptPath)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function readMarketAdapterLockPid() {
+    try {
+        const raw = fs.readFileSync(MARKET_ADAPTER_LOCK_FILE, 'utf8');
+        const info = JSON.parse(raw);
+        const pid = Number(info.pid);
+        return Number.isInteger(pid) && pid > 0 ? pid : null;
+    } catch (_: any) {
+        return null;
+    }
+}
+
+async function stopMarketAdapterFromLock(timeoutMs = 5000) {
+    const pid = readMarketAdapterLockPid();
+    if (!pid || !isNodeProcessWithExactScript(pid, ['market_adapter', 'market_adapter'])) {
+        return { pid, stopped: false };
+    }
+
+    try {
+        process.kill(pid, 'SIGTERM');
+        let stopped = await waitForPidExit(pid, timeoutMs);
+        if (!stopped && isNodeProcessWithExactScript(pid, ['market_adapter', 'market_adapter'])) {
+            process.kill(pid, 'SIGKILL');
+            stopped = await waitForPidExit(pid, 2000);
+        }
+        return { pid, stopped };
+    } catch (err: any) {
+        if (err.code === 'ESRCH') {
+            return { pid, stopped: true };
+        }
+        throw err;
+    }
+}
+
 function getChildRSS(child) {
     if (!child || !child.pid) return -1;
     try {
@@ -266,6 +377,7 @@ function createBotSupervisor({
     setTimeoutFn = setTimeout,
     clearTimeoutFn = clearTimeout,
     nowFn = () => Date.now(),
+    stopMarketAdapter = stopMarketAdapterFromLock,
 } = {}) {
     const botStates = new Map();
     let shuttingDown = false;
@@ -606,13 +718,13 @@ function createBotSupervisor({
                     return { ok: true };
                 }
                 case 'restart-running':
-                    restartRunning();
+                    await restartRunning();
                     return { ok: true };
                 case 'stop-all':
                     stopAll();
                     return { ok: true };
                 case 'restart-all':
-                    restartAll();
+                    await restartAll();
                     return { ok: true };
                 case 'delete':
                     await shutdown({ preserveSockets: cmd.preserveSockets || [] });
@@ -910,22 +1022,42 @@ function createBotSupervisor({
         log('stop-all');
     }
 
-    function restartRunning({ logAction = true } = {}) {
+    async function restartRunning({ logAction = true } = {}) {
         userStopped = false;
+        const runningStates = [];
         for (const [, state] of botStates) {
             if (!state.bulkControl) continue;
             if (state.status === 'running' && state.child) {
                 state.pendingRestart = true;
-                try { state.child.kill('SIGTERM'); } catch (_: any) {}
+                runningStates.push({
+                    state,
+                    child: state.child,
+                    pid: state.child.pid || null,
+                });
             }
+        }
+
+        const adapterStop = await stopMarketAdapter();
+        for (const entry of runningStates) {
+            if (adapterStop.pid && entry.pid === adapterStop.pid) {
+                continue;
+            }
+            if (entry.state.child !== entry.child) {
+                continue;
+            }
+            try { entry.child.kill('SIGTERM'); } catch (_: any) {}
+        }
+
+        if (adapterStop.stopped) {
+            log(`restart-running: stopped market adapter PID ${adapterStop.pid}`);
         }
         if (logAction) {
             log('restart-running');
         }
     }
 
-    function restartAll() {
-        restartRunning({ logAction: false });
+    async function restartAll() {
+        await restartRunning({ logAction: false });
         for (const [, state] of botStates) {
             if (!state.bulkControl) continue;
             if (state.status === 'stopped' && state.appEntry && state.stoppedByUser) {
