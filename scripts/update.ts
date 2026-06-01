@@ -9,7 +9,7 @@
  * - Detects if updates are available
  * - Handles branch switching if needed
  * - Reinstalls npm dependencies
- * - Selectively reloads active PM2 processes
+ * - Selectively restarts active runtime processes
  * - Gracefully handles missing files or PM2
  *
  * Configuration:
@@ -123,7 +123,7 @@ async function detectIsolatedSupervisor() {
     }
 }
 
-async function reloadActiveIsolatedProcesses() {
+async function restartActiveIsolatedProcesses() {
     const status = await detectIsolatedSupervisor();
     if (!status) {
         return false;
@@ -238,7 +238,7 @@ try {
      *    - Action: Switch branch if needed, then exit cleanly
      * 2. Incoming updates available (updatesAvailable = true)
      *    - Remote has new commits we need to pull
-     *    - Action: Proceed with full update (pull, npm install, reload PM2)
+     *    - Action: Proceed with full update (pull, npm install, restart runtimes)
      */
     if (!updatesAvailable) {
         // No updates available - check if branch switch is needed
@@ -320,23 +320,23 @@ try {
     }
 
     /**
-     * STEP 9: Reload Active PM2 Processes
-     * Intelligently reloads only the bots that were active before update
+     * STEP 9: Restart Active Runtime Processes
+     * Intelligently restarts only the bots that were active before update
      * This approach:
      * - Preserves PM2 state if not running
-     * - Reloads active bots to pick up code changes
+     * - Restarts active bots to pick up code changes
      * - Handles missing bots.json gracefully
-     * - Never reloads dexbot-cred through bulk PM2 actions
+     * - Never restarts dexbot-cred through bulk PM2 actions
      */
-    log('Reloading active runtime processes...');
+    log('Restarting active runtime processes...');
     try {
         if (process.env.DEXBOT_UPDATE_SKIP_RELOAD === '1') {
-            log('Reload skipped (managed by launcher).');
+            log('Restart skipped (managed by launcher).');
         } else {
             const monolithic = detectMonolithicRuntime();
             if (monolithic) {
                 restartMonolithicRuntime(monolithic);
-            } else if (await reloadActiveIsolatedProcesses()) {
+            } else if (await restartActiveIsolatedProcesses()) {
                 log('Isolated supervisor runtime restarted.');
             } else {
                 const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
@@ -367,7 +367,7 @@ try {
                             runningProcesses = activeInConfig;
                         }
 
-                        const botsToReload = activeInConfig.filter(name => runningProcesses.includes(name));
+                        const botsToRestart = activeInConfig.filter(name => runningProcesses.includes(name));
                         const activeBots = (config.bots || []).filter(b => b.active !== false);
                         const runningActiveBots = activeBots.filter(b => runningProcesses.includes(b.name));
                         let needsMarketAdapter;
@@ -378,13 +378,13 @@ try {
                         }
                         const marketAdapterRequired = needsMarketAdapter(runningActiveBots);
 
-                        const serviceAppsToReload = marketAdapterRequired ? ['dexbot-adapter'] : [];
-                        const servicesToReload = serviceAppsToReload.filter(name => runningProcesses.includes(name));
-                        const allToReload = [...botsToReload, ...servicesToReload];
+                        const serviceAppsToRestart = marketAdapterRequired ? ['dexbot-adapter'] : [];
+                        const servicesToRestart = serviceAppsToRestart.filter(name => runningProcesses.includes(name));
+                        const allToRestart = [...botsToRestart, ...servicesToRestart];
 
-                        if (allToReload.length > 0) {
-                            log(`Active processes detected: ${allToReload.join(', ')}`);
-                            for (const name of allToReload) {
+                        if (allToRestart.length > 0) {
+                            log(`Active processes detected: ${allToRestart.join(', ')}`);
+                            for (const name of allToRestart) {
                                 try {
                                     run(`pm2 restart "${name}"`);
                                 } catch (e) {
@@ -392,7 +392,7 @@ try {
                                 }
                             }
                         } else {
-                            log('No active processes currently running in PM2. Skipping reload.');
+                            log('No active processes currently running in PM2. Skipping restart.');
                         }
 
                         if (marketAdapterRequired && !runningProcesses.includes('dexbot-adapter')) {
@@ -407,12 +407,12 @@ try {
                         log('No active bots found in config.');
                     }
                 } else {
-                    log('Warning: profiles/bots.json not found, skipping selective reload.');
+                    log('Warning: profiles/bots.json not found, skipping selective restart.');
                 }
             }
         }
     } catch (err) {
-        log(`Warning: runtime reload logic failed (${err.message}). Skipping bulk reload to avoid touching dexbot-cred.`);
+        log(`Warning: runtime restart logic failed (${err.message}). Skipping bulk restart to avoid touching dexbot-cred.`);
     }
 
 
