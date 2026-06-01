@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.9 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.10 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
 - **Growth Phase**: 1,446 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
 - **Stability**: Progression from manual testing to a suite of 180 automated test files
-- **Releases**: 25 tagged releases (v0.1.0 to v0.7.9)
+- **Releases**: 26 tagged releases (v0.1.0 to v0.7.10)
 
 ---
 
@@ -59,7 +59,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **May 29–31**: Hardened unlock (signal handler cleanup, polling guards), removed deprecated legacy migration patterns, swept 14 documentation files. Released v0.7.6. Then added default background daemon + crash restart, auto-update for monolithic path, per-bot log files, MPA `debtOnly` flag, and simplified CLI. Released v0.7.7. Renamed `unlock-start` → `unlock`, unified launcher summaries, hardened monolithic restart after auto-update, cleaned stale build artifacts, and polished DEXBot comparison docs. Released v0.7.8.
 
-**Jun 1**: Enhanced unlock status with market adapter and credential daemon health indicators, fixed update lifecycle to restart all runtime services, removed PM2 reload wrapper, and de-emphasized PM2 in the README. Released v0.7.9.
+**Jun 1**: Enhanced unlock status with market adapter and credential daemon health indicators, fixed update lifecycle to restart all runtime services, removed PM2 reload wrapper, and de-emphasized PM2 in the README. Released v0.7.9. Then hardened runtime self-healing paths: promoted structural grid drift into an explicit resync path, added targeted chain-truth reconciliation for idle maintenance, guarded post-reset spread correction with a fresh chain sync, and deferred fill processing during order batches; deduplicated the chain-sync/fill pipeline into a shared helper, made launcher wrappers work without a `dist/` build, and added a `node dexbot order` subcommand with green active-bot feedback in `node unlock status`. Released v0.7.10.
 
 ---
 
@@ -71,6 +71,7 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 - **Phase 5**: Multi-layered runtime — COW core execution, signal pipeline (AMA/Kalman/regime), credit/debt MPA runtime, credit maintenance hardening, credential daemon.
 - **Post-5: Zero-Dependency & TypeScript Migration**: Full codebase migration from JavaScript to TypeScript with strict mode, `tsc` build pipeline, zero-dependency runtime via `tsx`, and explicit architectural policy removing all external runtime dependencies.
 - **Post-5.1: Fill Detection Overhaul**: Complete rewrite of native BitShares fill detection subsystem — direct-notice dispatch replaces history scanning, instance-based cursor filtering, subscription reconnect retry, deferred cursor advancement on callback failure, unfiltered `get_account_history`, and btsFeeState hardening
+- **Post-5.2: Runtime Self-Healing**: Runtime maintenance now reconciles from chain truth whenever an active-order shortfall or fund drift is detected, treating structural grid drift as an explicit resync signal and guarding order batches so in-flight fills are never credited through the orphan path.
 
 ---
 
@@ -87,6 +88,9 @@ Default background daemon + crash restart for unlock, auto-update for monolithic
 
 ### v0.7.7 → v0.7.8 (7 commits)
 Rename `unlock-start` → `unlock`, unify launcher startup/control summaries, harden monolithic restart after auto-update, clean stale build artifacts, add Performance & Speed section to DEXBot comparison doc.
+
+### v0.7.9 → v0.7.10 (8 commits)
+Harden runtime self-healing: promote structural grid drift into an explicit resync path, add targeted chain-truth reconciliation for idle maintenance, guard post-reset spread correction with a fresh chain sync, and defer fill processing during order batches. Deduplicate the chain-sync/fill pipeline into a shared helper, make launcher wrappers work without a `dist/` build, and add a `node dexbot order` subcommand with green active-bot feedback in `node unlock status`.
 
 ### v0.7.8 → v0.7.9 (9 commits)
 Enhance unlock status with market adapter and credential daemon health indicators, fix unlock update lifecycle to restart all runtime services, remove PM2 reload wrapper, de-emphasize PM2 and clarify unlock modes in the README.
@@ -174,6 +178,6 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 **Report Originally Generated**: February 19, 2026
 **Last Updated**: June 1, 2026
-**Total Commits**: 1465
+**Total Commits**: 1473
 **Date Range**: December 2, 2025 - June 1, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.10] - 2026-06-01 - Grid Recovery Smoothing, Runtime Drift Reconciliation & CLI Polish
+
+This release hardens the runtime's self-healing paths against structural grid drift and live-order shortfalls, deduplicates the chain-sync/fill pipeline into a shared helper, makes launcher wrappers work without a prior `dist/` build, and adds a first-class `node dexbot order` subcommand plus colorized active-bot feedback in `node unlock status`.
+
+### 2026-06-01
+
+#### Grid Recovery & Runtime Drift Hardening
+- Promote structural grid drift into an explicit resync path — unmatched chain orders are now carried out of sync, classified as structural drift, and trigger a single full grid resync instead of repeated invariant recovery attempts (`930870e`).
+- Wire the deferred structural resync callback in `dexbot_class.ts`, defer credential recovery until bootstrap/broadcast state is idle, clear timers on shutdown, and reset the recovery attempt budget after a successful structural resync (`930870e`).
+- Return unmatched chain order metadata from `sync_engine.ts` and refresh final startup chain counts from chain state in `startup_reconcile.ts` so operators see accurate final startup summaries (`930870e`).
+- Add targeted chain-truth reconciliation for idle maintenance — when an active-order shortfall or fund drift is detected, fetch open orders, sync from chain truth, process detected fills, and run startup-style reconcile if shortfall/unmatched orders remain. Idle-gated with a 60s cooldown; a successful repair ends the current maintenance cycle for a clean follow-up pass (`f19cc51`).
+- Guard post-reset spread correction with a fresh chain sync — refresh open orders immediately before post-reset spread correction, process detected fills, and skip spread correction when unmatched chain orders remain or sync fails, preventing false correction orders from stale local state (`2f1d3f9`).
+- Defer fill queue consumption while order pipeline flags are active and restart the consumer from the batch `finally` block once the grid is coherent — prevents just-created orders from being credited through the orphan path when they fill before the batch commits their chain order id (`62fc990`).
+
+#### CLI & Status UX
+- Add `node dexbot order` subcommand — exposes the `scripts/analyze-orders.ts` analyzer as a first-class CLI command, integrated into `CLI_COMMANDS`, help text, and `CLI_EXAMPLES`, with `spawnSync` preserving ANSI colors and child exit codes (`2711e8e`).
+- Surface active AMA bots in green in the `node unlock status` market adapter block so operators can confirm the market adapter wiring at a glance (`2711e8e`).
+- Make launcher wrappers (`scripts/dexbot`, `scripts/pm2`, `scripts/unlock`, `scripts/bots`, `scripts/keys`, `scripts/update.js`) and root shims (`bot.js`, `credential-daemon.js`, `dexbot.js`, `pm2.js`, `unlock.js`) work without a prior `dist/` build — prefer compiled output when present, otherwise load the TypeScript entrypoint through `tsx/cjs` (`1ef1787`).
+- Move process uptime into the memory line (`<rss> (<uptime>)`) for monolithic bot, credential daemon, and market adapter; add credential daemon memory reporting; add small ANSI helpers for section titles, labels, and yes/no values with `NO_COLOR` and TTY checks (`7579fe9`).
+- Polish docs/CLI strings: add 🛠️ to the "BOT MANAGEMENT" header in the JSDoc usage block and reword the `node dexbot keys` description to "Set up master password and keyring" (`2711e8e`).
+- Document `scripts/unlock` and the `node pm2`-compatible wrapper in `scripts/README.md` (`1ef1787`).
+
+#### Refactoring
+- Extract `_syncOpenOrdersAndProcessFills(tag)` in `dexbot_class.ts` — shared helper covering read-open-orders → synchronize-with-chain → process-fills → re-read/re-sync. Replaces three inlined copies across `dexbot_class.ts` and `dexbot_maintenance_runtime.ts` (`70c5839`).
+- Switch `countLiveGridOrders` from scanning `manager.orders` to indexed `getOrdersByTypeAndState` lookups (ACTIVE + PARTIAL) with the `orderId` filter preserved to count only on-chain orders (`70c5839`).
+- Remove a duplicate error log in `_catch` of the batch-end `setImmediate` callback that double-logged the same error with different phrasing (`70c5839`).
+- Update test stubs: add `ORDER_TYPES`/`ORDER_STATES` values to module cache stubs in the dynamic-weights test, add `dryRun: true` to the unrelated RMS resync test, and add `_syncOpenOrdersAndProcessFills` + `getOrdersByTypeAndState` mocks to the targeted-drift-reconcile test (`70c5839`).
+
 ## [0.7.9] - 2026-06-01 - Unlock Status Health, Update Lifecycle Fixes & PM2 Cleanup
 
 This release enhances unlock status output with market adapter and credential daemon health indicators, fixes the unlock update lifecycle to properly restart all runtime services, removes the stale PM2 reload wrapper, and polishes the README around PM2 de-emphasis and unlock mode clarity.
