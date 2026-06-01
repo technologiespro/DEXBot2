@@ -41,6 +41,7 @@ const { sendControlCommand } = require('./modules/launcher/supervisor_control');
 const { registerCleanup, setupGracefulShutdown } = require('./modules/graceful_shutdown');
 const { getCredentialReadyFilePath, getCredentialSocketPath } = require('./modules/credential_runtime');
 const { normalizeBotEntry, resolveRawBotEntries, loadSettingsFile } = require('./modules/bot_settings');
+const chainKeys = require('./modules/chain_keys');
 
 const CODE_ROOT = __dirname;
 const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
@@ -65,6 +66,7 @@ const MONOLITHIC_MAX_RESTARTS = 13;
 const MONOLITHIC_MIN_UPTIME_MS = 86400000;
 const MONOLITHIC_RESTART_DELAY_MS = 3000;
 const MONOLITHIC_CONTROL_STOP_TIMEOUT_MS = 12000;
+const MARKET_ADAPTER_LOCK_FILE = path.join(ROOT, 'market_adapter', 'state', 'market_adapter.lock');
 const botProcessRef: { current: any } = { current: null };
 
 function cleanupMonolithicStateFiles() {
@@ -926,6 +928,157 @@ async function readProcCpuPercent(pid: number, samples: number = 2, intervalMs: 
     } catch { return '-'; }
 }
 
+function readProcCmdline(pid: number): string {
+    return readProcArgs(pid).join(' ');
+}
+
+function readProcArgs(pid: number): string[] {
+    if (!isPidAlive(pid)) return [];
+    try {
+        return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
+    } catch {
+        return [];
+    }
+}
+
+function runtimeScriptPath(scriptSegments: string[]): string {
+    const scriptExt = path.basename(CODE_ROOT) === 'dist' ? '.js' : '.ts';
+    const segments = [...scriptSegments];
+    const last = segments.pop() as string;
+    segments.push(last.replace(/\.(?:[cm]?js|ts)$/i, '') + scriptExt);
+    return path.join(CODE_ROOT, ...segments);
+}
+
+function scriptPathForRoot(root: string, scriptSegments: string[], ext: string): string {
+    const segments = [...scriptSegments];
+    const last = segments.pop() as string;
+    segments.push(last.replace(/\.(?:[cm]?js|ts)$/i, '') + ext);
+    return path.join(root, ...segments);
+}
+
+function candidateRuntimeScriptPaths(scriptSegments: string[]): Set<string> {
+    const candidates = new Set<string>();
+    candidates.add(runtimeScriptPath(scriptSegments));
+
+    candidates.add(scriptPathForRoot(ROOT, scriptSegments, '.ts'));
+    candidates.add(scriptPathForRoot(path.join(ROOT, 'dist'), scriptSegments, '.js'));
+
+    if (scriptSegments.length === 1) {
+        candidates.add(scriptPathForRoot(ROOT, scriptSegments, '.js'));
+    }
+
+    return candidates;
+}
+
+function readProcCwd(pid: number): string {
+    try {
+        return fs.realpathSync(`/proc/${pid}/cwd`);
+    } catch {
+        return '';
+    }
+}
+
+function normalizeProcScriptArg(arg: string, cwd: string): string {
+    if (!arg || arg.startsWith('-')) return '';
+    if (!/\.(?:[cm]?js|ts)$/i.test(arg)) return '';
+    return path.isAbsolute(arg)
+        ? path.normalize(arg)
+        : path.resolve(cwd || ROOT, arg);
+}
+
+function isNodeProcessWithExactScript(pid: number, scriptSegments: string[]): boolean {
+    const args = readProcArgs(pid);
+    if (!args.some((arg) => path.basename(String(arg)).includes('node'))) {
+        return false;
+    }
+
+    const expected = candidateRuntimeScriptPaths(scriptSegments);
+    const cwd = readProcCwd(pid);
+    for (const arg of args.slice(1)) {
+        const scriptPath = normalizeProcScriptArg(arg, cwd);
+        if (scriptPath && expected.has(scriptPath)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function isLikelyMarketAdapterProcess(pid: number): boolean {
+    return isNodeProcessWithExactScript(pid, ['market_adapter', 'market_adapter']);
+}
+
+function isLikelyCredentialDaemonProcess(pid: number): boolean {
+    return isNodeProcessWithExactScript(pid, ['credential-daemon']);
+}
+
+function isLikelyDexbotProcess(pid: number): boolean {
+    return isNodeProcessWithExactScript(pid, ['dexbot']);
+}
+
+function isLikelyUnlockProcess(pid: number): boolean {
+    return isNodeProcessWithExactScript(pid, ['unlock']);
+}
+
+async function readCredentialDaemonStatus(pid: number | null): Promise<{ alive: boolean; ready: boolean; socket: boolean }> {
+    const alive = !!(pid && isLikelyCredentialDaemonProcess(pid));
+    if (!alive) {
+        return { alive: false, ready: false, socket: false };
+    }
+
+    try {
+        const responsive = await chainKeys.isDaemonResponsive({
+            socketPath: CREDENTIAL_SOCKET_FILE,
+            readyFilePath: CREDENTIAL_READY_FILE,
+        });
+        return { alive, ready: responsive, socket: responsive };
+    } catch (_) {
+        return { alive, ready: false, socket: false };
+    }
+}
+
+function isExpectedProcessStarttime(pid: number, expectedStarttime: number | null | undefined): boolean {
+    if (typeof expectedStarttime !== 'number') return false;
+    const stat = readProcStat(pid);
+    return !!(stat && stat.starttime === expectedStarttime);
+}
+
+function isExpectedMonolithicBotPid(pid: number, botInfo: { pid?: number; starttime?: number | null } | null): boolean {
+    if (!Number.isInteger(pid) || pid <= 0) {
+        return false;
+    }
+    if (!botInfo || botInfo.pid !== pid) {
+        return false;
+    }
+    if (!isLikelyDexbotProcess(pid)) {
+        return false;
+    }
+    if (!isExpectedProcessStarttime(pid, botInfo.starttime)) {
+        return false;
+    }
+    return true;
+}
+
+function readMarketAdapterStatus(): { pid: number | null; alive: boolean; uptime: string; mem: string } {
+    try {
+        const raw = fs.readFileSync(MARKET_ADAPTER_LOCK_FILE, 'utf8');
+        const info = JSON.parse(raw);
+        const pid = Number(info.pid);
+        if (!Number.isInteger(pid) || pid <= 0) {
+            return { pid: null, alive: false, uptime: '-', mem: '-' };
+        }
+        const alive = isLikelyMarketAdapterProcess(pid);
+        return {
+            pid,
+            alive,
+            uptime: alive ? readProcUptime(pid) : '-',
+            mem: alive ? readProcMemMB(pid) : '-',
+        };
+    } catch (_) {
+        return { pid: null, alive: false, uptime: '-', mem: '-' };
+    }
+}
+
 function readProcUptime(pid: number): string {
     try {
         const stat = readProcStat(pid);
@@ -938,11 +1091,20 @@ function readProcUptime(pid: number): string {
     } catch { return '-'; }
 }
 
-function listConfiguredBots(): { name: string; active: boolean }[] {
+function usesAmaGridPrice(bot: any): boolean {
+    const gridPrice = typeof bot?.gridPrice === 'string' ? bot.gridPrice.trim().toLowerCase() : '';
+    return /^ama(?:[1-4])?$/.test(gridPrice);
+}
+
+function listConfiguredBots(): { name: string; active: boolean; gridPrice: string }[] {
     try {
         const { config } = loadSettingsFile(BOTS_FILE);
         const raw = resolveRawBotEntries(config);
-        return raw.map((b: any) => ({ name: b.name, active: b.active !== false }));
+        return raw.map((b: any) => ({
+            name: b.name,
+            active: b.active !== false,
+            gridPrice: typeof b.gridPrice === 'string' ? b.gridPrice.trim().toLowerCase() : '',
+        }));
     } catch { return []; }
 }
 
@@ -1011,13 +1173,12 @@ function readLiveMonolithicPid(): { pid: number; stale: boolean } {
 
     if (pid <= 0) return { pid: 0, stale: true };
 
-    try {
-        process.kill(pid, 0);
-        return { pid, stale: false };
-    } catch (_) {
+    if (!isLikelyUnlockProcess(pid)) {
         try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
         return { pid: 0, stale: true };
     }
+
+    return { pid, stale: false };
 }
 
 async function handleControl({ cmd, target }: { cmd: string; target?: string }) {
@@ -1056,15 +1217,8 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 try { botPidRaw = fs.readFileSync(MONOLITHIC_BOT_PID_FILE, 'utf8').trim(); } catch (_) {}
                 if (botPidRaw) {
                     const bp = Number(botPidRaw);
-                    if (Number.isInteger(bp) && bp > 0) {
-                        try {
-                            process.kill(bp, 0);
-                            const stat = readProcStat(bp);
-                            const expectedStarttime = botInfo?.pid === bp ? botInfo.starttime : undefined;
-                            if (stat && (botInfo == null || (typeof expectedStarttime === 'number' && stat.starttime === expectedStarttime))) {
-                                targetPid = bp;
-                            }
-                        } catch (_) {}
+                    if (isExpectedMonolithicBotPid(bp, botInfo)) {
+                        targetPid = bp;
                     }
                 }
 
@@ -1091,9 +1245,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                     if (Number.isInteger(n) && n > 0) credPid = n;
                 } catch (_) {}
 
-                const credAlive = credPid && isPidAlive(credPid);
-                const credReady = fs.existsSync(CREDENTIAL_READY_FILE);
-                const credSocket = fs.existsSync(CREDENTIAL_SOCKET_FILE);
+                const credStatus = await readCredentialDaemonStatus(credPid);
 
                 console.log('Monolithic bot');
                 console.log(`  PID:     ${targetPid}`);
@@ -1106,14 +1258,31 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 }
                 console.log('  Credential daemon:');
                 console.log(`    PID:   ${credPid || '-'}`);
-                if (credAlive) {
+                if (credStatus.alive) {
                     const credUptime = readProcUptime(credPid!);
                     console.log(`    Alive: yes  (uptime: ${credUptime})`);
                 } else {
                     console.log(`    Alive: no`);
                 }
-                console.log(`    Ready: ${credReady ? 'yes' : 'no'}`);
-                console.log(`    Socket: ${credSocket ? 'yes' : 'no'}`);
+                console.log(`    Ready: ${credStatus.ready ? 'yes' : 'no'}`);
+                console.log(`    Socket: ${credStatus.socket ? 'yes' : 'no'}`);
+
+                const adapterStatus = readMarketAdapterStatus();
+                const amaBots = listConfiguredBots().filter(b => b.active && usesAmaGridPrice(b));
+                console.log('  Market adapter:');
+                if (adapterStatus.alive) {
+                    console.log(`    PID:     ${adapterStatus.pid}`);
+                    console.log(`    Uptime:  ${adapterStatus.uptime}`);
+                    console.log(`    Memory:  ${adapterStatus.mem}`);
+                } else if (adapterStatus.pid) {
+                    console.log(`    PID:     ${adapterStatus.pid} (not alive)`);
+                } else {
+                    console.log('    (not running)');
+                }
+                console.log(`    Active:  ${amaBots.length} bot(s)`);
+                for (const b of amaBots) {
+                    console.log(`      - ${b.name} (${b.gridPrice})`);
+                }
                 return;
             }
 
