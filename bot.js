@@ -7,6 +7,6 @@ const distTarget = path.join(__dirname, 'dist', 'bot.js');
 if (fs.existsSync(distTarget)) {
   require(distTarget);
 } else {
-  require('tsx').register();
+  require('tsx/cjs');
   require('./bot.ts');
 }

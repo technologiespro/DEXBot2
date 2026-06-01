@@ -1,3 +1,14 @@
 #!/usr/bin/env node
 process.argv[2] = 'bots';
-require('../dist/dexbot.js');
+const fs = require('fs');
+const path = require('path');
+
+const root = path.resolve(__dirname, '..');
+const distTarget = path.join(root, 'dist', 'dexbot.js');
+
+if (fs.existsSync(distTarget)) {
+  require(distTarget);
+} else {
+  require('tsx/cjs');
+  require(path.join(root, 'dexbot.ts'));
+}

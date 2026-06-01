@@ -7,6 +7,6 @@ const distTarget = path.join(__dirname, 'dist', 'pm2.js');
 if (fs.existsSync(distTarget)) {
   require(distTarget);
 } else {
-  require('tsx').register();
+  require('tsx/cjs');
   require('./pm2.ts');
 }

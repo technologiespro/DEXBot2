@@ -3,11 +3,11 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const distTarget = path.join(root, 'dist', 'pm2.js');
+const distTarget = path.join(root, 'dist', 'unlock.js');
 
 if (fs.existsSync(distTarget)) {
   require(distTarget);
 } else {
   require('tsx/cjs');
-  require(path.join(root, 'pm2.ts'));
+  require(path.join(root, 'unlock.ts'));
 }

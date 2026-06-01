@@ -203,7 +203,8 @@ The following scripts allow you to call `dexbot` commands directly from the `scr
 | `scripts/bots` | `node dexbot bots` | `./scripts/bots` |
 | `scripts/keys` | `node dexbot keys` | `./scripts/keys` |
 | `scripts/dexbot` | `node dexbot` | `./scripts/dexbot <cmd>` |
-| `scripts/pm2` | `tsx pm2.ts` | `./scripts/pm2` |
+| `scripts/unlock` | `node unlock` | `./scripts/unlock <cmd>` |
+| `scripts/pm2` | `node pm2` | `./scripts/pm2` |
 
 ---
 

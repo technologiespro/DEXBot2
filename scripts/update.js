@@ -7,6 +7,6 @@ const distTarget = path.join(__dirname, '..', 'dist', 'scripts', 'update.js');
 if (fs.existsSync(distTarget)) {
   require(distTarget);
 } else {
-  require('tsx').register();
+  require('tsx/cjs');
   require('./update.ts');
 }

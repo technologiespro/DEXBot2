@@ -7,6 +7,6 @@ const distTarget = path.join(__dirname, 'dist', 'credential-daemon.js');
 if (fs.existsSync(distTarget)) {
   require(distTarget);
 } else {
-  require('tsx').register();
+  require('tsx/cjs');
   require('./credential-daemon.ts');
 }
