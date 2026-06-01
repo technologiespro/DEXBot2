@@ -1166,12 +1166,28 @@ function getControlActionLabel(cmd: string): string {
     return 'stopping';
 }
 
-function printControlActionSummary(action: string, botNames: string[]) {
+function getControlServiceNames(cmd: string, botNames: string[]) {
+    if (!['stop-all', 'restart-all', 'delete', 'shutdown'].includes(cmd)) return [];
+    const serviceNames = ['credential daemon'];
+    const botNameSet = new Set(botNames);
+    const affectedAmaBots = listConfiguredBots().some((bot) => (
+        bot.active && usesAmaGridPrice(bot) && botNameSet.has(bot.name)
+    ));
+    if (affectedAmaBots) {
+        serviceNames.push('market adapter');
+    }
+    return serviceNames;
+}
+
+function printControlActionSummary(action: string, botNames: string[], serviceNames: string[] = []) {
     console.log('='.repeat(50));
     console.log(`DEXBot2 ${action} ${botNames.length} bot(s)`);
     console.log();
     for (const botName of botNames) {
         console.log(`- ${botName}`);
+    }
+    for (const serviceName of serviceNames) {
+        console.log(`- ${serviceName}`);
     }
     console.log('='.repeat(50));
     console.log();
@@ -1226,6 +1242,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
 
         if (pid > 0) {
             const summaryBotNames = getControlBotNames(undefined, true);
+            const summaryServiceNames = getControlServiceNames(effectiveCmd, summaryBotNames);
 
             if (effectiveCmd === 'restart-all') {
                 const adapterResult = await stopMarketAdapterFromLock();
@@ -1237,7 +1254,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 } catch (err: any) {
                     if (err.code !== 'ESRCH') throw err;
                 }
-                printControlActionSummary(actionLabel, summaryBotNames);
+                printControlActionSummary(actionLabel, summaryBotNames, summaryServiceNames);
                 return;
             }
 
@@ -1345,7 +1362,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                     cleanupMonolithicStateFiles();
                 }
             }
-            printControlActionSummary(actionLabel, summaryBotNames);
+            printControlActionSummary(actionLabel, summaryBotNames, summaryServiceNames);
             return;
         } else if (stale) {
             if (effectiveCmd === 'delete') {
@@ -1355,7 +1372,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 if (credResult.signaled) {
                     console.log('Stop signal sent to credential daemon');
                 }
-                printControlActionSummary(actionLabel, summaryBotNames);
+                printControlActionSummary(actionLabel, summaryBotNames, getControlServiceNames(effectiveCmd, summaryBotNames));
                 if (isolatedDeleted || credResult.cleaned) return;
             }
             console.log(effectiveCmd === 'delete' ? 'Removed stale monolithic PID file' : 'Monolithic bot not running (stale PID file)');
@@ -1370,7 +1387,8 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
             console.log('Stop signal sent to credential daemon');
         }
         if (credResult.cleaned) {
-            printControlActionSummary(actionLabel, getControlBotNames(undefined, true));
+            const summaryBotNames = getControlBotNames(undefined, true);
+            printControlActionSummary(actionLabel, summaryBotNames, getControlServiceNames(effectiveCmd, summaryBotNames));
             return;
         }
     }
@@ -1386,7 +1404,8 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
         } else {
             if (target || effectiveCmd === 'stop-all' || effectiveCmd === 'restart-all' || effectiveCmd === 'delete') {
                 const summaryBotNames = getControlBotNames(target, !target && (effectiveCmd === 'stop-all' || effectiveCmd === 'restart-all' || effectiveCmd === 'delete'));
-                printControlActionSummary(actionLabel, summaryBotNames);
+                const summaryServiceNames = getControlServiceNames(effectiveCmd, summaryBotNames);
+                printControlActionSummary(actionLabel, summaryBotNames, summaryServiceNames);
             }
             console.log('OK');
         }

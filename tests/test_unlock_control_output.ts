@@ -54,6 +54,22 @@ function getActiveBotNames() {
         .map((bot) => String(bot.name));
 }
 
+function hasActiveAmaBot() {
+    const { config } = loadSettingsFile(botsFile, { silent: true, exitOnError: false });
+    return resolveRawBotEntries(config)
+        .some((bot) => {
+            const gridPrice = typeof bot?.gridPrice === 'string' ? bot.gridPrice.trim().toLowerCase() : '';
+            return bot && bot.active !== false && /^ama(?:[1-4])?$/.test(gridPrice);
+        });
+}
+
+function assertRuntimeServicesListed() {
+    assert.ok(logs.includes('- credential daemon'), 'whole-runtime control should list the credential daemon service');
+    if (hasActiveAmaBot()) {
+        assert.ok(logs.includes('- market adapter'), 'whole-runtime control should list the market adapter service');
+    }
+}
+
 function installStubs() {
     setCachedModule(controllerPath, {
         createCredentialDaemonController: () => controller,
@@ -151,6 +167,7 @@ async function assertWholeRuntimeControl(command, actionWord) {
     for (const botName of activeBotNames) {
         assert.ok(logs.includes(`- ${botName}`), `should list active bot ${botName}`);
     }
+    assertRuntimeServicesListed();
 }
 
 async function assertStaleControl(command, actionWord) {
@@ -164,6 +181,7 @@ async function assertStaleControl(command, actionWord) {
     for (const botName of activeBotNames) {
         assert.ok(logs.includes(`- ${botName}`), `stale control should list active bot ${botName}`);
     }
+    assertRuntimeServicesListed();
     assert.ok(!logs.some((line) => line.includes('stale PID file')), 'stale control should not fall back to the legacy stale message');
 }
 
