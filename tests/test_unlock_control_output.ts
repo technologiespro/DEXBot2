@@ -63,8 +63,12 @@ function hasActiveAmaBot() {
         });
 }
 
-function assertRuntimeServicesListed() {
-    assert.ok(logs.includes('- credential daemon'), 'whole-runtime control should list the credential daemon service');
+function assertRuntimeServicesListed(command) {
+    if (command === 'delete' || command === 'shutdown') {
+        assert.ok(logs.includes('- credential daemon'), 'shutdown controls should list the credential daemon service');
+    } else {
+        assert.ok(!logs.includes('- credential daemon'), `${command} should not list the credential daemon service`);
+    }
     if (hasActiveAmaBot()) {
         assert.ok(logs.includes('- market adapter'), 'whole-runtime control should list the market adapter service');
     }
@@ -167,7 +171,7 @@ async function assertWholeRuntimeControl(command, actionWord) {
     for (const botName of activeBotNames) {
         assert.ok(logs.includes(`- ${botName}`), `should list active bot ${botName}`);
     }
-    assertRuntimeServicesListed();
+    assertRuntimeServicesListed(command);
 }
 
 async function assertStaleControl(command, actionWord) {
@@ -181,7 +185,7 @@ async function assertStaleControl(command, actionWord) {
     for (const botName of activeBotNames) {
         assert.ok(logs.includes(`- ${botName}`), `stale control should list active bot ${botName}`);
     }
-    assertRuntimeServicesListed();
+    assertRuntimeServicesListed(command);
     assert.ok(!logs.some((line) => line.includes('stale PID file')), 'stale control should not fall back to the legacy stale message');
 }
 

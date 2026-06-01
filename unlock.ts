@@ -1168,7 +1168,10 @@ function getControlActionLabel(cmd: string): string {
 
 function getControlServiceNames(cmd: string, botNames: string[]) {
     if (!['stop-all', 'restart-all', 'delete', 'shutdown'].includes(cmd)) return [];
-    const serviceNames = ['credential daemon'];
+    const serviceNames = [];
+    if (cmd === 'delete' || cmd === 'shutdown') {
+        serviceNames.push('credential daemon');
+    }
     const botNameSet = new Set(botNames);
     const affectedAmaBots = listConfiguredBots().some((bot) => (
         bot.active && usesAmaGridPrice(bot) && botNameSet.has(bot.name)
