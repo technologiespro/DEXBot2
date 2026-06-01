@@ -47,6 +47,9 @@ async function runTests() {
                 clearStalePipelineOperations: () => {},
                 isPipelineEmpty: () => ({ isEmpty: true, reasons: [] }),
                 checkFundDriftAfterFills: () => ({ isValid: true, reason: 'ok' }),
+                getOrdersByTypeAndState: (type, state) => {
+                    return Array.from(orders.values()).filter(o => o && o.type === type && o.state === state);
+                },
                 synchronizeWithChain: async () => {
                     synchronized = true;
                     orders.set('slot-1', {
@@ -82,6 +85,11 @@ async function runTests() {
                 broadcasting: false,
             }),
             _processFillsWithBatching: async () => ({ aborted: false }),
+            _syncOpenOrdersAndProcessFills: async function (tag) {
+                const openOrders = await chainOrders.readOpenOrders(this.accountId);
+                const syncResult = await this.manager.synchronizeWithChain(openOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
+                return { syncResult, aborted: false, hasUnmatched: 0 };
+            },
             _executeBatchIfNeeded: async () => ({ executed: false }),
             updateOrdersOnChainPlan: async () => ({ executed: false }),
             updateOrdersOnChainBatch: async () => ({ executed: false }),

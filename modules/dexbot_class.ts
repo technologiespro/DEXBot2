@@ -1059,46 +1059,16 @@ class DEXBot {
                     // STEP 2: Refresh chain truth before spread correction. Trigger
                     // reset can create/cancel orders and fills can arrive while the
                     // reset is running; spread decisions must not use stale local grid.
-                    let skipPostResetSpreadCheck = false;
-                    if (!this.config.dryRun) {
-                        try {
-                            const postResetOpenOrders = await chainOrders.readOpenOrders(this.accountId);
-                            const postResetSync = await this.manager.synchronizeWithChain(
-                                postResetOpenOrders,
-                                'readOpenOrders',
-                                { fillLockAlreadyHeld: true }
-                            );
+                    const { aborted: postResetAborted, hasUnmatched: postResetUnmatched } =
+                        await this._syncOpenOrdersAndProcessFills('[POST-RESET] pre-spread');
 
-                            if (postResetSync.filledOrders?.length > 0) {
-                                this._log(`[POST-RESET] ${postResetSync.filledOrders.length} filled order(s) found before spread check`, 'info');
-                                const batchResult = await this._processFillsWithBatching(
-                                    postResetSync.filledOrders,
-                                    new Set(),
-                                    '[POST-RESET] pre-spread open-orders sync'
-                                );
-                                if (!batchResult?.aborted) {
-                                    const refreshedOpenOrders = await chainOrders.readOpenOrders(this.accountId);
-                                    await this.manager.synchronizeWithChain(refreshedOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
-                                } else {
-                                    skipPostResetSpreadCheck = true;
-                                }
-                            }
-
-                            if (postResetSync.unmatchedChainOrders?.length > 0) {
-                                this._warn(
-                                    `[POST-RESET] Skipping spread correction: ${postResetSync.unmatchedChainOrders.length} unmatched chain order(s) require maintenance reconciliation`
-                                );
-                                skipPostResetSpreadCheck = true;
-                            }
-                        } catch (err: any) {
-                            this._warn(`[POST-RESET] Open-orders sync before spread check failed: ${err.message}`);
-                            skipPostResetSpreadCheck = true;
-                        }
+                    if (postResetUnmatched) {
+                        this._warn(`[POST-RESET] Skipping spread correction: ${postResetUnmatched} unmatched chain order(s) require maintenance reconciliation`);
                     }
 
                     // STEP 3: Spread check AFTER fills are processed and chain truth refreshed
                     await this.manager.recalculateFunds();
-                    if (!skipPostResetSpreadCheck) {
+                    if (!postResetAborted && !postResetUnmatched) {
                         this._refreshDynamicWeightDistribution('post-reset spread check');
                         const spreadResult = await this.manager.checkSpreadCondition(
                             BitShares,
@@ -1315,11 +1285,49 @@ class DEXBot {
     }
 
     /**
-     * Consume and process the fill queue with deduplication and sequential rebalancing.
-     * Protected by AsyncLock to ensure single consumer.
+     * Read open orders from chain, sync with local state, and process any fills found.
+     * Shared helper used by post-reset spread check and targeted drift reconciliation.
+     * @param {string} tag - Context label for logging
+     * @returns {Promise<{syncResult: Object|null, aborted: boolean, hasUnmatched: number, openOrders: Array|null}>}
+     */
+    async _syncOpenOrdersAndProcessFills(tag) {
+        if (!this.accountId || this.config?.dryRun) {
+            return { syncResult: null, aborted: false, hasUnmatched: 0, openOrders: null };
+        }
+        try {
+            let openOrders = await chainOrders.readOpenOrders(this.accountId);
+            const syncResult = await this.manager.synchronizeWithChain(
+                openOrders,
+                'readOpenOrders',
+                { fillLockAlreadyHeld: true }
+            );
+            let aborted = false;
+            if (syncResult?.filledOrders?.length > 0) {
+                this._log(`[SYNC-CHAIN] ${syncResult.filledOrders.length} filled order(s) found during ${tag}`, 'info');
+                const batchResult = await this._processFillsWithBatching(
+                    syncResult.filledOrders,
+                    new Set(),
+                    `${tag} sync-fill`
+                );
+                if (!batchResult?.aborted) {
+                    openOrders = await chainOrders.readOpenOrders(this.accountId);
+                    await this.manager.synchronizeWithChain(openOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
+                } else {
+                    aborted = true;
+                }
+            }
+            const hasUnmatched = syncResult?.unmatchedChainOrders?.length || 0;
+            return { syncResult, aborted, hasUnmatched, openOrders };
+        } catch (err) {
+            this._warn(`[SYNC-CHAIN] Open-orders sync failed during ${tag}: ${err.message}`);
+            return { syncResult: null, aborted: true, hasUnmatched: 0, openOrders: null };
+        }
+    }
+
+    /**
+     * Consume queued fills from incomingFillQueue and rebalance.
      *
-     * FLOW:
-     * 1. Deduplicates fills using fillKey tracking and time window
+     * 1. Deduplicates fills against already-processed set (replay-safe)
      * 2. Syncs filled orders from history or open orders mode
      * 3. Handles price mismatches via correctAllPriceMismatches
      * 4. Processes fills sequentially with interruptible rebalancing (merges new work between fills)
@@ -3294,7 +3302,6 @@ class DEXBot {
 
             if (!this._shuttingDown && this._incomingFillQueue.length > 0) {
                 setImmediate(() => this._consumeFillQueue(chainOrders).catch(err => {
-                    this._log(`Error in post-batch fill consumer restart: ${err.message}`);
                     this._log(`Post-batch fill consumer restart failed: ${err.message}`, 'error');
                 }));
             }

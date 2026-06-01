@@ -119,7 +119,8 @@ async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
         },
     });
     setCachedModule(constantsPath, {
-        ORDER_STATES: {},
+        ORDER_STATES: { ACTIVE: 'active', PARTIAL: 'partial' },
+        ORDER_TYPES: { BUY: 'buy', SELL: 'sell' },
         TIMING: {},
         MAINTENANCE: {},
         GRID_LIMITS: {},
@@ -937,7 +938,8 @@ async function testRmsDivergenceRunsFullGridResync() {
 
     setCachedModule(bitsharesClientPath, { BitShares: {} });
     setCachedModule(constantsPath, {
-        ORDER_STATES: {},
+        ORDER_STATES: { ACTIVE: 'active', PARTIAL: 'partial' },
+        ORDER_TYPES: { BUY: 'buy', SELL: 'sell' },
         TIMING: {},
         MAINTENANCE: {},
         GRID_LIMITS: {
@@ -975,6 +977,7 @@ async function testRmsDivergenceRunsFullGridResync() {
     const self = {
         config: {
             botKey: 'rms-reset-bot-0',
+            dryRun: true,
             weightDistribution: { sell: 0.6, buy: 0.4 },
         },
         _baseWeightDistribution: { sell: 0.6, buy: 0.4 },
@@ -1080,8 +1083,8 @@ async function testDexbotClassPerformGridResyncForwardsOptions() {
     setCachedModule(fillRuntimePath, {});
     setCachedModule(creditRuntimePath, class {});
     setCachedModule(constantsPath, {
-        ORDER_STATES: {},
-        ORDER_TYPES: {},
+        ORDER_STATES: { ACTIVE: 'active', PARTIAL: 'partial' },
+        ORDER_TYPES: { BUY: 'buy', SELL: 'sell' },
         REBALANCE_STATES: {},
         COW_ACTIONS: {},
         TIMING: {},

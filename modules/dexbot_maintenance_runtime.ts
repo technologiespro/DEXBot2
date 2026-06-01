@@ -110,13 +110,10 @@ function runtimeConfigNeedsMarketAdapter(snapshot, config) {
 }
 
 function countLiveGridOrders(manager, type) {
-    if (!manager || !manager.orders) return 0;
-    return Array.from(manager.orders.values()).filter(order =>
-        order &&
-        order.type === type &&
-        order.orderId &&
-        (order.state === ORDER_STATES.ACTIVE || order.state === ORDER_STATES.PARTIAL)
-    ).length;
+    if (!manager) return 0;
+    const active = manager.getOrdersByTypeAndState?.(type, ORDER_STATES.ACTIVE) || [];
+    const partial = manager.getOrdersByTypeAndState?.(type, ORDER_STATES.PARTIAL) || [];
+    return active.concat(partial).filter(o => o?.orderId).length;
 }
 
 function getTargetActiveOrders(config, side) {
@@ -175,20 +172,10 @@ async function maybeRunTargetedDriftReconciliation(context) {
 
     try {
         await this.manager.fetchAccountTotals?.(this.accountId);
-        let openOrders = await chainOrders.readOpenOrders(this.accountId);
-        const syncResult = await this.manager.synchronizeWithChain(openOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
-
-        if (syncResult?.filledOrders?.length > 0) {
-            this._log(`[TARGETED-SYNC] ${syncResult.filledOrders.length} filled grid order(s) detected during ${context}`, 'info');
-            const batchResult = await this._processFillsWithBatching(
-                syncResult.filledOrders,
-                new Set(),
-                `targeted ${context} reconciliation`
-            );
-            if (!batchResult?.aborted) {
-                openOrders = await chainOrders.readOpenOrders(this.accountId);
-                await this.manager.synchronizeWithChain(openOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
-            }
+        const { syncResult, openOrders, aborted } = await this._syncOpenOrdersAndProcessFills(`targeted ${context} reconciliation`);
+        if (aborted) {
+            this._warn(`[TARGETED-SYNC] Chain sync failed during ${context}, skipping reconciliation`);
+            return false;
         }
 
         const remaining = getTargetedSyncReason.call(this);
