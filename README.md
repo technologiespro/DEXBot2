@@ -26,12 +26,9 @@ node dexbot bots
 
 # 3. Start DEXBot2
 node unlock           # Default — single prompt, no setup needed
-node unlock --isolated  # Per-process isolation with auto-restart
-node pm2              # PM2 process management
-node dexbot start     # For testing
 ```
 
-For detailed setup, see [Installation](#installation) or [Updating](#updating-dexbot2) sections below.
+For detailed setup, see [Installation](#installation) section below.
 
 ### Disclaimer — Use At Your Own Risk
 
@@ -94,22 +91,6 @@ node dexbot keys
 # Create and configure your bots
 node dexbot bots
 ```
-
-### Updating DEXBot2
-
-Update to the latest version:
-
-```bash
-# Run the update script from project root
-node dexbot update
-```
-
-The update script automatically:
-- Fetches and pulls the latest code
-- Installs any new dependencies
-- Restarts active bot processes if running
-- Ensures your `profiles/` directory is protected and unchanged
-- Logs all operations to `update.log`
 
 ## 🔧 Configuration
 
@@ -208,6 +189,18 @@ The supervisor runs in the background. Use `node unlock status` to check, `node 
 ## 🛠️ Bot Management
 
 ```bash
+# Set up master password and keyring
+node dexbot keys
+
+# Create and configure bots
+node dexbot bots
+
+# Update to the latest version
+node dexbot update
+
+# Start a bot for testing
+node dexbot start
+
 # Reset grid (regenerate orders)
 node dexbot reset {all|<bot-name>}
 

@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.8 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.9 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
 - **Growth Phase**: 1,446 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
-- **Stability**: Progression from manual testing to a suite of 174 automated test files
-- **Releases**: 24 tagged releases (v0.1.0 to v0.7.8)
+- **Stability**: Progression from manual testing to a suite of 180 automated test files
+- **Releases**: 25 tagged releases (v0.1.0 to v0.7.9)
 
 ---
 
@@ -59,6 +59,8 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **May 29–31**: Hardened unlock (signal handler cleanup, polling guards), removed deprecated legacy migration patterns, swept 14 documentation files. Released v0.7.6. Then added default background daemon + crash restart, auto-update for monolithic path, per-bot log files, MPA `debtOnly` flag, and simplified CLI. Released v0.7.7. Renamed `unlock-start` → `unlock`, unified launcher summaries, hardened monolithic restart after auto-update, cleaned stale build artifacts, and polished DEXBot comparison docs. Released v0.7.8.
 
+**Jun 1**: Enhanced unlock status with market adapter and credential daemon health indicators, fixed update lifecycle to restart all runtime services, removed PM2 reload wrapper, and de-emphasized PM2 in the README. Released v0.7.9.
+
 ---
 
 ## Architecture Evolution
@@ -85,6 +87,9 @@ Default background daemon + crash restart for unlock, auto-update for monolithic
 
 ### v0.7.7 → v0.7.8 (7 commits)
 Rename `unlock-start` → `unlock`, unify launcher startup/control summaries, harden monolithic restart after auto-update, clean stale build artifacts, add Performance & Speed section to DEXBot comparison doc.
+
+### v0.7.8 → v0.7.9 (9 commits)
+Enhance unlock status with market adapter and credential daemon health indicators, fix unlock update lifecycle to restart all runtime services, remove PM2 reload wrapper, de-emphasize PM2 and clarify unlock modes in the README.
 
 ### v0.7.3 → v0.7.4 (5 commits)
 Code cleanup (unused deps, inline helper), documentation refresh.
@@ -126,7 +131,7 @@ Core order/fund management, documentation, scripts & tooling.
 
 ## Development Statistics
 
-174 automated tests (all TypeScript), 24 tagged releases. See **Version History** for commit breakdown by release.
+180 automated tests (all TypeScript), 25 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -145,7 +150,7 @@ Core order/fund management, documentation, scripts & tooling.
 
 ## Documentation & Testing
 
-Evolved from a basic README to a comprehensive framework (20+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 174-file suite covering unit, integration, simulation, and COW architectural guard tests.
+Evolved from a basic README to a comprehensive framework (20+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 180-file suite covering unit, integration, simulation, and COW architectural guard tests.
 
 ---
 
@@ -168,7 +173,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: May 31, 2026
-**Total Commits**: 1455
-**Date Range**: December 2, 2025 - May 31, 2026 (ongoing)
+**Last Updated**: June 1, 2026
+**Total Commits**: 1465
+**Date Range**: December 2, 2025 - June 1, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

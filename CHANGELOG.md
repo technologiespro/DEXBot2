@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.9] - 2026-06-01 - Unlock Status Health, Update Lifecycle Fixes & PM2 Cleanup
+
+This release enhances unlock status output with market adapter and credential daemon health indicators, fixes the unlock update lifecycle to properly restart all runtime services, removes the stale PM2 reload wrapper, and polishes the README around PM2 de-emphasis and unlock mode clarity.
+
+### 2026-06-01
+
+#### Unlock Status Health
+- Add credential daemon health detection and status display to unlock status output (`c25197a`).
+- Add market adapter health detection and PID-file-based process detection to unlock status, covering both standard and isolated/PM2 modes (`f22dac5`).
+
+#### Unlock Update Lifecycle Fixes
+- Restart legacy unlock wrappers (isolated/PM2) after unlock update to ensure all runtime paths pick up new code (`1acd25c`).
+- Restart market adapter during unlock updates so the adapter also runs fresh code after an update (`8b26c53`).
+- List all runtime services (dexbot, credential daemon, market adapter) in unlock control summaries for complete operational visibility (`a9d8db4`).
+- Avoid listing credential daemon service on restarts — only show it in status/start summaries since restart is not a credential-daemon operation (`41087cd`).
+
+#### PM2 Wrapper Removal & README Polish
+- Remove the `node pm2 reload` wrapper script (`scripts/reload-pm2.sh`) and clean up all stale references to it across files (`71da709`).
+- Simplify supervisor description in README — remove redundant log note, consolidate general information into a dedicated section (`07b8709`).
+- De-emphasize PM2 in README: clarify unlock as the primary start mode, reposition PM2 as an advanced/specialized option (`983f665`).
+
 ## [0.7.8] - 2026-05-31 - Rename unlock-start to unlock, Unify Launcher & Docs Polish
 
 This release renames `unlock-start` to the simpler `unlock` command, unifies startup and control summaries under a single entry point, hardens monolithic runtime restart after auto-update, cleans up stale rename artifacts from the build, and adds a Performance & Speed section to the DEXBot comparison document.
