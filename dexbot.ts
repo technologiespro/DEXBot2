@@ -109,6 +109,7 @@ const PROFILES_DIR = path.join(ROOT, 'profiles');
 
 
 const CLI_COMMANDS = ['start', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order', 'clear'];
+const COMMAND_ALIASES: Record<string, string> = { orders: 'order', key: 'keys', bot: 'bots' };
 const CLI_HELP_FLAGS = ['-h', '--help'];
 const CLI_EXAMPLES_FLAG = '--cli-examples';
 const CLI_EXAMPLES = [
@@ -117,8 +118,8 @@ const CLI_EXAMPLES = [
     { title: 'Disable a bot in config', command: 'dexbot disable bot-name', notes: 'Marks the bot inactive in config.' },
     { title: 'Reset all active bot grids', command: 'dexbot reset all', notes: 'Triggers full grid regeneration for every active bot.' },
     { title: 'Reset a bot grid', command: 'dexbot reset bot-name', notes: 'Triggers a full grid regeneration for the named bot.' },
-    { title: 'Manage keys', command: 'dexbot keys', notes: 'Runs modules/chain_keys.js to add or update master passwords.' },
-    { title: 'Edit bot definitions', command: 'dexbot bots', notes: 'Launches the interactive modules/account_bots.js helper for the JSON config.' },
+    { title: 'Manage keys', command: 'dexbot key', notes: 'Runs modules/chain_keys.js to add or update master passwords.' },
+    { title: 'Edit bot definitions', command: 'dexbot bot', notes: 'Launches the interactive modules/account_bots.js helper for the JSON config.' },
     { title: 'Start bots with PM2', command: 'dexbot pm2', notes: 'Generates ecosystem config, authenticates, and starts PM2.' },
     { title: 'Update DEXBot2', command: 'node dexbot update', notes: 'Fetches latest code, updates dependencies, and restarts PM2.' },
     { title: 'Export bot trades for QTradeX', command: 'dexbot export bot-name', notes: 'Exports trading history and settings to CSV/JSON for backtesting.' },
@@ -140,8 +141,8 @@ function printCLIUsage() {
     console.log('  disable all       Mark all bots inactive in config.');
     console.log('  disable <bot>     Mark the bot inactive in config.');
     console.log('  export <bot>      Export bot trades and settings for QTradeX backtesting.');
-    console.log('  keys              Launch the chain key helper (modules/chain_keys.js).');
-    console.log('  bots              Launch the interactive bot configurator (modules/account_bots.js).');
+    console.log('  key               Launch the chain key helper (modules/chain_keys.js).');
+    console.log('  bot               Launch the interactive bot configurator (modules/account_bots.js).');
     console.log('  pm2               Start all active bots with PM2 (authenticate + generate config + start).');
     console.log('  update            Update DEXBot2 from the repository and restart active bots.');
     console.log('  order             Analyze persisted order grids in profiles/orders/ (spread, increment, funds).');
@@ -645,12 +646,13 @@ async function exportBotTrades(botName: string | undefined) {
 
 /**
  * Parse and execute CLI commands.
- * Supported commands: start, drystart, reset, disable, keys, bots, pm2, update, export
+ * Supported commands: start, drystart, reset, disable, key, bot, pm2, update, export
  * @returns {Promise<boolean>} True if a command was handled, false otherwise
  */
 async function handleCLICommands() {
     if (!cliArgs.length) return false;
-    const [command, target] = cliArgs;
+    const [rawCommand, target] = cliArgs;
+    const command = COMMAND_ALIASES[rawCommand] ?? rawCommand;
     if (!CLI_COMMANDS.includes(command)) {
         console.error(`Unknown command '${command}'.`);
         printCLIUsage();

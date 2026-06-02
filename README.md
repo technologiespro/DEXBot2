@@ -21,8 +21,8 @@ DEXBot2 is the first open source trading bot with zero runtime dependencies and 
 git clone https://github.com/froooze/DEXBot2.git && cd DEXBot2 && npm install
 
 # 2. Set up your master password, keys and add bots
-node dexbot keys
-node dexbot bots
+node dexbot key
+node dexbot bot
 
 # 3. Start DEXBot2
 node unlock           # Default — single prompt, no setup needed
@@ -86,10 +86,10 @@ cd DEXBot2
 npm install
 
 # Set up your master password and keyring
-node dexbot keys
+node dexbot key
 
 # Create and configure your bots
-node dexbot bots
+node dexbot bot
 ```
 
 ## 🔧 Configuration
@@ -116,7 +116,7 @@ market volatility instead of using an unnecessarily wide range.
 
 ### Simple AMA Workflow
 
-1. Create the bot with `node dexbot bots`.
+1. Create the bot with `node dexbot bot`.
 2. Leave defaults unchanged.
 3. Tune `targetSpreadPercent` and `incrementPercent`.
 4. Set `gridPrice` to `ama`.
@@ -131,7 +131,7 @@ market volatility instead of using an unnecessarily wide range.
 
 ### Bot Options Reference
 
-Configuration options from `node dexbot bots`, stored in `profiles/bots.json`:
+Configuration options from `node dexbot bot`, stored in `profiles/bots.json`:
 
 | Parameter | Type | Description |
 | :--- | :--- | :--- |
@@ -153,7 +153,7 @@ Configuration options from `node dexbot bots`, stored in `profiles/bots.json`:
 
 ### General Options (Global)
 
-Global settings via `node dexbot bots`, stored in `profiles/general.settings.json`:
+Global settings via `node dexbot bot`, stored in `profiles/general.settings.json`:
 
 - **Grid Health**: Grid Cache Regeneration % (default `3%`), RMS Divergence Threshold % (default `14.3%`), AMA Delta Threshold % (default `2%`)
 - **Order Recovery**: Partial Dust Threshold % (default `5%`), Dust Cancel Delay (default `30s`, `-1` = off, `0` = instant)
@@ -190,10 +190,10 @@ The supervisor runs in the background. Use `node unlock status` to check, `node 
 
 ```bash
 # Set up master password and keyring
-node dexbot keys
+node dexbot key
 
 # Create and configure bots
-node dexbot bots
+node dexbot bot
 
 # Update to the latest version
 node dexbot update
