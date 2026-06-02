@@ -209,6 +209,9 @@ node dexbot disable {all|<bot-name>}
 
 # Analyze persisted order grids in profiles/orders/
 node dexbot order
+
+# Clear all log files in profiles/logs/
+node dexbot clear
 ```
 
 ## 🎯 PM2 Process Management

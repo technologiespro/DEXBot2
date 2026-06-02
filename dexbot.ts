@@ -43,6 +43,7 @@
  *   node dexbot reset <bot-name>     - Reset bot grid (full regeneration)
  *   node dexbot disable all          - Mark all bots inactive in config
  *   node dexbot disable <bot-name>   - Mark bot inactive in config
+ *   node dexbot clear                - Clear all log files in profiles/logs/
  *
  * CONFIGURATION:
  *   node dexbot keys                 - Set up master password and keyring
@@ -107,7 +108,7 @@ const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 
 
-const CLI_COMMANDS = ['start', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order'];
+const CLI_COMMANDS = ['start', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order', 'clear'];
 const CLI_HELP_FLAGS = ['-h', '--help'];
 const CLI_EXAMPLES_FLAG = '--cli-examples';
 const CLI_EXAMPLES = [
@@ -121,7 +122,8 @@ const CLI_EXAMPLES = [
     { title: 'Start bots with PM2', command: 'dexbot pm2', notes: 'Generates ecosystem config, authenticates, and starts PM2.' },
     { title: 'Update DEXBot2', command: 'node dexbot update', notes: 'Fetches latest code, updates dependencies, and restarts PM2.' },
     { title: 'Export bot trades for QTradeX', command: 'dexbot export bot-name', notes: 'Exports trading history and settings to CSV/JSON for backtesting.' },
-    { title: 'Analyze persisted order grids', command: 'dexbot order', notes: 'Runs the order analyzer across profiles/orders/ and prints spread/increment/funds/distribution metrics.' }
+    { title: 'Analyze persisted order grids', command: 'dexbot order', notes: 'Runs the order analyzer across profiles/orders/ and prints spread/increment/funds/distribution metrics.' },
+    { title: 'Clear all bot log files', command: 'dexbot clear', notes: 'Runs scripts/clear-logs.sh to remove log files from profiles/logs/.' }
 ];
 const cliArgs = process.argv.slice(2);
 
@@ -143,6 +145,7 @@ function printCLIUsage() {
     console.log('  pm2               Start all active bots with PM2 (authenticate + generate config + start).');
     console.log('  update            Update DEXBot2 from the repository and restart active bots.');
     console.log('  order             Analyze persisted order grids in profiles/orders/ (spread, increment, funds).');
+    console.log('  clear             Remove all log files from profiles/logs/ (runs scripts/clear-logs.sh).');
     console.log('Options:');
     console.log('  --cli-examples    Print curated CLI snippets.');
     console.log('  -h, --help        Show this help text.');
@@ -726,6 +729,20 @@ async function handleCLICommands() {
             });
             if (result.error) {
                 console.error(`order: ${result.error.message}`);
+                process.exit(1);
+            }
+            process.exit(result.status ?? 0);
+            return true;
+        }
+        case 'clear': {
+            const { spawnSync } = require('child_process');
+            const clearScript = path.join(ROOT, 'scripts', 'clear-logs.sh');
+            const result = spawnSync('bash', [clearScript], {
+                cwd: ROOT,
+                stdio: 'inherit',
+            });
+            if (result.error) {
+                console.error(`clear: ${result.error.message}`);
                 process.exit(1);
             }
             process.exit(result.status ?? 0);
