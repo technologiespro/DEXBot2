@@ -2,7 +2,7 @@ const assert = require('assert');
 
 console.log('Running startup_decision tests');
 
-const { decideStartupGridAction, reconcileStartupOrders } = require('../modules/order/startup_reconcile');
+const { decideStartupGridAction, reconcileGridOrders } = require('../modules/order/grid_reconcile');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 const { _setFeeCache } = require('../modules/order/utils/math');
 
@@ -154,7 +154,7 @@ const { _setFeeCache } = require('../modules/order/utils/math');
             readOpenOrders: async () => [],
         };
 
-        await reconcileStartupOrders({
+        await reconcileGridOrders({
             manager,
             config: manager.config,
             account: 'test-account',

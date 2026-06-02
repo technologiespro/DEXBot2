@@ -24,7 +24,7 @@ const mathPath = require.resolve('../modules/order/utils/math');
 const processedFillStorePath = require.resolve('../modules/order/processed_fill_store');
 const fillRuntimePath = require.resolve('../modules/dexbot_fill_runtime');
 const creditRuntimePath = require.resolve('../modules/credit_runtime');
-const startupReconcilePath = require.resolve('../modules/order/startup_reconcile');
+const startupReconcilePath = require.resolve('../modules/order/grid_reconcile');
 const accountOrdersPath = require.resolve('../modules/account_orders');
 const botSettingsPath = require.resolve('../modules/bot_settings');
 const accountBotsPath = require.resolve('../modules/account_bots');
@@ -1096,7 +1096,7 @@ async function testDexbotClassPerformGridResyncForwardsOptions() {
     setCachedModule(startupReconcilePath, {
         attemptResumePersistedGridByPriceMatch: async () => null,
         decideStartupGridAction: () => null,
-        reconcileStartupOrders: async () => null,
+        reconcileGridOrders: async () => null,
     });
     setCachedModule(accountOrdersPath, {
         AccountOrders: class {},

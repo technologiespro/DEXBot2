@@ -1,9 +1,14 @@
 // @ts-nocheck
 /**
- * modules/order/startup_reconcile.js - Startup Reconciliation Module
+ * modules/order/grid_reconcile.ts - Grid Reconciliation Module
  *
- * Grid reconciliation and recovery on bot startup.
- * Handles resuming from persisted grids and resolving blockchain discrepancies.
+ * Reconciles the local grid against the on-chain state. Used both at startup
+ * (resume-from-persisted-grid) and from the maintenance runtime's targeted
+ * drift reconciliation path.
+ *
+ * Renamed from startup_reconcile.ts — the function is a general grid/chain
+ * reconciler, not a startup-only concern; maintenance depends on the same
+ * logic. See modules/dexbot_maintenance_runtime.ts for the runtime caller.
  *
  * Purpose:
  * - Resume previously persisted grids from storage
@@ -18,7 +23,7 @@
  * ===============================================================================
  *
  * PUBLIC FUNCTIONS:
- *   1. reconcileStartupOrders(manager, logger) - Main reconciliation function (async)
+ *   1. reconcileGridOrders(manager, logger) - Main reconciliation function (async)
  *      Reconciles blockchain orders with persisted grid, activates as needed
  *      Handles partial orders and triggers rebalancing if dust detected
  *      Returns null or rebalance result
@@ -52,7 +57,7 @@
  * 1. Load persisted grid from storage (if exists)
  * 2. Call decideStartupGridAction() to determine action
  * 3. If resume: attemptResumePersistedGridByPriceMatch()
- * 4. Call reconcileStartupOrders() to sync with blockchain
+ * 4. Call reconcileGridOrders() to sync with blockchain
  * 5. Activate appropriate orders
  * 6. Check for dust partials and trigger rebalancing if needed
  *
@@ -1163,7 +1168,7 @@ async function decideStartupGridAction({
  * @param {Array<Object>} params.chainOpenOrders - On-chain open orders
  * @returns {Promise<Object>} Reconciliation result
  */
-async function reconcileStartupOrders({
+async function reconcileGridOrders({
     manager,
     config,
     account,
@@ -1174,24 +1179,24 @@ async function reconcileStartupOrders({
 }) {
     // Parameter validation
     if (!manager || typeof manager.synchronizeWithChain !== 'function') {
-        throw new Error('reconcileStartupOrders: manager must be provided with synchronizeWithChain method');
+        throw new Error('reconcileGridOrders: manager must be provided with synchronizeWithChain method');
     }
     if (typeof manager.getOrdersByTypeAndState !== 'function') {
-        throw new Error('reconcileStartupOrders: manager.getOrdersByTypeAndState method not found');
+        throw new Error('reconcileGridOrders: manager.getOrdersByTypeAndState method not found');
     }
     if (!account || !privateKey) {
-        throw new Error('reconcileStartupOrders: account and privateKey are required');
+        throw new Error('reconcileGridOrders: account and privateKey are required');
     }
     if (!chainOrders || typeof chainOrders.cancelOrder !== 'function' || typeof chainOrders.createOrder !== 'function') {
-        throw new Error('reconcileStartupOrders: chainOrders must provide cancelOrder and createOrder methods');
+        throw new Error('reconcileGridOrders: chainOrders must provide cancelOrder and createOrder methods');
     }
     if (typeof chainOrders.readOpenOrders !== 'function') {
-        throw new Error('reconcileStartupOrders: chainOrders.readOpenOrders is required for recovery sync');
+        throw new Error('reconcileGridOrders: chainOrders.readOpenOrders is required for recovery sync');
     }
     const supportsBatchUpdate = typeof chainOrders.buildUpdateOrderOp === 'function' && typeof chainOrders.executeBatch === 'function';
     const supportsSequentialUpdate = typeof chainOrders.updateOrder === 'function';
     if (!supportsBatchUpdate && !supportsSequentialUpdate) {
-        throw new Error('reconcileStartupOrders: chainOrders must provide updateOrder or (buildUpdateOrderOp + executeBatch) for startup updates');
+        throw new Error('reconcileGridOrders: chainOrders must provide updateOrder or (buildUpdateOrderOp + executeBatch) for startup updates');
     }
 
     const logger = manager && manager.logger;
@@ -1442,7 +1447,7 @@ async function reconcileStartupOrders({
 }
 
 export = {
-    reconcileStartupOrders,
+    reconcileGridOrders,
     attemptResumePersistedGridByPriceMatch,
     decideStartupGridAction,
 };

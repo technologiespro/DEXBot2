@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { reconcileStartupOrders } = require('../modules/order/startup_reconcile');
+const { reconcileGridOrders } = require('../modules/order/grid_reconcile');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 
 async function testDuplicateRacePrevention() {
@@ -92,7 +92,7 @@ async function testDuplicateRacePrevention() {
     // updates = 1 (sell-1 will be targeted for update by 1.7.1).
     // creations = 1 (sell-2 will be targeted for creation).
     console.log("RUNNING RECONCILE: Expecting Phase 2 update for sell-1 to fail, trigger sync, and match sell-2");
-    await reconcileStartupOrders({
+    await reconcileGridOrders({
         manager,
         config: { activeOrders: { sell: 2 } },
         account: 'test',

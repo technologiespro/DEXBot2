@@ -801,11 +801,11 @@ class Grid {
         await manager.persistGrid();
         await Grid.initializeGrid(manager);
 
-        const { reconcileStartupOrders } = require('./startup_reconcile');
+        const { reconcileGridOrders } = require('./grid_reconcile');
 
         // FIX: Add error context for debugging grid recalculation issues
         try {
-            await reconcileStartupOrders({ manager, config: manager.config, account, privateKey, chainOrders, chainOpenOrders, fillLockAlreadyHeld: true });
+            await reconcileGridOrders({ manager, config: manager.config, account, privateKey, chainOrders, chainOpenOrders, fillLockAlreadyHeld: true });
         } catch (err: any) {
             manager.logger?.log?.(`Error during startup order reconciliation: ${err.message}`, 'error');
             throw new Error(`Grid recalculation failed during order reconciliation: ${err.message}`);

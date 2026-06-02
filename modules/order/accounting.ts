@@ -610,7 +610,7 @@ class Accountant {
        */
     async _attemptFundRecovery(mgr, violationType) {
           if (!mgr._recoveryState || typeof mgr._recoveryState !== 'object') {
-              mgr._recoveryState = { attemptCount: 0, lastAttemptAt: 0, inFlight: false, lastFailureAt: 0 };
+              mgr._recoveryState = { attemptCount: 0, lastAttemptAt: 0, inFlight: false, lastFailureAt: 0, structuralResyncRequested: false };
           }
 
           const state = mgr._recoveryState;
@@ -740,14 +740,15 @@ class Accountant {
        * @returns {void}
        */
        resetRecoveryState() {
-           if (!this.manager) return;
-           this.manager._recoveryAttempted = false;
-           this.manager._recoveryState = {
-               attemptCount: 0,
-               lastAttemptAt: 0,
-               inFlight: false,
-               lastFailureAt: 0
-           };
+            if (!this.manager) return;
+            this.manager._recoveryAttempted = false;
+            this.manager._recoveryState = {
+                attemptCount: 0,
+                lastAttemptAt: 0,
+                inFlight: false,
+                lastFailureAt: 0,
+                structuralResyncRequested: false
+            };
         }
 
     /**

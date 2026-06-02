@@ -1,9 +1,9 @@
 const assert = require('assert');
 
 const {
-    reconcileStartupOrders,
+    reconcileGridOrders,
     attemptResumePersistedGridByPriceMatch,
-} = require('../modules/order/startup_reconcile');
+} = require('../modules/order/grid_reconcile');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 
 function createManager(overrides = {}) {
@@ -71,7 +71,7 @@ async function testUnmatchedCancelReleasesFundsAndHandlesNullEntries() {
         readOpenOrders: async () => [],
     };
 
-    await reconcileStartupOrders({
+    await reconcileGridOrders({
         manager,
         config: { activeOrders: { sell: 0, buy: 0 } },
         account: 'acct',
@@ -127,7 +127,7 @@ async function testVerifiedAfterFailureRefetchesOpenOrders() {
         },
     ];
 
-    await reconcileStartupOrders({
+    await reconcileGridOrders({
         manager,
         config: { activeOrders: { sell: 0, buy: 0 } },
         account: 'acct',
@@ -198,7 +198,7 @@ async function testSkipUpdateWhenSlotAlreadyMapped() {
         },
     ];
 
-    await reconcileStartupOrders({
+    await reconcileGridOrders({
         manager,
         config: { activeOrders: { sell: 1, buy: 0 } },
         account: 'acct',

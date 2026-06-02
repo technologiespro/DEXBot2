@@ -128,7 +128,7 @@ const {
     GRID_LIMITS,
     FILL_PROCESSING
 } = require('./constants');
-const { attemptResumePersistedGridByPriceMatch, decideStartupGridAction, reconcileStartupOrders } = require('./order/startup_reconcile');
+const { attemptResumePersistedGridByPriceMatch, decideStartupGridAction, reconcileGridOrders } = require('./order/grid_reconcile');
 const { AccountOrders } = require('./account_orders');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { cloneWeightDistribution } = require('./order/utils/math');
@@ -1180,7 +1180,7 @@ class DEXBot {
                             this._log('Generating new grid and syncing with existing on-chain orders...');
                             await Grid.initializeGrid(this.manager);
                             await this.manager.syncFromOpenOrders(chainOpenOrders, { skipAccounting: true, fillLockAlreadyHeld: true });
-                            const rebalanceResult = await reconcileStartupOrders({
+                            const rebalanceResult = await reconcileGridOrders({
                                 manager: this.manager,
                                 config: this.config,
                                 account: this.account,
@@ -1217,7 +1217,7 @@ class DEXBot {
                             }
                         }
 
-                        const rebalanceResult = await reconcileStartupOrders({
+                        const rebalanceResult = await reconcileGridOrders({
                             manager: this.manager,
                             config: this.config,
                             account: this.account,
@@ -1778,7 +1778,6 @@ class DEXBot {
                 this._credentialRecoveryNeeded = true;
                 this._suspendGridPersistenceForCredentialOutage(`credential outage during fill processing: ${err.message}`);
             }
-            this._log(`Error processing fills: ${err.message}`);
             this._log(`Error processing fills: ${err.message}`, 'error');
             if (err.stack) this._log(err.stack, 'error');
         }
@@ -1788,7 +1787,6 @@ class DEXBot {
         if (!this._shuttingDown && this._incomingFillQueue.length > 0) {
             // Schedule consumer restart asynchronously (not in finally block)
             setImmediate(() => this._consumeFillQueue(chainOrders).catch(err => {
-                this._log(`Error in deferred consumer restart: ${err.message}`);
                 this._log(`Deferred consumer restart failed: ${err.message}`, 'error');
             }));
         }
@@ -3202,6 +3200,7 @@ class DEXBot {
                 'error'
             );
             if (typeof this.manager.requestStructuralGridResync === 'function') {
+                if (this.manager._recoveryState) this.manager._recoveryState.structuralResyncRequested = true;
                 await this.manager.requestStructuralGridResync('unmatched chain orders before COW create', {
                     unmatchedChainOrders
                 });
@@ -3451,7 +3450,6 @@ class DEXBot {
                         return {
                             executed: false,
                             hadRotation: false,
-                            resultTruncated: true,
                             missingCreateResults: missingCreateResults.map(item => ({
                                 index: item.index,
                                 slotId: item.ctx?.order?.id || item.ctx?.id || null
@@ -4073,7 +4071,7 @@ class DEXBot {
                 return { skipped: true, reason: 'shutting down' };
             }
 
-            if (this._structuralGridResyncInFlight || this._structuralGridResyncTimer) {
+            if (this._structuralGridResyncRunning || this._structuralGridResyncTimer) {
                 return { skipped: true, reason: 'structural grid resync already scheduled' };
             }
 
@@ -4084,7 +4082,7 @@ class DEXBot {
                 this._structuralGridResyncTimer = null;
                 if (this._shuttingDown) return;
 
-                this._structuralGridResyncInFlight = true;
+                this._structuralGridResyncRunning = true;
                 try {
                     const suffix = unmatchedCount > 0 ? ` (${unmatchedCount} unmatched chain order(s))` : '';
                     this._warn(`[RECOVERY] Running structural full grid resync for ${reason}${suffix}`);
@@ -4099,7 +4097,7 @@ class DEXBot {
                 } catch (err: any) {
                     this._warn(`[RECOVERY] Structural full grid resync failed: ${err.message}`);
                 } finally {
-                    this._structuralGridResyncInFlight = false;
+                    this._structuralGridResyncRunning = false;
                     if (this.manager?._recoveryState) {
                         this.manager._recoveryState.structuralResyncRequested = false;
                     }

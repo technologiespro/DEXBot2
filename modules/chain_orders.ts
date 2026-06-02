@@ -133,6 +133,14 @@ function recordOwnCancel(orderId) {
     }
 }
 
+function recordOwnCancelOps(operations) {
+    for (const op of operations || []) {
+        if (op?.op_name === 'limit_order_cancel' && op.op_data?.order) {
+            recordOwnCancel(op.op_data.order);
+        }
+    }
+}
+
 function wasRecentlyOwnCancelled(orderId) {
     if (!orderId) return false;
     const ts = _recentOwnCancels.get(String(orderId));
@@ -1006,7 +1014,9 @@ async function executeBatch(accountName, privateKey, operations) {
 
     try {
         if (isDaemonSigningToken(privateKey)) {
-            return executeViaDaemonToken(accountName, privateKey, operations);
+            const result = await executeViaDaemonToken(accountName, privateKey, operations);
+            recordOwnCancelOps(operations);
+            return result;
         }
 
         const acc = await createAccountClient(accountName, privateKey);
@@ -1023,6 +1033,13 @@ async function executeBatch(accountName, privateKey, operations) {
         }
 
         const result = await tx.broadcast();
+
+        // Record own-cancel correlation for the self-cancel guard in the fill
+        // consumer. Without this, batched cancels (the dominant COW path) would
+        // skip the ring buffer and the guard would not recognize their
+        // propagation artifacts as non-economic. Only fires after a successful
+        // broadcast so failed batches never poison the buffer.
+        recordOwnCancelOps(operations);
 
         // Normalize broadcast response shape across node variants.
         const operationResults =

@@ -46,7 +46,7 @@
  * 8. async_lock.js - AsyncLock class (race condition prevention)
  * 9. export.js - QTradeX export module (trade history extraction)
  * 10. runner.js - Heavy calculation and I/O operations
- * 11. startup_reconcile.js - Blockchain synchronization on startup
+ * 11. grid_reconcile.ts - Grid reconciliation against chain (startup + maintenance)
  * 12. strategy.js - Strategy configuration and parsing
  * 13. sync_engine.js - Real-time blockchain synchronization
  *

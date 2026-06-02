@@ -8,7 +8,7 @@ const { withDynamicWeightFiles } = require('./helpers/dynamic_weight_files');
 console.log('Running dexbot startup dynamic weight wiring tests');
 
 const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.ts');
-const startupReconcilePath = path.resolve(__dirname, '../modules/order/startup_reconcile.ts');
+const startupReconcilePath = path.resolve(__dirname, '../modules/order/grid_reconcile.ts');
 const dexbotClassPath = path.resolve(__dirname, '../modules/dexbot_class.ts');
 
 const originalBitsharesClient = require.cache[bitsharesClientPath];
@@ -30,7 +30,7 @@ setCachedModule(bitsharesClientPath, {
 setCachedModule(startupReconcilePath, {
     attemptResumePersistedGridByPriceMatch: async () => ({ resumed: false }),
     decideStartupGridAction: async () => ({ shouldRegenerate: false }),
-    reconcileStartupOrders: async () => ({ actions: [] }),
+    reconcileGridOrders: async () => ({ actions: [] }),
 });
 
 const chainOrders = require('../modules/chain_orders');

@@ -248,7 +248,7 @@ async function testStartupDustNoForcedRebalance() {
     await mgr._updateOrder({ id: 'sell-0', type: ORDER_TYPES.SELL, state: ORDER_STATES.PARTIAL, price: 1900, size: 1, orderId: '1.7.100' });
     await mgr._updateOrder({ id: 'buy-0', type: ORDER_TYPES.BUY, state: ORDER_STATES.PARTIAL, price: 1700, size: 5, orderId: '1.7.200' });
 
-    const { reconcileStartupOrders } = require('../modules/order/startup_reconcile');
+    const { reconcileGridOrders } = require('../modules/order/grid_reconcile');
     
     mgr.getChainFundsSnapshot = () => ({
         allocatedBuy: 1000, allocatedSell: 1000,
@@ -274,7 +274,7 @@ async function testStartupDustNoForcedRebalance() {
         { id: '1.7.200', sell_price: { base: { asset_id: '1.3.0', amount: 8500 }, quote: { asset_id: '1.3.5537', amount: 5000 } }, for_sale: 8500 }
     ];
 
-    await reconcileStartupOrders({
+    await reconcileGridOrders({
         manager: mgr,
         config: mgr.config,
         account: 'test-account',

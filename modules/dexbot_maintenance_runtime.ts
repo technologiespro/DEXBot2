@@ -18,7 +18,7 @@ const Format = require('./order/format');
 const { parseJsonWithComments } = require('./order/utils/system');
 const { cloneWeightDistribution, calculateOrderCreationFees, calculateSwapInAmount, floatToBlockchainInt, blockchainToFloat } = require('./order/utils/math');
 const { updateDynamicGridSnapshotSync } = require('../market_adapter/utils/dynamic_grid_snapshot');
-const { reconcileStartupOrders } = require('./order/startup_reconcile');
+const { reconcileGridOrders } = require('./order/grid_reconcile');
 const { formatUnmatchedChainOrder } = require('./order/utils/order');
 
 const CODE_ROOT = path.join(__dirname, '..');
@@ -122,19 +122,19 @@ function getTargetActiveOrders(config, side) {
     return Math.max(0, Number.isFinite(configured) ? configured : 1);
 }
 
-function getTargetedSyncReason() {
-    if (!this.manager || this.config?.dryRun) return null;
+function getTargetedSyncReason(bot) {
+    if (!bot.manager || bot.config?.dryRun) return null;
 
-    const targetBuy = getTargetActiveOrders(this.config, 'buy');
-    const targetSell = getTargetActiveOrders(this.config, 'sell');
-    const liveBuy = countLiveGridOrders(this.manager, ORDER_TYPES.BUY);
-    const liveSell = countLiveGridOrders(this.manager, ORDER_TYPES.SELL);
+    const targetBuy = getTargetActiveOrders(bot.config, 'buy');
+    const targetSell = getTargetActiveOrders(bot.config, 'sell');
+    const liveBuy = countLiveGridOrders(bot.manager, ORDER_TYPES.BUY);
+    const liveSell = countLiveGridOrders(bot.manager, ORDER_TYPES.SELL);
     const shortfalls = [];
 
     if (liveBuy < targetBuy) shortfalls.push(`buy ${liveBuy}/${targetBuy}`);
     if (liveSell < targetSell) shortfalls.push(`sell ${liveSell}/${targetSell}`);
 
-    const drift = this.manager.checkFundDriftAfterFills?.();
+    const drift = bot.manager.checkFundDriftAfterFills?.();
     if (drift && drift.isValid === false) {
         return { reason: `fund drift: ${drift.reason}`, targetBuy, targetSell, liveBuy, liveSell, drift };
     }
@@ -147,7 +147,7 @@ function getTargetedSyncReason() {
 }
 
 async function maybeRunTargetedDriftReconciliation(context) {
-    const trigger = getTargetedSyncReason.call(this);
+    const trigger = getTargetedSyncReason(this);
     if (!trigger) return false;
 
     const now = Date.now();
@@ -168,7 +168,6 @@ async function maybeRunTargetedDriftReconciliation(context) {
         return false;
     }
 
-    this._lastTargetedDriftSyncAt = now;
     this._log(`[TARGETED-SYNC] Fetching open orders during ${context}: ${trigger.reason}`, 'warn');
 
     try {
@@ -179,7 +178,7 @@ async function maybeRunTargetedDriftReconciliation(context) {
             return false;
         }
 
-        const remaining = getTargetedSyncReason.call(this);
+        const remaining = getTargetedSyncReason(this);
         const unmatchedCount = Number(syncResult?.unmatchedChainOrders?.length || 0);
         if (remaining || unmatchedCount > 0) {
             this._log(
@@ -187,7 +186,7 @@ async function maybeRunTargetedDriftReconciliation(context) {
                 `${remaining ? remaining.reason : `${unmatchedCount} unmatched chain order(s)`}`,
                 'warn'
             );
-            const reconcileResult = await reconcileStartupOrders({
+            const reconcileResult = await reconcileGridOrders({
                 manager: this.manager,
                 config: this.config,
                 account: this.account,
@@ -199,6 +198,12 @@ async function maybeRunTargetedDriftReconciliation(context) {
             await this._executeBatchIfNeeded(reconcileResult, `targeted ${context} reconcile`);
         }
 
+        // Advance cooldown only after the sync (and optional reconcile) succeeds.
+        // Previously this was set before the work, which meant a network blip
+        // would lock out the next drift for the full cooldown even though no
+        // useful work happened. With post-sync stamping, transient failures
+        // retry on the next maintenance tick.
+        this._lastTargetedDriftSyncAt = Date.now();
         await this.manager.persistGrid?.();
         return true;
     } catch (err) {

@@ -1,13 +1,13 @@
 /**
  * tests/test_resync_balance_fix.js
  * 
- * Verifies that reconcileStartupOrders correctly uses delta-based balance checks
+ * Verifies that reconcileGridOrders correctly uses delta-based balance checks
  * during its update phase (Phase 2), allowing updates when funds are reused.
  */
 
 const assert = require('assert');
 // Load real modules
-const { reconcileStartupOrders } = require('../modules/order/startup_reconcile');
+const { reconcileGridOrders } = require('../modules/order/grid_reconcile');
 const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 
 async function testDeltaBalanceCheck() {
@@ -88,7 +88,7 @@ async function testDeltaBalanceCheck() {
     };
 
     console.log("SUB-TEST 1: Delta increase (10) > balance (5) -> Should SKIP");
-    await reconcileStartupOrders({
+    await reconcileGridOrders({
         manager,
         account: 'test-account',
         privateKey: 'test-key',
@@ -105,7 +105,7 @@ async function testDeltaBalanceCheck() {
     console.log("\nSUB-TEST 2: Delta increase (10) < balance (15) -> Should SUCCEED");
     updateCalled = false;
     manager.accountTotals.sellFree = 15; // Balance covers delta 10
-    await reconcileStartupOrders({
+    await reconcileGridOrders({
         manager,
         account: 'test-account',
         privateKey: 'test-key',
@@ -120,7 +120,7 @@ async function testDeltaBalanceCheck() {
     updateCalled = false;
     manager.accountTotals.sellFree = 2; // Very low balance
     manager.orders.get('sell-1').size = 80; // Grid size reduced to 80 (Reduction from 90)
-    await reconcileStartupOrders({
+    await reconcileGridOrders({
         manager,
         account: 'test-account',
         privateKey: 'test-key',

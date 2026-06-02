@@ -470,7 +470,8 @@ async function testNoPostBatchCacheDeductionForCreates() {
     }
 
     assert.strictEqual(result.executed, false, 'Missing create result must abort local commit');
-    assert.strictEqual(result.resultTruncated, true, 'Missing create result should be reported');
+    assert.strictEqual(Array.isArray(result.missingCreateResults), true, 'Missing create result should be reported via missingCreateResults key');
+    assert.strictEqual(result.missingCreateResults.length, 1, 'Single missing create result should be reported');
     assert.strictEqual(recoverySyncCalls, 1, 'Missing create result must trigger immediate recovery sync');
     assert.strictEqual(manager._lastUnmatchedChainOrders.length, 1, 'Missing create result should leave a structural create blocker');
     assert.strictEqual(manager._lastUnmatchedChainOrders[0].reason, 'missing-create-result', 'Blocker should identify missing create result');
@@ -587,7 +588,8 @@ async function testNoPostBatchCacheDeductionForMixedCreates() {
     }
 
     assert.strictEqual(result.executed, false, 'Missing mixed create result must abort local commit');
-    assert.strictEqual(result.resultTruncated, true, 'Missing mixed create result should be reported');
+    assert.strictEqual(Array.isArray(result.missingCreateResults), true, 'Missing mixed create result should be reported via missingCreateResults key');
+    assert.strictEqual(result.missingCreateResults.length, 1, 'Single missing mixed create result should be reported');
     assert.strictEqual(recoverySyncCalls, 1, 'Missing mixed create result must trigger recovery sync');
     assert.strictEqual(manager._lastUnmatchedChainOrders.length, 1, 'Missing mixed create result should leave a structural create blocker');
     assert.strictEqual(manager._lastUnmatchedChainOrders[0].reason, 'missing-create-result', 'Mixed create blocker should identify missing result');
