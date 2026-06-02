@@ -164,27 +164,25 @@ Global settings via `node dexbot bot`, stored in `profiles/general.settings.json
 
 ## 🎯 Zero-Dependency Process Management
 
-Run without PM2. `node unlock` runs all bots in a single process. Add `--isolated` for per-process isolation with auto-restart, memory limits, and log files.
+`node unlock` is the recommended production runtime, which runs all bots in a single process, credential and market_adapter in a separate one.
 
 ```bash
 # Start all active bots
-node unlock              # Single process
-node unlock --isolated   # Per-process isolation
+node unlock              # Standard runtime
+node unlock --isolated   # Per-bot isolation
 
 # Start a specific bot
 node unlock <bot-name>
 node unlock --isolated <bot-name>
 
 # Runtime control
-node unlock status
-node unlock stop <bot-name>
-node unlock restart <bot-name>
-node unlock stop-all
-node unlock restart-all
-node unlock delete
+node unlock status              # Show status of all running processes
+node unlock stop <bot-name>     # Stop a specific bot
+node unlock restart <bot-name>  # Restart a specific bot
+node unlock stop-all            # Stop all running bots
+node unlock restart-all         # Restart all running bots
+node unlock delete              # Shut down all bots and clean up the runtime
 ```
-
-The supervisor runs in the background. Use `node unlock status` to check, `node unlock stop-all` to pause, and `node unlock delete` to fully stop.
 
 ## 🛠️ Bot Management
 
@@ -198,7 +196,7 @@ node dexbot bot
 # Update to the latest version
 node dexbot update
 
-# Start a bot for testing
+# Start all active bots directly
 node dexbot start
 
 # Reset grid (regenerate orders)
@@ -219,7 +217,7 @@ node dexbot clear
 
 ## 🎯 PM2 Process Management
 
-For production use with automatic restart and monitoring. Run `node pm2` to start — it handles connection, authentication, and PM2 startup automatically.
+PM2 is optional — `node unlock` is the native solution. Run `node pm2` to start, which handles connection, authentication, and PM2 startup automatically.
 
 ```bash
 # Start all active bots with PM2
