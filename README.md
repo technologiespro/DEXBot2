@@ -196,7 +196,7 @@ node dexbot bot
 # Update to the latest version
 node dexbot update
 
-# Start all active bots directly
+# Start all active bots directly (temporary testing only)
 node dexbot start
 
 # Reset grid (regenerate orders)
