@@ -16,8 +16,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { formatPrice6, formatPrice4 } = require('../modules/order/format');
-const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
+const { formatPrice6 } = require('../modules/order/format');
+const { ORDER_TYPES, ORDER_STATES, MARKET_ADAPTER } = require('../modules/constants');
 
 const PARENT = path.dirname(__dirname);
 const ROOT = path.basename(PARENT) === 'dist' ? path.dirname(PARENT) : PARENT;
@@ -33,11 +33,24 @@ const colors = {
   sellDark: '\x1b[38;5;52m', // even darker red
   spread: '\x1b[33m', // yellow
   cyan: '\x1b[36m',   // cyan
-  gray: '\x1b[90m'    // gray
+  gray: '\x1b[38;5;246m'    // medium grey (lighter than bright black)
 };
 
 // Partial block characters for weight visualization (0-8 eighths height)
 const partialBlocks = ['', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+// Maximum age (ms) for a dynamic grid snapshot to be considered "recently available".
+// The market adapter writes a fresh snapshot on every cycle; a gap larger than this
+// typically means the adapter is stopped or stuck for that bot. We allow up to two
+// full cycles of drift (one missed cycle + slack for slow processing) before falling
+// back to the static-only display, so the live colors track the actual adapter
+// cadence rather than a hand-tuned timeout.
+const DYNAMIC_GRID_SNAPSHOT_MAX_AGE_MS = 2 * MARKET_ADAPTER.RUNTIME_DEFAULTS.pollSeconds * 1000;
+
+// Tolerance (absolute weight delta) for treating the two live weights as equal
+// when picking a color. Half a percentage point avoids noisy green/red flicker
+// when the dynamic weight sits exactly on the static baseline.
+const DYNAMIC_WEIGHT_EPSILON = 0.005;
 
 // Bar width configuration (single source of truth)
 const BAR_WIDTH = 51;
@@ -80,6 +93,82 @@ function createBotKey(bot, index) {
 
 function hasBotsObject(data) {
   return Boolean(data && data.bots && typeof data.bots === 'object' && !Array.isArray(data.bots));
+}
+
+/**
+ * isAmaGridPrice: Detect bots whose grid price follows the AMA (Kaufman) stream.
+ *
+ * Mirrors the predicate used in market_adapter.ts / unlock.ts / pm2.ts so the
+ * analyzer only attempts to load a dynamic grid snapshot for AMA bots. Non-AMA
+ * bots never have a meaningful dynamic grid file.
+ */
+function isAmaGridPrice(config) {
+  if (!config || typeof config !== 'object') return false;
+  const gridPrice = typeof config.gridPrice === 'string' ? config.gridPrice.trim().toLowerCase() : '';
+  return /^ama(?:[1-4])?$/.test(gridPrice);
+}
+
+/**
+ * readDynamicGridSnapshot: Read profiles/orders/<botKey>.dynamicgrid.json safely.
+ *
+ * Returns null when the file is missing or unreadable. The caller decides whether
+ * the snapshot is fresh enough to surface live weight values.
+ */
+function readDynamicGridSnapshot(botKey) {
+  if (!botKey) return null;
+  try {
+    const filePath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
+    if (!fs.existsSync(filePath)) return null;
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return data && typeof data === 'object' ? data : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * buildDynamicWeightInfo: Extract a display-ready dynamic weight payload.
+ *
+ * Combines the bot's static `weightDistribution` (from bots.json) with the latest
+ * `effectiveWeights` from the dynamic grid snapshot. Returns null when no live
+ * data is available, and includes an `isRecent` flag indicating whether the
+ * snapshot was written within the freshness window.
+ */
+function buildDynamicWeightInfo(botKey, config) {
+  if (!isAmaGridPrice(config)) return null;
+  const snapshot = readDynamicGridSnapshot(botKey);
+  if (!snapshot) return null;
+  const dw = snapshot.dynamicWeights;
+  if (!dw || typeof dw !== 'object') return null;
+  const effective = dw.effectiveWeights;
+  if (!effective || typeof effective !== 'object') return null;
+  const effBuy = Number(effective.buy);
+  const effSell = Number(effective.sell);
+  if (!Number.isFinite(effBuy) || !Number.isFinite(effSell)) return null;
+  const baseFromSnapshot = dw.baseWeights && typeof dw.baseWeights === 'object' ? dw.baseWeights : null;
+  const baseBuy = baseFromSnapshot && Number.isFinite(Number(baseFromSnapshot.buy))
+    ? Number(baseFromSnapshot.buy)
+    : (config.weightDistribution && Number.isFinite(Number(config.weightDistribution.buy))
+        ? Number(config.weightDistribution.buy)
+        : null);
+  const baseSell = baseFromSnapshot && Number.isFinite(Number(baseFromSnapshot.sell))
+    ? Number(baseFromSnapshot.sell)
+    : (config.weightDistribution && Number.isFinite(Number(config.weightDistribution.sell))
+        ? Number(config.weightDistribution.sell)
+        : null);
+  if (!Number.isFinite(baseBuy) || !Number.isFinite(baseSell)) return null;
+  const updatedAtMs = Date.parse(String(snapshot.updatedAt || ''));
+  const isRecent = Number.isFinite(updatedAtMs)
+    && (Date.now() - updatedAtMs) <= DYNAMIC_GRID_SNAPSHOT_MAX_AGE_MS;
+  return {
+    live: { buy: effBuy, sell: effSell },
+    base: { buy: baseBuy, sell: baseSell },
+    isReady: dw.isReady === true,
+    trend: typeof dw.trend === 'string' ? dw.trend : null,
+    finalOffset: Number.isFinite(Number(dw.finalOffset)) ? Number(dw.finalOffset) : null,
+    isRecent,
+    updatedAt: Number.isFinite(updatedAtMs) ? new Date(updatedAtMs) : null,
+  };
 }
 
 function isRealGridOrder(order) {
@@ -137,6 +226,49 @@ function formatCurrency(value) {
   }
   // Standard values: use 2 decimal precision
   return Number(value).toFixed(2);
+}
+
+/**
+ * formatFundsValue: Format a fund amount with compact notation (K/M for ≥1000)
+ * and up to 5 significant figures, trimming uninformative trailing zeros.
+ * Examples:
+ *   194395   -> "194.4K"
+ *   10000    -> "10K"
+ *   1000     -> "1K"
+ *   332.33   -> "332.33"
+ *   10.389   -> "10.389"
+ *   1500000  -> "1.5M"
+ * @param {number} value
+ * @returns {string}
+ */
+function formatFundsValue(value) {
+  if (value === 0) return '0';
+  const absValue = Math.abs(value);
+
+  let quotient;
+  let suffix = '';
+  if (absValue >= 1000000) {
+    quotient = value / 1000000;
+    suffix = 'M';
+  } else if (absValue >= 1000) {
+    quotient = value / 1000;
+    suffix = 'K';
+  } else {
+    quotient = value;
+  }
+
+  const absQ = Math.abs(quotient);
+  const intDigits = Math.floor(Math.log10(Math.max(absQ, 1e-10))) + 1;
+  let formatted;
+  if (intDigits >= 5) {
+    formatted = String(Math.round(quotient));
+  } else {
+    const decimalPlaces = Math.max(0, 5 - intDigits);
+    formatted = quotient.toFixed(decimalPlaces);
+    formatted = formatted.replace(/(\.[0-9]*?)0+$/, '$1').replace(/\.$/, '');
+  }
+
+  return formatted + suffix;
 }
 
 /**
@@ -253,9 +385,10 @@ function getOrderFiles() {
  *
  * @param {Object} botData - Order data with grid array and metadata
  * @param {Object} config - Bot configuration (optional) for comparison
+ * @param {string} [botKey] - Bot key used to locate the dynamic grid snapshot
  * @returns {Object} Analysis result with spread, increment, funds, distribution
  */
-function analyzeOrder(botData, config) {
+function analyzeOrder(botData, config, botKey) {
   const meta = botData.meta;
   const grid = botData.grid;
 
@@ -389,7 +522,10 @@ function analyzeOrder(botData, config) {
     // Bot fund allocation settings from config
     botFunds: config ? config.botFunds : null,
     // Weight distribution from config
-    weightDistribution: config ? config.weightDistribution : null
+    weightDistribution: config ? config.weightDistribution : null,
+    // Latest dynamic weight payload from the market adapter (AMA bots only).
+    // Null when the bot is not AMA, or when no fresh snapshot is available.
+    dynamicWeight: buildDynamicWeightInfo(botKey, config)
   };
 }
 
@@ -805,6 +941,84 @@ function analyzeDistribution(buySlots, sellSlots, bestBuySlot, bestSellSlot) {
 }
 
 /**
+ * formatWeightLine: Render the "Weight:" line, optionally with live dynamic values.
+ *
+ * Behavior:
+ *  - No live data: print the static (configured) buy/sell weights only.
+ *  - Stale snapshot (older than 2 × market_adapter poll cycle): print the
+ *    static weights and append a red "(adapter offline)" alert so the operator
+ *    notices that the market_adapter has stopped publishing for this bot.
+ *  - Recent live data: print "<live> (<static>) buy | <live> (<static>) sell".
+ *    The metric is always relative to the static values:
+ *      - the side with the higher live weight is the "losing" side (red) -
+ *        the bot is the most aggressive at offloading the base asset on that side.
+ *      - the side with the lower live weight is the "winning" side (green) -
+ *        the bot is preserving capital there.
+ *      - when the two live weights are within epsilon of each other, both
+ *        are rendered in grey.
+ *    The static value is always rendered in grey.
+ *
+ * @param {Object} weightDistribution - Bot config {buy, sell} weights
+ * @param {Object|null} dynamicWeight - Result of buildDynamicWeightInfo
+ * @returns {string|null} Formatted line, or null when no weights are available
+ */
+function formatWeightLine(weightDistribution, dynamicWeight) {
+  if (!weightDistribution) return null;
+  const staticBuy = Number(weightDistribution.buy);
+  const staticSell = Number(weightDistribution.sell);
+  if (!Number.isFinite(staticBuy) || !Number.isFinite(staticSell)) return null;
+
+  // Stale snapshot: snapshot file exists but updatedAt is older than the
+  // freshness window. Surface a red "(adapter offline)" alert so the operator
+  // knows the live envelope is being withheld, not just absent.
+  if (dynamicWeight && dynamicWeight.isRecent === false) {
+    const staticBuyStr = `${colors.gray}${staticBuy.toFixed(2)}${colors.reset}`;
+    const staticSellStr = `${colors.gray}${staticSell.toFixed(2)}${colors.reset}`;
+    const alertStr = `${colors.sell}(adapter offline)${colors.reset}`;
+    return `   Weight: ${staticBuyStr} buy | ${staticSellStr} sell ${alertStr}`;
+  }
+
+  const useLive = !!(dynamicWeight
+    && dynamicWeight.isRecent
+    && dynamicWeight.live
+    && Number.isFinite(Number(dynamicWeight.live.buy))
+    && Number.isFinite(Number(dynamicWeight.live.sell)));
+
+  if (!useLive) {
+    return `   Weight: ${staticBuy.toFixed(2)} buy | ${staticSell.toFixed(2)} sell`;
+  }
+
+  const liveBuy = Number(dynamicWeight.live.buy);
+  const liveSell = Number(dynamicWeight.live.sell);
+  // Compare the two live weights, not their deltas: the side with the larger
+  // live weight is the one the bot is leaning on most heavily (the "losing"
+  // side for that asset). When the two live weights are equal, no side is
+  // being favored, so both fall back to grey.
+  const liveDelta = liveBuy - liveSell;
+  let buyColor;
+  let sellColor;
+  if (Math.abs(liveDelta) <= DYNAMIC_WEIGHT_EPSILON) {
+    buyColor = colors.gray;
+    sellColor = colors.gray;
+  } else if (liveDelta > 0) {
+    // Buy is higher -> losing side (red); sell is lower -> winning side (green)
+    buyColor = colors.sell;
+    sellColor = colors.buy;
+  } else {
+    // Buy is lower -> winning side (green); sell is higher -> losing side (red)
+    buyColor = colors.buy;
+    sellColor = colors.sell;
+  }
+
+  const liveBuyStr = `${buyColor}${liveBuy.toFixed(2)}${colors.reset}`;
+  const liveSellStr = `${sellColor}${liveSell.toFixed(2)}${colors.reset}`;
+  const staticBuyStr = `${colors.gray}${staticBuy.toFixed(2)}${colors.reset}`;
+  const staticSellStr = `${colors.gray}${staticSell.toFixed(2)}${colors.reset}`;
+
+  return `   Weight: ${liveBuyStr} (${staticBuyStr}) buy | ${liveSellStr} (${staticSellStr}) sell`;
+}
+
+/**
  * formatAnalysis: Format analysis results into readable console output
  *
  * Creates a compact, emoji-enriched display of all analysis metrics.
@@ -868,9 +1082,9 @@ function formatAnalysis(analysis) {
     
     lines.push(`   Active: ${buyActual}/${buyTarget} buy | ${sellActual}/${sellTarget} sell`);
     lines.push(``);
-    if (analysis.weightDistribution) {
-      const w = analysis.weightDistribution;
-      lines.push(`   Weight: ${w.buy} buy | ${w.sell} sell`);
+    const weightLine = formatWeightLine(analysis.weightDistribution, analysis.dynamicWeight);
+    if (weightLine) {
+      lines.push(weightLine);
     }
     if (analysis.botFunds) {
       lines.push(`   Funds:  ${analysis.botFunds.buy} buy | ${analysis.botFunds.sell} sell`);
@@ -941,10 +1155,6 @@ function formatAnalysis(analysis) {
    * Example: BUY 1000 BTS ≈ 50 XRP (at avg buy price)
    */
   const [assetASymbol, assetBSymbol] = analysis.pair.split('/');
-  const buyBTS = formatCurrency(analysis.funds.buy.bts);
-  const buyXRP = analysis.funds.buy.xrp.toFixed(4);
-  const sellXRP = analysis.funds.sell.xrp.toFixed(4);
-  const sellBTS = formatCurrency(analysis.funds.sell.bts);
 
   // Fallback for null symbols (shouldn't happen after fix, but added for safety)
   const aSymbol = assetASymbol || 'BASE';
@@ -1003,10 +1213,10 @@ function formatAnalysis(analysis) {
   );
 
   // Funds breakdown: BUY on left, SELL on right (right-aligned within its column)
-  const buyValueStr = `${formatCurrency(analysis.funds.buy.bts)} ${bSymbol}`;
-  const sellValueStr = `${analysis.funds.sell.xrp.toFixed(4)} ${aSymbol}`;
-  const buyEquivStr = `≈ ${analysis.funds.buy.xrp.toFixed(4)} ${aSymbol}`;
-  const sellEquivStr = `≈ ${formatCurrency(analysis.funds.sell.bts)} ${bSymbol}`;
+  const buyValueStr = `${formatFundsValue(analysis.funds.buy.bts)} ${bSymbol}`;
+  const sellValueStr = `${formatFundsValue(analysis.funds.sell.xrp)} ${aSymbol}`;
+  const buyEquivStr = `≈ ${formatFundsValue(analysis.funds.buy.xrp)} ${aSymbol}`;
+  const sellEquivStr = `≈ ${formatFundsValue(analysis.funds.sell.bts)} ${bSymbol}`;
   const partialParts = [];
   if (analysis.slots.partialBuy > 0) {
     partialParts.push(`${analysis.slots.partialBuy} buy`);
@@ -1111,8 +1321,8 @@ function main() {
         throw new Error(`Missing configured bot entry for ${botKey}`);
       }
 
-      // Analyze the order grid
-      const analysis = analyzeOrder(botData, config);
+      // Analyze the order grid (botKey is used to load the dynamic grid snapshot)
+      const analysis = analyzeOrder(botData, config, botKey);
       // Display formatted results
       let output = formatAnalysis(analysis);
       // Remove leading newline from first pair to avoid blank line after header
@@ -1146,6 +1356,19 @@ function main() {
   console.log(`${colors.cyan}Summary: ${analyzed} analyzed, ${skipped} skipped${colors.reset}\n`);
 }
 
-// Execute analysis
-main();
-export {};
+// Execute analysis only when invoked as a script. When required from a test we
+// expose the helpers below without triggering the analyzer side effects.
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  isAmaGridPrice,
+  readDynamicGridSnapshot,
+  buildDynamicWeightInfo,
+  formatWeightLine,
+  analyzeOrder,
+  formatAnalysis,
+  DYNAMIC_GRID_SNAPSHOT_MAX_AGE_MS,
+  DYNAMIC_WEIGHT_EPSILON,
+};

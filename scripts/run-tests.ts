@@ -49,6 +49,7 @@ const testFiles = [
   'tests/test_account_bots_draft.ts',
   'tests/test_allowedops_policy.ts',
   'tests/test_ama_center_snapshot.ts',
+  'tests/test_analyze_orders_dynamic_weight.ts',
   'tests/test_ama_slope_model.ts',
   'tests/test_asymmetric_bounds.ts',
   'tests/test_derivative_chart.ts',

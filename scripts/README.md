@@ -110,6 +110,12 @@ tsx scripts/divergence-calc.ts
 tsx scripts/analyze-orders.ts
 ```
 
+For AMA bots (`gridPrice: ama`) the analyzer reads `<botKey>.dynamicgrid.json`
+and, when fresh (`2 × MARKET_ADAPTER.RUNTIME_DEFAULTS.pollSeconds`, default 2h),
+shows live weights with color: higher = red (losing), lower = green (winning),
+static = grey. Stale snapshot appends a red `(adapter offline)` alert to the
+static weights.
+
 **File:** `sync-version.ts`
 **Purpose:** Keep DEXBot2-owned package and plugin manifests aligned to the root `package.json` version.
 ```bash
