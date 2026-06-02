@@ -250,9 +250,11 @@ let TIMING = {
     // daemon's broadcastWithRetry (credential-daemon.ts). Must be strictly less than
     // CREDENTIAL_BROADCAST_TIMEOUT_MS so the daemon can report a typed
     // { success:false, code:'BROADCAST_DEADLINE' } failure before the bot-side
-    // socket timer fires. 10s of slack is enough for the bot to receive and
-    // process the typed reply on a slow connection.
-    CREDENTIAL_DAEMON_INNER_DEADLINE_MS: 20000
+    // socket timer fires. 5s of slack is enough for the bot to receive and
+    // process the typed reply on a slow connection. 25s gives slow mainnet
+    // nodes most of the outer window for a successful broadcast; the recovery
+    // path handles whatever takes longer.
+    CREDENTIAL_DAEMON_INNER_DEADLINE_MS: 25000
 };
 
 // Grid limits and scaling constants

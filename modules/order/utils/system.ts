@@ -650,9 +650,9 @@ async function persistGridSnapshot(manager, accountOrders, botKey) {
  */
 async function retryPersistenceIfNeeded(manager) {
     if (!manager || !manager._persistenceWarning) return true;
-    const warning = manager._persistenceWarning;
     try {
-        const success = typeof manager.persistGrid === 'function' ? await manager.persistGrid() : true;
+        const result = typeof manager.persistGrid === 'function' ? await manager.persistGrid() : true;
+        const success = result === true || (result && !result.skipped && result.isValid !== false);
         if (success) delete manager._persistenceWarning;
         return success;
     } catch (e: any) { return false; }

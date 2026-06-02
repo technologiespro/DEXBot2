@@ -2670,19 +2670,37 @@ class DEXBot {
         //   already cleared the working grid, so we use a fresh sync.
         // - For discarded entries: leave the planned slot empty; the next
         //   planning cycle will refill it.
+        // - Short-circuit the re-sync when every CREATE in the batch was
+        //   fingerprinted AND adopted (the happy path of a slow but successful
+        //   chain). The chain state is already known for those slots, so a full
+        //   sync would just produce a burst of false-positive "no adoptable
+        //   slot" warnings for any non-CREATE orders that were already in
+        //   place before this batch.
         let hadRotation = false;
-        try {
-            if (chainSnapshot && chainSnapshot.length > 0 && this.manager?.syncFromOpenOrders) {
-                await this.manager.syncFromOpenOrders(chainSnapshot, {
-                    skipAccounting: true,
-                    fillLockAlreadyHeld: true
-                });
-                hadRotation = true;
+        const allCreatesAdopted = pending.length > 0
+            && pending.every(p => adopted.some(a => a.slotId === p.slotId));
+        const shouldRunHeavySync = !(allCreatesAdopted && discarded.length === 0);
+        if (shouldRunHeavySync) {
+            try {
+                if (chainSnapshot && chainSnapshot.length > 0 && this.manager?.syncFromOpenOrders) {
+                    await this.manager.syncFromOpenOrders(chainSnapshot, {
+                        skipAccounting: true,
+                        fillLockAlreadyHeld: true
+                    });
+                    hadRotation = true;
+                }
+            } catch (syncErr) {
+                this.manager.logger.log(
+                    `[COW][UNCERTAIN] syncFromOpenOrders failed during recovery: ${syncErr?.message || syncErr}`,
+                    'error'
+                );
             }
-        } catch (syncErr) {
+        } else {
+            hadRotation = true;
             this.manager.logger.log(
-                `[COW][UNCERTAIN] syncFromOpenOrders failed during recovery: ${syncErr?.message || syncErr}`,
-                'error'
+                `[COW][UNCERTAIN] All ${adopted.length} fingerprinted CREATE(s) adopted; ` +
+                `skipping heavy re-sync to avoid false-positive unmatched warnings.`,
+                'debug'
             );
         }
 
@@ -2776,7 +2794,8 @@ class DEXBot {
         if (unmatched.length === 0) {
             return { cancelled: false, reason: 'no-unmatched' };
         }
-        const target = unmatched[0];
+        const priceDriftOrphan = unmatched.find(u => u && u.reason === 'price-drift-orphan');
+        const target = priceDriftOrphan || unmatched[0];
         const orderId = target?.id || target?.orderId || target?.chainOrderId;
         if (!orderId) {
             return { cancelled: false, reason: 'no-orderId' };
@@ -3788,7 +3807,24 @@ class DEXBot {
                             );
                             continue;
                         }
-                        const args = buildCreateOrderArgs(order, assetA, assetB);
+                        const liveSlot = this.manager.orders.get(order.id);
+                        const plannedPrice = Number(order.price);
+                        const livePrice = liveSlot ? Number(liveSlot.price) : NaN;
+                        const priceDrift = Number.isFinite(plannedPrice) && Number.isFinite(livePrice)
+                            ? Math.abs(livePrice - plannedPrice)
+                            : 0;
+                        const effectiveOrder = (priceDrift > 0)
+                            ? { ...order, price: livePrice, size: order.size, type: order.type }
+                            : order;
+                        if (priceDrift > 0) {
+                            this.manager.logger.log(
+                                `[COW] Pre-broadcast price freshness: slot ${order.id} ` +
+                                `drifted from planned=${plannedPrice} to live=${livePrice} ` +
+                                `(diff=${priceDrift}); rebuilding CREATE op with live price.`,
+                                'debug'
+                            );
+                        }
+                        const args = buildCreateOrderArgs(effectiveOrder, assetA, assetB);
                         const buildResult = await chainOrders.buildCreateOrderOp(
                             this.account,
                             args.amountToSell,
@@ -3805,11 +3841,11 @@ class DEXBot {
                             continue;
                         }
                         operations.push(buildResult.op);
-                        opContexts.push({ kind: 'create', id: order.id, order, args, finalInts: buildResult.finalInts });
+                        opContexts.push({ kind: 'create', id: order.id, order: effectiveOrder, args, finalInts: buildResult.finalInts });
                         this._recordPendingBroadcast({
                             opIndex: operations.length - 1,
                             ctxIndex: opContexts.length - 1,
-                            order,
+                            order: effectiveOrder,
                             finalInts: buildResult.finalInts
                         });
                     } catch (err: any) {
@@ -3999,8 +4035,43 @@ class DEXBot {
                     // Process batch results for logging/metrics
                     const batchResult = await this._processBatchResults(result, executedContexts);
 
-                    // Persist to disk
-                    await this.manager.persistGrid();
+                    // Persist to disk. CRITICAL: working grid was already committed
+                    // to master above; if persistence is skipped or validation fails
+                    // here, the on-disk snapshot will be older than the in-memory
+                    // master. Retry once and surface the failure explicitly so the
+                    // next cycle / shutdown can recover.
+                    const persistResult = await this.manager.persistGrid();
+                    if (persistResult && (persistResult.skipped || persistResult.isValid === false)) {
+                        this.manager.logger.log(
+                            `[COW][PERSIST-GUARD] First persist attempt was ` +
+                            `${persistResult.skipped ? 'skipped' : 'invalid'} ` +
+                            `(${persistResult.reason || 'no reason'}); retrying once before ` +
+                            `clearing working grid reference.`,
+                            'warn'
+                        );
+                        this.manager._persistenceWarning = persistResult;
+                        const retryResult = await this.manager.persistGrid();
+                        if (retryResult && (retryResult.skipped || retryResult.isValid === false)) {
+                            this.manager.logger.log(
+                                `[COW][PERSIST-GUARD] Retry also skipped/invalid ` +
+                                `(${retryResult.reason || 'no reason'}). Master grid in memory ` +
+                                `is ahead of disk snapshot; structural resync requested.`,
+                                'error'
+                            );
+                            if (typeof this.manager.requestStructuralGridResync === 'function') {
+                                this.manager._recoveryState = this.manager._recoveryState || {};
+                                this.manager._recoveryState.structuralResyncRequested = true;
+                                await this.manager.requestStructuralGridResync(
+                                    'persistence guard triggered after COW batch',
+                                    { persistReason: retryResult.reason || 'unknown' }
+                                );
+                            }
+                        } else {
+                            delete this.manager._persistenceWarning;
+                        }
+                    } else if (this.manager._persistenceWarning) {
+                        delete this.manager._persistenceWarning;
+                    }
 
                     this._metrics.batchesExecuted++;
                     this.manager._clearWorkingGridRef();

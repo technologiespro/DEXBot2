@@ -42,6 +42,8 @@ const testFiles = [
   'tests/test_working_grid.ts',
   'tests/test_cow_commit_guards.ts',
   'tests/test_uncertain_broadcast.ts',
+  'tests/test_sync_excess_orphan.ts',
+  'tests/test_cow_orchestration_fixes.ts',
   'tests/test_cow_master_plan.ts',
   'tests/test_legacy_cow_projection.ts',
   'tests/test_account_bots_draft.ts',

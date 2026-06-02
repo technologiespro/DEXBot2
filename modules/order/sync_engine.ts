@@ -204,6 +204,65 @@ function describeNearestAdoptionCandidates(mgr, chainOrder, precision, calcToler
     }).join('; ');
 }
 
+const PRICE_DRIFT_TOLERANCE_MULTIPLIER = 4;
+
+/**
+ * Find the closest same-side (or spread) candidate slot for a chain order and
+ * return a "price-drift-orphan" tag if the slot's price diff is larger than the
+ * strict tolerance but small enough to be considered a meaningful drift.
+ *
+ * Rationale: when the chain order has drifted from the planned slot price by
+ * more than the matcher's strict tolerance (so the matcher correctly rejects
+ * the adoption), the next planning cycle's pre-broadcast guard will refuse
+ * new CREATEs and the structural resync will cancel+recreate. Tagging the
+ * entry as a price-drift-orphan lets the auto-cancel path prioritize it and
+ * the diagnostics surface the exact slot the orphan drifted from.
+ *
+ * "Meaningful drift" = price diff > strict tolerance AND price diff
+ * <= strict tolerance * PRICE_DRIFT_TOLERANCE_MULTIPLIER. Larger diffs are
+ * considered wildly-out-of-tolerance orphans (e.g. legacy orders from a
+ * previous config) and are NOT tagged — the resync will discard them
+ * structurally instead.
+ *
+ * @param {Object} mgr - OrderManager instance
+ * @param {Object} chainOrder - Parsed chain order { price, size, type }
+ * @param {Function} calcToleranceFn - calculatePriceTolerance function
+ * @returns {{candidateSlotId: string, candidateSlotPrice: number, priceDiff: number, tolerance: number}|null}
+ */
+function computeOutOfToleranceDriftTag(mgr, chainOrder, calcToleranceFn) {
+    if (!mgr?.orders || !chainOrder) return null;
+    const chainPrice = toFiniteNumber(chainOrder.price);
+    if (!Number.isFinite(chainPrice)) return null;
+    const chainSize = toFiniteNumber(chainOrder.size);
+    const orderType = chainOrder.type;
+    if (orderType !== ORDER_TYPES.BUY && orderType !== ORDER_TYPES.SELL) return null;
+
+    let bestDrift = null;
+    for (const slot of mgr.orders.values()) {
+        if (!slot) continue;
+        if (slot.type !== orderType && slot.type !== ORDER_TYPES.SPREAD) continue;
+        if (slot.orderId) continue;
+        if (![ORDER_STATES.ACTIVE, ORDER_STATES.PARTIAL, ORDER_STATES.VIRTUAL].includes(slot.state)) continue;
+        const slotPrice = toFiniteNumber(slot.price);
+        if (!Number.isFinite(slotPrice)) continue;
+        const priceDiff = Math.abs(slotPrice - chainPrice);
+        const effectiveSize = slot.size > 0 ? toFiniteNumber(slot.size) : chainSize;
+        const tolerance = (calcToleranceFn ? (calcToleranceFn(slotPrice, effectiveSize, orderType) || 0) : 0);
+        if (priceDiff <= tolerance) continue;
+        const driftBudget = tolerance * PRICE_DRIFT_TOLERANCE_MULTIPLIER;
+        if (driftBudget > 0 && priceDiff > driftBudget) continue;
+        if (!bestDrift || priceDiff < bestDrift.priceDiff) {
+            bestDrift = {
+                candidateSlotId: slot.id,
+                candidateSlotPrice: slotPrice,
+                priceDiff,
+                tolerance
+            };
+        }
+    }
+    return bestDrift;
+}
+
 class SyncEngine {
     /**
      * @param {Object} manager - OrderManager instance
@@ -777,17 +836,32 @@ class SyncEngine {
                         (p, s, t) => calculatePriceTolerance(p, s, t, mgr.assets),
                         matchedGridOrderIds
                     );
-                    unmatchedChainOrders.push({
+                    const driftTag = computeOutOfToleranceDriftTag(
+                        mgr,
+                        chainOrder,
+                        (p, s, t) => calculatePriceTolerance(p, s, t, mgr.assets)
+                    );
+                    const unmatchedEntry = {
                         chainOrderId,
                         type: chainOrder.type,
                         price: chainOrder.price,
                         size: chainOrder.size,
                         raw: rawChainOrders.get(chainOrderId),
                         candidateDiagnostics
-                    });
+                    };
+                    if (driftTag) {
+                        unmatchedEntry.reason = 'price-drift-orphan';
+                        unmatchedEntry.candidateSlotId = driftTag.candidateSlotId;
+                        unmatchedEntry.candidateSlotPrice = driftTag.candidateSlotPrice;
+                        unmatchedEntry.priceDiff = driftTag.priceDiff;
+                        unmatchedEntry.tolerance = driftTag.tolerance;
+                    }
+                    unmatchedChainOrders.push(unmatchedEntry);
                     mgr.logger?.log?.(
                         `[SYNC] Unmatched chain order ${chainOrderId} (${chainOrder.type}, price=${chainOrder.price}, ` +
-                        `size=${chainOrder.size}): no adoptable slot found. Nearest candidates: ${candidateDiagnostics}`,
+                        `size=${chainOrder.size}): no adoptable slot found` +
+                        (driftTag ? ` (price-drift-orphan slot=${driftTag.candidateSlotId}@${driftTag.candidateSlotPrice} diff=${driftTag.priceDiff} tol=${driftTag.tolerance})` : '') +
+                        `. Nearest candidates: ${candidateDiagnostics}`,
                         'warn'
                     );
                 }
