@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.11] - 2026-06-02 - COW Grid Integrity, Uncertain Broadcast Recovery & Foreign Daemon Defense
+
+This release closes several COW grid-integrity windows (missing-create results, unmatched chain orders, stale-slot binding), adds a typed recovery path for uncertain credential broadcasts, defends the launcher against foreign credential daemons, hardens the market adapter watchdog, and lands two CLI polish items (`node dexbot clear` log cleanup and plural/singular CLI aliases).
+
+### 2026-06-02
+
+#### COW Grid Integrity
+- Block COW creates on missing `chainOrderId` and unmatched grid drift (`c60e7ac`).
+  - Pre-broadcast guard in `_updateOrdersOnChainBatchCOW` aborts the batch when `manager._lastUnmatchedChainOrders` is non-empty and a CREATE is planned, returning `reason: 'UNMATCHED_CHAIN_ORDERS'` and requesting structural resync.
+  - Post-broadcast integrity check via new `_findMissingCreateResultContexts` — when a CREATE op returns no `chainOrderId`, the working grid is discarded, rebalance reset to NORMAL, a `missing-create-result` blocker is merged into `_lastUnmatchedChainOrders` (deduped by `reason:slotId:operationIndex`), and `_recoverAfterMissingCreateResults` runs an immediate chain sync. Recovery failures log CRITICAL and schedule structural resync.
+  - Sync engine `findMatchingGridOrderByOpenOrder` now honors `requireAvailableSlot` / `excludeGridOrderIds`; both adoption call sites pass `matchedGridOrderIds` so already-adopted slots are skipped in the same pass.
+  - Startup reconciliation now logs the top 5 nearest candidate slots per unmatched chain order via `describeNearestAdoptionCandidates` (with `type`/`price`/`size`/`occupied`/`primary-matchable`/`fallback-adoptable` tags) and escalates to `SUSPECTED DUPLICATE` (error) for near-matches within `tolerance * 5` (floored at 0.01). Magic numbers promoted to `SUSPECTED_DUPLICATE_TOLERANCE_MULTIPLIER` / `_FLOOR` constants.
+  - Shared formatter extracted as `formatUnmatchedChainOrder` in `modules/order/utils/order.ts` and re-imported by `dexbot_class.ts` + `dexbot_maintenance_runtime.ts`; now also surfaces `fingerprint=...` for missing-create blockers.
+- Harden COW uncertainty-recovery and orphan-cancel paths (`f722579`).
+  - Credential daemon inner deadline raised from 20s → 25s (5s slack) so slow mainnet broadcasts no longer force the recovery path; outer window now genuinely contains the inner.
+  - `_reconcileAfterUncertainBroadcast` short-circuits the heavy re-sync on the happy path (all CREATE fingerprints adopted, no discarded ops); `hadRotation` still set so callers treat it as state-changing. Eliminates "no adoptable slot" warnings for pre-existing, non-CREATE chain orders.
+  - New `computeOutOfToleranceDriftTag` helper tags orphans with 1x–4x tolerance drift as `price-drift-orphan` (with `candidateSlotId`/`priceDiff`/`tolerance` diagnostics); `_autoCancelOneUnmatchedOrphan` now prefers these for cancellation. >4x drift still treated as normal orphan so structural resync discards them.
+  - Pre-broadcast price freshness guard in `_updateOrdersOnChainBatchCOW` rebuilds the CREATE op with the live slot price if it has drifted since plan creation, defending against a manager/action planned-order divergence race.
+  - Persistence commit guard: persistGrid result is now checked; on `skipped:true` / `isValid:false` the first attempt sets `_persistenceWarning` and retries once, on repeated failure logs error and calls `requestStructuralGridResync("persistence guard triggered after COW batch")`. `retryPersistenceIfNeeded` now correctly treats the new return shape as a boolean failure (old truthy-check bug fixed).
+- Recover uncertain credential broadcasts safely (`377846d`).
+  - New `BroadcastUncertainError`, broadcast-specific socket timeouts, daemon inner deadlines, typed `BROADCAST_DEADLINE` replies, and no-retry handling for uncertain broadcasts across `dexbot_credential_client.ts`, `chain_orders.ts`, `credential-daemon.ts`, and `claw/modules/chain_broadcast.ts`.
+  - COW recovery: fingerprint CREATE ops, store pending broadcasts on the manager, reconcile uncertain batches from fresh chain snapshots, acquire the fill lock during recovery, adopt exact/near matches, and cap orphan auto-cancels to one per cycle. Raw BitShares `sell_price`/`for_sale` shapes and cleared-grid fallback paths handled explicitly.
+
+#### Grid Reconciliation Recovery
+- Harden grid reconciliation recovery paths (`4d90885`).
+  - Shared cancel-op recorder added to `chain_orders.ts.executeBatch` so the recent-own-cancel guard now sees both direct and daemon-signed batch cancellations (was previously invisible on the daemon path, allowing non-economic fill/cancel artifacts).
+  - Structural grid resync state initialized consistently across `dexbot_class.ts`, `modules/order/accounting.ts`, and `dexbot_maintenance_runtime.ts`; targeted sync takes the bot explicitly (no fragile `this` binding); cooldown stamps after successful reconciliation; running flag renamed for clarity.
+  - `modules/order/startup_reconcile.ts` renamed to `modules/order/grid_reconcile.ts` and `reconcileGridOrders` exposed as the shared API; both `dexbot_class.ts` and `dexbot_maintenance_runtime.ts` import the renamed module.
+
+#### Launcher & Runtime Hardening
+- Detect and remove foreign credential daemons in `node unlock` (`0ebe075`).
+  - New `modules/launcher/foreign_cred_daemon.ts` exposes `ensureNoForeignCredentialDaemon()` which probes the socket via `/proc/net/unix` + `/proc/<pid>/fd`, compares the live owner against the recorded ownership file, and SIGTERMs the foreign daemon when it matches the canonical credential-daemon script shape. `findCredentialSocketOwnerPid()` / `readCredentialSocketInode()` do the kernel lookup; the inode resolver compares the Path column EXACTLY (substring matching was a SIGTERM risk).
+  - `unlock.ts.main()` calls `ensureNoForeignCredentialDaemon()` before `controller.ensureCredentialDaemon` so a foreign daemon can no longer answer the readiness probe and suppress the master-password prompt.
+  - Readiness-probe predicate (`isLikelyCredentialDaemonProcess`) and candidate-aware helpers extracted and exported so tests exercise the SAME algorithm against temp-path candidates without overwriting real launcher files.
+  - `node unlock status` now probes for a foreign daemon whenever the socket exists, regardless of the ready marker, matching `ensureNoForeignCredentialDaemon`'s coverage; foreign PID surfaced as `(foreign/unowned)`.
+  - Cleanup covers four on-disk shapes: no-op when both files missing, unlink orphan ready marker, unlink stale socket without live owner, kill foreign live owner + unlink both. `readOwnedCredentialDaemonPid()` validates the recorded pid with the same shape predicate.
+- Harden market adapter watchdog locks (`8d55db6`).
+  - `market_adapter_runtime.ts` and `market_adapter/utils/file_lock.ts` now verify the lock PID is not a live market adapter before removal (prevents launcher/runtime from unlinking a held lock and starting a duplicate adapter) and recognize both JS and TS adapter entrypoints.
+  - `unlock.ts` centralizes launcher/watchdog defaults in new `MARKET_ADAPTER.WATCHDOG_DEFAULTS` and `LAUNCHER.MONOLITHIC` constant groups; restarts budgets reset on config changes / stable uptime / cooldown; adapter log streams are closed on child exit.
+- Rebuild updater bundle before restart (`05d7d3c`).
+  - `scripts/update.ts` now runs `npm run build` during update and verifies the compiled `dexbot_class.js` marker exists and is newer than its source marker, eliminating the stale-bundle case where a source-only pull left `dist/` untouched while PM2 reloaded the previous compiled code.
+  - Freshness check now fails the update explicitly when the source marker exists but `dist/modules/dexbot_class.js` was not produced (previously skipped validation when the compiled marker was missing).
+- Harden native reconnect and shutdown handling (`2f34341`).
+  - `modules/bitshares-native/transport.ts` and `modules/bitshares-native/subscriptions.ts` add socket-scoped close coalescing, connected-node connect no-op behavior, and per-subscription no-fill notice coalescing — reduces redundant reconnect / history-scan work under bursty websocket events.
+  - `modules/bitshares_client.ts` adds a configured failover assessment cooldown so cascading close events don't repeatedly re-assess failover.
+  - `modules/chain_orders.ts` + `modules/dexbot_class.ts`: successful local cancels are now recorded so the non-economic-artifact filter skips them; economic fills are still processed normally.
+  - `modules/graceful_shutdown.ts` + `bot.ts` + `dexbot.ts`: handler-reference unregistering and idempotent bot shutdown — concurrent calls await the same shutdown promise; one failed startup can no longer remove another cleanup hook.
+
+#### CLI & UX
+- Add `node dexbot clear` subcommand for log cleanup (`5a98e59`).
+  - Exposes the existing `scripts/clear-logs.sh` as a first-class CLI command (`'clear'` added to `CLI_COMMANDS`, `CLI_EXAMPLES`, `printCLIUsage`, and the "🛠️ BOT MANAGEMENT" doc-block). `case 'clear':` in `handleCLICommands` `spawnSync`s the script with `stdio: 'inherit'` and forwards the child exit code, mirroring the `order` subcommand pattern. The script's own `read` confirmation prompt is preserved.
+  - README "🛠️ Bot Management" block updated to link `node dexbot clear`.
+- Add CLI alias support (plural/singular) with docs in singular form (`b4b7d07`).
+  - `dexbot.ts` `COMMAND_ALIASES` map resolves `node dexbot orders` → `order`, `node dexbot key` → `keys`, `node dexbot bot` → `bots` before the command switch. Help text and CLI examples always show the singular form (`order`, `key`, `bot`) per convention.
+
+#### Tests
+- New: `tests/test_unlock_foreign_cred_daemon.ts` (9 cases), `tests/test_unlock_foreign_cred_daemon_live.ts` (4 cases), `tests/helpers/foreign_cred_stub.js` (canonical credential-daemon stub), `tests/test_cow_orchestration_fixes.ts` (COW-FRESH-001/002, COW-PERSIST-001/002), `tests/test_sync_excess_orphan.ts` (SYNC-EXCESS-001/002b/003), `tests/test_uncertain_broadcast.ts` (UNC-008b/008c2 expectations updated), `tests/test_recent_own_cancels.ts`, `tests/test_cow_structural_resync.ts`, `tests/test_cow_commit_guards.ts` (COW-COMMIT-005/006 added, COW-COMMIT-007..010 extended for missing-create paths), `tests/test_transport_connect_noop.ts`, `tests/test_fill_replay_guards.ts`, `tests/test_native_subscriptions.ts`, `tests/test_shutdown_reentrancy.ts`. `scripts/run-tests.ts` registers the new test files. `claw/tests/test_claw_chain_layer.ts` extended for broadcast request typing.
+
 ## [0.7.10] - 2026-06-01 - Grid Recovery Smoothing, Runtime Drift Reconciliation & CLI Polish
 
 This release hardens the runtime's self-healing paths against structural grid drift and live-order shortfalls, deduplicates the chain-sync/fill pipeline into a shared helper, makes launcher wrappers work without a prior `dist/` build, and adds a first-class `node dexbot order` subcommand plus colorized active-bot feedback in `node unlock status`.
