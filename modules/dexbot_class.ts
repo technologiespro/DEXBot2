@@ -167,6 +167,8 @@ class DEXBot {
     _staleCleanupRetentionMs: number;
     _metrics: any;
     _shuttingDown: boolean;
+    _shutdownStarted: boolean;
+    _shutdownPromise: Promise<void> | null;
     _blockchainFetchInterval: any;
     _fillsUnsubscribe: any;
     _triggerWatcher: any;
@@ -248,6 +250,8 @@ class DEXBot {
 
         // Shutdown state
         this._shuttingDown = false;
+        this._shutdownStarted = false;
+        this._shutdownPromise = null;
 
         // Runtime handles for graceful lifecycle management
         this._blockchainFetchInterval = null;
@@ -1398,6 +1402,23 @@ class DEXBot {
                     for (const fill of allFills) {
                         if (fill && fill.op && fill.op[0] === FILL_PROCESSING.OPERATION_TYPE) {
                             const fillOp = fill.op[1];
+
+                            // SELF-CANCEL GUARD: only drop malformed, cancel-like
+                            // artifacts for an order the local process just cancelled.
+                            // Real fill_order ops carry economic data and must still be
+                            // accounted even if they arrive shortly after a successful
+                            // cancel broadcast.
+                            const hasFillEconomics = fillOp?.pays?.asset_id && fillOp?.pays?.amount != null
+                                && fillOp?.receives?.asset_id && fillOp?.receives?.amount != null;
+                            if (chainOrders && typeof chainOrders.wasRecentlyOwnCancelled === 'function'
+                                && chainOrders.wasRecentlyOwnCancelled(fillOp.order_id)
+                                && !hasFillEconomics) {
+                                this.manager.logger.log(
+                                    `[SELF-CANCEL] Skipping non-economic fill artifact for order ${fillOp.order_id} (just cancelled by this bot)`,
+                                    'debug'
+                                );
+                                continue;
+                            }
 
                             // ACCOUNT VALIDATION: Verify the filled order belongs to this bot's account/grid
                             // Only process fills for orders we actually manage
@@ -3982,9 +4003,24 @@ class DEXBot {
     /**
      * Gracefully shutdown the bot.
      * Waits for current fill processing to complete, persists state, and stops intervals.
+     * Idempotent: subsequent calls await the first shutdown so duplicate cleanup
+     * invocations do not run the body twice or exit before persistence finishes.
      * @returns {Promise<void>}
      */
     async shutdown() {
+        if (this._shutdownStarted) {
+            this._log('Shutdown already in progress; ignoring re-entrant call');
+            return this._shutdownPromise || Promise.resolve();
+        }
+        this._shutdownStarted = true;
+        const shutdownImpl = typeof this._shutdownImpl === 'function'
+            ? this._shutdownImpl
+            : DEXBot.prototype._shutdownImpl;
+        this._shutdownPromise = shutdownImpl.call(this);
+        return this._shutdownPromise;
+    }
+
+    async _shutdownImpl() {
         this._log('Initiating graceful shutdown...');
         this._shuttingDown = true;
         this._processedFillStore.setShuttingDown(true);

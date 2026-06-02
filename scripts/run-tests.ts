@@ -102,6 +102,8 @@ const testFiles = [
   'tests/test_native_subscriptions.ts',
   'tests/test_websocket_subscription_flow.ts',
   'tests/test_native_transport.ts',
+  'tests/test_transport_connect_noop.ts',
+  'tests/test_shutdown_reentrancy.ts',
   'tests/test_native_facade.ts',
   'tests/test_native_chain_client.ts',
   'tests/test_connection_timeout_params.ts',

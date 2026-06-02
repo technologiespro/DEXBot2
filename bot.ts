@@ -52,7 +52,7 @@ const { createPm2AwareLogger } = require('./modules/logger');
 const DEXBot = require('./modules/dexbot_class');
 const { normalizeBotEntry } = require('./modules/dexbot_class');
 const { loadSettingsFile, resolveRawBotEntries, selectBotEntry } = require('./modules/bot_settings');
-const { setupGracefulShutdown, registerCleanup } = require('./modules/graceful_shutdown');
+const { setupGracefulShutdown, registerCleanup, unregisterCleanup } = require('./modules/graceful_shutdown');
 const chainKeys = require('./modules/chain_keys');
 const credentialPolicy = require('./modules/credential_policy');
 
@@ -192,12 +192,22 @@ async function getSigningSecretForAccount(accountName: string) {
 
          // Create and start bot with log prefix for [bot.js] context
           const bot = new DEXBot(normalizedConfig, { logPrefix: '[bot.js]' });
+          const botCleanupName = `Bot: ${botName}`;
+          let botCleanupHandler = null;
           try {
               // Register bot cleanup on shutdown
-              registerCleanup(`Bot: ${botName}`, () => bot.shutdown());
+              botCleanupHandler = () => bot.shutdown();
+              registerCleanup(botCleanupName, botCleanupHandler);
 
               await bot.startWithPrivateKey(signingSecret);
           } catch (err) {
+              // The bot's _runStartupSequence already invoked shutdown() once on
+              // the failure path. Remove the registered cleanup so the LIFO
+              // cleanup loop in graceful_shutdown.js does not call shutdown() a
+              // second time, and avoid the "double graceful shutdown" log pattern.
+              if (botCleanupHandler) {
+                  unregisterCleanup(botCleanupHandler);
+              }
               // Attempt graceful cleanup before exiting
               try {
                   await bot.shutdown();

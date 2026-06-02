@@ -78,6 +78,31 @@ function registerCleanup(name, handler) {
 }
 
 /**
+ * Remove a previously registered cleanup function.
+ * Use this when a component fails to initialize and its cleanup must not run
+ * on process exit. Returns true if a handler was removed.
+ * @param {string|Function} nameOrHandler - Cleanup name or handler reference
+ * @returns {boolean} True when a handler was found and removed
+ */
+function unregisterCleanup(nameOrHandler) {
+    const initialLength = cleanupHandlers.length;
+    if (typeof nameOrHandler === 'function') {
+        for (let i = cleanupHandlers.length - 1; i >= 0; i--) {
+            if (cleanupHandlers[i].handler === nameOrHandler) {
+                cleanupHandlers.splice(i, 1);
+            }
+        }
+    } else if (typeof nameOrHandler === 'string') {
+        for (let i = cleanupHandlers.length - 1; i >= 0; i--) {
+            if (cleanupHandlers[i].name === nameOrHandler) {
+                cleanupHandlers.splice(i, 1);
+            }
+        }
+    }
+    return cleanupHandlers.length !== initialLength;
+}
+
+/**
  * Execute all registered cleanup handlers
  * @private
  */
@@ -140,5 +165,6 @@ function setupGracefulShutdown() {
 
 export = {
     registerCleanup,
+    unregisterCleanup,
     setupGracefulShutdown,
 };

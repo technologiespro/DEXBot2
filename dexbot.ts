@@ -85,7 +85,7 @@ const { initializeFeeCache, ensureProfilesDirectory, readInput } = require('./mo
 const accountBots = require('./modules/account_bots');
 const SharedDEXBot = require('./modules/dexbot_class');
 
-const { setupGracefulShutdown, registerCleanup } = require('./modules/graceful_shutdown');
+const { setupGracefulShutdown, registerCleanup, unregisterCleanup } = require('./modules/graceful_shutdown');
 const {
     collectValidationIssues,
     loadSettingsFile,
@@ -415,12 +415,32 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
                 continue;
             }
 
+            const botCleanupName = `Bot: ${entry.name || entry.botKey || instances.length + 1}`;
+            let bot: any = null;
+            let botCleanupHandler: (() => Promise<void>) | null = null;
             try {
-                const bot = new DEXBot(entry);
-                registerCleanup(`Bot: ${entry.name || entry.botKey || instances.length + 1}`, () => bot.shutdown());
+                bot = new DEXBot(entry);
+                botCleanupHandler = () => bot.shutdown();
+                registerCleanup(botCleanupName, botCleanupHandler);
                 await bot.start(masterPassword);
                 instances.push(bot);
             } catch (err: any) {
+                // The bot's _runStartupSequence already invoked shutdown() once on
+                // the failure path. Remove the registered cleanup so the LIFO
+                // cleanup loop in graceful_shutdown.js does not call shutdown() a
+                // second time, and avoid the "double graceful shutdown" log pattern.
+                if (botCleanupHandler) {
+                    unregisterCleanup(botCleanupHandler);
+                }
+                // Attempt graceful cleanup before continuing. Idempotent via the
+                // _shutdownStarted guard, so a redundant call is a no-op.
+                if (bot) {
+                    try {
+                        await bot.shutdown();
+                    } catch (shutdownErr: any) {
+                        console.error(`Error during cleanup: ${shutdownErr.message}`);
+                    }
+                }
                 if (chainKeys.isMasterPasswordFailure(err)) {
                     printMasterPasswordFailure(err);
                     process.exit(1);

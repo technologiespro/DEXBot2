@@ -15,6 +15,12 @@ function createSubscriptionManager(chainClient: any): any {
     const reconnectRetryDelayMs = Number.isFinite(SUBSCRIPTIONS.RECONNECT_RETRY_DELAY_MS)
         ? Math.max(1000, SUBSCRIPTIONS.RECONNECT_RETRY_DELAY_MS)
         : 5000;
+    const noticeCoalesceMs = Number.isFinite(SUBSCRIPTIONS.NOTICE_COALESCE_MS)
+        ? Math.max(0, SUBSCRIPTIONS.NOTICE_COALESCE_MS)
+        : 0;
+    // Per-subscription pending scan state for coalescing. Keyed by sub object
+    // (Map iteration order is stable so we can reuse a single timer per entry).
+    const pendingScans = new Map<any, { timer: any; lastNoticeAt: number }>();
 
     function parseObjectIdInstance(id: any): number {
         if (typeof id !== 'string') return Number.NaN;
@@ -241,30 +247,62 @@ function createSubscriptionManager(chainClient: any): any {
             // up on any fills that may have occurred. Non-fill notices (object
             // changes, statistics updates, etc.) don't carry op data, so we must
             // fall back to history scanning to detect fills.
+            //
+            // Compute the per-notice max history instance once. Bare object notices
+            // (statistics/account/limit-order updates) carry no 1.11.x id, so
+            // noticeMaxInstance stays at -1 and the per-subscription cursor check
+            // falls through to the coalesced scan path.
             let noticeMaxInstance = -1;
-            let hasHistoryEntries = false;
             for (const item of data) {
                 if (!item || typeof item !== 'object') continue;
                 const id = item.id;
                 if (typeof id !== 'string' || !id.startsWith('1.11.')) continue;
-                hasHistoryEntries = true;
                 const inst = parseObjectIdInstance(id);
                 if (Number.isFinite(inst) && inst > noticeMaxInstance) {
                     noticeMaxInstance = inst;
                 }
             }
-            const scans = [];
+            const now = Date.now();
+            const eligible: any[] = [];
             for (const [, sub] of subscriptions) {
                 if (!sub.active) continue;
-                // Skip when the notice contains 1.11.x history IDs that the
-                // cursor already covers — no new fills to catch up.
-                if (hasHistoryEntries) {
+                // Skip when the notice carries a 1.11.x id that this sub's cursor
+                // has already covered — no new fills to catch up.
+                if (noticeMaxInstance !== -1) {
                     const subCursorInstance = parseObjectIdInstance(sub.lastDeliveredHistoryId);
-                    if (Number.isFinite(subCursorInstance) && Number.isFinite(noticeMaxInstance) && subCursorInstance >= noticeMaxInstance) continue;
+                    if (Number.isFinite(subCursorInstance) && subCursorInstance >= noticeMaxInstance) continue;
                 }
-                scans.push(processObjects(sub, data));
+                eligible.push(sub);
             }
-            await Promise.all(scans);
+            if (eligible.length === 0) return;
+
+            // Coalesce: no-fill notices are just trigger signals. Schedule one
+            // history scan per subscription for the coalesce window instead of
+            // running one RPC per notice.
+            for (const sub of eligible) {
+                const existing = pendingScans.get(sub);
+                if (existing) {
+                    if ((now - existing.lastNoticeAt) < noticeCoalesceMs) {
+                        existing.lastNoticeAt = now;
+                        continue;
+                    }
+                    clearTimeout(existing.timer);
+                    pendingScans.delete(sub);
+                }
+                if (noticeCoalesceMs > 0) {
+                    const entry = { timer: null as any, lastNoticeAt: now };
+                    entry.timer = setTimeout(() => {
+                        pendingScans.delete(sub);
+                        processObjects(sub, data).catch((err: any) => {
+                            subscriptionsLogger.warn(`processObjects (coalesced) error for ${sub.accountName}: ${err?.message}`);
+                        });
+                    }, noticeCoalesceMs);
+                    if (typeof entry.timer.unref === 'function') entry.timer.unref();
+                    pendingScans.set(sub, entry);
+                } else {
+                    await processObjects(sub, data);
+                }
+            }
             return;
         }
 
@@ -613,6 +651,11 @@ function createSubscriptionManager(chainClient: any): any {
         if (entry.callbacks.size === 0) {
             entry.active = false;
             clearReconnectRetry(entry);
+            const pending = pendingScans.get(entry);
+            if (pending) {
+                if (pending.timer) clearTimeout(pending.timer);
+                pendingScans.delete(entry);
+            }
             subscriptions.delete(accountName);
 
             if (subscriptions.size === 0) {
@@ -622,6 +665,13 @@ function createSubscriptionManager(chainClient: any): any {
     }
 
     async function resubscribeAll() {
+        // Drop any coalesced scans scheduled before the reconnect. They reference
+        // a pre-reconnect cursor and would race with the catch-up scan below.
+        for (const [, pending] of pendingScans) {
+            if (pending.timer) clearTimeout(pending.timer);
+        }
+        pendingScans.clear();
+
         // Refresh account data for every active entry first (before any RPC calls
         // that might race with each other on the same connection).
         const refreshTasks: Promise<void>[] = [];

@@ -164,6 +164,42 @@ async function runTests() {
         assert.strictEqual(bot.manager.accountTotals.sell, sellBefore + 2.5, 'Missing-history orphan replay must not double-credit');
     }
 
+    console.log(' - Testing self-cancel guard only skips non-economic artifacts...');
+    {
+        const { bot } = await createBotFixture('test_fill_replay_self_cancel_economic');
+        const fill = buildFill('1.11.779');
+        const sellBefore = bot.manager.accountTotals.sell;
+
+        bot._incomingFillQueue.push(fill);
+        await bot._consumeFillQueue({
+            getFillProcessingMode: () => 'history',
+            wasRecentlyOwnCancelled: () => true
+        });
+
+        assert.strictEqual(
+            bot.manager.accountTotals.sell,
+            sellBefore + 2.5,
+            'Recently canceled order id must not suppress a real fill_order with pays/receives data'
+        );
+
+        const artifact = {
+            block_num: 778,
+            id: '1.11.7791',
+            op: [4, { order_id: '1.7.424242' }]
+        };
+        bot._incomingFillQueue.push(artifact);
+        await bot._consumeFillQueue({
+            getFillProcessingMode: () => 'history',
+            wasRecentlyOwnCancelled: () => true
+        });
+
+        assert.strictEqual(
+            bot.manager.accountTotals.sell,
+            sellBefore + 2.5,
+            'Non-economic self-cancel artifact should be skipped without crediting proceeds'
+        );
+    }
+
     console.log(' - Testing processed fill persistence flushes durably for each accepted fill...');
     {
         const { bot, persistedFills, persistedFillBatches } = await createBotFixture('test_fill_replay_batching');

@@ -26,6 +26,7 @@ const transportLogger = new Logger('Transport');
 const CONNECT_TIMEOUT_MS: number = TRANSPORT.CONNECT_TIMEOUT_MS;
 const RPC_TIMEOUT_MS: number = TRANSPORT.RPC_TIMEOUT_MS;
 const KEEPALIVE_INTERVAL_MS: number = TRANSPORT.KEEPALIVE_INTERVAL_MS;
+const CLOSE_COALESCE_MS: number = TRANSPORT.CLOSE_COALESCE_MS;
 
 let _rpcId = 0;
 
@@ -110,6 +111,12 @@ function createTransport(config: TransportConfig = {}) {
     let intentionalClose = false;
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 20;
+    // Close-event debounce for the currently active socket only. Stale sockets
+    // are ignored by identity so a fresh socket close can never be suppressed by
+    // an older socket's close event.
+    let lastCloseSocket: WebSocketLike | null = null;
+    let lastCloseAt: number = 0;
+    const closeCoalesceMs = CLOSE_COALESCE_MS;
     let pendingRequests = new Map<string, PendingRequest>();
     let onMessageHandlers: Array<(params: any) => void> = [];
     let status: TransportStatus = 'closed';
@@ -239,9 +246,21 @@ function createTransport(config: TransportConfig = {}) {
         };
 
         socket.onclose = (evt: any) => {
+            if (socket !== ws) return;
             const code = evt?.code;
             const reason = evt?.reason || '';
             const wasClean = evt?.wasClean !== false;
+            const now = Date.now();
+            // Coalesce close events that arrive within `closeCoalesceMs` of one
+            // another from the same active socket. The first event runs cleanup
+            // + the reconnect schedule; subsequent same-socket events only
+            // update the timestamp.
+            if (lastCloseSocket === socket && now - lastCloseAt < closeCoalesceMs) {
+                lastCloseAt = now;
+                return;
+            }
+            lastCloseSocket = socket;
+            lastCloseAt = now;
             transportLogger.warn(`WebSocket closed on ${nodeUrl}: code=${code}, wasClean=${wasClean}, reason="${reason}"`);
             setStatus('closed');
             cleanup();
@@ -316,6 +335,18 @@ function createTransport(config: TransportConfig = {}) {
         if (nodeList.length === 0) {
             throw new ConnectionError('No servers provided');
         }
+
+        // No-op when the transport is already connected to one of the requested
+        // nodes. This breaks the cycle-boundary thrash where the market_adapter
+        // re-issues connectClient() every hour and the bot's transport flips
+        // open/closed each time. setNodes() may still have updated the list, so
+        // we keep that change but skip the disconnect/connect cycle.
+        if (ws && ws.readyState === 1 && nodeUrl && nodeList.includes(nodeUrl)) {
+            autoreconnect = autoReconnect;
+            intentionalClose = false;
+            return;
+        }
+
         nodeIndex = 0;
         reconnectAttempts = 0;
 

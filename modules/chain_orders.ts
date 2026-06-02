@@ -111,6 +111,38 @@ const {
 
 const Logger = require('./logger');
 const chainOrdersLogger = new Logger('ChainOrders');
+const { ORDER_EVENTS } = NATIVE_CLIENT;
+
+// Ring buffer of order ids the local process just cancelled.
+// Used by the fill consumer to ignore a fill/cancel-history entry that is
+// really just the propagation of the bot's own broadcast cancel op. Entries
+// expire after RECENT_OWN_CANCEL_TTL_MS so the buffer self-cleans.
+const RECENT_OWN_CANCEL_TTL_MS = ORDER_EVENTS.RECENT_OWN_CANCEL_TTL_MS;
+const RECENT_OWN_CANCEL_MAX_ENTRIES = ORDER_EVENTS.RECENT_OWN_CANCEL_MAX_ENTRIES;
+const _recentOwnCancels = new Map();
+
+function recordOwnCancel(orderId) {
+    if (!orderId) return;
+    const now = Date.now();
+    _recentOwnCancels.set(String(orderId), now);
+    // Lazy GC: drop expired entries when the buffer grows.
+    if (_recentOwnCancels.size > RECENT_OWN_CANCEL_MAX_ENTRIES) {
+        for (const [id, ts] of _recentOwnCancels) {
+            if (now - ts > RECENT_OWN_CANCEL_TTL_MS) _recentOwnCancels.delete(id);
+        }
+    }
+}
+
+function wasRecentlyOwnCancelled(orderId) {
+    if (!orderId) return false;
+    const ts = _recentOwnCancels.get(String(orderId));
+    if (ts == null) return false;
+    if (Date.now() - ts > RECENT_OWN_CANCEL_TTL_MS) {
+        _recentOwnCancels.delete(String(orderId));
+        return false;
+    }
+    return true;
+}
 
 // Key/auth helpers provided by modules/chain_keys.js
 // (authenticate(), getPrivateKey(), MasterPasswordError)
@@ -929,6 +961,7 @@ async function cancelOrder(accountName, privateKey, orderId) {
 
         if (isDaemonSigningToken(privateKey)) {
             const result = await executeViaDaemonToken(accountName, privateKey, [op]);
+            recordOwnCancel(orderId);
             chainOrdersLogger.info(`Order ${orderId} cancelled successfully`);
             return { success: true, orderId, verified: true, raw: result.raw, operation_results: result.operation_results };
         }
@@ -940,6 +973,7 @@ async function cancelOrder(accountName, privateKey, orderId) {
         tx.limit_order_cancel(op.op_data);
         await tx.broadcast();
 
+        recordOwnCancel(orderId);
         chainOrdersLogger.info(`Order ${orderId} cancelled successfully`);
         return { success: true, orderId, verified: true };
     } catch (error: any) {
@@ -1157,6 +1191,8 @@ export = {
     buildCancelOrderOp,
     buildLiquidityPoolExchangeOp,
     executeBatch,
+    wasRecentlyOwnCancelled,
+    recordOwnCancel,
 
     // Note: authentication and key retrieval moved to modules/chain_keys.js
 };

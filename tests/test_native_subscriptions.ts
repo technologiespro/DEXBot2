@@ -77,45 +77,26 @@ function makeAccountRecord(account) {
 
         assert.strictEqual(typeof noticeHandler, 'function', 'notice handler should be registered');
 
-        // Non-fill notice should be silently skipped (no history scan — matches btsdex behavior)
-        await noticeHandler([1, [{ id: '2.5.999', owner: '1.2.100' }]]);
-        assert.strictEqual(delivered.length, 1, 'non-fill notice should not trigger delivery');
-
         // Notice with direct fill object should be dispatched immediately to matching account
         await noticeHandler([1, [{ id: '1.11.501', block_num: 12, trx_in_block: 3, op: [4, { order_id: '1.7.3', account_id: '1.2.100' }] }]]);
 
-        // Two deliveries: bounded catch-up + direct notice fill.
-        assert.strictEqual(delivered.length, 2, 'matching account should receive two deliveries');
-        // First delivery: bounded catch-up delivers latest known fill plus activation-window fills.
+        assert.strictEqual(delivered.length, 1, 'matching account should receive direct notice delivery');
         assert.strictEqual(delivered[0][0], 'alice');
-        assert.deepStrictEqual(delivered[0][1].map(fill => fill.id), ['1.11.499', '1.11.500']);
-        // Second delivery: direct from notice data (no history scan).
-        assert.strictEqual(delivered[1][0], 'alice');
-        assert.strictEqual(delivered[1][1].length, 1);
-        assert.strictEqual(delivered[1][1][0].id, '1.11.501');
-        assert.strictEqual(delivered[1][1][0].block_num, 12, 'fill payload should expose block_num');
-        assert.strictEqual(delivered[1][1][0].trx_in_block, 3, 'fill payload should expose trx_in_block');
-        assert.strictEqual(delivered[1][1][0].block, undefined, 'legacy block alias should not leak through');
-        assert.strictEqual(delivered[1][1][0].trx, undefined, 'legacy trx alias should not leak through');
+        assert.strictEqual(delivered[0][1].length, 1);
+        assert.strictEqual(delivered[0][1][0].id, '1.11.501');
+        assert.strictEqual(delivered[0][1][0].block_num, 12, 'fill payload should expose block_num');
+        assert.strictEqual(delivered[0][1][0].trx_in_block, 3, 'fill payload should expose trx_in_block');
+        assert.strictEqual(delivered[0][1][0].block, undefined, 'legacy block alias should not leak through');
+        assert.strictEqual(delivered[0][1][0].trx, undefined, 'legacy trx alias should not leak through');
         const aliceHistoryCalls = historyCalls.filter(([account]) => account === '1.2.100');
         const bobHistoryCalls = historyCalls.filter(([account]) => account === '1.2.200');
-        // Startup primes latest first; non-fill object-change notices now trigger
-        // a catch-up scan because BitShares Core may notify impacted accounts with
-        // changed object IDs rather than full 1.11.x fill objects.
         assert.deepStrictEqual(
             aliceHistoryCalls[0],
             ['1.2.100', 4, '1.11.0', '1.11.0', 1],
             'subscription bootstrap should prime from the latest delivered fill id'
         );
-        assert.deepStrictEqual(
-            aliceHistoryCalls[1],
-            ['1.2.100', 4, '1.11.0', '1.11.498', 100],
-            'object-change notice should read the head page after priming'
-        );
-        assert.strictEqual(aliceHistoryCalls.length, 2, 'direct fill notice should not add an alice history scan');
-        assert.strictEqual(bobHistoryCalls.length, 2, 'bob prime plus object-change catch-up');
-        // Fill sent via direct notice should dispatch to all active subscriptions
-        assert.strictEqual(delivered.length, 2, 'alice should get catch-up + direct notice fill');
+        assert.strictEqual(aliceHistoryCalls.length, 1, 'direct fill notice should not add an alice history scan');
+        assert.strictEqual(bobHistoryCalls.length, 1, 'bob should only prime history in this direct-fill test');
         assert.ok(dbCalls.some(([method]) => method === 'set_subscribe_callback'), 'subscription RPC should be registered');
         assert.strictEqual(
             dbCalls.some(([method, account, subscribe]) => method === 'get_full_accounts' && account === 'alice' && subscribe === true),
@@ -167,6 +148,7 @@ function makeAccountRecord(account) {
         await manager.subscribe('alice', (fills) => {
             delivered.push(fills);
         });
+        await new Promise(resolve => setTimeout(resolve, 300));
 
         assert.strictEqual(callbackCountDuringRegister, 1, 'initial subscribe should attach the local callback before remote activation');
         assert.strictEqual(noticeHandlerPresentDuringRegister, true, 'initial subscribe should install the local notice handler before remote activation');
@@ -238,6 +220,7 @@ function makeAccountRecord(account) {
         assert.strictEqual(delivered[0][0].id, '1.11.900');
 
         await handlers[0]([1, [{ id: '2.5.4000', owner: '1.2.100' }]]);
+        await new Promise(resolve => setTimeout(resolve, 300));
         assert.strictEqual(delivered.length, 2, 'reattached object-change notice should scan and deliver newer fills');
         assert.strictEqual(delivered[1][0].id, '1.11.901');
         assert.ok(
@@ -292,6 +275,7 @@ function makeAccountRecord(account) {
         // may notify impacted accounts with changed object IDs rather than full 1.11.x fill objects.
         // The scan finds the fill at 1.11.700 from the mock.
         await noticeHandler([1, [{ id: '2.6.100' }]]);
+        await new Promise(resolve => setTimeout(resolve, 300));
         assert.strictEqual(accountNoticeDelivered.length, 1, 'object-change notice should trigger history scan and deliver fill');
         assert.strictEqual(accountNoticeDelivered[0][0].id, '1.11.700', 'history scan should deliver fill 1.11.700');
 
@@ -730,6 +714,160 @@ function makeAccountRecord(account) {
             // without needing redundant account data verification.
             assert.strictEqual(delivered.length, 1, 'catch-up should succeed without re-fetching account data');
             assert.strictEqual(delivered[0][0].id, '1.11.501', 'history fill ID should match');
+        } finally {
+            global.setTimeout = originalSetTimeout;
+            global.clearTimeout = originalClearTimeout;
+        }
+    }
+
+    console.log(' - Testing no-fill notice coalesce: back-to-back notices within NOTICE_COALESCE_MS trigger one history scan...');
+    {
+        // The coalesce window is fixed at construction time from NATIVE_CLIENT.SUBSCRIPTIONS.NOTICE_COALESCE_MS.
+        // We override global.setTimeout to capture the coalesce timers without actually firing them,
+        // then manually fire one and assert that a single history scan was scheduled.
+        const originalSetTimeout = global.setTimeout;
+        const originalClearTimeout = global.clearTimeout;
+        const coalesceTimers = [];
+        let noticeHandler = null;
+        let subscriptionComplete = false;
+        const historyCalls = [];
+        const delivered = [];
+
+        global.setTimeout = ((fn, delay) => {
+            coalesceTimers.push({ fn, delay });
+            return { coalesceTimer: true };
+        }) as any;
+        global.clearTimeout = (() => {}) as any;
+
+        try {
+            const chainClient = {
+                transport: {
+                    addMessageHandler(handler) {
+                        noticeHandler = handler;
+                        return () => { noticeHandler = null; };
+                    },
+                },
+                db: {
+                    get_full_accounts: async ([account]) => [makeAccountRecord(account)],
+                    call: async () => null,
+                },
+                history: {
+                    getAccountHistoryOperations: async (accountId, _opType, _start, stop, limit) => {
+                        historyCalls.push([accountId, stop, limit]);
+                        if (accountId !== '1.2.100') return [];
+                        if (limit === 1) {
+                            return [{ id: '1.11.200', block_num: 2, trx_in_block: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                        }
+                        if (subscriptionComplete) {
+                            // The cursor is at 1.11.200 at subscription time and the
+                            // fill at 1.11.201 is always returned in the head page so
+                            // the test does not need to track cursor advancement.
+                            return [{ id: '1.11.201', block_num: 3, trx_in_block: 2, op: [4, { order_id: '1.7.coalesce' }] }];
+                        }
+                        return [];
+                    },
+                },
+            };
+
+            const manager = createSubscriptionManager(chainClient);
+            await manager.subscribe('alice', (fills) => {
+                delivered.push(fills);
+            });
+            subscriptionComplete = true;
+            delivered.length = 0;
+            historyCalls.length = 0;
+            coalesceTimers.length = 0;
+
+            // First no-fill notice within the coalesce window. The per-sub cursor is at
+            // 1.11.200, but the notice carries no 1.11.x id, so noticeMaxInstance stays
+            // at -1 and the cursor check falls through. The first notice schedules
+            // the coalesced scan but does not run a synchronous history scan.
+            await noticeHandler([1, [{ id: '2.5.5000', owner: '1.2.100' }]]);
+            const scansAfterFirst = historyCalls.filter(([, , limit]) => limit !== 1).length;
+            assert.strictEqual(scansAfterFirst, 0, 'first no-fill notice should not trigger an immediate history scan');
+            assert.strictEqual(coalesceTimers.length, 1, 'first no-fill notice should schedule one coalesce timer');
+
+            // Second no-fill notice within the coalesce window should NOT trigger a new
+            // scan. The existing pending scan timer is updated with the new lastNoticeAt.
+            await noticeHandler([1, [{ id: '2.6.100' }]]);
+            const scansAfterSecond = historyCalls.filter(([, , limit]) => limit !== 1).length;
+            assert.strictEqual(scansAfterSecond, 0, 'second no-fill notice within window should not trigger an immediate scan');
+            assert.strictEqual(coalesceTimers.length, 1, 'coalesce timer should be reused, not duplicated');
+
+            // Fire the scheduled scan. This should be the only history scan for the
+            // two notices above.
+            coalesceTimers[0].fn();
+            await new Promise(resolve => originalSetTimeout(resolve, 10));
+            const scansAfterTimer = historyCalls.filter(([, , limit]) => limit !== 1).length;
+            assert.strictEqual(scansAfterTimer, 1, 'coalesced timer should trigger exactly one history scan');
+            assert.strictEqual(delivered.length, 1, 'coalesced scan should deliver the fill');
+            assert.strictEqual(delivered[0][0].id, '1.11.201', 'coalesced scan should deliver 1.11.201');
+
+            historyCalls.length = 0;
+            coalesceTimers.length = 0;
+
+            await noticeHandler([1, [{ id: '2.5.5001', owner: '1.2.100' }]]);
+            const scansAfterThird = historyCalls.filter(([, , limit]) => limit !== 1).length;
+            assert.strictEqual(scansAfterThird, 0, 'a fresh no-fill notice should schedule, not immediately run, a new scan');
+            assert.strictEqual(coalesceTimers.length, 1, 'fresh no-fill notice should schedule a new coalesce timer');
+        } finally {
+            global.setTimeout = originalSetTimeout;
+            global.clearTimeout = originalClearTimeout;
+        }
+    }
+
+    console.log(' - Testing resubscribeAll clears coalesced pending scans from the pre-reconnect era...');
+    {
+        // Verifies fix #1: pendingScans cleared on resubscribeAll so a deferred
+        // timer from before the reconnect cannot race the catch-up scan.
+        const originalSetTimeout = global.setTimeout;
+        const originalClearTimeout = global.clearTimeout;
+        let noticeHandler = null;
+        const chainClient = {
+            transport: {
+                addMessageHandler(handler) {
+                    noticeHandler = handler;
+                    return () => { noticeHandler = null; };
+                },
+            },
+            db: {
+                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
+                call: async () => null,
+            },
+            history: {
+                getAccountHistoryOperations: async (_accountId, _opType, _start, stop, limit) => {
+                    if (limit === 1) {
+                        return [{ id: '1.11.5000', block_num: 1, trx_in_block: 1, op: [4, { order_id: '1.7.bootstrap' }] }];
+                    }
+                    return [];
+                },
+            },
+        };
+
+        // Capture the coalesce timer handle so we can assert it gets cleared.
+        let capturedTimer: any = null;
+        global.setTimeout = ((fn, delay) => {
+            const handle = { fn, delay, cleared: false };
+            capturedTimer = handle;
+            return handle as any;
+        }) as any;
+        global.clearTimeout = ((handle: any) => {
+            if (handle && typeof handle === 'object') handle.cleared = true;
+        }) as any;
+
+        try {
+            const manager = createSubscriptionManager(chainClient);
+            await manager.subscribe('alice', () => {});
+            capturedTimer = null;
+
+            // Schedule a coalesce timer via a no-fill notice.
+            await noticeHandler([1, [{ id: '2.5.9999', owner: '1.2.100' }]]);
+            assert.ok(capturedTimer, 'no-fill notice should schedule a coalesce timer');
+            assert.strictEqual(capturedTimer.cleared, false, 'timer should not be cleared before reconnect');
+
+            // resubscribeAll should clear the pending timer.
+            await manager.resubscribeAll();
+            assert.strictEqual(capturedTimer.cleared, true, 'resubscribeAll should clear pending coalesce timer');
         } finally {
             global.setTimeout = originalSetTimeout;
             global.clearTimeout = originalClearTimeout;

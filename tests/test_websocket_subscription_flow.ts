@@ -106,6 +106,7 @@ function makeAccountRecord(account) {
             await noticeHandler([1, [
                 { id: '1.11.101', block_num: 11, trx_in_block: 2 },
             ]]);
+            await new Promise(resolve => setTimeout(resolve, 300));
 
             test('thin 1.11.x notice without fill op triggers history scan when cursor is behind', () => {
                 assert.strictEqual(delivered.length, 1, 'history scan should deliver fills');
@@ -228,6 +229,7 @@ function makeAccountRecord(account) {
 
             // Bob's statistics object - triggers scan for all subscriptions
             await noticeHandler([1, [{ id: '2.6.200' }]]);
+            await new Promise(resolve => setTimeout(resolve, 300));
 
             test('other account statistics notice triggers scan for all subscriptions', () => {
                 assert.ok(historyAccounts.includes(BOB_ID), 'bob history should be scanned');
@@ -298,6 +300,7 @@ function makeAccountRecord(account) {
                 { id: '1.11.501', block_num: 51, trx_in_block: 2 },
                 { id: '1.11.502', block_num: 52, trx_in_block: 3 },
             ]]);
+            await new Promise(resolve => setTimeout(resolve, 300));
 
             // After bootstrap, cursor = 499 (decremented from 500).
             // Thin notices with IDs ahead of the cursor trigger a scan.
@@ -499,6 +502,6 @@ function makeAccountRecord(account) {
         if (passedTests !== totalTests) {
             process.exitCode = 1;
         }
-    }, 100);
+    }, 1000);
 
 })();

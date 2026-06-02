@@ -514,6 +514,11 @@ let NODE_MANAGEMENT = {
     STARTUP_REFRESH_INTERVAL_MS: 30000,
     STARTUP_CONNECT_TIMEOUT_MS: 5000,
 
+    // Cooldown window between successive failover assessments (ms).
+    // Kept above the native transport close-coalesce window so cascading
+    // close events normally collapse into one node-health assessment.
+    FAILOVER_ASSESSMENT_COOLDOWN_MS: 500,
+
     // Default node list (used if no config file)
     DEFAULT_NODES: [
         'wss://btsws.roelandp.nl/ws',
@@ -1165,6 +1170,11 @@ let NATIVE_CLIENT = {
         // Uses a lightweight `login` call to detect severed connections early.
         KEEPALIVE_INTERVAL_MS: 45000,
 
+        // Coalesce duplicate close events from the same active socket (ms).
+        // Some WebSocket implementations can emit close/error cascades for one
+        // underlying connection failure; this window prevents redundant failover work.
+        CLOSE_COALESCE_MS: 250,
+
         // Reconnection backoff parameters (ms).
         // Reconnect delay = min(base × 2^attempt + random(0..1000), max).
         RECONNECT_BASE_MS: 1000,
@@ -1201,6 +1211,25 @@ let NATIVE_CLIENT = {
         // Subscription callbacks throw before acknowledging history when this
         // limit would be exceeded, so the cursor remains retryable.
         MAX_INCOMING_FILL_QUEUE: 1000,
+
+        // Coalesce window (ms) for the no-fill fallback scan in handleNotice.
+        // Back-to-back non-fill notices that arrive within this window share a
+        // single history scan per subscription instead of triggering one RPC
+        // per notice. Set to 0 to disable coalescing.
+        NOTICE_COALESCE_MS: 250,
+    },
+
+    // -------------------------------------------------------------------------
+    // ORDER_EVENTS — Local order-event correlation settings (chain_orders.js)
+    // -------------------------------------------------------------------------
+    ORDER_EVENTS: {
+        // Time window (ms) for remembering order ids this process just cancelled.
+        // Used only to discard malformed non-economic fill artifacts that are
+        // actually local cancel propagation; real fills with economics are kept.
+        RECENT_OWN_CANCEL_TTL_MS: 5000,
+
+        // Lazy-GC threshold for the recent-own-cancel map.
+        RECENT_OWN_CANCEL_MAX_ENTRIES: 256,
     },
 
     // -------------------------------------------------------------------------

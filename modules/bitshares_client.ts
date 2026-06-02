@@ -42,6 +42,8 @@ let nodeConfig = null;
 let startupNodeRefreshPromise = null;
 let failoverAssessmentPromise = null;
 let reconnectInProgress = false;
+let lastFailoverAssessmentAt = 0;
+const failoverAssessmentCooldownMs = NODE_MANAGEMENT.FAILOVER_ASSESSMENT_COOLDOWN_MS;
 
 // Reconnection callbacks registered by consumers (e.g. DEXBot)
 const _reconnectCallbacks = new Set();
@@ -252,6 +254,12 @@ async function assessFailover(reason = 'status change') {
     if (!nodeManager || nodeConfig?.healthCheck?.enabled === false) return false;
     if (reconnectInProgress) return false;
     if (failoverAssessmentPromise) return failoverAssessmentPromise;
+    // Cooldown: a single close can fan into multiple assessFailover calls
+    // (probe socket close + live transport close). Skip the second one for a
+    // short window so we only ever do one probe+restart per real disconnect.
+    const now = Date.now();
+    if (now - lastFailoverAssessmentAt < failoverAssessmentCooldownMs) return false;
+    lastFailoverAssessmentAt = now;
 
     failoverAssessmentPromise = (async () => {
         console.warn(`[NodeManager] ${reason}, triggering failover assessment`);
@@ -270,6 +278,13 @@ async function assessFailover(reason = 'status change') {
             const nextNodes = availableHealthyNodes.length > 0
                 ? availableHealthyNodes
                 : (healthyNodes.length > 0 ? healthyNodes : (availableFallbackNodes.length > 0 ? availableFallbackNodes : fallbackNodes));
+            // Avoid restarting to the same node we are already on. With the
+            // transport connect() no-op, a redundant restart is at best a
+            // no-op and at worst a forced disconnect cycle.
+            if (activeNode && (nextNodes.length === 0 || (nextNodes.length === 1 && nextNodes[0] === activeNode))) {
+                console.log(`[NodeManager] ${reason}: no better node available, keeping ${activeNode}`);
+                return false;
+            }
             return restartBitsharesConnection(nextNodes, reason);
         } catch (err: any) {
             console.warn('[NodeManager] Failover assessment error:', err.message);
