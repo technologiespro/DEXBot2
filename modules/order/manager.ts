@@ -463,6 +463,7 @@ class OrderManager {
     _recoveryAttempted: boolean;
     _gridVersion: number;
     _gridPersistenceSuspendedReason: any;
+    _pendingBroadcasts: Map<any, any>;
     _metrics: any;
     _currentWorkingGrid: any;
     _cowEngine: any;
@@ -530,6 +531,7 @@ class OrderManager {
         this._recoveryAttempted = false;
         this._gridVersion = 0;
         this._gridPersistenceSuspendedReason = null;
+        this._pendingBroadcasts = new Map();
 
         this._metrics = {
             fundRecalcCount: 0,

@@ -107,6 +107,7 @@ const path = require('path');
 const chainKeys = require('./chain_keys');
 const {
     executeOperationsViaCredentialDaemon,
+    BroadcastUncertainError,
 } = require('./dexbot_credential_client');
 
 const Logger = require('./logger');
@@ -434,6 +435,8 @@ async function executeViaDaemonToken(accountName, signingToken, operations) {
             socketPath: signingToken.socketPath,
             sessionId: signingToken.sessionId || null,
             botHmacSecret: signingToken.botHmacSecret || null,
+            requestType: 'broadcast',
+            batchId: signingToken.batchId || null,
         });
         return {
             success: true,
@@ -441,6 +444,12 @@ async function executeViaDaemonToken(accountName, signingToken, operations) {
             operation_results: Array.isArray(result.operation_results) ? result.operation_results : [],
         };
     } catch (err: any) {
+        // BroadcastUncertainError means the chain status is unknown. The
+        // recovery path in dexbot_class.ts reads the chain directly, so we
+        // MUST NOT retry — a retry could double-publish.
+        if (err instanceof BroadcastUncertainError) {
+            throw err;
+        }
         if (err.message && err.message.includes('invalid or expired session')) {
             chainOrdersLogger.warn(`Session expired for ${accountName}, automatically renegotiating...`);
             // Probe daemon for a new session
@@ -453,6 +462,8 @@ async function executeViaDaemonToken(accountName, signingToken, operations) {
                 socketPath: signingToken.socketPath,
                 sessionId: signingToken.sessionId,
                 botHmacSecret: signingToken.botHmacSecret || null,
+                requestType: 'broadcast',
+                batchId: signingToken.batchId || null,
             });
             
             return {
@@ -1210,6 +1221,7 @@ export = {
     executeBatch,
     wasRecentlyOwnCancelled,
     recordOwnCancel,
+    BroadcastUncertainError,
 
     // Note: authentication and key retrieval moved to modules/chain_keys.js
 };

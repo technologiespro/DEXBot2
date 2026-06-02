@@ -400,22 +400,54 @@ async function executeOperationsWithClient(client: any, operations: any) {
 }
 
 async function broadcastWithRetry(accountName: any, privateKey: any, broadcastFn: any) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-            if (_nativeChainClient.getStatus() !== 'connected') {
-                _nativeChainClient.setNodes(_nativeNodeList.length > 0 ? _nativeNodeList : NODE_MANAGEMENT.DEFAULT_NODES);
-                await _nativeChainClient.connect();
+    // The inner deadline caps the TOTAL time spent across BOTH retry attempts
+    // so we always reply to the bot well before its outer socket timer
+    // (CREDENTIAL_BROADCAST_TIMEOUT_MS) fires. If we don't reply in time, the
+    // bot raises BroadcastUncertainError and enters the recovery path.
+    // See: modules/dexbot_credential_client.ts BroadcastUncertainError.
+    const innerDeadlineMs = Number.isFinite(Number(TIMING?.CREDENTIAL_DAEMON_INNER_DEADLINE_MS))
+        ? Number(TIMING.CREDENTIAL_DAEMON_INNER_DEADLINE_MS)
+        : 20000;
+    const startedAt = Date.now();
+    let deadlineTimer: any = null;
+    const deadlinePromise = new Promise((_, reject) => {
+        deadlineTimer = setTimeout(() => {
+            const err: any = new Error(
+                `BROADCAST_DEADLINE:inner broadcast deadline ${innerDeadlineMs}ms exceeded`
+            );
+            err.code = 'BROADCAST_DEADLINE';
+            err.uncertain = true;
+            err.accountName = accountName;
+            err.startedAt = startedAt;
+            err.ageMs = Date.now() - startedAt;
+            reject(err);
+        }, innerDeadlineMs);
+    });
+
+    const work = (async () => {
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                if (_nativeChainClient.getStatus() !== 'connected') {
+                    _nativeChainClient.setNodes(_nativeNodeList.length > 0 ? _nativeNodeList : NODE_MANAGEMENT.DEFAULT_NODES);
+                    await _nativeChainClient.connect();
+                }
+                const { createSigningClient } = require('./modules/bitshares-native');
+                const signingClient = createSigningClient(_nativeChainClient, accountName, privateKey);
+                const client = signingClient.client;
+                await client.initPromise;
+                return await broadcastFn(client);
+            } catch (err: any) {
+                if (attempt === 2) throw err;
+                debugLog(`Broadcast failed (attempt ${attempt}), reconnecting: ${err.message}`);
+                try { _nativeChainClient.disconnect(); } catch (_) {}
             }
-            const { createSigningClient } = require('./modules/bitshares-native');
-            const signingClient = createSigningClient(_nativeChainClient, accountName, privateKey);
-            const client = signingClient.client;
-            await client.initPromise;
-            return await broadcastFn(client);
-        } catch (err: any) {
-            if (attempt === 2) throw err;
-            debugLog(`Broadcast failed (attempt ${attempt}), reconnecting: ${err.message}`);
-            try { _nativeChainClient.disconnect(); } catch (_) {}
         }
+    })();
+
+    try {
+        return await Promise.race([work, deadlinePromise]);
+    } finally {
+        if (deadlineTimer) clearTimeout(deadlineTimer);
     }
 }
 
@@ -738,10 +770,37 @@ function processRequest(requestStr: string, socket: any) {
                     }
 
                     const privateKey = await loadCurrentPrivateKey(accountName);
-                    const signResult = await broadcastWithRetry(
-                        accountName, privateKey,
-                        (client: any) => client.broadcast(operation)
-                    );
+                    let signResult: any;
+                    try {
+                        signResult = await broadcastWithRetry(
+                            accountName, privateKey,
+                            (client: any) => client.broadcast(operation)
+                        );
+                    } catch (broadcastErr: any) {
+                        if (broadcastErr && broadcastErr.code === 'BROADCAST_DEADLINE') {
+                            appendAuditLog({
+                                event: 'sign_timeout',
+                                accountName,
+                                sessionId,
+                                opCount: 1,
+                                opTypes: [operation && operation.op_name].filter(Boolean),
+                                ageMs: broadcastErr.ageMs,
+                                startedAt: broadcastErr.startedAt
+                                    ? new Date(broadcastErr.startedAt).toISOString()
+                                    : null,
+                                timestamp: new Date().toISOString(),
+                            });
+                            // Tell the bot the chain state is uncertain so it
+                            // can run the recovery path (read chain, match by
+                            // fingerprint, adopt or discard).
+                            return sendError(
+                                socket,
+                                'chain status uncertain after inner deadline',
+                                'BROADCAST_DEADLINE'
+                            );
+                        }
+                        throw broadcastErr;
+                    }
 
                     appendAuditLog({
                         event: 'sign_allowed',
@@ -816,10 +875,34 @@ function processRequest(requestStr: string, socket: any) {
                     }
 
                     const privateKey = await loadCurrentPrivateKey(accountName);
-                    const signResult = await broadcastWithRetry(
-                        accountName, privateKey,
-                        (client: any) => executeOperationsWithClient(client, operations)
-                    );
+                    let signResult: any;
+                    try {
+                        signResult = await broadcastWithRetry(
+                            accountName, privateKey,
+                            (client: any) => executeOperationsWithClient(client, operations)
+                        );
+                    } catch (broadcastErr: any) {
+                        if (broadcastErr && broadcastErr.code === 'BROADCAST_DEADLINE') {
+                            appendAuditLog({
+                                event: 'sign_timeout',
+                                accountName,
+                                sessionId,
+                                opCount: operations.length,
+                                opTypes: operations.map((o: any) => o && o.op_name).filter(Boolean),
+                                ageMs: broadcastErr.ageMs,
+                                startedAt: broadcastErr.startedAt
+                                    ? new Date(broadcastErr.startedAt).toISOString()
+                                    : null,
+                                timestamp: new Date().toISOString(),
+                            });
+                            return sendError(
+                                socket,
+                                'chain status uncertain after inner deadline',
+                                'BROADCAST_DEADLINE'
+                            );
+                        }
+                        throw broadcastErr;
+                    }
 
                     appendAuditLog({
                         event: 'sign_allowed',
@@ -861,10 +944,11 @@ function sendSuccess(socket: any, data: any) {
  * @param {net.Socket} socket - Client socket
  * @param {string} message - Error message
  */
-function sendError(socket: any, message: string) {
+function sendError(socket: any, message: string, code: string | null = null) {
     const response = JSON.stringify({
         success: false,
-        error: message
+        error: message,
+        ...(code ? { code } : {})
     });
     socket.write(response + '\n');
 }

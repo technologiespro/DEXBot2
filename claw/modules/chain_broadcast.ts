@@ -123,7 +123,9 @@ async function executeOperations(operations: any, options: Record<string, any> =
       socketPath: options.socketPath,
       timeoutMs: requestTimeoutMs,
       sessionId,
-      botHmacSecret
+      botHmacSecret,
+      requestType: 'broadcast',
+      batchId: options.batchId || null
     });
 
     return {

@@ -90,6 +90,7 @@ const { BitShares, waitForConnected, onReconnect: registerReconnectHook } = requ
 const chainKeys = require('./chain_keys');
 const credentialPolicy = require('./credential_policy');
 const chainOrders = require('./chain_orders');
+const { BroadcastUncertainError } = require('./dexbot_credential_client');
 const { OrderManager, grid: Grid } = require('./order');
 const {
     retryPersistenceIfNeeded,
@@ -102,6 +103,7 @@ const {
 } = require('./order/utils/validate');
 const {
     buildCreateOrderArgs,
+    buildCreateOpFingerprint,
     virtualizeOrder,
     correctAllPriceMismatches,
     convertToSpreadPlaceholder,
@@ -188,6 +190,8 @@ class DEXBot {
     _targetedDriftSyncCooldownMs: number;
     _maintenanceCooldownCycles: number;
     _lastGridActivityAt: number;
+    _currentCycleId: number;
+    _autoCancelOrphanCycleMarker: number | null;
     _dustSinceMap: Map<any, any>;
 
     /**
@@ -275,6 +279,8 @@ class DEXBot {
         this._targetedDriftSyncCooldownMs = 60_000;
         this._maintenanceCooldownCycles = 0;
         this._lastGridActivityAt = 0;
+        this._currentCycleId = 0;
+        this._autoCancelOrphanCycleMarker = null;
 
         // Tracks when each order first entered the dust state (orderId → timestamp ms).
         // Used by _cancelDustOrders to enforce DUST_CANCEL_DELAY_SEC.
@@ -2344,6 +2350,466 @@ class DEXBot {
         return formatUnmatchedChainOrder(order);
     }
 
+    /**
+     * Record a pending CREATE broadcast on the manager.
+     *
+     * Called immediately after each CREATE op is built into the opContext list.
+     * The fingerprint and op indices are stashed so the recovery path in
+     * _reconcileAfterUncertainBroadcast can correlate the planned op with an
+     * on-chain order (or discard it as a chain-side orphan).
+     *
+     * Storage: manager._pendingBroadcasts is a Map<fingerprint, PendingEntry>.
+     * We store on the manager (not on the bot) so the sync engine, grid
+     * reconcile, and any other consumer can read it without crossing the
+     * bot/manager boundary.
+     *
+     * @param {Object} entry
+     * @param {number} entry.opIndex - Index into the operations array
+     * @param {number} entry.ctxIndex - Index into opContexts
+     * @param {Object} entry.order - The grid order being broadcast
+     * @param {Object} entry.finalInts - { amountToSell, minToReceive, ... } blockchain integers
+     * @returns {void}
+     */
+    _recordPendingBroadcast(entry) {
+        if (!this.manager || !entry || !entry.order) return;
+        if (!this.manager._pendingBroadcasts || !(this.manager._pendingBroadcasts instanceof Map)) {
+            this.manager._pendingBroadcasts = new Map();
+        }
+        const fingerprint = buildCreateOpFingerprint({
+            side: entry.order.type,
+            assetA: this.manager?.assets?.assetA?.id,
+            assetB: this.manager?.assets?.assetB?.id,
+            sellInt: entry.finalInts?.sell,
+            receiveInt: entry.finalInts?.receive,
+            slotId: entry.order.id
+        });
+        if (!fingerprint) {
+            this.manager.logger.log?.(
+                `[COW] Skipped pending-broadcast record: could not build fingerprint for ${entry.order?.id || 'unknown'}`,
+                'warn'
+            );
+            return;
+        }
+        this.manager._pendingBroadcasts.set(fingerprint, {
+            fingerprint,
+            opIndex: entry.opIndex,
+            ctxIndex: entry.ctxIndex,
+            slotId: entry.order.id,
+            orderId: entry.order.id,
+            orderType: entry.order.type,
+            order: entry.order,
+            finalInts: entry.finalInts,
+            batchId: this._currentBatchId || null,
+            recordedAt: Date.now()
+        });
+    }
+
+    /**
+     * Clear the pending-broadcast cache.
+     *
+     * Called after a successful commit, after a confirmed failure (so the
+     * stale entries don't block the next cycle), and after a successful
+     * recovery adoption (matched entries are explicitly removed by
+     * _reconcileAfterUncertainBroadcast before calling this).
+     */
+    _clearPendingBroadcasts() {
+        if (this.manager && this.manager._pendingBroadcasts instanceof Map) {
+            this.manager._pendingBroadcasts.clear();
+        }
+    }
+
+    /**
+     * Build a fingerprint for an on-chain order so it can be matched against
+     * the pending-broadcast cache.
+     *
+     * @param {Object} chainOrder - Parsed chain order (id, sell, receive, sellAssetId, receiveAssetId, ...)
+     * @param {string} slotId - The grid slot id (order.id) we expect this chain order to belong to
+     * @returns {string|null} Fingerprint or null on bad input
+     */
+    _buildChainOrderFingerprint(chainOrder, slotId) {
+        if (!chainOrder || !slotId) return null;
+        const normalized = this._normalizeChainOrderForPendingMatch(chainOrder);
+        if (!normalized) return null;
+        return buildCreateOpFingerprint({
+            side: normalized.side,
+            assetA: normalized.assetA,
+            assetB: normalized.assetB,
+            sellInt: normalized.sellInt,
+            receiveInt: normalized.receiveInt,
+            slotId
+        });
+    }
+
+    /**
+     * Normalize raw BitShares limit_order_object data into the integer tuple
+     * used by pending-broadcast recovery.
+     *
+     * readOpenOrders() returns raw orders with sell_price/for_sale, not the
+     * parsed DEXBot fields type/sellInt/receiveInt. Test fixtures may still
+     * pass the parsed shape, so this helper accepts both.
+     *
+     * @param {Object} chainOrder
+     * @returns {{side: string, assetA: string, assetB: string, sellInt: number, receiveInt: number}|null}
+     */
+    _normalizeChainOrderForPendingMatch(chainOrder) {
+        if (!chainOrder) return null;
+        const assetA = this.manager?.assets?.assetA?.id;
+        const assetB = this.manager?.assets?.assetB?.id;
+        if (!assetA || !assetB) return null;
+
+        const explicitSide = (chainOrder.type === 'buy' || chainOrder.type === 'sell')
+            ? chainOrder.type
+            : null;
+        const explicitSell = chainOrder.sellInt ?? chainOrder.sell;
+        const explicitReceive = chainOrder.receiveInt ?? chainOrder.receive;
+        if (explicitSide && Number.isFinite(Number(explicitSell)) && Number.isFinite(Number(explicitReceive))) {
+            return {
+                side: explicitSide,
+                assetA,
+                assetB,
+                sellInt: Number(explicitSell),
+                receiveInt: Number(explicitReceive)
+            };
+        }
+
+        const base = chainOrder.sell_price?.base;
+        const quote = chainOrder.sell_price?.quote;
+        if (!base || !quote || !base.asset_id || !quote.asset_id) return null;
+        const baseAmount = Number(base.amount);
+        const quoteAmount = Number(quote.amount);
+        if (!Number.isFinite(baseAmount) || !Number.isFinite(quoteAmount)) return null;
+
+        if (base.asset_id === assetA && quote.asset_id === assetB) {
+            return { side: 'sell', assetA, assetB, sellInt: baseAmount, receiveInt: quoteAmount };
+        }
+        if (base.asset_id === assetB && quote.asset_id === assetA) {
+            return { side: 'buy', assetA, assetB, sellInt: baseAmount, receiveInt: quoteAmount };
+        }
+        return null;
+    }
+
+    /**
+     * Find a chain order that matches a planned slot using price+size proximity.
+     *
+     * Fallback for the case where the chain order's integer pair doesn't
+     * bit-match the planned op (e.g. the daemon normalized the minToReceive
+     * by ±1 unit to force an op, or precision rounding changed a value by 1).
+     * For each open chain order we build a fingerprint candidate per known
+     * slot id and accept the first exact match; if none, we look for a near
+     * match by sell+receive integer proximity.
+     *
+     * @param {Array<Object>} chainOrders - Open chain orders for the account
+     * @param {string} slotId - Planned grid slot id
+     * @param {Object} planned - { sell, receive, orderType } integers from the planned op
+     * @returns {Object|null} Matching chain order, or null
+     */
+    _findChainOrderForSlot(chainOrders, slotId, planned) {
+        if (!Array.isArray(chainOrders) || !slotId) return null;
+        const assetA = this.manager?.assets?.assetA?.id;
+        const assetB = this.manager?.assets?.assetB?.id;
+        if (!assetA || !assetB) return null;
+
+        // 1. Exact fingerprint match.
+        for (const o of chainOrders) {
+            const fp = this._buildChainOrderFingerprint(o, slotId);
+            if (fp && this.manager._pendingBroadcasts?.has(fp)) {
+                return o;
+            }
+        }
+        if (!planned || !Number.isFinite(Number(planned.sell)) || !Number.isFinite(Number(planned.receive))) {
+            return null;
+        }
+        // 2. Near match: same side, sell int within 1, receive int within 1% or 2 units.
+        const targetSell = Number(planned.sell);
+        const targetReceive = Number(planned.receive);
+        const plannedSide = planned.orderType ||
+            planned.side ||
+            this.manager._pendingBroadcasts?.get?.(planned.fingerprint)?.orderType ||
+            this.manager.orders.get(slotId)?.type;
+        if (plannedSide !== 'buy' && plannedSide !== 'sell') {
+            return null;
+        }
+        let best = null;
+        let bestDistance = Infinity;
+        for (const o of chainOrders) {
+            const normalized = this._normalizeChainOrderForPendingMatch(o);
+            if (!normalized) continue;
+            if (normalized.side !== plannedSide) continue;
+            const sell = Number(normalized.sellInt);
+            const receive = Number(normalized.receiveInt);
+            if (!Number.isFinite(sell) || !Number.isFinite(receive)) continue;
+            const sellDelta = Math.abs(sell - targetSell);
+            const receiveDelta = Math.abs(receive - targetReceive);
+            const receiveTol = Math.max(2, Math.floor(targetReceive * 0.01));
+            if (sellDelta > 1 || receiveDelta > receiveTol) continue;
+            const distance = sellDelta * 1000 + receiveDelta;
+            if (distance < bestDistance) {
+                best = o;
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Reconcile a broadcast whose chain state is unknown.
+     *
+     * Triggered when the credential daemon times out (or hits its inner
+     * deadline) before confirming the broadcast. The chain may or may not
+     * have accepted the operations; we MUST treat the state as uncertain
+     * and recover deterministically.
+     *
+     * Algorithm:
+     *   1. Read the account's current open orders from the chain.
+     *   2. For each pending-broadcast entry (fingerprinted CREATE op), look
+     *      for a matching chain order. If found: adopt it (set the opContext's
+     *      chainOrderId and continue with the existing planned slot).
+     *   3. For pending entries with no chain match: virtualize (mark the
+     *      opContext as discarded; the planned slot stays empty until the
+     *      next planning cycle).
+     *   4. Persist + log a structured [COW][UNCERTAIN] summary.
+     *
+     * After this method returns, the bot has either adopted the on-chain
+     * result (good case — chain accepted but we didn't see the reply) or
+     * accepted the discard (chain rejected or never received the op).
+     *
+     * @param {BroadcastUncertainError} err - The thrown error
+     * @param {Array<Object>} opContexts - Original opContexts from the failed batch
+     * @returns {Promise<Object>} Result object compatible with batch return shape
+     */
+    async _reconcileAfterUncertainBroadcast(err, opContexts, options = {}) {
+        if (
+            options.fillLockAlreadyHeld !== true &&
+            this.manager?._fillProcessingLock &&
+            typeof this.manager._fillProcessingLock.acquire === 'function'
+        ) {
+            return this.manager._fillProcessingLock.acquire(async () => (
+                this._reconcileAfterUncertainBroadcast(err, opContexts, {
+                    ...options,
+                    fillLockAlreadyHeld: true
+                })
+            ));
+        }
+
+        const startedAt = Date.now();
+        const pending = (this.manager && this.manager._pendingBroadcasts instanceof Map)
+            ? Array.from(this.manager._pendingBroadcasts.values())
+            : [];
+        const createContextCount = opContexts.filter(c => c && c.kind === 'create').length;
+        const nonCreateContextCount = opContexts.length - createContextCount;
+
+        this.manager.logger.log(
+            `[COW][UNCERTAIN] batchId=${err?.batchId || 'n/a'} ops=${opContexts.length} ` +
+            `creates=${createContextCount} nonCreates=${nonCreateContextCount} ` +
+            `staleSinceMs=${err?.timeoutMs || 'n/a'}. Entering reconcile-then-decide.`,
+            'warn'
+        );
+
+        if (!chainOrders?.readOpenOrders) {
+            this.manager.logger.log(
+                '[COW][UNCERTAIN] readOpenOrders unavailable; falling back to structural resync only.',
+                'error'
+            );
+            if (typeof this.manager.requestStructuralGridResync === 'function') {
+                await this.manager.requestStructuralGridResync(
+                    'broadcast uncertain — readOpenOrders unavailable',
+                    { batchId: err?.batchId || null }
+                );
+            }
+            this._clearPendingBroadcasts();
+            return { executed: false, hadRotation: false, uncertain: true };
+        }
+
+        // 1. Read the chain
+        const accountRef = this.accountId || this.account?.id || this.account;
+        let chainSnapshot = [];
+        try {
+            chainSnapshot = await chainOrders.readOpenOrders(accountRef);
+        } catch (readErr) {
+            this.manager.logger.log(
+                `[COW][UNCERTAIN] readOpenOrders failed: ${readErr?.message || readErr}. ` +
+                `Falling back to structural resync.`,
+                'error'
+            );
+            if (typeof this.manager.requestStructuralGridResync === 'function') {
+                await this.manager.requestStructuralGridResync(
+                    'broadcast uncertain — readOpenOrders failed',
+                    { batchId: err?.batchId || null, error: readErr?.message || String(readErr) }
+                );
+            }
+            this._clearPendingBroadcasts();
+            return { executed: false, hadRotation: false, uncertain: true };
+        }
+
+        const adopted = [];
+        const discarded = [];
+
+        // 2. For each pending broadcast, look for a chain match.
+        for (const entry of pending) {
+            const match = this._findChainOrderForSlot(
+                chainSnapshot,
+                entry.slotId,
+                {
+                    sell: entry.finalInts?.sell,
+                    receive: entry.finalInts?.receive,
+                    orderType: entry.orderType || entry.order?.type,
+                    fingerprint: entry.fingerprint
+                }
+            );
+            if (match) {
+                adopted.push({ slotId: entry.slotId, chainOrderId: match.id });
+                this.manager._pendingBroadcasts.delete(entry.fingerprint);
+            } else {
+                discarded.push({ slotId: entry.slotId });
+            }
+        }
+
+        // 3. Apply the result to the working grid.
+        // - For adopted entries: re-run a structural sync so the manager picks up
+        //   the chain order into the planned slot. The pre-broadcast guard
+        //   already cleared the working grid, so we use a fresh sync.
+        // - For discarded entries: leave the planned slot empty; the next
+        //   planning cycle will refill it.
+        let hadRotation = false;
+        try {
+            if (chainSnapshot && chainSnapshot.length > 0 && this.manager?.syncFromOpenOrders) {
+                await this.manager.syncFromOpenOrders(chainSnapshot, {
+                    skipAccounting: true,
+                    fillLockAlreadyHeld: true
+                });
+                hadRotation = true;
+            }
+        } catch (syncErr) {
+            this.manager.logger.log(
+                `[COW][UNCERTAIN] syncFromOpenOrders failed during recovery: ${syncErr?.message || syncErr}`,
+                'error'
+            );
+        }
+
+        // 4. Log structured summary.
+        const elapsedMs = Date.now() - startedAt;
+        const heartbeatAgeMs = this._lastBroadcastHeartbeatAt
+            ? Date.now() - this._lastBroadcastHeartbeatAt
+            : null;
+        this.manager.logger.log(
+            `[COW][UNCERTAIN] batchId=${err?.batchId || 'n/a'} ops=${opContexts.length} ` +
+            `staleSinceMs=${err?.timeoutMs || 'n/a'} heartbeatAgeMs=${heartbeatAgeMs ?? 'n/a'} ` +
+            `adopted=${adopted.length} discarded=${discarded.length} elapsedMs=${elapsedMs}`,
+            adopted.length > 0 ? 'info' : 'warn'
+        );
+        if (adopted.length > 0) {
+            this.manager.logger.log(
+                `[COW][UNCERTAIN] Adopted chain orders: ${adopted
+                    .map(a => `${a.slotId}->${a.chainOrderId}`)
+                    .join(', ')}`,
+                'info'
+            );
+        }
+        if (discarded.length > 0) {
+            this.manager.logger.log(
+                `[COW][UNCERTAIN] Discarded planned CREATEs (no chain match): ${discarded
+                    .map(d => d.slotId)
+                    .join(', ')}`,
+                'warn'
+            );
+        }
+
+        this._clearPendingBroadcasts();
+
+        // Post-recovery safety net: if there are still unmatched chain
+        // orders after reconcile-then-decide, cancel ONE per cycle. The cap
+        // is enforced inside the helper via _autoCancelOrphanCycleMarker.
+        try {
+            const autoCancelResult = await this._autoCancelOneUnmatchedOrphan();
+            if (autoCancelResult.cancelled) {
+                this.manager.logger.log(
+                    `[COW][UNCERTAIN] Auto-cancelled orphan ${autoCancelResult.orderId} ` +
+                    `after recovery (cap=1/cycle).`,
+                    'info'
+                );
+            }
+        } catch (orphanErr) {
+            this.manager.logger.log(
+                `[COW][UNCERTAIN] Auto-cancel pass failed: ${orphanErr?.message || orphanErr}`,
+                'warn'
+            );
+        }
+
+        return { executed: false, hadRotation, uncertain: true, adopted, discarded };
+    }
+
+    /**
+     * Auto-cancel a single unmatched chain order from the recovery snapshot.
+     *
+     * This is the post-recovery safety net: if, after
+     * _reconcileAfterUncertainBroadcast runs, there are still chain orders
+     * the bot doesn't recognize (e.g. from a network partition, or from a
+     * daemon timeout that we couldn't even fingerprint), we cancel ONE of
+     * them per call. Per-cycle cap = 1 — the next cycle will pick up the
+     * next unmatched order if more remain.
+     *
+     * Safety conditions (ALL must hold):
+     *   1. _pendingBroadcasts is empty (no in-flight recovery)
+     *   2. _lastUnmatchedChainOrders is non-empty
+     *   3. The current cycle has not already auto-cancelled an orphan
+     *      (tracked via this._autoCancelOrphanCycleMarker)
+     *
+     * Records the cancel via _recordOwnCancelOps so the fill consumer
+     * doesn't trip the self-cancel guard.
+     *
+     * @returns {Promise<{cancelled: boolean, orderId?: string, reason?: string}>}
+     */
+    async _autoCancelOneUnmatchedOrphan() {
+        const cycleId = this._currentCycleId || 0;
+        if (this._autoCancelOrphanCycleMarker === cycleId) {
+            return { cancelled: false, reason: 'cap-reached-this-cycle' };
+        }
+        const pending = (this.manager && this.manager._pendingBroadcasts instanceof Map)
+            ? this.manager._pendingBroadcasts.size
+            : 0;
+        if (pending > 0) {
+            return { cancelled: false, reason: 'pending-broadcasts-active' };
+        }
+        const unmatched = Array.isArray(this.manager?._lastUnmatchedChainOrders)
+            ? this.manager._lastUnmatchedChainOrders
+            : [];
+        if (unmatched.length === 0) {
+            return { cancelled: false, reason: 'no-unmatched' };
+        }
+        const target = unmatched[0];
+        const orderId = target?.id || target?.orderId || target?.chainOrderId;
+        if (!orderId) {
+            return { cancelled: false, reason: 'no-orderId' };
+        }
+        if (target?.fingerprint) {
+            // Fingerprinted unmatched orders came from a pending broadcast.
+            // The recovery path is the right place to handle them, not here.
+            return { cancelled: false, reason: 'fingerprinted-handle-via-recovery' };
+        }
+        if (!chainOrders?.cancelOrder) {
+            return { cancelled: false, reason: 'cancelOrder-unavailable' };
+        }
+        try {
+            this._autoCancelOrphanCycleMarker = cycleId;
+            this.manager.logger.log(
+                `[COW] Auto-cancelling 1/${unmatched.length} unmatched chain order ` +
+                `(${this._formatUnmatchedChainOrderForLog(target)}) — per-cycle cap=1.`,
+                'warn'
+            );
+            await chainOrders.cancelOrder(this.account, this.privateKey, orderId);
+            if (typeof chainOrders.recordOwnCancel === 'function') {
+                chainOrders.recordOwnCancel(orderId);
+            }
+            return { cancelled: true, orderId };
+        } catch (err) {
+            this.manager.logger.log(
+                `[COW] Auto-cancel of unmatched chain order ${orderId} failed: ${err?.message || err}`,
+                'error'
+            );
+            return { cancelled: false, reason: 'cancel-failed', error: err?.message || String(err) };
+        }
+    }
+
     // Pair mode applies only when create contexts include both BUY and SELL.
     // Single-side create batches intentionally remain a single executeBatch.
     /**
@@ -3153,6 +3619,7 @@ class DEXBot {
      * @private
      */
     async _updateOrdersOnChainBatchCOW(cowResult) {
+        this._currentCycleId = (Number.isFinite(Number(this._currentCycleId)) ? Number(this._currentCycleId) : 0) + 1;
         const { workingGrid, workingIndexes, workingBoundary, actions } = cowResult;
 
         if (this.config.dryRun) {
@@ -3188,28 +3655,79 @@ class DEXBot {
         const unmatchedChainOrders = Array.isArray(this.manager?._lastUnmatchedChainOrders)
             ? this.manager._lastUnmatchedChainOrders
             : [];
-        if (hasCreateActions && unmatchedChainOrders.length > 0) {
-            const sample = unmatchedChainOrders
-                .slice(0, 3)
-                .map(order => this._formatUnmatchedChainOrderForLog(order))
-                .join(' | ');
-            this.manager.logger.log(
-                `[COW] Rejecting CREATE batch: ${unmatchedChainOrders.length} unmatched chain order(s) ` +
-                `are not represented in the grid${sample ? ` (${sample})` : ''}. ` +
-                `Run structural reconciliation before placing replacement orders.`,
-                'error'
-            );
+        // PENDING_BROADCASTS: an earlier batch timed out at the credential
+        // daemon and the chain status of its CREATEs is still unknown. The
+        // recovery path (_reconcileAfterUncertainBroadcast) is responsible
+        // for resolving it. We refuse to publish a fresh CREATE batch until
+        // recovery runs, otherwise we risk double-publishing or stacking
+        // orphan orders on top of potentially-orphaned ones.
+        const pendingBroadcasts = (this.manager && this.manager._pendingBroadcasts instanceof Map)
+            ? Array.from(this.manager._pendingBroadcasts.values())
+            : [];
+        if (hasCreateActions && (unmatchedChainOrders.length > 0 || pendingBroadcasts.length > 0)) {
+            const blockers = [];
+            if (unmatchedChainOrders.length > 0) blockers.push(`${unmatchedChainOrders.length} unmatched chain order(s)`);
+            if (pendingBroadcasts.length > 0) blockers.push(`${pendingBroadcasts.length} pending broadcast(s)`);
+            const reasonText = blockers.join(' and ');
+            if (pendingBroadcasts.length > 0) {
+                this.manager.logger.log(
+                    `[COW] Rejecting CREATE batch: ${reasonText} from a prior uncertain ` +
+                    `broadcast. Running recovery before placing replacement orders.`,
+                    'error'
+                );
+            } else {
+                const sample = unmatchedChainOrders
+                    .slice(0, 3)
+                    .map(order => this._formatUnmatchedChainOrderForLog(order))
+                    .join(' | ');
+                this.manager.logger.log(
+                    `[COW] Rejecting CREATE batch: ${reasonText} ` +
+                    `are not represented in the grid${sample ? ` (${sample})` : ''}. ` +
+                    `Run structural reconciliation before placing replacement orders.`,
+                    'error'
+                );
+            }
             if (typeof this.manager.requestStructuralGridResync === 'function') {
                 if (this.manager._recoveryState) this.manager._recoveryState.structuralResyncRequested = true;
-                await this.manager.requestStructuralGridResync('unmatched chain orders before COW create', {
-                    unmatchedChainOrders
-                });
+                await this.manager.requestStructuralGridResync(
+                    pendingBroadcasts.length > 0
+                        ? 'pending broadcasts before COW create'
+                        : 'unmatched chain orders before COW create',
+                    pendingBroadcasts.length > 0
+                        ? { pendingBroadcasts: pendingBroadcasts.map(p => p.slotId) }
+                        : { unmatchedChainOrders }
+                );
+            }
+            // If we have pending broadcasts, drive the recovery now so the
+            // next planning cycle has a clean state.
+            if (pendingBroadcasts.length > 0) {
+                try {
+                    await this._reconcileAfterUncertainBroadcast(
+                        new BroadcastUncertainError(
+                            'rejected CREATE batch had pending broadcasts',
+                            {
+                                operations: pendingBroadcasts.map(p => p.order),
+                                accountName: this.account,
+                                batchId: this._currentBatchId || null,
+                                payload: null,
+                                timeoutMs: null
+                            }
+                        ),
+                        []
+                    );
+                } catch (recoverErr) {
+                    this.manager.logger.log(
+                        `[COW] Recovery from pending broadcasts failed: ${recoverErr?.message || recoverErr}`,
+                        'error'
+                    );
+                }
             }
             return {
                 executed: false,
                 aborted: true,
-                reason: 'UNMATCHED_CHAIN_ORDERS',
-                unmatchedChainOrders,
+                reason: pendingBroadcasts.length > 0 ? 'PENDING_BROADCASTS' : 'UNMATCHED_CHAIN_ORDERS',
+                unmatchedChainOrders: pendingBroadcasts.length > 0 ? [] : unmatchedChainOrders,
+                pendingBroadcasts: pendingBroadcasts.map(p => p.slotId),
                 hadRotation: false
             };
         }
@@ -3288,6 +3806,12 @@ class DEXBot {
                         }
                         operations.push(buildResult.op);
                         opContexts.push({ kind: 'create', id: order.id, order, args, finalInts: buildResult.finalInts });
+                        this._recordPendingBroadcast({
+                            opIndex: operations.length - 1,
+                            ctxIndex: opContexts.length - 1,
+                            order,
+                            finalInts: buildResult.finalInts
+                        });
                     } catch (err: any) {
                         this.manager.logger.log(`Failed to prepare create op for ${action.id}: ${err.message}`, 'error');
                     }
@@ -3420,6 +3944,7 @@ class DEXBot {
 
             // Execute batch
             this.manager.logger.log(`[COW] Broadcasting batch with ${operations.length} operations...`, 'info');
+            this._lastBroadcastHeartbeatAt = Date.now();
             const execution = await this._executeOperationsWithStrategy(operations, opContexts);
             const result = execution.result;
             const executedContexts = execution.opContexts;
@@ -3473,18 +3998,20 @@ class DEXBot {
 
                     // Process batch results for logging/metrics
                     const batchResult = await this._processBatchResults(result, executedContexts);
-                    
+
                     // Persist to disk
                     await this.manager.persistGrid();
-                    
+
                     this._metrics.batchesExecuted++;
                     this.manager._clearWorkingGridRef();
-                    
+                    this._clearPendingBroadcasts();
+
                     return { executed: true, hadRotation: true, ...batchResult };
                 } else {
                     // FAILURE: Working grid discarded, master unchanged
                     this.manager.logger.log('[COW] Blockchain failed - working grid discarded, master unchanged', 'warn');
                     this.manager._clearWorkingGridRef();
+                    this._clearPendingBroadcasts();
                     return { executed: false, hadRotation: false, ...result };
                 }
             } finally {
@@ -3508,6 +4035,17 @@ class DEXBot {
             }
             this.manager.stopBroadcasting();
             this.manager._clearWorkingGridRef();
+
+            // BROADCAST_UNCERTAIN: the credential daemon timed out (or hit its
+            // inner deadline) and the chain status of the planned CREATEs is
+            // unknown. Run the reconcile-then-decide recovery path: read the
+            // chain, match each pending broadcast by fingerprint, adopt any
+            // chain-side matches, and discard the rest. We MUST NOT throw —
+            // throwing would re-enter the catch loop on the next attempt and
+            // potentially double-publish.
+            if (err instanceof BroadcastUncertainError) {
+                return await this._reconcileAfterUncertainBroadcast(err, opContexts);
+            }
 
             // Handle hard abort
             const hardAbortResult = await this._handleBatchHardAbort(err, 'COW batch processing', operations.length);

@@ -345,6 +345,7 @@ async function testChainBroadcast() {
     });
 
     assert.strictEqual(calls.daemon.execute.length, 1, 'daemon-backed execute should use the daemon RPC');
+    assert.strictEqual(calls.daemon.execute[0].options.requestType, 'broadcast');
     assert.strictEqual(daemonTxResult.raw.source, 'daemon-execute');
 
     const rawResult = await broadcast.broadcastOperation(

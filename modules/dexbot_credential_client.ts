@@ -12,14 +12,43 @@ const {
 const DEFAULT_SOCKET_PATH = getCredentialSocketPath();
 const DEFAULT_READY_FILE = getCredentialReadyFilePath();
 const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
+const DEFAULT_BROADCAST_TIMEOUT_MS = TIMING.CREDENTIAL_BROADCAST_TIMEOUT_MS || 30000;
 const DEFAULT_WAIT_TIMEOUT_MS = TIMING.DAEMON_STARTUP_TIMEOUT_MS;
 const DEFAULT_POLL_INTERVAL_MS = TIMING.CHECK_INTERVAL_MS;
+
+/**
+ * Typed error raised when the bot-side socket timer fires BEFORE the credential
+ * daemon has responded. The chain status of the operations is unknown at this
+ * point — the daemon may have signed and broadcast, or it may have stalled
+ * before doing anything. Callers (chain_orders.ts / dexbot_class.ts) MUST catch
+ * this and run the recovery path (read chain, match by fingerprint, adopt or
+ * discard). A plain `Error` would lose the metadata the recovery path needs.
+ *
+ * Fields:
+ *   - operations: the original op array sent to the daemon
+ *   - accountName: account the ops were intended for
+ *   - batchId: caller-provided correlation id (if any)
+ *   - payload: the full request payload (for retry/log)
+ *   - timeoutMs: the outer timeout that fired
+ */
+class BroadcastUncertainError extends Error {
+    constructor(message, details = {}) {
+        super(message);
+        this.name = 'BroadcastUncertainError';
+        this.code = 'BROADCAST_UNCERTAIN';
+        this.operations = details.operations || null;
+        this.accountName = details.accountName || null;
+        this.batchId = details.batchId || null;
+        this.payload = details.payload || null;
+        this.timeoutMs = details.timeoutMs || null;
+    }
+}
 
 function getSocketPath(options = {}) {
     return options.socketPath || DEFAULT_SOCKET_PATH;
 }
 
-function sendCredentialDaemonRequest(socketPath, payload, timeoutMs) {
+function sendCredentialDaemonRequest(socketPath, payload, timeoutMs, meta = {}) {
     return new Promise((resolve, reject) => {
         let settled = false;
         const socket = net.createConnection(socketPath, () => {
@@ -29,7 +58,27 @@ function sendCredentialDaemonRequest(socketPath, payload, timeoutMs) {
         let responseBuffer = '';
         const timer = setTimeout(() => {
             socket.destroy();
-            if (!settled) { settled = true; reject(new Error(`Credential daemon request timed out after ${timeoutMs}ms`)); }
+            if (!settled) {
+                settled = true;
+                // For broadcast requests the chain may have already accepted the
+                // operations by the time we time out. Use a typed error so the
+                // recovery path can detect this case explicitly. Non-broadcast
+                // requests stay on the plain Error path.
+                if (meta && meta.uncertainOnTimeout) {
+                    reject(new BroadcastUncertainError(
+                        `Credential daemon broadcast request timed out after ${timeoutMs}ms`,
+                        {
+                            operations: meta.operations || null,
+                            accountName: meta.accountName || null,
+                            batchId: meta.batchId || null,
+                            payload,
+                            timeoutMs,
+                        }
+                    ));
+                } else {
+                    reject(new Error(`Credential daemon request timed out after ${timeoutMs}ms`));
+                }
+            }
         }, timeoutMs);
 
         socket.on('data', (data) => {
@@ -108,9 +157,13 @@ function executeOperationsViaCredentialDaemon(accountName, operations, options =
     }
 
     const socketPath = getSocketPath(options);
+    // Broadcast requests have their own (longer) outer timeout. Non-broadcast
+    // callers can still pass timeoutMs explicitly to override.
+    const isBroadcast = options.requestType === 'broadcast' || options.isBroadcast === true;
+    const defaultTimeout = isBroadcast ? DEFAULT_BROADCAST_TIMEOUT_MS : DEFAULT_REQUEST_TIMEOUT_MS;
     const timeoutMs = Number.isFinite(Number(options.timeoutMs))
         ? Number(options.timeoutMs)
-        : DEFAULT_REQUEST_TIMEOUT_MS;
+        : defaultTimeout;
 
     const payload = { type: 'execute-operations', accountName, operations };
     const sessionId = options.sessionId || null;
@@ -124,19 +177,56 @@ function executeOperationsViaCredentialDaemon(accountName, operations, options =
             .digest('hex');
     }
 
-    return sendCredentialDaemonRequest(socketPath, payload, timeoutMs).then((response) => {
+    const meta = isBroadcast
+        ? {
+            uncertainOnTimeout: true,
+            operations,
+            accountName,
+            batchId: options.batchId || null,
+        }
+        : {};
+
+    return sendCredentialDaemonRequest(socketPath, payload, timeoutMs, meta).then((response) => {
         if (response.success) {
             return response;
         }
-        throw new Error(response.error || 'Unknown credential daemon error');
+        const errMsg = response.error || 'Unknown credential daemon error';
+        const errCode = response.code || null;
+        // The daemon hit its inner deadline (BROADCAST_DEADLINE) and the chain
+        // state is uncertain. Convert this typed failure back to a
+        // BroadcastUncertainError so the recovery path picks it up. Only
+        // relevant for broadcast requests — non-broadcast callers don't carry
+        // the uncertainOnTimeout flag.
+        if (
+            isBroadcast &&
+            (errCode === 'BROADCAST_DEADLINE' ||
+                (typeof errMsg === 'string' && errMsg.startsWith('BROADCAST_DEADLINE')))
+        ) {
+            throw new BroadcastUncertainError(
+                `Credential daemon broadcast uncertain: ${errCode || errMsg}`,
+                {
+                    operations,
+                    accountName,
+                    batchId: options.batchId || null,
+                    payload,
+                    timeoutMs,
+                }
+            );
+        }
+        // Typed failure reply from the daemon (e.g. policy denied, bad op) —
+        // the chain state is known (chain NOT touched), so a plain Error is
+        // fine.
+        throw new Error(errMsg);
     });
 }
 
 export = {
     DEFAULT_READY_FILE,
     DEFAULT_SOCKET_PATH,
+    DEFAULT_BROADCAST_TIMEOUT_MS,
     sendCredentialDaemonRequest,
     executeOperationsViaCredentialDaemon,
     isCredentialDaemonReady,
     waitForCredentialDaemon,
+    BroadcastUncertainError,
 };

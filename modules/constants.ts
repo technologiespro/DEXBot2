@@ -39,6 +39,7 @@
  *      LOCK_TIMEOUT_MS, SYNC_LOCK_TIMEOUT_MS
  *      CONNECTION_TIMEOUT_MS, DAEMON_STARTUP_TIMEOUT_MS
  *      RUN_LOOP_DEFAULT_MS, OPEN_ORDERS_SYNC_LOOP_ENABLED, CHECK_INTERVAL_MS
+ *      CREDENTIAL_BROADCAST_TIMEOUT_MS, CREDENTIAL_DAEMON_INNER_DEADLINE_MS
  *
  * GRID & ORDER LIMITS:
  *   5. GRID_LIMITS - Grid sizing and scaling constraints
@@ -232,7 +233,26 @@ let TIMING = {
     // LOCK_REFRESH_MIN_MS: Minimum interval for refreshing order lock leases during long operations.
     // Prevents lock expiration during extended reconciliations or batch operations.
     // Default: 250ms (4 refreshes per second minimum during long operations).
-    LOCK_REFRESH_MIN_MS: 250
+    LOCK_REFRESH_MIN_MS: 250,
+
+    // CREDENTIAL_BROADCAST_TIMEOUT_MS: Outer timeout for a credential-daemon broadcast
+    // request, enforced by the bot socket client (modules/dexbot_credential_client.ts).
+    // Rationale: Broadcasts can take much longer than read-only daemon calls because the
+    // daemon must sign locally, then push the signed transaction to a BitShares node and
+    //   wait for chain inclusion. 30s gives slow mainnet nodes enough headroom on cold
+    //   start while still bounding bot-side wait time.
+    // If this outer timer fires before the daemon responds, the bot raises a typed
+    // BroadcastUncertainError and enters the recovery path (chain may or may not have
+    // accepted the operations).
+    CREDENTIAL_BROADCAST_TIMEOUT_MS: 30000,
+
+    // CREDENTIAL_DAEMON_INNER_DEADLINE_MS: Inner deadline enforced inside the credential
+    // daemon's broadcastWithRetry (credential-daemon.ts). Must be strictly less than
+    // CREDENTIAL_BROADCAST_TIMEOUT_MS so the daemon can report a typed
+    // { success:false, code:'BROADCAST_DEADLINE' } failure before the bot-side
+    // socket timer fires. 10s of slack is enough for the bot to receive and
+    // process the typed reply on a slow connection.
+    CREDENTIAL_DAEMON_INNER_DEADLINE_MS: 20000
 };
 
 // Grid limits and scaling constants

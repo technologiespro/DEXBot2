@@ -387,6 +387,48 @@ function buildCreateOrderArgs(order, assetA, assetB) {
 }
 
 /**
+ * Build a deterministic fingerprint for a planned CREATE order.
+ *
+ * The fingerprint is used by the COW recovery path (see
+ * modules/dexbot_class.ts::_reconcileAfterUncertainBroadcast) to match an
+ * order the bot just tried to broadcast to an on-chain order that may or may
+ * not have been accepted. Determinism is the key property: if the bot replays
+ * the same CREATE op after a credential daemon timeout, the new fingerprint
+ * must equal the old one so the chain side can be correlated.
+ *
+ * The fingerprint uses the (side, assetA, assetB, sellInt, receiveInt, slotId)
+ * tuple. sellInt and receiveInt are the raw blockchain integer amounts from
+ * buildCreateOrderOp's finalInts (see modules/chain_orders.ts). Using the
+ * raw integer pair is more robust than re-deriving a price float because
+ * it is invariant to human-side rounding.
+ *
+ * The slot id is included so two CREATEs with identical price+size on the
+ * same side (theoretically possible across non-adjacent grid slots) are
+ * still distinguishable.
+ *
+ * Returns null on any malformed input so callers can skip non-CREATE / non-
+ * integer contexts without raising.
+ *
+ * @param {Object} params
+ * @param {string} params.side - 'sell' or 'buy'
+ * @param {string} params.assetA - Base asset id (e.g. '1.3.0')
+ * @param {string} params.assetB - Quote asset id (e.g. '1.3.121')
+ * @param {number|string} params.sellInt - Integer (blockchain-precision) amount-to-sell
+ * @param {number|string} params.receiveInt - Integer (blockchain-precision) min-to-receive
+ * @param {string} params.slotId - Grid slot id (e.g. 'sell-3', 'buy-7')
+ * @returns {string|null} Fingerprint or null on bad input
+ */
+function buildCreateOpFingerprint(params) {
+    if (!params || typeof params !== 'object') return null;
+    const { side, assetA, assetB, sellInt, receiveInt, slotId } = params;
+    if (side !== 'sell' && side !== 'buy') return null;
+    if (!assetA || !assetB) return null;
+    if (!Number.isFinite(Number(sellInt)) || !Number.isFinite(Number(receiveInt))) return null;
+    if (!slotId) return null;
+    return `${side}:${assetA}:${assetB}:${Number(sellInt)}:${Number(receiveInt)}:${String(slotId)}`;
+}
+
+/**
  * Determine which order sides were updated based on update flags.
  * 
  * @param {boolean} buyUpdated - Whether buy side was updated
@@ -403,7 +445,7 @@ function getOrderTypeFromUpdatedFlags(buyUpdated, sellUpdated) {
  * 
  * @param {*} value - Configured value (number, percentage, relative, or empty)
  * @param {number} fallback - Fallback value if configured value is empty
- * @param {number} startPrice - Reference price for relative expressions
+ * @param {number} startPrice - Reference price for relative calculations
  * @param {string} mode - "min" or "max" for relative calculation mode
  * @returns {number} Resolved numeric price
  * @throws {Error} If value is invalid and cannot be interpreted
@@ -1142,5 +1184,6 @@ export = {
     getOrderSize,
     deriveTargetBoundary,
     getSideBudget,
-    calculateBudgetedSizes
+    calculateBudgetedSizes,
+    buildCreateOpFingerprint
 };
