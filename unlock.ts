@@ -40,6 +40,7 @@ const { createBotSupervisor, SOCKET_PATH, parseCronExpression, getNextCronDate }
 const { sendControlCommand } = require('./modules/launcher/supervisor_control');
 const { registerCleanup, setupGracefulShutdown } = require('./modules/graceful_shutdown');
 const { getCredentialReadyFilePath, getCredentialSocketPath } = require('./modules/credential_runtime');
+const foreignCredDaemon = require('./modules/launcher/foreign_cred_daemon');
 const { normalizeBotEntry, resolveRawBotEntries, loadSettingsFile } = require('./modules/bot_settings');
 const chainKeys = require('./modules/chain_keys');
 
@@ -448,6 +449,23 @@ function cleanupCredentialRuntimeFiles() {
     try { fs.unlinkSync(CREDENTIAL_READY_FILE); } catch (_) {}
 }
 
+function ensureNoForeignCredentialDaemon({ verbose = true } = {}): Promise<boolean> {
+    return foreignCredDaemon.ensureNoForeignCredentialDaemon({
+        socketPath: CREDENTIAL_SOCKET_FILE,
+        readyFilePath: CREDENTIAL_READY_FILE,
+        pidFile: MONOLITHIC_CRED_PID_FILE,
+        isLikelyProcess: isLikelyCredentialDaemonProcess,
+        verbose,
+    });
+}
+
+function findCredentialSocketOwnerPid(): number {
+    return foreignCredDaemon.findCredentialSocketOwnerPid(
+        CREDENTIAL_SOCKET_FILE,
+        isLikelyCredentialDaemonProcess
+    );
+}
+
 async function stopMonolithicCredentialDaemon(): Promise<{ signaled: boolean; cleaned: boolean }> {
     let pidRaw: string | null = null;
     try {
@@ -831,6 +849,14 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
 
         if (!isDetachedSupervisorChild) {
             printLauncherHeader({ botName, clawOnly, isolated });
+
+            // Detect and clean up a credential daemon that is not owned by
+            // this launcher. Without this check, a leftover daemon (for
+            // example, one started by a previous version of the launcher
+            // or by a different unlock command) would silently answer
+            // the launcher's readiness probe and skip the master password
+            // prompt. See ensureNoForeignCredentialDaemon for details.
+            await ensureNoForeignCredentialDaemon();
 
             const daemonOpts: any = { detached: isolated && !forceForegroundIsolated };
             let daemonOutFd: number | null = null;
@@ -1230,16 +1256,28 @@ function normalizeProcScriptArg(arg: string, cwd: string): string {
 }
 
 function isNodeProcessWithExactScript(pid: number, scriptSegments: string[]): boolean {
+    return pidMatchesScriptCandidates(pid, candidateRuntimeScriptPaths(scriptSegments));
+}
+
+/**
+ * Generic predicate: returns true if `pid` is a node process whose argv
+ * contains any of the absolute script paths in `expectedPaths`. This is
+ * the testable, candidate-aware building block used by all
+ * `isLikely*Process` helpers and by tests that need to validate the
+ * matching algorithm against processes launched from a temp directory
+ * (without overwriting any real launcher files).
+ */
+function pidMatchesScriptCandidates(pid: number, expectedPaths: Set<string>): boolean {
+    if (!expectedPaths || expectedPaths.size === 0) return false;
     const args = readProcArgs(pid);
     if (!args.some((arg) => path.basename(String(arg)).includes('node'))) {
         return false;
     }
 
-    const expected = candidateRuntimeScriptPaths(scriptSegments);
     const cwd = readProcCwd(pid);
     for (const arg of args.slice(1)) {
         const scriptPath = normalizeProcScriptArg(arg, cwd);
-        if (scriptPath && expected.has(scriptPath)) {
+        if (scriptPath && expectedPaths.has(scriptPath)) {
             return true;
         }
     }
@@ -1533,11 +1571,33 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 }
 
                 let credPid: number | null = null;
+                let credForeign = false;
                 try {
                     const raw = fs.readFileSync(MONOLITHIC_CRED_PID_FILE, 'utf8').trim();
                     const n = Number(raw);
                     if (Number.isInteger(n) && n > 0) credPid = n;
                 } catch (_) {}
+
+                // No recorded PID? Probe the socket directly so a foreign
+                // daemon (one we did not start in this run) is still
+                // surfaced in the status output. We do this BEFORE
+                // readCredentialDaemonStatus so that a foreign daemon is
+                // reflected in the Ready/Socket flags as well.
+                //
+                // We probe whenever the socket exists, even without the
+                // ready marker. The launcher may have started the daemon
+                // (or a previous unlock may have left the socket bound)
+                // without writing the ready file; in that case the
+                // readiness probe below will report `ready=false`, but
+                // we still want to surface the foreign PID so the user
+                // can see the stale state.
+                if (!credPid && fs.existsSync(CREDENTIAL_SOCKET_FILE)) {
+                    const ownerPid = findCredentialSocketOwnerPid();
+                    if (ownerPid > 0 && isLikelyCredentialDaemonProcess(ownerPid)) {
+                        credPid = ownerPid;
+                        credForeign = true;
+                    }
+                }
 
                 const credStatus = await readCredentialDaemonStatus(credPid);
 
@@ -1550,10 +1610,14 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                     console.log(`    - ${b.name}`);
                 }
                 console.log(`  ${statusTitle('Credential daemon:')}`);
-                console.log(`    ${statusLabel('PID:')}   ${credPid || '-'}`);
-                if (credStatus.alive) {
-                    const credUptime = readProcUptime(credPid!);
-                    const credMem = readProcMemMB(credPid!);
+                if (credPid && credForeign) {
+                    console.log(`    ${statusLabel('PID:')}   ${credPid} ${colorStatus('(foreign/unowned)', STATUS_COLORS.warn)}`);
+                } else {
+                    console.log(`    ${statusLabel('PID:')}   ${credPid || '-'}`);
+                }
+                if (credPid && isPidAlive(credPid) && isLikelyCredentialDaemonProcess(credPid)) {
+                    const credUptime = readProcUptime(credPid);
+                    const credMem = readProcMemMB(credPid);
                     console.log(`    ${statusLabel('Memory:')}  ${formatMemoryWithUptime(credMem, credUptime)}`);
                     console.log(`    ${statusLabel('Alive:')} ${statusBool(true)}`);
                 } else {
@@ -1561,6 +1625,14 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 }
                 console.log(`    ${statusLabel('Ready:')} ${statusBool(credStatus.ready)}`);
                 console.log(`    ${statusLabel('Socket:')} ${statusBool(credStatus.socket)}`);
+                if (credForeign) {
+                    console.log(
+                        `    ${colorStatus(
+                            'Rerun `node unlock` to detach the foreign daemon and unlock with a fresh master password.',
+                            STATUS_COLORS.warn
+                        )}`
+                    );
+                }
 
                 const adapterStatus = readMarketAdapterStatus();
                 const amaBots = listConfiguredBots().filter(b => b.active && usesAmaGridPrice(b));
@@ -1729,7 +1801,12 @@ if (isUnlockStartDirectRun) {
 export = {
     buildDexbotStartArgs,
     buildUnlockArgs,
+    candidateRuntimeScriptPaths,
+    ensureNoForeignCredentialDaemon,
+    findCredentialSocketOwnerPid,
+    isLikelyCredentialDaemonProcess,
     main,
+    pidMatchesScriptCandidates,
     waitForChildSpawn,
     waitForStableChildStartup,
 };

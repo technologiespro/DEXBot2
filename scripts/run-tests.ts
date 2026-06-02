@@ -75,6 +75,8 @@ const testFiles = [
   'tests/test_unlock_main.ts',
   'tests/test_unlock_control_output.ts',
   'tests/test_unlock_isolated_poll_reject.ts',
+  'tests/test_unlock_foreign_cred_daemon.ts',
+  'tests/test_unlock_foreign_cred_daemon_live.ts',
   'tests/test_bot_daemon_ready_output.ts',
   'tests/test_bot_daemon_probe_fallback.ts',
   'tests/test_dexbot_daemon_ready_output.ts',
