@@ -4,12 +4,17 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
+const { MARKET_ADAPTER } = require('../constants');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_ROOT = path.basename(DEFAULT_CODE_ROOT) === 'dist' ? path.dirname(DEFAULT_CODE_ROOT) : DEFAULT_CODE_ROOT;
 const DEFAULT_STATE_DIR = path.join(DEFAULT_ROOT, 'market_adapter', 'state');
 const DEFAULT_LOCK_FILE = path.join(DEFAULT_STATE_DIR, 'market_adapter.lock');
 const DEFAULT_SCRIPT = path.join(DEFAULT_CODE_ROOT, 'market_adapter', 'market_adapter.js');
+const DEFAULT_STALE_LOCK_MS = (
+    MARKET_ADAPTER.RUNTIME_DEFAULTS.pollSeconds * 1000 +
+    MARKET_ADAPTER.WATCHDOG_DEFAULTS.staleLockGraceMs
+);
 
 function loadLockInfo(lockPath: string): any {
     try {
@@ -31,10 +36,40 @@ function isProcessAlive(pid: number): boolean {
     }
 }
 
+function isLikelyMarketAdapterProcess(pid: number): boolean {
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    if (!isProcessAlive(pid)) return false;
+    try {
+        const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ');
+        return cmdline.includes('node') && /market_adapter\/market_adapter\.(?:js|ts)\b/.test(cmdline);
+    } catch (_: any) {
+        return false;
+    }
+}
+
+function isLockStale(lockPath = DEFAULT_LOCK_FILE, staleAfterMs = DEFAULT_STALE_LOCK_MS, isAdapterProcess = isLikelyMarketAdapterProcess): boolean {
+    try {
+        const info = loadLockInfo(lockPath);
+        const pid = Number(info.pid);
+        // Runtime startup may remove malformed locks so a new owned process can acquire the file.
+        if (!Number.isInteger(pid) || pid <= 0) return true;
+        if (!isAdapterProcess(pid)) return true;
+        const mtimeMs = fs.statSync(lockPath).mtimeMs;
+        if ((Date.now() - mtimeMs) > staleAfterMs) {
+            return !isAdapterProcess(pid);
+        }
+        return false;
+    } catch (_: any) {
+        return false;
+    }
+}
+
 function isLikelyAdapterRunning(lockPath = DEFAULT_LOCK_FILE) {
     try {
         const info = loadLockInfo(lockPath);
-        return isProcessAlive(Number(info.pid));
+        const pid = Number(info.pid);
+        if (!Number.isInteger(pid) || pid <= 0) return false;
+        return isLikelyMarketAdapterProcess(pid);
     } catch (_: any) {
         return false;
     }
@@ -82,6 +117,10 @@ function createMarketAdapterRuntime({
     async function startOwnedProcess() {
         if (isOwnedChildRunning()) {
             return { running: true, owned: true, started: false };
+        }
+
+        if (isLockStale(lockFile)) {
+            try { fs.unlinkSync(lockFile); } catch (_) {}
         }
 
         if (isRunningExternally()) {
@@ -210,6 +249,8 @@ export = {
     createMarketAdapterRuntime,
     getSharedMarketAdapterRuntime,
     isLikelyAdapterRunning,
+    isLikelyMarketAdapterProcess,
+    isLockStale,
     isProcessAlive,
     loadLockInfo,
     resetSharedMarketAdapterRuntime,

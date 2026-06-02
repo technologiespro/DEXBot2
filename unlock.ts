@@ -34,7 +34,7 @@ const { spawn } = require('child_process');
 const { createCredentialDaemonController } = require('./modules/launcher/credential_daemon');
 const { buildScopedChildEnv } = require('./modules/launcher/child_env');
 const { parseUnlockArgs } = require('./modules/launcher/launch_modes');
-const { UPDATER } = require('./modules/constants');
+const { UPDATER, LAUNCHER, MARKET_ADAPTER } = require('./modules/constants');
 const { buildRuntimeScriptArgs } = require('./modules/launcher/runtime_entry');
 const { createBotSupervisor, SOCKET_PATH, parseCronExpression, getNextCronDate } = require('./modules/launcher/bot_supervisor');
 const { sendControlCommand } = require('./modules/launcher/supervisor_control');
@@ -62,11 +62,8 @@ const CREDENTIAL_SOCKET_FILE = getCredentialSocketPath({ root: ROOT });
 const CREDENTIAL_READY_FILE = getCredentialReadyFilePath({ root: ROOT });
 const MONOLITHIC_OUT_LOG = path.join(LOGS_DIR, 'dexbot.log');
 const MONOLITHIC_ERROR_LOG = path.join(LOGS_DIR, 'dexbot-error.log');
-const MONOLITHIC_MAX_RESTARTS = 13;
-const MONOLITHIC_MIN_UPTIME_MS = 86400000;
-const MONOLITHIC_RESTART_DELAY_MS = 3000;
-const MONOLITHIC_CONTROL_STOP_TIMEOUT_MS = 12000;
 const MARKET_ADAPTER_LOCK_FILE = path.join(ROOT, 'market_adapter', 'state', 'market_adapter.lock');
+const MARKET_ADAPTER_SCRIPT = path.join(ROOT, 'market_adapter', 'market_adapter.js');
 const botProcessRef: { current: any } = { current: null };
 
 function cleanupMonolithicStateFiles() {
@@ -596,6 +593,213 @@ function scheduleMonolithicUpdateJob(botProcessRef: { current: any }) {
     return () => { cancelled = true; clearMonolithicUpdateTimer(); };
 }
 
+let _marketAdapterWatchdogTimer: NodeJS.Timeout | null = null;
+let _marketAdapterChild: any = null;
+let _marketAdapterChildStartedAt = 0;
+let _marketAdapterRestartCount = 0;
+let _marketAdapterRestartExhaustedAt = 0;
+let _marketAdapterWatchdogFingerprint = '';
+
+function clearMarketAdapterWatchdogTimer() {
+    if (_marketAdapterWatchdogTimer) {
+        clearInterval(_marketAdapterWatchdogTimer);
+        _marketAdapterWatchdogTimer = null;
+    }
+}
+
+function isOwnedMarketAdapterChildRunning(): boolean {
+    return !!(_marketAdapterChild && !_marketAdapterChild.killed && _marketAdapterChild.exitCode == null && _marketAdapterChild.signalCode == null);
+}
+
+function readMarketAdapterLockPid(): number {
+    try {
+        const info = JSON.parse(fs.readFileSync(MARKET_ADAPTER_LOCK_FILE, 'utf8'));
+        return Number(info.pid) || 0;
+    } catch (_) { return 0; }
+}
+
+function isMarketAdapterLockStale(): boolean {
+    const pid = readMarketAdapterLockPid();
+    // Watchdog absence of a pid means no lock to clean; runtime startup handles malformed locks.
+    if (!pid) return false;
+    if (!isPidAlive(pid)) return true;
+    if (!isLikelyMarketAdapterProcess(pid)) return true;
+    try {
+        const mtimeMs = fs.statSync(MARKET_ADAPTER_LOCK_FILE).mtimeMs;
+        const staleAfterMs = (
+            MARKET_ADAPTER.RUNTIME_DEFAULTS.pollSeconds * 1000 +
+            MARKET_ADAPTER.WATCHDOG_DEFAULTS.staleLockGraceMs
+        );
+        if ((Date.now() - mtimeMs) > staleAfterMs) {
+            return !isLikelyMarketAdapterProcess(pid);
+        }
+        return false;
+    } catch (_) { return true; }
+}
+
+function removeMarketAdapterLockIfNotLive() {
+    const pid = readMarketAdapterLockPid();
+    if (!pid || !isLikelyMarketAdapterProcess(pid)) {
+        try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
+        return true;
+    }
+    return false;
+}
+
+async function stopOwnedMarketAdapterChild(): Promise<void> {
+    if (!_marketAdapterChild || _marketAdapterChild.killed) {
+        _marketAdapterChild = null;
+        _marketAdapterChildStartedAt = 0;
+        return;
+    }
+    try {
+        _marketAdapterChild.kill('SIGTERM');
+    } catch (_) {}
+    const exited = await Promise.race([
+        new Promise<boolean>((resolve) => {
+            _marketAdapterChild.once('close', () => resolve(true));
+        }),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
+    ]);
+    if (!exited && _marketAdapterChild && _marketAdapterChild.exitCode == null) {
+        try { _marketAdapterChild.kill('SIGKILL'); } catch (_) {}
+    }
+    _marketAdapterChild = null;
+    _marketAdapterChildStartedAt = 0;
+    try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
+}
+
+function spawnMarketAdapterChild() {
+    const child = spawn(process.execPath, [MARKET_ADAPTER_SCRIPT], {
+        cwd: ROOT,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const childLogStreams: any[] = [];
+    // The monolithic background wrapper already owns the user-facing log files, so
+    // adapter output is appended there instead of inheriting detached stdio.
+    if (child.stdout) {
+        const outStream = fs.createWriteStream(MONOLITHIC_OUT_LOG, { flags: 'a' });
+        childLogStreams.push(outStream);
+        child.stdout.pipe(outStream);
+        child.stdout.on('error', () => {});
+    }
+    if (child.stderr) {
+        const errStream = fs.createWriteStream(MONOLITHIC_ERROR_LOG, { flags: 'a' });
+        childLogStreams.push(errStream);
+        child.stderr.pipe(errStream);
+        child.stderr.on('error', () => {});
+    }
+    child.once('close', () => {
+        for (const stream of childLogStreams) {
+            try { stream.end(); } catch (_) {}
+        }
+        if (_marketAdapterChild === child) {
+            _marketAdapterChild = null;
+            _marketAdapterChildStartedAt = 0;
+        }
+    });
+    _marketAdapterChild = child;
+    _marketAdapterChildStartedAt = Date.now();
+    return child;
+}
+
+function getActiveAmaBotFingerprint(): string {
+    return listConfiguredBots()
+        .filter((b) => b.active && usesAmaGridPrice(b))
+        .map((b) => `${b.name}:${b.gridPrice}`)
+        .sort()
+        .join('|');
+}
+
+function resetMarketAdapterRestartBudget() {
+    _marketAdapterRestartCount = 0;
+    _marketAdapterRestartExhaustedAt = 0;
+}
+
+function scheduleMarketAdapterWatchdog() {
+    clearMarketAdapterWatchdogTimer();
+
+    const tick = () => {
+        try {
+            const activeAmaFingerprint = getActiveAmaBotFingerprint();
+            if (activeAmaFingerprint !== _marketAdapterWatchdogFingerprint) {
+                _marketAdapterWatchdogFingerprint = activeAmaFingerprint;
+                resetMarketAdapterRestartBudget();
+            }
+
+            if (!activeAmaFingerprint) {
+                if (isOwnedMarketAdapterChildRunning()) {
+                    stopOwnedMarketAdapterChild().catch(() => {});
+                }
+                removeMarketAdapterLockIfNotLive();
+                resetMarketAdapterRestartBudget();
+                return;
+            }
+
+            if (isMarketAdapterLockStale()) {
+                const stalePid = readMarketAdapterLockPid();
+                try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
+                console.warn(`[market-adapter-watchdog] removed stale lock (was pid=${stalePid})`);
+            }
+
+            if (isLikelyAdapterProcessRunning()) {
+                return;
+            }
+
+            if (isOwnedMarketAdapterChildRunning()) {
+                return;
+            }
+
+            const uptime = Date.now() - _marketAdapterChildStartedAt;
+            if (_marketAdapterChildStartedAt > 0 && uptime >= MARKET_ADAPTER.WATCHDOG_DEFAULTS.minUptimeMs) {
+                resetMarketAdapterRestartBudget();
+            }
+
+            if (_marketAdapterRestartExhaustedAt > 0) {
+                const exhaustedForMs = Date.now() - _marketAdapterRestartExhaustedAt;
+                if (exhaustedForMs < MARKET_ADAPTER.WATCHDOG_DEFAULTS.restartExhaustionResetMs) {
+                    return;
+                }
+                resetMarketAdapterRestartBudget();
+                console.warn('[market-adapter-watchdog] restart budget reset after cooldown');
+            }
+
+            const nextRestartAttempt = _marketAdapterRestartCount + 1;
+            if (nextRestartAttempt > MARKET_ADAPTER.WATCHDOG_DEFAULTS.maxRestarts) {
+                _marketAdapterRestartExhaustedAt = Date.now();
+                console.error(`[market-adapter-watchdog] exceeded max restarts (${MARKET_ADAPTER.WATCHDOG_DEFAULTS.maxRestarts}), giving up until restart budget resets`);
+                return;
+            }
+            _marketAdapterRestartCount = nextRestartAttempt;
+            console.warn(`[market-adapter-watchdog] spawning market adapter (attempt ${_marketAdapterRestartCount}/${MARKET_ADAPTER.WATCHDOG_DEFAULTS.maxRestarts})`);
+            try {
+                spawnMarketAdapterChild();
+            } catch (err: any) {
+                console.error(`[market-adapter-watchdog] spawn failed: ${err.message}`);
+            }
+        } catch (err: any) {
+            console.warn(`[market-adapter-watchdog] tick error: ${err.message}`);
+        }
+    };
+
+    _marketAdapterWatchdogTimer = setInterval(tick, MARKET_ADAPTER.WATCHDOG_DEFAULTS.intervalMs);
+    if (_marketAdapterWatchdogTimer && typeof _marketAdapterWatchdogTimer.unref === 'function') {
+        _marketAdapterWatchdogTimer.unref();
+    }
+
+    tick();
+
+    return () => {
+        clearMarketAdapterWatchdogTimer();
+    };
+}
+
+function isLikelyAdapterProcessRunning(): boolean {
+    const status = readMarketAdapterStatus();
+    return !!(status.pid && status.alive);
+}
+
 /**
  * Main entry point.
  * Starts daemon, then launches bot process(es) via monolithic or isolated mode.
@@ -745,6 +949,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
         }
 
         const cancelUpdateScheduler = scheduleMonolithicUpdateJob(botProcessRef);
+        const cancelMarketAdapterWatchdog = scheduleMarketAdapterWatchdog();
         let restartCount = 0;
         let lastStartTime = 0;
         let keepRunning = true;
@@ -826,17 +1031,17 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
                     console.log('Update applied, restarting bot...');
                 } else if (exitCode !== 0) {
                     const uptime = Date.now() - lastStartTime;
-                    if (uptime >= MONOLITHIC_MIN_UPTIME_MS) {
+                    if (uptime >= LAUNCHER.MONOLITHIC.minUptimeMs) {
                         restartCount = 0;
                     }
                     restartCount++;
-                    if (restartCount > MONOLITHIC_MAX_RESTARTS) {
-                        console.error(`Bot crashed ${MONOLITHIC_MAX_RESTARTS} times without stable uptime. Exiting.`);
+                    if (restartCount > LAUNCHER.MONOLITHIC.maxRestarts) {
+                        console.error(`Bot crashed ${LAUNCHER.MONOLITHIC.maxRestarts} times without stable uptime. Exiting.`);
                         process.exitCode = exitCode || 1;
                         keepRunning = false;
                     } else {
-                        console.log(`Bot crashed (exit ${exitCode}), restarting in ${MONOLITHIC_RESTART_DELAY_MS / 1000}s (attempt ${restartCount}/${MONOLITHIC_MAX_RESTARTS})...`);
-                        await new Promise((r) => setTimeout(r, MONOLITHIC_RESTART_DELAY_MS));
+                        console.log(`Bot crashed (exit ${exitCode}), restarting in ${LAUNCHER.MONOLITHIC.restartDelayMs / 1000}s (attempt ${restartCount}/${LAUNCHER.MONOLITHIC.maxRestarts})...`);
+                        await new Promise((r) => setTimeout(r, LAUNCHER.MONOLITHIC.restartDelayMs));
                     }
                 } else {
                     process.exitCode = 0;
@@ -848,6 +1053,8 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
                 process.off('SIGUSR2', onSigusr2);
             }
             cancelUpdateScheduler();
+            cancelMarketAdapterWatchdog();
+            await stopOwnedMarketAdapterChild();
         }
     } finally {
         if (isMonolithicBgChild) {
@@ -1118,6 +1325,7 @@ function readMarketAdapterStatus(): { pid: number | null; alive: boolean; uptime
 async function stopMarketAdapterFromLock(timeoutMs = 5000): Promise<{ pid: number | null; stopped: boolean }> {
     const status = readMarketAdapterStatus();
     if (!status.pid || !status.alive) {
+        try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
         return { pid: status.pid, stopped: false };
     }
 
@@ -1128,9 +1336,13 @@ async function stopMarketAdapterFromLock(timeoutMs = 5000): Promise<{ pid: numbe
             process.kill(status.pid, 'SIGKILL');
             stopped = await waitForPidExit(status.pid, 2000);
         }
+        if (stopped || !isLikelyMarketAdapterProcess(status.pid)) {
+            try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
+        }
         return { pid: status.pid, stopped };
     } catch (err: any) {
         if (err.code === 'ESRCH') {
+            try { fs.unlinkSync(MARKET_ADAPTER_LOCK_FILE); } catch (_) {}
             return { pid: status.pid, stopped: true };
         }
         throw err;
@@ -1371,7 +1583,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
             let monolithicExited = false;
             try {
                 process.kill(pid, 'SIGTERM');
-                const timeoutMs = effectiveCmd === 'delete' ? MONOLITHIC_CONTROL_STOP_TIMEOUT_MS : 5000;
+                const timeoutMs = effectiveCmd === 'delete' ? LAUNCHER.MONOLITHIC.controlStopTimeoutMs : 5000;
                 monolithicExited = await waitForPidExit(pid, timeoutMs);
                 if (!monolithicExited && effectiveCmd === 'delete') {
                     process.kill(pid, 'SIGKILL');

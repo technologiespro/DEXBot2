@@ -1,5 +1,7 @@
 const assert = require('assert');
-const { createMarketAdapterRuntime } = require('../modules/launcher/market_adapter_runtime');
+const fs = require('fs');
+const path = require('path');
+const { createMarketAdapterRuntime, isLockStale } = require('../modules/launcher/market_adapter_runtime');
 
 console.log('Running market adapter runtime tests');
 
@@ -82,9 +84,58 @@ async function testSignalExitedChildRestartsOnNextRequiredSync() {
     assert.strictEqual(runtime.getStatus().hasOwnedChild, true, 'runtime should track the replacement child as active');
 }
 
+async function testStartRemovesConfiguredStaleLock() {
+    const lockFile = path.join('/tmp', `dexbot2-market-adapter-runtime-${process.pid}.lock`);
+    try { fs.unlinkSync(lockFile); } catch (_) {}
+    fs.writeFileSync(lockFile, JSON.stringify({ pid: -1 }), { mode: 0o600 });
+
+    const runtime = createMarketAdapterRuntime({
+        lockFile,
+        spawnFn: () => createChild(),
+        buildEnv: () => ({}),
+    });
+
+    await runtime.syncBot('ama-bot', true);
+    assert.strictEqual(fs.existsSync(lockFile), false, 'start should remove the configured stale lock file');
+}
+
+function writeStaleLock(lockFile, pid) {
+    try { fs.unlinkSync(lockFile); } catch (_) {}
+    fs.writeFileSync(lockFile, JSON.stringify({ pid }), { mode: 0o600 });
+    const old = new Date(Date.now() - 10 * 60 * 1000);
+    fs.utimesSync(lockFile, old, old);
+}
+
+async function testLiveAdapterStaleMtimeIsNotRemovable() {
+    const lockFile = path.join('/tmp', `dexbot2-market-adapter-runtime-live-adapter-${process.pid}.lock`);
+    writeStaleLock(lockFile, 12345);
+
+    assert.strictEqual(
+        isLockStale(lockFile, 1000, (pid) => pid === 12345),
+        false,
+        'live market adapter lock must not be removable solely because mtime is old'
+    );
+    try { fs.unlinkSync(lockFile); } catch (_) {}
+}
+
+async function testLiveNonAdapterStaleLockIsRemovable() {
+    const lockFile = path.join('/tmp', `dexbot2-market-adapter-runtime-live-non-adapter-${process.pid}.lock`);
+    writeStaleLock(lockFile, 12345);
+
+    assert.strictEqual(
+        isLockStale(lockFile, 1000, () => false),
+        true,
+        'live non-adapter lock should be removable'
+    );
+    try { fs.unlinkSync(lockFile); } catch (_) {}
+}
+
 async function main() {
     await testStopAndReleaseDoNotSpawn();
     await testSignalExitedChildRestartsOnNextRequiredSync();
+    await testStartRemovesConfiguredStaleLock();
+    await testLiveAdapterStaleMtimeIsNotRemovable();
+    await testLiveNonAdapterStaleLockIsRemovable();
     console.log('market adapter runtime tests passed');
 }
 

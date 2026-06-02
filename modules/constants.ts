@@ -662,6 +662,19 @@ let MARKET_ADAPTER = {
         minRequiredCandles: 80,
     },
 
+    // Watchdog defaults for launchers that supervise the standalone adapter.
+    // Reuse existing node-startup and recovery timings so restart polling and
+    // stability windows stay aligned with the rest of the runtime.
+    WATCHDOG_DEFAULTS: {
+        staleLockGraceMs: 30 * 60 * 1000,
+        // Poll every 30s during startup/recovery and allow 13 fast retries:
+        // enough to ride out transient launch failures without retrying forever.
+        intervalMs: NODE_MANAGEMENT.STARTUP_REFRESH_INTERVAL_MS,
+        maxRestarts: 13,
+        minUptimeMs: PIPELINE_TIMING.RECOVERY_RETRY_INTERVAL_MS,
+        restartExhaustionResetMs: PIPELINE_TIMING.RECOVERY_DECAY_FALLBACK_MS,
+    },
+
     // KIBANA_REQUEST_TIMEOUT_MS: Shared per-request timeout for Kibana-backed candle fetches.
     // Used by both the standalone LP history fetcher and the live market adapter's
     // bootstrap / repair / backfill calls so long-running scans share one ceiling.
@@ -1025,6 +1038,15 @@ let UPDATER = {
     // │ │ │ │ │
     // 0 0 * * *  (Default: Daily at midnight)
     SCHEDULE: "0 0 * * *"
+};
+
+let LAUNCHER = {
+    MONOLITHIC: {
+        maxRestarts: 13,
+        minUptimeMs: 24 * 60 * 60 * 1000,
+        restartDelayMs: 3000,
+        controlStopTimeoutMs: 12000,
+    },
 };
 
 // Copy-on-Write (COW) Grid performance thresholds
@@ -1433,6 +1455,8 @@ Object.freeze(MAINTENANCE);
 Object.freeze(NODE_MANAGEMENT);
 Object.freeze(PIPELINE_TIMING);
 Object.freeze(UPDATER);
+Object.freeze(LAUNCHER.MONOLITHIC);
+Object.freeze(LAUNCHER);
 Object.freeze(COW_PERFORMANCE);
 Object.freeze(LOGGING_CONFIG);
 Object.freeze(NATIVE_CLIENT.CHAIN);
@@ -1445,6 +1469,7 @@ Object.freeze(NATIVE_CLIENT.RESOLVERS);
 Object.freeze(NATIVE_CLIENT.ECC);
 Object.freeze(NATIVE_CLIENT);
 Object.freeze(MARKET_ADAPTER.RUNTIME_DEFAULTS);
+Object.freeze(MARKET_ADAPTER.WATCHDOG_DEFAULTS);
 Object.freeze(MARKET_ADAPTER.AMAS.AMA1);
 Object.freeze(MARKET_ADAPTER.AMAS.AMA2);
 Object.freeze(MARKET_ADAPTER.AMAS.AMA3);
@@ -1452,4 +1477,4 @@ Object.freeze(MARKET_ADAPTER.AMAS.AMA4);
 Object.freeze(MARKET_ADAPTER.AMAS);
 Object.freeze(MARKET_ADAPTER);
 
-export = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, CR_ZONES, DEFAULT_TARGET_CR, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, COW_PERFORMANCE, NATIVE_CLIENT, MARKET_ADAPTER, BTS_PRECISION };
+export = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, CR_ZONES, DEFAULT_TARGET_CR, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, LAUNCHER, COW_PERFORMANCE, NATIVE_CLIENT, MARKET_ADAPTER, BTS_PRECISION };

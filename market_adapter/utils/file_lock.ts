@@ -27,7 +27,7 @@ function isLikelyMarketAdapterProcess(pid: any) {
     if (!isProcessAlive(pid)) return false;
     try {
         const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ');
-        return cmdline.includes('node') && cmdline.includes('market_adapter/market_adapter.js');
+        return cmdline.includes('node') && /market_adapter\/market_adapter\.(?:js|ts)\b/.test(cmdline);
     } catch (_: any) {
         return false;
     }
