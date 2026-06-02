@@ -140,6 +140,70 @@ function hasEquivalentRawOnChainOrder(a, b) {
         String(aQuote.asset_id ?? '') === String(bQuote.asset_id ?? '');
 }
 
+function describeNearestAdoptionCandidates(mgr, chainOrder, precision, calcTolerance, matchedGridOrderIds = null) {
+    if (!mgr?.orders || !chainOrder || typeof precision !== 'number') return 'candidate diagnostics unavailable';
+
+    const chainPrice = toFiniteNumber(chainOrder.price);
+    const chainSize = toFiniteNumber(chainOrder.size);
+    const chainInt = floatToBlockchainInt(chainSize, precision);
+    const candidates = [];
+
+    for (const slot of mgr.orders.values()) {
+        if (!slot || ![ORDER_STATES.ACTIVE, ORDER_STATES.PARTIAL, ORDER_STATES.VIRTUAL].includes(slot.state)) continue;
+        const typeMatch = slot.type === chainOrder.type;
+        const spreadMatch = slot.type === ORDER_TYPES.SPREAD;
+        if (!typeMatch && !spreadMatch) continue;
+
+        const price = toFiniteNumber(slot.price);
+        const priceDiff = Math.abs(price - chainPrice);
+        const effectiveSize = slot.size > 0 ? toFiniteNumber(slot.size) : chainSize;
+        const tolerance = calcTolerance(price, effectiveSize, chainOrder.type) || 0;
+        const gridInt = floatToBlockchainInt(toFiniteNumber(slot.size), precision);
+        const sizeDiffInt = chainInt - gridInt;
+        const hasOrderId = Boolean(slot.orderId);
+        const alreadyMatched = Boolean(matchedGridOrderIds?.has?.(slot.id));
+        const sizeOk = Math.abs(sizeDiffInt) <= 1;
+        const primaryEligible = typeMatch && priceDiff <= tolerance && sizeOk;
+        const fallbackEligible = (typeMatch || spreadMatch) && priceDiff <= tolerance && sizeOk && !hasOrderId && !alreadyMatched;
+
+        candidates.push({
+            slot,
+            typeMatch,
+            spreadMatch,
+            priceDiff,
+            tolerance,
+            sizeDiffInt,
+            hasOrderId,
+            alreadyMatched,
+            primaryEligible,
+            fallbackEligible,
+        });
+    }
+
+    candidates.sort((a, b) => a.priceDiff - b.priceDiff);
+    if (candidates.length === 0) return 'no same-side or spread candidate slots exist';
+
+    return candidates.slice(0, 5).map((candidate) => {
+        const slot = candidate.slot;
+        const reasons = [];
+        if (!candidate.typeMatch && !candidate.spreadMatch) reasons.push('type');
+        if (candidate.priceDiff > candidate.tolerance) reasons.push('price');
+        if (Math.abs(candidate.sizeDiffInt) > 1) reasons.push('size');
+        if (candidate.hasOrderId) reasons.push(`occupied:${slot.orderId}`);
+        if (candidate.alreadyMatched) reasons.push('alreadyMatched');
+        if (candidate.primaryEligible) reasons.push('primary-matchable');
+        if (candidate.fallbackEligible) reasons.push('fallback-adoptable');
+        return `${slot.id || 'unknown'} ${slot.type}/${slot.state}` +
+            ` orderId=${slot.orderId || 'none'}` +
+            ` price=${Format.formatPrice6(slot.price)}` +
+            ` diff=${Format.formatPrice6(candidate.priceDiff)}` +
+            ` tol=${Format.formatPrice6(candidate.tolerance)}` +
+            ` size=${Format.formatSizeByOrderType(slot.size || 0, chainOrder.type, mgr.assets)}` +
+            ` sizeDiffInt=${candidate.sizeDiffInt}` +
+            ` reason=${reasons.join('|') || 'unknown'}`;
+    }).join('; ');
+}
+
 class SyncEngine {
     /**
      * @param {Object} manager - OrderManager instance
@@ -262,6 +326,16 @@ class SyncEngine {
                         throw new Error('Sync operation cancelled due to lock acquisition timeout');
                     }
                     const result = await this._doSyncFromOpenOrders(chainOrders, options);
+                    const unmatchedCount = Array.isArray(result.unmatchedChainOrders)
+                        ? result.unmatchedChainOrders.length
+                        : 0;
+                    // Lifecycle: this cache is the structural create blocker consumed by DEXBot COW.
+                    // A clean full sync clears it; missing-create recovery may preserve synthetic
+                    // blockers if a lagging recovery snapshot does not account for affected slots.
+                    mgr._lastUnmatchedChainOrders = unmatchedCount > 0
+                        ? result.unmatchedChainOrders.map(order => ({ ...order }))
+                        : [];
+                    mgr._lastUnmatchedChainOrdersAt = unmatchedCount > 0 ? Date.now() : 0;
                     mgr.logger?.log?.(`[SYNC] Synchronization complete: ${result.filledOrders.length} filled, ${result.updatedOrders.length} updated, ${result.ordersNeedingCorrection.length} needing correction.`, 'info');
                     return result;
                 }, { cancelToken }),
@@ -574,7 +648,9 @@ class SyncEngine {
                     assets: mgr.assets,
                     calcToleranceFn: (p, s, t) => calculatePriceTolerance(p, s, t, mgr.assets),
                     logger: mgr.logger,
-                    allowSmallerChainSize: true
+                    allowSmallerChainSize: true,
+                    requireAvailableSlot: true,
+                    excludeGridOrderIds: matchedGridOrderIds
                 }
             );
 
@@ -659,6 +735,8 @@ class SyncEngine {
                         calcToleranceFn: (p, s, t) => calculatePriceTolerance(p, s, t, mgr.assets),
                         allowSpreadType: true,
                         skipSizeMatch: true,
+                        requireAvailableSlot: true,
+                        excludeGridOrderIds: matchedGridOrderIds
                     }
                 );
 
@@ -691,16 +769,25 @@ class SyncEngine {
                         'warn'
                     );
                 } else {
+                    const precision = (chainOrder.type === ORDER_TYPES.SELL) ? assetAPrecision : assetBPrecision;
+                    const candidateDiagnostics = describeNearestAdoptionCandidates(
+                        mgr,
+                        chainOrder,
+                        precision,
+                        (p, s, t) => calculatePriceTolerance(p, s, t, mgr.assets),
+                        matchedGridOrderIds
+                    );
                     unmatchedChainOrders.push({
                         chainOrderId,
                         type: chainOrder.type,
                         price: chainOrder.price,
                         size: chainOrder.size,
-                        raw: rawChainOrders.get(chainOrderId)
+                        raw: rawChainOrders.get(chainOrderId),
+                        candidateDiagnostics
                     });
                     mgr.logger?.log?.(
                         `[SYNC] Unmatched chain order ${chainOrderId} (${chainOrder.type}, price=${chainOrder.price}, ` +
-                        `size=${chainOrder.size}): no adoptable slot found within price tolerance`,
+                        `size=${chainOrder.size}): no adoptable slot found. Nearest candidates: ${candidateDiagnostics}`,
                         'warn'
                     );
                 }

@@ -60,10 +60,13 @@
  */
 
 const { ORDER_TYPES, ORDER_STATES, TIMING, BTS_PRECISION } = require('../constants');
-const { getMinAbsoluteOrderSize, getAssetFees, blockchainToFloat } = require('./utils/math');
+const { getMinAbsoluteOrderSize, getAssetFees, blockchainToFloat, calculatePriceTolerance } = require('./utils/math');
 const { isOrderPlaced, parseChainOrder, buildCreateOrderArgs, isOrderOnChain, buildOutsideInPairGroups, extractBatchOperationResults } = require('./utils/order');
 const { resolveAccountRef } = require('./utils/system');
 const Format = require('./format');
+
+const SUSPECTED_DUPLICATE_TOLERANCE_MULTIPLIER = 5;
+const SUSPECTED_DUPLICATE_TOLERANCE_FLOOR = 0.01;
 
 /**
  * Count active orders on the grid for a given type.
@@ -1242,6 +1245,48 @@ async function reconcileStartupOrders({
         const unmatchedParsed = unmatchedChain
             .map(co => ({ chain: co, parsed: parseChainOrder(co, manager.assets) }))
             .filter(x => x.parsed);
+
+        // Log individual unmatched chain orders with enough context for later adoption analysis.
+        const activeGridOrders = Array.from(manager.orders.values()).filter(o => o && o.orderId && isOrderPlaced(o));
+        for (const u of unmatchedParsed) {
+            const p = u.parsed;
+            const desc = `Unmatched chain order: ${p.orderId} (${p.type === ORDER_TYPES.BUY ? 'BUY' : 'SELL'}), price=${Format.formatPrice6(p.price)}, size=${Format.formatSizeByOrderType(p.size, p.type, manager.assets)}`;
+            let nearest = null;
+            for (const gridOrder of activeGridOrders) {
+                if (gridOrder.type !== p.type) continue;
+                const priceDiff = Math.abs(p.price - gridOrder.price);
+                const tolerance = calculatePriceTolerance(gridOrder.price, gridOrder.size, gridOrder.type, manager.assets);
+                const candidate = {
+                    gridOrder,
+                    priceDiff,
+                    tolerance,
+                    looseTolerance: Math.max(
+                        tolerance * SUSPECTED_DUPLICATE_TOLERANCE_MULTIPLIER,
+                        SUSPECTED_DUPLICATE_TOLERANCE_FLOOR
+                    ),
+                };
+                if (!nearest || priceDiff < nearest.priceDiff) nearest = candidate;
+            }
+            if (nearest && nearest.priceDiff <= nearest.looseTolerance) {
+                logger?.log?.(
+                    `SUSPECTED DUPLICATE: ${desc} - nearest active grid ${nearest.gridOrder.id} ` +
+                    `(orderId=${nearest.gridOrder.orderId}, price=${Format.formatPrice6(nearest.gridOrder.price)}, ` +
+                    `diff=${Format.formatPrice6(nearest.priceDiff)}, tolerance=${Format.formatPrice6(nearest.tolerance)}, ` +
+                    `looseTolerance=${Format.formatPrice6(nearest.looseTolerance)})`,
+                    'error'
+                );
+            } else if (nearest) {
+                logger?.log?.(
+                    `${desc}; nearest active same-side grid ${nearest.gridOrder.id} ` +
+                    `(orderId=${nearest.gridOrder.orderId}, price=${Format.formatPrice6(nearest.gridOrder.price)}, ` +
+                    `diff=${Format.formatPrice6(nearest.priceDiff)}, tolerance=${Format.formatPrice6(nearest.tolerance)}, ` +
+                    `looseTolerance=${Format.formatPrice6(nearest.looseTolerance)})`,
+                    'warn'
+                );
+            } else {
+                logger?.log?.(`${desc}; no active same-side grid order exists`, 'warn');
+            }
+        }
 
         let unmatchedBuys = unmatchedParsed.filter(x => x.parsed.type === ORDER_TYPES.BUY).map(x => x.chain);
         let unmatchedSells = unmatchedParsed.filter(x => x.parsed.type === ORDER_TYPES.SELL).map(x => x.chain);

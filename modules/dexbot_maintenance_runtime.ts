@@ -19,6 +19,7 @@ const { parseJsonWithComments } = require('./order/utils/system');
 const { cloneWeightDistribution, calculateOrderCreationFees, calculateSwapInAmount, floatToBlockchainInt, blockchainToFloat } = require('./order/utils/math');
 const { updateDynamicGridSnapshotSync } = require('../market_adapter/utils/dynamic_grid_snapshot');
 const { reconcileStartupOrders } = require('./order/startup_reconcile');
+const { formatUnmatchedChainOrder } = require('./order/utils/order');
 
 const CODE_ROOT = path.join(__dirname, '..');
 const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
@@ -1051,7 +1052,15 @@ function setupBlockchainFetchInterval() {
                         }
 
                         if (syncResult.unmatchedChainOrders && syncResult.unmatchedChainOrders.length > 0) {
-                            this._log(`Periodic sync: ${syncResult.unmatchedChainOrders.length} chain order(s) not in grid (surplus/divergence)`, 'warn');
+                            const sample = syncResult.unmatchedChainOrders
+                                .slice(0, 3)
+                                .map(formatUnmatchedChainOrder)
+                                .join(' | ');
+                            this._log(
+                                `Periodic sync: ${syncResult.unmatchedChainOrders.length} chain order(s) not in grid ` +
+                                `(surplus/divergence)${sample ? `: ${sample}` : ''}`,
+                                'warn'
+                            );
                         }
                     } catch (err: any) {
                         this._warn(`Error reading open orders during periodic fetch: ${err.message}`);

@@ -32,6 +32,7 @@
  *   - countOrdersByType(orderType, ordersMap) - Count orders by type
  *   - buildOutsideInPairGroups(items, accessors) - Outside->center pair grouping
  *   - extractBatchOperationResults(result) - Extract operation_results from chain batch result
+ *   - formatUnmatchedChainOrder(order) - Format structural drift diagnostics
  *
  * SECTION 5: STATE PREDICATES (7 functions)
  *   - isOrderOnChain(order) - Check if order is ACTIVE or PARTIAL
@@ -135,6 +136,8 @@ function parseChainOrder(chainOrder, assets) {
  * @param {Object} [opts.logger] - Optional logger
  * @param {boolean} [opts.skipSizeMatch=false] - Skip size matching check
  * @param {boolean} [opts.allowSmallerChainSize=false] - Allow chain order to be smaller
+ * @param {boolean} [opts.requireAvailableSlot=false] - Skip slots already bound to a different chain order
+ * @param {Set<string>} [opts.excludeGridOrderIds] - Skip grid slot ids already assigned in this sync pass
  * @returns {Object|null} Matching grid order or null if no match found
  */
 function findMatchingGridOrderByOpenOrder(parsedChainOrder, opts) {
@@ -162,7 +165,9 @@ function findMatchingGridOrderByOpenOrder(parsedChainOrder, opts) {
         const typeMatch = gridOrder?.type === parsedChainOrder.type ||
             (opts?.allowSpreadType && gridOrder?.type === ORDER_TYPES.SPREAD);
         if (!gridOrder || !typeMatch) continue;
+        if (opts?.excludeGridOrderIds?.has?.(gridOrder.id)) continue;
         if (![ORDER_STATES.ACTIVE, ORDER_STATES.PARTIAL, ORDER_STATES.VIRTUAL].includes(gridOrder.state)) continue;
+        if (opts?.requireAvailableSlot && gridOrder.orderId && gridOrder.orderId !== parsedChainOrder.orderId) continue;
 
         const priceDiff = Math.abs(gridOrder.price - chainPrice);
         // Virtual/spread slots have size=0 — fall back to chain order's size so the
@@ -512,6 +517,25 @@ function extractBatchOperationResults(result) {
         null
     );
     return (ops && ops.length > 0) ? ops : null;
+}
+
+/**
+ * Format an unmatched chain order/blocker for operator logs.
+ *
+ * @param {Object} order - Unmatched chain order or structural blocker.
+ * @returns {string} Compact human-readable diagnostic.
+ */
+function formatUnmatchedChainOrder(order) {
+    if (!order) return 'unknown unmatched order';
+    const parts = [
+        `${order.chainOrderId || 'unknown'}:${order.type || 'unknown'}@${Format.formatPrice6(order.price)}`,
+    ];
+    if (order.size !== undefined) parts.push(`size=${Format.formatAmount(order.size)}`);
+    if (order.slotId) parts.push(`slot=${order.slotId}`);
+    if (order.reason) parts.push(`reason=${order.reason}`);
+    if (order.fingerprint) parts.push(`fingerprint=${order.fingerprint}`);
+    if (order.candidateDiagnostics) parts.push(`candidates=${order.candidateDiagnostics}`);
+    return parts.join(' ');
 }
 
 /**
@@ -1097,6 +1121,7 @@ export = {
     filterOrdersByType,
     buildOutsideInPairGroups,
     extractBatchOperationResults,
+    formatUnmatchedChainOrder,
     isOrderOnChain,
     isOrderVirtual,
     hasOnChainId,

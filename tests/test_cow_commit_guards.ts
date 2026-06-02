@@ -293,8 +293,114 @@ async function testRejectsCreateOnOccupiedSlotBeforeBroadcast() {
     console.log('✓ COW-COMMIT-004 passed');
 }
 
+async function testRejectsCreatesWhenUnmatchedChainOrdersExist() {
+    console.log('\n[COW-COMMIT-005] rejects creates while unmatched chain orders exist...');
+
+    const masterOrders = new Map([
+        ['slot-new', createOrder('slot-new', {
+            type: ORDER_TYPES.SELL,
+            state: ORDER_STATES.VIRTUAL,
+            price: 1.1,
+            size: 10,
+            orderId: ''
+        })]
+    ]);
+    const { bot, manager } = createCowExecutionFixture(masterOrders);
+    const workingGrid = new WorkingGrid(manager.orders, { baseVersion: 1 });
+    let structuralResyncRequests = 0;
+    let executeCalls = 0;
+
+    manager._lastUnmatchedChainOrders = [{
+        chainOrderId: '1.7.572303058',
+        type: ORDER_TYPES.SELL,
+        price: 1.101,
+        size: 10
+    }];
+    manager.requestStructuralGridResync = async () => {
+        structuralResyncRequests += 1;
+        return { scheduled: true };
+    };
+    bot._executeOperationsWithStrategy = async () => {
+        executeCalls += 1;
+        return { result: { success: true, operation_results: [[1, '1.7.999']] }, opContexts: [] };
+    };
+
+    const result = await bot._updateOrdersOnChainBatchCOW({
+        workingGrid,
+        workingIndexes: workingGrid.getIndexes(),
+        workingBoundary: 0,
+        actions: [{
+            type: COW_ACTIONS.CREATE,
+            id: 'slot-new',
+            order: {
+                id: 'slot-new',
+                type: ORDER_TYPES.SELL,
+                price: 1.1,
+                size: 10,
+                state: ORDER_STATES.VIRTUAL,
+                orderId: ''
+            }
+        }]
+    });
+
+    assert.strictEqual(result.executed, false, 'Create batch should not execute with unmatched chain orders');
+    assert.strictEqual(result.aborted, true, 'Create batch should abort before broadcast');
+    assert.strictEqual(result.reason, 'UNMATCHED_CHAIN_ORDERS', 'Abort reason should identify structural drift');
+    assert.strictEqual(executeCalls, 0, 'No blockchain broadcast should be attempted');
+    assert.strictEqual(structuralResyncRequests, 1, 'Structural resync should be requested');
+
+    console.log('✓ COW-COMMIT-005 passed');
+}
+
+async function testMissingCreateBlockerMergesWithExistingUnmatchedOrders() {
+    console.log('\n[COW-COMMIT-006] missing create blocker merges with existing unmatched orders...');
+
+    const { bot, manager } = createCowExecutionFixture();
+    manager._lastUnmatchedChainOrders = [{
+        chainOrderId: '1.7.572303058',
+        type: ORDER_TYPES.SELL,
+        price: 1.101,
+        size: 10,
+        reason: 'unmatched-chain-order'
+    }];
+
+    bot._markMissingCreateResultsAsStructuralBlocker([{
+        index: 2,
+        ctx: {
+            id: 'slot-missing-create',
+            order: {
+                id: 'slot-missing-create',
+                type: ORDER_TYPES.BUY,
+                price: 1.25,
+                size: 3.5
+            }
+        }
+    }]);
+    bot._markMissingCreateResultsAsStructuralBlocker([{
+        index: 2,
+        ctx: {
+            id: 'slot-missing-create',
+            order: {
+                id: 'slot-missing-create',
+                type: ORDER_TYPES.BUY,
+                price: 1.25,
+                size: 3.5
+            }
+        }
+    }]);
+
+    assert.strictEqual(manager._lastUnmatchedChainOrders.length, 2, 'Existing unmatched order should be preserved and duplicate blocker deduped');
+    assert.strictEqual(manager._lastUnmatchedChainOrders[0].chainOrderId, '1.7.572303058', 'Existing unmatched order should remain first');
+    assert.strictEqual(manager._lastUnmatchedChainOrders[1].reason, 'missing-create-result', 'Missing create blocker should be appended');
+    assert(manager._lastUnmatchedChainOrders[1].fingerprint.includes('type='), 'Missing create blocker should include local type fingerprint');
+    assert(manager._lastUnmatchedChainOrders[1].fingerprint.includes('price='), 'Missing create blocker should include local price fingerprint');
+    assert(manager._lastUnmatchedChainOrders[1].fingerprint.includes('size='), 'Missing create blocker should include local size fingerprint');
+
+    console.log('✓ COW-COMMIT-006 passed');
+}
+
 async function testNoPostBatchCacheDeductionForCreates() {
-    console.log('\n[COW-COMMIT-005] no post-batch cache deduction (handled in real-time by updateOptimisticFreeBalance)...');
+    console.log('\n[COW-COMMIT-007] no post-batch cache deduction (handled in real-time by updateOptimisticFreeBalance)...');
 
     const { bot, manager, postBatchAdjustments } = createCowExecutionFixture();
     const workingGrid = new WorkingGrid(manager.orders, { baseVersion: 1 });
@@ -338,8 +444,19 @@ async function testNoPostBatchCacheDeductionForCreates() {
         opContexts
     });
 
+    let recoverySyncCalls = 0;
+    manager.syncFromOpenOrders = async () => {
+        recoverySyncCalls += 1;
+        manager._lastUnmatchedChainOrders = [];
+        manager._lastUnmatchedChainOrdersAt = 0;
+        return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [], unmatchedChainOrders: [] };
+    };
+    const originalReadOpenOrders = chainOrders.readOpenOrders;
+    chainOrders.readOpenOrders = async () => [];
+
+    let result;
     try {
-        await bot._updateOrdersOnChainBatchCOW({
+        result = await bot._updateOrdersOnChainBatchCOW({
             workingGrid,
             workingIndexes: workingGrid.getIndexes(),
             workingBoundary: 0,
@@ -349,19 +466,25 @@ async function testNoPostBatchCacheDeductionForCreates() {
         chainOrders.buildCreateOrderOp = originalBuildCreate;
         chainOrders.buildCancelOrderOp = originalBuildCancel;
         chainOrders.buildUpdateOrderOp = originalBuildUpdate;
+        chainOrders.readOpenOrders = originalReadOpenOrders;
     }
 
+    assert.strictEqual(result.executed, false, 'Missing create result must abort local commit');
+    assert.strictEqual(result.resultTruncated, true, 'Missing create result should be reported');
+    assert.strictEqual(recoverySyncCalls, 1, 'Missing create result must trigger immediate recovery sync');
+    assert.strictEqual(manager._lastUnmatchedChainOrders.length, 1, 'Missing create result should leave a structural create blocker');
+    assert.strictEqual(manager._lastUnmatchedChainOrders[0].reason, 'missing-create-result', 'Blocker should identify missing create result');
     // Cache deduction now happens in real-time via updateOptimisticFreeBalance
     // (inside _commitWorkingGrid), not as a separate post-batch step.
     // No cow-placements deductions should occur (would be double-deducting).
     assert.strictEqual(postBatchAdjustments.length, 0,
         'No post-batch cache deduction expected (handled in real-time by updateOptimisticFreeBalance)');
 
-    console.log('✓ COW-COMMIT-005 passed');
+    console.log('✓ COW-COMMIT-007 passed');
 }
 
 async function testNoPostBatchCacheDeductionForMixedCreates() {
-    console.log('\n[COW-COMMIT-006] no post-batch cache deduction for mixed creates...');
+    console.log('\n[COW-COMMIT-008] no post-batch cache deduction for mixed creates...');
 
     const { bot, manager, postBatchAdjustments } = createCowExecutionFixture();
     const workingGrid = new WorkingGrid(manager.orders, { baseVersion: 1 });
@@ -438,8 +561,19 @@ async function testNoPostBatchCacheDeductionForMixedCreates() {
         opContexts: opContexts.filter(ctx => ctx?.kind === 'create' && ctx?.order?.type === ORDER_TYPES.SELL)
     });
 
+    let recoverySyncCalls = 0;
+    manager.syncFromOpenOrders = async () => {
+        recoverySyncCalls += 1;
+        manager._lastUnmatchedChainOrders = [];
+        manager._lastUnmatchedChainOrdersAt = 0;
+        return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [], unmatchedChainOrders: [] };
+    };
+    const originalReadOpenOrders = chainOrders.readOpenOrders;
+    chainOrders.readOpenOrders = async () => [];
+
+    let result;
     try {
-        await bot._updateOrdersOnChainBatchCOW({
+        result = await bot._updateOrdersOnChainBatchCOW({
             workingGrid,
             workingIndexes: workingGrid.getIndexes(),
             workingBoundary: 0,
@@ -449,18 +583,24 @@ async function testNoPostBatchCacheDeductionForMixedCreates() {
         chainOrders.buildCreateOrderOp = originalBuildCreate;
         chainOrders.buildCancelOrderOp = originalBuildCancel;
         chainOrders.buildUpdateOrderOp = originalBuildUpdate;
+        chainOrders.readOpenOrders = originalReadOpenOrders;
     }
 
+    assert.strictEqual(result.executed, false, 'Missing mixed create result must abort local commit');
+    assert.strictEqual(result.resultTruncated, true, 'Missing mixed create result should be reported');
+    assert.strictEqual(recoverySyncCalls, 1, 'Missing mixed create result must trigger recovery sync');
+    assert.strictEqual(manager._lastUnmatchedChainOrders.length, 1, 'Missing mixed create result should leave a structural create blocker');
+    assert.strictEqual(manager._lastUnmatchedChainOrders[0].reason, 'missing-create-result', 'Mixed create blocker should identify missing result');
     // Cache deduction now happens in real-time via updateOptimisticFreeBalance
     // (inside _commitWorkingGrid), not as a separate post-batch step.
     assert.strictEqual(postBatchAdjustments.length, 0,
         'No post-batch cache deduction expected (handled in real-time by updateOptimisticFreeBalance)');
 
-    console.log('✓ COW-COMMIT-006 passed');
+    console.log('✓ COW-COMMIT-008 passed');
 }
 
 async function testNoPostBatchCacheDeductionForSizeUpdates() {
-    console.log('\n[COW-COMMIT-007] no post-batch cache deduction for size updates...');
+    console.log('\n[COW-COMMIT-009] no post-batch cache deduction for size updates...');
 
     const master = new Map([
         ['slot-update-buy', createOrder('slot-update-buy', {
@@ -521,8 +661,13 @@ async function testNoPostBatchCacheDeductionForSizeUpdates() {
         opContexts
     });
 
+    let commitCalls = 0;
+    manager._commitWorkingGrid = async () => {
+        commitCalls += 1;
+    };
+    let result;
     try {
-        await bot._updateOrdersOnChainBatchCOW({
+        result = await bot._updateOrdersOnChainBatchCOW({
             workingGrid,
             workingIndexes: workingGrid.getIndexes(),
             workingBoundary: 0,
@@ -534,16 +679,18 @@ async function testNoPostBatchCacheDeductionForSizeUpdates() {
         chainOrders.buildUpdateOrderOp = originalBuildUpdate;
     }
 
+    assert.strictEqual(result.executed, true, 'Update-only batch with empty operation_results should still commit');
+    assert.strictEqual(commitCalls, 1, 'Update-only batch should not be rejected by create result guard');
     // Cache deduction now happens in real-time via updateOptimisticFreeBalance
     // (inside _commitWorkingGrid), not as a separate post-batch step.
     assert.strictEqual(postBatchAdjustments.length, 0,
         'No post-batch cache deduction expected (handled in real-time by updateOptimisticFreeBalance)');
 
-    console.log('✓ COW-COMMIT-007 passed');
+    console.log('✓ COW-COMMIT-009 passed');
 }
 
 async function testCredentialDaemonPreflightBlocksBroadcast() {
-    console.log('\n[COW-COMMIT-008] credential daemon preflight blocks write broadcast...');
+    console.log('\n[COW-COMMIT-010] credential daemon preflight blocks write broadcast...');
 
     const masterOrders = new Map([
         ['slot-new', {
@@ -602,7 +749,7 @@ async function testCredentialDaemonPreflightBlocksBroadcast() {
     }
 
     assert.strictEqual(executeCalls, 0, 'Credential outage must abort before broadcast execution');
-    console.log('✓ COW-COMMIT-008 passed');
+    console.log('✓ COW-COMMIT-010 passed');
 }
 
 async function run() {
@@ -611,6 +758,8 @@ async function run() {
     await testNoPostCommitSideEffectsWhenDeltaEmpty();
     await testExecuteBatchIfNeededSkipsEmptyActions();
     await testRejectsCreateOnOccupiedSlotBeforeBroadcast();
+    await testRejectsCreatesWhenUnmatchedChainOrdersExist();
+    await testMissingCreateBlockerMergesWithExistingUnmatchedOrders();
     await testNoPostBatchCacheDeductionForCreates();
     await testNoPostBatchCacheDeductionForMixedCreates();
     await testNoPostBatchCacheDeductionForSizeUpdates();

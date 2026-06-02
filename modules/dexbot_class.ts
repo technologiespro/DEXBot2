@@ -107,7 +107,8 @@ const {
     convertToSpreadPlaceholder,
     buildOutsideInPairGroups,
     extractBatchOperationResults,
-    buildFillKey
+    buildFillKey,
+    formatUnmatchedChainOrder
 } = require('./order/utils/order');
 const { validateOrderSize, calculateRotationOrderSizes } = require('./order/utils/math');
 const {
@@ -2175,6 +2176,176 @@ class DEXBot {
         return [];
     }
 
+    /**
+     * Find CREATE operation contexts whose broadcast result did not include a chain order id.
+     *
+     * @param {Array} operationResults - operation_results aligned with opContexts.
+     * @param {Array<Object>} opContexts - Operation context metadata aligned with operations.
+     * @returns {Array<{index:number, ctx:Object}>} Missing create result contexts.
+     */
+    _findMissingCreateResultContexts(operationResults, opContexts) {
+        const missing = [];
+        if (!Array.isArray(opContexts)) return missing;
+
+        for (let i = 0; i < opContexts.length; i++) {
+            const ctx = opContexts[i];
+            if (ctx?.kind !== 'create') continue;
+            const chainOrderId = operationResults?.[i]?.[1];
+            if (!chainOrderId || !/^1\.7\.\d+$/.test(String(chainOrderId))) {
+                missing.push({ index: i, ctx });
+            }
+        }
+
+        return missing;
+    }
+
+    /**
+     * Run an immediate chain sync after a successful CREATE broadcast returned incomplete ids.
+     *
+     * Missing-create blockers are intentionally preserved if the recovery snapshot does not
+     * account for the affected local slot. The sync engine owns normal clearing of
+     * _lastUnmatchedChainOrders after a successful clean snapshot; this method prevents a
+     * lagging empty snapshot from clearing blockers that were just created by this flow.
+     *
+     * @param {string} [reason] - Human-readable recovery context for logs.
+     * @returns {Promise<void>}
+     */
+    async _recoverAfterMissingCreateResults(reason = 'missing create operation results') {
+        try {
+            const accountRef = this.accountId || this.account?.id || this.account;
+            if (!accountRef || !this.manager || !chainOrders?.readOpenOrders) {
+                this.manager?.logger?.log?.(`[COW] Recovery sync unavailable after ${reason}`, 'warn');
+                return;
+            }
+            const preRecoveryMissingCreateBlockers = Array.isArray(this.manager._lastUnmatchedChainOrders)
+                ? this.manager._lastUnmatchedChainOrders
+                    .filter(order => order?.reason === 'missing-create-result')
+                    .map(order => ({ ...order }))
+                : [];
+            const openOrders = await chainOrders.readOpenOrders(accountRef);
+            const recoveryResult = await this.manager.syncFromOpenOrders(openOrders, {
+                skipAccounting: false,
+                fillLockAlreadyHeld: true
+            });
+            this._preserveMissingCreateBlockersAfterRecovery(preRecoveryMissingCreateBlockers, recoveryResult);
+        } catch (err: any) {
+            this.manager?.logger?.log?.(`[COW] CRITICAL: Recovery sync failed after ${reason}: ${err.message}`, 'error');
+            if (typeof this.manager?.requestStructuralGridResync === 'function') {
+                try {
+                    await this.manager.requestStructuralGridResync(`recovery sync failed after ${reason}`, {
+                        error: err.message
+                    });
+                } catch (scheduleErr: any) {
+                    this.manager?.logger?.log?.(
+                        `[COW] CRITICAL: Failed to schedule structural resync after recovery failure: ${scheduleErr.message}`,
+                        'error'
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Restore unresolved missing-create blockers after recovery if sync did not adopt them.
+     *
+     * @param {Array<Object>} blockers - Pre-recovery missing-create blockers.
+     * @param {Object} recoveryResult - Result returned by manager.syncFromOpenOrders.
+     * @returns {void}
+     */
+    _preserveMissingCreateBlockersAfterRecovery(blockers, recoveryResult) {
+        if (!Array.isArray(blockers) || blockers.length === 0 || !this.manager) return;
+
+        const adoptedSlotIds = new Set(
+            (Array.isArray(recoveryResult?.updatedOrders) ? recoveryResult.updatedOrders : [])
+                .filter(order => order?.id && order?.orderId)
+                .map(order => order.id)
+        );
+        const unresolvedBlockers = blockers.filter(blocker => !blocker.slotId || !adoptedSlotIds.has(blocker.slotId));
+        if (unresolvedBlockers.length === 0) return;
+
+        const currentUnmatched = Array.isArray(this.manager._lastUnmatchedChainOrders)
+            ? this.manager._lastUnmatchedChainOrders
+            : [];
+        const currentKeys = new Set(currentUnmatched.map(order => `${order.reason || ''}:${order.slotId || ''}:${order.operationIndex ?? ''}`));
+        const restored = [...currentUnmatched];
+
+        for (const blocker of unresolvedBlockers) {
+            const key = `${blocker.reason || ''}:${blocker.slotId || ''}:${blocker.operationIndex ?? ''}`;
+            if (!currentKeys.has(key)) restored.push({ ...blocker });
+        }
+
+        if (restored.length !== currentUnmatched.length) {
+            this.manager._lastUnmatchedChainOrders = restored;
+            this.manager._lastUnmatchedChainOrdersAt = Date.now();
+            this.manager.logger?.log?.(
+                `[COW] Preserving ${restored.length - currentUnmatched.length} missing-create blocker(s) after recovery sync; ` +
+                `chain snapshot did not account for the affected slot(s).`,
+                'warn'
+            );
+        }
+    }
+
+    /**
+     * Merge missing CREATE result contexts into manager._lastUnmatchedChainOrders.
+     *
+     * The sync engine sets and clears _lastUnmatchedChainOrders on full sync snapshots.
+     * COW uses the same manager field as a structural create blocker before broadcasting.
+     * Missing-create entries are keyed by reason:slotId:operationIndex to avoid replacing
+     * unrelated unmatched chain orders that may already be blocking new creates.
+     *
+     * @param {Array<{index:number, ctx:Object}>} missingCreateResults - Missing CREATE results.
+     * @returns {void}
+     */
+    _markMissingCreateResultsAsStructuralBlocker(missingCreateResults) {
+        const blockers = Array.isArray(missingCreateResults)
+            ? missingCreateResults.map(item => {
+                const order = item.ctx?.order || {};
+                const fingerprint = [
+                    `type=${order.type || 'unknown'}`,
+                    `price=${Format.formatPrice6(order.price)}`,
+                    `size=${Format.formatAmount(order.size)}`
+                ].join(',');
+                return {
+                    chainOrderId: 'unknown',
+                    type: order.type || null,
+                    price: order.price,
+                    size: order.size,
+                    slotId: order.id || item.ctx?.id || null,
+                    reason: 'missing-create-result',
+                    operationIndex: item.index,
+                    fingerprint,
+                };
+            })
+            : [];
+
+        if (this.manager && blockers.length > 0) {
+            const existing = Array.isArray(this.manager._lastUnmatchedChainOrders)
+                ? this.manager._lastUnmatchedChainOrders
+                : [];
+            const keys = new Set(existing.map(order => `${order.reason || ''}:${order.slotId || ''}:${order.operationIndex ?? ''}`));
+            const merged = [...existing];
+            for (const blocker of blockers) {
+                const key = `${blocker.reason || ''}:${blocker.slotId || ''}:${blocker.operationIndex ?? ''}`;
+                if (!keys.has(key)) {
+                    merged.push(blocker);
+                    keys.add(key);
+                }
+            }
+            this.manager._lastUnmatchedChainOrders = merged;
+            this.manager._lastUnmatchedChainOrdersAt = Date.now();
+        }
+    }
+
+    /**
+     * Format an unmatched chain order/blocker for COW logs.
+     *
+     * @param {Object} order - Unmatched chain order or structural blocker.
+     * @returns {string} Compact human-readable diagnostic.
+     */
+    _formatUnmatchedChainOrderForLog(order) {
+        return formatUnmatchedChainOrder(order);
+    }
+
     // Pair mode applies only when create contexts include both BUY and SELL.
     // Single-side create batches intentionally remain a single executeBatch.
     /**
@@ -3015,6 +3186,35 @@ class DEXBot {
             };
         }
 
+        const hasCreateActions = actions.some(action => action.type === COW_ACTIONS.CREATE);
+        const unmatchedChainOrders = Array.isArray(this.manager?._lastUnmatchedChainOrders)
+            ? this.manager._lastUnmatchedChainOrders
+            : [];
+        if (hasCreateActions && unmatchedChainOrders.length > 0) {
+            const sample = unmatchedChainOrders
+                .slice(0, 3)
+                .map(order => this._formatUnmatchedChainOrderForLog(order))
+                .join(' | ');
+            this.manager.logger.log(
+                `[COW] Rejecting CREATE batch: ${unmatchedChainOrders.length} unmatched chain order(s) ` +
+                `are not represented in the grid${sample ? ` (${sample})` : ''}. ` +
+                `Run structural reconciliation before placing replacement orders.`,
+                'error'
+            );
+            if (typeof this.manager.requestStructuralGridResync === 'function') {
+                await this.manager.requestStructuralGridResync('unmatched chain orders before COW create', {
+                    unmatchedChainOrders
+                });
+            }
+            return {
+                executed: false,
+                aborted: true,
+                reason: 'UNMATCHED_CHAIN_ORDERS',
+                unmatchedChainOrders,
+                hadRotation: false
+            };
+        }
+
         const { assetA, assetB } = this.manager.assets;
         const operations = [];
         const opContexts = [];
@@ -3231,6 +3431,34 @@ class DEXBot {
                 this.manager._throwOnIllegalState = true;
                 
                 if (result.success) {
+                    // Pre-commit integrity: only CREATE ops require returned chainOrderIds.
+                    // Cancel/update operation results may be empty depending on the broadcaster.
+                    const preCommitResults = this._extractOperationResults(result, 'pre-commit-integrity');
+                    const missingCreateResults = this._findMissingCreateResultContexts(preCommitResults, executedContexts);
+                    if (missingCreateResults.length > 0) {
+                        const missingSlots = missingCreateResults
+                            .map(item => item.ctx?.order?.id || item.ctx?.id || `op-${item.index}`)
+                            .join(', ');
+                        this.manager.logger.log(
+                            `[COW] Refusing to commit working grid: ${missingCreateResults.length} CREATE op(s) ` +
+                            `returned no chainOrderId (${missingSlots}). Discarding working grid and syncing from chain.`,
+                            'error'
+                        );
+                        this.manager._clearWorkingGridRef();
+                        this.manager._setRebalanceState(REBALANCE_STATES.NORMAL);
+                        this._markMissingCreateResultsAsStructuralBlocker(missingCreateResults);
+                        await this._recoverAfterMissingCreateResults('missing create operation results');
+                        return {
+                            executed: false,
+                            hadRotation: false,
+                            resultTruncated: true,
+                            missingCreateResults: missingCreateResults.map(item => ({
+                                index: item.index,
+                                slotId: item.ctx?.order?.id || item.ctx?.id || null
+                            }))
+                        };
+                    }
+
                     // SUCCESS: Commit working grid to master (atomic swap)
                     this.manager.logger.log('[COW] Blockchain success - committing working grid to master', 'info');
                     // RC-FIX: skipRecalc prevents invariant violation before optimistic accounting
@@ -3433,6 +3661,18 @@ class DEXBot {
                         }
                     }
                     this.manager.logger.log(`Placed ${ctx.order.type} order ${ctx.order.id} -> ${chainOrderId}`, 'info');
+                } else {
+                    const fingerprint = [
+                        `type=${ctx.order.type || 'unknown'}`,
+                        `price=${Format.formatPrice6(ctx.order.price)}`,
+                        `size=${Format.formatAmount(ctx.order.size)}`
+                    ].join(',');
+                    this.manager.logger.log(
+                        `[COW] CRITICAL: Create op for slot ${ctx.order.id} (type=${ctx.order.type}) ` +
+                        `returned no chainOrderId. Identify any orphaned on-chain order by local fingerprint ` +
+                        `${fingerprint} before cancelling.`,
+                        'error'
+                    );
                 }
             }
             else if (ctx.kind === 'rotation') {

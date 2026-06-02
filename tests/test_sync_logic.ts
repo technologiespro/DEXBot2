@@ -174,6 +174,39 @@ async function runTests() {
         assert(result.updatedOrders.some(o => o.id === 'spread-1'), 'Sync result should include the adopted slot update');
     }
 
+    console.log(' - Testing Orphan Adoption Skips Occupied Nearest Slot...');
+    {
+        const manager = await createManager();
+        await manager._updateOrder({
+            id: 'occupied-1',
+            state: ORDER_STATES.ACTIVE,
+            type: ORDER_TYPES.SELL,
+            price: 100,
+            size: 25,
+            orderId: 'c-existing'
+        });
+        await manager._updateOrder({
+            id: 'spread-available-1',
+            state: ORDER_STATES.VIRTUAL,
+            type: ORDER_TYPES.SPREAD,
+            price: 100,
+            size: 0
+        });
+
+        const result = await manager.sync.syncFromOpenOrders([
+            makeSellChainOrder('c-existing', 25, 100),
+            makeSellChainOrder('c-new-orphan', 26, 100)
+        ]);
+
+        const occupied = manager.orders.get('occupied-1');
+        const adopted = manager.orders.get('spread-available-1');
+
+        assert.strictEqual(occupied.orderId, 'c-existing', 'Existing occupied slot must keep its chain order id');
+        assert.strictEqual(adopted.orderId, 'c-new-orphan', 'Orphan should skip occupied slot and adopt available spread slot');
+        assert.strictEqual(adopted.type, ORDER_TYPES.SELL, 'Adopted spread slot should take orphan side');
+        assert.strictEqual(result.unmatchedChainOrders.length, 0, 'Available spread slot should prevent unmatched orphan');
+    }
+
     console.log(' - Testing Non-Grid Pair Chain Orders Are Ignored...');
     {
         const manager = await createManager();
