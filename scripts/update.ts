@@ -294,9 +294,46 @@ try {
     run('npm install --prefer-offline');
 
     /**
-     * STEP 8b: Build TypeScript sources (already compiled by prepare hook during npm install)
+     * STEP 8b: Build TypeScript sources
+     *
+     * Do NOT rely on the npm `prepare` hook. The `prepare` script only re-fires
+     * when package.json itself changes, not when only .ts source files are
+     * updated. After a `git pull` that touches only .ts files, `npm install`
+     * is a no-op, `tsc` never runs, and the running bot process keeps loading
+     * the stale dist/ bundle — with no error surfaced to the operator.
+     *
+     * Always run the explicit build here so the next PM2 restart picks up
+     * the new code. The staleness check at the end of this step is defense
+     * in depth: if the build silently no-ops (e.g. tsc crashed, output path
+     * missing), the update aborts before PM2 is restarted.
      */
-    log('TypeScript sources built during npm install prepare hook.');
+    log('Building TypeScript sources (npm run build)...');
+    run('npm run build');
+
+    const SOURCE_MARKER = path.join(ROOT, 'modules', 'dexbot_class.ts');
+    const DIST_MARKER = path.join(ROOT, 'dist', 'modules', 'dexbot_class.js');
+    if (fs.existsSync(SOURCE_MARKER)) {
+        if (!fs.existsSync(DIST_MARKER)) {
+            throw new Error(
+                `Build did not produce dist/modules/dexbot_class.js. ` +
+                `Refusing to restart PM2 with a missing bundle. ` +
+                `Run \`npm run build\` manually and inspect tsc output.`
+            );
+        }
+
+        const srcStat = fs.statSync(SOURCE_MARKER);
+        const distStat = fs.statSync(DIST_MARKER);
+        if (distStat.mtimeMs < srcStat.mtimeMs) {
+            throw new Error(
+                `Build did not refresh dist/modules/dexbot_class.js ` +
+                `(src mtime=${srcStat.mtime.toISOString()}, ` +
+                `dist mtime=${distStat.mtime.toISOString()}). ` +
+                `Refusing to restart PM2 with a stale bundle. ` +
+                `Run \`npm run build\` manually and inspect tsc output.`
+            );
+        }
+        log(`dist/ is fresh (mtime=${distStat.mtime.toISOString()}).`);
+    }
 
     /**
      * STEP 8c: Regenerate Ecosystem Config
