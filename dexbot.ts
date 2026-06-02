@@ -57,6 +57,9 @@
   *   node dexbot pm2 delete <bot-name>- Delete specific bot from PM2
  *   node dexbot pm2 help             - Show PM2 command help
  *
+ * STATUS:
+ *   node dexbot status               - Show bot runtime status (unlock monolithic/isolated or PM2)
+ *
  * MAINTENANCE:
  *   node dexbot update               - Update to latest version (pull + install + restart)
  *   node dexbot export <bot-name>    - Export trading history to CSV/JSON for QTradeX
@@ -108,7 +111,7 @@ const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 
 
-const CLI_COMMANDS = ['start', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order', 'clear'];
+const CLI_COMMANDS = ['start', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order', 'clear', 'status'];
 const COMMAND_ALIASES: Record<string, string> = { orders: 'order', key: 'keys', bot: 'bots' };
 const CLI_HELP_FLAGS = ['-h', '--help'];
 const CLI_EXAMPLES_FLAG = '--cli-examples';
@@ -146,6 +149,7 @@ function printCLIUsage() {
     console.log('  pm2               Start all active bots with PM2 (authenticate + generate config + start).');
     console.log('  update            Update DEXBot2 from the repository and restart active bots.');
     console.log('  order             Analyze persisted order grids in profiles/orders/ (spread, increment, funds).');
+    console.log('  status            Show bot runtime status (unlock monolithic/isolated or PM2).');
     console.log('  clear             Remove all log files from profiles/logs/ (runs scripts/clear-logs.sh).');
     console.log('Options:');
     console.log('  --cli-examples    Print curated CLI snippets.');
@@ -748,6 +752,125 @@ async function handleCLICommands() {
                 process.exit(1);
             }
             process.exit(result.status ?? 0);
+            return true;
+        }
+        case 'status': {
+            const { spawnSync, execSync } = require('child_process');
+            const MONOLITHIC_PID_FILE = path.join(PROFILES_DIR, 'monolithic.pid');
+            const SUPERVISOR_SOCK = path.join(PROFILES_DIR, 'supervisor.sock');
+            let unlockRunning = false;
+
+            if (fs.existsSync(MONOLITHIC_PID_FILE)) {
+                try {
+                    const pid = Number(fs.readFileSync(MONOLITHIC_PID_FILE, 'utf8').trim());
+                    if (Number.isInteger(pid) && pid > 0) {
+                        try { process.kill(pid, 0); unlockRunning = true; } catch (_) {}
+                    }
+                } catch (_) {}
+            }
+
+            if (!unlockRunning && fs.existsSync(SUPERVISOR_SOCK)) {
+                unlockRunning = true;
+            }
+
+            if (unlockRunning) {
+                const unlockScript = path.join(ROOT, 'unlock.js');
+                const result = spawnSync(process.execPath, [unlockScript, 'status'], {
+                    cwd: ROOT,
+                    stdio: 'inherit',
+                });
+                process.exit(result.status ?? 0);
+                return true;
+            }
+
+            try {
+                const output = execSync('pm2 jlist', { encoding: 'utf8', timeout: 5000 }).toString().trim();
+                const jsonStart = output.indexOf('[');
+                if (jsonStart === -1) {
+                    console.log('No DEXBot2 processes running.');
+                    process.exit(0);
+                    return true;
+                }
+
+                const allProcs = JSON.parse(output.slice(jsonStart));
+                if (!Array.isArray(allProcs) || allProcs.length === 0) {
+                    console.log('No DEXBot2 processes running.');
+                    process.exit(0);
+                    return true;
+                }
+
+                const serviceNames = new Set(['dexbot-cred', 'dexbot-adapter', 'dexbot-update']);
+                const botNames = new Set<string>();
+                try {
+                    const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
+                    const entries = resolveRawBotEntries(config);
+                    for (const b of entries) {
+                        if (b.name) botNames.add(b.name);
+                    }
+                } catch (_) {}
+
+                const dexbotProcs = allProcs.filter((p: any) => {
+                    const name = String(p?.name || '');
+                    return serviceNames.has(name) || botNames.has(name);
+                });
+
+                if (dexbotProcs.length === 0) {
+                    console.log('No DEXBot2 PM2 processes running.');
+                    process.exit(0);
+                    return true;
+                }
+
+                console.log('='.repeat(50));
+                console.log('DEXBot2 PM2 Processes');
+                console.log('='.repeat(50));
+                console.log('');
+
+                const fmtUptime = (p: any) => {
+                    if (!p?.pm2_env?.pm_uptime) return '-';
+                    const ms = Date.now() - new Date(p.pm2_env.pm_uptime).getTime();
+                    const s = Math.floor(Math.abs(ms) / 1000);
+                    if (s < 60) return `${s}s`;
+                    const m = Math.floor(s / 60);
+                    if (m < 60) return `${m}m ${s % 60}s`;
+                    const h = Math.floor(m / 60);
+                    if (h < 24) return `${h}h ${m % 60}m`;
+                    const d = Math.floor(h / 24);
+                    return `${d}d ${h % 24}h`;
+                };
+
+                const fmtMem = (p: any) => {
+                    const bytes = p?.monit?.memory;
+                    if (!bytes || bytes <= 0) return '-';
+                    if (bytes < 1024) return `${bytes}B`;
+                    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+                    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+                };
+
+                const rows = dexbotProcs.map((p: any) => ({
+                    pid: String(p?.pid || '-'),
+                    name: String(p?.name || '-'),
+                    status: String(p?.pm2_env?.status || '-'),
+                    uptime: fmtUptime(p),
+                    mem: fmtMem(p),
+                }));
+
+                const nameWidth = Math.max(...rows.map(r => r.name.length), 4);
+                const statusWidth = Math.max(...rows.map(r => r.status.length), 6);
+                const header = `${'PID'.padEnd(8)} ${'NAME'.padEnd(nameWidth)} ${'STATUS'.padEnd(statusWidth)} ${'UPTIME'.padEnd(12)} ${'MEMORY'}`;
+                console.log(header);
+                console.log('-'.repeat(header.length));
+                for (const r of rows) {
+                    console.log(`${r.pid.padEnd(8)} ${r.name.padEnd(nameWidth)} ${r.status.padEnd(statusWidth)} ${r.uptime.padEnd(12)} ${r.mem}`);
+                }
+            } catch (err: any) {
+                const msg = String(err?.message || err || '');
+                if (msg.includes('ENOENT') || msg.includes('not found') || msg.includes('not installed')) {
+                    console.log('PM2 is not installed or not available.');
+                } else {
+                    console.log('No DEXBot2 processes running.');
+                }
+            }
+            process.exit(0);
             return true;
         }
         default:

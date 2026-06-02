@@ -207,6 +207,9 @@ node dexbot reset {all|<bot-name>}
 # Disable a bot in config
 node dexbot disable {all|<bot-name>}
 
+# Show runtime status (unlock monolithic/isolated or PM2)
+node dexbot status
+
 # Analyze persisted order grids in profiles/orders/
 node dexbot order
 
@@ -225,8 +228,8 @@ node pm2
 # Start a specific bot
 node pm2 <bot-name>
 
-# View status and resource usage
-pm2 status
+# View status and resource usage (auto-detects PM2 or unlock runtime)
+node dexbot status
 
 # View real-time logs
 pm2 logs [<bot-name>]
