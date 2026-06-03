@@ -140,7 +140,7 @@ File: <path>
 - `accounting.ts` - Fee accounting and fund tracking
 - `sync_engine.ts` - Blockchain synchronization
 - `processed_fill_store.ts` - Processed fill dedupe persistence and batching
-- `startup_reconcile.ts` - Startup order reconciliation
+- `grid_reconcile.ts` - Startup grid reconciliation
 - `runner.ts` - Order execution runner
 - `async_lock.ts` - Concurrency control
 - `logger.ts` - Order logging

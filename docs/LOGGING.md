@@ -73,7 +73,7 @@ The logging system uses a **semi-centralized** (hybrid) architecture:
 - ✅ **Data Flow** - All calls → Logger → console.log
 
 **Distributed:**
-- ⚠️ **Log Call Sites** - 161+ calls across 8 modules (strategy, manager, dexbot_class, accounting, sync_engine, startup_reconcile, utils, runner)
+- ⚠️ **Log Call Sites** - 161+ calls across 8 modules (strategy, manager, dexbot_class, accounting, sync_engine, grid_reconcile, utils, runner)
 
 ### Why This Design?
 
@@ -460,7 +460,7 @@ logger.log('[FUND] available: 100.50000000', 'debug')  // ✓ LOGGED (change det
 - `modules/order/manager.ts` - 20 logger.log() calls
 - `modules/dexbot_class.ts` - 45 logger.log() calls
 - `modules/order/accounting.ts` - 8 logger.log() calls
-- `modules/order/startup_reconcile.ts` - 37 logger.log() calls
+- `modules/order/grid_reconcile.ts` - 37 logger.log() calls
 - `modules/order/utils/` - 8 logger.log() calls
 - `modules/order/runner.ts` - 1 logger.log() call
 - All test files - All compatible

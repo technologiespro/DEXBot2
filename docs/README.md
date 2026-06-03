@@ -2,7 +2,7 @@
 
 This directory contains the comprehensive technical documentation for the DEXBot2 trading bot. It is designed to guide developers from high-level architecture down to the nuances of fund accounting and state management.
 
-**Version context:** v0.7.7 is the current working version. This release adds default background daemon mode with crash restart, auto-update for the monolithic path, per-bot log files, MPA `debtOnly` flag, and CLI simplification.
+**Version context:** v0.7.11 is the current working version. This release closes COW grid-integrity windows, hardens uncertainty-recovery, defends against foreign credential daemons, and adds CLI polish (`node dexbot clear`, plural/singular aliases).
 
 ---
 
@@ -158,5 +158,5 @@ While these docs explain the *why*, the *how* lives in the code. Key source modu
 - **`modules/order/utils/order.ts`**: Order state predicates, grid indexing, reconciliation helpers, delta building, index utilities
 - **`modules/order/utils/validate.ts`**: Order validation, grid reconciliation, COW action building
 - **`modules/order/utils/system.ts`**: System utilities, price derivation, fill deduplication
-- **`modules/order/startup_reconcile.ts`**: Startup grid reconciliation and offline fill detection
+- **`modules/order/grid_reconcile.ts`**: Startup grid reconciliation and offline fill detection
 - **`modules/credential_policy.ts`**: Signing policy validation and operation allowlists

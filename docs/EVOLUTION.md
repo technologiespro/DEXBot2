@@ -8,7 +8,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 - **Project Inception**: December 2, 2025
 - **Growth Phase**: 1,485 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
-- **Stability**: Progression from manual testing to a suite of 190 automated test files
+- **Stability**: Progression from manual testing to a suite of 208 automated test files
 - **Releases**: 27 tagged releases (v0.1.0 to v0.7.11)
 
 ---
@@ -53,7 +53,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **May 21–22**: Shared AMA strategy with market adapter runtime, Kalman stability patch, adapter packaging consolidation, documentation refresh. Released v0.7.1–v0.7.4.
 
-**May 23–25**: Replaced `btsdex` npm dependency with native BitShares integration, codified zero-dependency policy, completed full TypeScript migration (48K+ lines, 173 tests). Released v0.7.5.
+**May 23–25**: Replaced `btsdex` npm dependency with native BitShares integration, codified zero-dependency policy, completed full TypeScript migration (48K+ lines, 173 tests → 184 by v0.7.11). Released v0.7.5.
 
 **May 26–28**: Overhauled fill detection (direct-notice dispatch, instance-based cursor, subscription reconnect), BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening (private-key removal, memory zeroing, bootstrap leak fix).
 
@@ -80,7 +80,7 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 ## Version History
 
 ### v0.7.4 → v0.7.5 (93 commits)
-Removal of all external runtime dependencies and full TypeScript migration (48K+ lines, 173 tests). Native BitShares integration replaces `btsdex`, fill detection overhaul with direct-notice dispatch, BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening.
+Removal of all external runtime dependencies and full TypeScript migration (48K+ lines, 173 tests → 184+ by v0.7.11). Native BitShares integration replaces `btsdex`, fill detection overhaul with direct-notice dispatch, BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening.
 
 ### v0.7.5 → v0.7.6 (5 commits)
 Unlock-start launcher hardening (signal handler cleanup, polling guards), deprecated legacy migration code removal, broken reference fixes, 14-file documentation sweep.
@@ -140,7 +140,7 @@ Core order/fund management, documentation, scripts & tooling.
 
 ## Development Statistics
 
-190 automated tests (all TypeScript), 27 tagged releases. See **Version History** for commit breakdown by release.
+208+ automated tests (all TypeScript), 27 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -159,7 +159,7 @@ Core order/fund management, documentation, scripts & tooling.
 
 ## Documentation & Testing
 
-Evolved from a basic README to a comprehensive framework (20+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 180-file suite covering unit, integration, simulation, and COW architectural guard tests.
+Evolved from a basic README to a comprehensive framework (20+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 200+ file suite covering unit, integration, simulation, and COW architectural guard tests.
 
 ---
 

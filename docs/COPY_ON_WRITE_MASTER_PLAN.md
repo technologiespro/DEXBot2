@@ -415,7 +415,7 @@ NEW FILL ARRIVES
 - `modules/order/manager.ts` - Added COW methods, immutable master (Object.freeze), version tracking
 - `modules/dexbot_class.ts` - Wired COW broadcast, removed legacy rollback
 - `modules/order/sync_engine.ts` - Uses `_applyOrderUpdate` (lock-free) for all sync paths
-- `modules/order/startup_reconcile.ts` - Uses `_applySync` (lock-free) when inside `_gridLock`
+- `modules/order/grid_reconcile.ts` - Uses `_applySync` (lock-free) when inside `_gridLock`
 - `modules/order/utils/system.ts` - Migrated `applyGridDivergenceCorrections` to full COW pattern
 - `modules/order/grid.ts` - Migrated `updateGridFromBlockchainSnapshot` to return COW result instead of modifying master directly
 
@@ -525,7 +525,7 @@ Run these tests before promotion:
 
 2. **Atomic Transaction Semantics:** Large boundary shifts (>5 slots) are inherently safe because the COW pattern only commits after successful blockchain confirmation. If market volatility causes rapid shifts during planning, the working grid is simply discarded and replanning occurs on the next cycle.
 
-3. **Resync on Error:** If any blockchain action fails (e.g., "Insufficient funds"), the bot discards the working grid and triggers `startup_reconcile.ts` for a fresh blockchain sync.
+3. **Resync on Error:** If any blockchain action fails (e.g., "Insufficient funds"), the bot discards the working grid and triggers `grid_reconcile.ts` for a fresh blockchain sync.
 
 ## Backward Compatibility
 

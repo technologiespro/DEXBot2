@@ -226,9 +226,6 @@ node pm2
 # Start a specific bot
 node pm2 <bot-name>
 
-# View status and resource usage (auto-detects PM2 or unlock runtime)
-node dexbot status
-
 # View real-time logs
 pm2 logs [<bot-name>]
 

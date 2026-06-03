@@ -628,7 +628,7 @@ for (const partial of buyPartials) {
 **Eliminates duplications in**:
 - `strategy.ts::_getPartialOrdersByType()`
 - `grid.ts::compareGrids()`
-- `startup_reconcile.ts::selectPartialSlots()`
+- `grid_reconcile.ts::selectPartialSlots()`
 
 #### `validateAssetPrecisions(assets)`
 ```javascript
