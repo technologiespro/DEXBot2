@@ -39,6 +39,7 @@ let lastConnectionError = null;
 let intentionalDisconnect = false;
 let nodeManager = null;
 let nodeConfig = null;
+let nodeManagerEnabled = false;
 let startupNodeRefreshPromise = null;
 let failoverAssessmentPromise = null;
 let reconnectInProgress = false;
@@ -74,121 +75,143 @@ async function notifyReconnectCallbacks() {
     }
 }
 
-// Native client references
+// Lazy initialization guard
+let _initialized = false;
+
+// Native client references (lazily initialized)
 let _nativeClient = null;
 let _subscriptionManager = null;
 let _nativeBitSharesProxy = null;
+let _resolvers = null;
 
-const native = require('./bitshares-native');
-const { createSubscriptionManager, createResolvers } = native;
-_nativeClient = native.createChainClient({
-    onStatusChange: handleConnectionStatus,
-    rpcTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS,
-    connectTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS,
-});
-_subscriptionManager = createSubscriptionManager(_nativeClient);
-_nativeClient.onReconnect = async () => {
-    await _subscriptionManager.onReconnect();
-    await notifyReconnectCallbacks();
-};
-const _resolvers = createResolvers(_nativeClient);
+function ensureInitialized() {
+    if (_initialized) return;
+    _initialized = true;
 
-_nativeBitSharesProxy = {
-    get connect() {
-        return (servers, autoreconnect) => {
-            if (Array.isArray(servers)) _nativeClient.setNodes(servers);
-            return _nativeClient.connect();
-        };
-    },
-    get disconnect() { return () => _nativeClient.disconnect(); },
-    get node() { return _nativeClient.getNodes(); },
-    set node(v) { _nativeClient.setNodes(Array.isArray(v) ? v : []); },
-    get autoreconnect() { return true; },
-    set autoreconnect(v) {},
-    get connectPromise() { return undefined; },
-    set connectPromise(v) {},
-    get subscribe() {
-        return (eventType, callback, accountName) => {
-            if (eventType === 'account') {
-                return _subscriptionManager.subscribe(accountName, callback);
-            }
-            if (_nativeClient && _nativeClient.subscribe) {
-                return _nativeClient.subscribe(eventType, callback, accountName);
-            }
-        };
-    },
-    get unsubscribe() {
-        return (eventType, callback, accountName) => {
-            if (eventType === 'account') {
-                return _subscriptionManager.unsubscribe(accountName, callback);
-            }
-            if (_nativeClient && _nativeClient.unsubscribe) {
-                return _nativeClient.unsubscribe(eventType, callback, accountName);
-            }
-        };
-    },
-    get assets() {
-        return new Proxy({}, {
-            get(_target, prop) {
-                if (typeof prop !== 'string') return undefined;
-                return _resolvers.resolveAsset(prop);
-            },
-        });
-    },
-    get accounts() {
-        return new Proxy({}, {
-            get(_target, prop) {
-                if (typeof prop !== 'string') return undefined;
-                return _resolvers.resolveAccount(prop).then((acc) => acc || null);
-            },
-        });
-    },
-    get chain() { return { get coreAsset() { return _nativeClient.getCoreAsset(); } }; },
-    get db() {
-        return new Proxy(_nativeClient.db, {
-            get(target, prop) {
-                if (typeof target[prop] === 'function') {
-                    return (...args) => target[prop](...args);
-                }
-                return (...args) => target.call(prop, args);
-            },
-        });
-    },
-    get history() {
-        return new Proxy(_nativeClient.history, {
-            get(target, prop) {
-                if (typeof target[prop] === 'function') {
-                    return (...args) => target[prop](...args);
-                }
-                return (...args) => target.call(prop, args);
-            },
-        });
-    },
-};
-
-const settings = readGeneralSettings({
-    fallback: null,
-    onError: (err) => {
-        console.warn('[NodeManager] Config load failed, continuing with defaults:', err.message);
-    },
-});
-
-const nodeSettings = settings?.NODES;
-const configuredNodes = Array.isArray(nodeSettings?.list)
-    ? nodeSettings.list.filter((node) => typeof node === 'string' && node.trim())
-    : [];
-const nodeManagerEnabled = nodeSettings?.enabled ?? NODE_MANAGEMENT.DEFAULT_ENABLED;
-
-if (nodeManagerEnabled) {
-    nodeConfig = {
-        ...nodeSettings,
-        enabled: nodeManagerEnabled,
-        list: configuredNodes.length > 0 ? configuredNodes : NODE_MANAGEMENT.DEFAULT_NODES,
+    const native = require('./bitshares-native');
+    const { createSubscriptionManager, createResolvers } = native;
+    _nativeClient = native.createChainClient({
+        onStatusChange: handleConnectionStatus,
+        rpcTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS,
+        connectTimeoutMs: TIMING.CONNECTION_TIMEOUT_MS,
+    });
+    _subscriptionManager = createSubscriptionManager(_nativeClient);
+    _nativeClient.onReconnect = async () => {
+        await _subscriptionManager.onReconnect();
+        await notifyReconnectCallbacks();
     };
-    nodeManager = new NodeManager(nodeConfig);
-    _nativeClient.setNodes(Array.isArray(nodeConfig.list) ? nodeConfig.list.slice() : nodeConfig.list);
-    console.log(`[NodeManager] Loaded config for ${nodeConfig.list.length} nodes`);
+    _resolvers = createResolvers(_nativeClient);
+
+    _nativeBitSharesProxy = {
+        get connect() {
+            return (servers, autoreconnect) => {
+                if (Array.isArray(servers)) _nativeClient.setNodes(servers);
+                return _nativeClient.connect();
+            };
+        },
+        get disconnect() { return () => _nativeClient.disconnect(); },
+        get node() { return _nativeClient.getNodes(); },
+        set node(v) { _nativeClient.setNodes(Array.isArray(v) ? v : []); },
+        get autoreconnect() { return true; },
+        set autoreconnect(v) {},
+        get connectPromise() { return undefined; },
+        set connectPromise(v) {},
+        get subscribe() {
+            return (eventType, callback, accountName) => {
+                if (eventType === 'account') {
+                    return _subscriptionManager.subscribe(accountName, callback);
+                }
+                if (_nativeClient && _nativeClient.subscribe) {
+                    return _nativeClient.subscribe(eventType, callback, accountName);
+                }
+            };
+        },
+        get unsubscribe() {
+            return (eventType, callback, accountName) => {
+                if (eventType === 'account') {
+                    return _subscriptionManager.unsubscribe(accountName, callback);
+                }
+                if (_nativeClient && _nativeClient.unsubscribe) {
+                    return _nativeClient.unsubscribe(eventType, callback, accountName);
+                }
+            };
+        },
+        get assets() {
+            return new Proxy({}, {
+                get(_target, prop) {
+                    if (typeof prop !== 'string') return undefined;
+                    return _resolvers.resolveAsset(prop);
+                },
+            });
+        },
+        get accounts() {
+            return new Proxy({}, {
+                get(_target, prop) {
+                    if (typeof prop !== 'string') return undefined;
+                    return _resolvers.resolveAccount(prop).then((acc) => acc || null);
+                },
+            });
+        },
+        get chain() { return { get coreAsset() { return _nativeClient.getCoreAsset(); } }; },
+        get db() {
+            return new Proxy(_nativeClient.db, {
+                get(target, prop) {
+                    if (typeof target[prop] === 'function') {
+                        return (...args) => target[prop](...args);
+                    }
+                    return (...args) => target.call(prop, args);
+                },
+            });
+        },
+        get history() {
+            return new Proxy(_nativeClient.history, {
+                get(target, prop) {
+                    if (typeof target[prop] === 'function') {
+                        return (...args) => target[prop](...args);
+                    }
+                    return (...args) => target.call(prop, args);
+                },
+            });
+        },
+    };
+
+    const settings = readGeneralSettings({
+        fallback: null,
+        onError: (err) => {
+            console.warn('[NodeManager] Config load failed, continuing with defaults:', err.message);
+        },
+    });
+
+    const nodeSettings = settings?.NODES;
+    const configuredNodes = Array.isArray(nodeSettings?.list)
+        ? nodeSettings.list.filter((node) => typeof node === 'string' && node.trim())
+        : [];
+    nodeManagerEnabled = nodeSettings?.enabled ?? NODE_MANAGEMENT.DEFAULT_ENABLED;
+
+    if (nodeManagerEnabled) {
+        nodeConfig = {
+            ...nodeSettings,
+            enabled: nodeManagerEnabled,
+            list: configuredNodes.length > 0 ? configuredNodes : NODE_MANAGEMENT.DEFAULT_NODES,
+        };
+        nodeManager = new NodeManager(nodeConfig);
+        _nativeClient.setNodes(Array.isArray(nodeConfig.list) ? nodeConfig.list.slice() : nodeConfig.list);
+        console.log(`[NodeManager] Loaded config for ${nodeConfig.list.length} nodes`);
+    }
 }
+
+// BitShares proxy that auto-initializes on first property access
+const _lazyBitShares = new Proxy({}, {
+    get(_target, prop) {
+        ensureInitialized();
+        return _nativeBitSharesProxy[prop];
+    },
+    set(_target, prop, value) {
+        ensureInitialized();
+        _nativeBitSharesProxy[prop] = value;
+        return true;
+    },
+});
 
 /**
  * Suppress or restore connection log output.
@@ -206,6 +229,7 @@ function setSuppressConnectionLog(suppress) {
  * @returns {Promise<boolean>} True if connection succeeded
  */
 async function restartBitsharesConnection(serverList, reason = 'startup') {
+    ensureInitialized();
     if (reconnectInProgress) return false;
     const servers = Array.isArray(serverList)
         ? serverList.filter((server) => typeof server === 'string' && server.trim())
@@ -251,6 +275,7 @@ async function restartBitsharesConnection(serverList, reason = 'startup') {
  * @private
  */
 async function assessFailover(reason = 'status change') {
+    ensureInitialized();
     if (!nodeManager || nodeConfig?.healthCheck?.enabled === false) return false;
     if (reconnectInProgress) return false;
     if (failoverAssessmentPromise) return failoverAssessmentPromise;
@@ -304,6 +329,7 @@ async function assessFailover(reason = 'status change') {
  * @returns {string[]} Array of node URLs
  */
 function getConfiguredOrDefaultNodes() {
+    ensureInitialized();
     return Array.isArray(nodeConfig?.list) && nodeConfig.list.length > 0
         ? nodeConfig.list
         : NODE_MANAGEMENT.DEFAULT_NODES;
@@ -349,6 +375,7 @@ function handleConnectionStatus(status) {
  * @returns {Promise<string[]>} Array of selected node URLs
  */
 async function refreshStartupNodeServers(reason = 'startup') {
+    ensureInitialized();
     if (!nodeManager || !nodeConfig?.list?.length) {
         return Array.isArray(nodeConfig?.list) ? nodeConfig.list : [];
     }
@@ -398,6 +425,7 @@ async function refreshStartupNodeServers(reason = 'startup') {
  * @throws {Error} If connection times out
  */
 async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS, options = {}) {
+    ensureInitialized();
     const start = Date.now();
     const initialDelayMs = Number.isFinite(options.retryDelayMs)
         ? Math.max(0, options.retryDelayMs)
@@ -442,6 +470,7 @@ async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS, option
  * @returns {Promise<Object>} Account client with initPromise, newTx(), broadcast()
  */
 async function createAccountClient(accountName, privateKey) {
+    ensureInitialized();
     await waitForConnected(TIMING.CONNECTION_TIMEOUT_MS);
 
     const { createSigningClient } = require('./bitshares-native');
@@ -454,6 +483,7 @@ async function createAccountClient(accountName, privateKey) {
  * @returns {string} Status string from native client
  */
 function getConnectionStatus() {
+    ensureInitialized();
     return _nativeClient.getStatus();
 }
 
@@ -462,6 +492,7 @@ function getConnectionStatus() {
  * @returns {Promise<void>}
  */
 async function disconnectClient() {
+    ensureInitialized();
     intentionalDisconnect = true;
     connected = false;
     try {
@@ -484,6 +515,7 @@ async function disconnectClient() {
  * @returns {Promise<boolean>} True if reconnection succeeded
  */
 async function reconnectForCycle(reason = 'adapter-cycle') {
+    ensureInitialized();
     const nodes = nodeManager && nodeConfig?.healthCheck?.enabled !== false
         ? nodeManager.getHealthyNodes()
         : [];
@@ -492,22 +524,23 @@ async function reconnectForCycle(reason = 'adapter-cycle') {
 }
 
 export = {
-    BitShares: _nativeBitSharesProxy,
+    BitShares: _lazyBitShares,
     createAccountClient,
     waitForConnected,
     getConnectionStatus,
     disconnectClient,
     reconnectForCycle,
     setSuppressConnectionLog,
-    getNodeManager: () => nodeManager,
-    getNodeStats: () => nodeManager?.getStats(),
-    getNodeSummary: () => nodeManager?.getSummary(),
+    getNodeManager: () => { ensureInitialized(); return nodeManager; },
+    getNodeStats: () => { ensureInitialized(); return nodeManager?.getStats(); },
+    getNodeSummary: () => { ensureInitialized(); return nodeManager?.getSummary(); },
     getConnectionError: () => lastConnectionError,
     onReconnect,
     removeOnReconnect,
     _assessFailover: assessFailover,
     _internal: {
         get connected() {
+            ensureInitialized();
             return connected;
         },
     },
