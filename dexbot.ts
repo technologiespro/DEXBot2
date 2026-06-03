@@ -35,7 +35,7 @@
  * ===============================================================================
  *
  * TRADING OPERATIONS:
- *   node dexbot start <bot-name>     - Start single bot directly (live trading)
+ *   node dexbot test <bot-name>      - Test-run single bot (live trading)
  *   node dexbot drystart <bot-name>  - Start bot in dry-run mode (no transactions)
  *
  * 🛠️ BOT MANAGEMENT:
@@ -111,12 +111,12 @@ const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 
 
-const CLI_COMMANDS = ['start', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order', 'clear', 'status', 'whitelist'];
-const COMMAND_ALIASES: Record<string, string> = { orders: 'order', key: 'keys', bot: 'bots', white: 'whitelist', stat: 'status' };
+const CLI_COMMANDS = ['start', 'test', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order', 'clear', 'status', 'whitelist', 'unlock'];
+const COMMAND_ALIASES: Record<string, string> = { orders: 'order', key: 'keys', bot: 'bots', white: 'whitelist', stat: 'status', start: 'test' };
 const CLI_HELP_FLAGS = ['-h', '--help'];
 const CLI_EXAMPLES_FLAG = '--cli-examples';
 const CLI_EXAMPLES = [
-    { title: 'Start a bot from the tracked config', command: 'dexbot start bot-name', notes: 'Targets the named entry in profiles/bots.json.' },
+    { title: 'Test-run a bot from the tracked config', command: 'dexbot test bot-name', notes: 'Targets the named entry in profiles/bots.json.' },
     { title: 'Dry-run a bot without broadcasting', command: 'dexbot drystart bot-name', notes: 'Forces the run into dry-run mode even if the stored config was live.' },
     { title: 'Disable a bot in config', command: 'dexbot disable bot-name', notes: 'Marks the bot inactive in config.' },
     { title: 'Reset all active bot grids', command: 'dexbot reset all', notes: 'Triggers full grid regeneration for every active bot.' },
@@ -137,8 +137,9 @@ const cliArgs = process.argv.slice(2);
 function printCLIUsage() {
     console.log('Usage: dexbot [command] [bot-name]');
     console.log('Commands:');
-    console.log('  start <bot>       Start the named bot using the tracked config.');
-    console.log('  drystart <bot>    Same as start but forces dry-run execution.');
+    console.log('  test <bot>        Test-run the named bot (one-shot, live trading).');
+    console.log('  start <bot>       Alias for test (legacy).');
+    console.log('  drystart <bot>    Same as test but forces dry-run execution.');
     console.log('  reset all         Trigger grid resets for all active bots.');
     console.log('  reset <bot>       Trigger a grid reset (auto-reloads if running, or applies on next start).');
     console.log('  disable all       Mark all bots inactive in config.');
@@ -150,6 +151,7 @@ function printCLIUsage() {
     console.log('  update            Update DEXBot2 from the repository and restart active bots.');
     console.log('  order             Analyze persisted order grids in profiles/orders/ (spread, increment, funds).');
     console.log('  status, stat      Show bot runtime status (unlock monolithic/isolated or PM2).');
+    console.log('  unlock            Run credential daemon + bot (equivalent to `node unlock`).');
     console.log('  whitelist, white  Generate market adapter whitelist from AMA bot configs.');
     console.log('  clear             Remove all log files from profiles/logs/ (runs scripts/clear-logs.sh).');
     console.log('Options:');
@@ -291,7 +293,7 @@ function printStartLauncherHeader({ botName = null, dryRun = false } = {}) {
 }
 
 function printStartLauncherSuccess({ botName = null, dryRun = false } = {}) {
-    const command = dryRun ? 'drystart' : 'start';
+    const command = dryRun ? 'drystart' : 'test';
     const target = botName ? ` ${botName}` : '';
     console.log();
     console.log('='.repeat(50));
@@ -593,7 +595,7 @@ async function resetBotByName(botName: string | null | undefined) {
     console.log();
     console.log('Action complete.');
     console.log('- If the bot is running (CLI or PM2), it will detect the trigger and reset automatically.');
-    console.log('- If the bot is stopped, the grid will be regenerated the next time you run `dexbot start`.');
+    console.log('- If the bot is stopped, the grid will be regenerated the next time you run `dexbot test`.');
 }
 
 /**
@@ -664,7 +666,7 @@ async function handleCLICommands() {
         process.exit(1);
     }
     switch (command) {
-        case 'start':
+        case 'test':
             await startBotByName(target, { dryRun: false });
             return true;
         case 'drystart':
@@ -752,6 +754,17 @@ async function handleCLICommands() {
                 console.error(`order: ${result.error.message}`);
                 process.exit(1);
             }
+            process.exit(result.status ?? 0);
+            return true;
+        }
+        case 'unlock': {
+            const { spawnSync } = require('child_process');
+            const unlockScript = path.join(ROOT, 'unlock.js');
+            const unlockArgs = [unlockScript, ...cliArgs.slice(1)];
+            const result = spawnSync(process.execPath, unlockArgs, {
+                cwd: ROOT,
+                stdio: 'inherit',
+            });
             process.exit(result.status ?? 0);
             return true;
         }

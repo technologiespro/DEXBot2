@@ -164,86 +164,44 @@ Global settings via `node dexbot bot`, stored in `profiles/general.settings.json
 
 ## 🎯 Zero-Dependency Process Management
 
-`node unlock` is the recommended production runtime, which runs all bots in a single process, credential and market_adapter in a separate one.
+`node unlock` is the recommended production runtime — all bots in one process, credential and market_adapter in separate processes.
 
 ```bash
-# Start all active bots
-node unlock              # Standard runtime
-node unlock --isolated   # Per-bot isolation
-
-# Start a specific bot
-node unlock <bot-name>
-node unlock --isolated <bot-name>
-
-# Runtime control
-node unlock status              # Show status of all running processes
-node unlock stop <bot-name>     # Stop a specific bot
-node unlock restart <bot-name>  # Restart a specific bot
-node unlock stop-all            # Stop all running bots
-node unlock restart-all         # Restart all running bots
-node unlock delete              # Shut down all bots and clean up the runtime
+node unlock [<bot-name>]        # Start (default runtime)
+node unlock stat                # Runtime status
+node unlock stop <bot>          # Stop a specific bot
+node unlock stop-all            # Stop all bots
+node unlock restart <bot>       # Restart a specific bot
+node unlock restart-all         # Restart all bots
+node unlock delete              # Shut down and clean up
 ```
 
 ## 🛠️ Bot Management
 
 ```bash
-# Set up master password and keyring
-node dexbot key
-
-# Create and configure bots
-node dexbot bot
-
-# Update to the latest version
-node dexbot update
-
-# Start all active bots directly (temporary testing only)
-node dexbot start
-
-# Reset grid (regenerate orders)
-node dexbot reset {all|<bot-name>}
-
-# Disable a bot in config
-node dexbot disable {all|<bot-name>}
-
-# Show runtime status (unlock monolithic/isolated or PM2)
-node dexbot stat
-
-# Analyze persisted order grids in profiles/orders/
-node dexbot order
-
-# Clear all log files in profiles/logs/
-node dexbot clear
-
-# Generate market adapter whitelist from AMA bot configs
-node dexbot white
+node dexbot key                 # Master password/keyring
+node dexbot bot                 # Interactive bot configurator
+node dexbot white               # Market adapter whitelist
+node dexbot test [<bot>]        # Test-run a bot (one-shot, live)
+node dexbot unlock [<cmd>]      # Alias for node unlock
+node dexbot reset {all|<bot>}   # Regenerate grid
+node dexbot disable {all|<bot>} # Disable bot in config
+node dexbot stat                # Runtime status (unlock or PM2)
+node dexbot order               # Analyze order grids
+node dexbot update              # Update DEXBot2
+node dexbot clear               # Clear log files
 ```
 
 ## 🎯 PM2 Process Management
 
-PM2 is optional — `node unlock` is the native solution. Run `node pm2` to start, which handles connection, authentication, and PM2 startup automatically.
+PM2 is optional — `node unlock` is the native solution.
 
 ```bash
-# Start all active bots with PM2
-node pm2
-
-# Start a specific bot
-node pm2 <bot-name>
-
-# View real-time logs
-pm2 logs [<bot-name>]
-
-# Safe restart path for DEXBot-managed PM2 apps
-node pm2 restart {all|<bot-name>|dexbot-cred}
-
-# Stop processes
-pm2 stop {all|<bot-name>}
-
-# Delete processes
-pm2 delete {all|<bot-name>}
-
-# Stop/delete only dexbot processes (via wrapper)
-node pm2 stop {all|<bot-name>}
-node pm2 delete {all|<bot-name>}
+node pm2 [<bot-name>]                    # Start with PM2
+node pm2 restart {all|<bot>|dexbot-cred} # Safe restart
+node pm2 stop {all|<bot>}                # Stop (via wrapper)
+node pm2 delete {all|<bot>}              # Delete (via wrapper)
+pm2 logs [<bot-name>]                    # Real-time logs
 ```
 
 Always use `node pm2 restart` instead of raw `pm2 restart all` — the wrapper safely handles the credential daemon. If the credential daemon stops, rerun `node pm2`.

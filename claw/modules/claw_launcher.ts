@@ -28,7 +28,7 @@ async function launcherStart(botName: string | null, options: Record<string, any
   const ROOT = normalizeRoot(options);
   const dexbotPath = resolveRuntimeScript(ROOT, 'dexbot.js');
 
-  const args = ['start'];
+  const args = ['test'];
   if (botName) {
     args.push(botName);
   }
@@ -45,7 +45,7 @@ async function launcherStart(botName: string | null, options: Record<string, any
     started: true,
     botName: botName || 'default',
     pid: child.pid,
-    command: `node dexbot start ${botName || '(default)'}`,
+    command: `node dexbot test ${botName || '(default)'}`,
   };
 }
 

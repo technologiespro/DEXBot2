@@ -15,8 +15,8 @@
  *   node unlock --claw-only
  *   node unlock --isolated
  *   node unlock --isolated <botName>
- *   node unlock status
- *   node unlock stop
+ *   node unlock status, stat
+ *   node unlock stop <botName>
  *   node unlock restart <botName>
  *   node unlock stop-all
  *   node unlock restart-all
@@ -222,7 +222,7 @@ function resolveBotEntryForName(botName: string) {
 }
 
 function buildDexbotStartArgs(botName: string | null = null) {
-    const scriptArgs = ['start'];
+    const scriptArgs = ['test'];
     if (botName) scriptArgs.push(botName);
     return buildRuntimeScriptArgs({
         codeRoot: CODE_ROOT,
@@ -1509,17 +1509,17 @@ function readLiveMonolithicPid(): { pid: number; stale: boolean } {
 }
 
 async function handleControl({ cmd, target }: { cmd: string; target?: string }) {
-    const effectiveCmd = cmd === 'shutdown' ? 'delete' : cmd;
+    const effectiveCmd = cmd === 'shutdown' ? 'delete' : cmd === 'stat' ? 'status' : cmd;
     const actionLabel = getControlActionLabel(cmd);
 
-    if (effectiveCmd === 'restart' && !target) {
-        console.error('Usage: node unlock restart <botName> or node unlock restart-all');
+    if ((effectiveCmd === 'restart' || effectiveCmd === 'stop') && !target) {
+        console.error(`Usage: node unlock ${effectiveCmd === 'restart' ? 'restart <botName> or node unlock restart-all' : 'stop <botName>'}`);
         process.exitCode = 1;
         return;
     }
 
     // Try monolithic PID file first for whole-runtime controls.
-    if ((effectiveCmd === 'stop' || effectiveCmd === 'stop-all' || effectiveCmd === 'delete' || effectiveCmd === 'status' || effectiveCmd === 'restart-all') && !target) {
+    if ((effectiveCmd === 'stop-all' || effectiveCmd === 'delete' || effectiveCmd === 'status' || effectiveCmd === 'restart-all') && !target) {
         const { pid, stale } = readLiveMonolithicPid();
 
         if (pid > 0) {

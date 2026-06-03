@@ -1,4 +1,4 @@
-const CONTROL_COMMANDS = new Set(['status', 'stop', 'delete', 'restart', 'stop-all', 'restart-all', 'shutdown']);
+const CONTROL_COMMANDS = new Set(['status', 'stat', 'stop', 'delete', 'restart', 'stop-all', 'restart-all', 'shutdown']);
 
 function findFirstPositionalArg(args: string[]): string | null {
     return args.find((arg: string) => !arg.startsWith('-') && arg !== 'claw-only' && !CONTROL_COMMANDS.has(arg)) || null;

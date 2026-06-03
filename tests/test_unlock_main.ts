@@ -89,7 +89,7 @@ async function runAllBotsTest() {
     assert.strictEqual(state.calls.length, 1, 'launcher should spawn exactly one bot process');
     assert.deepStrictEqual(
         state.calls[0].args,
-        ['--import', 'tsx', path.resolve(__dirname, '..', 'dexbot.ts'), 'start'],
+        ['--import', 'tsx', path.resolve(__dirname, '..', 'dexbot.ts'), 'test'],
         'default unlock should launch all bots'
     );
 }
@@ -102,7 +102,7 @@ async function runSingleBotTest() {
     assert.strictEqual(state.stopCount, 1, 'launcher should clean up its owned daemon');
     assert.deepStrictEqual(
         state.calls[0].args,
-        ['--import', 'tsx', path.resolve(__dirname, '..', 'dexbot.ts'), 'start', 'XRP-BTS'],
+        ['--import', 'tsx', path.resolve(__dirname, '..', 'dexbot.ts'), 'test', 'XRP-BTS'],
         'single-bot unlock should pass the bot name through'
     );
 }

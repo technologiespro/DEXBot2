@@ -292,5 +292,5 @@ tail -f profiles/logs/update.log
 **Run a specific bot dry-run from the CLI:**
 ```bash
 # Force a clean start for 'my-bot'
-bash scripts/clear-orders.sh && BOT_NAME=my-bot node dexbot start
+bash scripts/clear-orders.sh && BOT_NAME=my-bot node dexbot test
 ```
