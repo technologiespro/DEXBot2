@@ -235,7 +235,7 @@ need a reset to move to the new asymmetric range and offset placement price.
 Range scaling is enabled by whitelist:
 
 ```bash
-npm run market-adapter:whitelist
+node dexbot white
 ```
 
 To leave range scaling disabled while allowing AMA pricing:

@@ -123,7 +123,7 @@ market volatility instead of using an unnecessarily wide range.
 5. Generate the market-adapter whitelist:
 
    ```bash
-   npm run market-adapter:whitelist
+   node dexbot white
    ```
 
 6. Start DEXBot2 with `node unlock` (or `node pm2` for PM2).
@@ -206,13 +206,16 @@ node dexbot reset {all|<bot-name>}
 node dexbot disable {all|<bot-name>}
 
 # Show runtime status (unlock monolithic/isolated or PM2)
-node dexbot status
+node dexbot stat
 
 # Analyze persisted order grids in profiles/orders/
 node dexbot order
 
 # Clear all log files in profiles/logs/
 node dexbot clear
+
+# Generate market adapter whitelist from AMA bot configs
+node dexbot white
 ```
 
 ## 🎯 PM2 Process Management

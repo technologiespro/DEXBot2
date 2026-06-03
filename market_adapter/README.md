@@ -49,7 +49,7 @@ adapter still computes state, but live grid snapshots and recalc triggers stay
 in dry-run mode.
 
 ```bash
-npm run market-adapter:whitelist
+node dexbot white
 ```
 
 This writes `profiles/market_adapter_whitelist.json`.
@@ -197,7 +197,7 @@ Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 
 | Task | Command |
 |------|---------|
-| Generate whitelist | `npm run market-adapter:whitelist` |
+| Generate whitelist | `node dexbot white` |
 | Preview whitelist | `tsx scripts/generate_market_adapter_whitelist.ts --dry-run` |
 | Run one adapter cycle | `tsx market_adapter/market_adapter.ts --once` |
 | Run one cycle with threshold override | `tsx market_adapter/market_adapter.ts --once --deltaPercent 1.5` |
@@ -212,7 +212,7 @@ Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 ### Bot is not processed
 
 - Confirm `gridPrice` is `ama`, `ama1`, `ama2`, `ama3`, or `ama4`.
-- Regenerate the whitelist with `npm run market-adapter:whitelist`.
+- Regenerate the whitelist with `node dexbot white`.
 - Confirm the expected `botKey` exists in `profiles/market_adapter_whitelist.json`.
 - If `startPrice` is numeric, the adapter will not fetch pool/book candles for that bot. Use `startPrice` only for a fixed anchor in that case; `gridPrice` remains a separate grid setting.
 

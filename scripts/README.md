@@ -77,7 +77,7 @@ tsx scripts/validate_bots.ts
 **Purpose:** Generate `profiles/market_adapter_whitelist.json` from bots whose `gridPrice` uses AMA mode.
 ```bash
 # Rewrite the whitelist from profiles/bots.json
-npm run market-adapter:whitelist
+dexbot white
 
 # Rewrite the whitelist with dynamicWeight disabled for AMA bots
 tsx scripts/generate_market_adapter_whitelist.ts --no-dynamic-weight

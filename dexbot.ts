@@ -111,8 +111,8 @@ const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 
 
-const CLI_COMMANDS = ['start', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order', 'clear', 'status'];
-const COMMAND_ALIASES: Record<string, string> = { orders: 'order', key: 'keys', bot: 'bots' };
+const CLI_COMMANDS = ['start', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order', 'clear', 'status', 'whitelist'];
+const COMMAND_ALIASES: Record<string, string> = { orders: 'order', key: 'keys', bot: 'bots', white: 'whitelist', stat: 'status' };
 const CLI_HELP_FLAGS = ['-h', '--help'];
 const CLI_EXAMPLES_FLAG = '--cli-examples';
 const CLI_EXAMPLES = [
@@ -149,7 +149,8 @@ function printCLIUsage() {
     console.log('  pm2               Start all active bots with PM2 (authenticate + generate config + start).');
     console.log('  update            Update DEXBot2 from the repository and restart active bots.');
     console.log('  order             Analyze persisted order grids in profiles/orders/ (spread, increment, funds).');
-    console.log('  status            Show bot runtime status (unlock monolithic/isolated or PM2).');
+    console.log('  status, stat      Show bot runtime status (unlock monolithic/isolated or PM2).');
+    console.log('  whitelist, white  Generate market adapter whitelist from AMA bot configs.');
     console.log('  clear             Remove all log files from profiles/logs/ (runs scripts/clear-logs.sh).');
     console.log('Options:');
     console.log('  --cli-examples    Print curated CLI snippets.');
@@ -722,6 +723,20 @@ async function handleCLICommands() {
             await exportBotTrades(target);
             process.exit(0);
             return true;
+        case 'whitelist': {
+            const { spawnSync } = require('child_process');
+            const result = spawnSync('npm', ['run', 'market-adapter:whitelist', ...(target ? [target] : [])], {
+                cwd: ROOT,
+                stdio: 'inherit',
+                shell: true,
+            });
+            if (result.error) {
+                console.error(`whitelist: ${result.error.message}`);
+                process.exit(1);
+            }
+            process.exit(result.status ?? 0);
+            return true;
+        }
         case 'order': {
             const { spawnSync } = require('child_process');
             const scriptArgs = buildRuntimeScriptArgs({
