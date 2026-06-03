@@ -217,9 +217,15 @@ NEW FILL ARRIVES (Individual Order Fill)
 - `tests/test_cow_master_plan.ts` - 11 COW core tests
 - `tests/test_cow_commit_guards.ts` - Commit guard regression tests
 - `tests/test_cow_concurrent_fills.ts` - Concurrent fill integration tests
+- `tests/test_cow_divergence_correction.ts` - Divergence correction COW tests
+- `tests/test_cow_orchestration_fixes.ts` - COW orchestration fixes
+- `tests/test_cow_structural_resync.ts` - Structural grid resync tests
+- `tests/test_cow_static_analysis.ts` - Static analysis and invariant checks
+- `tests/test_cow_index_mutation_detection.ts` - Index mutation detection
+- `tests/test_cow_fund_validation_precision.ts` - Fund validation precision tests
+- `tests/test_cow_set_mutation_report.ts` - Set mutation report tests
 - `tests/test_sync_lock_routing.ts` - Lock routing verification tests
 - `tests/test_working_grid.ts` - WorkingGrid unit tests
-- `tests/benchmark_cow.ts` - Performance benchmarks
 
 ### Phase 6: Divergence & Cache Updates ✅
 **Critical Rule**: Divergence checks and cache function updates only execute when NO fills are pending.
@@ -407,7 +413,6 @@ NEW FILL ARRIVES
 - `tests/test_cow_concurrent_fills.ts` - Concurrent fill integration tests
 - `tests/test_cow_divergence_correction.ts` - Divergence correction COW tests
 - `tests/test_working_grid.ts` - WorkingGrid unit tests
-- `tests/benchmark_cow.ts` - Performance benchmarks
 
 ## Files Modified
 

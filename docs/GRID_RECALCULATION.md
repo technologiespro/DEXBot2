@@ -130,7 +130,7 @@ For a narrower override, set `deltaThresholdPercent` in
 
 **Parameters:**
 - `AMA_DELTA_THRESHOLD_PERCENT`: Percentage change in AMA center that triggers grid reset
-  - Default: `2%`
+  - Default: `1.25%` (in `modules/constants.ts`)
   - Range: `0.1` to `50.0` (configurable via CLI and `node dexbot bots` general settings)
   - Example: If set to `1`, the bot fully resyncs when AMA center moves ±1% from the last accepted center
 

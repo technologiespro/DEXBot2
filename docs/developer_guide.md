@@ -30,7 +30,7 @@ Follow this path through the codebase:
 2. modules/order/manager.ts                (10 min)  - Central coordinator, read constructor + _updateOrder() + _applySafeRebalanceCOW()
 3. modules/order/working_grid.ts           (5 min)   - COW working copy; read syncFromMaster() + buildDelta() + _commitWorkingGrid()
 4. modules/order/accounting.ts             (5 min)   - Fund tracking, read recalculateFunds() and resetRecoveryState()
-5. modules/order/strategy.ts               (5 min)   - Rebalancing logic, read rebalance()
+5. modules/order/strategy.ts               (5 min)   - Target grid calculation, read calculateTargetGrid()
 6. modules/order/grid.ts                   (5 min)   - Grid creation, read createOrderGrid()
 7. modules/dexbot_fill_runtime.ts          (5 min)   - Fill batch processing pipeline and replay-safe accounting
 8. modules/dexbot_maintenance_runtime.ts   (5 min)   - Sync loops, grid maintenance, trigger handling
@@ -375,7 +375,7 @@ try {
 
 ### Three-Layer Prevention System
 
-#### Layer 1: Primary Guard in `OrderManager._updateOrder()` (manager.ts:570-584)
+#### Layer 1: Primary Guard in `OrderManager._updateOrder()` (manager.ts)
 
 **The Critical Validation**:
 ```javascript
@@ -397,7 +397,7 @@ if ((order.state === ORDER_STATES.ACTIVE || order.state === ORDER_STATES.PARTIAL
 - Applies to ALL modules: grid, sync, strategy, dexbot_class
 - Auto-correction with logging provides audit trail
 
-#### Layer 2: Grid Resize Protection (grid.ts:1154)
+#### Layer 2: Grid Resize Protection (grid.ts)
 
 **Before (Vulnerable)**:
 ```javascript
@@ -411,7 +411,7 @@ manager._updateOrder({ ...order, size: newSize, state: order.state }, 'grid-resi
 
 **Why It Matters**: Preserves order's current state instead of forcing ACTIVE, preventing VIRTUAL → ACTIVE phantom creation during grid resizing.
 
-#### Layer 3: Sync Cleanup (sync_engine.ts:297-305)
+#### Layer 3: Sync Cleanup (sync_engine.ts)
 
 **Phantom Detection & Prevention**:
 ```javascript
@@ -435,13 +435,13 @@ if (!currentGridOrder?.orderId || !parsedChainOrders.has(currentGridOrder.orderI
 
 ### Additional Hardening
 
-**Strategy Module** (strategy.ts:484, 521):
+**Strategy Module** (strategy.ts):
 ```javascript
 // Only upgrade to ACTIVE if order has valid orderId
 const newState = partial.orderId ? ORDER_STATES.ACTIVE : ORDER_STATES.VIRTUAL;
 ```
 
-**Fallback Placements** (dexbot_class.ts:982):
+**Fallback Placements** (dexbot_class.ts):
 ```javascript
 const fallbackPlacements = unmetRotations.map(r => ({
     id: r.newGridId,
@@ -626,7 +626,6 @@ for (const partial of buyPartials) {
 ```
 
 **Eliminates duplications in**:
-- `strategy.ts::_getPartialOrdersByType()`
 - `grid.ts::compareGrids()`
 - `grid_reconcile.ts::selectPartialSlots()`
 
@@ -767,48 +766,24 @@ _verifyFundInvariants(...)
 
 **Critical Methods**:
 ```javascript
-// Main entry point for rebalancing
-rebalance(fills, excludeIds)
+// Pure target grid calculation — no side effects
+calculateTargetGrid(params)
 
-// Core rebalancing algorithm
-rebalanceSideRobust(type, allSlots, sideSlots, direction, budget, available, excludeIds, reactionCap)
+// Fill processing (fund updates only, no rebalance trigger)
+processFillsOnly(filledOrders, excludeOrderIds)
 
-// Fill processing
-processFilledOrders(filledOrders, excludeOrderIds)
-
-// Partial order movement
-preparePartialOrderMove(partialOrder, gridSlotsToMove, reservedGridIds)
-completePartialOrderMove(moveInfo)
+// Dust detection
+hasAnyDust(partials, side)
 ```
 
 **Rebalancing Algorithm**:
 ```javascript
-// 1. Identify shortages (empty slots in active window)
-const shortages = sideSlots
-    .filter(slot => slot.state === VIRTUAL)
-    .slice(0, targetActiveCount);
-
-// 2. Identify surpluses (orders outside active window)
-const hardSurpluses = activeOrders.slice(targetActiveCount);
-const crawlCandidates = activeOrders.slice(0, targetActiveCount);
-
-// 3. For each shortage, find rotation candidate
-for (const shortage of shortages) {
-    const candidate = findFurthestOrder(crawlCandidates);
-    
-    if (shortage.price is better than candidate.price) {
-        // Rotate: cancel candidate, place at shortage
-        rotateOrder(candidate, shortage);
-    }
-}
-
-// 4. Apply Global Side Capping if needed
-if (totalIncrease > availablePool) {
-    const scaleFactor = availablePool / totalIncrease;
-    for (const order of orders) {
-        order.size *= scaleFactor;
-    }
-}
+// 1. Determine reference price from fills or market
+// 2. Calculate gap slots for spread zone
+// 3. Determine split index (boundary location in sorted prices)
+// 4. Assign roles: BUY below boundary, SPREAD within gap, SELL above
+// 5. Calculate order sizes from budget
+// 6. Return { targetGrid: Map, boundaryIdx: number }
 ```
 
 ---

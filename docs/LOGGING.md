@@ -67,7 +67,7 @@ All 7 implementation phases finished, legacy code removed, all logging-specific 
 The logging system uses a **semi-centralized** (hybrid) architecture:
 
 **Centralized:**
-- ✅ **Logger Class** (`modules/order/logger.ts` - 597 lines) - Single source of logging logic
+- ✅ **Logger Class** (`modules/order/logger.ts` - 582 lines) - Single source of logging logic
 - ✅ **LoggerState** (`modules/order/logger_state.ts` - 179 lines) - Smart change detection
 - ✅ **Configuration** (`modules/constants.ts`) - Central config management + override loading from `general.settings.json`
 - ✅ **Data Flow** - All calls → Logger → console.log
@@ -398,7 +398,7 @@ logger.log('[FUND] available: 100.50000000', 'debug')  // ✓ LOGGED (change det
 - Methods: detectChanges(), isSignificantChange(), recordChange(), reset()
 
 **Step 3: Logger Refactoring** ✅
-- Updated `modules/order/logger.ts` (597 lines, -50 lines legacy code)
+- Updated `modules/order/logger.ts` (582 lines, -50 lines legacy code)
 - Integrated LoggerState for smart change detection
 - Configuration-driven behavior
 - Config gating for display features

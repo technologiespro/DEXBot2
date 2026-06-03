@@ -39,13 +39,13 @@
 | **Release Track** | 1.0.0 | v0.7.11 |
 | **Language** | Python 3.6+ | TypeScript 5.x |
 | **Status** | Released 1.0.0, unmaintained | Active development |
-| **Last Repo Activity** | May 23, 2020 | 2026-06-02 |
+| **Last Repo Activity** | May 23, 2020 | 2026-06-03 |
 | **License** | MIT | MIT |
 | **Origin** | BitShares worker-proposal funded, Codaone Oy | Private rewrite by froooze |
 | **Primary Goal** | Multi-strategy, extensible trading framework | Hardened adaptive grid runtime with operator/AI tooling |
 | **Target Exchange** | BitShares DEX | BitShares DEX |
 | **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large TypeScript codebase; core runtime, adapter, analysis, Claw, and test modules |
-| **Source Files** | 72 Python files in `dexbot/` | 1012 TS files across the repo |
+| **Source Files** | 72 Python files in `dexbot/` | 430+ TS files across the repo |
 
 ### Summary
 
@@ -769,11 +769,11 @@ Where:
 | **Release Track** | 1.0.0 | v0.7.5 |
 | **Active Since** | ~2018 | December 2025 |
 | **Last Commit** | May 23, 2020 | 2026-05-28 |
-| **Total Commits** | 2281 | 1470 at current HEAD |
+| **Total Commits** | 2281 | 1497 at current HEAD |
 | **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large TypeScript runtime + adapter + Claw + analysis + tests |
-| **Source Files** | 72 Python files in `dexbot/` | 1012 TS files across the repo |
-| **Test Files** | 16 Python test files | 173 `test_*.ts` files |
-| **Documentation** | Sphinx docs + README | 30+ Markdown docs plus Claw skills/references |
+| **Source Files** | 72 Python files in `dexbot/` | 430+ TS files across the repo |
+| **Test Files** | 16 Python test files | 208 `test_*.ts` files |
+| **Documentation** | Sphinx docs + README | 50+ Markdown docs plus Claw skills/references |
 | **Strategies** | 3 + plugins | 1 |
 | **Max Concurrent Bots** | Many (one process) | Many (one process per bot, PM2) |
 | **Primary Developer** | Codaone Oy (team) | froooze (individual, 99.1% commits) |

@@ -178,9 +178,9 @@ type RuntimeContext = {
 };
 ```
 
-### `BotState`
+### `BotState` (conceptual shape)
 
-The bot-specific state Claw already owns and passes through the infrastructure layer.
+The bot-specific state Claw already owns and passes through the infrastructure layer. This is a conceptual shape — the actual runtime representation may differ.
 
 ```ts
 type BotState = {
@@ -199,9 +199,9 @@ type BotState = {
 };
 ```
 
-### `ConstraintSet`
+### `ConstraintSet` (conceptual shape)
 
-The execution limits Claw wants its own logic to respect.
+The execution limits Claw wants its own logic to respect. This is a conceptual shape — not a defined TypeScript type in the codebase.
 
 ```ts
 type ConstraintSet = {
@@ -225,7 +225,7 @@ type ConstraintSet = {
 Creates a shared runtime object for Claw.
 
 ```ts
-type RuntimeOptions = {
+type RuntimeContextOptions = {
   name: string;
   accountName?: string;
   socketPath?: string;

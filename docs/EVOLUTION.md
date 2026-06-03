@@ -6,9 +6,9 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,491 commits over ~6 active months
+- **Growth Phase**: 1,497 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
-- **Stability**: Progression from manual testing to a suite of 208 automated test files
+- **Stability**: Progression from manual testing to a suite of 208+ automated test files
 - **Releases**: 27 tagged releases (v0.1.0 to v0.7.11)
 
 ---
@@ -140,7 +140,7 @@ Core order/fund management, documentation, scripts & tooling.
 
 ## Development Statistics
 
-208+ automated tests (all TypeScript), 27 tagged releases. See **Version History** for commit breakdown by release.
+208+ automated test files (all TypeScript), 27 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -159,7 +159,7 @@ Core order/fund management, documentation, scripts & tooling.
 
 ## Documentation & Testing
 
-Evolved from a basic README to a comprehensive framework (20+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 200+ file suite covering unit, integration, simulation, and COW architectural guard tests.
+Evolved from a basic README to a comprehensive framework (50+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 208+ file suite covering unit, integration, simulation, and COW architectural guard tests.
 
 ---
 
@@ -183,6 +183,6 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 **Report Originally Generated**: February 19, 2026
 **Last Updated**: June 3, 2026
-**Total Commits**: 1491
+**Total Commits**: 1497
 **Date Range**: December 2, 2025 - June 3, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

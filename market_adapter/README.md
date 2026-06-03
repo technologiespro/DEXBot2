@@ -445,12 +445,16 @@ market_adapter/
 |-- inputs/
 |   |-- kibana_source.ts           Elasticsearch LP data source
 |   `-- fetch_lp_data.ts           historical LP candle exporter
+|-- index.ts                       module barrel export
 |-- utils/
 |   |-- chain.ts                   blockchain query helpers
 |   |-- adapter_client.ts          inter-process credential daemon client
 |   |-- native_history.ts          native BitShares market history fetch
 |   |-- file_lock.ts               single-instance file lock
-|   `-- data_discovery.ts          data directory auto-discovery
+|   |-- data_discovery.ts          data directory auto-discovery
+|   |-- atomic_write.ts            atomic file write utility
+|   |-- dynamic_grid_snapshot.ts   dynamic grid snapshot helpers
+|   `-- paths.ts                   path resolution helpers
 |-- data/                          runtime candle caches and exports
 `-- state/                         runtime state, centers, and lock file
 ```

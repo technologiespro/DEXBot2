@@ -2,6 +2,8 @@
 
 **Status:** All implementation phases (1–5) are complete. Phase 6 (tests) was not created — `tests/test_non_bts_fee_handling.ts` does not exist on disk. This document is preserved for historical reference.
 
+> **Note:** The actual implementation diverges from this plan in one area: no `calculateMinBtsValue()` helper was created. The code uses `calculateOrderCreationFees()` directly with a `configMinBtsValue` parameter instead. See `modules/order/utils/math.ts` and `modules/dexbot_maintenance_runtime.ts` for the live implementation.
+
 ## Problem
 
 On BitShares, **every** limit order operation (create/update/cancel) pays fees in BTS (`1.3.0`) regardless of the trading pair. For BTS-paired bots (e.g. XRP/**BTS**), the bot holds BTS on one side so fees are naturally deducted. For **non-BTS pairs** (e.g. XRP/USD), the bot never touches BTS through trading — yet fees still drain BTS.

@@ -184,7 +184,7 @@ tsx analysis/trend_detection/tests/test_kalman_trend.ts
 tsx analysis/trend_detection/tests/test_kalman_velocity_smoothing.ts
 ```
 
-**Local deps:** Run `npm install` inside `trend_detection/` for chart-generator dev dependencies (`package.json`).
+**Note:** `trend_detection/` has no external dependencies — runs directly with `tsx`.
 
 ### `ama_fitting/`
 
@@ -213,7 +213,7 @@ tsx analysis/ama_fitting/calibrate_convergence_er.ts \
   --amas AMA1,AMA3
 ```
 
-**Local deps:** Run `npm install` inside `ama_fitting/` if you need the optimizer's worker-thread dependencies (`package.json`).
+**Note:** `ama_fitting/` has no external dependencies — runs directly with `tsx`.
 
 ### `bot_fitting/`
 

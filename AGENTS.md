@@ -125,12 +125,8 @@ File: <path>
 - `modules/dexbot_fill_runtime.ts` - Fill processing runtime and replay-safe accounting helpers
 - `modules/dexbot_maintenance_runtime.ts` - Maintenance runtime for sync loops and grid checks
 - `modules/constants.ts` - Centralized configuration and tuning parameters
-- `modules/bitshares_client.ts` - BitShares connection and node management integration
+- `modules/bitshares_client.ts` - BitShares connection and node management
 - `modules/node_manager.ts` - Multi-node health checking and failover
-- `modules/general_settings.ts` - General settings management
-- `modules/graceful_shutdown.ts` - Graceful shutdown handling
-- `modules/chain_keys.ts` - Key management
-- `modules/bots_file_lock.ts` - Bot config file locking
 
 ### Order Management (`modules/order/`)
 - `manager.ts` - Order lifecycle and state management
@@ -139,36 +135,23 @@ File: <path>
 - `strategy.ts` - Trading strategy (anchor & refill, consolidation)
 - `accounting.ts` - Fee accounting and fund tracking
 - `sync_engine.ts` - Blockchain synchronization
-- `processed_fill_store.ts` - Processed fill dedupe persistence and batching
 - `grid_reconcile.ts` - Startup grid reconciliation
 - `runner.ts` - Order execution runner
-- `async_lock.ts` - Concurrency control
 - `logger.ts` - Order logging
-- `logger_state.ts` - Logger state tracking
-- `format.ts` - Order formatting
-- `export.ts` - Order data export
-- `index.ts` - Module exports
 - `utils/` - Utilities (math, order, system, validate)
 
 ### Market Adapter (`market_adapter/`)
-- `market_adapter.ts` - AMA delta threshold, grid price offset persistence, and grid recalculation trigger
-- `core/market_adapter_service.ts` - Price adapter service core (offset calculation, bound clamping)
+- `market_adapter.ts` - AMA delta threshold, grid price offset, and recalc triggers
+- `core/market_adapter_service.ts` - Price adapter service core (offset, bound clamping)
 - `ama_signal_runner.ts` - AMA signal processing
-- `inputs/kibana_source.ts` - Kibana data source
-- `inputs/fetch_lp_data.ts` - Liquidity pool data fetching
-- `merge_lp_data.ts` - LP data merging
+- `inputs/` - Kibana and LP data sources
 - `candle_utils.ts` - Candlestick utilities
-- `interval_utils.ts` - Shared interval label helpers
-- `lp_chart_core.ts` - LP chart core logic
-- `lp_chart_runner.ts` - Shared LP chart orchestration used by the supported chart scripts
 
 ### Blockchain Interaction
 - `modules/chain_orders.ts` - Blockchain order operations
 - `modules/account_orders.ts` - Account order queries
-- `modules/account_bots.ts` - Account bot data management
 
 ### Configuration
-- `profiles/ecosystem.config.js` - PM2 ecosystem configuration
 - `profiles/bots.json` - Bot configuration
 - `profiles/general.settings.json` - Global settings (auto-generated on first run)
 - `profiles/market_profiles.json` - Market-specific settings (AMA params, price offset params)
@@ -176,51 +159,29 @@ File: <path>
 ### Claw Integration (`claw/`)
 - `claw/index.ts` - Main export combining all modules
 - `claw/modules/claw_bridge.ts` - JSON bridge for runtime integration
-- `claw/modules/zeroclaw_bridge.ts` - ZeroClaw runtime bridge
-- `claw/modules/bitshares_client.ts` - BitShares connection wrapper
-- `claw/modules/chain_queries.ts` - Chain read helpers
-- `claw/modules/chain_broadcast.ts` - Chain write helpers
+- `claw/modules/claw_catalog.ts` - Command catalog for bridge dispatch
+- `claw/modules/claw_manifest.ts` - Runtime manifest
+- `claw/modules/claw_infra.ts` - Shared runtime infrastructure
+- `claw/modules/bitshares_client.ts` - BitShares connection, queries, broadcast
 - `claw/modules/chain_actions.ts` - High-level chain operations
-- `claw/modules/position_manager.ts` - Position tracking and management
-- `claw/modules/position_health.ts` - Position health monitoring
+- `claw/modules/decision_loop.ts` - Position evaluation orchestration
 - `claw/modules/dexbot_profiles.ts` - DEXBot2 profile reader
 - `claw/modules/dexbot_credential_client.ts` - Credential daemon client
+- `claw/modules/feed_price_source.ts` / `kibana_price_source.ts` - Price sources
 - `claw/modules/honest_ecosystem.ts` - HONEST asset helpers
+- `claw/modules/position_manager.ts` - Position tracking
+- `claw/modules/position_health.ts` - Position health monitoring
 - `claw/modules/short_mpa_strategy.ts` - Short MPA workflow
-- `claw/modules/claw_infra.ts` - Shared runtime infrastructure
-- `claw/docs/AI_BOT_LIBRARY_API.md` - API boundary and responsibility split
-- `claw/docs/DEXBOT2_TUNING_CHEAT_SHEET.md` - Grid tuning reference
-
 
 ### Analysis Tools (`analysis/`)
-
 Research scripts for parameter tuning — output interactive HTML charts, not used in production.
-
-- `analysis/README.md` - top-level analysis index and folder map
-
-#### Dynamic Weight Research
-- `analyze_dynamic_weight.ts` - Runner: loads candles, computes AMA3 + Kalman, generates chart
-- `trend_detection/dynamic_weight_chart_generator.ts` - 4-panel uPlot chart with interactive knobs (α, maxS%, gain, clip%, nz%)
-- Docs: `analysis/trend_detection/DYNAMIC_WEIGHT_RESEARCH.md`
-
-#### Derivative / Signal Research
-- `analyze_derivatives.ts` - SMA/MACD/RSI signal analyzer runner
-- `trend_detection/derivative_analyzer.ts` - Core signal engine (MACD, RSI, trend filter)
-- `trend_detection/kalman_trend_analyzer.ts` - Kalman filter with tactical/modal state tracking
-- `trend_detection/kalman_chart_generator.ts` - Kalman signal chart generator
-- `trend_detection/volatility_chart_generator.ts` - Volatility / symmetric shift chart generator
-- `analyze_kalman.ts` - Kalman standalone analyzer runner
-- Docs: `analysis/trend_detection/SIGNAL_DOCUMENTATION.md`
-- `trend_detection/README.md` - local index for the trend detection research docs
-
-#### AMA Fitting
-- `market_adapter/core/strategies/ama.ts` - Kaufman Adaptive Moving Average implementation
-- `ama_fitting/optimizer_high_resolution.ts` - AMA parameter optimizer
-- `ama_fitting/generate_unified_comparison_chart.ts` - AMA comparison chart
-- `ama_fitting/analyze_ama_price_changes.ts` - AMA price change analysis
-
-#### Data Sources
-- `price_sources.ts` - Unified candle source abstraction (`json`, `market_adapter`)
+- `analysis/README.md` - top-level index and folder map
+- `analyze_dynamic_weight.ts` / `trend_detection/dynamic_weight_chart_generator.ts` - Dynamic weight research
+- `analyze_derivatives.ts` / `trend_detection/derivative_analyzer.ts` - SMA/MACD/RSI signal analysis
+- `trend_detection/kalman_trend_analyzer.ts` - Kalman filter trend analysis
+- `ama_fitting/optimizer_high_resolution.ts` - AMA parameter optimization
+- `analysis/price_sources.ts` - Unified candle source abstraction
+- Docs in `analysis/trend_detection/`
 
 ### Testing
 - `tests/` - Comprehensive test suite (unit, integration, scenario tests)

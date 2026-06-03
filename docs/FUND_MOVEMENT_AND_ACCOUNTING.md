@@ -17,7 +17,7 @@ The accounting system is designed around a **Single Source of Truth** principle 
 
 ### 1.2 The Available Funds Formula
 
-This formula determines the bot's spending power. It is calculated atomically in `utils.ts::calculateAvailableFundsValue`.
+This formula determines the bot's spending power. It is calculated atomically in `math.ts::calculateAvailableFundsValue`.
 
 $$Available = \max(0, \text{ChainFree} - \text{Virtual} - \text{FeesOwed} - \text{FeesReservation})$$
 
@@ -128,7 +128,7 @@ FILL_PROCESSING: {
 2. **Single Accounting Pass**: Call `processFillAccounting()` once for all N fills
    - All proceeds credited directly to `chainFree` (via `adjustTotalBalance`)
    - All proceeds immediately available to next rebalance cycle (not split across cycles)
-3. **Single Rebalance**: Call `rebalanceSideRobust()` once
+3. **Single Target Calculation**: Call `calculateTargetGrid()` once
    - Sizes replacement orders using combined proceeds
    - Applies rotations and boundary shifts
 4. **Batch Broadcast**: Call `updateOrdersOnChainBatch()` once
@@ -311,7 +311,7 @@ The grid is divided into zones by a dynamic **Boundary Index**.
 
 ## 3. The Strategy Engine (Boundary-Crawl Algorithm)
 
-The rebalancing logic (`strategy.ts::rebalanceSideRobust`) executes the "Crawl" strategy.
+The rebalancing logic (`strategy.ts::calculateTargetGrid`) computes the target "Crawl" state.
 
 ### 3.1 Boundary Shift (The Crawl)
 When a fill occurs, the boundary shifts to "follow" the price.

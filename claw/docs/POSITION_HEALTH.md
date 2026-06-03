@@ -26,17 +26,15 @@ Each discovered position includes:
 
 `discoverPositionsSummary(accountName)` returns a compact summary with rounded values for quick inspection.
 
-## 5-Zone CR Model
+## 3-Zone CR Model
 
-The health assessor classifies collateral ratios into five zones based on HONEST asset MCR (1.4):
+The health assessor classifies collateral ratios into three zones using the thresholds from `CR_ZONES` in `modules/constants.ts`:
 
 | Zone | CR range | Status | Meaning |
 |---|---|---|---|
-| `red_low` | below 1.7 | `not_acceptable` | Near liquidation, immediate action needed |
-| `orange_low` | 1.7 – 2.0 | `temporary` | Uncomfortable but survivable, act soon |
-| `green` | 2.0 – 2.5 | `safe` | Healthy operating range |
-| `orange_high` | 2.5 – 3.0 | `excess_collateral` | Capital sitting idle, consider deploying |
-| `red_high` | above 3.0 | `over_collateralized` | Significant capital inefficiency |
+| `red_low` | below `CR_ZONES.RED_LOW` (1.7) | `not_acceptable` | Near liquidation, immediate action needed |
+| `green` | `CR_ZONES.RED_LOW` (1.7) – `CR_ZONES.RED_HIGH` (3.0) | `safe` | Healthy operating range |
+| `red_high` | above `CR_ZONES.RED_HIGH` (3.0) | `over_collateralized` | Capital sitting idle, consider deploying |
 
 ## Dual-Layer Actions
 
@@ -52,9 +50,7 @@ Action priorities:
 | Zone | Priority | Layer 1 | Layer 2 |
 |---|---|---|---|
 | `red_low` | `immediate` | `reduce_debt` | `add_collateral` |
-| `orange_low` | `soon` | `reduce_debt` | `add_collateral` |
 | `green` | — | no action | no action |
-| `orange_high` | `soon` | `increase_debt` | `withdraw_collateral` |
 | `red_high` | `immediate` | `increase_debt` | `withdraw_collateral` |
 
 ## Trend Alignment
@@ -74,10 +70,7 @@ CR math is handled by the shared planner at `modules/cr_planner.ts` (root level,
 The decision loop in `modules/decision_loop.ts` combines all signals into a unified assessment:
 
 - CR adjustment intent (debt first, collateral second)
-- grid price offset percentage derived from trend direction and confidence
-- weight distribution derived from trend analysis
 - price range ratio recommendation based on historical price action
-- a concrete `botPatch` object ready to apply to the bot config
 - the CR plan should be treated as structural, not tactical, so execution code must rebuild the grid after it applies
 
 ## Decision Loop
@@ -93,8 +86,8 @@ The decision loop in `modules/decision_loop.ts` combines all signals into a unif
 
 The summary includes:
 
-- zone counts (`red_low`, `orange_low`, `green`, `orange_high`, `red_high`)
-- immediate and soon action counts
+- zone counts (`red_low`, `green`, `red_high`)
+- immediate action count
 - `allGreen` flag for quick health checks
 
 ## Position Manager Watch

@@ -2,17 +2,15 @@
 
 ## Collateral Ratio Zones
 
-See `claw/docs/POSITION_HEALTH.md` for the full 5-zone CR model, dual-layer action system, and trend alignment logic.
+See `claw/docs/POSITION_HEALTH.md` for the full 3-zone CR model, dual-layer action system, and trend alignment logic.
 
 The skill-level summary:
 
 | Zone | CR Range | Status |
 |---|---|---|
-| Red (high) | Above 3.0 | Over-collateralized |
-| Orange (high) | 2.5 – 3.0 | Excess collateral |
-| Green | 2.0 – 2.5 | Safe — operating target |
-| Orange (low) | 1.7 – 2.0 | Temporarily acceptable |
-| Red (low) | Below 1.7 | Not acceptable |
+| Red (high) | Above `CR_ZONES.RED_HIGH` (3.0) | Over-collateralized |
+| Green | `CR_ZONES.RED_LOW` (1.7) – `CR_ZONES.RED_HIGH` (3.0) | Safe — operating target |
+| Red (low) | Below `CR_ZONES.RED_LOW` (1.7) | Not acceptable |
 
 MCR for HONEST.Assets is 1.4. See `honest-assets.md` for full ecosystem properties.
 
@@ -112,12 +110,12 @@ Practical range-ratio bands:
 
 ### Unified Plan
 
-The planner in `claw/modules/position_health.ts` (`buildMarginTradingPlan(...)`) should therefore produce one unified plan with:
+The functions in `claw/modules/position_health.ts` (`assessPosition()`, `computePriceRangeRatioPlan()`, `computeOrderWeightBias()`) should therefore produce a unified plan with:
 
 - position assessment
 - target CR resolution
 - debt/collateral action plan
-- final `weightDistribution`
+- final `weightDistribution` bias
 - final min/max price ratio recommendation
 - a structural reset requirement when the CR plan changes debt or collateral
 
@@ -139,43 +137,12 @@ Example: sideways market
 - `weightDistribution` stays balanced or double-mountain
 - the bot keeps full deployment, centered by AMA, with no strong directional skew beyond the configured price bounds
 
-Example unified plan output:
-
-```js
-{
-  targetCr: 2.0,
-  crPlan: {
-    primaryAction: 'reduce_debt',
-    fallbackAction: 'add_collateral',
-    debtDelta: -18.4,
-    collateralDelta: 920,
-    needsGridReset: true
-  },
-  gridPlan: {
-    finalPriceRangeRatio: 2.4,
-    weightDistribution: {
-      sell: 0.1,
-      buy: 1.05
-    }
-  },
-  botPatch: {
-    minPrice: '2.4x',
-    maxPrice: '2.4x',
-    weightDistribution: {
-      sell: 0.1,
-      buy: 1.05
-    }
-  }
-}
-```
-
 Interpretation:
 
-- CR is below target, so debt reduction is the first action
+- CR below target → debt reduction first
 - if a CR leg executes, the bot must rebuild the grid before reusing fund assumptions
-- buys are front-loaded because they are the with-trend side
-- sells are flattened because price is moving away from them
-- the range ratio stays competitive rather than widening all the way to a conservative `3x`
+- buys are front-loaded when they are the with-trend side
+- sells are flattened when price is moving away from them
 
 ## Loss Minimization
 

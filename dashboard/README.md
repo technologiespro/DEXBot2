@@ -28,14 +28,13 @@ cargo check --manifest-path dashboard/Cargo.toml
 
 ## Included Actions
 
-- `tsx scripts/update.ts`
-- `scripts/validate_bots.ts`
-- `scripts/analyze-orders.ts`
-- `scripts/analyze-git.ts`
-- `scripts/create-bot-symlinks.sh`
-- `scripts/clear-logs.sh`
-- `scripts/clear-orders.sh`
-- `scripts/clear-all.sh`
+- `tsx scripts/validate_bots.ts`
+- `tsx scripts/analyze-orders.ts`
+- `tsx scripts/analyze-git.ts`
+- `bash scripts/create-bot-symlinks.sh`
+- `bash scripts/clear-logs.sh`
+- `bash scripts/clear-orders.sh`
+- `bash scripts/clear-all.sh`
 
 ## Excluded by Design
 

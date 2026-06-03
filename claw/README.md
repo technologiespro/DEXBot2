@@ -29,6 +29,10 @@ npm install
 - memU support: `modules/memu_bridge.ts`, `scripts/memu_runner.py`, `scripts/memu_mcp_server.ts`
 - Skill packs: `skills/bitshares-guide/SKILL.md`, `skills/margin-trading/SKILL.md`, `skills/trend-detection/SKILL.md`, `skills/launcher-ops/SKILL.md`, `skills/memu-memory/SKILL.md`, shared boundary references under `skills/shared/references/`
 - HONEST support: `modules/honest_ecosystem.ts`, `modules/liquidity_pools.ts`
+- Launcher and paths: `modules/claw_launcher.ts`, `modules/launcher_mode_detector.ts`, `modules/launcher_paths.ts`
+- Shared runtime infrastructure: `modules/claw_infra.ts`, `modules/types.ts`, `modules/utils.ts`
+- MPA utilities: `modules/mpa_utils.ts`
+- OpenClaw support: `modules/openclaw_manifest.ts`
 - Reference docs: `docs/AI_BOT_LIBRARY_API.md`, `docs/DEXBOT2_TUNING_CHEAT_SHEET.md`, `docs/POSITION_HEALTH.md`, `docs/RUNTIME_COMPARISON.md`
 - Example entrypoints: `examples/connection_test.ts`, `examples/short_mpa_bts_strategy.ts`, `examples/position_manager_cli.ts`, `examples/nullclaw_bridge_example.ts`, `examples/zeroclaw_bridge_example.ts`, `examples/memu_integration_example.ts`, `examples/claw_profiles_example.ts`, `examples/claw_consumer_example.ts`, `examples/claw_infra_example.ts`, `examples/honest_ecosystem_example.ts`
 

@@ -27,8 +27,6 @@ These commands remain out of scope for UI-triggered operations.
 ## Data Sources
 
 - `profiles/bots.json` for bot definitions and active flags
-- `profiles/orders/*.json` for grid/fund/order state snapshots
-- `profiles/logs/*.log` for live event tailing
 - PM2 process list/status for runtime health
 - Script stdout/stderr capture for action results
 
@@ -44,10 +42,7 @@ These commands remain out of scope for UI-triggered operations.
 
 ### Tabs
 
-- `F1` Overview
-- `F2` Bot Detail
-- `F3` Scripts
-- `F4` Alerts
+- `Tab` / `Right` / `Left` navigate between panes
 
 ## Bot States
 
@@ -65,28 +60,19 @@ Badges shown in list/detail views:
 
 Maintenance:
 
-- `tsx scripts/update.ts`
 - `bash scripts/create-bot-symlinks.sh`
 
 Diagnostics:
 
 - `tsx scripts/validate_bots.ts`
 - `tsx scripts/analyze-orders.ts`
-- `tsx scripts/divergence-calc.ts`
-- `tsx scripts/print_grid.ts`
 - `tsx scripts/analyze-git.ts`
-- `bash scripts/git-viewer.sh`
 
 Cleanup:
 
 - `bash scripts/clear-logs.sh`
 - `bash scripts/clear-orders.sh`
 - `bash scripts/clear-all.sh`
-
-Wrappers:
-
-- `./scripts/bots`
-- `./scripts/keys`
 
 ### Safety Classes
 
@@ -103,12 +89,8 @@ Wrappers:
 ## Keyboard Model
 
 - `j/k` move selection
-- `Enter` open selected bot/action
 - `x` execute selected action
 - `r` refresh
-- `l` toggle logs/output pane
-- `:` open command palette
-- `?` help overlay
 - `q` quit
 
 ## Refresh Strategy

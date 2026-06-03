@@ -242,11 +242,11 @@ The master grid (`this.orders`) is **immutable** - it can only be replaced atomi
 
 | Mechanism | Location | Purpose |
 |-----------|----------|---------|
-| `Object.freeze()` | `manager.ts:479` | Master Map is frozen at initialization |
-| `deepFreeze()` | `manager.ts:979` | Individual order objects are deep-frozen |
-| `_gridVersion` | `manager.ts:464` | Version counter for staleness detection |
-| `_gridLock` | `manager.ts:455` | AsyncLock serializes grid mutations |
-| Encapsulation | `manager.ts:489` | Index Sets are private; mutations only via `_applyOrderUpdate()` |
+| `Object.freeze()` | `manager.ts` | Master Map is frozen at initialization |
+| `deepFreeze()` | `manager.ts` | Individual order objects are deep-frozen |
+| `_gridVersion` | `manager.ts` | Version counter for staleness detection |
+| `_gridLock` | `manager.ts` | AsyncLock serializes grid mutations |
+| Encapsulation | `manager.ts` | Index Sets are private; mutations only via `_applyOrderUpdate()` |
 
 ### Master Grid Update Pattern
 
@@ -367,7 +367,7 @@ The fill pipeline handles incoming filled orders efficiently through fixed-cap b
 └─────────────────────┬───────────────────────────────────────┘
                       ↓
 ┌─────────────────────────────────────────────────────────────┐
-│    rebalanceSideRobust() - Single Call                       │
+│    calculateTargetGrid() - Single Call                       │
 │  Size replacement orders using combined proceeds           │
 │  Apply rotations and boundary shifts                       │
 │  Use unallocated remainder for next allocation opportunities│
@@ -438,7 +438,7 @@ By default, the grid is centered around `startPrice`. However, if the bot has as
 
 ### Boundary Calculation
 
-**Location**: `modules/dexbot_class.ts::_performGridChecks()` → Boundary Sync step
+**Location**: `modules/dexbot_class.ts::_performPeriodicGridChecks()` → Boundary Sync step
 
 **Algorithm**:
 ```javascript
@@ -498,7 +498,7 @@ Instead of complex partial handling, spread corrections are **conservative and f
 
 ### Algorithm
 
-**Location**: `modules/order/strategy.ts::rebalanceSideRobust()`
+**Location**: `modules/order/strategy.ts::calculateTargetGrid()`
 
 The simplified approach prioritizes fund availability over aggressive corrections:
 
@@ -665,15 +665,13 @@ PIPELINE_TIMING: {
 - Non-destructive recovery: clears operation flags only, does NOT delete orders or modify grid state
 - Recovery called from `_executeMaintenanceLogic()` during periodic maintenance checks
 
-**Location**: `modules/order/manager.ts` lines 1083-1148
+**Location**: `modules/order/manager.ts` (`isPipelineEmpty()` and `clearStalePipelineOperations()`)
 
 **How It Works**:
 - `isPipelineEmpty()` tracks when pipeline operations started blocking via `_pipelineBlockedSince` timestamp
 - If blockage exceeds 5 minutes, `clearStalePipelineOperations()` is called
 - Non-destructive recovery: clears operation flags only, does NOT delete orders or modify grid state
 - Recovery called from `_executeMaintenanceLogic()` during periodic maintenance checks
-
-**Location**: `modules/order/manager.ts` lines 1149+
 
 ### Data Flow
 
@@ -769,9 +767,9 @@ A **phantom order** is an illegal state where an order exists as ACTIVE/PARTIAL 
 
 | Layer | Location | Mechanism |
 |-------|----------|-----------|
-| **Guard** | `manager.ts:570-584` | Centralized validation in `_updateOrder()` rejects ACTIVE/PARTIAL without orderId, auto-downgrades to VIRTUAL |
-| **Grid Protection** | `grid.ts:1154` | Preserve order state during resize: `state: order.state` instead of forcing ACTIVE |
-| **Sync Cleanup** | `sync_engine.ts:297-305` | Detect orders without orderId and convert to SPREAD placeholders; prevent phantom fills from triggering rebalancing |
+| **Guard** | `manager.ts::_updateOrder()` | Centralized validation in `_updateOrder()` rejects ACTIVE/PARTIAL without orderId, auto-downgrades to VIRTUAL |
+| **Grid Protection** | `grid.ts` | Preserve order state during resize: `state: order.state` instead of forcing ACTIVE |
+| **Sync Cleanup** | `sync_engine.ts` | Detect orders without orderId and convert to SPREAD placeholders; prevent phantom fills from triggering rebalancing |
 
 **Verification**:
 - Direct state assignment in code review: All transitions go through `_updateOrder()` (cannot bypass)
@@ -828,21 +826,21 @@ graph LR
 ```mermaid
 sequenceDiagram
     participant Strat as StrategyEngine
-    participant Acct as Accountant
     participant Mgr as OrderManager
+    participant Acct as Accountant
 
-    Note over Strat: Want to place order<br/>size = 100
+    Note over Mgr: Want to place order<br/>size = 100
 
-    Strat->>Acct: tryDeductFromChainFree(type, 100)
+    Mgr->>Acct: tryDeductFromChainFree(type, 100)
 
     alt Sufficient funds (available >= 100)
         Acct->>Acct: chainFree -= 100
         Acct->>Acct: virtual += 100
-        Acct-->>Strat: true (success)
-        Strat->>Mgr: Place order
+        Acct-->>Mgr: true (success)
+        Mgr->>Mgr: Place order
     else Insufficient funds
-        Acct-->>Strat: false (failed)
-        Note over Strat: Order not placed<br/>No fund leak
+        Acct-->>Mgr: false (failed)
+        Note over Mgr: Order not placed<br/>No fund leak
     end
 ```
 
@@ -903,21 +901,21 @@ graph LR
 sequenceDiagram
     participant Chain as Blockchain
     participant Sync as SyncEngine
-    participant Strat as StrategyEngine
+    participant Mgr as OrderManager
     participant Acct as Accountant
-    participant Grid as Grid
+    participant Strat as StrategyEngine
 
-    Chain->>Sync: Order filled
-    Sync->>Sync: Detect fill
-    Sync->>Strat: processFilledOrders([fills])
+    Chain->>Mgr: Order filled
+    Mgr->>Mgr: Detect fill
+    Mgr->>Strat: processFillsOnly([fills])
 
     Strat->>Acct: Add proceeds to chainFree
 
-    Strat->>Grid: Shift boundary index
-    Strat->>Acct: Deduct BTS fees from cache
-    Strat->>Strat: Identify dust partials (if any)
-    Strat->>Strat: Execute rotations based on fund availability
-    Strat->>Grid: Apply boundary-driven slot reassignments
+    Mgr->>Strat: calculateTargetGrid(params)
+    Strat-->>Mgr: target grid
+    Mgr->>Mgr: Apply rotations via WorkingGrid
+    Mgr->>Acct: Deduct BTS fees during recalculateFunds
+    Mgr->>Mgr: Consolidate dust partials
 ```
 
 ### 2. Order Rotation (Crawl Mechanism)
@@ -1009,7 +1007,7 @@ sequenceDiagram
 |--------|----------------------|---------------|
 | **OrderManager** | Central coordinator, state management | `_updateOrder()`, `lockOrders()`, `getOrdersByTypeAndState()` |
 | **Accountant** | Fund tracking, fee management | `recalculateFunds()`, `tryDeductFromChainFree()`, `_verifyFundInvariants()` |
-| **StrategyEngine** | Rebalancing, rotation, partial handling | `rebalance()`, `processFilledOrders()`, `preparePartialOrderMove()` |
+| **StrategyEngine** | Grid rebalancing, rotation target calculation | `calculateTargetGrid()`, `processFillsOnly()`, `hasAnyDust()` |
 | **SyncEngine** | Blockchain sync, fill detection | `syncFromOpenOrders()`, `synchronizeWithChain()` |
 | **Grid** | Grid creation, sizing, divergence | `createOrderGrid()`, `compareGrids()`, `checkAndUpdateGridIfNeeded()` |
 | **Utils** | Shared utilities, conversions | `quantizeFloat()`, `normalizeInt()` (`math.ts`); order predicates (`order.ts`); COW action building (`validate.ts`); price derivation (`system.ts`) |
