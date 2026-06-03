@@ -180,14 +180,18 @@ node unlock delete            # Shut down and clean up
 node dexbot key                 # Master password/keyring
 node dexbot bot                 # Interactive bot configurator
 node dexbot white               # Market adapter whitelist
-node dexbot test [<bot>]        # Test-run a bot (one-shot, live)
+
+node dexbot test [<bot>]        # Test-run a bot only
 node dexbot unlock [<cmd>]      # Alias for node unlock
 node dexbot reset {all|<bot>}   # Regenerate grid
 node dexbot disable {all|<bot>} # Disable bot in config
+
 node dexbot stat                # Runtime status (unlock or PM2)
 node dexbot order               # Analyze order grids
+
 node dexbot update              # Update DEXBot2
 node dexbot clear               # Clear log files
+node dexbot default             # Reset settings to defaults
 ```
 
 ## 🎯 PM2 Process Management

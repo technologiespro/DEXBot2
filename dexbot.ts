@@ -41,6 +41,7 @@
  * 🛠️ BOT MANAGEMENT:
  *   node dexbot reset all            - Reset all active bot grids (full regeneration)
  *   node dexbot reset <bot-name>     - Reset bot grid (full regeneration)
+ *   node dexbot default              - Reset settings to defaults (deletes general.settings.json, market_profiles.json, market_adapter_settings.json)
  *   node dexbot disable all          - Mark all bots inactive in config
  *   node dexbot disable <bot-name>   - Mark bot inactive in config
  *   node dexbot clear                - Clear all log files in profiles/logs/
@@ -111,8 +112,8 @@ const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 
 
-const CLI_COMMANDS = ['start', 'test', 'reset', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order', 'clear', 'status', 'whitelist', 'unlock'];
-const COMMAND_ALIASES: Record<string, string> = { orders: 'order', key: 'keys', bot: 'bots', white: 'whitelist', stat: 'status', start: 'test' };
+const CLI_COMMANDS = ['start', 'test', 'reset', 'default', 'disable', 'drystart', 'keys', 'bots', 'pm2', 'update', 'export', 'order', 'clear', 'status', 'whitelist', 'unlock'];
+const COMMAND_ALIASES: Record<string, string> = { orders: 'order', key: 'keys', bot: 'bots', white: 'whitelist', stat: 'status', start: 'test', defaults: 'default' };
 const CLI_HELP_FLAGS = ['-h', '--help'];
 const CLI_EXAMPLES_FLAG = '--cli-examples';
 const CLI_EXAMPLES = [
@@ -127,7 +128,8 @@ const CLI_EXAMPLES = [
     { title: 'Update DEXBot2', command: 'node dexbot update', notes: 'Fetches latest code, updates dependencies, and restarts PM2.' },
     { title: 'Export bot trades for QTradeX', command: 'dexbot export bot-name', notes: 'Exports trading history and settings to CSV/JSON for backtesting.' },
     { title: 'Analyze persisted order grids', command: 'dexbot order', notes: 'Runs the order analyzer across profiles/orders/ and prints spread/increment/funds/distribution metrics.' },
-    { title: 'Clear all bot log files', command: 'dexbot clear', notes: 'Runs scripts/clear-logs.sh to remove log files from profiles/logs/.' }
+    { title: 'Clear all bot log files', command: 'dexbot clear', notes: 'Runs scripts/clear-logs.sh to remove log files from profiles/logs/.' },
+    { title: 'Reset settings to defaults', command: 'dexbot default', notes: 'Runs scripts/reset-settings.sh to delete general.settings.json, market_profiles.json, and market_adapter_settings.json.' }
 ];
 const cliArgs = process.argv.slice(2);
 
@@ -142,6 +144,7 @@ function printCLIUsage() {
     console.log('  drystart <bot>    Same as test but forces dry-run execution.');
     console.log('  reset all         Trigger grid resets for all active bots.');
     console.log('  reset <bot>       Trigger a grid reset (auto-reloads if running, or applies on next start).');
+    console.log('  default, defaults Reset settings to defaults (deletes general.settings.json, market_profiles.json, market_adapter_settings.json).');
     console.log('  disable all       Mark all bots inactive in config.');
     console.log('  disable <bot>     Mark the bot inactive in config.');
     console.log('  export <bot>      Export bot trades and settings for QTradeX backtesting.');
@@ -680,6 +683,20 @@ async function handleCLICommands() {
             }
             await resetBotByName(target === 'all' ? null : target);
             process.exit(0);
+        case 'default': {
+            const { spawnSync } = require('child_process');
+            const resetScript = path.join(ROOT, 'scripts', 'reset-settings.sh');
+            const result = spawnSync('bash', [resetScript], {
+                cwd: ROOT,
+                stdio: 'inherit',
+            });
+            if (result.error) {
+                console.error(`default: ${result.error.message}`);
+                process.exit(1);
+            }
+            process.exit(result.status ?? 0);
+            return true;
+        }
         case 'disable':
             if (!target) {
                 console.error('Error: Target required. Specify "all" or a bot name.');
