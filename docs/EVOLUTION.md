@@ -6,7 +6,7 @@ DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares 
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,485 commits over ~6 active months
+- **Growth Phase**: 1,491 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
 - **Stability**: Progression from manual testing to a suite of 208 automated test files
 - **Releases**: 27 tagged releases (v0.1.0 to v0.7.11)
@@ -61,7 +61,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **Jun 1**: Enhanced unlock status with market adapter and credential daemon health indicators, fixed update lifecycle to restart all runtime services, removed PM2 reload wrapper, and de-emphasized PM2 in the README. Released v0.7.9. Then hardened runtime self-healing paths: promoted structural grid drift into an explicit resync path, added targeted chain-truth reconciliation for idle maintenance, guarded post-reset spread correction with a fresh chain sync, and deferred fill processing during order batches; deduplicated the chain-sync/fill pipeline into a shared helper, made launcher wrappers work without a `dist/` build, and added a `node dexbot order` subcommand with green active-bot feedback in `node unlock status`. Released v0.7.10.
 
-**Jun 2**: Closed several COW grid-integrity windows (pre-broadcast unmatched-chain guard, post-broadcast missing-`chainOrderId` blocker, sync-engine occupied-slot exclusion, startup `SUSPECTED DUPLICATE` diagnostics) and hardened uncertainty-recovery with a typed `BroadcastUncertainError`, price-drift-orphan prioritization, pre-broadcast price freshness, and a persistence-commit guard. Renamed the shared reconciler to `grid_reconcile.ts`. Defended the launcher against foreign credential daemons, hardened the market adapter watchdog lock, force-rebuilt the updater bundle, and added socket-scoped close coalescing, failover cooldown, idempotent shutdown, and local-cancel artifact filtering. CLI polish: `node dexbot clear` and plural/singular CLI aliases. Released v0.7.11.
+**Jun 2–3**: Closed several COW grid-integrity windows (pre-broadcast unmatched-chain guard, post-broadcast missing-`chainOrderId` blocker, sync-engine occupied-slot exclusion, startup `SUSPECTED DUPLICATE` diagnostics) and hardened uncertainty-recovery with a typed `BroadcastUncertainError`, price-drift-orphan prioritization, pre-broadcast price freshness, and a persistence-commit guard. Renamed the shared reconciler to `grid_reconcile.ts`. Defended the launcher against foreign credential daemons, hardened the market adapter watchdog lock, force-rebuilt the updater bundle, and added socket-scoped close coalescing, failover cooldown, idempotent shutdown, and local-cancel artifact filtering. CLI polish: `node dexbot clear`, plural/singular CLI aliases, `node dexbot status` unified runtime status, and live dynamic-weight/adapter-offline alerts in `node dexbot order`. Released v0.7.11.
 
 ---
 
@@ -91,8 +91,8 @@ Default background daemon + crash restart for unlock, auto-update for monolithic
 ### v0.7.7 → v0.7.8 (7 commits)
 Rename `unlock-start` → `unlock`, unify launcher startup/control summaries, harden monolithic restart after auto-update, clean stale build artifacts, add Performance & Speed section to DEXBot comparison doc.
 
-### v0.7.10 → v0.7.11 (10 commits)
-Close COW grid-integrity windows (unmatched chain orders, missing `chainOrderId` results, occupied-slot adoption, startup `SUSPECTED DUPLICATE` diagnostics); harden uncertainty-recovery with `BroadcastUncertainError`, price-drift-orphan prioritization, and a persistence-commit guard. Rename the shared reconciler to `grid_reconcile.ts`. Defend the launcher against foreign credential daemons, harden the market adapter watchdog lock, force-rebuild the updater bundle, and add native transport close coalescing, failover cooldown, idempotent shutdown, and local-cancel artifact filtering. CLI polish: `node dexbot clear` and plural/singular CLI aliases.
+### v0.7.10 → v0.7.11 (16 commits)
+Close COW grid-integrity windows (unmatched chain orders, missing `chainOrderId` results, occupied-slot adoption, startup `SUSPECTED DUPLICATE` diagnostics); harden uncertainty-recovery with `BroadcastUncertainError`, price-drift-orphan prioritization, and a persistence-commit guard. Rename the shared reconciler to `grid_reconcile.ts`. Defend the launcher against foreign credential daemons, harden the market adapter watchdog lock, force-rebuild the updater bundle, and add native transport close coalescing, failover cooldown, idempotent shutdown, and local-cancel artifact filtering. CLI polish: `node dexbot clear`, plural/singular CLI aliases, `node dexbot status` unified runtime command, and live dynamic-weight/adapter-offline alerts in `node dexbot order`. Documentation sweep for stale version references, file renames, and hardcoded paths; README clarity pass emphasizing unlock as the recommended runtime.
 
 ### v0.7.9 → v0.7.10 (8 commits)
 Harden runtime self-healing: promote structural grid drift into an explicit resync path, add targeted chain-truth reconciliation for idle maintenance, guard post-reset spread correction with a fresh chain sync, and defer fill processing during order batches. Deduplicate the chain-sync/fill pipeline into a shared helper, make launcher wrappers work without a `dist/` build, and add a `node dexbot order` subcommand with green active-bot feedback in `node unlock status`.
@@ -182,7 +182,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: June 2, 2026
-**Total Commits**: 1485
-**Date Range**: December 2, 2025 - June 2, 2026 (ongoing)
+**Last Updated**: June 3, 2026
+**Total Commits**: 1491
+**Date Range**: December 2, 2025 - June 3, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

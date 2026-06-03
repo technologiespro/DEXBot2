@@ -2,11 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.11] - 2026-06-02 - COW Grid Integrity, Uncertain Broadcast Recovery & Foreign Daemon Defense
+## [0.7.11] - 2026-06-03 - COW Grid Integrity, Uncertain Broadcast Recovery, Unified Status & Dynamic Weight Display
 
-This release closes several COW grid-integrity windows (missing-create results, unmatched chain orders, stale-slot binding), adds a typed recovery path for uncertain credential broadcasts, defends the launcher against foreign credential daemons, hardens the market adapter watchdog, and lands two CLI polish items (`node dexbot clear` log cleanup and plural/singular CLI aliases).
+This release closes several COW grid-integrity windows (missing-create results, unmatched chain orders, stale-slot binding), adds a typed recovery path for uncertain credential broadcasts, defends the launcher against foreign credential daemons, hardens the market adapter watchdog, lands two CLI polish items (`node dexbot clear` log cleanup and plural/singular CLI aliases), adds a unified `node dexbot status` command, integrates live dynamic weight and adapter-offline alerts into `node dexbot order`, and sweeps documentation for stale references and clarity.
 
-### 2026-06-02
+### 2026-06-03
 
 #### COW Grid Integrity
 - Block COW creates on missing `chainOrderId` and unmatched grid drift (`c60e7ac`).
@@ -56,9 +56,29 @@ This release closes several COW grid-integrity windows (missing-create results, 
   - README "🛠️ Bot Management" block updated to link `node dexbot clear`.
 - Add CLI alias support (plural/singular) with docs in singular form (`b4b7d07`).
   - `dexbot.ts` `COMMAND_ALIASES` map resolves `node dexbot orders` → `order`, `node dexbot key` → `keys`, `node dexbot bot` → `bots` before the command switch. Help text and CLI examples always show the singular form (`order`, `key`, `bot`) per convention.
+- Add `node dexbot status` command for unified runtime status (`b9de86d`).
+  - Unifies status reporting under a single entry point that auto-detects the active runtime (unlock monolithic, isolated/supervisor, or PM2). Unlock path delegates to `node unlock status`; PM2 path runs `pm2 jlist` and renders a formatted table of known DEXBot2 processes. Graceful handling when PM2 is not installed or no processes found.
+  - `dexbot.ts`: new `status` case in `handleCLICommands`. README updated to reference `node dexbot status` instead of raw `pm2 status`.
+- Integrate dynamic weight and adapter-offline alert into `node dexbot order` (`74f24a1`).
+  - `scripts/analyze-orders.ts` now reads `<botKey>.dynamicgrid.json` snapshots and renders `Weight: <live> (<static>) buy | <live> (<static>) sell` for AMA bots. Color rule: higher live weight = red, lower = green, equal/baseline = grey. Staleness threshold at 2× poll cycle (default 2h); stale snapshot appends a red `(adapter offline)` alert.
+  - `formatFundsValue` replaces `formatCurrency`/`.toFixed(4)` in fund breakdown with up to 5 significant figures and K/M suffix.
+  - Dead imports and unused variable declarations cleaned up; `main()` wrapped in `require.main === module` guard.
+
+#### Documentation
+- Clarify unlock as recommended runtime in README (`0813a39`).
+  - Emphasize `node unlock` as the production runtime over PM2. Add `#` comments to all runtime control commands. Soften PM2 section as optional.
+- Clarify `node dexbot start` as temporary testing only (`0c63cbc`).
+  - README comment updated to avoid suggesting `node dexbot start` for production use.
+- Sweep stale version references, file renames, hardcoded paths, and test counts (`f3e0656`).
+  - `docs/README.md`: v0.7.7→v0.7.11 version context; `startup_reconcile`→`grid_reconcile` across all stale references (AGENTS.md, developer_guide.md, COPY_ON_WRITE_MASTER_PLAN.md, LOGGING.md).
+  - `docs/DEXBOT_COMPARISON.md`: Date→2026-06-03, version→v0.7.11, last activity→2026-06-02.
+  - `docs/EVOLUTION.md`: Test counts refreshed (190→208, 173→184+, 180→200+).
+  - `CHANGELOG.md`: Removed hardcoded `/home/alex` machine paths from v0.7.6 entry.
+  - `README.md`: Removed duplicate `node dexbot status` entry from PM2 section.
 
 #### Tests
 - New: `tests/test_unlock_foreign_cred_daemon.ts` (9 cases), `tests/test_unlock_foreign_cred_daemon_live.ts` (4 cases), `tests/helpers/foreign_cred_stub.js` (canonical credential-daemon stub), `tests/test_cow_orchestration_fixes.ts` (COW-FRESH-001/002, COW-PERSIST-001/002), `tests/test_sync_excess_orphan.ts` (SYNC-EXCESS-001/002b/003), `tests/test_uncertain_broadcast.ts` (UNC-008b/008c2 expectations updated), `tests/test_recent_own_cancels.ts`, `tests/test_cow_structural_resync.ts`, `tests/test_cow_commit_guards.ts` (COW-COMMIT-005/006 added, COW-COMMIT-007..010 extended for missing-create paths), `tests/test_transport_connect_noop.ts`, `tests/test_fill_replay_guards.ts`, `tests/test_native_subscriptions.ts`, `tests/test_shutdown_reentrancy.ts`. `scripts/run-tests.ts` registers the new test files. `claw/tests/test_claw_chain_layer.ts` extended for broadcast request typing.
+- New: `tests/test_analyze_orders_dynamic_weight.ts` (17 cases covering AMA detection, snapshot staleness, weight formatting, and `analyzeOrder` integration). Registered in `scripts/run-tests.ts`.
 
 ## [0.7.10] - 2026-06-01 - Grid Recovery Smoothing, Runtime Drift Reconciliation & CLI Polish
 
