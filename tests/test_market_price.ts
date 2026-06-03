@@ -18,10 +18,10 @@ const Format = require('../modules/order/format');
 // Color codes for console output
 const colors = {
     reset: '\x1b[0m',
-    green: '\x1b[32m',
-    blue: '\x1b[36m',
-    yellow: '\x1b[33m',
-    red: '\x1b[31m',
+    green: '\x1b[92m',
+    blue: '\x1b[96m',
+    yellow: '\x1b[93m',
+    red: '\x1b[38;5;160m',
     bold: '\x1b[1m'
 };
 

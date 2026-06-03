@@ -95,9 +95,9 @@ class Logger {
 
         this.colors = useColors ? {
             reset: '\x1b[0m',
-            buy: '\x1b[32m', sell: '\x1b[31m', spread: '\x1b[33m',
-            debug: '\x1b[36m', info: '\x1b[37m', warn: '\x1b[33m', error: '\x1b[31m',
-            virtual: '\x1b[90m', active: '\x1b[32m', partial: '\x1b[34m'
+            buy: '\x1b[92m', sell: '\x1b[91m', spread: '\x1b[93m',
+            debug: '\x1b[38;5;87m', info: '\x1b[97m', warn: '\x1b[93m', error: '\x1b[91m',
+            virtual: '\x1b[90m', active: '\x1b[92m', partial: '\x1b[94m'
         } : {
             reset: '', buy: '', sell: '', spread: '',
             debug: '', info: '', warn: '', error: '',

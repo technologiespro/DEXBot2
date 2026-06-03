@@ -1122,9 +1122,9 @@ const STATUS_COLORS = {
     reset: '\x1b[0m',
     title: '\x1b[1;33m',
     label: '\x1b[38;5;208m',
-    ok: '\x1b[1;32m',
+    ok: '\x1b[1;92m',
     warn: '\x1b[1;31m',
-    muted: '\x1b[37m',
+    muted: '\x1b[97m',
 };
 
 function colorStatus(text: string, color: string): string {

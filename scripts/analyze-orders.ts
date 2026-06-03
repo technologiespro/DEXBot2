@@ -27,12 +27,12 @@ const BOTS_CONFIG = path.join(ROOT, 'profiles/bots.json');
 // Color codes for terminal output
 const colors = {
   reset: '\x1b[0m',
-  buy: '\x1b[32m',    // green
-  sell: '\x1b[31m',   // red
-  buyDark: '\x1b[38;5;22m',  // even darker green
-  sellDark: '\x1b[38;5;52m', // even darker red
-  spread: '\x1b[33m', // yellow
-  cyan: '\x1b[36m',   // cyan
+  buy: '\x1b[92m',    // green
+  sell: '\x1b[91m',   // light red
+  buyDark: '\x1b[38;5;28m',  // even darker green
+  sellDark: '\x1b[38;5;160m', // red
+  spread: '\x1b[93m', // yellow
+  cyan: '\x1b[38;5;87m',   // bright cyan
   gray: '\x1b[38;5;246m'    // medium grey (lighter than bright black)
 };
 

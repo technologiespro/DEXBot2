@@ -893,7 +893,7 @@ async function promptBotData(base = {}) {
              console.log(`\x1b[1;33m5) Funding:\x1b[0m    \x1b[38;5;208mSell:\x1b[0m ${data.botFunds.sell}, \x1b[38;5;208mBuy:\x1b[0m ${data.botFunds.buy} | \x1b[38;5;208mOrders:\x1b[0m (S:${data.activeOrders.sell}, B:${data.activeOrders.buy})`);
              console.log('--------------------------------------------------');
              console.log('\x1b[1;32mS) Save & Exit\x1b[0m');
-             console.log('\x1b[37mC) Cancel (Discard changes)\x1b[0m');
+             console.log('\x1b[97mC) Cancel (Discard changes)\x1b[0m');
             showMenu = false;
         }
 
@@ -985,7 +985,7 @@ async function promptBotData(base = {}) {
             case 's':
                 // Final basic validation before saving
                 if (!data.name || !data.assetA || !data.assetB || !data.preferredAccount) {
-                    console.log('\x1b[31mError: Name, Pair, and Account are required before saving.\x1b[0m');
+                    console.log('\x1b[38;5;160mError: Name, Pair, and Account are required before saving.\x1b[0m');
                     break;
                 }
                 {
@@ -995,7 +995,7 @@ async function promptBotData(base = {}) {
                         : 2.1;
                     const minRequiredSpread = data.incrementPercent * spreadFactor;
                     if (data.targetSpreadPercent + Number.EPSILON < minRequiredSpread) {
-                        console.log(`\x1b[31mError: targetSpreadPercent (${data.targetSpreadPercent}) must be >= ${spreadFactor}x incrementPercent (${Number(minRequiredSpread.toFixed(6))}).\x1b[0m`);
+                        console.log(`\x1b[38;5;160mError: targetSpreadPercent (${data.targetSpreadPercent}) must be >= ${spreadFactor}x incrementPercent (${Number(minRequiredSpread.toFixed(6))}).\x1b[0m`);
                         break;
                     }
                 }
@@ -1053,12 +1053,12 @@ async function promptGeneralSettings() {
           console.log(`\x1b[1;33m3) Timing (Core):\x1b[0m \x1b[38;5;208mFetchInterval:\x1b[0m ${settings.TIMING.BLOCKCHAIN_FETCH_INTERVAL_MIN}min, \x1b[38;5;208mSyncDelay:\x1b[0m ${settings.TIMING.SYNC_DELAY_MS / 1000}s, \x1b[38;5;208mLockTimeout:\x1b[0m ${settings.TIMING.LOCK_TIMEOUT_MS / 1000}s`);
           console.log(`\x1b[1;33m4) Timing (Fill):\x1b[0m \x1b[38;5;208mDedupeWindow:\x1b[0m ${settings.TIMING.FILL_DEDUPE_WINDOW_MS / 1000}s, \x1b[38;5;208mRetention:\x1b[0m ${settings.TIMING.FILL_RECORD_RETENTION_MS / 1000}s`);
           console.log(`\x1b[1;33m5) Log lvl:\x1b[0m      \x1b[38;5;208m${settings.LOG_LEVEL}\x1b[0m (debug, info, warn, error)`);
-          const updaterStatus = settings.UPDATER.ACTIVE ? `\x1b[32mON\x1b[0m` : `\x1b[31mOFF\x1b[0m`;
+          const updaterStatus = settings.UPDATER.ACTIVE ? `\x1b[92mON\x1b[0m` : `\x1b[38;5;160mOFF\x1b[0m`;
           const currentSched = parseCronToDelta(settings.UPDATER.SCHEDULE || "0 0 * * *");
           console.log(`\x1b[1;33m6) Updater:\x1b[0m      [${updaterStatus}] \x1b[38;5;208mBranch:\x1b[0m ${settings.UPDATER.BRANCH}, \x1b[38;5;208mInterval:\x1b[0m ${currentSched.days}d, \x1b[38;5;208mTime:\x1b[0m ${currentSched.time}`);
           console.log('--------------------------------------------------');
           console.log('\x1b[1;32mS) Save & Exit\x1b[0m');
-          console.log('\x1b[37mC) Cancel (Discard changes)\x1b[0m');
+          console.log('\x1b[97mC) Cancel (Discard changes)\x1b[0m');
 
          const choice = (await readInput('Select section to edit or action: ', {
              validate: (input: string) => ['1', '2', '3', '4', '5', '6', 's', 'c'].includes(input)
@@ -1119,7 +1119,7 @@ async function promptGeneralSettings() {
                 if (upActive === '\x1b') break;
                 settings.UPDATER.ACTIVE = upActive;
 
-                 console.log('  \x1b[38;5;250mBranch:\x1b[0m \x1b[32mmain\x1b[0m, \x1b[38;5;208mdev\x1b[0m, \x1b[31mtest\x1b[0m, or \x1b[38;5;39mauto\x1b[0m (detected current)');
+                 console.log('  \x1b[38;5;250mBranch:\x1b[0m \x1b[92mmain\x1b[0m, \x1b[38;5;208mdev\x1b[0m, \x1b[38;5;160mtest\x1b[0m, or \x1b[38;5;39mauto\x1b[0m (detected current)');
                 const branch = await askUpdaterBranch('Branch', settings.UPDATER.BRANCH);
                 if (branch === '\x1b') break;
 

@@ -209,12 +209,12 @@ function testFormatWeightLineBuyHigherIsRed() {
   assert.ok(stripped.includes('0.60 (0.50) buy'), 'expected buy side "<live> (<static>)" pair');
   assert.ok(stripped.includes('0.40 (0.50) sell'), 'expected sell side "<live> (<static>)" pair');
   // Buy is higher -> red; sell is lower -> green; both statics -> grey.
-  assert.ok(line.includes('\x1b[31m'), 'red color must be applied to the higher live value (buy)');
-  assert.ok(line.includes('\x1b[32m'), 'green color must be applied to the lower live value (sell)');
+  assert.ok(line.includes('\x1b[91m'), 'red color must be applied to the higher live value (buy)');
+  assert.ok(line.includes('\x1b[92m'), 'green color must be applied to the lower live value (sell)');
   assert.ok(line.includes('\x1b[38;5;246m'), 'grey color must be applied to static values');
   // The first color in the line should be red (buy losing), then green (sell winning).
-  const redIdx = line.indexOf('\x1b[31m');
-  const greenIdx = line.indexOf('\x1b[32m');
+  const redIdx = line.indexOf('\x1b[91m');
+  const greenIdx = line.indexOf('\x1b[92m');
   assert.ok(redIdx < greenIdx, 'red (losing/buy) must appear before green (winning/sell)');
   // Reset codes must follow the colored segments.
   assert.ok(line.includes('\x1b[0m'), 'color segments must be terminated with a reset');
@@ -233,10 +233,10 @@ function testFormatWeightLineSellHigherIsRed() {
   assert.ok(stripped.includes('0.40 (0.50) buy'), 'expected buy side live/static pair');
   assert.ok(stripped.includes('0.60 (0.50) sell'), 'expected sell side live/static pair');
   // Sell is higher -> red (losing); buy is lower -> green (winning).
-  assert.ok(line.includes('\x1b[31m'), 'red color must be present for the higher live value (sell)');
-  assert.ok(line.includes('\x1b[32m'), 'green color must be present for the lower live value (buy)');
-  const redIdx = line.indexOf('\x1b[31m');
-  const greenIdx = line.indexOf('\x1b[32m');
+  assert.ok(line.includes('\x1b[91m'), 'red color must be present for the higher live value (sell)');
+  assert.ok(line.includes('\x1b[92m'), 'green color must be present for the lower live value (buy)');
+  const redIdx = line.indexOf('\x1b[91m');
+  const greenIdx = line.indexOf('\x1b[92m');
   assert.ok(greenIdx < redIdx, 'green (winning/buy) must appear before red (losing/sell)');
 }
 
@@ -249,8 +249,8 @@ function testFormatWeightLineLiveEqualBothGrey() {
   );
   assert.ok(line, 'expected a line');
   // No red or green colors should be used for the live values.
-  assert.ok(!line.includes('\x1b[32m'), 'no green when live weights are equal');
-  assert.ok(!line.includes('\x1b[31m'), 'no red when live weights are equal');
+  assert.ok(!line.includes('\x1b[92m'), 'no green when live weights are equal');
+  assert.ok(!line.includes('\x1b[91m'), 'no red when live weights are equal');
   // Grey should be used (for both the live and the static).
   assert.ok(line.includes('\x1b[38;5;246m'), 'grey should be used when live weights are equal');
 }
@@ -268,7 +268,7 @@ function testFormatWeightLineLiveStaleFallsBackToStatic() {
   assert.ok(!stripped.includes('0.70'), 'stale live value should not be displayed');
   assert.ok(stripped.includes('0.50'), 'static value should be displayed');
   assert.ok(stripped.includes('(adapter offline)'), 'stale snapshot should show adapter offline alert');
-  assert.ok(line.includes('\x1b[31m'), 'alert should be rendered in red');
+  assert.ok(line.includes('\x1b[91m'), 'alert should be rendered in red');
   assert.ok(line.includes('\x1b[38;5;246m'), 'static values should be grey');
 }
 
