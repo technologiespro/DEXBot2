@@ -75,12 +75,12 @@ assert.deepStrictEqual(
 const expectedDexbotPath = path.join(__dirname, '..', 'dexbot.ts');
 assert.deepStrictEqual(
     unlock.buildDexbotStartArgs('XRP-BTS'),
-    ['--import', 'tsx', expectedDexbotPath, 'start', 'XRP-BTS'],
+    ['--import', 'tsx', expectedDexbotPath, 'test', 'XRP-BTS'],
     'launcher should append the requested bot name'
 );
 assert.deepStrictEqual(
     unlock.buildDexbotStartArgs(null),
-    ['--import', 'tsx', expectedDexbotPath, 'start'],
+    ['--import', 'tsx', expectedDexbotPath, 'test'],
     'launcher should omit the bot arg when starting all bots'
 );
 assert.strictEqual(
@@ -114,14 +114,24 @@ assert.deepStrictEqual(
     'unlock parser should parse restart <name>'
 );
 assert.deepStrictEqual(
+    parseUnlockArgs(['node', 'unlock', 'stop', 'all']),
+    { botName: null, clawOnly: false, isolated: false, control: { cmd: 'stop-all', target: null } },
+    'unlock parser should parse stop all'
+);
+assert.deepStrictEqual(
+    parseUnlockArgs(['node', 'unlock', 'restart', 'all']),
+    { botName: null, clawOnly: false, isolated: false, control: { cmd: 'restart-all', target: null } },
+    'unlock parser should parse restart all'
+);
+assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', 'stop-all']),
     { botName: null, clawOnly: false, isolated: false, control: { cmd: 'stop-all', target: null } },
-    'unlock parser should parse stop-all'
+    'unlock parser should parse stop-all (backward compat)'
 );
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', 'restart-all']),
     { botName: null, clawOnly: false, isolated: false, control: { cmd: 'restart-all', target: null } },
-    'unlock parser should parse restart-all'
+    'unlock parser should parse restart-all (backward compat)'
 );
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', 'delete']),

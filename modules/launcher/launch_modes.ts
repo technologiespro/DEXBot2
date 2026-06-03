@@ -10,13 +10,20 @@ function parseUnlockArgs(argv = process.argv) {
     const isolated = args.includes('--isolated');
 
     if (args[0] && CONTROL_COMMANDS.has(args[0])) {
-        const cmd = args[0];
+        let cmd = args[0];
         const target = args[1] || null;
+
+        // Normalize "restart all" → "restart-all", "stop all" → "stop-all"
+        const consumedAll = (cmd === 'restart' || cmd === 'stop') && target === 'all';
+        if (consumedAll) {
+            cmd += '-all';
+        }
+
         return {
             botName: null,
             clawOnly: false,
             isolated: false,
-            control: { cmd, target },
+            control: { cmd, target: consumedAll ? null : target },
         };
     }
 

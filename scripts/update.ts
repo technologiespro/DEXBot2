@@ -111,7 +111,7 @@ function restartMonolithicRuntime(monolithic) {
     const unlockPath = fs.existsSync(path.join(ROOT, 'dist', 'unlock.js'))
         ? path.join(ROOT, 'dist', 'unlock.js')
         : path.join(ROOT, 'unlock.js');
-    run(`node "${unlockPath}" restart-all`);
+    run(`node "${unlockPath}" restart all`);
 }
 
 async function detectIsolatedSupervisor() {

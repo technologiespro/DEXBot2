@@ -16,10 +16,8 @@
  *   node unlock --isolated
  *   node unlock --isolated <botName>
  *   node unlock status, stat
- *   node unlock stop <botName>
- *   node unlock restart <botName>
- *   node unlock stop-all
- *   node unlock restart-all
+ *   node unlock stop <botName>|all
+ *   node unlock restart <botName>|all
  *   node unlock delete
  *
  * Environment:
@@ -1513,7 +1511,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
     const actionLabel = getControlActionLabel(cmd);
 
     if ((effectiveCmd === 'restart' || effectiveCmd === 'stop') && !target) {
-        console.error(`Usage: node unlock ${effectiveCmd === 'restart' ? 'restart <botName> or node unlock restart-all' : 'stop <botName>'}`);
+        console.error(`Usage: node unlock ${effectiveCmd === 'restart' ? 'restart <botName> or node unlock restart all' : 'stop <botName> or node unlock stop all'}`);
         process.exitCode = 1;
         return;
     }

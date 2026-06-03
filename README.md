@@ -167,13 +167,11 @@ Global settings via `node dexbot bot`, stored in `profiles/general.settings.json
 `node unlock` is the recommended production runtime — all bots in one process, credential and market_adapter in separate processes.
 
 ```bash
-node unlock [<bot-name>]        # Start (default runtime)
-node unlock stat                # Runtime status
-node unlock stop <bot>          # Stop a specific bot
-node unlock stop-all            # Stop all bots
-node unlock restart <bot>       # Restart a specific bot
-node unlock restart-all         # Restart all bots
-node unlock delete              # Shut down and clean up
+node unlock [<bot-name>]      # Start (default runtime)
+node unlock stat              # Runtime status
+node unlock stop <bot>|all    # Stop bot(s)
+node unlock restart <bot>|all # Restart bot(s)
+node unlock delete            # Shut down and clean up
 ```
 
 ## 🛠️ Bot Management
