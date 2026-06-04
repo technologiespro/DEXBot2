@@ -996,21 +996,111 @@ function sleep(ms) {
 function readInput(prompt, options = {}) {
     return new Promise((resolve) => {
         const stdin = process.stdin; const stdout = process.stdout;
-        let input = ''; stdout.write(prompt);
+        const ESC_SEQUENCE_TIMEOUT_MS = 150;
+        let input = '';
+        let cursorPos = 0;
+        let escBuf = '';
+        let escTimer = null;
+        stdout.write(prompt);
         const isRaw = stdin.isRaw; if (stdin.isTTY) stdin.setRawMode(true);
         stdin.resume(); stdin.setEncoding('utf8');
+
+        function redraw() {
+            const shouldMask = options.hideEchoBack || typeof options.mask === 'string';
+            const maskChar = options.mask || '*';
+            const display = shouldMask ? maskChar.repeat(input.length) : input;
+            stdout.write('\r\x1b[K' + prompt + display);
+            if (cursorPos < input.length) {
+                stdout.write('\x1b[' + (input.length - cursorPos) + 'D');
+            }
+        }
+
+        function handleSequence(seq) {
+            // Arrow keys
+            if (seq === 'D') { if (cursorPos > 0) { cursorPos--; redraw(); } return true; }
+            if (seq === 'C') { if (cursorPos < input.length) { cursorPos++; redraw(); } return true; }
+            // Home / End
+            if (seq === 'H' || seq === 'OH') { cursorPos = 0; redraw(); return true; }
+            if (seq === 'F' || seq === 'OF') { cursorPos = input.length; redraw(); return true; }
+            // Delete
+            if (seq === '3~') {
+                if (cursorPos < input.length) {
+                    input = input.slice(0, cursorPos) + input.slice(cursorPos + 1);
+                    redraw();
+                }
+                return true;
+            }
+            // Insert
+            if (seq === '2~') { return true; }
+            return false;
+        }
+
+        function processEscBuf() {
+            escTimer = null;
+            const buf = escBuf;
+            escBuf = '';
+            // Standalone ESC
+            if (buf === '\x1b') { cleanup(); stdout.write('\n'); return resolve('\x1b'); }
+            // CSI sequence: ESC [ <params> <final>
+            if (buf.length >= 3 && buf[1] === '[') {
+                const seq = buf.substring(2);
+                if (handleSequence(seq)) return;
+                // Unhandled sequence — ignore
+                return;
+            }
+            // ESC + something else (e.g. Alt+key) — ignore
+        }
+
+        function handleChar(ch) {
+            if (ch === '\r' || ch === '\n' || ch === '\u0004') { cleanup(); stdout.write('\n'); return resolve(input.trim()); }
+            if (ch === '\u0003') { cleanup(); process.exit(); }
+
+            // Backspace
+            if (ch === '\u007f' || ch === '\u0008') {
+                if (cursorPos > 0) {
+                    input = input.slice(0, cursorPos - 1) + input.slice(cursorPos);
+                    cursorPos--;
+                    redraw();
+                }
+                return;
+            }
+
+            // Printable character — insert at cursor
+            if (ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) <= 126) {
+                input = input.slice(0, cursorPos) + ch + input.slice(cursorPos);
+                cursorPos++;
+                redraw();
+            }
+        }
+
         const onData = (chunk) => {
             const s = String(chunk);
             for (let i = 0; i < s.length; i++) {
                 const ch = s[i];
-                if (ch === '\x1b') { if (s.length === 1) { cleanup(); stdout.write('\n'); return resolve('\x1b'); } continue; }
-                if (ch === '\r' || ch === '\n' || ch === '\u0004') { cleanup(); stdout.write('\n'); return resolve(input.trim()); }
-                if (ch === '\u0003') { cleanup(); process.exit(); }
-                if (ch === '\u007f' || ch === '\u0008') { if (input.length > 0) { input = input.slice(0, -1); stdout.write('\b \b'); } continue; }
-                if (ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) <= 126) { input += ch; if (!options.hideEchoBack) stdout.write(options.mask || ch); }
+
+                // Accumulating an escape sequence
+                if (escBuf) {
+                    escBuf += ch;
+                    // CSI: after ESC [, collect up to final byte (@-~)
+                    if (escBuf.length === 2 && escBuf[1] === '[') continue;
+                    if (escBuf.length > 2 && ch >= '@' && ch <= '~') {
+                        clearTimeout(escTimer);
+                        processEscBuf();
+                    }
+                    continue;
+                }
+
+                // Start of potential escape sequence
+                if (ch === '\x1b') {
+                    escBuf = ch;
+                    escTimer = setTimeout(processEscBuf, ESC_SEQUENCE_TIMEOUT_MS);
+                    continue;
+                }
+
+                handleChar(ch);
             }
         };
-        const cleanup = () => { stdin.removeListener('data', onData); if (stdin.isTTY) stdin.setRawMode(isRaw); };
+        const cleanup = () => { clearTimeout(escTimer); escBuf = ''; stdin.removeListener('data', onData); if (stdin.isTTY) stdin.setRawMode(isRaw); };
         stdin.on('data', onData);
     });
 }

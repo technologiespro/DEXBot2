@@ -128,15 +128,27 @@ async function runInodeExactPathMatchTest() {
     // This test only runs when /proc/net/unix is reachable (Linux).
     if (process.platform === 'win32') return;
     const net = require('net');
-    const longPath = socketFile + '.longer-suffix';
+    const shortTarget = path.join(tmpRoot, 's');
+    const longPath = shortTarget + '.longer';
     try { fs.unlinkSync(longPath); } catch (_) {}
     const server = net.createServer(() => {});
-    await new Promise((resolve) => server.listen(longPath, resolve));
+    const listenError = await new Promise((resolve) => {
+        server.once('error', resolve);
+        server.listen(longPath, () => resolve(null));
+    });
+    if (listenError) {
+        if (['EPERM', 'EACCES', 'EADDRNOTAVAIL'].includes(listenError.code)) {
+            console.log(`Skipping inode exact path match test: Unix socket listen unavailable (${listenError.code})`);
+            return;
+        }
+        throw listenError;
+    }
     try {
-        const inode = fcd.readCredentialSocketInode(socketFile);
+        const inode = fcd.readCredentialSocketInode(shortTarget);
         assert.strictEqual(inode, 0, 'substring match must not match a longer path');
     } finally {
         server.close();
+        try { fs.unlinkSync(shortTarget); } catch (_) {}
         try { fs.unlinkSync(longPath); } catch (_) {}
     }
 }

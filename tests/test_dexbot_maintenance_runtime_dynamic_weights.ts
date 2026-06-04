@@ -28,6 +28,7 @@ const startupReconcilePath = require.resolve('../modules/order/grid_reconcile');
 const accountOrdersPath = require.resolve('../modules/account_orders');
 const botSettingsPath = require.resolve('../modules/bot_settings');
 const accountBotsPath = require.resolve('../modules/account_bots');
+const marketAdapterRuntimePath = require.resolve('../modules/launcher/market_adapter_runtime');
 
 const originals = new Map([
     [runtimePath, require.cache[runtimePath]],
@@ -51,6 +52,7 @@ const originals = new Map([
     [accountOrdersPath, require.cache[accountOrdersPath]],
     [botSettingsPath, require.cache[botSettingsPath]],
     [accountBotsPath, require.cache[accountBotsPath]],
+    [marketAdapterRuntimePath, require.cache[marketAdapterRuntimePath]],
 ]);
 
 const originalExistsSync = fs.existsSync;
@@ -151,6 +153,12 @@ async function testPerformGridResyncAppliesVolatilityOnlyDynamicWeights() {
         virtualizeOrder: (order) => order,
     });
     setCachedModule(accountBotsPath, {});
+    setCachedModule(marketAdapterRuntimePath, {
+        getSharedMarketAdapterRuntime: () => ({
+            syncBot: async () => ({ running: false, started: false, stopped: false }),
+            releaseBot: async () => ({ running: false, stopped: false }),
+        }),
+    });
 
     const { performGridResync } = require(runtimePath);
 
@@ -971,6 +979,12 @@ async function testRmsDivergenceRunsFullGridResync() {
     setCachedModule(accountBotsPath, {
         isBotDynamicWeightWhitelisted: () => false,
         resetMarketAdapterWhitelistCache: () => {},
+    });
+    setCachedModule(marketAdapterRuntimePath, {
+        getSharedMarketAdapterRuntime: () => ({
+            syncBot: async () => ({ running: false, started: false, stopped: false }),
+            releaseBot: async () => ({ running: false, stopped: false }),
+        }),
     });
 
     const { executeMaintenanceLogic } = require(runtimePath);

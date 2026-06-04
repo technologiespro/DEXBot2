@@ -71,6 +71,14 @@ function restoreStubs() {
     restoreCachedModule(controllerPath, originalControllerModule);
 }
 
+function isDexbotSpawn(call) {
+    return call.args.some((arg) => String(arg).endsWith('dexbot.ts'));
+}
+
+function isMarketAdapterSpawn(call) {
+    return call.args.some((arg) => String(arg).endsWith('market_adapter/market_adapter.js'));
+}
+
 installStubs();
 process.env.DEXBOT_SUPERVISOR_SOCKET = `/tmp/dexbot-supervisor-test-${process.pid}.sock`;
 process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET = '1';
@@ -86,9 +94,14 @@ async function runAllBotsTest() {
     assert.strictEqual(state.ensureCount, 1, 'launcher should unlock the credential daemon once');
     assert.strictEqual(state.waitCount, 0, 'normal startup should not wait on daemon shutdown');
     assert.strictEqual(state.stopCount, 1, 'launcher should clean up its owned daemon');
-    assert.strictEqual(state.calls.length, 1, 'launcher should spawn exactly one bot process');
+    const botCalls = state.calls.filter(isDexbotSpawn);
+    assert.strictEqual(botCalls.length, 1, 'launcher should spawn exactly one bot process');
+    assert.ok(
+        state.calls.filter(isMarketAdapterSpawn).length <= 1,
+        'launcher may spawn at most one market adapter watchdog process'
+    );
     assert.deepStrictEqual(
-        state.calls[0].args,
+        botCalls[0].args,
         ['--import', 'tsx', path.resolve(__dirname, '..', 'dexbot.ts'), 'test'],
         'default unlock should launch all bots'
     );
@@ -100,8 +113,10 @@ async function runSingleBotTest() {
 
     assert.strictEqual(state.ensureCount, 1, 'launcher should unlock the credential daemon once');
     assert.strictEqual(state.stopCount, 1, 'launcher should clean up its owned daemon');
+    const botCalls = state.calls.filter(isDexbotSpawn);
+    assert.strictEqual(botCalls.length, 1, 'single-bot unlock should spawn exactly one bot process');
     assert.deepStrictEqual(
-        state.calls[0].args,
+        botCalls[0].args,
         ['--import', 'tsx', path.resolve(__dirname, '..', 'dexbot.ts'), 'test', 'XRP-BTS'],
         'single-bot unlock should pass the bot name through'
     );

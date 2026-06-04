@@ -2,6 +2,7 @@ import { spawnSync } from 'child_process';
 
 const testFiles = [
   'tests/test_utils.ts',
+  'tests/test_read_input.ts',
   'tests/test_order_grid.ts',
   'tests/test_logger.ts',
   'tests/test_manager.ts',
