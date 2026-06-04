@@ -2,7 +2,7 @@
 
 This directory contains the comprehensive technical documentation for the DEXBot2 trading bot. It is designed to guide developers from high-level architecture down to the nuances of fund accounting and state management.
 
-**Version context:** v0.7.11 is the current working version. This release closes COW grid-integrity windows, hardens uncertainty-recovery, defends against foreign credential daemons, and adds CLI polish (`node dexbot clear`, plural/singular aliases).
+**Version context:** v0.7.12 is the current working version. This release adds CLI quality-of-life improvements (`node dexbot default`, `stat`/`white` aliases, `start`→`test` rename, `restart all`/`stop all` canonical forms), lightens the terminal color palette, eliminates a doubled log line from CLI-only commands, and sweeps documentation for stale references across 20 files.
 
 ---
 

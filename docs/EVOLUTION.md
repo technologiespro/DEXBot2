@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.11 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.12 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
 - **Growth Phase**: 1,497 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
 - **Stability**: Progression from manual testing to a suite of 208+ automated test files
-- **Releases**: 27 tagged releases (v0.1.0 to v0.7.11)
+- **Releases**: 28 tagged releases (v0.1.0 to v0.7.12)
 
 ---
 
@@ -53,7 +53,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **May 21–22**: Shared AMA strategy with market adapter runtime, Kalman stability patch, adapter packaging consolidation, documentation refresh. Released v0.7.1–v0.7.4.
 
-**May 23–25**: Replaced `btsdex` npm dependency with native BitShares integration, codified zero-dependency policy, completed full TypeScript migration (48K+ lines, 173 tests → 184 by v0.7.11). Released v0.7.5.
+**May 23–25**: Replaced `btsdex` npm dependency with native BitShares integration, codified zero-dependency policy, completed full TypeScript migration (48K+ lines, 173 tests → 184 by v0.7.12). Released v0.7.5.
 
 **May 26–28**: Overhauled fill detection (direct-notice dispatch, instance-based cursor, subscription reconnect), BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening (private-key removal, memory zeroing, bootstrap leak fix).
 
@@ -62,6 +62,8 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 **Jun 1**: Enhanced unlock status with market adapter and credential daemon health indicators, fixed update lifecycle to restart all runtime services, removed PM2 reload wrapper, and de-emphasized PM2 in the README. Released v0.7.9. Then hardened runtime self-healing paths: promoted structural grid drift into an explicit resync path, added targeted chain-truth reconciliation for idle maintenance, guarded post-reset spread correction with a fresh chain sync, and deferred fill processing during order batches; deduplicated the chain-sync/fill pipeline into a shared helper, made launcher wrappers work without a `dist/` build, and added a `node dexbot order` subcommand with green active-bot feedback in `node unlock status`. Released v0.7.10.
 
 **Jun 2–3**: Closed several COW grid-integrity windows (pre-broadcast unmatched-chain guard, post-broadcast missing-`chainOrderId` blocker, sync-engine occupied-slot exclusion, startup `SUSPECTED DUPLICATE` diagnostics) and hardened uncertainty-recovery with a typed `BroadcastUncertainError`, price-drift-orphan prioritization, pre-broadcast price freshness, and a persistence-commit guard. Renamed the shared reconciler to `grid_reconcile.ts`. Defended the launcher against foreign credential daemons, hardened the market adapter watchdog lock, force-rebuilt the updater bundle, and added socket-scoped close coalescing, failover cooldown, idempotent shutdown, and local-cancel artifact filtering. CLI polish: `node dexbot clear`, plural/singular CLI aliases, `node dexbot status` unified runtime status, and live dynamic-weight/adapter-offline alerts in `node dexbot order`. Released v0.7.11.
+
+**Jun 4**: CLI polish (`default`, `white`/`stat` aliases, `start`→`test`, `restart all`/`stop all`), terminal color brightening, doubled-log fix, 20-file doc sweep. Released v0.7.12.
 
 ---
 
@@ -80,7 +82,7 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 ## Version History
 
 ### v0.7.4 → v0.7.5 (93 commits)
-Removal of all external runtime dependencies and full TypeScript migration (48K+ lines, 173 tests → 184+ by v0.7.11). Native BitShares integration replaces `btsdex`, fill detection overhaul with direct-notice dispatch, BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening.
+Removal of all external runtime dependencies and full TypeScript migration (48K+ lines, 173 tests → 184+ by v0.7.12). Native BitShares integration replaces `btsdex`, fill detection overhaul with direct-notice dispatch, BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening.
 
 ### v0.7.5 → v0.7.6 (5 commits)
 Unlock-start launcher hardening (signal handler cleanup, polling guards), deprecated legacy migration code removal, broken reference fixes, 14-file documentation sweep.
@@ -90,6 +92,9 @@ Default background daemon + crash restart for unlock, auto-update for monolithic
 
 ### v0.7.7 → v0.7.8 (7 commits)
 Rename `unlock-start` → `unlock`, unify launcher startup/control summaries, harden monolithic restart after auto-update, clean stale build artifacts, add Performance & Speed section to DEXBot comparison doc.
+
+### v0.7.11 → v0.7.12 (7 commits)
+CLI polish (`default`, `white`/`stat` aliases, `start`→`test`, `restart all`/`stop all`), terminal color brightening, doubled-log lazy-init fix, 20-file doc sweep.
 
 ### v0.7.10 → v0.7.11 (16 commits)
 Close COW grid-integrity windows (unmatched chain orders, missing `chainOrderId` results, occupied-slot adoption, startup `SUSPECTED DUPLICATE` diagnostics); harden uncertainty-recovery with `BroadcastUncertainError`, price-drift-orphan prioritization, and a persistence-commit guard. Rename the shared reconciler to `grid_reconcile.ts`. Defend the launcher against foreign credential daemons, harden the market adapter watchdog lock, force-rebuild the updater bundle, and add native transport close coalescing, failover cooldown, idempotent shutdown, and local-cancel artifact filtering. CLI polish: `node dexbot clear`, plural/singular CLI aliases, `node dexbot status` unified runtime command, and live dynamic-weight/adapter-offline alerts in `node dexbot order`. Documentation sweep for stale version references, file renames, and hardcoded paths; README clarity pass emphasizing unlock as the recommended runtime.
@@ -140,7 +145,7 @@ Core order/fund management, documentation, scripts & tooling.
 
 ## Development Statistics
 
-208+ automated test files (all TypeScript), 27 tagged releases. See **Version History** for commit breakdown by release.
+208+ automated test files (all TypeScript), 28 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -182,7 +187,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: June 3, 2026
-**Total Commits**: 1497
-**Date Range**: December 2, 2025 - June 3, 2026 (ongoing)
+**Last Updated**: June 4, 2026
+**Total Commits**: 1499
+**Date Range**: December 2, 2025 - June 4, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

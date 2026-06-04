@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.12] - 2026-06-04 - CLI Polish, Color Palette Fix & Documentation Sweep
+
+This release adds several CLI quality-of-life improvements (`node dexbot default`, `stat`/`white` aliases, `start`→`test` rename, `restart all`/`stop all` canonical forms), lightens the terminal color palette for better readability, eliminates a doubled log line from CLI-only invocations, and sweeps 20 documentation files for stale references and architecture drift.
+
+### 2026-06-04
+
+#### CLI & UX
+- Add `node dexbot default` (alias: `defaults`) CLI command to delete settings files and restore built-in defaults — runs `scripts/reset-settings.sh` (`adf4ae5`).
+  - Lowered `DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT` (amaS%) default from 0.1 to 0.09 for more sensitive AMA channel response.
+- Normalize `node unlock restart all` / `node unlock stop all` as canonical CLI forms with space-separated `all` parameter; backward compat preserved for hyphenated `restart-all`/`stop-all` forms (`373dcfe`).
+  - Unlock doc comment deduplicated to `stop <botName>|all` / `restart <botName>|all`.
+- Rename `dexbot start` to `dexbot test` as canonical CLI command; keep `start` as backward-compatible alias; add `dexbot unlock` as convenience wrapper for `node unlock` (`49fcca6`).
+  - `stat` now recognized as `status`; `node unlock stop` now requires an explicit `<botName>` argument.
+  - All launchers and internal scripts use the canonical command.
+- Add `dexbot white` (alias for `whitelist`) and `dexbot stat` (alias for `status`) CLI shortcuts (`0a01b43`).
+- Lighten terminal color palette across order display and analysis — standard ANSI colors shifted to bright variants (32m→92m, 33m→93m, 34m→94m, 31m→91m) and adjusted 256-color codes for a uniformly lighter palette (`1549ab5`).
+
+#### Fixes
+- Eliminate doubled "[NodeManager] Loaded config" log output — wrap top-level side-effect initialization in `bitshares_client.ts` in a lazy `ensureInitialized()` guard so commands like `stat`/`status` no longer trigger node-config loading at import time (`1969cec`).
+
+#### Documentation
+- Comprehensive documentation sweep across 20 files fixing stale references, statistics, and architecture drift (`47ca88f`).
+  - **Rewritten**: `docs/architecture.md`, `docs/developer_guide.md`, `claw/docs/POSITION_HEALTH.md`, `claw/skills/margin-trading/references/position-management.md`, `dashboard/tui_dashboard_spec.md`.
+  - **Minor fixes**: `AGENTS.md`, `docs/COPY_ON_WRITE_MASTER_PLAN.md`, `docs/FUND_MOVEMENT_AND_ACCOUNTING.md`, `docs/DEXBOT_COMPARISON.md`, `docs/GRID_RECALCULATION.md`, `docs/LOGGING.md`, `docs/EVOLUTION.md`, `docs/PLAN_MIN_BTS_VALUE.md`, `scripts/README.md`, `dashboard/README.md`, `claw/README.md`, `claw/docs/AI_BOT_LIBRARY_API.md`, `claw/skills/trend-detection/references/service.md`, `market_adapter/README.md`, `analysis/README.md`.
+
+#### Tests
+- Updated `test_launcher_exports.ts` for canonical CLI forms and backward compat.
+- Updated `test_dexbot_startup_output.ts` and `test_unlock_control_output.ts` for `start`→`test` rename.
+- Updated color assertions in `test_analyze_orders_dynamic_weight.ts`, `test_market_price.ts`, `test_debug_orderbook.ts`, `test_any_pair.ts`.
+
 ## [0.7.11] - 2026-06-03 - COW Grid Integrity, Uncertain Broadcast Recovery, Unified Status & Dynamic Weight Display
 
 This release closes several COW grid-integrity windows (missing-create results, unmatched chain orders, stale-slot binding), adds a typed recovery path for uncertain credential broadcasts, defends the launcher against foreign credential daemons, hardens the market adapter watchdog, lands two CLI polish items (`node dexbot clear` log cleanup and plural/singular CLI aliases), adds a unified `node dexbot status` command, integrates live dynamic weight and adapter-offline alerts into `node dexbot order`, and sweeps documentation for stale references and clarity.
