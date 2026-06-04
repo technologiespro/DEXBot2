@@ -181,8 +181,7 @@ node dexbot key                 # Master password/keyring
 node dexbot bot                 # Interactive bot configurator
 node dexbot white               # Market adapter whitelist
 
-node dexbot test [<bot>]        # Test-run a bot only
-node dexbot unlock [<cmd>]      # Alias for node unlock
+node dexbot unlock [<cmd>]      # Standard live runtime
 node dexbot reset {all|<bot>}   # Regenerate grid
 node dexbot disable {all|<bot>} # Disable bot in config
 
