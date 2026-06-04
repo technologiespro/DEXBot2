@@ -287,11 +287,13 @@ try {
 
     /**
      * STEP 8: Reinstall Dependencies
-     * Updates npm packages to versions specified in package-lock.json
+     * Updates npm packages to versions specified in package-lock.json.
+     * --ignore-scripts prevents npm from running the package `prepare` hook,
+     * which would build once here before the explicit build step below.
      * --prefer-offline: Uses cached packages when possible
      */
     log('Updating dependencies...');
-    run('npm install --prefer-offline');
+    run('npm install --prefer-offline --ignore-scripts');
 
     /**
      * STEP 8b: Build TypeScript sources
