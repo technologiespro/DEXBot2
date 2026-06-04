@@ -706,7 +706,7 @@ async function handleCLICommands() {
             await disableBotByName(target === 'all' ? null : target);
             process.exit(0);
         case 'keys':
-            await runAccountManager({ waitForConnection: true, exitAfter: true, disconnectAfter: true });
+            await runAccountManager({ exitAfter: true });
             return true;
          case 'bots':
              setSuppressConnectionLog(true);
