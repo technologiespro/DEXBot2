@@ -21,6 +21,7 @@
     "ptest": "bash scripts/ptest.sh",
     "lp:chart": "tsx scripts/generate_lp_chart.ts",
     "market-adapter:whitelist": "tsx scripts/generate_market_adapter_whitelist.ts",
+    "market-adapter:fetch-cex-synthetic": "tsx market_adapter/inputs/fetch_cex_synthetic_data.ts",
     "analysis:tradingview": "tsx analysis/tradingview/analyze_tradingview.ts",
     "ama:chart:lp-local": "tsx analysis/ama_fitting/generate_unified_comparison_chart.ts",
     "analysis:derivatives": "tsx analysis/analyze_derivatives.ts",

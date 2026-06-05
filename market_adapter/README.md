@@ -92,8 +92,7 @@ The adapter uses tiered clamping thresholds to manage inventory risk during extr
 tsx analysis/ama_fitting/optimizer_high_resolution.ts --data <lp-file.json>
 ```
 
-Source: pool 133 `IOB.XRP/BTS`, 1h candles, 2023-05-05 22:00 UTC through
-2026-05-04 22:00 UTC.
+Source: example LP pool, 1h candles, representative historical window.
 
 | AMA preset | 99.9% — 3.29σ | 99.99% — 3.89σ | 99.999% — 4.42σ |
 |------------|-------------------:|--------------------:|-------------------------:|
@@ -199,6 +198,8 @@ Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 |------|---------|
 | Generate whitelist | `node dexbot white` |
 | Preview whitelist | `tsx scripts/generate_market_adapter_whitelist.ts --dry-run` |
+| Probe public CEX availability | `tsx market_adapter/inputs/fetch_cex_synthetic_data.ts --exchange auto --check-only` |
+| Seed synthetic cross candles | `tsx market_adapter/inputs/fetch_cex_synthetic_data.ts --exchange auto --bot-key <bot-key>` |
 | Run one adapter cycle | `tsx market_adapter/market_adapter.ts --once` |
 | Run one cycle with threshold override | `tsx market_adapter/market_adapter.ts --once --deltaPercent 1.5` |
 | Run continuously | `tsx market_adapter/market_adapter.ts` |
@@ -206,6 +207,20 @@ Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 | Print one bot's compact signal output | `tsx market_adapter/ama_signal_runner.ts --bot <botKey> --compact` |
 
 `--deltaPercent` changes the threshold only for that run.
+
+The public CEX synthetic importer uses only the exchanges that passed the live
+depth test for the requested cross. It ranks them by the historical depth their
+public candle APIs return for the probe window, filters out sources that do
+not meet the market-adapter seed requirement, and then seeds the file with a
+synthetic cross built from two public `USDT` legs on the best usable exchange.
+Some exchanges expose alternate market names for the same underlying asset;
+the importer normalizes those aliases automatically.
+
+The seed depth is calculated from the effective AMA configuration when a bot
+identity is provided, so the generated file has enough candles for that
+runtime configuration. The adapter only reads the exact
+`market_adapter_<botKey>_<interval>.json` file, so the generated seed must
+match the bot's eventual `botKey`.
 
 ## Troubleshooting
 
