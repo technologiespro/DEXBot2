@@ -6,6 +6,7 @@ This exporter generates a standalone HTML chart in the `analysis/charts/` folder
 
 - Log-scale price chart
 - Candle timeframe buttons: `1h`, `4h`, `1d`, `1w`
+- Pair-orientation switcher for `A/B` and `B/A`
 - SMA overlay
 - AMA overlay with explicit `erPeriod`, `fastPeriod`, and `slowPeriod` inputs
 - VWMA overlay
@@ -145,6 +146,7 @@ For manual pool discovery, use `--pool`, `--precA`, and `--precB` instead of `--
 - AMA settings priority: bot-specific `ama` object > market profile > constants (112.7).
 - The AMA controls start with the bot-specific AMA, then pair-specific entry from `profiles/market_profiles.json` when available, falling back to AMA3 values from `modules/constants.ts`.
 - The AMA `Reset` button restores the HTML defaults, not the browser-stored overrides.
+- The pair switcher inverts the candles client-side, so you can inspect both `A/B` and `B/A` views from one export.
 - Indicator, timeframe, and scale changes are persisted in browser `localStorage` for the generated HTML.
 - The price axis defaults to log base `10`, with a toolbar switch for `Log` / `Linear`.
 - If you regenerate the HTML and then open it later, the browser still needs access to the `uPlot` CDN unless you inline or bundle the library.

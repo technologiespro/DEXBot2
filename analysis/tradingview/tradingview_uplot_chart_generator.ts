@@ -111,10 +111,13 @@ function generateHTML(data, title = 'TradingView Style Research') {
 
     const assetLabelA = meta.assetA?.symbol || meta.assetA?.id || 'Asset A';
     const assetLabelB = meta.assetB?.symbol || meta.assetB?.id || 'Asset B';
-    const poolLabel = meta.pool ? `Pool ${String(meta.pool).replace(/^1\.19\./, '')}` : `${assetLabelA}/${assetLabelB}`;
+    const pairLabelNormal = `${assetLabelA}/${assetLabelB}`;
+    const pairLabelInverse = `${assetLabelB}/${assetLabelA}`;
+    const poolLabel = meta.pool ? `Pool ${String(meta.pool).replace(/^1\.19\./, '')}` : 'Pair';
     const intervalLabel = baseIntervalSeconds >= 86400
         ? `${Math.round(baseIntervalSeconds / 86400)}d`
         : `${Math.round(baseIntervalSeconds / 3600)}h`;
+    const defaultPairMode = data.defaultPairMode === 'inverse' ? 'inverse' : 'normal';
 
     const payload = {
         candles,
@@ -127,6 +130,11 @@ function generateHTML(data, title = 'TradingView Style Research') {
         vwapEnabled: defaults.vwapEnabled,
         vwapBars: defaults.vwapBars,
         priceScale: defaults.priceScale,
+        defaultPairMode,
+        assetLabelA,
+        assetLabelB,
+        pairLabelNormal,
+        pairLabelInverse,
         poolLabel,
         intervalLabel,
         amaDefaultsSource: marketProfiles ? 'market_profiles' : 'constants',
@@ -168,6 +176,9 @@ function generateHTML(data, title = 'TradingView Style Research') {
         #toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 12px; align-items: center; }
         .group { display: inline-flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid #263241; }
         .group:first-child { padding-left: 0; border-left: 0; }
+        :root {
+            --control-height: 36px;
+        }
         .time-btn {
             appearance: none;
             border: 1px solid #263241;
@@ -191,7 +202,8 @@ function generateHTML(data, title = 'TradingView Style Research') {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 7px 10px;
+            min-height: var(--control-height);
+            padding: 0 13px;
             border: 1px solid #263241;
             border-radius: 10px;
             background: rgba(20,25,33,0.86);
@@ -200,6 +212,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
             display: inline-flex;
             align-items: center;
             gap: 6px;
+            min-height: var(--control-height);
             font-size: 11px;
             font-weight: 700;
             color: #d7e0ea;
@@ -213,40 +226,81 @@ function generateHTML(data, title = 'TradingView Style Research') {
             background: rgba(10,14,19,0.92);
             color: #d7e0ea;
             border-radius: 8px;
-            padding: 6px 8px;
+            padding: 7px 10px;
             font-size: 11px;
             outline: none;
             width: 79px;
             min-width: 79px;
+            height: calc(var(--control-height) - 8px);
+        }
+        .pair-toggle {
+            appearance: none;
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #263241;
+            border-radius: 999px;
+            background: radial-gradient(circle at 30% 30%, rgba(94,161,255,0.18), rgba(10,14,19,0.96));
+            color: #d7e0ea;
+            cursor: pointer;
+            padding: 0;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+            transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, color 120ms ease;
+        }
+        .pair-toggle:hover {
+            transform: translateY(-1px);
+            border-color: rgba(94,161,255,0.85);
+            color: #fff;
+        }
+        .pair-toggle:active {
+            transform: translateY(0);
+        }
+        .pair-toggle svg {
+            width: 17px;
+            height: 17px;
+            fill: currentColor;
+            display: block;
+        }
+        .pair-toggle.is-inverse {
+            color: #5ea1ff;
+            border-color: rgba(94,161,255,0.45);
         }
         .indicator input[type="number"].ama-fast-field {
             width: 68px;
             min-width: 68px;
         }
-        .scale-switch {
+        .scale-toggle {
+            appearance: none;
+            min-width: 76px;
+            height: 32px;
             display: inline-flex;
             align-items: center;
-            gap: 0;
+            justify-content: center;
             border: 1px solid #263241;
             border-radius: 999px;
-            overflow: hidden;
             background: rgba(10,14,19,0.92);
-        }
-        .scale-btn {
-            appearance: none;
-            border: 0;
-            background: transparent;
-            color: #8290a2;
+            color: #d7e0ea;
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 0.45px;
             text-transform: uppercase;
-            padding: 6px 11px;
             cursor: pointer;
+            padding: 0 11px;
+            transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, color 120ms ease;
         }
-        .scale-btn.active {
+        .scale-toggle:hover {
+            transform: translateY(-1px);
+            border-color: rgba(94,161,255,0.85);
             color: #fff;
-            background: linear-gradient(180deg, rgba(35,53,79,0.95), rgba(22,32,47,0.98));
+        }
+        .scale-toggle:active {
+            transform: translateY(0);
+        }
+        .scale-toggle.is-linear {
+            color: #5ea1ff;
+            border-color: rgba(94,161,255,0.45);
         }
         .reset-btn {
             appearance: none;
@@ -307,7 +361,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
         <div id="topbar">
             <div id="brand">
                 <div id="title">${escapeHtml(title)}</div>
-                <div id="subtitle">${escapeHtml(poolLabel)} · ${escapeHtml(intervalLabel)} base · indicators from 1h · volume · uPlot</div>
+                <div id="subtitle">${escapeHtml(poolLabel)} · ${escapeHtml(pairLabelNormal)} · ${escapeHtml(intervalLabel)} base · indicators from 1h · volume · uPlot</div>
             </div>
             <div id="toolbar">
                 <div class="group" id="tf-group">
@@ -315,11 +369,16 @@ function generateHTML(data, title = 'TradingView Style Research') {
                 </div>
                 <div class="group">
                     <div class="indicator">
+                        <span class="tag">pair</span>
+                        <button type="button" class="pair-toggle${defaultPairMode === 'inverse' ? ' is-inverse' : ''}" id="pair-toggle" aria-label="Swap pair orientation" title="Swap pair orientation" data-pair-mode="${escapeHtml(defaultPairMode)}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path d="M6.5 7H19v2H6.5v3L2 8.5 6.5 5v2Zm11 10H5v-2h12.5v-3L22 15.5 17.5 19v-2Z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="indicator">
                         <span class="tag">scale</span>
-                        <div class="scale-switch" id="price-scale-switch" role="tablist" aria-label="Price scale">
-                            <button type="button" class="scale-btn${defaults.priceScale === 'log' ? ' active' : ''}" data-scale="log">Log</button>
-                            <button type="button" class="scale-btn${defaults.priceScale === 'linear' ? ' active' : ''}" data-scale="linear">Linear</button>
-                        </div>
+                        <button type="button" class="scale-toggle${defaults.priceScale === 'linear' ? ' is-linear' : ''}" id="scale-toggle" data-scale="${escapeHtml(defaults.priceScale)}" aria-label="Toggle price scale" title="Toggle price scale">${defaults.priceScale === 'linear' ? 'Linear' : 'Log'}</button>
                     </div>
                     <div class="indicator">
                         <label><input type="checkbox" id="sma-toggle"${defaults.smaEnabled ? ' checked' : ''}> SMA</label>
@@ -347,9 +406,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
                         <span id="ama-init-offset-val" style="font-size:11px;color:#8b949e;width:32px;display:inline-block;text-align:right">0%</span>
                     </div>
                 </div>
-                <div class="group">
-                    <div class="status pill">Drag to pan · wheel to zoom · crosshair legends</div>
-                </div>
+                <div class="group"></div>
             </div>
         </div>
         <div id="chart-shell">
@@ -406,7 +463,11 @@ function generateHTML(data, title = 'TradingView Style Research') {
         let currentVwapBars = Number.isFinite(state.vwapBars) ? state.vwapBars : Number(payload.vwapBars || 500);
         let currentAmaInitOffset = Number.isFinite(state.amaInitOffset) ? state.amaInitOffset : 0;
         let currentPriceScale = state.priceScale || payload.priceScale || 'log';
+        let currentPairMode = state.pairMode === 'inverse' ? 'inverse' : (payload.defaultPairMode === 'inverse' ? 'inverse' : 'normal');
         let currentCandles = [];
+        let currentSeriesState = null;
+        let currentSeriesCandles = baseCandles;
+        let currentSeriesCloseValues = baseCloseValues;
         let currentOpen = [];
         let currentHigh = [];
         let currentLow = [];
@@ -436,6 +497,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
         const smaCache = new Map();
         const amaCache = new Map();
         const vwapCache = new Map();
+        const seriesCache = new Map();
 
         function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
         function fmtPrice(v) {
@@ -515,12 +577,69 @@ function generateHTML(data, title = 'TradingView Style Research') {
                     vwapBars: currentVwapBars,
                     amaInitOffset: currentAmaInitOffset,
                     priceScale: currentPriceScale,
+                    pairMode: currentPairMode,
                 }));
             } catch (e) {}
         }
+        function normalizePairMode(mode) {
+            return String(mode).toLowerCase() === 'inverse' ? 'inverse' : 'normal';
+        }
+        function getPairLabel(mode = currentPairMode) {
+            return normalizePairMode(mode) === 'inverse'
+                ? (payload.pairLabelInverse || (payload.assetLabelB + '/' + payload.assetLabelA))
+                : (payload.pairLabelNormal || (payload.assetLabelA + '/' + payload.assetLabelB));
+        }
+        function refreshSubtitle() {
+            const subtitleEl = document.getElementById('subtitle');
+            if (!subtitleEl) return;
+            subtitleEl.textContent = payload.poolLabel + ' · ' + getPairLabel() + ' · ' + payload.intervalLabel + ' base · indicators from 1h · volume · uPlot';
+        }
+        function snapInitOffset(value) {
+            const next = Math.round(Number(value) || 0);
+            return Math.abs(next) <= 2 ? 0 : next;
+        }
+        function setActivePairMode(mode) {
+            const label = normalizePairMode(mode);
+            const btn = document.getElementById('pair-toggle');
+            if (!btn) return;
+            btn.dataset.pairMode = label;
+            btn.classList.toggle('is-inverse', label === 'inverse');
+            btn.title = label === 'inverse' ? 'Swap to A/B' : 'Swap to B/A';
+            btn.setAttribute('aria-label', label === 'inverse' ? 'Swap to A/B' : 'Swap to B/A');
+        }
+        function invertCandle(candle) {
+            const open = Number(candle?.open);
+            const high = Number(candle?.high);
+            const low = Number(candle?.low);
+            const close = Number(candle?.close);
+            if (![open, high, low, close].every(Number.isFinite) || open <= 0 || high <= 0 || low <= 0 || close <= 0) return null;
+            const volume = Number(candle?.volume);
+            return {
+                time: candle.time,
+                open: 1 / open,
+                high: 1 / low,
+                low: 1 / high,
+                close: 1 / close,
+                // Convert base-asset volume into the inverse pair's base units approximately.
+                volume: Number.isFinite(volume) ? volume * close : 0,
+            };
+        }
+        function getSeriesState(mode = currentPairMode) {
+            const key = normalizePairMode(mode);
+            if (seriesCache.has(key)) return seriesCache.get(key);
+            const candles = key === 'inverse'
+                ? baseCandles.map(invertCandle).filter(Boolean)
+                : baseCandles.slice();
+            const state = {
+                candles,
+                closeValues: candles.map((c) => c.close),
+            };
+            seriesCache.set(key, state);
+            return state;
+        }
         function aggregateCandles(rows, seconds) {
             const bucketSec = Math.max(1, Math.round(seconds || 3600));
-            const cacheKey = bucketSec;
+            const cacheKey = currentPairMode + '|' + bucketSec;
             if (aggregateCache.has(cacheKey)) return aggregateCache.get(cacheKey);
             const out = [];
             const idxs = [];
@@ -576,7 +695,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
         }
         function computeSMA(candles, period) {
             const safePeriod = Math.max(1, Math.round(period));
-            const cacheKey = safePeriod + '|' + candles.length;
+            const cacheKey = currentPairMode + '|' + safePeriod + '|' + candles.length;
             if (smaCache.has(cacheKey)) return smaCache.get(cacheKey);
             const out = [];
             let sum = 0;
@@ -602,7 +721,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
             return out;
         }
         function getSmaCacheKey(period) {
-            return Math.max(1, Math.round(period)) + '|' + baseCloseValues.length;
+            return currentPairMode + '|' + Math.max(1, Math.round(period)) + '|' + currentSeriesCloseValues.length;
         }
         function createSMAWorker() {
             if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined') return null;
@@ -676,7 +795,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
             if (smaWorkerJob && smaWorkerJob.key !== key) clearSMAWorker();
             if (!smaWorker) smaWorker = createSMAWorker();
             if (!smaWorker) {
-                smaCache.set(key, computeSMA(baseCandles, safePeriod));
+                smaCache.set(key, computeSMA(currentSeriesCandles, safePeriod));
                 if (currentSmaEnabled && key === getSmaCacheKey(currentSmaPeriod)) rerender(false);
                 return;
             }
@@ -692,7 +811,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
                         id: smaWorkerJob.id,
                         key,
                         period: safePeriod,
-                        closes: baseCloseValues,
+                        closes: currentSeriesCloseValues,
                     });
                 });
             });
@@ -709,7 +828,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
             const erPeriod = Math.max(1, Math.round(params.erPeriod ?? 10));
             const fastPeriod = Math.max(0.1, Number(params.fastPeriod ?? 2));
             const slowPeriod = Math.max(0.1, Number(params.slowPeriod ?? 30));
-            const cacheKey = erPeriod + '|' + fastPeriod + '|' + slowPeriod + '|' + candles.length + '|' + initOffset;
+            const cacheKey = currentPairMode + '|' + erPeriod + '|' + fastPeriod + '|' + slowPeriod + '|' + candles.length + '|' + initOffset;
             if (amaCache.has(cacheKey)) return amaCache.get(cacheKey);
             const fastSC = 2 / (fastPeriod + 1);
             const slowSC = 2 / (slowPeriod + 1);
@@ -757,7 +876,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
         }
         function computeVWMA(candles, bars) {
             const safeBars = Math.max(1, Math.round(bars || 500));
-            const cacheKey = safeBars + '|' + candles.length;
+            const cacheKey = currentPairMode + '|' + safeBars + '|' + candles.length;
             if (vwapCache.has(cacheKey)) return vwapCache.get(cacheKey);
             const out = [];
             let cumPV = 0;
@@ -841,7 +960,14 @@ function generateHTML(data, title = 'TradingView Style Research') {
             document.querySelectorAll('.time-btn').forEach((btn) => btn.classList.toggle('active', btn.dataset.timeframe === label));
         }
         function setActivePriceScale(label) {
-            document.querySelectorAll('.scale-btn').forEach((btn) => btn.classList.toggle('active', btn.dataset.scale === label));
+            const btn = document.getElementById('scale-toggle');
+            if (!btn) return;
+            const next = label === 'linear' ? 'linear' : 'log';
+            btn.dataset.scale = next;
+            btn.classList.toggle('is-linear', next === 'linear');
+            btn.textContent = next === 'linear' ? 'Linear' : 'Log';
+            btn.title = next === 'linear' ? 'Toggle to log scale' : 'Toggle to linear scale';
+            btn.setAttribute('aria-label', next === 'linear' ? 'Toggle to log scale' : 'Toggle to linear scale');
         }
         function resetAmaDefaults() {
             currentAmaErPeriod = Number(payload.amaDefaults?.erPeriod || 781);
@@ -912,7 +1038,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
                 ? ((delta >= 0 ? '+' : '') + fmtPrice(delta))
                 : '-';
             document.getElementById('legend-volume').textContent = fmtVolume(c.volume);
-            document.getElementById('legend-scale').textContent = currentPriceScale === 'linear' ? 'Linear' : 'Log 10';
+            document.getElementById('legend-scale').textContent = currentPriceScale === 'linear' ? 'Linear' : 'Log';
             document.getElementById('legend-sma').textContent = Number.isFinite(currentSma[idx]) ? fmtPrice(currentSma[idx]) : (smaPending ? '...' : '-');
             document.getElementById('legend-ama').textContent = Number.isFinite(currentAma[idx]) ? fmtPrice(currentAma[idx]) : '-';
             document.getElementById('legend-sma-init').textContent = Number.isFinite(currentSmaInit[idx]) ? fmtPrice(currentSmaInit[idx]) : '-';
@@ -1063,18 +1189,21 @@ function generateHTML(data, title = 'TradingView Style Research') {
         }
         function buildData() {
             const tf = timeframeMap.get(currentTimeframe) || timeframeMap.get(defaultTimeframe.label) || timeframes[0];
-            const aggregated = aggregateCandles(baseCandles, tf?.seconds || 3600);
+            currentSeriesState = getSeriesState(currentPairMode);
+            currentSeriesCandles = currentSeriesState.candles;
+            currentSeriesCloseValues = currentSeriesState.closeValues;
+            const aggregated = aggregateCandles(currentSeriesCandles, tf?.seconds || 3600);
             currentCandles = aggregated.candles;
             currentDisplayCandles = deriveDisplayCandles(currentCandles);
             currentOpen = currentDisplayCandles.map((c) => c.open);
             currentHigh = currentCandles.map((c) => c.high);
             currentLow = currentCandles.map((c) => c.low);
             currentClose = currentDisplayCandles.map((c) => c.close);
-            const baseAma = currentAmaEnabled ? computeAMA(baseCandles, currentAmaConfig()) : [];
+            const baseAma = currentAmaEnabled ? computeAMA(currentSeriesCandles, currentAmaConfig()) : [];
             const baseAmaOff = currentAmaEnabled && currentAmaInitOffset !== 0
-                ? computeAMA(baseCandles, currentAmaConfig(), currentAmaInitOffset)
+                ? computeAMA(currentSeriesCandles, currentAmaConfig(), currentAmaInitOffset)
                 : [];
-            const baseVwap = currentVwapEnabled ? computeVWMA(baseCandles, currentVwapBars) : [];
+            const baseVwap = currentVwapEnabled ? computeVWMA(currentSeriesCandles, currentVwapBars) : [];
             if (currentSmaEnabled) {
                 const smaKey = getSmaCacheKey(currentSmaPeriod);
                 const baseSma = smaCache.get(smaKey);
@@ -1093,15 +1222,15 @@ function generateHTML(data, title = 'TradingView Style Research') {
             const amaCfg = currentAmaConfig();
             const warmupInit = currentAmaEnabled && baseAma.length > amaCfg.erPeriod ? baseAma[amaCfg.erPeriod] : null;
             const baseSmaInit = warmupInit !== null
-                ? baseCandles.map((c, i) => i <= amaCfg.erPeriod ? warmupInit : null)
-                : new Array(baseCandles.length).fill(null);
+                ? currentSeriesCandles.map((c, i) => i <= amaCfg.erPeriod ? warmupInit : null)
+                : new Array(currentSeriesCandles.length).fill(null);
             currentSmaInit = sampleSeriesByIndex(baseSmaInit, aggregated.idxs);
             const offsetInit = currentAmaEnabled && currentAmaInitOffset !== 0 && baseAmaOff.length > amaCfg.erPeriod
                 ? baseAmaOff[amaCfg.erPeriod]
                 : null;
             const baseSmaInitOff = offsetInit !== null
-                ? baseCandles.map((c, i) => i <= amaCfg.erPeriod ? offsetInit : null)
-                : new Array(baseCandles.length).fill(null);
+                ? currentSeriesCandles.map((c, i) => i <= amaCfg.erPeriod ? offsetInit : null)
+                : new Array(currentSeriesCandles.length).fill(null);
             currentSmaInitOff = sampleSeriesByIndex(baseSmaInitOff, aggregated.idxs);
             currentPriceData = [
                 currentCandles.map((c) => c.time),
@@ -1301,6 +1430,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
             updateLegend(Math.max(0, currentCandles.length - 1));
         }
         function setControls() {
+            setActivePairMode(currentPairMode);
             setActivePriceScale(currentPriceScale);
             document.getElementById('sma-toggle').checked = currentSmaEnabled;
             document.getElementById('sma-period').value = String(currentSmaPeriod);
@@ -1313,6 +1443,7 @@ function generateHTML(data, title = 'TradingView Style Research') {
             document.getElementById('ama-init-offset').value = String(currentAmaInitOffset);
             document.getElementById('ama-init-offset-val').textContent = currentAmaInitOffset + '%';
             setActiveTimeframe(currentTimeframe);
+            refreshSubtitle();
         }
         function rerender(keepRange = true) {
             const oldRange = keepRange && priceChart ? priceChart.scales.x : null;
@@ -1369,15 +1500,22 @@ function generateHTML(data, title = 'TradingView Style Research') {
             });
         });
 
-        document.querySelectorAll('.scale-btn').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const next = btn.dataset.scale === 'linear' ? 'linear' : 'log';
-                if (next === currentPriceScale) return;
-                currentPriceScale = next;
+        const scaleToggle = document.getElementById('scale-toggle');
+        if (scaleToggle) {
+            scaleToggle.addEventListener('click', () => {
+                currentPriceScale = currentPriceScale === 'linear' ? 'log' : 'linear';
                 setActivePriceScale(currentPriceScale);
                 rerender(false);
             });
-        });
+        }
+        const pairToggle = document.getElementById('pair-toggle');
+        if (pairToggle) {
+            pairToggle.addEventListener('click', () => {
+                currentPairMode = currentPairMode === 'inverse' ? 'normal' : 'inverse';
+                setControls();
+                rerender(true);
+            });
+        }
 
         const syncInputs = () => {
             currentSmaEnabled = document.getElementById('sma-toggle').checked;
@@ -1386,7 +1524,9 @@ function generateHTML(data, title = 'TradingView Style Research') {
             currentAmaErPeriod = clamp(Math.round(Number(document.getElementById('ama-er').value) || 781), 1, 999999);
             currentAmaFastPeriod = clamp(Number(document.getElementById('ama-fast').value) || Number(payload.amaDefaults?.fastPeriod || 5.2), 0.1, 999999);
             currentAmaSlowPeriod = clamp(Number(document.getElementById('ama-slow').value) || Number(payload.amaDefaults?.slowPeriod || 112.7), 0.1, 999999);
-            currentAmaInitOffset = Math.round(Number(document.getElementById('ama-init-offset').value) || 0);
+            currentAmaInitOffset = snapInitOffset(document.getElementById('ama-init-offset').value);
+            document.getElementById('ama-init-offset').value = String(currentAmaInitOffset);
+            document.getElementById('ama-init-offset-val').textContent = currentAmaInitOffset + '%';
             currentVwapEnabled = document.getElementById('vwap-toggle').checked;
             currentVwapBars = clamp(Math.round(Number(document.getElementById('vwap-bars').value) || 500), 24, 2000);
             setControls();
@@ -1435,8 +1575,10 @@ function generateHTML(data, title = 'TradingView Style Research') {
         });
         document.getElementById('ama-reset').addEventListener('click', resetAmaDefaults);
         document.getElementById('ama-init-offset').addEventListener('input', () => {
-            const val = document.getElementById('ama-init-offset').value;
-            document.getElementById('ama-init-offset-val').textContent = val + '%';
+            const input = document.getElementById('ama-init-offset');
+            const snapped = snapInitOffset(input.value);
+            if (String(snapped) !== String(input.value)) input.value = String(snapped);
+            document.getElementById('ama-init-offset-val').textContent = snapped + '%';
             syncInputs();
         });
 
