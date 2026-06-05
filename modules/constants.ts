@@ -689,8 +689,8 @@ let MARKET_ADAPTER = {
     //     a recalculate.<botKey>.trigger file is written to signal grid regeneration.
     //   - Configurable per deployment via profiles/general.settings.json under MARKET_ADAPTER.
     //   - Range: 0.1 to 50.0 (enforced in account_bots.js)
-    //   - Default: 1.25 (1.0 Sigma: calibrated at 1.21% on pool 133 3y; triggers reset beyond hourly noise)
-    AMA_DELTA_THRESHOLD_PERCENT: 1.25,
+    //   - Default: 1.00 (slightly more responsive than the 1.21% sigma calibration baseline)
+    AMA_DELTA_THRESHOLD_PERCENT: 1.00,
 
     // AMA_SLOPE_DELTA_THRESHOLD_PERCENT: Percentage change in AMA slope that can trigger a
     // grid reset when the slope delta moves far enough away from the last accepted snapshot.
@@ -730,7 +730,7 @@ let MARKET_ADAPTER = {
     // Lower values make the AMA channel reach maximum influence more easily.
     // Higher values require a stronger price move before AMA reaches full effect.
     // nob: amaS% (AMA Max Slope %)
-    DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: 0.09,
+    DYNAMIC_WEIGHT_AMA_MAX_SLOPE_PCT: 0.085,
 
     // DYNAMIC_WEIGHT_KALMAN_MAX_SLOPE_PCT: Trend size that counts as "full strength" for
     // the Kalman composite branch. Kept separate from the AMA slope knob so the two

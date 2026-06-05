@@ -160,7 +160,7 @@ Configure the default in `profiles/general.settings.json` or from the
 ```json
 {
   "MARKET_ADAPTER": {
-    "AMA_DELTA_THRESHOLD_PERCENT": 1.25
+    "AMA_DELTA_THRESHOLD_PERCENT": 1
   }
 }
 ```
