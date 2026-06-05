@@ -30,7 +30,7 @@ const colors = {
   buy: '\x1b[92m',    // green
   sell: '\x1b[91m',   // light red
   buyDark: '\x1b[38;5;28m',  // even darker green
-  sellDark: '\x1b[38;5;160m', // red
+  sellDark: '\x1b[31m', // dark red
   spread: '\x1b[93m', // yellow
   cyan: '\x1b[38;5;87m',   // bright cyan
   gray: '\x1b[38;5;246m'    // medium grey (lighter than bright black)
