@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.12 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.13 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,497 commits over ~6 active months
+- **Growth Phase**: 1,509 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
 - **Stability**: Progression from manual testing to a suite of 208+ automated test files
-- **Releases**: 28 tagged releases (v0.1.0 to v0.7.12)
+- **Releases**: 29 tagged releases (v0.1.0 to v0.7.13)
 
 ---
 
@@ -53,7 +53,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **May 21–22**: Shared AMA strategy with market adapter runtime, Kalman stability patch, adapter packaging consolidation, documentation refresh. Released v0.7.1–v0.7.4.
 
-**May 23–25**: Replaced `btsdex` npm dependency with native BitShares integration, codified zero-dependency policy, completed full TypeScript migration (48K+ lines, 173 tests → 184 by v0.7.12). Released v0.7.5.
+**May 23–25**: Replaced `btsdex` npm dependency with native BitShares integration, codified zero-dependency policy, completed full TypeScript migration (48K+ lines, 173 tests → 184 by v0.7.13). Released v0.7.5.
 
 **May 26–28**: Overhauled fill detection (direct-notice dispatch, instance-based cursor, subscription reconnect), BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening (private-key removal, memory zeroing, bootstrap leak fix).
 
@@ -64,6 +64,8 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 **Jun 2–3**: Closed several COW grid-integrity windows (pre-broadcast unmatched-chain guard, post-broadcast missing-`chainOrderId` blocker, sync-engine occupied-slot exclusion, startup `SUSPECTED DUPLICATE` diagnostics) and hardened uncertainty-recovery with a typed `BroadcastUncertainError`, price-drift-orphan prioritization, pre-broadcast price freshness, and a persistence-commit guard. Renamed the shared reconciler to `grid_reconcile.ts`. Defended the launcher against foreign credential daemons, hardened the market adapter watchdog lock, force-rebuilt the updater bundle, and added socket-scoped close coalescing, failover cooldown, idempotent shutdown, and local-cancel artifact filtering. CLI polish: `node dexbot clear`, plural/singular CLI aliases, `node dexbot status` unified runtime status, and live dynamic-weight/adapter-offline alerts in `node dexbot order`. Released v0.7.11.
 
 **Jun 4**: CLI polish (`default`, `white`/`stat` aliases, `start`→`test`, `restart all`/`stop all`), terminal color brightening, doubled-log fix, 20-file doc sweep. Released v0.7.12.
+
+**Jun 6**: Added pair orientation toggle to TradingView charts, CEX synthetic candle seeding to complement native candle data, tuned AMA reset and asymmetry defaults, kept key manager startup quiet, avoided duplicate builds during update install, preserved masked terminal input editing, darkened active sell color in order display, and removed stale doc references. Released v0.7.13.
 
 ---
 
@@ -81,8 +83,38 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 
 ## Version History
 
+### v0.1.0 → v0.2.0 (29 commits)
+Core order/fund management, documentation, scripts & tooling.
+
+### v0.2.0 → v0.3.0 (155 commits)
+Fund management & BTS fees, grid divergence detection, persistence & race conditions, order rotation & sizing, refactoring.
+
+### v0.3.0 → v0.4.0 (18 commits)
+Fund management consolidation, grid sizing & quantization, market fees & RMS threshold, partial order handling.
+
+### v0.4.0 → v0.5.0 (92 commits)
+Critical bug fixes, race condition prevention (AsyncLock), fund management centralization, spread correction, fill processing & deduplication, grid health & dust recovery.
+
+### v0.5.0 → v0.6.0 (598 commits)
+Fund accounting overhaul, COW architecture, strategy engine refactoring, sync engine improvements, fill processing hardening, credential daemon, dashboard scaffolding, AMA prototype, comprehensive documentation and testing.
+
+### v0.6.0 → v0.7.0 (325 commits)
+AMA-based market adapter with signal pipeline, credential daemon hardening, connection resilience, credit/MPA debt runtime, safer grid lifecycle, expanded analysis suite.
+
+### v0.7.0 → v0.7.1 (2 commits)
+Share AMA strategy with market adapter, version history docs.
+
+### v0.7.1 → v0.7.2 (2 commits)
+Dynamic-weight Kalman stability patch, chart slope floor adjustment.
+
+### v0.7.2 → v0.7.3 (3 commits)
+Docker launcher docs alignment, centralized AMA slope conversion helpers.
+
+### v0.7.3 → v0.7.4 (5 commits)
+Code cleanup (unused deps, inline helper), documentation refresh.
+
 ### v0.7.4 → v0.7.5 (93 commits)
-Removal of all external runtime dependencies and full TypeScript migration (48K+ lines, 173 tests → 184+ by v0.7.12). Native BitShares integration replaces `btsdex`, fill detection overhaul with direct-notice dispatch, BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening.
+Removal of all external runtime dependencies and full TypeScript migration (48K+ lines, 173 tests → 184+ by v0.7.13). Native BitShares integration replaces `btsdex`, fill detection overhaul with direct-notice dispatch, BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening.
 
 ### v0.7.5 → v0.7.6 (5 commits)
 Unlock-start launcher hardening (signal handler cleanup, polling guards), deprecated legacy migration code removal, broken reference fixes, 14-file documentation sweep.
@@ -93,47 +125,20 @@ Default background daemon + crash restart for unlock, auto-update for monolithic
 ### v0.7.7 → v0.7.8 (7 commits)
 Rename `unlock-start` → `unlock`, unify launcher startup/control summaries, harden monolithic restart after auto-update, clean stale build artifacts, add Performance & Speed section to DEXBot comparison doc.
 
-### v0.7.11 → v0.7.12 (7 commits)
-CLI polish (`default`, `white`/`stat` aliases, `start`→`test`, `restart all`/`stop all`), terminal color brightening, doubled-log lazy-init fix, 20-file doc sweep.
-
-### v0.7.10 → v0.7.11 (16 commits)
-Close COW grid-integrity windows (unmatched chain orders, missing `chainOrderId` results, occupied-slot adoption, startup `SUSPECTED DUPLICATE` diagnostics); harden uncertainty-recovery with `BroadcastUncertainError`, price-drift-orphan prioritization, and a persistence-commit guard. Rename the shared reconciler to `grid_reconcile.ts`. Defend the launcher against foreign credential daemons, harden the market adapter watchdog lock, force-rebuild the updater bundle, and add native transport close coalescing, failover cooldown, idempotent shutdown, and local-cancel artifact filtering. CLI polish: `node dexbot clear`, plural/singular CLI aliases, `node dexbot status` unified runtime command, and live dynamic-weight/adapter-offline alerts in `node dexbot order`. Documentation sweep for stale version references, file renames, and hardcoded paths; README clarity pass emphasizing unlock as the recommended runtime.
+### v0.7.8 → v0.7.9 (9 commits)
+Enhance unlock status with market adapter and credential daemon health indicators, fix unlock update lifecycle to restart all runtime services, remove PM2 reload wrapper, de-emphasize PM2 and clarify unlock modes in the README.
 
 ### v0.7.9 → v0.7.10 (8 commits)
 Harden runtime self-healing: promote structural grid drift into an explicit resync path, add targeted chain-truth reconciliation for idle maintenance, guard post-reset spread correction with a fresh chain sync, and defer fill processing during order batches. Deduplicate the chain-sync/fill pipeline into a shared helper, make launcher wrappers work without a `dist/` build, and add a `node dexbot order` subcommand with green active-bot feedback in `node unlock status`.
 
-### v0.7.8 → v0.7.9 (9 commits)
-Enhance unlock status with market adapter and credential daemon health indicators, fix unlock update lifecycle to restart all runtime services, remove PM2 reload wrapper, de-emphasize PM2 and clarify unlock modes in the README.
+### v0.7.10 → v0.7.11 (16 commits)
+Close COW grid-integrity windows (unmatched chain orders, missing `chainOrderId` results, occupied-slot adoption, startup `SUSPECTED DUPLICATE` diagnostics); harden uncertainty-recovery with `BroadcastUncertainError`, price-drift-orphan prioritization, and a persistence-commit guard. Rename the shared reconciler to `grid_reconcile.ts`. Defend the launcher against foreign credential daemons, harden the market adapter watchdog lock, force-rebuild the updater bundle, and add native transport close coalescing, failover cooldown, idempotent shutdown, and local-cancel artifact filtering. CLI polish: `node dexbot clear`, plural/singular CLI aliases, `node dexbot status` unified runtime command, and live dynamic-weight/adapter-offline alerts in `node dexbot order`. Documentation sweep for stale version references, file renames, and hardcoded paths; README clarity pass emphasizing unlock as the recommended runtime.
 
-### v0.7.3 → v0.7.4 (5 commits)
-Code cleanup (unused deps, inline helper), documentation refresh.
+### v0.7.11 → v0.7.12 (7 commits)
+CLI polish (`default`, `white`/`stat` aliases, `start`→`test`, `restart all`/`stop all`), terminal color brightening, doubled-log lazy-init fix, 20-file doc sweep.
 
-### v0.7.2 → v0.7.3 (3 commits)
-Docker launcher docs alignment, centralized AMA slope conversion helpers.
-
-### v0.7.1 → v0.7.2 (2 commits)
-Dynamic-weight Kalman stability patch, chart slope floor adjustment.
-
-### v0.7.0 → v0.7.1 (2 commits)
-Share AMA strategy with market adapter, version history docs.
-
-### v0.6.0 → v0.7.0 (325 commits)
-AMA-based market adapter with signal pipeline, credential daemon hardening, connection resilience, credit/MPA debt runtime, safer grid lifecycle, expanded analysis suite.
-
-### v0.5.0 → v0.6.0 (598 commits)
-Fund accounting overhaul, COW architecture, strategy engine refactoring, sync engine improvements, fill processing hardening, credential daemon, dashboard scaffolding, AMA prototype, comprehensive documentation and testing.
-
-### v0.4.0 → v0.5.0 (92 commits)
-Critical bug fixes, race condition prevention (AsyncLock), fund management centralization, spread correction, fill processing & deduplication, grid health & dust recovery.
-
-### v0.3.0 → v0.4.0 (18 commits)
-Fund management consolidation, grid sizing & quantization, market fees & RMS threshold, partial order handling.
-
-### v0.2.0 → v0.3.0 (155 commits)
-Fund management & BTS fees, grid divergence detection, persistence & race conditions, order rotation & sizing, refactoring.
-
-### v0.1.0 → v0.2.0 (29 commits)
-Core order/fund management, documentation, scripts & tooling.
+### v0.7.12 → v0.7.13 (9 commits)
+TradingView chart pair orientation toggle, CEX synthetic candle seeding, AMA reset and asymmetry default tuning, key manager startup quieting, duplicate build avoidance during update install, masked terminal input editing preservation, active sell color darkening in order display, stale doc reference cleanup.
 
 ---
 
@@ -145,7 +150,7 @@ Core order/fund management, documentation, scripts & tooling.
 
 ## Development Statistics
 
-208+ automated test files (all TypeScript), 28 tagged releases. See **Version History** for commit breakdown by release.
+208+ automated test files (all TypeScript), 29 tagged releases. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -187,7 +192,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: June 4, 2026
-**Total Commits**: 1499
-**Date Range**: December 2, 2025 - June 4, 2026 (ongoing)
+**Last Updated**: June 6, 2026
+**Total Commits**: 1509
+**Date Range**: December 2, 2025 - June 6, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)
