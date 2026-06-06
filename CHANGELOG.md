@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.13] - 2026-06-06 - TradingView Orientation, CEX Synthetic Seeding & Runtime Polish
+
+This release adds pair-orientation controls to TradingView analysis charts, introduces CEX synthetic candle seeding for market-adapter research data, tunes AMA reset/asymmetry defaults, and fixes several launcher/update/terminal UX rough edges discovered after v0.7.12.
+
+### 2026-06-06
+
+#### Analysis & Market Adapter
+- Add pair orientation toggle to TradingView charts (`89f3900`).
+  - TradingView uPlot output can now switch orientation so chart inspection matches either pair direction.
+  - `analysis/tradingview/README.md` documents the new chart control.
+- Add CEX synthetic candle seeding (`480d8b3`).
+  - New `market_adapter/inputs/fetch_cex_synthetic_data.ts` fetcher seeds synthetic CEX candles for market-adapter data workflows.
+  - `market_adapter/README.md` documents the new data source flow.
+  - Root package scripts now expose `market-adapter:fetch-cex-synthetic`.
+
+### 2026-06-05
+
+#### Runtime & CLI Fixes
+- Preserve masked terminal input editing (`5ab9be6`).
+  - Shared read-input handling in `modules/order/utils/system.ts` now supports editing behavior while keeping sensitive input masked.
+  - Added `tests/test_read_input.ts` plus launcher/runtime test coverage for the updated input path.
+- Avoid duplicate build during update install (`d3ad915`).
+  - `scripts/update.ts` skips the redundant install-time build when the update flow already rebuilds before restart.
+- Keep key manager startup quiet (`201d0a3`).
+  - `dexbot.ts` suppresses unintended startup noise from key-manager paths.
+
+#### Defaults & Display
+- Tune AMA reset and asymmetry defaults (`de6c134`).
+  - Updated `modules/constants.ts` defaults and refreshed matching documentation in `analysis/trend_detection/DYNAMIC_WEIGHT_RESEARCH.md`, `docs/GRID_RECALCULATION.md`, and `market_adapter/README.md`.
+- Darken active sell color in `node dexbot order` / analyze-orders display (`8af8317`).
+
+### 2026-06-04
+
+#### Documentation
+- Remove stale `dexbot test` reference from the README CLI table (`89b2645`).
+
 ## [0.7.12] - 2026-06-04 - CLI Polish, Color Palette Fix & Documentation Sweep
 
 This release adds several CLI quality-of-life improvements (`node dexbot default`, `stat`/`white` aliases, `start`→`test` rename, `restart all`/`stop all` canonical forms), lightens the terminal color palette for better readability, eliminates a doubled log line from CLI-only invocations, and sweeps 20 documentation files for stale references and architecture drift.
