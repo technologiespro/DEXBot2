@@ -166,6 +166,8 @@ function buildDynamicWeightInfo(botKey, config) {
     isReady: dw.isReady === true,
     trend: typeof dw.trend === 'string' ? dw.trend : null,
     finalOffset: Number.isFinite(Number(dw.finalOffset)) ? Number(dw.finalOffset) : null,
+    amaCenterPrice: Number.isFinite(Number(snapshot.amaCenterPrice)) ? Number(snapshot.amaCenterPrice) : null,
+    centerPrice: Number.isFinite(Number(snapshot.centerPrice)) ? Number(snapshot.centerPrice) : null,
     isRecent,
     updatedAt: Number.isFinite(updatedAtMs) ? new Date(updatedAtMs) : null,
   };
@@ -208,24 +210,24 @@ function formatPercent(value) {
 }
 
 /**
- * formatCurrency: Format large numbers with compact notation.
- * Handles millions (M), thousands (K), small values (6 decimals).
+ * formatCurrency: Format a number to 5 significant digits without K/M abbreviation.
+ * Very small values (< 0.01) use 6 decimal places via formatPrice6.
  * @param {number} value - Numeric value to format
  * @returns {string} Formatted currency/quantity string
  */
 function formatCurrency(value) {
-  if (Math.abs(value) >= 1000000) {
-    // Millions: use 2 decimal precision
-    return (value / 1000000).toFixed(2) + 'M';
-  } else if (Math.abs(value) >= 1000) {
-    // Thousands: use 2 decimal precision
-    return (value / 1000).toFixed(2) + 'K';
-  } else if (Math.abs(value) < 0.01) {
-    // Very small values: use 6 decimal precision from format.js
+  if (value === 0) return '0';
+  const abs = Math.abs(value);
+  if (abs < 0.1) {
+    if (abs >= 0.001) return formatCurrency(value * 1000) + 'm';
+    if (abs >= 0.000001) return formatCurrency(value * 1000000) + 'μ';
+    if (abs >= 1e-9) return formatCurrency(value * 1e9) + 'n';
     return formatPrice6(value);
   }
-  // Standard values: use 2 decimal precision
-  return Number(value).toFixed(2);
+  let intDigits = Math.floor(Math.log10(abs)) + 1;
+  if (abs < 1) intDigits = 1;
+  if (intDigits >= 5) return String(Math.round(value));
+  return value.toFixed(5 - intDigits);
 }
 
 /**
@@ -414,9 +416,9 @@ function analyzeOrder(botData, config, botKey) {
   const sellSlots = grid.filter((s, i) => i > boundaryIdx && s.type === ORDER_TYPES.SELL);
   const spreadSlots = grid.filter(s => s.type === ORDER_TYPES.SPREAD);
 
-  const activeBuySlots = buySlots.filter(s => s.state === ORDER_STATES.ACTIVE);
+  const activeBuySlots = buySlots.filter(s => s.state === ORDER_STATES.ACTIVE || s.state === ORDER_STATES.PARTIAL);
   const virtualBuySlots = buySlots.filter(s => s.state === ORDER_STATES.VIRTUAL);
-  const activeSellSlots = sellSlots.filter(s => s.state === ORDER_STATES.ACTIVE);
+  const activeSellSlots = sellSlots.filter(s => s.state === ORDER_STATES.ACTIVE || s.state === ORDER_STATES.PARTIAL);
   const virtualSellSlots = sellSlots.filter(s => s.state === ORDER_STATES.VIRTUAL);
 
   /**
@@ -941,41 +943,23 @@ function analyzeDistribution(buySlots, sellSlots, bestBuySlot, bestSellSlot) {
 }
 
 /**
- * formatWeightLine: Render the "Weight:" line, optionally with live dynamic values.
+ * getRawWeightValues: Extract raw buy/sell value strings for column alignment,
+ * without any color codes or formatting artifacts.
  *
- * Behavior:
- *  - No live data: print the static (configured) buy/sell weights only.
- *  - Stale snapshot (older than 2 × market_adapter poll cycle): print the
- *    static weights and append a red "(adapter offline)" alert so the operator
- *    notices that the market_adapter has stopped publishing for this bot.
- *  - Recent live data: print "<live> (<static>) buy | <live> (<static>) sell".
- *    The metric is always relative to the static values:
- *      - the side with the higher live weight is the "losing" side (red) -
- *        the bot is the most aggressive at offloading the base asset on that side.
- *      - the side with the lower live weight is the "winning" side (green) -
- *        the bot is preserving capital there.
- *      - when the two live weights are within epsilon of each other, both
- *        are rendered in grey.
- *    The static value is always rendered in grey.
+ * Mirrors the display-mode logic of formatWeightLine but returns plain strings.
  *
- * @param {Object} weightDistribution - Bot config {buy, sell} weights
- * @param {Object|null} dynamicWeight - Result of buildDynamicWeightInfo
- * @returns {string|null} Formatted line, or null when no weights are available
+ * @param {Object|null} weightDistribution
+ * @param {Object|null} dynamicWeight
+ * @returns {{ buy: string, sell: string } | null}
  */
-function formatWeightLine(weightDistribution, dynamicWeight) {
+function getRawWeightValues(weightDistribution, dynamicWeight) {
   if (!weightDistribution) return null;
   const staticBuy = Number(weightDistribution.buy);
   const staticSell = Number(weightDistribution.sell);
   if (!Number.isFinite(staticBuy) || !Number.isFinite(staticSell)) return null;
 
-  // Stale snapshot: snapshot file exists but updatedAt is older than the
-  // freshness window. Surface a red "(adapter offline)" alert so the operator
-  // knows the live envelope is being withheld, not just absent.
   if (dynamicWeight && dynamicWeight.isRecent === false) {
-    const staticBuyStr = `${colors.gray}${staticBuy.toFixed(2)}${colors.reset}`;
-    const staticSellStr = `${colors.gray}${staticSell.toFixed(2)}${colors.reset}`;
-    const alertStr = `${colors.sell}(adapter offline)${colors.reset}`;
-    return `   Weight: ${staticBuyStr} buy | ${staticSellStr} sell ${alertStr}`;
+    return { buy: staticBuy.toFixed(2), sell: staticSell.toFixed(2) };
   }
 
   const useLive = !!(dynamicWeight
@@ -985,7 +969,60 @@ function formatWeightLine(weightDistribution, dynamicWeight) {
     && Number.isFinite(Number(dynamicWeight.live.sell)));
 
   if (!useLive) {
-    return `   Weight: ${staticBuy.toFixed(2)} buy | ${staticSell.toFixed(2)} sell`;
+    return { buy: staticBuy.toFixed(2), sell: staticSell.toFixed(2) };
+  }
+
+  const liveBuy = Number(dynamicWeight.live.buy);
+  const liveSell = Number(dynamicWeight.live.sell);
+  return {
+    buy: liveBuy.toFixed(2),
+    sell: liveSell.toFixed(2)
+  };
+}
+
+/**
+ * formatWeightLine: Render the "Weight:" line, optionally with live dynamic values.
+ *
+ * Has three display modes:
+ * 1. No dynamic snapshot at all (static-only) — e.g. legacy bots
+ * 2. Stale snapshot — static values grayed (adapter offline)
+ * 3. Live snapshot — live values colored by delta
+ *
+ * When maxBuyWidth/maxSellWidth are provided, the value portion in each column
+ * is right-padded so it aligns with the widest value across the Active/Weight/Funds block.
+ *
+ * @param {Object|null} weightDistribution - Static weight config from bots.json
+ * @param {Object|null} dynamicWeight - Live weight snapshot from dynamic grid
+ * @param {number} [maxBuyWidth] - Target width for buy-side values (for column alignment)
+ * @param {number} [maxSellWidth] - Target width for sell-side values (for column alignment)
+ * @returns {string|null} Formatted weight line or null if no valid data
+ */
+function formatWeightLine(weightDistribution, dynamicWeight, maxBuyWidth, maxSellWidth) {
+  if (!weightDistribution) return null;
+  const staticBuy = Number(weightDistribution.buy);
+  const staticSell = Number(weightDistribution.sell);
+  if (!Number.isFinite(staticBuy) || !Number.isFinite(staticSell)) return null;
+
+  // Stale snapshot: snapshot file exists but updatedAt is older than the
+  // freshness window. Surface a red "(adapter offline)" alert so the operator
+  // knows the live envelope is being withheld, not just absent.
+  if (dynamicWeight && dynamicWeight.isRecent === false) {
+    const buyVal = staticBuy.toFixed(2);
+    const sellVal = staticSell.toFixed(2);
+    const alertStr = `${colors.sell}(adapter offline)${colors.reset}`;
+    return `   Weight: ${colors.gray}${maxBuyWidth ? buyVal.padEnd(maxBuyWidth) : buyVal}${colors.reset} ${colors.buy}buy${colors.reset} | ${colors.gray}${maxSellWidth ? sellVal.padEnd(maxSellWidth) : sellVal}${colors.reset} ${colors.sell}sell${colors.reset} ${alertStr}`;
+  }
+
+  const useLive = !!(dynamicWeight
+    && dynamicWeight.isRecent
+    && dynamicWeight.live
+    && Number.isFinite(Number(dynamicWeight.live.buy))
+    && Number.isFinite(Number(dynamicWeight.live.sell)));
+
+  if (!useLive) {
+    const buyVal = staticBuy.toFixed(2);
+    const sellVal = staticSell.toFixed(2);
+    return `   Weight: ${maxBuyWidth ? buyVal.padEnd(maxBuyWidth) : buyVal} ${colors.buy}buy${colors.reset} | ${maxSellWidth ? sellVal.padEnd(maxSellWidth) : sellVal} ${colors.sell}sell${colors.reset}`;
   }
 
   const liveBuy = Number(dynamicWeight.live.buy);
@@ -1015,7 +1052,14 @@ function formatWeightLine(weightDistribution, dynamicWeight) {
   const staticBuyStr = `${colors.gray}${staticBuy.toFixed(2)}${colors.reset}`;
   const staticSellStr = `${colors.gray}${staticSell.toFixed(2)}${colors.reset}`;
 
-  return `   Weight: ${liveBuyStr} (${staticBuyStr}) buy | ${liveSellStr} (${staticSellStr}) sell`;
+  const buyValVisual = liveBuy.toFixed(2);
+  const sellValVisual = liveSell.toFixed(2);
+  const coloredBuyVal = liveBuyStr;
+  const coloredSellVal = liveSellStr;
+  const paddedBuyVal = maxBuyWidth ? coloredBuyVal + ' '.repeat(Math.max(0, maxBuyWidth - buyValVisual.length)) : coloredBuyVal;
+  const paddedSellVal = maxSellWidth ? coloredSellVal + ' '.repeat(Math.max(0, maxSellWidth - sellValVisual.length)) : coloredSellVal;
+
+  return `   Weight: ${paddedBuyVal} ${colors.buy}buy${colors.reset} | ${paddedSellVal} ${colors.sell}sell${colors.reset}`;
 }
 
 /**
@@ -1079,15 +1123,48 @@ function formatAnalysis(analysis) {
     const sellTarget = analysis.activeOrdersTarget.sell;
     const buyActual = analysis.slots.activeBuy;
     const sellActual = analysis.slots.activeSell;
-    
-    lines.push(`   Active: ${buyActual}/${buyTarget} buy | ${sellActual}/${sellTarget} sell`);
+
+    // Collect raw buy/sell values across Active, Weight, Funds for column alignment
+    const rawWeightVals = getRawWeightValues(analysis.weightDistribution, analysis.dynamicWeight);
+    const buyValues: string[] = [`${buyActual}/${buyTarget}`];
+    const sellValues: string[] = [`${sellActual}/${sellTarget}`];
+    if (rawWeightVals) {
+      buyValues.push(rawWeightVals.buy);
+      sellValues.push(rawWeightVals.sell);
+    }
+    if (analysis.botFunds) {
+      buyValues.push(analysis.botFunds.buy);
+      sellValues.push(analysis.botFunds.sell);
+    }
+    const maxBuyWidth = Math.max(...buyValues.map(v => stripColorCodes(v).length));
+    const maxSellWidth = Math.max(...sellValues.map(v => stripColorCodes(v).length));
+
+    lines.push(`   Active: ${(buyActual + '/' + buyTarget).padEnd(maxBuyWidth)} ${colors.buy}buy${colors.reset} | ${(sellActual + '/' + sellTarget).padEnd(maxSellWidth)} ${colors.sell}sell${colors.reset}`);
     lines.push(``);
-    const weightLine = formatWeightLine(analysis.weightDistribution, analysis.dynamicWeight);
+    const weightLine = formatWeightLine(analysis.weightDistribution, analysis.dynamicWeight, maxBuyWidth, maxSellWidth);
     if (weightLine) {
       lines.push(weightLine);
     }
     if (analysis.botFunds) {
-      lines.push(`   Funds:  ${analysis.botFunds.buy} buy | ${analysis.botFunds.sell} sell`);
+      lines.push(`    Funds: ${analysis.botFunds.buy.padEnd(maxBuyWidth)} ${colors.buy}buy${colors.reset} | ${analysis.botFunds.sell.padEnd(maxSellWidth)} ${colors.sell}sell${colors.reset}`);
+    }
+    if (analysis.dynamicWeight && analysis.dynamicWeight.amaCenterPrice != null) {
+      const dw = analysis.dynamicWeight;
+      const amaColor = dw.isRecent ? '' : colors.gray;
+      const rawPrice = Number(dw.amaCenterPrice);
+      const amaPrice = rawPrice === 0 ? '0'
+        : (Math.abs(rawPrice) >= 1e5 ? String(Math.round(rawPrice))
+        : rawPrice.toPrecision(5));
+
+      let diffStr = '';
+      if (analysis.marketPrice != null && rawPrice !== 0) {
+        const diff = (analysis.marketPrice - rawPrice) / rawPrice;
+        const diffColor = diff > 0 ? colors.buy : diff < 0 ? colors.sell : '';
+        const sign = diff > 0 ? '+' : '';
+        diffStr = ` ${diffColor}(${sign}${Math.round(diff * 100)}%)${colors.reset}`;
+      }
+
+      lines.push(`      AMA: ${amaColor}${amaPrice}${colors.reset}${diffStr}`);
     }
     lines.push(``);
   }
@@ -1108,8 +1185,8 @@ function formatAnalysis(analysis) {
   const midPrice = analysis.marketPrice ? formatCurrency(analysis.marketPrice) : 'N/A';
   const sellPrice = analysis.gridMaxPrice ? `${colors.sell}${formatCurrency(analysis.gridMaxPrice)}${colors.reset}` : 'N/A';
 
-  const pricePrefix = `   Price:  `;
-  const slotsPrefix = `   Slots:  `;
+  const pricePrefix = `    Price: `;
+  const slotsPrefix = `    Slots: `;
 
   // Get visual lengths (without color codes)
   const buyPriceVisualLen = stripColorCodes(buyPrice).length;
@@ -1209,7 +1286,7 @@ function formatAnalysis(analysis) {
   );
 
   lines.push(
-    `   Funds:  ${weightBar}`
+    `    Funds: ${weightBar}`
   );
 
   // Funds breakdown: BUY on left, SELL on right (right-aligned within its column)
@@ -1217,13 +1294,6 @@ function formatAnalysis(analysis) {
   const sellValueStr = `${formatFundsValue(analysis.funds.sell.xrp)} ${aSymbol}`;
   const buyEquivStr = `≈ ${formatFundsValue(analysis.funds.buy.xrp)} ${aSymbol}`;
   const sellEquivStr = `≈ ${formatFundsValue(analysis.funds.sell.bts)} ${bSymbol}`;
-  const partialParts = [];
-  if (analysis.slots.partialBuy > 0) {
-    partialParts.push(`${analysis.slots.partialBuy} buy`);
-  }
-  if (analysis.slots.partialSell > 0) {
-    partialParts.push(`${analysis.slots.partialSell} sell`);
-  }
 
   // Right column width is the maximum of sell value or sell equivalent
   const rightColWidth = Math.max(sellValueStr.length, sellEquivStr.length);
@@ -1240,7 +1310,7 @@ function formatAnalysis(analysis) {
 
   // Calculate spacing to match the Slots line width (prefix + bar width)
   // This ensures funds breakdown lines align with the visual bar width
-  const barLinePrefix = `   Funds:  `;
+  const barLinePrefix = `    Funds: `;
   const targetWidth = barLinePrefix.length + BAR_WIDTH;
 
   // Spacing for each line: targetWidth - line prefix - buyValue - sellColumn
@@ -1249,10 +1319,25 @@ function formatAnalysis(analysis) {
 
   lines.push(`${prefix1}${colors.buy}${buyValueStr}${colors.reset}${' '.repeat(spacing1)}${colors.sell}${sellValueRight}${colors.reset}`);
   lines.push(`${prefix2}${buyEquivStr}${' '.repeat(spacing2)}${sellEquivRight}`);
-  if (partialParts.length > 0) {
-    lines.push(`${prefix2}${colors.gray}Partial orders: ${partialParts.join(' | ')}${colors.reset}`);
-  }
 
+  // Align pipe separators across all lines so every | sits at the same column
+  let maxPipePos = 0;
+  const pipeLines: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const pipeIdx = lines[i].indexOf('|');
+    if (pipeIdx !== -1) {
+      pipeLines.push(i);
+      const visualLen = stripColorCodes(lines[i].substring(0, pipeIdx)).length;
+      if (visualLen > maxPipePos) maxPipePos = visualLen;
+    }
+  }
+  for (const idx of pipeLines) {
+    const pipeIdx = lines[idx].indexOf('|');
+    const visualLen = stripColorCodes(lines[idx].substring(0, pipeIdx)).length;
+    if (visualLen < maxPipePos) {
+      lines[idx] = lines[idx].substring(0, pipeIdx) + ' '.repeat(maxPipePos - visualLen) + lines[idx].substring(pipeIdx);
+    }
+  }
 
   return lines.join('\n');
 }
@@ -1367,6 +1452,7 @@ module.exports = {
   readDynamicGridSnapshot,
   buildDynamicWeightInfo,
   formatWeightLine,
+  getRawWeightValues,
   analyzeOrder,
   formatAnalysis,
   DYNAMIC_GRID_SNAPSHOT_MAX_AGE_MS,
