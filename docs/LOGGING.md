@@ -21,7 +21,7 @@
 The logging system works out of the box with sensible defaults:
 
 ```bash
-npm start  # Works with smart logging enabled
+node dexbot  # Works with smart logging enabled
 ```
 
 ### Optional: Tune Logging
@@ -45,7 +45,7 @@ Edit `profiles/general.settings.json` to customize:
 Then restart the bot:
 
 ```bash
-npm start
+node dexbot
 ```
 
 ### Run Tests

@@ -698,7 +698,7 @@ sequenceDiagram
     Sync->>Chain: Get open orders
     Chain-->>Sync: Order data
     Sync->>Mgr: syncFromOpenOrders()
-    Mgr->>Strat: processFilledOrders()
+    Mgr->>Mgr: processFilledOrders()
     Strat->>Acct: Update funds (cache proceeds)
     Strat->>Strat: Identify shortages/surpluses
     Strat->>Mgr: Rotate orders
@@ -1321,7 +1321,7 @@ DEXBot2 uses a hardened credential daemon (`credential-daemon.ts`) for key manag
 
 ### Security Layers
 - **Vault v2**: scrypt (N=2^17) key derivation, per-record HKDF isolation, AES-256-GCM encryption
-- **Daemon-backed signing**: Primary bot flow uses signing tokens; compatibility clients can request raw keys
+- **Daemon-backed signing**: Primary bot flow uses signing tokens; all signing happens inside the daemon, raw keys never exported
 - **Session cache**: Encrypted HKDF re-encryption with a random salt never persisted
 - **Runtime hardening**: lstat + owner/mode/type checks on all sockets and ready files; bootstrap socket destroyed after first use
 - **Strict daemon policy**: Memory safety and zeroing, session hardening, signing cache with time-based expiry
@@ -1382,7 +1382,7 @@ The strategy engine has been significantly strengthened with improvements to fun
 - Both market and blockchain taker fees now accounted for correctly
 - Fee deduction uses proper `isMaker` parameter
 - Prevents fund leaks from missing fee calculations
-- Located in: `modules/order/strategy.ts` - `processFilledOrders()`
+- Located in: `modules/order/manager.ts` - `processFilledOrders()`
 
 **6. Precision Spread Management (Logarithmic Logic)**
 - **Discrete Step Tracking**: Replaced the legacy linear multiplier (`SPREAD_WIDENING_MULTIPLIER`) with a discrete 1-slot logarithmic buffer. This ensures correction triggers exactly when the market moves by one full increment.

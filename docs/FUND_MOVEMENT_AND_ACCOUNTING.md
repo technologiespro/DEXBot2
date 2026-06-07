@@ -47,7 +47,7 @@ sellFree represents unallocated assetA available for limit orders
 
 ### Implementation Location
 
-File: `modules/dexbot_class.ts::_buildCreateOps()`
+File: `modules/dexbot_class.ts` — `_buildCreateOps()` (removed, logic consolidated into `_rebalanceGridOrders()`)
 
 ```javascript
 // Separate BUY and SELL orders
@@ -103,7 +103,7 @@ Previously, fills were processed one-at-a-time (~3s per broadcast). A burst of 2
 
 ### Solution: Fixed-Cap Batch Fill Processing
 
-**Mechanism** (`modules/dexbot_class.ts::processFilledOrders`): Groups fills into capped batches before executing the full rebalance pipeline.
+**Mechanism** (`modules/order/manager.ts::processFilledOrders`): Groups fills into capped batches before executing the full rebalance pipeline.
 
 **Batch Sizing Algorithm**:
 ```javascript
@@ -694,7 +694,7 @@ For BUY orders that are makers:
 
 ### 5.5.1 Core Quantization Functions
 
-**Location**: `modules/order/utils/math.ts` (line 235)
+**Location**: `modules/order/utils/math.ts` (line 237)
 
 #### `quantizeFloat(value, precision)` - Eliminate Accumulation Errors
 
