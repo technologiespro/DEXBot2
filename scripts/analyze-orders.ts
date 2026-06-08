@@ -1030,13 +1030,13 @@ function formatWeightLine(weightDistribution, dynamicWeight, maxBuyWidth, maxSel
   // Compare the two live weights, not their deltas: the side with the larger
   // live weight is the one the bot is leaning on most heavily (the "losing"
   // side for that asset). When the two live weights are equal, no side is
-  // being favored, so both fall back to grey.
+  // being favored, so both fall back to white (default terminal color).
   const liveDelta = liveBuy - liveSell;
   let buyColor;
   let sellColor;
   if (Math.abs(liveDelta) <= DYNAMIC_WEIGHT_EPSILON) {
-    buyColor = colors.gray;
-    sellColor = colors.gray;
+    buyColor = '';
+    sellColor = '';
   } else if (liveDelta > 0) {
     // Buy is higher -> losing side (red); sell is lower -> winning side (green)
     buyColor = colors.sell;
