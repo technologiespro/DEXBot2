@@ -5344,6 +5344,92 @@ async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
     assert.ok(Number.isFinite(state.bots['xrp-bts-dw-fail'].lastClosedCandleTs), 'successful retry should finally consume the closed candle');
 }
 
+async function testPlainAmaSnapshotRefreshFailureDoesNotConsumeClosedCandle() {
+    let writeCount = 0;
+    let lastPayload = null;
+
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateTrendingCandles(1000, 100, 0.2) }),
+        saveJson: () => {},
+        calculateBotThreshold: () => 1000,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-ama-refresh-fail.trigger',
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
+            writeCount += 1;
+            lastPayload = payload;
+            return writeCount > 1;
+        },
+        isBotDynamicWeightWhitelisted: () => false,
+        isBotGridRangeScalingWhitelisted: () => false,
+        isBotAsymmetricBoundsWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-ama-refresh-fail',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+
+    const state = {
+        bots: {
+            'xrp-bts-ama-refresh-fail': {
+                centerPrice: 100,
+                amaCenterPrice: 100,
+            },
+        },
+    };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+    };
+
+    const contextCache = new Map();
+    const firstResult = await service.processBot(bot, state, cfg, contextCache, {});
+
+    assert.strictEqual(firstResult.ok, true, 'processBot should still complete when plain AMA snapshot refresh fails');
+    assert.strictEqual(firstResult.triggered, false, 'plain snapshot refresh failure should not create a trigger');
+    assert.strictEqual(firstResult.triggerSuppressedReason, 'ama_center_persist_failed', 'plain snapshot refresh failure should reuse the AMA center persistence reason');
+    assert.strictEqual(writeCount, 1, 'plain AMA snapshot refresh should be attempted');
+    assert.strictEqual(state.bots['xrp-bts-ama-refresh-fail'].effectiveWeights, null, 'non-whitelisted refresh should not advance effective weights');
+    assert.strictEqual(state.bots['xrp-bts-ama-refresh-fail'].amaCenterPrice, 100, 'raw AMA center should remain aligned with the last persisted snapshot');
+    assert.strictEqual(state.bots['xrp-bts-ama-refresh-fail'].lastClosedCandleTs, null, 'failed plain snapshot refresh should not consume the closed candle');
+
+    const secondResult = await service.processBot(bot, state, cfg, contextCache, {});
+
+    assert.strictEqual(secondResult.ok, true, 'retry after plain snapshot refresh failure should complete');
+    assert.strictEqual(secondResult.pendingClosedCandle, false, 'successful retry should process the same closed candle instead of skipping it');
+    assert.strictEqual(secondResult.triggerSuppressedReason, null, 'successful retry should clear the persistence failure reason');
+    assert.strictEqual(writeCount, 2, 'the same closed candle should be retried after plain snapshot refresh failure');
+    assert.strictEqual(lastPayload?.dynamicWeights, undefined, 'plain AMA snapshot refresh should not persist dynamic weights without whitelist flags');
+    assert.ok(Number.isFinite(state.bots['xrp-bts-ama-refresh-fail'].lastClosedCandleTs), 'successful retry should finally consume the closed candle');
+}
+
 async function testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData() {
     let writeCount = 0;
 
@@ -5484,6 +5570,7 @@ async function testDynamicWeightInvalidAtrPeriodAndClampAreSanitized() {
 
 async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
     let dynamicGridWrites = 0;
+    let lastDynamicGridPayload = null;
     let triggerWrites = 0;
 
     const service = new MarketAdapterService({
@@ -5509,8 +5596,9 @@ async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
             triggerWrites += 1;
             return '/tmp/recalculate.xrp-bts-dw-diagnostic.trigger';
         },
-        writeBotDynamicGrid: () => {
+        writeBotDynamicGrid: (_botKey, _center, payload) => {
             dynamicGridWrites += 1;
+            lastDynamicGridPayload = payload;
             return true;
         },
         isBotDynamicWeightWhitelisted: () => false,
@@ -5555,7 +5643,10 @@ async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
     const result = await service.processBot(bot, state, cfg, new Map(), {});
 
     assert.strictEqual(result.ok, true, 'processBot should succeed');
-    assert.strictEqual(dynamicGridWrites, 0, 'non-whitelisted AMA bots should not persist dynamic grids');
+    assert.strictEqual(dynamicGridWrites, 1, 'non-whitelisted AMA bots should still refresh the AMA dynamic grid snapshot');
+    assert.ok(lastDynamicGridPayload, 'dynamic grid payload should be captured');
+    assert.ok(lastDynamicGridPayload.amaSlope, 'snapshot refresh should include AMA slope diagnostics');
+    assert.strictEqual(lastDynamicGridPayload.dynamicWeights, undefined, 'non-whitelisted diagnostics should not persist live dynamic weights');
     assert.strictEqual(triggerWrites, 0, 'non-grid-range-scaling bots should not emit slope reset triggers');
     assert.strictEqual(result.dynamicWeightWhitelisted, false, 'whitelist flag should remain false');
     assert.strictEqual(result.dynamicWeightReady, true, 'diagnostic dynamic weights should still be computed');
@@ -5884,6 +5975,7 @@ async function run() {
     await testDynamicWeightSuppressedTrendUsesFlatProfile();
     await testDynamicWeightWeightOnlyWritesPersistOnClosedCandle();
     await testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState();
+    await testPlainAmaSnapshotRefreshFailureDoesNotConsumeClosedCandle();
     await testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData();
     await testDynamicWeightInvalidAtrPeriodAndClampAreSanitized();
     await testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots();

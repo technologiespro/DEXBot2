@@ -2283,24 +2283,20 @@ class MarketAdapterService {
             ? acceptedGridCenterPrice
             : undefined;
 
-        // Weight-only update path: persist fresh weights to dynamicgrid.json without a grid reset.
-        // The bot will pick these up on the next recalculation cycle after fills or config reload.
-        if (!snapshotPersistedThisCycle && !triggered && !triggerSuppressedReason && !isDryRun && !staleData && canApplyDynamicWeights
-                && dynamicWeightsPayload && (persistedCenterPrice as number) > 0
+        // Successful AMA cycles refresh dynamicgrid.json even when no grid reset
+        // is needed. Dynamic-weight payloads still honor the existing whitelist:
+        // buildDynamicGridOptions includes them only for live dynamic weights or
+        // range-scaling diagnostics, and effectiveWeights only advance when live
+        // dynamic weights are explicitly whitelisted.
+        if (!snapshotPersistedThisCycle && !triggered && !triggerSuppressedReason && !isDryRun && !staleData
+                && (persistedCenterPrice as number) > 0
                 && typeof deps.writeBotDynamicGrid === 'function') {
-            const dynamicWeightsPersisted = deps.writeBotDynamicGrid(bot.botKey, persistedCenterPrice, {
-                amaCenterPrice: amaPrice,
+            const dynamicGridPersisted = persistDynamicGridSnapshot(persistedCenterPrice, {
                 amaSlope: amaSlope || previousAmaSlope || null,
                 gridRangeScalingAmaSlope: botState.gridRangeScalingAmaSlope || previousGridResetAmaSlope || null,
-                amaSlopeDeltaPercent,
-                amaSlopeThresholdPercent,
-                observedLastGridResetAt: botState.lastGridResetAt,
-                ...(isGridRangeScalingWhitelisted
-                    ? { gridPriceOffsetPct: gridPriceOffsetPlan.gridPriceOffsetPct }
-                    : {}),
-                dynamicWeights: dynamicWeightsPayload,
-            }) !== false;
-            if (dynamicWeightsPersisted) {
+                gridPriceOffsetPct: gridPriceOffsetPlan.gridPriceOffsetPct,
+            });
+            if (dynamicGridPersisted) {
                 botState.amaCenterPrice = amaPrice;
                 botState.amaSlope = amaSlope || previousAmaSlope || null;
                 botState.amaSlopeDeltaPercent = Number.isFinite(amaSlopeDeltaPercent)
@@ -2308,10 +2304,14 @@ class MarketAdapterService {
                     : botState.amaSlopeDeltaPercent ?? null;
                 botState.amaSlopeThresholdPercent = amaSlopeThresholdPercent;
                 botState.amaSlopePercentMode = AMA_SLOPE_PERCENT_MODE_PER_BAR;
-                botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
+                if (canApplyDynamicWeights && dynamicWeightsPayload) {
+                    botState.effectiveWeights = dynamicWeightsPayload.effectiveWeights || null;
+                }
                 snapshotPersistedThisCycle = true;
             } else if (!triggerSuppressedReason) {
-                triggerSuppressedReason = 'dynamic_weight_persist_failed';
+                triggerSuppressedReason = canApplyDynamicWeights
+                    ? 'dynamic_weight_persist_failed'
+                    : 'ama_center_persist_failed';
             }
         }
 
