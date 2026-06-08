@@ -99,6 +99,7 @@ const {
     saveSettingsFile,
 } = require('./modules/bot_settings');
 const { buildRuntimeScriptArgs } = require('./modules/launcher/runtime_entry');
+const { buildMarketAdapterWhitelistNpmArgs } = require('./modules/cli_whitelist_args');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
@@ -744,7 +745,7 @@ async function handleCLICommands() {
             return true;
         case 'whitelist': {
             const { spawnSync } = require('child_process');
-            const result = spawnSync('npm', ['run', 'market-adapter:whitelist', ...(target ? [target] : [])], {
+            const result = spawnSync('npm', buildMarketAdapterWhitelistNpmArgs(cliArgs.slice(1)), {
                 cwd: ROOT,
                 stdio: 'inherit',
                 shell: true,

@@ -52,18 +52,21 @@ in dry-run mode.
 node dexbot white
 ```
 
-This writes `profiles/market_adapter_whitelist.json`.
+This writes `profiles/market_adapter_whitelist.json`, where each bot's AMA,
+dynamic-weight, and range-scaling flags can be inspected or adjusted.
 
-To whitelist AMA pricing but keep dynamic weights disabled:
+By default, newly generated entries whitelist AMA pricing and asymmetric bounds,
+but keep dynamic weights disabled. To opt newly generated entries into dynamic
+weights:
 
 ```bash
-tsx scripts/generate_market_adapter_whitelist.ts --no-dynamic-weight
+node dexbot white --dynamic-weight
 ```
 
 To keep asymmetric bounds disabled:
 
 ```bash
-tsx scripts/generate_market_adapter_whitelist.ts --no-asymmetric-bounds
+node dexbot white --no-asymmetric-bounds
 ```
 
 ### 3. Start DEXBot2
@@ -198,6 +201,8 @@ Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 |------|---------|
 | Generate whitelist | `node dexbot white` |
 | Preview whitelist | `tsx scripts/generate_market_adapter_whitelist.ts --dry-run` |
+| Opt new whitelist entries into dynamic weights | `node dexbot white --dynamic-weight` |
+| Generate AMA-only entries without range scaling | `node dexbot white --no-asymmetric-bounds` |
 | Probe public CEX availability | `tsx market_adapter/inputs/fetch_cex_synthetic_data.ts --exchange auto --check-only` |
 | Seed synthetic cross candles | `tsx market_adapter/inputs/fetch_cex_synthetic_data.ts --exchange auto --bot-key <bot-key>` |
 | Run one adapter cycle | `tsx market_adapter/market_adapter.ts --once` |
@@ -483,7 +488,7 @@ market_adapter/
   "whitelist": {
     "<botKey>": {
       "ama": true,
-      "dynamicWeight": true,
+      "dynamicWeight": false,
       "asymmetricBounds": true
     }
   }

@@ -21,11 +21,12 @@ function loadBotsConfig() {
 }
 
 function parseOptions(argv: string[]) {
+    const dynamicWeightEnabled = argv.includes('--dynamic-weight=true') || argv.includes('--dynamic-weight') || argv.includes('--with-dynamic-weight');
     const dynamicWeightDisabled = argv.includes('--dynamic-weight=false') || argv.includes('--no-dynamic-weight');
     const asymmetricBoundsDisabled = argv.includes('--asymmetric-bounds=false') || argv.includes('--no-asymmetric-bounds');
 
     return {
-        dynamicWeight: !dynamicWeightDisabled,
+        dynamicWeight: dynamicWeightEnabled && !dynamicWeightDisabled,
         asymmetricBounds: !asymmetricBoundsDisabled,
     };
 }

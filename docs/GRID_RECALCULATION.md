@@ -238,10 +238,14 @@ Range scaling is enabled by whitelist:
 node dexbot white
 ```
 
+This writes `profiles/market_adapter_whitelist.json`. The default generation
+enables AMA live writes and range scaling for new AMA bots, while leaving
+dynamic weights disabled.
+
 To leave range scaling disabled while allowing AMA pricing:
 
 ```bash
-tsx scripts/generate_market_adapter_whitelist.ts --no-asymmetric-bounds
+node dexbot white --no-asymmetric-bounds
 ```
 
 The snapshot fields involved are:

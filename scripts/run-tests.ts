@@ -67,6 +67,7 @@ const testFiles = [
   'tests/test_dexbot_maintenance_runtime_market_adapter_watchdog.ts',
   'tests/test_dexbot_startup_dynamic_weight_wiring.ts',
   'tests/test_market_adapter_fixes.ts',
+  'tests/test_cli_whitelist_args.ts',
   'tests/test_market_adapter_logic.ts',
   'tests/test_market_adapter_log_format.ts',
   'tests/test_market_adapter_signal_gates.ts',

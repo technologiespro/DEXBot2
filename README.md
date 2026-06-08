@@ -126,6 +126,10 @@ market volatility instead of using an unnecessarily wide range.
    node dexbot white
    ```
 
+   This writes `profiles/market_adapter_whitelist.json`. New AMA bots get AMA
+   live writes and range scaling. Use `node dexbot white --dynamic-weight` for
+   newly generated dynamic-weight entries; existing entries are preserved.
+
 6. Start DEXBot2 with `node unlock` (or `node pm2` for PM2).
 7. Then tune `minPrice` / `maxPrice` for the market's volatility range.
 
@@ -181,7 +185,7 @@ For independent per-bot process control, use isolated mode or PM2 instead of the
 ```bash
 node dexbot key                 # Master password/keyring
 node dexbot bot                 # Interactive bot configurator
-node dexbot white               # Market adapter whitelist
+node dexbot white               # Market adapter whitelist, dynamic weights off by default
 
 node dexbot unlock [<cmd>]      # Standard live runtime
 node dexbot reset {all|<bot>}   # Regenerate grid

@@ -20,6 +20,7 @@ const { MarketAdapterService } = require('../market_adapter/core/market_adapter_
 const {
     buildWhitelist,
     loadExistingWhitelist,
+    parseOptions,
 } = require('../scripts/generate_market_adapter_whitelist');
 
 async function testWhitelistCache() {
@@ -99,7 +100,7 @@ async function testWhitelistGenerationPreservesExistingEntries() {
     };
 
     const result = buildWhitelist(bots, existing, {
-        dynamicWeight: true,
+        dynamicWeight: false,
         asymmetricBounds: true,
     });
 
@@ -110,7 +111,7 @@ async function testWhitelistGenerationPreservesExistingEntries() {
     );
     assert.deepStrictEqual(
         result.whitelist['new-ama-1'],
-        { ama: true, dynamicWeight: true, asymmetricBounds: true },
+        { ama: true, dynamicWeight: false, asymmetricBounds: true },
         'new AMA entry should be added with current command defaults'
     );
     assert.deepStrictEqual(
@@ -122,6 +123,30 @@ async function testWhitelistGenerationPreservesExistingEntries() {
         result.whitelist['non-ama-2'],
         undefined,
         'non-AMA bot configs should not create new whitelist entries'
+    );
+}
+
+async function testWhitelistGenerationOptionDefaults() {
+    console.log(' - Testing whitelist generation option defaults...');
+    assert.deepStrictEqual(
+        parseOptions([]),
+        { dynamicWeight: false, asymmetricBounds: true },
+        'dynamicWeight should default off for newly generated whitelist entries'
+    );
+    assert.deepStrictEqual(
+        parseOptions(['--dynamic-weight']),
+        { dynamicWeight: true, asymmetricBounds: true },
+        'dynamicWeight should be explicitly opt-in'
+    );
+    assert.deepStrictEqual(
+        parseOptions(['--dynamic-weight=true', '--no-asymmetric-bounds']),
+        { dynamicWeight: true, asymmetricBounds: false },
+        'explicit dynamicWeight opt-in should combine with asymmetric-bounds opt-out'
+    );
+    assert.deepStrictEqual(
+        parseOptions(['--dynamic-weight=true', '--no-dynamic-weight']),
+        { dynamicWeight: false, asymmetricBounds: true },
+        'explicit disable should win if conflicting dynamicWeight flags are provided'
     );
 }
 
@@ -323,6 +348,7 @@ async function runAll() {
     console.log('Running Market Adapter Fixes tests...');
     await testWhitelistCache();
     await testWhitelistGenerationPreservesExistingEntries();
+    await testWhitelistGenerationOptionDefaults();
     await testWhitelistLoaderPreservesExistingFileEntries();
     await testKalmanRawValues();
     await testRobustAssetResolution();
