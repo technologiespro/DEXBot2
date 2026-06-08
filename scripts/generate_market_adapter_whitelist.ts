@@ -20,34 +20,86 @@ function loadBotsConfig() {
     return Array.isArray(json?.bots) ? json.bots : [];
 }
 
-function buildWhitelist(bots: any) {
-    const dynamicWeight = process.argv.includes('--dynamic-weight=false')
-        || process.argv.includes('--no-dynamic-weight')
-        ? false
-        : true;
-    const asymmetricBounds = process.argv.includes('--asymmetric-bounds=false')
-        || process.argv.includes('--no-asymmetric-bounds')
-        ? false
-        : true;
-    const entries = [];
+function parseOptions(argv: string[]) {
+    const dynamicWeightDisabled = argv.includes('--dynamic-weight=false') || argv.includes('--no-dynamic-weight');
+    const asymmetricBoundsDisabled = argv.includes('--asymmetric-bounds=false') || argv.includes('--no-asymmetric-bounds');
+
+    return {
+        dynamicWeight: !dynamicWeightDisabled,
+        asymmetricBounds: !asymmetricBoundsDisabled,
+    };
+}
+
+function normalizeWhitelistEntry(entry: any) {
+    if (entry === true) {
+        return { ama: true, dynamicWeight: true, asymmetricBounds: true };
+    }
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        return null;
+    }
+    return {
+        ama: entry.ama === true,
+        dynamicWeight: entry.dynamicWeight === true,
+        asymmetricBounds: entry.asymmetricBounds === true,
+    };
+}
+
+function loadExistingWhitelist() {
+    if (!fs.existsSync(WHITELIST_FILE)) return {};
+
+    let json;
+    try {
+        json = JSON.parse(fs.readFileSync(WHITELIST_FILE, 'utf8'));
+    } catch (err: any) {
+        process.stderr.write(`Warning: ignoring malformed ${WHITELIST_FILE}: ${err.message}\n`);
+        return {};
+    }
+    const raw = json?.whitelist;
+    const entries: any = {};
+
+    if (Array.isArray(raw)) {
+        for (const botKey of raw) {
+            if (botKey) entries[String(botKey)] = { ama: true, dynamicWeight: true, asymmetricBounds: true };
+        }
+    } else if (raw && typeof raw === 'object') {
+        for (const [botKey, entry] of Object.entries(raw)) {
+            entries[String(botKey)] = entry;
+        }
+    }
+
+    return entries;
+}
+
+function buildWhitelist(bots: any, existingWhitelist: any = {}, options = parseOptions(process.argv)) {
+    const entries = new Map<string, any>();
+
+    for (const [botKey, entry] of Object.entries(existingWhitelist || {})) {
+        entries.set(String(botKey), entry);
+    }
 
     for (const [index, bot] of bots.entries()) {
         const botKey = createBotKey(bot, index);
         if (!botKey || !isAmaGridPrice(bot?.gridPrice)) continue;
-        entries.push([String(botKey), { ama: true, dynamicWeight, asymmetricBounds }]);
+        const key = String(botKey);
+        if (!entries.has(key)) {
+            entries.set(key, {
+                ama: true,
+                dynamicWeight: options.dynamicWeight,
+                asymmetricBounds: options.asymmetricBounds,
+            });
+        }
     }
 
-    entries.sort((a: any, b: any) => a[0].localeCompare(b[0]));
-
     return {
-        whitelist: Object.fromEntries(entries),
+        whitelist: Object.fromEntries([...entries.entries()].sort((a, b) => a[0].localeCompare(b[0]))),
     };
 }
 
 function main() {
     const dryRun = process.argv.includes('--dry-run') || process.argv.includes('--print');
     const bots = loadBotsConfig();
-    const whitelist = buildWhitelist(bots);
+    const existingWhitelist = loadExistingWhitelist();
+    const whitelist = buildWhitelist(bots, existingWhitelist, parseOptions(process.argv));
     const output = JSON.stringify(whitelist, null, 2) + '\n';
 
     if (dryRun) {
@@ -62,4 +114,11 @@ function main() {
 if (require.main === module) {
     main();
 }
-export {};
+
+module.exports = {
+    isAmaGridPrice,
+    parseOptions,
+    normalizeWhitelistEntry,
+    loadExistingWhitelist,
+    buildWhitelist,
+};

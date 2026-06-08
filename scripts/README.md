@@ -76,13 +76,13 @@ tsx scripts/validate_bots.ts
 **File:** `generate_market_adapter_whitelist.ts`
 **Purpose:** Generate `profiles/market_adapter_whitelist.json` from bots whose `gridPrice` uses AMA mode.
 ```bash
-# Rewrite the whitelist from profiles/bots.json
+# Add missing AMA bots from profiles/bots.json without changing existing entries
 dexbot white
 
-# Rewrite the whitelist with dynamicWeight disabled for AMA bots
+# Add missing AMA bots with dynamicWeight disabled for newly created entries
 tsx scripts/generate_market_adapter_whitelist.ts --no-dynamic-weight
 
-# Rewrite the whitelist with asymmetricBounds disabled for AMA bots
+# Add missing AMA bots with asymmetricBounds disabled for newly created entries
 tsx scripts/generate_market_adapter_whitelist.ts --no-asymmetric-bounds
 
 # Disable both dynamicWeight and asymmetricBounds

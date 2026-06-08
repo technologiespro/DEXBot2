@@ -17,6 +17,10 @@ const {
 
 const { KalmanTrendAnalyzer } = require('../analysis/trend_detection/kalman_trend_analyzer');
 const { MarketAdapterService } = require('../market_adapter/core/market_adapter_service');
+const {
+    buildWhitelist,
+    loadExistingWhitelist,
+} = require('../scripts/generate_market_adapter_whitelist');
 
 async function testWhitelistCache() {
     console.log(' - Testing isBotWhitelisted caching...');
@@ -79,6 +83,90 @@ async function testWhitelistCache() {
             fs.unlinkSync(WHITELIST_FILE);
         }
         _resetCycleCache();
+    }
+}
+
+async function testWhitelistGenerationPreservesExistingEntries() {
+    console.log(' - Testing whitelist generation preserves existing entries...');
+    const bots = [
+        { name: 'Existing AMA', gridPrice: 'ama' },
+        { name: 'New AMA', gridPrice: 'ama2' },
+        { name: 'Non AMA', gridPrice: 'pool' },
+    ];
+    const existing = {
+        'existing-ama-0': { ama: true, dynamicWeight: false, asymmetricBounds: false, derivativeSignals: false },
+        'manual-non-ama': { ama: true, dynamicWeight: false, asymmetricBounds: true },
+    };
+
+    const result = buildWhitelist(bots, existing, {
+        dynamicWeight: true,
+        asymmetricBounds: true,
+    });
+
+    assert.deepStrictEqual(
+        result.whitelist['existing-ama-0'],
+        { ama: true, dynamicWeight: false, asymmetricBounds: false, derivativeSignals: false },
+        'existing AMA entry must not be normalized or overwritten by generated defaults'
+    );
+    assert.deepStrictEqual(
+        result.whitelist['new-ama-1'],
+        { ama: true, dynamicWeight: true, asymmetricBounds: true },
+        'new AMA entry should be added with current command defaults'
+    );
+    assert.deepStrictEqual(
+        result.whitelist['manual-non-ama'],
+        { ama: true, dynamicWeight: false, asymmetricBounds: true },
+        'manual entries not found in bots.json should be preserved'
+    );
+    assert.strictEqual(
+        result.whitelist['non-ama-2'],
+        undefined,
+        'non-AMA bot configs should not create new whitelist entries'
+    );
+}
+
+async function testWhitelistLoaderPreservesExistingFileEntries() {
+    console.log(' - Testing whitelist loader preserves existing file entries...');
+    const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
+    const WHITELIST_FILE = path.join(PROFILES_DIR, 'market_adapter_whitelist.json');
+
+    let originalContent = null;
+    if (fs.existsSync(WHITELIST_FILE)) {
+        originalContent = fs.readFileSync(WHITELIST_FILE, 'utf8');
+    }
+
+    try {
+        const existing = {
+            whitelist: {
+                'existing-ama-0': {
+                    ama: true,
+                    dynamicWeight: false,
+                    asymmetricBounds: false,
+                    derivativeSignals: false,
+                },
+                'legacy-bool': true,
+            },
+        };
+        fs.writeFileSync(WHITELIST_FILE, JSON.stringify(existing), 'utf8');
+
+        assert.deepStrictEqual(
+            loadExistingWhitelist(),
+            existing.whitelist,
+            'loader must not normalize object-form whitelist entries'
+        );
+
+        fs.writeFileSync(WHITELIST_FILE, '{bad json', 'utf8');
+        assert.deepStrictEqual(
+            loadExistingWhitelist(),
+            {},
+            'malformed whitelist should be ignored so generation can recover'
+        );
+    } finally {
+        if (originalContent !== null) {
+            fs.writeFileSync(WHITELIST_FILE, originalContent, 'utf8');
+        } else if (fs.existsSync(WHITELIST_FILE)) {
+            fs.unlinkSync(WHITELIST_FILE);
+        }
     }
 }
 
@@ -234,6 +322,8 @@ async function testSignalConfirmationInitialLatch() {
 async function runAll() {
     console.log('Running Market Adapter Fixes tests...');
     await testWhitelistCache();
+    await testWhitelistGenerationPreservesExistingEntries();
+    await testWhitelistLoaderPreservesExistingFileEntries();
     await testKalmanRawValues();
     await testRobustAssetResolution();
     await testRobustBotContext();
