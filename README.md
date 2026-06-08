@@ -164,15 +164,17 @@ Global settings via `node dexbot bot`, stored in `profiles/general.settings.json
 
 ## 🎯 Zero-Dependency Process Management
 
-`node unlock` is the recommended production runtime — all bots in one process, credential and market_adapter in separate processes.
+`node unlock` is the recommended production runtime. It runs the selected bot set as one monolithic bot process, with the credential daemon and market adapter in separate helper processes. Monolithic start/stop/restart controls apply to the whole runtime, not to individual bots.
 
 ```bash
-node unlock [<bot-name>]      # Start (default runtime)
-node unlock stat              # Runtime status
-node unlock stop <bot>|all    # Stop bot(s)
-node unlock restart <bot>|all # Restart bot(s)
-node unlock delete            # Shut down and clean up
+node unlock              # Start all active bots
+node unlock stat         # Runtime status
+node unlock stop all     # Stop the monolithic runtime
+node unlock restart all  # Restart the monolithic runtime
+node unlock delete       # Shut down and clean up
 ```
+
+For independent per-bot process control, use isolated mode or PM2 instead of the default monolithic runtime.
 
 ## 🛠️ Bot Management
 

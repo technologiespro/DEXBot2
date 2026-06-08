@@ -12,10 +12,13 @@ const controllerPath = require.resolve('../modules/launcher/credential_daemon');
 const originalControllerModule = require.cache[controllerPath];
 const originalSpawn = childProcess.spawn;
 const originalExistsSync = fs.existsSync;
+const originalReadFileSync = fs.readFileSync;
 const originalOpenSync = fs.openSync;
 const originalCloseSync = fs.closeSync;
 const originalWriteFileSync = fs.writeFileSync;
 const originalUnlinkSync = fs.unlinkSync;
+const originalRealpathSync = fs.realpathSync;
+const originalProcessKill = process.kill;
 const originalProcessExit = process.exit;
 const originalMonolithicBg = process.env.DEXBOT_MONOLITHIC_BG;
 const originalConsoleLog = console.log;
@@ -45,6 +48,8 @@ const state = {
     waitCount: 0,
     stopCount: 0,
     calls: [],
+    liveMonolithicPid: false,
+    monolithicAlive: false,
 };
 
 const controller = {
@@ -69,8 +74,11 @@ function resetState() {
     state.waitCount = 0;
     state.stopCount = 0;
     state.calls.length = 0;
+    state.liveMonolithicPid = false;
+    state.monolithicAlive = false;
     logs.length = 0;
     errors.length = 0;
+    process.exitCode = 0;
 }
 
 function installStubs() {
@@ -94,8 +102,27 @@ function installStubs() {
     };
 
     fs.existsSync = (filePath) => {
+        if (String(filePath) === monolithicPidPath) return state.liveMonolithicPid;
+        if (String(filePath) === `/proc/999999/cmdline`) {
+            return state.liveMonolithicPid && state.monolithicAlive;
+        }
         if (monolithicStatePaths.has(String(filePath))) return false;
         return originalExistsSync(filePath);
+    };
+    fs.readFileSync = (filePath, options) => {
+        if (String(filePath) === monolithicPidPath && state.liveMonolithicPid) {
+            return '999999';
+        }
+        if (String(filePath) === `/proc/999999/cmdline` && state.liveMonolithicPid && state.monolithicAlive) {
+            return ['node', path.resolve(__dirname, '..', 'unlock.js')].join('\0');
+        }
+        return originalReadFileSync(filePath, options);
+    };
+    fs.realpathSync = (filePath) => {
+        if (String(filePath) === `/proc/999999/cwd`) {
+            return path.resolve(__dirname, '..');
+        }
+        return originalRealpathSync(filePath);
     };
     fs.openSync = (filePath, flags, mode) => {
         if (monolithicLogPaths.has(String(filePath))) {
@@ -111,6 +138,20 @@ function installStubs() {
     fs.unlinkSync = (filePath) => {
         if (monolithicStatePaths.has(String(filePath))) return;
         return originalUnlinkSync(filePath);
+    };
+    process.kill = (pid, signal) => {
+        if (pid === 999999 && state.liveMonolithicPid) {
+            if (signal === 0 || signal === undefined) {
+                if (!state.monolithicAlive) {
+                    const err = new Error('No such process');
+                    err.code = 'ESRCH';
+                    throw err;
+                }
+                return true;
+            }
+            return true;
+        }
+        return originalProcessKill(pid, signal);
     };
 
     console.log = (...args) => {
@@ -131,10 +172,13 @@ function installStubs() {
 function restoreStubs() {
     childProcess.spawn = originalSpawn;
     fs.existsSync = originalExistsSync;
+    fs.readFileSync = originalReadFileSync;
     fs.openSync = originalOpenSync;
     fs.closeSync = originalCloseSync;
     fs.writeFileSync = originalWriteFileSync;
     fs.unlinkSync = originalUnlinkSync;
+    fs.realpathSync = originalRealpathSync;
+    process.kill = originalProcessKill;
     process.exit = originalProcessExit;
     if (originalMonolithicBg === undefined) {
         delete process.env.DEXBOT_MONOLITHIC_BG;
@@ -151,6 +195,12 @@ function getActiveBotNames() {
     return resolveRawBotEntries(config)
         .filter((bot) => bot && bot.active !== false)
         .map((bot) => String(bot.name));
+}
+
+function countSpawnCallsMatchingScript(scriptName) {
+    return state.calls.filter((call) => Array.isArray(call.args) && call.args.some((arg) => (
+        typeof arg === 'string' && path.basename(arg).replace(/\.(?:[cm]?js|ts)$/i, '') === scriptName
+    ))).length;
 }
 
 async function runUnlockStart(args, startupGraceMs = 0) {
@@ -208,7 +258,7 @@ async function runForegroundTest() {
 
     assert.strictEqual(state.ensureCount, 1, 'foreground mode should unlock the credential daemon once');
     assert.strictEqual(state.stopCount, 1, 'foreground mode should clean up its owned daemon');
-    assert.strictEqual(state.calls.length, 1, 'foreground mode should spawn the bot process once');
+    assert.strictEqual(countSpawnCallsMatchingScript('dexbot'), 1, 'foreground mode should spawn the bot process once');
     assert.ok(
         logs.includes(`DEXBot2 started ${activeBotNames.length} bot(s) in foreground`),
         'foreground mode should print the shared startup summary'
@@ -226,6 +276,21 @@ async function runReuseDaemonTest() {
     assert.strictEqual(state.ensureCount, 1, 'launcher should still check daemon availability');
     assert.strictEqual(state.stopCount, 0, 'background startup should hand daemon ownership to the child');
     assert.ok(!logs.includes('✓ Authentication successful'), 'launcher should not claim fresh authentication when reusing an existing daemon');
+}
+
+async function runAlreadyRunningTest() {
+    resetState();
+    state.liveMonolithicPid = true;
+    state.monolithicAlive = true;
+
+    await runUnlockStart(['node', 'unlock']);
+
+    assert.strictEqual(state.ensureCount, 0, 'already-running startup should not unlock the credential daemon');
+    assert.strictEqual(state.stopCount, 0, 'already-running startup should not stop any daemon');
+    assert.strictEqual(state.calls.length, 0, 'already-running startup should not spawn another wrapper');
+    assert.strictEqual(process.exitCode, 0, 'already-running startup should exit successfully');
+    assert.ok(logs.includes('DEXBot2 already running in background (PID 999999).'), 'launcher should report the live wrapper PID');
+    assert.ok(errors.length === 0, 'already-running startup should not print an error');
 }
 
 async function runClawOnlyTest() {
@@ -269,6 +334,7 @@ async function runStartupFailureSuppressesSuccessTest() {
         await runSingleBotTest();
         await runForegroundTest();
         await runReuseDaemonTest();
+        await runAlreadyRunningTest();
         await runClawOnlyTest();
         await runStartupFailureSuppressesSuccessTest();
         restoreStubs();

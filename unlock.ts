@@ -9,15 +9,15 @@
  * Use --foreground to run in terminal (no auto-restart).
  *
  * Usage:
- *   node unlock [botName]       Background + auto-restart (default)
+ *   node unlock                 Background + auto-restart (default)
  *   node unlock --foreground    Terminal mode (no auto-restart)
  *   node unlock claw-only
  *   node unlock --claw-only
  *   node unlock --isolated
  *   node unlock --isolated <botName>
  *   node unlock status, stat
- *   node unlock stop <botName>|all
- *   node unlock restart <botName>|all
+ *   node unlock stop all
+ *   node unlock restart all
  *   node unlock delete
  *
  * Environment:
@@ -838,13 +838,25 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
     const { botName, clawOnly, isolated } = parsed;
     const selectedBot = botName ? resolveBotEntryForName(botName) : null;
     const launchedBotNames = getLaunchedBotNames(botName);
+    const shouldStartMonolithicBackground = !clawOnly && !isolated && !isDetachedSupervisorChild && !isMonolithicBgChild && !forceForeground;
     let daemonReleased = false;
 
-    try {
-        if (botName && !selectedBot) {
-            throw new Error(`Bot '${botName}' not found in bots.json`);
-        }
+    if (botName && !selectedBot) {
+        throw new Error(`Bot '${botName}' not found in bots.json`);
+    }
 
+    if (shouldStartMonolithicBackground) {
+        const { pid } = readLiveMonolithicPid();
+        if (pid > 0) {
+            printLauncherHeader({ botName, clawOnly, isolated });
+            console.log(`DEXBot2 already running in background (PID ${pid}).`);
+            console.log('Use `node unlock stat` to inspect it, or `node unlock restart all` to restart it.');
+            process.exitCode = 0;
+            return;
+        }
+    }
+
+    try {
         if (!isDetachedSupervisorChild) {
             printLauncherHeader({ botName, clawOnly, isolated });
 
@@ -889,21 +901,13 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
         }
 
         // Background daemonization for monolithic mode (default)
-        if (!clawOnly && !isolated && !isDetachedSupervisorChild && !isMonolithicBgChild && !forceForeground) {
-            // Check old PID file before overwriting
-            try {
-                if (fs.existsSync(MONOLITHIC_PID_FILE)) {
-                    const oldPid = Number(fs.readFileSync(MONOLITHIC_PID_FILE, 'utf8').trim());
-                    if (Number.isInteger(oldPid) && oldPid > 0) {
-                        try { process.kill(oldPid, 0); throw new Error('already running'); } catch (e: any) {
-                            if (e.message === 'already running') {
-                                throw new Error(`background instance already running (PID ${oldPid})`);
-                            }
-                        }
-                    }
-                }
-            } catch (e: any) {
-                if (e.message.includes('already running')) throw e;
+        if (shouldStartMonolithicBackground) {
+            const { pid } = readLiveMonolithicPid();
+            if (pid > 0) {
+                console.log(`DEXBot2 already running in background (PID ${pid}).`);
+                console.log('Use `node unlock stat` to inspect it, or `node unlock restart all` to restart it.');
+                process.exitCode = 0;
+                return;
             }
 
             const credentialDaemonPid = controller.getManagedDaemonPid();
@@ -1511,7 +1515,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
     const actionLabel = getControlActionLabel(cmd);
 
     if ((effectiveCmd === 'restart' || effectiveCmd === 'stop') && !target) {
-        console.error(`Usage: node unlock ${effectiveCmd === 'restart' ? 'restart <botName> or node unlock restart all' : 'stop <botName> or node unlock stop all'}`);
+        console.error(`Usage: node unlock ${effectiveCmd === 'restart' ? 'restart all' : 'stop all'}`);
         process.exitCode = 1;
         return;
     }

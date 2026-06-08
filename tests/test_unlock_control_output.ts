@@ -40,6 +40,7 @@ const controller = {
 };
 
 function resetState() {
+    process.exitCode = 0;
     logs.length = 0;
     errors.length = 0;
     state.controlCalls.length = 0;
