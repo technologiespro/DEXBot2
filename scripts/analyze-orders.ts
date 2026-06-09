@@ -128,49 +128,62 @@ function readDynamicGridSnapshot(botKey) {
 }
 
 /**
- * buildDynamicWeightInfo: Extract a display-ready dynamic weight payload.
+ * buildDynamicWeightInfo: Extract a display-ready market-adapter payload.
  *
- * Combines the bot's static `weightDistribution` (from bots.json) with the
- * latest `effectiveWeights` from the dynamic grid snapshot. Returns null when
- * the bot is not AMA/dynamic-weight whitelisted or no live data is available,
- * and includes an `isRecent` flag indicating whether the snapshot was written
- * within the freshness window.
+ * Reads the latest AMA dynamic-grid snapshot for AMA-whitelisted bots. Dynamic
+ * weight values are attached only when the bot is also dynamic-weight
+ * whitelisted and the snapshot contains effective weights. AMA center and
+ * freshness status remain available for AMA-only bots.
  */
 function buildDynamicWeightInfo(botKey, config) {
   if (!isAmaGridPrice(config)) return null;
   const whitelistFlags = getWhitelistFlags(botKey);
-  if (!(whitelistFlags.ama === true && whitelistFlags.dynamicWeight === true)) return null;
+  if (whitelistFlags.ama !== true) return null;
   const snapshot = readDynamicGridSnapshot(botKey);
   if (!snapshot) return null;
-  const dw = snapshot.dynamicWeights;
-  if (!dw || typeof dw !== 'object') return null;
-  const effective = dw.effectiveWeights;
-  if (!effective || typeof effective !== 'object') return null;
-  const effBuy = Number(effective.buy);
-  const effSell = Number(effective.sell);
-  if (!Number.isFinite(effBuy) || !Number.isFinite(effSell)) return null;
-  const baseFromSnapshot = dw.baseWeights && typeof dw.baseWeights === 'object' ? dw.baseWeights : null;
-  const baseBuy = baseFromSnapshot && Number.isFinite(Number(baseFromSnapshot.buy))
-    ? Number(baseFromSnapshot.buy)
-    : (config.weightDistribution && Number.isFinite(Number(config.weightDistribution.buy))
-        ? Number(config.weightDistribution.buy)
-        : null);
-  const baseSell = baseFromSnapshot && Number.isFinite(Number(baseFromSnapshot.sell))
-    ? Number(baseFromSnapshot.sell)
-    : (config.weightDistribution && Number.isFinite(Number(config.weightDistribution.sell))
-        ? Number(config.weightDistribution.sell)
-        : null);
-  if (!Number.isFinite(baseBuy) || !Number.isFinite(baseSell)) return null;
+  const dw = snapshot.dynamicWeights && typeof snapshot.dynamicWeights === 'object'
+    ? snapshot.dynamicWeights
+    : null;
+  const hasDynamicWeightData = whitelistFlags.dynamicWeight === true
+    && dw
+    && dw.effectiveWeights
+    && typeof dw.effectiveWeights === 'object';
+  let live = null;
+  let base = null;
+  if (hasDynamicWeightData) {
+    const effBuy = Number(dw.effectiveWeights.buy);
+    const effSell = Number(dw.effectiveWeights.sell);
+    if (Number.isFinite(effBuy) && Number.isFinite(effSell)) {
+      const baseFromSnapshot = dw.baseWeights && typeof dw.baseWeights === 'object' ? dw.baseWeights : null;
+      const baseBuy = baseFromSnapshot && Number.isFinite(Number(baseFromSnapshot.buy))
+        ? Number(baseFromSnapshot.buy)
+        : (config.weightDistribution && Number.isFinite(Number(config.weightDistribution.buy))
+            ? Number(config.weightDistribution.buy)
+            : null);
+      const baseSell = baseFromSnapshot && Number.isFinite(Number(baseFromSnapshot.sell))
+        ? Number(baseFromSnapshot.sell)
+        : (config.weightDistribution && Number.isFinite(Number(config.weightDistribution.sell))
+            ? Number(config.weightDistribution.sell)
+            : null);
+      if (Number.isFinite(baseBuy) && Number.isFinite(baseSell)) {
+        live = { buy: effBuy, sell: effSell };
+        base = { buy: baseBuy, sell: baseSell };
+      }
+    }
+  }
   const updatedAtMs = Date.parse(String(snapshot.updatedAt || ''));
   const isRecent = Number.isFinite(updatedAtMs)
     && (Date.now() - updatedAtMs) <= DYNAMIC_GRID_SNAPSHOT_MAX_AGE_MS;
+  const amaCenterPrice = Number.isFinite(Number(snapshot.amaCenterPrice))
+    ? Number(snapshot.amaCenterPrice)
+    : (Number.isFinite(Number(snapshot.gridCenterPrice)) ? Number(snapshot.gridCenterPrice) : null);
   return {
-    live: { buy: effBuy, sell: effSell },
-    base: { buy: baseBuy, sell: baseSell },
-    isReady: dw.isReady === true,
-    trend: typeof dw.trend === 'string' ? dw.trend : null,
-    finalOffset: Number.isFinite(Number(dw.finalOffset)) ? Number(dw.finalOffset) : null,
-    amaCenterPrice: Number.isFinite(Number(snapshot.amaCenterPrice)) ? Number(snapshot.amaCenterPrice) : null,
+    live,
+    base,
+    isReady: dw ? dw.isReady === true : false,
+    trend: dw && typeof dw.trend === 'string' ? dw.trend : null,
+    finalOffset: dw && Number.isFinite(Number(dw.finalOffset)) ? Number(dw.finalOffset) : null,
+    amaCenterPrice,
     centerPrice: Number.isFinite(Number(snapshot.centerPrice)) ? Number(snapshot.centerPrice) : null,
     isRecent,
     updatedAt: Number.isFinite(updatedAtMs) ? new Date(updatedAtMs) : null,

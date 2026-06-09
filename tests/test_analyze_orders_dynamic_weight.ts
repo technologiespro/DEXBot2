@@ -209,7 +209,7 @@ function testBuildDynamicWeightInfoRejectsMissingEffectiveWeights() {
   writeSnapshot(botKey, {
     updatedAt,
     dynamicWeights: {
-      // No effectiveWeights - we should return null.
+      // No effectiveWeights: adapter status is still useful, but live weights are not.
       baseWeights: { sell: 0.5, buy: 0.5 },
     },
   });
@@ -221,17 +221,20 @@ function testBuildDynamicWeightInfoRejectsMissingEffectiveWeights() {
       const { buildDynamicWeightInfo } = loadAnalyzer();
       return buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.5, sell: 0.5 } });
     });
-    assert.strictEqual(info, null, 'missing effectiveWeights should yield null info');
+    assert.ok(info, 'missing effectiveWeights should still expose adapter snapshot status');
+    assert.strictEqual(info.live, null, 'missing effectiveWeights should not expose live weights');
+    assert.strictEqual(info.isRecent, true, 'fresh snapshot remains fresh without effectiveWeights');
   } finally {
     removeSnapshot(botKey);
   }
 }
 
-function testBuildDynamicWeightInfoRequiresAmaAndDynamicWeightWhitelist() {
+function testBuildDynamicWeightInfoRequiresAmaWhitelistForSnapshotStatus() {
   const botKey = `dw-not-whitelisted-${Date.now()}`;
   const updatedAt = new Date(Date.now() - 1000).toISOString();
   writeSnapshot(botKey, {
     updatedAt,
+    amaCenterPrice: 101,
     dynamicWeights: {
       effectiveWeights: { sell: 0.55, buy: 0.45 },
       baseWeights: { sell: 0.5, buy: 0.5 },
@@ -245,7 +248,9 @@ function testBuildDynamicWeightInfoRequiresAmaAndDynamicWeightWhitelist() {
       const { buildDynamicWeightInfo } = loadAnalyzer();
       return buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.5, sell: 0.5 } });
     });
-    assert.strictEqual(amaOnlyInfo, null, 'AMA-only whitelist should not enable dynamic weight display');
+    assert.ok(amaOnlyInfo, 'AMA-only whitelist should expose adapter snapshot status');
+    assert.strictEqual(amaOnlyInfo.live, null, 'AMA-only whitelist should not enable dynamic weight display');
+    assert.strictEqual(amaOnlyInfo.amaCenterPrice, 101, 'AMA center should be available for AMA-only bots');
 
     const dynamicOnlyInfo = withWhitelist({
       [botKey]: { ama: false, dynamicWeight: true, asymmetricBounds: false },
@@ -253,7 +258,7 @@ function testBuildDynamicWeightInfoRequiresAmaAndDynamicWeightWhitelist() {
       const { buildDynamicWeightInfo } = loadAnalyzer();
       return buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.5, sell: 0.5 } });
     });
-    assert.strictEqual(dynamicOnlyInfo, null, 'dynamicWeight-only whitelist should not enable dynamic weight display');
+    assert.strictEqual(dynamicOnlyInfo, null, 'dynamicWeight-only whitelist should not expose adapter data');
   } finally {
     removeSnapshot(botKey);
   }
@@ -291,6 +296,38 @@ function testFormatWeightLineAmaWithoutDynamicWhitelistStaysWhite() {
     assert.ok(!line.includes('\x1b[91m0.50'), 'static buy/sell values should not be red');
     assert.ok(!line.includes('\x1b[92m0.50'), 'static buy/sell values should not be green');
     assert.ok(!line.includes('\x1b[38;5;246m0.50'), 'static buy/sell values should not be grey');
+  } finally {
+    removeSnapshot(botKey);
+  }
+}
+
+function testFormatWeightLineStaleAmaWithoutDynamicWhitelistShowsOffline() {
+  const botKey = `dw-ama-stale-${Date.now()}`;
+  const updatedAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  writeSnapshot(botKey, {
+    updatedAt,
+    amaCenterPrice: 101,
+    dynamicWeights: {
+      effectiveWeights: { sell: 0.7, buy: 0.3 },
+      baseWeights: { sell: 0.5, buy: 0.5 },
+    },
+  });
+
+  try {
+    const line = withWhitelist({
+      [botKey]: { ama: true, dynamicWeight: false, asymmetricBounds: false },
+    }, () => {
+      const { buildDynamicWeightInfo, formatWeightLine } = loadAnalyzer();
+      const dynamicWeight = buildDynamicWeightInfo(botKey, {
+        gridPrice: 'ama',
+        weightDistribution: { buy: 0.5, sell: 0.5 },
+      });
+      return formatWeightLine({ buy: 0.5, sell: 0.5 }, dynamicWeight);
+    });
+    const stripped = stripColorCodes(line);
+    assert.ok(stripped.includes('(adapter offline)'), 'stale AMA-only snapshot should show adapter offline alert');
+    assert.ok(!stripped.includes('0.70'), 'dynamicWeight-disabled live sell value should not be displayed');
+    assert.ok(!stripped.includes('0.30'), 'dynamicWeight-disabled live buy value should not be displayed');
   } finally {
     removeSnapshot(botKey);
   }
@@ -480,8 +517,9 @@ async function main() {
   testBuildDynamicWeightInfoMissingSnapshot();
   testBuildDynamicWeightInfoFallsBackToConfigBase();
   testBuildDynamicWeightInfoRejectsMissingEffectiveWeights();
-  testBuildDynamicWeightInfoRequiresAmaAndDynamicWeightWhitelist();
+  testBuildDynamicWeightInfoRequiresAmaWhitelistForSnapshotStatus();
   testFormatWeightLineAmaWithoutDynamicWhitelistStaysWhite();
+  testFormatWeightLineStaleAmaWithoutDynamicWhitelistShowsOffline();
   testFormatWeightLineStaticOnly();
   testFormatWeightLineBuyHigherIsRed();
   testFormatWeightLineSellHigherIsRed();
