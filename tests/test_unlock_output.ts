@@ -20,7 +20,9 @@ const originalUnlinkSync = fs.unlinkSync;
 const originalRealpathSync = fs.realpathSync;
 const originalProcessKill = process.kill;
 const originalProcessExit = process.exit;
+const originalStdoutIsTTY = process.stdout.isTTY;
 const originalMonolithicBg = process.env.DEXBOT_MONOLITHIC_BG;
+const originalNoColor = process.env.NO_COLOR;
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
 
@@ -50,7 +52,24 @@ const state = {
     calls: [],
     liveMonolithicPid: false,
     monolithicAlive: false,
+    monolithicBotInfoJson: null,
 };
+
+function setStdoutTTY(value) {
+    Object.defineProperty(process.stdout, 'isTTY', {
+        value,
+        configurable: true,
+        writable: true,
+    });
+}
+
+function stripAnsi(text) {
+    return String(text).replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function logsIncludePlain(expected) {
+    return logs.some((line) => stripAnsi(line) === expected);
+}
 
 const controller = {
     ensureCredentialDaemon: async () => {
@@ -76,6 +95,7 @@ function resetState() {
     state.calls.length = 0;
     state.liveMonolithicPid = false;
     state.monolithicAlive = false;
+    state.monolithicBotInfoJson = null;
     logs.length = 0;
     errors.length = 0;
     process.exitCode = 0;
@@ -103,6 +123,7 @@ function installStubs() {
 
     fs.existsSync = (filePath) => {
         if (String(filePath) === monolithicPidPath) return state.liveMonolithicPid;
+        if (String(filePath) === monolithicBotInfoPath) return !!state.monolithicBotInfoJson;
         if (String(filePath) === `/proc/999999/cmdline`) {
             return state.liveMonolithicPid && state.monolithicAlive;
         }
@@ -113,8 +134,20 @@ function installStubs() {
         if (String(filePath) === monolithicPidPath && state.liveMonolithicPid) {
             return '999999';
         }
+        if (String(filePath) === monolithicBotInfoPath && state.monolithicBotInfoJson) {
+            return state.monolithicBotInfoJson;
+        }
         if (String(filePath) === `/proc/999999/cmdline` && state.liveMonolithicPid && state.monolithicAlive) {
             return ['node', path.resolve(__dirname, '..', 'unlock.js')].join('\0');
+        }
+        if (String(filePath) === `/proc/999999/stat` && state.liveMonolithicPid && state.monolithicAlive) {
+            return '999999 (node) S 1 1 1 0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 1234567 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0';
+        }
+        if (String(filePath) === `/proc/999999/status` && state.liveMonolithicPid && state.monolithicAlive) {
+            return 'VmRSS:\t123456 kB\n';
+        }
+        if (String(filePath) === '/proc/uptime' && state.liveMonolithicPid && state.monolithicAlive) {
+            return '1234567.00 0.00\n';
         }
         return originalReadFileSync(filePath, options);
     };
@@ -180,10 +213,16 @@ function restoreStubs() {
     fs.realpathSync = originalRealpathSync;
     process.kill = originalProcessKill;
     process.exit = originalProcessExit;
+    setStdoutTTY(originalStdoutIsTTY);
     if (originalMonolithicBg === undefined) {
         delete process.env.DEXBOT_MONOLITHIC_BG;
     } else {
         process.env.DEXBOT_MONOLITHIC_BG = originalMonolithicBg;
+    }
+    if (originalNoColor === undefined) {
+        delete process.env.NO_COLOR;
+    } else {
+        process.env.NO_COLOR = originalNoColor;
     }
     console.log = originalConsoleLog;
     console.error = originalConsoleError;
@@ -235,7 +274,7 @@ async function runAllBotsTest() {
         'launcher should print the launched bot count'
     );
     for (const botName of activeBotNames) {
-        assert.ok(logs.includes(`- ${botName}`), `launcher should list active bot ${botName}`);
+        assert.ok(logsIncludePlain(`- ${botName}`), `launcher should list active bot ${botName}`);
     }
 }
 
@@ -248,7 +287,7 @@ async function runSingleBotTest() {
     assert.strictEqual(state.calls.length, 1, 'launcher should spawn the background child once');
     assert.ok(logs.includes('Starting bot: XRP-BTS'), 'launcher should print the selected bot name');
     assert.ok(logs.includes('DEXBot2 started 1 bot(s) in background'), 'launcher should print the single-bot count');
-    assert.ok(logs.includes('- XRP-BTS'), 'launcher should list the launched bot');
+    assert.ok(logsIncludePlain('- XRP-BTS'), 'launcher should list the launched bot');
 }
 
 async function runForegroundTest() {
@@ -264,7 +303,7 @@ async function runForegroundTest() {
         'foreground mode should print the shared startup summary'
     );
     for (const botName of activeBotNames) {
-        assert.ok(logs.includes(`- ${botName}`), `foreground mode should list active bot ${botName}`);
+        assert.ok(logsIncludePlain(`- ${botName}`), `foreground mode should list active bot ${botName}`);
     }
 }
 
@@ -328,6 +367,36 @@ async function runStartupFailureSuppressesSuccessTest() {
     assert.strictEqual(state.stopCount, 1, 'launcher should still clean up the daemon after startup failure');
 }
 
+async function runStatusColorTest() {
+    resetState();
+    setStdoutTTY(true);
+    delete process.env.NO_COLOR;
+    state.liveMonolithicPid = true;
+    state.monolithicAlive = true;
+    const activeBotNames = getActiveBotNames();
+    state.monolithicBotInfoJson = JSON.stringify({ botNames: activeBotNames });
+
+    await runUnlockStart(['node', 'unlock', 'status']);
+
+    assert.ok(
+        logs.some((line) => line.includes('\x1b[1;92m') && activeBotNames.some((botName) => line.includes(botName))),
+        'status output should color active bot names green'
+    );
+}
+
+async function runStartupSummaryColorTest() {
+    resetState();
+    setStdoutTTY(true);
+    delete process.env.NO_COLOR;
+    await runUnlockStart(['node', 'unlock']);
+    const activeBotNames = getActiveBotNames();
+
+    assert.ok(
+        logs.some((line) => line.includes('\x1b[1;92m') && activeBotNames.some((botName) => line.includes(botName))),
+        'startup summary should color active bot names green'
+    );
+}
+
 (async () => {
     try {
         await runAllBotsTest();
@@ -337,6 +406,8 @@ async function runStartupFailureSuppressesSuccessTest() {
         await runAlreadyRunningTest();
         await runClawOnlyTest();
         await runStartupFailureSuppressesSuccessTest();
+        await runStatusColorTest();
+        await runStartupSummaryColorTest();
         restoreStubs();
         process.stdout.write('unlock output tests passed\n');
         process.exit(0);

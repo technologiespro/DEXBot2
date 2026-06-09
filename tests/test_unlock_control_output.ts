@@ -31,6 +31,10 @@ const state = {
     supervisorDeleteTransient: false,
 };
 
+function stripAnsi(text) {
+    return String(text).replace(/\x1b\[[0-9;]*m/g, '');
+}
+
 const controller = {
     ensureCredentialDaemon: async () => false,
     getManagedDaemonPid: () => null,
@@ -161,7 +165,7 @@ async function assertTargetControl(command, actionWord, botName) {
     await runControl([command, botName]);
     assert.deepStrictEqual(state.controlCalls[0], { cmd: command, bot: botName });
     assert.ok(logs.includes(`DEXBot2 ${actionWord} 1 bot(s)`), `should print the ${actionWord} summary`);
-    assert.ok(logs.includes(`- ${botName}`), 'should list the affected bot');
+    assert.ok(logs.some((line) => stripAnsi(line).includes(`- ${botName}`)), 'should list the affected bot');
 }
 
 async function assertWholeRuntimeControl(command, actionWord) {
@@ -170,7 +174,7 @@ async function assertWholeRuntimeControl(command, actionWord) {
     assert.deepStrictEqual(state.controlCalls[0], { cmd: command === 'shutdown' ? 'delete' : command });
     assert.ok(logs.includes(`DEXBot2 ${actionWord} ${activeBotNames.length} bot(s)`), `should print the ${actionWord} summary`);
     for (const botName of activeBotNames) {
-        assert.ok(logs.includes(`- ${botName}`), `should list active bot ${botName}`);
+        assert.ok(logs.some((line) => stripAnsi(line).includes(`- ${botName}`)), `should list active bot ${botName}`);
     }
     assertRuntimeServicesListed(command);
 }
@@ -184,7 +188,7 @@ async function assertStaleControl(command, actionWord) {
 
     assert.ok(logs.includes(`DEXBot2 ${actionWord} ${activeBotNames.length} bot(s)`), 'stale control should print the shared summary');
     for (const botName of activeBotNames) {
-        assert.ok(logs.includes(`- ${botName}`), `stale control should list active bot ${botName}`);
+        assert.ok(logs.some((line) => stripAnsi(line).includes(`- ${botName}`)), `stale control should list active bot ${botName}`);
     }
     assertRuntimeServicesListed(command);
     assert.ok(!logs.some((line) => line.includes('stale PID file')), 'stale control should not fall back to the legacy stale message');

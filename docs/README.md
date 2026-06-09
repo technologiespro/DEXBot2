@@ -2,7 +2,7 @@
 
 This directory contains the comprehensive technical documentation for the DEXBot2 trading bot. It is designed to guide developers from high-level architecture down to the nuances of fund accounting and state management.
 
-**Version context:** v0.7.14 is the current working version. This release refines AMA/order terminal display, hardens market-adapter whitelist and dynamic-weight handling, makes unlock startup idempotent, and simplifies whole-runtime `node unlock stop` / `node unlock restart` controls while keeping legacy `all` arguments compatible.
+**Version context:** v0.7.15 is the current working version. This patch carries quiet orderbook candles forward through bounded no-trade gaps so book-sourced bots keep refreshing dynamic-grid snapshots during ordinary silence, and highlights active bot names in launcher/status output for faster runtime visibility.
 
 ---
 

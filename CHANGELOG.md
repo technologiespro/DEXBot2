@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.15] - 2026-06-09 - Quiet Orderbook Candles & Launcher Bot Visibility
+
+This release keeps orderbook-derived dynamic-grid snapshots advancing through ordinary quiet periods by carrying the last close forward across bounded no-trade gaps, while also making active bot names easier to spot in launcher and status output.
+
+### 2026-06-09
+
+#### Market Adapter
+- Carry quiet orderbook candles forward through bounded no-trade gaps (`73fa79d`).
+  - Book-sourced bots continue rewriting dynamic-grid snapshots during ordinary quiet periods instead of freezing on stale close values.
+  - The existing verified long-silence path remains in place for larger inactivity windows.
+
+#### Runtime & Launcher
+- Highlight active bot names in green where launcher/status output lists running or affected bots.
+  - `node dexbot start` now prints an explicit active-bot summary before handing off to the runtime.
+  - `node unlock` startup summaries, whole-runtime control summaries, and `node unlock status` use the same active-bot highlighting.
+  - Coloring remains disabled for non-TTY output and when `NO_COLOR` is set.
+
+#### Testing
+- `npx tsx tests/test_market_adapter_service.ts`
+- `npx tsx tests/test_dexbot_startup_output.ts`
+- `npx tsx tests/test_unlock_control_output.ts`
+- `npx tsx tests/test_unlock_output.ts`
+
 ## [0.7.14] - 2026-06-09 - AMA Display Polish, Whitelist Safety & Unlock Controls
 
 This release refines the live order/AMA terminal display, hardens market-adapter whitelist and dynamic-weight handling, makes monolithic unlock startup idempotent, and simplifies whole-runtime unlock controls while preserving isolated per-bot targets and legacy `all` arguments.

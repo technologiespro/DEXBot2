@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.14 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.15 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
 - **Growth Phase**: 1,519 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
 - **Stability**: Progression from manual testing to a suite of 208+ automated test files
-- **Releases**: 30 release entries (v0.1.0 to v0.7.14)
+- **Releases**: 31 release entries (v0.1.0 to v0.7.15)
 
 ---
 
@@ -67,7 +67,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **Jun 6**: Added pair orientation toggle to TradingView charts, CEX synthetic candle seeding to complement native candle data, tuned AMA reset and asymmetry defaults, kept key manager startup quiet, avoided duplicate builds during update install, preserved masked terminal input editing, darkened active sell color in order display, and removed stale doc references. Released v0.7.13.
 
-**Jun 9**: Refined `node dexbot order` / analyze-orders output with aligned columns, richer AMA metadata, and 5-digit pricing; hardened market-adapter whitelist preservation, default dynamic-weight behavior, AMA snapshot refresh, and whitelist gating; made unlock monolithic startup idempotent; simplified whole-runtime controls to `node unlock stop` / `node unlock restart` while keeping `all` and isolated bot targets compatible. Released v0.7.14.
+**Jun 9**: Refined `node dexbot order` / analyze-orders output with aligned columns, richer AMA metadata, and 5-digit pricing; hardened market-adapter whitelist preservation, default dynamic-weight behavior, AMA snapshot refresh, and whitelist gating; made unlock monolithic startup idempotent; simplified whole-runtime controls to `node unlock stop` / `node unlock restart` while keeping `all` and isolated bot targets compatible. Released v0.7.14. Also carried quiet orderbook candles forward through bounded no-trade gaps so book-sourced bots keep refreshing dynamic-grid snapshots during ordinary silence, and highlighted active bot names in `dexbot`/`unlock` launcher and status output. Released v0.7.15.
 
 ---
 
@@ -145,6 +145,9 @@ TradingView chart pair orientation toggle, CEX synthetic candle seeding, AMA res
 ### v0.7.13 → v0.7.14 (10 commits)
 Analyze-orders display overhaul with aligned columns, AMA metadata, and 5-digit pricing; market-adapter whitelist preservation, dynamic weights defaulting off, AMA snapshot refresh every cycle, whitelist-gated dynamic weights, and AMA status display without dynamic weights. Unlock monolithic startup is idempotent, `node unlock stop` / `node unlock restart` are canonical whole-runtime controls, and legacy `all` plus isolated bot targets remain compatible.
 
+### v0.7.14 → v0.7.15
+Quiet orderbook candle carry-forward for bounded no-trade gaps on book-sourced market data, plus active-bot highlighting in `dexbot`/`unlock` launcher and status output.
+
 ---
 
 ### Pre-DEXBot2
@@ -155,7 +158,7 @@ Analyze-orders display overhaul with aligned columns, AMA metadata, and 5-digit 
 
 ## Development Statistics
 
-208+ automated test files (all TypeScript), 30 release entries. See **Version History** for commit breakdown by release.
+208+ automated test files (all TypeScript), 31 release entries. See **Version History** for commit breakdown by release.
 
 ---
 

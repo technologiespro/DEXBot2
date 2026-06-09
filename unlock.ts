@@ -107,7 +107,7 @@ function printLauncherStartupSummary({
     console.log(`DEXBot2 started ${botNames.length} bot(s) in ${mode}`);
     console.log();
     for (const botName of botNames) {
-        console.log(`- ${botName}`);
+        console.log(`- ${statusActiveBotName(botName)}`);
     }
     console.log('='.repeat(50));
 }
@@ -1145,6 +1145,10 @@ function statusBool(value: boolean): string {
     return colorStatus(value ? 'yes' : 'no', value ? STATUS_COLORS.ok : STATUS_COLORS.warn);
 }
 
+function statusActiveBotName(name: string): string {
+    return colorStatus(name, STATUS_COLORS.ok);
+}
+
 function formatMemoryWithUptime(memory: string, uptime: string): string {
     return uptime && uptime !== '-' ? `${memory} (${uptime})` : memory;
 }
@@ -1468,7 +1472,7 @@ function printControlActionSummary(action: string, botNames: string[], serviceNa
     console.log(`DEXBot2 ${action} ${botNames.length} bot(s)`);
     console.log();
     for (const botName of botNames) {
-        console.log(`- ${botName}`);
+        console.log(`- ${statusActiveBotName(botName)}`);
     }
     for (const serviceName of serviceNames) {
         console.log(`- ${serviceName}`);
@@ -1603,7 +1607,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 console.log(`  ${statusLabel('CPU:')}     ${cpuPct}  (${statusLabel('cumulative:')} ${cpuTime})`);
                 console.log(`  ${statusLabel('Bots:')}    ${displayedBots.length} active`);
                 for (const b of displayedBots) {
-                    console.log(`    - ${b.name}`);
+                    console.log(`    - ${statusActiveBotName(b.name)}`);
                 }
                 console.log(`  ${statusTitle('Credential daemon:')}`);
                 if (credPid && credForeign) {

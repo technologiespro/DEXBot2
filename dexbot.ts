@@ -132,6 +132,17 @@ const CLI_EXAMPLES = [
     { title: 'Clear all bot log files', command: 'dexbot clear', notes: 'Runs scripts/clear-logs.sh to remove log files from profiles/logs/.' },
     { title: 'Reset settings to defaults', command: 'dexbot default', notes: 'Runs scripts/reset-settings.sh to delete general.settings.json, market_profiles.json, and market_adapter_settings.json.' }
 ];
+
+const STARTUP_COLORS = {
+    reset: '\x1b[0m',
+    ok: '\x1b[1;92m',
+};
+
+function colorStartupActiveBotName(name: string): string {
+    return process.stdout.isTTY && !process.env.NO_COLOR
+        ? `${STARTUP_COLORS.ok}${name}${STARTUP_COLORS.reset}`
+        : name;
+}
 const cliArgs = process.argv.slice(2);
 
 /**
@@ -420,6 +431,16 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
 
         if (shouldAnnounceLauncher) {
             console.log(`Number active bots: ${activeCount}`);
+            if (activeCount > 0) {
+                console.log('Active bots:');
+                for (const entry of prepared) {
+                    if (!entry.active) {
+                        continue;
+                    }
+                    const botName = String(entry.name || entry.botKey || 'unnamed');
+                    console.log(`  - ${colorStartupActiveBotName(botName)}`);
+                }
+            }
             console.log();
             console.log('Starting bot runtime...');
         }

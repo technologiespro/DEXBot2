@@ -23,6 +23,8 @@ const originalAccountBots = require.cache[accountBotsPath];
 const originalBitsharesClient = require.cache[bitsharesClientPath];
 const originalExistsSync = fs.existsSync;
 const originalArgv = process.argv.slice();
+const originalStdoutIsTTY = process.stdout.isTTY;
+const originalNoColor = process.env.NO_COLOR;
 const originalConsoleLog = console.log;
 const originalConsoleWarn = console.warn;
 const originalConsoleError = console.error;
@@ -32,6 +34,14 @@ const warns = [];
 const errors = [];
 const suppressCalls = [];
 let startCalled = false;
+
+function setStdoutTTY(value) {
+    Object.defineProperty(process.stdout, 'isTTY', {
+        value,
+        configurable: true,
+        writable: true,
+    });
+}
 
 function installStubs() {
     delete require.cache[dexbotPath];
@@ -149,6 +159,46 @@ function restoreStubs() {
 
     if (originalDexbotModule) require.cache[dexbotPath] = originalDexbotModule;
     else delete require.cache[dexbotPath];
+
+    setStdoutTTY(originalStdoutIsTTY);
+    if (originalNoColor === undefined) {
+        delete process.env.NO_COLOR;
+    } else {
+        process.env.NO_COLOR = originalNoColor;
+    }
+}
+
+async function runStartupColorTest() {
+    resetLogs();
+    setStdoutTTY(true);
+    delete process.env.NO_COLOR;
+
+    installStubs();
+    require('../dexbot');
+
+    await new Promise((resolve) => {
+        const check = () => {
+            if (startCalled) resolve();
+            else setImmediate(check);
+        };
+        check();
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.ok(logs.includes('Active bots:'), 'dexbot start should print the active-bot summary header');
+    assert.ok(
+        logs.some((line) => line.includes('\x1b[1;92m') && line.includes('XRP-BTS')),
+        'dexbot start should color active bot names green'
+    );
+}
+
+function resetLogs() {
+    logs.length = 0;
+    warns.length = 0;
+    errors.length = 0;
+    suppressCalls.length = 0;
+    startCalled = false;
 }
 
 installStubs();
@@ -182,6 +232,7 @@ require('../dexbot');
         assert.deepStrictEqual(warns, [], 'dexbot startup should not emit warnings');
         assert.deepStrictEqual(errors, [], 'dexbot startup should not emit errors');
 
+        await runStartupColorTest();
         restoreStubs();
         originalConsoleLog('dexbot startup output tests passed');
         process.exit(0);
