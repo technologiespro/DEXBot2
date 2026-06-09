@@ -646,7 +646,7 @@ async function installPM2() {
             // Try standard install first
             runInstall('npm', ['install', '-g', 'pm2'])
                 .then(() => {
-                    console.log('PM2 installed successfully!');
+                    console.log(pm2Success('PM2 installed successfully!'));
                     resolve();
                 })
                 .catch((err: any) => {
@@ -657,7 +657,7 @@ async function installPM2() {
 
                         runInstall('sudo', ['npm', 'install', '-g', 'pm2'])
                             .then(() => {
-                                console.log('PM2 installed successfully with sudo!');
+                                console.log(pm2Success('PM2 installed successfully with sudo!'));
                                 resolve();
                             })
                             .catch((finalErr: any) => {
@@ -677,7 +677,7 @@ async function installPM2() {
                             .then(() => {
                                 // Verify installation succeeded since we can't easily get the exit code from the elevated process
                                 if (checkPM2Installed()) {
-                                    console.log('PM2 installed successfully (Elevated)!');
+                                    console.log(pm2Success('PM2 installed successfully (Elevated)!'));
                                     resolve();
                                 } else {
                                     reject(new Error('PM2 installation failed or was cancelled in the elevated window.'));

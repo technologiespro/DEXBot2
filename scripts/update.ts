@@ -64,7 +64,7 @@ function log(msg) {
 }
 
 function logSuccess(msg) {
-    log(colorUpdateOutput(msg, UPDATE_COLORS.ok));
+    console.log(colorUpdateOutput(`[${new Date().toISOString()}] [UPDATE] ${msg}`, UPDATE_COLORS.ok));
 }
 
 function updateError(msg) {
@@ -372,7 +372,7 @@ try {
             ({ generateEcosystemConfig } = require(path.join(ROOT, 'pm2')));
         }
         generateEcosystemConfig({ clawOnly: false, exitOnError: false });
-        log('Ecosystem config regenerated successfully.');
+        logSuccess('Ecosystem config regenerated successfully.');
     } catch (err) {
         log(`Warning: Ecosystem config regeneration failed (${err.message}). Continuing with existing config.`);
     }
