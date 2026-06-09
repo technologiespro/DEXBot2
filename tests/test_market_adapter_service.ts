@@ -635,6 +635,7 @@ async function testOrderbookNativeFetchUsesBitsharesHistory() {
 
 async function testOrderbookIncrementalFillsVerifiedLongSilence() {
     let savedPayload = null;
+    let silenceVerificationCalls = 0;
     let kibanaCalls = 0;
     const logs = [];
     const baseTs = Date.parse('2026-04-28T00:00:00Z');
@@ -653,9 +654,11 @@ async function testOrderbookIncrementalFillsVerifiedLongSilence() {
         candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_book_1h.json`),
         loadJson: () => ({
             meta: { marketSource: 'book' },
-            candles: [
-                [baseTs, 100, 100, 100, 100, 1],
-            ],
+            candles: Array.from({ length: 90 }, (_, idx) => {
+                const ts = baseTs - ((89 - idx) * hour);
+                const price = idx < 89 ? 90 + idx : 100;
+                return [ts, price, price, price, price, 1];
+            }),
         }),
         saveJson: (_filePath, payload) => {
             savedPayload = payload;
@@ -667,14 +670,10 @@ async function testOrderbookIncrementalFillsVerifiedLongSilence() {
         kibanaMarketSource: {
             getMarketCandles: async (_assetA, _assetB, cfg) => {
                 kibanaCalls += 1;
-                assert.deepStrictEqual(
-                    cfg.timeRange,
-                    {
-                        gte: new Date(baseTs + hour).toISOString(),
-                        lte: new Date(baseTs + (37 * hour)).toISOString(),
-                    },
-                    'orderbook verified silence query should cover the missing closed buckets'
-                );
+                if (cfg.timeRange?.gte === new Date(baseTs + hour).toISOString()
+                        && cfg.timeRange?.lte === new Date(baseTs + (37 * hour)).toISOString()) {
+                    silenceVerificationCalls += 1;
+                }
                 return [];
             },
         },
@@ -719,13 +718,101 @@ async function testOrderbookIncrementalFillsVerifiedLongSilence() {
     }, new Map(), {});
 
     assert.strictEqual(result.ok, true, 'orderbook processBot should complete after verified long silence');
-    assert.strictEqual(kibanaCalls, 1, 'orderbook silence verification should use orderbook Kibana candles');
+    assert.ok(kibanaCalls >= 1, 'orderbook flow should use orderbook Kibana candles');
+    assert.strictEqual(silenceVerificationCalls, 1, 'orderbook verified silence query should cover the missing closed buckets once');
     assert.strictEqual(savedPayload.meta.marketSource, 'book', 'saved payload should remain orderbook sourced');
-    assert.strictEqual(savedPayload.candles.length, 38, 'orderbook verified silence should be materialized as continuous flat candles');
+    assert.ok(savedPayload.candles.length >= 38, 'orderbook verified silence should preserve enough continuous flat candles');
+    assert.strictEqual(savedPayload.candles[savedPayload.candles.length - 1][0], baseTs + (37 * hour), 'orderbook verified silence should extend through the latest closed bucket');
+    assert.strictEqual(savedPayload.candles[savedPayload.candles.length - 1][4], 100, 'orderbook verified silence should carry the prior close');
     assert.strictEqual(savedPayload.meta.staleTailVerifiedStartTs, baseTs + hour, 'orderbook verified silence start should be saved');
     assert.strictEqual(savedPayload.meta.staleTailVerifiedEndTs, baseTs + (37 * hour), 'orderbook verified silence end should be saved');
     assert.strictEqual(result.staleData, false, 'orderbook verified silence should not look like stale data');
     assert.ok(logs.some((entry) => entry.level === 'info' && entry.message.includes('verified no trades')), 'orderbook verified silence should be logged');
+}
+
+async function testOrderbookIncrementalFillsBoundedNoTradeSilence() {
+    let savedPayload = null;
+    let kibanaCalls = 0;
+    const baseTs = Date.parse('2026-04-28T00:00:00Z');
+    const hour = 3600000;
+    const nowMs = baseTs + (5 * hour) + 1;
+
+    const service = new MarketAdapterService({
+        getNowMs: () => nowMs,
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: null,
+            marketSource: 'book',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 1, fastPeriod: 2, slowPeriod: 2 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_book_1h.json`),
+        loadJson: () => ({
+            meta: { marketSource: 'book' },
+            candles: Array.from({ length: 90 }, (_, idx) => {
+                const ts = baseTs - ((89 - idx) * hour);
+                const price = idx < 89 ? 90 + idx : 100;
+                return [ts, price, price, price, price, idx < 89 ? 1 : 0];
+            }),
+        }),
+        saveJson: (_filePath, payload) => {
+            savedPayload = payload;
+        },
+        calculateBotThreshold: () => 100,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        fetchNativeMarketHistorySince: async () => [],
+        kibanaMarketSource: {
+            getMarketCandles: async () => {
+                kibanaCalls += 1;
+                throw new Error('bounded orderbook silence should not require Kibana verification');
+            },
+        },
+        kibanaSource: {
+            getLpCandlesForPool: async () => {
+                throw new Error('LP fetch should not run for orderbook bots');
+            },
+        },
+        fillCandleGaps,
+        detectMissingCandleTimestamps,
+        mergeCandles,
+        pruneCandles: (candles) => candles,
+        pruneStaleTail,
+        detectStaleTail: require('../market_adapter/candle_utils').detectStaleTail,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.book-bounded-silence.trigger',
+        isBotDynamicWeightWhitelisted: () => false,
+        root: process.cwd(),
+        path,
+    });
+
+    const result = await service.processBot({
+        name: 'IOB.XRP/BTS',
+        botKey: 'iob-xrp-bts-book-bounded-silence',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        startPrice: 'book',
+    }, { bots: {} }, {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 100,
+        nativeBackfillHours: 1,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 24,
+        maxNativeGapFillCandles: MARKET_ADAPTER.STALE_TAIL_THRESHOLD_CANDLES,
+    }, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'orderbook processBot should complete after bounded no-trade silence');
+    assert.strictEqual(kibanaCalls, 0, 'bounded orderbook silence should not call Kibana');
+    assert.strictEqual(savedPayload.meta.marketSource, 'book', 'saved payload should remain orderbook sourced');
+    assert.strictEqual(savedPayload.candles.length, 94, 'bounded orderbook silence should be materialized as flat closed candles');
+    assert.strictEqual(savedPayload.candles[93][0], baseTs + (4 * hour), 'bounded orderbook silence should extend through the latest closed bucket');
+    assert.strictEqual(savedPayload.candles[93][4], 100, 'bounded orderbook silence should carry the prior close');
+    assert.strictEqual(result.triggerSuppressedReason, null, 'bounded silence should pass the closed-candle gate');
+    assert.strictEqual(result.unresolvedGapCount, 0, 'bounded orderbook silence should not leave unresolved gaps');
 }
 
 async function testOrderbookIncrementalFillsVerifiedLongSilenceBeforeLaterNativeActivity() {
@@ -5976,6 +6063,7 @@ async function run() {
     await testNumericStartPriceSkipsAllMarketFetches();
     await testOrderbookNativeFetchUsesBitsharesHistory();
     await testOrderbookIncrementalFillsVerifiedLongSilence();
+    await testOrderbookIncrementalFillsBoundedNoTradeSilence();
     await testOrderbookIncrementalFillsVerifiedLongSilenceBeforeLaterNativeActivity();
     await testOrderbookIncrementalIgnoresNativeOverlapWhenVerifyingSilenceBeforeActivity();
     await testAmaWithFlatCandlesComputesValidPrice();

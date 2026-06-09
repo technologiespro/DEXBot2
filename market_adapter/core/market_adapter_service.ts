@@ -1390,6 +1390,8 @@ class MarketAdapterService {
                         nextCandles = verifiedSilence.candles;
                         sourceLabel = verifiedSilence.sourceLabel;
                         nextCandles = fillBoundedTrailingClosedGap(nextCandles, latestClosedBucketTs, nowMs, maxNativeGapFill);
+                    } else {
+                        nextCandles = fillBoundedTrailingClosedGap(nextCandles, latestClosedBucketTs, nowMs, maxNativeGapFill);
                     }
                 }
 
