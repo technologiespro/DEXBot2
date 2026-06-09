@@ -6,7 +6,8 @@ const path = require('path');
 const CODE_ROOT = path.join(__dirname, '..');
 const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
 const PROFILES_DIR = path.join(ROOT, 'profiles');
-const WHITELIST_FILE = path.join(PROFILES_DIR, 'market_adapter_whitelist.json');
+const WHITELIST_FILE = process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE
+    || path.join(PROFILES_DIR, 'market_adapter_whitelist.json');
 
 interface WhitelistFlags {
     ama: boolean;

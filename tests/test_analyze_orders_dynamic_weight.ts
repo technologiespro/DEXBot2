@@ -2,10 +2,14 @@
 
 const assert = require('assert');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const ORDERS_DIR = path.join(__dirname, '..', 'profiles', 'orders');
 const ANALYZER_PATH = path.resolve(__dirname, '..', 'scripts', 'analyze-orders.ts');
+const WHITELIST_MODULE_PATH = path.resolve(__dirname, '..', 'modules', 'market_adapter_whitelist.ts');
+const TEST_WHITELIST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-analyze-whitelist-'));
+const TEST_WHITELIST_PATH = path.join(TEST_WHITELIST_DIR, 'market_adapter_whitelist.json');
 
 function loadAnalyzer() {
   delete require.cache[ANALYZER_PATH];
@@ -29,6 +33,28 @@ function removeSnapshot(botKey) {
   const filePath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
+  }
+}
+
+function withWhitelist(entries, fn) {
+  const originalEnv = process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE;
+  fs.writeFileSync(TEST_WHITELIST_PATH, JSON.stringify({ whitelist: entries }, null, 2) + '\n', 'utf8');
+  process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE = TEST_WHITELIST_PATH;
+  delete require.cache[WHITELIST_MODULE_PATH];
+  delete require.cache[ANALYZER_PATH];
+  try {
+    return fn();
+  } finally {
+    if (originalEnv === undefined) {
+      delete process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE;
+    } else {
+      process.env.DEXBOT_TEST_MARKET_ADAPTER_WHITELIST_FILE = originalEnv;
+    }
+    if (fs.existsSync(TEST_WHITELIST_PATH)) {
+      fs.unlinkSync(TEST_WHITELIST_PATH);
+    }
+    delete require.cache[WHITELIST_MODULE_PATH];
+    delete require.cache[ANALYZER_PATH];
   }
 }
 
@@ -58,7 +84,6 @@ function testIsAmaGridPrice() {
 }
 
 function testBuildDynamicWeightInfoRecentSnapshot() {
-  const { buildDynamicWeightInfo } = loadAnalyzer();
   const botKey = `dw-recent-${Date.now()}`;
   // Updated 1 second ago - definitely recent.
   const updatedAt = new Date(Date.now() - 1000).toISOString();
@@ -75,7 +100,12 @@ function testBuildDynamicWeightInfoRecentSnapshot() {
   });
 
   try {
-    const info = buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.5, sell: 0.5 } });
+    const info = withWhitelist({
+      [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: false },
+    }, () => {
+      const { buildDynamicWeightInfo } = loadAnalyzer();
+      return buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.5, sell: 0.5 } });
+    });
     assert.ok(info, 'expected info for recent snapshot');
     assert.strictEqual(info.live.buy, 0.45, 'live buy should match effectiveWeights.buy');
     assert.strictEqual(info.live.sell, 0.55, 'live sell should match effectiveWeights.sell');
@@ -91,7 +121,6 @@ function testBuildDynamicWeightInfoRecentSnapshot() {
 }
 
 function testBuildDynamicWeightInfoStaleSnapshot() {
-  const { buildDynamicWeightInfo } = loadAnalyzer();
   const botKey = `dw-stale-${Date.now()}`;
   // Updated 3 hours ago - past the 2-cycle freshness window (2h default).
   const updatedAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
@@ -107,7 +136,12 @@ function testBuildDynamicWeightInfoStaleSnapshot() {
   });
 
   try {
-    const info = buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.5, sell: 0.5 } });
+    const info = withWhitelist({
+      [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: false },
+    }, () => {
+      const { buildDynamicWeightInfo } = loadAnalyzer();
+      return buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.5, sell: 0.5 } });
+    });
     assert.ok(info, 'snapshot is read even when stale');
     assert.strictEqual(info.isRecent, false, 'snapshot is NOT recent');
     assert.strictEqual(info.live.sell, 0.7);
@@ -144,7 +178,6 @@ function testBuildDynamicWeightInfoMissingSnapshot() {
 }
 
 function testBuildDynamicWeightInfoFallsBackToConfigBase() {
-  const { buildDynamicWeightInfo } = loadAnalyzer();
   const botKey = `dw-fallback-${Date.now()}`;
   const updatedAt = new Date(Date.now() - 1000).toISOString();
   writeSnapshot(botKey, {
@@ -156,7 +189,12 @@ function testBuildDynamicWeightInfoFallsBackToConfigBase() {
   });
 
   try {
-    const info = buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.4, sell: 0.6 } });
+    const info = withWhitelist({
+      [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: false },
+    }, () => {
+      const { buildDynamicWeightInfo } = loadAnalyzer();
+      return buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.4, sell: 0.6 } });
+    });
     assert.ok(info, 'expected info when baseWeights missing but config provides baseline');
     assert.strictEqual(info.base.buy, 0.4, 'base buy should fall back to config');
     assert.strictEqual(info.base.sell, 0.6, 'base sell should fall back to config');
@@ -166,7 +204,6 @@ function testBuildDynamicWeightInfoFallsBackToConfigBase() {
 }
 
 function testBuildDynamicWeightInfoRejectsMissingEffectiveWeights() {
-  const { buildDynamicWeightInfo } = loadAnalyzer();
   const botKey = `dw-noeff-${Date.now()}`;
   const updatedAt = new Date(Date.now() - 1000).toISOString();
   writeSnapshot(botKey, {
@@ -178,8 +215,82 @@ function testBuildDynamicWeightInfoRejectsMissingEffectiveWeights() {
   });
 
   try {
-    const info = buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.5, sell: 0.5 } });
+    const info = withWhitelist({
+      [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: false },
+    }, () => {
+      const { buildDynamicWeightInfo } = loadAnalyzer();
+      return buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.5, sell: 0.5 } });
+    });
     assert.strictEqual(info, null, 'missing effectiveWeights should yield null info');
+  } finally {
+    removeSnapshot(botKey);
+  }
+}
+
+function testBuildDynamicWeightInfoRequiresAmaAndDynamicWeightWhitelist() {
+  const botKey = `dw-not-whitelisted-${Date.now()}`;
+  const updatedAt = new Date(Date.now() - 1000).toISOString();
+  writeSnapshot(botKey, {
+    updatedAt,
+    dynamicWeights: {
+      effectiveWeights: { sell: 0.55, buy: 0.45 },
+      baseWeights: { sell: 0.5, buy: 0.5 },
+    },
+  });
+
+  try {
+    const amaOnlyInfo = withWhitelist({
+      [botKey]: { ama: true, dynamicWeight: false, asymmetricBounds: false },
+    }, () => {
+      const { buildDynamicWeightInfo } = loadAnalyzer();
+      return buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.5, sell: 0.5 } });
+    });
+    assert.strictEqual(amaOnlyInfo, null, 'AMA-only whitelist should not enable dynamic weight display');
+
+    const dynamicOnlyInfo = withWhitelist({
+      [botKey]: { ama: false, dynamicWeight: true, asymmetricBounds: false },
+    }, () => {
+      const { buildDynamicWeightInfo } = loadAnalyzer();
+      return buildDynamicWeightInfo(botKey, { gridPrice: 'ama', weightDistribution: { buy: 0.5, sell: 0.5 } });
+    });
+    assert.strictEqual(dynamicOnlyInfo, null, 'dynamicWeight-only whitelist should not enable dynamic weight display');
+  } finally {
+    removeSnapshot(botKey);
+  }
+}
+
+function testFormatWeightLineAmaWithoutDynamicWhitelistStaysWhite() {
+  const botKey = `dw-white-${Date.now()}`;
+  const updatedAt = new Date(Date.now() - 1000).toISOString();
+  writeSnapshot(botKey, {
+    updatedAt,
+    dynamicWeights: {
+      effectiveWeights: { sell: 0.7, buy: 0.3 },
+      baseWeights: { sell: 0.5, buy: 0.5 },
+    },
+  });
+
+  try {
+    const line = withWhitelist({
+      [botKey]: { ama: true, dynamicWeight: false, asymmetricBounds: false },
+    }, () => {
+      const { buildDynamicWeightInfo, formatWeightLine } = loadAnalyzer();
+      const dynamicWeight = buildDynamicWeightInfo(botKey, {
+        gridPrice: 'ama',
+        weightDistribution: { buy: 0.5, sell: 0.5 },
+      });
+      return formatWeightLine({ buy: 0.5, sell: 0.5 }, dynamicWeight);
+    });
+    assert.ok(line, 'expected static weight line');
+    const stripped = stripColorCodes(line);
+    assert.ok(stripped.includes('0.50 buy'), 'buy static value should be displayed');
+    assert.ok(stripped.includes('0.50 sell'), 'sell static value should be displayed');
+    assert.ok(!stripped.includes('0.70'), 'live sell value should not be displayed');
+    assert.ok(!stripped.includes('0.30'), 'live buy value should not be displayed');
+    assert.ok(!stripped.includes('(adapter offline)'), 'offline alert should not render without dynamic whitelist');
+    assert.ok(!line.includes('\x1b[91m0.50'), 'static buy/sell values should not be red');
+    assert.ok(!line.includes('\x1b[92m0.50'), 'static buy/sell values should not be green');
+    assert.ok(!line.includes('\x1b[38;5;246m0.50'), 'static buy/sell values should not be grey');
   } finally {
     removeSnapshot(botKey);
   }
@@ -248,9 +359,10 @@ function testFormatWeightLineLiveEqualBothGrey() {
     { isRecent: true, live: { buy: 0.5, sell: 0.5 } }
   );
   assert.ok(line, 'expected a line');
-  // No red or green colors should be used for the live values.
-  assert.ok(!line.includes('\x1b[92m'), 'no green when live weights are equal');
-  assert.ok(!line.includes('\x1b[91m'), 'no red when live weights are equal');
+  // No red or green colors should be used for the live values. The side labels
+  // remain green/red, so assert against the numeric segments specifically.
+  assert.ok(!line.includes('\x1b[92m0.50'), 'no green numeric value when live weights are equal');
+  assert.ok(!line.includes('\x1b[91m0.50'), 'no red numeric value when live weights are equal');
   // Grey should be used (for both the live and the static).
   assert.ok(line.includes('\x1b[38;5;246m'), 'grey should be used when live weights are equal');
 }
@@ -294,7 +406,6 @@ function testFormatWeightLineNullWeights() {
 }
 
 function testAnalyzeOrderIncludesDynamicWeightForAma() {
-  const { analyzeOrder } = loadAnalyzer();
   const botKey = `dw-analyze-${Date.now()}`;
   const updatedAt = new Date(Date.now() - 1000).toISOString();
   writeSnapshot(botKey, {
@@ -325,7 +436,12 @@ function testAnalyzeOrderIncludesDynamicWeightForAma() {
       botFunds: { buy: 1, sell: 1 },
       weightDistribution: { buy: 0.5, sell: 0.5 },
     };
-    const analysis = analyzeOrder(botData, config, botKey);
+    const analysis = withWhitelist({
+      [botKey]: { ama: true, dynamicWeight: true, asymmetricBounds: false },
+    }, () => {
+      const { analyzeOrder } = loadAnalyzer();
+      return analyzeOrder(botData, config, botKey);
+    });
     assert.ok(analysis.dynamicWeight, 'analyzeOrder should attach dynamicWeight for AMA bots');
     assert.strictEqual(analysis.dynamicWeight.live.buy, 0.45);
     assert.strictEqual(analysis.dynamicWeight.isRecent, true);
@@ -364,6 +480,8 @@ async function main() {
   testBuildDynamicWeightInfoMissingSnapshot();
   testBuildDynamicWeightInfoFallsBackToConfigBase();
   testBuildDynamicWeightInfoRejectsMissingEffectiveWeights();
+  testBuildDynamicWeightInfoRequiresAmaAndDynamicWeightWhitelist();
+  testFormatWeightLineAmaWithoutDynamicWhitelistStaysWhite();
   testFormatWeightLineStaticOnly();
   testFormatWeightLineBuyHigherIsRed();
   testFormatWeightLineSellHigherIsRed();

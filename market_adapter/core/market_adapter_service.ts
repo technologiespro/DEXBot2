@@ -1972,12 +1972,16 @@ class MarketAdapterService {
         }
         const weightVariance = Number.isFinite(atr) && amaPrice > 0 ? (atr / amaPrice) : 0;
 
-        // 3. Dynamic weight computation — live path uses AMA + Kalman + regime gate,
-        //    with ATR applied only as a separate symmetric penalty.
-        //    Calculations always run for AMA-grid bots; live application is gated
-        //    later by the AMA whitelist and the dynamic-weight whitelist.
-        const isDynamicWeightWhitelisted = forceWhitelistAll || (typeof deps.isBotDynamicWeightWhitelisted === 'function'
+        // 3. Signal computation — dynamic weights use AMA + Kalman + regime gate,
+        //    with ATR applied only as a separate symmetric penalty. Range scaling
+        //    reuses the AMA slope signal, but buy/sell dynamic weights are only
+        //    exposed, persisted, or applied when dynamicWeight is whitelisted.
+        const isAmaWhitelisted = forceWhitelistAll || (typeof deps.isBotWhitelisted === 'function'
+            ? deps.isBotWhitelisted(bot.botKey)
+            : true);
+        const isDynamicWeightFlagWhitelisted = forceWhitelistAll || (typeof deps.isBotDynamicWeightWhitelisted === 'function'
             && deps.isBotDynamicWeightWhitelisted(bot.botKey));
+        const isDynamicWeightWhitelisted = isAmaWhitelisted && isDynamicWeightFlagWhitelisted;
         const isGridRangeScalingWhitelisted = forceWhitelistAll
             || (typeof deps.isBotGridRangeScalingWhitelisted === 'function'
                 && deps.isBotGridRangeScalingWhitelisted(bot.botKey))
@@ -1987,9 +1991,11 @@ class MarketAdapterService {
         const hasExplicitBaseWeights = Number.isFinite(bot.weightDistribution?.sell)
             && Number.isFinite(bot.weightDistribution?.buy);
         const isAmaGridBot = /^ama(?:[1-4])?$/i.test(String(bot?.gridPrice || '').trim());
-        const shouldComputeDynamicWeights = isAmaGridBot && hasExplicitBaseWeights;
-        const canApplyDynamicWeights = isDynamicWeightWhitelisted && shouldComputeDynamicWeights;
-        if (!hasExplicitBaseWeights && isAmaGridBot) {
+        const shouldComputeDynamicWeightSignal = isAmaGridBot && hasExplicitBaseWeights
+            && (isDynamicWeightWhitelisted || isGridRangeScalingWhitelisted);
+        const canExposeDynamicWeights = isDynamicWeightWhitelisted && shouldComputeDynamicWeightSignal;
+        const canApplyDynamicWeights = canExposeDynamicWeights;
+        if (!hasExplicitBaseWeights && isAmaGridBot && (isDynamicWeightWhitelisted || isGridRangeScalingWhitelisted)) {
             warn(`${bot.botKey} is missing explicit weightDistribution; skipping dynamic volatility weights for this cycle.`);
         }
 
@@ -1998,7 +2004,7 @@ class MarketAdapterService {
         let weights = null;
         let dynamicWeightsPayload = null;
 
-        if (shouldComputeDynamicWeights) {
+        if (shouldComputeDynamicWeightSignal) {
             const dwResult = this._computeDynamicWeights({
                 analysisCandles,
                 closes,
@@ -2025,7 +2031,7 @@ class MarketAdapterService {
         const amaSlopeThresholdPercent = amaSlopeResetDetails.thresholdPercent;
 
         // 4. Advisory collateral-ratio hint only; execution is owned by the debt runtime.
-        const collateralRecommendation = shouldComputeDynamicWeights ? adjustCollateralRatio(slopeResult, 1.5, 2.0) : null;
+        const collateralRecommendation = canExposeDynamicWeights ? adjustCollateralRatio(slopeResult, 1.5, 2.0) : null;
 
         const amaComparison = deps.calcAmaComparison(analysisCandles, bot, ctx);
         const closedCandleTs = lastCandle[0] || null;
@@ -2049,8 +2055,7 @@ class MarketAdapterService {
                 Object.assign(weights.meta, asymmetryMetrics);
             }
         }
-        const shouldPersistRangeScalingSnapshot = isGridRangeScalingWhitelisted && dynamicWeightsPayload;
-        const dynamicSnapshotPayload = (canApplyDynamicWeights || shouldPersistRangeScalingSnapshot)
+        const dynamicSnapshotPayload = canExposeDynamicWeights
             ? dynamicWeightsPayload
             : null;
 
@@ -2385,7 +2390,7 @@ class MarketAdapterService {
             staleAgeHours,
             lastTriggerFile: triggerPath || botState.lastTriggerFile || null,
             lastTriggerSuppressedReason: triggerSuppressedReason || null,
-            weights,
+            weights: canExposeDynamicWeights ? weights : null,
             collateralRecommendation,
             atr,
             weightVariance,
@@ -2399,8 +2404,8 @@ class MarketAdapterService {
                 : (botState.effectiveWeights || null),
             dynamicWeightWhitelisted: isDynamicWeightWhitelisted,
             gridRangeScalingWhitelisted: isGridRangeScalingWhitelisted,
-            dynamicWeightReady:       dynamicWeightsPayload?.isReady ?? false,
-            dynamicWeightProfile:     weights?.profile || null,
+            dynamicWeightReady:       canExposeDynamicWeights ? (dynamicWeightsPayload?.isReady ?? false) : false,
+            dynamicWeightProfile:     canExposeDynamicWeights ? (weights?.profile || null) : null,
             dynamicWeightApplied:     snapshotPersistedThisCycle && canApplyDynamicWeights,
             hasExplicitBaseWeights,
             pendingClosedCandle: false,
@@ -2436,7 +2441,7 @@ class MarketAdapterService {
             staleAgeHours,
             triggerCallbackError,
             triggerSuppressedReason,
-            weights,
+            weights: canExposeDynamicWeights ? weights : null,
             collateralRecommendation,
             amaSlope: amaSlope || botState.amaSlope || null,
             amaSlopeDeltaPercent: Number.isFinite(amaSlopeDeltaPercent)
@@ -2445,8 +2450,8 @@ class MarketAdapterService {
             amaSlopeThresholdPercent: amaSlopeThresholdPercent ?? botState.amaSlopeThresholdPercent ?? null,
             dynamicWeightWhitelisted: isDynamicWeightWhitelisted,
             gridRangeScalingWhitelisted: isGridRangeScalingWhitelisted,
-            dynamicWeightReady: dynamicWeightsPayload?.isReady ?? false,
-            dynamicWeightProfile: weights?.profile || null,
+            dynamicWeightReady: canExposeDynamicWeights ? (dynamicWeightsPayload?.isReady ?? false) : false,
+            dynamicWeightProfile: canExposeDynamicWeights ? (weights?.profile || null) : null,
             dynamicWeightApplied: snapshotPersistedThisCycle && canApplyDynamicWeights,
             hasExplicitBaseWeights,
             poolId: ctx.poolId,

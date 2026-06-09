@@ -2261,7 +2261,7 @@ async function testCenterStableButSlopeDeltaTriggersReset() {
     assert.ok(lastWrite[2].amaSlope, 'dynamic snapshot should persist the current slope snapshot');
     assert.ok(Number.isFinite(lastWrite[2].gridPriceOffsetPct), 'dynamic snapshot should persist the AMA spread offset');
     assert.ok(lastWrite[2].gridPriceOffsetPct < 0, 'downtrend should persist a negative spread offset');
-    assert.ok(lastWrite[2].dynamicWeights, 'range-scaling snapshot should persist slope fields without live dynamic weights');
+    assert.strictEqual(lastWrite[2].dynamicWeights, undefined, 'range-scaling snapshot should not persist live dynamic weights without dynamic whitelist');
     assert.strictEqual(result.dynamicWeightApplied, false, 'range-scaling snapshot should not report live dynamic weights as applied');
     assert.strictEqual(state.bots['xrp-bts-slope'].effectiveWeights, null, 'range-only snapshot should not advance live effective weights');
     assert.strictEqual(state.bots['xrp-bts-slope'].amaSlope.trend, 'DOWN', 'state should retain current slope direction');
@@ -2458,7 +2458,7 @@ async function testLegacyDynamicGridSlopeBaselineIsNormalizedBeforeComparison() 
         writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-legacy-slope-baseline.trigger',
         writeBotDynamicGrid: () => true,
         isBotDynamicWeightWhitelisted: () => false,
-        isBotGridRangeScalingWhitelisted: () => false,
+        isBotGridRangeScalingWhitelisted: () => true,
         root: process.cwd(),
         path,
     };
@@ -5645,18 +5645,77 @@ async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
     assert.strictEqual(result.ok, true, 'processBot should succeed');
     assert.strictEqual(dynamicGridWrites, 1, 'non-whitelisted AMA bots should still refresh the AMA dynamic grid snapshot');
     assert.ok(lastDynamicGridPayload, 'dynamic grid payload should be captured');
-    assert.ok(lastDynamicGridPayload.amaSlope, 'snapshot refresh should include AMA slope diagnostics');
+    assert.strictEqual(lastDynamicGridPayload.amaSlope, null, 'non-whitelisted snapshot should not include dynamic-weight slope diagnostics');
     assert.strictEqual(lastDynamicGridPayload.dynamicWeights, undefined, 'non-whitelisted diagnostics should not persist live dynamic weights');
     assert.strictEqual(triggerWrites, 0, 'non-grid-range-scaling bots should not emit slope reset triggers');
     assert.strictEqual(result.dynamicWeightWhitelisted, false, 'whitelist flag should remain false');
-    assert.strictEqual(result.dynamicWeightReady, true, 'diagnostic dynamic weights should still be computed');
-    assert.strictEqual(result.dynamicWeightApplied, false, 'diagnostic weights should not be reported as applied');
-    assert.ok(result.weights, 'diagnostic weights should be returned for logging');
-    assert.ok(result.amaSlope, 'diagnostic amaSlope should be returned for logging');
-    assert.strictEqual(result.weights.meta.source, 'dynamic_weight', 'diagnostic weights should come from the dynamic-weight path');
-    assert.strictEqual(result.weights.meta.rawAsymmetryFactor, null, 'asymmetry diagnostics should stay blank when asymmetric bounds are not whitelisted');
-    assert.strictEqual(result.weights.meta.appliedAsymmetryFactor, null, 'applied asymmetry should stay blank when asymmetric bounds are not whitelisted');
+    assert.strictEqual(result.dynamicWeightReady, false, 'non-whitelisted bots should not compute dynamic weights');
+    assert.strictEqual(result.dynamicWeightApplied, false, 'non-whitelisted weights should not be reported as applied');
+    assert.strictEqual(result.weights, null, 'non-whitelisted bots should not return dynamic-weight diagnostics');
+    assert.strictEqual(result.amaSlope, null, 'non-whitelisted bots should not return dynamic-weight slope diagnostics');
     assert.strictEqual(state.bots['xrp-bts-dw-diagnostic'].effectiveWeights, null, 'non-whitelisted diagnostics should not update live effective weights');
+}
+
+async function testDynamicWeightRequiresAmaAndDynamicWeightWhitelist() {
+    const service = new MarketAdapterService({
+        resolveBotContext: async () => ({
+            assetA: { id: '1.3.1', precision: 4, symbol: 'IOB.XRP' },
+            assetB: { id: '1.3.0', precision: 5, symbol: 'BTS' },
+            poolId: '1.19.133',
+        }),
+        resolveAmaForBot: () => ({ enabled: true, erPeriod: 10, fastPeriod: 2, slowPeriod: 30 }),
+        candleFileForBot: (botKey) => path.join('/tmp', `market_adapter_${botKey}_1h.json`),
+        loadJson: () => ({ candles: generateTrendingCandles(1000, 100, 0.5) }),
+        saveJson: () => {},
+        calculateBotThreshold: () => 1000,
+        computeCandleStaleness: () => ({ staleData: false, staleAgeHours: 1.0 }),
+        withRetries: async (fn) => fn(),
+        kibanaSource: { getLpCandlesForPool: async () => [] },
+        fetchNativeTradesSince: async () => ({ trades: [], truncated: false, pages: 1 }),
+        tradesToCandles: () => [],
+        mergeCandles: (existing, incoming) => [...existing, ...incoming],
+        pruneCandles: (candles) => candles,
+        calcAmaComparison: () => [],
+        writeGridResetTrigger: () => '/tmp/recalculate.xrp-bts-dw-ama-required.trigger',
+        writeBotDynamicGrid: () => true,
+        isBotWhitelisted: () => false,
+        isBotDynamicWeightWhitelisted: () => true,
+        root: process.cwd(),
+        path,
+    });
+
+    const bot = {
+        name: 'XRP-BTS',
+        botKey: 'xrp-bts-dw-ama-required',
+        assetA: 'IOB.XRP',
+        assetB: 'BTS',
+        gridPrice: 'ama',
+        incrementPercent: 0.4,
+        weightDistribution: { sell: 0.6, buy: 0.4 },
+    };
+    const state = { bots: { 'xrp-bts-dw-ama-required': { centerPrice: 100 } } };
+    const cfg = {
+        intervalSeconds: 3600,
+        bootstrapLookbackHours: 1200,
+        nativeBackfillHours: 6,
+        pageLimit: 100,
+        maxPages: 80,
+        sourceRetries: 1,
+        retryDelayMs: 0,
+        maxStaleHours: 6,
+        minOutputThreshold: 0,
+        regimeSensitivity: 0,
+        signalConfirmBars: 0,
+        maxVolatilityOffset: 0,
+    };
+
+    const result = await service.processBot(bot, state, cfg, new Map(), {});
+
+    assert.strictEqual(result.ok, true, 'processBot should succeed');
+    assert.strictEqual(result.dynamicWeightWhitelisted, false, 'dynamic weights require AMA whitelist plus dynamicWeight flag');
+    assert.strictEqual(result.dynamicWeightReady, false, 'dynamicWeight-only whitelist should not compute dynamic weights');
+    assert.strictEqual(result.weights, null, 'dynamicWeight-only whitelist should not expose weights');
+    assert.strictEqual(state.bots['xrp-bts-dw-ama-required'].effectiveWeights, null, 'dynamicWeight-only whitelist should not update state weights');
 }
 
 async function testDynamicWeightDiagnosticsDoNotLeakIntoBootstrapState() {
@@ -5721,8 +5780,8 @@ async function testDynamicWeightDiagnosticsDoNotLeakIntoBootstrapState() {
 
     assert.strictEqual(result.ok, true, 'processBot should succeed');
     assert.strictEqual(dynamicGridWrites, 1, 'bootstrap should still persist the AMA center snapshot');
-    assert.strictEqual(result.dynamicWeightReady, true, 'diagnostic dynamic weights should still be computed');
-    assert.strictEqual(result.dynamicWeightApplied, false, 'bootstrap diagnostics should not be reported as applied');
+    assert.strictEqual(result.dynamicWeightReady, false, 'non-whitelisted bootstrap should not compute dynamic weights');
+    assert.strictEqual(result.dynamicWeightApplied, false, 'bootstrap weights should not be reported as applied');
     assert.strictEqual(state.bots['xrp-bts-dw-bootstrap-diagnostic'].effectiveWeights, null, 'non-whitelisted bootstrap diagnostics should not update live effective weights');
 }
 
@@ -5979,6 +6038,7 @@ async function run() {
     await testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData();
     await testDynamicWeightInvalidAtrPeriodAndClampAreSanitized();
     await testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots();
+    await testDynamicWeightRequiresAmaAndDynamicWeightWhitelist();
     await testDynamicWeightDiagnosticsDoNotLeakIntoBootstrapState();
     await testWeightOnlyUpdateInDryRunUpdatesState();
     await testNewerDynamicGridResetCenterOverridesStaleAdapterState();

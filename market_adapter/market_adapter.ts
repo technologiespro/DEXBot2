@@ -1083,6 +1083,7 @@ const adapterService = new MarketAdapterService({
     calcAmaComparison,
     writeGridResetTrigger,
     writeBotDynamicGrid,
+    isBotWhitelisted,
     isBotDynamicWeightWhitelisted,
     isBotGridRangeScalingWhitelisted,
     logger,

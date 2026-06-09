@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { formatPrice6 } = require('../modules/order/format');
 const { ORDER_TYPES, ORDER_STATES, MARKET_ADAPTER } = require('../modules/constants');
+const { getWhitelistFlags } = require('../modules/market_adapter_whitelist');
 
 const PARENT = path.dirname(__dirname);
 const ROOT = path.basename(PARENT) === 'dist' ? path.dirname(PARENT) : PARENT;
@@ -129,13 +130,16 @@ function readDynamicGridSnapshot(botKey) {
 /**
  * buildDynamicWeightInfo: Extract a display-ready dynamic weight payload.
  *
- * Combines the bot's static `weightDistribution` (from bots.json) with the latest
- * `effectiveWeights` from the dynamic grid snapshot. Returns null when no live
- * data is available, and includes an `isRecent` flag indicating whether the
- * snapshot was written within the freshness window.
+ * Combines the bot's static `weightDistribution` (from bots.json) with the
+ * latest `effectiveWeights` from the dynamic grid snapshot. Returns null when
+ * the bot is not AMA/dynamic-weight whitelisted or no live data is available,
+ * and includes an `isRecent` flag indicating whether the snapshot was written
+ * within the freshness window.
  */
 function buildDynamicWeightInfo(botKey, config) {
   if (!isAmaGridPrice(config)) return null;
+  const whitelistFlags = getWhitelistFlags(botKey);
+  if (!(whitelistFlags.ama === true && whitelistFlags.dynamicWeight === true)) return null;
   const snapshot = readDynamicGridSnapshot(botKey);
   if (!snapshot) return null;
   const dw = snapshot.dynamicWeights;
@@ -1052,10 +1056,10 @@ function formatWeightLine(weightDistribution, dynamicWeight, maxBuyWidth, maxSel
   const staticBuyStr = `${colors.gray}${staticBuy.toFixed(2)}${colors.reset}`;
   const staticSellStr = `${colors.gray}${staticSell.toFixed(2)}${colors.reset}`;
 
-  const buyValVisual = liveBuy.toFixed(2);
-  const sellValVisual = liveSell.toFixed(2);
-  const coloredBuyVal = liveBuyStr;
-  const coloredSellVal = liveSellStr;
+  const buyValVisual = `${liveBuy.toFixed(2)} (${staticBuy.toFixed(2)})`;
+  const sellValVisual = `${liveSell.toFixed(2)} (${staticSell.toFixed(2)})`;
+  const coloredBuyVal = `${liveBuyStr} (${staticBuyStr})`;
+  const coloredSellVal = `${liveSellStr} (${staticSellStr})`;
   const paddedBuyVal = maxBuyWidth ? coloredBuyVal + ' '.repeat(Math.max(0, maxBuyWidth - buyValVisual.length)) : coloredBuyVal;
   const paddedSellVal = maxSellWidth ? coloredSellVal + ' '.repeat(Math.max(0, maxSellWidth - sellValVisual.length)) : coloredSellVal;
 
