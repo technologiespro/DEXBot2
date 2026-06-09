@@ -16,8 +16,8 @@
  *   node unlock --isolated
  *   node unlock --isolated <botName>
  *   node unlock status, stat
- *   node unlock stop all
- *   node unlock restart all
+ *   node unlock stop
+ *   node unlock restart
  *   node unlock delete
  *
  * Environment:
@@ -850,7 +850,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
         if (pid > 0) {
             printLauncherHeader({ botName, clawOnly, isolated });
             console.log(`DEXBot2 already running in background (PID ${pid}).`);
-            console.log('Use `node unlock stat` to inspect it, or `node unlock restart all` to restart it.');
+            console.log('Use `node unlock stat` to inspect it, or `node unlock restart` to restart it.');
             process.exitCode = 0;
             return;
         }
@@ -905,7 +905,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             const { pid } = readLiveMonolithicPid();
             if (pid > 0) {
                 console.log(`DEXBot2 already running in background (PID ${pid}).`);
-                console.log('Use `node unlock stat` to inspect it, or `node unlock restart all` to restart it.');
+                console.log('Use `node unlock stat` to inspect it, or `node unlock restart` to restart it.');
                 process.exitCode = 0;
                 return;
             }
@@ -1513,12 +1513,6 @@ function readLiveMonolithicPid(): { pid: number; stale: boolean } {
 async function handleControl({ cmd, target }: { cmd: string; target?: string }) {
     const effectiveCmd = cmd === 'shutdown' ? 'delete' : cmd === 'stat' ? 'status' : cmd;
     const actionLabel = getControlActionLabel(cmd);
-
-    if ((effectiveCmd === 'restart' || effectiveCmd === 'stop') && !target) {
-        console.error(`Usage: node unlock ${effectiveCmd === 'restart' ? 'restart all' : 'stop all'}`);
-        process.exitCode = 1;
-        return;
-    }
 
     // Try monolithic PID file first for whole-runtime controls.
     if ((effectiveCmd === 'stop-all' || effectiveCmd === 'delete' || effectiveCmd === 'status' || effectiveCmd === 'restart-all') && !target) {

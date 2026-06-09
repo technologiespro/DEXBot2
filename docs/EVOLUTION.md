@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.13 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.14 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,509 commits over ~6 active months
+- **Growth Phase**: 1,519 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
 - **Stability**: Progression from manual testing to a suite of 208+ automated test files
-- **Releases**: 29 tagged releases (v0.1.0 to v0.7.13)
+- **Releases**: 30 release entries (v0.1.0 to v0.7.14)
 
 ---
 
@@ -53,7 +53,7 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **May 21–22**: Shared AMA strategy with market adapter runtime, Kalman stability patch, adapter packaging consolidation, documentation refresh. Released v0.7.1–v0.7.4.
 
-**May 23–25**: Replaced `btsdex` npm dependency with native BitShares integration, codified zero-dependency policy, completed full TypeScript migration (48K+ lines, 173 tests → 184 by v0.7.13). Released v0.7.5.
+**May 23–25**: Replaced `btsdex` npm dependency with native BitShares integration, codified zero-dependency policy, completed full TypeScript migration (48K+ lines, 173 tests → 184+ by v0.7.14). Released v0.7.5.
 
 **May 26–28**: Overhauled fill detection (direct-notice dispatch, instance-based cursor, subscription reconnect), BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening (private-key removal, memory zeroing, bootstrap leak fix).
 
@@ -66,6 +66,8 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 **Jun 4**: CLI polish (`default`, `white`/`stat` aliases, `start`→`test`, `restart all`/`stop all`), terminal color brightening, doubled-log fix, 20-file doc sweep. Released v0.7.12.
 
 **Jun 6**: Added pair orientation toggle to TradingView charts, CEX synthetic candle seeding to complement native candle data, tuned AMA reset and asymmetry defaults, kept key manager startup quiet, avoided duplicate builds during update install, preserved masked terminal input editing, darkened active sell color in order display, and removed stale doc references. Released v0.7.13.
+
+**Jun 9**: Refined `node dexbot order` / analyze-orders output with aligned columns, richer AMA metadata, and 5-digit pricing; hardened market-adapter whitelist preservation, default dynamic-weight behavior, AMA snapshot refresh, and whitelist gating; made unlock monolithic startup idempotent; simplified whole-runtime controls to `node unlock stop` / `node unlock restart` while keeping `all` and isolated bot targets compatible. Released v0.7.14.
 
 ---
 
@@ -114,7 +116,7 @@ Docker launcher docs alignment, centralized AMA slope conversion helpers.
 Code cleanup (unused deps, inline helper), documentation refresh.
 
 ### v0.7.4 → v0.7.5 (93 commits)
-Removal of all external runtime dependencies and full TypeScript migration (48K+ lines, 173 tests → 184+ by v0.7.13). Native BitShares integration replaces `btsdex`, fill detection overhaul with direct-notice dispatch, BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening.
+Removal of all external runtime dependencies and full TypeScript migration (48K+ lines, 173 tests → 184+ by v0.7.14). Native BitShares integration replaces `btsdex`, fill detection overhaul with direct-notice dispatch, BTS fee acquisition via AMM pool, centralized logging, credential daemon security hardening.
 
 ### v0.7.5 → v0.7.6 (5 commits)
 Unlock-start launcher hardening (signal handler cleanup, polling guards), deprecated legacy migration code removal, broken reference fixes, 14-file documentation sweep.
@@ -140,6 +142,9 @@ CLI polish (`default`, `white`/`stat` aliases, `start`→`test`, `restart all`/`
 ### v0.7.12 → v0.7.13 (9 commits)
 TradingView chart pair orientation toggle, CEX synthetic candle seeding, AMA reset and asymmetry default tuning, key manager startup quieting, duplicate build avoidance during update install, masked terminal input editing preservation, active sell color darkening in order display, stale doc reference cleanup.
 
+### v0.7.13 → v0.7.14 (10 commits)
+Analyze-orders display overhaul with aligned columns, AMA metadata, and 5-digit pricing; market-adapter whitelist preservation, dynamic weights defaulting off, AMA snapshot refresh every cycle, whitelist-gated dynamic weights, and AMA status display without dynamic weights. Unlock monolithic startup is idempotent, `node unlock stop` / `node unlock restart` are canonical whole-runtime controls, and legacy `all` plus isolated bot targets remain compatible.
+
 ---
 
 ### Pre-DEXBot2
@@ -150,7 +155,7 @@ TradingView chart pair orientation toggle, CEX synthetic candle seeding, AMA res
 
 ## Development Statistics
 
-208+ automated test files (all TypeScript), 29 tagged releases. See **Version History** for commit breakdown by release.
+208+ automated test files (all TypeScript), 30 release entries. See **Version History** for commit breakdown by release.
 
 ---
 

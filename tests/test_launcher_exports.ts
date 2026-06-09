@@ -114,14 +114,24 @@ assert.deepStrictEqual(
     'unlock parser should parse restart <name>'
 );
 assert.deepStrictEqual(
+    parseUnlockArgs(['node', 'unlock', 'stop']),
+    { botName: null, clawOnly: false, isolated: false, control: { cmd: 'stop-all', target: null } },
+    'unlock parser should parse bare stop as stop all'
+);
+assert.deepStrictEqual(
+    parseUnlockArgs(['node', 'unlock', 'restart']),
+    { botName: null, clawOnly: false, isolated: false, control: { cmd: 'restart-all', target: null } },
+    'unlock parser should parse bare restart as restart all'
+);
+assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', 'stop', 'all']),
     { botName: null, clawOnly: false, isolated: false, control: { cmd: 'stop-all', target: null } },
-    'unlock parser should parse stop all'
+    'unlock parser should parse stop all for backward compatibility'
 );
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', 'restart', 'all']),
     { botName: null, clawOnly: false, isolated: false, control: { cmd: 'restart-all', target: null } },
-    'unlock parser should parse restart all'
+    'unlock parser should parse restart all for backward compatibility'
 );
 assert.deepStrictEqual(
     parseUnlockArgs(['node', 'unlock', 'stop-all']),

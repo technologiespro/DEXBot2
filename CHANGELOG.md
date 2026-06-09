@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.14] - 2026-06-09 - AMA Display Polish, Whitelist Safety & Unlock Controls
+
+This release refines the live order/AMA terminal display, hardens market-adapter whitelist and dynamic-weight handling, makes monolithic unlock startup idempotent, and simplifies whole-runtime unlock controls while preserving isolated per-bot targets and legacy `all` arguments.
+
+### 2026-06-09
+
+#### Runtime & Launcher
+- Make unlock monolithic startup idempotent (`93538d0`).
+  - Re-running the monolithic launcher no longer creates duplicate runtime state when the background process is already active.
+- Simplify whole-runtime unlock controls.
+  - `node unlock stop` and `node unlock restart` are now the canonical monolithic controls.
+  - `node unlock stop all` / `node unlock restart all` remain backward compatible.
+  - `node unlock stop <botName>` / `node unlock restart <botName>` remain available for isolated per-bot control.
+  - README examples, launcher help text, and parser coverage were updated.
+
+#### Market Adapter & Dynamic Weights
+- Preserve market adapter whitelist entries (`820592b`).
+  - Whitelist generation no longer drops existing configured entries while refreshing adapter settings.
+- Default whitelist dynamic weights off (`b32a869`).
+  - Newly generated whitelist entries avoid enabling dynamic weighting implicitly.
+- Refresh AMA dynamic grid snapshots every cycle (`1a9a9b5`).
+  - Runtime snapshots stay current even when the market adapter does not otherwise trigger a grid reset.
+- Gate dynamic weights on AMA whitelist (`e8188a4`).
+  - Dynamic-weight display and behavior now require the relevant AMA whitelist configuration instead of only inferred bot state.
+- Show AMA adapter status without dynamic weights (`d48cb0c`).
+  - AMA status remains visible for whitelisted adapter bots even when dynamic weights are disabled.
+
+#### CLI & Display
+- Overhaul `node dexbot order` / analyze-orders output (`69a0068`).
+  - Aligned terminal columns, richer AMA metadata, and 5-digit price formatting improve scanability of live order state.
+- Show equal dynamic weights in the default terminal color instead of grey (`2e87acf`).
+  - Neutral/equal weight state now reads consistently with normal terminal output.
+
+#### Documentation
+- Fix stale references across documentation (`a97623e`).
+- Reorder version history chronologically and add v0.7.13 to the evolution report (`a366418`).
+
 ## [0.7.13] - 2026-06-06 - TradingView Orientation, CEX Synthetic Seeding & Runtime Polish
 
 This release adds pair-orientation controls to TradingView analysis charts, introduces CEX synthetic candle seeding for market-adapter research data, tunes AMA reset/asymmetry defaults, and fixes several launcher/update/terminal UX rough edges discovered after v0.7.12.

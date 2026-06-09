@@ -173,12 +173,12 @@ Global settings via `node dexbot bot`, stored in `profiles/general.settings.json
 ```bash
 node unlock              # Start all active bots
 node unlock stat         # Runtime status
-node unlock stop all     # Stop the monolithic runtime
-node unlock restart all  # Restart the monolithic runtime
+node unlock stop         # Stop the monolithic runtime
+node unlock restart      # Restart the monolithic runtime
 node unlock delete       # Shut down and clean up
 ```
 
-For independent per-bot process control, use isolated mode or PM2 instead of the default monolithic runtime.
+For independent per-bot process control, use isolated mode or PM2 instead of the default monolithic runtime. Isolated mode still accepts bot targets, for example `node unlock stop XRP-BTS` or `node unlock restart XRP-BTS`.
 
 ## 🛠️ Bot Management
 

@@ -13,8 +13,11 @@ function parseUnlockArgs(argv = process.argv) {
         let cmd = args[0];
         const target = args[1] || null;
 
-        // Normalize "restart all" → "restart-all", "stop all" → "stop-all"
-        const consumedAll = (cmd === 'restart' || cmd === 'stop') && target === 'all';
+        // Normalize whole-runtime controls:
+        //   restart, restart all -> restart-all
+        //   stop, stop all       -> stop-all
+        // Keep stop/restart <botName> for isolated per-bot control.
+        const consumedAll = (cmd === 'restart' || cmd === 'stop') && (!target || target === 'all');
         if (consumedAll) {
             cmd += '-all';
         }
