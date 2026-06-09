@@ -97,16 +97,10 @@ function buildWhitelist(bots: any, existingWhitelist: any = {}, options = parseO
 }
 
 function main() {
-    const dryRun = process.argv.includes('--dry-run') || process.argv.includes('--print');
     const bots = loadBotsConfig();
     const existingWhitelist = loadExistingWhitelist();
     const whitelist = buildWhitelist(bots, existingWhitelist, parseOptions(process.argv));
     const output = JSON.stringify(whitelist, null, 2) + '\n';
-
-    if (dryRun) {
-        process.stdout.write(output);
-        return;
-    }
 
     fs.writeFileSync(WHITELIST_FILE, output, 'utf8');
     const botCount = Object.keys(whitelist.whitelist).length;

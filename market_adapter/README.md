@@ -200,7 +200,6 @@ Dry-run log lines include `[DRY RUN]` or `[suppressed, dry-run]`.
 | Task | Command |
 |------|---------|
 | Generate whitelist | `node dexbot white` |
-| Preview whitelist | `tsx scripts/generate_market_adapter_whitelist.ts --dry-run` |
 | Opt new whitelist entries into dynamic weights | `node dexbot white --dynamic-weight` |
 | Generate AMA-only entries without range scaling | `node dexbot white --no-asymmetric-bounds` |
 | Probe public CEX availability | `tsx market_adapter/inputs/fetch_cex_synthetic_data.ts --exchange auto --check-only` |
