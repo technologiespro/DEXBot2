@@ -178,7 +178,7 @@ node unlock restart      # Restart the monolithic runtime
 node unlock delete       # Shut down and clean up
 ```
 
-For independent per-bot process control, use isolated mode or PM2 instead of the default monolithic runtime. Isolated mode still accepts bot targets, for example `node unlock stop XRP-BTS` or `node unlock restart XRP-BTS`.
+For independent per-bot process control, start isolated mode with `node unlock --isolated` or use PM2 instead of the default monolithic runtime.
 
 ## 🛠️ Bot Management
 
@@ -187,7 +187,7 @@ node dexbot key                 # Master password/keyring
 node dexbot bot                 # Interactive bot configurator
 node dexbot white               # Market adapter whitelist, dynamic weights off by default
 
-node dexbot unlock [<cmd>]      # Standard live runtime
+node dexbot unlock              # Standard live runtime
 node dexbot reset {all|<bot>}   # Regenerate grid
 node dexbot disable {all|<bot>} # Disable bot in config
 
