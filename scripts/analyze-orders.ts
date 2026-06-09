@@ -180,6 +180,7 @@ function buildDynamicWeightInfo(botKey, config) {
   return {
     live,
     base,
+    dynamicWeightEnabled: whitelistFlags.dynamicWeight === true,
     isReady: dw ? dw.isReady === true : false,
     trend: dw && typeof dw.trend === 'string' ? dw.trend : null,
     finalOffset: dw && Number.isFinite(Number(dw.finalOffset)) ? Number(dw.finalOffset) : null,
@@ -1002,7 +1003,7 @@ function getRawWeightValues(weightDistribution, dynamicWeight) {
  *
  * Has three display modes:
  * 1. No dynamic snapshot at all (static-only) — e.g. legacy bots
- * 2. Stale snapshot — static values grayed (adapter offline)
+ * 2. Stale snapshot — static values grayed only when dynamic weights are enabled
  * 3. Live snapshot — live values colored by delta
  *
  * When maxBuyWidth/maxSellWidth are provided, the value portion in each column
@@ -1027,7 +1028,9 @@ function formatWeightLine(weightDistribution, dynamicWeight, maxBuyWidth, maxSel
     const buyVal = staticBuy.toFixed(2);
     const sellVal = staticSell.toFixed(2);
     const alertStr = `${colors.sell}(adapter offline)${colors.reset}`;
-    return `   Weight: ${colors.gray}${maxBuyWidth ? buyVal.padEnd(maxBuyWidth) : buyVal}${colors.reset} ${colors.buy}buy${colors.reset} | ${colors.gray}${maxSellWidth ? sellVal.padEnd(maxSellWidth) : sellVal}${colors.reset} ${colors.sell}sell${colors.reset} ${alertStr}`;
+    const valueColor = dynamicWeight.dynamicWeightEnabled === true ? colors.gray : '';
+    const valueReset = valueColor ? colors.reset : '';
+    return `   Weight: ${valueColor}${maxBuyWidth ? buyVal.padEnd(maxBuyWidth) : buyVal}${valueReset} ${colors.buy}buy${colors.reset} | ${valueColor}${maxSellWidth ? sellVal.padEnd(maxSellWidth) : sellVal}${valueReset} ${colors.sell}sell${colors.reset} ${alertStr}`;
   }
 
   const useLive = !!(dynamicWeight
@@ -1066,13 +1069,10 @@ function formatWeightLine(weightDistribution, dynamicWeight, maxBuyWidth, maxSel
 
   const liveBuyStr = `${buyColor}${liveBuy.toFixed(2)}${colors.reset}`;
   const liveSellStr = `${sellColor}${liveSell.toFixed(2)}${colors.reset}`;
-  const staticBuyStr = `${colors.gray}${staticBuy.toFixed(2)}${colors.reset}`;
-  const staticSellStr = `${colors.gray}${staticSell.toFixed(2)}${colors.reset}`;
-
-  const buyValVisual = `${liveBuy.toFixed(2)} (${staticBuy.toFixed(2)})`;
-  const sellValVisual = `${liveSell.toFixed(2)} (${staticSell.toFixed(2)})`;
-  const coloredBuyVal = `${liveBuyStr} (${staticBuyStr})`;
-  const coloredSellVal = `${liveSellStr} (${staticSellStr})`;
+  const buyValVisual = liveBuy.toFixed(2);
+  const sellValVisual = liveSell.toFixed(2);
+  const coloredBuyVal = liveBuyStr;
+  const coloredSellVal = liveSellStr;
   const paddedBuyVal = maxBuyWidth ? coloredBuyVal + ' '.repeat(Math.max(0, maxBuyWidth - buyValVisual.length)) : coloredBuyVal;
   const paddedSellVal = maxSellWidth ? coloredSellVal + ' '.repeat(Math.max(0, maxSellWidth - sellValVisual.length)) : coloredSellVal;
 

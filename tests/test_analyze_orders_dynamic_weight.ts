@@ -328,6 +328,7 @@ function testFormatWeightLineStaleAmaWithoutDynamicWhitelistShowsOffline() {
     assert.ok(stripped.includes('(adapter offline)'), 'stale AMA-only snapshot should show adapter offline alert');
     assert.ok(!stripped.includes('0.70'), 'dynamicWeight-disabled live sell value should not be displayed');
     assert.ok(!stripped.includes('0.30'), 'dynamicWeight-disabled live buy value should not be displayed');
+    assert.ok(!line.includes('\x1b[38;5;246m0.50'), 'AMA-only stale static weights should not be grey');
   } finally {
     removeSnapshot(botKey);
   }
@@ -354,12 +355,12 @@ function testFormatWeightLineBuyHigherIsRed() {
   );
   assert.ok(line, 'expected a line when live weights are recent');
   const stripped = stripColorCodes(line);
-  assert.ok(stripped.includes('0.60 (0.50) buy'), 'expected buy side "<live> (<static>)" pair');
-  assert.ok(stripped.includes('0.40 (0.50) sell'), 'expected sell side "<live> (<static>)" pair');
-  // Buy is higher -> red; sell is lower -> green; both statics -> grey.
+  assert.ok(stripped.includes('0.60 buy'), 'expected buy side live value');
+  assert.ok(stripped.includes('0.40 sell'), 'expected sell side live value');
+  assert.ok(!stripped.includes('(0.50)'), 'live line should not repeat static baseline in parentheses');
+  // Buy is higher -> red; sell is lower -> green.
   assert.ok(line.includes('\x1b[91m'), 'red color must be applied to the higher live value (buy)');
   assert.ok(line.includes('\x1b[92m'), 'green color must be applied to the lower live value (sell)');
-  assert.ok(line.includes('\x1b[38;5;246m'), 'grey color must be applied to static values');
   // The first color in the line should be red (buy losing), then green (sell winning).
   const redIdx = line.indexOf('\x1b[91m');
   const greenIdx = line.indexOf('\x1b[92m');
@@ -378,8 +379,9 @@ function testFormatWeightLineSellHigherIsRed() {
   );
   assert.ok(line, 'expected a line');
   const stripped = stripColorCodes(line);
-  assert.ok(stripped.includes('0.40 (0.50) buy'), 'expected buy side live/static pair');
-  assert.ok(stripped.includes('0.60 (0.50) sell'), 'expected sell side live/static pair');
+  assert.ok(stripped.includes('0.40 buy'), 'expected buy side live value');
+  assert.ok(stripped.includes('0.60 sell'), 'expected sell side live value');
+  assert.ok(!stripped.includes('(0.50)'), 'live line should not repeat static baseline in parentheses');
   // Sell is higher -> red (losing); buy is lower -> green (winning).
   assert.ok(line.includes('\x1b[91m'), 'red color must be present for the higher live value (sell)');
   assert.ok(line.includes('\x1b[92m'), 'green color must be present for the lower live value (buy)');
@@ -400,8 +402,10 @@ function testFormatWeightLineLiveEqualBothGrey() {
   // remain green/red, so assert against the numeric segments specifically.
   assert.ok(!line.includes('\x1b[92m0.50'), 'no green numeric value when live weights are equal');
   assert.ok(!line.includes('\x1b[91m0.50'), 'no red numeric value when live weights are equal');
-  // Grey should be used (for both the live and the static).
-  assert.ok(line.includes('\x1b[38;5;246m'), 'grey should be used when live weights are equal');
+  const stripped = stripColorCodes(line);
+  assert.ok(stripped.includes('0.50 buy'), 'equal live buy value should still be displayed');
+  assert.ok(stripped.includes('0.50 sell'), 'equal live sell value should still be displayed');
+  assert.ok(!stripped.includes('(0.50)'), 'equal live line should not repeat static baseline in parentheses');
 }
 
 function testFormatWeightLineLiveStaleFallsBackToStatic() {
@@ -410,7 +414,7 @@ function testFormatWeightLineLiveStaleFallsBackToStatic() {
   // plus a red "(adapter offline)" alert.
   const line = formatWeightLine(
     { buy: 0.5, sell: 0.5 },
-    { isRecent: false, live: { buy: 0.7, sell: 0.3 } }
+    { isRecent: false, live: { buy: 0.7, sell: 0.3 }, dynamicWeightEnabled: true }
   );
   assert.ok(line, 'expected a line');
   const stripped = stripColorCodes(line);
