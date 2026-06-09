@@ -191,6 +191,18 @@ async function runStartupColorTest() {
         logs.some((line) => line.includes('\x1b[1;92m') && line.includes('XRP-BTS')),
         'dexbot start should color active bot names green'
     );
+    assert.ok(
+        logs.some((line) => line.includes('\x1b[1;92m') && line.includes('Connected to BitShares')),
+        'dexbot start should color connection success green'
+    );
+    assert.ok(
+        logs.some((line) => line.includes('\x1b[1;92m') && line.includes('✓ Authentication successful')),
+        'dexbot start should color authentication success green'
+    );
+    assert.ok(
+        logs.some((line) => line.includes('\x1b[1;92m') && line.includes('DEXBot2 started successfully!')),
+        'dexbot start should color the final success footer green'
+    );
 }
 
 function resetLogs() {

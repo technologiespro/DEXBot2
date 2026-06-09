@@ -65,6 +65,10 @@ const MARKET_ADAPTER_LOCK_FILE = path.join(ROOT, 'market_adapter', 'state', 'mar
 const MARKET_ADAPTER_SCRIPT = path.join(ROOT, 'market_adapter', 'market_adapter.js');
 const botProcessRef: { current: any } = { current: null };
 
+function formatBotCount(count: number) {
+    return `${count} ${count === 1 ? 'bot' : 'bots'}`;
+}
+
 function cleanupMonolithicStateFiles() {
     try { fs.unlinkSync(MONOLITHIC_PID_FILE); } catch (_) {}
     try { fs.unlinkSync(MONOLITHIC_BOT_PID_FILE); } catch (_) {}
@@ -104,7 +108,7 @@ function printLauncherStartupSummary({
     mode: 'background' | 'foreground' | 'isolated';
 }) {
     console.log('='.repeat(50));
-    console.log(`DEXBot2 started ${botNames.length} bot(s) in ${mode}`);
+    console.log(`DEXBot2 started ${formatBotCount(botNames.length)} in ${mode}`);
     console.log();
     for (const botName of botNames) {
         console.log(`- ${statusActiveBotName(botName)}`);
@@ -116,14 +120,14 @@ function printLauncherSuccess({ botName = null, clawOnly = false, isolated = fal
     console.log();
     console.log('='.repeat(50));
     if (clawOnly) {
-        console.log('DEXBot2 credential daemon started successfully!');
+        console.log(statusSuccess('DEXBot2 credential daemon started successfully!'));
         console.log('If the daemon stops, rerun `node unlock --claw-only` to unlock it again.');
     } else if (botName) {
-        console.log('DEXBot2 started successfully!');
+        console.log(statusSuccess('DEXBot2 started successfully!'));
         const cmd = isolated ? `node unlock --isolated ${botName}` : `node unlock ${botName}`;
         console.log(`If the bot stops, rerun \`${cmd}\` to unlock it again.`);
     } else {
-        console.log('DEXBot2 started successfully!');
+        console.log(statusSuccess('DEXBot2 started successfully!'));
         const cmd = isolated ? 'node unlock --isolated' : 'node unlock';
         console.log(`If the bot stops, rerun \`${cmd}\` to unlock it again.`);
     }
@@ -784,7 +788,7 @@ function scheduleMarketAdapterWatchdog() {
             const nextRestartAttempt = _marketAdapterRestartCount + 1;
             if (nextRestartAttempt > MARKET_ADAPTER.WATCHDOG_DEFAULTS.maxRestarts) {
                 _marketAdapterRestartExhaustedAt = Date.now();
-                console.error(`[market-adapter-watchdog] exceeded max restarts (${MARKET_ADAPTER.WATCHDOG_DEFAULTS.maxRestarts}), giving up until restart budget resets`);
+                console.error(statusError(`[market-adapter-watchdog] exceeded max restarts (${MARKET_ADAPTER.WATCHDOG_DEFAULTS.maxRestarts}), giving up until restart budget resets`));
                 return;
             }
             _marketAdapterRestartCount = nextRestartAttempt;
@@ -792,7 +796,7 @@ function scheduleMarketAdapterWatchdog() {
             try {
                 spawnMarketAdapterChild();
             } catch (err: any) {
-                console.error(`[market-adapter-watchdog] spawn failed: ${err.message}`);
+                console.error(statusError(`[market-adapter-watchdog] spawn failed: ${err.message}`));
             }
         } catch (err: any) {
             console.warn(`[market-adapter-watchdog] tick error: ${err.message}`);
@@ -890,7 +894,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
             try {
                 const unlockedNow = await controller.ensureCredentialDaemon(daemonOpts);
                 if (unlockedNow) {
-                    console.log('✓ Authentication successful');
+                    console.log(statusSuccess('✓ Authentication successful'));
                 }
             } finally {
                 if (daemonOutFd !== null) try { fs.closeSync(daemonOutFd); } catch (_) {}
@@ -1064,7 +1068,7 @@ async function main({ argv = process.argv, startupGraceMs = DEFAULT_STARTUP_GRAC
                     }
                     restartCount++;
                     if (restartCount > LAUNCHER.MONOLITHIC.maxRestarts) {
-                        console.error(`Bot crashed ${LAUNCHER.MONOLITHIC.maxRestarts} times without stable uptime. Exiting.`);
+                        console.error(statusError(`Bot crashed ${LAUNCHER.MONOLITHIC.maxRestarts} times without stable uptime. Exiting.`));
                         process.exitCode = exitCode || 1;
                         keepRunning = false;
                     } else {
@@ -1129,8 +1133,8 @@ const STATUS_COLORS = {
     muted: '\x1b[97m',
 };
 
-function colorStatus(text: string, color: string): string {
-    return process.stdout.isTTY && !process.env.NO_COLOR ? `${color}${text}${STATUS_COLORS.reset}` : text;
+function colorStatus(text: string, color: string, stream: any = process.stdout): string {
+    return stream.isTTY && !process.env.NO_COLOR ? `${color}${text}${STATUS_COLORS.reset}` : text;
 }
 
 function statusTitle(text: string): string {
@@ -1147,6 +1151,14 @@ function statusBool(value: boolean): string {
 
 function statusActiveBotName(name: string): string {
     return colorStatus(name, STATUS_COLORS.ok);
+}
+
+function statusSuccess(text: string): string {
+    return colorStatus(text, STATUS_COLORS.ok);
+}
+
+function statusError(text: string): string {
+    return colorStatus(text, STATUS_COLORS.warn, process.stderr);
 }
 
 function formatMemoryWithUptime(memory: string, uptime: string): string {
@@ -1469,7 +1481,7 @@ function getControlServiceNames(cmd: string, botNames: string[]) {
 
 function printControlActionSummary(action: string, botNames: string[], serviceNames: string[] = []) {
     console.log('='.repeat(50));
-    console.log(`DEXBot2 ${action} ${botNames.length} bot(s)`);
+    console.log(`DEXBot2 ${action} ${formatBotCount(botNames.length)}`);
     console.log();
     for (const botName of botNames) {
         console.log(`- ${statusActiveBotName(botName)}`);
@@ -1645,7 +1657,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
                 } else {
                     console.log(`    ${colorStatus('(not running)', STATUS_COLORS.muted)}`);
                 }
-                console.log(`    ${statusLabel('Active:')}  ${amaBots.length} bot(s)`);
+                console.log(`    ${statusLabel('Active:')}  ${formatBotCount(amaBots.length)}`);
                 for (const b of amaBots) {
                     console.log(`      - ${colorStatus(b.name, STATUS_COLORS.ok)} (${b.gridPrice})`);
                 }
@@ -1730,7 +1742,7 @@ async function handleControl({ cmd, target }: { cmd: string; target?: string }) 
             console.log('No runtime processes found.');
             return;
         }
-        console.error(`control ${cmd}: ${err.message}`);
+        console.error(statusError(`control ${cmd}: ${err.message}`));
         process.exitCode = 1;
     }
 }
@@ -1792,7 +1804,7 @@ if (isUnlockStartDirectRun) {
         try {
             await main();
         } catch (err: any) {
-            console.error('unlock failed:', err.message || err);
+            console.error(statusError(`unlock failed: ${err.message || err}`));
             process.exitCode = 1;
         }
     })();

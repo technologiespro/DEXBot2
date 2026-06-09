@@ -19,12 +19,37 @@ const originalChainKeys = require.cache[chainKeysPath];
 const originalBootstrap = require.cache[bootstrapPath];
 const originalBotSettings = require.cache[botSettingsPath];
 const originalSpawn = childProcess.spawn;
+const originalProcessExit = process.exit;
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
+const originalStdoutIsTTY = process.stdout.isTTY;
+const originalNoColor = process.env.NO_COLOR;
 
 const logs = [];
 const errors = [];
 const spawnCalls = [];
+
+function setStdoutTTY(value) {
+    Object.defineProperty(process.stdout, 'isTTY', {
+        value,
+        configurable: true,
+        writable: true,
+    });
+}
+
+function resetState() {
+    logs.length = 0;
+    errors.length = 0;
+    spawnCalls.length = 0;
+}
+
+function stripAnsi(text) {
+    return String(text).replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function logsIncludePlain(expected) {
+    return logs.some((line) => stripAnsi(line) === expected);
+}
 
 function installStubs() {
     delete require.cache[pm2Path];
@@ -49,6 +74,7 @@ function installStubs() {
 
     setCachedModule(bootstrapPath, {
         createPasswordBootstrapServer: async () => ({
+            socketPath: '/tmp/bootstrap.sock',
             credentialEnv: {
                 DEXBOT_CRED_BOOTSTRAP_SOCKET: '/tmp/bootstrap.sock',
             },
@@ -142,13 +168,27 @@ function installStubs() {
         const line = args.map((part) => String(part)).join(' ');
         if (line.trim()) errors.push(line.trim());
     };
+
+    process.exit = (code = 0) => {
+        const err = new Error(`process.exit(${code})`);
+        err.code = 'TEST_PROCESS_EXIT';
+        err.exitCode = code;
+        throw err;
+    };
 }
 
 function restoreStubs() {
     Module._resolveFilename = originalResolveFilename;
     childProcess.spawn = originalSpawn;
+    process.exit = originalProcessExit;
     console.log = originalConsoleLog;
     console.error = originalConsoleError;
+    setStdoutTTY(originalStdoutIsTTY);
+    if (originalNoColor === undefined) {
+        delete process.env.NO_COLOR;
+    } else {
+        process.env.NO_COLOR = originalNoColor;
+    }
 
     restoreCachedModule(bitsharesClientPath, originalBitsharesClient);
     restoreCachedModule(chainKeysPath, originalChainKeys);
@@ -165,13 +205,15 @@ const { main } = require('../pm2');
 
 (async () => {
     try {
+        setStdoutTTY(true);
+        delete process.env.NO_COLOR;
         await main();
 
-        assert.ok(logs.includes('Connected to BitShares'), 'launcher should still report BitShares connectivity');
-        assert.ok(logs.includes('✓ Authentication successful'), 'launcher should still report successful authentication');
+        assert.ok(logsIncludePlain('Connected to BitShares'), 'launcher should still report BitShares connectivity');
+        assert.ok(logsIncludePlain('✓ Authentication successful'), 'launcher should still report successful authentication');
         assert.ok(logs.includes('Number active bots: 3'), 'launcher should still report the active bot count');
         assert.ok(logs.includes('Starting PM2 with all services...'), 'launcher should still report PM2 startup');
-        assert.ok(logs.includes('DEXBot2 started successfully!'), 'launcher should still print the final success banner');
+        assert.ok(logsIncludePlain('DEXBot2 started successfully!'), 'launcher should still print the final success banner');
         assert.ok(logs.includes('If dexbot-cred stops, rerun `node pm2` to unlock it again.'), 'launcher should still print the final advisory');
         assert.ok(!logs.some((line) => line.includes('Connecting to BitShares...')), 'launcher should not print a separate connection banner');
         assert.ok(!logs.some((line) => line.includes('Authenticating master password...')), 'launcher should not print an auth banner');
@@ -190,6 +232,19 @@ const { main } = require('../pm2');
         assert.ok(!logs.some((line) => line.startsWith('┌') || line.startsWith('│') || line.startsWith('├') || line.startsWith('└')), 'launcher should strip PM2 table output');
         assert.deepStrictEqual(errors, [], 'launcher should not emit console errors during a normal start');
         assert.ok(spawnCalls.some((call) => call.args[0] === 'start' && String(call.args[1]).includes('ecosystem.config.js')), 'launcher should still start the PM2 ecosystem');
+
+        assert.ok(
+            logs.some((line) => line.includes('\x1b[1;92m') && line.includes('Connected to BitShares')),
+            'PM2 launcher should color connection success green'
+        );
+        assert.ok(
+            logs.some((line) => line.includes('\x1b[1;92m') && line.includes('✓ Authentication successful')),
+            'PM2 launcher should color authentication success green'
+        );
+        assert.ok(
+            logs.some((line) => line.includes('\x1b[1;92m') && line.includes('DEXBot2 started successfully!')),
+            'PM2 launcher should color the final success banner green'
+        );
 
         restoreStubs();
         process.stdout.write('PM2 main output tests passed\n');

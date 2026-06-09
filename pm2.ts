@@ -88,6 +88,25 @@ const { UPDATER, TIMING } = require('./modules/constants');
 setupGracefulShutdown();
 
 const execAsync = promisify(exec);
+const PM2_COLORS = {
+    reset: '\x1b[0m',
+    ok: '\x1b[1;92m',
+    error: '\x1b[1;31m',
+};
+
+function colorPm2Output(text: string, color: string, stream: any = process.stdout): string {
+    return stream.isTTY && !process.env.NO_COLOR
+        ? `${color}${text}${PM2_COLORS.reset}`
+        : text;
+}
+
+function pm2Success(text: string): string {
+    return colorPm2Output(text, PM2_COLORS.ok);
+}
+
+function pm2Error(text: string): string {
+    return colorPm2Output(text, PM2_COLORS.error, process.stderr);
+}
 
 const CODE_ROOT = __dirname;
 const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
@@ -254,7 +273,7 @@ function buildCredentialDaemonApp({ credentialEnv = {} }: { credentialEnv?: any 
 function generateEcosystemConfig({ botNameFilter = null, clawOnly = false, exitOnError = true }: { botNameFilter?: string | null; clawOnly?: boolean; exitOnError?: boolean } = {}) {
     function fail(message: any) {
         if (exitOnError) {
-            console.error(message);
+            console.error(pm2Error(String(message)));
             process.exit(1);
         }
         throw new Error(message);
@@ -356,7 +375,7 @@ async function ensureCredentialDaemonPM2({ forceRefresh = false, logReuse }: { f
     try {
         const vaultSecret = await chainKeys.authenticate();
         bootstrap = await createPasswordBootstrapServer({ secret: vaultSecret });
-        console.log('✓ Authentication successful');
+        console.log(pm2Success('✓ Authentication successful'));
         await startManagedRuntimePM2({ apps: [], bootstrap });
         return true;
     } catch (error: any) {
@@ -420,14 +439,14 @@ async function main({ botNameFilter = null, clawOnly = false } = {}) {
             console.log = originalLog;
         }
 
-        console.log('Connected to BitShares');
+        console.log(pm2Success('Connected to BitShares'));
     } else {
         console.log();
     }
 
     // Step 1: Check PM2
     if (!checkPM2Installed()) {
-        console.error('PM2 is not installed');
+        console.error(pm2Error('PM2 is not installed'));
         await installPM2();
     }
 
@@ -435,7 +454,7 @@ async function main({ botNameFilter = null, clawOnly = false } = {}) {
     try {
         await ensureCredentialDaemonPM2();
     } catch (error: any) {
-        console.error('\n❌', error.message);
+        console.error(pm2Error(`\n❌ ${error.message}`));
         process.exit(1);
     }
 
@@ -454,7 +473,7 @@ async function main({ botNameFilter = null, clawOnly = false } = {}) {
 
     console.log();
     console.log('='.repeat(50));
-    console.log('DEXBot2 started successfully!');
+    console.log(pm2Success('DEXBot2 started successfully!'));
     console.log('If dexbot-cred stops, rerun `node pm2` to unlock it again.');
     console.log('='.repeat(50));
     console.log();
@@ -665,8 +684,8 @@ async function installPM2() {
                                 }
                             })
                             .catch((winErr: any) => {
-                                console.error('\nFailed to elevate permissions.');
-                                console.error('Please manually run "npm install -g pm2" as Administrator.');
+                                console.error(pm2Error('\nFailed to elevate permissions.'));
+                                console.error(pm2Error('Please manually run "npm install -g pm2" as Administrator.'));
                                 reject(new Error('PM2 installation failed.'));
                             });
                     }
@@ -934,7 +953,7 @@ if (isPm2DirectRun) {
                 update.on('close', (code: any) => process.exit(code));
             } else if (command === 'stop') {
                 if (!target) {
-                    console.error('Error: Target required. Specify bot name or "all".');
+                    console.error(pm2Error('Error: Target required. Specify bot name or "all".'));
                     showPM2Help();
                     process.exit(1);
                 }
@@ -942,12 +961,12 @@ if (isPm2DirectRun) {
                     await stopPM2Processes(target);
                     process.exit(0);
                 } catch (err: any) {
-                    console.error(`Failed to stop processes: ${err.message}`);
+                    console.error(pm2Error(`Failed to stop processes: ${err.message}`));
                     process.exit(1);
                 }
             } else if (command === 'delete') {
                 if (!target) {
-                    console.error('Error: Target required. Specify bot name or "all".');
+                    console.error(pm2Error('Error: Target required. Specify bot name or "all".'));
                     showPM2Help();
                     process.exit(1);
                 }
@@ -955,12 +974,12 @@ if (isPm2DirectRun) {
                     await deletePM2Processes(target);
                     process.exit(0);
                 } catch (err: any) {
-                    console.error(`Failed to delete processes: ${err.message}`);
+                    console.error(pm2Error(`Failed to delete processes: ${err.message}`));
                     process.exit(1);
                 }
             } else if (command === 'restart') {
                 if (!target) {
-                    console.error('Error: Target required. Specify bot name, "dexbot-cred", or "all".');
+                    console.error(pm2Error('Error: Target required. Specify bot name, "dexbot-cred", or "all".'));
                     showPM2Help();
                     process.exit(1);
                 }
@@ -968,19 +987,19 @@ if (isPm2DirectRun) {
                     await restartPM2Processes(target);
                     process.exit(0);
                 } catch (err: any) {
-                    console.error(`Failed to restart processes: ${err.message}`);
+                    console.error(pm2Error(`Failed to restart processes: ${err.message}`));
                     process.exit(1);
                 }
             } else if (command === 'help') {
                 showPM2Help();
                 process.exit(0);
             } else {
-                console.error(`Unknown command: ${command}`);
+                console.error(pm2Error(`Unknown command: ${command}`));
                 showPM2Help();
                 process.exit(1);
             }
         } catch (err: any) {
-            console.error('Error:', err.message);
+            console.error(pm2Error(`Error: ${err.message}`));
             process.exit(1);
         }
     })();

@@ -164,7 +164,7 @@ async function runControl(args) {
 async function assertTargetControl(command, actionWord, botName) {
     await runControl([command, botName]);
     assert.deepStrictEqual(state.controlCalls[0], { cmd: command, bot: botName });
-    assert.ok(logs.includes(`DEXBot2 ${actionWord} 1 bot(s)`), `should print the ${actionWord} summary`);
+    assert.ok(logs.includes(`DEXBot2 ${actionWord} 1 bot`), `should print the ${actionWord} summary`);
     assert.ok(logs.some((line) => stripAnsi(line).includes(`- ${botName}`)), 'should list the affected bot');
 }
 
@@ -172,7 +172,7 @@ async function assertWholeRuntimeControl(command, actionWord) {
     const activeBotNames = getActiveBotNames();
     await runControl([command]);
     assert.deepStrictEqual(state.controlCalls[0], { cmd: command === 'shutdown' ? 'delete' : command });
-    assert.ok(logs.includes(`DEXBot2 ${actionWord} ${activeBotNames.length} bot(s)`), `should print the ${actionWord} summary`);
+    assert.ok(logs.includes(`DEXBot2 ${actionWord} ${activeBotNames.length} bots`), `should print the ${actionWord} summary`);
     for (const botName of activeBotNames) {
         assert.ok(logs.some((line) => stripAnsi(line).includes(`- ${botName}`)), `should list active bot ${botName}`);
     }
@@ -186,7 +186,7 @@ async function assertStaleControl(command, actionWord) {
     const activeBotNames = getActiveBotNames();
     await runControl([command]);
 
-    assert.ok(logs.includes(`DEXBot2 ${actionWord} ${activeBotNames.length} bot(s)`), 'stale control should print the shared summary');
+    assert.ok(logs.includes(`DEXBot2 ${actionWord} ${activeBotNames.length} bots`), 'stale control should print the shared summary');
     for (const botName of activeBotNames) {
         assert.ok(logs.some((line) => stripAnsi(line).includes(`- ${botName}`)), `stale control should list active bot ${botName}`);
     }

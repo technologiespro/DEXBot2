@@ -270,7 +270,7 @@ async function runAllBotsTest() {
     assert.ok(logs.includes('Starting all bots'), 'launcher should print the chosen launch mode');
     assert.ok(logs.includes('✓ Authentication successful'), 'launcher should confirm successful authentication');
     assert.ok(
-        logs.includes(`DEXBot2 started ${activeBotNames.length} bot(s) in background`),
+        logs.includes(`DEXBot2 started ${activeBotNames.length} bots in background`),
         'launcher should print the launched bot count'
     );
     for (const botName of activeBotNames) {
@@ -286,7 +286,7 @@ async function runSingleBotTest() {
     assert.strictEqual(state.stopCount, 0, 'background startup should hand daemon ownership to the child');
     assert.strictEqual(state.calls.length, 1, 'launcher should spawn the background child once');
     assert.ok(logs.includes('Starting bot: XRP-BTS'), 'launcher should print the selected bot name');
-    assert.ok(logs.includes('DEXBot2 started 1 bot(s) in background'), 'launcher should print the single-bot count');
+    assert.ok(logs.includes('DEXBot2 started 1 bot in background'), 'launcher should print the single-bot count');
     assert.ok(logsIncludePlain('- XRP-BTS'), 'launcher should list the launched bot');
 }
 
@@ -299,7 +299,7 @@ async function runForegroundTest() {
     assert.strictEqual(state.stopCount, 1, 'foreground mode should clean up its owned daemon');
     assert.strictEqual(countSpawnCallsMatchingScript('dexbot'), 1, 'foreground mode should spawn the bot process once');
     assert.ok(
-        logs.includes(`DEXBot2 started ${activeBotNames.length} bot(s) in foreground`),
+        logs.includes(`DEXBot2 started ${activeBotNames.length} bots in foreground`),
         'foreground mode should print the shared startup summary'
     );
     for (const botName of activeBotNames) {
@@ -395,6 +395,23 @@ async function runStartupSummaryColorTest() {
         logs.some((line) => line.includes('\x1b[1;92m') && activeBotNames.some((botName) => line.includes(botName))),
         'startup summary should color active bot names green'
     );
+    assert.ok(
+        logs.some((line) => line.includes('\x1b[1;92m') && line.includes('✓ Authentication successful')),
+        'startup summary should color authentication success green'
+    );
+}
+
+async function runClawOnlySuccessColorTest() {
+    resetState();
+    setStdoutTTY(true);
+    delete process.env.NO_COLOR;
+
+    await runUnlockStart(['node', 'unlock', 'claw-only']);
+
+    assert.ok(
+        logs.some((line) => line.includes('\x1b[1;92m') && line.includes('DEXBot2 credential daemon started successfully!')),
+        'claw-only startup should color the credential-daemon success footer green'
+    );
 }
 
 (async () => {
@@ -408,6 +425,7 @@ async function runStartupSummaryColorTest() {
         await runStartupFailureSuppressesSuccessTest();
         await runStatusColorTest();
         await runStartupSummaryColorTest();
+        await runClawOnlySuccessColorTest();
         restoreStubs();
         process.stdout.write('unlock output tests passed\n');
         process.exit(0);

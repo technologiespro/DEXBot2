@@ -40,6 +40,17 @@ const { UPDATER } = require('../modules/constants');
 const MONOLITHIC_PID_FILE = path.join(ROOT, 'profiles', 'monolithic.pid');
 const MONOLITHIC_BOT_PID_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.pid');
 const MONOLITHIC_BOT_INFO_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.json');
+const UPDATE_COLORS = {
+    reset: '\x1b[0m',
+    ok: '\x1b[1;92m',
+    error: '\x1b[1;31m',
+};
+
+function colorUpdateOutput(text, color, stream = process.stdout) {
+    return stream.isTTY && !process.env.NO_COLOR
+        ? `${color}${text}${UPDATE_COLORS.reset}`
+        : text;
+}
 
 /**
  * log: Output timestamped update log message
@@ -50,6 +61,14 @@ const MONOLITHIC_BOT_INFO_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.jso
  */
 function log(msg) {
     console.log(`[${new Date().toISOString()}] [UPDATE] ${msg}`);
+}
+
+function logSuccess(msg) {
+    log(colorUpdateOutput(msg, UPDATE_COLORS.ok));
+}
+
+function updateError(msg) {
+    return colorUpdateOutput(msg, UPDATE_COLORS.error, process.stderr);
 }
 
 /**
@@ -66,7 +85,7 @@ function run(cmd) {
     try {
         execSync(cmd, { stdio: 'inherit', cwd: ROOT });
     } catch (err) {
-        console.error(`[ERROR] Command failed: ${cmd}`);
+        console.error(updateError(`[ERROR] Command failed: ${cmd}`));
         throw err;
     }
 }
@@ -455,13 +474,13 @@ try {
     }
 
 
-    log('DEXBot2 update completed successfully.');
+    logSuccess('DEXBot2 update completed successfully.');
     process.exit(0);
 } catch (err) {
-    console.error('==========================================');
-    console.error('UPDATE FAILED');
-    console.error('Error:', err.message);
-    console.error('==========================================');
+    console.error(updateError('=========================================='));
+    console.error(updateError('UPDATE FAILED'));
+    console.error(updateError(`Error: ${err.message}`));
+    console.error(updateError('=========================================='));
     process.exit(1);
 }
 })();

@@ -18,12 +18,18 @@ This release keeps orderbook-derived dynamic-grid snapshots advancing through or
   - `node dexbot start` now prints an explicit active-bot summary before handing off to the runtime.
   - `node unlock` startup summaries, whole-runtime control summaries, and `node unlock status` use the same active-bot highlighting.
   - Coloring remains disabled for non-TTY output and when `NO_COLOR` is set.
+- Polish launcher and updater terminal wording/color.
+  - Bot-count summaries now print `bot` or `bots` instead of the generic `bot(s)`.
+  - Interactive success lines use green and important failure/error lines use red across `dexbot`, `unlock`, `pm2`, and the update script.
+  - Redirected output and log-style output stay plain through the same TTY/`NO_COLOR` guard.
 
 #### Testing
 - `npx tsx tests/test_market_adapter_service.ts`
 - `npx tsx tests/test_dexbot_startup_output.ts`
 - `npx tsx tests/test_unlock_control_output.ts`
 - `npx tsx tests/test_unlock_output.ts`
+- `npx tsx tests/test_dexbot_start_master_password_failure_output.ts`
+- `npx tsx tests/test_pm2_main_output.ts`
 
 ## [0.7.14] - 2026-06-09 - AMA Display Polish, Whitelist Safety & Unlock Controls
 

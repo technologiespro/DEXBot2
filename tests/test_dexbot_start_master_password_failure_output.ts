@@ -33,6 +33,10 @@ const errorCalls = [];
 const suppressCalls = [];
 let exitCode = null;
 
+function stripAnsi(text) {
+    return String(text).replace(/\x1b\[[0-9;]*m/g, '');
+}
+
 function installStubs() {
     delete require.cache[dexbotPath];
 
@@ -101,6 +105,7 @@ function installStubs() {
     setCachedModule(gracefulShutdownPath, {
         setupGracefulShutdown: () => {},
         registerCleanup: () => {},
+        unregisterCleanup: () => {},
     });
     setCachedModule(systemPath, {
         ensureProfilesDirectory: () => false,
@@ -164,8 +169,7 @@ require('../dexbot');
         assert.strictEqual(exitCode, 1, 'dexbot start should exit with code 1 on master password failure');
         assert.ok(suppressCalls.includes(true), 'dexbot startup should suppress BitShares connection logs');
         assert.ok(suppressCalls.includes(false), 'dexbot startup should restore BitShares connection logs after startup');
-        assert.ok(errorCalls.includes(''), 'dexbot start should print a blank line before the failure message');
-        assert.ok(errors.includes('❌ Incorrect master password after 3 attempts.'), 'dexbot start should match the PM2-style failure output');
+        assert.ok(errors.some((line) => stripAnsi(line).includes('Incorrect master password after 3 attempts.')), 'dexbot start should match the PM2-style failure output');
         assert.ok(!errors.some((line) => line.includes('Failed to start bot:')), 'dexbot start should not print the generic failure prefix');
         assert.ok(!errors.some((line) => line.includes('Aborting because the master password failed 3 times.')), 'dexbot start should not print the extra abort line');
         assert.ok(logs.includes('Connected to BitShares'), 'dexbot start should still print the connection banner before failure');

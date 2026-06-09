@@ -136,12 +136,25 @@ const CLI_EXAMPLES = [
 const STARTUP_COLORS = {
     reset: '\x1b[0m',
     ok: '\x1b[1;92m',
+    error: '\x1b[1;31m',
 };
 
+function colorStartupOutput(text: string, color: string, stream: any = process.stdout): string {
+    return stream.isTTY && !process.env.NO_COLOR
+        ? `${color}${text}${STARTUP_COLORS.reset}`
+        : text;
+}
+
+function startupSuccess(text: string): string {
+    return colorStartupOutput(text, STARTUP_COLORS.ok);
+}
+
+function startupError(text: string): string {
+    return colorStartupOutput(text, STARTUP_COLORS.error, process.stderr);
+}
+
 function colorStartupActiveBotName(name: string): string {
-    return process.stdout.isTTY && !process.env.NO_COLOR
-        ? `${STARTUP_COLORS.ok}${name}${STARTUP_COLORS.reset}`
-        : name;
+    return startupSuccess(name);
 }
 const cliArgs = process.argv.slice(2);
 
@@ -312,7 +325,7 @@ function printStartLauncherSuccess({ botName = null, dryRun = false } = {}) {
     const target = botName ? ` ${botName}` : '';
     console.log();
     console.log('='.repeat(50));
-    console.log('DEXBot2 started successfully!');
+    console.log(startupSuccess('DEXBot2 started successfully!'));
     if (botName) {
         console.log(`If the bot stops, rerun \`node dexbot ${command}${target}\` to start it again.`);
     } else {
@@ -324,7 +337,7 @@ function printStartLauncherSuccess({ botName = null, dryRun = false } = {}) {
 
 function printMasterPasswordFailure(err: any) {
     console.error();
-    console.error(`❌ ${err.message}`);
+    console.error(startupError(`❌ ${err.message}`));
 }
 
 /**
@@ -353,14 +366,14 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
 
     const announceConnection = () => {
         if (shouldAnnounceLauncher && !connectionAnnounced) {
-            console.log('Connected to BitShares');
+            console.log(startupSuccess('Connected to BitShares'));
             connectionAnnounced = true;
         }
     };
 
     const announceAuthentication = () => {
         if (shouldAnnounceLauncher && !authenticationAnnounced) {
-            console.log('✓ Authentication successful');
+            console.log(startupSuccess('✓ Authentication successful'));
             authenticationAnnounced = true;
         }
     };
@@ -386,9 +399,9 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
         const { errors } = collectValidationIssues(prepared, sourceName);
 
         if (errors.length) {
-            console.error('ERROR: Invalid configuration for one or more **active** bots:');
-            errors.forEach((e: any) => console.error('  -', e));
-            console.error('Fix the configuration problems in profiles/bots.json and restart. Aborting.');
+            console.error(startupError('ERROR: Invalid configuration for one or more **active** bots:'));
+            errors.forEach((e: any) => console.error(startupError(`  - ${e}`)));
+            console.error(startupError('Fix the configuration problems in profiles/bots.json and restart. Aborting.'));
             process.exit(1);
         }
 
@@ -424,8 +437,8 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
             announceConnection();
             await initializeFeeCache(prepared.filter((b: any) => b.active), BitShares);
         } catch (err: any) {
-            console.error(`Fee cache initialization failed: ${err.message}`);
-            console.error('Cannot proceed without fee cache for fill processing. Aborting.');
+            console.error(startupError(`Fee cache initialization failed: ${err.message}`));
+            console.error(startupError('Cannot proceed without fee cache for fill processing. Aborting.'));
             process.exit(1);
         }
 
@@ -474,7 +487,7 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
                     try {
                         await bot.shutdown();
                     } catch (shutdownErr: any) {
-                        console.error(`Error during cleanup: ${shutdownErr.message}`);
+                        console.error(startupError(`Error during cleanup: ${shutdownErr.message}`));
                     }
                 }
                 if (chainKeys.isMasterPasswordFailure(err)) {
@@ -482,7 +495,7 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
                     process.exit(1);
                     return;
                 }
-                console.error('Failed to start bot:', err.message);
+                console.error(startupError(`Failed to start bot: ${err.message}`));
                 if (err && err.message && String(err.message).toLowerCase().includes('marketprice')) {
                     console.info('Hint: startPrice could not be derived.');
                     console.info(' - If using profiles/bots.json with "pool" or "book" signals, ensure the chain contains a matching liquidity pool or orderbook for the configured pair.');
@@ -525,12 +538,12 @@ async function startBotByName(botName: string | null | undefined, { dryRun = fal
     const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
     const entries = resolveRawBotEntries(config);
     if (!entries.length) {
-        console.error('No bot definitions exist in the tracked settings.');
+        console.error(startupError('No bot definitions exist in the tracked settings.'));
         process.exit(1);
     }
     const match = entries.find((b: any) => b.name === botName);
     if (!match) {
-        console.error(`Could not find any bot named '${botName}' in the tracked settings.`);
+        console.error(startupError(`Could not find any bot named '${botName}' in the tracked settings.`));
         process.exit(1);
     }
     const entryCopy = JSON.parse(JSON.stringify(match));
@@ -571,7 +584,7 @@ async function disableBotByName(botName: string | null | undefined) {
     }
     const match = entries.find((b: any) => b.name === botName);
     if (!match) {
-        console.error(`Could not find any bot named '${botName}' to disable.`);
+        console.error(startupError(`Could not find any bot named '${botName}' to disable.`));
         process.exit(1);
     }
     if (!match.active) {
@@ -601,24 +614,24 @@ async function resetBotByName(botName: string | null | undefined) {
     // Filter targets
     const targets = botName ? entries.filter((b: any) => b.name === botName) : entries.filter((b: any) => b.active);
     if (botName && targets.length === 0) {
-        console.error(`Could not find any bot named '${botName}' to reset.`);
+        console.error(startupError(`Could not find any bot named '${botName}' to reset.`));
         process.exit(1);
     }
 
-    console.log(`Setting regeneration trigger for ${targets.length} bot(s)...`);
+    console.log(`Setting regeneration trigger for ${targets.length} ${targets.length === 1 ? 'bot' : 'bots'}...`);
 
     for (const bot of targets) {
         try {
             const triggerFile = path.join(PROFILES_DIR, `recalculate.${bot.botKey}.trigger`);
             fs.writeFileSync(triggerFile, '');
-            console.log(`✓ Trigger set for '${bot.name}' (${path.basename(triggerFile)})`);
+            console.log(startupSuccess(`✓ Trigger set for '${bot.name}' (${path.basename(triggerFile)})`));
         } catch (err: any) {
             console.warn(`Failed to set trigger for '${bot.name}': ${err.message}`);
         }
     }
 
     console.log();
-    console.log('Action complete.');
+    console.log(startupSuccess('Action complete.'));
     console.log('- If the bot is running (CLI or PM2), it will detect the trigger and reset automatically.');
     console.log('- If the bot is stopped, the grid will be regenerated the next time you run `dexbot test`.');
 }
@@ -629,7 +642,7 @@ async function resetBotByName(botName: string | null | undefined) {
  */
 async function exportBotTrades(botName: string | undefined) {
     if (!botName) {
-        console.error('Please specify a bot name: dexbot export <bot-name>');
+        console.error(startupError('Please specify a bot name: dexbot export <bot-name>'));
         process.exit(1);
     }
 
@@ -641,7 +654,7 @@ async function exportBotTrades(botName: string | undefined) {
         const bot = resolveRawBotEntries(botsData).find((b: any) => b.name === botName);
 
         if (!bot) {
-            console.error(`Bot '${botName}' not found in profiles/bots.json`);
+            console.error(startupError(`Bot '${botName}' not found in profiles/bots.json`));
             process.exit(1);
         }
 
@@ -657,7 +670,7 @@ async function exportBotTrades(botName: string | undefined) {
 
         if (result.success) {
             console.log(`\n${'='.repeat(60)}`);
-            console.log(`✓ Export successful!`);
+            console.log(startupSuccess(`✓ Export successful!`));
             console.log(`${'='.repeat(60)}`);
             console.log(`Bot:              ${botName}`);
             console.log(`Trades exported:  ${result.trades_exported}`);
@@ -667,11 +680,11 @@ async function exportBotTrades(botName: string | undefined) {
             console.log(`Timestamp:        ${result.timestamp}`);
             console.log(`\nYou can now use these files with QTradeX for backtesting.\n`);
         } else {
-            console.error(`\n✗ Export failed: ${result.error || 'Unknown error'}\n`);
+            console.error(startupError(`\n✗ Export failed: ${result.error || 'Unknown error'}\n`));
             process.exit(1);
         }
     } catch (err: any) {
-        console.error(`\nExport error: ${err.message}\n`);
+        console.error(startupError(`\nExport error: ${err.message}\n`));
         process.exit(1);
     }
 }
@@ -686,7 +699,7 @@ async function handleCLICommands() {
     const [rawCommand, target] = cliArgs;
     const command = COMMAND_ALIASES[rawCommand] ?? rawCommand;
     if (!CLI_COMMANDS.includes(command)) {
-        console.error(`Unknown command '${command}'.`);
+        console.error(startupError(`Unknown command '${command}'.`));
         printCLIUsage();
         process.exit(1);
     }
@@ -1019,7 +1032,7 @@ async function bootstrap() {
             MARKET_ADAPTER: { ...MARKET_ADAPTER },
         };
         fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2) + '\n', 'utf8');
-        console.log('✓ Created default general.settings.json');
+        console.log(startupSuccess('✓ Created default general.settings.json'));
         console.log();
 
         console.log('To get started, you need to configure your master password.');
@@ -1031,7 +1044,7 @@ async function bootstrap() {
             console.log();
             await chainKeys.main();
             console.log();
-            console.log('Master password configured! Now you can:');
+            console.log(startupSuccess('Master password configured! Now you can:'));
             console.log('  node dexbot bots   - Create and manage bots');
             console.log('  node dexbot        - Run your configured bots');
             console.log();

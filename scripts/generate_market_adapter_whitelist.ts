@@ -109,7 +109,8 @@ function main() {
     }
 
     fs.writeFileSync(WHITELIST_FILE, output, 'utf8');
-    process.stdout.write(`Wrote ${WHITELIST_FILE} with ${Object.keys(whitelist.whitelist).length} bot(s)\n`);
+    const botCount = Object.keys(whitelist.whitelist).length;
+    process.stdout.write(`Wrote ${WHITELIST_FILE} with ${botCount} ${botCount === 1 ? 'bot' : 'bots'}\n`);
 }
 
 if (require.main === module) {
