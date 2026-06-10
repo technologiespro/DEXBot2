@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.16] - 2026-06-10 - Pipeline Blocking Hardening & Dead Code Removal
+
+This release eliminates three remaining categories of pipeline-blocking stale-state hazards, removes dead tracking variables, and cleans up documentation.
+
+### 2026-06-10
+
+#### Pipeline & Fill Processing
+- Resolve pipeline self-blocking from stale `_gridSidesUpdated` flags: clear divergence flags before the maintenance pipeline check so a prior aborted tick cannot permanently block the next tick (`b49d051`).
+  - Also clear ratio flags after an RMS structural resync completes.
+- Remove dead `anyRotations` tracking, deduplicate fund recalculation in `initializeGrid` (`skipRecalc` parameter), and remove redundant post-fill `recalculateFunds` calls (`a01b00b`).
+- Fix remaining stale-entry blocking risks (`eaf3258`):
+  - `correctOrderPriceOnChain`: both surplus-cancel and price-update branches now remove correction entries in a `finally` block, covering all exit paths (success, skip, error).
+  - Remove dormant `_batchRetryInFlight` property (never set in production).
+  - Guard `updateGridFromBlockchainSnapshot` in `applyGridDivergenceCorrections` with try/catch that clears `_gridSidesUpdated` on failure.
+- Rename "Grid Cache Regeneration" to "Grid Ratio Regeneration" in CLI settings labels (`b49d051`).
+
+#### Documentation
+- Clarify isolated runtime startup (`7b5fa5f`).
+- Fix stale doc references and label format (`b49d051`).
+
+#### Chores
+- Remove `dry-run`/`print` from market adapter whitelist generation (`eaae0e5`).
+
+#### Testing
+- `npx tsx tests/test_cow_concurrent_fills.ts`
+- `npx tsx tests/test_cow_divergence_correction.ts`
+- `npx tsx tests/test_cow_structural_resync.ts`
+- `npx tsx tests/test_patch17_invariants.ts`
+- `npx tsx tests/test_targeted_drift_reconcile.ts`
+
 ## [0.7.15] - 2026-06-09 - Quiet Orderbook Candles & Launcher Bot Visibility
 
 This release keeps orderbook-derived dynamic-grid snapshots advancing through ordinary quiet periods by carrying the last close forward across bounded no-trade gaps, while also making active bot names easier to spot in launcher and status output.
