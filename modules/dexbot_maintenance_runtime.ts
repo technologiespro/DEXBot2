@@ -19,7 +19,7 @@ const { parseJsonWithComments } = require('./order/utils/system');
 const { cloneWeightDistribution, calculateOrderCreationFees, calculateSwapInAmount, floatToBlockchainInt, blockchainToFloat } = require('./order/utils/math');
 const { updateDynamicGridSnapshotSync } = require('../market_adapter/utils/dynamic_grid_snapshot');
 const { reconcileGridOrders } = require('./order/grid_reconcile');
-const { formatUnmatchedChainOrder } = require('./order/utils/order');
+const { formatUnmatchedChainOrder, getSideBudget } = require('./order/utils/order');
 
 const CODE_ROOT = path.join(__dirname, '..');
 const ROOT = path.basename(CODE_ROOT) === BUILD_DIR ? path.dirname(CODE_ROOT) : CODE_ROOT;
@@ -122,6 +122,20 @@ function getTargetActiveOrders(config, side) {
     return Math.max(0, Number.isFinite(configured) ? configured : 1);
 }
 
+function _hasBudgetForSide(manager, config, side) {
+    try {
+        const funds = manager?.getChainFundsSnapshot?.();
+        if (!funds) return true;
+        const allocated = side === 'buy' ? (funds.allocatedBuy || 0) : (funds.allocatedSell || 0);
+        if (allocated <= 0) return false;
+        const targetBuy = Math.max(0, config?.activeOrders?.buy || 1);
+        const targetSell = Math.max(0, config?.activeOrders?.sell || 1);
+        const totalTarget = targetBuy + targetSell;
+        const budget = getSideBudget(side, funds, config, totalTarget);
+        return budget > 0;
+    } catch { return true; }
+}
+
 function getTargetedSyncReason(bot) {
     if (!bot.manager || bot.config?.dryRun) return null;
 
@@ -131,8 +145,16 @@ function getTargetedSyncReason(bot) {
     const liveSell = countLiveGridOrders(bot.manager, ORDER_TYPES.SELL);
     const shortfalls = [];
 
-    if (liveBuy < targetBuy) shortfalls.push(`buy ${liveBuy}/${targetBuy}`);
-    if (liveSell < targetSell) shortfalls.push(`sell ${liveSell}/${targetSell}`);
+    if (liveBuy < targetBuy) {
+        if (_hasBudgetForSide(bot.manager, bot.config, 'buy')) {
+            shortfalls.push(`buy ${liveBuy}/${targetBuy}`);
+        }
+    }
+    if (liveSell < targetSell) {
+        if (_hasBudgetForSide(bot.manager, bot.config, 'sell')) {
+            shortfalls.push(`sell ${liveSell}/${targetSell}`);
+        }
+    }
 
     const drift = bot.manager.checkFundDriftAfterFills?.();
     if (drift && drift.isValid === false) {

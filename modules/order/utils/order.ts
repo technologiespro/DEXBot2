@@ -1076,7 +1076,7 @@ function deriveTargetBoundary(fills, currentBoundaryIdx, allSlots, config, gapSl
  * @param {string} side - 'buy' or 'sell'
  * @param {Object} funds - Snapshot of allocated funds
  * @param {Object} config - Bot configuration
- * @param {number} totalTarget - Total target order count (for fee calculation)
+ * @param {number} totalTarget - Total target order count (used for BTS fee calculation on both sides)
  * @returns {number} Available budget for the side
  */
 function getSideBudget(side, funds, config, totalTarget) {

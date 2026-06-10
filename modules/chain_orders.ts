@@ -96,7 +96,7 @@
 
 const { BitShares, createAccountClient, waitForConnected } = require('./bitshares_client');
 const { floatToBlockchainInt, blockchainToFloat, normalizeInt, validateOrderAmountsWithinLimits } = require('./order/utils/math');
-const { FILL_PROCESSING, TIMING, NATIVE_CLIENT } = require('./constants');
+const { FILL_PROCESSING, TIMING, NATIVE_CLIENT, BUILD_DIR } = require('./constants');
 const Format = require('./order/format');
 const { toFiniteNumber } = Format;
 const AsyncLock = require('./order/async_lock');
@@ -450,13 +450,45 @@ async function executeViaDaemonToken(accountName, signingToken, operations) {
         if (err instanceof BroadcastUncertainError) {
             throw err;
         }
-        if (err.message && err.message.includes('invalid or expired session')) {
-            chainOrdersLogger.warn(`Session expired for ${accountName}, automatically renegotiating...`);
+        if (err.message && (err.message.includes('invalid or expired session') || err.message.includes('invalid source authentication'))) {
+            const isSourceAuthError = err.message.includes('invalid source authentication');
+            chainOrdersLogger.warn(
+                isSourceAuthError
+                    ? `Source auth denied for ${accountName}, renegotiating session and reloading daemon policy...`
+                    : `Session expired for ${accountName}, automatically renegotiating...`
+            );
+
+            // For HMAC/source-auth failures, send SIGHUP so the daemon reloads
+            // policyConfig from disk. This fixes stale botHmacSecret entries
+            // when the daemon was started before daemon-policies.json was fully
+            // populated.
+            if (isSourceAuthError) {
+                try {
+                    const PARENT = path.dirname(__dirname);
+                    const ROOT = path.basename(PARENT) === BUILD_DIR ? path.dirname(PARENT) : PARENT;
+                    const readyFile = path.join(ROOT, 'profiles', 'runtime', 'credential-daemon.ready');
+                    if (fs.existsSync(readyFile)) {
+                        const daemonInfo = JSON.parse(fs.readFileSync(readyFile, 'utf8'));
+                        if (daemonInfo && daemonInfo.pid) {
+                            process.kill(daemonInfo.pid, 'SIGHUP');
+                            chainOrdersLogger.log(`[credential-daemon] Sent SIGHUP (pid ${daemonInfo.pid}) to reload policy config`);
+                        }
+                    }
+                } catch (sigErr: any) {
+                    chainOrdersLogger.warn(`[credential-daemon] Could not send SIGHUP: ${sigErr.message}`);
+                }
+            }
+
             // Probe daemon for a new session
             const newSessionId = await chainKeys.probeAccountInDaemon(accountName);
             // Update token in-place so future calls use the fresh session
             signingToken.sessionId = newSessionId;
-            
+
+            // Small delay so daemon's SIGHUP handler finishes before we retry
+            if (isSourceAuthError) {
+                await new Promise(r => setTimeout(r, 500));
+            }
+
             // Retry exact same operation with new session
             const retryResult = await executeOperationsViaCredentialDaemon(accountName, operations, {
                 socketPath: signingToken.socketPath,
@@ -465,7 +497,7 @@ async function executeViaDaemonToken(accountName, signingToken, operations) {
                 requestType: 'broadcast',
                 batchId: signingToken.batchId || null,
             });
-            
+
             return {
                 success: true,
                 raw: retryResult.raw || null,

@@ -187,7 +187,8 @@ class Grid {
         let budget = isBuy ? (snap.allocatedBuy || 0) : (snap.allocatedSell || 0);
 
         // 3. Standardize BTS Fee Deduction (Issue #15 consistency)
-        // If this side is the BTS-holding side, it must reserve fees for the WHOLE grid.
+        // BTS fees are paid for ALL order operations regardless of side, so the
+        // BTS-holding side reserves fees for both buy and sell target counts.
         const isBtsSide = (isBuy && manager.config.assetB === 'BTS') || (!isBuy && manager.config.assetA === 'BTS');
         if (isBtsSide && budget > 0) {
             const targetBuy = Math.max(0, manager.config.activeOrders?.buy || 1);
