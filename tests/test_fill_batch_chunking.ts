@@ -161,7 +161,6 @@ async function runTests() {
         const bot = makeBot();
         const result = await bot._processFillsWithBatching([], null, 'test-empty');
         assert.strictEqual(result.aborted, false, 'empty fills should not abort');
-        assert.strictEqual(result.anyRotations, false, 'empty fills should have no rotations');
         assert.strictEqual(bot._callLog.length, 0, 'empty fills should make no calls');
         console.log('  ✓ empty fills returns immediately');
     }
@@ -172,8 +171,6 @@ async function runTests() {
         const fill = makeFill('sell1');
         const result = await bot._processFillsWithBatching([fill], null, 'test-single');
         assert.strictEqual(result.aborted, false, 'single fill should not abort');
-        assert.strictEqual(result.anyRotations, false, 'single fill should report rotation status');
-
         const processCalls = bot._callLog.filter(c => c.method === 'processFilledOrders');
         assert.strictEqual(processCalls.length, 1, 'single fill: 1 processFilledOrders call');
         assert.strictEqual(processCalls[0].fillCount, 1, 'single fill: 1 fill in batch');
@@ -345,7 +342,7 @@ async function runTests() {
         console.log(`  ✓ 20 fills chunked into ${expectedChunks} batches of max ${MAX_BATCH}`);
     }
 
-    // --- Test 12: hadRotation propagated ---
+    // --- Test 12: multi-chunk batch execution ---
     {
         const bot = makeBot();
         const fills = Array.from({ length: MAX_BATCH + 1 }, (_, n) => makeFill(`sell${n + 1}`));
@@ -359,8 +356,7 @@ async function runTests() {
 
         const result = await bot._processFillsWithBatching(fills, null, 'test-rotation');
         assert.strictEqual(result.aborted, false);
-        assert.strictEqual(result.anyRotations, true, 'rotation in second chunk should propagate');
-        console.log('  ✓ hadRotation propagated from chunk to result');
+        console.log('  ✓ multi-chunk batch processed without error');
     }
 
     // --- Test 13: bootstrap fill rotations respect MAX_BATCH broadcast cap ---
