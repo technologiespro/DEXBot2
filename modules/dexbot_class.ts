@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/dexbot_class.js - DEXBot Core Engine
  *

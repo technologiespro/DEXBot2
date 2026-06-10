@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * FETCH LP PRICE DATA FROM KIBANA — Pool-centric
  *

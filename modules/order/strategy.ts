@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/order/strategy.js - StrategyEngine
  *

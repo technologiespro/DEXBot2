@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { buildFillKey } = require('./order/utils/order');
 const { PROCESSED_FILL_PERSISTENCE_MODES } = require('./order/processed_fill_store');
 const { NATIVE_CLIENT } = require('./constants');

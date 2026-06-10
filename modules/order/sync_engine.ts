@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/order/sync_engine.js - SyncEngine
  *

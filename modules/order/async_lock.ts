@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/order/async_lock.js - AsyncLock Engine
  *

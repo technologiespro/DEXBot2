@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use strict';
 
 const { smoothKalmanVelocityPoint } = require('./kalman_velocity_smoothing');

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/node_manager.js - Multi-Node Health Checking and Failover Management
  *

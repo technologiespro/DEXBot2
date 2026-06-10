@@ -5,7 +5,11 @@
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": ".",
-    "strict": true,
+    "strict": false,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "noImplicitAny": false,
+    "noImplicitThis": false,
 
     "noUnusedLocals": false,
     "noUnusedParameters": false,

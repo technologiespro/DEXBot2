@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use strict';
 
 const { toFiniteNumber } = require('./order/format');

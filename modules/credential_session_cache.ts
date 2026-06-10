@@ -1,4 +1,3 @@
-// @ts-nocheck
 const chainKeys = require('./chain_keys');
 
 function buildSessionAccountCache(accountsData, masterSecret, options = {}) {

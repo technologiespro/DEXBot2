@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/bots_file_lock.js - File Synchronization Lock
  *

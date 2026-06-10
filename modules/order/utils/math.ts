@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/order/utils/math.js - Mathematical and Numeric Utilities
  * 

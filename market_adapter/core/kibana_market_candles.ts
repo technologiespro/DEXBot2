@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * KIBANA MARKET CANDLES
  *

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Quadratic Divergence Calculator
  *

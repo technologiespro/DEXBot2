@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/chain_keys.js - Authentication and Key Management
  *

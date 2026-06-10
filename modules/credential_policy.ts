@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * DEXBot2 Credential Daemon Policy Engine
  *

@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use strict';
 
 const { clamp } = require('../../modules/order/utils/math');

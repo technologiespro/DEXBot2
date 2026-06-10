@@ -224,7 +224,7 @@ The following scripts allow you to call `dexbot` commands directly from the `scr
 | `npm run pmain` | `scripts/pmain.sh` | Sync local test → dev → main |
 | `npm run unlock` | `unlock.ts` | Build + single-prompt credential unlock (full bot) |
 | `npm run claw:unlock` | `unlock.ts` | Build + single-prompt unlock (claw-only mode) |
-| `npm run pm2:unlock-start` | `pm2.ts` | Build + launch full bot via PM2 ecosystem |
+| `npm run pm2:unlock` | `pm2.ts` | Build + launch full bot via PM2 ecosystem |
 | `npm run pm2:claw-only` | `pm2.ts` | Build + launch claw-only PM2 process |
 | `npm run lp:chart` | `scripts/generate_lp_chart.ts` | Generate uPlot LP chart |
 | `npm run market-adapter:whitelist` | `scripts/generate_market_adapter_whitelist.ts` | Generate/update whitelist from AMA-configured bots |

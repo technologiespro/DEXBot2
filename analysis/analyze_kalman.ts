@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck
 
 /**
  * KALMAN TREND ANALYSIS RUNNER

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/order/working_grid.js - WorkingGrid Copy-on-Write Engine
  *

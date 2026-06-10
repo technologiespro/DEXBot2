@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/order/runner.js - Grid Calculation Runner
  *

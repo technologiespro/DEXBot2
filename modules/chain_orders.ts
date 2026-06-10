@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/chain_orders.js - Blockchain Interaction Layer
  *

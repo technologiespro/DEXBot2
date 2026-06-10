@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/order/grid.js - Grid Engine
  *

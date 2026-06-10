@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/account_orders.js - Order Grid Persistence Layer
  *

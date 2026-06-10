@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/order/export.js - QTradeX Export Module
  *

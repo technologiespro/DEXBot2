@@ -16,6 +16,7 @@ async function testScaledSpreadCorrection() {
         assetA: { id: '1.3.1', symbol: 'BASE', precision: 5 },
         assetB: { id: '1.3.2', symbol: 'QUOTE', precision: 5 }
     };
+    mgr.btsBalance = { free: 1000, total: 1000, locked: 0 };
 
     // 1. Setup a grid slot
     await mgr._updateOrder({ id: 'slot-1', price: 0.9, type: ORDER_TYPES.SPREAD, state: ORDER_STATES.VIRTUAL, size: 0 });

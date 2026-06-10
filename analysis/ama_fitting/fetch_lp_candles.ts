@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck
 'use strict';
 /**
  * Fetch LP pool candles from Kibana for AMA optimizer input.

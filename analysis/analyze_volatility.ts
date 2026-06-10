@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck
 
 /**
  * VOLATILITY / SYMMETRIC SHIFT RESEARCH TOOL

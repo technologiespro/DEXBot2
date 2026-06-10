@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/order/utils/system.js - System and I/O Utilities
  * 

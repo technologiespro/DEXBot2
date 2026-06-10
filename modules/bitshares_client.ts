@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/bitshares_client.js - BitShares Connection Manager
  *

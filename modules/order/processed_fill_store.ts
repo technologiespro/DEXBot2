@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * @enum {string}
  */

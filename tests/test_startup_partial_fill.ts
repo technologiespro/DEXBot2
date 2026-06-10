@@ -58,9 +58,8 @@ console.log('Running offline partial-fill unit test (syncing startup orders)...'
 
         // ASSERTIONS
         const assert = require('assert');
-        // Sync engine preserves existing state during size mismatch;
-        // only fill events transition ACTIVE -> PARTIAL.
-        assert.strictEqual(updated.state, ORDER_STATES.ACTIVE, 'Order should remain ACTIVE after sync (size mismatch detected but state preserved)');
+        // Sync engine detects size mismatch and transitions to PARTIAL.
+        assert.strictEqual(updated.state, ORDER_STATES.PARTIAL, 'Order should transition to PARTIAL when sync detects size mismatch');
         assert.strictEqual(updated.size, remainingHuman, 'Order size should reflect remaining chain amount');
         assert.strictEqual(updated.orderId, chainOrderId, 'Order should have chain ID');
 

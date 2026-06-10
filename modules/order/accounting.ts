@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/order/accounting.js - Accountant Engine
  *

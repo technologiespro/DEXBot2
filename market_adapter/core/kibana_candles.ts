@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use strict';
 
 const { kibanaSearch, DEFAULT_CONFIG: BASE_CONFIG } = require('./kibana_client');

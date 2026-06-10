@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/graceful_shutdown.js - Process Shutdown Manager
  *
