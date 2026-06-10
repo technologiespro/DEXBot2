@@ -842,7 +842,8 @@ class Grid {
                 manager.funds,
                 manager.config.assetA,
                 manager.config.assetB,
-                manager.config.activeOrders
+                manager.config.activeOrders,
+                manager.config.min_BTS_value
             );
 
             // Denominator: side's allocated capital (or chain total fallback).
@@ -1176,24 +1177,23 @@ class Grid {
         const persistedBuys = filterForRms(persistedSnap, ORDER_TYPES.BUY);
         const persistedSells = filterForRms(persistedSnap, ORDER_TYPES.SELL);
 
-        // Calculate ideal sizes for each order based on current available budget
-        const getIdeals = async (activeOrders, type) => {
-            if (!manager || activeOrders.length === 0 || !manager.assets) return activeOrders;
-            const side = type === ORDER_TYPES.BUY ? 'buy' : 'sell';
+        // Calculate ideal sizes for each order based on current available budget.
+        // The sizing context (which includes recalculateFunds) is resolved once per side up front
+        // so both buy and sell metrics share a single fund snapshot. This avoids the previous
+        // double-recalculateFunds between the two sides and keeps the metric consistent even if
+        // a fill event arrives between per-side calculations.
+        const computeSideIdeals = (activeOrders, type, ctx) => {
+            if (!manager || !ctx || ctx.budget <= 0 || activeOrders.length === 0) return activeOrders;
 
-            // 1. Get centralized sizing context (respects botFunds % allocation)
-            const ctx = await Grid._getSizingContext(manager, side);
-            if (!ctx || ctx.budget <= 0) return activeOrders;
-
-            // 2. Identify ALL slots currently assigned to this side
-            // Ideal sizing must use the full slot count to determine geometric share per slot
+            // Identify ALL slots currently assigned to this side.
+            // Ideal sizing must use the full slot count to determine geometric share per slot.
             const sideSlots = Array.from(manager.orders.values())
                 .filter(o => o.type === type)
                 .sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
 
             if (sideSlots.length === 0) return activeOrders;
 
-            // 3. Calculate geometric ideals for the ENTIRE side (all slots)
+            // Calculate geometric ideals for the ENTIRE side (all slots)
             try {
                 const allIdealSizes = calculateRotationOrderSizes(
                     ctx.budget,
@@ -1216,9 +1216,22 @@ class Grid {
             }
         };
 
+        // Resolve sizing context per-side, but only for sides that have active orders.
+        // _getSizingContext calls recalculateFunds internally (locked), so we skip
+        // empty sides to avoid unnecessary recalculation.
+        const buyCtx = calculatedBuys.length > 0 && manager?.assets
+            ? await Grid._getSizingContext(manager, 'buy')
+            : null;
+        const sellCtx = calculatedSells.length > 0 && manager?.assets
+            ? await Grid._getSizingContext(manager, 'sell')
+            : null;
+
+        const buyIdeals = computeSideIdeals(calculatedBuys, ORDER_TYPES.BUY, buyCtx);
+        const sellIdeals = computeSideIdeals(calculatedSells, ORDER_TYPES.SELL, sellCtx);
+
         // Calculate RMS divergence metric for each side
-        const buyMetric = calculateGridSideDivergenceMetric(await getIdeals(calculatedBuys, ORDER_TYPES.BUY), persistedBuys, 'buy');
-        const sellMetric = calculateGridSideDivergenceMetric(await getIdeals(calculatedSells, ORDER_TYPES.SELL), persistedSells, 'sell');
+        const buyMetric = calculateGridSideDivergenceMetric(buyIdeals, persistedBuys, 'buy');
+        const sellMetric = calculateGridSideDivergenceMetric(sellIdeals, persistedSells, 'sell');
 
         // Check if metrics exceed threshold and flag sides for regeneration
         // Set RMS_PERCENTAGE to 0 to disable RMS divergence checks

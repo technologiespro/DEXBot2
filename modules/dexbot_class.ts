@@ -1598,7 +1598,6 @@ class DEXBot {
                         }
 
                     } finally {
-                        await this.manager.recalculateFunds();
                         await this.manager.resumeFundRecalc();
                     }
 
@@ -1610,8 +1609,6 @@ class DEXBot {
                             allFilledOrders, null, 'fill set'
                         );
                         let abortedFillCycle = result.aborted;
-                        const anyRotations = result.anyRotations;
-
                         if (!abortedFillCycle) {
                             const batchFillKeys = new Set(allFilledOrders.map(filledOrder => buildFillKey({
                                 orderId: filledOrder?.orderId,
@@ -1643,7 +1640,7 @@ class DEXBot {
                         const fullFillCount = allFilledOrders.filter(o =>
                             o && o.isPartial !== true
                         ).length;
-                        const shouldRunPostFillChecks = !abortedFillCycle && fullFillCount > 0 && anyRotations;
+                        const shouldRunPostFillChecks = !abortedFillCycle && fullFillCount > 0;
 
                         if (shouldRunPostFillChecks) {
                             // SAFE: Called inside _fillProcessingLock.acquire(), no concurrent fund modifications

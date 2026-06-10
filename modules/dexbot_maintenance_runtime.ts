@@ -1277,6 +1277,22 @@ async function executeMaintenanceLogic(context) {
     await checkBtsBalanceAndAcquire.call(this);
     this.manager.clearStalePipelineOperations();
 
+    // Clear stale divergence flags before the pipeline check to break a self-blocking loop:
+    // checkAndUpdateGridIfNeeded / compareGrids may have set _gridSidesUpdated earlier in this
+    // tick (or in a previous tick that aborted before corrections ran), and applyGridDivergenceCorrections
+    // is the only consumer that clears it. If a prior tick set the flag but never reached the
+    // correction path, the flag persists and the next isPipelineEmpty sees it as a blockage,
+    // preventing the divergence section from running. Stale flags must be cleared here, BEFORE
+    // the pipeline check, so the divergence section can be entered.
+    const staleFlags = this.manager._gridSidesUpdated?.size || 0;
+    if (staleFlags > 0) {
+        this.manager._gridSidesUpdated.clear();
+        this._log(
+            `[PIPELINE-CLEAR] Cleared ${staleFlags} stale _gridSidesUpdated flag(s) before ${context} pipeline check`,
+            'info'
+        );
+    }
+
     if (this._maintenanceCooldownCycles > 0) {
         this._maintenanceCooldownCycles--;
         this._log(
@@ -1327,6 +1343,7 @@ async function executeMaintenanceLogic(context) {
         try {
             const persistedGridData = this.accountOrders.loadBotGrid(this.config.botKey, true) || [];
             const calculatedGrid = Array.from(this.manager.orders.values());
+
             const divergence = await Grid.monitorDivergence(this.manager, calculatedGrid, persistedGridData);
 
             if (divergence.needsUpdate) {
@@ -1339,6 +1356,11 @@ async function executeMaintenanceLogic(context) {
                     const ok = await this._performGridResync(buildGridResyncOptions('rms_structural_grid_resync'));
                     if (!ok) {
                         this._warn(`RMS structural divergence full grid resync failed during ${context}; retaining existing grid state.`);
+                    }
+                    // Clear any ratio flags set by checkAndUpdateGridIfNeeded earlier in this tick,
+                    // since the resync already rebuilt the full grid.
+                    if (this.manager._gridSidesUpdated?.size > 0) {
+                        this.manager._gridSidesUpdated.clear();
                     }
                     return;
                 }
