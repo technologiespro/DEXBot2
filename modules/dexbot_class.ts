@@ -184,7 +184,6 @@ class DEXBot {
     _creditRuntime: any;
     _creditWatchdogInterval: any;
     _batchInFlight: boolean;
-    _batchRetryInFlight: boolean;
     _recoverySyncInFlight: boolean;
     _lastTargetedDriftSyncAt: number;
     _targetedDriftSyncCooldownMs: number;
@@ -273,7 +272,6 @@ class DEXBot {
 
         // Pipeline state flags (used by maintenance gating)
         this._batchInFlight = false;
-        this._batchRetryInFlight = false;
         this._recoverySyncInFlight = false;
         this._lastTargetedDriftSyncAt = 0;
         this._targetedDriftSyncCooldownMs = 60_000;
@@ -394,14 +392,13 @@ class DEXBot {
 
     /**
      * Get current pipeline signal state for congestion checks.
-     * @returns {{incomingFillQueueLength: number, shadowLocks: number, batchInFlight: boolean, retryInFlight: boolean, recoveryInFlight: boolean, broadcasting: boolean}}
+     * @returns {{incomingFillQueueLength: number, shadowLocks: number, batchInFlight: boolean, recoveryInFlight: boolean, broadcasting: boolean}}
      */
     _getPipelineSignals() {
         return {
             incomingFillQueueLength: this._incomingFillQueue.length,
             shadowLocks: this.manager?.shadowOrderIds?.size || 0,
             batchInFlight: this._batchInFlight,
-            retryInFlight: this._batchRetryInFlight,
             recoveryInFlight: this._recoverySyncInFlight,
             broadcasting: this.manager?._state?.isBroadcastingActive() || false
         };
@@ -1361,7 +1358,7 @@ class DEXBot {
             return;
         }
 
-        if (this._batchInFlight || this._batchRetryInFlight || this._recoverySyncInFlight) {
+        if (this._batchInFlight || this._recoverySyncInFlight) {
             this.manager?.logger?.log?.(
                 `Fill processing deferred: order pipeline active (${this._incomingFillQueue.length} queued)`,
                 'debug'

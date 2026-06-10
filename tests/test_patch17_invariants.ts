@@ -152,7 +152,6 @@ async function testPipelineInFlightDefersMaintenance() {
 
     bot._incomingFillQueue.push({ id: 'fill-1' });
     bot._batchInFlight = true;
-    bot._batchRetryInFlight = true;
     bot._recoverySyncInFlight = true;
 
     bot.manager = {
@@ -179,7 +178,6 @@ async function testPipelineInFlightDefersMaintenance() {
 
     assert(capturedSignals, 'Pipeline signals should be passed to isPipelineEmpty');
     assert.strictEqual(capturedSignals.batchInFlight, true, 'batchInFlight signal should be true');
-    assert.strictEqual(capturedSignals.retryInFlight, true, 'retryInFlight signal should be true');
     assert.strictEqual(capturedSignals.recoveryInFlight, true, 'recoveryInFlight signal should be true');
     assert.strictEqual(capturedSignals.broadcasting, true, 'broadcasting signal should be true');
     assert.strictEqual(spreadChecks, 0, 'Spread maintenance must be deferred when pipeline is in-flight');

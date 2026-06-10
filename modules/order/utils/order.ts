@@ -286,7 +286,6 @@ async function correctOrderPriceOnChain(manager, correctionInfo, accountName, pr
             const sideLabel = type === ORDER_TYPES.SELL ? 'SELL' : 'BUY';
             manager.logger?.log?.(`[CORRECTION] Cancelling surplus/mismatched ${sideLabel} order ${chainOrderId} for slot ${gridOrder?.id || 'unknown'}`, 'info');
             await accountOrders.cancelOrder(accountName, privateKey, chainOrderId);
-            manager.ordersNeedingPriceCorrection = manager.ordersNeedingPriceCorrection.filter(c => c.chainOrderId !== chainOrderId);
             if (gridOrder && manager._applyOrderUpdate) {
                 const spreadOrder = convertToSpreadPlaceholder(gridOrder);
                 await manager._applyOrderUpdate(spreadOrder, 'surplus-type-mismatch-cancel', {
@@ -296,8 +295,9 @@ async function correctOrderPriceOnChain(manager, correctionInfo, accountName, pr
             }
             return { success: true, cancelled: true };
         } catch (error: any) {
-            manager.ordersNeedingPriceCorrection = manager.ordersNeedingPriceCorrection.filter(c => c.chainOrderId !== chainOrderId);
             return { success: false, error: error.message, orderGone: error.message?.includes('not found') };
+        } finally {
+            manager.ordersNeedingPriceCorrection = manager.ordersNeedingPriceCorrection.filter(c => c.chainOrderId !== chainOrderId);
         }
     }
 
@@ -312,12 +312,14 @@ async function correctOrderPriceOnChain(manager, correctionInfo, accountName, pr
 
     try {
         const updateResult = await accountOrders.updateOrder(accountName, privateKey, chainOrderId, { amountToSell, minToReceive });
-        if (updateResult === null) return { success: false, error: 'skipped' };
-        manager.ordersNeedingPriceCorrection = manager.ordersNeedingPriceCorrection.filter(c => c.chainOrderId !== chainOrderId);
+        if (updateResult === null) {
+            return { success: false, error: 'skipped' };
+        }
         return { success: true };
     } catch (error: any) {
-        manager.ordersNeedingPriceCorrection = manager.ordersNeedingPriceCorrection.filter(c => c.chainOrderId !== chainOrderId);
         return { success: false, error: error.message, orderGone: error.message?.includes('not found') };
+    } finally {
+        manager.ordersNeedingPriceCorrection = manager.ordersNeedingPriceCorrection.filter(c => c.chainOrderId !== chainOrderId);
     }
 }
 

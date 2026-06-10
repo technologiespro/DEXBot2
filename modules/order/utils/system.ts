@@ -706,7 +706,13 @@ async function applyGridDivergenceCorrections(manager, accountOrders, botKey, up
             manager._gridSidesUpdated.add(ORDER_TYPES.SELL);
         }
 
-        resizeCowResult = await Grid.updateGridFromBlockchainSnapshot(manager, resizeOrderType, true, pendingBoundaryIdx);
+        try {
+            resizeCowResult = await Grid.updateGridFromBlockchainSnapshot(manager, resizeOrderType, true, pendingBoundaryIdx);
+        } catch (err: any) {
+            manager.logger?.log?.(`[DIVERGENCE-COW] Grid resize failed: ${err.message}`, 'error');
+            manager._gridSidesUpdated.clear();
+            return;
+        }
     }
 
     // Phase 2: Create working grid for divergence corrections

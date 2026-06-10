@@ -1295,7 +1295,6 @@ class OrderManager {
         const incomingFillQueueLength = toFiniteNumber(normalizedSignals.incomingFillQueueLength);
         const shadowLocks = toFiniteNumber(normalizedSignals.shadowLocks);
         const batchInFlight = !!normalizedSignals.batchInFlight;
-        const retryInFlight = !!normalizedSignals.retryInFlight;
         const recoveryInFlight = !!normalizedSignals.recoveryInFlight;
         const broadcasting = !!normalizedSignals.broadcasting;
 
@@ -1316,9 +1315,6 @@ class OrderManager {
         }
         if (batchInFlight) {
             reasons.push('batch broadcast in-flight');
-        }
-        if (retryInFlight) {
-            reasons.push('batch retry in-flight');
         }
         if (recoveryInFlight) {
             reasons.push('recovery sync in-flight');

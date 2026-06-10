@@ -750,7 +750,6 @@ export interface PipelineSignals {
   incomingFillQueueLength?: number;
   shadowLocks?: number;
   batchInFlight?: boolean;
-  retryInFlight?: boolean;
   recoveryInFlight?: boolean;
   broadcasting?: boolean;
 }
