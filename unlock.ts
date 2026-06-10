@@ -32,8 +32,8 @@ const { spawn } = require('child_process');
 const { createCredentialDaemonController } = require('./modules/launcher/credential_daemon');
 const { buildScopedChildEnv } = require('./modules/launcher/child_env');
 const { parseUnlockArgs } = require('./modules/launcher/launch_modes');
-const { UPDATER, LAUNCHER, MARKET_ADAPTER } = require('./modules/constants');
-const { buildRuntimeScriptArgs } = require('./modules/launcher/runtime_entry');
+const { UPDATER, LAUNCHER, MARKET_ADAPTER, BUILD_DIR } = require('./modules/constants');
+const { buildRuntimeScriptArgs, buildRuntimeScriptPath } = require('./modules/launcher/runtime_entry');
 const { createBotSupervisor, SOCKET_PATH, parseCronExpression, getNextCronDate } = require('./modules/launcher/bot_supervisor');
 const { sendControlCommand } = require('./modules/launcher/supervisor_control');
 const { registerCleanup, setupGracefulShutdown } = require('./modules/graceful_shutdown');
@@ -43,7 +43,7 @@ const { normalizeBotEntry, resolveRawBotEntries, loadSettingsFile } = require('.
 const chainKeys = require('./modules/chain_keys');
 
 const CODE_ROOT = __dirname;
-const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const ROOT = path.basename(CODE_ROOT) === BUILD_DIR ? path.dirname(CODE_ROOT) : CODE_ROOT;
 const BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const LOGS_DIR = path.join(ROOT, 'profiles', 'logs');
 const SUPERVISOR_OUT_LOG = path.join(LOGS_DIR, 'supervisor.log');
@@ -62,7 +62,6 @@ const CREDENTIAL_READY_FILE = getCredentialReadyFilePath({ root: ROOT });
 const MONOLITHIC_OUT_LOG = path.join(LOGS_DIR, 'dexbot.log');
 const MONOLITHIC_ERROR_LOG = path.join(LOGS_DIR, 'dexbot-error.log');
 const MARKET_ADAPTER_LOCK_FILE = path.join(ROOT, 'market_adapter', 'state', 'market_adapter.lock');
-const MARKET_ADAPTER_SCRIPT = path.join(ROOT, 'market_adapter', 'market_adapter.js');
 const botProcessRef: { current: any } = { current: null };
 
 function formatBotCount(count: number) {
@@ -690,7 +689,7 @@ async function stopOwnedMarketAdapterChild(): Promise<void> {
 }
 
 function spawnMarketAdapterChild() {
-    const child = spawn(process.execPath, [MARKET_ADAPTER_SCRIPT], {
+    const child = spawn(process.execPath, buildRuntimeScriptArgs({ codeRoot: CODE_ROOT, scriptSegments: ['market_adapter', 'market_adapter'] }), {
         cwd: ROOT,
         env: process.env,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -1222,11 +1221,7 @@ function readProcArgs(pid: number): string[] {
 }
 
 function runtimeScriptPath(scriptSegments: string[]): string {
-    const scriptExt = path.basename(CODE_ROOT) === 'dist' ? '.js' : '.ts';
-    const segments = [...scriptSegments];
-    const last = segments.pop() as string;
-    segments.push(last.replace(/\.(?:[cm]?js|ts)$/i, '') + scriptExt);
-    return path.join(CODE_ROOT, ...segments);
+    return buildRuntimeScriptPath(CODE_ROOT, scriptSegments);
 }
 
 function scriptPathForRoot(root: string, scriptSegments: string[], ext: string): string {

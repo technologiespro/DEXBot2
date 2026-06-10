@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const path = require('path');
+const { BUILD_DIR } = require('../../modules/constants');
 const {
   buildNullClawSkillToml,
   describeNullClawSkill,
@@ -8,7 +9,7 @@ const {
 } = require('../modules/nullclaw_skill');
 
 const NS_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const NS_PROJECT_ROOT = path.basename(NS_PARENT_DIR) === 'dist' ? path.dirname(NS_PARENT_DIR) : NS_PARENT_DIR;
+const NS_PROJECT_ROOT = path.basename(NS_PARENT_DIR) === BUILD_DIR ? path.dirname(NS_PARENT_DIR) : NS_PARENT_DIR;
 
 function parseArgs(argv: any) {
   const options: Record<string, any> = {

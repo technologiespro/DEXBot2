@@ -2,6 +2,7 @@ const assert = require('assert');
 const path = require('path');
 const { EventEmitter } = require('events');
 const childProcess = require('child_process');
+const { BUILD_DIR } = require('../modules/constants');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
 
 console.log('Running unlock main tests');
@@ -13,6 +14,9 @@ const originalSupervisorSocket = process.env.DEXBOT_SUPERVISOR_SOCKET;
 const originalDisableSupervisorSocket = process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET;
 const originalIsolatedForeground = process.env.DEXBOT_ISOLATED_FOREGROUND;
 const originalMonolithicBg = process.env.DEXBOT_MONOLITHIC_BG;
+
+const _isDist = path.basename(path.dirname(__dirname)) === BUILD_DIR;
+const _tsSuffix = _isDist ? '.js' : '.ts';
 
 const state = {
     calls: [],
@@ -72,11 +76,11 @@ function restoreStubs() {
 }
 
 function isDexbotSpawn(call) {
-    return call.args.some((arg) => String(arg).endsWith('dexbot.ts'));
+    return call.args.some((arg) => String(arg).endsWith('dexbot' + _tsSuffix));
 }
 
 function isMarketAdapterSpawn(call) {
-    return call.args.some((arg) => String(arg).endsWith('market_adapter/market_adapter.js'));
+    return call.args.some((arg) => String(arg).endsWith('market_adapter/market_adapter' + _tsSuffix));
 }
 
 installStubs();
@@ -102,7 +106,7 @@ async function runAllBotsTest() {
     );
     assert.deepStrictEqual(
         botCalls[0].args,
-        ['--import', 'tsx', path.resolve(__dirname, '..', 'dexbot.ts'), 'test'],
+        [...(_isDist ? [] : ['--import', 'tsx']), path.resolve(__dirname, '..', 'dexbot' + _tsSuffix), 'test'],
         'default unlock should launch all bots'
     );
 }
@@ -117,7 +121,7 @@ async function runSingleBotTest() {
     assert.strictEqual(botCalls.length, 1, 'single-bot unlock should spawn exactly one bot process');
     assert.deepStrictEqual(
         botCalls[0].args,
-        ['--import', 'tsx', path.resolve(__dirname, '..', 'dexbot.ts'), 'test', 'XRP-BTS'],
+        [...(_isDist ? [] : ['--import', 'tsx']), path.resolve(__dirname, '..', 'dexbot' + _tsSuffix), 'test', 'XRP-BTS'],
         'single-bot unlock should pass the bot name through'
     );
 }
@@ -147,10 +151,10 @@ async function runIsolatedSingleBotTest() {
 
     assert.strictEqual(state.ensureCount, 1, 'isolated single-bot launcher should unlock the credential daemon');
     assert.strictEqual(state.stopCount, 1, 'isolated single-bot launcher should clean up its owned daemon');
-    const botCalls = state.calls.filter((call) => call.args.some((arg) => String(arg).endsWith('bot.ts')));
+    const botCalls = state.calls.filter((call) => call.args.some((arg) => String(arg).endsWith(path.sep + 'bot' + _tsSuffix)));
     assert.strictEqual(botCalls.length, 1, 'isolated single-bot launcher should spawn exactly one bot process');
     assert.ok(
-        botCalls[0].args.some((arg) => String(arg).endsWith('bot.ts')),
+        botCalls[0].args.some((arg) => String(arg).endsWith(path.sep + 'bot' + _tsSuffix)),
         'isolated launcher should use the source bot entry point'
     );
 }

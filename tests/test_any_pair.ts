@@ -6,6 +6,12 @@
  * Finds active trading pairs and shows their order book data
  */
 
+if (process.env.RUN_LIVE_BITSHARES_TESTS !== '1') {
+    console.log('Skipping live BitShares connection test.');
+    console.log('Set RUN_LIVE_BITSHARES_TESTS=1 to run it explicitly.');
+    process.exit(0);
+}
+
 const { BitShares, waitForConnected } = require('../modules/bitshares_client');
 
 const colors = {

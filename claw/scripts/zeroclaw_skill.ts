@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const path = require('path');
+const { BUILD_DIR } = require('../../modules/constants');
 const {
   buildZeroClawSkillToml,
   describeZeroClawSkill,
@@ -8,7 +9,7 @@ const {
 } = require('../modules/zeroclaw_skill');
 
 const ZS_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const ZS_PROJECT_ROOT = path.basename(ZS_PARENT_DIR) === 'dist' ? path.dirname(ZS_PARENT_DIR) : ZS_PARENT_DIR;
+const ZS_PROJECT_ROOT = path.basename(ZS_PARENT_DIR) === BUILD_DIR ? path.dirname(ZS_PARENT_DIR) : ZS_PARENT_DIR;
 
 function parseArgs(argv: any) {
   const options: Record<string, any> = {

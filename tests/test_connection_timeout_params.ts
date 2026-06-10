@@ -50,6 +50,10 @@ console.log = () => {};
 console.warn = () => {};
 
 const facade = require('../modules/bitshares_client');
+
+// Trigger lazy initialization (the _lazyBitShares proxy calls ensureInitialized
+// on first property access)
+facade.getConnectionStatus();
 console.log = origLog;
 console.warn = origWarn;
 

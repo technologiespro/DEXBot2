@@ -54,12 +54,13 @@ const { normalizeBotEntry } = require('./modules/dexbot_class');
 const { loadSettingsFile, resolveRawBotEntries, selectBotEntry } = require('./modules/bot_settings');
 const { setupGracefulShutdown, registerCleanup, unregisterCleanup } = require('./modules/graceful_shutdown');
 const chainKeys = require('./modules/chain_keys');
+const { BUILD_DIR } = require('./modules/constants');
 const credentialPolicy = require('./modules/credential_policy');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
 
-const ROOT = path.basename(__dirname) === 'dist' ? path.dirname(__dirname) : __dirname;
+const ROOT = path.basename(__dirname) === BUILD_DIR ? path.dirname(__dirname) : __dirname;
 const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const launcherLogger = createPm2AwareLogger('bot.js');
 

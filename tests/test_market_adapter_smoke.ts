@@ -5,15 +5,21 @@ const path = require('path');
 
 console.log('Running market_adapter smoke tests');
 
+const { BUILD_DIR } = require('../modules/constants');
 const root = path.join(__dirname, '..');
 const lockPath = path.join(root, 'market_adapter', 'state', 'market_adapter.lock');
+
+const _isDist = path.basename(path.dirname(__dirname)) === BUILD_DIR;
+const _adapterScript = _isDist ? `${BUILD_DIR}/market_adapter/market_adapter.js` : 'market_adapter/market_adapter.ts';
+const _signalRunnerScript = _isDist ? `${BUILD_DIR}/market_adapter/ama_signal_runner.js` : 'market_adapter/ama_signal_runner.ts';
+const _spawnArgs = _isDist ? [] : ['--import', 'tsx'];
 
 {
     if (fs.existsSync(lockPath)) {
         fs.unlinkSync(lockPath);
     }
 
-    const res = spawnSync('node', ['dist/market_adapter/market_adapter.js', '--once', '--dryRun', '--quiet'], {
+    const res = spawnSync('node', [..._spawnArgs, _adapterScript, '--once', '--dryRun', '--quiet'], {
         cwd: root,
         encoding: 'utf8',
     });
@@ -22,7 +28,7 @@ const lockPath = path.join(root, 'market_adapter', 'state', 'market_adapter.lock
 }
 
 {
-    const res = spawnSync('node', ['dist/market_adapter/market_adapter.js', '--whitelist-all', '--once', '--dryRun', '--quiet'], {
+    const res = spawnSync('node', [..._spawnArgs, _adapterScript, '--whitelist-all', '--once', '--dryRun', '--quiet'], {
         cwd: root,
         encoding: 'utf8',
     });
@@ -60,7 +66,7 @@ const lockPath = path.join(root, 'market_adapter', 'state', 'market_adapter.lock
         ],
     };
 
-    const res = spawnSync('node', ['dist/market_adapter/ama_signal_runner.js', '--compact'], {
+    const res = spawnSync('node', [..._spawnArgs, _signalRunnerScript, '--compact'], {
         cwd: root,
         encoding: 'utf8',
         env: {

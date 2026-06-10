@@ -2,10 +2,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const { BUILD_DIR } = require('../../modules/constants');
 
 function isDexbot2Root(candidate: string) {
   return !!candidate && (
-    fs.existsSync(path.join(candidate, 'dist', 'dexbot.js')) ||
+    fs.existsSync(path.join(candidate, BUILD_DIR, 'dexbot.js')) ||
     fs.existsSync(path.join(candidate, 'dexbot.js')) ||
     fs.existsSync(path.join(candidate, 'dexbot.ts'))
   );
@@ -27,7 +28,7 @@ function findDexbot2Root(startDir?: string) {
 }
 
 const LP_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const LP_PROJECT_ROOT = path.basename(LP_PARENT_DIR) === 'dist' ? path.dirname(LP_PARENT_DIR) : LP_PARENT_DIR;
+const LP_PROJECT_ROOT = path.basename(LP_PARENT_DIR) === BUILD_DIR ? path.dirname(LP_PARENT_DIR) : LP_PARENT_DIR;
 const DEFAULT_ROOT = findDexbot2Root(LP_PROJECT_ROOT);
 
 function normalizeRoot(options: Record<string, any> = {}) {
@@ -60,7 +61,7 @@ function resolveRuntimeScript(root: string, ...segments: string[]) {
   if (fs.existsSync(sourcePath)) {
     return sourcePath;
   }
-  return path.join(root, 'dist', ...segments);
+  return path.join(root, BUILD_DIR, ...segments);
 }
 
 export = { normalizeRoot, normalizeProfileDir, resolveRuntimeScript };

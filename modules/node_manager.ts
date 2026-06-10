@@ -45,14 +45,14 @@ const fs = require('fs');
 const path = require('path');
 const _WebSocket = globalThis.WebSocket;
 const Logger = require('./logger');
-const { NODE_MANAGEMENT } = require('./constants');
+const { NODE_MANAGEMENT, BUILD_DIR } = require('./constants');
 const {
     resolveHealthCacheFile,
     writeHealthCache,
 } = require('./node_health_cache');
 
 const MODULE_DIR = path.dirname(__dirname);
-const PROJECT_ROOT = path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
+const PROJECT_ROOT = path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
 const BLACKLIST_STATE_FILE = path.join(PROJECT_ROOT, 'profiles', 'node_blacklist.json');
 
 /**

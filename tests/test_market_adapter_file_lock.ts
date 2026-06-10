@@ -45,7 +45,7 @@ async function testLiveAdapterLockIsNotStolen() {
     const readyPath = path.join(tmpDir, 'ready');
     const childCode = `
 const fs = require('fs');
-const { acquireFileLockSync, releaseFileLockSync } = require(${JSON.stringify(path.join(root, 'dist/market_adapter/utils/file_lock'))});
+const { acquireFileLockSync, releaseFileLockSync } = require(${JSON.stringify(path.join(root, 'market_adapter', 'utils', 'file_lock'))});
 const lock = acquireFileLockSync(process.argv[1], { staleMs: 60000 });
 fs.writeFileSync(process.argv[2], String(process.pid));
 setTimeout(() => {
@@ -54,7 +54,12 @@ setTimeout(() => {
 }, 2000);
 `;
 
-    const child = spawn(process.execPath, ['-e', childCode, lockPath, readyPath, 'market_adapter/market_adapter.js'], {
+    // The trailing marker arg is required so the spawned child's /proc/<pid>/cmdline
+    // contains `market_adapter/market_adapter.ts`, which the production lock heuristic
+    // in market_adapter/utils/file_lock.ts (isLikelyMarketAdapterProcess) uses to
+    // decide whether the existing lock holder is a real market-adapter process.
+    const childArgs = ['--import', 'tsx', '-e', childCode, lockPath, readyPath, 'market_adapter/market_adapter.ts'];
+    const child = spawn(process.execPath, childArgs, {
         cwd: root,
         stdio: ['ignore', 'pipe', 'pipe'],
     });

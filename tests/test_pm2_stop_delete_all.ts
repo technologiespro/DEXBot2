@@ -148,10 +148,10 @@ const { deletePM2Processes, stopPM2Processes } = require('../pm2');
         assert.deepStrictEqual(
             calls.map((args) => [args[0], args[1]]),
             [
-                ['stop', ecosystemConfigPath],
                 ['stop', 'dexbot-cred'],
+                ['stop', ecosystemConfigPath],
             ],
-            'stop all should act on the managed ecosystem first and then dexbot-cred silently'
+            'stop all should act on dexbot-cred first (safety-stop) and then the managed ecosystem'
         );
         assert.deepStrictEqual(warnings, [], 'stop all should not warn in the normal path');
 
@@ -174,10 +174,10 @@ const { deletePM2Processes, stopPM2Processes } = require('../pm2');
         assert.deepStrictEqual(
             calls.map((args) => [args[0], args[1]]),
             [
-                ['delete', ecosystemConfigPath],
                 ['delete', 'dexbot-cred'],
+                ['delete', ecosystemConfigPath],
             ],
-            'delete all should act on the managed ecosystem first and then dexbot-cred silently'
+            'delete all should act on dexbot-cred first (safety-stop) and then the managed ecosystem'
         );
         assert.deepStrictEqual(warnings, [], 'delete all should not warn in the normal path');
 

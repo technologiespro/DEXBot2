@@ -71,7 +71,7 @@ function instance(id) {
 
     function test(name, fn) {
         total++;
-        fn().then(() => {
+        return fn().then(() => {
             console.log(`  \u2713 ${name}`);
             passed++;
         }).catch(err => {
@@ -216,6 +216,9 @@ function instance(id) {
         // BitShares Core account subscriptions may notify with changed/removed
         // object IDs or ordinary full objects, not the 1.11.x fill object itself.
         await makeNotice(noticeHandler, 1, ['1.7.501']);
+
+        // Wait for coalesced history scan (NOTICE_COALESCE_MS = 250ms)
+        await new Promise(r => setTimeout(r, 300));
 
         assertEqual(delivered.length, 1, 'object-change notice should trigger a history scan delivery');
         assertEqual(delivered[0].length, 1, 'history scan should deliver one fill');

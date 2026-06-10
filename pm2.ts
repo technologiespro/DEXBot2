@@ -82,7 +82,7 @@ const { buildScopedChildEnv } = require('./modules/launcher/child_env');
 const { createPasswordBootstrapServer } = require('./modules/launcher/credential_bootstrap');
 const { parsePm2Args } = require('./modules/launcher/launch_modes');
 const { setupGracefulShutdown } = require('./modules/graceful_shutdown');
-const { UPDATER, TIMING } = require('./modules/constants');
+const { UPDATER, TIMING, BUILD_DIR } = require('./modules/constants');
 
 // Setup graceful shutdown handlers
 setupGracefulShutdown();
@@ -109,7 +109,7 @@ function pm2Error(text: string): string {
 }
 
 const CODE_ROOT = __dirname;
-const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const ROOT = path.basename(CODE_ROOT) === BUILD_DIR ? path.dirname(CODE_ROOT) : CODE_ROOT;
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 const BOTS_JSON = path.join(PROFILES_DIR, 'bots.json');
 const ECOSYSTEM_FILE = path.join(PROFILES_DIR, 'ecosystem.config.js');
@@ -206,9 +206,10 @@ function buildEcosystemApps(bots: any, { includeUpdater = true }: { includeUpdat
     });
 
     if (needsMarketAdapter(bots)) {
+        const isDev = path.basename(CODE_ROOT) !== BUILD_DIR;
         apps.unshift({
             name: 'dexbot-adapter',
-            script: runtimeScript('market_adapter', 'market_adapter.js'),
+            script: path.join(CODE_ROOT, 'market_adapter', 'market_adapter' + (isDev ? '.ts' : '.js')),
             cwd: ROOT,
             watch: false,
             autorestart: true,
@@ -221,7 +222,8 @@ function buildEcosystemApps(bots: any, { includeUpdater = true }: { includeUpdat
             max_size: '100M',
             max_restarts: 13,
             min_uptime: 60000,
-            restart_delay: 3000
+            restart_delay: 3000,
+            ...(isDev ? { node_args: ['--import', 'tsx'] } : {})
         });
     }
 
@@ -781,6 +783,9 @@ async function stopPM2Processes(target: any) {
 
     if (target === 'all') {
         console.log('');
+        // Stop credential daemon first — it holds the only handle to keys.
+        // If managed apps were stopped first they'd lose key access; this order
+        // ensures the daemon is the last process released.
         await execPM2CommandIgnoreMissing('stop', CREDENTIAL_DAEMON_APP_NAME);
         if (fs.existsSync(ECOSYSTEM_FILE)) {
             await runManagedAppsPm2Action('stop');

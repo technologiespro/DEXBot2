@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const Logger = require('./logger');
+const { BUILD_DIR } = require('./constants');
 const runtimeLogger = new Logger('credential-runtime');
 
 const DEFAULT_RUNTIME_DIR_NAME = 'dexbot2';
@@ -15,7 +16,7 @@ function debugLog(message, err = null) {
 
 function getDexbotRoot() {
     const MODULE_DIR = path.dirname(__dirname);
-    return path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
+    return path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
 }
 
 function isUsableRuntimeBaseDir(dirPath) {

@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const { BUILD_DIR } = require('../../modules/constants');
 
 function candidateExists(candidatePath: string) {
   if (fs.existsSync(candidatePath)) {
@@ -20,11 +21,11 @@ function getDexbot2Root() {
   }
 
   const DB_PARENT_DIR = path.dirname(path.dirname(__dirname));
-  const DB_PROJECT_ROOT = path.basename(DB_PARENT_DIR) === 'dist' ? path.dirname(DB_PARENT_DIR) : DB_PARENT_DIR;
+  const DB_PROJECT_ROOT = path.basename(DB_PARENT_DIR) === BUILD_DIR ? path.dirname(DB_PARENT_DIR) : DB_PARENT_DIR;
   const repoRoot = DB_PROJECT_ROOT;
   if (
     candidateExists(path.join(repoRoot, 'modules', 'order', 'index.js')) ||
-    candidateExists(path.join(repoRoot, 'dist', 'modules', 'order', 'index.js'))
+    candidateExists(path.join(repoRoot, BUILD_DIR, 'modules', 'order', 'index.js'))
   ) {
     return repoRoot;
   }
@@ -41,7 +42,7 @@ function resolveDexbot2Path(relativePath: string) {
     candidates.push(path.join(root, normalizedPath.replace(/\.js$/, '.ts')));
   }
 
-  candidates.push(path.join(root, 'dist', normalizedPath));
+  candidates.push(path.join(root, BUILD_DIR, normalizedPath));
 
   for (const candidate of candidates) {
     if (candidateExists(candidate)) {

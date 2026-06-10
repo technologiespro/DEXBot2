@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * modules/constants.js - Configuration and Constants
  *
@@ -116,8 +115,6 @@
  *
  * ===============================================================================
  */
-
-const { readGeneralSettings } = require('./general_settings');
 
 // Order categories used by the OrderManager when classifying grid entries.
 const ORDER_TYPES = Object.freeze({
@@ -484,6 +481,13 @@ let CR_ZONES = Object.freeze({
 // Default target collateral ratio when returning to green zone.
 // Computed as the midpoint of the green band.
 const DEFAULT_TARGET_CR = (CR_ZONES.RED_LOW + CR_ZONES.RED_HIGH) / 2;
+
+// Build output directory name (relative to project root).
+// Matches tsconfig.json outDir. Used at runtime to decide whether to load
+// compiled .js or source .ts entry points. Change here if outDir ever changes.
+// WARNING: modules/general_settings.ts has a hardcoded 'dist' (circular dep).
+// Keep in sync manually if this value changes.
+const BUILD_DIR = 'dist';
 
 // BTS blockchain precision constant.
 // Number of decimal places for BTS on BitShares (5 decimals → 1 satoshi = 0.00001 BTS).
@@ -1337,9 +1341,11 @@ let NATIVE_CLIENT = {
 // --- LOCAL SETTINGS OVERRIDES ---
 // Load user-defined settings from profiles/general.settings.json if it exists.
 // This allows preserving settings during updates without git stashing.
+// Lazy require breaks the circular dependency: constants → general_settings → constants
+const { readGeneralSettings } = require('./general_settings');
 const settings = readGeneralSettings({
     fallback: null,
-    onError: (err, filePath) => {
+    onError: (err: any, filePath: string) => {
         console.warn(`[WARN] Failed to load local settings from ${filePath}: ${err.message}`);
     }
 });
@@ -1407,7 +1413,7 @@ if (settings) {
     }
 
     if (settings.NATIVE_CLIENT) {
-        const mergeNested = (target, source) => {
+        const mergeNested = (target: any, source: any) => {
             const sf = Object.fromEntries(
                 Object.entries(source).filter(([key]) => !key.startsWith('_'))
             );
@@ -1423,7 +1429,7 @@ if (settings) {
 
     if (settings.LOGGING_CONFIG) {
         // Deep merge logging config to preserve defaults not specified in settings
-        const mergeConfig = (target, source) => {
+        const mergeConfig = (target: any, source: any) => {
             for (const key in source) {
                 if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
                     target[key] = { ...target[key], ...source[key] };
@@ -1477,4 +1483,4 @@ Object.freeze(MARKET_ADAPTER.AMAS.AMA4);
 Object.freeze(MARKET_ADAPTER.AMAS);
 Object.freeze(MARKET_ADAPTER);
 
-export = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, CR_ZONES, DEFAULT_TARGET_CR, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, LAUNCHER, COW_PERFORMANCE, NATIVE_CLIENT, MARKET_ADAPTER, BTS_PRECISION };
+export = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, CR_ZONES, DEFAULT_TARGET_CR, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, LAUNCHER, COW_PERFORMANCE, NATIVE_CLIENT, MARKET_ADAPTER, BUILD_DIR, BTS_PRECISION };

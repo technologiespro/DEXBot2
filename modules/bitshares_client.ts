@@ -32,6 +32,8 @@ const { TIMING, NODE_MANAGEMENT } = require('./constants');
 const NodeManager = require('./node_manager');
 const { readGeneralSettings } = require('./general_settings');
 const { sleep } = require('./order/utils/system');
+const Logger = require('./logger');
+const logger = new Logger('bitshares_client');
 
 let connected = false;
 let suppressConnectionLog = false;
@@ -56,7 +58,7 @@ const _reconnectCallbacks = new Set();
  */
 function onReconnect(callback) {
     if (typeof callback !== 'function') {
-        console.warn('[bitshares_client] onReconnect requires a function, got', typeof callback);
+        logger.warn(`onReconnect requires a function, got ${typeof callback}`);
         return () => {};
     }
     _reconnectCallbacks.add(callback);
@@ -70,7 +72,7 @@ async function notifyReconnectCallbacks() {
     if (_reconnectCallbacks.size === 0) return;
     for (const cb of Array.from(_reconnectCallbacks)) {
         try { await Promise.resolve(cb()); } catch (err: any) {
-            console.warn('[bitshares_client] Reconnect callback error:', err?.message || err);
+            logger.warn(`Reconnect callback error: ${err?.message || err}`);
         }
     }
 }
@@ -178,7 +180,7 @@ function ensureInitialized() {
     const settings = readGeneralSettings({
         fallback: null,
         onError: (err) => {
-            console.warn('[NodeManager] Config load failed, continuing with defaults:', err.message);
+            logger.warn(`Config load failed, continuing with defaults: ${err.message}`);
         },
     });
 
@@ -196,7 +198,7 @@ function ensureInitialized() {
         };
         nodeManager = new NodeManager(nodeConfig);
         _nativeClient.setNodes(Array.isArray(nodeConfig.list) ? nodeConfig.list.slice() : nodeConfig.list);
-        console.log(`[NodeManager] Loaded config for ${nodeConfig.list.length} nodes`);
+        logger.info(`Loaded config for ${nodeConfig.list.length} nodes`);
     }
 }
 
@@ -245,7 +247,7 @@ async function restartBitsharesConnection(serverList, reason = 'startup') {
         await _nativeClient.connect();
         if (_subscriptionManager) {
             try { await _subscriptionManager.onReconnect(); } catch (err: any) {
-                console.warn('[bitshares_client] Subscription re-establishment after reconnect failed:', err?.message || err);
+                logger.warn(`Subscription re-establishment after reconnect failed: ${err?.message || err}`);
             }
         }
 
@@ -253,14 +255,14 @@ async function restartBitsharesConnection(serverList, reason = 'startup') {
         await notifyReconnectCallbacks();
 
         if (!suppressConnectionLog) {
-            console.log(`[NodeManager] ${reason}: reconnect requested across ${servers.length} node(s)`);
+            logger.info(`${reason}: reconnect requested across ${servers.length} node(s)`);
         }
         return true;
     } catch (err: any) {
         lastConnectionError = err;
         try { _nativeClient.disconnect(); } catch (_: any) {}
         if (!suppressConnectionLog) {
-            console.warn(`[NodeManager] ${reason}: reconnect request failed: ${err.message || err}`);
+            logger.warn(`${reason}: reconnect request failed: ${err.message || err}`);
         }
         return false;
     } finally {
@@ -287,7 +289,7 @@ async function assessFailover(reason = 'status change') {
     lastFailoverAssessmentAt = now;
 
     failoverAssessmentPromise = (async () => {
-        console.warn(`[NodeManager] ${reason}, triggering failover assessment`);
+        logger.warn(`${reason}, triggering failover assessment`);
         try {
             const activeNode = _nativeClient?.transport?.getNodeUrl?.();
 
@@ -307,12 +309,12 @@ async function assessFailover(reason = 'status change') {
             // transport connect() no-op, a redundant restart is at best a
             // no-op and at worst a forced disconnect cycle.
             if (activeNode && (nextNodes.length === 0 || (nextNodes.length === 1 && nextNodes[0] === activeNode))) {
-                console.log(`[NodeManager] ${reason}: no better node available, keeping ${activeNode}`);
+                logger.info(`${reason}: no better node available, keeping ${activeNode}`);
                 return false;
             }
             return restartBitsharesConnection(nextNodes, reason);
         } catch (err: any) {
-            console.warn('[NodeManager] Failover assessment error:', err.message);
+            logger.warn(`Failover assessment error: ${err.message}`);
             return false;
         }
     })();
@@ -350,7 +352,7 @@ function handleConnectionStatus(status) {
             nodeManager.start();
         }
         if (!suppressConnectionLog) {
-            console.log('modules/bitshares_client: BitShares connected');
+            logger.info('BitShares connected');
         }
         return false;
     }
@@ -387,7 +389,7 @@ async function refreshStartupNodeServers(reason = 'startup') {
                 const fallbackNodes = getConfiguredOrDefaultNodes();
                 await restartBitsharesConnection(fallbackNodes, `Startup ${reason}`);
                 if (!suppressConnectionLog) {
-                    console.log(`[NodeManager] Startup ${reason}: using ${fallbackNodes.length} configured node(s) without health probing`);
+                    logger.info(`Startup ${reason}: using ${fallbackNodes.length} configured node(s) without health probing`);
                 }
                 return fallbackNodes;
             }
@@ -396,12 +398,12 @@ async function refreshStartupNodeServers(reason = 'startup') {
             const nextNodes = healthyNodes.length > 0 ? healthyNodes : getConfiguredOrDefaultNodes();
             await restartBitsharesConnection(nextNodes, `Startup ${reason}`);
             if (!suppressConnectionLog) {
-                console.log(`[NodeManager] Startup ${reason}: using ${nextNodes.length} node(s)`);
+                logger.info(`Startup ${reason}: using ${nextNodes.length} node(s)`);
             }
             return nextNodes;
         } catch (err: any) {
             if (!suppressConnectionLog) {
-                console.warn(`[NodeManager] Startup ${reason} node refresh failed: ${err.message}`);
+                logger.warn(`Startup ${reason} node refresh failed: ${err.message}`);
             }
             return getConfiguredOrDefaultNodes();
         }

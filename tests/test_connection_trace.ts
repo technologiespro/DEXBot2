@@ -21,15 +21,23 @@ async function testRawWebSocketNodes() {
     'wss://api.bts.mobi/ws',
     'wss://api.btslebin.com/ws',
   ];
+  const WS_TIMEOUT_MS = 10000;
   for (const url of nodes) {
     const start = Date.now();
     try {
       const ws = new WebSocket(url);
-      await new Promise((resolve, reject) => {
-        ws.onopen = resolve;
-        ws.onerror = (e) => reject(new Error(e.message || 'WS error'));
-        ws.onclose = (e) => reject(new Error(`close code=${e.code}`));
-      });
+      let timeout;
+      await Promise.race([
+        new Promise((resolve, reject) => {
+          ws.onopen = resolve;
+          ws.onerror = (e) => reject(new Error(e.message || 'WS error'));
+          ws.onclose = (e) => reject(new Error(`close code=${e.code}`));
+        }),
+        new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(new Error(`WS timeout after ${WS_TIMEOUT_MS}ms`)), WS_TIMEOUT_MS)
+        }),
+      ]);
+      clearTimeout(timeout);
       const connectMs = Date.now() - start;
       ws.close();
       console.log(`  ✓ ${url}  (${connectMs}ms)`);
@@ -139,13 +147,23 @@ async function testModuleConnection() {
   }
 }
 
+const TRACE_TIMEOUT_MS = Number(process.env.BITSHARES_TRACE_TIMEOUT_MS) || 60000;
+let traceTimer;
 (async () => {
+  traceTimer = setTimeout(() => {
+    console.error(`\nTrace timed out after ${TRACE_TIMEOUT_MS}ms`);
+    process.exit(1);
+  }, TRACE_TIMEOUT_MS);
+
   try {
     await testRawWebSocketNodes();
     await testTransportConnectAndLogin('wss://btsws.roelandp.nl/ws');
     await testModuleConnection();
+    clearTimeout(traceTimer);
     console.log('\n=== Trace complete ===');
+    process.exit(0);
   } catch (e) {
+    clearTimeout(traceTimer);
     console.error('Trace error:', e.message);
     process.exit(1);
   }

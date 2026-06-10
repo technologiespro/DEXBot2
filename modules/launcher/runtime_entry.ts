@@ -1,7 +1,8 @@
 const path = require('path');
+const { BUILD_DIR } = require('../constants');
 
 function isDistCodeRoot(codeRoot: string) {
-    return path.basename(codeRoot) === 'dist';
+    return path.basename(codeRoot) === BUILD_DIR;
 }
 
 function stripKnownExtension(fileName: string) {

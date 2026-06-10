@@ -32,6 +32,7 @@
     "version:sync": "tsx scripts/sync-version.ts",
     "version:check": "tsx scripts/sync-version.ts --check",
     "test": "node --import tsx scripts/run-tests.ts",
+    "test:live": "RUN_LIVE_BITSHARES_TESTS=1 node --import tsx scripts/run-tests.ts",
     "clean": "node scripts/clean-dist.js",
     "build": "npm run clean && tsc",
     "typecheck": "tsc --noEmit",

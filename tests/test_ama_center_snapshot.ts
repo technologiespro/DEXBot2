@@ -5,6 +5,14 @@ const fs = require('fs/promises');
 const fsSync = require('fs');
 const path = require('path');
 
+const { BUILD_DIR } = require('../modules/constants');
+const _isDist = path.basename(path.dirname(__dirname)) === BUILD_DIR;
+function _resolveAdapterModule() {
+  return _isDist
+    ? path.resolve(__dirname, '..', 'market_adapter', 'market_adapter.js')
+    : require.resolve('../market_adapter/market_adapter.ts');
+}
+
 const {
   loadAmaCenterPrice,
   loadAmaCenterSnapshot
@@ -32,7 +40,7 @@ async function testSnapshotReaderExposesCenterOnly() {
     },
     amaSlopeDeltaPercent: 0.18,
     amaSlopeThresholdPercent: 0.1,
-    source: 'market_adapter/market_adapter.js',
+    source: 'market_adapter/market_adapter.ts',
     updatedAt: '2026-01-01T00:00:00Z',
   }, null, 2) + '\n', 'utf8');
 
@@ -69,7 +77,7 @@ async function testSnapshotReaderRejectsLegacyEffectiveCenterOnly() {
   await fs.writeFile(filePath, JSON.stringify({
     amaCenterPrice: 100,
     effectiveCenterPrice: 101.5,
-    source: 'market_adapter/market_adapter.js',
+    source: 'market_adapter/market_adapter.ts',
     updatedAt: '2026-01-01T00:00:00Z'
   }, null, 2) + '\n', 'utf8');
 
@@ -83,7 +91,7 @@ async function testSnapshotReaderRejectsLegacyEffectiveCenterOnly() {
 }
 
 async function testCenterSnapshotWriterUsesOnlyNewCollateralField() {
-  const marketAdapterPath = require.resolve('../market_adapter/market_adapter.js');
+  const marketAdapterPath = _resolveAdapterModule();
   delete require.cache[marketAdapterPath];
 
   const originalWriteFileSync = fsSync.writeFileSync;
@@ -148,7 +156,7 @@ async function testCenterSnapshotWriterUsesOnlyNewCollateralField() {
 }
 
 async function testCenterSnapshotWriterIgnoresLegacyCollateralInput() {
-  const marketAdapterPath = require.resolve('../market_adapter/market_adapter.js');
+  const marketAdapterPath = _resolveAdapterModule();
   delete require.cache[marketAdapterPath];
 
   const originalWriteFileSync = fsSync.writeFileSync;
@@ -188,7 +196,7 @@ async function testCenterSnapshotWriterIgnoresLegacyCollateralInput() {
 }
 
 async function testAdapterStateMergePreservesBotResetMetadata() {
-  const marketAdapterPath = require.resolve('../market_adapter/market_adapter.js');
+  const marketAdapterPath = _resolveAdapterModule();
   delete require.cache[marketAdapterPath];
 
   const botKey = `adapter-merge-${Date.now()}`;
@@ -201,7 +209,7 @@ async function testAdapterStateMergePreservesBotResetMetadata() {
     amaCenterPrice: 130.25,
     lastGridResetAt: '2026-05-15T00:01:00.327Z',
     lastGridResetSource: 'dexbot_grid_resync',
-    source: 'market_adapter/market_adapter.js',
+    source: 'market_adapter/market_adapter.ts',
     updatedAt: '2026-05-15T00:01:00.327Z',
   }, null, 2) + '\n', 'utf8');
 
@@ -230,7 +238,7 @@ async function testAdapterStateMergePreservesBotResetMetadata() {
 }
 
 async function testDynamicGridWritePreservesExistingResetMetadata() {
-  const marketAdapterPath = require.resolve('../market_adapter/market_adapter.js');
+  const marketAdapterPath = _resolveAdapterModule();
   delete require.cache[marketAdapterPath];
 
   const botKey = `adapter-existing-reset-${Date.now()}`;
@@ -243,7 +251,7 @@ async function testDynamicGridWritePreservesExistingResetMetadata() {
     amaCenterPrice: 101,
     lastGridResetAt: '2026-05-15T00:01:00.327Z',
     lastGridResetSource: 'manual_grid_resync',
-    source: 'market_adapter/market_adapter.js',
+    source: 'market_adapter/market_adapter.ts',
     updatedAt: '2026-05-15T00:01:00.327Z',
   }, null, 2) + '\n', 'utf8');
 
@@ -264,7 +272,7 @@ async function testDynamicGridWritePreservesExistingResetMetadata() {
 }
 
 async function testDynamicGridWritePreservesNewerResetCenterWhenAdapterStateIsStale() {
-  const marketAdapterPath = require.resolve('../market_adapter/market_adapter.js');
+  const marketAdapterPath = _resolveAdapterModule();
   delete require.cache[marketAdapterPath];
 
   const botKey = `adapter-stale-reset-${Date.now()}`;
@@ -277,7 +285,7 @@ async function testDynamicGridWritePreservesNewerResetCenterWhenAdapterStateIsSt
     amaCenterPrice: 151,
     lastGridResetAt: '2026-05-15T00:01:00.327Z',
     lastGridResetSource: 'manual_grid_resync',
-    source: 'market_adapter/market_adapter.js',
+    source: 'market_adapter/market_adapter.ts',
     updatedAt: '2026-05-15T00:01:00.327Z',
   }, null, 2) + '\n', 'utf8');
 
@@ -305,7 +313,7 @@ async function testDynamicGridWritePreservesNewerResetCenterWhenAdapterStateIsSt
 }
 
 async function testGridResetTriggerWriteIsAtomicRename() {
-  const marketAdapterPath = require.resolve('../market_adapter/market_adapter.js');
+  const marketAdapterPath = _resolveAdapterModule();
   delete require.cache[marketAdapterPath];
 
   const originalWriteFileSync = fsSync.writeFileSync;
@@ -338,7 +346,8 @@ async function testGridResetTriggerWriteIsAtomicRename() {
     assert.deepStrictEqual(renames, [{ src: writes[0].filePath, dst: triggerPath }], 'trigger writer should publish with one rename');
 
     const parsed = JSON.parse(writes[0].data);
-    assert.strictEqual(parsed.source, 'market_adapter/market_adapter.js');
+    const _expectedSource = 'market_adapter/market_adapter' + (_isDist ? '.js' : '.ts');
+    assert.strictEqual(parsed.source, _expectedSource);
     assert.strictEqual(parsed.reason, 'market_adapter_delta_threshold');
     assert.strictEqual(parsed.newCenterPrice, 123.45);
   } finally {

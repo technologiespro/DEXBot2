@@ -6,7 +6,7 @@ const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const chainOrders = require('./chain_orders');
 const Grid = require('./order/grid');
-const { ORDER_STATES, ORDER_TYPES, TIMING, GRID_LIMITS, FEE_PARAMETERS, BTS_PRECISION, NATIVE_CLIENT } = require('./constants');
+const { ORDER_STATES, ORDER_TYPES, TIMING, GRID_LIMITS, FEE_PARAMETERS, BTS_PRECISION, NATIVE_CLIENT, BUILD_DIR } = require('./constants');
 const { applyGridDivergenceCorrections, loadAmaCenterSnapshot } = require('./order/utils/system');
 const { isPm2Runtime } = require('./order/logger');
 const { getSharedMarketAdapterRuntime } = require('./launcher/market_adapter_runtime');
@@ -22,15 +22,15 @@ const { reconcileGridOrders } = require('./order/grid_reconcile');
 const { formatUnmatchedChainOrder } = require('./order/utils/order');
 
 const CODE_ROOT = path.join(__dirname, '..');
-const ROOT = path.basename(CODE_ROOT) === 'dist' ? path.dirname(CODE_ROOT) : CODE_ROOT;
+const ROOT = path.basename(CODE_ROOT) === BUILD_DIR ? path.dirname(CODE_ROOT) : CODE_ROOT;
 const PROFILES_DIR = path.join(ROOT, 'profiles');
 const PROFILES_BOTS_FILE = path.join(PROFILES_DIR, 'bots.json');
 const LOGS_DIR = path.join(PROFILES_DIR, 'logs');
 const MARKET_ADAPTER_APP_NAME = 'dexbot-adapter';
-const MARKET_ADAPTER_SCRIPT = path.join(CODE_ROOT, 'market_adapter', 'market_adapter.js');
+const MARKET_ADAPTER_SCRIPT = path.join(CODE_ROOT, 'market_adapter', 'market_adapter' + (path.basename(CODE_ROOT) === BUILD_DIR ? '.js' : '.ts'));
 const MARKET_ADAPTER_ERROR_FILE = path.join(LOGS_DIR, 'dexbot-adapter-error.log');
 const MARKET_ADAPTER_OUT_FILE = path.join(LOGS_DIR, 'dexbot-adapter.log');
-const MARKET_ADAPTER_TRIGGER_SOURCE = 'market_adapter/market_adapter.js';
+const MARKET_ADAPTER_TRIGGER_SOURCE = 'market_adapter/market_adapter' + (path.basename(CODE_ROOT) === BUILD_DIR ? '.js' : '.ts');
 const MANUAL_TRIGGER_METADATA = {
     shouldRefreshCenterPrice: true,
     centerRefreshContext: 'manual grid resync',
@@ -327,9 +327,14 @@ async function startMarketAdapterPm2() {
         fs.mkdirSync(LOGS_DIR, { recursive: true });
     }
 
-    await runPm2Command([
+    const pm2Args = [
         'start',
         MARKET_ADAPTER_SCRIPT,
+    ];
+    if (path.basename(CODE_ROOT) !== BUILD_DIR) {
+        pm2Args.push('--node-args', '--import', '--node-args', 'tsx');
+    }
+    pm2Args.push(
         '--name',
         MARKET_ADAPTER_APP_NAME,
         '--cwd',
@@ -342,7 +347,8 @@ async function startMarketAdapterPm2() {
         '150M',
         '--log-date-format',
         'YY-MM-DD HH:mm:ss.SSS',
-    ]);
+    );
+    await runPm2Command(pm2Args);
 }
 
 /**

@@ -212,12 +212,28 @@ The following scripts allow you to call `dexbot` commands directly from the `scr
 
 ## 📦 NPM SCRIPTS
 
-| Command | Purpose |
-|:---|:---|
-| `npm run ptest` | Sync local test → origin/test |
-| `npm run pdev` | Sync local test → dev |
-| `npm run pmain` | Sync local test → dev → main |
-| `npm test` | Run full test suite (200+ test cases) |
+| Command | File | Purpose |
+|:---|:---|:---|
+| `npm test` | `scripts/run-tests.ts` | Run full test suite (excludes live-chain tests) |
+| `npm run test:live` | `scripts/run-tests.ts` | Run full test suite including live-chain tests |
+| `npm run typecheck` | — | TypeScript type checking (`tsc --noEmit`) |
+| `npm run build` | — | Clean + compile TypeScript |
+| `npm run clean` | `scripts/clean-dist.js` | Remove compiled `dist/` output |
+| `npm run ptest` | `scripts/ptest.sh` | Sync local test → origin/test |
+| `npm run pdev` | `scripts/pdev.sh` | Sync local test → dev |
+| `npm run pmain` | `scripts/pmain.sh` | Sync local test → dev → main |
+| `npm run unlock` | `unlock.ts` | Build + single-prompt credential unlock (full bot) |
+| `npm run claw:unlock` | `unlock.ts` | Build + single-prompt unlock (claw-only mode) |
+| `npm run pm2:unlock-start` | `pm2.ts` | Build + launch full bot via PM2 ecosystem |
+| `npm run pm2:claw-only` | `pm2.ts` | Build + launch claw-only PM2 process |
+| `npm run lp:chart` | `scripts/generate_lp_chart.ts` | Generate uPlot LP chart |
+| `npm run market-adapter:whitelist` | `scripts/generate_market_adapter_whitelist.ts` | Generate/update whitelist from AMA-configured bots |
+| `npm run analysis:derivatives` | `analysis/analyze_derivatives.ts` | Derivative analysis report |
+| `npm run version:sync` | `scripts/sync-version.ts` | Rewrite plugin/manifest versions from root `package.json` |
+| `npm run version:check` | `scripts/sync-version.ts --check` | Verify all version manifests match root `package.json` |
+| `npm run native:release-gates` | `scripts/native_release_gates.ts` | Verify native library build, linkage, and mainnet corpus round-trips |
+| `npm run native:serial-snapshots` | `tests/test_native_serial_ops.ts` | Pin wire-format bytes for signed operation types |
+| `npm run native:ecc-invariants` | `tests/test_native_ecc.ts` | Validate ECDH key derivation, ECDSA signing, WIF, brain key, and hash functions |
 
 ---
 

@@ -1,11 +1,12 @@
 const fs = require('fs/promises');
 const path = require('path');
+const { BUILD_DIR } = require('../../modules/constants');
 const { getClawToolCatalog } = require('./claw_catalog');
 const { getSupportedClawRuntime } = require('./claw_runtime_matrix');
 
 function normalizeRepoRoot(repoRoot: string) {
   const CM_PARENT_DIR = path.dirname(path.dirname(__dirname));
-  const CM_PROJECT_ROOT = path.basename(CM_PARENT_DIR) === 'dist' ? path.dirname(CM_PARENT_DIR) : CM_PARENT_DIR;
+  const CM_PROJECT_ROOT = path.basename(CM_PARENT_DIR) === BUILD_DIR ? path.dirname(CM_PARENT_DIR) : CM_PARENT_DIR;
   return path.resolve(repoRoot || path.join(CM_PROJECT_ROOT, 'claw'));
 }
 

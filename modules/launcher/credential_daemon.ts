@@ -13,9 +13,10 @@ const {
 const { createPasswordBootstrapServer } = require('./credential_bootstrap');
 const { buildScopedChildEnv } = require('./child_env');
 const { buildRuntimeScriptArgs } = require('./runtime_entry');
+const { BUILD_DIR } = require('../constants');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_ROOT = path.basename(DEFAULT_CODE_ROOT) === 'dist' ? path.dirname(DEFAULT_CODE_ROOT) : DEFAULT_CODE_ROOT;
+const DEFAULT_ROOT = path.basename(DEFAULT_CODE_ROOT) === BUILD_DIR ? path.dirname(DEFAULT_CODE_ROOT) : DEFAULT_CODE_ROOT;
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 
 function waitForExit(child: any): Promise<any> {

@@ -115,6 +115,7 @@ const STATE_DIR = path.join(ROOT, 'market_adapter', 'state');
 const STATE_FILE = path.join(STATE_DIR, 'market_adapter_state.json');
 const CENTER_FILE = path.join(STATE_DIR, 'market_adapter_centers.json');
 const LOCK_FILE = path.join(STATE_DIR, 'market_adapter.lock');
+const MARKET_ADAPTER_SOURCE = path.relative(ROOT, __filename).replace(/^dist[\\\/]/, '');
 const MARKET_PROFILES_FILE = path.join(PROFILES_DIR, 'market_profiles.json');
 const MARKET_ADAPTER_SETTINGS_FILE = path.join(PROFILES_DIR, 'market_adapter_settings.json');
 
@@ -651,7 +652,7 @@ function printHelp() {
     logger.raw('Market adapter (standalone): Kibana bootstrap + native incremental updates\n');
     logger.raw('\n');
     logger.raw('Usage:\n');
-    logger.raw(`  node market_adapter/market_adapter.js [--once] [--pollSeconds ${RUNTIME_DEFAULTS.pollSeconds}]\n`);
+    logger.raw(`  node ${MARKET_ADAPTER_SOURCE} [--once] [--pollSeconds ${RUNTIME_DEFAULTS.pollSeconds}]\n`);
     logger.raw('\n');
     logger.raw('Options:\n');
     logger.raw('  --once                 Run one cycle and exit\n');
@@ -954,7 +955,7 @@ function writeGridResetTrigger(bot, payload) {
     const triggerPath = path.join(PROFILES_DIR, `recalculate.${bot.botKey}.trigger`);
     const content = {
         createdAt: new Date().toISOString(),
-        source: 'market_adapter/market_adapter.js',
+        source: MARKET_ADAPTER_SOURCE,
         botName: bot.name,
         botKey: bot.botKey,
         ...payload,
@@ -1021,7 +1022,7 @@ function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
                 amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : resolvedGridCenterPrice,
                 amaSlopePercentMode: AMA_SLOPE_PERCENT_MODE_PER_BAR,
                 updatedAt: new Date().toISOString(),
-                source: 'market_adapter/market_adapter.js',
+                source: MARKET_ADAPTER_SOURCE,
             };
             if (options.amaSlope && typeof options.amaSlope === 'object') {
                 payload.amaSlope = options.amaSlope;
@@ -1274,7 +1275,7 @@ async function runOnce(cfg, state, contextCache) {
 
     state.meta = {
         updatedAt: new Date().toISOString(),
-        source: 'market_adapter/market_adapter.js',
+        source: MARKET_ADAPTER_SOURCE,
         defaults: {
             ama: DEFAULT_AMA,
             intervalSeconds: cfg.intervalSeconds,

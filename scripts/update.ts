@@ -28,15 +28,15 @@ const path = require('path');
 const fs = require('fs');
 const { sendControlCommand } = require('../modules/launcher/supervisor_control');
 
+// Import update configuration from constants
+// Contains: REPOSITORY_URL, BRANCH, BUILD_DIR settings
+const { UPDATER, BUILD_DIR } = require('../modules/constants');
+
 // Project root directory — handles running from scripts/ or dist/scripts/
 const SCRIPTS_DIR = __dirname;
-const ROOT = path.basename(path.dirname(SCRIPTS_DIR)) === 'dist'
+const ROOT = path.basename(path.dirname(SCRIPTS_DIR)) === BUILD_DIR
     ? path.resolve(SCRIPTS_DIR, '..', '..')
     : path.resolve(SCRIPTS_DIR, '..');
-
-// Import update configuration from constants
-// Contains: REPOSITORY_URL, BRANCH settings
-const { UPDATER } = require('../modules/constants');
 const MONOLITHIC_PID_FILE = path.join(ROOT, 'profiles', 'monolithic.pid');
 const MONOLITHIC_BOT_PID_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.pid');
 const MONOLITHIC_BOT_INFO_FILE = path.join(ROOT, 'profiles', 'monolithic-bot.json');
@@ -127,8 +127,8 @@ function restartMonolithicRuntime(monolithic) {
     ].filter(Boolean).join('; ');
 
     log(`Monolithic runtime detected (${details}). Restarting via unlock control...`);
-    const unlockPath = fs.existsSync(path.join(ROOT, 'dist', 'unlock.js'))
-        ? path.join(ROOT, 'dist', 'unlock.js')
+    const unlockPath = fs.existsSync(path.join(ROOT, BUILD_DIR, 'unlock.js'))
+        ? path.join(ROOT, BUILD_DIR, 'unlock.js')
         : path.join(ROOT, 'unlock.js');
     run(`node "${unlockPath}" restart all`);
 }
@@ -332,7 +332,7 @@ try {
     run('npm run build');
 
     const SOURCE_MARKER = path.join(ROOT, 'modules', 'dexbot_class.ts');
-    const DIST_MARKER = path.join(ROOT, 'dist', 'modules', 'dexbot_class.js');
+    const DIST_MARKER = path.join(ROOT, BUILD_DIR, 'modules', 'dexbot_class.js');
     if (fs.existsSync(SOURCE_MARKER)) {
         if (!fs.existsSync(DIST_MARKER)) {
             throw new Error(
@@ -367,7 +367,7 @@ try {
         // Try loading from compiled dist/ first, then fall back to source dir
         let generateEcosystemConfig;
         try {
-            ({ generateEcosystemConfig } = require(path.join(ROOT, 'dist', 'pm2')));
+            ({ generateEcosystemConfig } = require(path.join(ROOT, BUILD_DIR, 'pm2')));
         } catch (_) {
             ({ generateEcosystemConfig } = require(path.join(ROOT, 'pm2')));
         }
@@ -430,7 +430,7 @@ try {
                         const runningActiveBots = activeBots.filter(b => runningProcesses.includes(b.name));
                         let needsMarketAdapter;
                         try {
-                            ({ needsMarketAdapter } = require(path.join(ROOT, 'dist', 'pm2')));
+                            ({ needsMarketAdapter } = require(path.join(ROOT, BUILD_DIR, 'pm2')));
                         } catch (_) {
                             ({ needsMarketAdapter } = require(path.join(ROOT, 'pm2')));
                         }

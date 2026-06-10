@@ -1,5 +1,6 @@
 const fs = require('fs/promises');
 const path = require('path');
+const { BUILD_DIR } = require('../../modules/constants');
 const { getZeroClawSkillTools } = require('./zeroclaw_catalog');
 
 function tomlString(value: any) {
@@ -8,7 +9,7 @@ function tomlString(value: any) {
 
 function normalizeRepoRoot(repoRoot?: string) {
   const ZC_PARENT_DIR = path.dirname(path.dirname(__dirname));
-  const ZC_PROJECT_ROOT = path.basename(ZC_PARENT_DIR) === 'dist' ? path.dirname(ZC_PARENT_DIR) : ZC_PARENT_DIR;
+  const ZC_PROJECT_ROOT = path.basename(ZC_PARENT_DIR) === BUILD_DIR ? path.dirname(ZC_PARENT_DIR) : ZC_PARENT_DIR;
   return path.resolve(repoRoot || path.join(ZC_PROJECT_ROOT, 'claw'));
 }
 

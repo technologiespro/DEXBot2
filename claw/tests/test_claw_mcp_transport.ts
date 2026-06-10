@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const { spawnSync } = require('child_process');
 const path = require('path');
+const { BUILD_DIR } = require('../../modules/constants');
 const mcpServer = require('../scripts/claw_mcp_server');
 
 function encodeNewlineMessage(message) {
@@ -143,7 +144,9 @@ async function testHandleRequestEmitsNewlineJson() {
 function runServerProcess(input) {
   const repoRoot = path.resolve(__dirname, '..', '..');
   const clawRoot = path.resolve(__dirname, '..');
-  const scriptPath = path.join(clawRoot, 'scripts', 'claw_mcp_server.js');
+  const _isDist = path.basename(path.dirname(__dirname)) === BUILD_DIR;
+  const scriptPath = path.join(clawRoot, 'scripts', 'claw_mcp_server' + (_isDist ? '.js' : '.ts'));
+  const scriptRel = path.relative(repoRoot, scriptPath);
 
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'claw-mcp-transport-'));
   const inputPath = path.join(tmpRoot, 'input.jsonl');
@@ -151,7 +154,8 @@ function runServerProcess(input) {
   fs.writeFileSync(inputPath, input, 'utf8');
 
   try {
-    const shellCommand = `cat ${shellQuote(inputPath)} | ${shellQuote(process.execPath)} ${shellQuote(scriptPath)} --profile-root ${shellQuote(repoRoot)} > ${shellQuote(outputPath)}`;
+    const loaderArgs = _isDist ? '' : '--import tsx ';
+    const shellCommand = `cat ${shellQuote(inputPath)} | ${shellQuote(process.execPath)} --no-warnings ${loaderArgs}${shellQuote(scriptRel)} --profile-root ${shellQuote(repoRoot)} > ${shellQuote(outputPath)}`;
     const run = spawnSync('/bin/sh', ['-lc', shellCommand], {
       cwd: repoRoot,
       encoding: 'utf8'

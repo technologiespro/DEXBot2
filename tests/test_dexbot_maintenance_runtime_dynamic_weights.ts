@@ -7,6 +7,9 @@ const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache
 
 console.log('Running dexbot maintenance runtime dynamic weight tests');
 
+const { BUILD_DIR } = require('../modules/constants');
+const _isDist = path.basename(path.dirname(__dirname)) === BUILD_DIR;
+const _adapterSource = 'market_adapter/market_adapter' + (_isDist ? '.js' : '.ts');
 const runtimePath = require.resolve('../modules/dexbot_maintenance_runtime');
 const dexbotClassPath = require.resolve('../modules/dexbot_class');
 const bitsharesClientPath = require.resolve('../modules/bitshares_client');
@@ -301,7 +304,7 @@ async function testManualTriggerResetRefreshesCenterPrice() {
         centerPrice: 100,
         amaCenterPrice: 123.45,
         gridPriceOffsetPct: 0.8,
-        source: 'market_adapter/market_adapter.js',
+        source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
     }, null, 2) + '\n', 'utf8');
     fs.writeFileSync(triggerFile, '', 'utf8');
@@ -402,7 +405,7 @@ async function testManualTriggerResetKeepsOffsetWhenCenterAlreadyCurrent() {
         centerPrice: 123.45,
         amaCenterPrice: 123.45,
         gridPriceOffsetPct: 0.8,
-        source: 'market_adapter/market_adapter.js',
+        source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
     }, null, 2) + '\n', 'utf8');
     fs.writeFileSync(triggerFile, '', 'utf8');
@@ -497,11 +500,11 @@ async function testMarketAdapterTriggerResetRefreshesAmaCenterPrice() {
         centerPrice: 100,
         amaCenterPrice: 123.45,
         gridPriceOffsetPct: 0.8,
-        source: 'market_adapter/market_adapter.js',
+        source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
     }, null, 2) + '\n', 'utf8');
     fs.writeFileSync(triggerFile, JSON.stringify({
-        source: 'market_adapter/market_adapter.js',
+        source: _adapterSource,
         reason: 'market_adapter_delta_threshold',
         newCenterPrice: 100,
         amaCenterPrice: 123.45,
@@ -602,11 +605,11 @@ async function testMarketAdapterBootstrapTriggerResetRecordsBootstrapSource() {
         gridCenterPrice: 100,
         centerPrice: 100,
         amaCenterPrice: 123.45,
-        source: 'market_adapter/market_adapter.js',
+        source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
     }, null, 2) + '\n', 'utf8');
     fs.writeFileSync(triggerFile, JSON.stringify({
-        source: 'market_adapter/market_adapter.js',
+        source: _adapterSource,
         reason: 'market_adapter_bootstrap',
         newCenterPrice: 100,
         amaCenterPrice: 123.45,
@@ -707,11 +710,11 @@ async function testMarketAdapterSlopeTriggerResetRecordsSlopeSource() {
         gridCenterPrice: 100,
         centerPrice: 100,
         amaCenterPrice: 123.45,
-        source: 'market_adapter/market_adapter.js',
+        source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
     }, null, 2) + '\n', 'utf8');
     fs.writeFileSync(triggerFile, JSON.stringify({
-        source: 'market_adapter/market_adapter.js',
+        source: _adapterSource,
         reason: 'market_adapter_ama_slope_delta_threshold',
         newCenterPrice: 100,
         amaCenterPrice: 123.45,
@@ -811,7 +814,7 @@ function testUpdateBotGridResetMetadataRecordsActualReset() {
         centerPrice: 123.45,
         amaCenterPrice: 130.25,
         gridPriceOffsetPct: 0.8,
-        source: 'market_adapter/market_adapter.js',
+        source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
     }, null, 2) + '\n', 'utf8');
 
@@ -859,7 +862,7 @@ function testUpdateBotGridResetMetadataRejectsInvalidSnapshot() {
         gridCenterPrice: 0,
         centerPrice: 0,
         amaCenterPrice: 130.25,
-        source: 'market_adapter/market_adapter.js',
+        source: _adapterSource,
         updatedAt: '2026-01-01T00:00:00Z',
     }, null, 2) + '\n', 'utf8');
 

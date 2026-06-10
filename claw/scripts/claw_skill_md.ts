@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 const path = require('path');
+const { BUILD_DIR } = require('../../modules/constants');
 const {
   buildRuntimeSkillMarkdown,
   writeRuntimeSkillMarkdown
 } = require('../modules/claw_skill_md');
 
 const CS_PARENT_DIR = path.dirname(path.dirname(__dirname));
-const CS_PROJECT_ROOT = path.basename(CS_PARENT_DIR) === 'dist' ? path.dirname(CS_PARENT_DIR) : CS_PARENT_DIR;
+const CS_PROJECT_ROOT = path.basename(CS_PARENT_DIR) === BUILD_DIR ? path.dirname(CS_PARENT_DIR) : CS_PARENT_DIR;
 
 function parseArgs(argv: any) {
   const options: Record<string, any> = {

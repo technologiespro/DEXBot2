@@ -69,7 +69,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const chainKeys = require('./modules/chain_keys');
-const { TIMING, NODE_MANAGEMENT } = require('./modules/constants');
+const { TIMING, NODE_MANAGEMENT, BUILD_DIR } = require('./modules/constants');
 const { readGeneralSettings } = require('./modules/general_settings');
 const { orderNodesForSettings } = require('./modules/node_health_cache');
 const credentialPolicy = require('./modules/credential_policy');
@@ -98,7 +98,7 @@ const daemonLogger = new Logger('credential-daemon');
 
 // Resolve project root — handles running from dist/ (compiled) vs source
 const DAEMON_DIR = __dirname;
-const PROJECT_ROOT = path.basename(DAEMON_DIR) === 'dist' ? path.dirname(DAEMON_DIR) : DAEMON_DIR;
+const PROJECT_ROOT = path.basename(DAEMON_DIR) === BUILD_DIR ? path.dirname(DAEMON_DIR) : DAEMON_DIR;
 
 // Platform check - Unix sockets require Unix-like systems or Windows 10+
 const platform = os.platform();

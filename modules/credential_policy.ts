@@ -15,10 +15,10 @@ const { spawn } = require('child_process');
 const { BitShares } = require('./bitshares_client');
 const { isPositiveInt } = require('./order/utils/math');
 const { parseJsonWithComments } = require('./order/utils/system');
-const { FEE_PARAMETERS } = require('./constants');
+const { FEE_PARAMETERS, BUILD_DIR } = require('./constants');
 
 const MODULE_DIR = path.dirname(__dirname);
-const PROJECT_ROOT = path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
+const PROJECT_ROOT = path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
 
 const BOTS_JSON_PATH = path.join(PROJECT_ROOT, 'profiles', 'bots.json');
 const ASSET_OBJECT_ID_PATTERN = /^1\.3\.\d+$/;

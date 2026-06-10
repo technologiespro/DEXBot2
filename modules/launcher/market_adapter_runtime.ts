@@ -4,13 +4,13 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
-const { MARKET_ADAPTER } = require('../constants');
+const { MARKET_ADAPTER, BUILD_DIR } = require('../constants');
 
 const DEFAULT_CODE_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_ROOT = path.basename(DEFAULT_CODE_ROOT) === 'dist' ? path.dirname(DEFAULT_CODE_ROOT) : DEFAULT_CODE_ROOT;
+const DEFAULT_ROOT = path.basename(DEFAULT_CODE_ROOT) === BUILD_DIR ? path.dirname(DEFAULT_CODE_ROOT) : DEFAULT_CODE_ROOT;
 const DEFAULT_STATE_DIR = path.join(DEFAULT_ROOT, 'market_adapter', 'state');
 const DEFAULT_LOCK_FILE = path.join(DEFAULT_STATE_DIR, 'market_adapter.lock');
-const DEFAULT_SCRIPT = path.join(DEFAULT_CODE_ROOT, 'market_adapter', 'market_adapter.js');
+const DEFAULT_SCRIPT = path.join(DEFAULT_CODE_ROOT, 'market_adapter', 'market_adapter' + (path.basename(DEFAULT_CODE_ROOT) === BUILD_DIR ? '.js' : '.ts'));
 const DEFAULT_STALE_LOCK_MS = (
     MARKET_ADAPTER.RUNTIME_DEFAULTS.pollSeconds * 1000 +
     MARKET_ADAPTER.WATCHDOG_DEFAULTS.staleLockGraceMs
@@ -127,7 +127,8 @@ function createMarketAdapterRuntime({
             return { running: true, owned: false, external: true, started: false };
         }
 
-        const spawnedChild = spawnFn(process.execPath, [script], {
+        const nodeArgs = script.endsWith('.ts') ? ['--import', 'tsx', script] : [script];
+        const spawnedChild = spawnFn(process.execPath, nodeArgs, {
             cwd: root,
             env: buildEnv(),
             stdio: 'inherit',

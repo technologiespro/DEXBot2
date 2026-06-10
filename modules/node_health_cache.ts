@@ -1,10 +1,10 @@
 // @ts-nocheck
 const fs = require('fs');
 const path = require('path');
-const { NODE_MANAGEMENT } = require('./constants');
+const { NODE_MANAGEMENT, BUILD_DIR } = require('./constants');
 
 const MODULE_DIR = path.dirname(__dirname);
-const PROJECT_ROOT = path.basename(MODULE_DIR) === 'dist' ? path.dirname(MODULE_DIR) : MODULE_DIR;
+const PROJECT_ROOT = path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
 const DEFAULT_HEALTH_CACHE_FILE = path.join(PROJECT_ROOT, 'profiles', 'node_health_cache.json');
 
 function resolveHealthCacheFile(config = {}) {
