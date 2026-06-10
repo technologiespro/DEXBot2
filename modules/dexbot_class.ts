@@ -1643,8 +1643,8 @@ class DEXBot {
                         const shouldRunPostFillChecks = !abortedFillCycle && fullFillCount > 0;
 
                         if (shouldRunPostFillChecks) {
-                            // SAFE: Called inside _fillProcessingLock.acquire(), no concurrent fund modifications
-                            await this.manager.recalculateFunds();
+                            // SAFE: Called inside _fillProcessingLock.acquire(), no concurrent fund modifications.
+                            // Fund state is already fresh from _processFillsWithBatching's internal resumeFundRecalc.
 
                             // Check grid health only if pipeline is empty (no pending fills, no pending operations)
                             const pipelineStatus = this.manager.isPipelineEmpty(this._getPipelineSignals());
@@ -3117,11 +3117,11 @@ class DEXBot {
      * @param {Set|null} excl - Exclusion set (order IDs to skip)
      * @param {string} contextLabel - Label for logging and batch context
      * @param {Object} [options={}] - Passed through to processFilledOrders
-     * @returns {{aborted: boolean, anyRotations: boolean}}
+     * @returns {{aborted: boolean}}
      */
     async _processFillsWithBatching(fills, excl, contextLabel, options = {}) {
         if (!fills || fills.length === 0) {
-            return { aborted: false, anyRotations: false };
+            return { aborted: false };
         }
 
         const managerLog = this.manager?.logger?.log?.bind(this.manager.logger) || (() => {});
@@ -3134,8 +3134,6 @@ class DEXBot {
             `Processing ${totalFills} filled orders (${modeLabel}, baseBatch=${useUnifiedPlan ? totalFills : maxBatch})...`,
             'info'
         );
-
-        let anyRotations = false;
 
         if (typeof this.manager?.pauseFundRecalc === 'function') {
             this.manager.pauseFundRecalc();
@@ -3178,11 +3176,7 @@ class DEXBot {
                         `[HARD-ABORT] ${label} aborted due to critical state. Skipping remaining fills.`,
                         'error'
                     );
-                    return { aborted: true, anyRotations };
-                }
-
-                if (batchResult.hadRotation) {
-                    anyRotations = true;
+                    return { aborted: true };
                 }
             }
         } finally {
@@ -3191,7 +3185,7 @@ class DEXBot {
             }
         }
 
-        return { aborted: false, anyRotations };
+        return { aborted: false };
     }
 
     /**

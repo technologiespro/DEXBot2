@@ -170,11 +170,13 @@ class Grid {
      * @returns {Promise<import('./types').SizingContext|null>}
      * @private
      */
-    static async _getSizingContext(manager, side) {
+    static async _getSizingContext(manager, side, { skipRecalc = false } = {}) {
         if (!manager || !manager.assets) return null;
 
         // 1. Ensure fund state is fresh before sizing
-        await manager.recalculateFunds();
+        if (!skipRecalc) {
+            await manager.recalculateFunds();
+        }
 
         const snap = manager.getChainFundsSnapshot ? manager.getChainFundsSnapshot() : {};
         const isBuy = side === 'buy';
@@ -707,9 +709,12 @@ class Grid {
 
         const { A: precA, B: precB } = getPrecisionsForManager(manager.assets);
 
-        // Use centralized sizing context for both sides
-        const sellCtx = await Grid._getSizingContext(manager, 'sell');
-        const buyCtx = await Grid._getSizingContext(manager, 'buy');
+        // Use centralized sizing context for both sides.
+        // Resolve funds once upfront so both contexts share the same snapshot,
+        // avoiding a redundant recalculateFunds inside the second _getSizingContext call.
+        await manager.recalculateFunds();
+        const sellCtx = await Grid._getSizingContext(manager, 'sell', { skipRecalc: true });
+        const buyCtx = await Grid._getSizingContext(manager, 'buy', { skipRecalc: true });
 
         if (!sellCtx || !buyCtx) throw new Error('Failed to retrieve sizing context for grid initialization');
 
