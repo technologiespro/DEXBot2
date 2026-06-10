@@ -439,8 +439,7 @@ async function testSpreadConditionWithPartials() {
 // ============================================================================
 (async () => {
     try {
-        // SKIPPED: testPartialAtGridBoundary() - uses preparePartialOrderMove which was removed as dead code
-        // (partial move functionality was never actually used in the strategy)
+        // SKIPPED: testPartialAtGridBoundary()
         await testPartialOrdersCounting();
         await testMultiplePartialsOnSameSide();
         await testPartialStateTransitions();

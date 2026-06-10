@@ -1107,7 +1107,7 @@ export interface BotState {
   botName: string;
   botKey: string;
   marketSource: 'pool' | 'book' | null;
-  priceMode: 'market' | 'fixed' | null;
+  priceMode: 'book' | 'fixed' | null;
   lastCycleSource: string | null;
   lastCycleAt: string | null;
   pendingClosedCandle: boolean;

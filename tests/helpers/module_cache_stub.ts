@@ -1,4 +1,5 @@
 const path = require('path');
+const { BUILD_DIR } = require('../../modules/constants');
 
 const MODULES_SEG = path.sep + 'modules' + path.sep;
 
@@ -10,7 +11,7 @@ function _deriveDistPath(sourcePath) {
     const root = normalized.slice(0, idx);
     const relative = normalized.slice(idx + 1);
     const cleaned = relative.replace(/\.ts$/i, '.js');
-    return path.join(root, 'dist', cleaned);
+    return path.join(root, BUILD_DIR, cleaned);
 }
 
 function setCachedModule(modulePath, exports, opts = {}) {

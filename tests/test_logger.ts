@@ -38,7 +38,7 @@ const mgrStub = {
 	funds: { available: { buy: 1.2345, sell: 2.3456 }, committed: { buy: 0.5, sell: 0.25 }, total: { buy: 10, sell: 20 } },
 	currentSpreadCount: 2,
 	targetSpreadCount: 3,
-	outOfSpread: false,
+	outOfSpread: 0,
 	getOrdersByTypeAndState: (type, state) => {
 		if (state === 'active') return [1,2];
 		if (state === 'partial') return [1];

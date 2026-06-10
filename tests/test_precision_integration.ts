@@ -207,7 +207,7 @@ async function testFullOrderLifecycle() {
 
     if (result.updatedOrders.length > 0) {
         console.log(`  The partial order with 0.00001 remaining:`);
-        console.log(`    ✓ Can be moved to another grid position (preparePartialOrderMove)`);
+        console.log(`    ✓ Can be moved to another grid position`);
         console.log(`    ✓ Can trigger rebalancing if needed`);
         console.log(`    ✓ Can be handled by Anchor & Refill strategy`);
         console.log(`    ✓ Grid flow is NOT blocked`);

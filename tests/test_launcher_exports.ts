@@ -1,5 +1,6 @@
 const assert = require('assert');
 const path = require('path');
+const { BUILD_DIR } = require('../modules/constants');
 
 console.log('Running launcher export tests');
 
@@ -90,11 +91,11 @@ assert.strictEqual(
 );
 assert.deepStrictEqual(
     buildRuntimeScriptArgs({
-        codeRoot: path.join(__dirname, '..', 'dist'),
+        codeRoot: path.join(__dirname, '..', BUILD_DIR),
         scriptSegments: ['dexbot'],
         scriptArgs: ['start'],
     }),
-    [path.join(__dirname, '..', 'dist', 'dexbot.js'), 'start'],
+    [path.join(__dirname, '..', BUILD_DIR, 'dexbot.js'), 'start'],
     'runtime helper should resolve dist entrypoints to .js paths without tsx'
 );
 

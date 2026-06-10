@@ -766,10 +766,10 @@ Where:
 
 | Metric | DEXBot | DEXBot2 |
 |---|---|---|
-| **Release Track** | 1.0.0 | v0.7.5 |
+| **Release Track** | 1.0.0 | v0.7.17 |
 | **Active Since** | ~2018 | December 2025 |
-| **Last Commit** | May 23, 2020 | 2026-05-28 |
-| **Total Commits** | 2281 | 1497 at current HEAD |
+| **Last Commit** | May 23, 2020 | 2026-06-10 |
+| **Total Commits** | 2281 | 1535 at current HEAD |
 | **Lines of Code** | ~10,846 Python LOC in `dexbot/` | Large TypeScript runtime + adapter + Claw + analysis + tests |
 | **Source Files** | 72 Python files in `dexbot/` | 430+ TS files across the repo |
 | **Test Files** | 16 Python test files | 208 `test_*.ts` files |
@@ -906,4 +906,4 @@ The practical migration path is to treat DEXBot2 as a new runtime: recreate bot 
 
 ---
 
-*Report generated 2026-05-13. Metrics refreshed 2026-05-27 from local DEXBot-master and DEXBot2 source trees.*
+*Report generated 2026-06-10. Metrics refreshed 2026-06-10 from local DEXBot-master and DEXBot2 source trees.*

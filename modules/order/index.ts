@@ -42,8 +42,7 @@
  * 4. format.js - Numeric formatting (18 functions for consistent display)
  * 5. accounting.js - Accountant class (fund calculations and reconciliation)
  * 6. logger.js - Logger class (structured, color-coded output)
- * 7. logger_state.js - LoggerState class (change detection, audit trail)
- * 8. async_lock.js - AsyncLock class (race condition prevention)
+ * 7. async_lock.js - AsyncLock class (race condition prevention)
  * 9. export.js - QTradeX export module (trade history extraction)
  * 10. runner.js - Heavy calculation and I/O operations
  * 11. grid_reconcile.ts - Grid reconciliation against chain (startup + maintenance)

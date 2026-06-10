@@ -6,9 +6,7 @@
     "outDir": "./dist",
     "rootDir": ".",
     "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "noImplicitThis": true,
+
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "esModuleInterop": true,
@@ -28,11 +26,7 @@
 
     "scripts/**/*.ts",
     "analysis/**/*.ts",
-    "dexbot.ts",
-    "bot.ts",
-    "pm2.ts",
-    "unlock.ts",
-    "credential-daemon.ts"
+    "*.ts"
   ],
   "exclude": [
     "node_modules",

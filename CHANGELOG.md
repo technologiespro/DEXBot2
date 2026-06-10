@@ -2,6 +2,78 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.17] - 2026-06-10 - BUILD_DIR Centralization, HMAC Recovery & Doc Fixes
+
+This release centralizes the hardcoded `'dist'` string into a `BUILD_DIR` constant across 50+ files, adds source-mode runtime support (tsx without pre-built `dist/`), hardens silent error paths with proper logging, and recovers from stale HMAC sessions without manual daemon restarts. It also bumps the version and fixes stale documentation references.
+
+### 2026-06-10
+
+#### BUILD_DIR Centralization & Source-Mode Runtime
+- Centralize `BUILD_DIR` constant in `modules/constants.ts`; replace hardcoded `'dist'` across 50+ entry points and scripts (`c09176a`).
+- Add source-mode runtime support: `runtime_entry.ts` picks `.ts` + `--import tsx` in source mode, `.js` in compiled mode; `unlock.ts`, `pm2.ts`, `bot_supervisor.ts`, and `market_adapter_runtime.ts` all delegate to the shared helper (`c09176a`).
+- Add `buildRuntimeScriptPath` / `buildRuntimeScriptArgs` for consistent entry-point resolution across launcher paths (`c09176a`).
+- Add PM2 `--node-args` for market-adapter app in source mode; PM2 ecosystem entries now carry `['--import', 'tsx']` when running from source (`c09176a`).
+
+#### Test Runner Improvements
+- Add `liveTestFiles` set + `RUN_LIVE_BITSHARES_TESTS=1` env var separating live-blockchain tests from standard test runs; skipped live tests display `[SKIPPED N live test(s)]` summary (`c09176a`).
+- Set `NODE_OPTIONS=--no-warnings` in test runner to suppress circular-dep warnings (`c09176a`).
+- Fix `test_fill_subscription_lifecycle.ts` — add missing `return` to `test()` IIFE so `await test(...)` actually waits (`c09176a`).
+- Fix `test_connection_timeout_params.ts` — explicitly call `facade.getConnectionStatus()` to trigger lazy proxy init (`c09176a`).
+- Fix `test_pm2_stop_delete_all.ts` — assert new credential-daemon-first stop order (`c09176a`).
+- Fix `test_connection_trace.ts` — add per-node WS connect timeout and overall `BITSHARES_TRACE_TIMEOUT_MS` guard (`c09176a`).
+- Fix `test_derivative_signal_trap_regression.ts` — skip with message instead of hard-exit when LP data file is absent in CI (`c09176a`).
+- Fix `test_market_adapter_file_lock.ts` — spawn child with `tsx` matching production process regex (`c09176a`).
+
+#### Error Handling Hardening
+- Replace empty `.catch(() => {})` patterns with proper logging across `transport.ts`, `bitshares_client.ts` (both main and Claw), and `chain_broadcast.ts` (`89aad0a`).
+- Add try/catch with re-resolve-and-retry around credential-daemon broadcast path in `chain_broadcast.ts` (`89aad0a`).
+- Check `_updateOrder` return values at 6 call sites; log context-specific warnings instead of silently discarding validation failures (`89aad0a`).
+
+#### Redundant Computation Reduction
+- `compareGrids()`: call `recalculateFunds` once upfront, pass `skipRecalc:true` to both `_getSizingContext` calls (`89aad0a`).
+- `node_manager.ts`: replace five `.filter()` passes with single `for…of` loop (`89aad0a`).
+- `manager.ts`: replace 4 inline `actions.filter().length` calls with `summarizeActions(actions)` utility (`89aad0a`).
+
+#### Shared Daemon Error Constants
+- Add `DAEMON_ERRORS` (`SESSION_EXPIRED`, `SOURCE_AUTH_DENIED`) to `modules/constants.ts`; both `chain_orders.ts` and Claw broadcast use the same named constants (`89aad0a`).
+
+#### HMAC Session Recovery
+- Extend daemon retry branch in `executeViaDaemonToken` to catch `'invalid source authentication'` — send SIGHUP to re-load policy config, sleep 500ms, probe fresh session, retry the same operations (`598cb32`).
+- Eliminates the manual-daemon-restart requirement after `botHmacSecret` rotation or startup race (`598cb32`).
+
+#### Budget-Aware Shortfall Suppression
+- Gate targeted-sync shortfall detection with `_hasBudgetForSide()` — bots with one side fully drained no longer hot-spin on RPC budget (`598cb32`).
+- Uses the same `getSideBudget` formula as `strategy.ts:314-316`; try/catch fails open (`598cb32`).
+
+#### Test & Code Cleanup
+- Remove dead `anyRotations` assertions from `test_fill_batch_chunking.ts` (3 locations, stale since the return type was simplified in a01b00b) (`8de5586`).
+- Logger migration: `bitshares_client.ts` replaces `console.log/warn` with `Logger('bitshares_client')` for consistent codebase output (`c09176a`).
+- Legacy comment cleanup: remove stale `// FIX: Use logger instead of console.warn` in `grid.ts` (`89aad0a`).
+- Replace hardcoded `'dist'` strings in `unlock.ts` with existing `BUILD_DIR` constant (missed during BUILD_DIR refactor) (`89aad0a`).
+
+#### Codebase Audit Fixes
+- Fix `outOfSpread` boolean type mismatch → numeric `0` in test logger stub (`test_logger.ts`).
+- Fix stale `'market'` priceMode in `modules/types.ts` type definition → `'book'`.
+- Fix stale `priceMode: 'market'` return value in `market_adapter/utils/chain.ts` → `'book'`.
+- Rename `test_startup_reconcile*` test files to `test_grid_reconcile*` to match the renamed module.
+- Remove stale `test_refactor.ts` archaic manual test (superseded by proper test suite).
+- Rename `test_account_bots_draft.ts` → `test_account_bots_normalize.ts`.
+- Clean up 149 empty LP test data directories under `market_adapter/inputs/data/lp/`.
+- Replace hardcoded `'dist'` with `BUILD_DIR` constant in `module_cache_stub.ts` and `test_launcher_exports.ts`.
+- Clean up stale `preparePartialOrderMove` comments in 2 test files.
+- Clean up stale comment in `modules/order/index.ts` referencing removed `logger_state.js`.
+- Use `"*.ts"` glob in `tsconfig.json` include (replaces explicit entry-point list); remove redundant strict flags already implied by `"strict": true`.
+
+#### Documentation
+- Fix stale version footer in `docs/FUND_MOVEMENT_AND_ACCOUNTING.md` (v0.7.5 → v0.7.17).
+- Fix stale release track, last commit date, total commits, and report date in `docs/DEXBOT_COMPARISON.md`.
+- Update version context in `docs/README.md` from v0.7.15 to v0.7.17.
+- Clean up stale `unlock-start` reference in `scripts/README.md`.
+- Add v0.7.17 entry to `docs/EVOLUTION.md`.
+
+#### Chores
+- Bump version to 0.7.17 across all `package.json` manifests.
+
 ## [0.7.16] - 2026-06-10 - Pipeline Blocking Hardening & Dead Code Removal
 
 This release eliminates three remaining categories of pipeline-blocking stale-state hazards, removes dead tracking variables, and cleans up documentation.

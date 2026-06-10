@@ -2,7 +2,7 @@
 
 This directory contains the comprehensive technical documentation for the DEXBot2 trading bot. It is designed to guide developers from high-level architecture down to the nuances of fund accounting and state management.
 
-**Version context:** v0.7.15 is the current working version. This patch carries quiet orderbook candles forward through bounded no-trade gaps so book-sourced bots keep refreshing dynamic-grid snapshots during ordinary silence, and highlights active bot names in launcher/status output for faster runtime visibility.
+**Version context:** v0.7.17 is the current working version. This release fixes stale doc references and bumps the version.
 
 ---
 

@@ -199,7 +199,7 @@ async function resolveBotContext(bot: any) {
             : normalizePoolId((await findPoolByAssets(assetA.id, assetB.id)).id);
     }
 
-    return { assetA, assetB, poolId, marketSource, priceMode: 'market' };
+    return { assetA, assetB, poolId, marketSource, priceMode: 'book' };
 }
 
 export = {
