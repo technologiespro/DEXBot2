@@ -58,7 +58,9 @@ async function waitForConnected(timeoutMs = DEFAULT_TIMEOUT_MS) {
 
     while (!connected) {
         if (!_connectPromise && _nativeClient.getStatus() !== 'connecting') {
-            ensureConnected().catch(() => {});
+            ensureConnected().catch((err: any) => {
+                console.warn(`[CLAW] Connection attempt failed: ${err.message}`);
+            });
         }
         if (Date.now() - start > timeoutMs) {
             throw new Error(`Timed out waiting for BitShares connection after ${timeoutMs}ms`);

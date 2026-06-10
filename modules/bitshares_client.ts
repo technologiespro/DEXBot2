@@ -365,7 +365,9 @@ function handleConnectionStatus(status) {
         if (intentionalDisconnect) {
             return true;
         }
-        assessFailover('Connection closed').catch(() => {});
+        assessFailover('Connection closed').catch((err: any) => {
+            logger.warn(`Failover assessment failed: ${err.message}`);
+        });
         return true;
     }
     return false;

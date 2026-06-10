@@ -1005,7 +1005,10 @@ class SyncEngine {
                     };
 
                     const spreadOrder = convertToSpreadPlaceholder(matchedGridOrder);
-                    await mgr._updateOrder(spreadOrder, 'handle-fill-full', { skipAccounting: false, fee: 0 });
+                    const fullOk = await mgr._updateOrder(spreadOrder, 'handle-fill-full', { skipAccounting: false, fee: 0 });
+                    if (fullOk === false) {
+                        mgr.logger.log(`[SYNC] Failed to convert filled order ${orderId} to spread placeholder`, 'warn');
+                    }
                     filledOrders.push(filledOrder);
                     return { filledOrders, updatedOrders, partialFill: false };
                 } else {
@@ -1035,7 +1038,10 @@ class SyncEngine {
                         updatedOrder = { ...updatedOrder, ...nextOrder };
                     }
 
-                    await mgr._updateOrder(updatedOrder, 'handle-fill-partial', { skipAccounting: false, fee: 0 });
+                    const partialOk = await mgr._updateOrder(updatedOrder, 'handle-fill-partial', { skipAccounting: false, fee: 0 });
+                    if (partialOk === false) {
+                        mgr.logger.log(`[SYNC] Failed to update partially filled order ${orderId}`, 'warn');
+                    }
                     updatedOrders.push(updatedOrder);
                     filledOrders.push(filledPortion);
                     return { filledOrders, updatedOrders, partialFill: true };

@@ -1429,10 +1429,7 @@ class OrderManager {
         return {
             ...result,
             actions,
-            total: actions.length,
-            creates: actions.filter(a => a.type === COW_ACTIONS.CREATE).length,
-            cancels: actions.filter(a => a.type === COW_ACTIONS.CANCEL).length,
-            updates: actions.filter(a => a.type === COW_ACTIONS.UPDATE).length
+            ...summarizeActions(actions)
         };
     }
 

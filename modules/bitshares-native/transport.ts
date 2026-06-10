@@ -175,7 +175,9 @@ function createTransport(config: TransportConfig = {}) {
                 keepAliveInFlight = false;
             }, Math.min(rpcTimeoutMs, 15000));
             call('call', [1, 'login', ['', '']], Math.min(rpcTimeoutMs, 10000))
-                .catch(() => {})
+                .catch(() => {
+                    console.warn('[TRANSPORT] Keep-alive call failed');
+                })
                 .finally(() => {
                     clearTimeout(safe);
                     keepAliveInFlight = false;

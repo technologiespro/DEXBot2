@@ -1896,11 +1896,14 @@ class DEXBot {
                 const oppositeType = filledType === ORDER_TYPES.BUY ? ORDER_TYPES.SELL : ORDER_TYPES.BUY;
 
                 // Mark filled slot as VIRTUAL (released)
-                await this.manager._updateOrder(
+                const fillOk = await this.manager._updateOrder(
                     { ...virtualizeOrder(filledOrder), size: 0 },
                     'bootstrap-fill',
                     { skipAccounting: false, fee: 0 }
                 );
+                if (fillOk === false) {
+                    this.manager.logger.log(`[BOOTSTRAP] Failed to virtualize filled slot ${filledOrder.id}`, 'warn');
+                }
 
                 // Find highest active order on opposite side (closest to market)
                 const allOrders = Array.from(this.manager.orders.values());
@@ -1955,11 +1958,14 @@ class DEXBot {
                 this._log(`[BOOTSTRAP] Rotating ${surplusOrder.id} → ${targetSlot.id} (${oppositeType} ${Format.formatAmount8(rotationSize)})`, 'info');
 
                 // Mark surplus as released
-                await this.manager._updateOrder(
+                const rotateOk = await this.manager._updateOrder(
                     { ...virtualizeOrder(surplusOrder), size: 0 },
                     'bootstrap-rotate',
                     { skipAccounting: false, fee: 0 }
                 );
+                if (rotateOk === false) {
+                    this.manager.logger.log(`[BOOTSTRAP] Failed to release surplus order ${surplusOrder.id}`, 'warn');
+                }
 
                 // Create rotation order with weight-adjusted size
                 ordersToPlace.push({

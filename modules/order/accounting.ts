@@ -379,13 +379,17 @@ class Accountant {
              const isSell = order.type === ORDER_TYPES.SELL || (order.type === ORDER_TYPES.SPREAD && order.price >= mgr.startPrice);
 
              if (isBuy) {
-                 if (isActive) gridBuy += size;           // On-chain BUY commitment
-                 if (isActive) chainBuy += size;          // Same as gridBuy for this accounting method
-                 if (isVirtual) virtualBuy += size;       // Pending virtual BUY order
+                 if (isActive) {
+                     gridBuy += size;
+                     chainBuy += size;
+                 }
+                 if (isVirtual) virtualBuy += size;
              } else if (isSell) {
-                 if (isActive) gridSell += size;          // On-chain SELL commitment
-                 if (isActive) chainSell += size;         // Same as gridSell
-                 if (isVirtual) virtualSell += size;      // Pending virtual SELL order
+                 if (isActive) {
+                     gridSell += size;
+                     chainSell += size;
+                 }
+                 if (isVirtual) virtualSell += size;
              }
          }
 

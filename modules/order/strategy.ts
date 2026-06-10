@@ -211,11 +211,14 @@ class StrategyEngine {
 
                 if (currentSlot && !slotReused && isOrderPlaced(currentSlot)) {
                     mgr.logger.log(`[STRATEGY] Virtualizing filled slot ${filledOrder.id}`, 'debug');
-                    await mgr._updateOrder(
+                    const ok = await mgr._updateOrder(
                         { ...virtualizeOrder(currentSlot), size: 0 },
                         'fill',
                         { skipAccounting: false, fee: 0 }
                     );
+                    if (ok === false) {
+                        mgr.logger.log(`[STRATEGY] Failed to virtualize filled slot ${filledOrder.id}`, 'warn');
+                    }
                 }
             }
         }

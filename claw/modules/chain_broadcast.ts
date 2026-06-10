@@ -7,6 +7,7 @@ const {
   waitForCredentialDaemon
 } = require('./dexbot_credential_client');
 const { getDexbot2Root, requireDexbot2Module } = require('./dexbot_bridge');
+const { DAEMON_ERRORS } = require('../../modules/constants');
 
 // Lazy-load DEXBot2 modules
 let chainKeys: any = null;
@@ -48,8 +49,8 @@ async function resolveSessionCredentials(accountName: any, options: Record<strin
       const policyPath = path.join(getDexbot2Root(), 'profiles', 'daemon-policies.json');
       botHmacSecret = policyMod.loadBotHmacSecret(accountName, policyPath);
     }
-  } catch (_: any) {
-    // Fall back to unauthenticated request if probe/load fails
+  } catch (err: any) {
+    console.warn(`[CLAW] Failed to resolve session credentials: ${err.message}`);
   }
 
   return { sessionId, botHmacSecret };
@@ -117,23 +118,46 @@ async function executeOperations(operations: any, options: Record<string, any> =
 
     await waitForCredentialDaemon(daemonTimeoutMs, options);
 
-    const { sessionId, botHmacSecret } = await resolveSessionCredentials(accountName, options);
+    let { sessionId, botHmacSecret } = await resolveSessionCredentials(accountName, options);
 
-    const result = await executeOperationsViaCredentialDaemon(accountName, ops, {
-      socketPath: options.socketPath,
-      timeoutMs: requestTimeoutMs,
-      sessionId,
-      botHmacSecret,
-      requestType: 'broadcast',
-      batchId: options.batchId || null
-    });
+    try {
+      const result = await executeOperationsViaCredentialDaemon(accountName, ops, {
+        socketPath: options.socketPath,
+        timeoutMs: requestTimeoutMs,
+        sessionId,
+        botHmacSecret,
+        requestType: 'broadcast',
+        batchId: options.batchId || null
+      });
 
-    return {
-      ...result,
-      operation_results: result.operation_results || [],
-      raw: result.raw || null,
-      success: true
-    };
+      return {
+        ...result,
+        operation_results: result.operation_results || [],
+        raw: result.raw || null,
+        success: true
+      };
+    } catch (err: any) {
+      const msg = String(err.message || err);
+      if (msg.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED) || msg.includes(DAEMON_ERRORS.SESSION_EXPIRED)) {
+        console.warn(`[CLAW] Session/HMAC error, re-resolving credentials and retrying: ${msg}`);
+        const retry = await resolveSessionCredentials(accountName, options);
+        const result = await executeOperationsViaCredentialDaemon(accountName, ops, {
+          socketPath: options.socketPath,
+          timeoutMs: requestTimeoutMs,
+          sessionId: retry.sessionId,
+          botHmacSecret: retry.botHmacSecret,
+          requestType: 'broadcast',
+          batchId: options.batchId || null
+        });
+        return {
+          ...result,
+          operation_results: result.operation_results || [],
+          raw: result.raw || null,
+          success: true
+        };
+      }
+      throw err;
+    }
   }
 
   const client = await getSigningClient(options);
@@ -190,26 +214,34 @@ async function broadcastOperation(operation: any, options: Record<string, any> =
 
     await waitForCredentialDaemon(daemonTimeoutMs, options);
 
-    const { sessionId, botHmacSecret } = await resolveSessionCredentials(accountName, options);
+    let { sessionId, botHmacSecret } = await resolveSessionCredentials(accountName, options);
 
-    const result = await broadcastOperationViaCredentialDaemon(accountName, operation, {
-      socketPath: options.socketPath,
-      timeoutMs: requestTimeoutMs,
-      sessionId,
-      botHmacSecret
-    });
+    async function doBroadcast(sid: string | null | undefined, secret: string | null) {
+      const result = await broadcastOperationViaCredentialDaemon(accountName, operation, {
+        socketPath: options.socketPath,
+        timeoutMs: requestTimeoutMs,
+        sessionId: sid,
+        botHmacSecret: secret
+      });
+      const operationResults =
+        (result && Array.isArray(result.operation_results) && result.operation_results) ||
+        (result && result.trx && Array.isArray(result.trx.operation_results) && result.trx.operation_results) ||
+        (Array.isArray(result) && result[0] && result[0].trx && Array.isArray(result[0].trx.operation_results) && result[0].trx.operation_results) ||
+        [];
+      return { success: true, raw: result, operation_results: operationResults };
+    }
 
-    const operationResults =
-      (result && Array.isArray(result.operation_results) && result.operation_results) ||
-      (result && result.trx && Array.isArray(result.trx.operation_results) && result.trx.operation_results) ||
-      (Array.isArray(result) && result[0] && result[0].trx && Array.isArray(result[0].trx.operation_results) && result[0].trx.operation_results) ||
-      [];
-
-    return {
-      success: true,
-      raw: result,
-      operation_results: operationResults
-    };
+    try {
+      return await doBroadcast(sessionId, botHmacSecret);
+    } catch (err: any) {
+      const msg = String(err.message || err);
+      if (msg.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED) || msg.includes(DAEMON_ERRORS.SESSION_EXPIRED)) {
+        console.warn(`[CLAW] Session/HMAC error, re-resolving credentials and retrying: ${msg}`);
+        const retry = await resolveSessionCredentials(accountName, options);
+        return await doBroadcast(retry.sessionId, retry.botHmacSecret);
+      }
+      throw err;
+    }
   }
 
   const client = await getSigningClient(options);

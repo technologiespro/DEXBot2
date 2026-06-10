@@ -529,7 +529,6 @@ class Grid {
                     throw new Error(`Price derivation returned no result for ${manager.config.assetA}/${manager.config.assetB}`);
                 }
             } catch (err: any) {
-                // FIX: Use logger instead of console.warn (Issue #5)
                 manager.logger?.log?.(`Failed to derive market price: ${err.message}`, 'warn');
                 throw err; // Re-throw to prevent "pool" string reaching numeric math
             }
@@ -1030,11 +1029,14 @@ class Grid {
                         }
                     } else {
                         // CRITICAL: Set skipAccounting=false to ensure delta is consumed/released from ChainFree
-                        await manager._updateOrder(
+                        const resizeOk = await manager._updateOrder(
                             { ...slot, size: newSize },
                             'grid-resize',
                             { skipAccounting: false, fee: 0 }
                         );
+                        if (resizeOk === false) {
+                            manager.logger?.log?.(`Failed to resize order ${slot.id}`, 'warn');
+                        }
                     }
                 }
 
@@ -1222,14 +1224,16 @@ class Grid {
             }
         };
 
-        // Resolve sizing context per-side, but only for sides that have active orders.
-        // _getSizingContext calls recalculateFunds internally (locked), so we skip
-        // empty sides to avoid unnecessary recalculation.
-        const buyCtx = calculatedBuys.length > 0 && manager?.assets
-            ? await Grid._getSizingContext(manager, 'buy')
+        const needsBuy = calculatedBuys.length > 0 && manager?.assets;
+        const needsSell = calculatedSells.length > 0 && manager?.assets;
+        if (needsBuy || needsSell) {
+            await manager.recalculateFunds();
+        }
+        const buyCtx = needsBuy
+            ? await Grid._getSizingContext(manager, 'buy', { skipRecalc: true })
             : null;
-        const sellCtx = calculatedSells.length > 0 && manager?.assets
-            ? await Grid._getSizingContext(manager, 'sell')
+        const sellCtx = needsSell
+            ? await Grid._getSizingContext(manager, 'sell', { skipRecalc: true })
             : null;
 
         const buyIdeals = computeSideIdeals(calculatedBuys, ORDER_TYPES.BUY, buyCtx);

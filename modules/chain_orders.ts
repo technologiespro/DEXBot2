@@ -96,7 +96,7 @@
 
 const { BitShares, createAccountClient, waitForConnected } = require('./bitshares_client');
 const { floatToBlockchainInt, blockchainToFloat, normalizeInt, validateOrderAmountsWithinLimits } = require('./order/utils/math');
-const { FILL_PROCESSING, TIMING, NATIVE_CLIENT, BUILD_DIR } = require('./constants');
+const { FILL_PROCESSING, TIMING, NATIVE_CLIENT, BUILD_DIR, DAEMON_ERRORS } = require('./constants');
 const Format = require('./order/format');
 const { toFiniteNumber } = Format;
 const AsyncLock = require('./order/async_lock');
@@ -450,8 +450,8 @@ async function executeViaDaemonToken(accountName, signingToken, operations) {
         if (err instanceof BroadcastUncertainError) {
             throw err;
         }
-        if (err.message && (err.message.includes('invalid or expired session') || err.message.includes('invalid source authentication'))) {
-            const isSourceAuthError = err.message.includes('invalid source authentication');
+        if (err.message && (err.message.includes(DAEMON_ERRORS.SESSION_EXPIRED) || err.message.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED))) {
+            const isSourceAuthError = err.message.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED);
             chainOrdersLogger.warn(
                 isSourceAuthError
                     ? `Source auth denied for ${accountName}, renegotiating session and reloading daemon policy...`

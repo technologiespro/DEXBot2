@@ -638,14 +638,17 @@ class NodeManager {
      */
     getSummary() {
         const stats = Array.from(this.nodeStats.values());
-        const counts = {
+        const counts: Record<string, number> = {
             total: stats.length,
-            healthy: stats.filter(s => s.status === 'healthy').length,
-            slow: stats.filter(s => s.status === 'slow').length,
-            failed: stats.filter(s => s.status === 'failed').length,
-            blacklisted: stats.filter(s => s.status === 'blacklisted').length,
-            unchecked: stats.filter(s => s.status === 'unchecked').length
+            healthy: 0,
+            slow: 0,
+            failed: 0,
+            blacklisted: 0,
+            unchecked: 0
         };
+        for (const s of stats) {
+            if (s.status in counts) counts[s.status]++;
+        }
 
         const bestNode = this.getBestNode();
         const statsWithLatency = stats.filter(s => s.latencyMs !== null);

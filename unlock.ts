@@ -1236,7 +1236,7 @@ function candidateRuntimeScriptPaths(scriptSegments: string[]): Set<string> {
     candidates.add(runtimeScriptPath(scriptSegments));
 
     candidates.add(scriptPathForRoot(ROOT, scriptSegments, '.ts'));
-    candidates.add(scriptPathForRoot(path.join(ROOT, 'dist'), scriptSegments, '.js'));
+    candidates.add(scriptPathForRoot(path.join(ROOT, BUILD_DIR), scriptSegments, '.js'));
 
     if (scriptSegments.length === 1) {
         candidates.add(scriptPathForRoot(ROOT, scriptSegments, '.js'));
@@ -1246,7 +1246,7 @@ function candidateRuntimeScriptPaths(scriptSegments: string[]): Set<string> {
     if (scriptSegments.length === 1 && scriptSegments[0] === 'unlock') {
         candidates.add(scriptPathForRoot(ROOT, ['unlock-start'], '.js'));
         candidates.add(scriptPathForRoot(ROOT, ['unlock-start'], '.ts'));
-        candidates.add(scriptPathForRoot(path.join(ROOT, 'dist'), ['unlock-start'], '.js'));
+        candidates.add(scriptPathForRoot(path.join(ROOT, BUILD_DIR), ['unlock-start'], '.js'));
     }
 
     return candidates;
