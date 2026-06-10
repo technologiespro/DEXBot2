@@ -336,7 +336,7 @@ try {
     if (fs.existsSync(SOURCE_MARKER)) {
         if (!fs.existsSync(DIST_MARKER)) {
             throw new Error(
-                `Build did not produce dist/modules/dexbot_class.js. ` +
+                `Build did not produce ${BUILD_DIR}/modules/dexbot_class.js. ` +
                 `Refusing to restart PM2 with a missing bundle. ` +
                 `Run \`npm run build\` manually and inspect tsc output.`
             );
@@ -346,14 +346,14 @@ try {
         const distStat = fs.statSync(DIST_MARKER);
         if (distStat.mtimeMs < srcStat.mtimeMs) {
             throw new Error(
-                `Build did not refresh dist/modules/dexbot_class.js ` +
+                `Build did not refresh ${BUILD_DIR}/modules/dexbot_class.js ` +
                 `(src mtime=${srcStat.mtime.toISOString()}, ` +
-                `dist mtime=${distStat.mtime.toISOString()}). ` +
+                `${BUILD_DIR} mtime=${distStat.mtime.toISOString()}). ` +
                 `Refusing to restart PM2 with a stale bundle. ` +
                 `Run \`npm run build\` manually and inspect tsc output.`
             );
         }
-        log(`dist/ is fresh (mtime=${distStat.mtime.toISOString()}).`);
+        log(`${BUILD_DIR}/ is fresh (mtime=${distStat.mtime.toISOString()}).`);
     }
 
     /**

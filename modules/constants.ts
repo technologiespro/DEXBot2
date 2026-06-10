@@ -693,6 +693,10 @@ let MARKET_ADAPTER = {
     // LP fetcher when it splits long requests into sequential sub-requests.
     KIBANA_FETCH_CHUNK_MONTHS: 3,
 
+    // CEX_API_DELAY_MS: Minimum delay between paginated CEX API requests to avoid
+    // rate limiting. Applied between candle-fetch pages during synthetic data seeding.
+    CEX_API_DELAY_MS: 500,
+
     // AMA_DELTA_THRESHOLD_PERCENT: Percentage change in AMA center price that triggers a grid reset.
     //   - When AMA price moves ±AMA_DELTA_THRESHOLD_PERCENT from the last recorded center,
     //     a recalculate.<botKey>.trigger file is written to signal grid regeneration.

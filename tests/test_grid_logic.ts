@@ -10,12 +10,12 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const Grid = require('../modules/order/grid');
-const { ORDER_TYPES, ORDER_STATES, DEFAULT_CONFIG, GRID_LIMITS } = require('../modules/constants');
+const { ORDER_TYPES, ORDER_STATES, DEFAULT_CONFIG, GRID_LIMITS, BUILD_DIR } = require('../modules/constants');
 const { OrderManager } = require('../modules/order/manager');
 const { allocateFundsByWeights, getSingleDustThreshold } = require('../modules/order/utils/math');
 const { shouldFlagOutOfSpread } = require('../modules/order/utils/order');
 const { WHITELIST_FILE, resetMarketAdapterWhitelistCache } = require('../modules/market_adapter_whitelist');
-const _distWhitelist = require('../dist/modules/market_adapter_whitelist.js');
+const _distWhitelist = require(`../${BUILD_DIR}/modules/market_adapter_whitelist.js`);
 const _resetBothWhitelistCaches = () => {
     resetMarketAdapterWhitelistCache();
     _distWhitelist.resetMarketAdapterWhitelistCache();
@@ -512,11 +512,11 @@ async function runTests() {
             ? fs.readFileSync(WHITELIST_FILE, 'utf8')
             : null;
         const systemModule = require('../modules/order/utils/system');
-        const distSystemModule = require('../dist/modules/order/utils/system.js');
+        const distSystemModule = require(`../${BUILD_DIR}/modules/order/utils/system.js`);
         const originalDerivePrice = systemModule.derivePrice;
         const originalDistDerivePrice = distSystemModule.derivePrice;
         const originalGridModule = require.cache[gridModulePath];
-        const distGridPath = require.resolve('../dist/modules/order/grid.js');
+        const distGridPath = require.resolve(`../${BUILD_DIR}/modules/order/grid.js`);
         const originalDistGridModule = require.cache[distGridPath];
 
         fs.mkdirSync(ordersDir, { recursive: true });

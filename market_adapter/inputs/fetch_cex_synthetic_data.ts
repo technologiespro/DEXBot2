@@ -936,7 +936,8 @@ async function fetchHistoricalCandles(def, marketId, interval, intervalSeconds, 
             untilMs: pageEnd,
         }));
         if (!res.ok || !res.json) {
-            throw new Error(`HTTP ${res.status} ${res.statusText}`);
+            console.warn(`[CEX] ${def.name}: HTTP ${res.status} ${res.statusText} at cursor=${cursor} — skipping page`);
+            break;
         }
 
         const page = def.parseCandles(res.json);
@@ -953,6 +954,10 @@ async function fetchHistoricalCandles(def, marketId, interval, intervalSeconds, 
         cursor = lastTs + intervalMs;
         if (cursor > endMs) {
             break;
+        }
+
+        if (i < maxIterations - 1) {
+            await new Promise(r => setTimeout(r, MARKET_ADAPTER.CEX_API_DELAY_MS));
         }
     }
 

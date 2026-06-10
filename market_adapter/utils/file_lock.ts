@@ -38,8 +38,9 @@ function acquireFileLockSync(lockPath: any, opts: any = {}) {
     const now = Date.now();
 
     for (let pass = 0; pass < 2; pass++) {
+        let fd: number | null = null;
         try {
-            const fd = fs.openSync(lockPath, 'wx');
+            fd = fs.openSync(lockPath, 'wx');
             const payload = {
                 pid: process.pid,
                 createdAt: new Date(now).toISOString(),
@@ -55,6 +56,9 @@ function acquireFileLockSync(lockPath: any, opts: any = {}) {
             if (typeof heartbeat.unref === 'function') heartbeat.unref();
             return { fd, lockPath, heartbeat };
         } catch (err: any) {
+            if (fd !== null) {
+                try { fs.closeSync(fd); } catch (_: any) {}
+            }
             if (err.code !== 'EEXIST') throw err;
 
             const info = loadLockInfo(lockPath);
@@ -101,11 +105,15 @@ function acquirePathLockSync(filePath: any, opts: any = {}) {
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
+        let fd: number | null = null;
         try {
-            const fd = fs.openSync(lockPath, 'wx');
+            fd = fs.openSync(lockPath, 'wx');
             fs.writeFileSync(fd, `${JSON.stringify({ pid: process.pid, at: Date.now() })}\n`, 'utf8');
             return { fd, lockPath };
         } catch (err: any) {
+            if (fd !== null) {
+                try { fs.closeSync(fd); } catch (_: any) {}
+            }
             if (err.code !== 'EEXIST') throw err;
             try {
                 const stat = fs.statSync(lockPath);

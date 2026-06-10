@@ -398,9 +398,10 @@ async function runTests() {
 
         const originalFetchTotals = manager.fetchAccountTotals;
         const originalSyncFromOpenOrders = manager.syncFromOpenOrders;
+        const { BUILD_DIR } = require('../modules/constants');
         const chainOrdersPath = path.resolve(__dirname, '../modules/chain_orders.ts');
         const chainOrdersSourcePath = path.resolve(__dirname, '../modules/chain_orders.ts');
-        const distChainOrdersPath = path.resolve(__dirname, '../dist/modules/chain_orders.ts');
+        const distChainOrdersPath = path.resolve(__dirname, '..', BUILD_DIR, 'modules', 'chain_orders.ts');
         const stubbedChainOrders = {
             readOpenOrders: async () => [],
         };
