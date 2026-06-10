@@ -1,4 +1,5 @@
 const { createAccountClient } = require('./bitshares_client');
+const fs = require('fs');
 const path = require('path');
 const {
   isCredentialDaemonReady,
@@ -21,6 +22,22 @@ function getChainKeys() {
 function getCredentialPolicy() {
   if (!credentialPolicy) credentialPolicy = requireDexbot2Module('modules/credential_policy.js');
   return credentialPolicy;
+}
+
+function _sendSighupToDaemon() {
+  try {
+    const root = getDexbot2Root();
+    const readyFile = path.join(root, 'profiles', 'runtime', 'credential-daemon.ready');
+    if (fs.existsSync(readyFile)) {
+      const daemonInfo = JSON.parse(fs.readFileSync(readyFile, 'utf8'));
+      if (daemonInfo && daemonInfo.pid) {
+        process.kill(daemonInfo.pid, 'SIGHUP');
+        console.log(`[CLAW][credential-daemon] Sent SIGHUP (pid ${daemonInfo.pid}) to reload policy config`);
+      }
+    }
+  } catch (sigErr: any) {
+    console.warn(`[CLAW][credential-daemon] Could not send SIGHUP: ${sigErr.message}`);
+  }
 }
 
 /**
@@ -139,8 +156,15 @@ async function executeOperations(operations: any, options: Record<string, any> =
     } catch (err: any) {
       const msg = String(err.message || err);
       if (msg.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED) || msg.includes(DAEMON_ERRORS.SESSION_EXPIRED)) {
+        const isSourceAuthError = msg.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED);
         console.warn(`[CLAW] Session/HMAC error, re-resolving credentials and retrying: ${msg}`);
+        if (isSourceAuthError) {
+          _sendSighupToDaemon();
+        }
         const retry = await resolveSessionCredentials(accountName, options);
+        if (isSourceAuthError) {
+          await new Promise(r => setTimeout(r, 500));
+        }
         const result = await executeOperationsViaCredentialDaemon(accountName, ops, {
           socketPath: options.socketPath,
           timeoutMs: requestTimeoutMs,
@@ -236,8 +260,15 @@ async function broadcastOperation(operation: any, options: Record<string, any> =
     } catch (err: any) {
       const msg = String(err.message || err);
       if (msg.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED) || msg.includes(DAEMON_ERRORS.SESSION_EXPIRED)) {
+        const isSourceAuthError = msg.includes(DAEMON_ERRORS.SOURCE_AUTH_DENIED);
         console.warn(`[CLAW] Session/HMAC error, re-resolving credentials and retrying: ${msg}`);
+        if (isSourceAuthError) {
+          _sendSighupToDaemon();
+        }
         const retry = await resolveSessionCredentials(accountName, options);
+        if (isSourceAuthError) {
+          await new Promise(r => setTimeout(r, 500));
+        }
         return await doBroadcast(retry.sessionId, retry.botHmacSecret);
       }
       throw err;
