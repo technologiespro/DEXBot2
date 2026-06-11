@@ -97,7 +97,7 @@ async function runTests() {
 
         bot._wireStructuralGridResyncRequest();
 
-        manager._lastUnmatchedChainOrders = [{
+        (manager as any)._lastUnmatchedChainOrders = [{
             chainOrderId: '1.7.572303058',
             type: ORDER_TYPES.SELL,
             price: 1.101,
@@ -216,8 +216,8 @@ async function runTests() {
         bot._wireStructuralGridResyncRequest();
 
         const unmatched = [{ chainOrderId: '1.7.572303058', type: ORDER_TYPES.SELL, price: 1.1, size: 10 }];
-        const first = await manager.requestStructuralGridResync('first trigger', { unmatchedChainOrders: unmatched });
-        const second = await manager.requestStructuralGridResync('second trigger', { unmatchedChainOrders: unmatched });
+        const first = await (manager as any).requestStructuralGridResync('first trigger', { unmatchedChainOrders: unmatched });
+        const second = await (manager as any).requestStructuralGridResync('second trigger', { unmatchedChainOrders: unmatched });
 
         assert.strictEqual(first.scheduled, true, 'First call should report scheduled');
         assert.strictEqual(second.skipped, true, 'Second call should be deduped (skipped)');
@@ -231,7 +231,7 @@ async function runTests() {
             'Deduped calls must not produce additional requestGridReset invocations'
         );
 
-        const third = await manager.requestStructuralGridResync('after completion', { unmatchedChainOrders: unmatched });
+        const third = await (manager as any).requestStructuralGridResync('after completion', { unmatchedChainOrders: unmatched });
         assert.strictEqual(third.scheduled, true, 'After completion a fresh schedule should be accepted');
 
         await waitForResync(300);
@@ -295,7 +295,7 @@ async function runTests() {
 
         bot._wireStructuralGridResyncRequest();
 
-        const scheduleResult = await manager.requestStructuralGridResync('shutdown test trigger', {});
+        const scheduleResult = await (manager as any).requestStructuralGridResync('shutdown test trigger', {});
         assert.strictEqual(scheduleResult.scheduled, true, 'Schedule should be accepted before shutdown');
 
         await bot.shutdown();
@@ -308,7 +308,7 @@ async function runTests() {
             'Shutdown must clear pending structural resync timer and prevent requestGridReset'
         );
 
-        const afterShutdown = await manager.requestStructuralGridResync('after shutdown', {});
+        const afterShutdown = await (manager as any).requestStructuralGridResync('after shutdown', {});
         assert.strictEqual(afterShutdown.skipped, true, 'Schedule after shutdown must be skipped');
         assert.strictEqual(afterShutdown.reason, 'shutting down', 'Skip reason must mention shutdown');
 

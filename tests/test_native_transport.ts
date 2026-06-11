@@ -172,8 +172,8 @@ function createWsServer(port, options = {}) {
                     }
 
                     if (handlers.onMessage) handlers.onMessage(JSON.parse(frame.payload.toString()));
-                    if (typeof options.onMessage === 'function') {
-                        options.onMessage(JSON.parse(frame.payload.toString()));
+                    if (typeof (options as any).onMessage === 'function') {
+                        (options as any).onMessage(JSON.parse(frame.payload.toString()));
                     }
                 } catch (e) {
                     // Ignore parse errors for control frames

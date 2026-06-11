@@ -152,9 +152,9 @@ const tests = [
             const result = mockGetAssetFees('BTS', 100);
 
             assert(typeof result === 'object', 'BTS should return object');
-            assert(result.total !== undefined, 'Should have total field');
-            assert(result.createFee !== undefined, 'Should have createFee field');
-            assert(result.updateFee !== undefined, 'Should have updateFee field');
+            assert((result as any).total !== undefined, 'Should have total field');
+            assert((result as any).createFee !== undefined, 'Should have createFee field');
+            assert((result as any).updateFee !== undefined, 'Should have updateFee field');
         }
     },
     {

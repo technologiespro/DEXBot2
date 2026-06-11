@@ -216,7 +216,7 @@ async function testPersistenceCommitGuardRequestsResyncOnRepeatedFailure() {
     manager.persistGrid = async () => ({ isValid: false, reason: 'corrupted-state' });
 
     const resyncCalls = [];
-    manager.requestStructuralGridResync = async (reason, opts) => {
+    (manager as any).requestStructuralGridResync = async (reason, opts) => {
         resyncCalls.push({ reason, opts });
         return { scheduled: true };
     };

@@ -13,7 +13,7 @@ const chainOrdersPath = path.resolve(__dirname, '../modules/chain_orders.ts');
 const creditRuntimePath = path.resolve(__dirname, '../modules/credit_runtime.ts');
 
 function installStubs(calls, dbCalls, options = {}) {
-  const callOrders = options.callOrders || [
+  const callOrders = (options as any).callOrders || [
     {
       id: '1.8.1',
       borrower: '1.2.3',
@@ -25,7 +25,7 @@ function installStubs(calls, dbCalls, options = {}) {
       },
     },
   ];
-  const dealResponses = options.dealResponses || [[
+  const dealResponses = (options as any).dealResponses || [[
     {
       id: '1.19.77',
       borrower: '1.2.3',
@@ -41,7 +41,7 @@ function installStubs(calls, dbCalls, options = {}) {
     },
   ]];
   let dealResponseIndex = 0;
-  const assetsById = options.assetsById || {
+  const assetsById = (options as any).assetsById || {
     '1.3.10': {
       id: '1.3.10',
       symbol: 'HONEST.USD',
@@ -56,7 +56,7 @@ function installStubs(calls, dbCalls, options = {}) {
     },
   };
   const assetsBySymbol = new Map(Object.values(assetsById).map((asset) => [(asset as any).symbol, asset]));
-  const bitassetObjects = options.bitassetObjects || {
+  const bitassetObjects = (options as any).bitassetObjects || {
     '2.4.1': {
       id: '2.4.1',
       current_feed: {
@@ -67,8 +67,8 @@ function installStubs(calls, dbCalls, options = {}) {
       },
     },
   };
-  const assetDynamicData = options.assetDynamicData || {};
-  const offersById = options.offersById || {
+  const assetDynamicData = (options as any).assetDynamicData || {};
+  const offersById = (options as any).offersById || {
     '1.18.42': {
       id: '1.18.42',
       asset_type: '1.3.10',
@@ -85,9 +85,9 @@ function installStubs(calls, dbCalls, options = {}) {
       },
     },
   };
-  const creditOffersByOwner = options.creditOffersByOwner || Object.values(offersById);
-  const poolByShareAsset = options.poolByShareAsset || {};
-  const poolByAssetPair = options.poolByAssetPair || {};
+  const creditOffersByOwner = (options as any).creditOffersByOwner || Object.values(offersById);
+  const poolByShareAsset = (options as any).poolByShareAsset || {};
+  const poolByAssetPair = (options as any).poolByAssetPair || {};
   const pairKey = (left, right) => [String(left), String(right)].sort().join('|');
   const handleDbCall = async (method, args) => {
     dbCalls.push({ method, args });
@@ -141,12 +141,12 @@ function installStubs(calls, dbCalls, options = {}) {
       return Object.values(offersById).filter((offer) => String(offer?.asset_type) === String(assetId));
     }
     if (method === 'get_on_chain_asset_balances') {
-      return options.assetBalances || {};
+      return (options as any).assetBalances || {};
     }
     return [];
   };
 
-  const onExecuteBatch = typeof options.onExecuteBatch === 'function' ? options.onExecuteBatch : null;
+  const onExecuteBatch = typeof (options as any).onExecuteBatch === 'function' ? (options as any).onExecuteBatch : null;
 
   const originalBitshares = setCachedModule(bitsharesClientPath, {
     BitShares: {
@@ -182,7 +182,7 @@ function installStubs(calls, dbCalls, options = {}) {
       return null;
     },
     getOnChainAssetBalances: async (accountRef, assets) => {
-      const balanceMap = options.assetBalances || {};
+      const balanceMap = (options as any).assetBalances || {};
       const out: any = {};
       for (const asset of assets || []) {
         const key = String(asset);

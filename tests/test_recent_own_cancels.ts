@@ -184,7 +184,7 @@ async function runTests() {
                         const tx = {
                             limit_order_cancel: (opData) => { txOps.last = opData; },
                         };
-                        tx.broadcast = async () => {
+                        (tx as any).broadcast = async () => {
                             txBroadcasted.count += 1;
                             return [[1, '1.7.0']];
                         };
@@ -251,7 +251,7 @@ async function runTests() {
                         const tx = {
                             limit_order_cancel: () => {},
                         };
-                        tx.broadcast = async () => {
+                        (tx as any).broadcast = async () => {
                             throw new Error('simulated broadcast failure');
                         };
                         return tx;

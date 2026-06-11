@@ -310,13 +310,13 @@ async function testRejectsCreatesWhenUnmatchedChainOrdersExist() {
     let structuralResyncRequests = 0;
     let executeCalls = 0;
 
-    manager._lastUnmatchedChainOrders = [{
+    (manager as any)._lastUnmatchedChainOrders = [{
         chainOrderId: '1.7.572303058',
         type: ORDER_TYPES.SELL,
         price: 1.101,
         size: 10
     }];
-    manager.requestStructuralGridResync = async () => {
+    (manager as any).requestStructuralGridResync = async () => {
         structuralResyncRequests += 1;
         return { scheduled: true };
     };
@@ -356,7 +356,7 @@ async function testMissingCreateBlockerMergesWithExistingUnmatchedOrders() {
     console.log('\n[COW-COMMIT-006] missing create blocker merges with existing unmatched orders...');
 
     const { bot, manager } = createCowExecutionFixture();
-    manager._lastUnmatchedChainOrders = [{
+    (manager as any)._lastUnmatchedChainOrders = [{
         chainOrderId: '1.7.572303058',
         type: ORDER_TYPES.SELL,
         price: 1.101,
@@ -389,12 +389,12 @@ async function testMissingCreateBlockerMergesWithExistingUnmatchedOrders() {
         }
     }]);
 
-    assert.strictEqual(manager._lastUnmatchedChainOrders.length, 2, 'Existing unmatched order should be preserved and duplicate blocker deduped');
-    assert.strictEqual(manager._lastUnmatchedChainOrders[0].chainOrderId, '1.7.572303058', 'Existing unmatched order should remain first');
-    assert.strictEqual(manager._lastUnmatchedChainOrders[1].reason, 'missing-create-result', 'Missing create blocker should be appended');
-    assert(manager._lastUnmatchedChainOrders[1].fingerprint.includes('type='), 'Missing create blocker should include local type fingerprint');
-    assert(manager._lastUnmatchedChainOrders[1].fingerprint.includes('price='), 'Missing create blocker should include local price fingerprint');
-    assert(manager._lastUnmatchedChainOrders[1].fingerprint.includes('size='), 'Missing create blocker should include local size fingerprint');
+    assert.strictEqual((manager as any)._lastUnmatchedChainOrders.length, 2, 'Existing unmatched order should be preserved and duplicate blocker deduped');
+    assert.strictEqual((manager as any)._lastUnmatchedChainOrders[0].chainOrderId, '1.7.572303058', 'Existing unmatched order should remain first');
+    assert.strictEqual((manager as any)._lastUnmatchedChainOrders[1].reason, 'missing-create-result', 'Missing create blocker should be appended');
+    assert((manager as any)._lastUnmatchedChainOrders[1].fingerprint.includes('type='), 'Missing create blocker should include local type fingerprint');
+    assert((manager as any)._lastUnmatchedChainOrders[1].fingerprint.includes('price='), 'Missing create blocker should include local price fingerprint');
+    assert((manager as any)._lastUnmatchedChainOrders[1].fingerprint.includes('size='), 'Missing create blocker should include local size fingerprint');
 
     console.log('✓ COW-COMMIT-006 passed');
 }
@@ -445,10 +445,10 @@ async function testNoPostBatchCacheDeductionForCreates() {
     });
 
     let recoverySyncCalls = 0;
-    manager.syncFromOpenOrders = async () => {
+    (manager as any).syncFromOpenOrders = async () => {
         recoverySyncCalls += 1;
-        manager._lastUnmatchedChainOrders = [];
-        manager._lastUnmatchedChainOrdersAt = 0;
+        (manager as any)._lastUnmatchedChainOrders = [];
+        (manager as any)._lastUnmatchedChainOrdersAt = 0;
         return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [], unmatchedChainOrders: [] };
     };
     const originalReadOpenOrders = chainOrders.readOpenOrders;
@@ -473,8 +473,8 @@ async function testNoPostBatchCacheDeductionForCreates() {
     assert.strictEqual(Array.isArray(result.missingCreateResults), true, 'Missing create result should be reported via missingCreateResults key');
     assert.strictEqual(result.missingCreateResults.length, 1, 'Single missing create result should be reported');
     assert.strictEqual(recoverySyncCalls, 1, 'Missing create result must trigger immediate recovery sync');
-    assert.strictEqual(manager._lastUnmatchedChainOrders.length, 1, 'Missing create result should leave a structural create blocker');
-    assert.strictEqual(manager._lastUnmatchedChainOrders[0].reason, 'missing-create-result', 'Blocker should identify missing create result');
+    assert.strictEqual((manager as any)._lastUnmatchedChainOrders.length, 1, 'Missing create result should leave a structural create blocker');
+    assert.strictEqual((manager as any)._lastUnmatchedChainOrders[0].reason, 'missing-create-result', 'Blocker should identify missing create result');
     // Cache deduction now happens in real-time via updateOptimisticFreeBalance
     // (inside _commitWorkingGrid), not as a separate post-batch step.
     // No cow-placements deductions should occur (would be double-deducting).
@@ -563,10 +563,10 @@ async function testNoPostBatchCacheDeductionForMixedCreates() {
     });
 
     let recoverySyncCalls = 0;
-    manager.syncFromOpenOrders = async () => {
+    (manager as any).syncFromOpenOrders = async () => {
         recoverySyncCalls += 1;
-        manager._lastUnmatchedChainOrders = [];
-        manager._lastUnmatchedChainOrdersAt = 0;
+        (manager as any)._lastUnmatchedChainOrders = [];
+        (manager as any)._lastUnmatchedChainOrdersAt = 0;
         return { filledOrders: [], updatedOrders: [], ordersNeedingCorrection: [], unmatchedChainOrders: [] };
     };
     const originalReadOpenOrders = chainOrders.readOpenOrders;
@@ -591,8 +591,8 @@ async function testNoPostBatchCacheDeductionForMixedCreates() {
     assert.strictEqual(Array.isArray(result.missingCreateResults), true, 'Missing mixed create result should be reported via missingCreateResults key');
     assert.strictEqual(result.missingCreateResults.length, 1, 'Single missing mixed create result should be reported');
     assert.strictEqual(recoverySyncCalls, 1, 'Missing mixed create result must trigger recovery sync');
-    assert.strictEqual(manager._lastUnmatchedChainOrders.length, 1, 'Missing mixed create result should leave a structural create blocker');
-    assert.strictEqual(manager._lastUnmatchedChainOrders[0].reason, 'missing-create-result', 'Mixed create blocker should identify missing result');
+    assert.strictEqual((manager as any)._lastUnmatchedChainOrders.length, 1, 'Missing mixed create result should leave a structural create blocker');
+    assert.strictEqual((manager as any)._lastUnmatchedChainOrders[0].reason, 'missing-create-result', 'Mixed create blocker should identify missing result');
     // Cache deduction now happens in real-time via updateOptimisticFreeBalance
     // (inside _commitWorkingGrid), not as a separate post-batch step.
     assert.strictEqual(postBatchAdjustments.length, 0,

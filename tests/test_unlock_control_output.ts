@@ -88,7 +88,7 @@ function installStubs() {
         }
         if (String(filePath) === monolithicBotInfoPath) {
             const err = new Error('ENOENT: no such file or directory');
-            err.code = 'ENOENT';
+            (err as any).code = 'ENOENT';
             throw err;
         }
         return originalReadFileSync(filePath, options);

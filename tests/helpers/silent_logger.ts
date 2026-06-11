@@ -3,7 +3,7 @@ function createTestLogger({ onLog = null, includeFundsStatus = true } = {}) {
         log: typeof onLog === 'function' ? onLog : () => {},
     };
     if (includeFundsStatus) {
-        logger.logFundsStatus = () => {};
+        (logger as any).logFundsStatus = () => {};
     }
     return logger;
 }

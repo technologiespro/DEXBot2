@@ -23,7 +23,7 @@ function setCachedModule(modulePath, exports, opts = {}) {
         exports,
     } as any;
 
-    if (opts.mirrorDist !== false) {
+    if ((opts as any).mirrorDist !== false) {
         const distPath = _deriveDistPath(modulePath);
         if (distPath) {
             require.cache[distPath] = require.cache[modulePath];
@@ -40,7 +40,7 @@ function restoreCachedModule(modulePath, original, opts = {}) {
         delete require.cache[modulePath];
     }
 
-    if (opts.mirrorDist !== false) {
+    if ((opts as any).mirrorDist !== false) {
         const distPath = _deriveDistPath(modulePath);
         if (distPath) {
             delete require.cache[distPath];

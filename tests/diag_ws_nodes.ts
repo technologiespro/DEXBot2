@@ -93,7 +93,7 @@ async function testNode(nodeUrl, index) {
         result.checks.push('connect');
     } catch (err) {
         log(`  connect ✗ ${err.message}`);
-        result.ok = false; result.error = `connect: ${err.message}`;
+        result.ok = false; (result as any).error = `connect: ${err.message}`;
         return result;
     }
 
@@ -107,7 +107,7 @@ async function testNode(nodeUrl, index) {
         result.checks.push('login');
     } catch (err) {
         log(`  login ✗ ${err.message}`);
-        result.ok = false; result.error = `login: ${err.message}`;
+        result.ok = false; (result as any).error = `login: ${err.message}`;
         try { ws.close(); } catch (_) {} return result;
     }
 
@@ -121,7 +121,7 @@ async function testNode(nodeUrl, index) {
         }
     } catch (err) {
         log(`  chain ✗ ${err.message}`);
-        result.ok = false; result.error = `chain: ${err.message}`;
+        result.ok = false; (result as any).error = `chain: ${err.message}`;
         try { ws.close(); } catch (_) {} return result;
     }
     log(`  chain ✓`);
@@ -138,7 +138,7 @@ async function testNode(nodeUrl, index) {
         result.checks.push('assets');
     } catch (err) {
         log(`  assets ✗ ${err.message}`);
-        result.ok = false; result.error = `assets: ${err.message}`;
+        result.ok = false; (result as any).error = `assets: ${err.message}`;
         try { ws.close(); } catch (_) {} return result;
     }
 
@@ -150,7 +150,7 @@ async function testNode(nodeUrl, index) {
         result.checks.push('pool-swaps');
     } catch (err) {
         log(`  pool-swaps ✗ ${err.message}`);
-        result.ok = false; result.error = `pool-swaps: ${err.message}`;
+        result.ok = false; (result as any).error = `pool-swaps: ${err.message}`;
         try { ws.close(); } catch (_) {} return result;
     }
 
@@ -168,7 +168,7 @@ async function testNode(nodeUrl, index) {
         result.checks.push('book-candles');
     } catch (err) {
         log(`  book-candles ✗ ${err.message}`);
-        result.ok = false; result.error = `book-candles: ${err.message}`;
+        result.ok = false; (result as any).error = `book-candles: ${err.message}`;
         try { ws.close(); } catch (_) {} return result;
     }
 

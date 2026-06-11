@@ -9,7 +9,7 @@ async function main() {
     const bsModule = require('../modules/bitshares_client');
     const originalBS = bsModule.BitShares;
 
-    const mock = { assets: {}, db: {} };
+    const mock = { assets: {}, db: {} as any };
     const assetA = 'IOB.XRP';
     const assetB = 'BTS';
     mock.assets[assetA.toLowerCase()] = { id: '1.3.100' };

@@ -384,7 +384,7 @@ async function testIllegalBatchAbortArmsMaintenanceCooldown() {
 
         chainOrders.executeBatch = async () => {
             const err = new Error('simulated illegal state');
-            err.code = 'ILLEGAL_ORDER_STATE';
+            (err as any).code = 'ILLEGAL_ORDER_STATE';
             throw err;
         };
 

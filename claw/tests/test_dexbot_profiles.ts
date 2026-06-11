@@ -60,7 +60,7 @@ async function testAtomicWriteFailsFastWhenLockCannotBeAcquired() {
   fs.writeFile = async (targetPath, data, options) => {
     if (String(targetPath).endsWith('.lock')) {
       const err = new Error('lock busy');
-      err.code = 'EEXIST';
+      (err as any).code = 'EEXIST';
       throw err;
     }
     return originalWriteFile.call(fs, targetPath, data, options);

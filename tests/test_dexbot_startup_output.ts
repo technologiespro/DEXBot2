@@ -91,8 +91,8 @@ function installStubs() {
 
         async shutdown() {}
     }
-    StubSharedDEXBot.authenticateWithChainKeys = async () => {};
-    StubSharedDEXBot.normalizeBotEntry = (bot, index) => ({
+    (StubSharedDEXBot as any).authenticateWithChainKeys = async () => {};
+    (StubSharedDEXBot as any).normalizeBotEntry = (bot, index) => ({
         ...bot,
         active: bot.active !== false,
         botIndex: index,

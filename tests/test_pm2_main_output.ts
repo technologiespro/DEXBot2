@@ -171,8 +171,8 @@ function installStubs() {
 
     process.exit = (code = 0) => {
         const err = new Error(`process.exit(${code})`);
-        err.code = 'TEST_PROCESS_EXIT';
-        err.exitCode = code;
+        (err as any).code = 'TEST_PROCESS_EXIT';
+        (err as any).exitCode = code;
         throw err;
     };
 }

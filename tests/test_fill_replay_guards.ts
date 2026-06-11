@@ -28,8 +28,8 @@ async function createBotFixture(botKey, options = {}) {
         },
         async updateProcessedFillsBatch(savedBotKey, fills) {
             const entries = fills instanceof Map ? Array.from(fills.entries()) : fills;
-            if (options.failProcessedFillWrites) {
-                throw new Error(options.failProcessedFillWrites);
+            if ((options as any).failProcessedFillWrites) {
+                throw new Error((options as any).failProcessedFillWrites);
             }
             persistedFillBatches.push(entries);
             for (const [fillKey, timestamp] of entries) {
@@ -389,7 +389,7 @@ async function runTests() {
         };
         bot._executeBatchIfNeeded = async () => {
             const err = new Error('Credential daemon unavailable before COW batch broadcast: ENOENT');
-            err.code = 'CREDENTIAL_DAEMON_UNAVAILABLE';
+            (err as any).code = 'CREDENTIAL_DAEMON_UNAVAILABLE';
             throw err;
         };
         bot._triggerStateRecoverySync = async () => {

@@ -20,7 +20,7 @@ console.log('Testing Node Failover Integration...\n');
 const tempStateDirs: any[] = [];
 
 function createNodeManager(config = {}) {
-    if (config.stateDir) return new NodeManager(config);
+    if ((config as any).stateDir) return new NodeManager(config);
     const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dexbot-node-failover-test-'));
     tempStateDirs.push(stateDir);
     return new NodeManager({ ...config, stateDir });

@@ -92,7 +92,7 @@ async function testVerifiedAfterFailureRefetchesOpenOrders() {
     let syncSource = null;
     let syncOptions = null;
     let syncPayload = null;
-    manager.syncFromOpenOrders = async (chainOrders, options) => {
+    (manager as any).syncFromOpenOrders = async (chainOrders, options) => {
         syncCalls++;
         syncPayload = chainOrders;
         syncOptions = options;

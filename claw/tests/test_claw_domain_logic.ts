@@ -54,8 +54,8 @@ function createHonestHarness(options = {}) {
     symbol: 'HONEST.EUR'
   };
   const ordinary = { id: '1.3.200', precision: 5, symbol: 'ABC' };
-  const listAssetPages = Array.isArray(options.listAssetPages)
-    ? options.listAssetPages
+  const listAssetPages = Array.isArray((options as any).listAssetPages)
+    ? (options as any).listAssetPages
     : [
         [referenceAsset, honestUsd, ordinary],
         [referenceAsset, honestUsd, ordinary]

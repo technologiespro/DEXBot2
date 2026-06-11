@@ -24,7 +24,7 @@ async function runAutoderiveForBot(botCfg) {
     const systemModule = require('../modules/order/utils/system');
 
     // Create a mock BitShares object with db helpers used by derive functions
-    const mock = { assets: {}, db: {} };
+    const mock = { assets: {}, db: {} as any };
     const assetA = botCfg.assetA; const assetB = botCfg.assetB;
     if (!assetA || !assetB) throw new Error('Bot configuration missing assetA/assetB');
 

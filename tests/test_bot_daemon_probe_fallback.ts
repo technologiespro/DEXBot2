@@ -78,7 +78,7 @@ function installStubs() {
 
         async shutdown() {}
     }
-    StubDEXBot.normalizeBotEntry = (bot, index) => ({
+    (StubDEXBot as any).normalizeBotEntry = (bot, index) => ({
         ...bot,
         botIndex: index,
         botKey: `bot-${index}`,

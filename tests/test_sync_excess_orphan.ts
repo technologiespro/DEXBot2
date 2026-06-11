@@ -7,10 +7,10 @@ const { calculatePriceTolerance } = require('../modules/order/utils/math');
 
 function makeMgr(opts = {}) {
     const orders = new Map();
-    for (const o of opts.orders || []) {
+    for (const o of (opts as any).orders || []) {
         orders.set(o.id, { ...o });
     }
-    const assets = opts.assets || {
+    const assets = (opts as any).assets || {
         assetA: { id: '1.3.0', precision: 8, symbol: 'BTS' },
         assetB: { id: '1.3.121', precision: 5, symbol: 'USD' }
     };

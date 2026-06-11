@@ -74,7 +74,7 @@ function installStubs() {
 
     const masterPasswordError = new Error('Incorrect master password after 3 attempts.');
     masterPasswordError.name = 'MasterPasswordError';
-    masterPasswordError.code = 'MASTER_PASSWORD_FAILED';
+    (masterPasswordError as any).code = 'MASTER_PASSWORD_FAILED';
 
     class StubSharedDEXBot {
     [key: string]: any;
@@ -88,8 +88,8 @@ function installStubs() {
 
         async shutdown() {}
     }
-    StubSharedDEXBot.authenticateWithChainKeys = async () => {};
-    StubSharedDEXBot.normalizeBotEntry = (bot, index) => ({
+    (StubSharedDEXBot as any).authenticateWithChainKeys = async () => {};
+    (StubSharedDEXBot as any).normalizeBotEntry = (bot, index) => ({
         ...bot,
         active: bot.active !== false,
         botIndex: index,

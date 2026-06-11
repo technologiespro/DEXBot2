@@ -64,22 +64,22 @@ async function testBTSFeeObjectBackwardsCompat() {
     // Test 2: Existing fields are still present
     {
         const result = getAssetFeesMock('BTS', 1000, true);
-        const hasOldFields = result.total !== undefined && result.createFee !== undefined && result.netFee !== undefined;
+        const hasOldFields = (result as any).total !== undefined && (result as any).createFee !== undefined && (result as any).netFee !== undefined;
         logTest('Object contains old fee fields', hasOldFields, `total, createFee, netFee present`);
     }
 
     // Test 3: New netProceeds field is added
     {
         const result = getAssetFeesMock('BTS', 1000, true);
-        const hasNetProceeds = result.netProceeds !== undefined;
-        logTest('Object includes new netProceeds field', hasNetProceeds, `${result.netProceeds}`);
+        const hasNetProceeds = (result as any).netProceeds !== undefined;
+        logTest('Object includes new netProceeds field', hasNetProceeds, `${(result as any).netProceeds}`);
     }
 
     // Test 4: Code expecting old behavior (accessing total) still works
     {
         const result = getAssetFeesMock('BTS', 1000, true);
-        const totalIsNumber = typeof result.total === 'number';
-        logTest('Legacy code accessing .total still works', totalIsNumber, `total = ${result.total}`);
+        const totalIsNumber = typeof (result as any).total === 'number';
+        logTest('Legacy code accessing .total still works', totalIsNumber, `total = ${(result as any).total}`);
     }
 
     // Test 5: New code can safely check typeof and access netProceeds
@@ -96,10 +96,10 @@ async function testBTSFeeObjectBackwardsCompat() {
         const makerResult = getAssetFeesMock('BTS', 1000, true);
         const takerResult = getAssetFeesMock('BTS', 1000, false);
 
-        const makerNetFee = makerResult.netFee;
-        const takerNetFee = takerResult.netFee;
-        const makerProceeds = makerResult.netProceeds;
-        const takerProceeds = takerResult.netProceeds;
+        const makerNetFee = (makerResult as any).netFee;
+        const takerNetFee = (takerResult as any).netFee;
+        const makerProceeds = (makerResult as any).netProceeds;
+        const takerProceeds = (takerResult as any).netProceeds;
 
         const makerHasRefund = makerProceeds > 1000;
         const takerHasNoRefund = takerProceeds === 1000;
@@ -185,8 +185,8 @@ async function testFeeCalculationAccuracy() {
     {
         const result = getAssetFeesMock('BTS', 1000, true);
         const expectedNetFee = 100 * 0.1; // 10% of 100 = 10
-        logTest('BTS maker net fee = 10% of creation fee', result.netFee === expectedNetFee,
-                `${result.netFee} === ${expectedNetFee}`);
+        logTest('BTS maker net fee = 10% of creation fee', (result as any).netFee === expectedNetFee,
+                `${(result as any).netFee} === ${expectedNetFee}`);
     }
 
     // Test 2: BTS maker proceeds include refund
@@ -194,8 +194,8 @@ async function testFeeCalculationAccuracy() {
         const assetAmount = 1000;
         const result = getAssetFeesMock('BTS', assetAmount, true);
         const expectedProceeds = assetAmount + (100 * 0.9); // amount + 90% refund
-        logTest('BTS maker netProceeds = amount + 90% refund', result.netProceeds === expectedProceeds,
-                `${result.netProceeds} === ${expectedProceeds}`);
+        logTest('BTS maker netProceeds = amount + 90% refund', (result as any).netProceeds === expectedProceeds,
+                `${(result as any).netProceeds} === ${expectedProceeds}`);
     }
 
     // Test 3: BTS taker has no refund
@@ -203,8 +203,8 @@ async function testFeeCalculationAccuracy() {
         const assetAmount = 1000;
         const result = getAssetFeesMock('BTS', assetAmount, false);
         const expectedProceeds = assetAmount; // No refund for taker
-        logTest('BTS taker netProceeds = amount (no refund)', result.netProceeds === expectedProceeds,
-                `${result.netProceeds} === ${expectedProceeds}`);
+        logTest('BTS taker netProceeds = amount (no refund)', (result as any).netProceeds === expectedProceeds,
+                `${(result as any).netProceeds} === ${expectedProceeds}`);
     }
 
     // Test 4: USD fee deduction (0.2% maker fee)

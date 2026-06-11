@@ -31,21 +31,21 @@ function createOrder(type, price, size, id = null, state = ORDER_STATES.ACTIVE) 
  */
 function createMockManager(options = {}) {
     return {
-        config: options.config || { botKey: 'test-bot' },
-        funds: options.funds || { 
+        config: (options as any).config || { botKey: 'test-bot' },
+        funds: (options as any).funds || { 
             total: { grid: { buy: 100, sell: 100 } },
             virtual: { buy: 100, sell: 100 }
         },
         orders: new Map(),
-        assets: options.assets || { 
+        assets: (options as any).assets || { 
             assetA: { precision: 8 }, 
             assetB: { precision: 8 } 
         },
         logger: {
-            log: options.logFn || (() => {})
+            log: (options as any).logFn || (() => {})
         },
-        _updateOrder: options.updateOrderFn || ((o) => {}),
-        recalculateFunds: options.recalculateFundsFn || (() => {})
+        _updateOrder: (options as any).updateOrderFn || ((o) => {}),
+        recalculateFunds: (options as any).recalculateFundsFn || (() => {})
     };
 }
 

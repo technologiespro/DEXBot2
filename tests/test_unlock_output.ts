@@ -161,7 +161,7 @@ function installStubs() {
             if (signal === 0 || signal === undefined) {
                 if (!state.monolithicAlive) {
                     const err = new Error('No such process');
-                    err.code = 'ESRCH';
+                    (err as any).code = 'ESRCH';
                     throw err;
                 }
                 return true;
@@ -181,7 +181,7 @@ function installStubs() {
     };
     process.exit = (code) => {
         const err = new Error(`process.exit:${code}`);
-        err.code = 'TEST_PROCESS_EXIT';
+        (err as any).code = 'TEST_PROCESS_EXIT';
         throw err;
     };
 }
