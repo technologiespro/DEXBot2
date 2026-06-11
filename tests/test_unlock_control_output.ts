@@ -1,10 +1,9 @@
 const assert = require('assert');
-const { EventEmitter } = require('events');
 const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { loadSettingsFile, resolveRawBotEntries } = require('../modules/bot_settings');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
+const { makeControllerStub, getActiveBotNames, stripAnsi, makeFakeChild, hasActiveAmaBot } = require('./helpers/unlock_test_helpers');
 
 console.log('Running unlock control output tests');
 
@@ -31,17 +30,7 @@ const state = {
     supervisorDeleteTransient: false,
 };
 
-function stripAnsi(text) {
-    return String(text).replace(/\x1b\[[0-9;]*m/g, '');
-}
-
-const controller = {
-    ensureCredentialDaemon: async () => false,
-    getManagedDaemonPid: () => null,
-    releaseManagedDaemon: () => {},
-    isDaemonReady: async () => true,
-    stopManagedDaemon: async () => {},
-};
+const controller = makeControllerStub();
 
 function resetState() {
     process.exitCode = 0;
@@ -50,22 +39,6 @@ function resetState() {
     state.controlCalls.length = 0;
     state.staleMonolithicPid = false;
     state.supervisorDeleteTransient = false;
-}
-
-function getActiveBotNames() {
-    const { config } = loadSettingsFile(botsFile, { silent: true, exitOnError: false });
-    return resolveRawBotEntries(config)
-        .filter((bot) => bot && bot.active !== false)
-        .map((bot) => String(bot.name));
-}
-
-function hasActiveAmaBot() {
-    const { config } = loadSettingsFile(botsFile, { silent: true, exitOnError: false });
-    return resolveRawBotEntries(config)
-        .some((bot) => {
-            const gridPrice = typeof bot?.gridPrice === 'string' ? bot.gridPrice.trim().toLowerCase() : '';
-            return bot && bot.active !== false && /^ama(?:[1-4])?$/.test(gridPrice);
-        });
 }
 
 function assertRuntimeServicesListed(command) {
@@ -95,18 +68,7 @@ function installStubs() {
     });
 
     childProcess.spawn = (command, args, options) => {
-        const child = new EventEmitter();
-        child.killed = false;
-        child.pid = 9999;
-        child.kill = () => {
-            child.killed = true;
-        };
-        child.unref = () => {};
-        process.nextTick(() => {
-            child.emit('spawn');
-            setImmediate(() => child.emit('close', 0));
-        });
-        return child;
+        return makeFakeChild();
     };
 
     fs.existsSync = (filePath) => {

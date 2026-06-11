@@ -22,7 +22,6 @@ const ALICE_STATS = '2.6.100';
 const BOB_ID = '1.2.200';
 
 function makeAccountRecord(account) {
-    // account can be a name ('alice', 'bob') or an id ('1.2.100', '1.2.200')
     const name = account === '1.2.200' ? 'bob' : account === '1.2.100' ? 'alice' : account;
     return [account, {
         account: {
@@ -31,6 +30,21 @@ function makeAccountRecord(account) {
             statistics: name === 'bob' ? '2.6.200' : '2.6.100',
         },
     }];
+}
+
+function makeChainClientMock({ historyImpl, setupNoticeHandler }: any) {
+    return {
+        transport: {
+            addMessageHandler(h) { return setupNoticeHandler(h); },
+        },
+        db: {
+            get_full_accounts: async ([account]) => [makeAccountRecord(account)],
+            call: async () => null,
+        },
+        history: {
+            getAccountHistoryOperations: historyImpl,
+        },
+    };
 }
 
 (function () {
@@ -67,31 +81,23 @@ function makeAccountRecord(account) {
         const historyPages = [];
         const delivered = [];
 
-        const chainClient = {
-            transport: {
-                addMessageHandler(h) { noticeHandler = h; return () => { noticeHandler = null; }; },
+        const chainClient = makeChainClientMock({
+            setupNoticeHandler: (h) => { noticeHandler = h; return () => { noticeHandler = null; }; },
+            historyImpl: async (accountId, opType, start, stop, limit) => {
+                historyPages.push({ accountId, opType, start, stop, limit });
+                if (limit === 1) {
+                    return [{ id: '1.11.100', block_num: 10, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.1' }] }];
+                }
+                if (stop === '1.11.99') {
+                    return [{ id: '1.11.100', block_num: 10, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.1' }] }];
+                }
+                if (stop === '1.11.100') {
+                    return [{ id: '1.11.101', block_num: 11, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.2' }] }];
+                }
+                if (stop === '1.11.101') return [];
+                return [];
             },
-            db: {
-                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
-                call: async () => null,
-            },
-            history: {
-                getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
-                    historyPages.push({ accountId, opType, start, stop, limit });
-                    if (limit === 1) {
-                        return [{ id: '1.11.100', block_num: 10, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.1' }] }];
-                    }
-                    if (stop === '1.11.99') {
-                        return [{ id: '1.11.100', block_num: 10, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.1' }] }];
-                    }
-                    if (stop === '1.11.100') {
-                        return [{ id: '1.11.101', block_num: 11, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.2' }] }];
-                    }
-                    if (stop === '1.11.101') return [];
-                    return [];
-                },
-            },
-        };
+        });
 
         (async () => {
             const manager = createSubscriptionManager(chainClient);
@@ -148,24 +154,17 @@ function makeAccountRecord(account) {
         const historyPages = [];
         const delivered = [];
 
-        const chainClient = {
-            transport: {
-                addMessageHandler(h) { noticeHandler = h; return () => { noticeHandler = null; }; },
+        const chainClient = makeChainClientMock({
+            setupNoticeHandler: (h) => { noticeHandler = h; return () => { noticeHandler = null; }; },
+            historyImpl: async (accountId, opType, start, stop, limit) => {
+                historyPages.push({ accountId, opType, start, stop, limit });
+                if (limit === 1) return [{ id: '1.11.200', block_num: 20, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.10' }] }];
+                if (stop === '1.11.199') return [{ id: '1.11.200', block_num: 20, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.10' }] }];
+                if (stop === '1.11.200') return [{ id: '1.11.201', block_num: 21, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.11' }] }];
+                if (stop === '1.11.201') return [{ id: '1.11.202', block_num: 22, trx_in_block: 3, op: [OP_FILL_ORDER, { order_id: '1.7.12' }] }];
+                return [];
             },
-            db: {
-                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
-                call: async () => null,
-            },
-            history: {
-                getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
-                    historyPages.push({ accountId, opType, start, stop, limit });
-                    if (limit === 1) return [{ id: '1.11.200', block_num: 20, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.10' }] }];
-                    if (stop === '1.11.199') return [{ id: '1.11.200', block_num: 20, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.10' }] }];
-                    if (stop === '1.11.200') return [{ id: '1.11.201', block_num: 21, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.11' }] }];
-                    return [];
-                },
-            },
-        };
+        });
 
         (async () => {
             const manager = createSubscriptionManager(chainClient);
@@ -200,24 +199,16 @@ function makeAccountRecord(account) {
         const deliveredBob = [];
         const historyAccounts = [];
 
-        const chainClient = {
-            transport: {
-                addMessageHandler(h) { noticeHandler = h; return () => { noticeHandler = null; }; },
+        const chainClient = makeChainClientMock({
+            setupNoticeHandler: (h) => { noticeHandler = h; return () => { noticeHandler = null; }; },
+            historyImpl: async (accountId, opType, start, stop, limit) => {
+                historyAccounts.push(accountId);
+                if (limit === 1) return [{ id: '1.11.300', block_num: 30, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.20' }] }];
+                if (stop === '1.11.299') return [{ id: '1.11.300', block_num: 30, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.20' }] }];
+                if (accountId !== ALICE_ID) return [];
+                return [];
             },
-            db: {
-                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
-                call: async () => null,
-            },
-            history: {
-                getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
-                    historyAccounts.push(accountId);
-                    if (limit === 1) return [{ id: '1.11.300', block_num: 30, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.20' }] }];
-                    if (stop === '1.11.299') return [{ id: '1.11.300', block_num: 30, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.20' }] }];
-                    if (accountId !== ALICE_ID) return [];
-                    return [];
-                },
-            },
-        };
+        });
 
         (async () => {
             const manager = createSubscriptionManager(chainClient);
@@ -251,31 +242,22 @@ function makeAccountRecord(account) {
         const delivered = [];
         const historyCalls = [];
 
-        const chainClient = {
-            transport: {
-                addMessageHandler(h) { noticeHandler = h; return () => { noticeHandler = null; }; },
+        const chainClient = makeChainClientMock({
+            setupNoticeHandler: (h) => { noticeHandler = h; return () => { noticeHandler = null; }; },
+            historyImpl: async (accountId, opType, start, stop, limit) => {
+                historyCalls.push({ start, stop, limit });
+                if (limit === 1) return [{ id: '1.11.500', block_num: 50, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.50' }] }];
+                if (stop === '1.11.499') {
+                    return [
+                        { id: '1.11.499', block_num: 49, trx_in_block: 0, op: [OP_FILL_ORDER, { order_id: '1.7.49' }] },
+                        { id: '1.11.500', block_num: 50, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.50' }] },
+                        { id: '1.11.501', block_num: 51, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.51' }] },
+                    ];
+                }
+                if (stop === '1.11.501') return [];
+                return [];
             },
-            db: {
-                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
-                call: async () => null,
-            },
-            history: {
-                getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
-                    historyCalls.push({ start, stop, limit });
-                    if (limit === 1) return [{ id: '1.11.500', block_num: 50, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.50' }] }];
-                    if (stop === '1.11.499') {
-                        // Return entries at cursor, before cursor, and after cursor
-                        return [
-                            { id: '1.11.499', block_num: 49, trx_in_block: 0, op: [OP_FILL_ORDER, { order_id: '1.7.49' }] },
-                            { id: '1.11.500', block_num: 50, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.50' }] },
-                            { id: '1.11.501', block_num: 51, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.51' }] },
-                        ];
-                    }
-                    if (stop === '1.11.501') return [];
-                    return [];
-                },
-            },
-        };
+        });
 
         (async () => {
             const manager = createSubscriptionManager(chainClient);
@@ -319,39 +301,29 @@ function makeAccountRecord(account) {
         const historyCalls = [];
         let handlers = [];
 
-        const chainClient = {
-            transport: {
-                addMessageHandler(h) {
-                    handlers.push(h);
-                    const unsubscribe = () => {
-                        const idx = handlers.indexOf(h);
-                        if (idx !== -1) handlers.splice(idx, 1);
-                    };
-                    unsubscribe.isActive = () => handlers.includes(h);
-                    return unsubscribe;
-                },
+        const chainClient = makeChainClientMock({
+            setupNoticeHandler: (h) => {
+                handlers.push(h);
+                const unsubscribe = () => {
+                    const idx = handlers.indexOf(h);
+                    if (idx !== -1) handlers.splice(idx, 1);
+                };
+                unsubscribe.isActive = () => handlers.includes(h);
+                return unsubscribe;
             },
-            db: {
-                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
-                call: async () => null,
+            historyImpl: async (accountId, opType, start, stop, limit) => {
+                historyCalls.push({ start, stop, limit });
+                if (limit === 1) return [{ id: '1.11.800', block_num: 80, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.80' }] }];
+                if (stop === '1.11.799') {
+                    return [{ id: '1.11.800', block_num: 80, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.80' }] }];
+                }
+                if (stop === '1.11.800') {
+                    return [{ id: '1.11.801', block_num: 81, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.81' }] }];
+                }
+                if (stop === '1.11.801') return [];
+                return [];
             },
-            history: {
-                getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
-                    historyCalls.push({ start, stop, limit });
-                    if (limit === 1) return [{ id: '1.11.800', block_num: 80, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.80' }] }];
-                    // Bootstrap: stop = decrement(800) = 799
-                    if (stop === '1.11.799') {
-                        return [{ id: '1.11.800', block_num: 80, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.80' }] }];
-                    }
-                    // Reconnect: stop = 800 (cursor after bootstrap)
-                    if (stop === '1.11.800') {
-                        return [{ id: '1.11.801', block_num: 81, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.81' }] }];
-                    }
-                    if (stop === '1.11.801') return [];
-                    return [];
-                },
-            },
-        };
+        });
 
         (async () => {
             const manager = createSubscriptionManager(chainClient);
@@ -385,28 +357,20 @@ function makeAccountRecord(account) {
         const delivered = [];
         const historyCalls = [];
 
-        const chainClient = {
-            transport: {
-                addMessageHandler(h) { noticeHandler = h; return () => { noticeHandler = null; }; },
+        const chainClient = makeChainClientMock({
+            setupNoticeHandler: (h) => { noticeHandler = h; return () => { noticeHandler = null; }; },
+            historyImpl: async (accountId, opType, start, stop, limit) => {
+                historyCalls.push({ start, stop, limit });
+                if (limit === 1) return [{ id: '1.11.900', block_num: 90, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.90' }] }];
+                if (stop === '1.11.899') {
+                    return [{ id: '1.11.900', block_num: 90, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.90' }] }];
+                }
+                if (stop === '1.11.900') return [{ id: '1.11.901', block_num: 91, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.91' }] }];
+                if (stop === '1.11.901') return [{ id: '1.11.902', block_num: 92, trx_in_block: 3, op: [OP_FILL_ORDER, { order_id: '1.7.92' }] }];
+                if (stop === '1.11.902') return [];
+                return [];
             },
-            db: {
-                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
-                call: async () => null,
-            },
-            history: {
-                getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
-                    historyCalls.push({ start, stop, limit });
-                    if (limit === 1) return [{ id: '1.11.900', block_num: 90, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.90' }] }];
-                    if (stop === '1.11.899') {
-                        return [{ id: '1.11.900', block_num: 90, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.90' }] }];
-                    }
-                    if (stop === '1.11.900') return [{ id: '1.11.901', block_num: 91, trx_in_block: 2, op: [OP_FILL_ORDER, { order_id: '1.7.91' }] }];
-                    if (stop === '1.11.901') return [{ id: '1.11.902', block_num: 92, trx_in_block: 3, op: [OP_FILL_ORDER, { order_id: '1.7.92' }] }];
-                    if (stop === '1.11.902') return [];
-                    return [];
-                },
-            },
-        };
+        });
 
         (async () => {
             const manager = createSubscriptionManager(chainClient);
@@ -442,22 +406,14 @@ function makeAccountRecord(account) {
         let noticeProcessedCount = 0;
         let historyScanCount = 0;
 
-        const chainClient = {
-            transport: {
-                addMessageHandler(h) { noticeHandler = h; return () => { noticeHandler = null; }; },
+        const chainClient = makeChainClientMock({
+            setupNoticeHandler: (h) => { noticeHandler = h; return () => { noticeHandler = null; }; },
+            historyImpl: async (accountId, opType, start, stop, limit) => {
+                historyScanCount++;
+                if (limit === 1) return [{ id: '1.11.400', block_num: 40, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.40' }] }];
+                return [];
             },
-            db: {
-                get_full_accounts: async ([account]) => [makeAccountRecord(account)],
-                call: async () => null,
-            },
-            history: {
-                getAccountHistoryOperations: async (accountId, opType, start, stop, limit) => {
-                    historyScanCount++;
-                    if (limit === 1) return [{ id: '1.11.400', block_num: 40, trx_in_block: 1, op: [OP_FILL_ORDER, { order_id: '1.7.40' }] }];
-                    return [];
-                },
-            },
-        };
+        });
 
         (async () => {
             const manager = createSubscriptionManager(chainClient);

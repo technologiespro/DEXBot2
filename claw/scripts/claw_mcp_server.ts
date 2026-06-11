@@ -7,6 +7,7 @@ console.warn = () => {};
 
 const { getClawToolByName, getClawToolCatalog } = require('../modules/claw_catalog');
 const { runClawCommand } = require('../modules/claw_bridge');
+const { success, failure, runMcpServer, createMessageParser } = require('../modules/mcp_utils');
 
 function parseArgs(argv: any) {
   const options: Record<string, any> = {};
@@ -35,42 +36,6 @@ function parseArgs(argv: any) {
   }
 
   return options;
-}
-
-function writeMessage(message: any) {
-  return new Promise<void>((resolve, reject) => {
-    try {
-      process.stdout.write(`${JSON.stringify(message)}\n`, (error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    } catch (error) {
-      reject(error);
-    }
-  });
-}
-
-function success(id: any, result: any) {
-  return writeMessage({
-    jsonrpc: '2.0',
-    id,
-    result
-  });
-}
-
-function failure(id: any, code: any, message: any, data = undefined) {
-  return writeMessage({
-    jsonrpc: '2.0',
-    id,
-    error: {
-      code,
-      message,
-      ...(data === undefined ? {} : { data })
-    }
-  });
 }
 
 function listMcpTools() {
@@ -155,65 +120,9 @@ async function handleRequest(message: any, defaults: any) {
   }
 }
 
-function createMessageParser(onMessage: any) {
-  let buffer = Buffer.alloc(0);
-  let queue = Promise.resolve();
-
-  function processBuffer() {
-    while (true) {
-      const newlineIndex = buffer.indexOf('\n');
-      if (newlineIndex === -1) {
-        return;
-      }
-
-      const line = buffer.slice(0, newlineIndex).toString('utf8').trim();
-      buffer = buffer.slice(newlineIndex + 1);
-
-      if (!line) {
-        continue;
-      }
-
-      let message;
-      try {
-        message = JSON.parse(line);
-      } catch (error) {
-        continue;
-      }
-
-      queue = queue.then(() => onMessage(message)).catch((error) => {
-        process.stderr.write(`${error && error.stack ? error.stack : String(error)}\n`);
-      });
-    }
-  }
-
-  return {
-    push(chunk: any) {
-      buffer = Buffer.concat([buffer, chunk]);
-      processBuffer();
-      return queue;
-    }
-  };
-}
-
-async function main() {
-  const defaults = parseArgs(process.argv.slice(2));
-  const parser = createMessageParser((message: any) => handleRequest(message, defaults));
-  let lastQueue = Promise.resolve();
-
-  process.stdin.on('data', (chunk) => {
-    lastQueue = parser.push(chunk);
-  });
-  process.stdin.resume();
-
-  await new Promise((resolve) => {
-    process.stdin.on('end', resolve);
-  });
-  await lastQueue;
-}
-
 if (require.main === module) {
-  main().catch((err) => {
-    process.stderr.write(`${err && err.stack ? err.stack : String(err)}\n`);
+  runMcpServer(parseArgs, handleRequest).catch((err: unknown) => {
+    process.stderr.write(`${err instanceof Error && err.stack ? err.stack : String(err)}\n`);
     process.exit(1);
   });
 }
@@ -223,7 +132,5 @@ export = {
   failure,
   handleRequest,
   listMcpTools,
-  main,
   success,
-  writeMessage
 };

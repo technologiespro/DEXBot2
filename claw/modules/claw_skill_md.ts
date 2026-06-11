@@ -1,25 +1,11 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { BUILD_DIR } = require('../../modules/constants');
 const { getClawToolCatalog } = require('./claw_catalog');
 const { getSupportedClawRuntime } = require('./claw_runtime_matrix');
+const { normalizeRepoRoot, normalizeProfileRoot } = require('./skill_utils');
 
-function normalizeRepoRoot(repoRoot: string) {
-  const CM_PARENT_DIR = path.dirname(path.dirname(__dirname));
-  const CM_PROJECT_ROOT = path.basename(CM_PARENT_DIR) === BUILD_DIR ? path.dirname(CM_PARENT_DIR) : CM_PARENT_DIR;
-  return path.resolve(repoRoot || path.join(CM_PROJECT_ROOT, 'claw'));
-}
-
-function normalizeProfileRoot(options: Record<string, any> = {}, repoRoot: string) {
-  if (options.profileRoot) {
-    return path.resolve(options.profileRoot);
-  }
-
-  if (options.dexbotRoot) {
-    return path.resolve(options.dexbotRoot);
-  }
-
-  return path.resolve(repoRoot, '..');
+function normalizeClawRepoRoot(repoRoot: string) {
+  return normalizeRepoRoot('claw-skill-md', repoRoot);
 }
 
 function buildToolSummary(runtimeName: string) {
@@ -257,7 +243,7 @@ function buildRuntimeSkillMarkdown(runtimeName: string, options: Record<string, 
     throw new Error('NullClaw uses SKILL.toml via scripts/nullclaw_skill.js, not claw_skill_md.js');
   }
 
-  const repoRoot = normalizeRepoRoot(options.repoRoot);
+  const repoRoot = normalizeClawRepoRoot(options.repoRoot);
   const profileRoot = normalizeProfileRoot(options, repoRoot);
 
   return [

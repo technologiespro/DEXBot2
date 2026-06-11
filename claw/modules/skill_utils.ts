@@ -1,0 +1,83 @@
+const path = require('path');
+const fs = require('fs/promises');
+const { BUILD_DIR } = require('../../modules/constants');
+
+export function normalizeRepoRoot(variableName: string, repoRoot?: string) {
+  const PARENT_DIR = path.dirname(path.dirname(__dirname));
+  const PROJECT_ROOT = path.basename(PARENT_DIR) === BUILD_DIR ? path.dirname(PARENT_DIR) : PARENT_DIR;
+  return path.resolve(repoRoot || path.join(PROJECT_ROOT, 'claw'));
+}
+
+export function normalizeProfileRoot(options: Record<string, any> = {}, repoRoot: string) {
+  if (options.profileRoot) {
+    return path.resolve(options.profileRoot);
+  }
+
+  if (options.dexbotRoot) {
+    return path.resolve(options.dexbotRoot);
+  }
+
+  return path.resolve(repoRoot, '..');
+}
+
+export function shellQuote(value: any) {
+  return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
+}
+
+export function buildBridgeCommand(bridgeScript: string, profileRoot: string, command: string, extraArgs: any[] = []) {
+  return ['node', bridgeScript, command, '--profile-root', profileRoot, ...extraArgs]
+    .map((part, index) => (index === 0 ? String(part) : shellQuote(part)))
+    .join(' ');
+}
+
+export function createTool(name: string, description: string, command: string, args: any = null) {
+  return {
+    name,
+    description,
+    kind: 'shell',
+    command,
+    ...(args ? { args } : {})
+  };
+}
+
+export function tomlString(value: any) {
+  return JSON.stringify(String(value));
+}
+
+export function buildSkillTomlLines(skillName: string, description: string, tags: string[], tools: any[]) {
+  const lines = [
+    '[skill]',
+    `name = "${skillName}"`,
+    `description = "${description}"`,
+    'version = "1.0.0"',
+    `tags = [${tags.map(t => JSON.stringify(t)).join(', ')}]`
+  ];
+
+  for (const tool of tools) {
+    lines.push('', '[[tools]]');
+    lines.push(`name = ${tomlString(tool.name)}`);
+    lines.push(`description = ${tomlString(tool.description)}`);
+    lines.push(`kind = ${tomlString(tool.kind)}`);
+    lines.push(`command = ${tomlString(tool.command)}`);
+
+    if (tool.args && Object.keys(tool.args).length > 0) {
+      const argEntries = Object.entries(tool.args)
+        .map(([key, value]) => `${key} = ${tomlString(value)}`)
+        .join(', ');
+      lines.push(`args = { ${argEntries} }`);
+    }
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+export async function writeSkillFile(outputPath: string, content: string) {
+  if (!outputPath) {
+    throw new Error('outputPath is required');
+  }
+
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await fs.writeFile(outputPath, content, 'utf8');
+  return content;
+}

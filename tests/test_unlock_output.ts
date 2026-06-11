@@ -3,8 +3,8 @@ const { EventEmitter } = require('events');
 const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { loadSettingsFile, resolveRawBotEntries } = require('../modules/bot_settings');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
+const { makeControllerStub, getActiveBotNames, stripAnsi, makeFakeChild } = require('./helpers/unlock_test_helpers');
 
 console.log('Running unlock output tests');
 
@@ -43,7 +43,6 @@ const monolithicStatePaths = new Set([
     monolithicBotPidPath,
     monolithicBotInfoPath,
 ]);
-const botsFile = path.resolve(__dirname, '..', 'profiles', 'bots.json');
 const state = {
     ensureCount: 0,
     ensureResult: true,
@@ -63,21 +62,16 @@ function setStdoutTTY(value) {
     });
 }
 
-function stripAnsi(text) {
-    return String(text).replace(/\x1b\[[0-9;]*m/g, '');
-}
-
 function logsIncludePlain(expected) {
     return logs.some((line) => stripAnsi(line) === expected);
 }
 
-const controller = {
+const controller = makeControllerStub({
     ensureCredentialDaemon: async () => {
         state.ensureCount += 1;
         return state.ensureResult;
     },
     getManagedDaemonPid: () => 12345,
-    releaseManagedDaemon: () => {},
     waitForManagedDaemon: async () => {
         state.waitCount += 1;
         return 0;
@@ -85,7 +79,7 @@ const controller = {
     stopManagedDaemon: async () => {
         state.stopCount += 1;
     },
-};
+});
 
 function resetState() {
     state.ensureCount = 0;
@@ -108,17 +102,7 @@ function installStubs() {
 
     childProcess.spawn = (command, args, options) => {
         state.calls.push({ command, args, options });
-        const child = new EventEmitter();
-        child.killed = false;
-        child.kill = () => {
-            child.killed = true;
-        };
-        child.unref = () => {};
-        process.nextTick(() => {
-            child.emit('spawn');
-            setImmediate(() => child.emit('close', 0));
-        });
-        return child;
+        return makeFakeChild();
     };
 
     fs.existsSync = (filePath) => {
@@ -227,13 +211,6 @@ function restoreStubs() {
     console.log = originalConsoleLog;
     console.error = originalConsoleError;
     restoreCachedModule(controllerPath, originalControllerModule);
-}
-
-function getActiveBotNames() {
-    const { config } = loadSettingsFile(botsFile, { silent: true, exitOnError: false });
-    return resolveRawBotEntries(config)
-        .filter((bot) => bot && bot.active !== false)
-        .map((bot) => String(bot.name));
 }
 
 function countSpawnCallsMatchingScript(scriptName) {

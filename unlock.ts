@@ -162,31 +162,36 @@ function waitForChildSpawn(child: any) {
     });
 }
 
+function makeFinishGuard(cleanup: () => void) {
+    let settled = false;
+    let timer: NodeJS.Timeout | null = null;
+
+    const finish = (fn: (value?: any) => void, value?: any) => {
+        if (settled) return;
+        settled = true;
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+        cleanup();
+        fn(value);
+    };
+
+    return { finish, getTimer: () => timer, setTimer: (t: NodeJS.Timeout | null) => { timer = t; } };
+}
+
 function waitForStableChildStartup(child: any, { label = 'child process', timeoutMs = DEFAULT_STARTUP_GRACE_MS } = {}) {
     if (timeoutMs <= 0) {
         return waitForChildSpawn(child);
     }
 
     return new Promise<void>((resolve, reject) => {
-        let settled = false;
-        let timer: NodeJS.Timeout | null = null;
-
-        const finish = (fn: (value?: any) => void, value?: any) => {
-            if (settled) return;
-            settled = true;
-            if (timer) {
-                clearTimeout(timer);
-                timer = null;
-            }
-            cleanup();
-            fn(value);
-        };
-
         const handleSpawn = () => {
-            timer = setTimeout(() => finish(resolve), timeoutMs);
-            if (timer && typeof timer.unref === 'function') {
-                timer.unref();
+            const t = setTimeout(() => finish(resolve), timeoutMs);
+            if (t && typeof t.unref === 'function') {
+                t.unref();
             }
+            setTimer(t);
         };
 
         const handleError = (error: any) => finish(reject, error);
@@ -199,6 +204,8 @@ function waitForStableChildStartup(child: any, { label = 'child process', timeou
             child.off('error', handleError);
             child.off('close', handleClose);
         };
+
+        const { finish, setTimer } = makeFinishGuard(cleanup);
 
         child.once('spawn', handleSpawn);
         child.once('error', handleError);
@@ -326,20 +333,6 @@ function isSupervisorTransientError(err: any): boolean {
 
 function waitForSupervisorReady({ child = null, timeoutMs = 15000, intervalMs = 250 }: { child?: any; timeoutMs?: number; intervalMs?: number } = {}): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
-        let settled = false;
-        let timer: NodeJS.Timeout | null = null;
-
-        const finish = (fn: (value?: any) => void, value?: any) => {
-            if (settled) return;
-            settled = true;
-            if (timer) {
-                clearTimeout(timer);
-                timer = null;
-            }
-            cleanup();
-            fn(value);
-        };
-
         const handleClose = (code: any, signal: any) => {
             finish(reject, new Error(`supervisor exited before becoming ready (exit ${code}${signal ? `, signal ${signal}` : ''})`));
         };
@@ -351,14 +344,14 @@ function waitForSupervisorReady({ child = null, timeoutMs = 15000, intervalMs = 
             }
         };
 
+        const { finish, setTimer } = makeFinishGuard(cleanup);
+
         const startedAt = Date.now();
         const poll = async () => {
-            if (settled) return;
             try {
                 await sendControlCommand({ cmd: 'status' });
-                if (!settled) finish(resolve, true);
+                finish(resolve, true);
             } catch (err: any) {
-                if (settled) return;
                 if (!isSupervisorTransientError(err)) {
                     finish(reject, err);
                     return;
@@ -367,10 +360,11 @@ function waitForSupervisorReady({ child = null, timeoutMs = 15000, intervalMs = 
                     finish(resolve, false);
                     return;
                 }
-                timer = setTimeout(poll, intervalMs);
-                if (timer && typeof timer.unref === 'function') {
-                    timer.unref();
+                const t = setTimeout(poll, intervalMs);
+                if (t && typeof t.unref === 'function') {
+                    t.unref();
                 }
+                setTimer(t);
             }
         };
 

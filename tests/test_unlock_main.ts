@@ -1,9 +1,9 @@
 const assert = require('assert');
 const path = require('path');
-const { EventEmitter } = require('events');
 const childProcess = require('child_process');
 const { BUILD_DIR } = require('../modules/constants');
 const { restoreCachedModule, setCachedModule } = require('./helpers/module_cache_stub');
+const { makeControllerStub, makeFakeChild } = require('./helpers/unlock_test_helpers');
 
 console.log('Running unlock main tests');
 
@@ -25,18 +25,11 @@ const state = {
     stopCount: 0,
 };
 
-const controller = {
-    ensureCredentialDaemon: async () => {
-        state.ensureCount += 1;
-    },
-    waitForManagedDaemon: async () => {
-        state.waitCount += 1;
-        return 0;
-    },
-    stopManagedDaemon: async () => {
-        state.stopCount += 1;
-    },
-};
+const controller = makeControllerStub({
+    ensureCredentialDaemon: async () => { state.ensureCount += 1; },
+    waitForManagedDaemon: async () => { state.waitCount += 1; return 0; },
+    stopManagedDaemon: async () => { state.stopCount += 1; },
+});
 
 function resetState() {
     state.calls.length = 0;
@@ -52,21 +45,7 @@ function installStubs() {
 
     childProcess.spawn = (command, args, options) => {
         state.calls.push({ command, args, options });
-        const child = new EventEmitter();
-        child.killed = false;
-        child.pid = 9999;
-        child.stdout = new EventEmitter();
-        child.stdout.pipe = (dest) => dest;
-        child.stderr = new EventEmitter();
-        child.stderr.pipe = (dest) => dest;
-        child.kill = () => {
-            child.killed = true;
-        };
-        process.nextTick(() => {
-            child.emit('spawn');
-            setImmediate(() => child.emit('close', 0));
-        });
-        return child;
+        return makeFakeChild({ withStdio: true });
     };
 }
 

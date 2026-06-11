@@ -1,7 +1,7 @@
 const assert = require('assert');
-const { EventEmitter } = require('events');
 const childProcess = require('child_process');
 const { setCachedModule } = require('./helpers/module_cache_stub');
+const { makeControllerStub, makeFakeChild } = require('./helpers/unlock_test_helpers');
 
 console.log('Running unlock isolated poll rejection tests');
 
@@ -15,10 +15,7 @@ const originalIsolatedForeground = process.env.DEXBOT_ISOLATED_FOREGROUND;
 const originalDisableSupervisorSocket = process.env.DEXBOT_DISABLE_SUPERVISOR_SOCKET;
 const originalSupervisorSocket = process.env.DEXBOT_SUPERVISOR_SOCKET;
 
-const controller = {
-    ensureCredentialDaemon: async () => {},
-    stopManagedDaemon: async () => {},
-};
+const controller = makeControllerStub();
 
 function createThrowingGetStatusSupervisor() {
     let callCount = 0;
@@ -40,19 +37,7 @@ function createThrowingGetStatusSupervisor() {
 }
 
 childProcess.spawn = (command, args, options) => {
-    const child = new EventEmitter();
-    child.killed = false;
-    child.pid = 9999;
-    child.stdout = new EventEmitter();
-    child.stdout.pipe = (dest) => dest;
-    child.stderr = new EventEmitter();
-    child.stderr.pipe = (dest) => dest;
-    child.kill = () => { child.killed = true; };
-    process.nextTick(() => {
-        child.emit('spawn');
-        setImmediate(() => child.emit('close', 0));
-    });
-    return child;
+    return makeFakeChild({ withStdio: true });
 };
 
 setCachedModule(controllerPath, {

@@ -162,6 +162,38 @@ function createToolDefinition(definition: any) {
   });
 }
 
+function memuDef(overrides: any) {
+  return createToolDefinition({ runtimes: ['memu'], surface: 'memory', ...overrides });
+}
+
+function payloadTool(argsDesc: string, schema: any, overrides: any) {
+  return createToolDefinition({
+    args: { payload_json: argsDesc },
+    extraArgs: ['--payload', '{{payload_json}}'],
+    inputSchema: schema,
+    ...overrides,
+  });
+}
+
+function launcherTool(command: string, description: string, toolName: string, botNameDesc = 'Bot name as defined in profiles/bots.json. Omit for all active bots.') {
+  return payloadTool(
+    `JSON object with botName (optional), profileRoot (optional)`,
+    objectSchema({
+      botName: stringSchema(botNameDesc),
+      profileRoot: stringSchema('Optional DEXBot2 profile root'),
+    }, []),
+    { command, description, risk: 'execute', toolName }
+  );
+}
+
+function memuListTool(command: string, description: string, toolName: string, scopeDesc = 'Optional memU scope') {
+  return memuDef(payloadTool(
+    'JSON object with optional where filter',
+    objectSchema({ where: memuScopeSchema(scopeDesc) }),
+    { command, description, risk: 'read', toolName }
+  ));
+}
+
 const CLAW_TOOL_CATALOG = Object.freeze([
   createToolDefinition({
     command: 'manifest',
@@ -221,9 +253,7 @@ const CLAW_TOOL_CATALOG = Object.freeze([
   createToolDefinition({
     command: 'account-snapshot',
     description: 'Read an account snapshot with balances and open orders',
-    args: {
-      account_name: 'BitShares account name or id'
-    },
+    args: { account_name: 'BitShares account name or id' },
     extraArgs: ['--account', '{{account_name}}'],
     inputSchema: objectSchema({
       accountName: stringSchema('BitShares account name or id'),
@@ -234,9 +264,7 @@ const CLAW_TOOL_CATALOG = Object.freeze([
   createToolDefinition({
     command: 'open-orders',
     description: 'Read open orders for an account',
-    args: {
-      account_name: 'BitShares account name or id'
-    },
+    args: { account_name: 'BitShares account name or id' },
     extraArgs: ['--account', '{{account_name}}'],
     inputSchema: objectSchema({
       accountName: stringSchema('BitShares account name or id'),
@@ -295,34 +323,8 @@ const CLAW_TOOL_CATALOG = Object.freeze([
     }),
     toolName: 'claw_honest_context'
   }),
-  createToolDefinition({
-    command: 'honest-pair',
-    description: 'Resolve HONEST pair context',
-    args: {
-      payload_json: 'JSON object with assetA and assetB, or pair'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      assetA: stringSchema('First asset symbol'),
-      assetB: stringSchema('Second asset symbol'),
-      pair: stringSchema('Pair such as HONEST.USD/BTS')
-    }),
-    toolName: 'claw_honest_pair'
-  }),
-  createToolDefinition({
-    command: 'honest-price',
-    description: 'Resolve HONEST pair price',
-    args: {
-      payload_json: 'JSON object with assetA and assetB, or pair'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      assetA: stringSchema('First asset symbol'),
-      assetB: stringSchema('Second asset symbol'),
-      pair: stringSchema('Pair such as HONEST.USD/BTS')
-    }),
-    toolName: 'claw_honest_price'
-  }),
+  payloadTool('JSON object with assetA and assetB, or pair', objectSchema({ assetA: stringSchema('First asset symbol'), assetB: stringSchema('Second asset symbol'), pair: stringSchema('Pair such as HONEST.USD/BTS') }), { command: 'honest-pair', description: 'Resolve HONEST pair context', toolName: 'claw_honest_pair' }),
+  payloadTool('JSON object with assetA and assetB, or pair', objectSchema({ assetA: stringSchema('First asset symbol'), assetB: stringSchema('Second asset symbol'), pair: stringSchema('Pair such as HONEST.USD/BTS') }), { command: 'honest-price', description: 'Resolve HONEST pair price', toolName: 'claw_honest_price' }),
   createToolDefinition({
     command: 'create-limit-order',
     description: 'Create a BitShares limit order',
@@ -480,106 +482,12 @@ const CLAW_TOOL_CATALOG = Object.freeze([
     risk: 'execute',
     toolName: 'claw_settle_mpa'
   }),
-  createToolDefinition({
-    command: 'open-short-bts',
-    description: 'Build and execute the open leg of a BTS-backed short',
-    args: {
-      payload_json:
-        'JSON object with accountName, mpaAsset, debtAmount, collateralAmount, sellPriceInBts, optional targetCollateralRatio'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      accountName: stringSchema('BitShares account name'),
-      mpaAsset: stringSchema('MPA asset symbol'),
-      debtAmount: numberSchema('Debt amount to borrow'),
-      collateralAmount: numberSchema('Collateral to lock'),
-      sellPriceInBts: numberSchema('Sell price in BTS'),
-      targetCollateralRatio: numberSchema('Optional target collateral ratio')
-    }, ['mpaAsset', 'debtAmount', 'collateralAmount', 'sellPriceInBts']),
-    risk: 'execute',
-    toolName: 'claw_open_short_bts'
-  }),
-  createToolDefinition({
-    command: 'take-profit-bts',
-    description: 'Place the take-profit leg for a BTS-backed short',
-    args: {
-      payload_json: 'JSON object with accountName, mpaAsset, amountToCover, buyPriceInBts'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      accountName: stringSchema('BitShares account name'),
-      mpaAsset: stringSchema('MPA asset symbol'),
-      amountToCover: numberSchema('Amount to cover'),
-      buyPriceInBts: numberSchema('Buy price in BTS')
-    }, ['mpaAsset', 'amountToCover', 'buyPriceInBts']),
-    risk: 'execute',
-    toolName: 'claw_take_profit_bts'
-  }),
-  createToolDefinition({
-    command: 'close-short-bts',
-    description: 'Close a BTS-backed short',
-    args: {
-      payload_json: 'JSON object with accountName, mpaAsset, amountToRepay, optional releaseCollateralDelta'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      accountName: stringSchema('BitShares account name'),
-      mpaAsset: stringSchema('MPA asset symbol'),
-      amountToRepay: numberSchema('Debt amount to repay'),
-      releaseCollateralDelta: numberSchema('Optional collateral release amount')
-    }, ['mpaAsset', 'amountToRepay']),
-    risk: 'execute',
-    toolName: 'claw_close_short_bts'
-  }),
-  createToolDefinition({
-    command: 'build-open-short-plan',
-    description: 'Build the open-short plan without broadcasting',
-    args: {
-      payload_json: 'JSON object with accountName, mpaAsset, debtAmount, collateralAmount, sellPriceInBts'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      accountName: stringSchema('BitShares account name'),
-      mpaAsset: stringSchema('MPA asset symbol'),
-      debtAmount: numberSchema('Debt amount to borrow'),
-      collateralAmount: numberSchema('Collateral to lock'),
-      sellPriceInBts: numberSchema('Sell price in BTS')
-    }, ['mpaAsset', 'debtAmount', 'collateralAmount', 'sellPriceInBts']),
-    risk: 'plan',
-    toolName: 'claw_build_open_short_plan'
-  }),
-  createToolDefinition({
-    command: 'build-take-profit-plan',
-    description: 'Build the take-profit plan without broadcasting',
-    args: {
-      payload_json: 'JSON object with accountName, mpaAsset, amountToCover, buyPriceInBts'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      accountName: stringSchema('BitShares account name'),
-      mpaAsset: stringSchema('MPA asset symbol'),
-      amountToCover: numberSchema('Amount to cover'),
-      buyPriceInBts: numberSchema('Buy price in BTS')
-    }, ['mpaAsset', 'amountToCover', 'buyPriceInBts']),
-    risk: 'plan',
-    toolName: 'claw_build_take_profit_plan'
-  }),
-  createToolDefinition({
-    command: 'build-close-short-plan',
-    description: 'Build the close-short plan without broadcasting',
-    args: {
-      payload_json: 'JSON object with accountName, mpaAsset, amountToRepay, optional releaseCollateralDelta'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      accountName: stringSchema('BitShares account name'),
-      mpaAsset: stringSchema('MPA asset symbol'),
-      amountToRepay: numberSchema('Debt amount to repay'),
-      releaseCollateralDelta: numberSchema('Optional collateral release amount')
-    }, ['mpaAsset', 'amountToRepay']),
-    risk: 'plan',
-    toolName: 'claw_build_close_short_plan'
-  }),
+  payloadTool('JSON object with accountName, mpaAsset, debtAmount, collateralAmount, sellPriceInBts, optional targetCollateralRatio', objectSchema({ accountName: stringSchema('BitShares account name'), mpaAsset: stringSchema('MPA asset symbol'), debtAmount: numberSchema('Debt amount to borrow'), collateralAmount: numberSchema('Collateral to lock'), sellPriceInBts: numberSchema('Sell price in BTS'), targetCollateralRatio: numberSchema('Optional target collateral ratio') }, ['mpaAsset', 'debtAmount', 'collateralAmount', 'sellPriceInBts']), { command: 'open-short-bts', description: 'Build and execute the open leg of a BTS-backed short', risk: 'execute', toolName: 'claw_open_short_bts' }),
+  payloadTool('JSON object with accountName, mpaAsset, debtAmount, collateralAmount, sellPriceInBts', objectSchema({ accountName: stringSchema('BitShares account name'), mpaAsset: stringSchema('MPA asset symbol'), debtAmount: numberSchema('Debt amount to borrow'), collateralAmount: numberSchema('Collateral to lock'), sellPriceInBts: numberSchema('Sell price in BTS') }, ['mpaAsset', 'debtAmount', 'collateralAmount', 'sellPriceInBts']), { command: 'build-open-short-plan', description: 'Build the open-short plan without broadcasting', risk: 'plan', toolName: 'claw_build_open_short_plan' }),
+  payloadTool('JSON object with accountName, mpaAsset, amountToCover, buyPriceInBts', objectSchema({ accountName: stringSchema('BitShares account name'), mpaAsset: stringSchema('MPA asset symbol'), amountToCover: numberSchema('Amount to cover'), buyPriceInBts: numberSchema('Buy price in BTS') }, ['mpaAsset', 'amountToCover', 'buyPriceInBts']), { command: 'take-profit-bts', description: 'Place the take-profit leg for a BTS-backed short', risk: 'execute', toolName: 'claw_take_profit_bts' }),
+  payloadTool('JSON object with accountName, mpaAsset, amountToCover, buyPriceInBts', objectSchema({ accountName: stringSchema('BitShares account name'), mpaAsset: stringSchema('MPA asset symbol'), amountToCover: numberSchema('Amount to cover'), buyPriceInBts: numberSchema('Buy price in BTS') }, ['mpaAsset', 'amountToCover', 'buyPriceInBts']), { command: 'build-take-profit-plan', description: 'Build the take-profit plan without broadcasting', risk: 'plan', toolName: 'claw_build_take_profit_plan' }),
+  payloadTool('JSON object with accountName, mpaAsset, amountToRepay, optional releaseCollateralDelta', objectSchema({ accountName: stringSchema('BitShares account name'), mpaAsset: stringSchema('MPA asset symbol'), amountToRepay: numberSchema('Debt amount to repay'), releaseCollateralDelta: numberSchema('Optional collateral release amount') }, ['mpaAsset', 'amountToRepay']), { command: 'close-short-bts', description: 'Close a BTS-backed short', risk: 'execute', toolName: 'claw_close_short_bts' }),
+  payloadTool('JSON object with accountName, mpaAsset, amountToRepay, optional releaseCollateralDelta', objectSchema({ accountName: stringSchema('BitShares account name'), mpaAsset: stringSchema('MPA asset symbol'), amountToRepay: numberSchema('Debt amount to repay'), releaseCollateralDelta: numberSchema('Optional collateral release amount') }, ['mpaAsset', 'amountToRepay']), { command: 'build-close-short-plan', description: 'Build the close-short plan without broadcasting', risk: 'plan', toolName: 'claw_build_close_short_plan' }),
   createToolDefinition({
     command: 'mpa-position',
     description: 'Read the on-chain MPA position for an account',
@@ -610,104 +518,13 @@ const CLAW_TOOL_CATALOG = Object.freeze([
     risk: 'execute',
     toolName: 'claw_launcher_run'
   }),
-  createToolDefinition({
-    command: 'launcher-drystart',
-    description: 'Run a bot in dry-run mode (test/simulate without broadcasting to blockchain). Synonyms: dry run, simulate, test mode, paper trade, trial run, simulation',
-    args: {
-      payload_json: 'JSON object with botName (optional), profileRoot (optional)'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      botName: stringSchema('Bot name as defined in profiles/bots.json. Omit for default.'),
-      profileRoot: stringSchema('Optional DEXBot2 profile root')
-    }, []),
-    risk: 'execute',
-    toolName: 'claw_launcher_drystart'
-  }),
-  createToolDefinition({
-    command: 'launcher-reset',
-    description: 'Reset a bot grid (triggers recalculation on next start or if running). Synonyms: reset grid, regenerate, recalculate, rebuild orders, refresh grid',
-    args: {
-      payload_json: 'JSON object with botName (optional, defaults to all active), profileRoot (optional)'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      botName: stringSchema('Bot name as defined in profiles/bots.json. Omit or "all" for all active bots.'),
-      profileRoot: stringSchema('Optional DEXBot2 profile root')
-    }, []),
-    risk: 'execute',
-    toolName: 'claw_launcher_reset'
-  }),
-  createToolDefinition({
-    command: 'launcher-disable',
-    description: 'Disable a bot in config (set active: false). Synonyms: disable, deactivate, turn off, mark inactive, deregister',
-    args: {
-      payload_json: 'JSON object with botName (optional, defaults to all), profileRoot (optional)'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      botName: stringSchema('Bot name as defined in profiles/bots.json. Omit or "all" to disable all.'),
-      profileRoot: stringSchema('Optional DEXBot2 profile root')
-    }, []),
-    risk: 'execute',
-    toolName: 'claw_launcher_disable'
-  }),
-  createToolDefinition({
-    command: 'launcher-pm2-start',
-    description: 'Start bots via PM2 (production-grade, managed). Requires credential daemon running. Synonyms: pm2 start, deploy, launch pm2, production start',
-    args: {
-      payload_json: 'JSON object with botName (optional, defaults to all active), profileRoot (optional)'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      botName: stringSchema('Bot name as defined in profiles/bots.json. Omit for all active bots.'),
-      profileRoot: stringSchema('Optional DEXBot2 profile root')
-    }, []),
-    risk: 'execute',
-    toolName: 'claw_launcher_pm2_start'
-  }),
-  createToolDefinition({
-    command: 'launcher-pm2-stop',
-    description: 'Stop a bot process via PM2. Synonyms: pause, stop, halt, freeze, suspend, shut down, quiet',
-    args: {
-      payload_json: 'JSON object with botName (optional, defaults to all), profileRoot (optional)'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      botName: stringSchema('Bot name or "all". Omit defaults to "all".'),
-      profileRoot: stringSchema('Optional DEXBot2 profile root')
-    }, []),
-    risk: 'execute',
-    toolName: 'claw_launcher_pm2_stop'
-  }),
-  createToolDefinition({
-    command: 'launcher-pm2-delete',
-    description: 'Delete a bot from PM2 process list. Synonyms: delete, remove, deregister, unregister, purge',
-    args: {
-      payload_json: 'JSON object with botName (optional, defaults to all), profileRoot (optional)'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      botName: stringSchema('Bot name or "all". Omit defaults to "all".'),
-      profileRoot: stringSchema('Optional DEXBot2 profile root')
-    }, []),
-    risk: 'execute',
-    toolName: 'claw_launcher_pm2_delete'
-  }),
-  createToolDefinition({
-    command: 'launcher-pm2-restart',
-    description: 'Restart a bot process via PM2. Synonyms: restart, reboot, cycle, bounce, reset, recycle',
-    args: {
-      payload_json: 'JSON object with botName (optional, defaults to all), profileRoot (optional)'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      botName: stringSchema('Bot name or "all". Omit defaults to "all".'),
-      profileRoot: stringSchema('Optional DEXBot2 profile root')
-    }, []),
-    risk: 'execute',
-    toolName: 'claw_launcher_pm2_restart'
-  }),
+  launcherTool('launcher-drystart', 'Run a bot in dry-run mode (test/simulate without broadcasting to blockchain). Synonyms: dry run, simulate, test mode, paper trade, trial run, simulation', 'claw_launcher_drystart', 'Bot name as defined in profiles/bots.json. Omit for default.'),
+  launcherTool('launcher-reset', 'Reset a bot grid (triggers recalculation on next start or if running). Synonyms: reset grid, regenerate, recalculate, rebuild orders, refresh grid', 'claw_launcher_reset', 'Bot name as defined in profiles/bots.json. Omit or "all" for all active bots.'),
+  launcherTool('launcher-disable', 'Disable a bot in config (set active: false). Synonyms: disable, deactivate, turn off, mark inactive, deregister', 'claw_launcher_disable', 'Bot name as defined in profiles/bots.json. Omit or "all" to disable all.'),
+  launcherTool('launcher-pm2-start', 'Start bots via PM2 (production-grade, managed). Requires credential daemon running. Synonyms: pm2 start, deploy, launch pm2, production start', 'claw_launcher_pm2_start'),
+  launcherTool('launcher-pm2-stop', 'Stop a bot process via PM2. Synonyms: pause, stop, halt, freeze, suspend, shut down, quiet', 'claw_launcher_pm2_stop', 'Bot name or "all". Omit defaults to "all".'),
+  launcherTool('launcher-pm2-delete', 'Delete a bot from PM2 process list. Synonyms: delete, remove, deregister, unregister, purge', 'claw_launcher_pm2_delete', 'Bot name or "all". Omit defaults to "all".'),
+  launcherTool('launcher-pm2-restart', 'Restart a bot process via PM2. Synonyms: restart, reboot, cycle, bounce, reset, recycle', 'claw_launcher_pm2_restart', 'Bot name or "all". Omit defaults to "all".'),
   createToolDefinition({
     command: 'memu-manifest',
     description: 'Inspect the memU memory bridge surface',
@@ -759,36 +576,8 @@ const CLAW_TOOL_CATALOG = Object.freeze([
     surface: 'memory',
     toolName: 'claw_memu_retrieve'
   }),
-  createToolDefinition({
-    command: 'memu-list-categories',
-    description: 'List memU categories',
-    args: {
-      payload_json: 'JSON object with optional where filter'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      where: memuScopeSchema('Optional memU category scope')
-    }),
-    risk: 'read',
-    runtimes: ['memu'],
-    surface: 'memory',
-    toolName: 'claw_memu_list_categories'
-  }),
-  createToolDefinition({
-    command: 'memu-list-items',
-    description: 'List memU memory items',
-    args: {
-      payload_json: 'JSON object with optional where filter'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      where: memuScopeSchema('Optional memU item scope')
-    }),
-    risk: 'read',
-    runtimes: ['memu'],
-    surface: 'memory',
-    toolName: 'claw_memu_list_items'
-  }),
+  memuListTool('memu-list-categories', 'List memU categories', 'claw_memu_list_categories', 'Optional memU category scope'),
+  memuListTool('memu-list-items', 'List memU memory items', 'claw_memu_list_items', 'Optional memU item scope'),
   createToolDefinition({
     command: 'memu-create-item',
     description: 'Create a memU item in a category by category id or category name',
@@ -849,36 +638,8 @@ const CLAW_TOOL_CATALOG = Object.freeze([
     surface: 'memory',
     toolName: 'claw_memu_delete_item'
   }),
-  createToolDefinition({
-    command: 'memu-clear',
-    description: 'Clear memU memory, optionally limited by a where scope',
-    args: {
-      payload_json: 'JSON object with optional where filter'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      where: memuScopeSchema('Optional memU clear scope')
-    }),
-    risk: 'execute',
-    runtimes: ['memu'],
-    surface: 'memory',
-    toolName: 'claw_memu_clear'
-  }),
-  createToolDefinition({
-    command: 'memu-status',
-    description: 'Inspect memU status and counts',
-    args: {
-      payload_json: 'JSON object with optional where filter'
-    },
-    extraArgs: ['--payload', '{{payload_json}}'],
-    inputSchema: objectSchema({
-      where: memuScopeSchema('Optional memU status scope')
-    }),
-    risk: 'read',
-    runtimes: ['memu'],
-    surface: 'memory',
-    toolName: 'claw_memu_status'
-  }),
+  memuDef(payloadTool('JSON object with optional where filter', objectSchema({ where: memuScopeSchema('Optional memU clear scope') }), { command: 'memu-clear', description: 'Clear memU memory, optionally limited by a where scope', risk: 'execute', toolName: 'claw_memu_clear' })),
+  memuListTool('memu-status', 'Inspect memU status and counts', 'claw_memu_status', 'Optional memU status scope'),
   createToolDefinition({
     command: 'memu-memorize-conversation',
     description: 'Store a conversation transcript in memU',
