@@ -128,7 +128,7 @@ const {
     MAINTENANCE,
     GRID_LIMITS,
     FILL_PROCESSING,
-    BUILD_DIR
+    BUILD_DIR,
 } = require('./constants');
 const { attemptResumePersistedGridByPriceMatch, decideStartupGridAction, reconcileGridOrders } = require('./order/grid_reconcile');
 const { AccountOrders } = require('./account_orders');
@@ -1001,13 +1001,13 @@ class DEXBot {
                     this._log('Blockchain connection re-established; scheduling safety-net sync');
                     const runSafetyNetSync = async () => {
                         if (this.manager && this.accountId && !this._shuttingDown && !this.config.dryRun) {
-                            // Cap the entire safety-net sync at 25s so it can
+                            // Cap the entire safety-net sync at TIMING.SAFETY_NET_SYNC_TIMEOUT_MS so it can
                             // never hold _fillProcessingLock longer than the
                             // 20s shutdown lock timeout. readOpenOrders +
                             // synchronizeWithChain + batch + persist can be
                             // ~45s worst case without a cap, which would
                             // stall shutdown until the 20s timeout fires.
-                            const safetyNetTimeoutMs = 25_000;
+                            const safetyNetTimeoutMs = TIMING.SAFETY_NET_SYNC_TIMEOUT_MS;
                             let safetyNetTimer;
                             try {
                                 await Promise.race([

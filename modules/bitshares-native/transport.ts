@@ -343,6 +343,19 @@ function createTransport(config: TransportConfig = {}) {
         // re-issues connectClient() every hour and the bot's transport flips
         // open/closed each time. setNodes() may still have updated the list, so
         // we keep that change but skip the disconnect/connect cycle.
+        //
+        // CONTRACT for wrappers using a connect-generation counter
+        // (see modules/bitshares_client.ts withTimeout wrapper around
+        // _nativeClient.connect()): the no-op early return resolves the
+        // returned Promise IMMEDIATELY without sweeping nodes. If the wrapper
+        // previously captured a generation, a "late success" handler that
+        // sees the new connect sweep finish will see this resolve as a
+        // success, not a no-op — but the connection itself is unchanged.
+        // To avoid any generation-counter confusion, callers SHOULD call
+        // disconnect() before connect() so the no-op path is bypassed and
+        // the connect sweep runs normally. restartBitsharesConnection in
+        // bitshares_client.ts does this. New callers should follow the same
+        // pattern unless they have a specific reason not to.
         if (ws && ws.readyState === 1 && nodeUrl && nodeList.includes(nodeUrl)) {
             autoreconnect = autoReconnect;
             intentionalClose = false;

@@ -27,7 +27,8 @@
  * ===============================================================================
  */
 
-const { TIMING, NODE_MANAGEMENT, TRANSPORT } = require('./constants');
+const { TIMING, NODE_MANAGEMENT, NATIVE_CLIENT } = require('./constants');
+const { TRANSPORT } = NATIVE_CLIENT;
 const NodeManager = require('./node_manager');
 const { readGeneralSettings } = require('./general_settings');
 const { sleep } = require('./order/utils/system');

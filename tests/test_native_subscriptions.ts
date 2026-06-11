@@ -471,7 +471,7 @@ function makeAccountRecord(account) {
 
         await manager.resubscribeAll();
 
-        assert.strictEqual(reconnectHistoryPages, 12, 'reconnect catch-up should keep scanning until the previous cursor is reached');
+        assert.strictEqual(reconnectHistoryPages, 23, 'reconnect catch-up should keep scanning until the previous cursor is reached (1101 entries / 50 per page = 22 full + 1 short)');
         assert.strictEqual(delivered.length, 1, 'reconnect catch-up should deliver recovered fills once');
         assert.strictEqual(delivered[0].length, 1101, 'all missed fills newer than the previous cursor should be delivered');
         assert.strictEqual(delivered[0][0].id, '1.11.900', 'oldest missed fill should be preserved');

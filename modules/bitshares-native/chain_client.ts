@@ -73,6 +73,7 @@ function createChainClient(config: ChainClientConfig = {}) {
     let _broadcastApiId: number | null = null;
     let _chainConfig: ChainConfig | null = null;
     let _loginPromise: Promise<ChainConfig | undefined> | null = null;
+    let _apiLimitGetAccountHistory: number | null = null;
     if (Array.isArray(nodes) && nodes.length > 0) {
         transport._setNodes(nodes);
     }
@@ -105,6 +106,23 @@ function createChainClient(config: ChainClientConfig = {}) {
                     coreAsset = globals.parameters.core_asset;
                 }
             } catch (_: any) {}
+
+            try {
+                // login_api.get_config() returns application_options (which
+                // includes api_limit_get_account_history). database_api.get_config()
+                // returns the chain config (GRAPHENE_* constants only) and does
+                // NOT expose api_limit_* fields, so we must call login_api
+                // (API id 1) directly. get_config requires the user to be
+                // logged in; the empty-creds login above is sufficient on nodes
+                // with the default api_access.json (anonymous full access).
+                const nodeConfig = await transport.call('call', [1, 'get_config', []]);
+                if (nodeConfig && typeof nodeConfig.api_limit_get_account_history === 'number') {
+                    _apiLimitGetAccountHistory = nodeConfig.api_limit_get_account_history;
+                }
+            } catch (_: any) {
+                // get_config may be denied (locked-down node) or unsupported;
+                // fall back to the static HISTORY_LOOKBACK_MAX default.
+            }
 
             if (validateChainId && chainId !== expectedChainId) {
                 _dbApiId = null;
@@ -183,6 +201,7 @@ function createChainClient(config: ChainClientConfig = {}) {
     function getStatus(): string { return transport.getStatus(); }
     function getConfig(): ChainConfig | null { return _chainConfig; }
     function getCoreAsset(): string { return _chainConfig ? _chainConfig.coreAsset : CHAIN.CORE_ASSET_ID; }
+    function getApiLimitGetAccountHistory(): number | null { return _apiLimitGetAccountHistory; }
 
     const db: Record<string, (...args: any[]) => Promise<any>> = {};
 
@@ -233,6 +252,7 @@ function createChainClient(config: ChainClientConfig = {}) {
         getStatus,
         getConfig,
         getCoreAsset,
+        getApiLimitGetAccountHistory,
         db,
         history,
         broadcast,

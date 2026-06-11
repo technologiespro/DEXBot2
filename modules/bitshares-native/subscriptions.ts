@@ -104,13 +104,27 @@ function createSubscriptionManager(chainClient: any): any {
         const maxPagesDefault = SUBSCRIPTIONS.HISTORY_MAX_PAGES;
         const maxPages = Number.isFinite(options.maxPages) ? options.maxPages : maxPagesDefault;
 
-        subscriptionsLogger.info(`fetchFillHistoryEntries: account=${accountId}, cursor=${cursorHistoryId}, start=${startHistoryId}, maxPages=${maxPages}`);
+        // Cap page size to the node's api_limit_get_account_history to avoid FC_ASSERT.
+        const configuredLimit = typeof chainClient.getApiLimitGetAccountHistory === 'function'
+            ? chainClient.getApiLimitGetAccountHistory()
+            : null;
+        const pageLimit = configuredLimit != null
+            ? Math.min(SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX, configuredLimit)
+            : SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX;
+        if (configuredLimit != null && configuredLimit < SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX) {
+            subscriptionsLogger.warn(
+                `fetchFillHistoryEntries: node api_limit_get_account_history (${configuredLimit}) ` +
+                `< HISTORY_LOOKBACK_MAX (${SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX}), capping page size to ${pageLimit}`
+            );
+        }
+
+        subscriptionsLogger.info(`fetchFillHistoryEntries: account=${accountId}, cursor=${cursorHistoryId}, start=${startHistoryId}, maxPages=${maxPages}, pageLimit=${pageLimit}`);
 
         while (true) {
             const page = await Promise.resolve(fetchPage(
                 accountId,
                 cursorHistoryId,
-                SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX,
+                pageLimit,
                 startHistoryId
             ));
             pagesFetched++;
@@ -140,8 +154,8 @@ function createSubscriptionManager(chainClient: any): any {
                 subscriptionsLogger.info(`fetchFillHistoryEntries: skipped ${skippedCount} entries at/before cursor (cursor=${cursorHistoryId})`);
             }
 
-            if (page.length < SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX) {
-                subscriptionsLogger.info(`fetchFillHistoryEntries: last page (${page.length} < ${SUBSCRIPTIONS.HISTORY_LOOKBACK_MAX})`);
+            if (page.length < pageLimit) {
+                subscriptionsLogger.info(`fetchFillHistoryEntries: last page (${page.length} < ${pageLimit})`);
                 break;
             }
             if (maxPages !== null && pagesFetched >= maxPages) {
@@ -582,7 +596,22 @@ function createSubscriptionManager(chainClient: any): any {
             };
             subscriptions.set(accountName, entry);
 
+            // Add callback BEFORE first await so a rollback unsubscribe()
+            // during the async work can properly find and remove it,
+            // keeping callbacks consistent and avoiding orphaned entries.
+            entry.callbacks.add(callback);
+            if (onError) entry.onError = onError;
+
             const accounts = await chainClient.db.get_full_accounts([accountName], true);
+            // Detect a rollback unsubscribe() that fired during the await:
+            // the entry is gone from the Map, so the native subscription was
+            // already torn down by the caller. Abort cleanly without
+            // re-priming or registering a server-side subscription — otherwise
+            // the local entry would be orphaned (still in memory, not in Map)
+            // and handleNotice() would never reach its callbacks.
+            if (!subscriptions.has(accountName)) {
+                return () => {};
+            }
             if (accounts && accounts[0] && accounts[0][1] && accounts[0][1].account) {
                 entry.accountId = accounts[0][1].account.id;
                 entry.statisticsId = accounts[0][1].account.statistics || null;
@@ -591,11 +620,10 @@ function createSubscriptionManager(chainClient: any): any {
                 subscriptions.delete(accountName);
                 throw new Error(`Could not resolve subscribed account: ${accountName}`);
             }
-
+        } else {
+            entry.callbacks.add(callback);
+            if (onError) entry.onError = onError;
         }
-
-        entry.callbacks.add(callback);
-        if (onError) entry.onError = onError;
 
         if (createdEntry) {
             try {
@@ -603,6 +631,11 @@ function createSubscriptionManager(chainClient: any): any {
                 // decremented so that the next scan re-fetches the primed fill,
                 // ensuring no fills are lost between prime and subscribe.
                 const latestFillId = await primeLastDeliveredHistoryId(entry);
+                if (!subscriptions.has(accountName)) {
+                    // Rollback during prime — entry is gone. Abort without
+                    // activating or calling refreshSubscriptions.
+                    return () => {};
+                }
                 entry.lastDeliveredHistoryId = latestFillId
                     ? (decrementObjectId(latestFillId) || latestFillId)
                     : SUBSCRIPTIONS.HISTORY_API_OBJECT;
@@ -610,6 +643,15 @@ function createSubscriptionManager(chainClient: any): any {
                 entry.active = !!entry.accountId;
 
                 const refreshFailures = await refreshSubscriptions();
+                if (!subscriptions.has(accountName)) {
+                    // Rollback during refreshSubscriptions — entry is gone.
+                    // Abort. The server-side set_subscribe_callback was already
+                    // called (side effect of refreshSubscriptions), but the
+                    // local entry is no longer in the Map so handleNotice()
+                    // cannot dispatch to its callbacks. The orphaned callbacks
+                    // become unreachable and will be GC'd on process exit.
+                    return () => {};
+                }
                 const entryRefreshFailure = refreshFailures.find((failure: any) => failure.entry === entry);
                 if (entryRefreshFailure) throw entryRefreshFailure.err;
                 for (const failure of refreshFailures) {
@@ -621,15 +663,21 @@ function createSubscriptionManager(chainClient: any): any {
                 // processObjects is called on reconnect (resubscribeEntry/resubscribeAll)
                 // to catch fills missed during disconnect, at which point the grid is loaded.
             } catch (err: any) {
-                entry.callbacks.delete(callback);
-                if (entry.onError === onError) {
-                    entry.onError = null;
-                }
-                if (entry.callbacks.size === 0) {
-                    entry.active = false;
-                    subscriptions.delete(accountName);
-                    if (subscriptions.size === 0) {
-                        removeNoticeSubscription();
+                // Only clean up if WE still own the entry. If a rollback already
+                // deleted it from the Map during the await that threw, the
+                // unsubscribe() rollback path is responsible for state — touching
+                // it here would corrupt the next subscribe's accounting.
+                if (subscriptions.has(accountName)) {
+                    entry.callbacks.delete(callback);
+                    if (entry.onError === onError) {
+                        entry.onError = null;
+                    }
+                    if (entry.callbacks.size === 0) {
+                        entry.active = false;
+                        subscriptions.delete(accountName);
+                        if (subscriptions.size === 0) {
+                            removeNoticeSubscription();
+                        }
                     }
                 }
                 throw new Error(`Failed to register subscription callback: ${err.message}`);

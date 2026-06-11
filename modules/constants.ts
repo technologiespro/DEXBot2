@@ -251,7 +251,12 @@ let TIMING = {
     // process the typed reply on a slow connection. 25s gives slow mainnet
     // nodes most of the outer window for a successful broadcast; the recovery
     // path handles whatever takes longer.
-    CREDENTIAL_DAEMON_INNER_DEADLINE_MS: 25000
+    CREDENTIAL_DAEMON_INNER_DEADLINE_MS: 25000,
+
+    // SAFETY_NET_SYNC_TIMEOUT_MS: Cap on the post-reconnect safety-net sync
+    // in dexbot_class.ts. Must stay below the 20s shutdown lock timeout so
+    // it never holds _fillProcessingLock longer than the shutdown deadline.
+    SAFETY_NET_SYNC_TIMEOUT_MS: 25000,
 };
 
 // Grid limits and scaling constants
@@ -551,15 +556,17 @@ let FILL_PROCESSING = {
     // CONSUMER_BACKOFF_INITIAL_MS: First backoff delay after the consumer
     // has hit MAX_CONSECUTIVE_CONSUMER_FAILURES. Each subsequent failure
     // doubles the delay up to CONSUMER_BACKOFF_MAX_MS.
-    CONSUMER_BACKOFF_INITIAL_MS: 30000,
+    CONSUMER_BACKOFF_INITIAL_MS: 15000,
 
     // CONSUMER_BACKOFF_MAX_MS: Upper bound on the consumer's backoff delay
     // between retries once the failure budget is exhausted. With defaults
-    // (5 failures, 30s initial, 5min cap) the worst-case retry interval
-    // after a sustained outage is 5 minutes. The consumer NEVER stops
+    // (5 failures, 15s initial, 60s cap) the worst-case retry interval
+    // after a sustained outage is 60 seconds. The consumer NEVER stops
     // re-scheduling entirely — the original infinite setImmediate loop was
     // changed to slow-but-persistent retries.
-    CONSUMER_BACKOFF_MAX_MS: 300000,
+    // Reduced from 300s to 60s per tuning review: time-sensitive fills (e.g.,
+    // credential daemon recovery) should not wait 5 minutes between retries.
+    CONSUMER_BACKOFF_MAX_MS: 60000,
 };
 
 // Cleanup and maintenance parameters
@@ -1320,15 +1327,18 @@ let NATIVE_CLIENT = {
         // Maximum number of history entries to fetch per page when scanning for
         // fills after a subscription notice. The scan pages until it catches up
         // to the per-subscription cursor (lastDeliveredHistoryId).
-        HISTORY_LOOKBACK_MAX: 100,
+        // This is used as an upper bound; at runtime the actual page limit is
+        // capped at min(HISTORY_LOOKBACK_MAX, node's api_limit_get_account_history)
+        // to avoid FC_ASSERT on nodes with a lower configured limit.
+        HISTORY_LOOKBACK_MAX: 50,
 
         // HISTORY_MAX_PAGES: Default cap on pages fetched by
         // fetchFillHistoryEntries in modules/bitshares-native/subscriptions.ts
         // when the caller does not pass `options.maxPages`. Bounds the loop in
         // case the history API keeps returning full pages (which would otherwise
-        // run unbounded). At HISTORY_LOOKBACK_MAX=100 entries per page this caps
-        // the per-call scan at 20k history entries by default.
-        HISTORY_MAX_PAGES: 200,
+        // run unbounded). At HISTORY_LOOKBACK_MAX=50 entries per page this caps
+        // the per-call scan at 5k history entries by default.
+        HISTORY_MAX_PAGES: 100,
 
         // SUBSCRIBE_TIMEOUT_MS: Outer bound on a single BitShares.subscribe
         // operation. subscribe() chains several RPCs (get_full_accounts,
@@ -1337,7 +1347,7 @@ let NATIVE_CLIENT = {
         // legitimately take 4× that on a deep-history account. 60s covers
         // the typical case with headroom; the native per-RPC timeout still
         // fires earlier on a hard hang.
-        SUBSCRIBE_TIMEOUT_MS: 60000,
+        SUBSCRIBE_TIMEOUT_MS: 75000,
 
         // Delay before retrying a failed reconnect catch-up for a subscription.
         RECONNECT_RETRY_DELAY_MS: 5000,
