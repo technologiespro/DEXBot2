@@ -130,7 +130,7 @@ async function testNode(nodeUrl, index) {
     let assetAId, assetBId;
     try {
         const symbols = await rpc(ws, 'call', [dbId, 'lookup_asset_symbols', [[ASSET_A, ASSET_B]]]);
-        const by = {}; for (const a of symbols) by[a.symbol] = a;
+        const by = {}; for (const a of (symbols as any)) by[a.symbol] = a;
         if (!by[ASSET_A] || !by[ASSET_B]) throw new Error(`missing: ${(symbols as any).map((s) => s.symbol).join(',')}`);
         assetAId = by[ASSET_A].id;
         assetBId = by[ASSET_B].id;
@@ -194,13 +194,13 @@ async function testNode(nodeUrl, index) {
             if (dropped) {
                 result.lifespanS = ((Date.now() - stabilityStart) / 1000).toFixed(1);
                 log(`  stability ✗ DROPPED after ${result.lifespanS}s (${result.dropReason})`);
-                resolve(); return;
+                resolve(undefined); return;
             }
             if ((Date.now() - stabilityStart) / 1000 >= STABILITY_S) {
                 result.lifespanS = `>${STABILITY_S}`;
                 log(`  stability ✓ held ${STABILITY_S}s`);
                 try { ws.close(); } catch (_) {}
-                resolve(); return;
+                resolve(undefined); return;
             }
             setTimeout(check, 1000);
         };

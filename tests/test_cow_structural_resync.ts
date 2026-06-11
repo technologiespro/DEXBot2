@@ -21,7 +21,7 @@ function waitForResync(maxMs = 200) {
     return new Promise((resolve) => {
         const start = Date.now();
         const tick = () => {
-            if (Date.now() - start >= maxMs) return resolve();
+            if (Date.now() - start >= maxMs) return resolve(undefined);
             setImmediate(tick);
         };
         setImmediate(tick);

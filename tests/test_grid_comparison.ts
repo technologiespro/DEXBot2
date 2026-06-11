@@ -29,7 +29,7 @@ function createOrder(type, price, size, id = null, state = ORDER_STATES.ACTIVE) 
 /**
  * Test helper to create a minimal mock manager
  */
-function createMockManager(options = {}) {
+function createMockManager(options: any = {}) {
     return {
         config: (options as any).config || { botKey: 'test-bot' },
         funds: (options as any).funds || { 

@@ -129,7 +129,7 @@ async function testCase3a() {
     const partialSlot = slots[3];
     if (partialSlot) {
         await mgr._updateOrder({
-            ...partialSlot,
+            ...(partialSlot as any),
             type: ORDER_TYPES.BUY,
             orderId: 'partial-buy-1',
             size: dustSize,
@@ -174,7 +174,7 @@ async function testCase3b() {
     const partialSlot = slots[4];
     if (partialSlot) {
         await mgr._updateOrder({
-            ...partialSlot,
+            ...(partialSlot as any),
             type: ORDER_TYPES.BUY,
             orderId: 'partial-buy-2',
             size: largePartialSize,
@@ -252,12 +252,12 @@ async function testCase6() {
     // Mock some active orders
     const buyOrders = Array.from(mgr.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY).slice(0, 2);
     for (const o of buyOrders) {
-        await mgr._updateOrder({...o, orderId: 'oid-' + (o as any).id, state: ORDER_STATES.ACTIVE});
+        await mgr._updateOrder({...(o as any), orderId: 'oid-' + (o as any).id, state: ORDER_STATES.ACTIVE});
     }
 
     const sellOrders = Array.from(mgr.orders.values()).filter(o => (o as any).type === ORDER_TYPES.SELL).slice(0, 2);
     for (const o of sellOrders) {
-        await mgr._updateOrder({...o, orderId: 'oid-' + (o as any).id, state: ORDER_STATES.ACTIVE});
+        await mgr._updateOrder({...(o as any), orderId: 'oid-' + (o as any).id, state: ORDER_STATES.ACTIVE});
     }
 
     // Snapshot master grid before rebalance
@@ -278,7 +278,7 @@ async function testCase7() {
 
     // Setup initial state
     const o = Array.from(mgr.orders.values())[0];
-    await mgr._updateOrder({...o, orderId: 'oid-'+(o as any).id, state: ORDER_STATES.ACTIVE});
+    await mgr._updateOrder({...(o as any), orderId: 'oid-'+(o as any).id, state: ORDER_STATES.ACTIVE});
 
     const preOrders = new Map(mgr.orders);
     const preFunds = JSON.parse(JSON.stringify(mgr.funds));
@@ -302,7 +302,7 @@ async function testCase8() {
     // Setup: make some orders ACTIVE so they become surplus when boundary shifts
     const orders = Array.from(mgr.orders.values());
     for (const o of orders.slice(0, 3)) {
-        await mgr._updateOrder({...o, orderId: 'oid-'+(o as any).id, state: ORDER_STATES.ACTIVE});
+        await mgr._updateOrder({...(o as any), orderId: 'oid-'+(o as any).id, state: ORDER_STATES.ACTIVE});
     }
 
     const rebalance = await mgr.performSafeRebalance();
@@ -323,7 +323,7 @@ async function testCase9() {
     const mgr = createManagerWithGridSize(10, 1000, 1000);
 
     const fill = Array.from(mgr.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY)[0];
-    await mgr._updateOrder({...fill, orderId: 'oid-'+(fill as any).id, state: ORDER_STATES.ACTIVE});
+    await mgr._updateOrder({...(fill as any), orderId: 'oid-'+(fill as any).id, state: ORDER_STATES.ACTIVE});
 
     const preFunds = JSON.parse(JSON.stringify(mgr.funds));
 

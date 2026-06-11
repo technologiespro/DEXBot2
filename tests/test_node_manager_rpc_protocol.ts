@@ -49,7 +49,7 @@ class FakeWebSocket {
 
 async function main() {
     const savedWebSocket = globalThis.WebSocket;
-    globalThis.WebSocket = FakeWebSocket;
+    globalThis.WebSocket = FakeWebSocket as any;
     delete require.cache[nodeManagerPath];
 
     try {

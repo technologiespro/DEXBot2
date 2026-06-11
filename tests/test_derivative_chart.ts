@@ -33,7 +33,6 @@ function makeResult(i) {
         isBearWeakEntry: i === 3,
         isBearConfirmation: i === 4,
         isLateBearWithoutWeak: i === 4,
-        fastSmaValue: price - 0.25,
         fastSmaBarsInTrend: i + 2,
         isReady: true,
     };

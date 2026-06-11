@@ -31,7 +31,7 @@ const originals = new Map([
 const originalExistsSync = fs.existsSync;
 const originalReadFileSync = fs.readFileSync;
 
-function loadRuntimeWithStubs({ marketAdapterRuntimeStub } = {}) {
+function loadRuntimeWithStubs({ marketAdapterRuntimeStub }: any = {}) {
     delete require.cache[runtimePath];
 
     setCachedModule(bitsharesClientPath, { BitShares: {} });

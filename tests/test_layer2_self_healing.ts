@@ -7,7 +7,7 @@ const assert = require('assert');
 const { OrderManager } = require('../modules/order/manager');
 const { ORDER_STATES, ORDER_TYPES, GRID_LIMITS } = require('../modules/constants');
 
-function createMockManager(options = {}) {
+function createMockManager(options: any = {}) {
     const {
         buyTotal = 10000,
         sellTotal = 100,

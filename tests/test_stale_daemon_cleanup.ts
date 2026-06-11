@@ -35,7 +35,7 @@ async function setupFiles() {
 
     await new Promise((resolve, reject) => {
         child.on('message', (msg) => {
-            if (msg === 'ready') resolve();
+            if (msg === 'ready') resolve(undefined);
         });
         child.on('error', reject);
         setTimeout(() => reject(new Error('Child timeout')), 2000);

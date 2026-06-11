@@ -14,7 +14,7 @@ function createChainKeysStub(state) {
             if (vaultKeyHex === 'vault-key') {
                 const entry = Object.entries(state.accounts).find(([, value]) => (value as any).encryptedKey === encryptedKey);
                 if (!entry) throw new Error(`Unknown encrypted key: ${encryptedKey}`);
-                return entry[1].privateKey;
+                return (entry as any)?.[1]?.privateKey;
             }
             if (vaultKeyHex === 'session-key') {
                 return String(encryptedKey).replace(/^session:/, '');
@@ -75,7 +75,7 @@ async function testLiveLookupRefreshesSessionCache() {
         'live lookup should refresh the session cache after key rotation'
     );
 
-    state.accounts.bob = { encryptedKey: 'vault:bob:v1', privateKey: 'bob-private-v1' };
+    (state.accounts as any).bob = { encryptedKey: 'vault:bob:v1', privateKey: 'bob-private-v1' };
     const addedKey = await loadDaemonPrivateKey('bob', daemonState, { chainKeys });
     assert.strictEqual(addedKey, 'bob-private-v1', 'live lookup should see newly added accounts');
     assert.strictEqual(

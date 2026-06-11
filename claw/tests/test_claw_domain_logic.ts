@@ -20,7 +20,7 @@ function registerMock(modulePath, exports) {
 
 const { clone } = require('../modules/utils');
 
-function createHonestHarness(options = {}) {
+function createHonestHarness(options: any = {}) {
   const ecosystemPath = require.resolve('../modules/honest_ecosystem');
   const queriesPath = require.resolve('../modules/chain_queries');
   const poolsPath = require.resolve('../modules/liquidity_pools');

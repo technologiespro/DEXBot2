@@ -58,7 +58,7 @@ async function testCOWRebalanceProducesValidActions() {
         .filter(o => (o as any).type === ORDER_TYPES.SELL)
         .sort((a,b) => (b as any).price - (a as any).price)[0];
 
-    await mgr._updateOrder({ ...furthestSell, state: ORDER_STATES.ACTIVE, orderId: 'chain-surplus', size: 100 });
+    await mgr._updateOrder({ ...((furthestSell as any)), state: ORDER_STATES.ACTIVE, orderId: 'chain-surplus', size: 100 });
 
     // Target count 1 ensures furthest is surplus
     mgr.config.activeOrders.sell = 1;

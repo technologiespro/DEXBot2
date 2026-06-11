@@ -51,7 +51,7 @@ class StubWebSocket {
 
 // Install the stub before requiring the transport module — it captures
 // WebSocketConstructor at module load time.
-globalThis.WebSocket = StubWebSocket;
+globalThis.WebSocket = StubWebSocket as any;
 const { createTransport } = require('../modules/bitshares-native/transport');
 
 console.log('=== Transport Connect No-Op Tests ===\n');

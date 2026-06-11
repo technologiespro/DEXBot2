@@ -231,14 +231,14 @@ async function testSellOrderEdgeOrdering() {
     const orders = Array.from(manager.orders.values()).filter(o => (o as any).type === ORDER_TYPES.SELL);
     const sorted = orders.sort((a, b) => ((a as any).price || 0) - ((b as any).price || 0));
 
-    assert.strictEqual(sorted[0].price, 0.4, 'Lowest price (edge) should be first in market-to-edge sort');
-    assert.strictEqual(sorted[4].price, 0.8, 'Highest price (market) should be last');
+    assert.strictEqual((sorted[0] as any).price, 0.4, 'Lowest price (edge) should be first in market-to-edge sort');
+    assert.strictEqual((sorted[4] as any).price, 0.8, 'Highest price (market) should be last');
 
     // Get last N as edge
     const edgeCount = 2;
     const edgeOrders = sorted.slice(-edgeCount);
-    assert.strictEqual(edgeOrders[0].price, 0.7, 'Edge should start from second-highest');
-    assert.strictEqual(edgeOrders[1].price, 0.8, 'Edge should end at highest (market closest)');
+    assert.strictEqual((edgeOrders[0] as any).price, 0.7, 'Edge should start from second-highest');
+    assert.strictEqual((edgeOrders[1] as any).price, 0.8, 'Edge should end at highest (market closest)');
     console.log('✅ TEST 6 PASSED: SELL order edge ordering is correct');
 }
 
@@ -266,14 +266,14 @@ async function testBuyOrderEdgeOrdering() {
     const orders = Array.from(manager.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY);
     const sorted = orders.sort((a, b) => ((b as any).price || 0) - ((a as any).price || 0));
 
-    assert.strictEqual(sorted[0].price, 0.8, 'Highest price (market) should be first');
-    assert.strictEqual(sorted[4].price, 0.4, 'Lowest price (edge) should be last');
+    assert.strictEqual((sorted[0] as any).price, 0.8, 'Highest price (market) should be first');
+    assert.strictEqual((sorted[4] as any).price, 0.4, 'Lowest price (edge) should be last');
 
     // Get last N as edge
     const edgeCount = 2;
     const edgeOrders = sorted.slice(-edgeCount);
-    assert.strictEqual(edgeOrders[0].price, 0.5, 'Edge should start from second-lowest');
-    assert.strictEqual(edgeOrders[1].price, 0.4, 'Edge should end at lowest (furthest)');
+    assert.strictEqual((edgeOrders[0] as any).price, 0.5, 'Edge should start from second-lowest');
+    assert.strictEqual((edgeOrders[1] as any).price, 0.4, 'Edge should end at lowest (furthest)');
     console.log('✅ TEST 7 PASSED: BUY order edge ordering is correct');
 }
 

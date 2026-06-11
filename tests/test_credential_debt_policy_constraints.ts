@@ -19,7 +19,7 @@ function loadPolicyWithAssetStub(assetsBySymbol = {}) {
                 },
                 get_assets: async (ids) => {
                     return (ids || []).map((id) => {
-                        const match = Object.values(assetsBySymbol).find((asset) => String(asset?.id) === String(id));
+                        const match = Object.values(assetsBySymbol).find((asset) => String((asset as any)?.id) === String(id));
                         return match || null;
                     });
                 },

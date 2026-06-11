@@ -138,7 +138,7 @@ function installStubs(calls, dbCalls, options = {}) {
     }
     if (method === 'get_credit_offers_by_asset') {
       const assetId = args?.[0];
-      return Object.values(offersById).filter((offer) => String(offer?.asset_type) === String(assetId));
+      return Object.values(offersById).filter((offer) => String((offer as any)?.asset_type) === String(assetId));
     }
     if (method === 'get_on_chain_asset_balances') {
       return (options as any).assetBalances || {};

@@ -12,7 +12,7 @@ function waitForFile(filePath, timeoutMs = 5000) {
     return new Promise((resolve, reject) => {
         const tick = () => {
             if (fs.existsSync(filePath)) {
-                resolve();
+                resolve(undefined);
                 return;
             }
             if (Date.now() - started > timeoutMs) {

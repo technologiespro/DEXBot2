@@ -165,8 +165,8 @@ const tests = [
             assets.forEach(asset => {
                 const result = mockGetAssetFees(asset, 100, 0.5);
                 assert(typeof result === 'number', `${asset} should return number`);
-                assert(result > 0, `${asset} result should be positive`);
-                assert(result < 100, `${asset} result should be less than raw (fee deducted)`);
+                assert((result as any) > 0, `${asset} result should be positive`);
+                assert((result as any) < 100, `${asset} result should be less than raw (fee deducted)`);
             });
         }
     },

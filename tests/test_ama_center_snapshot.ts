@@ -230,7 +230,7 @@ async function testAdapterStateMergePreservesBotResetMetadata() {
     assert.strictEqual(state.bots[botKey].gridCenterPrice, 123.45);
     assert.strictEqual(state.bots[botKey].centerPrice, 123.45);
     assert.strictEqual(state.bots[botKey].lastGridResetAt, '2026-05-15T00:01:00.327Z');
-    assert.strictEqual(state.bots[botKey].lastGridResetSource, 'dexbot_grid_resync');
+    assert.strictEqual((state.bots[botKey] as any).lastGridResetSource, 'dexbot_grid_resync');
   } finally {
     await fs.unlink(filePath).catch(() => {});
     delete require.cache[marketAdapterPath];
