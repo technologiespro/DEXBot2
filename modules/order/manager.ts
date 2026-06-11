@@ -72,8 +72,6 @@ const Grid = require('./grid');
 const Format = require('./format');
 const { toFiniteNumber, isValidNumber } = Format;
 
-const SYNC_SOURCES_MANAGE_OWN_GRID_LOCK = new Set(['readOpenOrders', 'periodicBlockchainFetch']);
-
 // ===============================================================================
 // SECTION 2: COW REBALANCE ENGINE
 // ===============================================================================
@@ -851,12 +849,10 @@ class OrderManager {
      * @returns {Promise<import('./types').SyncResult>}
      */
     async synchronizeWithChain(data, src, options = {}) {
-        if (SYNC_SOURCES_MANAGE_OWN_GRID_LOCK.has(src)) {
-            return await this._applySync(data, src, options);
-        }
-        return await this._gridLock.acquire(async () => {
-            return await this._applySync(data, src, options);
-        });
+        // _gridLock acquisition is delegated to sync.synchronizeWithChain itself.
+        // createOrder / cancelOrder acquire it inline; readOpenOrders and
+        // periodicBlockchainFetch acquire it inside syncFromOpenOrders.
+        return await this._applySync(data, src, options);
     }
 
     async _applySync(data, src, options = {}) {
@@ -1626,9 +1622,14 @@ class OrderManager {
     }
 
     /**
+     * @param {Array<Object>} [snapshotOrders] - Optional explicit orders to persist.
+     *   When provided, this list is persisted as-is and the live `manager.orders`
+     *   map is not touched. This is the only race-free way to persist a freshly
+     *   built grid (e.g. from the startup `storeGrid` callback) without briefly
+     *   swapping the live map and exposing it to concurrent readers.
      * @returns {Promise<import('./types').PersistenceValidationResult>}
      */
-    async persistGrid() {
+    async persistGrid(snapshotOrders) {
         if (this._gridPersistenceSuspendedReason) {
             this.logger.log(
                 `[PERSISTENCE-GATE] Skipping grid persistence while suspended: ${this._gridPersistenceSuspendedReason}`,
@@ -1646,7 +1647,7 @@ class OrderManager {
             return validation;
         }
 
-        await persistGridSnapshot(this, this.accountOrders, this.config.botKey);
+        await persistGridSnapshot(this, this.accountOrders, this.config.botKey, snapshotOrders);
         return validation;
     }
 

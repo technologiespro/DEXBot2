@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { writeJsonFileAtomic } = require('./bots_file_lock');
 
 // Resolve profiles directory correctly whether running from source (modules/)
 // or compiled output (dist/modules/)
@@ -48,10 +49,10 @@ function readGeneralSettings({ fallback = null, onError = null }: { fallback?: a
  * @throws {Error} If write operation fails
  */
 function writeGeneralSettings(settings: any): void {
-    if (!fs.existsSync(PROFILES_DIR)) {
-        fs.mkdirSync(PROFILES_DIR, { recursive: true });
-    }
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+    // Atomic write: see writeJsonFileAtomic in bots_file_lock.ts. A plain
+    // writeFileSync could leave a truncated file on crash and break the
+    // next process that reads general.settings.json.
+    writeJsonFileAtomic(SETTINGS_FILE, settings);
 }
 
 export = {

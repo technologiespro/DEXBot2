@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { NODE_MANAGEMENT, BUILD_DIR } = require('./constants');
+const { writeJsonFileAtomic } = require('./bots_file_lock');
 
 const MODULE_DIR = path.dirname(__dirname);
 const PROJECT_ROOT = path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
@@ -90,8 +91,9 @@ function writeHealthCache(stats: Iterable<NodeHealthStat> | ArrayLike<NodeHealth
     const file = resolveHealthCacheFile(options);
     const now = Number.isFinite(options.now) ? options.now! : Date.now();
     const payload = buildHealthCachePayload(stats, now);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8');
+    // Atomic write: see writeJsonFileAtomic in bots_file_lock.ts. A torn
+    // health cache would either lose all health history or fail to parse.
+    writeJsonFileAtomic(file, payload);
     return payload;
 }
 

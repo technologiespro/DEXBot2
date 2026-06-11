@@ -326,7 +326,7 @@ async function _createOrderFromGrid({ chainOrders, account, privateKey, manager,
             chainOrderId,
             isPartialPlacement: false,
             fee: btsFeeData.createFee
-        }, 'createOrder');
+        }, 'createOrder', { gridLockAlreadyHeld: true });
     } else {
         // CRITICAL FIX: Recovery sync if order extraction fails
         const logger = manager && manager.logger;
@@ -383,7 +383,7 @@ async function _cancelChainOrder({ chainOrders, account, privateKey, manager, ch
         });
     } else {
         // CRITICAL: Use _applySync (lock-free) since caller holds _gridLock
-        await manager._applySync(chainOrderId, 'cancelOrder');
+        await manager._applySync(chainOrderId, 'cancelOrder', { gridLockAlreadyHeld: true });
     }
 
     // Unmatched chain orders are not represented as ACTIVE/PARTIAL grid slots, so
@@ -494,7 +494,7 @@ async function _finalizeStartupUpdate({ manager, preparedUpdate }: { manager: an
         fee: btsFeeData.updateFee,
         skipAccounting: false,
         deferredFee: deferredFeeFloat,
-    }, 'createOrder');
+    }, 'createOrder', { gridLockAlreadyHeld: true });
 }
 
 async function _executeStartupUpdateBatch({
@@ -815,7 +815,7 @@ async function _executeStartupCreateGroupBatch({
                 chainOrderId,
                 isPartialPlacement: false,
                 fee: btsFeeData.createFee
-            }, 'createOrder');
+            }, 'createOrder', { gridLockAlreadyHeld: true });
         }
 
         if (missingChainOrderId) {

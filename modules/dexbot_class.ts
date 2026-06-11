@@ -166,6 +166,7 @@ class DEXBot {
     _credentialDaemonDown: boolean;
     _credentialRecoveryNeeded: boolean;
     _credentialRecoveryInFlight: boolean;
+    _credentialDaemonWatchdogInFlight: boolean;
     _staleCleanedOrderIds: Map<any, any>;
     _staleCleanupRetentionMs: number;
     _metrics: any;
@@ -173,6 +174,7 @@ class DEXBot {
     _shutdownStarted: boolean;
     _shutdownPromise: Promise<void> | null;
     _blockchainFetchInterval: any;
+    _blockchainFetchInFlight: boolean;
     _fillsUnsubscribe: any;
     _triggerWatcher: any;
     _triggerDebounceTimer: any;
@@ -240,6 +242,7 @@ class DEXBot {
         this._credentialDaemonDown = false;
         this._credentialRecoveryNeeded = false;
         this._credentialRecoveryInFlight = false;
+        this._credentialDaemonWatchdogInFlight = false;
 
         // Track order IDs whose grid slots were already freed by stale-order batch cleanup.
         // When a batch fails because an order no longer exists on-chain (filled between our
@@ -267,6 +270,7 @@ class DEXBot {
 
         // Runtime handles for graceful lifecycle management
         this._blockchainFetchInterval = null;
+        this._blockchainFetchInFlight = false;
         this._fillsUnsubscribe = null;
         this._triggerWatcher = null;
         this._triggerDebounceTimer = null;
@@ -1215,11 +1219,11 @@ class DEXBot {
                     manager: this.manager,
                     logger: { log: (msg) => this._log(msg) },
                     storeGrid: async (orders) => {
-                        // Temporarily replace manager.orders to persist the specific orders
-                        const originalOrders = this.manager.orders;
-                        this.manager.orders = new Map(orders.map(o => [o.id, o]));
-                        await this.manager.persistGrid();
-                        this.manager.orders = originalOrders;
+                        // Pass the snapshot directly to persistGrid so the live
+                        // `manager.orders` map is not briefly swapped (which would
+                        // leave the _ordersByState/_ordersByType indexes inconsistent
+                        // with the map for the duration of the persist call).
+                        await this.manager.persistGrid(orders);
                     },
                     attemptResumeFn: attemptResumePersistedGridByPriceMatch,
                 });
@@ -3552,39 +3556,48 @@ class DEXBot {
         const intervalMs = Math.max(30_000, Number(TIMING.CREDENTIAL_DAEMON_WATCHDOG_MS) || 60_000);
         const probe = async () => {
             if (this._shuttingDown || !this._isCredentialDaemonWriteRequired()) return;
-            const token = this.privateKey;
+            // Guard against overlapping ticks: if the previous probe is still
+            // running (slow chain / stall), skip rather than queue a second
+            // pingDaemon and a second recovery attempt.
+            if (this._credentialDaemonWatchdogInFlight) return;
+            this._credentialDaemonWatchdogInFlight = true;
             try {
-                await chainKeys.pingDaemon(
-                    token.accountName,
-                    2000,
-                    { socketPath: token.socketPath }
-                );
-                if (this._credentialDaemonDown) {
-                    this.manager?.logger?.log?.('[CREDENTIAL] Credential daemon responsive again.', 'info');
-                }
-                this._credentialDaemonDown = false;
-                await this._runCredentialRecoveryAfterDaemonRestored();
-            } catch (err: any) {
-                if (!this._credentialDaemonDown) {
-                    const errMsg = String(err.message || '');
-                    let hint = '';
-                    if (errMsg.includes('ENOENT')) {
-                        hint = `Socket file missing at ${token.socketPath}. The credential daemon process may have been killed (e.g. by stray Ctrl-C). Restart it with: node pm2 restart dexbot-cred. If the problem persists, check the daemon log: profiles/logs/dexbot-cred.log`;
-                    } else if (errMsg.includes('ECONNREFUSED')) {
-                        hint = `Connection refused at ${token.socketPath}. The daemon may be in a zombie state or restarting. Try: node pm2 restart dexbot-cred.`;
-                    } else if (errMsg.includes('timeout')) {
-                        hint = `Probe timed out. The daemon may be under heavy load or blocked. Check profiles/logs/dexbot-cred.log.`;
-                    } else {
-                        hint = `Write operations will remain paused until re-unlocked with node pm2.`;
-                    }
-
-                    this.manager?.logger?.log?.(
-                        `[CREDENTIAL] Credential daemon watchdog failed: ${err.message}. ${hint}`,
-                        'error'
+                const token = this.privateKey;
+                try {
+                    await chainKeys.pingDaemon(
+                        token.accountName,
+                        2000,
+                        { socketPath: token.socketPath }
                     );
+                    if (this._credentialDaemonDown) {
+                        this.manager?.logger?.log?.('[CREDENTIAL] Credential daemon responsive again.', 'info');
+                    }
+                    this._credentialDaemonDown = false;
+                    await this._runCredentialRecoveryAfterDaemonRestored();
+                } catch (err: any) {
+                    if (!this._credentialDaemonDown) {
+                        const errMsg = String(err.message || '');
+                        let hint = '';
+                        if (errMsg.includes('ENOENT')) {
+                            hint = `Socket file missing at ${token.socketPath}. The credential daemon process may have been killed (e.g. by stray Ctrl-C). Restart it with: node pm2 restart dexbot-cred. If the problem persists, check the daemon log: profiles/logs/dexbot-cred.log`;
+                        } else if (errMsg.includes('ECONNREFUSED')) {
+                            hint = `Connection refused at ${token.socketPath}. The daemon may be in a zombie state or restarting. Try: node pm2 restart dexbot-cred.`;
+                        } else if (errMsg.includes('timeout')) {
+                            hint = `Probe timed out. The daemon may be under heavy load or blocked. Check profiles/logs/dexbot-cred.log.`;
+                        } else {
+                            hint = `Write operations will remain paused until re-unlocked with node pm2.`;
+                        }
+
+                        this.manager?.logger?.log?.(
+                            `[CREDENTIAL] Credential daemon watchdog failed: ${err.message}. ${hint}`,
+                            'error'
+                        );
+                    }
+                    this._credentialDaemonDown = true;
+                    this._suspendGridPersistenceForCredentialOutage(`credential daemon watchdog failed: ${err.message}`);
                 }
-                this._credentialDaemonDown = true;
-                this._suspendGridPersistenceForCredentialOutage(`credential daemon watchdog failed: ${err.message}`);
+            } finally {
+                this._credentialDaemonWatchdogInFlight = false;
             }
         };
 

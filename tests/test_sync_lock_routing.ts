@@ -45,7 +45,7 @@ async function testReadOpenOrdersNoDeadlock() {
 }
 
 async function testSourceBasedLockRouting() {
-    console.log('\n[SYNC-LOCK-002] synchronizeWithChain routes lock ownership by source...');
+    console.log('\n[SYNC-LOCK-002] manager.synchronizeWithChain delegates lock acquisition to sync_engine...');
     const manager = createManagerFixture();
 
     let lockAcquireCalls = 0;
@@ -58,20 +58,79 @@ async function testSourceBasedLockRouting() {
 
     manager.sync.synchronizeWithChain = async (_data, src) => ({ src });
 
+    // The manager wrapper no longer acquires _gridLock; the sync_engine does it for
+    // createOrder/cancelOrder inline, and syncFromOpenOrders does it for
+    // readOpenOrders/periodicBlockchainFetch. The wrapper is a plain delegator.
     await manager.synchronizeWithChain({ any: 1 }, 'createOrder');
-    assert.strictEqual(lockAcquireCalls, 1, 'createOrder should acquire _gridLock in manager wrapper');
+    assert.strictEqual(lockAcquireCalls, 0, 'manager wrapper should not acquire _gridLock for createOrder');
 
     lockAcquireCalls = 0;
     await manager.synchronizeWithChain([], 'readOpenOrders');
-    assert.strictEqual(lockAcquireCalls, 0, 'readOpenOrders should bypass manager-level _gridLock');
+    assert.strictEqual(lockAcquireCalls, 0, 'manager wrapper should not acquire _gridLock for readOpenOrders');
 
     lockAcquireCalls = 0;
     await manager.synchronizeWithChain([], 'periodicBlockchainFetch');
-    assert.strictEqual(lockAcquireCalls, 0, 'periodicBlockchainFetch should bypass manager-level _gridLock');
+    assert.strictEqual(lockAcquireCalls, 0, 'manager wrapper should not acquire _gridLock for periodicBlockchainFetch');
 
     lockAcquireCalls = 0;
     await manager.synchronizeWithChain({ any: 1 }, 'customSource');
-    assert.strictEqual(lockAcquireCalls, 1, 'unknown source should still acquire _gridLock');
+    assert.strictEqual(lockAcquireCalls, 0, 'manager wrapper should not acquire _gridLock for unknown sources');
+
+    console.log('  PASS');
+}
+
+async function testSyncEngineCreateOrderAcquiresGridLock() {
+    console.log('\n[SYNC-LOCK-004] sync_engine.synchronizeWithChain(createOrder) acquires _gridLock...');
+    const manager = createManagerFixture();
+
+    let lockAcquireCalls = 0;
+    const realSyncFromOpenOrders = manager.sync.syncFromOpenOrders;
+    manager._gridLock = {
+        acquire: async (callback) => {
+            lockAcquireCalls += 1;
+            return await callback();
+        }
+    };
+
+    // Provide a real gridOrder with a pre-existing orderId for the rotation path to skip.
+    manager.orders.set('grid-1', {
+        id: 'grid-1', type: 'BUY', state: 'VIRTUAL', price: 1, size: 10, orderId: '',
+    });
+
+    await manager.sync.synchronizeWithChain({
+        gridOrderId: 'grid-1',
+        chainOrderId: '1.7.99',
+        isPartialPlacement: false,
+        expectedType: 'BUY',
+        fee: 0,
+    }, 'createOrder');
+
+    assert.strictEqual(lockAcquireCalls, 1, 'createOrder case should acquire _gridLock inside sync_engine');
+
+    console.log('  PASS');
+}
+
+async function testSyncEngineCancelOrderAcquiresGridLock() {
+    console.log('\n[SYNC-LOCK-005] sync_engine.synchronizeWithChain(cancelOrder) acquires _gridLock...');
+    const manager = createManagerFixture();
+
+    let lockAcquireCalls = 0;
+    manager._gridLock = {
+        acquire: async (callback) => {
+            lockAcquireCalls += 1;
+            return await callback();
+        }
+    };
+    manager.accountant = {
+        ...manager.accountant,
+        adjustTotalBalance: async () => {},
+    };
+
+    // No matching grid order -> fall through to the unmatched-cancel-fee path,
+    // which is inside the critical section we want to lock.
+    await manager.sync.synchronizeWithChain({ orderId: '1.7.99' }, 'cancelOrder');
+
+    assert.strictEqual(lockAcquireCalls, 1, 'cancelOrder case should acquire _gridLock inside sync_engine');
 
     console.log('  PASS');
 }
@@ -105,6 +164,8 @@ async function run() {
     await testReadOpenOrdersNoDeadlock();
     await testSourceBasedLockRouting();
     await testOpenOrdersSyncUsesFillLockContract();
+    await testSyncEngineCreateOrderAcquiresGridLock();
+    await testSyncEngineCancelOrderAcquiresGridLock();
     console.log('\nAll sync lock routing regression tests passed');
 }
 

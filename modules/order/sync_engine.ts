@@ -1112,65 +1112,79 @@ class SyncEngine {
             // ... [existing cases: createOrder, cancelOrder] ...
             case 'createOrder': {
                 const { gridOrderId, chainOrderId, isPartialPlacement, expectedType, fee } = chainData;
-                // Lock order to prevent concurrent modifications during state transition
-                mgr.lockOrders([gridOrderId]);
-                try {
-                    const gridOrder = mgr.orders.get(gridOrderId);
-                    if (gridOrder) {
-                        // Check if this chain order already exists on grid (rotation case)
-                        // If so, fee was already paid when original order was placed - don't deduct again
-                        // CRITICAL: Look for ANY order with this orderId, even if it's been transitioned to VIRTUAL
-                        const existingOrder: any = Array.from(mgr.orders.values() as any[]).find(
-                            (o: any) => o.orderId === chainOrderId && o.id !== gridOrderId
-                        );
-                        const isRotation = !!existingOrder;
+                const runCreate = async () => {
+                    // Lock order to prevent concurrent modifications during state transition
+                    mgr.lockOrders([gridOrderId]);
+                    try {
+                        const gridOrder = mgr.orders.get(gridOrderId);
+                        if (gridOrder) {
+                            // Check if this chain order already exists on grid (rotation case)
+                            // If so, fee was already paid when original order was placed - don't deduct again
+                            // CRITICAL: Look for ANY order with this orderId, even if it's been transitioned to VIRTUAL
+                            const existingOrder: any = Array.from(mgr.orders.values() as any[]).find(
+                                (o: any) => o.orderId === chainOrderId && o.id !== gridOrderId
+                            );
+                            const isRotation = !!existingOrder;
 
-                        // For rotation: transition the old order to VIRTUAL, freeing its capital
-                        if (isRotation && existingOrder) {
-                            if (!isOrderVirtual(existingOrder)) {
-                                const oldVirtualOrder = { ...virtualizeOrder(existingOrder), size: 0 };
-                                await mgr._applyOrderUpdate(oldVirtualOrder, 'rotation-cleanup', {
-                                    skipAccounting: chainData.skipAccounting || false,
-                                    fee: 0
-                                });
-                            } else if (hasOnChainId(existingOrder)) {
-                                // Already VIRTUAL but still has orderId (from rebalance)
-                                // Just clear the orderId to reflect blockchain state
-                                const clearedOrder = { ...virtualizeOrder(existingOrder), size: 0 };
-                                await mgr._applyOrderUpdate(clearedOrder, 'fill-cleanup', {
-                                    skipAccounting: chainData.skipAccounting || false,
-                                    fee: 0
-                                });
+                            // For rotation: transition the old order to VIRTUAL, freeing its capital
+                            if (isRotation && existingOrder) {
+                                if (!isOrderVirtual(existingOrder)) {
+                                    const oldVirtualOrder = { ...virtualizeOrder(existingOrder), size: 0 };
+                                    await mgr._applyOrderUpdate(oldVirtualOrder, 'rotation-cleanup', {
+                                        skipAccounting: chainData.skipAccounting || false,
+                                        fee: 0
+                                    });
+                                } else if (hasOnChainId(existingOrder)) {
+                                    // Already VIRTUAL but still has orderId (from rebalance)
+                                    // Just clear the orderId to reflect blockchain state
+                                    const clearedOrder = { ...virtualizeOrder(existingOrder), size: 0 };
+                                    await mgr._applyOrderUpdate(clearedOrder, 'fill-cleanup', {
+                                        skipAccounting: chainData.skipAccounting || false,
+                                        fee: 0
+                                    });
+                                }
                             }
-                        }
 
-                        const newState = isPartialPlacement ? ORDER_STATES.PARTIAL : ORDER_STATES.ACTIVE;
-                        const normalizedExpectedType = (expectedType === ORDER_TYPES.BUY || expectedType === ORDER_TYPES.SELL)
-                            ? expectedType
-                            : null;
-                        const updatedOrder = {
-                            ...gridOrder,
-                            type: normalizedExpectedType || gridOrder.type,
-                            state: newState,
-                            orderId: chainOrderId
-                        };
-                        // Restore btsFeeState from raw chain order data if provided.
-                        // After a grid reset, in-memory orders have no fee state but the
-                        // chain's limit_order_object stores deferred_fee. Passing it through
-                        // chainData.deferredFee allows reconstructing btsFeeState so the fee
-                        // lifecycle (cancel refunds, fill maker discounts) uses correct values.
-                        if (chainData.deferredFee !== undefined && chainData.deferredFee !== null) {
-                            updatedOrder.btsFeeState = { deferredFee: Math.max(0, chainData.deferredFee) };
+                            const newState = isPartialPlacement ? ORDER_STATES.PARTIAL : ORDER_STATES.ACTIVE;
+                            const normalizedExpectedType = (expectedType === ORDER_TYPES.BUY || expectedType === ORDER_TYPES.SELL)
+                                ? expectedType
+                                : null;
+                            const updatedOrder = {
+                                ...gridOrder,
+                                type: normalizedExpectedType || gridOrder.type,
+                                state: newState,
+                                orderId: chainOrderId
+                            };
+                            // Restore btsFeeState from raw chain order data if provided.
+                            // After a grid reset, in-memory orders have no fee state but the
+                            // chain's limit_order_object stores deferred_fee. Passing it through
+                            // chainData.deferredFee allows reconstructing btsFeeState so the fee
+                            // lifecycle (cancel refunds, fill maker discounts) uses correct values.
+                            if (chainData.deferredFee !== undefined && chainData.deferredFee !== null) {
+                                updatedOrder.btsFeeState = { deferredFee: Math.max(0, chainData.deferredFee) };
+                            }
+                            // Deduced fee (createFee or updateFee) must always be applied to reflect blockchain cost
+                            const actualFee = fee;
+                            await mgr._applyOrderUpdate(updatedOrder, 'fill-place', {
+                                skipAccounting: chainData.skipAccounting || false,
+                                fee: actualFee
+                            });
                         }
-                        // Deduced fee (createFee or updateFee) must always be applied to reflect blockchain cost
-                        const actualFee = fee;
-                        await mgr._applyOrderUpdate(updatedOrder, 'fill-place', {
-                            skipAccounting: chainData.skipAccounting || false,
-                            fee: actualFee
-                        });
+                    } finally {
+                        mgr.unlockOrders([gridOrderId]);
                     }
-                } finally {
-                    mgr.unlockOrders([gridOrderId]);
+                };
+                // CRITICAL: serialize with concurrent _applyOrderUpdate on the global
+                // _ordersByState / _ordersByType Sets and the frozen manager.orders Map.
+                // Internal callers that already hold _gridLock (e.g. reconcileGridOrders)
+                // opt out via { gridLockAlreadyHeld: true } to avoid deadlock with the
+                // non-reentrant AsyncLock.
+                if (options?.gridLockAlreadyHeld) {
+                    await runCreate();
+                } else if (mgr._gridLock && typeof mgr._gridLock.acquire === 'function') {
+                    await mgr._gridLock.acquire(runCreate);
+                } else {
+                    await runCreate();
                 }
                 break;
             }
@@ -1198,34 +1212,43 @@ class SyncEngine {
                         isMaker: true,
                     };
                 }
-                const gridOrder = findMatchingGridOrderByOpenOrder({ orderId }, { orders: mgr.orders, assets: mgr.assets, calcToleranceFn: (p, s, t) => calculatePriceTolerance(p, s, t, mgr.assets), logger: mgr.logger });
-                
-                if (gridOrder) {
-                    // Lock both chain orderId and grid order ID to prevent concurrent modifications
-                    const orderIds = [orderId, gridOrder.id].filter(Boolean);
-                    mgr.lockOrders(orderIds);
-                    try {
-                        // Re-fetch to ensure we have latest state after acquiring lock
-                        const currentGridOrder = mgr.orders.get(gridOrder.id);
-                        if (currentGridOrder && currentGridOrder.orderId === orderId) {
-                            const nextOrder = clearSize
-                                ? { ...virtualizeOrder(currentGridOrder), size: 0 }
-                                : virtualizeOrder(currentGridOrder);
-                            await mgr._applyOrderUpdate(nextOrder, 'cancel-order', {
-                                skipAccounting: false,
-                                fee: btsFeeData?.cancelFee || 0
-                            });
+                const runCancel = async () => {
+                    const gridOrder = findMatchingGridOrderByOpenOrder({ orderId }, { orders: mgr.orders, assets: mgr.assets, calcToleranceFn: (p, s, t) => calculatePriceTolerance(p, s, t, mgr.assets), logger: mgr.logger });
+                    if (gridOrder) {
+                        // Lock both chain orderId and grid order ID to prevent concurrent modifications
+                        const orderIds = [orderId, gridOrder.id].filter(Boolean);
+                        mgr.lockOrders(orderIds);
+                        try {
+                            // Re-fetch to ensure we have latest state after acquiring lock
+                            const currentGridOrder = mgr.orders.get(gridOrder.id);
+                            if (currentGridOrder && currentGridOrder.orderId === orderId) {
+                                const nextOrder = clearSize
+                                    ? { ...virtualizeOrder(currentGridOrder), size: 0 }
+                                    : virtualizeOrder(currentGridOrder);
+                                await mgr._applyOrderUpdate(nextOrder, 'cancel-order', {
+                                    skipAccounting: false,
+                                    fee: btsFeeData?.cancelFee || 0
+                                });
+                            }
+                        } finally {
+                            mgr.unlockOrders(orderIds);
                         }
-                    } finally {
-                        mgr.unlockOrders(orderIds);
+                    } else {
+                        // CRITICAL: Even if order not in grid, the cancellation fee was still paid on blockchain
+                        // Deduct it from account totals to prevent drift.
+                        const btsSide = (mgr.config.assetA === 'BTS') ? ORDER_TYPES.SELL : (mgr.config.assetB === 'BTS') ? ORDER_TYPES.BUY : null;
+                        if (btsSide && btsFeeData?.cancelFee > 0) {
+                            await mgr.accountant.adjustTotalBalance(btsSide, -btsFeeData.cancelFee, 'cancel-order-unmatched-fee');
+                        }
                     }
+                };
+                // CRITICAL: same _gridLock rationale as the createOrder case above.
+                if (options?.gridLockAlreadyHeld) {
+                    await runCancel();
+                } else if (mgr._gridLock && typeof mgr._gridLock.acquire === 'function') {
+                    await mgr._gridLock.acquire(runCancel);
                 } else {
-                    // CRITICAL: Even if order not in grid, the cancellation fee was still paid on blockchain
-                    // Deduct it from account totals to prevent drift.
-                    const btsSide = (mgr.config.assetA === 'BTS') ? ORDER_TYPES.SELL : (mgr.config.assetB === 'BTS') ? ORDER_TYPES.BUY : null;
-                    if (btsSide && btsFeeData?.cancelFee > 0) {
-                        await mgr.accountant.adjustTotalBalance(btsSide, -btsFeeData.cancelFee, 'cancel-order-unmatched-fee');
-                    }
+                    await runCancel();
                 }
                 break;
             }

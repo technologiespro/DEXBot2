@@ -595,10 +595,12 @@ async function initializeFeeCache(botsConfig: any[], BitShares: any): Promise<Re
  * @param {string} botKey - Bot identifier for storage
  * @returns {Promise<boolean>} True if persistence succeeded, false on error
  */
-async function persistGridSnapshot(manager: any, accountOrders: any, botKey: string): Promise<boolean> {
+async function persistGridSnapshot(manager: any, accountOrders: any, botKey: string, snapshotOrders?: any[]): Promise<boolean> {
     if (!manager || !accountOrders || !botKey) return false;
     try {
-        const orders = Array.from(manager.orders.values());
+        const orders = Array.isArray(snapshotOrders)
+            ? snapshotOrders
+            : Array.from(manager.orders.values());
         const pricing = manager._lastGridPricingContext || null;
         let debugConfig = manager.config || null;
         if (debugConfig && pricing) {

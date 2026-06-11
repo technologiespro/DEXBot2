@@ -87,6 +87,7 @@ function createPositionManagerWatcher(options: Record<string, any> = {}) {
   let running = false;
   let syncTimer: any = null;
   let unsubscribe: any = null;
+  let syncInFlight = false;
 
   // Health tracking state
   let consecutiveFailures = 0;
@@ -197,11 +198,23 @@ function createPositionManagerWatcher(options: Record<string, any> = {}) {
       if (!running) {
         return;
       }
-
+      // Guard against overlapping ticks: if a previous sync is still running
+      // (slow chain / stall), skip this tick rather than queue a second
+      // syncAllPositions call on top of the first.
+      if (syncInFlight) {
+        return;
+      }
+      syncInFlight = true;
       manager.syncAllPositions()
         .then(() => recordSyncSuccess())
-        .catch((err: any) => recordSyncFailure(err));
+        .catch((err: any) => recordSyncFailure(err))
+        .finally(() => {
+          syncInFlight = false;
+        });
     }, resolvedOptions.syncIntervalMs);
+    if (typeof syncTimer.unref === 'function') {
+      syncTimer.unref();
+    }
 
     logger.info('[position-manager-watch] running');
     return {

@@ -8,6 +8,7 @@ const { blockchainToFloat, floatToBlockchainInt, resolveConfigValue } = require(
 const { deriveLiquidityPoolTokenValue } = require('./order/utils/system');
 const { toFiniteNumber } = require('./order/format');
 const { createBotKey } = require('./account_orders');
+const { writeJsonFileAtomic } = require('./bots_file_lock');
 const {
     buildCollateralFallbackPlan,
     buildDebtFirstCrPlan,
@@ -277,6 +278,8 @@ class CreditRuntime {
     _borrowerDealsCache: any;
     state: any;
     _loaded: boolean;
+    _maintenanceInFlight: boolean;
+    _watchdogInFlight: boolean;
 
     constructor(bot, options = {}) {
         this.bot = bot || {};
@@ -295,6 +298,8 @@ class CreditRuntime {
         this._borrowerDealsCache = null;
         this.state = this._createDefaultState();
         this._loaded = false;
+        this._maintenanceInFlight = false;
+        this._watchdogInFlight = false;
     }
 
     _createDefaultState() {
@@ -402,8 +407,10 @@ class CreditRuntime {
         this.state.botKey = this.botKey;
         this.state.reborrowPending = Array.isArray(this.state.pendingReborrows) && this.state.pendingReborrows.length > 0;
 
-        const payload = JSON.stringify(this.state, null, 2) + '\n';
-        fs.writeFileSync(this.statePath, payload, 'utf8');
+        // Atomic write: see writeJsonFileAtomic in bots_file_lock.ts. A plain
+        // writeFileSync here could leave a truncated state file on crash and
+        // cause the next process startup to lose all credit/MPA tracking.
+        writeJsonFileAtomic(this.statePath, this.state);
         if (reason) {
             this.log(`credit runtime: persisted ${this.botKey} state (${reason})`);
         }
@@ -2598,39 +2605,51 @@ class CreditRuntime {
         if (!this.isEnabled()) {
             return { skipped: true, reason: 'debt policy disabled' };
         }
-
-        await this.refreshState();
-
-        const results = {
-            context,
-            mpa: [],
-            credit: [],
-        };
-
-        const dp = this.debtPolicy;
-        for (const item of dp.lending) {
-            const resolvedAsset = await this._resolveAsset(item.asset);
-            const assetId = resolvedAsset?.id ? String(resolvedAsset.id) : null;
-            if (!assetId) {
-                this.warn(`credit runtime: unable to resolve asset "${item.asset}" for lending item; skipping`);
-                continue;
-            }
-            if (item.type === 'mpa') {
-                results.mpa.push(await this._runMpaMaintenance(context, options, item, assetId));
-            } else if (item.type === 'creditOffer') {
-                results.credit.push(await this._runCreditMaintenance(item, assetId, { context, options }));
-            }
+        if (this._maintenanceInFlight) {
+            return { skipped: true, reason: 'maintenance already in flight' };
         }
+        this._maintenanceInFlight = true;
 
-        const reborrowResult = await this.processPendingReborrows();
-        await this.persistState(context);
-        return { ...results, reborrows: reborrowResult };
+        try {
+            await this.refreshState();
+
+            const results = {
+                context,
+                mpa: [],
+                credit: [],
+            };
+
+            const dp = this.debtPolicy;
+            for (const item of dp.lending) {
+                const resolvedAsset = await this._resolveAsset(item.asset);
+                const assetId = resolvedAsset?.id ? String(resolvedAsset.id) : null;
+                if (!assetId) {
+                    this.warn(`credit runtime: unable to resolve asset "${item.asset}" for lending item; skipping`);
+                    continue;
+                }
+                if (item.type === 'mpa') {
+                    results.mpa.push(await this._runMpaMaintenance(context, options, item, assetId));
+                } else if (item.type === 'creditOffer') {
+                    results.credit.push(await this._runCreditMaintenance(item, assetId, { context, options }));
+                }
+            }
+
+            const reborrowResult = await this.processPendingReborrows();
+            await this.persistState(context);
+            return { ...results, reborrows: reborrowResult };
+        } finally {
+            this._maintenanceInFlight = false;
+        }
     }
 
     async runCreditWatchdog() {
         if (!this.isEnabled()) {
             return { skipped: true, reason: 'debt policy disabled' };
         }
+        if (this._watchdogInFlight) {
+            return { skipped: true, reason: 'watchdog already in flight' };
+        }
+        this._watchdogInFlight = true;
         try {
             await this.refreshState();
 
@@ -2663,6 +2682,8 @@ class CreditRuntime {
         } catch (err: any) {
             this.warn(`credit runtime: watchdog error: ${err.message}`);
             return { skipped: true, reason: err.message };
+        } finally {
+            this._watchdogInFlight = false;
         }
     }
 

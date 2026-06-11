@@ -169,6 +169,7 @@ const testFiles = [
   'tests/test_partial_order_edge_cases.ts',
   'tests/test_patch17_invariants.ts',
   'tests/test_periodic_sync_fill_rebalance.ts',
+  'tests/test_race_condition_fixes_batch1.ts',
   'tests/test_pm2_logic.ts',
   'tests/test_pm2_main_output.ts',
   'tests/test_pm2_single_target_output.ts',

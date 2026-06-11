@@ -37,6 +37,36 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+
+/**
+ * Write a JSON document atomically by staging to a tmp file in the same
+ * directory as the target and renaming into place. This is the only safe
+ * way to write a JSON file from multiple processes: a `writeFileSync` to
+ * the target path can be observed as a truncated / mid-write document if
+ * the process crashes or if a concurrent writer truncates the file.
+ *
+ * Same-directory + rename is atomic on POSIX and on Windows when the target
+ * exists (the latter via MoveFileEx with MOVEFILE_REPLACE_EXISTING, which
+ * `fs.renameSync` uses). Best-effort cleanup of the tmp file on failure.
+ *
+ * @param {string} targetPath - Path of the final JSON file.
+ * @param {*} data - Anything `JSON.stringify` accepts.
+ */
+function writeJsonFileAtomic(targetPath, data) {
+    const dir = path.dirname(targetPath);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    const tmpPath = `${targetPath}.${process.pid}.${Date.now()}.${crypto.randomBytes(8).toString('hex')}.tmp`;
+    try {
+        fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+        fs.renameSync(tmpPath, targetPath);
+    } catch (err) {
+        try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+        throw err;
+    }
+}
 
 /**
  * Semaphore for synchronizing access to bots.json.
@@ -116,7 +146,11 @@ async function readBotsFileWithLock(botsJsonPath, parseFunction) {
 async function writeBotsFileWithLock(botsJsonPath, config) {
     await botsFileLock.acquire();
     try {
-        fs.writeFileSync(botsJsonPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+        // Atomic write prevents readers (in this process or another) from
+        // seeing a truncated file mid-write. The in-process semaphore here
+        // serializes concurrent writers within the same process; the
+        // tmp+rename is the cross-process safety net.
+        writeJsonFileAtomic(botsJsonPath, config);
     } finally {
         botsFileLock.release();
     }
@@ -149,4 +183,5 @@ export = {
     readBotsFileWithLock,
     writeBotsFileWithLock,
     readBotsFileSync,
+    writeJsonFileAtomic,
 };

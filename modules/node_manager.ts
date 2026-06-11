@@ -45,6 +45,7 @@ const path = require('path');
 const _WebSocket = globalThis.WebSocket;
 const Logger = require('./logger');
 const { NODE_MANAGEMENT, BUILD_DIR } = require('./constants');
+const { writeJsonFileAtomic } = require('./bots_file_lock');
 const {
     resolveHealthCacheFile,
     writeHealthCache,
@@ -207,8 +208,10 @@ class NodeManager {
                     };
                 }
             }
-            fs.mkdirSync(path.dirname(this.blacklistStateFile), { recursive: true });
-            fs.writeFileSync(this.blacklistStateFile, JSON.stringify(state, null, 2), 'utf8');
+            // Atomic write: see writeJsonFileAtomic in bots_file_lock.ts. A
+            // truncated blacklist would cause the next process to either lose
+            // all blacklist state or, worse, fail to parse it.
+            writeJsonFileAtomic(this.blacklistStateFile, state);
         } catch (err: any) {
             this.logger.warn(`Failed to save blacklist state: ${err.message}`);
         }

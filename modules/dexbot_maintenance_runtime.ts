@@ -914,8 +914,16 @@ async function setupTriggerFileDetection() {
                         if (this._triggerDebounceTimer) clearTimeout(this._triggerDebounceTimer);
                         this._triggerDebounceTimer = setTimeout(() => {
                             this._triggerDebounceTimer = null;
+                            // Re-check shutdown: the fs.watch callback checked
+                            // _shuttingDown at debounce-schedule time, but the
+                            // 200ms delay can outlive the start of shutdown.
+                            // Acquiring the fill lock with a torn-down manager
+                            // would be a no-op-or-error at best and a use-after-
+                            // free at worst.
+                            if (this._shuttingDown || !this.manager?._fillProcessingLock) return;
                             const triggerInfo = readTriggerMetadata(this.triggerFile);
                             this.manager._fillProcessingLock.acquire(async () => {
+                                if (this._shuttingDown) return;
                                 const ok = await this._performGridResync(buildGridResyncOptions(triggerInfo));
                                 if (!ok) {
                                     this._warn('Runtime trigger reset failed; retaining existing grid state.');
@@ -1059,57 +1067,78 @@ function setupBlockchainFetchInterval() {
 
     const intervalMs = intervalMin * 60 * 1000;
     this._blockchainFetchInterval = setInterval(async () => {
+        // Skip if shutdown has begun between the previous tick and now:
+        // there is no point acquiring _fillProcessingLock or making
+        // chain / daemon calls once we are tearing down. The lock would
+        // serialize correctly, but we would still do wasted work
+        // (syncMarketAdapter, fetchAccountTotals, readOpenOrders)
+        // during shutdown.
+        if (this._shuttingDown) return;
+        // Guard against overlapping ticks: if the previous tick is still in
+        // flight (slow chain / stall), skip rather than queue a second
+        // periodic fetch. The fill lock below would still serialize the
+        // work, but the second tick would waste a syncMarketAdapter call
+        // and a fetchAccountTotals call while waiting.
+        if (this._blockchainFetchInFlight) return;
+        this._blockchainFetchInFlight = true;
         try {
-            await syncMarketAdapterOnPeriodicConfigCheck.call(this, 'periodic blockchain fetch');
+            try {
+                await syncMarketAdapterOnPeriodicConfigCheck.call(this, 'periodic blockchain fetch');
 
-            await this.manager._fillProcessingLock.acquire(async () => {
-                if (this.manager.accountant && typeof this.manager.accountant.resetRecoveryState === 'function') {
-                    this.manager.accountant.resetRecoveryState();
-                } else {
-                    this.manager._recoveryAttempted = false;
-                }
-                this._log(`Fetching blockchain account values (interval: every ${intervalMin}min)`);
-                await this.manager.fetchAccountTotals(this.accountId);
-
-                let chainOpenOrders = [];
-                if (!this.config.dryRun) {
-                    try {
-                        chainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
-                        const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'periodicBlockchainFetch', { fillLockAlreadyHeld: true });
-
-                        if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
-                            this._log(`Periodic sync: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
-                            this._markGridActivity?.('periodic sync fill rebalance');
-                            const batchResult = await this._processFillsWithBatching(
-                                syncResult.filledOrders, new Set(), 'periodic sync fill rebalance'
-                            );
-                            if (!batchResult?.aborted) {
-                                await this.manager.persistGrid();
-                            }
-                        }
-
-                        if (syncResult.unmatchedChainOrders && syncResult.unmatchedChainOrders.length > 0) {
-                            const sample = syncResult.unmatchedChainOrders
-                                .slice(0, 3)
-                                .map(formatUnmatchedChainOrder)
-                                .join(' | ');
-                            this._log(
-                                `Periodic sync: ${syncResult.unmatchedChainOrders.length} chain order(s) not in grid ` +
-                                `(surplus/divergence)${sample ? `: ${sample}` : ''}`,
-                                'warn'
-                            );
-                        }
-                    } catch (err: any) {
-                        this._warn(`Error reading open orders during periodic fetch: ${err.message}`);
+                await this.manager._fillProcessingLock.acquire(async () => {
+                    if (this.manager.accountant && typeof this.manager.accountant.resetRecoveryState === 'function') {
+                        this.manager.accountant.resetRecoveryState();
+                    } else {
+                        this.manager._recoveryAttempted = false;
                     }
-                }
+                    this._log(`Fetching blockchain account values (interval: every ${intervalMin}min)`);
+                    await this.manager.fetchAccountTotals(this.accountId);
 
-                await this._performPeriodicGridChecks();
-            });
-        } catch (err: any) {
-            this._warn(`Error during periodic blockchain fetch: ${err && err.message ? err.message : err}`);
+                    let chainOpenOrders = [];
+                    if (!this.config.dryRun) {
+                        try {
+                            chainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
+                            const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'periodicBlockchainFetch', { fillLockAlreadyHeld: true });
+
+                            if (syncResult.filledOrders && syncResult.filledOrders.length > 0) {
+                                this._log(`Periodic sync: ${syncResult.filledOrders.length} grid order(s) found filled on-chain. Triggering rebalance.`, 'info');
+                                this._markGridActivity?.('periodic sync fill rebalance');
+                                const batchResult = await this._processFillsWithBatching(
+                                    syncResult.filledOrders, new Set(), 'periodic sync fill rebalance'
+                                );
+                                if (!batchResult?.aborted) {
+                                    await this.manager.persistGrid();
+                                }
+                            }
+
+                            if (syncResult.unmatchedChainOrders && syncResult.unmatchedChainOrders.length > 0) {
+                                const sample = syncResult.unmatchedChainOrders
+                                    .slice(0, 3)
+                                    .map(formatUnmatchedChainOrder)
+                                    .join(' | ');
+                                this._log(
+                                    `Periodic sync: ${syncResult.unmatchedChainOrders.length} chain order(s) not in grid ` +
+                                    `(surplus/divergence)${sample ? `: ${sample}` : ''}`,
+                                    'warn'
+                                );
+                            }
+                        } catch (err: any) {
+                            this._warn(`Error reading open orders during periodic fetch: ${err.message}`);
+                        }
+                    }
+
+                    await this._performPeriodicGridChecks();
+                });
+            } catch (err: any) {
+                this._warn(`Error during periodic blockchain fetch: ${err && err.message ? err.message : err}`);
+            }
+        } finally {
+            this._blockchainFetchInFlight = false;
         }
     }, intervalMs);
+    if (typeof this._blockchainFetchInterval.unref === 'function') {
+        this._blockchainFetchInterval.unref();
+    }
 
     this._log(`Started periodic blockchain fetch interval: every ${intervalMin} minute(s)`);
 }
