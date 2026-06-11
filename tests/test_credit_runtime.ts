@@ -55,7 +55,7 @@ function installStubs(calls, dbCalls, options = {}) {
       bitasset_data_id: null,
     },
   };
-  const assetsBySymbol = new Map(Object.values(assetsById).map((asset) => [asset.symbol, asset]));
+  const assetsBySymbol = new Map(Object.values(assetsById).map((asset) => [(asset as any).symbol, asset]));
   const bitassetObjects = options.bitassetObjects || {
     '2.4.1': {
       id: '2.4.1',

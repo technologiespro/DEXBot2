@@ -12,7 +12,7 @@ function registerMock(modulePath, exports) {
     filename: modulePath,
     loaded: true,
     exports
-  };
+  } as any;
 }
 
 function createStrategyHarness() {

@@ -83,8 +83,8 @@ async function run() {
     const sellSlot = manager.orders.get('slot-10');
     const buySlot = manager.orders.get('slot-0');
 
-    assert.strictEqual(sellSlot.state, ORDER_STATES.VIRTUAL, 'Valid SELL fill should be virtualized');
-    assert.strictEqual(buySlot.state, ORDER_STATES.VIRTUAL, 'Valid BUY fill should be virtualized');
+    assert.strictEqual((sellSlot as any).state, ORDER_STATES.VIRTUAL, 'Valid SELL fill should be virtualized');
+    assert.strictEqual((buySlot as any).state, ORDER_STATES.VIRTUAL, 'Valid BUY fill should be virtualized');
 
     console.log('✓ Malformed fill types are ignored, valid fills processed correctly');
 }

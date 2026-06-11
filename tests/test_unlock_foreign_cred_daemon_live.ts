@@ -115,7 +115,7 @@ async function runLiveForeignKilledTest() {
     try { fs.unlinkSync(credPidFile); } catch (_) {}
 
     const stub = await launchStub();
-    const stubPid = stub.pid;
+    const stubPid = (stub as any).pid;
     await assertStubIsRecognised(stubPid);
     assert.ok(isAlive(stubPid), 'foreign stub should be running');
     assert.ok(fs.existsSync(socketFile), 'socket file should exist');
@@ -144,7 +144,7 @@ async function runLiveForeignPidMismatchTest() {
     fs.writeFileSync(credPidFile, '0', { mode: 0o600 });
 
     const stub = await launchStub();
-    const stubPid = stub.pid;
+    const stubPid = (stub as any).pid;
     await assertStubIsRecognised(stubPid);
     assert.ok(isAlive(stubPid), 'foreign stub should be running');
 
@@ -170,7 +170,7 @@ async function runOwnedStubLeftAloneTest() {
     try { fs.unlinkSync(credPidFile); } catch (_) {}
 
     const stub = await launchStub();
-    const stubPid = stub.pid;
+    const stubPid = (stub as any).pid;
     await assertStubIsRecognised(stubPid);
     assert.ok(isAlive(stubPid), 'foreign stub should be running');
     fs.writeFileSync(credPidFile, String(stubPid), { mode: 0o600 });
@@ -201,7 +201,7 @@ async function runSocketWithoutReadyFileTest() {
     try { fs.unlinkSync(credPidFile); } catch (_) {}
 
     const stub = await launchStub();
-    const stubPid = stub.pid;
+    const stubPid = (stub as any).pid;
     await assertStubIsRecognised(stubPid);
     // Simulate the ready file being removed by an external process
     // (e.g. a previous unlock unlinked it).

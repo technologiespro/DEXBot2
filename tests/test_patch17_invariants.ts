@@ -21,9 +21,9 @@ if (typeof testTimeoutHandle.unref === 'function') testTimeoutHandle.unref();
 process.on('unhandledRejection', (reason) => {
     const isPostTestWsErrorEvent = testsComplete &&
         reason &&
-        reason.type === 'error' &&
-        reason.error &&
-        typeof reason.error === 'object';
+        (reason as any).type === 'error' &&
+        (reason as any).error &&
+        typeof (reason as any).error === 'object';
 
     if (isPostTestWsErrorEvent) {
         return;
@@ -331,8 +331,8 @@ async function testGridResizeRespectsBudgetAfterCap() {
 
     await Grid._recalculateGridOrderSizesFromBlockchain(mgr, ORDER_TYPES.BUY);
 
-    const buyOrders = Array.from(mgr.orders.values()).filter(o => o.type === ORDER_TYPES.BUY);
-    const allocatedBuy = buyOrders.reduce((sum, o) => sum + Number(o.size || 0), 0);
+    const buyOrders = Array.from(mgr.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY);
+    const allocatedBuy = buyOrders.reduce((sum, o) => sum + Number((o as any).size || 0), 0);
     const buyCtx = await Grid._getSizingContext(mgr, 'buy');
     const buyBudget = Number(buyCtx?.budget || 0);
 

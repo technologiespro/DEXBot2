@@ -23,9 +23,9 @@ let testsComplete = false;
 process.on('unhandledRejection', (reason) => {
     const isPostTestWsErrorEvent = testsComplete &&
         reason &&
-        reason.type === 'error' &&
-        reason.error &&
-        typeof reason.error === 'object';
+        (reason as any).type === 'error' &&
+        (reason as any).error &&
+        typeof (reason as any).error === 'object';
 
     if (isPostTestWsErrorEvent) {
         return;
@@ -237,7 +237,7 @@ async function testRecordedPendingBroadcastStoresSlotId() {
 
     assert.strictEqual(bot.manager._pendingBroadcasts.size, 1, 'pending broadcast should be recorded');
     const entry = Array.from(bot.manager._pendingBroadcasts.values())[0];
-    assert.strictEqual(entry.slotId, slotId, 'runtime pending entry must carry slotId');
+    assert.strictEqual((entry as any).slotId, slotId, 'runtime pending entry must carry slotId');
 
     const chainOrders = [
         {
@@ -253,8 +253,8 @@ async function testRecordedPendingBroadcastStoresSlotId() {
 
     const match = bot._findChainOrderForSlot(
         chainOrders,
-        entry.slotId,
-        { sell: entry.finalInts.sell, receive: entry.finalInts.receive, orderType: entry.orderType }
+        (entry as any).slotId,
+        { sell: (entry as any).finalInts.sell, receive: (entry as any).finalInts.receive, orderType: (entry as any).orderType }
     );
     assert(match, 'runtime-shaped pending entry should match chain order');
     assert.strictEqual(match.id, '1.7.572311703');

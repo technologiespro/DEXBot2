@@ -87,13 +87,13 @@ async function testTransportConnectAndLogin(url) {
     const dbApiId = await rpcCall('call', [1, 'database', []]);
     console.log(`  ✓ database API: id=${dbApiId} (${Date.now() - rpcStart}ms)`);
 
-    const chainId = await rpcCall('call', [dbApiId, 'get_chain_id', []]);
+    const chainId: any = await rpcCall('call', [dbApiId, 'get_chain_id', []]);
     console.log(`  ✓ chain_id: ${chainId.substring(0, 16)}... (${Date.now() - rpcStart}ms)`);
 
-    const props = await rpcCall('call', [dbApiId, 'get_chain_properties', []]);
+    const props: any = await rpcCall('call', [dbApiId, 'get_chain_properties', []]);
     console.log(`  ✓ chain_properties: prefix=${props?.address_prefix} (${Date.now() - rpcStart}ms)`);
 
-    const globals = await rpcCall('call', [dbApiId, 'get_global_properties', []]);
+    const globals: any = await rpcCall('call', [dbApiId, 'get_global_properties', []]);
     console.log(`  ✓ global_properties: core=${globals?.parameters?.core_asset} (${Date.now() - rpcStart}ms)`);
 
     console.log(`  ✓ Full login sequence: ${Date.now() - rpcStart}ms`);

@@ -15,4 +15,4 @@ function createSilentLogger() {
 module.exports = {
     createTestLogger,
     createSilentLogger,
-};
+} as any;

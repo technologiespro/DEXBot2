@@ -20,4 +20,4 @@ function installBitsharesClientStub(modulePath) {
 
 module.exports = {
     installBitsharesClientStub,
-};
+} as any;

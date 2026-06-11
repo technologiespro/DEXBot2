@@ -21,7 +21,7 @@ function setCachedModule(modulePath, exports, opts = {}) {
         filename: modulePath,
         loaded: true,
         exports,
-    };
+    } as any;
 
     if (opts.mirrorDist !== false) {
         const distPath = _deriveDistPath(modulePath);
@@ -51,4 +51,4 @@ function restoreCachedModule(modulePath, original, opts = {}) {
 module.exports = {
     restoreCachedModule,
     setCachedModule,
-};
+} as any;

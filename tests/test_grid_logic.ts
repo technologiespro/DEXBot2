@@ -170,8 +170,8 @@ async function runTests() {
 
         const partialId = 'b5';
         const sideSlots = Array.from(manager.orders.values())
-            .filter(o => o.type === ORDER_TYPES.BUY)
-            .sort((a, b) => a.price - b.price);
+            .filter(o => (o as any).type === ORDER_TYPES.BUY)
+            .sort((a, b) => (a as any).price - (b as any).price);
         const ctx = await Grid.getSizingContext(manager, 'buy');
         const idealSizes = allocateFundsByWeights(
             ctx.budget,
@@ -182,7 +182,7 @@ async function runTests() {
             0,
             ctx.precision
         );
-        const partialIdx = sideSlots.findIndex(s => s.id === partialId);
+        const partialIdx = sideSlots.findIndex(s => (s as any).id === partialId);
         const threshold = getSingleDustThreshold(idealSizes[partialIdx]);
         const partialSize = threshold * 0.95;
 

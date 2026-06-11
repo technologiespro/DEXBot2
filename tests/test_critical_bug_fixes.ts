@@ -55,8 +55,8 @@ async function testCOWRebalanceProducesValidActions() {
 
     // Force a surplus far away on sell side
     const furthestSell = Array.from(mgr.orders.values())
-        .filter(o => o.type === ORDER_TYPES.SELL)
-        .sort((a,b) => b.price - a.price)[0];
+        .filter(o => (o as any).type === ORDER_TYPES.SELL)
+        .sort((a,b) => (b as any).price - (a as any).price)[0];
 
     await mgr._updateOrder({ ...furthestSell, state: ORDER_STATES.ACTIVE, orderId: 'chain-surplus', size: 100 });
 

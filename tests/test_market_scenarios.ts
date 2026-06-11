@@ -139,7 +139,7 @@ async function runStateLifecycleScenario() {
     await commitResult(fillRes);
     
     // Move window past it - force a far slot to be active
-    const sellSlots = Array.from(mgr.orders.values()).filter(o => o.id.startsWith('sell-')).sort((a,b) => a.price - b.price);
+    const sellSlots = Array.from(mgr.orders.values()).filter(o => (o as any).id.startsWith('sell-')).sort((a,b) => (a as any).price - (b as any).price);
     await mgr._updateOrder({ ...sellSlots[10], state: ORDER_STATES.ACTIVE, orderId: 'force' });
     
     // Rebalance to reassign types based on new boundary

@@ -61,7 +61,7 @@ function detectMutations(manager, snapshot) {
         
         // Check for removed items
         for (const item of prevSet) {
-            if (!set.has(item)) {
+            if (!(set as any).has(item)) {
                 mutations.push({
                     type: 'DELETE',
                     setName: '_ordersByState',
@@ -90,7 +90,7 @@ function detectMutations(manager, snapshot) {
         
         // Check for removed items
         for (const item of prevSet) {
-            if (!set.has(item)) {
+            if (!(set as any).has(item)) {
                 mutations.push({
                     type: 'DELETE',
                     setName: '_ordersByType',
@@ -128,10 +128,10 @@ function generateMutationReport(tracker) {
     }
     
     for (const [setKey, mutations] of Object.entries(groupedBySet)) {
-        report += `\n${setKey} - ${mutations.length} mutations:\n`;
+        report += `\n${setKey} - ${(mutations as any).length} mutations:\n`;
         report += `${'-'.repeat(60)}\n`;
         
-        mutations.forEach((mut, idx) => {
+        (mutations as any).forEach((mut, idx) => {
             report += `\n  Violation #${idx + 1}:\n`;
             report += `    Type: ${mut.type}\n`;
             report += `    Item: ${mut.item || 'N/A'}\n`;

@@ -12,7 +12,7 @@ function createChainKeysStub(state) {
         decrypt: (encryptedKey, secret) => {
             const vaultKeyHex = secret && secret.vaultKeyHex;
             if (vaultKeyHex === 'vault-key') {
-                const entry = Object.entries(state.accounts).find(([, value]) => value.encryptedKey === encryptedKey);
+                const entry = Object.entries(state.accounts).find(([, value]) => (value as any).encryptedKey === encryptedKey);
                 if (!entry) throw new Error(`Unknown encrypted key: ${encryptedKey}`);
                 return entry[1].privateKey;
             }

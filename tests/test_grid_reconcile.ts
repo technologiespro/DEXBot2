@@ -69,11 +69,11 @@ async function testGridEdgeDetection() {
     }
 
     // Test edge detection (all 5 outermost BUY orders are ACTIVE)
-    const orders = Array.from(manager.orders.values()).filter(o => o.type === ORDER_TYPES.BUY);
-    const sorted = orders.sort((a, b) => (b.price || 0) - (a.price || 0));
+    const orders = Array.from(manager.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY);
+    const sorted = orders.sort((a, b) => ((b as any).price || 0) - ((a as any).price || 0));
     const outerEdgeCount = 5;
     const edgeOrders = sorted.slice(-outerEdgeCount);
-    const allEdgeActive = edgeOrders.every(o => o.orderId && (o.state === ORDER_STATES.ACTIVE || o.state === ORDER_STATES.PARTIAL));
+    const allEdgeActive = edgeOrders.every(o => (o as any).orderId && ((o as any).state === ORDER_STATES.ACTIVE || (o as any).state === ORDER_STATES.PARTIAL));
 
     assert.strictEqual(allEdgeActive, true, 'Edge orders should all be ACTIVE');
     assert.strictEqual(edgeOrders.length, 5, 'Should have 5 edge orders');
@@ -110,11 +110,11 @@ async function testGridEdgeDetectionWithVirtual() {
         });
     }
 
-    const orders = Array.from(manager.orders.values()).filter(o => o.type === ORDER_TYPES.BUY);
-    const sorted = orders.sort((a, b) => (b.price || 0) - (a.price || 0));
+    const orders = Array.from(manager.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY);
+    const sorted = orders.sort((a, b) => ((b as any).price || 0) - ((a as any).price || 0));
     const outerEdgeCount = 3;
     const edgeOrders = sorted.slice(-outerEdgeCount);
-    const allEdgeActive = edgeOrders.every(o => o.orderId && (o.state === ORDER_STATES.ACTIVE || o.state === ORDER_STATES.PARTIAL));
+    const allEdgeActive = edgeOrders.every(o => (o as any).orderId && ((o as any).state === ORDER_STATES.ACTIVE || (o as any).state === ORDER_STATES.PARTIAL));
 
     assert.strictEqual(allEdgeActive, false, 'Edge should NOT be all ACTIVE when VIRTUAL orders exist');
     console.log('✅ TEST 2 PASSED: Edge detection correctly rejects partial ACTIVE edges');
@@ -228,8 +228,8 @@ async function testSellOrderEdgeOrdering() {
     }
 
     // Sort for edge detection (low to high = market to edge)
-    const orders = Array.from(manager.orders.values()).filter(o => o.type === ORDER_TYPES.SELL);
-    const sorted = orders.sort((a, b) => (a.price || 0) - (b.price || 0));
+    const orders = Array.from(manager.orders.values()).filter(o => (o as any).type === ORDER_TYPES.SELL);
+    const sorted = orders.sort((a, b) => ((a as any).price || 0) - ((b as any).price || 0));
 
     assert.strictEqual(sorted[0].price, 0.4, 'Lowest price (edge) should be first in market-to-edge sort');
     assert.strictEqual(sorted[4].price, 0.8, 'Highest price (market) should be last');
@@ -263,8 +263,8 @@ async function testBuyOrderEdgeOrdering() {
     }
 
     // Sort for edge detection (high to low = market to edge)
-    const orders = Array.from(manager.orders.values()).filter(o => o.type === ORDER_TYPES.BUY);
-    const sorted = orders.sort((a, b) => (b.price || 0) - (a.price || 0));
+    const orders = Array.from(manager.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY);
+    const sorted = orders.sort((a, b) => ((b as any).price || 0) - ((a as any).price || 0));
 
     assert.strictEqual(sorted[0].price, 0.8, 'Highest price (market) should be first');
     assert.strictEqual(sorted[4].price, 0.4, 'Lowest price (edge) should be last');
@@ -302,10 +302,10 @@ async function testNoReductionWhenEdgeHasVirtual() {
         orderId: null
     });
 
-    const orders = Array.from(manager.orders.values()).filter(o => o.type === ORDER_TYPES.BUY);
-    const sorted = orders.sort((a, b) => (b.price || 0) - (a.price || 0));
+    const orders = Array.from(manager.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY);
+    const sorted = orders.sort((a, b) => ((b as any).price || 0) - ((a as any).price || 0));
     const edgeOrders = sorted.slice(-1);  // Last 1 = edge
-    const isEdgeFullyActive = edgeOrders.every(o => o.orderId && (o.state === ORDER_STATES.ACTIVE || o.state === ORDER_STATES.PARTIAL));
+    const isEdgeFullyActive = edgeOrders.every(o => (o as any).orderId && ((o as any).state === ORDER_STATES.ACTIVE || (o as any).state === ORDER_STATES.PARTIAL));
 
     assert.strictEqual(isEdgeFullyActive, false, 'Edge with VIRTUAL should not be fully active');
     console.log('✅ TEST 8 PASSED: Correctly skips reduction when edge has VIRTUAL orders');

@@ -72,4 +72,4 @@ function withDynamicWeightFiles(botKey) {
 
 module.exports = {
     withDynamicWeightFiles,
-};
+} as any;

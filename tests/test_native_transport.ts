@@ -195,7 +195,7 @@ function createWsServer(port, options = {}) {
                 port,
                 close() {
                     for (const s of connections) {
-                        try { s.destroy(); } catch (_) {}
+                        try { (s as any).destroy(); } catch (_) {}
                     }
                     server.close();
                 },
@@ -293,7 +293,7 @@ async function testConnectionLifecycle() {
 
         console.log('  PASS: Connection lifecycle');
     } finally {
-        wsServer.close();
+        (wsServer as any).close();
     }
 }
 
@@ -320,7 +320,7 @@ async function testMultiNodeFailover() {
 
         console.log('  PASS: Multi-node failover (bad node first)');
     } finally {
-        wsServer.close();
+        (wsServer as any).close();
     }
 }
 
@@ -385,7 +385,7 @@ async function testStatusCallbacks() {
 
         console.log('  PASS: Status callbacks');
     } finally {
-        wsServer.close();
+        (wsServer as any).close();
     }
 }
 
@@ -416,7 +416,7 @@ async function testKeepAlive() {
         transport.disconnect();
         console.log('  PASS: Idle keepalive');
     } finally {
-        wsServer.close();
+        (wsServer as any).close();
     }
 }
 

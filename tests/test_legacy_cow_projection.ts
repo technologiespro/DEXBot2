@@ -12,9 +12,9 @@ let testsComplete = false;
 process.on('unhandledRejection', (reason) => {
     const isPostTestWsErrorEvent = testsComplete &&
         reason &&
-        reason.type === 'error' &&
-        reason.error &&
-        typeof reason.error === 'object';
+        (reason as any).type === 'error' &&
+        (reason as any).error &&
+        typeof (reason as any).error === 'object';
 
     if (isPostTestWsErrorEvent) {
         return;

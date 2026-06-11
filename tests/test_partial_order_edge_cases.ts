@@ -104,17 +104,17 @@ async function testPartialAtGridBoundary() {
     // TEST: STEP 2.5 - Partial at boundary should be recognized and handled in-place
     // (With new STEP 2.5 logic, partials are handled in-place: dust→merge, non-dust→keep)
     const allOrders = Array.from(mgr.orders.values());
-    const foundPartial = allOrders.find(o => o.id === 'sell-173');
+    const foundPartial = allOrders.find(o => (o as any).id === 'sell-173');
     assert(foundPartial !== undefined, 'Partial order should exist in grid');
-    assert(foundPartial.state === ORDER_STATES.PARTIAL, 'Order should remain in PARTIAL state');
+    assert((foundPartial as any).state === ORDER_STATES.PARTIAL, 'Order should remain in PARTIAL state');
 
     // Verify partial is a DUST partial (needs merging)
     const targetSize = 10; // Example target size
     const dustThreshold = targetSize * (GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE / 100);
-    const isDust = foundPartial.size < dustThreshold;
-    assert(isDust === true, `Dust partial (size=${foundPartial.size}) should be < threshold=${dustThreshold.toFixed(4)}`);
+    const isDust = (foundPartial as any).size < dustThreshold;
+    assert(isDust === true, `Dust partial (size=${(foundPartial as any).size}) should be < threshold=${dustThreshold.toFixed(4)}`);
 
-    console.log(`  ✓ Partial at boundary (sell-173, size=${foundPartial.size}) recognized as dust`);
+    console.log(`  ✓ Partial at boundary (sell-173, size=${(foundPartial as any).size}) recognized as dust`);
     console.log(`  ✓ Will be updated in-place to merge to target size\n`);
 }
 
@@ -237,7 +237,7 @@ async function testMultiplePartialsOnSameSide() {
 
     // TEST: preparePartialOrderMove returns null for second partial (only first found)
     const partials = Array.from(mgr.orders.values())
-        .filter(o => o.type === ORDER_TYPES.BUY && o.state === ORDER_STATES.PARTIAL);
+        .filter(o => (o as any).type === ORDER_TYPES.BUY && (o as any).state === ORDER_STATES.PARTIAL);
     assert.strictEqual(partials.length, 2, 'Should find both PARTIAL orders');
 
     console.log(`  ✓ Found 2 PARTIAL orders on BUY side`);

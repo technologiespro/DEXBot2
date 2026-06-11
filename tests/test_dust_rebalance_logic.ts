@@ -103,9 +103,9 @@ async function testDustTrigger() {
     });
 
     const buyPartials = Array.from(manager.orders.values())
-        .filter(o => o.type === ORDER_TYPES.BUY && o.state === ORDER_STATES.PARTIAL);
+        .filter(o => (o as any).type === ORDER_TYPES.BUY && (o as any).state === ORDER_STATES.PARTIAL);
     const sellPartials = Array.from(manager.orders.values())
-        .filter(o => o.type === ORDER_TYPES.SELL && o.state === ORDER_STATES.PARTIAL);
+        .filter(o => (o as any).type === ORDER_TYPES.SELL && (o as any).state === ORDER_STATES.PARTIAL);
 
     const buyHasDust = buyPartials.length > 0 && await Grid.hasAnyDust(manager, buyPartials, 'buy');
     const sellHasDust = sellPartials.length > 0 && await Grid.hasAnyDust(manager, sellPartials, 'sell');
@@ -127,9 +127,9 @@ async function testDustTrigger() {
     });
 
     const buyPartials2 = Array.from(manager.orders.values())
-        .filter(o => o.type === ORDER_TYPES.BUY && o.state === ORDER_STATES.PARTIAL);
+        .filter(o => (o as any).type === ORDER_TYPES.BUY && (o as any).state === ORDER_STATES.PARTIAL);
     const sellPartials2 = Array.from(manager.orders.values())
-        .filter(o => o.type === ORDER_TYPES.SELL && o.state === ORDER_STATES.PARTIAL);
+        .filter(o => (o as any).type === ORDER_TYPES.SELL && (o as any).state === ORDER_STATES.PARTIAL);
 
     const buyHasDust2 = buyPartials2.length > 0 && await Grid.hasAnyDust(manager, buyPartials2, 'buy');
     const sellHasDust2 = sellPartials2.length > 0 && await Grid.hasAnyDust(manager, sellPartials2, 'sell');

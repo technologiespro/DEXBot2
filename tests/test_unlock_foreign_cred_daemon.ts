@@ -137,8 +137,8 @@ async function runInodeExactPathMatchTest() {
         server.listen(longPath, () => resolve(null));
     });
     if (listenError) {
-        if (['EPERM', 'EACCES', 'EADDRNOTAVAIL'].includes(listenError.code)) {
-            console.log(`Skipping inode exact path match test: Unix socket listen unavailable (${listenError.code})`);
+        if (['EPERM', 'EACCES', 'EADDRNOTAVAIL'].includes((listenError as any).code)) {
+            console.log(`Skipping inode exact path match test: Unix socket listen unavailable (${(listenError as any).code})`);
             return;
         }
         throw listenError;

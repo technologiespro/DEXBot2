@@ -94,9 +94,9 @@ async function testCase1() {
     });
 
     const activeBuyCount = Array.from(result.targetGrid.values())
-        .filter(o => o.type === ORDER_TYPES.BUY && o.state === ORDER_STATES.ACTIVE).length;
+        .filter(o => (o as any).type === ORDER_TYPES.BUY && (o as any).state === ORDER_STATES.ACTIVE).length;
     const buySlotCount = Array.from(mgr.orders.values())
-        .filter(o => o.type === ORDER_TYPES.BUY).length;
+        .filter(o => (o as any).type === ORDER_TYPES.BUY).length;
 
     assert(activeBuyCount <= buySlotCount, 'Should not place more orders than available slots');
 }
@@ -120,7 +120,7 @@ async function testCase2() {
 
 async function testCase3a() {
     const mgr = createManagerWithGridSize(10, 500, 50);
-    const slots = Array.from(mgr.orders.values()).filter(o => o.type === ORDER_TYPES.BUY);
+    const slots = Array.from(mgr.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY);
 
     const dustPercentage = GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE / 100;
     const idealSize = 10;
@@ -157,7 +157,7 @@ async function testCase3a() {
         assert(reconcileResult !== undefined, 'Should process MERGE consolidation');
         // Dust orders should not get CREATE actions
         const createsForDust = reconcileResult.actions.filter(
-            a => a.type === COW_ACTIONS.CREATE && a.id === partialSlot.id
+            a => a.type === COW_ACTIONS.CREATE && a.id === (partialSlot as any).id
         );
         assert.strictEqual(createsForDust.length, 0, 'Dust partial should not trigger a CREATE action');
     }
@@ -165,7 +165,7 @@ async function testCase3a() {
 
 async function testCase3b() {
     const mgr = createManagerWithGridSize(10, 500, 50);
-    const slots = Array.from(mgr.orders.values()).filter(o => o.type === ORDER_TYPES.BUY);
+    const slots = Array.from(mgr.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY);
 
     const dustPercentage = GRID_LIMITS.PARTIAL_DUST_THRESHOLD_PERCENTAGE / 100;
     const idealSize = 10;
@@ -240,7 +240,7 @@ async function testCase5() {
     });
 
     const activeWithSize = Array.from(result.targetGrid.values())
-        .filter(o => o.state === ORDER_STATES.ACTIVE && o.size > 0);
+        .filter(o => (o as any).state === ORDER_STATES.ACTIVE && (o as any).size > 0);
 
     assert.strictEqual(activeWithSize.length, 0, 'Should not place orders with zero budget');
 }
@@ -250,14 +250,14 @@ async function testCase6() {
     const mgr = createManagerWithGridSize(10, 1000, 1000);
 
     // Mock some active orders
-    const buyOrders = Array.from(mgr.orders.values()).filter(o => o.type === ORDER_TYPES.BUY).slice(0, 2);
+    const buyOrders = Array.from(mgr.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY).slice(0, 2);
     for (const o of buyOrders) {
-        await mgr._updateOrder({...o, orderId: 'oid-' + o.id, state: ORDER_STATES.ACTIVE});
+        await mgr._updateOrder({...o, orderId: 'oid-' + (o as any).id, state: ORDER_STATES.ACTIVE});
     }
 
-    const sellOrders = Array.from(mgr.orders.values()).filter(o => o.type === ORDER_TYPES.SELL).slice(0, 2);
+    const sellOrders = Array.from(mgr.orders.values()).filter(o => (o as any).type === ORDER_TYPES.SELL).slice(0, 2);
     for (const o of sellOrders) {
-        await mgr._updateOrder({...o, orderId: 'oid-' + o.id, state: ORDER_STATES.ACTIVE});
+        await mgr._updateOrder({...o, orderId: 'oid-' + (o as any).id, state: ORDER_STATES.ACTIVE});
     }
 
     // Snapshot master grid before rebalance
@@ -278,7 +278,7 @@ async function testCase7() {
 
     // Setup initial state
     const o = Array.from(mgr.orders.values())[0];
-    await mgr._updateOrder({...o, orderId: 'oid-'+o.id, state: ORDER_STATES.ACTIVE});
+    await mgr._updateOrder({...o, orderId: 'oid-'+(o as any).id, state: ORDER_STATES.ACTIVE});
 
     const preOrders = new Map(mgr.orders);
     const preFunds = JSON.parse(JSON.stringify(mgr.funds));
@@ -302,7 +302,7 @@ async function testCase8() {
     // Setup: make some orders ACTIVE so they become surplus when boundary shifts
     const orders = Array.from(mgr.orders.values());
     for (const o of orders.slice(0, 3)) {
-        await mgr._updateOrder({...o, orderId: 'oid-'+o.id, state: ORDER_STATES.ACTIVE});
+        await mgr._updateOrder({...o, orderId: 'oid-'+(o as any).id, state: ORDER_STATES.ACTIVE});
     }
 
     const rebalance = await mgr.performSafeRebalance();
@@ -322,14 +322,14 @@ async function testCase9() {
     console.log('Testing fund invariance during COW planning...');
     const mgr = createManagerWithGridSize(10, 1000, 1000);
 
-    const fill = Array.from(mgr.orders.values()).filter(o => o.type === ORDER_TYPES.BUY)[0];
-    await mgr._updateOrder({...fill, orderId: 'oid-'+fill.id, state: ORDER_STATES.ACTIVE});
+    const fill = Array.from(mgr.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY)[0];
+    await mgr._updateOrder({...fill, orderId: 'oid-'+(fill as any).id, state: ORDER_STATES.ACTIVE});
 
     const preFunds = JSON.parse(JSON.stringify(mgr.funds));
 
     const rebalance = await mgr.performSafeRebalance();
 
-    assert(mgr.orders.get(fill.id).state === ORDER_STATES.ACTIVE, 'Order should remain ACTIVE after planning');
+    assert(mgr.orders.get((fill as any).id).state === ORDER_STATES.ACTIVE, 'Order should remain ACTIVE after planning');
     assert.deepStrictEqual(mgr.funds, preFunds, 'Funds should remain unchanged during COW planning');
 }
 

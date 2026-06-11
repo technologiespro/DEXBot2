@@ -131,7 +131,7 @@ async function testNode(nodeUrl, index) {
     try {
         const symbols = await rpc(ws, 'call', [dbId, 'lookup_asset_symbols', [[ASSET_A, ASSET_B]]]);
         const by = {}; for (const a of symbols) by[a.symbol] = a;
-        if (!by[ASSET_A] || !by[ASSET_B]) throw new Error(`missing: ${symbols.map((s) => s.symbol).join(',')}`);
+        if (!by[ASSET_A] || !by[ASSET_B]) throw new Error(`missing: ${(symbols as any).map((s) => s.symbol).join(',')}`);
         assetAId = by[ASSET_A].id;
         assetBId = by[ASSET_B].id;
         log(`  assets ✓ ${ASSET_A}=${assetAId} ${ASSET_B}=${assetBId}`);

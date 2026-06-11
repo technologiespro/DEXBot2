@@ -168,7 +168,7 @@ if (violations.length === 0) {
     
     for (const [file, viols] of Object.entries(byFile)) {
         console.log(`${file}:`);
-        viols.forEach(v => {
+        (viols as any).forEach(v => {
             console.log(`  Line ${v.line}: ${v.type}`);
             console.log(`    ${v.code}`);
         });

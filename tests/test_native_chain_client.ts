@@ -197,7 +197,7 @@ async function testApiProxyWiring() {
         client.disconnect();
         console.log('  PASS: API proxy wiring');
     } finally {
-        wsServer.close();
+        (wsServer as any).close();
     }
 }
 
@@ -226,7 +226,7 @@ async function testLazyApiRegistration() {
         client.disconnect();
         console.log('  PASS: Lazy API registration');
     } finally {
-        wsServer.close();
+        (wsServer as any).close();
     }
 }
 
@@ -254,7 +254,7 @@ async function testReadOnlyClient() {
         // After disconnect, isConnected may be false or the WS ref may be nulled
         assert.strictEqual(client.isConnected(), false, 'Should be disconnected after disconnect()');
     } finally {
-        wsServer.close();
+        (wsServer as any).close();
     }
 }
 

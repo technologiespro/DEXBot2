@@ -140,8 +140,8 @@ if (violations.length === 0) {
     
     console.log('Violations by Type:\n');
     for (const [type, viols] of Object.entries(byType)) {
-        console.log(`  ${type}: ${viols.length} violation(s)`);
-        viols.forEach(v => {
+        console.log(`  ${type}: ${(viols as any).length} violation(s)`);
+        (viols as any).forEach(v => {
             console.log(`    ${v.file}:${v.line}`);
             console.log(`      Code: ${v.code}`);
         });
