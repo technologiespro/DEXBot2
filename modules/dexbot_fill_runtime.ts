@@ -114,6 +114,17 @@ async function applyReplaySafeFillAccounting(fill, fillOp, {
     replayLevel = 'debug',
     persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE,
     allowOrphanFallbackKey = false
+}: {
+    missingKeyMessage?: any;
+    fallbackKeyMessage?: any;
+    replayMessage?: any;
+    errorMessage?: any;
+    logger?: any;
+    missingKeyLevel?: string;
+    fallbackKeyLevel?: string;
+    replayLevel?: string;
+    persistenceMode?: any;
+    allowOrphanFallbackKey?: boolean;
 } = {}) {
     let fillKey = buildFillKey(fill);
     let usedFallbackKey = false;
@@ -170,6 +181,11 @@ async function applyReplaySafeTrackedFillAccounting(fill, fillOp, {
     logger = this.manager?.logger,
     replayMessage,
     persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
+}: {
+    context?: string;
+    logger?: any;
+    replayMessage?: any;
+    persistenceMode?: any;
 } = {}) {
     return applyReplaySafeFillAccounting.call(this, fill, fillOp, {
         logger,
@@ -198,6 +214,11 @@ async function applyReplaySafeOrphanFillAccounting(fill, fillOp, {
     logger = this.manager?.logger,
     replayMessage,
     persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE
+}: {
+    context?: string;
+    logger?: any;
+    replayMessage?: any;
+    persistenceMode?: any;
 } = {}) {
     return applyReplaySafeFillAccounting.call(this, fill, fillOp, {
         logger,

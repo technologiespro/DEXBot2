@@ -192,6 +192,14 @@ class DEXBot {
     _currentCycleId: number;
     _autoCancelOrphanCycleMarker: number | null;
     _dustSinceMap: Map<any, any>;
+    _consecutiveConsumeFailures: number;
+    _consumeFailureFirstAt: number;
+    _reconnectUnregister: any;
+    _credentialRecoveryDeferredTimer: any;
+    _structuralGridResyncTimer: any;
+    _structuralGridResyncRunning: boolean;
+    _lastBroadcastHeartbeatAt: number;
+    _currentBatchId: any;
 
     /**
      * Create a new DEXBot instance
@@ -199,7 +207,7 @@ class DEXBot {
      * @param {Object} options - Optional settings
      * @param {string} options.logPrefix - Prefix for console logs (e.g., "[bot.js]")
      */
-    constructor(config, options = {}) {
+    constructor(config, options: { logPrefix?: string } = {}) {
         // Validate critical config values before initialization
         this._validateStartupConfig(config);
 
@@ -284,6 +292,12 @@ class DEXBot {
         // Used by _cancelDustOrders to enforce DUST_CANCEL_DELAY_SEC.
         // Entries are pruned when an order recovers from dust or is cancelled.
         this._dustSinceMap = new Map();
+
+        // Fill consumer watchdog: consecutive failure tracking.
+        // Reset on successful consumption; above _maxConsumeFailures, the
+        // re-schedule backs off and logs CRITICAL.
+        this._consecutiveConsumeFailures = 0;
+        this._consumeFailureFirstAt = 0;
     }
 
     /**
@@ -652,8 +666,8 @@ class DEXBot {
             const updates = [];
             for (let i = 0; i < orderIds.length; i++) {
                 const chainOrder = objects[i];
-                const gridOrder = Array.from(this.manager.orders.values())
-                    .find(o => o.orderId === orderIds[i]);
+                const gridOrder = (Array.from(this.manager.orders.values()) as any[])
+                    .find((o: any) => o.orderId === orderIds[i]);
                 if (!gridOrder) continue;
 
                 if (!chainOrder || typeof chainOrder.for_sale === 'undefined') {
@@ -859,6 +873,17 @@ class DEXBot {
         replayLevel = 'debug',
         persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE,
         allowOrphanFallbackKey = false
+    }: {
+        missingKeyMessage?: any;
+        fallbackKeyMessage?: any;
+        replayMessage?: any;
+        errorMessage?: any;
+        logger?: any;
+        missingKeyLevel?: string;
+        fallbackKeyLevel?: string;
+        replayLevel?: string;
+        persistenceMode?: any;
+        allowOrphanFallbackKey?: boolean;
     } = {}) {
         return DexbotFillRuntime.applyReplaySafeFillAccounting.call(this, fill, fillOp, {
             missingKeyMessage,
@@ -890,6 +915,11 @@ class DEXBot {
         logger = this.manager?.logger,
         replayMessage,
         persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.BATCHED
+    }: {
+        context?: string;
+        logger?: any;
+        replayMessage?: any;
+        persistenceMode?: any;
     } = {}) {
         return DexbotFillRuntime.applyReplaySafeTrackedFillAccounting.call(this, fill, fillOp, {
             context,
@@ -915,6 +945,11 @@ class DEXBot {
         logger = this.manager?.logger,
         replayMessage,
         persistenceMode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE
+    }: {
+        context?: string;
+        logger?: any;
+        replayMessage?: any;
+        persistenceMode?: any;
     } = {}) {
         return DexbotFillRuntime.applyReplaySafeOrphanFillAccounting.call(this, fill, fillOp, {
             context,
@@ -964,22 +999,59 @@ class DEXBot {
             if (!this._reconnectUnregister) {
                 this._reconnectUnregister = registerReconnectHook(() => {
                     this._log('Blockchain connection re-established; scheduling safety-net sync');
-                    setImmediate(async () => {
-                        try {
-                            if (this.manager && this.accountId && !this._shuttingDown && !this.config.dryRun) {
-                                await this.manager._fillProcessingLock.acquire(async () => {
-                                    const chainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
-                                    const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
-                                    if (syncResult?.filledOrders?.length > 0) {
-                                        this._log(`Post-reconnect sync: ${syncResult.filledOrders.length} grid order(s) found filled.`, 'info');
-                                        await this._processFillsWithBatching(syncResult.filledOrders, new Set(), 'post-reconnect sync fill');
-                                        await this.manager.persistGrid();
-                                    }
-                                });
+                    const runSafetyNetSync = async () => {
+                        if (this.manager && this.accountId && !this._shuttingDown && !this.config.dryRun) {
+                            // Cap the entire safety-net sync at 25s so it can
+                            // never hold _fillProcessingLock longer than the
+                            // 20s shutdown lock timeout. readOpenOrders +
+                            // synchronizeWithChain + batch + persist can be
+                            // ~45s worst case without a cap, which would
+                            // stall shutdown until the 20s timeout fires.
+                            const safetyNetTimeoutMs = 25_000;
+                            let safetyNetTimer;
+                            try {
+                                await Promise.race([
+                                    this.manager._fillProcessingLock.acquire(async () => {
+                                        // Re-check shutdown AFTER acquiring the
+                                        // lock — the pre-acquire check at the
+                                        // top of this block races with shutdown.
+                                        if (this._shuttingDown) return;
+                                        const chainOpenOrders = await chainOrders.readOpenOrders(this.accountId);
+                                        if (this._shuttingDown) return;
+                                        const syncResult = await this.manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld: true });
+                                        if (this._shuttingDown) return;
+                                        if (syncResult?.filledOrders?.length > 0) {
+                                            this._log(`Post-reconnect sync: ${syncResult.filledOrders.length} grid order(s) found filled.`, 'info');
+                                            await this._processFillsWithBatching(syncResult.filledOrders, new Set(), 'post-reconnect sync fill');
+                                            if (this._shuttingDown) return;
+                                            await this.manager.persistGrid();
+                                        }
+                                    }),
+                                    new Promise((_, reject) => {
+                                        safetyNetTimer = setTimeout(
+                                            () => reject(new Error(`Safety-net sync exceeded ${safetyNetTimeoutMs}ms cap`)),
+                                            safetyNetTimeoutMs
+                                        );
+                                    })
+                                ]);
+                            } catch (capErr: any) {
+                                this._warn(`Post-reconnect safety-net sync aborted: ${capErr?.message || capErr}`);
+                            } finally {
+                                if (safetyNetTimer) clearTimeout(safetyNetTimer);
                             }
-                        } catch (err) {
-                            this._warn('Post-reconnect safety-net sync failed:' + (err?.message || err));
                         }
+                    };
+                    // The setImmediate callback returns a Promise; we MUST attach
+                    // a .catch so a rejection here does not propagate to
+                    // process.on('unhandledRejection') and tear down the bot.
+                    setImmediate(() => {
+                        runSafetyNetSync().catch(err => {
+                            try {
+                                this._warn('Post-reconnect safety-net sync failed: ' + (err?.message || err));
+                            } catch (_warnErr: any) {
+                                // _warn itself inaccessible — last line of defense.
+                            }
+                        });
                     });
                 });
             }
@@ -1009,7 +1081,7 @@ class DEXBot {
 
                             const fillOp = fill.op[1];
                             const gridOrder = this.manager.orders.get(fillOp.order_id) ||
-                                Array.from(this.manager.orders.values()).find(o => o.orderId === fillOp.order_id);
+                                (Array.from(this.manager.orders.values()) as any[]).find((o: any) => o.orderId === fillOp.order_id);
 
                             if (!gridOrder) {
                                 // CRITICAL FIX: Even if order not in grid, we must still credit the fill proceeds
@@ -1332,6 +1404,105 @@ class DEXBot {
         }
     }
 
+    _maxConsecutiveFillConsumerFailures() {
+        return FILL_PROCESSING.MAX_CONSECUTIVE_CONSUMER_FAILURES;
+    }
+
+    /**
+     * Compute the backoff delay for fill-consumer retries after the failure
+     * budget (MAX_CONSECUTIVE_CONSUMER_FAILURES) is exhausted. Each retry
+     * doubles the previous delay, capped at CONSUMER_BACKOFF_MAX_MS. The
+     * consumer NEVER permanently stops re-scheduling — it just slows down.
+     * @param {number} failures The current consecutive-failure count.
+     * @returns {number} Delay in milliseconds before the next retry.
+     * @private
+     */
+    _computeFillConsumerBackoffMs(failures) {
+        const initial = FILL_PROCESSING.CONSUMER_BACKOFF_INITIAL_MS;
+        const max = FILL_PROCESSING.CONSUMER_BACKOFF_MAX_MS;
+        const stepAfterMax = Math.max(0, failures - FILL_PROCESSING.MAX_CONSECUTIVE_CONSUMER_FAILURES);
+        // 0 -> initial, 1 -> 2*initial, 2 -> 4*initial, ... capped at max.
+        return Math.min(max, initial * Math.pow(2, stepAfterMax));
+    }
+
+    _scheduleFillConsumerRestart(chainOrders) {
+        const failures = this._consecutiveConsumeFailures;
+        if (failures >= FILL_PROCESSING.MAX_CONSECUTIVE_CONSUMER_FAILURES) {
+            // Past the failure budget: switch from tight setImmediate loop to
+            // exponential backoff. The consumer continues to retry — a transient
+            // outage (e.g., credential daemon recovery) will resume normal
+            // operation as soon as one cycle succeeds and resets the counter.
+            // A permanent failure mode yields slower-but-still-progressing
+            // retries capped at CONSUMER_BACKOFF_MAX_MS, with no permanent
+            // stop that would require a bot restart.
+            const backoffMs = this._computeFillConsumerBackoffMs(failures);
+            const elapsedSec = this._consumeFailureFirstAt
+                ? Math.round((Date.now() - this._consumeFailureFirstAt) / 1000)
+                : null;
+            const elapsed = elapsedSec !== null ? `${elapsedSec}s` : 'unknown';
+            // Escalate log level on sustained failure so operators monitoring
+            // for error/critical alerts are not blind to a stuck consumer.
+            //   - warn   : within the first escalation window (5-9 failures,
+            //              <5 min) — could be a slow recovery
+            //   - error  : 10+ failures OR 5+ minutes of sustained failure
+            //   - critical: 20+ failures OR 15+ minutes of sustained failure —
+            //              this is the "permanent fault" signal
+            const sustainedLevel = (failures >= 20 || (elapsedSec !== null && elapsedSec >= 900))
+                ? 'critical'
+                : (failures >= 10 || (elapsedSec !== null && elapsedSec >= 300))
+                    ? 'error'
+                    : 'warn';
+            this._log(
+                `[FILL-QUEUE] Fill consumer has failed ${failures} consecutive times over ${elapsed}; ` +
+                `backing off ${Math.round(backoffMs / 1000)}s before retry. ` +
+                `Queue: ${this._incomingFillQueue.length} fills.`,
+                sustainedLevel
+            );
+            setTimeout(() => {
+                if (this._shuttingDown) return;
+                this._consumeFillQueue(chainOrders).catch(err => {
+                    if (!this._consumeFailureFirstAt) {
+                        this._consumeFailureFirstAt = Date.now();
+                    }
+                    this._consecutiveConsumeFailures++;
+                    const newFailures = this._consecutiveConsumeFailures;
+                    const newElapsedSec = this._consumeFailureFirstAt
+                        ? Math.round((Date.now() - this._consumeFailureFirstAt) / 1000)
+                        : null;
+                    const resumeLevel = (newFailures >= 20 || (newElapsedSec !== null && newElapsedSec >= 900))
+                        ? 'critical'
+                        : (newFailures >= 10 || (newElapsedSec !== null && newElapsedSec >= 300))
+                            ? 'error'
+                            : 'warn';
+                    this._log(
+                        `Fill consumer resume after backoff failed ` +
+                        `(${newFailures} total, ` +
+                        `next backoff ${Math.round(this._computeFillConsumerBackoffMs(newFailures) / 1000)}s): ` +
+                        `${err.message}`,
+                        resumeLevel
+                    );
+                    // Continue the backoff loop. The success path of
+                    // _consumeFillQueue resets the counter, breaking the cycle.
+                    this._scheduleFillConsumerRestart(chainOrders);
+                });
+            }, backoffMs);
+            return;
+        }
+
+        setImmediate(() => this._consumeFillQueue(chainOrders).catch(err => {
+            if (!this._consumeFailureFirstAt) {
+                this._consumeFailureFirstAt = Date.now();
+            }
+            this._consecutiveConsumeFailures++;
+            const remaining = this._maxConsecutiveFillConsumerFailures() - this._consecutiveConsumeFailures;
+            this._log(
+                `Fill consumer failed (${this._consecutiveConsumeFailures}/${this._maxConsecutiveFillConsumerFailures()}, ` +
+                `${remaining} attempts remaining): ${err.message}`,
+                this._consecutiveConsumeFailures >= 3 ? 'warn' : 'error'
+            );
+        }));
+    }
+
     /**
      * Consume queued fills from incomingFillQueue and rebalance.
      *
@@ -1346,15 +1517,32 @@ class DEXBot {
      * @private
      */
     async _consumeFillQueue(chainOrders) {
+        // Helper: every early return below is a "deferral", not a failure.
+        // The counter only tracks actual failures, so any healthy deferral
+        // path should also reset the counter. Without this, a sequence of
+        // F-S-F-S-F-S-F-S-F (fail, succeed, fail, succeed, ...) would still
+        // reach the max and trip backoff, OR a failure followed by an empty
+        // queue / shutdown / in-flight batch would leave the counter sticky
+        // and trigger backoff one step sooner on the next real failure.
+        const resetFailureWatchdogIfSet = () => {
+            if (this._consecutiveConsumeFailures > 0 || this._consumeFailureFirstAt > 0) {
+                this._consecutiveConsumeFailures = 0;
+                this._consumeFailureFirstAt = 0;
+            }
+        };
+
         // ATOMIC: Only attempt lock acquisition if queue has work
         // This prevents unnecessary lock contention on empty queues
         if (this._incomingFillQueue.length === 0) {
+            // Empty queue = consumer is healthy, just idle.
+            resetFailureWatchdogIfSet();
             return;
         }
 
         // Check shutdown state
         if (this._shuttingDown) {
             this._warn('Fill processing skipped: shutdown in progress');
+            resetFailureWatchdogIfSet();
             return;
         }
 
@@ -1363,6 +1551,11 @@ class DEXBot {
                 `Fill processing deferred: order pipeline active (${this._incomingFillQueue.length} queued)`,
                 'debug'
             );
+            // A batch is in flight, not a failure. The next iteration will
+            // either succeed (and reset the counter on the success path) or
+            // fail and increment it. Either way, leaving an old failure
+            // count here would double-count.
+            resetFailureWatchdogIfSet();
             return;
         }
 
@@ -1372,10 +1565,24 @@ class DEXBot {
             // Process fills immediately with side-only rebalancing (no expensive full grid recalculations)
             if (this.manager._state.isBootstrapping()) {
                 // During bootstrap: skip lock contention checks, process fills directly
+                let bootstrapSkipped = false;
                 await this.manager._fillProcessingLock.acquire(async () => {
-                    if (!this.manager._state.isBootstrapping()) return; // bootstrap finished while waiting for lock
+                    if (!this.manager._state.isBootstrapping()) {
+                        // Bootstrap finished while waiting for the lock — no
+                        // work to do, but the iteration is still healthy.
+                        bootstrapSkipped = true;
+                        return;
+                    }
                     await this._processFillsWithBootstrapMode(chainOrders);
                 });
+                if (bootstrapSkipped) {
+                    // Bootstrap-mode lock callback returned without doing
+                    // work; the .acquire() success path at line ~1941 that
+                    // would normally reset the counter is not reached in
+                    // this branch. Reset here so a stale counter from a
+                    // prior failure doesn't carry over.
+                    resetFailureWatchdogIfSet();
+                }
                 return;
             }
 
@@ -1384,6 +1591,10 @@ class DEXBot {
             // Note: We DO proceed if lock is held but has no waiters - we'll wait our turn
             if (this.manager._fillProcessingLock.getQueueLength() > 0) {
                 this._metrics.lockContentionEvents++;
+                // Deferral, not a failure. Reset the watchdog so the next
+                // call (which may now find an empty queue, or process
+                // successfully) doesn't inherit a stale counter.
+                resetFailureWatchdogIfSet();
                 return;
             }
 
@@ -1427,7 +1638,7 @@ class DEXBot {
                             // ACCOUNT VALIDATION: Verify the filled order belongs to this bot's account/grid
                             // Only process fills for orders we actually manage
                             const gridOrder = this.manager.orders.get(fillOp.order_id) ||
-                                Array.from(this.manager.orders.values()).find(o => o.orderId === fillOp.order_id);
+                                (Array.from(this.manager.orders.values()) as any[]).find((o: any) => o.orderId === fillOp.order_id);
                             if (!gridOrder) {
                                 // Check if this order was already freed by stale-order batch cleanup.
                                 // When a batch fails due to a stale order reference, the cleanup converts the
@@ -1740,6 +1951,13 @@ class DEXBot {
                 } // End while(_incomingFillQueue)
 
                 this._markGridActivity('fill processing end');
+                // Reset the fill-consumer watchdog on the success path. The
+                // counter is only incremented by _scheduleFillConsumerRestart's
+                // catch handler; without this reset, a fill pattern of
+                // F-S-F-S-F-S-F-S-F would still reach the max and the consumer
+                // would stop being re-scheduled.
+                this._consecutiveConsumeFailures = 0;
+                this._consumeFailureFirstAt = 0;
             });
         } catch (err: any) {
             const isCredentialOutage = this._isCredentialDaemonError(err);
@@ -1785,10 +2003,7 @@ class DEXBot {
         // Post-processing: If new fills arrived while processing, schedule another cycle
         // SAFE: Done outside lock context, no async work in finally block
         if (!this._shuttingDown && this._incomingFillQueue.length > 0) {
-            // Schedule consumer restart asynchronously (not in finally block)
-            setImmediate(() => this._consumeFillQueue(chainOrders).catch(err => {
-                this._log(`Deferred consumer restart failed: ${err.message}`, 'error');
-            }));
+            this._scheduleFillConsumerRestart(chainOrders);
         }
     }
 
@@ -1827,7 +2042,7 @@ class DEXBot {
 
             const fillOp = fill.op[1];
             const gridOrder = this.manager.orders.get(fillOp.order_id) ||
-                Array.from(this.manager.orders.values()).find(o => o.orderId === fillOp.order_id);
+                (Array.from(this.manager.orders.values()) as any[]).find((o: any) => o.orderId === fillOp.order_id);
 
             if (!gridOrder) {
                 // CRITICAL FIX: Even if order not in grid, we must still credit the fill proceeds
@@ -1905,8 +2120,8 @@ class DEXBot {
                 }
 
                 // Find highest active order on opposite side (closest to market)
-                const allOrders = Array.from(this.manager.orders.values());
-                const activeOpposite = allOrders.filter(o =>
+                const allOrders = Array.from(this.manager.orders.values()) as any[];
+                const activeOpposite = allOrders.filter((o: any) =>
                     o.type === oppositeType &&
                     o.orderId &&
                     o.state === ORDER_STATES.ACTIVE
@@ -1918,14 +2133,14 @@ class DEXBot {
                 }
 
                 // Sort to find market-closest (highest price for SELL, lowest price for BUY)
-                activeOpposite.sort((a, b) =>
+                activeOpposite.sort((a: any, b: any) =>
                     oppositeType === ORDER_TYPES.SELL ? a.price - b.price : b.price - a.price
                 );
 
                 const surplusOrder = activeOpposite[0];
 
                 // Find empty slot on opposite side (VIRTUAL with no orderId)
-                const emptySlotsOpposite = allOrders.filter(o =>
+                const emptySlotsOpposite = allOrders.filter((o: any) =>
                     o.type === oppositeType &&
                     !o.orderId &&
                     o.state === ORDER_STATES.VIRTUAL
@@ -1937,7 +2152,7 @@ class DEXBot {
                 }
 
                 // Sort to find best slot (closest to market)
-                emptySlotsOpposite.sort((a, b) =>
+                emptySlotsOpposite.sort((a: any, b: any) =>
                     oppositeType === ORDER_TYPES.SELL ? a.price - b.price : b.price - a.price
                 );
 
@@ -1947,9 +2162,9 @@ class DEXBot {
                 const oppositeSide = oppositeType === ORDER_TYPES.BUY ? 'buy' : 'sell';
                 const ctx = await Grid._getSizingContext(this.manager, oppositeSide);
                 const allOppositeSlots = allOrders
-                    .filter(o => o.type === oppositeType)
-                    .sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
-                const targetIdx = allOppositeSlots.findIndex(s => s.id === targetSlot.id);
+                    .filter((o: any) => o.type === oppositeType)
+                    .sort((a: any, b: any) => (a.price ?? 0) - (b.price ?? 0));
+                const targetIdx = allOppositeSlots.findIndex((s: any) => s.id === targetSlot.id);
                 const rotationSize = (ctx && ctx.budget > 0 && targetIdx >= 0)
                     ? calculateRotationOrderSizes(ctx.budget, 0, allOppositeSlots.length, oppositeType, this.manager.config, 0, ctx.precision)[targetIdx]
                     : targetSlot.size;
@@ -2577,7 +2792,7 @@ class DEXBot {
      * @param {Array<Object>} opContexts - Original opContexts from the failed batch
      * @returns {Promise<Object>} Result object compatible with batch return shape
      */
-    async _reconcileAfterUncertainBroadcast(err, opContexts, options = {}) {
+    async _reconcileAfterUncertainBroadcast(err, opContexts, options: { fillLockAlreadyHeld?: boolean; [key: string]: any } = {}) {
         if (
             options.fillLockAlreadyHeld !== true &&
             this.manager?._fillProcessingLock &&
@@ -2592,8 +2807,8 @@ class DEXBot {
         }
 
         const startedAt = Date.now();
-        const pending = (this.manager && this.manager._pendingBroadcasts instanceof Map)
-            ? Array.from(this.manager._pendingBroadcasts.values())
+        const pending: any[] = (this.manager && this.manager._pendingBroadcasts instanceof Map)
+            ? Array.from(this.manager._pendingBroadcasts.values()) as any[]
             : [];
         const createContextCount = opContexts.filter(c => c && c.kind === 'create').length;
         const nonCreateContextCount = opContexts.length - createContextCount;
@@ -3245,7 +3460,7 @@ class DEXBot {
             this._credentialRecoveryNeeded = true;
             this._suspendGridPersistenceForCredentialOutage(message);
             this.manager?.logger?.log?.(`[CREDENTIAL] ${message}. Write operations paused; re-unlock with node pm2.`, 'error');
-            const wrapped = new Error(message);
+            const wrapped: any = new Error(message);
             wrapped.code = 'CREDENTIAL_DAEMON_UNAVAILABLE';
             wrapped.cause = err;
             throw wrapped;
@@ -3674,8 +3889,8 @@ class DEXBot {
         // for resolving it. We refuse to publish a fresh CREATE batch until
         // recovery runs, otherwise we risk double-publishing or stacking
         // orphan orders on top of potentially-orphaned ones.
-        const pendingBroadcasts = (this.manager && this.manager._pendingBroadcasts instanceof Map)
-            ? Array.from(this.manager._pendingBroadcasts.values())
+        const pendingBroadcasts: any[] = (this.manager && this.manager._pendingBroadcasts instanceof Map)
+            ? Array.from(this.manager._pendingBroadcasts.values()) as any[]
             : [];
         if (hasCreateActions && (unmatchedChainOrders.length > 0 || pendingBroadcasts.length > 0)) {
             const blockers = [];
@@ -4151,9 +4366,7 @@ class DEXBot {
             this.manager.unlockOrders(idsToLock);
 
             if (!this._shuttingDown && this._incomingFillQueue.length > 0) {
-                setImmediate(() => this._consumeFillQueue(chainOrders).catch(err => {
-                    this._log(`Post-batch fill consumer restart failed: ${err.message}`, 'error');
-                }));
+                this._scheduleFillConsumerRestart(chainOrders);
             }
         }
     }
@@ -4645,7 +4858,7 @@ class DEXBot {
         }
     }
 
-    async requestGridReset(reason = 'structural change', options = {}) {
+    async requestGridReset(reason = 'structural change', options: { refreshCenterPrice?: boolean; fillLockAlreadyHeld?: boolean; [key: string]: any } = {}) {
         if (!this.manager || typeof this._performGridResync !== 'function') {
             return { skipped: true, reason: 'grid resync unavailable' };
         }
@@ -4669,7 +4882,7 @@ class DEXBot {
     _wireStructuralGridResyncRequest() {
         if (!this.manager || this.manager.requestStructuralGridResync) return;
 
-        this.manager.requestStructuralGridResync = async (reason = 'structural recovery', details = {}) => {
+        this.manager.requestStructuralGridResync = async (reason = 'structural recovery', details: { unmatchedChainOrders?: any[]; [key: string]: any } = {}) => {
             if (this._shuttingDown) {
                 return { skipped: true, reason: 'shutting down' };
             }
@@ -4950,26 +5163,92 @@ class DEXBot {
             if (!this.manager?._fillProcessingLock) {
                 this._warn('Shutdown lock skipped: manager or fillProcessingLock unavailable');
             } else {
-                await this.manager._fillProcessingLock.acquire(async () => {
-                    this._log('Fill processing lock acquired for shutdown');
-
-                    // Log any remaining queued fills
-                    if (this._incomingFillQueue.length > 0) {
-                        this._warn(`${this._incomingFillQueue.length} fills queued but not processed at shutdown`);
-                    }
-
-                    await this._flushProcessedFillPersistence('shutdown');
-
-                    // Persist final state
-                    if (this.manager && this.accountOrders && this.config?.botKey) {
-                        try {
-                            await this.manager.persistGrid();
-                            this._log('Final grid snapshot persisted');
-                        } catch (err: any) {
-                            this._warn(`Failed to persist final state: ${err.message}`);
+                const shutdownLockTimeoutMs = TIMING.SYNC_LOCK_TIMEOUT_MS;
+                let shutdownLockTimer;
+                // AsyncLock starts the callback as soon as the lock is available,
+                // which can be a few ms after the timeout fires. Without this
+                // claim flag, the lock callback and the fallback path would both
+                // run their own _flushProcessedFillPersistence + persistGrid,
+                // racing on the same persistence targets. Set the flag the moment
+                // the timeout fires (and at the top of the lock callback) so
+                // exactly one path performs the flush.
+                let flushClaimed = false;
+                const lockResult = await Promise.race([
+                    this.manager._fillProcessingLock.acquire(async () => {
+                        if (flushClaimed) {
+                            this._log('Shutdown: fallback flush already ran, skipping lock-protected flush');
+                            return;
                         }
-                    }
+                        flushClaimed = true;
+                        this._log('Fill processing lock acquired for shutdown');
+
+                        // Log any remaining queued fills
+                        if (this._incomingFillQueue.length > 0) {
+                            this._warn(`${this._incomingFillQueue.length} fills queued but not processed at shutdown`);
+                        }
+
+                        await this._flushProcessedFillPersistence('shutdown');
+
+                        // Persist final state
+                        if (this.manager && this.accountOrders && this.config?.botKey) {
+                            try {
+                                await this.manager.persistGrid();
+                                this._log('Final grid snapshot persisted');
+                            } catch (err: any) {
+                                this._warn(`Failed to persist final state: ${err.message}`);
+                            }
+                        }
+                    }).then(() => 'acquired'),
+                    new Promise<string>((resolve) => {
+                        shutdownLockTimer = setTimeout(() => {
+                            // Claim the flush for the fallback path BEFORE the
+                            // race resolves, so if the lock callback starts
+                            // microseconds later it sees the claim.
+                            flushClaimed = true;
+                            resolve('timed-out');
+                        }, shutdownLockTimeoutMs);
+                    })
+                ]).finally(() => {
+                    if (shutdownLockTimer) clearTimeout(shutdownLockTimer);
                 });
+
+                if (lockResult === 'timed-out') {
+                    this._warn(
+                        `Shutdown: _fillProcessingLock not acquired within ${shutdownLockTimeoutMs}ms — ` +
+                        `falling back to best-effort flush without lock.`
+                    );
+                    // Best-effort flush without the lock. The lock's only
+                    // purpose during shutdown is to prevent concurrent
+                    // updates; if we're shutting down, no other updater is
+                    // running. The risk is if the bot is being restarted
+                    // (not stopped) — in which case the same race window
+                    // applies. The trade-off is: prefer losing one batch of
+                    // recent fills over skipping persistence entirely.
+                    try {
+                        if (this._incomingFillQueue.length > 0) {
+                            this._warn(
+                                `${this._incomingFillQueue.length} fills queued at shutdown; ` +
+                                `persisting without lock.`
+                            );
+                        }
+                        await this._flushProcessedFillPersistence('shutdown-fallback');
+                        if (this.manager && this.accountOrders && this.config?.botKey) {
+                            try {
+                                await this.manager.persistGrid();
+                                this._log('Final grid snapshot persisted (best-effort, lock not held)');
+                            } catch (err: any) {
+                                this._warn(`Failed to persist final state (best-effort): ${err.message}`);
+                            }
+                        }
+                    } catch (err: any) {
+                        this._warn(`Best-effort flush during shutdown failed: ${err.message}`);
+                    }
+                }
+
+                // Always reset the fill-consumer watchdog on shutdown completion,
+                // regardless of whether persistGrid ran or succeeded.
+                this._consecutiveConsumeFailures = 0;
+                this._consumeFailureFirstAt = 0;
             }
         } catch (err: any) {
             this._warn(`Error during shutdown lock acquisition: ${err.message}`);

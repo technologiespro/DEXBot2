@@ -300,7 +300,7 @@ function parsePm2JlistOutput(stdout) {
  * @returns {Promise<{stdout: string, stderr: string}>} Command output
  * @throws {Error} If the command exits with non-zero code
  */
-function runPm2Command(args) {
+function runPm2Command(args): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
         const child = spawn('pm2', args, {
             stdio: 'pipe',
@@ -728,7 +728,7 @@ function promoteAmaCenterSnapshotForGridReset(botKey) {
  * @param {string} [options.resetSource] - Source label for the reset (defaults to 'dexbot_grid_resync')
  * @returns {boolean} True if metadata was written
  */
-function updateBotGridResetMetadata(botKey, options = {}) {
+function updateBotGridResetMetadata(botKey, options: { resetAt?: string; resetSource?: string } = {}) {
     if (!botKey) return false;
 
     const resetAt = options.resetAt || new Date().toISOString();
@@ -763,7 +763,12 @@ function updateBotGridResetMetadata(botKey, options = {}) {
  * @param {import('./types').GridResyncOptions} [options] - Grid resync options
  * @returns {Promise<boolean>} True if resync succeeded
  */
-function performGridResync(options = {}) {
+function performGridResync(options: {
+    refreshCenterPrice?: boolean;
+    centerRefreshContext?: string;
+    centerRefreshLabel?: string;
+    resetSource?: string;
+} = {}) {
     const self = this;
     let success = false;
     const refreshCenterPrice = !!options.refreshCenterPrice;
@@ -1228,6 +1233,11 @@ function scheduleMaintenanceAfterIdle(ctx, context, options = {}) {
     const delayMs = getMaintenanceIdleDelayMs(ctx);
     if (!(delayMs > 0)) return;
 
+    // The caller will have returned (and released _fillProcessingLock, if it
+    // was held) by the time this deferred callback fires, so the deferred
+    // run must always acquire the lock itself. Override any caller-supplied
+    // fillLockAlreadyHeld=true so the deferred path can't deadlock against
+    // a lock the caller no longer owns.
     const timerOptions = {
         ...options,
         fillLockAlreadyHeld: false,
@@ -1451,7 +1461,12 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
 
     const toCancel = allDust.filter(o => {
         if (!o.orderId) return false;
-        const firstSeen = this._dustSinceMap.get(o.orderId) ?? now;
+        // The map was just populated (lines 1446-1450) for every order in
+        // allDust, so the get() below never returns undefined. The DUST_CANCEL_DELAY
+        // window starts at firstSeen (when the order first appeared in the dust
+        // set), not at this maintenance tick, so an order can only be cancelled
+        // after the delay has elapsed since its initial detection.
+        const firstSeen = this._dustSinceMap.get(o.orderId);
         return (now - firstSeen) >= delayMs;
     });
 
@@ -1584,6 +1599,11 @@ function scheduleDustMaintenanceCheck() {
     ) {
         return;
     }
+    // Note: do NOT gate on !this.manager._fillProcessingLock here. The timer
+    // body re-validates and returns silently if the lock is missing, and the
+    // .finally reschedules — so a transient lock outage self-heals on the
+    // next tick once manager is reattached. Tightening the guard would skip
+    // the timer entirely and orphan _dustSinceMap entries.
 
     const delayMs = delaySec * 1_000;
     const now = Date.now();
@@ -1604,9 +1624,15 @@ function scheduleDustMaintenanceCheck() {
 
         this.manager._fillProcessingLock.acquire(async () => {
             if (this._shuttingDown) return;
-            await this._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true, skipIdle: true });
+            await this._runGridMaintenance('dust-timer', { fillLockAlreadyHeld: true });
         }).catch(err => {
-            this._warn(`Error during dust maintenance timer: ${err.message}`);
+            // AssertionError must propagate so test mocks can fail the test
+            // instead of silently passing. Other errors stay caught to keep
+            // the timer chain alive and avoid unhandled-rejection shutdowns.
+            if (err && (err.code === 'ERR_ASSERTION' || err.name === 'AssertionError')) {
+                throw err;
+            }
+            this._warn(`Error during dust maintenance timer: ${err?.message || err}`);
         }).finally(() => {
             if (!this._shuttingDown) {
                 this._scheduleDustMaintenanceCheck();
@@ -1656,7 +1682,10 @@ async function seedDustTimersFromPartialUpdates(updatedOrders = [], detectedAt =
  * @param {boolean} [options.skipIdle=false] - Skip idle delay check
  * @returns {Promise<void>}
  */
-async function runGridMaintenance(context = 'periodic', options = {}) {
+async function runGridMaintenance(
+    context = 'periodic',
+    options: { fillLockAlreadyHeld?: boolean; skipIdle?: boolean } = {}
+) {
     if (options === null || typeof options !== 'object' || Array.isArray(options)) {
         throw new TypeError('Grid maintenance options must be an object');
     }
@@ -1676,23 +1705,34 @@ async function runGridMaintenance(context = 'periodic', options = {}) {
     }
 
     try {
-        if (!this.manager || !this.manager.orders || this.manager.orders.size === 0) return;
+        if (!this.manager) return;
 
+        // Lock-ordering contract:
+        //   - When fillLockAlreadyHeld=false this function acquires
+        //     _fillProcessingLock first, then _divergenceLock (canonical order).
+        //   - When fillLockAlreadyHeld=true the caller must already hold
+        //     _fillProcessingLock; only _divergenceLock is acquired here.
+        // AsyncLock is NOT reentrant — acquiring in the reverse order anywhere
+        // else in the bot would deadlock against the path above.
         const runWithDivergenceLock = async () => {
-            await this.manager._divergenceLock.acquire(async () => {
-                await this._executeMaintenanceLogic(context);
-            });
+            // Re-check orders size under the divergence lock to avoid a TOCTOU
+            // race with concurrent order mutations. The previous placement
+            // (before any lock acquisition) could observe a stale empty
+            // grid and silently skip maintenance while fills were in flight.
+            if (!this.manager.orders || this.manager.orders.size === 0) return;
+            await this._executeMaintenanceLogic(context);
         };
 
         if (fillLockAlreadyHeld) {
-            await runWithDivergenceLock();
+            await this.manager._divergenceLock.acquire(runWithDivergenceLock);
         } else {
             await this.manager._fillProcessingLock.acquire(async () => {
-                await runWithDivergenceLock();
+                await this.manager._divergenceLock.acquire(runWithDivergenceLock);
             });
         }
     } catch (err: any) {
         this._warn(`Error during ${context} grid maintenance: ${err.message}`);
+        throw err;
     }
 }
 
@@ -1710,9 +1750,22 @@ async function checkBtsBalanceAndAcquire() {
     if (this.config.assetA === 'BTS' || this.config.assetB === 'BTS') return;
 
     const cooldownMs = (TIMING.BTS_ACQUIRE_COOLDOWN_MIN || 60) * 60 * 1000;
+    const now = Date.now();
+
+    // Prune every expired entry in the map, not just the current bot's.
+    // Otherwise entries for bots that acquired BTS and then stopped calling
+    // (removed from bots.json, supervisor restart with a different roster)
+    // would persist forever. The map is bounded by the number of unique bot
+    // keys that ever acquired BTS, so this O(n) sweep is cheap.
+    for (const [key, ts] of _lastBtsAcquisitionTimestamps) {
+        if ((now - ts) >= cooldownMs) {
+            _lastBtsAcquisitionTimestamps.delete(key);
+        }
+    }
+
     const botKey = this.config.botKey || this.config.name;
     const lastAcq = _lastBtsAcquisitionTimestamps.get(botKey);
-    if (lastAcq && (Date.now() - lastAcq) < cooldownMs) return;
+    if (lastAcq && (now - lastAcq) < cooldownMs) return;
 
     if (!this.manager || !this.manager.btsBalance) return;
 
@@ -1811,10 +1864,12 @@ async function acquireBts(deficit) {
     if (this.manager.accountant) {
         this.manager.accountant.adjustTotalBalance(orderType, -best.sellAmount, 'bts-acquisition-swap-sell');
     }
-    if (this.manager.btsBalance) {
-        this.manager.btsBalance.free = (this.manager.btsBalance.free || 0) + best.expectedReceive;
-        this.manager.btsBalance.total = (this.manager.btsBalance.total || 0) + best.expectedReceive;
-    }
+    // Do NOT optimistically bump btsBalance.free/total here. expectedReceive is
+    // a pre-swap estimate and may diverge from the actual fill (slippage, fees,
+    // partial fills, broadcast/confirm failures). The next periodic
+    // fetchAccountTotals() reconciles from chain truth. The bts-acquisition
+    // cooldown in checkBtsBalanceAndAcquire prevents immediate re-trigger even
+    // if the chain balance is still below the trigger threshold.
 
     this._log(`[BTS-ACQ] Acquired ~${Format.formatAmount8(best.expectedReceive)} BTS: sold ${Format.formatAmount8(best.sellAmount)} ${best.asset.symbol} via pool ${best.poolId}`, 'info');
 }

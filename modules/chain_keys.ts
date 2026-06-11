@@ -86,7 +86,7 @@ const fs = require('fs');
 const net = require('net');
 const path = require('path');
 const { readInput, readPassword } = require('./order/utils/system');
-const { TIMING, BUILD_DIR } = require('./constants');
+const { TIMING, BUILD_DIR, CREDENTIAL_PROMPTS } = require('./constants');
 const {
     getCredentialReadyFilePath,
     getCredentialSocketPath,
@@ -484,7 +484,7 @@ function isMasterPasswordFailure(err) {
     return !!(err && (err instanceof MasterPasswordError || err.code === 'MASTER_PASSWORD_FAILED'));
 }
 
-const MASTER_PASSWORD_MAX_ATTEMPTS = 3;
+const MASTER_PASSWORD_MAX_ATTEMPTS = CREDENTIAL_PROMPTS.MAX_MASTER_PASSWORD_ATTEMPTS;
 let masterPasswordAttempts = 0;
 
 /**
@@ -513,6 +513,14 @@ async function authenticate() {
     const accountsData = loadAccounts();
     try {
         while (true) {
+            // Enforce the attempt limit at the top of the loop as well as inside
+            // _promptPassword. _promptPassword also checks the limit so that
+            // any other future caller (or a refactor that removes the check
+            // here) cannot accidentally produce an infinite prompt loop. This
+            // explicit check is the authoritative exit path.
+            if (masterPasswordAttempts >= MASTER_PASSWORD_MAX_ATTEMPTS) {
+                throw new MasterPasswordError(`Incorrect master password after ${MASTER_PASSWORD_MAX_ATTEMPTS} attempts.`);
+            }
             const enteredPassword = await _promptPassword();
             try {
                 const secret = unlockWithPassword(enteredPassword, accountsData);
@@ -524,9 +532,7 @@ async function authenticate() {
                 }
             }
 
-            if (masterPasswordAttempts < MASTER_PASSWORD_MAX_ATTEMPTS) {
-                console.log('Master password not correct. Please try again.');
-            }
+            console.log('Master password not correct. Please try again.');
         }
     } catch (err: any) {
         if (err instanceof MasterPasswordError) {

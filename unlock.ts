@@ -305,6 +305,7 @@ async function runIsolated({
     }
 
     return new Promise((resolve, reject) => {
+        const pollStartedAt = Date.now();
         const interval = setInterval(async () => {
             try {
                 const status = supervisor.getStatus();
@@ -316,6 +317,16 @@ async function runIsolated({
                     cleanupSignalHandlers();
                     await supervisor.shutdown();
                     resolve(0);
+                    return;
+                }
+                const elapsedMs = Date.now() - pollStartedAt;
+                if (elapsedMs >= LAUNCHER.MONOLITHIC.SUPERVISOR_POLL_TIMEOUT_MS) {
+                    clearInterval(interval);
+                    cleanupSignalHandlers();
+                    reject(new Error(
+                        `Supervisor poll timeout after ${Math.ceil(elapsedMs / 1000)}s: ` +
+                        `one or more bots are still in running/restarting/starting state`
+                    ));
                 }
             } catch (err) {
                 clearInterval(interval);
@@ -411,13 +422,41 @@ async function stopCredentialDaemonPid(pid: string | number) {
         }
     }
 
+    const sigkillStartedAt = Date.now();
     try {
         process.kill(daemonPid, 'SIGKILL');
     } catch (err: any) {
         if (err.code !== 'ESRCH') {
             throw err;
         }
+        // ESRCH: process is already gone, nothing more to do.
+        return;
     }
+
+    const SIGKILL_DEADLINE_MS = LAUNCHER.MONOLITHIC.DAEMON_SIGKILL_DEADLINE_MS;
+    while ((Date.now() - sigkillStartedAt) < SIGKILL_DEADLINE_MS) {
+        try {
+            process.kill(daemonPid, 0);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        } catch (err: any) {
+            if (err.code === 'ESRCH') {
+                return;
+            }
+            // EPERM means the process exists but we cannot signal it; treat
+            // the same as a live process and keep polling. Any other error
+            // (e.g. EINVAL) is non-fatal — log and continue waiting.
+            console.warn(
+                `stopCredentialDaemonPid: unexpected error probing pid ${daemonPid}: ` +
+                `${err?.code || ''} ${err?.message || err}. Continuing wait.`
+            );
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+    }
+
+    console.warn(
+        `stopCredentialDaemonPid: SIGKILL did not terminate pid ${daemonPid} after ` +
+        `${Math.ceil(SIGKILL_DEADLINE_MS / 1000)}s (process may be in uninterruptible sleep).`
+    );
 }
 
 function isPidAlive(pid: number) {

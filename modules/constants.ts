@@ -494,6 +494,18 @@ const DAEMON_ERRORS = Object.freeze({
     SOURCE_AUTH_DENIED: 'invalid source authentication',
 });
 
+// Interactive credential-prompt limits
+// (modules/chain_keys.ts master-password authentication, etc.).
+// Capped to prevent infinite stdin loops on a corrupted vault or a forgotten
+// password without requiring Ctrl+C.
+let CREDENTIAL_PROMPTS = {
+    // MAX_MASTER_PASSWORD_ATTEMPTS: Hard upper bound on master-password
+    // retries. The vault unlock throws MasterPasswordError after this many
+    // failed attempts. The check is enforced both in _promptPassword and at
+    // the top of the authenticate() loop as defense-in-depth.
+    MAX_MASTER_PASSWORD_ATTEMPTS: 3,
+};
+
 // BTS blockchain precision constant.
 // Number of decimal places for BTS on BitShares (5 decimals → 1 satoshi = 0.00001 BTS).
 // Used for converting raw chain deferred_fee to float BTS in sync/reconcile paths.
@@ -525,7 +537,29 @@ let FILL_PROCESSING = {
     // - 1..MAX_FILL_BATCH_SIZE fills -> single unified batch
     // - >MAX_FILL_BATCH_SIZE fills   -> fixed-size chunking at MAX_FILL_BATCH_SIZE
     // Set to 1 for current sequential behavior.
-    MAX_FILL_BATCH_SIZE: 4
+    MAX_FILL_BATCH_SIZE: 4,
+
+    // MAX_CONSECUTIVE_CONSUMER_FAILURES: Threshold for the _consumeFillQueue
+    // watchdog. Below this count, the consumer re-schedules on every failure
+    // via setImmediate. At or above this count, the consumer switches to
+    // exponential backoff (see CONSUMER_BACKOFF_* below) instead of stopping
+    // permanently. The counter is reset on the consumer's success path and on
+    // shutdown, so transient failure bursts (e.g., a credential daemon outage
+    // that self-resolves) recover automatically once a cycle succeeds.
+    MAX_CONSECUTIVE_CONSUMER_FAILURES: 5,
+
+    // CONSUMER_BACKOFF_INITIAL_MS: First backoff delay after the consumer
+    // has hit MAX_CONSECUTIVE_CONSUMER_FAILURES. Each subsequent failure
+    // doubles the delay up to CONSUMER_BACKOFF_MAX_MS.
+    CONSUMER_BACKOFF_INITIAL_MS: 30000,
+
+    // CONSUMER_BACKOFF_MAX_MS: Upper bound on the consumer's backoff delay
+    // between retries once the failure budget is exhausted. With defaults
+    // (5 failures, 30s initial, 5min cap) the worst-case retry interval
+    // after a sustained outage is 5 minutes. The consumer NEVER stops
+    // re-scheduling entirely — the original infinite setImmediate loop was
+    // changed to slow-but-persistent retries.
+    CONSUMER_BACKOFF_MAX_MS: 300000,
 };
 
 // Cleanup and maintenance parameters
@@ -1059,6 +1093,23 @@ let LAUNCHER = {
         minUptimeMs: 24 * 60 * 60 * 1000,
         restartDelayMs: 3000,
         controlStopTimeoutMs: 12000,
+
+        // SUPERVISOR_POLL_TIMEOUT_MS: Maximum wall-clock duration the
+        // `node unlock <bot>` (or monolithic wrapper) waits for the
+        // supervisor to report that all supervised bots have stopped. If a
+        // bot is stuck in a PM2 restart loop and reports `restarting`
+        // indefinitely, the launcher's setInterval poll would never clear.
+        // After this timeout the launcher rejects the runIsolated promise
+        // with a descriptive error so the user can intervene.
+        SUPERVISOR_POLL_TIMEOUT_MS: 60000,
+
+        // DAEMON_SIGKILL_DEADLINE_MS: Maximum time the credential-daemon
+        // stop path will wait for a SIGKILL to take effect before giving up
+        // and warning that the process may be in uninterruptible sleep.
+        // Most credential daemons exit within ~100ms of SIGKILL on healthy
+        // systems; 10s is a generous upper bound for slow disks or heavy
+        // process state.
+        DAEMON_SIGKILL_DEADLINE_MS: 10000,
     },
 };
 
@@ -1219,6 +1270,16 @@ let NATIVE_CLIENT = {
         // If the handshake does not complete within this window, the node is skipped.
         CONNECT_TIMEOUT_MS: 10000,
 
+        // Outer bound on a full _nativeClient.connect() operation (ms).
+        // The native transport sweeps all configured nodes sequentially, each
+        // bounded by CONNECT_TIMEOUT_MS, before giving up. With 8 default
+        // nodes × 10s handshake = 80s worst case; this gives a 10s buffer
+        // so the outer wrapper rejects cleanly without a hard tail-latency
+        // cliff. The native's connect() cannot be cancelled, so this is a
+        // "stop waiting" signal only — the underlying sweep continues in
+        // the background even after the outer bound fires.
+        CONNECT_TOTAL_TIMEOUT_MS: 90000,
+
         // Maximum time waiting for an RPC response before timing out (ms).
         // Applies to all native JSON-RPC calls (database, history, broadcast).
         RPC_TIMEOUT_MS: 15000,
@@ -1260,6 +1321,23 @@ let NATIVE_CLIENT = {
         // fills after a subscription notice. The scan pages until it catches up
         // to the per-subscription cursor (lastDeliveredHistoryId).
         HISTORY_LOOKBACK_MAX: 100,
+
+        // HISTORY_MAX_PAGES: Default cap on pages fetched by
+        // fetchFillHistoryEntries in modules/bitshares-native/subscriptions.ts
+        // when the caller does not pass `options.maxPages`. Bounds the loop in
+        // case the history API keeps returning full pages (which would otherwise
+        // run unbounded). At HISTORY_LOOKBACK_MAX=100 entries per page this caps
+        // the per-call scan at 20k history entries by default.
+        HISTORY_MAX_PAGES: 200,
+
+        // SUBSCRIBE_TIMEOUT_MS: Outer bound on a single BitShares.subscribe
+        // operation. subscribe() chains several RPCs (get_full_accounts,
+        // primeLastDeliveredHistoryId, refreshSubscriptions), each individually
+        // capped by TRANSPORT.RPC_TIMEOUT_MS (15s). The total can therefore
+        // legitimately take 4× that on a deep-history account. 60s covers
+        // the typical case with headroom; the native per-RPC timeout still
+        // fires earlier on a hard hang.
+        SUBSCRIBE_TIMEOUT_MS: 60000,
 
         // Delay before retrying a failed reconnect catch-up for a subscription.
         RECONNECT_RETRY_DELAY_MS: 5000,
@@ -1421,6 +1499,29 @@ if (settings) {
         UPDATER = { ...UPDATER, ...settings.UPDATER };
     }
 
+    if (settings.LAUNCHER) {
+        // Deep-merge LAUNCHER so the MONOLITHIC sub-object can be overridden
+        // piecewise without losing other (future) sub-sections.
+        for (const key of Object.keys(settings.LAUNCHER)) {
+            if (
+                settings.LAUNCHER[key]
+                && typeof settings.LAUNCHER[key] === 'object'
+                && !Array.isArray(settings.LAUNCHER[key])
+            ) {
+                LAUNCHER[key] = { ...LAUNCHER[key], ...settings.LAUNCHER[key] };
+            } else {
+                LAUNCHER[key] = settings.LAUNCHER[key];
+            }
+        }
+    }
+
+    if (settings.CREDENTIAL_PROMPTS) {
+        const credPromptSettings = Object.fromEntries(
+            Object.entries(settings.CREDENTIAL_PROMPTS).filter(([key]) => !key.startsWith('_'))
+        );
+        CREDENTIAL_PROMPTS = { ...CREDENTIAL_PROMPTS, ...credPromptSettings };
+    }
+
     if (settings.NATIVE_CLIENT) {
         const mergeNested = (target: any, source: any) => {
             const sf = Object.fromEntries(
@@ -1491,5 +1592,6 @@ Object.freeze(MARKET_ADAPTER.AMAS.AMA3);
 Object.freeze(MARKET_ADAPTER.AMAS.AMA4);
 Object.freeze(MARKET_ADAPTER.AMAS);
 Object.freeze(MARKET_ADAPTER);
+Object.freeze(CREDENTIAL_PROMPTS);
 
-export = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, CR_ZONES, DEFAULT_TARGET_CR, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, LAUNCHER, COW_PERFORMANCE, NATIVE_CLIENT, MARKET_ADAPTER, BUILD_DIR, BTS_PRECISION, DAEMON_ERRORS };
+export = { ORDER_TYPES, ORDER_STATES, REBALANCE_STATES, COW_ACTIONS, DEFAULT_CONFIG, TIMING, GRID_LIMITS, LOG_LEVEL, LOGGING_CONFIG, INCREMENT_BOUNDS, FEE_PARAMETERS, CR_ZONES, DEFAULT_TARGET_CR, API_LIMITS, FILL_PROCESSING, MAINTENANCE, NODE_MANAGEMENT, PIPELINE_TIMING, UPDATER, LAUNCHER, COW_PERFORMANCE, NATIVE_CLIENT, MARKET_ADAPTER, BUILD_DIR, BTS_PRECISION, DAEMON_ERRORS, CREDENTIAL_PROMPTS };

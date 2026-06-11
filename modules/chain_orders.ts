@@ -93,7 +93,7 @@
  * ===============================================================================
  */
 
-const { BitShares, createAccountClient, waitForConnected } = require('./bitshares_client');
+const { BitShares, createAccountClient, waitForConnected, withTimeout } = require('./bitshares_client');
 const { floatToBlockchainInt, blockchainToFloat, normalizeInt, validateOrderAmountsWithinLimits } = require('./order/utils/math');
 const { FILL_PROCESSING, TIMING, NATIVE_CLIENT, BUILD_DIR, DAEMON_ERRORS } = require('./constants');
 const Format = require('./order/format');
@@ -356,7 +356,31 @@ async function _ensureAccountSubscriber(accountName, userCallback = null) {
             }
         };
 
-        await BitShares.subscribe('account', bsCallback, accountName);
+        try {
+            await withTimeout(
+                BitShares.subscribe('account', bsCallback, accountName),
+                NATIVE_CLIENT.SUBSCRIPTIONS.SUBSCRIBE_TIMEOUT_MS,
+                'BitShares.subscribe'
+            );
+        } catch (subscribeErr: any) {
+            // Roll back any partial native-subscription state set up before the
+            // timeout or hard failure. BitShares.subscribe registers the entry
+            // in the native subscriptions map and adds bsCallback to
+            // entry.callbacks before its first await; if we fail before it
+            // returns, that state would otherwise be leaked and the next call
+            // for the same account would observe a half-dead subscription.
+            if (typeof BitShares.unsubscribe === 'function') {
+                try {
+                    await BitShares.unsubscribe('account', bsCallback, accountName);
+                } catch (rollbackErr: any) {
+                    chainOrdersLogger.warn(
+                        `Failed to roll back partial subscription for ${accountName} after error: ` +
+                        `${rollbackErr?.message || rollbackErr}`
+                    );
+                }
+            }
+            throw subscribeErr;
+        }
 
         const entry = { userCallbacks, bsCallback };
         accountSubscriptions.set(accountName, entry);

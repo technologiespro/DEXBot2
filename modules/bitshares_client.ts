@@ -27,7 +27,7 @@
  * ===============================================================================
  */
 
-const { TIMING, NODE_MANAGEMENT } = require('./constants');
+const { TIMING, NODE_MANAGEMENT, TRANSPORT } = require('./constants');
 const NodeManager = require('./node_manager');
 const { readGeneralSettings } = require('./general_settings');
 const { sleep } = require('./order/utils/system');
@@ -84,6 +84,45 @@ let _nativeClient = null;
 let _subscriptionManager = null;
 let _nativeBitSharesProxy = null;
 let _resolvers = null;
+
+// Monotonic generation counter for native _nativeClient.connect() calls.
+// The native transport's connect() sweep cannot be cancelled, so a timeout
+// in the outer withTimeout wrapper only stops the *awaiter* — the sweep
+// continues in the background and may resolve later. If the caller has
+// since moved on (e.g. failover to a different node list), a late
+// resolution would leave _nativeClient connected to the stale node set
+// while the caller assumes the connect was abandoned. We tag each
+// connect attempt with the current generation and, on resolution, drop
+// the result and force a disconnect if the generation has moved on.
+let _connectGeneration = 0;
+
+/**
+ * Race a promise against a timeout, with two safety guarantees:
+ *   1. The timer is always cleared on settle, so the timeout promise does not
+ *      hold a ref to the event loop.
+ *   2. The inner promise is observed even if the timeout wins the race, so a
+ *      late rejection cannot become an unhandledRejection (which would tear
+ *      the process down via graceful_shutdown.ts).
+ * @param {Promise<any>} inner The underlying call to bound.
+ * @param {number} timeoutMs Max time to wait before rejecting with a timeout error.
+ * @param {string} label Short label used in the timeout error message.
+ * @returns {Promise<any>}
+ */
+function withTimeout(inner, timeoutMs, label) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(
+            () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+            timeoutMs
+        );
+    });
+    // Attach a no-op rejection handler to the inner promise so that a late
+    // rejection does not trigger process.on('unhandledRejection'). The race
+    // winner's rejection is what the caller observes; the late inner rejection
+    // is intentionally swallowed.
+    Promise.resolve(inner).catch(() => {});
+    return Promise.race([inner, timeout]).finally(() => clearTimeout(timer));
+}
 
 function ensureInitialized() {
     if (_initialized) return;
@@ -155,6 +194,11 @@ function ensureInitialized() {
         },
         get chain() { return { get coreAsset() { return _nativeClient.getCoreAsset(); } }; },
         get db() {
+            // The native transport (modules/bitshares-native/transport.ts:380)
+            // already enforces a per-RPC timeout of TRANSPORT.RPC_TIMEOUT_MS
+            // (15s) on every call(). An additional wrapper here would only add
+            // dead slack past the native rejection and produce misleading
+            // error messages. Pass through directly.
             return new Proxy(_nativeClient.db, {
                 get(target, prop) {
                     if (typeof target[prop] === 'function') {
@@ -243,7 +287,40 @@ async function restartBitsharesConnection(serverList, reason = 'startup') {
 
         try { _nativeClient.disconnect(); } catch (_: any) {}
         _nativeClient.setNodes(servers);
-        await _nativeClient.connect();
+        const myGeneration = ++_connectGeneration;
+        const connectPromise = _nativeClient.connect();
+        try {
+            await withTimeout(
+                connectPromise,
+                TRANSPORT.CONNECT_TOTAL_TIMEOUT_MS,
+                'BitShares connection'
+            );
+        } catch (connectErr: any) {
+            // The native connect() sweep continues in the background even
+            // though withTimeout rejected. Tag the sweep with the generation
+            // it was started under — its eventual settlement forces a
+            // disconnect to keep isConnected() consistent with the caller's
+            // timeout. Two cases:
+            //   - Generation has moved: a NEW connect is in progress. The
+            //     late success would interfere with it, so force-disconnect.
+            //   - Generation has NOT moved: no new connect was started. The
+            //     late success would leave the transport internally connected
+            //     while the module-level `connected` flag is still false,
+            //     creating a state mismatch where isConnected() returns false
+            //     but the transport is actually live. Force-disconnect to
+            //     keep the state consistent.
+            connectPromise
+                .then(() => {
+                    logger.warn(
+                        `Late native connect success after timeout ` +
+                        `(attempt generation=${myGeneration}, current=${_connectGeneration}). ` +
+                        `Forcing disconnect to keep isConnected() state consistent.`
+                    );
+                    try { _nativeClient.disconnect(); } catch (_: any) {}
+                })
+                .catch(() => { /* expected when sweep gives up */ });
+            throw connectErr;
+        }
         if (_subscriptionManager) {
             try { await _subscriptionManager.onReconnect(); } catch (err: any) {
                 logger.warn(`Subscription re-establishment after reconnect failed: ${err?.message || err}`);
@@ -540,6 +617,7 @@ export = {
     getConnectionError: () => lastConnectionError,
     onReconnect,
     removeOnReconnect,
+    withTimeout,
     _assessFailover: assessFailover,
     _internal: {
         get connected() {

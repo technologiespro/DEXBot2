@@ -101,7 +101,8 @@ function createSubscriptionManager(chainClient: any): any {
         // start=0 being replaced by the server with the max/head operation ID.
         let startHistoryId = SUBSCRIPTIONS.HISTORY_API_OBJECT;
         let pagesFetched = 0;
-        const maxPages = Number.isFinite(options.maxPages) ? options.maxPages : null;
+        const maxPagesDefault = SUBSCRIPTIONS.HISTORY_MAX_PAGES;
+        const maxPages = Number.isFinite(options.maxPages) ? options.maxPages : maxPagesDefault;
 
         subscriptionsLogger.info(`fetchFillHistoryEntries: account=${accountId}, cursor=${cursorHistoryId}, start=${startHistoryId}, maxPages=${maxPages}`);
 
