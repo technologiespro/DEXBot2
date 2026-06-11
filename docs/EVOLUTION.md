@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.17 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.18 release cycle.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,535 commits over ~6 active months
+- **Growth Phase**: 1,538 commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
-- **Stability**: Progression from manual testing to a suite of 208+ automated test files
-- **Releases**: 33 release entries (v0.1.0 to v0.7.17)
+- **Stability**: Progression from manual testing to a suite of 211+ automated test files
+- **Releases**: 34 release entries (v0.1.0 to v0.7.18)
 
 ---
 
@@ -70,6 +70,8 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 **Jun 9**: Analyze-orders display overhaul, market-adapter whitelist/dynamic-weight hardening, idempotent unlock startup, simplified runtime controls — v0.7.14. Quiet orderbook candles, TTY-safe terminal polish — v0.7.15.
 
 **Jun 10**: Pipeline blocking hardening, dead code removal — v0.7.16. Then BUILD_DIR centralization, HMAC recovery, error handling hardening, plus a full codebase audit fixing stale types, dead tests, hardcoded paths, empty dirs, and comments — v0.7.17.
+
+**Jun 11**: Gradual strict typing (all @ts-nocheck removed, 67 files annotated), race-condition batch 1 (atomic JSON, in-flight flags, snapshot persist), timeout hardening and leak fixes across the board, DRY refactoring claw/tests/unlock — v0.7.18.
 
 ---
 
@@ -156,6 +158,9 @@ Pipeline blocking hardening: stale `_gridSidesUpdated` self-blocking fix, dead `
 ### v0.7.16 → v0.7.17 (6 commits)
 BUILD_DIR centralization, source-mode runtime, HMAC recovery, error hardening, zero-budget shortfall suppression, plus a full codebase audit fixing stale types, dead tests, hardcoded paths, empty dirs, and doc references.
 
+### v0.7.17 → v0.7.18 (8 commits)
+Massive gradual typing effort removing all 89 @ts-nocheck directives and adding full type annotations across 67 files, race-condition batch 1 (atomic JSON writes, per-context in-flight flags, snapshot persist, sync engine lock ownership), across-the-board timeout hardening and leak fixes (withTimeout utility, subscribe orphan cleanup, consumer backoff watchdog, history page cap, master password limit), DRY refactoring extracting shared MCP/skill/test utilities (~460 lines removed), Claw HMAC recovery alignment with the main path, plus remaining audit cleanup (BUILD_DIR paths, fd leak, CEX rate limiting).
+
 ---
 
 ### Pre-DEXBot2
@@ -166,7 +171,7 @@ BUILD_DIR centralization, source-mode runtime, HMAC recovery, error hardening, z
 
 ## Development Statistics
 
-208+ automated test files (all TypeScript), 33 release entries. See **Version History** for commit breakdown by release.
+211+ automated test files (all TypeScript), 34 release entries. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -185,7 +190,7 @@ BUILD_DIR centralization, source-mode runtime, HMAC recovery, error hardening, z
 
 ## Documentation & Testing
 
-Evolved from a basic README to a comprehensive framework (50+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 208+ file suite covering unit, integration, simulation, and COW architectural guard tests.
+Evolved from a basic README to a comprehensive framework (50+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 211+ file suite covering unit, integration, simulation, and COW architectural guard tests.
 
 ---
 
@@ -208,7 +213,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: June 10, 2026
-**Total Commits**: 1530
+**Last Updated**: June 11, 2026
+**Total Commits**: 1538
 **Date Range**: December 2, 2025 - June 10, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.18] - 2026-06-11 - @ts-nocheck Removal, Type Annotations, Race-Condition Batch 1 & DRY Refactoring
+
+This release removes all remaining `@ts-nocheck` directives across production and analysis code (89 files), adds type annotations to 67 files resolving 1783 TS2339 errors, applies a comprehensive race-condition fix batch (atomic JSON writes, per-context in-flight flags, snapshot persist), tightens timeouts across the board, plugs a subscribe orphan-callback leak, and DRYs duplicated code across claw modules, tests, and unlock into shared utilities (~460 lines removed).
+
+### 2026-06-11
+
+#### Gradual Strict Typing: @ts-nocheck Removal
+- Remove all 89 remaining `@ts-nocheck` directives from production `/modules/`, `market_adapter/`, `scripts/`, and `analysis/` directories; relax `tsconfig.json` from `strict: true` to selective strict checks for gradual migration (`ccaf14e`).
+- Add type annotations across 67 files — class property declarations, options/destructured parameter interfaces, `Array.from` casts for TS 5→6 `unknown[]` change, method return types, and ~30 inline interfaces for config shapes. Purely additive, zero runtime impact (`d2d8561`).
+
+#### Race-Condition Batch 1
+- **RC-6: Atomic JSON writes**: New `writeJsonFileAtomic` helper (tmp+rename) replaces raw `fs.writeFileSync` across 5 writers (bots.json, general.settings.json, credit state, node health cache, node blacklist) to prevent torn reads on crash (`47b5011`).
+- **RC-1: Per-context in-flight flags**: Split shared `_maintenanceInFlight` into separate `_maintenanceInFlight` / `_watchdogInFlight` flags in `CreditRuntime` so watchdog ticks are never starved by long maintenance cycles (`47b5011`).
+- **RC-2: Sync engine owns `_gridLock`**: `createOrder`/`cancelOrder` acquire `_gridLock` inline inside the sync engine with `gridLockAlreadyHeld` escape for internal callers, preventing double-acquire / deadlock (`47b5011`).
+- **RC-3: Snapshot persist**: `persistGrid` now accepts an explicit snapshot orders map — the live `manager.orders` map is never swapped during persistence, eliminating inconsistent `_ordersByState`/`_ordersByType` reads (`47b5011`).
+- **RC-4: Position manager interval guards**: `syncInFlight` boolean guards overlapping watchdog ticks; timer is `unref()`'d so it doesn't prevent process exit (`47b5011`).
+- **RC-5: Credential-daemon watchdog + shutdown guards**: Added `_credentialDaemonWatchdogInFlight` flag, `_shuttingDown` re-checks throughout fill pipeline and blockchain fetch intervals (`47b5011`).
+
+#### Timeout Hardening & Leak Fixes
+- Headline constants: `HISTORY_LOOKBACK_MAX` 100→50, `HISTORY_MAX_PAGES` 200→100, `SUBSCRIBE_TIMEOUT_MS` 60s→75s, consumer backoff 30-300s→15-60s (`730f6c9`).
+- Runtime `api_limit_get_account_history` detection via `login_api.get_config()` — logs warning when the node's cap is below the static default (`730f6c9`).
+- Fix subscribe orphan-callback leak: check `subscriptions.has(accountName)` after each await in `subscribe()` — rollback during async work no longer leaks callback closures (`730f6c9`).
+- Add `withTimeout()` utility applied to native connect (90s), subscribe (60s), safety-net sync (25s), fill-processing lock (20s), with generation-counter for state consistency post-timeout (`86607ae`).
+- Fill consumer exponential backoff watchdog: consecutive-failure tracking with 5-threshold immediate-retry → exponential 30-300s backoff, escalating log levels (`86607ae`).
+- Master password attempt limit (configurable via `CREDENTIAL_PROMPTS.MAX_MASTER_PASSWORD_ATTEMPTS`) (`86607ae`).
+- Credential daemon stop hardening: `SUPERVISOR_POLL_TIMEOUT_MS` (60s), `DAEMON_SIGKILL_DEADLINE_MS` (10s) (`86607ae`).
+- Fix silent runtime import bug: `TRANSPORT` was destructured from wrong namespace (undefined at runtime) — corrected to `NATIVE_CLIENT.TRANSPORT` (`730f6c9`).
+
+#### DRY Refactoring
+- Shared modules created: `claw/modules/mcp_utils.ts` (MCP JSON-RPC infra), `claw/modules/skill_utils.ts` (skill generation), `tests/helpers/unlock_test_helpers.ts` (unlock test fixtures) — eliminating ~460 lines of duplication (`e199c6b`).
+- `claw_catalog.ts`: 988→756 lines via factory functions for launcher/MEMU tools (`e199c6b`).
+- `unlock.ts`: extracted `makeFinishGuard` helper for settled/timer/cleanup guard (`e199c6b`).
+- Test files: `makeChainClientMock` factory in subscription flow test, 4 unlock test files converted to shared helpers (`e199c6b`).
+
+#### Claw HMAC Recovery Alignment
+- `claw/modules/chain_broadcast.ts` now sends SIGHUP + 500ms sleep on `SOURCE_AUTH_DENIED`, matching the main path in `chain_orders.ts` (`fe82fa2`).
+
+#### Codebase Audit Cleanup
+- Replace remaining hardcoded `'dist'` paths in 3 test files and `scripts/update.ts` with `BUILD_DIR` constant (`50ee8fa`).
+- Fix fd leak in `file_lock.ts`: close opened fd in catch block when `writeFileSync` fails after `openSync` (`50ee8fa`).
+- Add `CEX_API_DELAY_MS: 500` to constants; paginated CEX requests now delay between pages; HTTP errors skip page instead of throwing (`50ee8fa`).
+
+#### Chores
+- Bump version to 0.7.18 across all `package.json` manifests.
+
 ## [0.7.17] - 2026-06-10 - BUILD_DIR Centralization, HMAC Recovery & Doc Fixes
 
 This release centralizes the hardcoded `'dist'` string into a `BUILD_DIR` constant across 50+ files, adds source-mode runtime support (tsx without pre-built `dist/`), hardens silent error paths with proper logging, and recovers from stale HMAC sessions without manual daemon restarts. It also bumps the version and fixes stale documentation references.
