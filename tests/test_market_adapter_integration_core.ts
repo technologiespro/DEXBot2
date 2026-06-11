@@ -159,12 +159,12 @@ console.log('Running market_adapter integration core tests (BitShares Core 7.0.x
     const tsMs = parseChainTimeToMs(row?.time || row?.op?.block_time);
     const opPayload = Array.isArray(row?.op?.op) ? row.op.op[1] : null;
     const resultPayload = Array.isArray(row?.op?.result) ? row.op.result[1] : null;
-    const received = Array.isArray(resultPayload?.received)
+    const received = Array.isArray((resultPayload as any)?.received)
         ? (resultPayload as any).received[0]
-        : (resultPayload?.received || null);
+        : ((resultPayload as any)?.received || null);
 
     assert.strictEqual(tsMs, Date.UTC(2026, 4, 9, 12, 0, 0), 'Row timestamp should be parsed as UTC');
-    assert.strictEqual(opPayload?.amount_to_sell?.amount, '10000', 'Sell amount should be extracted');
+    assert.strictEqual((opPayload as any)?.amount_to_sell?.amount, '10000', 'Sell amount should be extracted');
     assert.strictEqual(received?.amount, '45000', 'Received amount should be extracted from result payload');
 }
 

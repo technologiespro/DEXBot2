@@ -213,7 +213,7 @@ async function testPersistenceCommitGuardRetriesOnSkipped() {
 async function testPersistenceCommitGuardRequestsResyncOnRepeatedFailure() {
     console.log(' - Persistence commit guard requests structural resync on repeated failure...');
     const { bot, manager, logEntries } = makeBot();
-    manager.persistGrid = async () => ({ isValid: false, reason: 'corrupted-state' });
+    manager.persistGrid = async () => ({ isValid: false, skipped: false });
 
     const resyncCalls = [];
     (manager as any).requestStructuralGridResync = async (reason, opts) => {

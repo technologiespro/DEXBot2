@@ -123,7 +123,7 @@ async function testNonBTSFeeBackwardsCompat() {
     {
         const assetAmount = 1000;
         const result = getAssetFeesMock('USD', assetAmount, true);
-        const isNetAmount = result < assetAmount; // Fees deducted
+        const isNetAmount = (result as any) < assetAmount; // Fees deducted
         logTest('Non-BTS result is net amount', isNetAmount, `${result} < ${assetAmount}`);
     }
 
@@ -212,7 +212,7 @@ async function testFeeCalculationAccuracy() {
         const assetAmount = 1000;
         const result = getAssetFeesMock('USD', assetAmount, true);
         const expectedNet = assetAmount - (assetAmount * 0.002); // 0.2% fee
-        const matches = Math.abs(result - expectedNet) < 0.01;
+        const matches = Math.abs((result as any) - expectedNet) < 0.01;
         logTest('USD maker fee = 0.2%', matches,
                 `${result} ≈ ${expectedNet}`);
     }

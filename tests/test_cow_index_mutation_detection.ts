@@ -24,11 +24,11 @@ function snapshotIndices(manager) {
     const snapshot: any = {};
     
     for (const [state, set] of Object.entries(manager._ordersByState)) {
-        snapshot[`_ordersByState[${state}]`] = new Set(set);
+        snapshot[`_ordersByState[${state}]`] = new Set(set as any);
     }
     
     for (const [type, set] of Object.entries(manager._ordersByType)) {
-        snapshot[`_ordersByType[${type}]`] = new Set(set);
+        snapshot[`_ordersByType[${type}]`] = new Set(set as any);
     }
     
     return snapshot;
@@ -48,7 +48,7 @@ function detectMutations(manager, snapshot) {
         const prevSet = snapshot[key];
         
         // Check for added items
-        for (const item of set) {
+        for (const item of (set as any)) {
             if (!prevSet.has(item)) {
                 mutations.push({
                     type: 'ADD',
@@ -77,7 +77,7 @@ function detectMutations(manager, snapshot) {
         const prevSet = snapshot[key];
         
         // Check for added items
-        for (const item of set) {
+        for (const item of (set as any)) {
             if (!prevSet.has(item)) {
                 mutations.push({
                     type: 'ADD',

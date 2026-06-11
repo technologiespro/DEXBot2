@@ -332,12 +332,12 @@ async function testGridResizeRespectsBudgetAfterCap() {
     await Grid._recalculateGridOrderSizesFromBlockchain(mgr, ORDER_TYPES.BUY);
 
     const buyOrders = Array.from(mgr.orders.values()).filter(o => (o as any).type === ORDER_TYPES.BUY);
-    const allocatedBuy = buyOrders.reduce((sum, o) => sum + Number((o as any).size || 0), 0);
+    const allocatedBuy = buyOrders.reduce((sum, o) => (sum as any) + Number((o as any).size || 0), 0);
     const buyCtx = await Grid._getSizingContext(mgr, 'buy');
     const buyBudget = Number(buyCtx?.budget || 0);
 
     assert(
-        allocatedBuy <= buyBudget + 1e-5,
+        (allocatedBuy as any) <= buyBudget + 1e-5,
         `BUY allocation must not exceed budget after capping (allocated ${allocatedBuy}, budget ${buyBudget})`
     );
 }

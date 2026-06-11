@@ -119,13 +119,13 @@ function testGenerateMarketLpChartUplot() {
 }
 
 function assertProductionAmaDefaults(strategies) {
-    const expected = Object.values(MARKET_ADAPTER.AMAS);
+    const expected: any[] = Object.values(MARKET_ADAPTER.AMAS);
     assert.strictEqual(strategies.length, expected.length);
     for (let i = 0; i < expected.length; i++) {
-        assert.strictEqual(strategies[i].name, expected[i].name);
-        assert.strictEqual(strategies[i].erPeriod, expected[i].erPeriod);
-        assert.strictEqual(strategies[i].fastPeriod, expected[i].fastPeriod);
-        assert.strictEqual(strategies[i].slowPeriod, expected[i].slowPeriod);
+        assert.strictEqual((strategies[i] as any).name, expected[i].name);
+        assert.strictEqual((strategies[i] as any).erPeriod, expected[i].erPeriod);
+        assert.strictEqual((strategies[i] as any).fastPeriod, expected[i].fastPeriod);
+        assert.strictEqual((strategies[i] as any).slowPeriod, expected[i].slowPeriod);
     }
 }
 

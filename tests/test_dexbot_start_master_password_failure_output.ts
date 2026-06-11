@@ -126,9 +126,9 @@ function installStubs() {
     });
 
     process.argv = ['node', dexbotPath, 'start'];
-    process.exit = (code) => {
+    (process as any).exit = ((code: any) => {
         exitCode = code;
-    };
+    });
 
     console.log = (...args) => {
         const line = args.map((part) => String(part)).join(' ').trim();

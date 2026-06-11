@@ -543,7 +543,7 @@ function makeAccountRecord(account) {
         const originalClearTimeout = global.clearTimeout;
         const retryDelays = [];
         let retryCallback = null;
-        global.setTimeout = (fn, delay) => {
+        (global as any).setTimeout = (fn: any, delay: any) => {
             retryDelays.push(delay);
             retryCallback = fn;
             return { retryTimer: true };
@@ -661,7 +661,7 @@ function makeAccountRecord(account) {
         const originalClearTimeout = global.clearTimeout;
         const retryDelays = [];
         let retryCallback = null;
-        global.setTimeout = (fn, delay) => {
+        (global as any).setTimeout = (fn: any, delay: any) => {
             retryDelays.push(delay);
             retryCallback = fn;
             return { retryTimer: true };

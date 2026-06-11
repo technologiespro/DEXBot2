@@ -41,10 +41,10 @@ async function runTests() {
 
     let capturedCallback = null;
 
-    global.setInterval = (fn) => {
+    global.setInterval = ((fn: any): any => {
         capturedCallback = fn;
         return { timer: 'mock-periodic' };
-    };
+    }) as any;
     global.clearInterval = () => { };
     fs.existsSync = (filePath) => {
         if (String(filePath).endsWith('/profiles/bots.json')) {

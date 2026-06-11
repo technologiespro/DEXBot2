@@ -140,7 +140,7 @@ async function runStateLifecycleScenario() {
     
     // Move window past it - force a far slot to be active
     const sellSlots = Array.from(mgr.orders.values()).filter(o => (o as any).id.startsWith('sell-')).sort((a,b) => (a as any).price - (b as any).price);
-    await mgr._updateOrder({ ...sellSlots[10], state: ORDER_STATES.ACTIVE, orderId: 'force' });
+    await mgr._updateOrder({ ...(sellSlots[10] as any), state: ORDER_STATES.ACTIVE, orderId: 'force' });
     
     // Rebalance to reassign types based on new boundary
     const res3 = await mgr.performSafeRebalance();
@@ -151,7 +151,7 @@ async function runStateLifecycleScenario() {
     console.log('    ✓ SPREAD');
 
     // Restore: remove the forced active order and simulate a BUY fill to move boundary back
-    await mgr._updateOrder({ ...sellSlots[10], state: ORDER_STATES.VIRTUAL, orderId: null });
+    await mgr._updateOrder({ ...(sellSlots[10] as any), state: ORDER_STATES.VIRTUAL, orderId: null });
     
     // Simulate a BUY fill to move boundary back down (boundary-- for buy fills)
     // This should cause the SPREAD slot to become SELL again

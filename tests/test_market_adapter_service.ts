@@ -515,9 +515,9 @@ async function testNumericStartPriceSkipsAllMarketFetches() {
     assert.strictEqual(poolCalls, 0, 'LP fetch should be skipped for fixed startPrice bots');
     assert.strictEqual(bookCalls, 0, 'orderbook fetch should be skipped for fixed startPrice bots');
     assert.strictEqual(saveCalls, 0, 'no candle file should be written for fixed startPrice bots');
-    assert.strictEqual(state.bots['fixed-start-price'].priceMode, 'fixed', 'state should record fixed-price mode');
-    assert.strictEqual(state.bots['fixed-start-price'].candleFile, null, 'fixed-price state should clear any previous candle file reference');
-    assert.strictEqual(state.bots['fixed-start-price'].centerPrice, null, 'fixed-price state should clear any previous market center');
+    assert.strictEqual((state.bots['fixed-start-price'] as any).priceMode, 'fixed', 'state should record fixed-price mode');
+    assert.strictEqual((state.bots['fixed-start-price'] as any).candleFile, null, 'fixed-price state should clear any previous candle file reference');
+    assert.strictEqual((state.bots['fixed-start-price'] as any).centerPrice, null, 'fixed-price state should clear any previous market center');
 }
 
 async function testOrderbookNativeFetchUsesBitsharesHistory() {
@@ -1495,8 +1495,8 @@ async function testRestartBackfillsOldAma3WindowAndTriggersWhenDeltaThresholdIsE
     assert.strictEqual(kibanaCalls, 1, 'restart should perform one targeted historical backfill request');
     assert.strictEqual(dynamicGridWrites, 1, 'threshold trigger should persist the refreshed AMA center once');
     assert.strictEqual(triggerWrites, 1, 'threshold trigger should write exactly one grid-reset marker');
-    assert.strictEqual(state.bots['xrp-bts-restart-trigger'].lastClosedCandleTs, latestClosedTs, 'restart should advance the consumed closed-candle cursor after a successful trigger');
-    assert.strictEqual(state.bots['xrp-bts-restart-trigger'].centerPrice, 100, 'restart should persist the new AMA center after the trigger');
+    assert.strictEqual((state.bots['xrp-bts-restart-trigger'] as any).lastClosedCandleTs, latestClosedTs, 'restart should advance the consumed closed-candle cursor after a successful trigger');
+    assert.strictEqual((state.bots['xrp-bts-restart-trigger'] as any).centerPrice, 100, 'restart should persist the new AMA center after the trigger');
 }
 
 async function testBootstrapFallsBackWhenKibanaIsEmpty() {
@@ -1728,8 +1728,8 @@ async function testAmaTriggerSuppressedWhenCenterPersistFails() {
     assert.strictEqual(result.triggered, false, 'trigger should be suppressed if AMA center cannot be persisted');
     assert.strictEqual(result.triggerSuppressedReason, 'ama_center_persist_failed', 'suppression reason should be reported');
     assert.strictEqual(triggerWrites, 0, 'trigger file must not be written when center persistence fails');
-    assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'center price should not advance when trigger is suppressed');
-    assert.strictEqual(state.bots['xrp-bts-0'].amaCenterPrice, 100, 'raw AMA center should remain aligned with the persisted snapshot');
+    assert.strictEqual((state.bots['xrp-bts-0'] as any).centerPrice, 100, 'center price should not advance when trigger is suppressed');
+    assert.strictEqual((state.bots['xrp-bts-0'] as any).amaCenterPrice, 100, 'raw AMA center should remain aligned with the persisted snapshot');
 }
 
 async function testAmaCenterPersistFailureBlocksSlopeTriggerFallback() {
@@ -1823,8 +1823,8 @@ async function testAmaCenterPersistFailureBlocksSlopeTriggerFallback() {
     assert.strictEqual(result.triggerSuppressedReason, 'ama_center_persist_failed', 'center persistence failure should remain the reported reason');
     assert.strictEqual(triggerWrites, 0, 'no trigger file should be written after a failed center snapshot write');
     assert.strictEqual(dynamicGridWrites, 1, 'failed center snapshot should not be followed by a second slope snapshot write');
-    assert.strictEqual(state.bots['xrp-bts-center-slope-fail'].centerPrice, 100, 'center price should not advance after persistence failure');
-    assert.strictEqual(state.bots['xrp-bts-center-slope-fail'].gridRangeScalingAmaSlope.trend, 'UP', 'slope reset baseline should not advance after persistence failure');
+    assert.strictEqual((state.bots['xrp-bts-center-slope-fail'] as any).centerPrice, 100, 'center price should not advance after persistence failure');
+    assert.strictEqual((state.bots['xrp-bts-center-slope-fail'] as any).gridRangeScalingAmaSlope.trend, 'UP', 'slope reset baseline should not advance after persistence failure');
 }
 
 async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
@@ -1895,10 +1895,10 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
     assert.strictEqual(firstResult.triggered, false, 'bootstrap persistence failure should not produce a trigger');
     assert.strictEqual(firstResult.triggerSuppressedReason, 'ama_center_persist_failed', 'bootstrap failure should be reported');
     assert.strictEqual(triggerWrites, 0, 'trigger file must not be written during bootstrap persistence failure');
-    assert.strictEqual(state.bots['xrp-bts-bootstrap'].centerPrice, undefined, 'bootstrap baseline should remain unset so the next cycle retries');
-    assert.strictEqual(state.bots['xrp-bts-bootstrap'].amaCenterPrice, undefined, 'bootstrap raw AMA center should remain unset when snapshot persistence fails');
-    assert.strictEqual(state.bots['xrp-bts-bootstrap'].lastGridResetAt, undefined, 'bootstrap state should not pretend a reset happened');
-    assert.strictEqual(state.bots['xrp-bts-bootstrap'].lastClosedCandleTs, null, 'failed bootstrap persistence should not consume the closed candle');
+    assert.strictEqual((state.bots['xrp-bts-bootstrap'] as any).centerPrice, undefined, 'bootstrap baseline should remain unset so the next cycle retries');
+    assert.strictEqual((state.bots['xrp-bts-bootstrap'] as any).amaCenterPrice, undefined, 'bootstrap raw AMA center should remain unset when snapshot persistence fails');
+    assert.strictEqual((state.bots['xrp-bts-bootstrap'] as any).lastGridResetAt, undefined, 'bootstrap state should not pretend a reset happened');
+    assert.strictEqual((state.bots['xrp-bts-bootstrap'] as any).lastClosedCandleTs, null, 'failed bootstrap persistence should not consume the closed candle');
 
     const secondResult = await service.processBot(bot, state, cfg, contextCache, {});
 
@@ -1907,9 +1907,9 @@ async function testBootstrapCenterDoesNotAdvanceWhenPersistFails() {
     assert.strictEqual(secondResult.triggerSuppressedReason, null, 'successful bootstrap retry should clear the suppression reason');
     assert.strictEqual(writeAttempts, 2, 'the same closed candle should be retried after bootstrap persistence failure');
     assert.strictEqual(secondResult.pendingClosedCandle, false, 'successful retry should process the closed candle rather than skip it');
-    assert.ok(Number.isFinite(state.bots['xrp-bts-bootstrap'].centerPrice), 'bootstrap retry should establish the center baseline');
-    assert.strictEqual(state.bots['xrp-bts-bootstrap'].lastGridResetAt, undefined, 'bootstrap trigger request should not pretend the bot reset already completed');
-    assert.ok(Number.isFinite(state.bots['xrp-bts-bootstrap'].lastClosedCandleTs), 'successful bootstrap retry should finally consume the closed candle');
+    assert.ok(Number.isFinite((state.bots['xrp-bts-bootstrap'] as any).centerPrice), 'bootstrap retry should establish the center baseline');
+    assert.strictEqual((state.bots['xrp-bts-bootstrap'] as any).lastGridResetAt, undefined, 'bootstrap trigger request should not pretend the bot reset already completed');
+    assert.ok(Number.isFinite((state.bots['xrp-bts-bootstrap'] as any).lastClosedCandleTs), 'successful bootstrap retry should finally consume the closed candle');
 }
 
 // Center remains AMA when there is no offset. Trigger fires from AMA delta.
@@ -1992,8 +1992,8 @@ async function testCenterEqualsAmaTriggeredByAmaDelta() {
     assert.strictEqual(writeArgs[0], 'xrp-bts-0');
     assert.strictEqual(writeArgs[1], 100, 'written center should be the AMA center');
     assert.strictEqual(writeArgs[2].amaCenterPrice, 100, 'raw AMA center should be persisted separately');
-    assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'center updates to new AMA');
-    assert.strictEqual(state.bots['xrp-bts-0'].amaCenterPrice, 100, 'raw AMA center tracked separately');
+    assert.strictEqual((state.bots['xrp-bts-0'] as any).centerPrice, 100, 'center updates to new AMA');
+    assert.strictEqual((state.bots['xrp-bts-0'] as any).amaCenterPrice, 100, 'raw AMA center tracked separately');
 }
 
 // When AMA equals previous center, the center is unchanged → no trigger even with low threshold.
@@ -2080,7 +2080,7 @@ async function testNoTriggerWhenCenterMatchesAma() {
     assert.strictEqual(lastWrite[1], 100, 'snapshot refresh should preserve the current center');
     assert.strictEqual(lastWrite[2].amaCenterPrice, 100, 'snapshot refresh should persist the AMA center');
     assert.ok(lastWrite[2].dynamicWeights, 'snapshot refresh should persist dynamic weight metadata');
-    assert.strictEqual(state.bots['xrp-bts-0'].centerPrice, 100, 'stored center should remain unchanged');
+    assert.strictEqual((state.bots['xrp-bts-0'] as any).centerPrice, 100, 'stored center should remain unchanged');
 }
 
 async function testGridCenterPriceOnlyStateRestoresBaseline() {
@@ -2149,8 +2149,8 @@ async function testGridCenterPriceOnlyStateRestoresBaseline() {
     assert.strictEqual(result.deltaPercent, 0, 'gridCenterPrice-only state should be used as the reset baseline');
     assert.strictEqual(result.triggered, false, 'gridCenterPrice-only state should not bootstrap a new reset');
     assert.strictEqual(triggerWrites, 0, 'trigger file must not be written');
-    assert.strictEqual(state.bots['xrp-bts-grid-center'].gridCenterPrice, 100);
-    assert.strictEqual(state.bots['xrp-bts-grid-center'].centerPrice, 100, 'compatibility alias should be restored');
+    assert.strictEqual((state.bots['xrp-bts-grid-center'] as any).gridCenterPrice, 100);
+    assert.strictEqual((state.bots['xrp-bts-grid-center'] as any).centerPrice, 100, 'compatibility alias should be restored');
 }
 
 // Center is clamped to bot.minPrice/maxPrice bounds when AMA drifts outside them.
@@ -2228,8 +2228,8 @@ async function testCenterClampedByBotBounds() {
     const clampedResult = await service.processBot(clampedBot, clampedState, cfg, new Map(), {});
     assert.strictEqual(clampedResult.ok, true);
     assert.strictEqual(clampedResult.triggered, true, 'clamped center change should trigger recenter');
-    assert.strictEqual(clampedState.bots['xrp-bts-1'].centerPrice, 101, 'center should be clamped to maxPrice');
-    assert.strictEqual(clampedState.bots['xrp-bts-1'].lastGridResetAt, undefined, 'adapter trigger request should not record actual reset completion');
+    assert.strictEqual((clampedState.bots['xrp-bts-1'] as any).centerPrice, 101, 'center should be clamped to maxPrice');
+    assert.strictEqual((clampedState.bots['xrp-bts-1'] as any).lastGridResetAt, undefined, 'adapter trigger request should not record actual reset completion');
     assert.strictEqual(lastWrite[1], 101, 'written center should match clamped value');
     assert.strictEqual(lastWrite[2].amaCenterPrice, 110, 'raw AMA center should be persisted separately');
 
@@ -2245,7 +2245,7 @@ async function testCenterClampedByBotBounds() {
     const noOpResult = await service.processBot(noOpBot, noOpState, cfg, new Map(), {});
     assert.strictEqual(noOpResult.ok, true);
     assert.strictEqual(noOpResult.triggered, false, 'no trigger when clamping keeps center unchanged');
-    assert.strictEqual(noOpState.bots['xrp-bts-3'].centerPrice, 101, 'center should remain at clamp boundary');
+    assert.strictEqual((noOpState.bots['xrp-bts-3'] as any).centerPrice, 101, 'center should remain at clamp boundary');
     assert.strictEqual(triggerWrites, 1, 'only the initial clamp move should have triggered');
 }
 
@@ -2352,10 +2352,10 @@ async function testCenterStableButSlopeDeltaTriggersReset() {
     assert.ok(lastWrite[2].gridPriceOffsetPct < 0, 'downtrend should persist a negative spread offset');
     assert.strictEqual(lastWrite[2].dynamicWeights, undefined, 'range-scaling snapshot should not persist live dynamic weights without dynamic whitelist');
     assert.strictEqual(result.dynamicWeightApplied, false, 'range-scaling snapshot should not report live dynamic weights as applied');
-    assert.strictEqual(state.bots['xrp-bts-slope'].effectiveWeights, null, 'range-only snapshot should not advance live effective weights');
-    assert.strictEqual(state.bots['xrp-bts-slope'].amaSlope.trend, 'DOWN', 'state should retain current slope direction');
-    assert.strictEqual(state.bots['xrp-bts-slope'].gridRangeScalingAmaSlope.trend, 'DOWN', 'reset baseline should advance only after the slope reset');
-    assert.ok(Number.isFinite(state.bots['xrp-bts-slope'].amaSlopeDeltaPercent), 'state should retain the slope delta');
+    assert.strictEqual((state.bots['xrp-bts-slope'] as any).effectiveWeights, null, 'range-only snapshot should not advance live effective weights');
+    assert.strictEqual((state.bots['xrp-bts-slope'] as any).amaSlope.trend, 'DOWN', 'state should retain current slope direction');
+    assert.strictEqual((state.bots['xrp-bts-slope'] as any).gridRangeScalingAmaSlope.trend, 'DOWN', 'reset baseline should advance only after the slope reset');
+    assert.ok(Number.isFinite((state.bots['xrp-bts-slope'] as any).amaSlopeDeltaPercent), 'state should retain the slope delta');
 }
 
 async function testSlopeTriggerRecoversBaselineFromDynamicGridAfterStateClear() {
@@ -2463,7 +2463,7 @@ async function testSlopeTriggerRecoversBaselineFromDynamicGridAfterStateClear() 
         'slope trigger should normalize the persisted grid reset baseline from dynamicgrid.json before comparison'
     );
     assert.strictEqual(result.previousCenterPrice, 100, 'previous center should be restored from dynamicgrid.json after state clear');
-    assert.strictEqual(state.bots['xrp-bts-slope-after-clear'].centerPrice > 0, true, 'state should be rebuilt from the recovered snapshot');
+    assert.strictEqual((state.bots['xrp-bts-slope-after-clear'] as any).centerPrice > 0, true, 'state should be rebuilt from the recovered snapshot');
 }
 
 function testSlopeDirectionChangeDoesNotTriggerBelowDeltaThreshold() {
@@ -2610,9 +2610,9 @@ async function testLegacyDynamicGridSlopeBaselineIsNormalizedBeforeComparison() 
     assert.strictEqual(result.ok, true, 'comparison run should succeed');
     assert.strictEqual(result.triggered, false, 'legacy window baseline should not false-trigger after normalization');
     assert.strictEqual(triggerWrites, 0, 'legacy window baseline should not emit a reset trigger');
-    assert.strictEqual(state.bots[bot.botKey].amaSlopePercentMode, 'perBar', 'state should persist the normalized unit marker');
+    assert.strictEqual((state.bots[bot.botKey] as any).amaSlopePercentMode, 'perBar', 'state should persist the normalized unit marker');
     assert.strictEqual(
-        roundTo(state.bots[bot.botKey].gridRangeScalingAmaSlope.slopePct, 6),
+        roundTo((state.bots[bot.botKey] as any).gridRangeScalingAmaSlope.slopePct, 6),
         roundTo(currentSlopePct, 6),
         'legacy reset baseline should be converted to the current per-bar slope before comparison'
     );
@@ -2704,17 +2704,17 @@ async function testSlopePersistFailurePreservesRetryBaseline() {
     assert.strictEqual(failed.triggered, false, 'failed slope snapshot write should suppress the trigger');
     assert.strictEqual(failed.triggerSuppressedReason, 'ama_slope_persist_failed');
     assert.strictEqual(triggerWrites, 0, 'trigger file should not be written when snapshot persistence fails');
-    assert.strictEqual(state.bots['xrp-bts-slope-retry'].lastClosedCandleTs, previousClosedCandleTs, 'failed closed candle should remain retryable');
-    assert.deepStrictEqual(state.bots['xrp-bts-slope-retry'].amaSlope, previousAmaSlope, 'failed retry should not advance accepted slope baseline');
-    assert.deepStrictEqual(state.bots['xrp-bts-slope-retry'].gridRangeScalingAmaSlope, previousAmaSlope, 'failed retry should not advance grid range scaling baseline');
-    assert.strictEqual(state.bots['xrp-bts-slope-retry'].amaSlopeDeltaPercent, 0.01, 'failed retry should keep previous slope delta diagnostic');
+    assert.strictEqual((state.bots['xrp-bts-slope-retry'] as any).lastClosedCandleTs, previousClosedCandleTs, 'failed closed candle should remain retryable');
+    assert.deepStrictEqual((state.bots['xrp-bts-slope-retry'] as any).amaSlope, previousAmaSlope, 'failed retry should not advance accepted slope baseline');
+    assert.deepStrictEqual((state.bots['xrp-bts-slope-retry'] as any).gridRangeScalingAmaSlope, previousAmaSlope, 'failed retry should not advance grid range scaling baseline');
+    assert.strictEqual((state.bots['xrp-bts-slope-retry'] as any).amaSlopeDeltaPercent, 0.01, 'failed retry should keep previous slope delta diagnostic');
 
     const retried = await service.processBot(bot, state, cfg, new Map(), {});
     assert.strictEqual(retried.triggered, true, 'preserved slope baseline should allow the next cycle to retry the trigger');
     assert.strictEqual(triggerWrites, 1, 'retry should write the slope trigger after snapshot persistence succeeds');
-    assert.notDeepStrictEqual(state.bots['xrp-bts-slope-retry'].amaSlope, previousAmaSlope, 'successful retry should advance accepted slope baseline');
-    assert.notDeepStrictEqual(state.bots['xrp-bts-slope-retry'].gridRangeScalingAmaSlope, previousAmaSlope, 'successful retry should advance grid range scaling baseline');
-    assert.strictEqual(state.bots['xrp-bts-slope-retry'].lastClosedCandleTs, candles[candles.length - 1][0], 'successful retry should consume the closed candle');
+    assert.notDeepStrictEqual((state.bots['xrp-bts-slope-retry'] as any).amaSlope, previousAmaSlope, 'successful retry should advance accepted slope baseline');
+    assert.notDeepStrictEqual((state.bots['xrp-bts-slope-retry'] as any).gridRangeScalingAmaSlope, previousAmaSlope, 'successful retry should advance grid range scaling baseline');
+    assert.strictEqual((state.bots['xrp-bts-slope-retry'] as any).lastClosedCandleTs, candles[candles.length - 1][0], 'successful retry should consume the closed candle');
 }
 
 async function testContextCacheInvalidatesOnPoolChange() {
@@ -2784,7 +2784,7 @@ async function testContextCacheInvalidatesOnPoolChange() {
     await service.processBot(secondBot, state, cfg, contextCache, {});
 
     assert.strictEqual(resolveCalls, 2, 'context should be re-resolved after pool change');
-    assert.strictEqual(state.bots['xrp-bts-0'].poolId, '1.19.999', 'state should store refreshed pool context');
+    assert.strictEqual((state.bots['xrp-bts-0'] as any).poolId, '1.19.999', 'state should store refreshed pool context');
 }
 
 async function testKibanaGapRepairPatchesMissingCandles() {
@@ -2868,8 +2868,8 @@ async function testKibanaGapRepairPatchesMissingCandles() {
     );
     assert.strictEqual(result.kibanaGapRepairCount, 1, 'patched gap count should be reported in result');
     assert.strictEqual(result.unresolvedGapCount, 0, 'no gaps should remain after Kibana repair');
-    assert.strictEqual(state.bots['xrp-bts-0'].kibanaGapRepairCount, 1, 'state should track retained Kibana repairs');
-    assert.strictEqual(state.bots['xrp-bts-0'].unresolvedGapCount, 0, 'state should track remaining gaps');
+    assert.strictEqual((state.bots['xrp-bts-0'] as any).kibanaGapRepairCount, 1, 'state should track retained Kibana repairs');
+    assert.strictEqual((state.bots['xrp-bts-0'] as any).unresolvedGapCount, 0, 'state should track remaining gaps');
     assert.strictEqual(savedPayload.meta.kibanaGapRepairCount, 1, 'saved candle payload should include Kibana repair count');
     assert.strictEqual(savedPayload.meta.unresolvedGapCount, 0, 'saved candle payload should include remaining gap count');
     assert.deepStrictEqual(
@@ -2984,8 +2984,8 @@ async function testInternalNoTradeGapsAreSynthesizedWhenKibanaReturnsNoPatchData
     assert.notStrictEqual(result.triggerSuppressedReason, 'unresolved_candle_gaps', 'verified no-trade gaps should not suppress writes as unresolved');
     assert.strictEqual(triggerWrites, 1, 'verified no-trade gaps should allow the grid reset trigger to proceed');
     assert.strictEqual(dynamicGridWrites, 1, 'verified no-trade gaps should allow dynamic grid persistence');
-    assert.ok(Number.isFinite(state.bots['xrp-bts-0'].lastClosedCandleTs), 'verified no-trade repair should consume the closed candle');
-    assert.strictEqual(state.bots['xrp-bts-0'].unresolvedGapCount, 0, 'state should clear unresolved gap count after synthesized repair');
+    assert.ok(Number.isFinite((state.bots['xrp-bts-0'] as any).lastClosedCandleTs), 'verified no-trade repair should consume the closed candle');
+    assert.strictEqual((state.bots['xrp-bts-0'] as any).unresolvedGapCount, 0, 'state should clear unresolved gap count after synthesized repair');
     assert.strictEqual(savedPayload.meta.unresolvedGapCount, 0, 'saved payload should clear unresolved gap count after synthesized repair');
     assert.ok(
         savedPayload.candles.some((c) => c[0] === 1700036000000 && c[4] === 100 && Number(c[5]) === 0),
@@ -3092,7 +3092,7 @@ async function testEmptyKibanaRepairOnlySynthesizesGapsInsideCappedRepairWindow(
     assert.strictEqual(result.triggerSuppressedReason, 'unresolved_candle_gaps', 'writes should stay suppressed while an unverified gap remains');
     assert.strictEqual(triggerWrites, 0, 'the unresolved older gap should block trigger writes');
     assert.strictEqual(dynamicGridWrites, 0, 'the unresolved older gap should block dynamic grid writes');
-    assert.strictEqual(state.bots['xrp-bts-windowed'].unresolvedGapCount, 1, 'state should retain the older unresolved gap');
+    assert.strictEqual((state.bots['xrp-bts-windowed'] as any).unresolvedGapCount, 1, 'state should retain the older unresolved gap');
     assert.strictEqual(savedPayload.meta.unresolvedGapCount, 1, 'saved payload should retain the older unresolved gap');
     assert.ok(
         !savedPayload.candles.some((c) => c[0] === 1700018000000),
@@ -4200,7 +4200,7 @@ async function testClosedCandleGateSkipsCurrentPartialHour() {
     assert.strictEqual(savedPayload.meta.analysisCandleCount, 24, 'raw candle payload should record closed-candle count including prehistory');
     assert.strictEqual(savedPayload.meta.rawKeepCount, expectedRawKeepCount, 'raw candle payload should persist the retained raw target');
     assert.strictEqual(savedPayload.meta.analysisKeepCount, expectedAnalysisKeepCount, 'raw candle payload should persist the closed-candle target');
-    assert.strictEqual(state.bots['xrp-bts-closed-0'].centerPrice, 100, 'state should remain unchanged when waiting for a close');
+    assert.strictEqual((state.bots['xrp-bts-closed-0'] as any).centerPrice, 100, 'state should remain unchanged when waiting for a close');
 }
 
 async function testClosedCandleGateSurfacesStaleData() {
@@ -4283,9 +4283,9 @@ async function testClosedCandleGateSurfacesStaleData() {
     assert.strictEqual(result.pendingClosedCandle, false, 'stale data should not masquerade as a normal pending close');
     assert.strictEqual(result.triggerSuppressedReason, 'stale_candle_data', 'suppression reason should distinguish stale data from a normal wait');
     assert.ok(savedPayload, 'raw candle payload should still be persisted');
-    assert.strictEqual(state.bots['xrp-bts-stale-0'].pendingClosedCandle, false, 'state should not mark stale data as a pending close');
-    assert.strictEqual(state.bots['xrp-bts-stale-0'].staleData, true, 'state should retain stale status');
-    assert.strictEqual(state.bots['xrp-bts-stale-0'].lastTriggerSuppressedReason, 'stale_candle_data', 'state should persist the stale suppression reason');
+    assert.strictEqual((state.bots['xrp-bts-stale-0'] as any).pendingClosedCandle, false, 'state should not mark stale data as a pending close');
+    assert.strictEqual((state.bots['xrp-bts-stale-0'] as any).staleData, true, 'state should retain stale status');
+    assert.strictEqual((state.bots['xrp-bts-stale-0'] as any).lastTriggerSuppressedReason, 'stale_candle_data', 'state should persist the stale suppression reason');
 }
 
 async function testClosedCandlePruningRetainsFullDynamicWeightWarmup() {
@@ -5336,16 +5336,16 @@ async function testDynamicWeightWeightOnlyWritesPersistOnClosedCandle() {
 
     const firstResult = await service.processBot(bot, state, cfg, new Map(), {});
     const firstWeights = { ...lastPayload.dynamicWeights.effectiveWeights };
-    assert.strictEqual(state.bots['xrp-bts-dw-persist'].pendingClosedCandle, false, 'successful closed candle processing should clear the pending flag');
+    assert.strictEqual((state.bots['xrp-bts-dw-persist'] as any).pendingClosedCandle, false, 'successful closed candle processing should clear the pending flag');
     const secondResult = await service.processBot(bot, state, cfg, new Map(), {});
 
     assert.strictEqual(firstResult.pendingClosedCandle, false, 'first closed candle cycle should process normally');
-    assert.strictEqual(state.bots['xrp-bts-dw-persist'].pendingClosedCandle, true, 'state should mark the waiting poll after the second pass');
+    assert.strictEqual((state.bots['xrp-bts-dw-persist'] as any).pendingClosedCandle, true, 'state should mark the waiting poll after the second pass');
     assert.strictEqual(secondResult.pendingClosedCandle, true, 'second poll with no new closed candle should be skipped');
     assert.strictEqual(writeCount, 1, 'weight-only dynamic weights should only persist when a new closed candle is available');
     assert.deepStrictEqual(lastPayload.dynamicWeights.effectiveWeights, firstWeights, 'identical closed-candle data should yield identical effective weights');
     assert.deepStrictEqual(lastPayload.gridRangeScalingAmaSlope, previousGridResetAmaSlope, 'weight-only snapshot should preserve the last grid-reset slope baseline');
-    assert.deepStrictEqual(state.bots['xrp-bts-dw-persist'].gridRangeScalingAmaSlope, previousGridResetAmaSlope, 'weight-only state update should not advance the reset slope baseline');
+    assert.deepStrictEqual((state.bots['xrp-bts-dw-persist'] as any).gridRangeScalingAmaSlope, previousGridResetAmaSlope, 'weight-only state update should not advance the reset slope baseline');
 }
 
 async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
@@ -5418,9 +5418,9 @@ async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
     assert.strictEqual(firstResult.triggered, false, 'weight-only persistence failure should not create a trigger');
     assert.strictEqual(firstResult.triggerSuppressedReason, 'dynamic_weight_persist_failed', 'failed weight-only write should be surfaced');
     assert.strictEqual(writeCount, 1, 'weight-only persistence should still be attempted');
-    assert.strictEqual(state.bots['xrp-bts-dw-fail'].effectiveWeights, null, 'effective weights should not advance when snapshot write fails');
-    assert.strictEqual(state.bots['xrp-bts-dw-fail'].amaCenterPrice, 100, 'raw AMA center should remain aligned with the last persisted snapshot');
-    assert.strictEqual(state.bots['xrp-bts-dw-fail'].lastClosedCandleTs, null, 'failed weight-only persistence should not consume the closed candle');
+    assert.strictEqual((state.bots['xrp-bts-dw-fail'] as any).effectiveWeights, null, 'effective weights should not advance when snapshot write fails');
+    assert.strictEqual((state.bots['xrp-bts-dw-fail'] as any).amaCenterPrice, 100, 'raw AMA center should remain aligned with the last persisted snapshot');
+    assert.strictEqual((state.bots['xrp-bts-dw-fail'] as any).lastClosedCandleTs, null, 'failed weight-only persistence should not consume the closed candle');
 
     const secondResult = await service.processBot(bot, state, cfg, contextCache, {});
 
@@ -5429,8 +5429,8 @@ async function testDynamicWeightWeightOnlyWriteFailureDoesNotAdvanceState() {
     assert.strictEqual(secondResult.triggerSuppressedReason, null, 'successful retry should clear the persistence failure reason');
     assert.strictEqual(writeCount, 2, 'the same closed candle should be retried after weight-only persistence failure');
     assert.ok(lastPayload?.dynamicWeights, 'successful retry should write the dynamic weight payload');
-    assert.ok(state.bots['xrp-bts-dw-fail'].effectiveWeights, 'effective weights should advance after a successful retry');
-    assert.ok(Number.isFinite(state.bots['xrp-bts-dw-fail'].lastClosedCandleTs), 'successful retry should finally consume the closed candle');
+    assert.ok((state.bots['xrp-bts-dw-fail'] as any).effectiveWeights, 'effective weights should advance after a successful retry');
+    assert.ok(Number.isFinite((state.bots['xrp-bts-dw-fail'] as any).lastClosedCandleTs), 'successful retry should finally consume the closed candle');
 }
 
 async function testPlainAmaSnapshotRefreshFailureDoesNotConsumeClosedCandle() {
@@ -5505,9 +5505,9 @@ async function testPlainAmaSnapshotRefreshFailureDoesNotConsumeClosedCandle() {
     assert.strictEqual(firstResult.triggered, false, 'plain snapshot refresh failure should not create a trigger');
     assert.strictEqual(firstResult.triggerSuppressedReason, 'ama_center_persist_failed', 'plain snapshot refresh failure should reuse the AMA center persistence reason');
     assert.strictEqual(writeCount, 1, 'plain AMA snapshot refresh should be attempted');
-    assert.strictEqual(state.bots['xrp-bts-ama-refresh-fail'].effectiveWeights, null, 'non-whitelisted refresh should not advance effective weights');
-    assert.strictEqual(state.bots['xrp-bts-ama-refresh-fail'].amaCenterPrice, 100, 'raw AMA center should remain aligned with the last persisted snapshot');
-    assert.strictEqual(state.bots['xrp-bts-ama-refresh-fail'].lastClosedCandleTs, null, 'failed plain snapshot refresh should not consume the closed candle');
+    assert.strictEqual((state.bots['xrp-bts-ama-refresh-fail'] as any).effectiveWeights, null, 'non-whitelisted refresh should not advance effective weights');
+    assert.strictEqual((state.bots['xrp-bts-ama-refresh-fail'] as any).amaCenterPrice, 100, 'raw AMA center should remain aligned with the last persisted snapshot');
+    assert.strictEqual((state.bots['xrp-bts-ama-refresh-fail'] as any).lastClosedCandleTs, null, 'failed plain snapshot refresh should not consume the closed candle');
 
     const secondResult = await service.processBot(bot, state, cfg, contextCache, {});
 
@@ -5516,7 +5516,7 @@ async function testPlainAmaSnapshotRefreshFailureDoesNotConsumeClosedCandle() {
     assert.strictEqual(secondResult.triggerSuppressedReason, null, 'successful retry should clear the persistence failure reason');
     assert.strictEqual(writeCount, 2, 'the same closed candle should be retried after plain snapshot refresh failure');
     assert.strictEqual(lastPayload?.dynamicWeights, undefined, 'plain AMA snapshot refresh should not persist dynamic weights without whitelist flags');
-    assert.ok(Number.isFinite(state.bots['xrp-bts-ama-refresh-fail'].lastClosedCandleTs), 'successful retry should finally consume the closed candle');
+    assert.ok(Number.isFinite((state.bots['xrp-bts-ama-refresh-fail'] as any).lastClosedCandleTs), 'successful retry should finally consume the closed candle');
 }
 
 async function testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData() {
@@ -5586,8 +5586,8 @@ async function testDynamicWeightWeightOnlyWritesAreSuppressedForStaleData() {
     assert.strictEqual(result.staleData, true, 'stale flag should be surfaced');
     assert.strictEqual(result.triggered, false, 'stale data should not create a trigger');
     assert.strictEqual(writeCount, 0, 'stale data should suppress weight-only snapshot writes');
-    assert.strictEqual(state.bots['xrp-bts-dw-stale'].effectiveWeights, null, 'stale cycles should not update effective weights');
-    assert.strictEqual(state.bots['xrp-bts-dw-stale'].amaCenterPrice, 100, 'raw AMA center should remain aligned with the last persisted snapshot');
+    assert.strictEqual((state.bots['xrp-bts-dw-stale'] as any).effectiveWeights, null, 'stale cycles should not update effective weights');
+    assert.strictEqual((state.bots['xrp-bts-dw-stale'] as any).amaCenterPrice, 100, 'raw AMA center should remain aligned with the last persisted snapshot');
 }
 
 async function testDynamicWeightInvalidAtrPeriodAndClampAreSanitized() {
@@ -5742,7 +5742,7 @@ async function testDynamicWeightDiagnosticsComputeWithoutWhitelistForAmaBots() {
     assert.strictEqual(result.dynamicWeightApplied, false, 'non-whitelisted weights should not be reported as applied');
     assert.strictEqual(result.weights, null, 'non-whitelisted bots should not return dynamic-weight diagnostics');
     assert.strictEqual(result.amaSlope, null, 'non-whitelisted bots should not return dynamic-weight slope diagnostics');
-    assert.strictEqual(state.bots['xrp-bts-dw-diagnostic'].effectiveWeights, null, 'non-whitelisted diagnostics should not update live effective weights');
+    assert.strictEqual((state.bots['xrp-bts-dw-diagnostic'] as any).effectiveWeights, null, 'non-whitelisted diagnostics should not update live effective weights');
 }
 
 async function testDynamicWeightRequiresAmaAndDynamicWeightWhitelist() {
@@ -5804,7 +5804,7 @@ async function testDynamicWeightRequiresAmaAndDynamicWeightWhitelist() {
     assert.strictEqual(result.dynamicWeightWhitelisted, false, 'dynamic weights require AMA whitelist plus dynamicWeight flag');
     assert.strictEqual(result.dynamicWeightReady, false, 'dynamicWeight-only whitelist should not compute dynamic weights');
     assert.strictEqual(result.weights, null, 'dynamicWeight-only whitelist should not expose weights');
-    assert.strictEqual(state.bots['xrp-bts-dw-ama-required'].effectiveWeights, null, 'dynamicWeight-only whitelist should not update state weights');
+    assert.strictEqual((state.bots['xrp-bts-dw-ama-required'] as any).effectiveWeights, null, 'dynamicWeight-only whitelist should not update state weights');
 }
 
 async function testDynamicWeightDiagnosticsDoNotLeakIntoBootstrapState() {
@@ -5871,7 +5871,7 @@ async function testDynamicWeightDiagnosticsDoNotLeakIntoBootstrapState() {
     assert.strictEqual(dynamicGridWrites, 1, 'bootstrap should still persist the AMA center snapshot');
     assert.strictEqual(result.dynamicWeightReady, false, 'non-whitelisted bootstrap should not compute dynamic weights');
     assert.strictEqual(result.dynamicWeightApplied, false, 'bootstrap weights should not be reported as applied');
-    assert.strictEqual(state.bots['xrp-bts-dw-bootstrap-diagnostic'].effectiveWeights, null, 'non-whitelisted bootstrap diagnostics should not update live effective weights');
+    assert.strictEqual((state.bots['xrp-bts-dw-bootstrap-diagnostic'] as any).effectiveWeights, null, 'non-whitelisted bootstrap diagnostics should not update live effective weights');
 }
 
 async function testWeightOnlyUpdateInDryRunUpdatesState() {
@@ -5955,7 +5955,7 @@ async function testWeightOnlyUpdateInDryRunUpdatesState() {
 
     assert.strictEqual(result.ok, true, 'processBot should succeed');
     assert.strictEqual(dynamicGridWrites, 0, 'writeBotDynamicGrid should not be called in dry run');
-    assert.ok(state.bots['xrp-bts-dry-run'].effectiveWeights, 'state should be updated with effective weights even in dry run');
+    assert.ok((state.bots['xrp-bts-dry-run'] as any).effectiveWeights, 'state should be updated with effective weights even in dry run');
 }
 
 async function testNewerDynamicGridResetCenterOverridesStaleAdapterState() {
@@ -6054,10 +6054,10 @@ async function testNewerDynamicGridResetCenterOverridesStaleAdapterState() {
 
     assert.strictEqual(result.ok, true, 'processBot should succeed');
     assert.strictEqual(writtenCenter, 130, 'weight-only snapshot write should preserve the newer reset center');
-    assert.strictEqual(state.bots[botKey].gridCenterPrice, 130);
-    assert.strictEqual(state.bots[botKey].centerPrice, 130);
-    assert.strictEqual(state.bots[botKey].lastGridResetAt, '2026-05-15T00:01:00.327Z');
-    assert.strictEqual(state.bots[botKey].lastGridResetSource, 'manual_grid_resync');
+    assert.strictEqual((state.bots[botKey] as any).gridCenterPrice, 130);
+    assert.strictEqual((state.bots[botKey] as any).centerPrice, 130);
+    assert.strictEqual((state.bots[botKey] as any).lastGridResetAt, '2026-05-15T00:01:00.327Z');
+    assert.strictEqual((state.bots[botKey] as any).lastGridResetSource, 'manual_grid_resync');
 }
 
 async function run() {

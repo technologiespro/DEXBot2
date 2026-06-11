@@ -179,7 +179,7 @@ async function runStartupColorTest() {
 
     await new Promise((resolve) => {
         const check = () => {
-            if (startCalled) resolve();
+            if (startCalled) resolve(undefined);
             else setImmediate(check);
         };
         check();
@@ -221,7 +221,7 @@ require('../dexbot');
     try {
         await new Promise((resolve) => {
             const check = () => {
-                if (startCalled) resolve();
+                if (startCalled) resolve(undefined);
                 else setImmediate(check);
             };
             check();

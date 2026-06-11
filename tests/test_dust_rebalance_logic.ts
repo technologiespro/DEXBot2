@@ -830,11 +830,11 @@ async function testStartupDustSchedulesTimer() {
         let scheduledDelay = null;
         let scheduledFn = null;
 
-        global.setTimeout = (fn, delay) => {
+        global.setTimeout = ((fn: any, delay: any) => {
             scheduledFn = fn;
             scheduledDelay = delay;
             return { fakeTimer: true };
-        };
+        }) as any;
         global.clearTimeout = () => {};
 
         GRID_LIMITS.DUST_CANCEL_DELAY_SEC = 60;
@@ -897,10 +897,10 @@ async function testConsecutiveDustCancelSeeding() {
 
         // Intercept the timer so we can verify it is scheduled after the cancel.
         let timerScheduled = false;
-        global.setTimeout = (fn, delay) => {
+        global.setTimeout = ((fn: any, delay: any) => {
             timerScheduled = true;
             return { fakeTimer: true };
-        };
+        }) as any;
         global.clearTimeout = () => {};
 
         bot = new DEXBot({
@@ -977,10 +977,10 @@ async function testDustReseedHealthFailureDoesNotAbort() {
         GRID_LIMITS.DUST_CANCEL_DELAY_SEC = 60;
 
         let fallbackTimerScheduled = false;
-        global.setTimeout = (fn, delay) => {
+        global.setTimeout = ((fn: any, delay: any) => {
             fallbackTimerScheduled = true;
             return { fakeTimer: true };
-        };
+        }) as any;
         global.clearTimeout = () => {};
 
         bot = new DEXBot({
@@ -1045,10 +1045,10 @@ async function testMaintenanceDefersStructuralWorkWhileDustPending() {
     try {
         GRID_LIMITS.DUST_CANCEL_DELAY_SEC = 60;
         const scheduledDelays = [];
-        global.setTimeout = (fn, delay) => {
+        global.setTimeout = ((fn: any, delay: any) => {
             scheduledDelays.push(delay);
             return { fakeTimer: true };
-        };
+        }) as any;
         global.clearTimeout = () => {};
 
         const bot = new DEXBot({
@@ -1121,7 +1121,7 @@ async function testGridMaintenanceWaitsForQuietPeriod() {
 
     try {
         const scheduledDelays = [];
-        global.setTimeout = (_fn, delay) => {
+        (global as any).setTimeout = (_fn, delay) => {
             scheduledDelays.push(delay);
             return { fakeTimer: true };
         };

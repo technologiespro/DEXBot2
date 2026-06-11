@@ -86,7 +86,7 @@ async function testHandleRequestEmitsNewlineJson() {
   const captured = [];
   const originalWrite = process.stdout.write;
 
-  process.stdout.write = (chunk, encoding, callback) => {
+  process.stdout.write = ((chunk: any, encoding: any, callback: any) => {
     captured.push(String(chunk));
     if (typeof encoding === 'function') {
       encoding();
@@ -94,7 +94,7 @@ async function testHandleRequestEmitsNewlineJson() {
       callback();
     }
     return true;
-  };
+  }) as any;
 
   try {
     await mcpServer.handleRequest({
