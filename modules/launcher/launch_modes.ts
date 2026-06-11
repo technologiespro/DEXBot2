@@ -8,6 +8,7 @@ function parseUnlockArgs(argv = process.argv) {
     const args = argv.slice(2);
     const clawOnly = args.includes('--claw-only') || args.includes('claw-only');
     const isolated = args.includes('--isolated');
+    const dryrun = args.includes('--dryrun');
 
     if (args[0] && CONTROL_COMMANDS.has(args[0])) {
         let cmd = args[0];
@@ -26,6 +27,7 @@ function parseUnlockArgs(argv = process.argv) {
             botName: null,
             clawOnly: false,
             isolated: false,
+            dryrun: false,
             control: { cmd, target: consumedAll ? null : target },
         };
     }
@@ -34,6 +36,7 @@ function parseUnlockArgs(argv = process.argv) {
         botName: clawOnly ? null : findFirstPositionalArg(args) || process.env.BOT_NAME || null,
         clawOnly,
         isolated,
+        dryrun,
     };
 }
 

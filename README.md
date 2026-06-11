@@ -172,6 +172,8 @@ Global settings via `node dexbot bot`, stored in `profiles/general.settings.json
 
 ```bash
 node unlock              # Start all active bots
+node unlock --dryrun     # Dry-run (no transactions broadcast)
+node unlock --isolated   # Per-bot isolated supervisor mode
 node unlock stat         # Runtime status
 node unlock stop         # Stop the monolithic runtime
 node unlock restart      # Restart the monolithic runtime
