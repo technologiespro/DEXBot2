@@ -16,7 +16,7 @@ if (!process.env.RUN_LIVE_BITSHARES_TESTS) {
     process.exit(0);
 }
 
-const assetPrecisions = {};
+const assetPrecisions: any = {};
 
 function blockchainToFloat(amount, precision) {
     return Number(amount) / Math.pow(10, precision);

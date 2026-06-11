@@ -44,6 +44,7 @@ async function testHealthWritesStayOrdered() {
 
   let syncCount = 0;
   class MockPositionManager {
+    [key: string]: any;
     constructor() {}
 
     async syncAllPositions() {

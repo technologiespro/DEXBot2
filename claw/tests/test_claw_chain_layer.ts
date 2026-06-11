@@ -77,7 +77,7 @@ function createQueriesHarness() {
         get_dynamic_global_properties: async () => ({
           head_block_number: 100
         }),
-        get_assets: async (ids) => ids.map((id) => assets[id]).filter(Boolean),
+        get_assets: async (ids) => ids.map((id) => assets[id]).filter((x: any) => x),
         get_objects: async (ids) => ids.map((id) => objects[id] || null),
         call: async (method, args) => {
           calls.dbCall.push({ args: clone(args), method });
@@ -88,7 +88,7 @@ function createQueriesHarness() {
                 return assets['1.3.101'];
               }
               return null;
-            }).filter(Boolean);
+            }).filter((x: any) => x);
           }
 
           if (method === 'get_full_accounts') {

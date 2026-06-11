@@ -17,7 +17,7 @@ const { BitShares } = require('../modules/bitshares_client');
 
 const ACCOUNT_NAME = 'hanzac-si';
 
-const assetPrecisions = {};
+const assetPrecisions: any = {};
 
 function blockchainToFloat(amount, precision) {
     return Number(amount) / Math.pow(10, precision);

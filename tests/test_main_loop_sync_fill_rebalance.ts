@@ -4,6 +4,7 @@ const DEXBot = require('../modules/dexbot_class');
 const { withDynamicWeightFiles } = require('./helpers/dynamic_weight_files');
 
 class MockAsyncLock {
+    [key: string]: any;
     constructor() {
         this.locked = false;
     }

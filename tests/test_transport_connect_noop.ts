@@ -16,6 +16,7 @@
 const assert = require('assert');
 
 class StubWebSocket {
+    [key: string]: any;
     static instances = [];
     static reset() { StubWebSocket.instances = []; }
 

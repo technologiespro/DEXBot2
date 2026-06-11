@@ -6,7 +6,7 @@ const { createMarketAdapterRuntime, isLockStale } = require('../modules/launcher
 console.log('Running market adapter runtime tests');
 
 function createChild() {
-    const handlers = {};
+    const handlers: any = {};
     const child = {
         killed: false,
         exitCode: null,

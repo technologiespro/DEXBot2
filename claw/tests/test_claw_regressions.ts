@@ -313,6 +313,7 @@ async function testDecisionLoopReusesAnalyzerStateForDuplicateMarkets() {
   let trendFetchCount = 0;
 
   class FakeTrendAnalyzer {
+    [key: string]: any;
     update(marketPrice, feedPrice) {
       this.analysis = {
         confidence: 77,
@@ -410,6 +411,7 @@ async function testDecisionLoopReplacesAnalyzerOnConfigChange() {
   let constructionCount = 0;
 
   class ConfigTrackingAnalyzer {
+    [key: string]: any;
     constructor(config) {
       constructionCount += 1;
       this.config = config;
@@ -483,7 +485,7 @@ async function testPositionManagerEntryExposesSellPriceInBts() {
   clearModule(positionManagerPath);
   const { PositionManager } = require('../modules/position_manager');
 
-  const savedState = {};
+  const savedState: any = {};
   const pm = new PositionManager({
     loadState: async () => savedState.data || { positions: [] },
     saveState: async (state) => { savedState.data = state; }

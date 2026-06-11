@@ -77,6 +77,7 @@ function installStubs() {
     masterPasswordError.code = 'MASTER_PASSWORD_FAILED';
 
     class StubSharedDEXBot {
+    [key: string]: any;
         constructor(config) {
             this.config = config;
         }

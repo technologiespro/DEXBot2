@@ -73,6 +73,7 @@ function installStubs() {
     });
 
     class StubSharedDEXBot {
+    [key: string]: any;
         constructor(config) {
             this.config = config;
         }

@@ -122,7 +122,7 @@ async function testHandleRequestEmitsNewlineJson() {
   const responses = output
     .split('\n')
     .map((line) => line.trim())
-    .filter(Boolean)
+    .filter((x: any) => x)
     .map((line) => JSON.parse(line));
 
   assert.strictEqual(responses.length, 2, 'expected two JSON-RPC responses');
@@ -204,7 +204,7 @@ async function testMainEntrypointHandlesRealProcessInitialize() {
   const responses = run.stdout
     .split('\n')
     .map((line) => line.trim())
-    .filter(Boolean)
+    .filter((x: any) => x)
     .map((line) => JSON.parse(line));
 
   assert.strictEqual(responses.length, 2, 'expected two JSON-RPC responses from the entrypoint');

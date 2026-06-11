@@ -8,6 +8,7 @@ const expectedChainId = '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a
 const sentMessages: any[] = [];
 
 class FakeWebSocket {
+    [key: string]: any;
     constructor(url) {
         this.url = url;
         this.closed = false;

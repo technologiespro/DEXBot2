@@ -59,7 +59,7 @@ function createWsServer(port, options = {}) {
             );
 
             connections.add(socket);
-            const handlers = {};
+            const handlers: any = {};
 
             socket.on('data', (chunk) => {
                 try {

@@ -31,6 +31,7 @@ const mockBitShares = {
  * pairs (USD/EUR) so btsFeesReservation = 0 and avail = chainFree exactly.
  */
 class MockManager {
+    [key: string]: any;
     constructor({ gridBuy = 1000, gridSell = 1000, chainFreeBuy = 0, chainFreeSell = 0 } = {}) {
         this.config = {
             assetA: 'USD',

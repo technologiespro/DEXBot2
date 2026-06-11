@@ -132,7 +132,7 @@ if (violations.length === 0) {
     console.log(`✗ VIOLATIONS FOUND: ${violations.length} potential COW violations\n`);
     
     // Group by severity
-    const byType = {};
+    const byType: any = {};
     violations.forEach(v => {
         if (!byType[v.type]) byType[v.type] = [];
         byType[v.type].push(v);

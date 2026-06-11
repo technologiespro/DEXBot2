@@ -183,7 +183,7 @@ function installStubs(calls, dbCalls, options = {}) {
     },
     getOnChainAssetBalances: async (accountRef, assets) => {
       const balanceMap = options.assetBalances || {};
-      const out = {};
+      const out: any = {};
       for (const asset of assets || []) {
         const key = String(asset);
         out[key] = balanceMap[key] || balanceMap[String(key)] || { free: 0, locked: 0, total: 0 };

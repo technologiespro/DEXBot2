@@ -35,7 +35,7 @@ setCachedModule(path.resolve(__dirname, '../modules/chain_orders.ts'), {
     resolveAccountId: async (accountRef) => accountRef || '1.2.0',
     resolveAccountName: async (accountRef) => accountRef || 'account',
     getOnChainAssetBalances: async (accountRef, assets) => {
-        const out = {};
+        const out: any = {};
         for (const asset of assets || []) {
             out[String(asset)] = { free: 0, locked: 0, total: 0 };
         }

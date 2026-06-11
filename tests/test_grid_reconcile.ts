@@ -8,6 +8,7 @@ const { ORDER_TYPES, ORDER_STATES } = require('../modules/constants');
 
 // Mock OrderManager for testing
 class MockOrderManager {
+    [key: string]: any;
     constructor() {
         this.orders = new Map();
         this._ordersByState = {
@@ -34,7 +35,7 @@ class MockOrderManager {
         const typeIds = this._ordersByType[type] || new Set();
         const stateIds = this._ordersByState[state] || new Set();
         const ids = new Set([...typeIds].filter(id => stateIds.has(id)));
-        return Array.from(ids).map(id => this.orders.get(id)).filter(Boolean);
+        return Array.from(ids).map(id => this.orders.get(id)).filter((x: any) => x);
     }
 }
 

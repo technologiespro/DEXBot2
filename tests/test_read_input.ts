@@ -23,6 +23,7 @@ class MockStdin extends EventEmitter {
 }
 
 class MockStdout {
+    [key: string]: any;
     output = '';
 
     write(value) {

@@ -222,6 +222,7 @@ function createDecisionLoopHarness() {
   };
 
   class FakeTrendAnalyzer {
+    [key: string]: any;
     constructor(config) {
       this.config = config;
       this.updateCount = 0;

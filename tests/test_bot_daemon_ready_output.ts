@@ -64,6 +64,7 @@ function installStubs() {
     });
 
     class StubDEXBot {
+    [key: string]: any;
         constructor(config) {
             this.config = config;
         }

@@ -373,6 +373,7 @@ async function testPositionManagerWatchInFlightGuard() {
     const firstStarted = new Promise((resolve) => { releaseFirst = resolve; });
 
     class MockPositionManager {
+    [key: string]: any;
         constructor() {}
         async syncAllPositions() {
             callCount += 1;
@@ -432,6 +433,7 @@ async function testPositionManagerWatchUnref() {
     console.log('\n[RC-4B] position_manager_watch timer is unref()\'d so it does not keep the loop alive...');
 
     class MockPositionManager {
+    [key: string]: any;
         constructor() {}
         async syncAllPositions() { return { ok: true }; }
         async watchAccount() { return async () => {}; }

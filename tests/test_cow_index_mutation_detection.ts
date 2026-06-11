@@ -21,7 +21,7 @@ const { ORDER_STATES, ORDER_TYPES } = require('../modules/constants');
  * @returns {Object} Snapshot of all Sets
  */
 function snapshotIndices(manager) {
-    const snapshot = {};
+    const snapshot: any = {};
     
     for (const [state, set] of Object.entries(manager._ordersByState)) {
         snapshot[`_ordersByState[${state}]`] = new Set(set);
@@ -118,7 +118,7 @@ function generateMutationReport(tracker) {
     report += `MUTATION VIOLATION REPORT: ${tracker.mutations.length} violations detected\n`;
     report += `${'='.repeat(80)}\n\n`;
     
-    const groupedBySet = {};
+    const groupedBySet: any = {};
     for (const mut of tracker.mutations) {
         const key = `${mut.setName}[${mut.key}]`;
         if (!groupedBySet[key]) {

@@ -49,7 +49,7 @@ async function testAnyPair() {
         const assets = await BitShares.db.lookup_asset_symbols(assetSymbols);
 
         console.log(`Found ${assets.length} assets:\n`);
-        const assetMap = {};
+        const assetMap: any = {};
         assets.forEach(a => {
             if (a) {
                 console.log(`  ${a.symbol}: ${a.id}`);

@@ -48,6 +48,7 @@ function installStubs(calls) {
   });
 
   class FakeCreditRuntime {
+    [key: string]: any;
     constructor(bot) {
       this.bot = bot;
       this.loadStateCalls = 0;

@@ -160,7 +160,7 @@ if (violations.length === 0) {
     console.log(`✗ VIOLATIONS FOUND: ${violations.length}\n`);
     
     // Group by file
-    const byFile = {};
+    const byFile: any = {};
     violations.forEach(v => {
         if (!byFile[v.file]) byFile[v.file] = [];
         byFile[v.file].push(v);
