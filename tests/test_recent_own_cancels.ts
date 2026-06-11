@@ -197,7 +197,7 @@ async function runTests() {
                 getNodeSummary: () => null,
                 _internal: { connected: true }
             }
-        };
+        } as any;
 
         try {
             delete require.cache[require.resolve('../modules/chain_orders')];
@@ -263,7 +263,7 @@ async function runTests() {
                 getNodeSummary: () => null,
                 _internal: { connected: true }
             }
-        };
+        } as any;
 
         try {
             delete require.cache[require.resolve('../modules/chain_orders')];
@@ -316,7 +316,7 @@ async function runTests() {
                     };
                 }
             }
-        };
+        } as any;
 
         try {
             delete require.cache[require.resolve('../modules/chain_orders')];
@@ -374,7 +374,7 @@ async function runTests() {
                     throw new Error('simulated daemon broadcast failure');
                 }
             }
-        };
+        } as any;
 
         try {
             delete require.cache[require.resolve('../modules/chain_orders')];

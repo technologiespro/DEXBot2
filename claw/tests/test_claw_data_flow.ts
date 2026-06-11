@@ -13,7 +13,7 @@ function registerMock(modulePath, exports) {
     filename: modulePath,
     loaded: true,
     exports
-  };
+  } as any;
 }
 
 const { clone } = require('../modules/utils');

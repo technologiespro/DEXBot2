@@ -31,7 +31,7 @@ async function main() {
                 getNodes: () => [],
             }),
         },
-    };
+    } as any;
 
     try {
         const adapter = require('../market_adapter/utils/adapter_client');

@@ -15,7 +15,7 @@ function installBitsharesClientStub(modulePath) {
             getNodeSummary: () => null,
             _internal: { connected: true }
         }
-    };
+    } as any;
 }
 
 module.exports = {

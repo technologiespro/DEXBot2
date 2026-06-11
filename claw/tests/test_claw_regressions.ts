@@ -55,7 +55,7 @@ async function testClawBitsharesClientWaitForConnectedTriggersNativeConnect() {
       }),
       createSigningClient: () => ({ client: { initPromise: Promise.resolve(), newTx() {} } }),
     }
-  };
+  } as any;
 
   try {
     clearModule(clawBitsharesPath);
@@ -125,7 +125,7 @@ function testOpenFangCommandInjectsRuntimeName() {
         };
       }
     }
-  };
+  } as any;
 
   clearModule(clawBridgePath);
   clearModule(openfangBridgePath);
@@ -158,7 +158,7 @@ function testNullClawCommandInjectsRuntimeName() {
         };
       }
     }
-  };
+  } as any;
 
   clearModule(clawBridgePath);
   clearModule(nullclawBridgePath);
@@ -191,7 +191,7 @@ function testNanoClawCommandInjectsRuntimeName() {
         };
       }
     }
-  };
+  } as any;
 
   clearModule(clawBridgePath);
   clearModule(nanoclawBridgePath);
@@ -257,7 +257,7 @@ function testLiquidityPoolWrapperInjectsSharedBitSharesClient() {
     filename: bitsharesPath,
     loaded: true,
     exports: { BitShares: sharedBitShares }
-  };
+  } as any;
   require.cache[dexbotBridgePath] = {
     id: dexbotBridgePath,
     filename: dexbotBridgePath,
@@ -280,7 +280,7 @@ function testLiquidityPoolWrapperInjectsSharedBitSharesClient() {
       }),
       requireDexbot2Module: () => null
     }
-  };
+  } as any;
   clearModule(liquidityPoolsPath);
 
   const liquidityPools = require('../modules/liquidity_pools');
@@ -349,7 +349,7 @@ async function testDecisionLoopReusesAnalyzerStateForDuplicateMarkets() {
         { id: 'pos-2', market: 'HONEST.USD/BTS', mpaSymbol: 'HONEST.USD', onChain: { debtAmount: 3 } }
       ])
     }
-  };
+  } as any;
   require.cache[healthPath] = {
     id: healthPath,
     filename: healthPath,
@@ -361,7 +361,7 @@ async function testDecisionLoopReusesAnalyzerStateForDuplicateMarkets() {
         trend: trendSignal
       })
     }
-  };
+  } as any;
   require.cache[feedPriceSourcePath] = {
     id: feedPriceSourcePath,
     filename: feedPriceSourcePath,
@@ -376,13 +376,13 @@ async function testDecisionLoopReusesAnalyzerStateForDuplicateMarkets() {
         };
       }
     }
-  };
+  } as any;
   require.cache[trendAnalyzerPath] = {
     id: trendAnalyzerPath,
     filename: trendAnalyzerPath,
     loaded: true,
     exports: { KalmanTrendAnalyzer: FakeTrendAnalyzer }
-  };
+  } as any;
   clearModule(decisionLoopPath);
 
   const { evaluate, resetAnalyzers } = require('../modules/decision_loop');
@@ -433,19 +433,19 @@ async function testDecisionLoopReplacesAnalyzerOnConfigChange() {
         { id: 'pos-1', market: 'HONEST.USD/BTS', mpaSymbol: 'HONEST.USD', onChain: { debtAmount: 5 } }
       ])
     }
-  };
+  } as any;
   require.cache[healthPath] = {
     id: healthPath, filename: healthPath, loaded: true,
     exports: { assessPosition: (position, trendSignal) => ({ actions: [], positionId: position.id, trend: trendSignal }) }
-  };
+  } as any;
   require.cache[feedPriceSourcePath] = {
     id: feedPriceSourcePath, filename: feedPriceSourcePath, loaded: true,
     exports: { fetchTrendInput: async () => ({ feedPrice: 100, marketPrice: 95, premium: -5 }) }
-  };
+  } as any;
   require.cache[trendAnalyzerPath] = {
     id: trendAnalyzerPath, filename: trendAnalyzerPath, loaded: true,
     exports: { KalmanTrendAnalyzer: ConfigTrackingAnalyzer }
-  };
+  } as any;
   clearModule(decisionLoopPath);
 
   const { evaluate, resetAnalyzers } = require('../modules/decision_loop');
@@ -480,7 +480,7 @@ async function testPositionManagerEntryExposesSellPriceInBts() {
         mpaAsset: { id: `1.3.${sym.length}`, symbol: sym, precision: 5, bitasset_data_id: '2.4.1' }
       })
     }
-  };
+  } as any;
 
   clearModule(positionManagerPath);
   const { PositionManager } = require('../modules/position_manager');
@@ -523,7 +523,7 @@ function testClawBridgeRespectsRuntimeNameOption() {
         };
       }
     }
-  };
+  } as any;
 
   clearModule(clawBridgePath);
   const { createClawBridge } = require('../modules/claw_bridge');
@@ -657,7 +657,7 @@ function testZeroClawCommandInjectsRuntimeName() {
         };
       }
     }
-  };
+  } as any;
 
   clearModule(clawBridgePath);
   clearModule(zeroclawBridgePath);
