@@ -22,8 +22,8 @@ const monolithicCredPidPath = path.resolve(__dirname, '..', 'profiles', 'monolit
 const monolithicBotInfoPath = path.resolve(__dirname, '..', 'profiles', 'monolithic-bot.json');
 const botsFile = path.resolve(__dirname, '..', 'profiles', 'bots.json');
 
-const logs = [];
-const errors = [];
+const logs: any[] = [];
+const errors: any[] = [];
 const state = {
     controlCalls: [],
     staleMonolithicPid: false,

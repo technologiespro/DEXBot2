@@ -8,9 +8,9 @@ const Logger = require('../modules/order/index').logger;
 const { createPm2AwareLogger } = require('../modules/logger');
 
 // Capture console output by stream
-let captured = [];
-let capturedWarn = [];
-let capturedError = [];
+let captured: any[] = [];
+let capturedWarn: any[] = [];
+let capturedError: any[] = [];
 const origLog = console.log;
 const origWarn = console.warn;
 const origError = console.error;
@@ -81,7 +81,7 @@ assert.strictEqual(createPm2AwareLogger('verbose', { quietUnderPm2: false }).qui
 const pm2DirectLogFile = path.join(os.tmpdir(), `dexbot-logger-pm2-${process.pid}.log`);
 try { fs.unlinkSync(pm2DirectLogFile); } catch (err) {}
 const pm2Logger = new Logger('pm2-direct-file', { logFile: pm2DirectLogFile, quietUnderPm2: false, quiet: false });
-let pm2Captured = [];
+let pm2Captured: any[] = [];
 console.log = (...args) => { pm2Captured.push(args.join(' ')); };
 pm2Logger.info('pm2 stdout should remain visible');
 console.log = origLog;

@@ -37,13 +37,13 @@ const logger = new Logger('bitshares_client');
 
 let connected = false;
 let suppressConnectionLog = false;
-let lastConnectionError = null;
+let lastConnectionError: any = null;
 let intentionalDisconnect = false;
-let nodeManager = null;
-let nodeConfig = null;
+let nodeManager: any = null;
+let nodeConfig: any = null;
 let nodeManagerEnabled = false;
-let startupNodeRefreshPromise = null;
-let failoverAssessmentPromise = null;
+let startupNodeRefreshPromise: any = null;
+let failoverAssessmentPromise: any = null;
 let reconnectInProgress = false;
 let lastFailoverAssessmentAt = 0;
 const failoverAssessmentCooldownMs = NODE_MANAGEMENT.FAILOVER_ASSESSMENT_COOLDOWN_MS;
@@ -81,10 +81,10 @@ async function notifyReconnectCallbacks() {
 let _initialized = false;
 
 // Native client references (lazily initialized)
-let _nativeClient = null;
-let _subscriptionManager = null;
-let _nativeBitSharesProxy = null;
-let _resolvers = null;
+let _nativeClient: any = null;
+let _subscriptionManager: any = null;
+let _nativeBitSharesProxy: any = null;
+let _resolvers: any = null;
 
 // Monotonic generation counter for native _nativeClient.connect() calls.
 // The native transport's connect() sweep cannot be cancelled, so a timeout

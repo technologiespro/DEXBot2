@@ -12,7 +12,7 @@ const { FILL_PROCESSING, ORDER_STATES, ORDER_TYPES } = require('../modules/const
 
 const MAX_BATCH = FILL_PROCESSING.MAX_FILL_BATCH_SIZE;
 
-function makeFill(id, orderId = null, type = 'SELL') {
+function makeFill(id: string, orderId: string | null = null, type: string = 'SELL') {
     return { id, orderId: orderId || `1.7.${id.replace(/\D/g, '')}`, type, price: 0.02, size: 100, isPartial: false, blockNum: 1000 + parseInt(id.replace(/\D/g, ''), 10) || 1 };
 }
 
@@ -32,7 +32,7 @@ function makeBot() {
 
     bot.manager = {
         logger: {
-            log: (msg, lvl) => { /* silent */ },
+            log: (msg: string, lvl: string) => { /* silent */ },
             logFundsStatus: () => {},
         },
         _pauseFundRecalc: 0,
@@ -46,10 +46,10 @@ function makeBot() {
         unlockOrders() {},
     };
 
-    const callLog = [];
+    const callLog: any[] = [];
     bot._callLog = callLog;
 
-    bot.manager.processFilledOrders = async (fills, excl, options) => {
+    bot.manager.processFilledOrders = async (fills: any[], excl: any, options: any) => {
         callLog.push({ method: 'processFilledOrders', fillCount: fills.length, exclSize: excl?.size || 0, options });
         return {
             actions: [{ type: 'create', id: fills[0]?.id || 'x' }],
@@ -62,19 +62,19 @@ function makeBot() {
         };
     };
 
-    bot._executeBatchIfNeeded = async (rebalanceResult, contextLabel) => {
+    bot._executeBatchIfNeeded = async (rebalanceResult: any, contextLabel: string) => {
         callLog.push({ method: '_executeBatchIfNeeded', contextLabel });
         return { executed: true, hadRotation: false, skippedNoActions: false };
     };
 
-    bot._refreshDynamicWeightDistribution = (context) => {
+    bot._refreshDynamicWeightDistribution = (context: string) => {
         callLog.push({ method: '_refreshDynamicWeightDistribution', context });
     };
 
     return bot;
 }
 
-function makeBootstrapFill(n) {
+function makeBootstrapFill(n: number) {
     return {
         id: `1.11.${9000 + n}`,
         block_num: 9000 + n,

@@ -156,7 +156,7 @@ const DEFAULTS = {
 
 // Cycle-scoped caches — reset once per runOnce() so each cycle reads files fresh
 // but all bots within that cycle share the same loaded data (N bots → 1 file read).
-let _marketAdapterSettingsCache = null;
+let _marketAdapterSettingsCache: any = null;
 
 function _resetCycleCache() {
     _marketAdapterSettingsCache = null;

@@ -27,9 +27,9 @@ const originalConsoleLog = console.log;
 const originalConsoleWarn = console.warn;
 const originalConsoleError = console.error;
 
-const logs = [];
-const warns = [];
-const errors = [];
+const logs: any[] = [];
+const warns: any[] = [];
+const errors: any[] = [];
 let startCalled = false;
 
 function installStubs() {

@@ -17,11 +17,11 @@ const originalConsoleLog = console.log;
 const originalConsoleWarn = console.warn;
 const originalConsoleError = console.error;
 
-const logs = [];
-const warns = [];
-const errors = [];
+const logs: any[] = [];
+const warns: any[] = [];
+const errors: any[] = [];
 let spawnCount = 0;
-const spawnCalls = [];
+const spawnCalls: any[] = [];
 
 function installStubs() {
     delete require.cache[controllerPath];

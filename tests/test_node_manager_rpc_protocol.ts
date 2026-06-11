@@ -5,7 +5,7 @@ console.log('Testing NodeManager WebSocket RPC protocol...\n');
 
 const nodeManagerPath = path.resolve(__dirname, '../modules/node_manager.ts');
 const expectedChainId = '4018d7844c78f6a6c41c6a552b898022310fc5dec06da467ee7905a8dad512c8';
-const sentMessages = [];
+const sentMessages: any[] = [];
 
 class FakeWebSocket {
     constructor(url) {

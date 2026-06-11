@@ -16,9 +16,9 @@ const originalSpawn = childProcess.spawn;
 const originalConsoleError = console.error;
 const originalTestSecret = process.env.TEST_PM2_SECRET;
 
-const events = [];
-const spawnCalls = [];
-const consoleErrors = [];
+const events: any[] = [];
+const spawnCalls: any[] = [];
+const consoleErrors: any[] = [];
 const originalWriteFileSync = fs.writeFileSync;
 
 function installStubs() {

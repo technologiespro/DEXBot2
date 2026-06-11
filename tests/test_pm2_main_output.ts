@@ -25,9 +25,9 @@ const originalConsoleError = console.error;
 const originalStdoutIsTTY = process.stdout.isTTY;
 const originalNoColor = process.env.NO_COLOR;
 
-const logs = [];
-const errors = [];
-const spawnCalls = [];
+const logs: any[] = [];
+const errors: any[] = [];
+const spawnCalls: any[] = [];
 
 function setStdoutTTY(value) {
     Object.defineProperty(process.stdout, 'isTTY', {

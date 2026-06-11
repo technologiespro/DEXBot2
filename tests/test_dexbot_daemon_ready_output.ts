@@ -27,10 +27,10 @@ const originalConsoleLog = console.log;
 const originalConsoleWarn = console.warn;
 const originalConsoleError = console.error;
 
-const logs = [];
-const warns = [];
-const errors = [];
-const suppressCalls = [];
+const logs: any[] = [];
+const warns: any[] = [];
+const errors: any[] = [];
+const suppressCalls: any[] = [];
 const state = {
     startArgs: [],
     authCalls: 0,

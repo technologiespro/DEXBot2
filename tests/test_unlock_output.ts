@@ -26,8 +26,8 @@ const originalNoColor = process.env.NO_COLOR;
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
 
-const logs = [];
-const errors = [];
+const logs: any[] = [];
+const errors: any[] = [];
 const profilesDir = path.resolve(__dirname, '..', 'profiles');
 const monolithicPidPath = path.join(profilesDir, 'monolithic.pid');
 const monolithicCredPidPath = path.join(profilesDir, 'monolithic-cred.pid');

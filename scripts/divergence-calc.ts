@@ -58,7 +58,7 @@ function readData() {
 const data = readData();
 
 const lines = data.trim().split('\n');
-const orders = [];
+const orders: any[] = [];
 
 lines.forEach(line => {
   // Parse orders in format: Buy/Sell order-id @ price: persisted → calculated [state]

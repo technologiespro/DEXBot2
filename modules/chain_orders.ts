@@ -203,8 +203,8 @@ async function _getAssetPrecision(assetRef) {
 
 // Preferred account ID and name for operations (can be changed)
 // Access MUST be protected by _preferredAccountLock to prevent race conditions
-let preferredAccountId = null;
-let preferredAccountName = null;
+let preferredAccountId: any = null;
+let preferredAccountName: any = null;
 
 /**
  * Set the preferred account for subsequent operations.

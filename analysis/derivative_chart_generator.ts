@@ -694,8 +694,8 @@ let derivChart;
 let interpChart;
 let macdChart;
 let rsiChart;
-let charts = [];
-let pendingRange = null;
+let charts: any[] = [];
+let pendingRange: any = null;
 let pendingRangeRaf = 0;
 const [xMin, xMax] = [dates[0], dates[dates.length - 1]];
 try {

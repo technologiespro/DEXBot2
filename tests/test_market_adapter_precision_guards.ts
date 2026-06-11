@@ -3,8 +3,8 @@ const { MarketAdapterService } = require('../market_adapter/core/market_adapter_
 
 console.log('Running market adapter precision guard tests');
 
-let persistedSnapshotPrice = null;
-let persistedAmaPrice = null;
+let persistedSnapshotPrice: any = null;
+let persistedAmaPrice: any = null;
 
 const service = new MarketAdapterService({
     resolveBotContext: async () => ({

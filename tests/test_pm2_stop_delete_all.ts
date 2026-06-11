@@ -18,9 +18,9 @@ const originalExistsSync = fs.existsSync;
 const originalLog = console.log;
 const originalWarn = console.warn;
 
-const calls = [];
-const logs = [];
-const warnings = [];
+const calls: any[] = [];
+const logs: any[] = [];
+const warnings: any[] = [];
 
 let scenario = 'output';
 

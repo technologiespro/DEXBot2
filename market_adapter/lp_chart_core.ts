@@ -551,7 +551,7 @@ const volData = [ts, volumes];
 let priceChart;
 let devChart;
 let volChart;
-let charts = [];
+let charts: any[] = [];
 
 try {
 priceChart = initChart('price-chart', {
@@ -643,7 +643,7 @@ volChart = initChart('vol-chart', {
 
 charts = [priceChart, devChart, volChart];
 const [xMin, xMax] = [ts[0], ts[ts.length - 1]];
-let pendingRange = null;
+let pendingRange: any = null;
 let pendingRangeRaf = 0;
 
 function clampXRange(min, max) {
@@ -838,7 +838,7 @@ bindHoverState(volChart);
 // restores the most-recently-hovered candle (not just the last data point).
 lastLiveIdx = ts.length - 1;
 
-let leavePending = null;
+let leavePending: any = null;
 
 charts.forEach((chart) => {
     chart.over.addEventListener('mousemove', () => {

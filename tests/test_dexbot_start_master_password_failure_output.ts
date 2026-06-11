@@ -27,11 +27,11 @@ const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
 const originalProcessExit = process.exit;
 
-const logs = [];
-const errors = [];
-const errorCalls = [];
-const suppressCalls = [];
-let exitCode = null;
+const logs: any[] = [];
+const errors: any[] = [];
+const errorCalls: any[] = [];
+const suppressCalls: any[] = [];
+let exitCode: any = null;
 
 function stripAnsi(text) {
     return String(text).replace(/\x1b\[[0-9;]*m/g, '');

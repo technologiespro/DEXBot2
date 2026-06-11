@@ -18,7 +18,7 @@ console.log('=== COW Index Set Mutation Detection Report ===\n');
 
 console.log('[ANALYSIS-1] Static Code Scanning for Direct Mutations...\n');
 
-const violations = [];
+const violations: any[] = [];
 const approvedPatterns = [
     '_applyOrderUpdate',
     '_repairIndices',

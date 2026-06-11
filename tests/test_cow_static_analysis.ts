@@ -10,7 +10,7 @@ const path = require('path');
 
 console.log('=== COW Index Set Mutation Detection (Static Analysis) ===\n');
 
-const violations = [];
+const violations: any[] = [];
 const approvedFiles = new Set([
     'test_',
     'repro_',

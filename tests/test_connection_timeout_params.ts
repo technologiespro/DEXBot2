@@ -22,7 +22,7 @@ delete require.cache[nativePath];
 delete require.cache[require.resolve('../modules/bitshares-native/chain_client')];
 const native = require('../modules/bitshares-native');
 
-let capturedConfig = null;
+let capturedConfig: any = null;
 native.createChainClient = function (config) {
   capturedConfig = config;
   return {

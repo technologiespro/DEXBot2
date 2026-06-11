@@ -17,7 +17,7 @@ const { NODE_MANAGEMENT } = require('../modules/constants');
 
 console.log('Testing Node Failover Integration...\n');
 
-const tempStateDirs = [];
+const tempStateDirs: any[] = [];
 
 function createNodeManager(config = {}) {
     if (config.stateDir) return new NodeManager(config);

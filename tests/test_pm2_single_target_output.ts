@@ -19,9 +19,9 @@ const originalLog = console.log;
 const originalError = console.error;
 
 const targetBot = 'XRP-BTS';
-const logs = [];
-const errors = [];
-const spawnCalls = [];
+const logs: any[] = [];
+const errors: any[] = [];
+const spawnCalls: any[] = [];
 
 function makePm2Child() {
     const child = new EventEmitter();

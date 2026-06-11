@@ -58,7 +58,7 @@
  * ===============================================================================
  */
 
-let cleanupHandlers = [];
+let cleanupHandlers: any[] = [];
 let shutdownInProgress = false;
 const Logger = require('./logger');
 const shutdownLogger = new Logger('Shutdown');

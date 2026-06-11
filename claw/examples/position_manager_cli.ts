@@ -1,7 +1,7 @@
 const { DEFAULT_STATE_PATH, PositionManager } = require('../modules/position_manager');
 
-function parseArgs(argv) {
-  const options = {
+function parseArgs(argv: any) {
+  const options: any = {
     statePath: DEFAULT_STATE_PATH
   };
 
@@ -118,7 +118,7 @@ async function main() {
   throw new Error(`Unsupported mode: ${mode}`);
 }
 
-main().catch((err) => {
+main().catch((err: any) => {
   console.error(err.message);
   process.exit(1);
 });

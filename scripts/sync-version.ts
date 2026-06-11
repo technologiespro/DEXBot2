@@ -51,7 +51,7 @@ const targets = [
     }
 ];
 
-const mismatches = [];
+const mismatches: any[] = [];
 
 for (const target of targets) {
     const filePath = path.join(rootDir, target.file);
