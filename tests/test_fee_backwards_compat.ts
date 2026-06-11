@@ -85,8 +85,8 @@ async function testBTSFeeObjectBackwardsCompat() {
     // Test 5: New code can safely check typeof and access netProceeds
     {
         const result = getAssetFeesMock('BTS', 1000, false);
-        const legacy = (typeof result === 'object') ? result.total : result;
-        const modern = (typeof result === 'object') ? result.netProceeds : result;
+        const legacy = (typeof result === 'object') ? (result as any).total : result;
+        const modern = (typeof result === 'object') ? (result as any).netProceeds : result;
         logTest('New code can access netProceeds safely', modern !== undefined && modern > 0,
                 `legacy=${legacy}, modern=${modern}`);
     }
@@ -146,7 +146,7 @@ async function testMixedAssetAccounting() {
         // Safe extraction of net proceeds
         const getBTSProceeds = (result) => {
             if (typeof result === 'object') {
-                return result.netProceeds || result.total;
+                return (result as any).netProceeds || (result as any).total;
             }
             return result;
         };

@@ -1575,6 +1575,8 @@ async function testBootstrapFallsBackWhenKibanaIsEmpty() {
 }
 
 async function testAmaGridPriceIsCaseInsensitive() {
+    const baseTs = Date.parse("2026-04-28T00:00:00Z");
+    const hour = 3600000;
     let writeAmaCenterCalls = 0;
     let triggerWrites = 0;
 

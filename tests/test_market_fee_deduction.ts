@@ -11,7 +11,7 @@
 const assert = require('assert');
 
 // Helper function to simulate getAssetFees behavior
-function mockGetAssetFees(assetSymbol, assetAmount, marketFeePercent = 0) {
+function mockGetAssetFees(assetSymbol: any, assetAmount: any, marketFeePercent = 0): any {
     // Simulates the getAssetFees function from utils.js
     if (assetSymbol === 'BTS') {
         return {
