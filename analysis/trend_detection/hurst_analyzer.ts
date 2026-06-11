@@ -23,7 +23,7 @@ const { MARKET_ADAPTER } = require('../../modules/constants');
 /**
  * OLS slope of ys ~ slope * xs + intercept.  Returns slope only.
  */
-function olsSlope(xs, ys) {
+function olsSlope(xs: number[], ys: number[]): number {
     const n = xs.length;
     let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0;
     for (let i = 0; i < n; i++) {
@@ -39,7 +39,7 @@ function olsSlope(xs, ys) {
 /**
  * Compute R/S (rescaled range) for an array of log returns.
  */
-function computeRS(returns) {
+function computeRS(returns: number[]): number {
     const n = returns.length;
     if (n < 2) return 0;
 
@@ -62,12 +62,20 @@ function computeRS(returns) {
 }
 
 class HurstAnalyzer {
+    private _w: number;
+    window: number;
+    scales: number[];
+    private _prices: number[];
+    private _updateCount: number;
+    hurst: number;
+    isReady: boolean;
+
     /**
      * @param {Object}   config
      * @param {number}   config.window - Rolling window in bars (default 128)
      * @param {number[]} config.scales - Sub-window scales for R/S (default [8, 16, 32, 64])
      */
-    constructor(config = {}) {
+    constructor(config: { window?: number; scales?: number[] } = {}) {
         this._w = Math.ceil(config.window ?? 128);
         this.window = this._w;
         this.scales = config.scales ?? [8, 16, 32, 64];
@@ -83,7 +91,7 @@ class HurstAnalyzer {
      * @param {number} price
      * @returns {Object} { isReady, hurst, regime, regimeStrength, updateCount }
      */
-    update(price) {
+    update(price: number): { isReady: boolean; hurst: number; regime: string; regimeStrength: number; updateCount: number } {
         if (!Number.isFinite(price) || price <= 0) {
             throw new Error('price must be a positive finite number');
         }
@@ -128,7 +136,7 @@ class HurstAnalyzer {
         return this.getAnalysis();
     }
 
-    getAnalysis() {
+    getAnalysis(): { isReady: boolean; hurst: number; regime: string; regimeStrength: number; updateCount: number } {
         const h = this.hurst;
         const H_UPPER = 0.5 + MARKET_ADAPTER.HURST_ZONE_BAND;
         const H_LOWER = 0.5 - MARKET_ADAPTER.HURST_ZONE_BAND;

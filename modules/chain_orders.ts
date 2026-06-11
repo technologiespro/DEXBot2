@@ -324,7 +324,7 @@ async function _ensureAccountSubscriber(accountName, userCallback = null) {
             return accountSubscriptions.get(accountName);
         }
 
-        const userCallbacks = new Set();
+        const userCallbacks = new Set<(updates: any[]) => any>();
         if (typeof userCallback === 'function') {
             userCallbacks.add(userCallback);
         }
@@ -340,7 +340,7 @@ async function _ensureAccountSubscriber(accountName, userCallback = null) {
             if (fills.length > 0) {
                 // Call each registered user callback with the fills array
                 const failures = [];
-                for (const c of Array.from(userCallbacks)) {
+                for (const c of [...userCallbacks]) {
                     try {
                         await Promise.resolve(c(fills));
                     } catch (e: any) {
@@ -349,7 +349,7 @@ async function _ensureAccountSubscriber(accountName, userCallback = null) {
                     }
                 }
                 if (failures.length > 0) {
-                    const err = new Error(`Fill listener delivery failed for ${failures.length} callback(s): ${failures.map(e => e.message || String(e)).join('; ')}`);
+                    const err: any = new Error(`Fill listener delivery failed for ${failures.length} callback(s): ${failures.map(e => e.message || String(e)).join('; ')}`);
                     err.causes = failures;
                     throw err;
                 }

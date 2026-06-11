@@ -29,6 +29,7 @@ function parseArgs(argv) {
     maxCollateralRatio: null,
     connectTimeoutMs: DEFAULT_CONNECT_TIMEOUT_MS,
     autoRepay: 2,
+    help: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {

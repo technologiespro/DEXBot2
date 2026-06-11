@@ -70,6 +70,10 @@
  */
 
 class LoggerState {
+    previousState: Record<string, any>;
+    changeHistory: Array<{ timestamp: number; category: string; type: string; data: any }>;
+    maxHistory: number;
+
     constructor() {
         this.previousState = {
             funds: null,

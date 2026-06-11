@@ -62,7 +62,7 @@ function buildOrderCreateQuery(accountId, lookbackHours, intervalSeconds = 3600,
         { range: { 'block_data.block_time': { gte: `now-${lookbackHours}h`, lte: 'now' } } },
     ];
     if (sellAssetId) {
-        filters.push({ term: { 'operation_history.op_object.amount_to_sell.asset_id.keyword': sellAssetId } });
+        filters.push({ term: { 'operation_history.op_object.amount_to_sell.asset_id.keyword': sellAssetId } } as any);
     }
     return {
         size: 0,
@@ -91,7 +91,7 @@ function buildFillOrderQuery(accountId, lookbackHours, intervalSeconds = 3600, p
         { range: { 'block_data.block_time': { gte: `now-${lookbackHours}h`, lte: 'now' } } },
     ];
     if (paysAssetId) {
-        filters.push({ term: { 'operation_history.op_object.pays.asset_id.keyword': paysAssetId } });
+        filters.push({ term: { 'operation_history.op_object.pays.asset_id.keyword': paysAssetId } } as any);
     }
     return {
         size: 0,
@@ -221,7 +221,7 @@ function buildOrderPriceQuery(accountId, lookbackHours, sellAssetId = null, maxR
         { range: { 'block_data.block_time': { gte: `now-${lookbackHours}h`, lte: 'now' } } },
     ];
     if (sellAssetId) {
-        filters.push({ term: { 'operation_history.op_object.amount_to_sell.asset_id.keyword': sellAssetId } });
+        filters.push({ term: { 'operation_history.op_object.amount_to_sell.asset_id.keyword': sellAssetId } } as any);
     }
     return {
         size: maxResults,
@@ -252,7 +252,7 @@ function buildFillPriceQuery(accountId, lookbackHours, paysAssetId = null, maxRe
         { range: { 'block_data.block_time': { gte: `now-${lookbackHours}h`, lte: 'now' } } },
     ];
     if (paysAssetId) {
-        filters.push({ term: { 'operation_history.op_object.pays.asset_id.keyword': paysAssetId } });
+        filters.push({ term: { 'operation_history.op_object.pays.asset_id.keyword': paysAssetId } } as any);
     }
     return {
         size: maxResults,

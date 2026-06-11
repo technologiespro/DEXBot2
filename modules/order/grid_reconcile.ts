@@ -79,9 +79,9 @@ const SUSPECTED_DUPLICATE_TOLERANCE_FLOOR = 0.01;
  * @returns {number} Count of active and partial orders with orderId.
  * @private
  */
-function _countActiveOnGrid(manager, type) {
-    const active = manager.getOrdersByTypeAndState(type, ORDER_STATES.ACTIVE).filter(o => o && o.orderId);
-    const partial = manager.getOrdersByTypeAndState(type, ORDER_STATES.PARTIAL).filter(o => o && o.orderId);
+function _countActiveOnGrid(manager: any, type: any): number {
+    const active = manager.getOrdersByTypeAndState(type, ORDER_STATES.ACTIVE).filter((o: any) => o && o.orderId);
+    const partial = manager.getOrdersByTypeAndState(type, ORDER_STATES.PARTIAL).filter((o: any) => o && o.orderId);
     return active.length + partial.length;
 }
 
@@ -93,21 +93,21 @@ function _countActiveOnGrid(manager, type) {
  * @returns {Array<Object>} Array of picked virtual slots.
  * @private
  */
-function _pickVirtualSlotsToActivate(manager, type, count) {
+function _pickVirtualSlotsToActivate(manager: any, type: any, count: any): any[] {
     if (count <= 0) return [];
 
     // CRITICAL FIX: Filter by type BEFORE sorting
     // Only get slots of the requested type (SELL or BUY), not a mix
-    const slotsOfType = Array.from(manager.orders.values())
-        .filter(slot => slot && slot.type === type)
-        .sort((a, b) => type === ORDER_TYPES.BUY ? b.price - a.price : a.price - b.price);
+    const slotsOfType = (Array.from(manager.orders.values()) as any[])
+        .filter((slot: any) => slot && slot.type === type)
+        .sort((a: any, b: any) => type === ORDER_TYPES.BUY ? b.price - a.price : a.price - b.price);
 
     let effectiveMin = 0;
     try {
         effectiveMin = getMinAbsoluteOrderSize(type, manager.assets);
     } catch (e: any) { effectiveMin = 0; }
 
-    const valid = [];
+    const valid: any[] = [];
     for (const slot of slotsOfType) {
         if (valid.length >= count) break;
         if (!slot.orderId && slot.state === ORDER_STATES.VIRTUAL) {
@@ -122,7 +122,7 @@ function _pickVirtualSlotsToActivate(manager, type, count) {
     return valid;
 }
 
-function _getStartupSideComparators(orderType, assets) {
+function _getStartupSideComparators(orderType: any, assets: any): { sortUpdateComparator: (a: any, b: any) => number; sortExcessCancelComparator: (a: any, b: any) => number; sortMatchedCancelComparator: (a: any, b: any) => number } {
     const isSell = orderType === ORDER_TYPES.SELL;
 
     const sortUpdateComparator = isSell
@@ -155,18 +155,18 @@ function _getStartupSideComparators(orderType, assets) {
  * @returns {boolean} true if edge orders are all active
  * @private
  */
-function _isGridEdgeFullyActive(manager, orderType, updateCount) {
+function _isGridEdgeFullyActive(manager: any, orderType: any, updateCount: any): boolean {
     if (!manager || updateCount <= 0) return false;
 
     // Get all orders of this type
-    const allOrders = Array.from(manager.orders.values()).filter(o => o.type === orderType);
+    const allOrders: any[] = (Array.from(manager.orders.values()) as any[]).filter((o: any) => o.type === orderType);
     if (allOrders.length === 0) return false;
 
     // Sort: for BUY (highest to lowest price), for SELL (lowest to highest)
     // This puts market edge first, grid edge (furthest) last
     const sorted = orderType === ORDER_TYPES.BUY
-        ? allOrders.sort((a, b) => (b.price || 0) - (a.price || 0))  // Buy: high to low price
-        : allOrders.sort((a, b) => (a.price || 0) - (b.price || 0));  // Sell: low to high price
+        ? allOrders.sort((a: any, b: any) => (b.price || 0) - (a.price || 0))  // Buy: high to low price
+        : allOrders.sort((a: any, b: any) => (a.price || 0) - (b.price || 0));  // Sell: low to high price
 
     // Get the outermost orders (last N in sorted = furthest from market)
     const outerEdgeCount = Math.min(updateCount, sorted.length);
@@ -175,7 +175,7 @@ function _isGridEdgeFullyActive(manager, orderType, updateCount) {
     // Check if ALL edge orders are ACTIVE (placed on blockchain)
     // Empty array check prevents vacuous truth: every([]) returns true
     if (edgeOrders.length === 0) return false;
-    const allEdgeActive = edgeOrders.every(o => isOrderPlaced(o));
+    const allEdgeActive = edgeOrders.every((o: any) => isOrderPlaced(o));
 
     return allEdgeActive;
 }
@@ -188,7 +188,7 @@ function _isGridEdgeFullyActive(manager, orderType, updateCount) {
  * @returns {{order: Object, index: number}|null} Largest order and its index, or null if none found
  * @private
  */
-function _findLargestOrder(unmatchedOrders, updateCount) {
+function _findLargestOrder(unmatchedOrders: any, updateCount: any): { order: any; index: number } | null {
     if (!Array.isArray(unmatchedOrders) || unmatchedOrders.length === 0) return null;
 
     const ordersToCheck = unmatchedOrders.slice(0, updateCount);
@@ -225,7 +225,7 @@ function _findLargestOrder(unmatchedOrders, updateCount) {
  * @returns {Promise<{gridIndex: number, gridOrder: Object}|null>} Grid slot info or null
  * @private
  */
-async function _cancelLargestOrder({ chainOrders, account, privateKey, manager, unmatchedOrders, updateCount, orderType, dryRun, fillLockAlreadyHeld = false }) {
+async function _cancelLargestOrder({ chainOrders, account, privateKey, manager, unmatchedOrders, updateCount, orderType, dryRun, fillLockAlreadyHeld = false }: { chainOrders: any; account: any; privateKey: any; manager: any; unmatchedOrders: any; updateCount: any; orderType: any; dryRun: any; fillLockAlreadyHeld?: boolean }): Promise<{ index: number; orderType: any } | null> {
     if (dryRun) return null;
     if (!Array.isArray(unmatchedOrders) || unmatchedOrders.length === 0) return null;
 
@@ -280,7 +280,7 @@ async function _cancelLargestOrder({ chainOrders, account, privateKey, manager, 
  * @returns {Promise<void>}
  * @private
  */
-async function _createOrderFromGrid({ chainOrders, account, privateKey, manager, gridOrder, dryRun, fillLockAlreadyHeld = false }) {
+async function _createOrderFromGrid({ chainOrders, account, privateKey, manager, gridOrder, dryRun, fillLockAlreadyHeld = false }: { chainOrders: any; account: any; privateKey: any; manager: any; gridOrder: any; dryRun: any; fillLockAlreadyHeld?: boolean }): Promise<void> {
     if (dryRun) return;
 
     // ATOMIC RE-VERIFICATION: Ensure slot is still virtual and hasn't been filled by recovery sync
@@ -366,7 +366,7 @@ async function _createOrderFromGrid({ chainOrders, account, privateKey, manager,
  * @returns {Promise<void>}
  * @private
  */
-async function _cancelChainOrder({ chainOrders, account, privateKey, manager, chainOrderId, dryRun, chainOrderObj, releaseUntrackedFunds = false, fillLockAlreadyHeld = false }) {
+async function _cancelChainOrder({ chainOrders, account, privateKey, manager, chainOrderId, dryRun, chainOrderObj, releaseUntrackedFunds = false, fillLockAlreadyHeld = false }: { chainOrders: any; account: any; privateKey: any; manager: any; chainOrderId: any; dryRun: any; chainOrderObj: any; releaseUntrackedFunds?: boolean; fillLockAlreadyHeld?: boolean }): Promise<void> {
     if (dryRun) return;
 
     const cancelResult = await chainOrders.cancelOrder(account, privateKey, chainOrderId);
@@ -396,7 +396,7 @@ async function _cancelChainOrder({ chainOrders, account, privateKey, manager, ch
     }
 }
 
-async function _recoverStartupSyncFailure({ chainOrders, manager, account, logger, triggerMessage, source, fillLockAlreadyHeld = false }) {
+async function _recoverStartupSyncFailure({ chainOrders, manager, account, logger, triggerMessage, source, fillLockAlreadyHeld = false }: { chainOrders: any; manager: any; account: any; logger: any; triggerMessage: any; source: any; fillLockAlreadyHeld?: boolean }): Promise<any> {
     try {
         logger?.log?.(triggerMessage, 'warn');
         const freshChainOrders = await chainOrders.readOpenOrders(
@@ -416,7 +416,7 @@ async function _recoverStartupSyncFailure({ chainOrders, manager, account, logge
     }
 }
 
-function _refreshStartupUpdatePlans(updatePlans, chainOpenOrders) {
+function _refreshStartupUpdatePlans(updatePlans: any, chainOpenOrders: any): any[] {
     if (!Array.isArray(updatePlans) || updatePlans.length === 0) return [];
     const chainById = new Map(
         (Array.isArray(chainOpenOrders) ? chainOpenOrders : [])
@@ -437,7 +437,7 @@ function _refreshStartupUpdatePlans(updatePlans, chainOpenOrders) {
     return refreshed;
 }
 
-function _prepareStartupUpdatePlan(plan, manager, logger) {
+function _prepareStartupUpdatePlan(plan: any, manager: any, logger: any): any {
     const chainOrderId = plan?.chainOrderId;
     const gridOrder = plan?.gridOrder;
     if (!chainOrderId || !gridOrder?.id) return null;
@@ -472,7 +472,7 @@ function _prepareStartupUpdatePlan(plan, manager, logger) {
     };
 }
 
-async function _finalizeStartupUpdate({ manager, preparedUpdate }) {
+async function _finalizeStartupUpdate({ manager, preparedUpdate }: { manager: any; preparedUpdate: any }): Promise<void> {
     const { plan, parsedChain } = preparedUpdate;
     if (parsedChain && parsedChain.size > 0 && manager.accountant) {
         await manager.accountant.addToChainFree(plan.gridOrder.type, parsedChain.size, 'startup-align');
@@ -504,7 +504,14 @@ async function _executeStartupUpdateBatch({
     privateKey,
     manager,
     dryRun,
-}) {
+}: {
+    updatePlans: any;
+    chainOrders: any;
+    account: any;
+    privateKey: any;
+    manager: any;
+    dryRun: any;
+}): Promise<{ executed: boolean; prepared: number; skipped: boolean }> {
     if (!Array.isArray(updatePlans) || updatePlans.length === 0 || dryRun) {
         return { executed: false, prepared: 0, skipped: true };
     }
@@ -559,7 +566,14 @@ async function _executeStartupSingleUpdate({
     privateKey,
     manager,
     dryRun,
-}) {
+}: {
+    plan: any;
+    chainOrders: any;
+    account: any;
+    privateKey: any;
+    manager: any;
+    dryRun: any;
+}): Promise<{ executed: boolean; skipped: boolean }> {
     if (dryRun) return { executed: false, skipped: true };
     if (typeof chainOrders?.updateOrder !== 'function') {
         throw new Error('chainOrders.updateOrder is required for sequential update fallback');
@@ -593,7 +607,15 @@ async function _executeStartupSequentialUpdateFallback({
     manager,
     dryRun,
     fillLockAlreadyHeld = false,
-}) {
+}: {
+    updatePlans: any;
+    chainOrders: any;
+    account: any;
+    privateKey: any;
+    manager: any;
+    dryRun: any;
+    fillLockAlreadyHeld?: boolean;
+}): Promise<{ executed: number; skipped: number; failed: number }> {
     if (!Array.isArray(updatePlans) || updatePlans.length === 0 || dryRun) {
         return { executed: 0, skipped: 0, failed: 0 };
     }
@@ -653,7 +675,17 @@ async function _createStartupOrderWithHandling({
     dryRun,
     recovery,
     fillLockAlreadyHeld = false
-}) {
+}: {
+    chainOrders: any;
+    account: any;
+    privateKey: any;
+    manager: any;
+    gridOrder: any;
+    orderLabel: any;
+    dryRun: any;
+    recovery: any;
+    fillLockAlreadyHeld?: boolean;
+}): Promise<void> {
     try {
         await _createOrderFromGrid({ chainOrders, account, privateKey, manager, gridOrder, dryRun, fillLockAlreadyHeld });
     } catch (err: any) {
@@ -675,11 +707,11 @@ async function _createStartupOrderWithHandling({
 
 // _extractBatchOperationResults — thin wrapper over shared utility,
 // returns empty array (not null) for callers that iterate directly.
-function _extractBatchOperationResults(result) {
+function _extractBatchOperationResults(result: any): any[] {
     return extractBatchOperationResults(result) || [];
 }
 
-function _resolveGroupRecovery(group, fallbackMessage, fallbackSource) {
+function _resolveGroupRecovery(group: any, fallbackMessage: any, fallbackSource: any): { triggerMessage: any; source: any } {
     for (const plan of group || []) {
         if (plan?.recovery?.triggerMessage && plan?.recovery?.source) {
             return { triggerMessage: plan.recovery.triggerMessage, source: plan.recovery.source };
@@ -698,7 +730,17 @@ async function _executeStartupCreateGroupBatch({
     groupIndex,
     totalGroups,
     fillLockAlreadyHeld = false,
-}) {
+}: {
+    group: any;
+    chainOrders: any;
+    account: any;
+    privateKey: any;
+    manager: any;
+    dryRun: any;
+    groupIndex: any;
+    totalGroups: any;
+    fillLockAlreadyHeld?: boolean;
+}): Promise<void> {
     if (!Array.isArray(group) || group.length === 0 || dryRun) return;
     if (typeof chainOrders?.buildCreateOrderOp !== 'function' || typeof chainOrders?.executeBatch !== 'function') {
         throw new Error('chainOrders does not support batch create operations');
@@ -801,7 +843,7 @@ async function _executeStartupCreateGroupBatch({
     }
 }
 
-function _buildOutsideInCreateGroups(createPlans) {
+function _buildOutsideInCreateGroups(createPlans: any): any[] {
     return buildOutsideInPairGroups(createPlans, {
         isValid: p => Boolean(p?.gridOrder),
         getType: p => p.orderType,
@@ -817,7 +859,15 @@ async function _executePlannedStartupCreates({
     manager,
     dryRun,
     fillLockAlreadyHeld = false,
-}) {
+}: {
+    createPlans: any;
+    chainOrders: any;
+    account: any;
+    privateKey: any;
+    manager: any;
+    dryRun: any;
+    fillLockAlreadyHeld?: boolean;
+}): Promise<void> {
     const logger = manager?.logger;
     const groups = _buildOutsideInCreateGroups(createPlans);
     if (groups.length === 0) return;
@@ -878,7 +928,20 @@ async function _reconcileStartupSide({
     plannedCreates,
     plannedUpdates,
     fillLockAlreadyHeld = false,
-}) {
+}: {
+    orderType: any;
+    targetCount: any;
+    chainSideOrders: any;
+    unmatchedSideOrders: any;
+    manager: any;
+    chainOrders: any;
+    account: any;
+    privateKey: any;
+    dryRun: any;
+    plannedCreates: any;
+    plannedUpdates: any;
+    fillLockAlreadyHeld?: boolean;
+}): Promise<{ chainCount: any }> {
     const logger = manager?.logger;
     const sideUpper = orderType === ORDER_TYPES.SELL ? 'SELL' : 'BUY';
     const balanceKey = orderType === ORDER_TYPES.SELL ? 'sellFree' : 'buyFree';
@@ -1032,7 +1095,7 @@ async function _reconcileStartupSide({
                 if (cancelCount <= 0) break;
                 logger?.log?.(`Startup: Cancelling excess matched ${sideUpper} ${o.orderId} (grid ${o.id})`, 'warn');
                 try {
-                    await _cancelChainOrder({ chainOrders, account, privateKey, manager, chainOrderId: o.orderId, dryRun, fillLockAlreadyHeld });
+                    await _cancelChainOrder({ chainOrders, account, privateKey, manager, chainOrderId: o.orderId, dryRun, chainOrderObj: o, fillLockAlreadyHeld });
                     logger?.log?.(`Startup: Successfully cancelled excess matched ${sideUpper} order ${o.orderId} (grid ${o.id})`, 'info');
                     cancelCount--;
                 } catch (err: any) {
@@ -1079,9 +1142,9 @@ async function attemptResumePersistedGridByPriceMatch({
         await manager.synchronizeWithChain(chainOpenOrders, 'readOpenOrders', { fillLockAlreadyHeld });
 
         const matchedOrderIds = new Set(
-            Array.from(manager.orders.values())
-                .filter(o => o && isOrderOnChain(o))
-                .map(o => o.orderId)
+            (Array.from(manager.orders.values()) as any[])
+                .filter((o: any) => o && isOrderOnChain(o))
+                .map((o: any) => o.orderId)
                 .filter(Boolean)
         );
 
@@ -1092,7 +1155,7 @@ async function attemptResumePersistedGridByPriceMatch({
 
         logger && logger.log && logger.log(`Successfully matched ${matchedOrderIds.size} orders by price. Resuming with existing grid.`, 'info');
         if (typeof storeGrid === 'function') {
-            await storeGrid(Array.from(manager.orders.values()));
+            await storeGrid(Array.from(manager.orders.values()) as any[]);
         }
         return { resumed: true, matchedCount: matchedOrderIds.size };
     } catch (err: any) {
@@ -1251,7 +1314,7 @@ async function reconcileGridOrders({
             .filter(x => x.parsed);
 
         // Log individual unmatched chain orders with enough context for later adoption analysis.
-        const activeGridOrders = Array.from(manager.orders.values()).filter(o => o && o.orderId && isOrderPlaced(o));
+        const activeGridOrders = (Array.from(manager.orders.values()) as any[]).filter((o: any) => o && o.orderId && isOrderPlaced(o));
         for (const u of unmatchedParsed) {
             const p = u.parsed;
             const desc = `Unmatched chain order: ${p.orderId} (${p.type === ORDER_TYPES.BUY ? 'BUY' : 'SELL'}), price=${Format.formatPrice6(p.price)}, size=${Format.formatSizeByOrderType(p.size, p.type, manager.assets)}`;

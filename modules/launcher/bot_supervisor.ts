@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const net = require('net');
+import net = require('net');
 const { spawn, execSync } = require('child_process');
 const { buildScopedChildEnv } = require('./child_env');
 const { buildRuntimeScriptPath, isDistCodeRoot } = require('./runtime_entry');
@@ -384,7 +384,7 @@ function createBotSupervisor({
     let memoryCheckTimer = null;
     let statusLogTimer = null;
     let socketServer = null;
-    let socketConnections = new Set();
+    let socketConnections = new Set<net.Socket>();
     let userStopped = false;
 
     function allStopped() {
@@ -631,7 +631,7 @@ function createBotSupervisor({
                 if (settled) return;
                 settled = true;
                 cleanup();
-                resolve();
+                resolve(undefined);
             };
             const handleError = (error) => {
                 if (settled) return;
@@ -750,11 +750,11 @@ function createBotSupervisor({
                 settle(reject, new Error('Another supervisor instance is already running (socket exists). Stop it first or use a different profile.'));
             });
             testSocket.on('error', () => {
-                startSocketServerInternal().then(() => settle(resolve)).catch((err) => settle(reject, err));
+                startSocketServerInternal().then(() => settle(resolve, undefined)).catch((err) => settle(reject, err));
             });
             testSocket.setTimeout(500, () => {
                 testSocket.destroy();
-                startSocketServerInternal().then(() => settle(resolve)).catch((err) => settle(reject, err));
+                startSocketServerInternal().then(() => settle(resolve, undefined)).catch((err) => settle(reject, err));
             });
         });
     }
@@ -835,7 +835,7 @@ function createBotSupervisor({
                 });
                 try { fs.chmodSync(SOCKET_PATH, 0o600); } catch (_: any) {}
                 log(`Control socket: ${SOCKET_PATH}`);
-                resolve();
+                resolve(undefined);
             });
 
             process.once('exit', () => {
@@ -966,7 +966,7 @@ function createBotSupervisor({
             const done = () => {
                 if (forceKillTimer) clearTimeout(forceKillTimer);
                 if (forceResolveTimer) clearTimeout(forceResolveTimer);
-                resolve();
+                resolve(undefined);
             };
 
             shutdownResolve = () => {

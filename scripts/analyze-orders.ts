@@ -699,7 +699,7 @@ function createDistributionBar(counts) {
   const barWidth = BAR_WIDTH; // total width in characters
   const total = counts.activeBuy + counts.virtualBuy + counts.spread + counts.activeSell + counts.virtualSell;
 
-  if (total === 0) return ' '.repeat(barWidth);
+  if (total === 0) return { bar: ' '.repeat(barWidth), buyWidth: 0 };
 
   // Calculate widths proportionally
   let activeBuyWidth = Math.round((counts.activeBuy / total) * barWidth);

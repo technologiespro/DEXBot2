@@ -1,7 +1,7 @@
 /**
  * @enum {string}
  */
-const PROCESSED_FILL_PERSISTENCE_MODES = Object.freeze({
+const PROCESSED_FILL_PERSISTENCE_MODES: { readonly IMMEDIATE: string; readonly BATCHED: string; readonly MANUAL: string } = Object.freeze({
     IMMEDIATE: 'immediate',
     BATCHED: 'batched',
     MANUAL: 'manual'
@@ -13,7 +13,7 @@ const PROCESSED_FILL_PERSISTENCE_MODES = Object.freeze({
  * @param {string} [options.persistenceMode] - Explicit persistence mode
  * @returns {string} Resolved persistence mode ('immediate', 'batched', or 'manual')
  */
-function resolveProcessedFillPersistenceMode(options = {}) {
+function resolveProcessedFillPersistenceMode(options: { persistenceMode?: string } = {}): string {
     if (options?.persistenceMode === PROCESSED_FILL_PERSISTENCE_MODES.BATCHED) {
         return PROCESSED_FILL_PERSISTENCE_MODES.BATCHED;
     }
@@ -30,6 +30,17 @@ function resolveProcessedFillPersistenceMode(options = {}) {
  * @class
  */
 class ProcessedFillStore {
+    tracker: Map<string, number>;
+    pendingWrites: Map<string, number>;
+    _batchMs: number | undefined;
+    _batchSize: number | undefined;
+    _warn: (msg: string) => void;
+    _persistTimer: ReturnType<typeof setTimeout> | null;
+    _flushPromise: Promise<void>;
+    _accountOrders: any | null;
+    _botKey: string | null;
+    _shuttingDown: boolean;
+
     /**
      * Create a ProcessedFillStore instance.
      * @param {import('./types').ProcessedFillStoreConfig} [options] - Configuration
@@ -41,7 +52,7 @@ class ProcessedFillStore {
         batchMs,
         batchSize,
         warn
-    } = {}) {
+    }: { batchMs?: number; batchSize?: number; warn?: (msg: string) => void } = {}) {
         this.tracker = new Map();
         this.pendingWrites = new Map();
         this._batchMs = batchMs;
@@ -60,7 +71,7 @@ class ProcessedFillStore {
      * @param {Object} [options.accountOrders] - AccountOrders instance for persistence
      * @param {string} [options.botKey] - Bot identifier key
      */
-    configure({ accountOrders, botKey } = {}) {
+    configure({ accountOrders, botKey }: { accountOrders?: any; botKey?: string } = {}): void {
         this._accountOrders = accountOrders || null;
         this._botKey = botKey || null;
     }
@@ -69,7 +80,7 @@ class ProcessedFillStore {
      * Set the shutting down flag to prevent delayed writes during shutdown.
      * @param {boolean} value - Shutting down flag
      */
-    setShuttingDown(value) {
+    setShuttingDown(value: boolean): void {
         this._shuttingDown = value === true;
     }
 
@@ -80,7 +91,7 @@ class ProcessedFillStore {
      * @param {number|null} [options.minTimestamp=null] - Minimum timestamp filter
      * @returns {number} Number of persisted entries loaded
      */
-    loadPersisted({ forceReload = false, minTimestamp = null } = {}) {
+    loadPersisted({ forceReload = false, minTimestamp = null }: { forceReload?: boolean; minTimestamp?: number | null } = {}): number {
         if (!this._accountOrders || !this._botKey) return 0;
 
         const persistedFills = this._accountOrders.loadProcessedFills(this._botKey, {
@@ -102,7 +113,7 @@ class ProcessedFillStore {
      * Merge entries from a source Map into the in-memory tracker.
      * @param {Map<string, number>} sourceTracker - Source fill tracker to merge
      */
-    mergeTracker(sourceTracker) {
+    mergeTracker(sourceTracker: Map<string, number>): void {
         if (!(sourceTracker instanceof Map) || sourceTracker === this.tracker) return;
 
         for (const [fillKey, timestamp] of sourceTracker) {
@@ -122,7 +133,7 @@ class ProcessedFillStore {
      * @param {string} [options.mode='immediate'] - Persistence mode
      * @returns {Promise<void>}
      */
-    async persist(fillKey, timestamp, { mode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE } = {}) {
+    async persist(fillKey: string, timestamp: number, { mode = PROCESSED_FILL_PERSISTENCE_MODES.IMMEDIATE }: { mode?: string } = {}): Promise<void> {
         if (!this._accountOrders || !this._botKey || !fillKey) return;
 
         if (mode === PROCESSED_FILL_PERSISTENCE_MODES.MANUAL) {
@@ -140,7 +151,7 @@ class ProcessedFillStore {
      * @param {string} fillKey - Fill key to discard
      * @param {number} [timestamp] - Only discard if queued timestamp <= this value
      */
-    discard(fillKey, timestamp) {
+    discard(fillKey: string, timestamp?: number): void {
         const queuedTimestamp = this.pendingWrites.get(fillKey);
         if (queuedTimestamp === undefined) return;
         if (timestamp !== undefined && queuedTimestamp > timestamp) return;
@@ -154,7 +165,7 @@ class ProcessedFillStore {
      * @param {boolean} [options.throwOnError=false] - Re-throw on flush failure
      * @returns {Promise<void>}
      */
-    async flush(reason = 'manual', { throwOnError = false } = {}) {
+    async flush(reason: string = 'manual', { throwOnError = false }: { throwOnError?: boolean } = {}): Promise<void> {
         if (this._persistTimer) {
             clearTimeout(this._persistTimer);
             this._persistTimer = null;
@@ -205,7 +216,7 @@ class ProcessedFillStore {
      * @param {boolean} [options.throwOnError=false] - Re-throw on flush failure
      * @returns {Promise<void>}
      */
-    async flushKeys(fillKeys, reason = 'manual-selected', { throwOnError = false } = {}) {
+    async flushKeys(fillKeys: string[] | Set<string>, reason: string = 'manual-selected', { throwOnError = false }: { throwOnError?: boolean } = {}): Promise<void> {
         const keySet = fillKeys instanceof Set ? fillKeys : new Set(fillKeys || []);
         if (keySet.size === 0) return;
 
@@ -253,7 +264,7 @@ class ProcessedFillStore {
      * Discard pending writes for specific fill keys from the queue.
      * @param {string[]|Set<string>} fillKeys - Fill keys to discard
      */
-    discardKeys(fillKeys) {
+    discardKeys(fillKeys: string[] | Set<string>): void {
         const keySet = fillKeys instanceof Set ? fillKeys : new Set(fillKeys || []);
         for (const fillKey of keySet) {
             if (fillKey) this.pendingWrites.delete(fillKey);
@@ -268,7 +279,7 @@ class ProcessedFillStore {
      * @param {boolean} [options.schedule=true] - Schedule auto-flush timer
      * @private
      */
-    _queue(fillKey, timestamp, { schedule = true } = {}) {
+    _queue(fillKey: string, timestamp: number, { schedule = true }: { schedule?: boolean } = {}): void {
         const existing = this.pendingWrites.get(fillKey);
         if (existing === undefined || timestamp > existing) {
             this.pendingWrites.set(fillKey, timestamp);
@@ -288,7 +299,7 @@ class ProcessedFillStore {
      * Schedule a delayed flush if not already scheduled.
      * @private
      */
-    _schedule() {
+    _schedule(): void {
         if (this._persistTimer || this._shuttingDown || this.pendingWrites.size === 0) return;
 
         this._persistTimer = setTimeout(() => {

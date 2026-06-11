@@ -75,8 +75,29 @@
  * @class
  */
 
+interface QueueItem<T = unknown> {
+    callback: () => Promise<T>;
+    cancelToken?: { isCancelled: boolean };
+    resolve: (value: T) => void;
+    reject: (reason: unknown) => void;
+    timer?: ReturnType<typeof setTimeout>;
+}
+
+interface AsyncLockOptions {
+    timeout?: number;
+}
+
+interface AcquireOptions {
+    timeout?: number;
+    cancelToken?: { isCancelled: boolean };
+}
+
 class AsyncLock {
-    constructor(options = {}) {
+    private _queue: QueueItem<any>[];
+    private _locked: boolean;
+    private _defaultTimeout: number | null;
+
+    constructor(options: AsyncLockOptions = {}) {
         this._queue = [];
         this._locked = false;
         this._defaultTimeout = options.timeout || null;
@@ -90,27 +111,27 @@ class AsyncLock {
      * @param {Object} [options.cancelToken] - Optional object with 'isCancelled' property
      * @returns {Promise} Result of callback execution
      */
-    async acquire(callback, options = {}) {
+    async acquire<T>(callback: () => Promise<T>, options: AcquireOptions = {}): Promise<T> {
         const timeout = options.timeout || this._defaultTimeout;
         const cancelToken = options.cancelToken;
 
         return new Promise((resolve, reject) => {
-            let timer;
+            let timer: ReturnType<typeof setTimeout> | undefined;
 
             const item = {
                 callback,
                 cancelToken,
-                resolve: (val) => {
+                resolve: (val: T) => {
                     if (timer) {
                         clearTimeout(timer);
-                        timer = null;
+                        timer = undefined;
                     }
                     resolve(val);
                 },
-                reject: (err) => {
+                reject: (err: unknown) => {
                     if (timer) {
                         clearTimeout(timer);
-                        timer = null;
+                        timer = undefined;
                     }
                     reject(err);
                 }
@@ -135,7 +156,7 @@ class AsyncLock {
      * Process queued callbacks one at a time
      * @private
      */
-    async _processQueue() {
+    private async _processQueue(): Promise<void> {
         // If already locked, another call is executing, wait
         if (this._locked || this._queue.length === 0) {
             return;
@@ -171,7 +192,7 @@ class AsyncLock {
      * Check if lock is currently acquired
      * @returns {boolean}
      */
-    isLocked() {
+    isLocked(): boolean {
         return this._locked;
     }
 
@@ -179,7 +200,7 @@ class AsyncLock {
      * Get number of operations waiting for lock
      * @returns {number}
      */
-    getQueueLength() {
+    getQueueLength(): number {
         return this._queue.length;
     }
 
@@ -188,7 +209,7 @@ class AsyncLock {
      * Does NOT stop the currently executing operation if it is already locked.
      * @returns {number} Count of cleared items
      */
-    clearQueue() {
+    clearQueue(): number {
         const count = this._queue.length;
         while (this._queue.length > 0) {
             const { reject } = this._queue.shift();

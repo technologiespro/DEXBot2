@@ -17,7 +17,73 @@ const fs = require('fs');
 
 const { runOnceForAma } = require('./market_adapter');
 
-function printHelp() {
+interface AmaOverrides {
+    deltaThresholdPercent?: number;
+    bootstrapLookbackHours?: number;
+    nativeBackfillHours?: number;
+    maxStaleHours?: number;
+    sourceRetries?: number;
+    retryDelayMs?: number;
+    maxPages?: number;
+    pageLimit?: number;
+}
+
+interface CliArgs {
+    bot: string | null;
+    compact: boolean;
+    overrides: AmaOverrides;
+}
+
+interface BotResult {
+    botName: string;
+    botKey: string;
+    ok: boolean;
+    source?: string;
+    candleCount?: number;
+    amaPrice?: number;
+    previousCenterPrice?: number;
+    deltaPercent?: number;
+    thresholdPercent?: number;
+    weights?: { meta?: { finalOffset?: number } };
+    amaSlope?: { amaSlopeGated?: number; regimeMultiplier?: number };
+    triggered?: boolean;
+    triggerPath?: string;
+    reason?: string;
+}
+
+interface AmaPayload {
+    updatedAt?: string;
+    results?: BotResult[];
+    metrics?: Record<string, unknown> | null;
+}
+
+interface OutputBot {
+    botName: string;
+    botKey: string;
+    ok: boolean;
+    source: string | null;
+    candleCount: number | null;
+    amaPrice: number | null;
+    previousCenterPrice: number | null;
+    deltaPercent: number | null;
+    thresholdPercent: number | null;
+    finalOffset: number | null;
+    amaSlopeGated: number | null;
+    regimeMultiplier: number | null;
+    triggered: boolean;
+    triggerPath: string | null;
+    reason: string | null;
+}
+
+interface OutputPayload {
+    ok: boolean;
+    updatedAt: string;
+    metrics: Record<string, unknown> | null;
+    botCount: number;
+    bots: OutputBot[];
+}
+
+function printHelp(): void {
     console.log('AMA signal runner (one cycle): updates candles and returns latest AMA values.');
     console.log('');
     console.log('Usage:');
@@ -37,9 +103,9 @@ function printHelp() {
     console.log('  --help, -h                 Show this help');
 }
 
-function parseArgs() {
+function parseArgs(): CliArgs {
     const args = process.argv.slice(2);
-    const out = {
+    const out: CliArgs = {
         bot: null,
         compact: false,
         overrides: {},
@@ -101,17 +167,17 @@ function parseArgs() {
     return out;
 }
 
-function isFiniteOrNull(v) {
-    return Number.isFinite(v) ? v : null;
+function isFiniteOrNull(v: unknown): number | null {
+    return Number.isFinite(v) ? (v as number) : null;
 }
 
-function buildOutput(payload, botFilter) {
-    const bots = (payload?.results || []).map((r) => ({
+function buildOutput(payload: AmaPayload | undefined | null, botFilter: string | null): OutputPayload {
+    const bots: OutputBot[] = (payload?.results || []).map((r: BotResult) => ({
         botName: r.botName,
         botKey: r.botKey,
         ok: !!r.ok,
         source: r.source || null,
-        candleCount: Number.isFinite(r.candleCount) ? r.candleCount : null,
+        candleCount: Number.isFinite(r.candleCount) ? (r.candleCount as number) : null,
         amaPrice: isFiniteOrNull(r.amaPrice),
         previousCenterPrice: isFiniteOrNull(r.previousCenterPrice),
         deltaPercent: isFiniteOrNull(r.deltaPercent),
@@ -124,10 +190,10 @@ function buildOutput(payload, botFilter) {
         reason: r.reason || null,
     }));
 
-    let filtered = bots;
+    let filtered: OutputBot[] = bots;
     if (botFilter) {
         const target = String(botFilter).trim().toLowerCase();
-        filtered = bots.filter((b) => String(b.botName || '').toLowerCase() === target || String(b.botKey || '').toLowerCase() === target);
+        filtered = bots.filter((b: OutputBot) => String(b.botName || '').toLowerCase() === target || String(b.botKey || '').toLowerCase() === target);
     }
 
     return {
@@ -139,18 +205,17 @@ function buildOutput(payload, botFilter) {
     };
 }
 
-async function main() {
+async function main(): Promise<void> {
     const cli = parseArgs();
-    const fixtureRaw = process.env.AMA_SIGNAL_RUNNER_FIXTURE_JSON;
-    let payload;
+    const fixtureRaw: string | undefined = process.env.AMA_SIGNAL_RUNNER_FIXTURE_JSON;
+    let payload: AmaPayload;
     if (fixtureRaw) {
-        payload = JSON.parse(fixtureRaw);
+        payload = JSON.parse(fixtureRaw) as AmaPayload;
     } else {
-        // Suppress stdout so JSON output stays clean, but preserve stderr (warn/error).
-        const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+        const originalStdoutWrite = process.stdout.write.bind(process.stdout) as (buffer: string | Uint8Array) => boolean;
         process.stdout.write = () => true;
         try {
-            payload = await runOnceForAma(cli.overrides);
+            payload = (await runOnceForAma(cli.overrides)) as unknown as AmaPayload;
         } finally {
             process.stdout.write = originalStdoutWrite;
         }
@@ -161,7 +226,7 @@ async function main() {
     process.exit(0);
 }
 
-main().catch((err) => {
+main().catch((err: Error) => {
     const out = {
         ok: false,
         error: err.message,

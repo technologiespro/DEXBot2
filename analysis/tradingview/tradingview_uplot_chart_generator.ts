@@ -32,7 +32,7 @@ function loadMarketProfiles(filePath = path.join(__dirname, '..', '..', 'profile
     }
 }
 
-function findMarketProfile(profiles, meta = {}) {
+function findMarketProfile(profiles: any, meta: any = {}) {
     const entries = Array.isArray(profiles?.profiles) ? profiles.profiles : [];
     if (!entries.length) return null;
     const assetA = meta.assetA?.symbol || meta.assetA?.id || meta.assetA;
@@ -54,7 +54,7 @@ function findMarketProfile(profiles, meta = {}) {
     }) || null;
 }
 
-function resolveAmaDefaults({ meta, data, marketProfiles } = {}) {
+function resolveAmaDefaults({ meta, data, marketProfiles }: any = {}) {
     const amaDefaultsSource = MARKET_ADAPTER.AMAS?.AMA3
         || MARKET_ADAPTER.AMAS?.[MARKET_ADAPTER.DEFAULT_AMA_KEY || 'AMA3']
         || { erPeriod: 781, fastPeriod: 5.2, slowPeriod: 112.7 };

@@ -14,27 +14,36 @@
 // ─── Simple Moving Average ───────────────────────────────────────────────────
 
 class SMA {
-    constructor(period) {
+    period: number;
+    values: number[];
+
+    constructor(period: number) {
         this.period = period;
         this.values = [];
     }
 
-    update(price) {
+    update(price: number): number | null {
         this.values.push(price);
         if (this.values.length > this.period) this.values.shift();
         if (this.values.length < this.period) return null;
         return this.values.reduce((a, b) => a + b, 0) / this.period;
     }
 
-    isReady() { return this.values.length >= this.period; }
+    isReady(): boolean { return this.values.length >= this.period; }
 
-    reset(period) { this.period = period; this.values = []; }
+    reset(period: number): void { this.period = period; this.values = []; }
 }
 
 // ─── Exponential Moving Average ──────────────────────────────────────────────
 
 class EMA {
-    constructor(period) {
+    period: number;
+    multiplier: number;
+    value: number | null;
+    count: number;
+    _sum: number;
+
+    constructor(period: number) {
         this.period = period;
         this.multiplier = 2 / (period + 1);
         this.value = null;
@@ -42,7 +51,7 @@ class EMA {
         this._sum = 0;
     }
 
-    update(price) {
+    update(price: number): number | null {
         this.count++;
         if (this.count < this.period) {
             this._sum += price;
@@ -57,9 +66,9 @@ class EMA {
         return this.value;
     }
 
-    isReady() { return this.count >= this.period; }
+    isReady(): boolean { return this.count >= this.period; }
 
-    reset(period) {
+    reset(period?: number): void {
         this.period = period ?? this.period;
         this.multiplier = 2 / (this.period + 1);
         this.value = null;
@@ -71,13 +80,20 @@ class EMA {
 // ─── MACD ─────────────────────────────────────────────────────────────────────
 
 class MACD {
+    fastPeriod: number;
+    slowPeriod: number;
+    signalPeriod: number;
+    fastEma: EMA;
+    slowEma: EMA;
+    signalEma: EMA;
+
     /**
      * Moving Average Convergence Divergence
      * macdLine  = EMA(fast) - EMA(slow)
      * signal    = EMA(signalPeriod) of macdLine
      * histogram = macdLine - signal
      */
-    constructor(fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+    constructor(fastPeriod: number = 12, slowPeriod: number = 26, signalPeriod: number = 9) {
         this.fastPeriod   = fastPeriod;
         this.slowPeriod   = slowPeriod;
         this.signalPeriod = signalPeriod;
@@ -86,7 +102,7 @@ class MACD {
         this.signalEma = new EMA(signalPeriod);
     }
 
-    update(price) {
+    update(price: number): { macd: number; signal: number; histogram: number } | null {
         const fast = this.fastEma.update(price);
         const slow = this.slowEma.update(price);
         if (fast === null || slow === null) return null;
@@ -96,9 +112,9 @@ class MACD {
         return { macd: macdLine, signal, histogram: macdLine - signal };
     }
 
-    isReady() { return this.slowEma.isReady() && this.signalEma.isReady(); }
+    isReady(): boolean { return this.slowEma.isReady() && this.signalEma.isReady(); }
 
-    reset(fastPeriod, slowPeriod, signalPeriod) {
+    reset(fastPeriod?: number, slowPeriod?: number, signalPeriod?: number): void {
         this.fastPeriod   = fastPeriod   ?? this.fastPeriod;
         this.slowPeriod   = slowPeriod   ?? this.slowPeriod;
         this.signalPeriod = signalPeriod ?? this.signalPeriod;
@@ -111,11 +127,17 @@ class MACD {
 // ─── RSI ──────────────────────────────────────────────────────────────────────
 
 class RSI {
+    period: number;
+    count: number;
+    prevPrice: number | null;
+    avgGain: number;
+    avgLoss: number;
+
     /**
      * Relative Strength Index (Wilder smoothing)
      * Overbought > 70, Oversold < 30
      */
-    constructor(period = 14) {
+    constructor(period: number = 14) {
         this.period    = period;
         this.count     = 0;
         this.prevPrice = null;
@@ -123,7 +145,7 @@ class RSI {
         this.avgLoss   = 0;
     }
 
-    update(price) {
+    update(price: number): number | null {
         if (this.prevPrice === null) { this.prevPrice = price; return null; }
         const change = price - this.prevPrice;
         this.prevPrice = price;
@@ -146,9 +168,9 @@ class RSI {
         return 100 - (100 / (1 + this.avgGain / this.avgLoss));
     }
 
-    isReady() { return this.count >= this.period; }
+    isReady(): boolean { return this.count >= this.period; }
 
-    reset(period) {
+    reset(period?: number): void {
         this.period    = period ?? this.period;
         this.count     = 0;
         this.prevPrice = null;
@@ -159,33 +181,100 @@ class RSI {
 
 // ─── Derivative Analyzer ─────────────────────────────────────────────────────
 
+type DerivativeAnalyzerConfig = {
+    slowSmaPeriod?: number;
+    fastSmaPeriod?: number;
+    minBarsForConfirmation?: number;
+    macdFastPeriod?: number;
+    macdSlowPeriod?: number;
+    macdSignalPeriod?: number;
+    rsiPeriod?: number;
+    interpConfirmBars?: number;
+    interpHoldBars?: number;
+    rsiOverboughtLevel?: number;
+    rsiOversoldLevel?: number;
+    rsiBullThreshold?: number;
+    rsiBearThreshold?: number;
+    macdMinHist?: number;
+    fastSmaCommitmentBars?: number;
+    trendFilterEnabled?: boolean;
+    trendFilterMinBars?: number;
+    momentumGateEnabled?: boolean;
+    momentumGateMinBars?: number;
+    momentumGateRsiZone?: number;
+    priceRegimeGateEnabled?: boolean;
+    priceRegimeMinDistancePct?: number;
+};
+
+type MacdValues = {
+    macd: number;
+    signal: number;
+    histogram: number;
+};
+
 class DerivativeAnalyzer {
-    /**
-     * @param {Object} config
-     * @param {number}  [config.slowSmaPeriod=500]          – SMA period (null to disable)
-     * @param {number}  [config.fastSmaPeriod=100]          – Fast SMA period (null to disable)
-     * @param {number}  [config.minBarsForConfirmation=3]   – Bars to confirm trend
-     * @param {number}  [config.macdFastPeriod=12]          – MACD fast period
-     * @param {number}  [config.macdSlowPeriod=26]          – MACD slow period
-     * @param {number}  [config.macdSignalPeriod=9]         – MACD signal period
-     * @param {number}  [config.rsiPeriod=14]               – RSI period
-     * @param {number}  [config.interpConfirmBars=3]        – Confirmation bars for interpolation
-     * @param {number}  [config.interpHoldBars=0]           – Hold bars for interpolation
-     * @param {number}  [config.rsiOverboughtLevel=70]      – RSI overbought threshold
-     * @param {number}  [config.rsiOversoldLevel=30]        – RSI oversold threshold
-     * @param {number}  [config.rsiBullThreshold=55]        – RSI bull threshold
-     * @param {number}  [config.rsiBearThreshold=45]        – RSI bear threshold
-     * @param {number}  [config.macdMinHist=0]              – MACD histogram minimum
-     * @param {number}  [config.fastSmaCommitmentBars=2]    – Fast SMA commitment bars
-     * @param {boolean} [config.trendFilterEnabled=false]   – Enable trend filter
-     * @param {number}  [config.trendFilterMinBars=3]       – Trend filter minimum bars
-     * @param {boolean} [config.momentumGateEnabled=false]  – Enable momentum gate
-     * @param {number}  [config.momentumGateMinBars=3]      – Momentum gate minimum bars
-     * @param {number}  [config.momentumGateRsiZone=35]     – Momentum gate RSI zone
-     * @param {boolean} [config.priceRegimeGateEnabled=true] – Enable price regime gate
-     * @param {number}  [config.priceRegimeMinDistancePct=0.35] – Price regime minimum distance
-     */
-    constructor(config = {}) {
+    minBarsForConfirmation: number;
+    slowSmaPeriod: number;
+    sma: SMA | null;
+    fastSmaPeriod: number;
+    fastSma: SMA | null;
+    macdConfig: { fastPeriod: number; slowPeriod: number; signalPeriod: number };
+    macd: MACD;
+    currMacd: MacdValues | null;
+    prevMacd: MacdValues | null;
+    rsiPeriod: number;
+    rsi: RSI;
+    currRsi: number | null;
+    prevRsi: number | null;
+    interpConfirmBars: number;
+    interpHoldBars: number;
+    rsiOverboughtLevel: number;
+    rsiOversoldLevel: number;
+    rsiBullThreshold: number;
+    rsiBearThreshold: number;
+    macdMinHist: number;
+    fastSmaCommitmentBars: number;
+    trendFilterEnabled: boolean;
+    trendFilterMinBars: number;
+    momentumGateEnabled: boolean;
+    momentumGateMinBars: number;
+    momentumGateRsiZone: number;
+    barsInMacdDivergence: number;
+    barsInRsiDivergence: number;
+    priceRegimeGateEnabled: boolean;
+    priceRegimeMinDistancePct: number;
+    prevRawInterp: string | null;
+    barsInRawInterp: number;
+    currInterpretation: string;
+    currInterpretationRaw: string;
+    pendingInterp: string | null;
+    pendingInterpBars: number;
+    entryBias: string;
+    isBullWeakEntry: boolean;
+    isBullConfirmation: boolean;
+    isLateBullWithoutWeak: boolean;
+    isBearWeakEntry: boolean;
+    isBearConfirmation: boolean;
+    isLateBearWithoutWeak: boolean;
+    bullEntrySetupActive: boolean;
+    bullEntrySetupConfirmed: boolean;
+    bearEntrySetupActive: boolean;
+    bearEntrySetupConfirmed: boolean;
+    prevSma: number | null;
+    currSma: number | null;
+    prevFastSma: number | null;
+    currFastSma: number | null;
+    prevPrice: number | null;
+    currPrice: number | null;
+    prevRawSmaTrend: string | null;
+    barsInSmaTrend: number;
+    prevRawFastSmaTrend: string | null;
+    barsInFastSmaTrend: number;
+    barsAboveFastSma: number;
+    barsBelowFastSma: number;
+    updateCount: number;
+
+    constructor(config: DerivativeAnalyzerConfig = {}) {
         this.minBarsForConfirmation = config.minBarsForConfirmation || 3;
 
         // SMA (slow)
@@ -267,7 +356,7 @@ class DerivativeAnalyzer {
         this.updateCount = 0;
     }
 
-    update(price, timestamp = null) {
+    update(price: number, timestamp: number | null = null): ReturnType<DerivativeAnalyzer['getAnalysis']> {
         if (!Number.isFinite(price) || price <= 0) {
             throw new Error('price must be a positive finite number');
         }
@@ -388,34 +477,34 @@ class DerivativeAnalyzer {
         return result;
     }
 
-    _advanceTrend(raw, key) {
-        const prevKey = `prevRaw${key}Trend`;
-        const barsKey = `barsIn${key}Trend`;
-        if (raw !== this[prevKey]) {
-            this[prevKey] = raw;
-            this[barsKey] = 1;
+    _advanceTrend(raw: string, key: string): void {
+        const prevKey = `prevRaw${key}Trend` as keyof this;
+        const barsKey = `barsIn${key}Trend` as keyof this;
+        if (raw !== (this as any)[prevKey]) {
+            (this as any)[prevKey] = raw;
+            (this as any)[barsKey] = 1;
         } else {
-            this[barsKey]++;
+            (this as any)[barsKey]++;
         }
     }
 
     // ── Derivative signs ───────────────────────────────────────
 
-    _rawSmaTrend() {
+    _rawSmaTrend(): string {
         if (!this.sma || this.prevSma === null || this.currSma === null) return 'NEUTRAL';
         if (this.currSma > this.prevSma) return 'UP';
         if (this.currSma < this.prevSma) return 'DOWN';
         return 'NEUTRAL';
     }
 
-    _rawFastSmaTrend() {
+    _rawFastSmaTrend(): string {
         if (!this.fastSma || this.prevFastSma === null || this.currFastSma === null) return 'NEUTRAL';
         if (this.currFastSma > this.prevFastSma) return 'UP';
         if (this.currFastSma < this.prevFastSma) return 'DOWN';
         return 'NEUTRAL';
     }
 
-    _advancePriceFastSmaPosition() {
+    _advancePriceFastSmaPosition(): void {
         if (!this.fastSma || this.currFastSma === null || this.currPrice === null) {
             this.barsAboveFastSma = 0;
             this.barsBelowFastSma = 0;
@@ -430,7 +519,7 @@ class DerivativeAnalyzer {
         }
     }
 
-    _advanceMomentumDivergence() {
+    _advanceMomentumDivergence(): void {
         if (!this.momentumGateEnabled || !this.macd || !this.rsi || !this.sma) return;
         if (this.currMacd === null || this.currRsi === null) return;
 
@@ -455,12 +544,12 @@ class DerivativeAnalyzer {
 
     // ── Trend filter ─────────────────────────────────────────
 
-    _applyTrendFilter(interp) {
+    _applyTrendFilter(interp: string): string {
         // OB/OS are exit signals — not suppressed by trend direction
         if (interp === 'OVERBOUGHT' || interp === 'OVERSOLD') return interp;
 
         // Compute fast MA direction and sustained bars count
-        let fastDir, fastBarsInDir;
+        let fastDir: string, fastBarsInDir: number;
         if (this.fastSma) {
             fastDir       = this._rawFastSmaTrend();
             fastBarsInDir = (fastDir === this.prevRawFastSmaTrend ? this.barsInFastSmaTrend + 1 : 1);
@@ -494,10 +583,10 @@ class DerivativeAnalyzer {
             const rsiConf  = this.barsInRsiDivergence  >= this.momentumGateMinBars;
 
             if (macdConf && rsiConf && slowDir !== 'NEUTRAL') {
-                if (slowDir === 'UP' && this.currMacd?.histogram < -this.macdMinHist) {
+                if (slowDir === 'UP' && (this.currMacd?.histogram ?? 0) < -this.macdMinHist) {
                     interp = 'BEAR_WEAK';
                 }
-                if (slowDir === 'DOWN' && this.currMacd?.histogram > this.macdMinHist) {
+                if (slowDir === 'DOWN' && (this.currMacd?.histogram ?? 0) > this.macdMinHist) {
                     interp = 'BULL_WEAK';
                 }
             }
@@ -532,7 +621,7 @@ class DerivativeAnalyzer {
 
     // ── Hysteresis ────────────────────────────────────────────
 
-    _applyWithHysteresis(newInterp) {
+    _applyWithHysteresis(newInterp: string): void {
         // OB/OS are exit signals — always immediate, bypass hold
         if (newInterp === 'OVERBOUGHT' || newInterp === 'OVERSOLD') {
             this.currInterpretation = newInterp;
@@ -570,7 +659,7 @@ class DerivativeAnalyzer {
         }
     }
 
-    _resetEntryBias() {
+    _resetEntryBias(): void {
         this.entryBias = 'NONE';
         this.isBullWeakEntry = false;
         this.isBullConfirmation = false;
@@ -580,7 +669,7 @@ class DerivativeAnalyzer {
         this.isLateBearWithoutWeak = false;
     }
 
-    _advanceEntryBias(prevInterpretation) {
+    _advanceEntryBias(prevInterpretation: string): void {
         const curr = this.currInterpretation;
         const slowDir = this._rawSmaTrend();
         const fastDir = this.fastSma ? this._rawFastSmaTrend() : slowDir;
@@ -649,7 +738,7 @@ class DerivativeAnalyzer {
         }
     }
 
-    _isHardInvalidation(interp) {
+    _isHardInvalidation(interp: string): boolean {
         if (interp !== 'BULL' && interp !== 'BEAR') return false;
 
         if (this.macd && this.currMacd !== null) {
@@ -664,7 +753,7 @@ class DerivativeAnalyzer {
         return false;
     }
 
-    _violatesMacroDisagreeGate(interp, fastDirOverride = null) {
+    _violatesMacroDisagreeGate(interp: string, fastDirOverride: string | null = null): boolean {
         if (!this.trendFilterEnabled || !this.fastSma || !this.sma) return false;
         if (interp !== 'BULL' && interp !== 'BEAR') return false;
 
@@ -679,7 +768,7 @@ class DerivativeAnalyzer {
         return fastDir !== slowDir;
     }
 
-    _violatesPriceRegimeGate(interp) {
+    _violatesPriceRegimeGate(interp: string): boolean {
         if (!this.priceRegimeGateEnabled || !this.sma || this.currSma === null || this.currPrice === null) {
             return false;
         }
@@ -696,7 +785,7 @@ class DerivativeAnalyzer {
 
     // ── Interpretation ────────────────────────────────────────
 
-    _computeInterpretation() {
+    _computeInterpretation(): string {
         const hist     = this.currMacd?.histogram ?? null;
         const macdLine = this.currMacd?.macd      ?? null;
         const macdSig  = this.currMacd?.signal    ?? null;
@@ -769,7 +858,44 @@ class DerivativeAnalyzer {
 
     // ── Analysis ───────────────────────────────────────────────
 
-    getAnalysis() {
+    getAnalysis(): {
+        isReady: boolean;
+        reason?: string;
+        trend: string;
+        confidence: number;
+        isConfirmed: boolean;
+        rawTrend?: string;
+        barsInTrend?: number;
+        smaRawTrend: string;
+        smaTrend: string;
+        smaBarsInTrend: number;
+        smaConfidence: number;
+        fastSmaRawTrend: string;
+        fastSmaTrend: string;
+        fastSmaBarsInTrend: number;
+        fastSmaConfidence: number;
+        fastSmaValue: number | null;
+        slowSma: number | null;
+        macdLine: number | null;
+        macdSignal: number | null;
+        macdHistogram: number | null;
+        macdTrend: string | null;
+        rsi: number | null;
+        rsiZone: string | null;
+        interpretation: string;
+        interpretationRaw: string;
+        interpretationBars: number;
+        entryBias: string;
+        isBullWeakEntry: boolean;
+        isBullConfirmation: boolean;
+        isLateBullWithoutWeak: boolean;
+        isBearWeakEntry: boolean;
+        isBearConfirmation: boolean;
+        isLateBearWithoutWeak: boolean;
+        price: number | null;
+        updateCount: number;
+        timestamp?: number;
+    } {
         const warmupNeeded = Math.max(
             this.sma     ? this.slowSmaPeriod : 0,
             this.fastSma ? this.fastSmaPeriod : 0,
@@ -848,11 +974,21 @@ class DerivativeAnalyzer {
         };
     }
 
-    _conf(raw, bars) {
+    _conf(raw: string, bars: number): number {
         return raw !== 'NEUTRAL' ? Math.min(100, Math.round((bars / 20) * 100)) : 0;
     }
 
-    _emptySignals() {
+    _emptySignals(): {
+        smaRawTrend: string; smaTrend: string; smaBarsInTrend: number; smaConfidence: number;
+        fastSmaRawTrend: string; fastSmaTrend: string; fastSmaBarsInTrend: number; fastSmaConfidence: number; fastSmaValue: null;
+        slowSma: null;
+        macdLine: null; macdSignal: null; macdHistogram: null; macdTrend: null;
+        rsi: null; rsiZone: null;
+        interpretation: string; interpretationRaw: string; interpretationBars: number;
+        entryBias: string;
+        isBullWeakEntry: boolean; isBullConfirmation: boolean; isLateBullWithoutWeak: boolean;
+        isBearWeakEntry: boolean; isBearConfirmation: boolean; isLateBearWithoutWeak: boolean;
+    } {
         return {
             smaRawTrend: 'NEUTRAL', smaTrend: 'NEUTRAL', smaBarsInTrend: 0, smaConfidence: 0,
             fastSmaRawTrend: 'NEUTRAL', fastSmaTrend: 'NEUTRAL', fastSmaBarsInTrend: 0, fastSmaConfidence: 0, fastSmaValue: null,
@@ -870,7 +1006,7 @@ class DerivativeAnalyzer {
         };
     }
 
-    reset() {
+    reset(): void {
         if (this.sma)     this.sma.reset(this.slowSmaPeriod);
         if (this.fastSma) this.fastSma.reset(this.fastSmaPeriod);
         if (this.macd)    this.macd.reset(this.macdConfig.fastPeriod, this.macdConfig.slowPeriod, this.macdConfig.signalPeriod);
@@ -906,7 +1042,7 @@ class DerivativeAnalyzer {
         this.updateCount = 0;
     }
 
-    getUpdateCount() { return this.updateCount; }
+    getUpdateCount(): number { return this.updateCount; }
 }
 
 export = { DerivativeAnalyzer };

@@ -8,6 +8,49 @@ const {
     isPrivatePathSecure,
 } = require('./credential_runtime');
 
+interface BroadcastUncertainErrorDetails {
+    operations?: any[] | null;
+    accountName?: string | null;
+    batchId?: string | null;
+    payload?: any;
+    timeoutMs?: number | null;
+}
+
+interface CredentialClientOptions {
+    socketPath?: string;
+    readyFilePath?: string;
+    pollIntervalMs?: number;
+    requestType?: string;
+    isBroadcast?: boolean;
+    timeoutMs?: number;
+    sessionId?: string | null;
+    botHmacSecret?: string | null;
+    batchId?: string | null;
+}
+
+interface CredentialDaemonMeta {
+    uncertainOnTimeout?: boolean;
+    operations?: any[] | null;
+    accountName?: string | null;
+    batchId?: string | null;
+}
+
+interface CredentialDaemonResponse {
+    success?: boolean;
+    error?: string;
+    code?: string;
+    raw?: any;
+    operation_results?: any[];
+}
+
+interface RequestPayload {
+    type: string;
+    accountName: string;
+    operations: any[];
+    sessionId?: string | null;
+    hmac?: string;
+}
+
 const DEFAULT_SOCKET_PATH = getCredentialSocketPath();
 const DEFAULT_READY_FILE = getCredentialReadyFilePath();
 const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
@@ -31,7 +74,14 @@ const DEFAULT_POLL_INTERVAL_MS = TIMING.CHECK_INTERVAL_MS;
  *   - timeoutMs: the outer timeout that fired
  */
 class BroadcastUncertainError extends Error {
-    constructor(message, details = {}) {
+    code: string;
+    operations: any[] | null;
+    accountName: string | null;
+    batchId: string | null;
+    payload: any;
+    timeoutMs: number | null;
+
+    constructor(message: string, details: BroadcastUncertainErrorDetails = {}) {
         super(message);
         this.name = 'BroadcastUncertainError';
         this.code = 'BROADCAST_UNCERTAIN';
@@ -43,12 +93,12 @@ class BroadcastUncertainError extends Error {
     }
 }
 
-function getSocketPath(options = {}) {
+function getSocketPath(options: CredentialClientOptions = {}): string {
     return options.socketPath || DEFAULT_SOCKET_PATH;
 }
 
-function sendCredentialDaemonRequest(socketPath, payload, timeoutMs, meta = {}) {
-    return new Promise((resolve, reject) => {
+function sendCredentialDaemonRequest(socketPath: string, payload: any, timeoutMs: number, meta: CredentialDaemonMeta = {}): Promise<CredentialDaemonResponse> {
+    return new Promise<CredentialDaemonResponse>((resolve, reject) => {
         let settled = false;
         const socket = net.createConnection(socketPath, () => {
             socket.write(`${JSON.stringify(payload)}\n`);
@@ -116,11 +166,11 @@ function sendCredentialDaemonRequest(socketPath, payload, timeoutMs, meta = {}) 
     });
 }
 
-function getReadyFilePath(options = {}) {
+function getReadyFilePath(options: CredentialClientOptions = {}): string {
     return options.readyFilePath || DEFAULT_READY_FILE;
 }
 
-function isCredentialDaemonReady(options = {}) {
+function isCredentialDaemonReady(options: CredentialClientOptions = {}): boolean {
     try {
         const readyFilePath = getReadyFilePath(options);
         const socketPath = getSocketPath(options);
@@ -133,7 +183,7 @@ function isCredentialDaemonReady(options = {}) {
     }
 }
 
-async function waitForCredentialDaemon(timeoutMs = DEFAULT_WAIT_TIMEOUT_MS, options = {}) {
+async function waitForCredentialDaemon(timeoutMs: number = DEFAULT_WAIT_TIMEOUT_MS, options: CredentialClientOptions = {}): Promise<void> {
     const pollIntervalMs = Number.isFinite(Number(options.pollIntervalMs))
         ? Number(options.pollIntervalMs)
         : DEFAULT_POLL_INTERVAL_MS;
@@ -147,7 +197,7 @@ async function waitForCredentialDaemon(timeoutMs = DEFAULT_WAIT_TIMEOUT_MS, opti
     }
 }
 
-function executeOperationsViaCredentialDaemon(accountName, operations, options = {}) {
+function executeOperationsViaCredentialDaemon(accountName: string, operations: any[], options: CredentialClientOptions = {}): Promise<CredentialDaemonResponse> {
     if (!accountName) {
         return Promise.reject(new Error('accountName is required to execute operations'));
     }
@@ -164,7 +214,7 @@ function executeOperationsViaCredentialDaemon(accountName, operations, options =
         ? Number(options.timeoutMs)
         : defaultTimeout;
 
-    const payload = { type: 'execute-operations', accountName, operations };
+    const payload: RequestPayload = { type: 'execute-operations', accountName, operations };
     const sessionId = options.sessionId || null;
     if (sessionId) payload.sessionId = sessionId;
 

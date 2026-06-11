@@ -263,7 +263,7 @@ function applyKalmanSlopeOverrides(target, overrides) {
     return target;
 }
 
-function applyMarketAdapterOverrides(target, overrides, opts = {}) {
+function applyMarketAdapterOverrides(target: any, overrides: any, opts: { includeDefaultAmaKey?: boolean } = {}) {
     if (!overrides || typeof overrides !== 'object') return target;
     if (opts.includeDefaultAmaKey && overrides.defaultAmaKey) target.defaultAmaKey = overrides.defaultAmaKey;
     assignPresent(target, overrides, [
@@ -619,7 +619,7 @@ function resolveDeltaThresholdPercentFromGeneralSettings(settings) {
     return null;
 }
 
-function applyRuntimeDefaultsFromGeneralSettings(cfg, provided = {}, settingsOverride = undefined) {
+function applyRuntimeDefaultsFromGeneralSettings(cfg: any, provided: { deltaThresholdPercent?: boolean } = {}, settingsOverride?: any) {
     const out = { ...cfg };
     if (!provided?.deltaThresholdPercent) {
         const settings = settingsOverride === undefined
@@ -723,7 +723,7 @@ function resolveAmaForBot(bot, ctx = null, cfg = null) {
     const raw = (bot && typeof bot.ama === 'object' && bot.ama !== null) ? bot.ama : {};
     const erSmoothPeriod = resolveErSmoothPeriodForBot(bot);
 
-    const fromProfiles = getAmaFromProfilesForBot(bot, ctx, cfg);
+    const fromProfiles: any = getAmaFromProfilesForBot(bot, ctx, cfg);
     if (fromProfiles) {
         fromProfiles.erSmoothPeriod = erSmoothPeriod;
         return fromProfiles;
@@ -913,7 +913,7 @@ async function fetchNativeTradesUntilOverlap(poolId, overlapSequences, minOverla
     };
 }
 
-async function fetchNativeMarketHistorySince(assetA, assetB, sinceMs, untilMs, intervalSeconds, options = {}) {
+async function fetchNativeMarketHistorySince(assetA: any, assetB: any, sinceMs: any, untilMs: any, intervalSeconds: any, options: { fillCandleGaps?: Function } = {}) {
     const { BitShares } = getBitsharesClient();
     if (!BitShares) {
         throw new Error('BitShares client unavailable');
@@ -984,7 +984,16 @@ const ORDERS_DIR = path.join(ROOT, 'profiles', 'orders');
  * @param {string} [options.observedLastGridResetAt] - Reset timestamp seen before this adapter write was calculated
  * @returns {boolean} true on success
  */
-function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
+function writeBotDynamicGrid(botKey: string, gridCenterPrice: number, options: {
+    amaCenterPrice?: number;
+    amaSlope?: any;
+    gridRangeScalingAmaSlope?: any;
+    amaSlopeDeltaPercent?: number;
+    amaSlopeThresholdPercent?: number;
+    gridPriceOffsetPct?: number;
+    dynamicWeights?: any;
+    observedLastGridResetAt?: string;
+} = {}) {
     try {
         const filePath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
         const preserveGridResetMetadata = (target, snapshot) => {
@@ -1015,7 +1024,7 @@ function writeBotDynamicGrid(botKey, gridCenterPrice, options = {}) {
         const result = updateDynamicGridSnapshotSync(filePath, (previousSnapshot) => {
             const amaCenterPrice = Number(options.amaCenterPrice);
             const resolvedGridCenterPrice = Math.round(Number(gridCenterPrice) * 1e8) / 1e8;
-            const payload = {
+            const payload: Record<string, any> = {
                 gridCenterPrice: resolvedGridCenterPrice,
                 centerPrice: resolvedGridCenterPrice,
                 amaCenterPrice: Number.isFinite(amaCenterPrice) && amaCenterPrice > 0 ? amaCenterPrice : resolvedGridCenterPrice,
@@ -1095,12 +1104,13 @@ async function processBot(bot, state, cfg, contextCache, hooks = {}) {
     return adapterService.processBot(bot, state, cfg, contextCache, hooks);
 }
 
-function writeCenterSnapshot(state) {
-    const centers = {
+function writeCenterSnapshot(state: any) {
+    const centers: Record<string, any> = {
         updatedAt: new Date().toISOString(),
         bots: {},
     };
-    for (const [botKey, v] of Object.entries(state.bots || {})) {
+    const bots: Record<string, any> = state?.bots || {};
+    for (const [botKey, v] of Object.entries(bots)) {
         const gridCenterPrice = v.gridCenterPrice ?? v.centerPrice;
         centers.bots[botKey] = {
             botName: v.botName,
@@ -1125,12 +1135,13 @@ function writeCenterSnapshot(state) {
     saveJson(CENTER_FILE, centers);
 }
 
-function mergeGridResetMetadataFromDynamicGrid(state) {
+function mergeGridResetMetadataFromDynamicGrid(state: any) {
     if (!state || typeof state !== 'object' || !state.bots || typeof state.bots !== 'object') {
         return state;
     }
 
-    for (const [botKey, botState] of Object.entries(state.bots)) {
+    const bots: Record<string, any> = state.bots;
+    for (const [botKey, botState] of Object.entries(bots)) {
         if (!botState || typeof botState !== 'object') continue;
         const snapshotPath = path.join(ORDERS_DIR, `${botKey}.dynamicgrid.json`);
         let snapshot;

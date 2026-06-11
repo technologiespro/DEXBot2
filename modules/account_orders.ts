@@ -173,7 +173,7 @@ class AccountOrders {
    * @param {string} [options.ordersDir] - Optional override for the per-bot storage directory
    * @param {string} [options.profilesPath] - Optional override for the per-bot storage file path
    */
-  constructor(options = {}) {
+  constructor(options: { botKey: string; ordersDir?: string; profilesPath?: string } = { botKey: '' }) {
     if (!options.botKey) throw new Error("botKey required for AccountOrders");
     this.botKey = options.botKey;
 
@@ -339,7 +339,7 @@ class AccountOrders {
    * @returns {Object} The metadata object.
    * @private
    */
-  _buildMeta(bot, key, index, existing = {}) {
+  _buildMeta(bot: any, key: string, index: number, existing: { createdAt?: string } = {}) {
     const timestamp = nowIso();
     return {
       key,
@@ -577,7 +577,7 @@ class AccountOrders {
    * @param {boolean|Object} options - Reload/filter options
    * @returns {Map} Map of fillKey => timestamp
    */
-  loadProcessedFills(botKey, options = {}) {
+  loadProcessedFills(botKey: string, options: boolean | { forceReload?: boolean; minTimestamp?: number } = {}) {
     const forceReload = typeof options === 'boolean' ? options : options?.forceReload === true;
     const minTimestamp = typeof options === 'object' && options !== null && Number.isFinite(options.minTimestamp)
       ? options.minTimestamp
@@ -592,7 +592,7 @@ class AccountOrders {
       const botData = this.data.bots[botKey];
       const fills = botData.processedFills || {};
       const entries = Object.entries(fills).filter(([, timestamp]) =>
-        minTimestamp === null || (Number.isFinite(timestamp) && timestamp >= minTimestamp)
+        minTimestamp === null || (Number.isFinite(timestamp) && (timestamp as number) >= minTimestamp)
       );
       return new Map(entries);
     }
@@ -660,7 +660,7 @@ class AccountOrders {
       let deletedCount = 0;
 
       for (const [fillKey, timestamp] of Object.entries(fills)) {
-        if (now - timestamp > olderThanMs) {
+        if (now - (timestamp as number) > olderThanMs) {
           delete fills[fillKey];
           deletedCount++;
         }

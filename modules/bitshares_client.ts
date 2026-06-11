@@ -48,7 +48,7 @@ let lastFailoverAssessmentAt = 0;
 const failoverAssessmentCooldownMs = NODE_MANAGEMENT.FAILOVER_ASSESSMENT_COOLDOWN_MS;
 
 // Reconnection callbacks registered by consumers (e.g. DEXBot)
-const _reconnectCallbacks = new Set();
+const _reconnectCallbacks = new Set<() => void>();
 
 /**
  * Register a callback to be called after a successful reconnection.
@@ -69,7 +69,7 @@ function removeOnReconnect(callback) {
 
 async function notifyReconnectCallbacks() {
     if (_reconnectCallbacks.size === 0) return;
-    for (const cb of Array.from(_reconnectCallbacks)) {
+    for (const cb of [..._reconnectCallbacks]) {
         try { await Promise.resolve(cb()); } catch (err: any) {
             logger.warn(`Reconnect callback error: ${err?.message || err}`);
         }
@@ -504,7 +504,7 @@ async function refreshStartupNodeServers(reason = 'startup') {
  * @returns {Promise<boolean>} True when connected
  * @throws {Error} If connection times out
  */
-async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS, options = {}) {
+async function waitForConnected(timeoutMs = TIMING.CONNECTION_TIMEOUT_MS, options: { retryDelayMs?: number; maxRetryDelayMs?: number; refreshNodesEveryMs?: number } = {}) {
     ensureInitialized();
     const start = Date.now();
     const initialDelayMs = Number.isFinite(options.retryDelayMs)

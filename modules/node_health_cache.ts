@@ -6,7 +6,46 @@ const MODULE_DIR = path.dirname(__dirname);
 const PROJECT_ROOT = path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
 const DEFAULT_HEALTH_CACHE_FILE = path.join(PROJECT_ROOT, 'profiles', 'node_health_cache.json');
 
-function resolveHealthCacheFile(config = {}) {
+interface HealthCacheOptions {
+    healthCacheFile?: string;
+    stateDir?: string;
+    now?: number;
+    maxAgeMs?: number;
+}
+
+interface NodeHealthStat {
+    url?: string;
+    status?: string;
+    latencyMs?: number;
+    lastCheckTime?: string | number | null;
+}
+
+interface NodeHealthCacheEntry {
+    url: string;
+    status: string;
+    latencyMs: number | null;
+    lastCheckTime: string | number | null;
+}
+
+interface NodeHealthCachePayload {
+    version: number;
+    updatedAt: string;
+    updatedAtMs: number;
+    nodes: NodeHealthCacheEntry[];
+}
+
+interface NodeSettings {
+    NODES?: {
+        list?: string[];
+        enabled?: boolean;
+        healthCheck?: {
+            intervalMs?: number;
+            enabled?: boolean;
+        };
+    };
+}
+
+function resolveHealthCacheFile(config: HealthCacheOptions = {}): string {
     if (typeof config.healthCacheFile === 'string' && config.healthCacheFile.trim()) {
         return config.healthCacheFile;
     }
@@ -16,26 +55,27 @@ function resolveHealthCacheFile(config = {}) {
     return DEFAULT_HEALTH_CACHE_FILE;
 }
 
-function normalizeNodeList(nodes) {
+function normalizeNodeList(nodes: unknown): string[] {
     return Array.isArray(nodes)
-        ? nodes.filter((node) => typeof node === 'string' && node.trim())
+        ? nodes.filter((node: unknown): node is string => typeof node === 'string' && node.trim() !== '')
         : [];
 }
 
-function buildHealthCachePayload(stats, now = Date.now()) {
-    const nodes = Array.from(stats || [])
-        .filter((stat) => stat && (stat.status === 'healthy' || stat.status === 'slow'))
+function buildHealthCachePayload(stats: Iterable<NodeHealthStat> | ArrayLike<NodeHealthStat> | null | undefined, now: number = Date.now()): NodeHealthCachePayload {
+    const nodes: NodeHealthCacheEntry[] = Array.from(stats || [])
+        .filter((stat): stat is NodeHealthStat & { status: 'healthy' | 'slow'; url: string } =>
+            !!stat && (stat.status === 'healthy' || stat.status === 'slow') && typeof stat.url === 'string' && stat.url.trim() !== ''
+        )
         .map((stat) => ({
             url: stat.url,
             status: stat.status,
             latencyMs: Number.isFinite(stat.latencyMs) ? stat.latencyMs : null,
             lastCheckTime: stat.lastCheckTime || null,
-        }))
-        .filter((stat) => typeof stat.url === 'string' && stat.url.trim());
+        }));
 
     nodes.sort((a, b) => {
         if (a.status !== b.status) return a.status === 'healthy' ? -1 : 1;
-        return (a.latencyMs || Infinity) - (b.latencyMs || Infinity);
+        return (a.latencyMs ?? Infinity) - (b.latencyMs ?? Infinity);
     });
 
     return {
@@ -46,54 +86,55 @@ function buildHealthCachePayload(stats, now = Date.now()) {
     };
 }
 
-function writeHealthCache(stats, options = {}) {
+function writeHealthCache(stats: Iterable<NodeHealthStat> | ArrayLike<NodeHealthStat> | null | undefined, options: HealthCacheOptions = {}): NodeHealthCachePayload {
     const file = resolveHealthCacheFile(options);
-    const now = Number.isFinite(options.now) ? options.now : Date.now();
+    const now = Number.isFinite(options.now) ? options.now! : Date.now();
     const payload = buildHealthCachePayload(stats, now);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8');
     return payload;
 }
 
-function readHealthCache(options = {}) {
+function readHealthCache(options: HealthCacheOptions = {}): NodeHealthCachePayload | null {
     const file = resolveHealthCacheFile(options);
     const maxAgeMs = Number.isFinite(options.maxAgeMs)
-        ? options.maxAgeMs
+        ? options.maxAgeMs!
         : NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS;
-    const now = Number.isFinite(options.now) ? options.now : Date.now();
+    const now = Number.isFinite(options.now) ? options.now! : Date.now();
 
     try {
         if (!fs.existsSync(file)) return null;
         const raw = fs.readFileSync(file, 'utf8');
-        const payload = JSON.parse(raw);
+        const payload: NodeHealthCachePayload = JSON.parse(raw);
         if (!payload || payload.version !== 1 || !Array.isArray(payload.nodes)) return null;
         if (!Number.isFinite(payload.updatedAtMs)) return null;
         if (maxAgeMs >= 0 && now - payload.updatedAtMs > maxAgeMs) return null;
 
         const nodes = payload.nodes
-            .filter((node) => node && (node.status === 'healthy' || node.status === 'slow'))
-            .filter((node) => typeof node.url === 'string' && node.url.trim())
+            .filter((node): node is NodeHealthCacheEntry & { status: 'healthy' | 'slow' } =>
+                !!node && (node.status === 'healthy' || node.status === 'slow') && typeof node.url === 'string' && node.url.trim() !== ''
+            )
             .sort((a, b) => {
                 if (a.status !== b.status) return a.status === 'healthy' ? -1 : 1;
-                return (a.latencyMs || Infinity) - (b.latencyMs || Infinity);
+                return (a.latencyMs ?? Infinity) - (b.latencyMs ?? Infinity);
             });
 
         return {
             ...payload,
             nodes,
         };
-    } catch (_: any) {
+    } catch {
         return null;
     }
 }
 
-function orderNodesFromHealthCache(configuredNodes, options = {}) {
+function orderNodesFromHealthCache(configuredNodes: unknown, options: HealthCacheOptions = {}): string[] {
     const configured = normalizeNodeList(configuredNodes);
     const configuredSet = new Set(configured);
     const cache = readHealthCache(options);
     if (!cache || cache.nodes.length === 0) return configured;
 
-    const ordered = [];
+    const ordered: string[] = [];
     for (const node of cache.nodes) {
         if (!configuredSet.has(node.url) || ordered.includes(node.url)) continue;
         ordered.push(node.url);
@@ -104,7 +145,7 @@ function orderNodesFromHealthCache(configuredNodes, options = {}) {
     return ordered;
 }
 
-function resolveConfiguredNodes(settings) {
+function resolveConfiguredNodes(settings: NodeSettings): string[] {
     const nodeSettings = settings?.NODES;
     const configuredNodes = normalizeNodeList(nodeSettings?.list);
     return configuredNodes.length > 0
@@ -112,14 +153,14 @@ function resolveConfiguredNodes(settings) {
         : NODE_MANAGEMENT.DEFAULT_NODES;
 }
 
-function resolveHealthCacheMaxAgeMs(settings) {
+function resolveHealthCacheMaxAgeMs(settings: NodeSettings): number {
     const configuredInterval = settings?.NODES?.healthCheck?.intervalMs;
     return Number.isFinite(configuredInterval)
-        ? configuredInterval
+        ? configuredInterval!
         : NODE_MANAGEMENT.HEALTH_CHECK_INTERVAL_MS;
 }
 
-function orderNodesForSettings(settings, options = {}) {
+function orderNodesForSettings(settings: NodeSettings, options: HealthCacheOptions = {}): string[] {
     if (settings?.NODES?.healthCheck?.enabled === false) {
         return resolveConfiguredNodes(settings);
     }

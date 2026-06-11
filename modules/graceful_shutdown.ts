@@ -156,7 +156,7 @@ function setupGracefulShutdown() {
 
     // Handle unhandled rejections
     process.on('unhandledRejection', async (reason, promise) => {
-        shutdownLogger.error(`Unhandled rejection at: ${promise} reason: ${reason?.stack || reason}`);
+        shutdownLogger.error(`Unhandled rejection at: ${promise} reason: ${(reason as any)?.stack || reason}`);
         await executeCleanup();
         process.exit(1);
     });

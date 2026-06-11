@@ -43,7 +43,17 @@ function parseArgs(argv = process.argv.slice(2)) {
     return { ...parsed, outFile, help: false };
 }
 
-function generateLpChartCli(options = {}) {
+interface GenerateLpChartCliOptions {
+    dataFile?: string;
+    noOpen?: boolean;
+    outFile?: string;
+    logger?: Console;
+    profilesFile?: string;
+    comparisonProfilesFile?: string | null;
+    defaultStrategies?: { name: string; erPeriod: number; fastPeriod: number; slowPeriod: number; color?: string; dash?: string; lineWidth?: number }[];
+}
+
+function generateLpChartCli(options: GenerateLpChartCliOptions = {}) {
     const logger = options.logger ?? console;
     if (!options.outFile) {
         return generateLpChartBundle({

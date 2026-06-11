@@ -186,7 +186,7 @@ function validateGridForPersistence(orders, accountTotals) {
  * @param {Object} precisions - Precision config
  * @returns {Object} Required funds { buyInt, sellInt, buy, sell }
  */
-function calculateRequiredFunds(grid, precisions = {}) {
+function calculateRequiredFunds(grid: any, precisions: Record<string, any> = {}) {
     const buyPrecision = toFiniteNumber(precisions.buyPrecision, 8);
     const sellPrecision = toFiniteNumber(precisions.sellPrecision, 8);
 
@@ -224,7 +224,7 @@ function calculateRequiredFunds(grid, precisions = {}) {
  * @param {Object} assets - Asset metadata
  * @returns {Object} Validation result
  */
-function validateWorkingGridFunds(workingGrid, projectedFunds, precisions = {}, assets = null) {
+function validateWorkingGridFunds(workingGrid: any, projectedFunds: any, precisions: Record<string, any> = {}, assets: any = null) {
     const buyPrecision = toFiniteNumber(precisions.buyPrecision, assets?.assetB?.precision || 8);
     const sellPrecision = toFiniteNumber(precisions.sellPrecision, assets?.assetA?.precision || 8);
     
@@ -285,7 +285,7 @@ function validateWorkingGridFunds(workingGrid, projectedFunds, precisions = {}, 
  * @param {Object} assets - Asset metadata
  * @returns {Object} Drift check result
  */
-function checkFundDrift(orders, accountTotals, assets = null) {
+function checkFundDrift(orders: Map<string, any>, accountTotals: any, assets: any = null) {
     let gridBuy = 0, gridSell = 0;
     for (const order of Array.from(orders.values())) {
         const size = toFiniteNumber(order.size);
@@ -349,7 +349,7 @@ function checkFundDrift(orders, accountTotals, assets = null) {
  * @param {Object} options - Options
  * @returns {Object} Reconciliation result with actions
  */
-function reconcileGrid(masterGrid, targetGrid, targetBoundary, options = {}) {
+function reconcileGrid(masterGrid: any, targetGrid: any, targetBoundary: any, options: Record<string, any> = {}) {
     const { logger = null, dustThresholdPercent = 5 } = options;
     const actions = [];
     
@@ -791,7 +791,7 @@ function _isProjectionUnchanged(current, targetOrder, resultSize, resultState, r
  * @param {Array} [options.actions] - Pre-existing COW actions to consider
  * @returns {void}
  */
-function projectTargetToWorkingGrid(workingGrid, targetGrid, options = {}) {
+function projectTargetToWorkingGrid(workingGrid: any, targetGrid: any, options: Record<string, any> = {}) {
     const updateSelectors = _buildUpdateSelectors(options.actions);
     const targetIds = new Set();
 
@@ -941,7 +941,7 @@ function buildSuccessResult({
  * @param {Object} options - Evaluation options
  * @returns {Object} Evaluation result
  */
-function evaluateCommit(workingGrid, options = {}) {
+function evaluateCommit(workingGrid: any, options: any = {}) {
     const hasLock = typeof options === 'boolean' ? options : !!options?.hasLock;
     const currentVersion = toFiniteNumber(options?.currentVersion, null);
     const masterGrid = typeof options === 'object' ? options.masterGrid : null;

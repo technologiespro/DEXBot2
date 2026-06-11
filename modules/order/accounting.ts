@@ -96,6 +96,11 @@ class Accountant {
      * @param {Object} manager.funds - Fund tracking structure
      * @param {Logger} manager.logger - Logger instance
      */
+    manager: any;
+    _isVerifyingInvariants: boolean;
+    _pendingInvariantSnapshot: { chainFreeBuy: number; chainFreeSell: number; chainBuy: number; chainSell: number } | null;
+    _logThrottleState: Map<string, { lastAt: number; suppressed: number; lastMessage: string | null }>;
+
     constructor(manager) {
         this.manager = manager;
         this._isVerifyingInvariants = false;  // Prevents overlapping invariant checks
@@ -274,7 +279,7 @@ class Accountant {
         const btsOrderType = this._getBtsOrderType();
         if (!btsOrderType || !orderId) return null;
 
-        const order = Array.from(this.manager.orders?.values?.() || []).find(o => o?.orderId === orderId);
+        const order = (Array.from(this.manager.orders?.values?.() || []) as any[]).find((o: any) => o?.orderId === orderId);
         const deferredFee = this._normalizeBtsFeeState(order).deferredFee;
         if (deferredFee <= 0) return null;
 
@@ -353,7 +358,7 @@ class Accountant {
          }
 
          // No lock needed for read-only access to frozen orders (COW pattern)
-         const orderSnapshot = Array.from(mgr.orders.values());
+         const orderSnapshot = Array.from(mgr.orders.values()) as any[];
 
          let gridBuy = 0, gridSell = 0;
          let chainBuy = 0, chainSell = 0;
@@ -984,7 +989,7 @@ class Accountant {
                         const err = new Error(
                             `CRITICAL ACCOUNTING STATE: failed to lock ${Format.formatAmount8(commitmentDelta)} ${commitmentSide} during ${context}`
                         );
-                        err.code = 'ACCOUNTING_COMMITMENT_FAILED';
+                        (err as any).code = 'ACCOUNTING_COMMITMENT_FAILED';
                         throw err;
                     }
 

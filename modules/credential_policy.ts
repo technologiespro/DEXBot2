@@ -25,6 +25,20 @@ const ASSET_OBJECT_ID_PATTERN = /^1\.3\.\d+$/;
 const POLICY_DENIED_PREFIX = 'POLICY_DENIED: ';
 const EXECUTABLE_TIMEOUT_MS = 5000;
 
+interface PolicyContext {
+    accountName: string;
+    requestType: string;
+    sessionId: string | null;
+    timestamp: string;
+    operations: any[];
+}
+
+interface PolicyConfig {
+    sessionTtlMs?: number;
+    default?: Record<string, any>;
+    accounts?: Record<string, Record<string, any>>;
+}
+
 // BitShares operation types that DEXBot2 uses
 const ALLOWED_OP_TYPES = [
     'transfer',
@@ -61,7 +75,7 @@ const BUILTIN_DEFAULT_POLICY = Object.freeze({
 const policyCache = new Map();
 const assetRefResolutionCache = new Map();
 
-async function resolveAssetRefToId(assetRef) {
+async function resolveAssetRefToId(assetRef: string): Promise<string | null> {
     if (!assetRef || typeof assetRef !== 'string') return null;
     const cacheKey = String(assetRef);
     if (assetRefResolutionCache.has(cacheKey)) {
@@ -89,7 +103,7 @@ async function resolveAssetRefToId(assetRef) {
     return resolvedId;
 }
 
-async function resolveConfiguredAssetRefs(refs, label) {
+async function resolveConfiguredAssetRefs(refs: string[], label: string): Promise<{ ok: boolean; values?: string[]; reason?: string }> {
     const resolved = [];
     for (const ref of refs) {
         if (!ref) continue;
@@ -110,20 +124,20 @@ async function resolveConfiguredAssetRefs(refs, label) {
     return { ok: true, values: resolved };
 }
 
-function normalizeGrapheneCollateralRatio(value) {
+function normalizeGrapheneCollateralRatio(value: number): number | null {
     const numeric = Number(value);
     if (!Number.isFinite(numeric) || numeric <= 0) return null;
     const denom = FEE_PARAMETERS.GRAPHENE_COLLATERAL_RATIO_DENOM;
     return numeric >= denom ? numeric / denom : numeric;
 }
 
-function createMinimalPolicyConfig() {
+function createMinimalPolicyConfig(): { accounts: Record<string, never> } {
     return {
         accounts: {},
     };
 }
 
-function readPolicyConfigDetailed(filePath) {
+function readPolicyConfigDetailed(filePath: string): { status: string; config: any; error: string | null } {
     if (!fs.existsSync(filePath)) {
         return {
             status: 'missing',
@@ -168,7 +182,7 @@ function readPolicyConfigDetailed(filePath) {
  * @returns {object} Valid parsed config
  * @throws {Error} When the existing file is invalid or creation fails
  */
-function ensurePolicyConfig(filePath) {
+function ensurePolicyConfig(filePath: string): PolicyConfig {
     if (!fs.existsSync(filePath)) {
         try {
             fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -179,7 +193,7 @@ function ensurePolicyConfig(filePath) {
             });
         } catch (err: any) {
             if (err.code !== 'EEXIST') {
-                const wrapped = new Error(`Failed to create required policy config: ${err.message}`);
+                const wrapped = new Error(`Failed to create required policy config: ${err.message}`) as Error & { code: string };
                 wrapped.code = 'POLICY_CONFIG_CREATE_FAILED';
                 throw wrapped;
             }
@@ -197,7 +211,7 @@ function ensurePolicyConfig(filePath) {
  * @param {object} [options={}] - Options
  * @param {boolean} [options.forceReload=false] - If true, bypass cache and reload from disk
  */
-function loadPolicyConfig(filePath, options = {}) {
+function loadPolicyConfig(filePath: string, options: { forceReload?: boolean } = {}): PolicyConfig | null {
     const forceReload = options.forceReload || false;
     if (!forceReload && policyCache.has(filePath)) {
         return policyCache.get(filePath);
@@ -222,11 +236,11 @@ function loadPolicyConfig(filePath, options = {}) {
  * @returns {object} Valid parsed config
  * @throws {Error} When the file is missing or invalid
  */
-function loadRequiredPolicyConfig(filePath) {
+function loadRequiredPolicyConfig(filePath: string): PolicyConfig {
     const detailed = readPolicyConfigDetailed(filePath);
     if (detailed.status !== 'ok') {
         policyCache.set(filePath, null);
-        const err = new Error(`Required policy config ${detailed.status}: ${detailed.error}`);
+        const err = new Error(`Required policy config ${detailed.status}: ${detailed.error}`) as Error & { code: string };
         err.code = detailed.status === 'missing'
             ? 'POLICY_CONFIG_MISSING'
             : 'POLICY_CONFIG_INVALID';
@@ -240,15 +254,15 @@ function loadRequiredPolicyConfig(filePath) {
 /**
  * Helper: check if value is an array of strings
  */
-function isStringArray(v) {
-    return Array.isArray(v) && v.every((x) => typeof x === 'string');
+function isStringArray(v: any): v is string[] {
+    return Array.isArray(v) && v.every((x: any) => typeof x === 'string');
 }
 
 /**
  * Validate per-operation constraints. Returns { errors: string[] }.
  * Constraint fields are validated based on operation type.
  */
-function validateOpConstraints(opName, constraints) {
+function validateOpConstraints(opName: string, constraints: any): { errors: string[] } {
     const errors = [];
 
     // transfer
@@ -363,7 +377,7 @@ function validateOpConstraints(opName, constraints) {
 /**
  * Validate raw policy config. Returns { valid: boolean, errors: string[] }.
  */
-function validatePolicyConfig(raw) {
+function validatePolicyConfig(raw: any): { valid: boolean; errors: string[] } {
     const errors = [];
 
     if (typeof raw !== 'object' || raw === null) {
@@ -414,7 +428,7 @@ function validatePolicyConfig(raw) {
 /**
  * Validate a single policy object (used by both default and per-account policies).
  */
-function validatePolicyObject(policy) {
+function validatePolicyObject(policy: any): { valid: boolean; errors: string[] } {
     const errors = [];
 
     // allowedOpTypes: must be array of strings
@@ -492,7 +506,7 @@ function validatePolicyObject(policy) {
  *   - allowedCollateralAssets (string[]) — if multiple collaterals are used
  *   - allowedDebtAssets (string[]) — debt assets used in credit lending items
  */
-function deriveDebtPolicyConstraints(accountName) {
+function deriveDebtPolicyConstraints(accountName: string): Record<string, any> {
     if (!accountName) return {};
     try {
         if (!fs.existsSync(BOTS_JSON_PATH)) return {};
@@ -525,7 +539,7 @@ function deriveDebtPolicyConstraints(accountName) {
             }
         }
 
-        const constraints = {};
+        const constraints: Record<string, any> = {};
 
         if (mpaCollaterals.size > 0) {
             constraints.call_order_update = {};
@@ -564,7 +578,7 @@ function deriveDebtPolicyConstraints(accountName) {
  * Resolve the effective policy for an account by merging layers:
  * builtin default → auto-derived debt constraints → config.default → config.accounts[accountName]
  */
-function resolveAccountPolicy(config, accountName) {
+function resolveAccountPolicy(config: any, accountName: string): any {
     // Start with builtin
     let policy = JSON.parse(JSON.stringify(BUILTIN_DEFAULT_POLICY));
 
@@ -573,7 +587,7 @@ function resolveAccountPolicy(config, accountName) {
     if (Object.keys(debtConstraints).length > 0) {
         policy.allowedOps = { ...policy.allowedOps };
         for (const [opName, constraints] of Object.entries(debtConstraints)) {
-            policy.allowedOps[opName] = { ...policy.allowedOps[opName], ...constraints };
+            policy.allowedOps[opName] = { ...(policy.allowedOps[opName] || {}), ...constraints };
         }
     }
 
@@ -593,7 +607,7 @@ function resolveAccountPolicy(config, accountName) {
 /**
  * Build the PolicyContext passed to evaluatePolicy and to executable hooks.
  */
-function buildPolicyContext(request) {
+function buildPolicyContext(request: any): PolicyContext {
     return {
         accountName: request.accountName,
         requestType: request.type,
@@ -607,7 +621,7 @@ function buildPolicyContext(request) {
  * Evaluate per-operation parameter constraints.
  * Returns { allow: boolean, reason: string|null, policyId: string }
  */
-async function evaluateOpConstraints(opName, opData, constraints) {
+async function evaluateOpConstraints(opName: string, opData: any, constraints: any): Promise<{ allow: boolean; reason: string | null; policyId: string | null }> {
     if (!constraints) return { allow: true, reason: null, policyId: null };
     const d = opData || {};
 
@@ -1049,7 +1063,7 @@ async function evaluateOpConstraints(opName, opData, constraints) {
  * Evaluate a policy against a context. AND semantics: short-circuit on first denial.
  * Returns Promise<{ allow: boolean, reason: string|null, policyId: string|null }>
  */
-async function evaluatePolicy(policy, context) {
+async function evaluatePolicy(policy: any, context: PolicyContext): Promise<{ allow: boolean; reason: string | null; policyId: string | null }> {
     try {
         // Step 1: allowedOps check (if present) or allowedOpTypes fallback
         if (policy.allowedOps && typeof policy.allowedOps === 'object') {
@@ -1213,7 +1227,7 @@ async function evaluatePolicy(policy, context) {
  * Must output { "allow": true/false, "reason": "..." } to stdout within 5 seconds.
  * Returns Promise<{ allow: boolean, reason: string|null }>
  */
-function evaluateExecutable(exePath, context) {
+function evaluateExecutable(exePath: string, context: PolicyContext): Promise<{ allow: boolean; reason: string | null }> {
     return new Promise((resolve) => {
         // Check file exists and is executable
         try {
@@ -1289,7 +1303,7 @@ function evaluateExecutable(exePath, context) {
  * @param {Object} [options] - Optional configuration
  * @returns {string|null} The botHmacSecret, or null if not configured
  */
-function loadBotHmacSecret(accountName, policyConfigPath, options = {}) {
+function loadBotHmacSecret(accountName: string, policyConfigPath: string, options: { quiet?: boolean; silent?: boolean } = {}): string | null {
     const quiet = options.quiet === true || options.silent === true;
     const info = (...args) => {
         if (!quiet) console.log(...args);
@@ -1335,7 +1349,7 @@ function loadBotHmacSecret(accountName, policyConfigPath, options = {}) {
  * @returns {{ valid: boolean, reason: string|null, skipped: boolean }}
  *   skipped is always false — missing secrets are rejected in strict mode.
  */
-function verifySourceHmac(request, policyConfig) {
+function verifySourceHmac(request: any, policyConfig: any): { valid: boolean; reason: string | null; skipped: boolean } {
     const accountPolicy =
         policyConfig && policyConfig.accounts && policyConfig.accounts[request.accountName];
     const secretHex = accountPolicy && accountPolicy.botHmacSecret;

@@ -33,7 +33,13 @@ const ATR_PERIOD      = 14;
 
 function parseArgs() {
     const args = process.argv.slice(2);
-    const config = {
+    const config: {
+        source: { type: string; config: { botKey: string; filePath?: string; stateDir?: string } };
+        rNoise: number;
+        qNoise: number;
+        chartFile: string;
+        quiet: boolean;
+    } = {
         source: { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         rNoise: 0.05,
         qNoise: 0.005,

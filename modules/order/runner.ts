@@ -77,7 +77,7 @@ const { isNumeric } = require('./format');
  */
 async function runOrderManagerCalculation() {
     const cfgFile = path.join(RUNNER_ROOT, 'profiles', 'bots.json');
-    let botConfig = {};
+    let botConfig: any = {};
 
     try {
         const { config } = readBotsFileSync(cfgFile, parseJsonWithComments);

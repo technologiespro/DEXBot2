@@ -531,7 +531,7 @@ class CreditRuntime {
         const allActiveDealIds = [];
         const allActiveOfferIds = [];
         const allCreditDeals = [];
-        for (const pos of Object.values(this.state.positions || {})) {
+        for (const pos of (Object.values(this.state.positions || {}) as any[])) {
             if (Array.isArray(pos.activeDealIds)) {
                 allActiveDealIds.push(...pos.activeDealIds);
             }
@@ -558,7 +558,7 @@ class CreditRuntime {
             }
         }
 
-        for (const [key, pos] of Object.entries(this.state.positions || {})) {
+        for (const [key, pos] of (Object.entries(this.state.positions || {}) as Array<[string, any]>)) {
             if (validCreditPositionKeys.has(key)) continue;
             if (!pos || typeof pos !== 'object') continue;
             delete pos.creditDeals;
@@ -630,7 +630,7 @@ class CreditRuntime {
         return null;
     }
 
-    async _resolveMpaFeedPrice(debtAssetId, collateralAssetId, options = {}) {
+    async _resolveMpaFeedPrice(debtAssetId, collateralAssetId, options: { includeSource?: boolean } = {}) {
         if (!debtAssetId || !collateralAssetId) return null;
 
         const posKey = this._positionKey(debtAssetId, collateralAssetId);
@@ -663,7 +663,7 @@ class CreditRuntime {
         return cached;
     }
 
-    async _resolveCreditConversionRate(lendingItem, debtAssetId, collateralAssetId, options = {}) {
+    async _resolveCreditConversionRate(lendingItem, debtAssetId, collateralAssetId, options: { includeSource?: boolean } = {}) {
         if (!debtAssetId || !collateralAssetId) return null;
 
         const posKey = this._positionKey(debtAssetId, collateralAssetId);
@@ -876,7 +876,7 @@ class CreditRuntime {
         return Math.floor((Number(collateralAmountInt) * baseAmount) / quoteAmount);
     }
 
-    _enforceMaxBorrowAmount(policy, borrowInt, debtAsset, options = {}) {
+    _enforceMaxBorrowAmount(policy, borrowInt, debtAsset, options: Record<string, any> = {}) {
         const maxBorrowAmountValue = positiveOrNull(policy?.maxBorrowAmount);
         if (maxBorrowAmountValue === null) return;
         const borrowFloat = blockchainToFloat(borrowInt, debtAsset.precision);
@@ -944,7 +944,7 @@ class CreditRuntime {
         return onChainTotal + committed;
     }
 
-    async _enforceMaxCollateralAmount(policy, collateralInt, collateralAsset, accountId, options = {}) {
+    async _enforceMaxCollateralAmount(policy, collateralInt, collateralAsset, accountId, options: Record<string, any> = {}) {
         const maxCollateralAmountValue = policy?.maxCollateralAmount;
         if (maxCollateralAmountValue == null) return;
         let limitFloat = positiveOrNull(maxCollateralAmountValue);
@@ -1085,7 +1085,7 @@ class CreditRuntime {
     }
 
     async _buildDebtSnapshot() {
-        const snapshot = {
+        const snapshot: Record<string, any> = {
             assets: {},
             mpaCallOrders: Array.isArray(this.state.mpaCallOrders) ? this.state.mpaCallOrders : [],
             creditDeals: Array.isArray(this.state.creditDeals) ? this.state.creditDeals : [],
@@ -1129,7 +1129,7 @@ class CreditRuntime {
             bump(offer?.assetType, 'offeredBalance', blockchainAmountToFloat(offer?.currentBalance, asset) || 0);
         }
 
-        for (const entry of Object.values(snapshot.assets)) {
+        for (const entry of (Object.values(snapshot.assets) as any[])) {
             entry.totalDebt = (entry.mpaDebt || 0) + (entry.creditDebt || 0);
             entry.totalCollateral = (entry.mpaCollateral || 0) + (entry.creditCollateral || 0);
         }
@@ -1241,7 +1241,7 @@ class CreditRuntime {
         return posState;
     }
 
-    async refreshCreditState(options = {}, lendingItem) {
+    async refreshCreditState(options: Record<string, any> = {}, lendingItem) {
         await this.loadState();
         if (!lendingItem || typeof lendingItem !== 'object') {
             throw new Error('refreshCreditState requires a lendingItem');
@@ -1407,7 +1407,7 @@ class CreditRuntime {
         return plan;
     }
 
-    async buildMpaUpdateOperation(plan, options = {}, lendingItem, assetId) {
+    async buildMpaUpdateOperation(plan, options: Record<string, any> = {}, lendingItem, assetId) {
         if (!lendingItem || typeof lendingItem !== 'object') {
             throw new Error('buildMpaUpdateOperation requires a lendingItem');
         }
@@ -1452,7 +1452,7 @@ class CreditRuntime {
             return null;
         }
 
-        const extensions = {};
+        const extensions: Record<string, any> = {};
         const targetCollateralRatio = toGrapheneCollateralRatio(plan.targetCollateralRatio);
         if (targetCollateralRatio !== null) {
             extensions.target_collateral_ratio = targetCollateralRatio;
@@ -1470,7 +1470,7 @@ class CreditRuntime {
         };
     }
 
-    async buildCreditOfferAcceptOperation({ offer, borrowAmount, collateralAmount, autoRepay = false, specificPolicy = null, pendingRepayAmount = null, pendingReleaseCollateralAmount = null }) {
+    async buildCreditOfferAcceptOperation({ offer, borrowAmount, collateralAmount, autoRepay = false, specificPolicy = null, pendingRepayAmount = null, pendingReleaseCollateralAmount = null }: { offer?: any; borrowAmount?: any; collateralAmount?: any; autoRepay?: boolean; specificPolicy?: any; pendingRepayAmount?: any; pendingReleaseCollateralAmount?: any; } = {}) {
         let policy = specificPolicy;
         if (!policy) {
             const dp = this.debtPolicy;
@@ -1642,7 +1642,7 @@ class CreditRuntime {
             throw new Error(`collateral ratio ${collateralRatio} exceeds maxCollateralRatio ${maxCollateralRatioValue}`);
         }
 
-        const extensions = {};
+        const extensions: Record<string, any> = {};
         const autoRepayValue = resolveAutoRepayValue(autoRepay);
         if (autoRepayValue > 0) {
             extensions.auto_repay = autoRepayValue;
@@ -1727,7 +1727,7 @@ class CreditRuntime {
                 deal_id: dealSummary.id,
                 repay_amount: toAmountObject(repayInt, debtAsset.id),
                 credit_fee: toAmountObject(creditFee, debtAsset.id),
-                extensions: [],
+                extensions: [] as any,
             }
         };
     }
@@ -1750,7 +1750,7 @@ class CreditRuntime {
                 account: accountId,
                 deal_id: dealSummary.id,
                 auto_repay: resolveAutoRepayValue(autoRepay),
-                extensions: [],
+                extensions: [] as any,
             }
         };
     }
@@ -1775,7 +1775,7 @@ class CreditRuntime {
         return chainOrders.executeBatch(accountName, this.bot.privateKey, operations);
     }
 
-    async _checkGridMaintenanceAfterCreditUpdate(context = 'credit capital update', options = {}) {
+    async _checkGridMaintenanceAfterCreditUpdate(context = 'credit capital update', options: Record<string, any> = {}) {
         const manager = this.bot?.manager;
         const runGridMaintenance = this.bot?._runGridMaintenance;
         if (!manager || typeof runGridMaintenance !== 'function') {
@@ -1820,14 +1820,14 @@ class CreditRuntime {
         return result;
     }
 
-    async repayCreditDeal(deal, repayAmount, options = {}) {
+    async repayCreditDeal(deal, repayAmount, options: Record<string, any> = {}) {
         const dealSummary = typeof deal === 'object' ? parseDealSummary(deal) : await this._getDealById(deal);
         if (!dealSummary) {
             throw new Error('credit deal not found');
         }
 
         const repayOp = await this.buildCreditDealRepayOperation(dealSummary, repayAmount);
-        const operations = [repayOp];
+        const operations: any[] = [repayOp];
         const reborrowPolicy = options.specificPolicy || await this._findLendingItemForAsset(dealSummary.debtAssetId, 'creditOffer') || {};
         const shouldAutoReborrow = options.autoReborrow !== false && !!reborrowPolicy.autoReborrow;
         let deferredReborrowRequest = null;
@@ -2052,7 +2052,7 @@ class CreditRuntime {
         };
     }
 
-    async _selectFallbackCreditOffer({ debtAssetId, collateralAssetId, policy, borrowAmount, collateralAmount, autoRepay, pendingRepayAmount, pendingReleaseCollateralAmount, excludeOfferId = null }) {
+    async _selectFallbackCreditOffer({ debtAssetId, collateralAssetId, policy, borrowAmount, collateralAmount, autoRepay, pendingRepayAmount = null, pendingReleaseCollateralAmount, excludeOfferId = null }: { debtAssetId?: any; collateralAssetId?: any; policy?: any; borrowAmount?: any; collateralAmount?: any; autoRepay?: any; pendingRepayAmount?: any; pendingReleaseCollateralAmount?: any; excludeOfferId?: any; } = {}) {
         const offers = await this._fetchCreditOffersByAsset(debtAssetId);
         const candidates = [];
         for (const offer of offers) {
@@ -2097,7 +2097,7 @@ class CreditRuntime {
         return candidates[0] || null;
     }
 
-    async _selectCreditOfferForIncrease({ debtAssetId, collateralAssetId, policy, collateralAmount, minCollateralIncrease = 0, remainingBorrowCapacity = null, autoRepay }) {
+    async _selectCreditOfferForIncrease({ debtAssetId, collateralAssetId, policy, collateralAmount, minCollateralIncrease = 0, remainingBorrowCapacity = null, autoRepay }: { debtAssetId?: any; collateralAssetId?: any; policy?: any; collateralAmount?: any; minCollateralIncrease?: number; remainingBorrowCapacity?: any; autoRepay?: any; } = {}) {
         const allowedOfferIds = this._normalizePolicyList(policy?.allowedOfferIds);
         const offers = [];
         const seen = new Set();
@@ -2136,7 +2136,7 @@ class CreditRuntime {
             const validation = this._validateCreditPolicy(policy, offer);
             if (!validation.allow) continue;
             try {
-                let acceptArgs = {
+                let acceptArgs: any = {
                     offer,
                     collateralAmount,
                     autoRepay,
@@ -2370,7 +2370,7 @@ class CreditRuntime {
         return { processed, remaining: nextQueue.length, gridMaintenanceResult };
     }
 
-    async _runMpaMaintenance(context, options, lendingItem, assetId) {
+    async _runMpaMaintenance(context: any, options: Record<string, any>, lendingItem, assetId) {
         if (!lendingItem || typeof lendingItem !== 'object') {
             throw new Error('_runMpaMaintenance requires a lendingItem');
         }
@@ -2471,7 +2471,7 @@ class CreditRuntime {
         return null;
     }
 
-    async _runCreditMaintenance(lendingItem, assetId, runtimeContext = {}) {
+    async _runCreditMaintenance(lendingItem, assetId, runtimeContext: Record<string, any> = {}) {
         if (!lendingItem || typeof lendingItem !== 'object') {
             throw new Error('_runCreditMaintenance requires a lendingItem');
         }
@@ -2495,7 +2495,7 @@ class CreditRuntime {
         for (const deal of (posState.creditDeals || [])) {
             if (!activeDealIds.has(String(deal?.id))) continue;
             if (!deal.latestRepayTime) continue;
-            const timeLeft = new Date(deal.latestRepayTime) - Date.now();
+            const timeLeft = new Date(deal.latestRepayTime as string | number).getTime() - Date.now();
             if (timeLeft < expiryThresholdMs) {
                 try {
                     this.warn(`credit runtime: deal ${deal.id} expires in ${Math.round(timeLeft / 60000)}m; proactively repaying and reborrowing`);
@@ -2594,7 +2594,7 @@ class CreditRuntime {
         return null;
     }
 
-    async runMaintenance(context = 'periodic', options = {}) {
+    async runMaintenance(context = 'periodic', options: Record<string, any> = {}) {
         if (!this.isEnabled()) {
             return { skipped: true, reason: 'debt policy disabled' };
         }

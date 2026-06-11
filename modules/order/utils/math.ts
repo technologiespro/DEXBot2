@@ -603,7 +603,7 @@ function getPrecisionSlack(precision, factor = 2) {
  * @param {Object} [options={}] - Lookup options { type, side, proceeds }
  * @returns {number} Asset precision
  */
-function getPrecision(assets, { type, side, proceeds = false } = {}) {
+function getPrecision(assets: any, { type, side, proceeds = false }: { type?: string; side?: string; proceeds?: boolean } = {}) {
     if (!assets) throw new Error("Assets object required for precision lookup");
     
     // Determine target side: side param priority, then type param
@@ -1078,7 +1078,7 @@ function calculateSwapInAmount(targetReceive, poolReserveOut, poolReserveIn) {
  * @param {Object} GRID_LIMITS - Grid limits constants (optional, uses defaults)
  * @returns {number} Number of gap slots
  */
-function calculateGapSlots(incrementPercent, targetSpreadPercent, GRID_LIMITS = {}) {
+function calculateGapSlots(incrementPercent: any, targetSpreadPercent: any, GRID_LIMITS: { MIN_SPREAD_FACTOR?: number; MIN_SPREAD_ORDERS?: number } = {}) {
     const DEFAULT_INCREMENT = Number(DEFAULT_CONFIG.incrementPercent) || 0.5;
     const MIN_SPREAD_FACTOR = GRID_LIMITS.MIN_SPREAD_FACTOR || 2.1;
     const MIN_SPREAD_ORDERS = GRID_LIMITS.MIN_SPREAD_ORDERS || 2;

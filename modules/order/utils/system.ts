@@ -68,7 +68,7 @@ const poolIdCache = new Map();
  * @returns {Promise<Object>} Asset metadata with id, symbol, precision
  * @throws {Error} If asset cannot be found on blockchain
  */
-const lookupAsset = async (BitShares, s) => {
+const lookupAsset = async (BitShares: any, s: string): Promise<any> => {
     if (!BitShares) return null;
     let cached = null;
     if (BitShares?.assets) {
@@ -109,7 +109,7 @@ const lookupAsset = async (BitShares, s) => {
  * @param {string} symB - Second asset symbol
  * @returns {Promise<number|null>} Derived market price or null if unavailable
  */
-const deriveMarketPrice = async (BitShares, symA, symB) => {
+const deriveMarketPrice = async (BitShares: any, symA: string, symB: string): Promise<number | null> => {
     try {
         const [aMeta, bMeta] = await Promise.all([
             lookupAsset(BitShares, symA),
@@ -159,7 +159,7 @@ const deriveMarketPrice = async (BitShares, symA, symB) => {
  * @param {string} symB - Second asset symbol
  * @returns {Promise<number|null>} Derived pool price or null if unavailable
  */
-const derivePoolPrice = async (BitShares, symA, symB) => {
+const derivePoolPrice = async (BitShares: any, symA: string, symB: string): Promise<number | null> => {
     try {
         const [aMeta, bMeta] = await Promise.all([
             lookupAsset(BitShares, symA),
@@ -295,7 +295,7 @@ const derivePoolPrice = async (BitShares, symA, symB) => {
  * @param {string} [mode='auto'] - Derivation mode: "pool", "book", or "auto" (pool → book).
  * @returns {Promise<number|null>} Derived price or null if all methods fail
  */
-const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
+const derivePrice = async (BitShares: any, symA: string, symB: string, mode: string = 'auto'): Promise<number | null> => {
     mode = String(mode).toLowerCase();
     const validModes = new Set(['pool', 'book', 'auto']);
 
@@ -330,7 +330,7 @@ const derivePrice = async (BitShares, symA, symB, mode = 'auto') => {
  * @param {string} shareAssetRef - Share asset symbol or reference
  * @returns {Promise<Object|null>} Object with {shareAsset, pool} or null if not found
  */
-async function resolveLiquidityPoolByShareAsset(BitShares, shareAssetRef) {
+async function resolveLiquidityPoolByShareAsset(BitShares: any, shareAssetRef: string): Promise<any> {
     if (!BitShares?.db || typeof BitShares.db.get_liquidity_pools_by_share_asset !== 'function') {
         return null;
     }
@@ -356,7 +356,7 @@ async function resolveLiquidityPoolByShareAsset(BitShares, shareAssetRef) {
     };
 }
 
-async function getAssetCurrentSupply(BitShares, assetRef) {
+async function getAssetCurrentSupply(BitShares: any, assetRef: any): Promise<any> {
     const asset = typeof assetRef === 'object' && assetRef !== null
         ? assetRef
         : await lookupAsset(BitShares, assetRef).catch(() => null);
@@ -396,7 +396,7 @@ async function getAssetCurrentSupply(BitShares, assetRef) {
  * @param {string} [mode='auto'] - Price derivation mode ("pool", "book", or "auto")
  * @returns {Promise<number|null>} Value per share in denomination asset, or null
  */
-async function deriveLiquidityPoolTokenValue(BitShares, shareAssetRef, denominationAssetRef, mode = 'auto') {
+async function deriveLiquidityPoolTokenValue(BitShares: any, shareAssetRef: string, denominationAssetRef: string, mode: string = 'auto'): Promise<number | null> {
     try {
         const [shareAsset, denominationAsset] = await Promise.all([
             lookupAsset(BitShares, shareAssetRef),
@@ -467,7 +467,7 @@ async function deriveLiquidityPoolTokenValue(BitShares, shareAssetRef, denominat
  * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
  * @returns {Object|null} Snapshot with center and optional dynamicWeights fields, or null if invalid
  */
-function loadAmaCenterSnapshot(botKey) {
+function loadAmaCenterSnapshot(botKey: string): any {
     try {
         const gridPriceFile = path.join(ROOT, 'profiles', 'orders', `${botKey}.dynamicgrid.json`);
         const raw = fs.readFileSync(gridPriceFile, 'utf8');
@@ -508,7 +508,7 @@ function loadAmaCenterSnapshot(botKey) {
  * @param {string} botKey - Bot key (e.g. "iob-xrp-bts-0")
  * @returns {number|null} Grid center price in B/A format, or null if file absent/invalid
  */
-function loadAmaCenterPrice(botKey) {
+function loadAmaCenterPrice(botKey: string): number | null {
     const snapshot = loadAmaCenterSnapshot(botKey);
     return snapshot ? snapshot.gridCenterPrice : null;
 }
@@ -526,14 +526,14 @@ function loadAmaCenterPrice(botKey) {
  * @param {Object} BitShares - BitShares client instance
  * @returns {Promise<Object>} Fee cache object keyed by asset symbol
  */
-async function initializeFeeCache(botsConfig, BitShares) {
+async function initializeFeeCache(botsConfig: any[], BitShares: any): Promise<Record<string, any>> {
     const uniqueAssets = new Set(['BTS']);
     for (const bot of botsConfig) {
         if (bot.assetA) uniqueAssets.add(bot.assetA);
         if (bot.assetB) uniqueAssets.add(bot.assetB);
     }
 
-    const cache = {};
+    const cache: Record<string, any> = {};
     for (const assetSymbol of uniqueAssets) {
         try {
             if (assetSymbol === 'BTS') {
@@ -595,7 +595,7 @@ async function initializeFeeCache(botsConfig, BitShares) {
  * @param {string} botKey - Bot identifier for storage
  * @returns {Promise<boolean>} True if persistence succeeded, false on error
  */
-async function persistGridSnapshot(manager, accountOrders, botKey) {
+async function persistGridSnapshot(manager: any, accountOrders: any, botKey: string): Promise<boolean> {
     if (!manager || !accountOrders || !botKey) return false;
     try {
         const orders = Array.from(manager.orders.values());
@@ -647,7 +647,7 @@ async function persistGridSnapshot(manager, accountOrders, botKey) {
  * @param {Object} manager - OrderManager instance
  * @returns {Promise<boolean>} True if persisted successfully or no warning, false on error
  */
-async function retryPersistenceIfNeeded(manager) {
+async function retryPersistenceIfNeeded(manager: any): Promise<boolean> {
     if (!manager || !manager._persistenceWarning) return true;
     try {
         const result = typeof manager.persistGrid === 'function' ? await manager.persistGrid() : true;
@@ -671,7 +671,7 @@ async function retryPersistenceIfNeeded(manager) {
  * @param {Function} updateOrdersOnChainBatchFn - Batch update function for blockchain operations
  * @returns {Promise<void>}
  */
-async function applyGridDivergenceCorrections(manager, accountOrders, botKey, updateOrdersOnChainBatchFn) {
+async function applyGridDivergenceCorrections(manager: any, accountOrders: any, botKey: string, updateOrdersOnChainBatchFn: Function): Promise<void> {
     if (!manager._gridLock) return;
     const Grid = require('../grid');
     const { WorkingGrid } = require('../working_grid');
@@ -732,11 +732,11 @@ async function applyGridDivergenceCorrections(manager, accountOrders, botKey, up
             const sidePrecision = MathUtils.getPrecisionByOrderType(manager.assets, orderType);
             
             // Get current on-chain orders for this side (from master, not working)
-            const currentOnChainOrders = Array.from(manager.orders.values())
+            const currentOnChainOrders = (Array.from(manager.orders.values()) as any[])
                 .filter(o => o.type === orderType && OrderUtils.isOrderPlaced(o));
 
             // Get all slots for this side from working grid
-            const allSideSlots = Array.from(workingGrid.values())
+            const allSideSlots = (Array.from(workingGrid.values()) as any[])
                 .filter(o => o.type === orderType)
                 .sort((a, b) => sideName === 'buy' ? b.price - a.price : a.price - b.price);
 
@@ -922,10 +922,10 @@ async function applyGridDivergenceCorrections(manager, accountOrders, botKey, up
  * @param {Object} manager - OrderManager instance
  * @returns {{ changed: boolean, newIdx?: number }}
  */
-function syncBoundaryToFunds(manager) {
+function syncBoundaryToFunds(manager: any): { changed: boolean; newIdx?: number } {
     const availA = (manager.funds?.available?.sell || 0);
     const availB = (manager.funds?.available?.buy || 0);
-    const allSlots = Array.from(manager.orders.values()).sort((a, b) => a.price - b.price);
+    const allSlots = (Array.from(manager.orders.values()) as any[]).sort((a, b) => a.price - b.price);
     const Grid = require('../grid');
     const gapSlots = Grid.calculateGapSlots(manager.config.incrementPercent, manager.config.targetSpreadPercent);
 
@@ -973,7 +973,7 @@ function syncBoundaryToFunds(manager) {
  * @param {string} profilesDir - Path to profiles directory
  * @returns {boolean} True if directory was created, false if it already existed
  */
-function ensureProfilesDirectory(profilesDir) {
+function ensureProfilesDirectory(profilesDir: string): boolean {
     if (!fs.existsSync(profilesDir)) { fs.mkdirSync(profilesDir, { recursive: true }); return true; }
     return false;
 }
@@ -983,7 +983,7 @@ function ensureProfilesDirectory(profilesDir) {
  * @param {number} ms - Milliseconds to sleep
  * @returns {Promise<void>}
  */
-function sleep(ms) {
+function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
@@ -998,7 +998,7 @@ function sleep(ms) {
  * @param {string} [options.mask=''] - Character to display instead of input
  * @returns {Promise<string>} Trimmed user input
  */
-function readInput(prompt, options = {}) {
+function readInput(prompt: string, options: { hideEchoBack?: boolean; mask?: string } = {}): Promise<string> {
     return new Promise((resolve) => {
         const stdin = process.stdin; const stdout = process.stdout;
         const ESC_SEQUENCE_TIMEOUT_MS = 150;
@@ -1116,7 +1116,7 @@ function readInput(prompt, options = {}) {
  * @param {string} prompt - Prompt text to display
  * @returns {Promise<string>} User-entered password
  */
-async function readPassword(prompt) { return readInput(prompt, { mask: '*', hideEchoBack: false }); }
+async function readPassword(prompt: string): Promise<string> { return readInput(prompt, { mask: '*', hideEchoBack: false }); }
 
 /**
  * Execute async function with exponential backoff retry logic.
@@ -1132,7 +1132,7 @@ async function readPassword(prompt) { return readInput(prompt, { mask: '*', hide
  * @returns {Promise<*>} Result of function execution
  * @throws {Error} If all attempts fail, throws the final error
  */
-async function withRetry(fn, options = {}) {
+async function withRetry<T>(fn: () => Promise<T>, options: { maxAttempts?: number; baseDelayMs?: number; maxDelayMs?: number; logger?: { log?: Function } | null; operationName?: string } = {}): Promise<T> {
     const { maxAttempts = 3, baseDelayMs = 1000, maxDelayMs = 10000, logger = null, operationName = 'operation' } = options;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
@@ -1158,7 +1158,7 @@ async function withRetry(fn, options = {}) {
  * @param {string} account - Account name (optional)
  * @returns {string|null} Resolved account reference or null
  */
-function resolveAccountRef(manager, account) {
+function resolveAccountRef(manager: any, account: string): string | null {
     if (manager && typeof manager.accountId === 'string' && manager.accountId) {
         return manager.accountId;
     }
@@ -1176,7 +1176,7 @@ function resolveAccountRef(manager, account) {
  * @param {Object} obj 
  * @returns {Object}
  */
-function deepFreeze(obj) {
+function deepFreeze(obj: any): any {
     if (obj === null || typeof obj !== 'object') return obj;
     Object.freeze(obj);
     Object.getOwnPropertyNames(obj).forEach(prop => {
@@ -1195,7 +1195,7 @@ function deepFreeze(obj) {
  * @param {Map} map 
  * @returns {Map}
  */
-function cloneMap(map) {
+function cloneMap<K, V>(map: Map<K, V>): Map<K, V> {
     return new Map(map);
 }
 
@@ -1205,7 +1205,7 @@ function cloneMap(map) {
  * @param {string} dirPath - Directory path to ensure
  * @returns {void}
  */
-function ensureDir(dirPath) {
+function ensureDir(dirPath: string): void {
     if (!fs.existsSync(dirPath)) {
         fs.mkdirSync(dirPath, { recursive: true });
     }
@@ -1217,7 +1217,7 @@ function ensureDir(dirPath) {
  * @param {string} raw - The raw string content with possible comments.
  * @returns {Object} The parsed JSON object.
  */
-function parseJsonWithComments(raw) {
+function parseJsonWithComments(raw: string): any {
     const stripped = raw.replace(/\/\*(?:.|[\r\n])*?\*\//g, '').replace(/(^|\s*)\/\/.*$/gm, '');
     return JSON.parse(stripped);
 }

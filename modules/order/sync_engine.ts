@@ -263,10 +263,11 @@ function computeOutOfToleranceDriftTag(mgr, chainOrder, calcToleranceFn) {
 }
 
 class SyncEngine {
+    private manager: any;
     /**
      * @param {Object} manager - OrderManager instance
      */
-    constructor(manager) {
+    constructor(manager: any) {
         this.manager = manager;
     }
 
@@ -338,7 +339,7 @@ class SyncEngine {
      * @param {Object} [options={}] - Sync options (e.g., { skipAccounting: true })
      * @returns {Promise<Object>} Result with filledOrders, updatedOrders, ordersNeedingCorrection
      */
-    async syncFromOpenOrders(chainOrders, options = {}) {
+    async syncFromOpenOrders(chainOrders: any[] | null, options: Record<string, any> = {}) {
         const mgr = this.manager;
 
         if (!mgr) {
@@ -439,7 +440,7 @@ class SyncEngine {
      * @async
      * @private
      */
-    async _doSyncFromOpenOrders(chainOrders, options) {
+    async _doSyncFromOpenOrders(chainOrders: any[] | null, options: Record<string, any>) {
         const mgr = this.manager;
 
         // Validate inputs
@@ -504,8 +505,8 @@ class SyncEngine {
             }
         }
 
-        const chainOrderIdsOnGrid = new Set();
-        const matchedGridOrderIds = new Set();
+        const chainOrderIdsOnGrid = new Set<string>();
+        const matchedGridOrderIds = new Set<string>();
         const filledOrders = [];
         const updatedOrders = [];
         const ordersNeedingCorrection = [];
@@ -580,8 +581,8 @@ class SyncEngine {
      * @param {Object} options - Sync options (skipAccounting, etc.)
      * @returns {Promise<{filledOrders: Array, updatedOrders: Array, ordersNeedingCorrection: Array, unmatchedChainOrders: Array}>}
      */
-    async _performSyncFromOpenOrders(mgr, assetAPrecision, assetBPrecision, parsedChainOrders, rawChainOrders,
-        chainOrderIdsOnGrid, matchedGridOrderIds, filledOrders, updatedOrders, ordersNeedingCorrection, unmatchedChainOrders, options) {
+    async _performSyncFromOpenOrders(mgr: any, assetAPrecision: number, assetBPrecision: number, parsedChainOrders: Map<string, any>, rawChainOrders: Map<string, any>,
+        chainOrderIdsOnGrid: Set<string>, matchedGridOrderIds: Set<string>, filledOrders: any[], updatedOrders: any[], ordersNeedingCorrection: any[], unmatchedChainOrders: any[], options: Record<string, any>) {
         const skipAccounting = Boolean(options?.skipAccounting);
 
         const queueCorrection = (entry) => {
@@ -840,7 +841,7 @@ class SyncEngine {
                         chainOrder,
                         (p, s, t) => calculatePriceTolerance(p, s, t, mgr.assets)
                     );
-                    const unmatchedEntry = {
+                    const unmatchedEntry: Record<string, any> = {
                         chainOrderId,
                         type: chainOrder.type,
                         price: chainOrder.price,
@@ -877,7 +878,7 @@ class SyncEngine {
      * @param {Object} [options] - Persistence mode options
      * @returns {Promise<Object>} { filledOrders, updatedOrders, partialFill }
      */
-    async syncFromFillHistory(fill, options = {}) {
+    async syncFromFillHistory(fill: any, options: Record<string, any> = {}) {
         const mgr = this.manager;
         const persistenceMode = resolveProcessedFillPersistenceMode(options);
         if (!fill || !fill.op || !fill.op[1]) return { filledOrders: [], updatedOrders: [], partialFill: false };
@@ -1103,7 +1104,7 @@ class SyncEngine {
      * @param {Object} [options] - Sync options forwarded to open-order reconciliation
      * @returns {Promise<Object>} { newOrders, ordersNeedingCorrection }
      */
-    async synchronizeWithChain(chainData, source, options = {}) {
+    async synchronizeWithChain(chainData: any, source: string, options: Record<string, any> = {}) {
         const mgr = this.manager;
         if (!mgr.assets) return { newOrders: [], ordersNeedingCorrection: [] };
 
@@ -1119,8 +1120,8 @@ class SyncEngine {
                         // Check if this chain order already exists on grid (rotation case)
                         // If so, fee was already paid when original order was placed - don't deduct again
                         // CRITICAL: Look for ANY order with this orderId, even if it's been transitioned to VIRTUAL
-                        const existingOrder = Array.from(mgr.orders.values()).find(
-                            o => o.orderId === chainOrderId && o.id !== gridOrderId
+                        const existingOrder: any = Array.from(mgr.orders.values() as any[]).find(
+                            (o: any) => o.orderId === chainOrderId && o.id !== gridOrderId
                         );
                         const isRotation = !!existingOrder;
 

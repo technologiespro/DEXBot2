@@ -55,7 +55,17 @@ const { HURST_CONFIG, PE_CONFIG } = MARKET_ADAPTER;
 
 function parseArgs() {
     const args = process.argv.slice(2);
-    const config = {
+    const config: {
+        source: { type: string; config: { botKey: string; filePath?: string; stateDir?: string } };
+        chartFile: string;
+        alpha: any;
+        gain: any;
+        dispWeight: any;
+        clipPct: any;
+        quiet: boolean;
+        lookbackBars?: number;
+        dispScaleMinPct?: number;
+    } = {
         source: { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         chartFile: 'analysis/charts/dynamic_weight_chart.html',
         alpha: MARKET_ADAPTER.DYNAMIC_WEIGHT_ALPHA,

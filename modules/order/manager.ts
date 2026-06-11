@@ -432,8 +432,8 @@ class OrderManager {
     strategy: any;
     sync: any;
     _state: any;
-    _ordersByState: any;
-    _ordersByType: any;
+    _ordersByState: Record<string, Set<string>>;
+    _ordersByType: Record<string, Set<string>>;
     targetSpreadCount: number;
     currentSpreadCount: number;
     outOfSpread: number;
@@ -467,11 +467,12 @@ class OrderManager {
     _currentWorkingGrid: any;
     _cowEngine: any;
     accountOrders: any;
+    btsBalance: { free: number; total: number; locked: number };
 
     /**
      * @param {Object} [config] - Configuration overrides
      */
-    constructor(config = {}) {
+    constructor(config: Record<string, any> = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
         this.marketName = this.config.market || (this.config.assetA && this.config.assetB ? `${this.config.assetA}/${this.config.assetB}` : null);
         const logFile = config.logFile || undefined;
@@ -698,7 +699,7 @@ class OrderManager {
 
         await Promise.race([
             waitPromise,
-            new Promise((resolve) => {
+            new Promise<void>((resolve) => {
                 setTimeout(() => {
                     this.logger.log('[FUND] Timeout waiting for account totals', 'warn');
                     resolve();
@@ -910,7 +911,7 @@ class OrderManager {
         }
     }
 
-    _normalizeOrderUpdateOptions(options = {}) {
+    _normalizeOrderUpdateOptions(options: Record<string, any> = {}) {
         if (options === null || typeof options !== 'object' || Array.isArray(options)) {
             throw new TypeError('Order update options must be an object');
         }
@@ -921,7 +922,7 @@ class OrderManager {
         };
     }
 
-    _normalizeCommitOptions(options = {}) {
+    _normalizeCommitOptions(options: Record<string, any> = {}) {
         if (options === null || typeof options !== 'object' || Array.isArray(options)) {
             throw new TypeError('Commit options must be an object');
         }
@@ -955,7 +956,7 @@ class OrderManager {
                     message: fatalError.message
                 });
                 if (this._throwOnIllegalState) {
-                    const err = new Error(fatalError.message);
+                    const err: any = new Error(fatalError.message);
                     err.code = fatalError.code;
                     throw err;
                 }
@@ -1199,14 +1200,14 @@ class OrderManager {
     _repairIndices() {
         try {
             const rebuiltByState = {
-                [ORDER_STATES.VIRTUAL]: new Set(),
-                [ORDER_STATES.ACTIVE]: new Set(),
-                [ORDER_STATES.PARTIAL]: new Set()
+                [ORDER_STATES.VIRTUAL]: new Set<string>(),
+                [ORDER_STATES.ACTIVE]: new Set<string>(),
+                [ORDER_STATES.PARTIAL]: new Set<string>()
             };
             const rebuiltByType = {
-                [ORDER_TYPES.BUY]: new Set(),
-                [ORDER_TYPES.SELL]: new Set(),
-                [ORDER_TYPES.SPREAD]: new Set()
+                [ORDER_TYPES.BUY]: new Set<string>(),
+                [ORDER_TYPES.SELL]: new Set<string>(),
+                [ORDER_TYPES.SPREAD]: new Set<string>()
             };
 
             for (const [id, order] of this.orders) {
@@ -1286,8 +1287,8 @@ class OrderManager {
      * @param {Object|number} [pipelineSignals] - Pipeline state signals or queue length
      * @returns {import('./types').PipelineEmptyResult}
      */
-    isPipelineEmpty(pipelineSignals = 0) {
-        const normalizedSignals = (typeof pipelineSignals === 'number')
+    isPipelineEmpty(pipelineSignals: number | Record<string, any> = 0) {
+        const normalizedSignals: Record<string, any> = (typeof pipelineSignals === 'number')
             ? { incomingFillQueueLength: pipelineSignals }
             : (pipelineSignals || {});
 
@@ -1439,7 +1440,7 @@ class OrderManager {
         }, this.assets);
     }
 
-    _calculateRequiredFundsFromGrid(workingGrid, precisions = {}) {
+    _calculateRequiredFundsFromGrid(workingGrid, precisions: Record<string, any> = {}) {
         return calculateRequiredFunds(workingGrid, {
             buyPrecision: precisions.buyPrecision || this.assets?.assetB?.precision,
             sellPrecision: precisions.sellPrecision || this.assets?.assetA?.precision
@@ -1591,7 +1592,7 @@ class OrderManager {
      * @param {boolean} [options.allowBootstrapTransient]
      * @returns {import('./types').PersistenceValidationResult}
      */
-    validateGridStateForPersistence(options = {}) {
+    validateGridStateForPersistence(options: Record<string, any> = {}) {
         const result = validateGridForPersistence(this.orders, this.accountTotals);
         const allowBootstrapTransient = options.allowBootstrapTransient !== false;
 

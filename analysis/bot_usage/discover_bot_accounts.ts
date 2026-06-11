@@ -49,6 +49,33 @@ const {
     DEFAULT_CONFIG,
 } = require('./kibana_bot_queries');
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface AccountCounts {
+    creates: number;
+    cancels: number;
+    fills: number;
+}
+
+interface CandidateInfo {
+    id: string;
+    creates: number;
+    cancels: number;
+    fills: number;
+    cancelRatio: number;
+    fillRate: number;
+    gridScore: number;
+    impliedInc: number | null;
+    maxBatch: number;
+    dexScore: number;
+    cv: number | null;
+    name: string;
+    ordersFetched: number;
+    buyCount: number;
+    sellCount: number;
+    pairAssets: string[];
+}
+
 // ─── Configuration ────────────────────────────────────────────────────────────
 
 const BTS_NODE    = 'wss://dex.iobanker.com/ws';
@@ -202,9 +229,9 @@ function analyzeGrid(hits, sellPrec, recvPrec, cvThreshold = 0.35) {
     return { ...best, totalOrders: entries.length, sessionCount: sessions.length };
 }
 
-function analyzeBatching(hits) {
+function analyzeBatching(hits: any[]) {
     if (!hits.length) return { maxBatch: 0, avgBatch: 0 };
-    const counts = {};
+    const counts: Record<string, number> = {};
     for (const h of hits) {
         const t = h._source?.block_data?.block_time;
         if (t) counts[t] = (counts[t] ?? 0) + 1;
@@ -322,7 +349,7 @@ async function run() {
 
     console.log('\nPhase 2: Merging and filtering candidates...');
 
-    const accounts = {};  // id → { creates, cancels, fills }
+    const accounts: Record<string, AccountCounts> = {};
     for (const b of createBuckets) accounts[b.key] = { creates: b.doc_count, cancels: 0, fills: 0 };
     for (const b of cancelBuckets) {
         if (!accounts[b.key]) accounts[b.key] = { creates: 0, cancels: 0, fills: 0 };
@@ -334,7 +361,7 @@ async function run() {
     }
 
     // Pre-filter: must have creates ≥ minCreates AND meaningful cancel activity
-    const candidates = Object.entries(accounts)
+    const candidates: CandidateInfo[] = (Object.entries(accounts) as [string, AccountCounts][])
         .filter(([, s]) => s.creates >= opts.minCreates && s.cancels >= Math.max(3, s.creates * 0.2))
         .map(([id, s]) => ({
             id,
@@ -343,7 +370,7 @@ async function run() {
             fills:   s.fills,
             cancelRatio: s.cancels / Math.max(s.creates, 1),
             fillRate:    s.creates > 0 ? (s.fills / s.creates * 100) : 0,
-        }))
+        } as CandidateInfo))
         .sort((a, b) => b.creates - a.creates);
 
     console.log(`  Total unique accounts:   ${Object.keys(accounts).length}`);
@@ -354,7 +381,11 @@ async function run() {
 
     // ── Phase 3: Grid analysis ─────────────────────────────────────────────────
 
-    const results = toAnalyze.map(c => ({ ...c, gridScore: 0, impliedInc: null, maxBatch: 0, dexScore: 0 }));
+    const results: CandidateInfo[] = toAnalyze.map(c => ({
+        ...c,
+        gridScore: 0, impliedInc: null, maxBatch: 0, dexScore: 0,
+        cv: null, name: '', ordersFetched: 0, buyCount: 0, sellCount: 0, pairAssets: [],
+    }));
 
     if (!opts.skipGrid) {
         console.log('\nPhase 3: Grid analysis (batches of 5)...');
@@ -399,7 +430,7 @@ async function run() {
                 const pairAssets = new Set(hits.flatMap(h => {
                     const op = h._source?.operation_history?.op_object;
                     return [op?.amount_to_sell?.asset_id, op?.min_to_receive?.asset_id].filter(Boolean);
-                }));
+                }) as string[]);
                 r.pairAssets = [...pairAssets];
 
                 r.gridScore  = grid.score;

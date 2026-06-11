@@ -54,6 +54,25 @@ const MODULE_DIR = path.dirname(__dirname);
 const PROJECT_ROOT = path.basename(MODULE_DIR) === BUILD_DIR ? path.dirname(MODULE_DIR) : MODULE_DIR;
 const BLACKLIST_STATE_FILE = path.join(PROJECT_ROOT, 'profiles', 'node_blacklist.json');
 
+interface NodeManagerConfig {
+    list?: string[];
+    blacklistStateFile?: string;
+    stateDir?: string;
+    healthCheck?: {
+        intervalMs?: number;
+        timeoutMs?: number;
+        maxPingMs?: number;
+        blacklistThreshold?: number;
+        enabled?: boolean;
+    };
+    selection?: {
+        strategy?: string;
+        preferredNode?: string | null;
+    };
+    healthCacheFile?: string;
+    [key: string]: any;
+}
+
 /**
  * NodeManager - Manages health checking and selection of BitShares nodes
  *
@@ -82,7 +101,7 @@ class NodeManager {
     expectedChainId: string;
     BLACKLIST_COOLDOWN_MS: number;
 
-    constructor(config = {}) {
+    constructor(config: NodeManagerConfig = {}) {
         this.logger = new Logger('NodeManager');
         this.blacklistStateFile = typeof config.blacklistStateFile === 'string' && config.blacklistStateFile.trim()
             ? config.blacklistStateFile
@@ -129,7 +148,7 @@ class NodeManager {
      * Initialize tracking for all configured nodes
      * @private
      */
-    initializeNodeStats() {
+    private initializeNodeStats(): void {
         for (const nodeUrl of this.config.list) {
             if (!this.nodeStats.has(nodeUrl)) {
                 this.nodeStats.set(nodeUrl, {
@@ -150,11 +169,11 @@ class NodeManager {
      * Load persisted blacklist state from disk
      * @private
      */
-    loadBlacklistState() {
+    private loadBlacklistState(): void {
         try {
             if (!fs.existsSync(this.blacklistStateFile)) return;
             const raw = fs.readFileSync(this.blacklistStateFile, 'utf8');
-            const state = JSON.parse(raw);
+            const state: Record<string, any> = JSON.parse(raw);
             if (!state || typeof state !== 'object') return;
             for (const [nodeUrl, entry] of Object.entries(state)) {
                 if (!entry || entry.status !== 'blacklisted') continue;
@@ -175,7 +194,7 @@ class NodeManager {
      * Persist blacklisted nodes to disk
      * @private
      */
-    saveBlacklistState() {
+    private saveBlacklistState(): void {
         try {
             const state = {};
             for (const stats of this.nodeStats.values()) {
@@ -200,7 +219,7 @@ class NodeManager {
      * such as the credential daemon.
      * @private
      */
-    saveHealthCache() {
+    private saveHealthCache(): void {
         try {
             writeHealthCache(this.nodeStats.values(), { healthCacheFile: this.healthCacheFile });
         } catch (err: any) {
@@ -211,7 +230,7 @@ class NodeManager {
     /**
      * Start periodic health monitoring
      */
-    start() {
+    start(): void {
         if (this.monitoringActive) {
             this.logger.warn('Monitoring already active, ignoring duplicate start()');
             return;
@@ -239,7 +258,7 @@ class NodeManager {
     /**
      * Stop periodic health monitoring
      */
-    stop() {
+    stop(): void {
         if (!this.monitoringActive) return;
 
         this.monitoringActive = false;
@@ -254,7 +273,7 @@ class NodeManager {
      * Check all nodes in parallel
      * @returns {Promise<void>}
      */
-    async checkAllNodes() {
+    async checkAllNodes(): Promise<void> {
         if (this.checkAllNodesPromise) {
             return this.checkAllNodesPromise;
         }
@@ -309,7 +328,7 @@ class NodeManager {
      * @param {string} nodeUrl - WebSocket URL of the node
      * @returns {Promise<Object>} Health check result: { status, latency, error }
      */
-    async checkNode(nodeUrl) {
+    async checkNode(nodeUrl: string): Promise<{ status: string; latency: number | null; error: string | null }> {
         const stats = this.nodeStats.get(nodeUrl);
         if (!stats) {
             this.logger.warn(`Node ${nodeUrl} not in configured list`);
@@ -378,7 +397,7 @@ class NodeManager {
         }
     }
 
-    _shouldLogBlacklistWarning(nodeUrl, errorMessage, nowMs = Date.now()) {
+    _shouldLogBlacklistWarning(nodeUrl: string, errorMessage: string, nowMs: number = Date.now()): boolean {
         const errorKey = (errorMessage || '').slice(0, 160);
         const warnKey = `${nodeUrl}\0${errorKey}`;
         const lastWarnMs = this._lastBlacklistWarnMs.get(warnKey);
@@ -389,7 +408,7 @@ class NodeManager {
         return true;
     }
 
-    _clearBlacklistWarningCooldown(nodeUrl = null) {
+    _clearBlacklistWarningCooldown(nodeUrl: string | null = null): void {
         if (!nodeUrl) {
             this._lastBlacklistWarnMs.clear();
             return;
@@ -410,7 +429,7 @@ class NodeManager {
      * @param {number} timeoutMs - Connection timeout
      * @returns {Promise<WebSocket>} Connected WebSocket instance
      */
-    connectWithTimeout(nodeUrl, timeoutMs) {
+    connectWithTimeout(nodeUrl: string, timeoutMs: number): Promise<any> {
         return new Promise((resolve, reject) => {
             let settled = false;
             let ws = null;
@@ -460,7 +479,7 @@ class NodeManager {
      * @param {number} timeoutMs - RPC timeout
      * @returns {Promise<string>} Chain ID
      */
-    async getChainId(ws, timeoutMs) {
+    async getChainId(ws: any, timeoutMs: number): Promise<string> {
         await this.rpcCall(ws, 'call', [1, 'login', ['', '']], timeoutMs);
         const databaseApiId = await this.rpcCall(ws, 'call', [1, 'database', []], timeoutMs);
         return this.rpcCall(ws, 'call', [databaseApiId, 'get_chain_id', []], timeoutMs);
@@ -475,7 +494,7 @@ class NodeManager {
      * @param {number} timeoutMs - RPC timeout
      * @returns {Promise<any>} RPC result
      */
-    rpcCall(ws, method, params, timeoutMs) {
+    rpcCall(ws: any, method: string, params: any[], timeoutMs: number): Promise<any> {
         return new Promise((resolve, reject) => {
             const requestId = Math.random().toString(36).substring(7);
             const request = {
@@ -533,7 +552,7 @@ class NodeManager {
      * Get list of healthy nodes sorted by latency (best first)
      * @returns {string[]} Array of node URLs
      */
-    getHealthyNodes() {
+    getHealthyNodes(): string[] {
         const preferredNode = this.config.selection.preferredNode;
         const healthy = Array.from(this.nodeStats.values())
             .filter(stat => stat.status === 'healthy' || stat.status === 'slow')
@@ -558,7 +577,7 @@ class NodeManager {
      * Get the single best (lowest latency) healthy node
      * @returns {string|null} Best node URL or null if none available
      */
-    getBestNode() {
+    getBestNode(): string | null {
         const healthy = this.getHealthyNodes();
         return healthy.length > 0 ? healthy[0] : null;
     }
@@ -567,7 +586,7 @@ class NodeManager {
      * Manually blacklist a node (e.g., when it causes a connection failure)
      * @param {string} nodeUrl - Node URL to blacklist
      */
-    blacklistNode(nodeUrl) {
+    blacklistNode(nodeUrl: string): void {
         const stats = this.nodeStats.get(nodeUrl);
         if (stats) {
             stats.status = 'blacklisted';
@@ -583,7 +602,7 @@ class NodeManager {
      * Reset blacklist for a specific node (allow recovery)
      * @param {string} nodeUrl - Node URL to reset
      */
-    resetNode(nodeUrl) {
+    resetNode(nodeUrl: string): void {
         const stats = this.nodeStats.get(nodeUrl);
         if (stats) {
             stats.status = 'unchecked';
@@ -620,7 +639,7 @@ class NodeManager {
      * Get current node statistics (for monitoring/logging)
      * @returns {Array<Object>} Array of node stats
      */
-    getStats() {
+    getStats(): Array<{ url: string; status: string; latencyMs: number | null; failureCount: number; lastCheckTime: string | null; lastErrorMessage: string | null }> {
         return Array.from(this.nodeStats.values()).map(stat => ({
             url: stat.url,
             status: stat.status,
@@ -635,7 +654,7 @@ class NodeManager {
      * Get summary statistics
      * @returns {Object} Summary stats
      */
-    getSummary() {
+    getSummary(): { monitoring: boolean; counts: Record<string, number>; bestNode: string | null; avgLatency: number | null } {
         const stats = Array.from(this.nodeStats.values());
         const counts: Record<string, number> = {
             total: stats.length,

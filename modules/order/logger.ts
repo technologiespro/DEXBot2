@@ -63,7 +63,7 @@ class Logger {
      * @param {string} [options.level='info'] - Log level (debug, info, warn, error)
      * @param {Object} [options.configOverride] - Override LOGGING_CONFIG
      */
-    constructor(category = 'DEXBot', options = {}) {
+    constructor(category = 'DEXBot', options: { quiet?: boolean; quietUnderPm2?: boolean; logFile?: string; level?: string; configOverride?: any } = {}) {
         this.category = category;
 
         // Auto-quiet under PM2 when PM2 log paths are configured to prevent
@@ -484,7 +484,7 @@ class Logger {
         const partial = c.partial;
         const virtual = c.virtual;
 
-        const allOrders = Array.from(manager.orders?.values?.() || []).sort((a, b) => b.price - a.price);
+        const allOrders: any[] = Array.from(manager.orders?.values?.() || []).sort((a: any, b: any) => b.price - a.price);
 
         const activeOrders = allOrders.filter(o => o.state === ORDER_STATES.ACTIVE);
         const activeBuys = activeOrders.filter(o => o.type === ORDER_TYPES.BUY);

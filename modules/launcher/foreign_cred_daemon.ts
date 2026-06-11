@@ -165,6 +165,12 @@ async function ensureNoForeignCredentialDaemon({
     pidFile,
     isLikelyProcess,
     verbose = true,
+}: {
+    socketPath?: string;
+    readyFilePath?: string;
+    pidFile?: string;
+    isLikelyProcess?: (pid: number) => boolean;
+    verbose?: boolean;
 } = {}) {
     if (!socketPath || !readyFilePath) return false;
     const socketExists = fs.existsSync(socketPath);

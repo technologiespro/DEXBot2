@@ -128,7 +128,7 @@ function ensureProfilesKeysDirectory() {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-function toBuffer(value, encoding = 'hex') {
+function toBuffer(value: any, encoding: BufferEncoding = 'hex') {
     if (Buffer.isBuffer(value)) {
         return Buffer.from(value);
     }
@@ -159,7 +159,7 @@ function resolveVaultKey(secret) {
     return null;
 }
 
-function createVaultSecret(vaultKey, extra = {}) {
+function createVaultSecret(vaultKey: any, extra: Record<string, any> = {}) {
     const keyBuffer = resolveVaultKey(vaultKey);
     if (!keyBuffer) {
         throw new Error('Vault secret requires a derived key');
@@ -190,7 +190,7 @@ function createSessionSecret(vaultKey, sessionSalt = crypto.randomBytes(VAULT_SA
     };
 }
 
-function createDaemonSigningToken(accountName, options = {}) {
+function createDaemonSigningToken(accountName: string, options: Record<string, any> = {}) {
     if (!accountName || typeof accountName !== 'string') {
         throw new Error('accountName is required for daemon signing');
     }
@@ -242,7 +242,7 @@ function timingSafeEqualHex(leftHex, rightHex) {
     return crypto.timingSafeEqual(left, right);
 }
 
-function normalizeAccountsData(data = {}) {
+function normalizeAccountsData(data: Record<string, any> = {}) {
     const accountsSource = data.accounts && typeof data.accounts === 'object'
         ? data.accounts
         : {};
@@ -468,7 +468,8 @@ function verifyCurrentPassword(password, accountsData) {
 }
 
 class MasterPasswordError extends Error {
-    constructor(message) {
+    code: string;
+    constructor(message: string) {
         super(message);
         this.name = 'MasterPasswordError';
         this.code = 'MASTER_PASSWORD_FAILED';
@@ -625,7 +626,7 @@ async function changeMasterPassword(accountsData, currentSecret) {
 
     const oldSecret = hasModernVault(accountsData)
         ? deriveModernSecretFromPassword(oldPassword, accountsData)
-        : migrateLegacyVault(accountsData, oldPassword);
+        : deriveModernSecretFromPassword(oldPassword, accountsData);
 
     const newPassword = await readPassword('Enter new master password:     ');
     if (newPassword === '\x1b') return currentSecret;
@@ -645,7 +646,7 @@ async function changeMasterPassword(accountsData, currentSecret) {
     const decryptedKeys = {};
     try {
         for (const [name, account] of Object.entries(accountsData.accounts)) {
-            decryptedKeys[name] = decrypt(account.encryptedKey, oldSecret);
+            decryptedKeys[name] = decrypt((account as any).encryptedKey, oldSecret);
         }
     } catch (error: any) {
         console.log('Failed to decrypt stored keys with the current master password:', error.message);
@@ -653,9 +654,9 @@ async function changeMasterPassword(accountsData, currentSecret) {
     }
 
     const newSecret = setupModernVault(accountsData, newPassword);
-    for (const [name, account] of Object.entries(accountsData.accounts)) {
-        account.encryptedKey = encrypt(decryptedKeys[name], newSecret);
-    }
+        for (const [name, account] of Object.entries(accountsData.accounts)) {
+            (account as any).encryptedKey = encrypt(decryptedKeys[name], newSecret);
+        }
     saveAccounts(accountsData);
     console.log('Master password updated successfully.');
     return newSecret;

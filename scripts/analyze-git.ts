@@ -21,6 +21,16 @@ const Format = require('../modules/order/format');
  * Parses git history and generates both console and HTML visualizations.
  */
 class RepoAnalyzer {
+    private stats: {
+        files: { [key: string]: { added: number; deleted: number; edits: number } };
+        totalAdded: number;
+        totalDeleted: number;
+        totalEdits: number;
+        commits: number;
+        dailyStats: { [key: string]: { added: number; deleted: number; edits: number; commits: number } };
+    };
+    private filePatterns: RegExp[];
+
     /**
      * constructor: Initialize analyzer with empty stats and filter patterns
      *
@@ -68,7 +78,7 @@ class RepoAnalyzer {
      * @param {string} filePath - File path from git log
      * @returns {boolean} - True if file should be included in stats
      */
-    isTrackedFile(filePath) {
+    isTrackedFile(filePath: string): boolean {
         return this.filePatterns.some(pattern => pattern.test(filePath));
     }
 
@@ -88,7 +98,7 @@ class RepoAnalyzer {
      *
      * Error handling: Throws if git command fails (not a repo, etc.)
      */
-    analyzeGitLog() {
+    analyzeGitLog(): void {
         console.log('📊 Analyzing DEXBot2 Repository...\n');
 
         try {
@@ -163,7 +173,7 @@ class RepoAnalyzer {
 
             this.stats.commits = commitCount;
         } catch (err) {
-            console.error('Error analyzing git log:', err.message);
+            console.error('Error analyzing git log:', (err as any).message);
             process.exit(1);
         }
     }
@@ -178,7 +188,7 @@ class RepoAnalyzer {
      * Files are sorted by total edits (most active files first)
      * for meaningful visualization
      */
-    generateCharts() {
+    generateCharts(): void {
         // Sort files by total edits (descending) for most-active-first display
         const sortedFiles = Object.entries(this.stats.files)
             .sort((a, b) => b[1].edits - a[1].edits);
@@ -202,7 +212,7 @@ class RepoAnalyzer {
      * Output format uses Unicode box drawing and padding for readability
      * Suitable for terminal display with fixed-width fonts
      */
-    printConsoleCharts() {
+    printConsoleCharts(_sortedFiles: [string, { added: number; deleted: number; edits: number }][]): void {
         console.log('='.repeat(80));
         console.log('📈 DEXBot2 Repository Statistics');
         console.log('='.repeat(80));
@@ -281,7 +291,7 @@ class RepoAnalyzer {
      *
      * @param {Array<[string, Object]>} sortedFiles - Sorted files with their stats
      */
-    generateHtmlChart(sortedFiles) {
+    generateHtmlChart(sortedFiles: [string, { added: number; deleted: number; edits: number }][]): void {
         // Prepare file labels with truncation for readability in charts
         const labels = sortedFiles.map(([file]) => {
             // Truncate long filenames to 50 chars, add ellipsis

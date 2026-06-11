@@ -13,39 +13,82 @@ const { smoothKalmanVelocityPoint } = require('./kalman_velocity_smoothing');
  * the high-frequency "noise" (wicks).
  */
 
+interface KalmanFilterOpts {
+    R?: number;
+    Q?: number;
+    dt?: number;
+}
+
+interface KalmanFilterState {
+    x: number;
+    v: number;
+}
+
+interface Beam {
+    originX: number;
+    originY: number;
+    velocity: number;
+    type: string;
+}
+
+interface KalmanTrendConfig {
+    rNoise?: number;
+    qTactical?: number;
+    qModal?: number;
+    qNoise?: number;
+    beamCount?: number;
+    dt?: number;
+    warmupBars?: number;
+}
+
+interface TrendAnalysis {
+    isReady: boolean;
+    price: number | null;
+    kalmanPrice: number;
+    modalPrice: number;
+    velocity: number;
+    velocityPct: number;
+    velocityRawPct: number;
+    velocityFilteredPct: number | null;
+    velocityFilteredRawPct: number | null;
+    displacementPct: number;
+    displacementRawPct: number;
+    signal: string;
+    trend: string;
+    confidence: number;
+    updateCount: number;
+    beams: Beam[];
+    projections: { modal: number; tactical: number };
+}
+
 class KalmanFilter {
-    /**
-     * @param {Object} opts
-     * @param {number} opts.R - Measurement noise (trust in price data)
-     * @param {number} opts.Q - Process noise (trust in the velocity model)
-     * @param {number} opts.dt - Time step between observations, in bars
-     */
-    constructor(opts = {}) {
-        // R represents our confidence in the data (High R = ignore noise, but more lag)
+    R: number;
+    Q: number;
+    dt: number;
+    x: number;
+    v: number;
+    P00: number;
+    P01: number;
+    P10: number;
+    P11: number;
+    isInitialized: boolean;
+
+    constructor(opts: KalmanFilterOpts = {}) {
         this.R = opts.R ?? 0.05;
 
-        // Q represents acceleration noise spectral density (High Q = adapt faster)
         this.Q = opts.Q ?? 0.005;
         this.dt = Number.isFinite(opts.dt) && opts.dt > 0 ? opts.dt : 1;
 
-        // State vector [x, v]: [position, velocity]
         this.x = 0;
         this.v = 0;
 
-        // Covariance matrix P (estimates error in our state)
-        // Initialized with high values as we are uncertain at start
         this.P00 = 1; this.P01 = 0;
         this.P10 = 0; this.P11 = 1;
 
         this.isInitialized = false;
     }
 
-    /**
-     * Update filter with a new price measurement
-     * @param {number} z - Measured price
-     * @returns {Object} { x, v } Estimated state
-     */
-    update(z) {
+    update(z: number): KalmanFilterState {
         if (!Number.isFinite(z)) {
             return { x: this.x, v: this.v };
         }
@@ -123,17 +166,20 @@ function safePct(numerator, denominator) {
 }
 
 class KalmanTrendAnalyzer {
-    /**
-     * @param {Object} config
-     * @param {number} [config.rNoise=0.05] - Measurement noise
-     * @param {number} [config.qTactical=0.01] - Process noise for tactical filter
-     * @param {number} [config.qModal=0.0001] - Process noise for modal filter
-     * @param {number} [config.qNoise] - Legacy fallback for qTactical/qModal when unset
-     * @param {number} [config.beamCount=100] - Number of historical beams to track
-     * @param {number} [config.dt=1] - Time step between observations, in bars
-     * @param {number} [config.warmupBars=20] - Warmup bars before analysis
-     */
-    constructor(config = {}) {
+    config: KalmanTrendConfig;
+    tacticalKf: KalmanFilter;
+    modalKf: KalmanFilter;
+    beams: Beam[];
+    inflections: any[];
+    maxBeams: number;
+    warmupBars: number;
+    updateCount: number;
+    currPrice: number | null;
+    tactical: { x: number; v: number };
+    modal: { x: number; v: number };
+    velocityFilteredPct: number | null;
+
+    constructor(config: KalmanTrendConfig = {}) {
         this.config = { ...config };
         const rNoise = config.rNoise ?? 0.05;
         const qTactical = config.qTactical ?? config.qNoise ?? 0.01;
@@ -171,7 +217,7 @@ class KalmanTrendAnalyzer {
     /**
      * Update with a new market price
      */
-    update(price) {
+    update(price: number): TrendAnalysis {
         if (!Number.isFinite(price) || price <= 0) {
             throw new Error('price must be a positive finite number');
         }
@@ -212,7 +258,7 @@ class KalmanTrendAnalyzer {
         return this.getAnalysis();
     }
 
-    getAnalysis() {
+    getAnalysis(): TrendAnalysis {
         const displacement = this.currPrice - this.modal.x;
         const displacementPct = safePct(displacement, this.modal.x);
         const rawVelocityPct = safePct(this.tactical.v, this.modal.x);
@@ -257,7 +303,7 @@ class KalmanTrendAnalyzer {
         };
     }
 
-    reset() {
+    reset(): void {
         const rNoise = this.config.rNoise ?? 0.05;
         const qTactical = this.config.qTactical ?? this.config.qNoise ?? 0.01;
         const qModal = this.config.qModal ?? this.config.qNoise ?? 0.0001;

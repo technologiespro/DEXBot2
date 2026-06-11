@@ -21,8 +21,22 @@ const DEFAULT_BOTS_FILE = path.join(__dirname, '..', '..', 'profiles', 'bots.jso
 
 function parseArgs() {
     const args = process.argv.slice(2);
-    const config = {
-        source: { type: 'json', config: { filePath: null } },
+    const config: {
+        source: { type: string; config: { filePath: any; botKey?: any; assetA?: any; assetB?: any } };
+        chartFile: string;
+        title: string | null;
+        priceScale: string;
+        smaPeriod: number;
+        amaErPeriod: number;
+        amaFastPeriod: number;
+        amaSlowPeriod: number;
+        smaEnabled: boolean;
+        amaEnabled: boolean;
+        vwapEnabled: boolean;
+        vwapBars: number;
+        quiet: boolean;
+    } = {
+        source: { type: 'json', config: { filePath: null as any } },
         chartFile: DEFAULT_CHART_FILE,
         title: null,
         priceScale: 'log',

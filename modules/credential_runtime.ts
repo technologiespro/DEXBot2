@@ -4,6 +4,26 @@ const Logger = require('./logger');
 const { BUILD_DIR } = require('./constants');
 const runtimeLogger = new Logger('credential-runtime');
 
+interface RuntimeDirOptions {
+    runtimeDir?: string;
+    root?: string;
+}
+interface SocketPathOptions {
+    socketPath?: string;
+    runtimeDir?: string;
+    root?: string;
+}
+interface ReadyFilePathOptions {
+    readyFilePath?: string;
+    runtimeDir?: string;
+    root?: string;
+}
+interface PrivatePathOptions {
+    expectedType?: 'file' | 'dir' | 'socket';
+    requiredMode?: number;
+    requireOwner?: boolean;
+}
+
 const DEFAULT_RUNTIME_DIR_NAME = 'dexbot2';
 const DEFAULT_SOCKET_BASENAME = 'dexbot-cred-daemon.sock';
 const DEFAULT_READY_BASENAME = 'dexbot-cred-daemon.ready';
@@ -27,7 +47,7 @@ function isUsableRuntimeBaseDir(dirPath) {
     }
 }
 
-function getCredentialRuntimeDir(options = {}) {
+function getCredentialRuntimeDir(options: RuntimeDirOptions = {}) {
     if (options.runtimeDir) {
         return path.resolve(options.runtimeDir);
     }
@@ -45,7 +65,7 @@ function getCredentialRuntimeDir(options = {}) {
     return path.join(root, 'profiles', 'run');
 }
 
-function getCredentialSocketPath(options = {}) {
+function getCredentialSocketPath(options: SocketPathOptions = {}) {
     if (options.socketPath) {
         return path.resolve(options.socketPath);
     }
@@ -55,7 +75,7 @@ function getCredentialSocketPath(options = {}) {
     return path.join(getCredentialRuntimeDir(options), DEFAULT_SOCKET_BASENAME);
 }
 
-function getCredentialReadyFilePath(options = {}) {
+function getCredentialReadyFilePath(options: ReadyFilePathOptions = {}) {
     if (options.readyFilePath) {
         return path.resolve(options.readyFilePath);
     }
@@ -65,7 +85,7 @@ function getCredentialReadyFilePath(options = {}) {
     return path.join(getCredentialRuntimeDir(options), DEFAULT_READY_BASENAME);
 }
 
-function ensureCredentialRuntimeDirSync(options = {}) {
+function ensureCredentialRuntimeDirSync(options: RuntimeDirOptions = {}) {
     const runtimeDir = getCredentialRuntimeDir(options);
     fs.mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
     try {
@@ -81,7 +101,7 @@ function getCurrentUid() {
     return typeof process.getuid === 'function' ? process.getuid() : null;
 }
 
-function assertPrivatePathSecurity(filePath, options = {}) {
+function assertPrivatePathSecurity(filePath: string, options: PrivatePathOptions = {}) {
     if (!filePath) {
         throw new Error('filePath is required');
     }
@@ -132,7 +152,7 @@ function assertPrivatePathSecurity(filePath, options = {}) {
     return stat;
 }
 
-function isPrivatePathSecure(filePath, options = {}) {
+function isPrivatePathSecure(filePath: string, options: PrivatePathOptions = {}) {
     try {
         assertPrivatePathSecurity(filePath, options);
         return true;

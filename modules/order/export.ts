@@ -76,7 +76,26 @@ const EXPORT_ROOT = path.basename(EXPORT_PARENT) === BUILD_DIR ? path.dirname(EX
  * @param {string} line - Raw log line
  * @returns {Object|null} Parsed fill object or null on no match
  */
-function parseFillLine(line) {
+interface FillEntry {
+    timestamp: number;
+    side: any;
+    amount: number;
+    price: number;
+    proceeds: number;
+    fee_asset: string;
+    fee_amount: number;
+    order_id?: string;
+}
+
+interface FeeEntry {
+    count: number;
+    fee_per_fill: number;
+    fee_asset: any;
+    total_fee: number;
+    timestamp: number;
+}
+
+function parseFillLine(line: string): FillEntry | null {
     const fillMatch = line.match(/\[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\].*\[FILL\]\s+(\w+)\s+fill:\s+size=([\d.]+),\s+price=([\d.]+),\s+proceeds=([\d.]+)/);
 
     if (!fillMatch) return null;
@@ -86,7 +105,9 @@ function parseFillLine(line) {
         side: fillMatch[2],                                   // 'buy' or 'sell'
         amount: parseFloat(fillMatch[3]),                     // Size in base asset
         price: parseFloat(fillMatch[4]),                      // Execution price
-        proceeds: parseFloat(fillMatch[5])                    // Proceeds/cost
+        proceeds: parseFloat(fillMatch[5]),                    // Proceeds/cost
+        fee_asset: 'BTS',
+        fee_amount: 0
     };
 }
 
@@ -96,7 +117,7 @@ function parseFillLine(line) {
  * @param {string} line - Raw log line
  * @returns {Object|null} Parsed fee object or null on no match
  */
-function parseFeeLine(line) {
+function parseFeeLine(line: string): FeeEntry | null {
     const feeMatch = line.match(/\[FEES\].*?(\d+)\s+maker\s+fills\s+@\s+([\d.]+)\s+(\w+)\s*=\s*([\d.]+)\s+\w+/);
 
     if (!feeMatch) return null;
@@ -105,7 +126,8 @@ function parseFeeLine(line) {
         count: parseInt(feeMatch[1]),
         fee_per_fill: parseFloat(feeMatch[2]),
         fee_asset: feeMatch[3],
-        total_fee: parseFloat(feeMatch[4])
+        total_fee: parseFloat(feeMatch[4]),
+        timestamp: 0
     };
 }
 

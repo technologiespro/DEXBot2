@@ -135,6 +135,8 @@ const {
 const { derivePrice, loadAmaCenterPrice, loadAmaCenterSnapshot } = require('./utils/system');
 const { getWhitelistFlags } = require('../market_adapter_whitelist');
 
+import type { Order } from '../types.js';
+
 class Grid {
     /**
      * Calculate the spread gap size (number of empty slots between BUY and SELL rails).
@@ -169,7 +171,7 @@ class Grid {
      * @returns {Promise<import('./types').SizingContext|null>}
      * @private
      */
-    static async _getSizingContext(manager, side, { skipRecalc = false } = {}) {
+    static async _getSizingContext(manager: any, side: any, { skipRecalc = false }: { skipRecalc?: boolean } = {}) {
         if (!manager || !manager.assets) return null;
 
         // 1. Ensure fund state is fresh before sizing
@@ -767,7 +769,7 @@ class Grid {
         // FIX: Use consistent optional chaining pattern for all logger calls
         manager.logger?.log?.(`Initialized grid with ${orders.length} orders.`, 'info');
         manager.logger?.logFundsStatus?.(manager);
-        manager.logger?.logOrderGrid?.(Array.from(manager.orders.values()), gridStartPrice);
+        manager.logger?.logOrderGrid?.(Array.from(manager.orders.values()) as Order[], gridStartPrice);
     }
 
     /**
@@ -925,7 +927,7 @@ class Grid {
      * @returns {Promise<{actions: Array, changed: boolean}|undefined>} - COW result or undefined
      * @private
      */
-    static async _recalculateGridOrderSizesFromBlockchain(manager, orderType, options = {}) {
+    static async _recalculateGridOrderSizesFromBlockchain(manager: any, orderType: any, options: { workingGrid?: any } = {}) {
         if (!manager.assets) return options?.workingGrid ? { actions: [], changed: false } : undefined;
 
         const workingGrid = options?.workingGrid || null;
@@ -941,7 +943,7 @@ class Grid {
         // Get ALL slots for this side, sorted for calculateRotationOrderSizes
         // SELL: sorted ASC (Market to Edge)
         // BUY: sorted ASC (Edge to Market)
-        const allSideSlots = Array.from(manager.orders.values())
+        const allSideSlots = (Array.from(manager.orders.values()) as Order[])
             .filter(o => o.type === orderType)
             .sort((a, b) => a.price - b.price);
 
@@ -1094,7 +1096,7 @@ class Grid {
         const newBoundary = (overrideBoundaryIdx !== null) ? overrideBoundaryIdx : manager.boundaryIdx;
         if (overrideBoundaryIdx !== null && overrideBoundaryIdx !== manager.boundaryIdx) {
             const gapSlots = Grid.calculateGapSlots(manager.config.incrementPercent, manager.config.targetSpreadPercent);
-            const allSlots = Array.from(workingGrid.values())
+            const allSlots = (Array.from(workingGrid.values()) as Order[])
                 .filter(s => s.price != null)
                 .sort((a, b) => a.price - b.price);
             const updatedSlots = assignGridRoles(allSlots, newBoundary, gapSlots, ORDER_TYPES, ORDER_STATES);
@@ -1194,7 +1196,7 @@ class Grid {
 
             // Identify ALL slots currently assigned to this side.
             // Ideal sizing must use the full slot count to determine geometric share per slot.
-            const sideSlots = Array.from(manager.orders.values())
+            const sideSlots = (Array.from(manager.orders.values()) as Order[])
                 .filter(o => o.type === type)
                 .sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
 
@@ -1488,7 +1490,7 @@ class Grid {
     static async checkWindowDust(manager) {
         if (!manager) return { buyDust: false, sellDust: false, buyDustOrders: [], sellDustOrders: [] };
 
-        const allOrders = Array.from(manager.orders.values());
+        const allOrders = Array.from(manager.orders.values()) as Order[];
 
         const isLiveOrder = order =>
             order &&
@@ -1537,7 +1539,7 @@ class Grid {
         const ctx = await Grid._getSizingContext(manager, side);
         if (!ctx || ctx.budget <= 0) return [];
 
-        const sideSlots = Array.from(manager.orders.values())
+        const sideSlots = (Array.from(manager.orders.values()) as Order[])
             .filter(o => o.type === type)
             .sort((a, b) => a.price - b.price);
 
@@ -1693,7 +1695,7 @@ class Grid {
      */
     static async calculateGeometricSizeForSpreadCorrection(manager, targetType) {
         const side = targetType === ORDER_TYPES.BUY ? 'buy' : 'sell';
-        const slotsCount = Array.from(manager.orders.values()).filter(o => o.type === targetType).length + 1;
+        const slotsCount = (Array.from(manager.orders.values()) as Order[]).filter(o => o.type === targetType).length + 1;
 
         // Use centralized sizing context (respects botFunds % allocation)
         const ctx = await Grid._getSizingContext(manager, side);
@@ -1751,7 +1753,7 @@ class Grid {
         // 1. Priority: Update existing PARTIAL orders at the edge (Highest Buy / Lowest Sell).
         // 2. Fallback: Activate SPREAD slots at the edge (Lowest Spread for Buy / Highest Spread for Sell).
 
-        const allOrders = Array.from(manager.orders.values());
+        const allOrders = Array.from(manager.orders.values()) as Order[];
         let edgePartial = null;
         const partials = allOrders
             .filter(o => o.type === railType && o.state === ORDER_STATES.PARTIAL)

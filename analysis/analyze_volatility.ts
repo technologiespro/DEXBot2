@@ -54,7 +54,16 @@ function computeATRSeries(candles, period = DEFAULT_ATR_PERIOD) {
 
 function parseArgs() {
     const args = process.argv.slice(2);
-    const config = {
+    const config: {
+        source:    { type: string; config: { botKey: string; filePath?: string; stateDir?: string } };
+        chartFile: string;
+        threshold: number;
+        atrPeriod: number;
+        exponent:  number;
+        scaleX:    number;
+        clamp:     number;
+        quiet:     boolean;
+    } = {
         source: { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         chartFile: DEFAULT_CHART_FILE,
         threshold: DEFAULT_THRESHOLD,
@@ -157,7 +166,6 @@ async function main() {
         const html = generateHTML({
             allResults,
             candles,
-            atrPeriod: config.atrPeriod,
             volatilityThreshold: config.threshold,
             volatilityExponent: config.exponent,
             volatilityScaleX: config.scaleX,

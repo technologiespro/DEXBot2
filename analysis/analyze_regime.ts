@@ -35,7 +35,14 @@ const { getCandleClose }              = require('./math_utils');
 
 function parseArgs() {
     const args = process.argv.slice(2);
-    const config = {
+    const config: {
+        source:      { type: string; config: { botKey: string; filePath?: string; stateDir?: string } };
+        chartFile:   string;
+        hurstWindow: number;
+        peWindow:    number;
+        peM:         number;
+        quiet:       boolean;
+    } = {
         source:      { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         chartFile:   'analysis/charts/regime_chart.html',
         hurstWindow: HURST_CONFIG.window,

@@ -16,8 +16,15 @@ const path = require('path');
 const { fillCandleGaps } = require('../market_adapter/candle_utils');
 const { getCandleClose, getCandleTimestamp, loadCandleFile } = require('./math_utils');
 
+interface JsonFileConfig {
+    filePath: string;
+}
+
 class JsonFileSource {
-    constructor(config = {}) {
+    filePath: string;
+    name: string;
+
+    constructor(config: JsonFileConfig) {
         this.filePath = config.filePath;
         this.name = `json:${path.basename(this.filePath)}`;
         if (!fs.existsSync(this.filePath)) {
@@ -25,7 +32,7 @@ class JsonFileSource {
         }
     }
 
-    async fetchCandles() {
+    async fetchCandles(): Promise<any[]> {
         try {
             const { candles, meta } = loadCandleFile(this.filePath);
             if (!Array.isArray(candles) || candles.length === 0) {
@@ -42,24 +49,33 @@ class JsonFileSource {
             }
 
             return candles;
-        } catch (err) {
+        } catch (err: any) {
             throw new Error(`[JsonFileSource] Failed to read ${this.filePath}: ${err.message}`);
         }
     }
 
-    extractMarketPrice(candle) {
+    extractMarketPrice(candle: any): { marketPrice: any; timestamp: any } {
         return { marketPrice: getCandleClose(candle), timestamp: getCandleTimestamp(candle) };
     }
 }
 
+interface MarketAdapterConfig {
+    stateDir?: string;
+    botKey: string;
+}
+
 class MarketAdapterSource {
-    constructor(config = {}) {
+    stateDir: string;
+    botKey: string;
+    name: string;
+
+    constructor(config: MarketAdapterConfig) {
         this.stateDir = config.stateDir || path.join(__dirname, '..', 'market_adapter', 'state');
         this.botKey = config.botKey;
         this.name = `market_adapter:${this.botKey}`;
     }
 
-    async fetchCandles() {
+    async fetchCandles(): Promise<any[]> {
         const centersFile = path.join(this.stateDir, 'market_adapter_centers.json');
         if (!fs.existsSync(centersFile)) {
             throw new Error(`[MarketAdapterSource] Centers file not found: ${centersFile}`);
@@ -77,7 +93,7 @@ class MarketAdapterSource {
                 throw new Error(`Bot '${this.botKey}' not found in centers file`);
             }
 
-            return botData.history?.map(entry => ({
+            return botData.history?.map((entry: any) => ({
                 timestamp: entry.timestamp,
                 open: entry.center,
                 high: entry.center,
@@ -85,22 +101,22 @@ class MarketAdapterSource {
                 close: entry.center,
                 volume: 0,
             })) || [];
-        } catch (err) {
+        } catch (err: any) {
             throw new Error(`[MarketAdapterSource] Failed to read: ${err.message}`);
         }
     }
 
-    extractMarketPrice(candle) {
+    extractMarketPrice(candle: any): { marketPrice: any; timestamp: any } {
         return { marketPrice: candle.close, timestamp: candle.timestamp };
     }
 }
 
-function createSource(type, config) {
+function createSource(type: string, config: JsonFileConfig | MarketAdapterConfig): JsonFileSource | MarketAdapterSource {
     switch (type.toLowerCase()) {
         case 'json':
-            return new JsonFileSource(config);
+            return new JsonFileSource(config as JsonFileConfig);
         case 'market_adapter':
-            return new MarketAdapterSource(config);
+            return new MarketAdapterSource(config as MarketAdapterConfig);
         default:
             throw new Error(`[PriceSource] Unknown type: ${type}`);
     }

@@ -60,13 +60,19 @@ const { floatToBlockchainInt, getPrecisionByOrderType } = require('./utils/math'
 const Grid = require('./grid');
 
 class StrategyEngine {
+    manager: any;
+    _settledFeeEvents: Map<string, number>;
+    _feeEventTtlMs: number;
+    _pruneCallCount: number;
+
     /**
      * @param {Object} manager - OrderManager instance
      */
-    constructor(manager) {
+    constructor(manager: any) {
         this.manager = manager;
         this._settledFeeEvents = new Map();
         this._feeEventTtlMs = Number(PIPELINE_TIMING.FEE_EVENT_DEDUP_TTL_MS) || (6 * 60 * 60 * 1000);
+        this._pruneCallCount = 0;
     }
 
     /**
@@ -126,7 +132,7 @@ class StrategyEngine {
             if (this.manager?.assets && filledOrder?.type) {
                 precision = getPrecisionByOrderType(this.manager.assets, filledOrder.type);
             }
-        } catch (_: any) {
+        } catch (_) {
             precision = 8;
         }
 
@@ -279,7 +285,14 @@ class StrategyEngine {
      *     - state {string}: 'ACTIVE' or 'VIRTUAL'
      *   - boundaryIdx {number}: New boundary index
      */
-    calculateTargetGrid(params) {
+    calculateTargetGrid(params: {
+        frozenMasterGrid: Map<string, any>;
+        config: any;
+        accountAssets: any;
+        funds: any;
+        fills: any[];
+        currentBoundaryIdx: number;
+    }) {
         // Core params needed for calculation
         const { 
             frozenMasterGrid, 

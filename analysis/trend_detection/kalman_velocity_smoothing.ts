@@ -6,7 +6,19 @@ const { MARKET_ADAPTER } = require('../../modules/constants');
 const KALMAN_SMOOTHING_BUDGET = MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTHING_BUDGET;
 const KALMAN_SMOOTHING_FLOOR = MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTHING_FLOOR;
 
-function resolveKalmanVelocitySmoothingConfig(config = {}) {
+interface KalmanVelocityConfig {
+    kalmanSmoothPct?: number;
+    kalmanDispScaleMult?: number;
+    kalmanDispThresholdMult?: number;
+    kalmanSmoothSpanPct?: number;
+}
+
+interface KalmanHistoryPoint {
+    velocityPct?: number | null;
+    displacementPct?: number | null;
+}
+
+function resolveKalmanVelocitySmoothingConfig(config: KalmanVelocityConfig = {}) {
     const blend = clamp(
         config.kalmanSmoothPct ?? MARKET_ADAPTER.DYNAMIC_WEIGHT_KALMAN_SMOOTH_PCT_DEFAULT,
         0,
@@ -38,7 +50,7 @@ function resolveKalmanVelocitySmoothingConfig(config = {}) {
     };
 }
 
-function smoothKalmanVelocityPoint(rawVelocityPct, displacementPct, prevAdaptiveVelocity, config = {}) {
+function smoothKalmanVelocityPoint(rawVelocityPct: number | null | undefined, displacementPct: number | null | undefined, prevAdaptiveVelocity: number | null | undefined, config: KalmanVelocityConfig = {}) {
     if (rawVelocityPct == null || displacementPct == null) {
         return {
             adaptiveVelocityPct: null,
@@ -69,7 +81,7 @@ function smoothKalmanVelocityPoint(rawVelocityPct, displacementPct, prevAdaptive
     };
 }
 
-function buildKalmanVelocitySeries(kalmanHistory, config = {}) {
+function buildKalmanVelocitySeries(kalmanHistory: KalmanHistoryPoint[] | null | undefined, config: KalmanVelocityConfig = {}) {
     if (!Array.isArray(kalmanHistory) || kalmanHistory.length === 0) return [];
 
     const resolved = resolveKalmanVelocitySmoothingConfig(config);

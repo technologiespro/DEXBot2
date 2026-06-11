@@ -46,7 +46,7 @@ function buildDirectionalDocumentQuery({ opType, soldAssetField, receivedAssetFi
         ],
     };
 
-    if (Array.isArray(searchAfter)) query.search_after = searchAfter;
+    if (Array.isArray(searchAfter)) (query as any).search_after = searchAfter;
     return query;
 }
 

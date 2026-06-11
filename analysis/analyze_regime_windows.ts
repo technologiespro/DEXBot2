@@ -52,7 +52,11 @@ const PE_DELAY       = 1;
 
 function parseArgs() {
     const args = process.argv.slice(2);
-    const config = {
+    const config: {
+        source:    { type: string; config: { botKey: string; filePath?: string; stateDir?: string } };
+        chartFile: string;
+        quiet:     boolean;
+    } = {
         source:    { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         chartFile: 'analysis/charts/regime_windows_heatmap.html',
         quiet:     false,

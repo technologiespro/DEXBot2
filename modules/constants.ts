@@ -1457,7 +1457,7 @@ if (settings) {
         GRID_LIMITS = {
             ...GRID_LIMITS,
             ...filteredGridSettings,
-            GRID_COMPARISON: { ...GRID_LIMITS.GRID_COMPARISON, ...(filteredGridSettings.GRID_COMPARISON || {}) }
+            GRID_COMPARISON: { ...GRID_LIMITS.GRID_COMPARISON, ...((filteredGridSettings.GRID_COMPARISON || {}) as object) }
         };
     }
 

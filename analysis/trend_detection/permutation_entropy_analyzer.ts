@@ -25,7 +25,7 @@ const { MARKET_ADAPTER } = require('../../modules/constants');
  * stepping by `delay` positions.  Returns a string of digit-chars encoding
  * the rank order (stable sort, ties broken by original index).
  */
-function ordinalPattern(prices, start, m, delay) {
+function ordinalPattern(prices: number[], start: number, m: number, delay: number): string {
     const vals = new Array(m);
     for (let j = 0; j < m; j++) vals[j] = { v: prices[start + j * delay], j };
     vals.sort((a, b) => a.v !== b.v ? a.v - b.v : a.j - b.j);
@@ -34,14 +34,34 @@ function ordinalPattern(prices, start, m, delay) {
     return key;
 }
 
+interface PermutationEntropyAnalysis {
+    isReady: boolean;
+    entropy: number;
+    normalizedEntropy: number;
+    regime: string;
+    regimeStrength: number;
+    updateCount: number;
+}
+
 class PermutationEntropyAnalyzer {
+    m: number;
+    delay: number;
+    window: number;
+    _bufSize: number;
+    _maxEntropy: number;
+    _prices: number[];
+    _updateCount: number;
+    entropy: number;
+    normalizedEntropy: number;
+    isReady: boolean;
+
     /**
      * @param {Object} config
      * @param {number} config.m      - Embedding dimension (default 5; range 3–7)
      * @param {number} config.delay  - Time delay between elements (default 1)
      * @param {number} config.window - Rolling window of ordinal patterns (default 100)
      */
-    constructor(config = {}) {
+    constructor(config: Record<string, number> = {}) {
         this.m      = config.m      ?? 5;
         this.delay  = config.delay  ?? 1;
         this.window = config.window ?? 100;
@@ -65,7 +85,7 @@ class PermutationEntropyAnalyzer {
      * @param {number} price
      * @returns {Object} { isReady, entropy, normalizedEntropy, regime, regimeStrength, updateCount }
      */
-    update(price) {
+    update(price: number): PermutationEntropyAnalysis {
         if (!Number.isFinite(price) || price <= 0) {
             throw new Error('price must be a positive finite number');
         }
@@ -101,10 +121,10 @@ class PermutationEntropyAnalyzer {
         return this.getAnalysis();
     }
 
-    getAnalysis() {
+    getAnalysis(): PermutationEntropyAnalysis {
         const ne = this.normalizedEntropy;
-        const [PE_LOW, , PE_HIGH] = MARKET_ADAPTER.PE_NODES;
-        let regime, regimeStrength;
+        const [PE_LOW, , PE_HIGH]: [number, number, number] = MARKET_ADAPTER.PE_NODES;
+        let regime: string, regimeStrength: number;
         if (ne < PE_LOW) {
             regime = 'STRUCTURED';
             regimeStrength = Math.min(1, (PE_LOW - ne) / PE_LOW);

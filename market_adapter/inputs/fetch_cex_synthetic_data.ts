@@ -262,9 +262,9 @@ function marketRow(base, quote, id, extra = {}) {
     };
 }
 
-function extractMarketsFromList(list, mapper) {
+function extractMarketsFromList(list: any, mapper: (row: any) => any) {
     const rows = Array.isArray(list) ? list : [];
-    return rows.map(mapper).filter((row) => row && row.id && row.base && row.quote);
+    return rows.map(mapper).filter((row: any) => row && row.id && row.base && row.quote);
 }
 
 const EXCHANGES = {
@@ -581,16 +581,16 @@ const EXCHANGES = {
             url.searchParams.set('since', String(since));
             return url.toString();
         },
-        parseMarkets: (json) => {
+        parseMarkets: (json: any) => {
             const entries = Object.entries(json?.result || {});
-            return entries.map(([key, row]) => {
+            return entries.map(([key, row]: [string, any]) => {
                 const ws = String(row.wsname || '').toUpperCase();
                 const [baseFromWs, quoteFromWs] = ws.includes('/') ? ws.split('/') : [null, null];
                 const base = baseFromWs || upper(row.base);
                 const quote = quoteFromWs || upper(row.quote);
                 const id = row.altname || key;
                 return marketRow(base, quote, id, { wsname: row.wsname });
-            }).filter((row) => row.id && row.base && row.quote);
+            }).filter((row: any) => row.id && row.base && row.quote);
         },
         parseCandles: (json) => {
             const result = json?.result || {};
@@ -733,6 +733,7 @@ function parseArgs() {
         quiet: false,
         baseProvided: false,
         quoteProvided: false,
+        help: false,
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -886,10 +887,10 @@ function buildSyntheticCandle(left, right) {
     return [left[0], open, high, low, close, Number.isFinite(volume) ? volume : 0];
 }
 
-function synthesizeCrossCandles(leftCandles, rightCandles) {
-    const leftMap = new Map(leftCandles.map((row) => [row[0], row]));
-    const rightMap = new Map(rightCandles.map((row) => [row[0], row]));
-    const timestamps = [...leftMap.keys()].filter((ts) => rightMap.has(ts)).sort((a, b) => a - b);
+function synthesizeCrossCandles(leftCandles: any[], rightCandles: any[]) {
+    const leftMap = new Map<number, any[]>(leftCandles.map((row: any) => [row[0], row]));
+    const rightMap = new Map<number, any[]>(rightCandles.map((row: any) => [row[0], row]));
+    const timestamps = Array.from(leftMap.keys()).filter((ts: number) => rightMap.has(ts)).sort((a: number, b: number) => a - b);
     return timestamps.map((ts) => buildSyntheticCandle(leftMap.get(ts), rightMap.get(ts)));
 }
 
@@ -984,7 +985,26 @@ async function probeExchange(exchangeId, base, quote, commonQuote, interval, int
         const xautCommon = findMarketId(markets, quote, commonQuote);
         const nativeCross = findMarketId(markets, base, quote);
 
-        const result = {
+        const result: {
+            exchangeId: any;
+            name: any;
+            markets: any;
+            xrpCommon: any;
+            xautCommon: any;
+            nativeCross: any;
+            xrpCandles: any[];
+            xautCandles: any[];
+            nativeCrossCandles: any[];
+            requiredCandles: any;
+            probeLookbackHours: any;
+            probeCandles: number;
+            hasUsableTimeframe?: boolean;
+            lookbackSatisfied?: boolean;
+            xrpRange?: { count: number; oldestTs: any; newestTs: any; spanHours: number } | null;
+            xautRange?: { count: number; oldestTs: any; newestTs: any; spanHours: number } | null;
+            availableCandles?: number;
+            availableLookbackHours?: number;
+        } = {
             exchangeId,
             name: def.name,
             markets,

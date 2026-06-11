@@ -107,16 +107,16 @@ function parseArgs() {
 
 function loadAmaStrategies(resultsPath) {
     const json = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
-    const amas = json.meta?.amas ?? {};
-    const labels = { AMA1: 'AMA1', AMA2: 'AMA2', AMA3: 'AMA3', AMA4: 'AMA4' };
+    const amas = (json.meta?.amas ?? {}) as any;
+    const labels = { AMA1: 'AMA1', AMA2: 'AMA2', AMA3: 'AMA3', AMA4: 'AMA4' as string };
 
-    const out = [];
+    const out: any[] = [];
     for (const [key, val] of Object.entries(amas)) {
-        const a = val;
+        const a = val as any;
         if (!a || !Number.isFinite(a.er) || !Number.isFinite(a.fast) || !Number.isFinite(a.slow)) continue;
         out.push({
             id: key,
-            name: labels[key] ?? key,
+            name: labels[key as keyof typeof labels] ?? key,
             er: a.er,
             fast: a.fast,
             slow: a.slow,

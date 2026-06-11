@@ -134,13 +134,14 @@ function printHelp() {
 
 function loadAmaStrategies(resultsPath) {
     const json = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
-    const amas = json.meta?.amas;
+    const amas = (json.meta as any)?.amas;
     if (!amas) throw new Error('No meta.amas found in results file.');
 
-    const out = [];
+    const out: any[] = [];
     for (const [key, val] of Object.entries(amas)) {
-        if (!val || !Number.isFinite(val.er)) continue;
-        out.push({ id: key, name: val.label || key, er: val.er, fast: val.fast, slow: val.slow });
+        const v = val as any;
+        if (!v || !Number.isFinite(v.er)) continue;
+        out.push({ id: key, name: v.label || key, er: v.er, fast: v.fast, slow: v.slow });
     }
     out.sort((a, b) => a.id.localeCompare(b.id));
     if (out.length === 0) throw new Error('No valid AMA strategies found');

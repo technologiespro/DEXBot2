@@ -45,7 +45,7 @@ const UPDATE_COLORS = {
     error: '\x1b[1;31m',
 };
 
-function colorUpdateOutput(text, color, stream = process.stdout) {
+function colorUpdateOutput(text: string, color: string, stream: NodeJS.WriteStream = process.stdout) {
     return stream.isTTY && !process.env.NO_COLOR
         ? `${color}${text}${UPDATE_COLORS.reset}`
         : text;
@@ -132,10 +132,10 @@ function restartMonolithicRuntime(monolithic) {
     run(`node "${unlockPath}" restart all`);
 }
 
-async function detectIsolatedSupervisor() {
+async function detectIsolatedSupervisor(): Promise<Record<string, any> | null> {
     try {
-        const resp = await sendControlCommand({ cmd: 'status' });
-        return resp && resp.ok ? resp.status || {} : null;
+        const resp: any = await sendControlCommand({ cmd: 'status' });
+        return resp?.ok ? (resp.status as Record<string, any>) || {} : null;
     } catch (_) {
         return null;
     }

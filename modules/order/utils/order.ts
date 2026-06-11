@@ -88,7 +88,7 @@ const { blockchainToFloat, floatToBlockchainInt, quantizeFloat } = MathUtils;
  * @param {Object} assets - Asset metadata with assetA, assetB, and precisions
  * @returns {Object|null} Parsed order {orderId, price, type, size} or null if invalid
  */
-function parseChainOrder(chainOrder, assets) {
+function parseChainOrder(chainOrder: any, assets: any) {
     if (!chainOrder || !chainOrder.sell_price || !assets) return null;
     const { base, quote } = chainOrder.sell_price;
     if (!base || !quote || !base.asset_id || !quote.asset_id || base.amount === 0) return null;
@@ -139,7 +139,7 @@ function parseChainOrder(chainOrder, assets) {
  * @param {Set<string>} [opts.excludeGridOrderIds] - Skip grid slot ids already assigned in this sync pass
  * @returns {Object|null} Matching grid order or null if no match found
  */
-function findMatchingGridOrderByOpenOrder(parsedChainOrder, opts) {
+function findMatchingGridOrderByOpenOrder(parsedChainOrder: any, opts: any) {
     const { orders, assets, calcToleranceFn, logger } = opts || {};
     if (!parsedChainOrder || !orders) return null;
 
@@ -202,7 +202,7 @@ function findMatchingGridOrderByOpenOrder(parsedChainOrder, opts) {
  * @returns {Promise<Object|null>} Updated order object or null
  * @throws {Error} If chainSize suspicious (possible data corruption)
  */
-async function applyChainSizeToGridOrder(manager, gridOrder, chainSize) {
+async function applyChainSizeToGridOrder(manager: any, gridOrder: any, chainSize: any) {
     if (!manager || !gridOrder) return null;
     if (gridOrder.state !== ORDER_STATES.ACTIVE && gridOrder.state !== ORDER_STATES.PARTIAL) return null;
 
@@ -750,7 +750,7 @@ function calculateFundDrivenBoundary(allSlots, availA, availB, price, gapSlots) 
  * @param {boolean} [options.assignOnChain=false] - Override on-chain orders if true
  * @returns {Array<Object>} Slots with updated type assignments
  */
-function assignGridRoles(allSlots, boundaryIdx, gapSlots, ORDER_TYPES, ORDER_STATES, options = {}) {
+function assignGridRoles(allSlots: any, boundaryIdx: any, gapSlots: any, ORDER_TYPES: any, ORDER_STATES: any, options: { assignOnChain?: boolean; getCurrentSlot?: (id: any) => any } = {}) {
     const assignOnChain = options.assignOnChain === true;
     const getCurrentSlot = (typeof options.getCurrentSlot === 'function') ? options.getCurrentSlot : null;
     const buyEndIdx = boundaryIdx;
@@ -841,7 +841,7 @@ function validateIndexes(grid, indexes) {
     }
 
     for (const [key, indexSet] of Object.entries(indexes)) {
-        for (const id of indexSet) {
+        for (const id of (indexSet as Set<string>)) {
             if (!grid.has(id)) {
                 errors.push(`Orphaned index entry: ${key} has ${id} but not in grid`);
             }
@@ -898,7 +898,7 @@ function observedQuantum(a, b) {
     return quantum > 0 ? quantum : Number.EPSILON;
 }
 
-function resolveOrderSizePrecision(orderType, precisions = {}) {
+function resolveOrderSizePrecision(orderType: any, precisions: { buyPrecision?: number; sellPrecision?: number; defaultPrecision?: number } = {}) {
     if (!precisions || typeof precisions !== 'object') return null;
 
     if (orderType === ORDER_TYPES.BUY) return parseOptionalPrecision(precisions.buyPrecision);
@@ -907,7 +907,7 @@ function resolveOrderSizePrecision(orderType, precisions = {}) {
     return parseOptionalPrecision(precisions.defaultPrecision);
 }
 
-function resolvePriceTolerance(precisions = {}, order, referenceOrder) {
+function resolvePriceTolerance(precisions: { priceRelativeTolerance?: number } = {}, order: any, referenceOrder: any) {
     const leftPrice = Number(order?.price);
     const rightPrice = Number(referenceOrder?.price);
     const relativeToleranceRatio = Number(precisions.priceRelativeTolerance);
@@ -934,7 +934,7 @@ function nearlyEqualAbsolute(a, b, tolerance) {
     return Math.abs(left - right) <= tol;
 }
 
-function nearlyEqualRelative(a, b, options = {}) {
+function nearlyEqualRelative(a: any, b: any, options: { precision?: number } = {}) {
     const left = Number(a);
     const right = Number(b);
 
@@ -971,11 +971,11 @@ function getOrderSize(order) {
  * @param {Object} [options.precisions] - Optional precision hints {buyPrecision, sellPrecision, defaultPrecision, priceRelativeTolerance}
  * @returns {boolean} - True if orders are equivalent
  */
-function ordersEqual(a, b, options = {}) {
+function ordersEqual(a: any, b: any, options: { precisions?: { buyPrecision?: number; sellPrecision?: number; defaultPrecision?: number; priceRelativeTolerance?: number } } = {}) {
     if (!a || !b) return false;
     if (a === b) return true;
 
-    const precisionHints = options.precisions || {};
+    const precisionHints: { buyPrecision?: number; sellPrecision?: number; defaultPrecision?: number; priceRelativeTolerance?: number } = options.precisions || {};
     const sizePrecision = resolveOrderSizePrecision(a.type, precisionHints);
     const priceTolerance = resolvePriceTolerance(precisionHints, a, b);
 

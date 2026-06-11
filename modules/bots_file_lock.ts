@@ -43,11 +43,10 @@ const path = require('path');
  * @class
  */
 class FileLock {
+    isLocked: boolean = false;
+    queue: Array<() => void> = [];
+
     constructor() {
-        /** @type {boolean} */
-        this.isLocked = false;
-        /** @type {Array<Function>} */
-        this.queue = [];
     }
 
     /**
@@ -60,7 +59,7 @@ class FileLock {
             return;
         }
 
-        await new Promise(resolve => {
+        await new Promise<void>(resolve => {
             this.queue.push(resolve);
         });
     }

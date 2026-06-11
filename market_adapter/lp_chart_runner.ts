@@ -37,8 +37,8 @@ const ANALYSIS_CHARTS_DIR = path.join(ROOT, 'analysis', 'charts');
 const AMA_PROFILES_FILE = path.join(ROOT, 'profiles', 'market_profiles.json');
 const DEFAULT_COMPARISON_COLORS = ['#26a69a', '#fb8c00', '#5c9ee6', '#ef5350'];
 const DEFAULT_COMPARISON_DASHES = ['dot', 'solid', 'dash', 'dashdot'];
-const DEFAULT_COMPARISON_STRATEGIES = Object.keys(MARKET_ADAPTER.AMAS).map((key, index) => {
-    const ama = MARKET_ADAPTER.AMAS[key];
+const DEFAULT_COMPARISON_STRATEGIES = Object.keys(MARKET_ADAPTER.AMAS).map((key: string, index: number) => {
+    const ama: Record<string, any> = MARKET_ADAPTER.AMAS[key];
     return {
         name: ama.name || key,
         erPeriod: ama.erPeriod,
@@ -49,12 +49,111 @@ const DEFAULT_COMPARISON_STRATEGIES = Object.keys(MARKET_ADAPTER.AMAS).map((key,
     };
 });
 
-function parseLpChartCliArgs(argv, options = {}) {
+/* ── Type declarations ───────────────────────────────────── */
+
+type NormalizedLpCandle = [number, number, number, number, number, number];
+
+interface LpCandleObject {
+    timestamp: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+}
+
+interface LpMeta {
+    pool?: string;
+    assetA?: { symbol?: string };
+    assetB?: { symbol?: string };
+    intervalSeconds?: number;
+    [key: string]: unknown;
+}
+
+interface AmaConfig {
+    name: string;
+    erPeriod: number;
+    fastPeriod: number;
+    slowPeriod: number;
+    color?: string;
+    dash?: string;
+    lineWidth?: number;
+}
+
+interface AmaResult extends AmaConfig {
+    values: number[];
+}
+
+interface LpDataBundle {
+    dataFile: string;
+    meta: LpMeta | null;
+    candleArrays: NormalizedLpCandle[];
+    candleObjects: LpCandleObject[];
+}
+
+interface CliArgOptions {
+    dataFlags?: string[];
+    allowPositional?: boolean;
+    includeNoOpen?: boolean;
+}
+
+interface MarketChartOptions {
+    dataFile?: string;
+    logger?: { log: (...args: any[]) => void };
+    profilesFile?: string;
+    outFile?: string;
+    noOpen?: boolean;
+}
+
+interface ComparisonChartOptions {
+    dataFile?: string;
+    logger?: { log: (...args: any[]) => void };
+    defaultStrategies?: AmaConfig[];
+    profilesFile?: string | null;
+    outFile?: string;
+    noOpen?: boolean;
+}
+
+interface BundleChartOptions {
+    dataFile?: string;
+    logger?: { log: (...args: any[]) => void };
+    profilesFile?: string;
+    defaultStrategies?: AmaConfig[];
+    comparisonProfilesFile?: string | null;
+    openComparison?: boolean;
+    noOpen?: boolean;
+}
+
+interface CliOptions {
+    dataFlags?: string[];
+    logger?: { log: (...args: any[]) => void };
+    profilesFile?: string;
+    comparisonProfilesFile?: string | null;
+    defaultStrategies?: AmaConfig[];
+}
+
+interface ChartHtmlParams {
+    meta: LpMeta | null;
+    candleArrays: NormalizedLpCandle[];
+    amaResults: AmaResult[];
+    outFile: string;
+}
+
+interface MetricsResult {
+    maxDriftUp: number;
+    maxDriftDown: number;
+    cumDevAbove: number;
+    cumDevBelow: number;
+    totalDeviation: number;
+    maxDistance: number;
+}
+
+function parseLpChartCliArgs(argv: string[], options: CliArgOptions = {}): { dataFile: string | null; noOpen: boolean } {
     const args = Array.isArray(argv) ? argv : [];
     const dataFlags = new Set(options.dataFlags ?? ['--data', '--file']);
     const allowPositional = options.allowPositional !== false;
     const includeNoOpen = options.includeNoOpen !== false;
-    let dataFile = null;
+    let dataFile: string | null = null;
     let noOpen = false;
 
     for (let i = 0; i < args.length; i++) {
@@ -76,23 +175,29 @@ function parseLpChartCliArgs(argv, options = {}) {
     return { dataFile, noOpen };
 }
 
-function normalizeLpCandle(candle, index) {
+function normalizeLpCandle(candle: unknown, index: number): NormalizedLpCandle {
     if (Array.isArray(candle)) {
         if (candle.length < 5) {
             throw new Error(`Invalid candle row at index ${index}: expected at least 5 entries`);
         }
         return [
-            candle[0],
-            candle[1],
-            candle[2],
-            candle[3],
-            candle[4],
-            candle[5] ?? 0,
+            candle[0] as number,
+            candle[1] as number,
+            candle[2] as number,
+            candle[3] as number,
+            candle[4] as number,
+            (candle[5] ?? 0) as number,
         ];
     }
 
     if (candle && typeof candle === 'object') {
-        const { timestamp, open, high, low, close, volume = 0 } = candle;
+        const rec = candle as Record<string, unknown>;
+        const timestamp = rec.timestamp as number;
+        const open = rec.open as number;
+        const high = rec.high as number;
+        const low = rec.low as number;
+        const close = rec.close as number;
+        const volume = (rec.volume ?? 0) as number;
         if ([timestamp, open, high, low, close].some((value) => value == null)) {
             throw new Error(`Invalid candle object at index ${index}: missing OHLC fields`);
         }
@@ -102,8 +207,8 @@ function normalizeLpCandle(candle, index) {
     throw new Error(`Invalid candle row at index ${index}: unsupported format`);
 }
 
-function resolveLpDataFile(dataFile) {
-    const resolved = dataFile ? path.resolve(dataFile) : findLatestLpData();
+function resolveLpDataFile(dataFile?: string): string {
+    const resolved: string | null = dataFile ? path.resolve(dataFile) : findLatestLpData();
     if (!resolved) {
         throw new Error('No LP data file found. Use --data <path> or run the fetch step first.');
     }
@@ -113,11 +218,11 @@ function resolveLpDataFile(dataFile) {
     return resolved;
 }
 
-function loadLpDataFile(dataFile) {
+function loadLpDataFile(dataFile?: string): LpDataBundle {
     const resolved = resolveLpDataFile(dataFile);
-    const raw = JSON.parse(fs.readFileSync(resolved, 'utf8'));
-    const meta = raw.meta ?? null;
-    const candles = Array.isArray(raw?.candles) ? raw.candles : raw;
+    const raw: Record<string, unknown> = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+    const meta = (raw.meta ?? null) as LpMeta | null;
+    const candles: unknown[] = Array.isArray(raw?.candles) ? (raw.candles as unknown[]) : (Array.isArray(raw) ? (raw as unknown[]) : []);
     if (!Array.isArray(candles) || candles.length === 0) {
         throw new Error('No candles in data file.');
     }
@@ -140,26 +245,26 @@ function loadLpDataFile(dataFile) {
     };
 }
 
-function openInBrowser(filePath) {
+function openInBrowser(filePath: string): void {
     const url = `file://${filePath}`;
     const cmd = process.platform === 'darwin'
         ? `open "${url}"`
         : process.platform === 'win32'
             ? `start "" "${url}"`
             : `xdg-open "${url}"`;
-    exec(cmd, (err) => {
+    exec(cmd, (err: Error | null) => {
         if (err) console.warn(`  Could not auto-open browser: ${err.message}`);
     });
 }
 
-function defaultMarketChartPath(meta) {
+function defaultMarketChartPath(meta: LpMeta | null): string {
     const suffix = meta?.pool
         ? `pool_${String(meta.pool).replace('1.19.', '')}`
         : `${meta?.assetA?.symbol || '?'}_${meta?.assetB?.symbol || '?'}`;
     return path.join(ANALYSIS_CHARTS_DIR, `lp_AMA_chart_${suffix}.html`).replace(/\./g, '_').replace('_html', '.html');
 }
 
-function defaultComparisonChartPath(meta, dataFile) {
+function defaultComparisonChartPath(meta: LpMeta | null, dataFile?: string): string {
     if (meta?.pool) {
         const suffix = String(meta.pool).replace('1.19.', '');
         return path.join(ANALYSIS_CHARTS_DIR, `lp_chart_pool_${suffix}.comparison.html`);
@@ -178,7 +283,7 @@ function defaultComparisonChartPath(meta, dataFile) {
         .replace('_html', '.html');
 }
 
-function calculateMetrics(amaValues, candles) {
+function calculateMetrics(amaValues: number[], candles: LpCandleObject[]): MetricsResult {
     let maxDriftUp = 0;
     let maxDriftDown = 0;
     let cumDevAbove = 0;
@@ -205,13 +310,13 @@ function calculateMetrics(amaValues, candles) {
     };
 }
 
-function writeChartHtml({ meta, candleArrays, amaResults, outFile }) {
+function writeChartHtml({ meta, candleArrays, amaResults, outFile }: ChartHtmlParams): void {
     const html = generateHTML(meta, candleArrays, amaResults);
     fs.mkdirSync(path.dirname(outFile), { recursive: true });
     fs.writeFileSync(outFile, html);
 }
 
-function generateMarketLpChart(options = {}) {
+function generateMarketLpChart(options: MarketChartOptions = {}): { dataFile: string; outFile: string; amaResults: AmaResult[]; meta: LpMeta | null; candleArrays: NormalizedLpCandle[] } {
     const logger = options.logger ?? console;
     const { dataFile, meta, candleArrays } = loadLpDataFile(options.dataFile);
 
@@ -219,8 +324,8 @@ function generateMarketLpChart(options = {}) {
     const poolLabel = meta?.pool ? `pool ${meta.pool}` : `${meta?.assetA?.symbol || '?'}\/${meta?.assetB?.symbol || '?'}`;
     logger.log(`  ${candleArrays.length} candles · ${poolLabel}`);
 
-    const closes = candleArrays.map((c) => c[4]);
-    const amaConfigs = loadStrategiesForLpChart({
+    const closes: number[] = candleArrays.map((c) => c[4]);
+    const amaConfigs: AmaConfig[] | null = loadStrategiesForLpChart({
         dataFile,
         meta,
         profilesFile: options.profilesFile ?? AMA_PROFILES_FILE,
@@ -230,7 +335,7 @@ function generateMarketLpChart(options = {}) {
         throw new Error(`AMA profile not found for pair ${pair}`);
     }
 
-    const amaResults = amaConfigs.map((cfg) => ({
+    const amaResults: AmaResult[] = amaConfigs.map((cfg: AmaConfig) => ({
         ...cfg,
         values: calculateAMA(closes, cfg),
     }));
@@ -256,11 +361,11 @@ function generateMarketLpChart(options = {}) {
     return { dataFile, outFile, amaResults, meta, candleArrays };
 }
 
-function generateComparisonLpChart(options = {}) {
+function generateComparisonLpChart(options: ComparisonChartOptions = {}): { dataFile: string; outFile: string; amaResults: AmaResult[]; meta: LpMeta | null; candleArrays: NormalizedLpCandle[] } {
     const logger = options.logger ?? console;
     const { dataFile, meta, candleArrays, candleObjects } = loadLpDataFile(options.dataFile);
-    const defaultStrategies = options.defaultStrategies ?? DEFAULT_COMPARISON_STRATEGIES;
-    const strategies = loadStrategiesForLpChart({
+    const defaultStrategies: AmaConfig[] = options.defaultStrategies ?? DEFAULT_COMPARISON_STRATEGIES;
+    const strategies: AmaConfig[] = loadStrategiesForLpChart({
         dataFile,
         meta,
         profilesFile: options.profilesFile ?? null,
@@ -269,17 +374,17 @@ function generateComparisonLpChart(options = {}) {
     logger.log(`Data:        ${path.basename(dataFile)}  (${candleObjects.length} candles)`);
     if (strategies.length && strategies !== defaultStrategies) {
         logger.log('Strategies:  loaded from shared strategy loader');
-        strategies.forEach((s) => logger.log(`  ${s.name.padEnd(28)} ER=${s.erPeriod}  Fast=${s.fastPeriod}  Slow=${s.slowPeriod}`));
+        strategies.forEach((s: AmaConfig) => logger.log(`  ${s.name.padEnd(28)} ER=${s.erPeriod}  Fast=${s.fastPeriod}  Slow=${s.slowPeriod}`));
     } else {
         logger.log('Strategies:  results file not found — using defaults');
     }
 
-    const closes = candleObjects.map((c) => c.close);
-    const amaResults = [];
+    const closes: number[] = candleObjects.map((c: LpCandleObject) => c.close);
+    const amaResults: AmaResult[] = [];
     logger.log('');
     for (const [index, strategy] of strategies.entries()) {
-        const values = calculateAMA(closes, strategy);
-        const metrics = calculateMetrics(values, candleObjects);
+        const values: number[] = calculateAMA(closes, strategy);
+        const metrics: MetricsResult = calculateMetrics(values, candleObjects);
         amaResults.push({ ...strategy, lineWidth: index === 0 ? 2 : 1.5, values });
 
         logger.log(`${strategy.name}`);
@@ -303,7 +408,7 @@ function generateComparisonLpChart(options = {}) {
     return { dataFile, outFile, amaResults, meta, candleArrays };
 }
 
-function generateLpChartBundle(options = {}) {
+function generateLpChartBundle(options: BundleChartOptions = {}): { dataFile: string; marketChart: ReturnType<typeof generateMarketLpChart>; comparisonChart: ReturnType<typeof generateComparisonLpChart> } {
     const logger = options.logger ?? console;
     const dataFile = resolveLpDataFile(options.dataFile);
     logger.log(`Generating LP charts from ${path.relative(process.cwd(), dataFile)}`);
@@ -329,7 +434,7 @@ function generateLpChartBundle(options = {}) {
     };
 }
 
-function runLpChartCli(argv = process.argv.slice(2), options = {}) {
+function runLpChartCli(argv: string[] = process.argv.slice(2), options: CliOptions = {}): ReturnType<typeof generateLpChartBundle> {
     const { dataFile, noOpen } = parseLpChartCliArgs(argv, {
         dataFlags: options.dataFlags ?? ['--data', '--file'],
     });

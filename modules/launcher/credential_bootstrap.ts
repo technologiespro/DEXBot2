@@ -93,6 +93,10 @@ function fetchBootstrapPassword({
     socketPath,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     retries = 0,
+}: {
+    socketPath?: string;
+    timeoutMs?: number;
+    retries?: number;
 } = {}) {
     if (!socketPath) {
         return Promise.reject(new Error('Missing bootstrap socket'));
@@ -188,6 +192,10 @@ async function createPasswordBootstrapServer({
     password,
     secret,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+}: {
+    password?: string;
+    secret?: any;
+    timeoutMs?: number;
 } = {}) {
     const credential = typeof secret !== 'undefined' ? secret : password;
     const credentialType = typeof secret !== 'undefined' ? 'secret' : 'password';
@@ -260,7 +268,7 @@ async function createPasswordBootstrapServer({
                     // neither the socket nor the bootstrap path file and will fall
                     // through to interactive auth.  This is by design — the secret
                     // channel is intentionally single-use.
-                    settle(resolveTransfer);
+                    settle(resolveTransfer, undefined);
                 } catch (error: any) {
                     socket.write(JSON.stringify({ success: false, error: 'Invalid bootstrap request' }) + '\n');
                     socket.end();
@@ -282,7 +290,7 @@ async function createPasswordBootstrapServer({
             } catch (err: any) {
                 debugLog(`Unable to chmod bootstrap socket ${socketPath}`, err);
             }
-            resolve();
+            resolve(undefined);
         });
     });
 

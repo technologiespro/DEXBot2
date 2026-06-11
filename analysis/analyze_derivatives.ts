@@ -28,9 +28,50 @@ const { createSource }        = require('./price_sources');
 const { findLatestLpData }    = require('../market_adapter/utils/data_discovery');
 const { writeChartFile }      = require('./chart_utils');
 
-function parseArgs() {
+interface SourceConfig {
+    botKey: string;
+    filePath?: string;
+    poolId?: string;
+    precA?: number;
+    precB?: number;
+    stateDir?: string;
+}
+
+interface CliConfig {
+    source: { type: string; config: SourceConfig };
+    slowSmaPeriod: number;
+    fastSmaPeriod: number | null;
+    minBarsForConfirmation: number;
+    macdFastPeriod: number;
+    macdSlowPeriod: number;
+    macdSignalPeriod: number;
+    macdMinHist: number;
+    trendFilter: boolean;
+    trendFilterMinBars: number;
+    momentumGateEnabled: boolean;
+    momentumGateMinBars: number;
+    momentumGateRsiZone: number;
+    fastSmaCommitmentBars: number;
+    priceRegimeGate: boolean;
+    priceRegimeMinDistancePct: number;
+    rsiPeriod: number;
+    interpConfirmBars: number;
+    interpHoldBars: number;
+    rsiZone: number;
+    rsiExtreme: number;
+    chartFile: string;
+    quiet: boolean;
+}
+
+interface PriceSource {
+    name: string;
+    fetchCandles(): Promise<any[]>;
+    extractMarketPrice(candle: any): { marketPrice: any; timestamp: any };
+}
+
+function parseArgs(): CliConfig {
     const args = process.argv.slice(2);
-    const config = {
+    const config: CliConfig = {
         source: { type: 'market_adapter', config: { botKey: 'XRP-BTS' } },
         slowSmaPeriod:        500,
         fastSmaPeriod:        null,
@@ -150,7 +191,33 @@ Analyzer options:
     `);
 }
 
-async function analyze(source, config) {
+async function analyze(source: PriceSource, config: CliConfig): Promise<{
+    config: {
+        source: string;
+        slowSmaPeriod: number;
+        fastSmaPeriod: number | null;
+        macdFastPeriod: number;
+        macdSlowPeriod: number;
+        macdSignalPeriod: number;
+        macdMinHist: number;
+        trendFilter: boolean;
+        trendFilterMinBars: number;
+        momentumGateEnabled: boolean;
+        momentumGateMinBars: number;
+        momentumGateRsiZone: number;
+        fastSmaCommitmentBars: number;
+        priceRegimeGate: boolean;
+        priceRegimeMinDistancePct: number;
+        rsiPeriod: number;
+        interpConfirmBars: number;
+        interpHoldBars: number;
+        rsiZone: number;
+        rsiExtreme: number;
+        minBarsForConfirmation: number;
+    };
+    allResults: any[];
+    lastAnalysis: any;
+}> {
     if (!config.quiet) console.log(`[Analyzer] Loading candles from ${source.name}...`);
 
     const candles = await source.fetchCandles();
@@ -233,7 +300,7 @@ async function analyze(source, config) {
     };
 }
 
-async function main() {
+async function main(): Promise<void> {
     const config = parseArgs();
 
     try {

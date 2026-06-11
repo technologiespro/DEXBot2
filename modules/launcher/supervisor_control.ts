@@ -9,7 +9,7 @@ function sendControlCommand(cmd) {
         let buffer = '';
         let settled = false;
 
-        const done = (err, result) => {
+        const done = (err: Error | null, result?: any) => {
             if (settled) return;
             settled = true;
             try { socket.destroy(); } catch (_: any) {}

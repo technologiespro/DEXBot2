@@ -39,11 +39,18 @@ const { writeJsonAtomic } = require('../utils/atomic_write');
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_CONFIG = {
-    intervalSeconds: 3600,    // 1h buckets
-    lookbackHours:   26280,   // 3 years (3 * 365 * 24)
-    apiKey:          null,
-    chunkMonths:     MARKET_ADAPTER.KIBANA_FETCH_CHUNK_MONTHS,
+const DEFAULT_CONFIG: {
+    intervalSeconds: number;
+    lookbackHours: number;
+    apiKey: string | null;
+    chunkMonths: number;
+    timeRange?: { gte?: string; lte?: string };
+    outPath?: string;
+} = {
+    intervalSeconds: 3600,
+    lookbackHours: 26280,
+    apiKey: null,
+    chunkMonths: MARKET_ADAPTER.KIBANA_FETCH_CHUNK_MONTHS,
 };
 
 const FETCH_TIMEOUT_MS = MARKET_ADAPTER.KIBANA_REQUEST_TIMEOUT_MS;

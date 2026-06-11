@@ -1,10 +1,38 @@
 const chainKeys = require('./chain_keys');
 
-function buildSessionAccountCache(accountsData, masterSecret, options = {}) {
+interface SessionAccount {
+    encryptedKey: string;
+}
+
+interface AccountsData {
+    accounts?: Record<string, SessionAccount>;
+}
+
+interface BuildSessionCacheOptions {
+    chainKeys?: typeof chainKeys;
+    onDecryptError?: (accountName: string, err: Error) => void;
+}
+
+interface CacheSessionKeyOptions {
+    chainKeys?: typeof chainKeys;
+}
+
+interface LoadDaemonKeyOptions {
+    chainKeys?: typeof chainKeys;
+}
+
+interface SessionState {
+    vaultSecret?: string;
+    sessionSecret?: string;
+    sessionAccountKeys?: Map<string, string>;
+}
+
+function buildSessionAccountCache(accountsData: AccountsData, masterSecret: string, options: BuildSessionCacheOptions = {}) {
     const chainKeysImpl = options.chainKeys || chainKeys;
-    const accounts = accountsData && accountsData.accounts && typeof accountsData.accounts === 'object'
-        ? accountsData.accounts
-        : {};
+    const accounts: Record<string, SessionAccount> =
+        accountsData && accountsData.accounts && typeof accountsData.accounts === 'object'
+            ? accountsData.accounts
+            : {};
     const derivedSessionSecret = chainKeysImpl.createSessionSecret(masterSecret);
     const cache = new Map();
 
@@ -29,7 +57,7 @@ function buildSessionAccountCache(accountsData, masterSecret, options = {}) {
     };
 }
 
-function cacheSessionPrivateKey(accountName, privateKey, sessionState, options = {}) {
+function cacheSessionPrivateKey(accountName: string, privateKey: string, sessionState: SessionState, options: CacheSessionKeyOptions = {}) {
     const chainKeysImpl = options.chainKeys || chainKeys;
     const sessionAccountKeys = sessionState && sessionState.sessionAccountKeys;
     const sessionSecret = sessionState && sessionState.sessionSecret;
@@ -47,7 +75,7 @@ function cacheSessionPrivateKey(accountName, privateKey, sessionState, options =
     sessionAccountKeys.set(accountName, chainKeysImpl.encrypt(privateKey, sessionSecret));
 }
 
-async function loadDaemonPrivateKey(accountName, sessionState, options = {}) {
+async function loadDaemonPrivateKey(accountName: string, sessionState: SessionState, options: LoadDaemonKeyOptions = {}) {
     const chainKeysImpl = options.chainKeys || chainKeys;
     const currentVaultSecret = sessionState && sessionState.vaultSecret;
     const sessionAccountKeys = sessionState && sessionState.sessionAccountKeys;

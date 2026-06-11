@@ -144,10 +144,10 @@ function parseArgs(argv = process.argv.slice(2)) {
             case '--slowMax': out.slow.max = Number(v); i++; break;
             case '--slowStep': out.slow.step = Number(v); i++; break;
             case '--slowCount': out.slow.count = Number(v); i++; break;
-            case '--ama1Cap': out.ama1Cap = Number(v); i++; break;
-            case '--ama2Cap': out.ama2Cap = Number(v); i++; break;
-            case '--ama3Cap': out.ama3Cap = Number(v); i++; break;
-            case '--ama4Cap': out.ama4Cap = Number(v); i++; break;
+            case '--ama1Cap': (out as any).ama1Cap = Number(v); i++; break;
+            case '--ama2Cap': (out as any).ama2Cap = Number(v); i++; break;
+            case '--ama3Cap': (out as any).ama3Cap = Number(v); i++; break;
+            case '--ama4Cap': (out as any).ama4Cap = Number(v); i++; break;
             case '--workers': out.workers = Number(v); i++; break;
             case '--write-profiles': out.writeProfiles = true; break;
         }
@@ -514,8 +514,8 @@ async function run() {
         });
     }));
 
-    const entries = shardResults.flatMap((r) => r.entries);
-    const validCombos = shardResults.reduce((acc, r) => acc + r.validCombos, 0);
+    const entries = shardResults.flatMap((r) => (r as any).entries);
+    const validCombos = shardResults.reduce((acc, r) => acc + (r as any).validCombos, 0);
     const maxDistVals = entries.map((e) => e.area.maxDist);
 
     const objectiveResults = objectives.map((objective, idx) => {
