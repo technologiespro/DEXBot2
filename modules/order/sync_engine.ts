@@ -1184,7 +1184,7 @@ class SyncEngine {
                 } else if (mgr._gridLock && typeof mgr._gridLock.acquire === 'function') {
                     await mgr._gridLock.acquire(runCreate);
                 } else {
-                    await runCreate();
+                    throw new Error('synchronizeWithChain(createOrder): _gridLock is missing — cannot proceed without lock');
                 }
                 break;
             }
@@ -1248,7 +1248,7 @@ class SyncEngine {
                 } else if (mgr._gridLock && typeof mgr._gridLock.acquire === 'function') {
                     await mgr._gridLock.acquire(runCancel);
                 } else {
-                    await runCancel();
+                    throw new Error('synchronizeWithChain(cancelOrder): _gridLock is missing — cannot proceed without lock');
                 }
                 break;
             }

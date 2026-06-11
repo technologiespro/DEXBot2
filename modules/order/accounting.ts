@@ -349,7 +349,7 @@ class Accountant {
      */
     async recalculateFunds() {
          const mgr = this.manager;
-         if (mgr._pauseFundRecalc) return;
+         if (mgr._pauseFundRecalc > 0) return;
          if (!mgr.funds) this.resetFunds();
 
          // Sync btsBalance from manager into funds for non-BTS pairs
@@ -424,7 +424,7 @@ class Accountant {
              mgr.applyBotFundsAllocation();
          }
 
-          if (mgr.logger && mgr.logger.level === 'debug' && !mgr._pauseFundRecalc && !mgr._pauseRecalcLogging) {
+          if (mgr.logger && mgr.logger.level === 'debug' && mgr._pauseFundRecalc === 0 && !mgr._pauseRecalcLogging) {
               const buyPrecision = mgr.config?.assetB?.precision;
               const sellPrecision = mgr.config?.assetA?.precision;
              if (Number.isFinite(buyPrecision) && Number.isFinite(sellPrecision)) {
@@ -433,7 +433,7 @@ class Accountant {
              }
          }
 
-        if (!mgr._pauseFundRecalc && !mgr._state.isBootstrapping() && !mgr._state.isBroadcastingActive()) {
+        if (mgr._pauseFundRecalc === 0 && !mgr._state.isBootstrapping() && !mgr._state.isBroadcastingActive()) {
             const snapshot = { chainFreeBuy, chainFreeSell, chainBuy, chainSell };
 
             const runVerification = (nextSnapshot) => {

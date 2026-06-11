@@ -453,7 +453,7 @@ class OrderManager {
     _fundLock: any;
     _recentlyRotatedOrderIds: Set<any>;
     _gridSidesUpdated: Set<any>;
-    _pauseFundRecalc: boolean;
+    _pauseFundRecalc: number;
     _pauseRecalcLogging: boolean;
     _throwOnIllegalState: boolean;
     _pipelineBlockedSince: any;
@@ -522,7 +522,7 @@ class OrderManager {
 
         this._recentlyRotatedOrderIds = new Set();
         this._gridSidesUpdated = new Set();
-        this._pauseFundRecalc = false;
+        this._pauseFundRecalc = 0;
         this._pauseRecalcLogging = false;
         this._throwOnIllegalState = false;
         this._pipelineBlockedSince = null;
@@ -800,15 +800,17 @@ class OrderManager {
      * @returns {void}
      */
     pauseFundRecalc() {
-        this._pauseFundRecalc = true;
+        this._pauseFundRecalc++;
     }
 
     /**
      * @returns {Promise<void>}
      */
     async resumeFundRecalc() {
-        this._pauseFundRecalc = false;
-        await this.recalculateFunds();
+        this._pauseFundRecalc = Math.max(0, this._pauseFundRecalc - 1);
+        if (this._pauseFundRecalc === 0) {
+            await this.recalculateFunds();
+        }
     }
 
     /**
@@ -994,7 +996,7 @@ class OrderManager {
 
         this._syncWorkingGridFromMasterMutation(id, context);
 
-        if (!this._pauseFundRecalc) {
+        if (this._pauseFundRecalc === 0) {
             await this.recalculateFunds();
         }
 

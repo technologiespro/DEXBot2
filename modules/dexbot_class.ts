@@ -413,6 +413,7 @@ class DEXBot {
      * @returns {{incomingFillQueueLength: number, shadowLocks: number, batchInFlight: boolean, recoveryInFlight: boolean, broadcasting: boolean}}
      */
     _getPipelineSignals() {
+        this.manager?._cleanExpiredLocks?.();
         return {
             incomingFillQueueLength: this._incomingFillQueue.length,
             shadowLocks: this.manager?.shadowOrderIds?.size || 0,
@@ -4942,6 +4943,7 @@ class DEXBot {
      * @returns {Object} Metrics snapshot
      */
     getMetrics() {
+        this.manager?._cleanExpiredLocks?.();
         return {
             ...this._metrics,
             queueDepth: this._incomingFillQueue.length,
