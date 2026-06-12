@@ -983,13 +983,41 @@ export interface BotsFile {
   bots: BotConfigEntry[];
 }
 
+export interface LoggingRotationConfig {
+  enabled: boolean;
+  maxSize: number;
+  maxFiles: number;
+}
+
+export interface LoggingJsonConfig {
+  enabled: boolean;
+}
+
+export interface LoggingConfig {
+  changeTracking?: {
+    enabled: boolean;
+    ignoreMinor?: {
+      fundPrecision: number;
+      pricePrecision: number;
+    };
+  };
+  categories?: Record<string, {
+    enabled: boolean;
+    level: string;
+    options?: Record<string, any>;
+  }>;
+  rotation?: LoggingRotationConfig;
+  json?: LoggingJsonConfig;
+  display?: Record<string, any>;
+}
+
 export interface GeneralSettings {
   LOG_LEVEL?: string;
   GRID_LIMITS?: Record<string, any>;
   TIMING?: Record<string, any>;
   UPDATER?: Record<string, any>;
   MARKET_ADAPTER?: Record<string, any>;
-  LOGGING_CONFIG?: Record<string, any>;
+  LOGGING_CONFIG?: LoggingConfig;
   NATIVE_CLIENT?: Record<string, any>;
   FILL_PROCESSING?: Record<string, any>;
   PIPELINE_TIMING?: Record<string, any>;

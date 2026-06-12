@@ -995,6 +995,7 @@ let MARKET_ADAPTER = {
 // - 'info':  Standard production output. State changes (Active/Filled), keys confirmations, and errors.
 // - 'warn':  Warnings (non-critical issues) and errors only.
 // - 'error': Critical errors only.
+// - 'critical': Sustained critical failures (fill consumer cascade, permanent faults).
 let LOG_LEVEL = 'info';
 
 // Fine-grained Logging Configuration
@@ -1055,6 +1056,16 @@ let LOGGING_CONFIG = {
                 alwaysLog: true
             }
         }
+    },
+    // Rotation config: maxSize is the total disk budget for all log files (current + rotated).
+    // Per-file limit = maxSize / (maxFiles + 1). Oldest rotated files are pruned beyond maxFiles.
+    rotation: {
+        enabled: true,
+        maxSize: 1181116007,
+        maxFiles: 10
+    },
+    json: {
+        enabled: false
     },
     display: {
         gridDiagnostics: {

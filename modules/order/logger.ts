@@ -7,20 +7,8 @@ const LoggerState = require('./logger_state');
 const { LOGGING_CONFIG, ORDER_STATES } = require('../constants');
 
 /**
- * modules/order/logger.js - Logger Engine
- *
- * Color-coded console logger for OrderManager with structured output and optional file logging.
- * Exports a single Logger class that manages all logging operations.
- *
- * Provides:
- * - Log levels: debug, info, warn, error with color coding
- * - Color coding for order types (buy=green, sell=red, spread=yellow, partial=blue)
- * - Color coding for order states (virtual=gray, active=green)
- * - Formatted order grid display (sample with sell/spread/buy sections)
- * - Fund status display with smart change detection
- * - Configuration-driven output (enable/disable categories)
- * - Comprehensive status summaries and grid diagnostics
- * - Optional file logging (separate logFile per logger instance)
+ * Color-coded console logger with structured output, optional file logging,
+ * batched async writes, log rotation, JSON output, and correlation ID tracing.
  *
  * Configuration (LOGGING_CONFIG in constants.js):
  * - changeTracking: Smart detection of changes (only log what changed)
@@ -28,18 +16,9 @@ const { LOGGING_CONFIG, ORDER_STATES } = require('../constants');
  * - display.fundStatus: Enable/disable fund status display
  * - display.statusSummary: Enable/disable comprehensive status summaries
  * - display.gridDiagnostics: Enable/disable detailed grid diagnostics
- *
- * Fund Structure Display:
- * - available: Free funds for new orders (chainFree - virtual - fees - reservations)
- * - total.chain: chainFree + committed.chain (on-chain balance)
- * - total.grid: committed.grid + virtual (grid allocation)
- * - virtual: VIRTUAL order sizes (reserved for future placement)
- * - committed.grid: ACTIVE order sizes (internal tracking)
- * - committed.chain: ACTIVE orders with orderId (confirmed on-chain)
- *
- * @class
+ * - rotation: Size-based log rotation (total budget / maxFiles)
+ * - json: Structured JSON output to file (optional)
  */
-
 class Logger {
     level: string;
     config: any;
@@ -47,27 +26,35 @@ class Logger {
     quiet: boolean;
     logFile: any;
     state: any;
-    levels: { debug: number; info: number; warn: number; error: number };
+    levels: { debug: number; info: number; warn: number; error: number; critical: number };
     colors: any;
     marketName: any;
+    correlationId: string | null;
+
+    _writeQueue: string[];
+    _writeTimer: ReturnType<typeof setTimeout> | null;
+    _writeInterval: number;
+    _maxQueueSize: number;
+    _draining: boolean;
+    _maxTotalSize: number;
+    _maxLogFiles: number;
+    _jsonOutput: boolean;
+    _flushResolve: (() => void) | null;
+    _lastFileErrorTime: number;
 
     /**
-     * Create a new Logger instance.
-     * Auto-quiets console output under PM2 when PM2 log paths are configured
-     * (PM2 captures stdout/stderr, so console output would duplicate file logs).
      * @param {string} [category='DEXBot'] - Logger category/prefix
-     * @param {Object} [options={}] - Logger options
+     * @param {Object} [options]
      * @param {boolean} [options.quiet] - Suppress console output
-     * @param {boolean} [options.quietUnderPm2=true] - Auto-quiet under PM2 (default true)
+     * @param {boolean} [options.quietUnderPm2=true] - Auto-quiet under PM2
      * @param {string} [options.logFile] - Optional path to log file
-     * @param {string} [options.level='info'] - Log level (debug, info, warn, error)
+     * @param {string} [options.level='info'] - Log level
      * @param {Object} [options.configOverride] - Override LOGGING_CONFIG
+     * @param {string} [options.correlationId] - Tracing ID for JSON output
      */
-    constructor(category = 'DEXBot', options: { quiet?: boolean; quietUnderPm2?: boolean; logFile?: string; level?: string; configOverride?: any } = {}) {
+    constructor(category = 'DEXBot', options: { quiet?: boolean; quietUnderPm2?: boolean; logFile?: string; level?: string; configOverride?: any; correlationId?: string } = {}) {
         this.category = category;
 
-        // Auto-quiet under PM2 when PM2 log paths are configured to prevent
-        // duplicate output (PM2 captures stdout/stderr to files already).
         const isUnderPm2 = !!process.env.pm_exec_path;
         const hasPm2Logging = !!(process.env.pm_out_log_path || process.env.pm_err_log_path);
         const pm2AutoQuiet = isUnderPm2 && hasPm2Logging;
@@ -78,13 +65,10 @@ class Logger {
         this.level = options.level || 'info';
         this.config = options.configOverride || LOGGING_CONFIG;
 
-        // Initialize change tracking
         this.state = new LoggerState();
 
-        // Log levels mapping
-        this.levels = { debug: 0, info: 1, warn: 2, error: 3 };
+        this.levels = { debug: 0, info: 1, warn: 2, error: 3, critical: 4 };
 
-        // Only use colors if stdout is a TTY (terminal), not when piped to files
         let useColors = process.stdout.isTTY;
         if (this.config.display?.colors?.enabled === false) {
             useColors = false;
@@ -95,50 +79,128 @@ class Logger {
         this.colors = useColors ? {
             reset: '\x1b[0m',
             buy: '\x1b[92m', sell: '\x1b[91m', spread: '\x1b[93m',
-            debug: '\x1b[38;5;87m', info: '\x1b[97m', warn: '\x1b[93m', error: '\x1b[91m',
+            debug: '\x1b[38;5;87m', info: '\x1b[97m', warn: '\x1b[93m', error: '\x1b[91m', critical: '\x1b[38;5;196m',
             virtual: '\x1b[90m', active: '\x1b[92m', partial: '\x1b[94m'
         } : {
             reset: '', buy: '', sell: '', spread: '',
-            debug: '', info: '', warn: '', error: '',
+            debug: '', info: '', warn: '', error: '', critical: '',
             virtual: '', active: '', partial: ''
         };
 
         this.marketName = null;
+        this.correlationId = options.correlationId || null;
+
+        this._writeQueue = [];
+        this._writeTimer = null;
+        this._writeInterval = 100;
+        this._maxQueueSize = 1000;
+        this._draining = false;
+        this._maxTotalSize = this.config.rotation?.maxSize || 1181116007;
+        this._maxLogFiles = this.config.rotation?.maxFiles || 10;
+        this._jsonOutput = this.config.json?.enabled ?? false;
+        this._flushResolve = null;
+        this._lastFileErrorTime = 0;
     }
 
-    /**
-     * Write output to file (appends). Strips ANSI color codes.
-     * Creates parent directory if needed.
-     * @param {string} text - Text to write to log file
-     * @private
-     */
-    _writeToFile(text) {
+    _enqueueWrite(text: string) {
         if (!this.logFile) return;
         if (isPm2LoggingEnabled()) return;
-        const plainText = text.replace(/\x1b\[[0-9;]*m/g, '');
-        try {
-            // Ensure directory exists
-            const dir = path.dirname(this.logFile);
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
-            }
-            fs.appendFileSync(this.logFile, plainText + '\n', 'utf8');
-        } catch (err: any) {
-            // Silently fail on file write errors to avoid disrupting main flow
+        this._writeQueue.push(text);
+        if (this._writeQueue.length >= this._maxQueueSize) {
+            this._drainQueue();
+        } else if (!this._writeTimer) {
+            this._writeTimer = setTimeout(() => this._drainQueue(), this._writeInterval);
         }
+    }
+
+    async _drainQueue() {
+        this._writeTimer = null;
+        if (this._draining || this._writeQueue.length === 0) return;
+        this._draining = true;
+
+        const batch = this._writeQueue.splice(0, this._maxQueueSize);
+        const plainLines = batch.map(t => t.replace(/\x1b\[[0-9;]*m/g, ''));
+
+        try {
+            const dir = path.dirname(this.logFile);
+            await fs.promises.mkdir(dir, { recursive: true });
+
+            const perFileLimit = Math.floor(this._maxTotalSize / (this._maxLogFiles + 1));
+            if (perFileLimit > 0) {
+                try {
+                    const stat = await fs.promises.stat(this.logFile);
+                    if (stat.size >= perFileLimit) {
+                        await this._rotateLogFile();
+                    }
+                } catch (err: any) {
+                }
+            }
+
+            await fs.promises.appendFile(this.logFile, plainLines.join('\n') + '\n', 'utf8');
+        } catch (err: any) {
+            const now = Date.now();
+            if (now - this._lastFileErrorTime > 60000) {
+                this._lastFileErrorTime = now;
+                console.error(`[LOGGER] File write failed (${this.logFile}): ${err.message}`);
+            }
+        }
+
+        this._draining = false;
+
+        const resolve = this._flushResolve;
+        this._flushResolve = null;
+        if (resolve) resolve();
+
+        if (this._writeQueue.length > 0) {
+            this._writeTimer = setTimeout(() => this._drainQueue(), this._writeInterval);
+        }
+    }
+
+    async _rotateLogFile() {
+        const maxFiles = this._maxLogFiles;
+        if (maxFiles <= 0) return;
+
+        for (let i = maxFiles - 1; i >= 1; i--) {
+            const oldPath = this.logFile + '.' + i;
+            const newPath = this.logFile + '.' + (i + 1);
+            try {
+                await fs.promises.access(oldPath);
+                await fs.promises.rename(oldPath, newPath);
+            } catch (err: any) {
+            }
+        }
+
+        try {
+            await fs.promises.access(this.logFile);
+            await fs.promises.rename(this.logFile, this.logFile + '.1');
+        } catch (err: any) {
+        }
+    }
+
+    _getJsonLine(level: string, message: string, correlationId?: string | null): string | null {
+        if (!this._jsonOutput) return null;
+        const ts = new Date().toISOString();
+        const entry: any = {
+            timestamp: ts,
+            level: level.toUpperCase(),
+            category: this.category,
+            message: message
+        };
+        if (correlationId) {
+            entry.correlationId = correlationId;
+        }
+        return JSON.stringify(entry);
     }
 
     /**
      * Log a message with optional timestamp and level.
-     * Detects PM2 environment and disables timestamp to avoid duplication
-     * (PM2 adds its own timestamp via log_date_format).
-     * @param {string} message - The message to log.
-     * @param {string} [level='info'] - The log level ('debug', 'info', 'warn', 'error').
+     * Console output is immediate; file output is queued and batched.
+     * @param {string} message
+     * @param {string} [level='info'] - debug | info | warn | error | critical
      */
-    log(message, level = 'info') {
+    log(message: string, level = 'info') {
         if (this.levels[level] >= this.levels[this.level]) {
             const color = this.colors[level] || '';
-            // Check if running under PM2 (pm_exec_path is set by PM2)
             const isUnderPm2 = !!process.env.pm_exec_path;
             const timestamp = isUnderPm2 ? '' : new Date().toISOString();
             const timestampPart = timestamp ? `[${timestamp}] ` : '';
@@ -153,51 +215,52 @@ class Logger {
                     console.log(output);
                 }
             }
-            this._writeToFile(output);
+            this._enqueueWrite(output);
+
+            const jsonLine = this._getJsonLine(level, message, this.correlationId);
+            if (jsonLine) {
+                this._enqueueWrite(jsonLine);
+            }
         }
     }
 
-    /**
-     * Log at info level.
-     * @param {string} msg - Message to log
-     */
-    info(msg) { this.log(msg, 'info'); }
+    info(msg: string) { this.log(msg, 'info'); }
+    warn(msg: string) { this.log(msg, 'warn'); }
+    error(msg: string) { this.log(msg, 'error'); }
+    debug(msg: string) { this.log(msg, 'debug'); }
+    critical(msg: string) { this.log(msg, 'critical'); }
 
-    /**
-     * Log at warn level.
-     * @param {string} msg - Message to log
-     */
-    warn(msg) { this.log(msg, 'warn'); }
-
-    /**
-     * Log at error level.
-     * @param {string} msg - Message to log
-     */
-    error(msg) { this.log(msg, 'error'); }
-
-    /**
-     * Log at debug level.
-     * @param {string} msg - Message to log
-     */
-    debug(msg) { this.log(msg, 'debug'); }
-
-    /**
-     * Write raw output (no timestamp, no level).
-     * @param {string} text - Text to write
-     */
-    raw(text) {
+    raw(text: string) {
         if (!this.quiet) {
             process.stdout.write(text);
         }
-        this._writeToFile(text);
+        this._enqueueWrite(text);
+    }
+
+    setCorrelationId(id: string | null) {
+        this.correlationId = id;
     }
 
     /**
-     * Log a sample of the order grid.
-     * @param {Array<Object>} orders - The list of orders.
-     * @param {number} startPrice - The market start price.
+     * Wait until the write queue is empty.
+     * Call during shutdown to guarantee all pending lines are flushed.
      */
-    logOrderGrid(orders, startPrice) {
+    flush(): Promise<void> {
+        return new Promise((resolve) => {
+            if (this._writeQueue.length === 0 && !this._draining) {
+                resolve();
+                return;
+            }
+            this._flushResolve = resolve;
+            if (this._writeTimer) {
+                clearTimeout(this._writeTimer);
+                this._writeTimer = null;
+            }
+            this._drainQueue();
+        });
+    }
+
+    logOrderGrid(orders: any[], startPrice: number) {
         const header = '\n===== ORDER GRID (SAMPLE) =====';
         let output = header + '\n';
         if (this.marketName) output += `Market: ${this.marketName} @ ${startPrice}\n`;
@@ -211,17 +274,14 @@ class Logger {
 
         const sorted = [...orders].sort((a, b) => b.price - a.price);
 
-        // Separate by type
         const allSells = sorted.filter(o => o.type === 'sell');
         const allSpreads = sorted.filter(o => o.type === 'spread');
         const allBuys = sorted.filter(o => o.type === 'buy');
 
-        // SELL: top 3 (highest prices, edge) + last 3 (lowest prices, next to spread)
         const sellEdge = allSells.slice(0, 3);
         const sellNearSpread = allSells.slice(-3);
         [...sellEdge, ...sellNearSpread].forEach(order => this._logOrderRow(order));
 
-        // SPREAD: high, middle, low with gap indicators
         if (allSpreads.length > 0) {
             const highIdx = 0;
             const midIdx = Math.floor(allSpreads.length / 2);
@@ -245,22 +305,16 @@ class Logger {
             }
         }
 
-        // BUY: top 3 (highest prices, next to spread) + last 3 (lowest prices, edge)
         const buyNearSpread = allBuys.slice(0, 3);
         const buyEdge = allBuys.slice(-3);
         [...buyNearSpread, ...buyEdge].forEach(order => this._logOrderRow(order));
 
         const footer = '===============================================\n';
         if (!this.quiet) console.log(footer);
-        this._writeToFile(output + footer);
+        this._enqueueWrite(output + footer);
     }
 
-    /**
-     * Log a single order row.
-     * @param {Object} order - The order to log.
-     * @private
-     */
-    _logOrderRow(order) {
+    _logOrderRow(order: any) {
         const typeColor = this.colors[order.type] || '';
         const stateColor = this.colors[order.state] || '';
         const price = Format.formatPrice4(order.price).padEnd(12);
@@ -273,17 +327,10 @@ class Logger {
         if (!this.quiet) {
             console.log(output);
         }
-        this._writeToFile(output);
+        this._enqueueWrite(output);
     }
 
-    /**
-     * Print a summary of fund status for diagnostics with optional context.
-     *
-     * @param {OrderManager} manager - OrderManager instance to read funds from
-     * @param {string} context - Optional context string (e.g., "AFTER fill", "BEFORE rotation")
-     * @param {boolean} forceDetailed - Force detailed output even for non-critical events
-     */
-    logFundsStatus(manager, context = '', forceDetailed = false) {
+    logFundsStatus(manager: any, context = '', forceDetailed = false) {
         if (!manager) return;
         if (!this.config.display?.fundStatus?.enabled && !forceDetailed) return;
 
@@ -306,7 +353,6 @@ class Logger {
             context.includes('violation') ||
             context.includes('ERROR');
 
-        // Use change detection: only log if funds changed
         if (this.config.changeTracking?.enabled) {
             const { isNew, changes } = this.state.detectChanges('funds', fundState);
             if (!isNew && !Object.keys(changes).length && !isCriticalEvent) {
@@ -331,19 +377,12 @@ class Logger {
         const output = `Funds${headerContext}: ${buy}Buy ${availableBuy}${reset} ${buyName} | ${sell}Sell ${availableSell}${reset} ${sellName}`;
         this.log(output.replace(/\x1b\[[0-9;]*m/g, ''), 'info');
 
-        // Show detailed breakdown in debug mode on critical events
         if (isDebugMode && isCriticalEvent && this.config.display?.fundStatus?.showDetailed) {
             this._logDetailedFunds(manager, headerContext);
         }
     }
 
-    /**
-     * Log detailed fund breakdown (called only on critical events in debug mode).
-     * @param {OrderManager} manager - Manager instance
-     * @param {string} [headerContext=''] - Context label for log header
-     * @private
-     */
-    _logDetailedFunds(manager, headerContext = '') {
+    _logDetailedFunds(manager: any, headerContext = '') {
         const buyName = manager.config?.assetB || 'quote';
         const sellName = manager.config?.assetA || 'base';
         const buyPrecision = manager.config?.assetB?.precision || 8;
@@ -391,16 +430,11 @@ class Logger {
 
         lines.forEach(line => {
             if (!this.quiet) console.log(line);
-            this._writeToFile(line);
+            this._enqueueWrite(line);
         });
     }
 
-    /**
-     * Print a comprehensive status summary using manager state.
-     * @param {OrderManager} manager - The manager instance.
-     * @param {boolean} forceOutput - Force output even if disabled in config
-     */
-    displayStatus(manager, forceOutput = false) {
+    displayStatus(manager: any, forceOutput = false) {
         if (!manager) return;
         if (!this.config.display?.statusSummary?.enabled && !forceOutput) return;
 
@@ -460,17 +494,11 @@ class Logger {
 
         lines.forEach(line => {
             if (!this.quiet) console.log(line);
-            this._writeToFile(line);
+            this._enqueueWrite(line);
         });
     }
 
-    /**
-     * Log detailed grid diagnostic: ACTIVE, SPREAD, PARTIAL orders and first VIRTUAL on boundary
-     * @param {OrderManager} manager - Manager instance
-     * @param {string} [context=''] - Context label
-     * @param {boolean} [forceOutput=false] - Force output even if disabled in config
-     */
-    logGridDiagnostics(manager, context = '', forceOutput = false) {
+    logGridDiagnostics(manager: any, context = '', forceOutput = false) {
         if (!manager) return;
         if (!this.config.display?.gridDiagnostics?.enabled && !forceOutput) return;
 
@@ -540,36 +568,20 @@ class Logger {
 
         lines.forEach(line => {
             if (!this.quiet) console.log(line);
-            this._writeToFile(line);
+            this._enqueueWrite(line);
         });
     }
 }
 
-/**
- * Check if the current process is running under PM2.
- * @returns {boolean} True if pm_exec_path is set
- */
 function isPm2Runtime() {
     return !!process.env.pm_exec_path;
 }
 
-/**
- * Check if PM2 logging is configured (output/error log paths are set).
- * @returns {boolean} True if pm_out_log_path or pm_err_log_path is set
- */
 function isPm2LoggingEnabled() {
     return !!(process.env.pm_out_log_path || process.env.pm_err_log_path);
 }
 
-/**
- * Create a Logger instance with PM2 awareness (auto-quiets under PM2).
- * The constructor already handles this by default; this function exists
- * for backward compatibility.
- * @param {string} category - Logger category/prefix
- * @param {Object} [options] - Logger options (quietUnderPm2 is consumed here)
- * @returns {Logger} Configured Logger instance
- */
-function createPm2AwareLogger(category, options = {}) {
+function createPm2AwareLogger(category: string, options = {}) {
     return new Logger(category, { ...options });
 }
 

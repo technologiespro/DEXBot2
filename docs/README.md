@@ -53,10 +53,12 @@ This directory contains the comprehensive technical documentation for the DEXBot
 - **Trigger Execution**: How `profiles/recalculate.<botKey>.trigger` is consumed under the fill-processing lock
 
 ### 📝 [Logging System](LOGGING.md)
-*Observability and debugging.*
-- **Severity Levels**: Guidelines on using `info`, `warn`, `error`, and `debug`.
-- **Log Rotation**: Configuration for managing log file sizes and retention.
-- **Performance**: How the logging system minimizes overhead during high-frequency events.
+*Configuration reference for log levels, rotation, JSON output, and categories.*
+- **5 Severity Levels**: `debug`, `info`, `warn`, `error`, `critical`.
+- **Rotation**: Size-based (1GB default), auto-prune (5 files).
+- **JSON Output**: Structured lines for log aggregators (opt-in).
+- **Categories**: 6 independently enablable category groups.
+- **Change Detection**: Skips redundant logs (40-50% reduction).
 - **Batch Processing Logs**: Fill batching, recovery retry, and orphan-fill deduplication messages.
 - **Fill History Scans**: The `Subscriptions` logger emits `fetchFillHistoryEntries: maxPages (X) reached` at `info` level when the history scan hits its page cap. On a busy account this is normal (the scan catches up over multiple cycles). If it appears repeatedly without new fills being detected, the node may be running `--partial-operations` which prunes old `operation_history_objects` — the scan can never catch up because the entries have been removed from the `by_op` index. Operators should check their witness node configuration in that case.
 

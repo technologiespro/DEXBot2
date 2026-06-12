@@ -2,6 +2,8 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+
+async function main() {
 console.log('Running logger tests');
 
 const Logger = require('../modules/order/index').logger;
@@ -96,4 +98,93 @@ else process.env.pm_out_log_path = originalPmOutLogPath;
 if (originalPmErrLogPath === undefined) delete process.env.pm_err_log_path;
 else process.env.pm_err_log_path = originalPmErrLogPath;
 
+// ---- New feature tests ----
+
+// 1. critical level
+const critLogger = new Logger('CritTest', { level: 'warn' });
+let critCaptured: any[] = [];
+console.log = (...args) => { critCaptured.push(args.join(' ')); };
+critLogger.critical('this is critical');
+console.log = origLog;
+assert(critCaptured.some(line => line.includes('[CRITICAL]') && line.includes('this is critical')), 'critical() should produce CRITICAL level output');
+
+// critical passes when logger level is error (critical > error)
+const filteredLogger = new Logger('FilterTest', { level: 'error' });
+let filteredCaptured: any[] = [];
+console.log = (...args) => { filteredCaptured.push(args.join(' ')); };
+filteredLogger.critical('critical should appear with level=error');
+console.log = origLog;
+assert(filteredCaptured.some(line => line.includes('critical should appear')), 'critical should pass when level=error (4 >= 3)');
+
+// debug suppressed when level=warn
+const warnLogger = new Logger('WarnFilter', { level: 'warn' });
+let warnCaptured: any[] = [];
+console.log = (...args) => { warnCaptured.push(args.join(' ')); };
+warnLogger.debug('should not appear at warn');
+console.log = origLog;
+assert.strictEqual(warnCaptured.length, 0, 'debug should be suppressed when level=warn');
+
+// 2. correlation ID
+const corrLogger = new Logger('CorrTest', { correlationId: 'abc-123' });
+assert.strictEqual(corrLogger.correlationId, 'abc-123', 'correlationId should be set from constructor');
+corrLogger.setCorrelationId('xyz-789');
+assert.strictEqual(corrLogger.correlationId, 'xyz-789', 'setCorrelationId should update the value');
+corrLogger.setCorrelationId(null);
+assert.strictEqual(corrLogger.correlationId, null, 'setCorrelationId(null) should clear');
+
+// 3. JSON output
+const jsonLogFile = path.join(os.tmpdir(), `dexbot-logger-json-${process.pid}.log`);
+try { fs.unlinkSync(jsonLogFile); } catch (err) {}
+const jsonLogger = new Logger('JsonTest', {
+    logFile: jsonLogFile,
+    level: 'info',
+    configOverride: { json: { enabled: true }, display: {}, changeTracking: { enabled: false }, categories: {}, rotation: { enabled: false, maxSize: 0, maxFiles: 0 } }
+});
+jsonLogger.info('test json message');
+jsonLogger.setCorrelationId('corr-999');
+jsonLogger.warn('json with corr id');
+await jsonLogger.flush();
+const jsonContent = fs.readFileSync(jsonLogFile, 'utf8');
+const jsonLines = jsonContent.trim().split('\n').filter(l => l.startsWith('{'));
+assert(jsonLines.length >= 2, 'JSON output should produce at least 2 JSON lines');
+const parsed1 = JSON.parse(jsonLines[0]);
+assert.strictEqual(parsed1.level, 'INFO', 'JSON level should be INFO');
+assert.strictEqual(parsed1.category, 'JsonTest', 'JSON category should be JsonTest');
+assert(parsed1.message.includes('test json message'), 'JSON should contain the message');
+assert.strictEqual(parsed1.correlationId, undefined, 'first JSON line should not have correlationId');
+const parsed2 = JSON.parse(jsonLines[1]);
+assert.strictEqual(parsed2.correlationId, 'corr-999', 'second JSON line should include correlationId');
+assert.strictEqual(parsed2.level, 'WARN', 'JSON level should be WARN');
+try { fs.unlinkSync(jsonLogFile); } catch (err) {}
+
+// 4. flush()
+const flushLogFile = path.join(os.tmpdir(), `dexbot-logger-flush-${process.pid}.log`);
+try { fs.unlinkSync(flushLogFile); } catch (err) {}
+const flushLogger = new Logger('FlushTest', {
+    logFile: flushLogFile,
+    level: 'info',
+    configOverride: { json: { enabled: false }, display: {}, changeTracking: { enabled: false }, categories: {}, rotation: { enabled: false, maxSize: 0, maxFiles: 0 } }
+});
+flushLogger.info('flush test message');
+await flushLogger.flush();
+const flushContent = fs.readFileSync(flushLogFile, 'utf8');
+assert(flushContent.includes('flush test message'), 'flush() should ensure data is written to file');
+try { fs.unlinkSync(flushLogFile); } catch (err) {}
+
+// 5. Levels map includes critical
+assert.strictEqual(logger.levels.critical, 4, 'critical should be level 4 in the levels map');
+
+// 6. Info level suppresses debug
+const infoLogger = new Logger('InfoTest', { level: 'info' });
+let infoCaptured: any[] = [];
+console.log = (...args) => { infoCaptured.push(args.join(' ')); };
+infoLogger.debug('should be suppressed');
+infoLogger.info('should appear');
+console.log = origLog;
+assert.strictEqual(infoCaptured.length, 1, 'info-level logger should suppress debug');
+assert(infoCaptured[0].includes('should appear'), 'info-level logger should show info messages');
+
 console.log('logger tests passed');
+}
+
+main().catch(err => { console.error('Logger test failed:', err); process.exit(1); });
