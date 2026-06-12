@@ -36,6 +36,7 @@ const state = {
 };
 
 function installStubs() {
+    process.env.DEXBOT_SKIP_PROFILE_VALIDATION = '1';
     delete require.cache[botPath];
 
     fs.existsSync = (filePath) => {

@@ -61,6 +61,7 @@ function loadMarketAdapterWhitelist(): Map<string, WhitelistFlags> | false {
         _whitelistCache = map;
         return _whitelistCache;
     } catch (_: any) {
+        console.warn(`[WARN] Failed to parse ${WHITELIST_FILE}: ${_.message}. All whitelist features disabled.`);
         _whitelistCache = false;
         return _whitelistCache;
     }

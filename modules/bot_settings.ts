@@ -158,8 +158,10 @@ function validateBotEntry(b: any, i: number, src: string): string | null {
                             }
                         }
                         if ('minCollateralRatio' in item && 'maxCollateralRatio' in item) {
-                            if (Number(item.minCollateralRatio) > Number(item.maxCollateralRatio)) {
-                                problems.push(`debtPolicy.lending[${idx}].minCollateralRatio cannot exceed maxCollateralRatio`);
+                            const mcr = Number(item.minCollateralRatio);
+                            const mxcr = Number(item.maxCollateralRatio);
+                            if (Number.isFinite(mcr) && Number.isFinite(mxcr) && mcr > mxcr) {
+                                problems.push(`debtPolicy.lending[${idx}].minCollateralRatio (${mcr}) cannot exceed maxCollateralRatio (${mxcr})`);
                             }
                         }
                         if ('debtOnly' in item && typeof item.debtOnly !== 'boolean') {

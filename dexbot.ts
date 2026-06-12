@@ -972,6 +972,18 @@ async function runDefaultBots({ forceDryRun = false, sourceName = 'settings', la
     const { config } = loadSettingsFile(PROFILES_BOTS_FILE);
     const entries = resolveRawBotEntries(config);
     const normalized = normalizeBotEntries(entries);
+
+    // Validate all profile files at startup (skip for PM2 child processes and tests)
+    if (process.env.DEXBOT_SKIP_PROFILE_VALIDATION !== '1' && !process.env.PM2_HOME) {
+        const { validateAllProfiles, printValidationProblems } = require('./modules/validate_profiles');
+        const result = validateAllProfiles();
+        const ok = printValidationProblems(result);
+        if (!ok) {
+            console.error(startupError('Fix the configuration errors above and restart.'));
+            process.exit(1);
+        }
+    }
+
     await runBotInstances(normalized, { forceDryRun, sourceName, launcherStyle });
 }
 

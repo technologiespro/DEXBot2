@@ -1,141 +1,114 @@
 # DEXBot2 Test Suite
 
-This directory contains the test suite for DEXBot2, covering logic tests, integration tests, strategy verification, and infrastructure checks.
+Tests live as standalone `.ts` files in this directory. Each file is runnable directly via `tsx`. The suite uses Node's native `assert` — no test framework dependency.
 
-## Overview
-
-The test suite validates:
-- **Core Infrastructure**: Blockchain connectivity, state management, subscriptions
-- **Fund Accounting**: Balance calculations, fee deduction, fund invariant checks
-- **Grid Management**: Order generation, sizing, divergence detection, reconciliation
-- **Copy-on-Write Rebalancing**: Safe concurrent rebalancing with isolated working grids (see [docs/COPY_ON_WRITE_MASTER_PLAN.md](../docs/COPY_ON_WRITE_MASTER_PLAN.md))
-- **Fill Processing**: Adaptive batching, partial fills, consolidation, rotation order sizing
-- **Market Scenarios**: Realistic trading conditions, edge cases, recovery mechanisms
-
-## Running Tests
-
-Tests run directly with Node.js using native `assert`:
+## Quick Start
 
 ```bash
 # Run all tests
 npm test
 
-# Run specific test file
-node --import tsx tests/test_strategy_logic.ts
+# Run a single test file
+node --import tsx tests/<file>.ts
 ```
 
-**Module References:** For understanding the code being tested, see [root README 📦 Modules section](../README.md#-modules)
+## Directory Layout
 
-### 1. Core Infrastructure & Connection
-Tests ensuring the bot can connect to the blockchain and manage local state.
+```
+tests/
+  helpers/          # Shared test infrastructure (stubs, mocks, utilities)
+  tmp/              # Scratch space for tests that write temp files
+  tsconfig.json     # Test-specific TS config (extends root)
+  <name>.ts         # Test files (one file per module or concern)
+```
 
-*   `connection_test.ts` - Interactive test to verify connectivity to BitShares nodes.
-*   `test_indexdb.ts` - Verifies IndexedDB functionality for local data storage.
-*   `test_subscriptions.ts` - Tests market subscription handling and data updates.
-*   `test_logger.ts` - Verifies the logging system.
+`helpers/` contains reusable test support:
+- `bitshares_client_stub.ts` — mock blockchain client
+- `silent_logger.ts` — suppresses log output during tests
+- `module_cache_stub.ts` — isolates module state per test
+- `unlock_test_helpers.ts`, `foreign_cred_stub.js`, `dynamic_weight_files.ts` — domain-specific helpers
 
-### 2. Account & Authentication
-Tests for account handling, key validation, and balance calculations.
+## Test Categories
 
-*   `test_key_validation.ts` - Unit tests for private/public key format validation.
-*   `test_privatekey_sanitize.ts` - Checks sanitization logic for pasted private keys.
-*   `test_account_selection.ts` - Interactive tool to test account selection logic.
-*   `test_account_totals.ts` - Verifies account balance calculation and asset totals.
+Tests are organized by concern, **not** by directory — patterns like `test_<area>*.ts` indicate the focus area. Below is a thematic guide with representative files (run `ls tests/*.ts` for the full list).
 
-### 3. Market Data & Pricing
-Tests for fetching prices, order books, and deriving trading prices.
+### Core Infrastructure
+Connection, subscriptions, node management, native chain client.
+*Examples:* `test_subscriptions.ts`, `test_node_manager.ts`, `test_native_chain_client.ts`, `connection_test.ts`
 
-*   `test_market_price.ts` - Comprehensive test of market price fetching (Pool vs Orderbook).
-*   `test_price_derive.ts` - Tests logic for deriving prices from market data.
-*   `test_price_orientation.ts` - Verifies price orientation (buy/sell side) logic.
-*   `test_price_no_positional.ts` - Tests price handling when no positional data is available.
-*   `test_price_tolerance.ts` - Checks price tolerance boundaries.
-*   `test_debug_orderbook.ts` - Diagnostic tool for inspecting the order book.
-*   `test_any_pair.ts` - Discovers and tests active trading pairs.
-*   `test_autoderive.ts` - Tests automatic derivation of strategy parameters.
+### Account & Authentication
+Key validation, balance queries, account selection.
+*Examples:* `test_key_validation.ts`, `test_account_totals.ts`, `test_account_selection.ts`, `test_chain_keys_vault.ts`
 
-### 4. Order Management & Execution
-Tests for order lifecycle: placement, open order tracking, and fill processing.
+### Market Data & Pricing
+Price derivation, orderbook inspection, tolerance checks.
+*Examples:* `test_market_price.ts`, `test_price_derive.ts`, `test_price_tolerance.ts`, `test_any_pair.ts`, `test_kibana_candles.ts`
 
-*   `test_open_orders.ts` - Tests retrieval and management of open orders.
-*   `test_fills.ts` - interactive test for processing order fills.
-*   `test_trade_history.ts` - Tests retrieval of account trade history.
-*   `test_blockchain_fill_history.ts` - Verifies fill history against blockchain data.
+### Market Adapter
+AMA signal processing, price offset, bound clamping, signal gates.
+*Examples:* `test_market_adapter_logic.ts`, `test_market_adapter_service.ts`, `test_market_adapter_signal_gates.ts`, `test_market_adapter_integration_core.ts`
 
-### 5. Strategy & Grid Logic
-Tests for the core trading strategies, specifically the grid logic.
+### Order Management & Execution
+Order lifecycle, fill processing, trade history, batch execution.
+*Examples:* `test_open_orders.ts`, `test_fills.ts`, `test_fill_batch_chunking.ts`, `test_fill_replay_guards.ts`, `test_uncertain_broadcast.ts`
 
-*   `test_order_grid.ts` - Core grid order generation and logic.
-*   `test_grid_comparison.ts` - Compares different grid strategy configurations.
-*   `test_rotation_order_sizing.ts` - Verifies order sizing logic for rotation strategies.
-*   `test_rotation_available_funds.ts` - Tests available-funds budget in rotation strategies.
-*   `test_strategy_edge_cases.ts` - Tests various edge cases in strategy execution.
+### Strategy & Grid Logic
+Grid generation, sizing, rotation, divergence detection, reconciliation.
+*Examples:* `test_order_grid.ts`, `test_strategy_logic.ts`, `test_grid_reconcile.ts`, `test_working_grid.ts`, `test_rotation_order_sizing.ts`, `test_strategy_edge_cases.ts`
 
-### 6. Fees & Accounting
-Tests for fee calculations, fund management, and asset precision.
+### Copy-on-Write (COW) Rebalancing
+Concurrent-safe rebalancing with isolated working grids — dedicated test suite.
+*Examples:* `test_cow_master_plan.ts`, `test_cow_concurrent_fills.ts`, `test_cow_commit_guards.ts`, `test_cow_divergence_correction.ts`, `test_cow_static_analysis.ts`
 
-*   `test_funds.ts` - specific tests for fund management logic.
-*   `test_fee_cache.ts` - Tests the fee caching mechanism.
-*   `test_fee_cache_twentix.ts` - Fee caching tests specific to complex assets (e.g. Twentix).
-*   `test_market_fee_deduction.ts` - Verifies deduction of market fees from orders.
+### Fees & Accounting
+Fee deduction, fund tracking, precision, invariant checks.
+*Examples:* `test_accounting_logic.ts`, `test_fee_cache.ts`, `test_bts_fee_accounting.ts`, `test_core_fee_accounting.ts`, `test_funds.ts`, `test_precision_quantization.ts`
 
-### 7. Integration & Workflows
-Complex tests that simulate larger workflows or system integration.
+### Integration & Workflows
+Cross-module scenarios: startup reconciliation, engine integration, market simulations.
+*Examples:* `test_engine_integration.ts`, `test_market_scenarios.ts`, `test_startup_reconcile.ts`, `test_startup_decision.ts`, `test_main_loop_sync_fill_rebalance.ts`
 
-*   `test_engine_integration.ts` - Integration tests for the core engine.
-*   `test_market_scenarios.ts` - Realistic market simulation (Pumps, Dumps, V-Shape recovery).
-*   `test_integration_partial_complex.ts` - Tests complex partial fill integration.
-*   `test_integration_pending_proceeds.ts` - Integration tests for pending proceeds handling.
-*   `test_startup_reconcile.ts` - Tests the reconciliation process at bot startup.
-*   `test_startup_decision.ts` - Verifies startup decision-making logic.
-*   `test_startup_partial_fill.ts` - Tests handling of partial fills detected at startup.
+### Credential Daemon & Runtime
+Credential management, daemon lifecycle, session caching, debt policy.
+*Examples:* `test_credential_daemon.ts`, `test_credential_runtime.ts`, `test_credential_session_cache.ts`, `test_credit_runtime.ts`
 
-### 8. Edge Cases & Bug Fixes
-Tests created to reproduce or verify fixes for specific bugs and edge cases.
+### PM2 & Process Management
+PM2 lifecycle, startup ordering, bot supervision.
+*Examples:* `test_pm2_logic.ts`, `test_pm2_main_output.ts`, `test_bot_supervisor.ts`, `test_unlock_main.ts`
 
-*   `test_critical_bug_fixes.ts` - Regression tests for critical historical bugs.
-*   `test_partial_order_edge_cases.ts` - Edge cases for partial orders.
-*   `test_multi_partial_edge_cases.ts` - Edge cases for multiple partial fills.
-*   `test_multi_partial_consolidation.ts` - Tests consolidation of multiple partial fills.
-*   `test_twentix_only.ts` - specific asset lookup test (Twentix).
+### Diagnostics & Benchmarks
+Interactive tools and performance benchmarks (not part of CI).
+*Examples:* `connection_test.ts`, `diag_adapter_client.ts`, `diag_ws_nodes.ts`, `benchmark_cow.ts`, `sim_batching.ts`, `repro_phantom_orders.ts`
 
-### 9. Utilities & Helpers
-Tests for shared utility functions and helper modules.
+### Edge Cases & Regression
+Tests targeting specific bugs, race conditions, and failure modes.
+*Examples:* `test_critical_bug_fixes.ts`, `test_race_condition_fixes_batch1.ts`, `test_patch17_invariants.ts`, `test_shutdown_reentrancy.ts`, `test_multifill_opposite_partial.ts`
 
-*   `test_utils.ts` - General utility function tests.
-*   `test_chain_helpers.ts` - Tests for blockchain interaction helpers.
-*   `test_precision_integration.ts` - Integration tests for precision handling.
-*   `test_precision_quantization.ts` - Tests logic for quantizing values to asset precision.
-*   `test_fund_cycling_trigger.ts` - Tests triggers for fund cycling.
-*   `test_manager.ts` - Tests for the OrderManager module.
+### Utilities & Helpers
+Shared utility functions, precision handling, chain helpers.
+*Examples:* `test_utils.ts`, `test_chain_helpers.ts`, `test_precision_integration.ts`, `test_fund_cycling_trigger.ts`, `test_manager.ts`
 
 ---
 
-## 🏗️ Key Architectural Patterns Tested
+## Key Architectural Patterns Tested
 
 ### Copy-on-Write (COW) Rebalancing
-Tests verify that:
 - Master grid remains immutable during rebalancing
 - Working grids are isolated copies for planning
-- Fills arriving during rebalance are properly synchronized
-- Delta building correctly identifies changes between grids
+- Fills arriving mid-rebalance are synchronized
+- Delta building identifies changes between grids
 - Atomic commits apply changes only on success
 
 **Reference:** [docs/COPY_ON_WRITE_MASTER_PLAN.md](../docs/COPY_ON_WRITE_MASTER_PLAN.md)
 
 ### RMS Divergence Checking
-Tests validate:
-- Quadratic penalty for large errors (not just average error)
-- Concentrated errors require higher RMS thresholds
-- Grid recalculation triggers at correct divergence levels
-- Threshold interpretation matches README documentation
-
-**Reference:** [docs](../docs/README.md) - GRID RECALCULATION section
+- Quadratic penalty for large errors
+- Concentrated errors raise RMS threshold
+- Grid recalculation triggers at correct levels
 
 ### Fund Invariants
-Tests ensure:
 - Available funds never exceed free blockchain balance
-- Committed funds correctly tracked across states
+- Committed funds tracked across state transitions
 - Fee deductions and refunds maintain consistency
 - No double-spending between orders
 
@@ -143,14 +116,14 @@ Tests ensure:
 
 ---
 
-## 📚 Documentation References
+## Documentation References
 
-- **Module Architecture**: [root README 📦 Modules](../README.md#-modules)
-- **Copy-on-Write Pattern**: [COPY_ON_WRITE_MASTER_PLAN.md](../docs/COPY_ON_WRITE_MASTER_PLAN.md)
-- **Fund Accounting**: [FUND_MOVEMENT_AND_ACCOUNTING.md](../docs/FUND_MOVEMENT_AND_ACCOUNTING.md)
-- **Logging System**: [LOGGING.md](../docs/LOGGING.md)
-- **Developer Guide**: [developer_guide.md](../docs/developer_guide.md)
+- **Module Architecture:** [root README](../README.md#-modules)
+- **Copy-on-Write:** [COPY_ON_WRITE_MASTER_PLAN.md](../docs/COPY_ON_WRITE_MASTER_PLAN.md)
+- **Fund Accounting:** [FUND_MOVEMENT_AND_ACCOUNTING.md](../docs/FUND_MOVEMENT_AND_ACCOUNTING.md)
+- **Logging:** [LOGGING.md](../docs/LOGGING.md)
+- **Developer Guide:** [developer_guide.md](../docs/developer_guide.md)
 
 ---
 
-**Note:** Interactive tests (like `connection_test.ts`) may require network access and user input.
+**Note:** Interactive/diagnostic scripts (`connection_test.ts`, `diag_*`) require network access and are not part of CI. Run these manually when debugging.

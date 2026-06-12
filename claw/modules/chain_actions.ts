@@ -236,6 +236,9 @@ async function repayMpaDebt(options: any) {
   }
 
   const collateralDelta = options.collateralDelta !== undefined ? Number(options.collateralDelta) : 0;
+  if (options.collateralDelta !== undefined && !Number.isFinite(collateralDelta)) {
+    throw new Error(`collateralDelta must be a number, got ${JSON.stringify(options.collateralDelta)}`);
+  }
   const operation = await buildBorrowMpaOperation({
     accountName: options.accountName,
     mpaAsset: options.mpaAsset,

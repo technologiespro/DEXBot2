@@ -171,6 +171,8 @@ function loadMarketAdapterSettings() {
         _marketAdapterSettingsCache = JSON.parse(fs.readFileSync(MARKET_ADAPTER_SETTINGS_FILE, 'utf8'));
         return _marketAdapterSettingsCache;
     } catch (_: any) {
+        console.warn(`[WARN] Failed to parse ${MARKET_ADAPTER_SETTINGS_FILE}: ${_.message}. Using defaults.`);
+        _marketAdapterSettingsCache = false;
         return null;
     }
 }
@@ -1024,7 +1026,9 @@ function writeBotDynamicGrid(botKey: string, gridCenterPrice: number, options: {
         };
         const result = updateDynamicGridSnapshotSync(filePath, (previousSnapshot) => {
             const amaCenterPrice = Number(options.amaCenterPrice);
-            const resolvedGridCenterPrice = Math.round(Number(gridCenterPrice) * 1e8) / 1e8;
+            const resolvedGridCenterPrice = Number.isFinite(Number(gridCenterPrice))
+                ? Math.round(Number(gridCenterPrice) * 1e8) / 1e8
+                : null;
             const payload: Record<string, any> = {
                 gridCenterPrice: resolvedGridCenterPrice,
                 centerPrice: resolvedGridCenterPrice,

@@ -44,6 +44,7 @@ function setStdoutTTY(value) {
 }
 
 function installStubs() {
+    process.env.DEXBOT_SKIP_PROFILE_VALIDATION = '1';
     delete require.cache[dexbotPath];
 
     fs.existsSync = (filePath) => {

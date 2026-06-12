@@ -27,7 +27,8 @@ function loadMarketProfiles(filePath = path.join(__dirname, '..', '..', 'profile
     if (!filePath || !fs.existsSync(filePath)) return null;
     try {
         return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    } catch (err) {
+    } catch (err: any) {
+        console.warn(`[WARN] Failed to parse ${filePath}: ${err.message}. Falling back to built-in AMA defaults.`);
         return null;
     }
 }

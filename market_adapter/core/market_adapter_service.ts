@@ -506,7 +506,9 @@ class MarketAdapterService {
         if (Number.isFinite(explicit) && explicit > 0) return explicit;
         const factor = Number(cfg?.amaSlope?.deltaThresholdPct);
         if (!Number.isFinite(factor) || factor <= 0) return 0;
-        return (factor / 100) * Number(cfg?.amaSlope?.maxSlopePct);
+        const maxSlopePct = Number(cfg?.amaSlope?.maxSlopePct);
+        if (!Number.isFinite(maxSlopePct) || maxSlopePct <= 0) return 0;
+        return (factor / 100) * maxSlopePct;
     }
 
     buildAmaSlopeResetDetails(currentAmaSlope: any, previousAmaSlope: any, cfg: any){
