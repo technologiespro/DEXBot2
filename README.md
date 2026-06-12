@@ -159,7 +159,7 @@ Configuration options from `node dexbot bot`, stored in `profiles/bots.json`:
 
 Global settings via `node dexbot bot`, stored in `profiles/general.settings.json`:
 
-- **Grid Health**: Grid Ratio Regeneration % (default `3%`), RMS Divergence Threshold % (default `14.3%`), AMA Delta Threshold % (default `2%`)
+- **Grid Health**: Grid Ratio Regeneration % (default `3%`), RMS Divergence Threshold % (default `14.3%`), AMA Delta Threshold % (default `1%`)
 - **Order Recovery**: Partial Dust Threshold % (default `5%`), Dust Cancel Delay (default `30s`, `-1` = off, `0` = instant)
 - **Timing (Core)**: Blockchain Fetch Interval (default `240 min`), Sync Delay (default `500ms`), Lock Timeout (default `10s`)
 - **Timing (Fill)**: Dedupe Window (default `5s`), Cleanup Interval (default `10s`), Record Retention (default `60 min`)

@@ -1268,10 +1268,7 @@ tsx tests/test_dexbot_credit_wiring.ts
 
 ### Test Documentation References
 
-- **[TEST_UPDATES_SUMMARY.md](../tests/TEST_UPDATES_SUMMARY.md)** - Detailed test coverage for recent test cases
-  - Maps each test to specific bugfixes
-  - Shows what each test validates
-  - Running instructions for specific areas
+- **[tests/README.md](../tests/README.md)** - Test suite organization, categories, and running instructions
 
 - **[developer_guide.md#testing-fund-calculations](developer_guide.md#testing-fund-calculations)** - Testing guide for developers
   - How to write fund tests
@@ -1393,7 +1390,7 @@ The strategy engine has been significantly strengthened with improvements to fun
 
 For detailed fund calculations and test coverage, see:
 - [developer_guide.md#testing-fund-calculations](developer_guide.md#testing-fund-calculations) - How fund calculations are tested
-- [TEST_UPDATES_SUMMARY.md](../tests/TEST_UPDATES_SUMMARY.md) - Detailed coverage of recent bugfix tests
+- [tests/README.md](../tests/README.md) - Test suite organization and running instructions
 
 ---
 

@@ -475,7 +475,7 @@ All reset/update sources are **independent**:
 ```json
 {
   "MARKET_ADAPTER": {
-    "AMA_DELTA_THRESHOLD_PERCENT": 2.0  // Standard threshold
+    "AMA_DELTA_THRESHOLD_PERCENT": 1.0  // Default threshold
   },
   "GRID_LIMITS": {
     "GRID_REGENERATION_PERCENTAGE": 3,  // Moderate utilization

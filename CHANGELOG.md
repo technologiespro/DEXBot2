@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-06-12 - First Stable Release
+
+This release marks the project's first stable milestone. Includes 19 commits on top of 0.7.18: startup profile schema validation, a full logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold from `maxSlopePct` × `deltaThresholdPct/100`, dashboard isolation to `dashboard-draft`, `--dryrun` flag for unlock launcher, `modules/README.md` for new-user orientation, final 54 TS strict error resolutions across test files, deferred race-condition items #9/#10/#13, and a comprehensive stale-doc sweep (version numbers, test counts, broken links, default values).
+
+### 2026-06-12
+
+- **Feat**: startup profile schema validator — validates `bots.json` at boot and fixes 5 config risk patterns including `minPrice`/`maxPrice` type coercion, missing `gridPrice` fallback, overflow `incrementPercent`, and `botFunds` cap (`1e3afc6`).
+- **Feat**: overhaul logging system — write queue (100ms batch flush), size-based rotation (1.1GB total budget, 5 files), JSON structured output, `critical` severity level, and correlation ID tracing across fill/order/adapter operations (`dc85882`).
+- **Feat**: compute AMA slope delta threshold from `maxSlopePct × deltaThresholdPct/100` instead of requiring a literal threshold override (`d160839`).
+- **Feat**: add `--dryrun` flag to unlock launcher (`b84a33e`).
+- **Docs**: add `modules/README.md` with new-user orientation and module map (`577cd32`).
+- **Docs**: remove `--isolated` flag from README (`3ebb025`).
+- **Docs**: remove `AUDIT_v0.7.5_to_HEAD.md` (`1d584b2`).
+- **Refactor**: isolate `dashboard/` to `dashboard-draft` branch in repo (`8697d28`).
+- **Fix**: address 9 review issues — flush wiring, flush resolve, JSON separation, rotation test, JSDoc, and more (`c6e7c41`).
+- **Fix**: resolve last 54 TS strict errors across test files (`22f5857`, `d8f6373`, `294f834`, `11b13a2`, `e3022fb`, `48d4e90`, `65677a8`, `0ac4837`).
+- **Fix**: deferred race items #9 (credential daemon shutdown guard), #10 (creator-use-pay from auth token refresh), #13 (double event re-subscription guard) (`e0ac76d`).
+- **Version**: bump from 0.7.18 to 1.0.0 across all package.json manifests.
+- **Docs**: fix stale version references in `DEXBOT_COMPARISON.md`, `EVOLUTION.md`, `FUND_MOVEMENT_AND_ACCOUNTING.md`, `README.md`.
+- **Docs**: fix AMA delta threshold default in `README.md` (2% → 1%) and `GRID_RECALCULATION.md` example.
+- **Docs**: remove broken `TEST_UPDATES_SUMMARY.md` links in `architecture.md`, `developer_guide.md`, `DEXBOT_COMPARISON.md` — replaced with `tests/README.md`.
+- **Docs**: update test counts (188 `test_*.ts` files, 211 entries in `scripts/run-tests.ts`) and commit stats (1564) in `EVOLUTION.md` and `DEXBOT_COMPARISON.md`.
+- **Docs**: remove `Pre-DEXBot2` section from `EVOLUTION.md`.
+
 ## [0.7.18] - 2026-06-11 - @ts-nocheck Removal, Type Annotations, Race-Condition Batch 1 & DRY Refactoring
 
 This release removes all remaining `@ts-nocheck` directives across production and analysis code (89 files), adds type annotations to 67 files resolving 1783 TS2339 errors, applies a comprehensive race-condition fix batch (atomic JSON writes, per-context in-flight flags, snapshot persist), tightens timeouts across the board, plugs a subscribe orphan-callback leak, and DRYs duplicated code across claw modules, tests, and unlock into shared utilities (~460 lines removed).

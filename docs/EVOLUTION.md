@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 0.7.18 release cycle.
+DEXBot2 is a sophisticated decentralized exchange trading bot for the BitShares blockchain. This report documents the complete evolution of the project from its inception in December 2025 through the current 1.0.0 stable release.
 
 ### Key Milestones
 - **Project Inception**: December 2, 2025
-- **Growth Phase**: 1,538 commits over ~6 active months
+- **Growth Phase**: 1,564+ commits over ~6 active months
 - **Code Maturity**: Evolution from basic utilities to a ~57,000+ LoC intelligent TypeScript system
-- **Stability**: Progression from manual testing to a suite of 211+ automated test files
-- **Releases**: 34 release entries (v0.1.0 to v0.7.18)
+- **Stability**: Progression from manual testing to a suite of 200+ automated test files
+- **Releases**: 35 release entries (v0.1.0 to v1.0.0)
 
 ---
 
@@ -73,6 +73,8 @@ Consolidated the market adapter with split data sources (Kibana, native API), AM
 
 **Jun 11**: Gradual strict typing (all @ts-nocheck removed, 67 files annotated), race-condition batch 1 (atomic JSON, in-flight flags, snapshot persist), timeout hardening and leak fixes across the board, DRY refactoring claw/tests/unlock — v0.7.18.
 
+**Jun 12**: First stable release v1.0.0. Startup profile schema validation, logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold computed from `maxSlopePct × deltaThresholdPct/100`, dashboard branch isolation, `--dryrun` flag, final TS strict error sweep across test files, deferred race items, and comprehensive stale-documentation cleanup. This release marks the transition from pre-1.0 development to stable production readiness.
+
 ---
 
 ## Architecture Evolution
@@ -84,6 +86,7 @@ DEXBot2's architecture transitioned from monolithic utilities to a decoupled, ev
 - **Post-5: Zero-Dependency & TypeScript Migration**: Full codebase migration from JavaScript to TypeScript with strict mode, `tsc` build pipeline, zero-dependency runtime via `tsx`, and explicit architectural policy removing all external runtime dependencies.
 - **Post-5.1: Fill Detection Overhaul**: Native BitShares fill detection rewrite — direct-notice dispatch, instance-based cursor, subscription reconnect, btsFeeState hardening
 - **Post-5.2: Runtime Self-Healing**: Chain-truth reconciliation for shortfalls and drift, structural resync signaling, order-batch fill guarding.
+- **Phase 6: Stable Release (v1.0.0)**: Logging system overhaul with write queue, rotation, and JSON output. Startup profile validation. Final TS strict-mode completion. Comprehensive doc sweep. The project reaches production stability.
 
 ---
 
@@ -159,19 +162,20 @@ Pipeline blocking hardening: stale `_gridSidesUpdated` self-blocking fix, dead `
 BUILD_DIR centralization, source-mode runtime, HMAC recovery, error hardening, zero-budget shortfall suppression, plus a full codebase audit fixing stale types, dead tests, hardcoded paths, empty dirs, and doc references.
 
 ### v0.7.17 → v0.7.18 (8 commits)
+
 Massive gradual typing effort removing all 89 @ts-nocheck directives and adding full type annotations across 67 files, race-condition batch 1 (atomic JSON writes, per-context in-flight flags, snapshot persist, sync engine lock ownership), across-the-board timeout hardening and leak fixes (withTimeout utility, subscribe orphan cleanup, consumer backoff watchdog, history page cap, master password limit), DRY refactoring extracting shared MCP/skill/test utilities (~460 lines removed), Claw HMAC recovery alignment with the main path, plus remaining audit cleanup (BUILD_DIR paths, fd leak, CEX rate limiting).
 
----
+### v0.7.18 → v1.0.0 (19 commits)
 
-### Pre-DEXBot2
-- **StakeMachine v0.0.6** (2017): Python proof-of-concept, buy/sell walls.
-- **DEXBot v1.0.0** (2018–2020): Python production bot, PyQt5 GUI, 3 strategies, CCXT feeds.
+First stable release. Startup profile schema validation and 5 config risk fixes, comprehensive logging system overhaul (write queue, rotation, JSON output, critical level, correlation IDs), AMA slope delta threshold computed from `maxSlopePct × deltaThresholdPct/100`, dashboard branch isolation, `--dryrun` flag for unlock launcher, final TS strict error sweep (54 remaining errors resolved), deferred race-condition items #9/#10/#13, and a thorough stale-documentation cleanup across the entire docs tree. Version bumped to 1.0.0.
 
 ---
+
+
 
 ## Development Statistics
 
-211+ automated test files (all TypeScript), 34 release entries. See **Version History** for commit breakdown by release.
+200+ automated test files (all TypeScript), 35 release entries. See **Version History** for commit breakdown by release.
 
 ---
 
@@ -190,7 +194,7 @@ Massive gradual typing effort removing all 89 @ts-nocheck directives and adding 
 
 ## Documentation & Testing
 
-Evolved from a basic README to a comprehensive framework (50+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 211+ file suite covering unit, integration, simulation, and COW architectural guard tests.
+Evolved from a basic README to a comprehensive framework (50+ docs entries, 80%+ JSDoc coverage, AGENTS.md). Testing matured from manual blockchain trials → Jest → lightweight Node.js assert across a 200+ file suite covering unit, integration, simulation, and COW architectural guard tests.
 
 ---
 
@@ -200,9 +204,9 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 
 ---
 
-## Phase 6: Planned
+## Post-1.0.0: Planned
 
-- **Web & Terminal UI**: Browser-based and TUI dashboards for monitoring and tuning (TUI scaffolded in `dashboard/` — Rust/ratatui)
+- **Web & Terminal UI**: Browser-based and TUI dashboards for monitoring and tuning
 - **Backtesting Engine**: Replay historical candles through `OrderManager`/COW via a `MemoryExchange` drop-in at the `bitshares_client` boundary
 - **Performance Analytics**: PnL tracking, grid efficiency metrics, HTML report generation
 - **Monorepo Split**: Package into `@dexbot/core`, `@dexbot/bitshares`, `@dexbot/indicators` for parallelized builds
@@ -213,7 +217,7 @@ DEXBot2 has matured from a basic grid bot into a signal-intelligent, production-
 ---
 
 **Report Originally Generated**: February 19, 2026
-**Last Updated**: June 11, 2026
-**Total Commits**: 1538
-**Date Range**: December 2, 2025 - June 10, 2026 (ongoing)
+**Last Updated**: June 12, 2026
+**Total Commits**: 1564
+**Date Range**: December 2, 2025 - June 12, 2026 (ongoing)
 **Repository**: DEXBot2 (BitShares DEX Trading Bot)

@@ -1755,7 +1755,7 @@ tsx tests/test_accounting_logic.ts
 npm test
 ```
 
-See [TEST_UPDATES_SUMMARY.md](../tests/TEST_UPDATES_SUMMARY.md) for detailed coverage.
+See [tests/README.md](../tests/README.md) for detailed test coverage documentation.
 
 ### Debugging Fund Issues in Tests
 
