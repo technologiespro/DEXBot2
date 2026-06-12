@@ -29,6 +29,14 @@ class RepoAnalyzer {
         commits: number;
         dailyStats: { [key: string]: { added: number; deleted: number; edits: number; commits: number } };
     };
+    private allStats: {
+        files: { [key: string]: { added: number; deleted: number; edits: number } };
+        totalAdded: number;
+        totalDeleted: number;
+        totalEdits: number;
+        commits: number;
+        dailyStats: { [key: string]: { added: number; deleted: number; edits: number; commits: number } };
+    };
     private filePatterns: RegExp[];
 
     /**
@@ -57,6 +65,16 @@ class RepoAnalyzer {
             totalEdits: 0,       // Sum of added + deleted
             commits: 0,          // Number of commits processed
             dailyStats: {}       // date -> {added, deleted, edits, commits}
+        };
+
+        // All files statistics (no filtering)
+        this.allStats = {
+            files: {},
+            totalAdded: 0,
+            totalDeleted: 0,
+            totalEdits: 0,
+            commits: 0,
+            dailyStats: {}
         };
 
         // Regular expressions to filter which files to track
@@ -127,7 +145,16 @@ class RepoAnalyzer {
                             commits: 0
                         };
                     }
+                    if (!this.allStats.dailyStats[currentDate]) {
+                        this.allStats.dailyStats[currentDate] = {
+                            added: 0,
+                            deleted: 0,
+                            edits: 0,
+                            commits: 0
+                        };
+                    }
                     this.stats.dailyStats[currentDate].commits++;
+                    this.allStats.dailyStats[currentDate].commits++;
                     commitCount++;
                     continue;
                 }
@@ -139,6 +166,26 @@ class RepoAnalyzer {
                         const added = parseInt(parts[0]) || 0;
                         const deleted = parseInt(parts[1]) || 0;
                         const filePath = parts[2];
+
+                        // Track ALL files (no filtering)
+                        if (!this.allStats.files[filePath]) {
+                            this.allStats.files[filePath] = { added: 0, deleted: 0, edits: 0 };
+                        }
+                        this.allStats.files[filePath].added += added;
+                        this.allStats.files[filePath].deleted += deleted;
+                        this.allStats.files[filePath].edits += (added + deleted);
+                        this.allStats.totalAdded += added;
+                        this.allStats.totalDeleted += deleted;
+                        this.allStats.totalEdits += (added + deleted);
+
+                        if (currentDate) {
+                            if (!this.allStats.dailyStats[currentDate]) {
+                                this.allStats.dailyStats[currentDate] = { added: 0, deleted: 0, edits: 0, commits: 0 };
+                            }
+                            this.allStats.dailyStats[currentDate].added += added;
+                            this.allStats.dailyStats[currentDate].deleted += deleted;
+                            this.allStats.dailyStats[currentDate].edits += (added + deleted);
+                        }
 
                         // Only track files matching our patterns
                         if (this.isTrackedFile(filePath)) {
@@ -274,11 +321,12 @@ class RepoAnalyzer {
     /**
      * generateHtmlChart: Create interactive HTML visualization with Chart.js
      *
-     * Generates an HTML file with 4 interactive charts:
+     * Generates an HTML file with 5 interactive charts:
      * 1. File comparison: Stacked bar chart (added vs deleted by file)
      * 2. Daily trends: Line chart (daily changes over time)
      * 3. Cumulative progress: Line chart (total growth trajectory)
-     * 4. Net lines: Line chart (added - deleted over time)
+     * 4. Net core lines: Line chart (added - deleted over time for core files)
+     * 5. Net repo lines: Line chart (added - deleted over time for all files)
      *
      * Data preparation:
      * - Truncates file names to fit in chart labels
@@ -343,6 +391,25 @@ class RepoAnalyzer {
          */
         const netLinesData = cumulativeAddedData.map((added, index) => {
             return added - cumulativeDeletedData[index];
+        });
+
+        /**
+         * All Files Net Lines Calculation
+         * Covers all folders in the GitHub repo (no filtering)
+         */
+        const allDailyDates = Object.keys(this.allStats.dailyStats).sort();
+        let allCumulativeAdded = 0;
+        let allCumulativeDeleted = 0;
+        const allCumulativeAddedData = allDailyDates.map(date => {
+            allCumulativeAdded += this.allStats.dailyStats[date].added;
+            return allCumulativeAdded;
+        });
+        const allCumulativeDeletedData = allDailyDates.map(date => {
+            allCumulativeDeleted += this.allStats.dailyStats[date].deleted;
+            return allCumulativeDeleted;
+        });
+        const allNetLinesData = allCumulativeAddedData.map((added, index) => {
+            return added - allCumulativeDeletedData[index];
         });
 
         const html = `<!DOCTYPE html>
@@ -473,30 +540,37 @@ class RepoAnalyzer {
         </div>
 
         <div class="chart-container">
-            <h2>➕➖ Added vs Deleted by File</h2>
+            <h2>➕➖ Core: Added vs Deleted by File</h2>
             <div class="chart-wrapper">
                 <canvas id="addDelChart"></canvas>
             </div>
         </div>
 
         <div class="chart-container">
-            <h2>📈 Changes Over Time (Daily)</h2>
+            <h2>📈 Core: Changes Over Time (Daily)</h2>
             <div class="chart-wrapper" style="height: 400px;">
                 <canvas id="timeChart"></canvas>
             </div>
         </div>
 
         <div class="chart-container">
-            <h2>📊 Cumulative Changes Over Time</h2>
+            <h2>📊 Core: Cumulative Changes Over Time</h2>
             <div class="chart-wrapper" style="height: 400px;">
                 <canvas id="cumulativeChart"></canvas>
             </div>
         </div>
 
         <div class="chart-container">
-            <h2>📝 Total Net Lines Over Time</h2>
+            <h2>📝 Total Net Core Lines Over Time</h2>
             <div class="chart-wrapper" style="height: 400px;">
                 <canvas id="netLinesChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h2>📝 Total Net Repo Lines Over Time</h2>
+            <div class="chart-wrapper" style="height: 400px;">
+                <canvas id="allNetLinesChart"></canvas>
             </div>
         </div>
 
@@ -773,6 +847,73 @@ class RepoAnalyzer {
                         tension: 0.3,
                         pointRadius: 4,
                         pointBackgroundColor: '#8b5cf6',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20,
+                            font: { size: 15 }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += context.parsed.y.toLocaleString();
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            font: { size: 13 }
+                        }
+                    },
+                    y: {
+                        ticks: {
+                            font: { size: 13 },
+                            callback: function(value) {
+                                return value.toLocaleString();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Chart: All files net lines over time
+        const ctxAllNetLines = document.getElementById('allNetLinesChart').getContext('2d');
+        const allNetLinesChart = new Chart(ctxAllNetLines, {
+            type: 'line',
+            data: {
+                labels: ${JSON.stringify(allDailyDates)},
+                datasets: [
+                    {
+                        label: '📝 Net Lines — All Folders (Added - Deleted)',
+                        data: ${JSON.stringify(allNetLinesData)},
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#f59e0b',
                         pointBorderColor: '#fff',
                         pointBorderWidth: 2
                     }
