@@ -130,6 +130,7 @@ async function executeCleanup() {
     }
 
     shutdownLogger.info('Cleanup complete');
+    await shutdownLogger.flush();
 }
 
 /**

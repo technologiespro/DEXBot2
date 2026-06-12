@@ -235,7 +235,9 @@ Prefix tags used in log messages to help operators identify event types:
 
 ---
 
-## FAQ**
+## FAQ
+
+**Q: How much output reduction can I expect?**
 - Standard config: 40-50%
 - Production config: 90%+
 - Debug config: 0% (all logs)

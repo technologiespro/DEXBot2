@@ -184,6 +184,49 @@ console.log = origLog;
 assert.strictEqual(infoCaptured.length, 1, 'info-level logger should suppress debug');
 assert(infoCaptured[0].includes('should appear'), 'info-level logger should show info messages');
 
+// 7. Rotation — write enough to trigger rotate, verify .1 exists with expected content
+const rotateLogFile = path.join(os.tmpdir(), `dexbot-logger-rotate-${process.pid}.log`);
+try { fs.unlinkSync(rotateLogFile); } catch (err) {}
+try { fs.unlinkSync(rotateLogFile + '.1'); } catch (err) {}
+try { fs.unlinkSync(rotateLogFile + '.2'); } catch (err) {}
+const rotateLogger = new Logger('RotateTest', {
+    logFile: rotateLogFile,
+    level: 'info',
+    configOverride: {
+        json: { enabled: false },
+        display: {},
+        changeTracking: { enabled: false },
+        categories: {},
+        rotation: { enabled: true, maxSize: 500, maxFiles: 2 }
+    }
+});
+// perFileLimit = 500 / 3 ≈ 166 bytes. Each line is ~230 bytes.
+// First write creates the file (no rotation — file didn't exist at check time).
+rotateLogger.info('X'.repeat(200));
+await rotateLogger.flush();
+// Second write triggers rotation: file now exists at ~230 bytes >= 166
+rotateLogger.info('Y'.repeat(200));
+await rotateLogger.flush();
+assert(fs.existsSync(rotateLogFile), 'current log file should exist');
+assert(fs.existsSync(rotateLogFile + '.1'), 'rotated file .1 should exist');
+const rotatedContent = fs.readFileSync(rotateLogFile + '.1', 'utf8');
+assert(rotatedContent.includes('X'.repeat(200)), 'rotated .1 should contain first write');
+assert(!rotatedContent.includes('Y'.repeat(200)), 'rotated .1 should NOT contain second write');
+// Third write triggers second rotation: .1 → .2, current → .1
+rotateLogger.info('Z'.repeat(200));
+await rotateLogger.flush();
+assert(fs.existsSync(rotateLogFile + '.1'), 'rotated .1 should exist after third write');
+assert(fs.existsSync(rotateLogFile + '.2'), 'rotated .2 should exist after third write');
+const rotated2Content = fs.readFileSync(rotateLogFile + '.2', 'utf8');
+assert(rotated2Content.includes('X'.repeat(200)), 'rotated .2 should contain first write');
+// Fourth write triggers third rotation → .3 should be pruned (maxFiles=2)
+rotateLogger.info('W'.repeat(200));
+await rotateLogger.flush();
+assert(!fs.existsSync(rotateLogFile + '.3'), 'rotated .3 should be pruned (maxFiles=2)');
+try { fs.unlinkSync(rotateLogFile); } catch (err) {}
+try { fs.unlinkSync(rotateLogFile + '.1'); } catch (err) {}
+try { fs.unlinkSync(rotateLogFile + '.2'); } catch (err) {}
+
 console.log('logger tests passed');
 }
 

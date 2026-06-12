@@ -1061,7 +1061,7 @@ let LOGGING_CONFIG = {
     // Per-file limit = maxSize / (maxFiles + 1). Oldest rotated files are pruned beyond maxFiles.
     rotation: {
         enabled: true,
-        maxSize: 1181116007,
+        maxSize: 1181116007, // 1.1 GB total log budget
         maxFiles: 10
     },
     json: {

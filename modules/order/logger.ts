@@ -95,7 +95,7 @@ class Logger {
         this._writeInterval = 100;
         this._maxQueueSize = 1000;
         this._draining = false;
-        this._maxTotalSize = this.config.rotation?.maxSize || 1181116007;
+        this._maxTotalSize = this.config.rotation?.maxSize || 1181116007; // 1.1 GB (1.1 * 1024^3, rounded up)
         this._maxLogFiles = this.config.rotation?.maxFiles || 10;
         this._jsonOutput = this.config.json?.enabled ?? false;
         this._flushResolve = null;
@@ -147,12 +147,13 @@ class Logger {
 
         this._draining = false;
 
-        const resolve = this._flushResolve;
-        this._flushResolve = null;
-        if (resolve) resolve();
-
         if (this._writeQueue.length > 0) {
+            // Resolve will be re-attached when flush() is called again
             this._writeTimer = setTimeout(() => this._drainQueue(), this._writeInterval);
+        } else {
+            const resolve = this._flushResolve;
+            this._flushResolve = null;
+            if (resolve) resolve();
         }
     }
 
@@ -195,6 +196,7 @@ class Logger {
     /**
      * Log a message with optional timestamp and level.
      * Console output is immediate; file output is queued and batched.
+     * When json output is enabled, file receives JSON only (console stays text).
      * @param {string} message
      * @param {string} [level='info'] - debug | info | warn | error | critical
      */
@@ -215,21 +217,33 @@ class Logger {
                     console.log(output);
                 }
             }
-            this._enqueueWrite(output);
 
-            const jsonLine = this._getJsonLine(level, message, this.correlationId);
-            if (jsonLine) {
-                this._enqueueWrite(jsonLine);
+            if (this._jsonOutput) {
+                const jsonLine = this._getJsonLine(level, message, this.correlationId);
+                if (jsonLine) {
+                    this._enqueueWrite(jsonLine);
+                }
+            } else {
+                this._enqueueWrite(output);
             }
         }
     }
 
+    /** Log at info level. */
     info(msg: string) { this.log(msg, 'info'); }
+    /** Log at warn level. */
     warn(msg: string) { this.log(msg, 'warn'); }
+    /** Log at error level. */
     error(msg: string) { this.log(msg, 'error'); }
+    /** Log at debug level. */
     debug(msg: string) { this.log(msg, 'debug'); }
+    /** Log at critical level (above error — sustained failure signal). */
     critical(msg: string) { this.log(msg, 'critical'); }
 
+    /**
+     * Write raw output (no timestamp, no level).
+     * @param {string} text - Text to write
+     */
     raw(text: string) {
         if (!this.quiet) {
             process.stdout.write(text);
@@ -237,6 +251,10 @@ class Logger {
         this._enqueueWrite(text);
     }
 
+    /**
+     * Set tracing ID for subsequent log lines (per-instance, not per-call).
+     * Included in JSON output when enabled. Cleared by passing null.
+     */
     setCorrelationId(id: string | null) {
         this.correlationId = id;
     }
@@ -260,6 +278,11 @@ class Logger {
         });
     }
 
+    /**
+     * Log a sample of the order grid.
+     * @param {Array<Object>} orders - The list of orders.
+     * @param {number} startPrice - The market start price.
+     */
     logOrderGrid(orders: any[], startPrice: number) {
         const header = '\n===== ORDER GRID (SAMPLE) =====';
         let output = header + '\n';
@@ -330,6 +353,13 @@ class Logger {
         this._enqueueWrite(output);
     }
 
+    /**
+     * Print a summary of fund status for diagnostics with optional context.
+     * Skips output if nothing changed (change detection) unless forceDetailed.
+     * @param {Object} manager - OrderManager instance
+     * @param {string} context - Context label (e.g. "AFTER fill")
+     * @param {boolean} forceDetailed - Force output even if no change
+     */
     logFundsStatus(manager: any, context = '', forceDetailed = false) {
         if (!manager) return;
         if (!this.config.display?.fundStatus?.enabled && !forceDetailed) return;
@@ -434,6 +464,11 @@ class Logger {
         });
     }
 
+    /**
+     * Print a comprehensive status summary using manager state.
+     * @param {Object} manager - The manager instance
+     * @param {boolean} forceOutput - Force output even if disabled in config
+     */
     displayStatus(manager: any, forceOutput = false) {
         if (!manager) return;
         if (!this.config.display?.statusSummary?.enabled && !forceOutput) return;
@@ -498,6 +533,12 @@ class Logger {
         });
     }
 
+    /**
+     * Log detailed grid diagnostic: ACTIVE, SPREAD, PARTIAL orders and first VIRTUAL on boundary.
+     * @param {Object} manager - Manager instance
+     * @param {string} context - Context label
+     * @param {boolean} forceOutput - Force output even if disabled in config
+     */
     logGridDiagnostics(manager: any, context = '', forceOutput = false) {
         if (!manager) return;
         if (!this.config.display?.gridDiagnostics?.enabled && !forceOutput) return;

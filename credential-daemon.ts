@@ -1008,7 +1008,7 @@ function shutdown(exitCode = 0, reason = 'shutdown') {
         try { server.close(); } catch (_) {}
     }
     daemonLogger.log?.('[credential-daemon] Server closed');
-    process.exit(exitCode);
+    daemonLogger.flush().finally(() => process.exit(exitCode));
 }
 
 // Start daemon
