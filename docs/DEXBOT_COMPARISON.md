@@ -664,8 +664,8 @@ Where:
 | `claw/docs/DEXBOT2_TUNING_CHEAT_SHEET.md` | — | Grid tuning reference |
 | `claw/docs/POSITION_HEALTH.md` | — | Position health monitoring guide |
 | `claw/docs/RUNTIME_COMPARISON.md` | — | Claw runtime comparison |
-| `dashboard/README.md` | — | Dashboard overview |
-| `dashboard/tui_dashboard_spec.md` | — | TUI dashboard specification |
+| ~~`dashboard/README.md`~~ | ~~—~~ | ~~Moved to `dashboard-draft` branch~~ |
+| ~~`dashboard/tui_dashboard_spec.md`~~ | ~~—~~ | ~~Moved to `dashboard-draft` branch~~ |
 | ~~`docs/TYPESCRIPT_MIGRATION_ANALYSIS.md`~~ | ~~23 KB~~ | ~~Removed — migration complete~~ |
 | `docs/crash_report_jan_mar_2026.md` | 7 KB | Production incident analysis |
 | `docs/docker.md` | 3 KB | Docker deployment guide |
@@ -855,7 +855,7 @@ The 500× figure is not theoretical: it materializes in production when higher o
 - No DEXBot-style external CEX price-feed strategy support
 - JSON config requires manual editing (no wizard)
 - Backtesting/research exists under `analysis/`, but it is not a polished end-user backtesting product
-- No polished TUI/dashboard product
+- No polished TUI product
 - No community/plugin ecosystem
 - Heavy documentation suggests significant learning curve for contributors
 - Rapid iteration means new adapter/Claw/credit features require disciplined regression testing before production use

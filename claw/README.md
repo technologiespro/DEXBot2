@@ -1,5 +1,8 @@
 # Claw BitShares Bridge
 
+> **⚠️ EXPERIMENTAL — Use at your own risk.**  
+> The Claw subsystem handles live blockchain operations (create/cancel orders, borrow/repay MPAs, adjust collateral). It has not undergone the same level of production hardening, race-condition testing, and edge-case validation as the core DEXBot2 runtime. Review all actions before execution, especially in the `short_mpa_strategy`, `decision_loop`, and `position_health` modules.
+
 Integration layer for interacting with the BitShares blockchain from DEXBot2 and the supported Claw runtimes: OpenClaw, Hermes, OpenFang, NanoBot, PicoClaw, NanoClaw, ZeroClaw, NullClaw, and memU.
 
 This scaffold follows the same high-level split used in DEXBot2:

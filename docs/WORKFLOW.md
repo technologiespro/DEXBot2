@@ -174,6 +174,43 @@ git checkout test
 git pull origin test
 ```
 
+## Recommended Runtime: `unlock`
+
+DEXBot2 runs as a **monolithic daemon** (`node unlock`). This is the production-
+recommended mode:
+
+- **Single process** — no PM2, no separate credential daemon management
+- **Auto-update** — detects new releases, builds, and restarts cleanly
+- **Crash restart** — background mode re-spawns on failure
+- **Per-bot log files** — each bot logs to `profiles/logs/<bot>.log`
+- **Built-in daemon** — the credential daemon is managed internally
+
+Legacy PM2 mode (`npm run pm2:unlock`) is de-emphasized but still available.
+
+```bash
+# Start as background daemon (default)
+node unlock
+
+# Start in foreground (interactive)
+node unlock --foreground
+
+# Start with claw automation
+node unlock --claw-only
+```
+
+### Overview of CLI Commands
+
+The `node dexbot <subcommand>` family provides runtime management:
+
+| Command | Purpose |
+|---------|---------|
+| `node dexbot order` | Display live order book with AMA/dynamic-weight status |
+| `node dexbot status` | Unified runtime health — daemon, adapter, bots |
+| `node dexbot clear` | Clear log files and runtime state |
+| `node dexbot stat` | Bot statistics summary |
+| `node dexbot white` | Market adapter whitelist management |
+| `node dexbot default` | Show default configuration values |
+
 ## NPM Scripts for Branch Synchronization
 
 The following npm scripts provide safe, automated branch synchronization:

@@ -161,6 +161,19 @@ left open indefinitely.
 The daemon **never** exports raw private keys. All signing happens internally;
 callers receive only operation results.
 
+### HMAC Session Recovery
+
+If the daemon receives `SOURCE_AUTH_DENIED` (stale HMAC session — e.g., after a
+daemon restart or TTL expiry), it recovers transparently:
+
+1. Daemon catches `SIGHUP` and sleeps 500ms for the restart to settle.
+2. A fresh `sessionId` is fetched and injected into the `signingToken`.
+3. The pending operation is replayed cleanly.
+
+This prevents a stale HMAC session from blocking the pipeline. The recovery is
+automatic — no user or operator intervention required. Zero-budget shortfall
+warnings are suppressed during recovery to avoid noise.
+
 ### Daemon signing token
 
 The bot receives a **signing token** at startup:
@@ -295,6 +308,19 @@ bot.ts / dexbot.ts
 This means production deployments running the daemon never expose the master
 password interactively, while the interactive path remains available for
 development and recovery.
+
+### Foreign Daemon Detection
+
+At startup, `unlock` scans for credential daemons left by a different user or a
+stale session. If a foreign daemon is found (wrong UID or mismatched runtime
+directory):
+
+- The foreign daemon is gracefully terminated.
+- Its socket, ready file, and runtime artifacts are cleaned up.
+- A fresh daemon is started under the correct user context.
+
+This prevents credential cross-contamination when switching between user
+accounts or after an unclean exit.
 
 ---
 
