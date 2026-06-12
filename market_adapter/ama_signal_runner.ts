@@ -10,9 +10,9 @@ const fs = require('fs');
  * machine-readable AMA outputs per bot.
  *
  * Usage:
- *   node market_adapter/ama_signal_runner.js
- *   node market_adapter/ama_signal_runner.js --bot XRP-BTS
- *   node market_adapter/ama_signal_runner.js --bot xrp-bts-0 --compact
+ *   tsx market_adapter/ama_signal_runner.ts
+ *   tsx market_adapter/ama_signal_runner.ts --bot XRP-BTS
+ *   tsx market_adapter/ama_signal_runner.ts --bot xrp-bts-0 --compact
  */
 
 const { runOnceForAma } = require('./market_adapter');
@@ -87,7 +87,7 @@ function printHelp(): void {
     console.log('AMA signal runner (one cycle): updates candles and returns latest AMA values.');
     console.log('');
     console.log('Usage:');
-    console.log('  node market_adapter/ama_signal_runner.js [options]');
+    console.log('  tsx market_adapter/ama_signal_runner.ts [options]');
     console.log('');
     console.log('Options:');
     console.log('  --bot <name|key>           Filter output to a specific bot name or botKey');

@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * modules/logger.js - Centralized Logger Hub
+ * modules/logger.ts - Centralized Logger Hub
  *
- * Re-exports the comprehensive Logger from modules/order/logger.js as the centralized
+ * Re-exports the comprehensive Logger from modules/order/logger.ts as the centralized
  * logging system for all components (bot operations, market adapter, diagnostics, etc.).
  *
  * Usage:
@@ -25,6 +25,7 @@
  *   - logFile: {string} Path to optional log file (appends output)
  *   - level: {string} Log level: 'debug', 'info', 'warn', 'error' (default 'info')
  *   - configOverride: {Object} Override LOGGING_CONFIG from constants
+ *   - correlationId: {string} Optional correlation ID for request tracing
  */
 
 export = require('./order/logger');

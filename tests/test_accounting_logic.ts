@@ -1,8 +1,7 @@
 /**
- * tests/test_accounting_logic.js
- * 
- * Ported from tests/unit/accounting.test.js
- * Comprehensive unit tests for accounting.js - Fund tracking and calculations
+ * tests/test_accounting_logic.ts
+ *
+ * Comprehensive unit tests for accounting.ts - Fund tracking and calculations
  * Uses native assert to avoid Jest dependency.
  */
 
@@ -401,7 +400,7 @@ async function runTests() {
         const { BUILD_DIR } = require('../modules/constants');
         const chainOrdersPath = path.resolve(__dirname, '../modules/chain_orders.ts');
         const chainOrdersSourcePath = path.resolve(__dirname, '../modules/chain_orders.ts');
-        const distChainOrdersPath = path.resolve(__dirname, '..', BUILD_DIR, 'modules', 'chain_orders.ts');
+        const distChainOrdersPath = path.resolve(__dirname, '..', BUILD_DIR, 'modules', 'chain_orders.js');
         const stubbedChainOrders = {
             readOpenOrders: async () => [],
         };

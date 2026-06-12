@@ -1,5 +1,5 @@
 /**
- * tests/repro_phantom_orders.js
+ * tests/repro_phantom_orders.ts
  * 
  * Test that verifies phantom orders (ACTIVE/PARTIAL without orderId) are now PREVENTED.
  * 

@@ -15,7 +15,7 @@ const { MARKET_ADAPTER } = require('../../modules/constants');
  *
  * Threshold guidance: PE < PE_NODES[0] = structured (signals trustworthy);
  *                     PE > PE_NODES[2] = noise (suppress or gate signals).
- *                     Thresholds are defined in MARKET_ADAPTER.PE_NODES in constants.js.
+ *                     Thresholds are defined in MARKET_ADAPTER.PE_NODES in constants.ts.
  *
  * Default: m=5 (5!=120 patterns), window=100 bars.
  */

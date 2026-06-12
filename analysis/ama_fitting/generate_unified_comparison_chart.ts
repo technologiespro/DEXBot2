@@ -10,8 +10,8 @@
  * No Kibana fetch, no market_adapter runtime deps beyond the core renderer.
  *
  * Usage:
- *   node analysis/ama_fitting/generate_unified_comparison_chart.js --data <file.json>
- *   node analysis/ama_fitting/generate_unified_comparison_chart.js  (auto-discovers newest lp_pool_*.json)
+ *   tsx analysis/ama_fitting/generate_unified_comparison_chart.ts --data <file.json>
+ *   tsx analysis/ama_fitting/generate_unified_comparison_chart.ts  (auto-discovers newest lp_pool_*.json)
  */
 
 const fs = require('fs');
@@ -136,7 +136,7 @@ function showHelp() {
 Unified Comparison Chart Generator
 
 Usage:
-  node generate_unified_comparison_chart.js [options]
+  tsx generate_unified_comparison_chart.ts [options]
 
 Options:
   --data FILE     LP candle export JSON file
@@ -148,7 +148,7 @@ Options:
 Notes:
   - If --data is omitted, the newest lp_pool_*.json under market_adapter/data/lp is used.
   - Accepts any candle JSON: flat [[ts,o,h,l,c,v],...], {candles: [...]}, or {data: [...]}.
-  - Separate from Kibana fetching — use fetch_lp_candles.js to pull data first.
+  - Separate from Kibana fetching — use fetch_lp_candles.ts to pull data first.
 `);
 }
 
@@ -183,7 +183,7 @@ function generateChart(options = {} as Record<string, any>) {
         ? path.resolve(options.dataFile)
         : findLatestLpDataFile();
     if (!dataFile) {
-        throw new Error(`No LP data file found. Use --data <path> or run fetch_lp_candles.js first.`);
+        throw new Error(`No LP data file found. Use --data <path> or run fetch_lp_candles.ts first.`);
     }
 
     const strategies = Array.isArray(options.strategies) && options.strategies.length

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * credential-daemon.js - Secure Private Key Server
+ * credential-daemon.ts - Secure Private Key Server
  *
  * DEXBot credential daemon for multi-bot private key management.
  * Enables bot processes to request pre-decrypted keys via Unix socket.
@@ -22,13 +22,13 @@
  * - Socket: profiles/run/dexbot-cred-daemon.sock (or $DEXBOT_CRED_RUNTIME_DIR, or $XDG_RUNTIME_DIR/dexbot2/)
  * - Ready file: profiles/run/dexbot-cred-daemon.ready (or $DEXBOT_CRED_RUNTIME_DIR, or $XDG_RUNTIME_DIR/dexbot2/)
  * - Startup timeout: 60 seconds (DAEMON_STARTUP_TIMEOUT_MS)
- * - Windows 10+: Supported; earlier Windows not supported
+ * - Linux only (Unix socket)
  *
  * REQUEST FORMAT:
  *   {"type": "ping", "accountName": "account-name"}
  *   {"type": "probe-account", "accountName": "account-name"}
- *   {"type": "broadcast-operation", "accountName": "account-name", "operation": {...}}
- *   {"type": "execute-operations", "accountName": "account-name", "operations": [...]}
+ *   {"type": "broadcast-operation", "sessionId": "...", "accountName": "account-name", "operation": {...}}
+ *   {"type": "execute-operations", "sessionId": "...", "accountName": "account-name", "operations": [...]}
  *
  * RESPONSE FORMAT:
  *   Success:  {"success": true, ...}
@@ -50,7 +50,7 @@
  * ===============================================================================
  *
  * Direct:
- *   node credential-daemon.js
+ *   tsx credential-daemon.ts
  *
  * Via PM2 (recommended):
  *   npm run unlock
@@ -100,17 +100,7 @@ const daemonLogger = new Logger('credential-daemon');
 const DAEMON_DIR = __dirname;
 const PROJECT_ROOT = path.basename(DAEMON_DIR) === BUILD_DIR ? path.dirname(DAEMON_DIR) : DAEMON_DIR;
 
-// Platform check - Unix sockets require Unix-like systems or Windows 10+
-const platform = os.platform();
-if (platform === 'win32') {
-    const release = os.release();
-    const majorVersion = parseInt(release.split('.')[0], 10);
-    if (majorVersion < 10) {
-        daemonLogger.error('Credential daemon requires Windows 10 or later');
-        daemonLogger.error('On older Windows, use: node bot.js <bot-name> with interactive prompt');
-        process.exit(1);
-    }
-}
+// Unix sockets are required; only Unix-like systems are supported
 
 const RUNTIME_DIR = getCredentialRuntimeDir({ root: PROJECT_ROOT });
 const SOCKET_PATH = getCredentialSocketPath({ root: PROJECT_ROOT, runtimeDir: RUNTIME_DIR });
@@ -491,7 +481,7 @@ async function initialize() {
         // Check if profiles/keys.json exists
         const keysPath = path.join(PROJECT_ROOT, 'profiles', 'keys.json');
         if (!fs.existsSync(keysPath)) {
-            throw new Error('profiles/keys.json not found. Please run: node dexbot.js keys');
+            throw new Error('profiles/keys.json not found. Please run: tsx dexbot.ts keys');
         }
 
         // Accept a one-shot bootstrap secret when launched by a wrapper,
@@ -528,7 +518,7 @@ async function initialize() {
         // nodes as bot processes (when node management is enabled),
         // without instantiating NodeManager (which was crashing the
         // daemon ~80s after startup).  Mirror the enabled check from
-        // bitshares_client.js so both stay aligned.
+        // bitshares_client.ts so both stay aligned.
         const settings = readGeneralSettings({ fallback: null });
         refreshNodeList();
 
@@ -943,6 +933,7 @@ function sendSuccess(socket: any, data: any) {
  * 
  * @param {net.Socket} socket - Client socket
  * @param {string} message - Error message
+ * @param {number} code - Error code
  */
 function sendError(socket: any, message: string, code: string | null = null) {
     const response = JSON.stringify({

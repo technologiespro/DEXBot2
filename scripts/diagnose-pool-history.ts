@@ -4,7 +4,7 @@
 /**
  * Diagnostic: Inspect raw BitShares pool history API responses for pool 1.19.133.
  *
- * Usage: node scripts/diagnose-pool-history.js [--pool <id>] [--limit <n>] [--hours <n>] [--maxPages <n>]
+ * Usage: tsx scripts/diagnose-pool-history.ts [--pool <id>] [--limit <n>] [--hours <n>] [--maxPages <n>]
  */
 
 const { BitShares, waitForConnected } = require('../modules/bitshares_client');

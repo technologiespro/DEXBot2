@@ -16,7 +16,7 @@
  * effect can be researched in isolation.
  *
  * Usage:
- *   node analysis/analyze_volatility.js \
+ *   tsx analysis/analyze_volatility.ts \
  *     --file market_adapter/data/lp/<path>/<to>/<lp-candles>.json
  */
 

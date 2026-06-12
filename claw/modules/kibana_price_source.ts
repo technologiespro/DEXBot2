@@ -104,10 +104,9 @@ async function fetchPoolAssets(poolId: any, config: Record<string, any> = {}) {
 // ─── Combined: Market + Feed for Trend Analysis ─────────────────────────────
 
 /**
- * Fetch historical market candles and pair them with the current on-chain
- * feed price for a complete trend analysis dataset.
+ * Fetch historical market candles and extract close prices for trend analysis.
  *
- * Returns candles augmented with the latest feed price — suitable for
+ * Returns candles with their close prices — suitable for
  * initializing a TrendAnalyzer with historical context before switching
  * to live feed_price_source updates.
  *

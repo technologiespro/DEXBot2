@@ -1,5 +1,5 @@
 /**
- * modules/constants.js - Configuration and Constants
+ * modules/constants.ts - Configuration and Constants
  *
  * Global configuration, constants, and defaults for DEXBot2.
  * All constants are frozen to prevent accidental runtime modifications.
@@ -110,7 +110,7 @@
  * Useful for development, testing, and performance tuning.
  *
  * FREEZING:
- * All exported objects are frozen at module load to prevent accidental runtime modifications.
+ * Most exported objects are frozen at module load to prevent accidental runtime modifications.
  * This ensures constants remain truly constant throughout bot lifetime.
  *
  * ===============================================================================
@@ -272,7 +272,7 @@ let GRID_LIMITS = {
     //   - But target is 2%, so final spread = max(1.05%, 2%) = 2% (target wins)
     //   - This ensures spread is at least (0.5% × 2.1) but respects user's targetSpread
     //
-    // Default: 2.1 ensures 3-slot minimum gap even with tight increment (see grid.js::SPREAD_GAP_FORMULA)
+    // Default: 2.1 ensures 3-slot minimum gap even with tight increment (see grid.ts::SPREAD_GAP_FORMULA)
     MIN_SPREAD_FACTOR: 2.1,
 
     // MIN_ORDER_SIZE_FACTOR: Minimum order size = blockchain_minimum × this factor.
@@ -693,7 +693,7 @@ let PIPELINE_TIMING = {
 
 // Market Adapter Configuration
 // Controls price tracking and grid recalculation triggers.
-// See: market_adapter/market_adapter.js, modules/account_bots.js
+// See: market_adapter/market_adapter.ts, modules/account_bots.ts
 let MARKET_ADAPTER = {
     // Default candle/runtime cadence for the standalone market adapter.
     // Keep these centralized so the adapter, logs, and tests do not drift from
@@ -742,7 +742,7 @@ let MARKET_ADAPTER = {
     //   - When AMA price moves ±AMA_DELTA_THRESHOLD_PERCENT from the last recorded center,
     //     a recalculate.<botKey>.trigger file is written to signal grid regeneration.
     //   - Configurable per deployment via profiles/general.settings.json under MARKET_ADAPTER.
-    //   - Range: 0.1 to 50.0 (enforced in account_bots.js)
+    //   - Range: 0.1 to 50.0 (enforced in account_bots.ts)
     //   - Default: 1.00 (slightly more responsive than the 1.21% sigma calibration baseline)
     AMA_DELTA_THRESHOLD_PERCENT: 1.00,
 
@@ -1163,16 +1163,16 @@ let COW_PERFORMANCE = {
 //   NATIVE_CLIENT.ECC            - Cryptographic constants (reference only)
 //
 // Source files:
-//   modules/bitshares-native/serial/chain_constants.js  (CHAIN, OPERATIONS, OBJECT_TYPES)
-//   modules/bitshares-native/tx/builder.js               (TRANSACTION)
-//   modules/bitshares-native/transport.js                (TRANSPORT)
-//   modules/bitshares-native/subscriptions.js             (SUBSCRIPTIONS)
-//   modules/bitshares-native/resolvers.js                 (RESOLVERS)
-//   modules/bitshares-native/crypto/ecc.js                (ECC)
-//   modules/bitshares-native/serial/types.js              (object_id encoding)
-//   modules/bitshares-native/serial/operations.js         (operation serializers)
-//   modules/bitshares-native/chain_client.js              (API registration, core asset)
-//   modules/bitshares_client.js                           (connection proxy, event wiring)
+//   modules/bitshares-native/serial/chain_constants.ts  (CHAIN, OPERATIONS, OBJECT_TYPES)
+//   modules/bitshares-native/tx/builder.ts               (TRANSACTION)
+//   modules/bitshares-native/transport.ts                (TRANSPORT)
+//   modules/bitshares-native/subscriptions.ts             (SUBSCRIPTIONS)
+//   modules/bitshares-native/resolvers.ts                 (RESOLVERS)
+//   modules/bitshares-native/crypto/ecc.ts                (ECC)
+//   modules/bitshares-native/serial/types.ts              (object_id encoding)
+//   modules/bitshares-native/serial/operations.ts         (operation serializers)
+//   modules/bitshares-native/chain_client.ts              (API registration, core asset)
+//   modules/bitshares_client.ts                           (connection proxy, event wiring)
 //
 let NATIVE_CLIENT = {
 
@@ -1213,7 +1213,7 @@ let NATIVE_CLIENT = {
     // -------------------------------------------------------------------------
     // OPERATIONS — Graphene operation type IDs
     // -------------------------------------------------------------------------
-    // Corresponds to OP_* constants in serial/chain_constants.js.
+    // Corresponds to OP_* constants in serial/chain_constants.ts.
     // FILL_PROCESSING.OPERATION_TYPE (4) references OP_FILL_ORDER.
     OPERATIONS: {
         TRANSFER:             0,
@@ -1311,6 +1311,7 @@ let NATIVE_CLIENT = {
         // underlying connection failure; this window prevents redundant failover work.
         CLOSE_COALESCE_MS: 250,
 
+        // NOTE: These constants are informational but not imported by transport.ts
         // Reconnection backoff parameters (ms).
         // Reconnect delay = min(base × 2^attempt + random(0..1000), max).
         RECONNECT_BASE_MS: 1000,

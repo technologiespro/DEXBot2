@@ -1,5 +1,5 @@
 /**
- * tests/test_resync_invariants.js
+ * tests/test_resync_invariants.ts
  * 
  * Verifies that the isBootstrapping flag correctly suppresses fund invariant warnings
  * during transient states like grid resync.

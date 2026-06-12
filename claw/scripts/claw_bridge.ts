@@ -91,7 +91,7 @@ function parseArgs(argv: any) {
   return options;
 }
 
-function printHelp(scriptPath = 'node scripts/claw_bridge.js') {
+function printHelp(scriptPath = 'tsx scripts/claw_bridge.ts') {
   const commandLines = listClawCommandNames().map((command: any) => `  ${command}`);
 
   console.log([
@@ -107,7 +107,7 @@ function describeScriptRuntimeManifest(runtimeName: any, payload = {}) {
   return describeRuntimeManifest(runtimeName ? { ...payload, runtimeName } : payload);
 }
 
-async function main(runtimeName = null, scriptPath = 'node scripts/claw_bridge.js') {
+async function main(runtimeName = null, scriptPath = 'tsx scripts/claw_bridge.ts') {
   const { command, help, payload } = parseArgs(process.argv.slice(2));
 
   if (help || !command) {

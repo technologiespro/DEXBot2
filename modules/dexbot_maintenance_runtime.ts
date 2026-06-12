@@ -1,3 +1,4 @@
+/** Maintenance runtime - periodic sync loops, grid health checks, rebalance */
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -1490,7 +1491,7 @@ async function cancelDustOrders({ buy: buyDust = [], sell: sellDust = [] } = {})
 
     const toCancel = allDust.filter(o => {
         if (!o.orderId) return false;
-        // The map was just populated (lines 1446-1450) for every order in
+        // The map was just populated (lines 1486-1488) for every order in
         // allDust, so the get() below never returns undefined. The DUST_CANCEL_DELAY
         // window starts at firstSeen (when the order first appeared in the dust
         // set), not at this maintenance tick, so an order can only be cancelled

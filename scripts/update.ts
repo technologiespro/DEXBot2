@@ -12,14 +12,14 @@
  * - Gracefully handles missing files or PM2
  *
  * Configuration:
- * - Repository URL: Hardcoded in modules/constants.js (UPDATER.REPOSITORY_URL)
- * - Target branch: Configurable in constants.js (UPDATER.BRANCH), supports 'auto' for auto-detection
+ * - Repository URL: Hardcoded in modules/constants.ts (UPDATER.REPOSITORY_URL)
+ * - Target branch: Configurable in constants.ts (UPDATER.BRANCH), supports 'auto' for auto-detection
  *
  * Exit codes:
  * - 0: Update completed successfully (or already up-to-date)
  * - 1: Update failed (with error details printed)
  *
- * Usage: node scripts/update.js
+ * Usage: tsx scripts/update.ts
  */
 
 const { execSync } = require('child_process');

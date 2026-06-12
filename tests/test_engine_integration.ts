@@ -165,10 +165,10 @@ async function testFillToRebalanceCycle() {
 }
 
 // ============================================================================
-// TEST 4: MULTI-ENGINE CONSOLIDATION → SYNC → REBALANCE
+// TEST 2: MULTI-ENGINE CONSOLIDATION → SYNC → REBALANCE
 // ============================================================================
 async function testConsolidationSyncRebalanceCycle() {
-    console.log('\n[Test 4] Complex cycle: Consolidation → Sync → Rebalance');
+    console.log('\n[Test 2] Complex cycle: Consolidation → Sync → Rebalance');
     console.log('-'.repeat(80));
 
     const mgr = await setupManager();
@@ -210,7 +210,8 @@ async function testConsolidationSyncRebalanceCycle() {
     try {
         await initializeFeeCache(['BTS', 'USD'], mockBitShares);
         await testFillToRebalanceCycle();
-        // Skip Test 2/3 as they don't use rebalance() directly but verify they still pass
+        // Tests 2/3 (standalone rebalance exercises) were removed because they didn't test
+        // the rebalance() entry point directly. Renumbered from Test 4 → Test 2 above.
         await testConsolidationSyncRebalanceCycle();
 
         console.log('\n' + '='.repeat(80));

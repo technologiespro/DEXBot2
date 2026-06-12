@@ -1,5 +1,5 @@
 /**
- * tests/test_sequential_multi_fill.js
+ * tests/test_sequential_multi_fill.ts
  * 
  * Focused test for sequential processing of multiple filled orders.
  * UPDATED: Uses modern COW pipeline (performSafeRebalance).

@@ -1,12 +1,12 @@
 /**
- * tests/test_fee_cache.js
+ * tests/test_fee_cache.ts
  *
  * Test script demonstrating the new fee caching functions in utils.js:
- * - initializeFeeCache(): Loads fees from all assets in bots.json
+ * - initializeFeeCache(botConfigs, btsClient): Loads fees for given bot config assets via BitShares client
  * - getAssetFees(): Returns maker/taker/market fees for a given asset and amount
  *
  * Usage:
- *   node tests/test_fee_cache.js
+ *   tsx tests/test_fee_cache.ts
  */
 
 const { BitShares } = require('../modules/bitshares_client');

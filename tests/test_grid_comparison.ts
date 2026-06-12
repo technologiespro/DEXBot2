@@ -309,8 +309,8 @@ console.log('  - metric = (0.1)² = 0.01');
 console.log('  - promille = 0.01 × 1000 = 10 promille');
 console.log('  - Exceeds default threshold (1 promille) → triggers update\n');
 
-console.log('Run: npm test -- tests/test_grid_comparison.js');
-console.log('Or: node tests/test_grid_comparison.js\n');
+console.log('Run: npm test -- tests/test_grid_comparison.ts');
+console.log('Or: tsx tests/test_grid_comparison.ts\n');
 
 })().catch(err => {
     console.error('Test execution error:', err);

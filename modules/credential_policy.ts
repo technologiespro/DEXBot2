@@ -204,8 +204,8 @@ function ensurePolicyConfig(filePath: string): PolicyConfig {
 }
 
 /**
- * Load and parse daemon-policies.json. Returns normalized config or null on error.
- * On error, logs a warning and returns null (daemon will use BUILTIN_DEFAULT_POLICY).
+ * Load and parse daemon-policies.json. Returns normalized config or throws on
+ * error/absence (daemon uses loadRequiredPolicyConfig which throws).
  *
  * @param {string} filePath - Path to daemon-policies.json
  * @param {object} [options={}] - Options

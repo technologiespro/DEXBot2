@@ -6,7 +6,7 @@
  * and validates that each history entry has a unique ID field that can be
  * used in fill deduplication.
  *
- * Run: node tests/test_blockchain_fill_history.js
+ * Run: tsx tests/test_blockchain_fill_history.ts
  */
 
 if (process.env.RUN_LIVE_BITSHARES_TESTS !== '1') {

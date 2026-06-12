@@ -12,7 +12,7 @@ function listZeroClawCommandNames() {
   return listClawCommandNames();
 }
 
-function buildZeroClawCommandExamples(scriptPath = 'node scripts/zeroclaw_bridge.js') {
+function buildZeroClawCommandExamples(scriptPath = 'tsx scripts/zeroclaw_bridge.ts') {
   return buildClawCommandExamples(scriptPath);
 }
 

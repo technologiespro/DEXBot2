@@ -6,7 +6,7 @@
  * Runs KalmanTrendAnalyzer over candle data and generates an interactive HTML chart.
  *
  * Usage:
- *   node analysis/analyze_kalman.js \
+ *   tsx analysis/analyze_kalman.ts \
  *     --source json \
  *     --file market_adapter/data/lp/<path>/<to>/<lp-candles>.json
  */
@@ -21,7 +21,7 @@ const { calculateAMA } = require('../market_adapter/core/strategies/ama');
 const { computeATR, getCandleClose } = require('./math_utils');
 const { writeChartFile } = require('./chart_utils');
 
-// Mirror ama_slope_model.js defaults for a fair comparison
+// Mirror ama_slope_model.ts defaults for a fair comparison
 const AMA_ER_PERIOD   = 10;
 const AMA_FAST        = 2;
 const AMA_SLOW        = 30;

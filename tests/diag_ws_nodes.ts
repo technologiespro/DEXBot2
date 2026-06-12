@@ -13,7 +13,7 @@
  *   5. Orderbook market history (getMarketHistory — the book-source path)
  *   6. Connection stability hold
  *
- * Usage: node tests/diag_ws_nodes.js [--quick] [--stability-s 60]
+ * Usage: tsx tests/diag_ws_nodes.ts [--quick] [--stability-s 60]
  */
 
 const _WebSocket = globalThis.WebSocket;

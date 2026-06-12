@@ -1,5 +1,5 @@
 /**
- * modules/order/strategy.js - StrategyEngine
+ * modules/order/strategy.ts - StrategyEngine
  *
  * Grid rebalancing and order placement strategy.
  * Exports a single StrategyEngine class implementing boundary-crawl pivot strategy.

@@ -1,5 +1,5 @@
 /**
- * modules/order/export.js - QTradeX Export Module
+ * modules/order/export.ts - QTradeX Export Module
  *
  * Trading history extraction and CSV export engine.
  * Parses PM2 log files to extract trading fills and exports to standardized format.

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * modules/order/logger_state.js - Logger State Manager
+ * modules/order/logger_state.ts - Logger State Manager
  *
  * State tracking engine for change detection and audit logging.
  * Exports a single LoggerState class that enables smart logging by detecting state changes.

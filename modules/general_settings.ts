@@ -1,5 +1,5 @@
 /**
- * modules/general_settings.js - General Application Settings
+ * modules/general_settings.ts - General Application Settings
  * 
  * Centralized management for application-wide settings stored in profiles/general.settings.json.
  * Provides read/write operations with fallback handling.

@@ -14,7 +14,7 @@
  * Required fields for each bot: assetA, assetB, activeOrders, botFunds
  * Optional field: gridPrice (number | null | "ama"/"ama1".."ama4")
  *
- * Usage: node scripts/validate_bots.js
+ * Usage: tsx scripts/validate_bots.ts
  * Exit code: 0 (always, even if warnings found)
  */
 

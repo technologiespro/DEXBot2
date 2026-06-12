@@ -1,5 +1,5 @@
 /**
- * tests/test_strategy_logic.js
+ * tests/test_strategy_logic.ts
  * 
  * Ported from tests/unit/strategy.test.js
  * Comprehensive unit tests for strategy.js - Rebalancing logic and order placement

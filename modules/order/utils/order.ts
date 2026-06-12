@@ -1,11 +1,11 @@
 /**
- * modules/order/utils/order.js - Order Domain Utilities
+ * modules/order/utils/order.ts - Order Domain Utilities
  *
  * Business rules for orders, state predicates, filtering, and reconciliation.
  * Includes grid indexing, order comparison, delta building, and strategy calculations.
  *
  * ===============================================================================
- * TABLE OF CONTENTS (36 exported functions)
+ * TABLE OF CONTENTS (37 exported functions)
  * ===============================================================================
  *
  * SECTION 1: CHAIN ORDER MATCHING & RECONCILIATION (5 functions)
@@ -20,6 +20,7 @@
  *   - getOrderTypeFromUpdatedFlags(buyUpdated, sellUpdated) - Get type from update flags
  *   - resolveConfiguredPriceBound(value, fallback, startPrice, mode) - Resolve price bounds
  *   - buildFillKey(fillOrParts) - Build a stable fill dedupe key
+ *   - buildCreateOpFingerprint(params) - Build fingerprint for create operations
  *
  * SECTION 3: STATE TRANSITIONS (2 functions)
  *   - virtualizeOrder(order) - Convert order to VIRTUAL state
@@ -27,8 +28,7 @@
  *
  * SECTION 4: FILTERING & COUNTING (5 functions)
  *   - filterOrdersByType(orders, orderType) - Filter orders by type
- *   - getPartialsByType(orders) - Get partials grouped by type
- *   - countOrdersByType(orderType, ordersMap) - Count orders by type
+
  *   - buildOutsideInPairGroups(items, accessors) - Outside->center pair grouping
  *   - extractBatchOperationResults(result) - Extract operation_results from chain batch result
  *   - formatUnmatchedChainOrder(order) - Format structural drift diagnostics
@@ -390,8 +390,7 @@ function buildCreateOrderArgs(order, assetA, assetB) {
 /**
  * Build a deterministic fingerprint for a planned CREATE order.
  *
- * The fingerprint is used by the COW recovery path (see
- * modules/dexbot_class.ts::_reconcileAfterUncertainBroadcast) to match an
+ * The fingerprint is used by the COW recovery path to match an
  * order the bot just tried to broadcast to an on-chain order that may or may
  * not have been accepted. Determinism is the key property: if the bot replays
  * the same CREATE op after a credential daemon timeout, the new fingerprint

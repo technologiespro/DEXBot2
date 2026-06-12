@@ -1,5 +1,5 @@
 /**
- * tests/test_fill_batch_chunking.js
+ * tests/test_fill_batch_chunking.ts
  *
  * Tests for _processFillsWithBatching — verifies MAX_FILL_BATCH_SIZE
  * enforcement across the unified fill-chunking + rebalance + broadcast pipeline.

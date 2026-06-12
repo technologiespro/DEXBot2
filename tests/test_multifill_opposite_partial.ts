@@ -1,5 +1,5 @@
 /**
- * tests/test_multifill_opposite_partial.js
+ * tests/test_multifill_opposite_partial.ts
  * 
  * Verifies handling of multiple fills on one side (e.g. BUY) 
  * while a PARTIAL order exists on the opposite side (e.g. SELL).

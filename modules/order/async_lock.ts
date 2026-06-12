@@ -1,5 +1,5 @@
 /**
- * modules/order/async_lock.js - AsyncLock Engine
+ * modules/order/async_lock.ts - AsyncLock Engine
  *
  * Distributed mutual exclusion for async operations.
  * Exports a single AsyncLock class that prevents concurrent execution of critical sections.

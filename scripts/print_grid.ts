@@ -5,7 +5,7 @@
  * Creates a sample grid configuration and displays consecutive price levels
  * with the percentage difference between adjacent slots.
  *
- * Usage: node scripts/print_grid.js
+ * Usage: tsx scripts/print_grid.ts
  *
  * Output:
  * - Shows sell levels from highest (furthest above market) to market price

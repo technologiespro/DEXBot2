@@ -1,5 +1,5 @@
 /**
- * tests/test_native_transport.js — Transport layer unit tests
+ * tests/test_native_transport.ts — Transport layer unit tests
  *
  * Tests the transport lifecycle, multi-node failover, JSON-RPC 2.0 request/response
  * routing, and error handling using Node.js built-in WebSocket server for mocking.

@@ -71,7 +71,7 @@ const CASES = [
         extensions: [],
     }, '640000000000000000b96040420f00000000000100'],
 
-    ['limit_order_update_all', nativeOps.limit_order_update, {
+    ['limit_order_update', nativeOps.limit_order_update, {
         fee: { amount: 100, asset_id: '1.3.0' },
         seller: '1.2.12345',
         order: '1.7.999',

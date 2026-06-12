@@ -30,6 +30,7 @@ const DEFAULT_READY_BASENAME = 'dexbot-cred-daemon.ready';
 
 function debugLog(message, err = null) {
     const suffix = err && err.message ? `: ${err.message}` : '';
+    // NOTE: intentionally logs at error level for visibility in production logs
     runtimeLogger.error(`[credential-runtime][debug] ${message}${suffix}`);
 }
 

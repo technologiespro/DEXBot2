@@ -1,5 +1,5 @@
 /**
- * modules/order/grid.js - Grid Engine
+ * modules/order/grid.ts - Grid Engine
  *
  * Order grid creation, synchronization, and health management.
  * Exports a single Grid class with static methods for grid operations.

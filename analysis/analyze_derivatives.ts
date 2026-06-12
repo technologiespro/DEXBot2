@@ -7,11 +7,11 @@
  * Trend is detected from SMA, MACD, and RSI only.
  *
  * Usage:
- *   node analysis/analyze_derivatives.js \\
+ *   tsx analysis/analyze_derivatives.ts \\
  *     --source json \
  *     --file market_adapter/data/lp/<path>/<to>/<lp-candles>.json
  *
- *   node analysis/analyze_derivatives.js \\
+ *   tsx analysis/analyze_derivatives.ts \\
  *     --source market_adapter \
  *     --bot-key XRP-BTS
  *
@@ -102,9 +102,6 @@ function parseArgs(): CliConfig {
         if      (arg === '--source')    config.source.type                  = args[++i];
         else if (arg === '--bot-key')   config.source.config.botKey         = args[++i];
         else if (arg === '--file')      config.source.config.filePath       = args[++i];
-        else if (arg === '--pool')      config.source.config.poolId         = args[++i];
-        else if (arg === '--precA')     config.source.config.precA          = parseInt(args[++i]);
-        else if (arg === '--precB')     config.source.config.precB          = parseInt(args[++i]);
         else if (arg === '--sma')       config.slowSmaPeriod                = parseInt(args[++i]);
         else if (arg === '--fast-sma')  config.fastSmaPeriod                = parseInt(args[++i]);
         else if (arg === '--confirm')   config.minBarsForConfirmation       = parseInt(args[++i]);
@@ -141,14 +138,13 @@ Analyzes candle data using SMA, MACD, and RSI as trend signals.
 Generates an interactive HTML chart.
 
 Usage:
-  node analysis/analyze_derivatives.js \\
+  tsx analysis/analyze_derivatives.ts \\
     --source <type> \\
-    [--bot-key KEY] [--file PATH] [--pool ID] [--precA N] [--precB N]
+    [--bot-key KEY] [--file PATH]
 
 Sources:
   market_adapter   Use market_adapter state (default)   --bot-key XRP-BTS
   json             JSON candles file                    --file path/to/file.json
-  kibana           Kibana LP pool                       --pool ID --precA N --precB N
 
 Analyzer options:
   Core indicators:

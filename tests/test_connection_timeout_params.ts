@@ -1,7 +1,7 @@
 /**
- * tests/test_connection_timeout_params.js — Verify connection timeout wiring
+ * tests/test_connection_timeout_params.ts — Verify connection timeout wiring
  *
- * Confirms that bitshares_client.js correctly passes BOTH
+ * Confirms that bitshares_client.ts correctly passes BOTH
  * rpcTimeoutMs AND connectTimeoutMs to createChainClient matching
  * TIMING.CONNECTION_TIMEOUT_MS.
  */

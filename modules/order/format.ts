@@ -1,5 +1,5 @@
 /**
- * modules/order/format.js - Numeric formatting utilities
+ * modules/order/format.ts - Numeric formatting utilities
  *
  * Centralized formatting utilities for consistent decimal precision display across logs and output.
  * All functions return strings formatted to specified decimal places.
@@ -15,7 +15,7 @@
  * Time/Performance (ms, %):     1-2 decimals - readable metrics
  *
  * ===============================================================================
- * TABLE OF CONTENTS (18 exported functions)
+ * TABLE OF CONTENTS (17 exported functions)
  * ===============================================================================
  *
  * SECTION 1: ASSET FORMATTING (5 functions)
@@ -32,8 +32,7 @@
  *
  * SECTION 3: PERCENTAGE FORMATTING (3 functions)
  *   9. formatPercent2(value) - Format to 2 decimals (spread %, ratios)
- *   10. formatPercent4(value) - Format to 4 decimals (precise measurements)
- *   11. formatPercent(value, decimals) - Format with custom decimal places
+ *   10. formatPercent(value, decimals) - Format with custom decimal places
  *
  * SECTION 4: RATIO/METRIC FORMATTING (3 functions)
  *   12. formatRatio(value, decimals) - Format ratios with custom decimals (default 5)

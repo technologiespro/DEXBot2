@@ -1,5 +1,5 @@
 /**
- * tests/test_native_tx_builder.js — Transaction builder unit tests
+ * tests/test_native_tx_builder.ts — Transaction builder unit tests
  *
  * Tests transaction assembly, fee calculation guards, operation addition,
  * signing, and the MAX_TX_SIZE / MAX_OPS_PER_TX safety limits.

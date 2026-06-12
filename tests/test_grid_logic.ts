@@ -1,5 +1,5 @@
 /**
- * tests/test_grid_logic.js
+ * tests/test_grid_logic.ts
  * 
  * Ported from tests/unit/grid.test.js
  * Comprehensive unit tests for grid.js - Order grid generation and sizing

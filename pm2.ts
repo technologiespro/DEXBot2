@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * pm2.js - PM2 Orchestration Launcher
+ * pm2.ts - PM2 Orchestration Launcher
  *
  * Unified PM2 launcher for DEXBot2 multi-bot system.
  * One-command startup with all setup required before starting bots.

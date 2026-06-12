@@ -1,5 +1,5 @@
 /**
- * modules/account_bots.js - Bot Configuration Management
+ * modules/account_bots.ts - Bot Configuration Management
  *
  * Interactive CLI helper for editing bot profiles in profiles/bots.json.
  * Manages multi-bot configuration and metadata.
@@ -52,6 +52,8 @@
  *       "weightDistribution": { "sell": 1, "buy": 1 },
  *       "botFunds": { "sell": "100%", "buy": "100%" },
  *       "activeOrders": { "sell": 20, "buy": 20 },
+ *       "debtPolicy": "ignore",       // Debt policy: "ignore", "warn", or "block"
+ *       "min_BTS_value": 0,           // Minimum BTS value threshold for operations
  *     }
  *   ]
  * }

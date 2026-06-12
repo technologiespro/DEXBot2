@@ -7,7 +7,7 @@
  * a summed volume histogram with threshold annotations.
  *
  * Usage:
- *   node analysis/analyze_trade_heatmap.js --data <path> [options]
+ *   tsx analysis/analyze_trade_heatmap.ts --data <path> [options]
  *
  * Data:
  *   Expects LP candle JSON with { candles: [[ts, o, h, l, c, v], ...] }
@@ -67,7 +67,7 @@ const { calcStdDev } = require('./math_utils');
 function main() {
     const cfg = parseArgs();
     if (!cfg.data) {
-        console.error('Usage: node analysis/analyze_trade_heatmap.js --data <path> [options]');
+        console.error('Usage: tsx analysis/analyze_trade_heatmap.ts --data <path> [options]');
         console.error('');
         console.error('Options:');
         console.error('  --data <path>          Path to LP candle JSON file (required)');

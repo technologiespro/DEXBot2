@@ -1,7 +1,7 @@
 /*
- * tests/test_autoderive.js
+ * tests/test_autoderive.ts
  * New clean test that exercises auto-derive behavior against the inverted
- * `modules/order/price.js`. It uses the first active bot from `profiles/bots.json`.
+ * `modules/order/utils/system.ts`. It uses the first active bot from `profiles/bots.json`.
  *
  * The test does not suppress logs or errors. It mocks the shared BitShares
  * client to return deterministic on-chain data and verifies the derived
@@ -19,7 +19,7 @@ async function runAutoderiveForBot(botCfg) {
     // Monkeypatch shared BitShares client used by the codebase
     const bsModule = require('../modules/bitshares_client');
     const bitsharesClientPath = path.resolve(__dirname, '../modules/bitshares_client.ts');
-    const distBitsharesClientPath = path.resolve(__dirname, '..', BUILD_DIR, 'modules', 'bitshares_client.ts');
+    const distBitsharesClientPath = path.resolve(__dirname, '..', BUILD_DIR, 'modules', 'bitshares_client.js');
     const systemPath = path.resolve(__dirname, '../modules/order/utils/system.ts');
     const systemModule = require('../modules/order/utils/system');
 
@@ -50,7 +50,7 @@ async function runAutoderiveForBot(botCfg) {
         return [];
     };
 
-    // For market-derived price, price.js in this repo returns reciprocals. We
+    // For market-derived price, system.ts in this repo returns reciprocals. We
     // mock a small mid-market price (0.0015) so the reciprocal is about 666.
     mock.db.get_order_book = async (a, b, limit) => ({ bids: [{ price: 0.0014, size: 5 }], asks: [{ price: 0.0016, size: 3 }] });
     mock.db.get_ticker = async () => ({ latest: 0.0015 });

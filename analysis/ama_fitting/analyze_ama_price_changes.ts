@@ -16,7 +16,7 @@
  * per 1000 live steps — for each AMA × threshold combination.
  *
  * Usage:
- *   node analysis/ama_fitting/analyze_ama_price_changes.js --data <path-to-lp-candles.json> --results <path-to-optimization-results.json>
+ *   tsx analysis/ama_fitting/analyze_ama_price_changes.ts --data <path-to-lp-candles.json> --results <path-to-optimization-results.json>
  */
 const fs   = require('fs');
 const path = require('path');

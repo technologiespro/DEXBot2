@@ -1,7 +1,7 @@
 /**
- * tests/test_native_facade.js — Facade and feature flag tests
+ * tests/test_native_facade.ts — Facade and feature flag tests
  *
- * Tests that the bitshares_client.js facade correctly loads the native path
+ * Tests that the bitshares_client.ts facade correctly loads the native path
  * and exports the correct API surface.
  */
 

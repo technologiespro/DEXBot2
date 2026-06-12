@@ -1,19 +1,19 @@
 'use strict';
 
 /**
- * market_adapter/utils/adapter_client.js — Singleton BitShares WS client
+ * market_adapter/utils/adapter_client.ts — Singleton BitShares WS client
  *
- * Provides the same interface as bitshares_client.js but backed by the native
+ * Provides the same interface as bitshares_client.ts but backed by the native
  * bitshares-native read-only client. No subscriptions — just connect, query,
  * disconnect, with the native transport's node failover and timeout handling.
  *
- * Exported interface (mirrors bitshares_client.js):
+ * Exported interface (mirrors bitshares_client.ts):
  *   BitShares    — { db, history } JSON-RPC proxies
  *   connectClient(servers)  — connect to a list of WSS nodes
  *   disconnectClient()      — tear down the WebSocket
  *   isConnected()           — check if the WS is open
  *   getNodeUrl()            — currently connected node URL
- *   getConnectionStatus()   — 'open' | 'closed' | 'connecting'
+ *   getConnectionStatus()   — 'open' | 'closed'
  */
 
 const { NODE_MANAGEMENT, TIMING } = require('../../modules/constants');

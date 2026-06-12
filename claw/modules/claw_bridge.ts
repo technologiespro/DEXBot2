@@ -421,7 +421,7 @@ export = {
   describeRuntimeManifest,
   runClawCommand,
   createVariantBridgeModule(runtimeName: string, displayName: string, trustModel: string): any {
-    const scriptPath = `node scripts/${runtimeName}_bridge.js`;
+    const scriptPath = `tsx scripts/${runtimeName}_bridge.ts`;
     const describeFn = createVariantDescribeFn(runtimeName, displayName, scriptPath, trustModel);
 
     return {

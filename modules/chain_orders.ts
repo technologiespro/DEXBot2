@@ -1,5 +1,5 @@
 /**
- * modules/chain_orders.js - Blockchain Interaction Layer
+ * modules/chain_orders.ts - Blockchain Interaction Layer
  *
  * BitShares blockchain operations and order management interface.
  * Provides all blockchain I/O operations for the bot.
@@ -17,10 +17,10 @@
  * converted to blockchain integers internally using asset precision.
  *
  * ===============================================================================
- * EXPORTS (15 functions + 1 constant)
+ * EXPORTS (18 functions + 2 constants)
  * ===============================================================================
  *
- * ACCOUNT MANAGEMENT (2 functions - async)
+ * ACCOUNT MANAGEMENT (3 functions - async)
  *   1. selectAccount(nameOrId) - Select/authenticate account by name or ID
  *      Prompts for password if needed, caches selection
  *      Returns { accountId, accountName, authority }
@@ -28,45 +28,45 @@
  *   2. setPreferredAccount(accountId, accountName) - Set preferred account
  *      Used by selectAccount() if no account specified
  *
- *   2b. resolveAccountId(nameOrId) - Resolve account name to ID (async, cached)
- *   2c. resolveAccountName(id) - Resolve account ID to name (async, cached)
+ *   3. resolveAccountId(nameOrId) - Resolve account name to ID (async, cached)
+ *   4. resolveAccountName(id) - Resolve account ID to name (async, cached)
  *
  * ORDER OPERATIONS (5 functions - async)
- *   3. readOpenOrders(accountId) - Read all open orders for account
+ *   5. readOpenOrders(accountId) - Read all open orders for account
  *      Returns array of { id, seller, sells, receives, ...blockchain fields }
  *
- *   4. createOrder(accountId, orderParams, broadcastFn) - Create limit order
+ *   6. createOrder(accountId, orderParams, broadcastFn) - Create limit order
  *      orderParams: { sellSymbol, sellAmount, buySymbol, buyAmount, fillOrKill, ... }
  *      Returns { tx_id, operation_results } or throws
  *
- *   5. updateOrder(accountId, orderId, newAmount, broadcastFn) - Update existing order
+ *   7. updateOrder(accountId, orderId, newAmount, broadcastFn) - Update existing order
  *      Changes order amount, preserves price
  *      Returns transaction result
  *
- *   6. cancelOrder(accountId, orderId, broadcastFn) - Cancel order
+ *   8. cancelOrder(accountId, orderId, broadcastFn) - Cancel order
  *      Removes order from blockchain
  *      Returns transaction result
  *
- *   7. executeBatch(operations, broadcastFn) - Execute batch of operations
+ *   9. executeBatch(operations, broadcastFn) - Execute batch of operations
  *      Executes multiple operations (create/update/cancel) in one transaction
  *      Returns transaction result
  *
  * FILL EVENT HANDLING (1 function - async)
- *   8. listenForFills(accountId, fillCallback) - Subscribe to fill events
+ *   10. listenForFills(accountId, fillCallback) - Subscribe to fill events
  *      Invokes fillCallback({ id, orderId, side, amount, price, proceeds, ... })
  *      Returns unsubscribe function
  *
  * ACCOUNT STATE (1 function - async)
- *   9. getOnChainAssetBalances(accountId) - Fetch account asset balances
+ *   11. getOnChainAssetBalances(accountId) - Fetch account asset balances
  *      Returns { BTS: amount, USD: amount, ... } (human-readable floats)
  *
  * OPERATION BUILDERS (3 functions)
- *   10. buildCreateOrderOp(accountId, orderParams) - Build create order operation
- *   11. buildUpdateOrderOp(accountId, orderId, newAmount) - Build update order operation
- *   12. buildCancelOrderOp(accountId, orderId) - Build cancel order operation
+ *   12. buildCreateOrderOp(accountId, orderParams) - Build create order operation
+ *   13. buildUpdateOrderOp(accountId, orderId, newAmount) - Build update order operation
+ *   14. buildCancelOrderOp(accountId, orderId) - Build cancel order operation
  *
  * CONFIGURATION (2 functions/constants)
- *   13. getFillProcessingMode() - Get current fill processing mode
+ *   15. getFillProcessingMode() - Get current fill processing mode
  *       Returns 'history' (use fill event data) or 'open' (fetch open orders)
  *
  *   14. FILL_PROCESSING_MODE - Constant: current fill processing mode
@@ -75,7 +75,7 @@
  *
  * ACCOUNT RESOLUTION:
  * - Caches account name ↔ ID mappings to avoid repeated blockchain queries
- * - Shared with modules/chain_keys.js for authentication
+ * - Shared with modules/chain_keys.ts for authentication
  *
  * FILL MODES:
  * - 'history' mode: Use fill event data directly (faster, preferred)
@@ -87,7 +87,7 @@
  * - _resolutionLock: Serializes account resolution calls
  *
  * AUTHENTICATION:
- * Moved to modules/chain_keys.js for centralized key management.
+ * Moved to modules/chain_keys.ts for centralized key management.
  * Use chain_keys.authenticate() and getPrivateKey() for auth operations.
  *
  * ===============================================================================
@@ -152,7 +152,7 @@ function wasRecentlyOwnCancelled(orderId) {
     return true;
 }
 
-// Key/auth helpers provided by modules/chain_keys.js
+// Key/auth helpers provided by modules/chain_keys.ts
 // (authenticate(), getPrivateKey(), MasterPasswordError)
 
 /**
@@ -400,7 +400,7 @@ async function selectAccount() {
     const accountNames = Object.keys(accountsData.accounts);
 
     if (accountNames.length === 0) {
-        throw new Error('No accounts found. Please add accounts using modules/chain_keys.js');
+        throw new Error('No accounts found. Please add accounts using modules/chain_keys.ts');
     }
 
     console.log('Available accounts:');
@@ -1278,5 +1278,5 @@ export = {
     recordOwnCancel,
     BroadcastUncertainError,
 
-    // Note: authentication and key retrieval moved to modules/chain_keys.js
+    // Note: authentication and key retrieval moved to modules/chain_keys.ts
 };

@@ -1,5 +1,5 @@
 /**
- * tests/test_node_manager.js - Unit tests for NodeManager
+ * tests/test_node_manager.ts - Unit tests for NodeManager
  *
  * Tests core functionality:
  * - Node health checking

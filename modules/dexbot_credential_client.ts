@@ -1,3 +1,4 @@
+/** Credential client module - connects to credential daemon for key operations */
 const fs = require('fs');
 const net = require('net');
 const crypto = require('crypto');

@@ -28,9 +28,9 @@ const AMA_PROFILES_FILE = path.join(__dirname, '..', '..', 'profiles', 'market_p
  * being smooth.
  *
  * Usage:
- *   node optimizer_high_resolution.js --data <path-to-lp-candles.json>
- *   node optimizer_high_resolution.js --data <path-to-lp-candles.json> --write-profiles
- *   node optimizer_high_resolution.js --data <path-to-lp-candles.json> --erMax 400 --fastMax 20 --slowMax 200
+ *   tsx optimizer_high_resolution.ts --data <path-to-lp-candles.json>
+ *   tsx optimizer_high_resolution.ts --data <path-to-lp-candles.json> --write-profiles
+ *   tsx optimizer_high_resolution.ts --data <path-to-lp-candles.json> --erMax 400 --fastMax 20 --slowMax 200
  *
  */
 

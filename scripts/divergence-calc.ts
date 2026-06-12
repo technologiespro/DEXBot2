@@ -19,8 +19,8 @@
  * - 'virtual': Simulated orders
  * - 'partial': Temporarily filled orders (excluded from calculation)
  *
- * Usage: node scripts/divergence-calc.js [file] or pipe: cat orders.txt | node scripts/divergence-calc.js
- * Exit code: 0 (always)
+ * Usage: tsx scripts/divergence-calc.ts [file] or pipe: cat orders.txt | tsx scripts/divergence-calc.ts
+ * Exit code: 0 on success, 1 on error
  */
 
 const fs = require('fs');
@@ -31,8 +31,8 @@ const Format = require('../modules/order/format');
  * readData: Read order data from file or stdin
  *
  * Supports two input modes:
- * 1. File argument: node divergence-calc.js /path/to/file
- * 2. Stdin: cat file | node divergence-calc.js or node divergence-calc.js -
+ * 1. File argument: tsx divergence-calc.ts /path/to/file
+ * 2. Stdin: cat file | tsx divergence-calc.ts or tsx divergence-calc.ts -
  *
  * @returns {string} Raw order data lines
  * @throws {Error} If file cannot be read
@@ -103,7 +103,7 @@ console.log(`Sum of squared relative differences: ${Format.formatPrice4(sumSquar
 console.log(`\nMetric: ${Format.formatPrice4(normalizedMetric)}`);
 console.log(`In promille: ${Format.formatPrice4(promille)}`);
 console.log(`Real average error: ${Format.formatMetric2(realErrorPercent)}%`);
-console.log(`\nThreshold comparison (from constants.js):`);
+console.log(`\nThreshold comparison (hardcoded):`);
 console.log(`  Current: ${Format.formatPrice4(promille)} promille`);
 console.log(`  Default threshold: 1 promille (3.2% avg error)`);
 console.log(`  Status: ${promille <= 1 ? '✓ WITHIN THRESHOLD' : '✗ EXCEEDS THRESHOLD'}`);

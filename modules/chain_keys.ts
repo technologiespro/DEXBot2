@@ -1,5 +1,5 @@
 /**
- * modules/chain_keys.js - Authentication and Key Management
+ * modules/chain_keys.ts - Authentication and Key Management
  *
  * Secure storage and management of BitShares private keys.
  * Provides authentication, key storage, and transaction signing capabilities.
@@ -51,11 +51,12 @@
  *  10. saveAccounts(data) - Save accounts to keys.json
  *  11. createVaultSecret(...) - Build a serializable derived secret object
  *
- * DAEMON (4 functions)
+ * DAEMON (5 functions)
  *  10. isDaemonReady() - Check if credential daemon is ready
- *  11. waitForDaemon(timeoutMs) - Wait for daemon to become ready (async)
- *  12. probeAccountInDaemon(accountName) - Probe daemon for account (async)
- *  13. pingDaemon(accountName) - Lightweight daemon health check (async)
+ *  11. isDaemonResponsive() - Check if daemon is responsive
+ *  12. waitForDaemon(timeoutMs) - Wait for daemon to become ready (async)
+ *  13. probeAccountInDaemon(accountName) - Probe daemon for account (async)
+ *  14. pingDaemon(accountName) - Lightweight daemon health check (async)
  *
  * ERROR HANDLING (1 error class)
  *  14. MasterPasswordError - Thrown when authentication fails
@@ -454,7 +455,7 @@ function unlockWithPassword(password, accountsData = loadAccounts()) {
         if (Object.keys(accountsData.accounts || {}).length > 0) {
             throw new Error('Unsupported key vault format. Recreate profiles/keys.json with the current key manager.');
         }
-        throw new Error('No master password set. Please run modules/chain_keys.js first.');
+        throw new Error('No master password set. Please run modules/chain_keys.ts first.');
     }
 
     if (!verifyModernPassword(password, accountsData)) {

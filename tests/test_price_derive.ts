@@ -1,5 +1,5 @@
 /*
- * tests/test_price_derive.js
+ * tests/test_price_derive.ts
  * Tests derivePoolPrice and deriveMarketPrice produce numeric values and expected inversions/orientations.
  */
 

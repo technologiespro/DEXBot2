@@ -9,11 +9,10 @@
  *
  * Scoring:
  *   - regimeStability: mean duration (bars) before regime switches
- *   - directionalAccuracy: % of bars where regime direction matched next-bar return
  *   - entropyDefect: penalty for being stuck in the "random" band (H 0.45–0.55)
  *
  * Usage:
- *   node analysis/analyze_regime_windows.js \
+ *   tsx analysis/analyze_regime_windows.ts \
  *     --source json \
  *     --file market_adapter/data/lp/<path>/<to>/<lp-candles>.json
  */
@@ -251,7 +250,7 @@ function generateHeatmapHTML(results, hurstVals, peVals) {
             title="H=${Math.round(h)} PE=${Math.round(p)}
 composite=${r.composite} (${(norm * 100).toFixed(1)}% of range)
 stability=${r.meanStability.toFixed(1)}b  lag=${r.lagScore.toFixed(3)}
-dir=${(r.directionalAccuracy*100).toFixed(1)}%  noise=${(r.entropyDefect*100).toFixed(1)}%">
+noise=${(r.entropyDefect*100).toFixed(1)}%">
             <span class="val" style="color:${norm > 0.7 ? '#fff' : norm > 0.35 ? '#0b0e14' : 'rgba(255,255,255,0.75)'}">${r.composite.toFixed(3)}</span>
         </td>`;
     }

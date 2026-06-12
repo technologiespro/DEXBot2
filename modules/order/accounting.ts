@@ -1,5 +1,5 @@
 /**
- * modules/order/accounting.js - Accountant Engine
+ * modules/order/accounting.ts - Accountant Engine
  *
  * Specialized engine for financial state and fund tracking.
  * Responsible for calculating available funds, committed capital, and managing BTS blockchain fees.
@@ -37,7 +37,7 @@
  *   14. _deductFeesFromProceeds(assetSymbol, rawAmount, isMaker) - Deduct fees from fill proceeds (internal)
  *
  * FILL PROCESSING (1 method)
- *   15. processFillAccounting(fillOp) - Process fund impact of order fill (atomically updates accountTotals)
+ *   15. processFillAccounting(fillOp, fillKey, persistenceMode) - Process fund impact of order fill (atomically updates accountTotals)
  *
  * ===============================================================================
  * FUND STRUCTURE (managed by Accountant)
@@ -84,7 +84,7 @@ const { toFiniteNumber } = Format;
 
 /**
  * Accountant engine - Specialized handler for fund tracking and calculations
- * @typedef {Object} Accountant
+ * @class Accountant
  */
 class Accountant {
     /**

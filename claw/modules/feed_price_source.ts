@@ -19,7 +19,7 @@ function getBlockchainToFloat() {
 
 /**
  * Extract BTS-per-MPA from the settlement price object.
- * Replicates the logic in position_manager.computeBtsPerMpaFromSettlement
+ * Replicates the logic in position_manager (computeBtsPerMpaFromSettlement)
  * but as a standalone utility.
  */
 function parseBtsPerMpa(settlementPrice: any, mpaAsset: any, backingAsset: any) {

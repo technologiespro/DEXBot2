@@ -1,5 +1,5 @@
 /**
- * tests/test_native_chain_client.js — Chain client and read-only client tests
+ * tests/test_native_chain_client.ts — Chain client and read-only client tests
  *
  * Tests API proxy wiring, login flow, lazy API registration, and
  * read-only client creation.

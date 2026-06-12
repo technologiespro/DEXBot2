@@ -1,5 +1,5 @@
 /**
- * tests/test_dust_rebalance_logic.js
+ * tests/test_dust_rebalance_logic.ts
  * 
  * Verifies single-side dust detection helpers remain active.
  * Dust detection should still identify unhealthy partials on each side independently.

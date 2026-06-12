@@ -1,5 +1,5 @@
 /**
- * modules/account_orders.js - Order Grid Persistence Layer
+ * modules/account_orders.ts - Order Grid Persistence Layer
  *
  * Local persistence for order grid snapshots and state.
  * Enables bot recovery after crashes or restarts.
@@ -22,20 +22,24 @@
  *
  * FILE STRUCTURE (profiles/orders/{botKey}.json):
  * {
- *   "meta": {
- *     "name": "Bot name",
- *     "assetA": "BTS",
- *     "assetB": "USD",
- *     "active": true,
- *     "index": 0
- *   },
- *   "grid": [
- *     { "id": "slot-0", "type": "buy", "state": "virtual", "price": 100, "size": 1, "orderId": null },
- *     ...
- *   ],
- *   "btsFeesOwed": 0.1,
- *   "createdAt": "ISO timestamp",
- *   "lastUpdated": "ISO timestamp"
+ *   "bots": {
+ *     "<botKey>": {
+ *       "meta": {
+ *         "name": "Bot name",
+ *         "assetA": "BTS",
+ *         "assetB": "USD",
+ *         "active": true,
+ *         "index": 0
+ *       },
+ *       "grid": [
+ *         { "id": "slot-0", "type": "buy", "state": "virtual", "price": 100, "size": 1, "orderId": null },
+ *         ...
+ *       ],
+ *       "btsFeesOwed": 0.1,
+ *       "createdAt": "ISO timestamp",
+ *       "lastUpdated": "ISO timestamp"
+ *     }
+ *   }
  * }
  *
  * GRID ENTRY FIELDS:

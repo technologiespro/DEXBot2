@@ -1,5 +1,5 @@
 /**
- * modules/order/index.js - Order Subsystem Entry Point
+ * modules/order/index.ts - Order Subsystem Entry Point
  *
  * Combined entry point that exports the order subsystem components.
  * Exposes OrderManager and supporting utilities for grid-based trading.

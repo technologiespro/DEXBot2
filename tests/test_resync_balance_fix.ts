@@ -1,5 +1,5 @@
 /**
- * tests/test_resync_balance_fix.js
+ * tests/test_resync_balance_fix.ts
  * 
  * Verifies that reconcileGridOrders correctly uses delta-based balance checks
  * during its update phase (Phase 2), allowing updates when funds are reused.

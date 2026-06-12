@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * dexbot.js - DEXBot2 Primary CLI Driver
+ * dexbot.ts - DEXBot2 Primary CLI Driver
  *
  * Main entry point for DEXBot2 grid trading bot system.
  * Manages tracked bots and provides helper utilities (key/bot editors).
@@ -106,7 +106,7 @@ const { BUILD_DIR } = require('./modules/constants');
 setupGracefulShutdown();
 
 // Note: accountOrders is now per-bot only. Each bot has its own AccountOrders instance
-// created in DEXBot.start() in modules/dexbot_class.js. This eliminates shared-file race conditions.
+// created in DEXBot.start() in modules/dexbot_class.ts. This eliminates shared-file race conditions.
 
 // Primary CLI driver that manages tracked bots and helper utilities such as key/bot editors.
 const ROOT = path.basename(__dirname) === BUILD_DIR ? path.dirname(__dirname) : __dirname;
@@ -124,8 +124,8 @@ const CLI_EXAMPLES = [
     { title: 'Disable a bot in config', command: 'dexbot disable bot-name', notes: 'Marks the bot inactive in config.' },
     { title: 'Reset all active bot grids', command: 'dexbot reset all', notes: 'Triggers full grid regeneration for every active bot.' },
     { title: 'Reset a bot grid', command: 'dexbot reset bot-name', notes: 'Triggers a full grid regeneration for the named bot.' },
-    { title: 'Manage keys', command: 'dexbot key', notes: 'Runs modules/chain_keys.js to add or update master passwords.' },
-    { title: 'Edit bot definitions', command: 'dexbot bot', notes: 'Launches the interactive modules/account_bots.js helper for the JSON config.' },
+    { title: 'Manage keys', command: 'dexbot key', notes: 'Runs modules/chain_keys.ts to add or update master passwords.' },
+    { title: 'Edit bot definitions', command: 'dexbot bot', notes: 'Launches the interactive modules/account_bots.ts helper for the JSON config.' },
     { title: 'Start bots with PM2', command: 'dexbot pm2', notes: 'Generates ecosystem config, authenticates, and starts PM2.' },
     { title: 'Update DEXBot2', command: 'node dexbot update', notes: 'Fetches latest code, updates dependencies, and restarts PM2.' },
     { title: 'Export bot trades for QTradeX', command: 'dexbot export bot-name', notes: 'Exports trading history and settings to CSV/JSON for backtesting.' },
@@ -174,8 +174,8 @@ function printCLIUsage() {
     console.log('  disable all       Mark all bots inactive in config.');
     console.log('  disable <bot>     Mark the bot inactive in config.');
     console.log('  export <bot>      Export bot trades and settings for QTradeX backtesting.');
-    console.log('  key               Launch the chain key helper (modules/chain_keys.js).');
-    console.log('  bot               Launch the interactive bot configurator (modules/account_bots.js).');
+    console.log('  key               Launch the chain key helper (modules/chain_keys.ts).');
+    console.log('  bot               Launch the interactive bot configurator (modules/account_bots.ts).');
     console.log('  pm2               Start all active bots with PM2 (authenticate + generate config + start).');
     console.log('  update            Update DEXBot2 from the repository and restart active bots.');
     console.log('  order             Analyze persisted order grids in profiles/orders/ (spread, increment, funds).');
@@ -226,7 +226,7 @@ if (cliArgs.includes(CLI_EXAMPLES_FLAG)) {
  *
  * @class
  */
-// Extend SharedDEXBot for dexbot.js context (currently just a thin wrapper)
+// Extend SharedDEXBot for dexbot.ts context (currently just a thin wrapper)
 class DEXBot extends SharedDEXBot {
     constructor(config: any) {
         super(config, { logPrefix: '' });
@@ -477,7 +477,7 @@ async function runBotInstances(botEntries: any[], { forceDryRun = false, sourceN
             } catch (err: any) {
                 // The bot's _runStartupSequence already invoked shutdown() once on
                 // the failure path. Remove the registered cleanup so the LIFO
-                // cleanup loop in graceful_shutdown.js does not call shutdown() a
+                // cleanup loop in graceful_shutdown.ts does not call shutdown() a
                 // second time, and avoid the "double graceful shutdown" log pattern.
                 if (botCleanupHandler) {
                     unregisterCleanup(botCleanupHandler);

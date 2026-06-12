@@ -54,8 +54,8 @@ function testClawCatalog() {
   catalogCopy[0].command = 'mutated';
   assert.notStrictEqual(catalog.getClawToolCatalog()[0].command, 'mutated');
 
-  const examples = catalog.buildClawCommandExamples('node scripts/claw_bridge.js');
-  assert.ok(examples.some((line) => line.startsWith('node scripts/claw_bridge.js manifest')));
+  const examples = catalog.buildClawCommandExamples('tsx scripts/claw_bridge.ts');
+  assert.ok(examples.some((line) => line.startsWith('tsx scripts/claw_bridge.ts manifest')));
   assert.ok(examples.some((line) => line.includes('bot-settings-apply')));
 }
 

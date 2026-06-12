@@ -21,12 +21,12 @@
  *   5. Rank by DEX score and print table
  *
  * Usage:
- *   node analysis/bot_usage/discover_bot_accounts.js
- *   node analysis/bot_usage/discover_bot_accounts.js --days 14
- *   node analysis/bot_usage/discover_bot_accounts.js --days 7 --min-creates 10 --top 50
- *   node analysis/bot_usage/discover_bot_accounts.js --no-grid   (fast: counts only)
- *   node analysis/bot_usage/discover_bot_accounts.js --output-json results.json
- *   node analysis/bot_usage/discover_bot_accounts.js --cv-threshold 0.25
+ *   tsx analysis/bot_usage/discover_bot_accounts.ts
+ *   tsx analysis/bot_usage/discover_bot_accounts.ts --days 14
+ *   tsx analysis/bot_usage/discover_bot_accounts.ts --days 7 --min-creates 10 --top 50
+ *   tsx analysis/bot_usage/discover_bot_accounts.ts --no-grid   (fast: counts only)
+ *   tsx analysis/bot_usage/discover_bot_accounts.ts --output-json results.json
+ *   tsx analysis/bot_usage/discover_bot_accounts.ts --cv-threshold 0.25
  *
  * Options:
  *   --days <n>         Lookback window in days (default: 14)
@@ -114,7 +114,7 @@ function parseArgs() {
 
 function printHelpAndExit() {
     console.log(`\
-Usage: node analysis/bot_usage/discover_bot_accounts.js [options]
+Usage: tsx analysis/bot_usage/discover_bot_accounts.ts [options]
 
 Scans BitShares chain activity via Kibana to identify likely DEXBot/DEXBot2
 staggered-orders strategy accounts. Works in phases: discovery queries ->
@@ -133,10 +133,10 @@ Options:
   --help, -h         Show this help
 
 Examples:
-  node analysis/bot_usage/discover_bot_accounts.js
-  node analysis/bot_usage/discover_bot_accounts.js --days 30 --top 50
-  node analysis/bot_usage/discover_bot_accounts.js --no-grid
-  node analysis/bot_usage/discover_bot_accounts.js --output-json results.json`);
+  tsx analysis/bot_usage/discover_bot_accounts.ts
+  tsx analysis/bot_usage/discover_bot_accounts.ts --days 30 --top 50
+  tsx analysis/bot_usage/discover_bot_accounts.ts --no-grid
+  tsx analysis/bot_usage/discover_bot_accounts.ts --output-json results.json`);
     process.exit(0);
 }
 

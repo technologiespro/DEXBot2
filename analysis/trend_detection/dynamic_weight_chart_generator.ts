@@ -391,13 +391,13 @@ function generateHTML(data, title = 'Dynamic Weight Research') {
         let currentAmaClipThreshold = currentClipPct === 0 ? maxAmaSlope : data.amaPercentiles[100 - currentClipPct];
         let currentKalClipThreshold = currentClipPct === 0 ? Infinity : data.kalPercentiles[100 - currentClipPct];
 
-        // Regime table and axis nodes from payload — sourced from MARKET_ADAPTER in constants.js
+        // Regime table and axis nodes from payload — sourced from MARKET_ADAPTER in constants.ts
         const REGIME_TABLE = data.regimeTable;
         const H_NODES = data.hNodes; // [0.5+band, 0.5, 0.5-band]
         const P_NODES = data.pNodes; // PE_NODES
 
         /**
-         * Bilinear interpolation for smooth regime multiplier (mirrors regime_gate.js)
+         * Bilinear interpolation for smooth regime multiplier (mirrors regime_gate.ts)
          */
         function getRegimeMultiplier(H, PE) {
             if (H == null || PE == null) return 1.0;

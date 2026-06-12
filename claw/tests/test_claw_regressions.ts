@@ -95,13 +95,13 @@ function testClawRootExportsAvoidSilentCollisions() {
   assert.strictEqual(hermesManifest.compatibility.name, 'Hermes');
   assert.strictEqual(openclawManifest.options.runtimeName, 'openclaw');
   assert.strictEqual(openclawManifest.compatibility.name, 'OpenClaw');
-  assert.strictEqual(openclawManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
+  assert.strictEqual(openclawManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.ts')), true);
   assert.strictEqual(openfangManifest.options.runtimeName, 'openfang');
-  assert.strictEqual(openfangManifest.commandExamples.some((example) => example.includes('openfang_bridge.js')), true);
+  assert.strictEqual(openfangManifest.commandExamples.some((example) => example.includes('openfang_bridge.ts')), true);
   assert.strictEqual(nullManifest.options.runtimeName, 'nullclaw');
-  assert.strictEqual(nullManifest.commandExamples.some((example) => example.includes('nullclaw_bridge.js')), true);
+  assert.strictEqual(nullManifest.commandExamples.some((example) => example.includes('nullclaw_bridge.ts')), true);
   assert.strictEqual(manifest.options.runtimeName, 'zeroclaw');
-  assert.strictEqual(manifest.commandExamples.some((example) => example.includes('zeroclaw_bridge.js')), true);
+  assert.strictEqual(manifest.commandExamples.some((example) => example.includes('zeroclaw_bridge.ts')), true);
   assert.strictEqual(typeof claw.describeOpenClawBridge, 'function');
   assert.strictEqual(typeof claw.describeOpenFangBridge, 'function');
   assert.strictEqual(typeof claw.describeNanoClawBridge, 'function');
@@ -549,43 +549,43 @@ function testClawBridgeScriptManifestUsesRuntimeSpecificDescriptors() {
 
   const hermesManifest = describeRuntimeManifest('hermes', {});
   assert.strictEqual(hermesManifest.compatibility.name, 'Hermes');
-  assert.strictEqual(hermesManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
+  assert.strictEqual(hermesManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.ts')), true);
 
   const openclawManifest = describeRuntimeManifest('openclaw', {});
   assert.strictEqual(openclawManifest.compatibility.name, 'OpenClaw');
-  assert.strictEqual(openclawManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
+  assert.strictEqual(openclawManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.ts')), true);
 
   const openfangManifest = describeRuntimeManifest('openfang', {});
   assert.strictEqual(openfangManifest.compatibility.name, 'OpenFang');
-  assert.strictEqual(openfangManifest.commandExamples.some((example) => example.includes('openfang_bridge.js')), true);
+  assert.strictEqual(openfangManifest.commandExamples.some((example) => example.includes('openfang_bridge.ts')), true);
 
   const nanoclawManifest = describeRuntimeManifest('nanoclaw', {});
   assert.strictEqual(nanoclawManifest.compatibility.name, 'NanoClaw');
-  assert.strictEqual(nanoclawManifest.commandExamples.some((example) => example.includes('nanoclaw_bridge.js')), true);
+  assert.strictEqual(nanoclawManifest.commandExamples.some((example) => example.includes('nanoclaw_bridge.ts')), true);
 
   const nullclawManifest = describeRuntimeManifest('nullclaw', {});
   assert.strictEqual(nullclawManifest.compatibility.name, 'NullClaw');
-  assert.strictEqual(nullclawManifest.commandExamples.some((example) => example.includes('nullclaw_bridge.js')), true);
+  assert.strictEqual(nullclawManifest.commandExamples.some((example) => example.includes('nullclaw_bridge.ts')), true);
 
   const zeroclawManifest = describeRuntimeManifest('zeroclaw', {});
   assert.strictEqual(zeroclawManifest.compatibility.name, 'ZeroClaw');
-  assert.strictEqual(zeroclawManifest.commandExamples.some((example) => example.includes('zeroclaw_bridge.js')), true);
+  assert.strictEqual(zeroclawManifest.commandExamples.some((example) => example.includes('zeroclaw_bridge.ts')), true);
 
   const genericManifest = describeRuntimeManifest(null, {});
   assert.strictEqual(genericManifest.compatibility.name, 'Claw');
-  assert.strictEqual(genericManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
+  assert.strictEqual(genericManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.ts')), true);
 
   const payloadSelectedManifest = describeRuntimeManifest(null, { runtimeName: 'openfang' });
   assert.strictEqual(payloadSelectedManifest.compatibility.name, 'OpenFang');
-  assert.strictEqual(payloadSelectedManifest.commandExamples.some((example) => example.includes('openfang_bridge.js')), true);
+  assert.strictEqual(payloadSelectedManifest.commandExamples.some((example) => example.includes('openfang_bridge.ts')), true);
 
   const normalizedPayloadManifest = describeRuntimeManifest(null, { runtimeName: ' OpenFang ' });
   assert.strictEqual(normalizedPayloadManifest.compatibility.name, 'OpenFang');
-  assert.strictEqual(normalizedPayloadManifest.commandExamples.some((example) => example.includes('openfang_bridge.js')), true);
+  assert.strictEqual(normalizedPayloadManifest.commandExamples.some((example) => example.includes('openfang_bridge.ts')), true);
 
   const hermesPayloadManifest = describeRuntimeManifest(null, { runtimeName: ' Hermes ' });
   assert.strictEqual(hermesPayloadManifest.compatibility.name, 'Hermes');
-  assert.strictEqual(hermesPayloadManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')), true);
+  assert.strictEqual(hermesPayloadManifest.commandExamples.some((example) => example.includes('scripts/claw_bridge.ts')), true);
 
   clearModule(scriptPath);
 }
@@ -604,19 +604,19 @@ async function testRuntimeCommandManifestUsesRuntimeSpecificDescriptors() {
 
   const openfangManifest = await runOpenFangCommand('manifest', {});
   assert.strictEqual(openfangManifest.compatibility.name, 'OpenFang');
-  assert.strictEqual(openfangManifest.commandExamples.some((example) => example.includes('openfang_bridge.js')), true);
+  assert.strictEqual(openfangManifest.commandExamples.some((example) => example.includes('openfang_bridge.ts')), true);
 
   const nanoclawManifest = await runNanoClawCommand('manifest', {});
   assert.strictEqual(nanoclawManifest.compatibility.name, 'NanoClaw');
-  assert.strictEqual(nanoclawManifest.commandExamples.some((example) => example.includes('nanoclaw_bridge.js')), true);
+  assert.strictEqual(nanoclawManifest.commandExamples.some((example) => example.includes('nanoclaw_bridge.ts')), true);
 
   const nullclawManifest = await runNullClawCommand('manifest', {});
   assert.strictEqual(nullclawManifest.compatibility.name, 'NullClaw');
-  assert.strictEqual(nullclawManifest.commandExamples.some((example) => example.includes('nullclaw_bridge.js')), true);
+  assert.strictEqual(nullclawManifest.commandExamples.some((example) => example.includes('nullclaw_bridge.ts')), true);
 
   const zeroclawManifest = await runZeroClawCommand('manifest', {});
   assert.strictEqual(zeroclawManifest.compatibility.name, 'ZeroClaw');
-  assert.strictEqual(zeroclawManifest.commandExamples.some((example) => example.includes('zeroclaw_bridge.js')), true);
+  assert.strictEqual(zeroclawManifest.commandExamples.some((example) => example.includes('zeroclaw_bridge.ts')), true);
 }
 
 function testAccountOrdersBotKeyFallsBackToAssetIds() {

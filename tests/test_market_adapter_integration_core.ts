@@ -133,7 +133,7 @@ console.log('Running market_adapter integration core tests (BitShares Core 7.0.x
 {
     console.log('  Testing liquidity_pool_history row extraction...');
     
-    // Simulate parseChainTimeToMs as it is in market_adapter.js
+    // Simulate parseChainTimeToMs as it is in market_adapter.ts
     const parseChainTimeToMs = (timeStr) => {
         if (!timeStr) return Number.NaN;
         const s = String(timeStr);

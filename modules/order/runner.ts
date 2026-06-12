@@ -1,5 +1,5 @@
 /**
- * modules/order/runner.js - Grid Calculation Runner
+ * modules/order/runner.ts - Grid Calculation Runner
  *
  * Standalone order grid calculation utility for testing and debugging.
  * Provides command-line tools for grid verification without placing orders.

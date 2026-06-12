@@ -7,7 +7,7 @@
  * the full uncut dataset (no pruning) for optimizer use.
  *
  * Usage:
- *   node analysis/ama_fitting/fetch_lp_candles.js \
+ *   tsx analysis/ama_fitting/fetch_lp_candles.ts \
  *     --pool 1.19.133 \
  *     --assetA IOB.XRP --assetAId 1.3.3926 --assetAPrecision 4 \
  *     --assetB BTS     --assetBId 1.3.0    --assetBPrecision 5 \
@@ -72,10 +72,10 @@ function parseArgs() {
     return out;
 }
 function printHelp() {
-    console.log('fetch_lp_candles.js — fetch LP pool candles from Kibana for AMA optimizer');
+    console.log('fetch_lp_candles.ts — fetch LP pool candles from Kibana for AMA optimizer');
     console.log('');
     console.log('Usage:');
-    console.log('  node fetch_lp_candles.js --pool 1.19.133 \\');
+    console.log('  tsx fetch_lp_candles.ts --pool 1.19.133 \\');
     console.log('    --assetA IOB.XRP --assetAId 1.3.3926 --assetAPrecision 4 \\');
     console.log('    --assetB BTS     --assetBId 1.3.0    --assetBPrecision 5');
     console.log('');
@@ -163,7 +163,7 @@ async function main() {
     console.log(`  Saved:    ${path.relative(process.cwd(), outPath)}`);
     console.log('');
     console.log('Run optimizer:');
-    console.log(`  node analysis/ama_fitting/optimizer_high_resolution.js --data ${path.relative(process.cwd(), outPath)}`);
+    console.log(`  tsx analysis/ama_fitting/optimizer_high_resolution.ts --data ${path.relative(process.cwd(), outPath)}`);
 }
 main().catch((err) => {
     console.error('Error:', err.message);

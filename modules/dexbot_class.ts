@@ -1,7 +1,7 @@
 /**
- * modules/dexbot_class.js - DEXBot Core Engine
+ * modules/dexbot_class.ts - DEXBot Core Engine
  *
- * Core trading bot implementation shared by bot.js (single) and dexbot.js (multi-bot).
+ * Core trading bot implementation shared by bot.ts (single) and dexbot.ts (multi-bot).
  * Implements complete grid trading bot lifecycle.
  *
  * Responsibilities:
@@ -21,50 +21,20 @@
  *   - constructor(config) - Initialize bot with configuration
  *   - run() - Start bot operation loop
  *   - shutdown() - Graceful shutdown
- *   - pause() - Pause bot operations
- *   - resume() - Resume bot operations
- *
- * CONFIGURATION:
- *   - loadBotConfig() - Load bot configuration from files
- *   - validateConfig() - Validate configuration values
- *
- * INITIALIZATION:
- *   - initialize() - Set up blockchain connection and grid
- *   - setupAccount() - Authenticate and load account
- *   - initializeOrderManager() - Create and initialize OrderManager
- *
- * ORDER OPERATIONS:
- *   - placeOrders() - Create and place new orders
- *   - updateOrders() - Modify existing orders
- *   - cancelOrders() - Cancel orders
- *   - processBatch() - Execute batch operations
  *
  * FILL PROCESSING:
- *   - processFills() - Handle order fill events
- *   - updateFromFill() - Update internal state from fill
- *   - processFilledOrders() - Comprehensive fill processing
+ *   - processFills() - Handle fill events
  *
  * SYNCHRONIZATION:
- *   - syncFromBlockchain() - Sync grid state with blockchain
- *   - reconcileGrid() - Reconcile discrepancies
- *   - checkGridHealth() - Verify grid integrity
- *
- * REBALANCING:
- *   - rebalanceGrid() - Trigger grid rebalancing
- *   - rotateOrders() - Perform order rotation
- *   - checkSpreadCondition() - Verify spread limits
+ *   - reconcileGrid() - Reconcile grid state with blockchain
  *
  * MONITORING:
- *   - getMetrics() - Retrieve performance metrics
  *   - monitorHealth() - Check bot health status
- *   - detectDivergence() - Detect grid-blockchain divergence
  *
  * ===============================================================================
  *
  * HELPER FUNCTIONS (module-level):
  *   - normalizeBotEntry() - Normalize bot configuration object
- *   - validateBotConfig() - Validate configuration values
- *   - applyDefaults() - Apply default configuration values
  *
  * ===============================================================================
  *
@@ -485,7 +455,7 @@ class DEXBot {
      * @param {Error} err - The error that triggered the abort
      * @param {string} [phase='batch processing'] - Phase description
      * @param {number} [opsCount=0] - Number of operations in the batch
-     * @returns {Promise<Object|null>} Abort result object or null if not handled
+     * @returns {Promise<Object>} Abort result object
      */
     async _handleBatchHardAbort(err, phase = 'batch processing', opsCount = 0) {
         const baseResult = { executed: false, hadRotation: false };
@@ -713,7 +683,7 @@ class DEXBot {
     /**
      * Initialize bot state from storage and blockchain.
      * Consolidates common initialization logic for start() and startWithPrivateKey().
-     * @returns {{persistedGrid: Object, persistedBtsFeesOwed: number, persistedBoundaryIdx: number}}
+     * @returns {{persistedGrid: Object, persistedBtsFeesOwed: number, persistedBoundaryIdx: number, persistedBtsBalance: number}}
      * @private
      */
     async _initializeStartupState() {
@@ -2279,7 +2249,7 @@ class DEXBot {
                     throw err;
                 }
                 this._warn(`Auto-selection of preferredAccount failed: ${err.message}`);
-                // dexbot.js has fallback to selectAccount, bot.js throws
+                // dexbot.ts has fallback to selectAccount, bot.ts throws
                 if (typeof chainOrders.selectAccount === 'function') {
                     const accountData = await chainOrders.selectAccount();
                     this.privateKey = accountData.privateKey;

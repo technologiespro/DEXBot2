@@ -2,7 +2,7 @@
 
 const { main } = require('./claw_bridge');
 
-main('zeroclaw', 'node scripts/zeroclaw_bridge.js').catch((err: any) => {
+main('zeroclaw', 'tsx scripts/zeroclaw_bridge.ts').catch((err: any) => {
   console.error(err && err.stack ? err.stack : err.message);
   process.exit(1);
 });

@@ -12,12 +12,12 @@
  *
  * This script computes the implied ER — the value that, when plugged into
  * the formula, reproduces the empirical arithmetic SC_avg — and prints
- * the recommended constant for modules/constants.js.
+ * the recommended constant for modules/constants.ts.
  *
  * Usage:
- *   node analysis/ama_fitting/calibrate_convergence_er.js
- *   node analysis/ama_fitting/calibrate_convergence_er.js --data <lp-file.json>
- *   node analysis/ama_fitting/calibrate_convergence_er.js --data <lp-file.json> --amas AMA3
+ *   tsx analysis/ama_fitting/calibrate_convergence_er.ts
+ *   tsx analysis/ama_fitting/calibrate_convergence_er.ts --data <lp-file.json>
+ *   tsx analysis/ama_fitting/calibrate_convergence_er.ts --data <lp-file.json> --amas AMA3
  */
 const fs   = require('fs');
 const path = require('path');
@@ -79,7 +79,7 @@ function main() {
         if (err.code === 'ENOENT') {
             console.error(`Data file not found: ${opts.data}`);
             console.error('Export LP candles first, or point --data at an existing file.');
-            console.error('  node market_adapter/inputs/fetch_lp_data.js --pool 133 --precA 4 --precB 5 --interval 1h --lookback 26280h');
+            console.error('  tsx market_adapter/inputs/fetch_lp_data.ts --pool 133 --precA 4 --precB 5 --interval 1h --lookback 26280h');
         } else if (err instanceof SyntaxError) {
             console.error(`Failed to parse JSON from: ${opts.data}`);
             console.error(err.message);
@@ -167,7 +167,7 @@ function main() {
     console.log(`  Average implied ER: ${avgImpliedER.toFixed(4)}`);
     console.log(`  Rounded:            ${recRounded.toFixed(3)}`);
     console.log('');
-    console.log(`  Current in constants.js: AMA_CONVERGENCE_ER_AVG = ${MARKET_ADAPTER.AMA_CONVERGENCE_ER_AVG}`);
+    console.log(`  Current in constants.ts: AMA_CONVERGENCE_ER_AVG = ${MARKET_ADAPTER.AMA_CONVERGENCE_ER_AVG}`);
     console.log(`  Suggested update:        AMA_CONVERGENCE_ER_AVG = ${recRounded.toFixed(3)}`);
     // ── Convergence bars comparison (using cached results) ─────────────
     console.log('');

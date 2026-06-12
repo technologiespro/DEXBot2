@@ -26,7 +26,7 @@
  *    ├─ CLI override: --deltaPercent <percent>
  *    └─ Use case: Catch big market moves that require grid repositioning
  *
- * 2. RMS DIVERGENCE CHECK (order/grid.js / grid engine)
+ * 2. RMS DIVERGENCE CHECK (order/grid.ts / grid engine)
  *    Triggers when calculated grid diverges from blockchain state
  *    ├─ Controlled by: GRID_LIMITS.GRID_COMPARISON.RMS_PERCENTAGE
  *    ├─ Location: profiles/general.settings.json

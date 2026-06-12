@@ -65,7 +65,7 @@ function main() {
     const dataIdx = args.indexOf('--data');
     const dataPath = dataIdx !== -1 ? args[dataIdx + 1] : null;
     if (!dataPath) {
-        console.error('Usage: node analysis/analyze_risk_profile.js --data <path_to_json> [--ama <AMA_PRESET>] [--output <output_path>]');
+        console.error('Usage: tsx analysis/analyze_risk_profile.ts --data <path_to_json> [--ama <AMA_PRESET>] [--output <output_path>]');
         process.exit(1);
     }
     const amaIdx = args.indexOf('--ama');

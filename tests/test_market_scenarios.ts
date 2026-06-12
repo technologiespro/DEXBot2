@@ -1,5 +1,5 @@
 /**
- * tests/test_market_scenarios.js
+ * tests/test_market_scenarios.ts
  * 
  * Complex integration test simulating realistic market scenarios.
  * Focuses on StrategyEngine unified rebalancing logic.

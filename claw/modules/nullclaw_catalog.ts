@@ -12,7 +12,7 @@ function listNullClawCommandNames() {
   return listClawCommandNames();
 }
 
-function buildNullClawCommandExamples(scriptPath = 'node scripts/nullclaw_bridge.js') {
+function buildNullClawCommandExamples(scriptPath = 'tsx scripts/nullclaw_bridge.ts') {
   return buildClawCommandExamples(scriptPath);
 }
 

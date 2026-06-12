@@ -186,7 +186,7 @@ if [ "$REMAINING_DATA" -eq 0 ] && [ "$REMAINING_STATE" -eq 0 ] && [ "$REMAINING_
     log_info "Next steps:"
     log_info "- The market adapter will bootstrap fresh candle data from Kibana on next run"
     log_info "- All bot center prices and AMA state will be recomputed"
-    log_info "- Start market adapter: node market_adapter/market_adapter.js"
+    log_info "- Start market adapter: tsx market_adapter/market_adapter.ts"
 else
     log_warning "Cleanup incomplete. Remaining data files: $REMAINING_DATA, remaining state files: $REMAINING_STATE, remaining logs: $REMAINING_LOG"
 fi

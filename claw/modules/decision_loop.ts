@@ -58,7 +58,7 @@ function getOrCreateAnalyzer(mpaSymbol: string, config: Record<string, any> = {}
  * @param {string} accountName – BitShares account name
  * @param {Object} [options]
  * @param {Object} [options.analyzerConfig] – TrendAnalyzer config overrides
- * @param {Function} [options.logger]       – Log function (default console.log)
+ * @param {Object|Function} [options.logger]       – Console-like logger with .info/.warn/.error (default console)
  * @returns {Object} { account, evaluatedAt, positionCount, positions: [...assessments], summary }
  */
 async function evaluate(accountName: string, options: Record<string, any> = {}) {

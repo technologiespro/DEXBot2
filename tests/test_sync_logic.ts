@@ -1,5 +1,5 @@
 /**
- * tests/test_sync_logic.js
+ * tests/test_sync_logic.ts
  * 
  * Ported from tests/unit/sync_engine.test.js
  * Comprehensive unit tests for sync_engine.js - Blockchain reconciliation

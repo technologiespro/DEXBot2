@@ -18,7 +18,7 @@ const {
 } = require('../../pm2');
 
 /**
- * Start a bot directly (foreground, spawned as detached child process).
+ * Start a bot directly (background, spawned as detached child process).
  * Returns immediately with PID and command info.
  * @param {string|null} botName - Bot name or null for default
  * @param {Object} [options={}] - Options including profileRoot

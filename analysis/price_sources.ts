@@ -6,7 +6,6 @@
  * Unified interface for fetching market prices from multiple sources:
  * - JSON candle files
  * - Market adapter state
- * - Kibana LP pool data (basic)
  *
  * Each source returns: { marketPrice, timestamp }
  */

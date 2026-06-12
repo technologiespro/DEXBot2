@@ -615,7 +615,7 @@ async function testChainActions() {
       orderId: '1.7.9'
     });
 
-    assert.strictEqual(calls.buildUpdateOrderOp[0], 'modules/chain_orders.js');
+    assert.strictEqual(calls.buildUpdateOrderOp[0], 'modules/chain_orders.ts');
     assert.strictEqual(updateOp.op.op_name, 'limit_order_update');
     assert.strictEqual(updateOp.op.op_data.orderId, '1.7.9');
     assert.deepStrictEqual(updateOp.op.op_data.newParams, { newPrice: 2.5 });

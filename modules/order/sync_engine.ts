@@ -1,5 +1,5 @@
 /**
- * modules/order/sync_engine.js - SyncEngine
+ * modules/order/sync_engine.ts - SyncEngine
  *
  * Blockchain synchronization and reconciliation engine.
  * Exports a single SyncEngine class handling all blockchain state matching.
@@ -873,10 +873,10 @@ class SyncEngine {
 
     /**
      * Process one incremental fill-history event.
-     * Returns `{ filledOrders, updatedOrders, partialFill }`.
+     * Returns `{ filledOrders, updatedOrders, partialFill, requiresOpenOrdersSync }`.
      * @param {Object} fill - Fill history event object
      * @param {Object} [options] - Persistence mode options
-     * @returns {Promise<Object>} { filledOrders, updatedOrders, partialFill }
+     * @returns {Promise<Object>} { filledOrders, updatedOrders, partialFill, requiresOpenOrdersSync }
      */
     async syncFromFillHistory(fill: any, options: Record<string, any> = {}) {
         const mgr = this.manager;

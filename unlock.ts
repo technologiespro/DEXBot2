@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * unlock.js - Credential Daemon Launcher
+ * unlock.ts - Credential Daemon Launcher
  *
  * Starts credential daemon with master password and launches the bot process.
  *
@@ -859,6 +859,8 @@ function isLikelyAdapterProcessRunning(): boolean {
  * Main entry point.
  * Starts daemon, then launches bot process(es) via monolithic or isolated mode.
  *
+ * @param {string[]} argv - Command line arguments
+ * @param {number} [startupGraceMs] - Grace period before startup
  * @private
  * @returns {Promise<void>}
  */

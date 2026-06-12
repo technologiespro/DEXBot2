@@ -1,5 +1,5 @@
 /**
- * tests/test_ghost_order_fix.js
+ * tests/test_ghost_order_fix.ts
  * 
  * Verifies the fix for "ghost orders" where tiny remainders (below minimum order size)
  * were causing orders to stay in PARTIAL state instead of being marked as filled.

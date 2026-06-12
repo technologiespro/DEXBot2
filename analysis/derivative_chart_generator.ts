@@ -32,7 +32,7 @@ function showHelp() {
     console.log(`
 Derivative Chart Generator (uPlot)
 Usage:
-  node analysis/derivative_chart_generator.js --input <file.json> [options]
+  tsx analysis/derivative_chart_generator.ts --input <file.json> [options]
 Options:
   --output FILE   Output HTML (default: analysis/charts/derivative_chart.html)
   --title TEXT    Chart title

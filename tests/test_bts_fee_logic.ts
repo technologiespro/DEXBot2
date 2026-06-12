@@ -1,7 +1,6 @@
 /**
- * tests/test_bts_fee_logic.js
- * 
- * Ported from tests/unit/bts_fee_settlement.test.js
+ * tests/test_bts_fee_logic.ts
+ *
  * Unit tests for BTS fee settlement fix
  * Uses native assert to avoid Jest dependency.
  */

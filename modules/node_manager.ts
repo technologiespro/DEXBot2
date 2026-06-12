@@ -1,5 +1,5 @@
 /**
- * modules/node_manager.js - Multi-Node Health Checking and Failover Management
+ * modules/node_manager.ts - Multi-Node Health Checking and Failover Management
  *
  * Manages a configurable list of BitShares nodes with automatic health checking and
  * intelligent node selection based on latency and availability.
@@ -28,7 +28,7 @@
  * USAGE
  * ===============================================================================
  *
- * In bitshares_client.js:
+ * In bitshares_client.ts:
  *
  *   const NodeManager = require('./node_manager');
  *   const nodeManager = new NodeManager(config);

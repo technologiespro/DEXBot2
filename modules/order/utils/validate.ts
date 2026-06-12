@@ -1,5 +1,5 @@
 /**
- * modules/order/utils/validate.js
+ * modules/order/utils/validate.ts
  *
  * Pure functions for order validation, grid reconciliation, and immutable mutations.
  *

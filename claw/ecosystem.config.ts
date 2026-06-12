@@ -2,7 +2,7 @@ export = {
   apps: [
     {
       name: 'ai-bot-position-watch',
-      script: 'modules/position_manager_watch.js',
+      script: 'modules/position_manager_watch.ts',
       cwd: __dirname,
       autorestart: true,
       max_memory_restart: '200M',

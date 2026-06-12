@@ -1,5 +1,5 @@
 /**
- * tests/test_manager_logic.js
+ * tests/test_manager_logic.ts
  * 
  * Ported from tests/unit/manager.test.js
  * Comprehensive unit tests for manager.js - Order management and state machine

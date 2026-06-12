@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * bot.js - Single Bot Instance Launcher
+ * bot.ts - Single Bot Instance Launcher
  *
  * PM2-friendly entry point for single grid trading bot.
  * Standalone launcher executed by PM2 for each configured bot.
@@ -65,7 +65,7 @@ const PROFILES_BOTS_FILE = path.join(ROOT, 'profiles', 'bots.json');
 const launcherLogger = createPm2AwareLogger('bot.js');
 
 // Get bot name from args or environment
-// Support both direct names (node bot.js botname) and flag format (node bot.js --botname)
+// Support both direct names (tsx bot.ts botname) and flag format (tsx bot.ts --botname)
 // Flag format is used by PM2 for consistency with other CLI tools
 let botNameArg = process.argv[2];
 if (botNameArg && botNameArg.startsWith('--')) {
@@ -76,7 +76,7 @@ const botNameEnv = process.env.BOT_NAME || process.env.PREFERRED_ACCOUNT;
 const botName = botNameArg || botNameEnv;
 
 if (!botName) {
-    launcherLogger.error('No bot name provided. Usage: node bot.js <bot-name>');
+    launcherLogger.error('No bot name provided. Usage: tsx bot.ts <bot-name>');
     launcherLogger.error('Or set BOT_NAME or PREFERRED_ACCOUNT environment variable');
     process.exit(1);
 }
@@ -215,7 +215,7 @@ async function getSigningSecretForAccount(accountName: string) {
           } catch (err) {
               // The bot's _runStartupSequence already invoked shutdown() once on
               // the failure path. Remove the registered cleanup so the LIFO
-              // cleanup loop in graceful_shutdown.js does not call shutdown() a
+              // cleanup loop in graceful_shutdown.ts does not call shutdown() a
               // second time, and avoid the "double graceful shutdown" log pattern.
               if (botCleanupHandler) {
                   unregisterCleanup(botCleanupHandler);

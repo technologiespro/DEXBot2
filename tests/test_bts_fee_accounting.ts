@@ -1,5 +1,5 @@
 /**
- * tests/test_bts_fee_accounting.js
+ * tests/test_bts_fee_accounting.ts
  * 
  * Verifies that BTS fees are not double-counted during fill processing and rebalancing.
  * UPDATED: Uses modern COW pipeline (performSafeRebalance).

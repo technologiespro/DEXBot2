@@ -1,5 +1,5 @@
 /**
- * modules/bitshares_client.js - BitShares Connection Manager
+ * modules/bitshares_client.ts - BitShares Connection Manager
  *
  * Centralized BitShares client connection and account client factory.
  *
@@ -10,20 +10,28 @@
  * - Subscription and event handling
  *
  * ===============================================================================
- * EXPORTS (13 items)
+ * EXPORTS (16 items)
  * ===============================================================================
  *
  * 1. BitShares - Shared BitShares class for database operations
  *    Used for: querying accounts, assets, orders, subscriptions
  *    Never use for signing transactions
  *
- * 2. waitForConnected(timeoutMs) - Wait for connection to ready state (async)
- * 3. createAccountClient(name, key) - Create per-account client for signing
- * 4. setSuppressConnectionLog(bool) - Suppress/restore connection log output
- * 5. getNodeManager() - Get the NodeManager instance
- * 6. getNodeStats() - Get node health statistics
- * 7. getNodeSummary() - Get node summary
- * 8. _internal - Internal state (connected flag) for testing
+ * 2. createAccountClient(name, key) - Create per-account client for signing
+ * 3. waitForConnected(timeoutMs) - Wait for connection to ready state (async)
+ * 4. getConnectionStatus() - Get current connection status
+ * 5. disconnectClient() - Disconnect the client
+ * 6. reconnectForCycle() - Reconnect for maintenance cycle
+ * 7. setSuppressConnectionLog(bool) - Suppress/restore connection log output
+ * 8. getNodeManager() - Get the NodeManager instance
+ * 9. getNodeStats() - Get node health statistics
+ * 10. getNodeSummary() - Get node summary
+ * 11. getConnectionError() - Get last connection error
+ * 12. onReconnect(callback) - Register reconnect callback
+ * 13. removeOnReconnect(callback) - Remove reconnect callback
+ * 14. withTimeout(promise, timeoutMs) - Wrap promise with timeout
+ * 15. _assessFailover() - Internal failover assessment
+ * 16. _internal - Internal state (connected flag) for testing
  * ===============================================================================
  */
 

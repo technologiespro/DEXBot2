@@ -185,7 +185,7 @@ function buildRuntimeSetup(runtime: any, repoRoot: string, profileRoot: string) 
         'Start the memU MCP server:',
         '',
         '```bash',
-        `node ${path.join(repoRoot, 'scripts', 'memu_mcp_server.js').replace(/\\/g, '/')} --memu-dir ${path.join(repoRoot, 'data', 'memu').replace(/\\/g, '/')}`,
+        `tsx ${path.join(repoRoot, 'scripts', 'memu_mcp_server.ts').replace(/\\/g, '/')} --memu-dir ${path.join(repoRoot, 'data', 'memu').replace(/\\/g, '/')}`,
         '```',
         '',
         'Or use the npm script:',

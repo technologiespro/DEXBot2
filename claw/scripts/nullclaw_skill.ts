@@ -51,7 +51,7 @@ function parseArgs(argv: any) {
 function printHelp() {
   console.log([
     'Usage:',
-    '  node scripts/nullclaw_skill.js [--repo-root PATH] [--profile-root PATH] [--output PATH]',
+    '  tsx scripts/nullclaw_skill.ts [--repo-root PATH] [--profile-root PATH] [--output PATH]',
     '',
     'Outputs the NullClaw SKILL.toml that bridges NullClaw to AI-Bot.',
     'If --output is omitted, the TOML is written to stdout.'

@@ -1,10 +1,10 @@
 /**
- * modules/order/utils/math.js - Mathematical and Numeric Utilities
+ * modules/order/utils/math.ts - Mathematical and Numeric Utilities
  * 
  * Pure numeric calculations, blockchain conversions, fee math, and fund allocation.
  *
  * ===============================================================================
- * TABLE OF CONTENTS (41 exported functions)
+ * TABLE OF CONTENTS (42 exported functions)
  * ===============================================================================
  *
  * SECTION 1: PARSING & VALIDATION (4 functions)
@@ -48,11 +48,13 @@
  *   - _setFeeCache(cache) - Set internal fee cache (internal)
  *   - _getFeeCache() - Get internal fee cache (internal)
  *
- * SECTION 7: FUND ALLOCATION (4 functions)
+ * SECTION 7: FUND ALLOCATION (6 functions)
  *   - allocateFundsByWeights(available, targetCount) - Allocate funds by weight
+ *   - cloneWeightDistribution(weightDistribution, base) - Clone weight distribution safely
  *   - calculateOrderSizes(manager, orderType) - Calculate order sizes for placement
  *   - calculateRotationOrderSizes(manager, orderType, fillAmount) - Calculate rotation sizes
  *   - calculateGridSideDivergenceMetric(manager, orderType, threshold) - Calculate divergence
+ *   - clamp(value, min, max) - Clamp a value between min and max bounds
  *
  * SECTION 8: FEE DEDUCTION (3 functions)
  *   - calculateOrderCreationFees(count, btsFeeData) - Calculate total creation fees

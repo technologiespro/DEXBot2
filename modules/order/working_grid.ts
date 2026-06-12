@@ -1,5 +1,5 @@
 /**
- * modules/order/working_grid.js - WorkingGrid Copy-on-Write Engine
+ * modules/order/working_grid.ts - WorkingGrid Copy-on-Write Engine
  *
  * Efficient grid modification tracking for Copy-on-Write (COW) pattern.
  * Enables safe concurrent rebalancing by detecting changes without mutating master grid.
@@ -21,7 +21,7 @@
  * TABLE OF CONTENTS - WorkingGrid Class (21 methods/properties)
  * ===============================================================================
  *
- * INITIALIZATION (2 methods)
+ * INITIALIZATION (3 methods)
  *   1. constructor(masterGrid, options) - Clone master grid and initialize tracking
  *      options.baseVersion: Track version synced from master
  *

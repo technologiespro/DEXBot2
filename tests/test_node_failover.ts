@@ -1,5 +1,5 @@
 /**
- * tests/test_node_failover.js - Integration tests for node failover behavior
+ * tests/test_node_failover.ts - Integration tests for node failover behavior
  *
  * Tests integration scenarios:
  * - Multi-node configuration loading

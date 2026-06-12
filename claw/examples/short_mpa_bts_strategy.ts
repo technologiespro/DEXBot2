@@ -62,9 +62,9 @@ function parseArgs(argv) {
 
 function printUsage() {
   console.log('Usage examples:');
-  console.log('  node examples/short_mpa_bts_strategy.js --mode open --mpa HONEST.USD --debt 10 --collateral 25000 --sell-price 1000');
-  console.log('  node examples/short_mpa_bts_strategy.js --mode tp --mpa HONEST.USD --cover 10 --buy-price 900');
-  console.log('  node examples/short_mpa_bts_strategy.js --mode close --mpa HONEST.USD --repay 10 --release-collateral 25000');
+  console.log('  tsx examples/short_mpa_bts_strategy.ts --mode open --mpa HONEST.USD --debt 10 --collateral 25000 --sell-price 1000');
+  console.log('  tsx examples/short_mpa_bts_strategy.ts --mode tp --mpa HONEST.USD --cover 10 --buy-price 900');
+  console.log('  tsx examples/short_mpa_bts_strategy.ts --mode close --mpa HONEST.USD --repay 10 --release-collateral 25000');
   console.log('Add --execute to broadcast transactions. Without it, the script prints the plan only.');
 }
 

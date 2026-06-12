@@ -1,5 +1,5 @@
 /**
- * modules/graceful_shutdown.js - Process Shutdown Manager
+ * modules/graceful_shutdown.ts - Process Shutdown Manager
  *
  * Centralized graceful shutdown handler for clean process termination.
  *

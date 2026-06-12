@@ -11,8 +11,8 @@
  *   - Three weight profiles: valley, neutral, mountain (symmetric buy/sell)
  *
  * Usage:
- *   node analysis/bot_fitting/backtest_ama_sweep.js --data <path-to-lp-candles.json>
- *   node analysis/bot_fitting/backtest_ama_sweep.js --data <path-to-lp-candles.json> --spread 4:16:1 --increment 0.5:4:0.25
+ *   tsx analysis/bot_fitting/backtest_ama_sweep.ts --data <path-to-lp-candles.json>
+ *   tsx analysis/bot_fitting/backtest_ama_sweep.ts --data <path-to-lp-candles.json> --spread 4:16:1 --increment 0.5:4:0.25
  */
 
 const fs = require('fs');
@@ -112,7 +112,7 @@ function printHelp() {
     console.log('AMA Sweep Backtest — persistent grid simulation with weight profiles');
     console.log('');
     console.log('Usage:');
-    console.log('  node analysis/bot_fitting/backtest_ama_sweep.js [options]');
+    console.log('  tsx analysis/bot_fitting/backtest_ama_sweep.ts [options]');
     console.log('');
     console.log('Options:');
     console.log('  --data <path>           LP candle JSON');

@@ -2,7 +2,7 @@
 
 const { main } = require('./claw_bridge');
 
-main('openfang', 'node scripts/openfang_bridge.js').catch((err: any) => {
+main('openfang', 'tsx scripts/openfang_bridge.ts').catch((err: any) => {
   console.error(err && err.stack ? err.stack : err.message);
   process.exit(1);
 });

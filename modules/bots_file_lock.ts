@@ -1,5 +1,5 @@
 /**
- * modules/bots_file_lock.js - File Synchronization Lock
+ * modules/bots_file_lock.ts - File Synchronization Lock
  *
  * Thread-safe reading of bots.json with in-memory locking.
  * Prevents race conditions when multiple processes access file simultaneously.
@@ -10,7 +10,7 @@
  * - Queues operations during conflicts
  *
  * ===============================================================================
- * EXPORTS (3 functions)
+ * EXPORTS (4 functions)
  * ===============================================================================
  *
  * 1. readBotsFileWithLock(botsJsonPath, parseFunction) - Lock-protected async file read
@@ -24,6 +24,10 @@
  * 3. readBotsFileSync(botsJsonPath, parseFunction) - Synchronous file read (startup only)
  *    Returns: {content: string, config: Object}
  *    WARNING: Blocks event loop — only use before event loop is active
+ *
+ * 4. writeJsonFileAtomic(filePath, data) - Atomically write JSON via tmp file + rename
+ *    Returns: Promise<void>
+ *    Stages to temp file in same directory, then renames into place
  *
  * ===============================================================================
  *

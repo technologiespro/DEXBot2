@@ -1,17 +1,21 @@
 /**
- * modules/order/utils/system.js - System and I/O Utilities
+ * modules/order/utils/system.ts - System and I/O Utilities
  * 
  * Price derivation, persistence, grid correction, and UI/interactive utilities.
  *
  * ===============================================================================
- * TABLE OF CONTENTS (17 exported functions)
+ * TABLE OF CONTENTS (23 exported functions)
  * ===============================================================================
  *
- * SECTION 1: PRICE DERIVATION (4 functions)
+ * SECTION 1: PRICE DERIVATION (8 functions)
  *   - lookupAsset(BitShares, symbol) - Lookup asset metadata from blockchain
  *   - deriveMarketPrice(BitShares, symA, symB) - Derive price from order book
  *   - derivePoolPrice(BitShares, symA, symB) - Derive price from liquidity pool
  *   - derivePrice(BitShares, symA, symB, mode) - Derive price with fallback chain
+ *   - resolveLiquidityPoolByShareAsset(BitShares, shareAsset) - Resolve LP by share asset
+ *   - deriveLiquidityPoolTokenValue(BitShares, symA, symB) - Derive LP token value
+ *   - loadAmaCenterPrice(manager) - Load AMA center price
+ *   - loadAmaCenterSnapshot(manager) - Load AMA center snapshot
  *
  * SECTION 2: FEE MANAGEMENT (1 function)
  *   - initializeFeeCache(botsConfig, BitShares) - Initialize fee cache from blockchain

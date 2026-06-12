@@ -164,7 +164,7 @@ function testHermesManifest() {
   assert.strictEqual(desc.options.runtimeName, 'hermes');
   assert.strictEqual(desc.compatibility.recommendedTransport, 'mcp-stdio-jsonl');
   assert.ok(Array.isArray(desc.commandExamples));
-  assert.ok(desc.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')));
+  assert.ok(desc.commandExamples.some((example) => example.includes('scripts/claw_bridge.ts')));
 
   const withOpts = manifest.describeHermesBridge({ accountName: 'erin' });
   assert.strictEqual(withOpts.options.accountName, 'erin');
@@ -184,7 +184,7 @@ function testOpenClawManifest() {
   assert.strictEqual(desc.options.runtimeName, 'openclaw');
   assert.strictEqual(desc.compatibility.recommendedTransport, 'plugin-or-mcp');
   assert.ok(Array.isArray(desc.commandExamples));
-  assert.ok(desc.commandExamples.some((example) => example.includes('scripts/claw_bridge.js')));
+  assert.ok(desc.commandExamples.some((example) => example.includes('scripts/claw_bridge.ts')));
 
   const withOpts = manifest.describeOpenClawBridge({ accountName: 'dave' });
   assert.strictEqual(withOpts.options.accountName, 'dave');
@@ -230,7 +230,7 @@ function testNullClawManifest() {
   assert.strictEqual(desc.options.runtimeName, 'nullclaw');
   assert.strictEqual(desc.compatibility.recommendedTransport, 'skill-toml-or-mcp');
   assert.ok(Array.isArray(desc.commandExamples));
-  assert.ok(desc.commandExamples.some((example) => example.includes('nullclaw_bridge.js')));
+  assert.ok(desc.commandExamples.some((example) => example.includes('nullclaw_bridge.ts')));
 
   const withOpts = manifest.describeNullClawBridge({ accountName: 'carol' });
   assert.strictEqual(withOpts.options.accountName, 'carol');
@@ -261,7 +261,7 @@ function testDexbotBridgeRootResolution() {
 
   // --- Branch 2: no env var, auto-detected local repo layout ---
   // The test is already running inside the DEXBot2 repo, so the existsSync
-  // check for modules/order/index.js should resolve to the repo root.
+  // check for modules/order/index.ts should resolve to the repo root.
   delete require.cache[bridgePath];
   delete process.env.DEXBOT2_ROOT;
   try {

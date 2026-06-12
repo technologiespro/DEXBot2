@@ -10,7 +10,7 @@
  * - Total funds of AssetA and AssetB in the grid
  * - Grid slot distribution (% near center) vs grid composition
  *
- * Usage: node scripts/analyze-orders.js
+ * Usage: tsx scripts/analyze-orders.ts
  */
 
 const fs = require('fs');

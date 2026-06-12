@@ -4,18 +4,18 @@
 /**
  * MERGE LP DATA FILES
  *
- * Merges two JSON files produced by fetch_lp_data.js into one,
+ * Merges two JSON files produced by fetch_lp_data.ts into one,
  * deduplicating candles by timestamp and sorting chronologically.
  *
  * Both files must have the same pool ID, interval, and asset pair.
  *
  * Usage:
- *   node market_adapter/merge_lp_data.js <file1> <file2> --out <output>
+ *   tsx market_adapter/merge_lp_data.ts <file1> <file2> --out <output>
  *
  * Example (2-year 1h dataset):
- *   node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start 2024-03-06 --end 2025-03-06
- *   node market_adapter/inputs/fetch_lp_data.js --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start 2025-03-06 --end 2026-03-06
- *   node market_adapter/merge_lp_data.js \
+ *   tsx market_adapter/inputs/fetch_lp_data.ts --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start 2024-03-06 --end 2025-03-06
+ *   tsx market_adapter/inputs/fetch_lp_data.ts --pool <poolId> --precA <precA> --precB <precB> --interval 1h --start 2025-03-06 --end 2026-03-06
+ *   tsx market_adapter/merge_lp_data.ts \
  *     market_adapter/data/lp/<pair>/lp_pool_<poolShort>_1h_2024.json \
  *     market_adapter/data/lp/<pair>/lp_pool_<poolShort>_1h_2025.json \
  *     --out market_adapter/data/lp/<pair>/lp_pool_<poolShort>_1h.json
@@ -41,7 +41,7 @@ function parseArgs() {
     }
 
     if (files.length !== 2) {
-        console.error('Usage: merge_lp_data.js <file1> <file2> --out <output>');
+        console.error('Usage: merge_lp_data.ts <file1> <file2> --out <output>');
         process.exit(1);
     }
 
