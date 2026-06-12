@@ -1058,7 +1058,7 @@ export interface MarketAdapterConfig {
   once: boolean;
   maxNativeGapFillCandles: number;
   staleTailThreshold: number;
-  amaSlope: { lookbackBars: number; maxSlopePct: number; neutralZonePct: number };
+  amaSlope: { lookbackBars: number; maxSlopePct: number; neutralZonePct: number; deltaThresholdPct: number };
   kalmanSlope: { maxSlopePct: number };
   atrPeriod: number;
   onTrigger?: Function;

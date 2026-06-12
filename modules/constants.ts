@@ -746,11 +746,11 @@ let MARKET_ADAPTER = {
     //   - Default: 1.00 (slightly more responsive than the 1.21% sigma calibration baseline)
     AMA_DELTA_THRESHOLD_PERCENT: 1.00,
 
-    // AMA_SLOPE_DELTA_THRESHOLD_PERCENT: Percentage change in AMA slope that can trigger a
-    // grid reset when the slope delta moves far enough away from the last accepted snapshot.
-    //   - Configurable per market pair and per bot via market_adapter_settings.json.
-    //   - Default: 0.20 (Trend Sentinel: pro-actively resets when trend accelerates)
-    AMA_SLOPE_DELTA_THRESHOLD_PERCENT: 0.20,
+    // AMA_SLOPE_DELTA_THRESHOLD_PERCENT: Percentage of max slope used as the slope trigger
+    // threshold. Used as (AMA_SLOPE_DELTA_THRESHOLD_PERCENT / 100) in the computation:
+    //   threshold = (AMA_SLOPE_DELTA_THRESHOLD_PERCENT / 100) × maxSlopePct
+    //   - Default: 10 (meaning 10% of max slope)
+    AMA_SLOPE_DELTA_THRESHOLD_PERCENT: 10,
 
     // DYNAMIC_WEIGHT_ASYMMETRIC_TREND_THRESHOLD: Minimum blended trend strength required
     // before the bot applies a directional weight shift in the asymmetrical path.

@@ -405,8 +405,8 @@ function testResolveBotCfgDoesNotLeakNestedTopLevelOverridesAcrossBots() {
     );
     assert.strictEqual(
         unmatched.amaSlopeDeltaThresholdPercent,
-        MARKET_ADAPTER.AMA_SLOPE_DELTA_THRESHOLD_PERCENT,
-        'unmatched bot should keep the default AMA slope delta threshold'
+        undefined,
+        'unmatched bot should not have an explicit AMA slope delta threshold (dynamic default)'
     );
 }
 

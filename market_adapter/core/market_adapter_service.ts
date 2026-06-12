@@ -502,10 +502,11 @@ class MarketAdapterService {
     }
 
     resolveAmaSlopeDeltaThresholdPercent(cfg: any){
-        const threshold = Number(cfg?.amaSlopeDeltaThresholdPercent);
-        return Number.isFinite(threshold) && threshold > 0
-            ? threshold
-            : MARKET_ADAPTER.AMA_SLOPE_DELTA_THRESHOLD_PERCENT;
+        const explicit = Number(cfg?.amaSlopeDeltaThresholdPercent);
+        if (Number.isFinite(explicit) && explicit > 0) return explicit;
+        const factor = Number(cfg?.amaSlope?.deltaThresholdPct);
+        if (!Number.isFinite(factor) || factor <= 0) return 0;
+        return (factor / 100) * Number(cfg?.amaSlope?.maxSlopePct);
     }
 
     buildAmaSlopeResetDetails(currentAmaSlope: any, previousAmaSlope: any, cfg: any){
