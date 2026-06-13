@@ -234,6 +234,7 @@ The following scripts allow you to call `dexbot` commands directly from the `scr
 | `npm run native:release-gates` | `scripts/native_release_gates.ts` | Verify native library build, linkage, and mainnet corpus round-trips |
 | `npm run native:serial-snapshots` | `tests/test_native_serial_ops.ts` | Pin wire-format bytes for signed operation types |
 | `npm run native:ecc-invariants` | `tests/test_native_ecc.ts` | Validate ECDH key derivation, ECDSA signing, WIF, brain key, and hash functions |
+| `npm run native:corpus` | `scripts/generate_mainnet_corpus_report.ts` | Generate `profiles/native_validation/mainnet_corpus_report.json` by reserializing recent mainnet transactions through the native serializer and diffing against the chain's own `get_transaction_hex` output (and `block.transaction_ids` when the node exposes them) |
 
 ---
 
